@@ -34,6 +34,14 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {
 		out := m.Overview()
 		out.Installation = s.Installation
+		out.InstallReason = "仅当前原生未安装节点支持首次安装"
+		if !s.Dev && s.ComponentScope == "host" && s.MaintenanceScope == "host" && s.Installation == nil {
+			if err := installationTemplate(s.DataDir); err == nil {
+				out.InstallAvailable, out.InstallReason = true, ""
+			} else {
+				out.InstallReason = "须由当前原生安装器登记独立安装服务"
+			}
+		}
 		if s.Nginx != nil {
 			call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			defer cancel()

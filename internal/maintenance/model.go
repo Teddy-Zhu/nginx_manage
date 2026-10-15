@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"sync"
 
+	"nginxpanel/internal/fault"
 	"nginxpanel/internal/secure"
 )
 
@@ -57,6 +58,24 @@ type Service struct {
 	session *Session
 	root    RootStatus
 	reason  string
+}
+
+// Held serializes maintenance-owned admission with release and reconciliation.
+// The caller must release this guard after committing its durable intent.
+func (s *Service) Held(id string) (RootStatus, func(), error) {
+	if s == nil {
+		return RootStatus{}, nil, fault.Unavailable("维护服务未配置")
+	}
+	s.control.Lock()
+	s.mu.Lock()
+	r := s.root
+	ok := s.phase == "held" && s.session != nil && s.session.TaskID == id && r.ID == id && r.Available && r.Phase == "held" && r.Busy == 0 && validID(r.Epoch) && r.Epoch == s.session.RootEpoch
+	s.mu.Unlock()
+	if !ok {
+		s.control.Unlock()
+		return r, nil, fault.Conflict("须等待原维护会话重新进入 held")
+	}
+	return r, s.control.Unlock, nil
 }
 
 // Admit precedes every ordinary mutation. It is acquired before subsystem locks.

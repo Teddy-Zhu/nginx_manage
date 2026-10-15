@@ -154,6 +154,7 @@ func (s *Server) Run(ctx context.Context) error {
 	rootMaintenance.components = componentManager
 	s.maintenanceHandlers(mux, rootMaintenance)
 	s.componentHandlers(mux, componentManager)
+	s.installationHandlers(mux)
 	dns := &HostDNS{Dir: filepath.Join(s.DataDir, "agent", "reachability"), Owner: s.DNSOwner, Scope: s.DNSScope, Dev: s.Dev, Journal: s.Journal}
 	defer dns.Close()
 	if err := dns.Open(); err != nil {

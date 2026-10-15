@@ -121,15 +121,17 @@ type Operation struct {
 	Release       *Release `json:"release,omitempty"`
 }
 type Overview struct {
-	Installation  *nginxruntime.Installation `json:"installation,omitempty"`
-	Running       bool                       `json:"running"`
-	RuntimeReason string                     `json:"runtime_reason"`
-	Available     bool                       `json:"available"`
-	Scope         string                     `json:"scope"`
-	Reason        string                     `json:"reason"`
-	Repository    string                     `json:"repository"`
-	TrustSHA256   string                     `json:"trust_sha256"`
-	KeyIDs        []string                   `json:"key_ids"`
+	InstallAvailable bool                       `json:"install_available"`
+	InstallReason    string                     `json:"install_reason"`
+	Installation     *nginxruntime.Installation `json:"installation,omitempty"`
+	Running          bool                       `json:"running"`
+	RuntimeReason    string                     `json:"runtime_reason"`
+	Available        bool                       `json:"available"`
+	Scope            string                     `json:"scope"`
+	Reason           string                     `json:"reason"`
+	Repository       string                     `json:"repository"`
+	TrustSHA256      string                     `json:"trust_sha256"`
+	KeyIDs           []string                   `json:"key_ids"`
 }
 type Host interface {
 	ReadComponents(context.Context) (Overview, error)

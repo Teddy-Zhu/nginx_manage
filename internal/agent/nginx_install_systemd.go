@@ -61,7 +61,7 @@ func installationUnit(ctx context.Context, unit, data, worker string) error {
 	if err != nil {
 		return err
 	}
-	if !strings.HasPrefix(string(intent), "native-install-v3\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
+	if !strings.HasPrefix(string(intent), "native-install-v4\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
 		return errors.New("本机首次安装意图与未安装目标不一致")
 	}
 	raw, err := nginxmodules.ReadTrusted("/etc/systemd/system/"+unit, 64<<10)
@@ -159,7 +159,7 @@ func waitInstallationProbe(ctx context.Context, data string, b nginxruntime.Bind
 		stop()
 		if err == nil && json.Unmarshal([]byte(output.String()), &result) == nil {
 			info := result.Components.Installation
-			if info != nil && info.Owner == "managed" && info.PlanID == b.Signed.PlanID && info.AssetID == b.Signed.AssetID && info.SHA256 == b.SHA256 && info.Version == b.Version && result.Runtime.Available && result.Runtime.Integrity && !result.Runtime.ExternalChange && result.Runtime.RevisionID == "" && result.Runtime.Running == running {
+			if info != nil && info.Owner == "managed" && info.PlanID == b.Signed.PlanID && info.AssetID == b.Signed.AssetID && info.SHA256 == b.SHA256 && info.Version == b.Version && result.Runtime.Available && result.Runtime.Integrity && !result.Runtime.ExternalChange && result.Runtime.RevisionID == "" && (!running || result.Runtime.Running) {
 				return result, nil
 			}
 		}

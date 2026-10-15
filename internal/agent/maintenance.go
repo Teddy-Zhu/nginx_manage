@@ -331,7 +331,7 @@ func (s *Server) maintenanceHandlers(mux *http.ServeMux, g *maintenanceGate) {
 }
 func (g *maintenanceGate) handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/v1/maintenance/acquire" || r.URL.Path == "/v1/maintenance/release" {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/v1/maintenance/acquire" || r.URL.Path == "/v1/maintenance/release" || r.Method == http.MethodPost && r.URL.Path == "/v1/components/nginx-installations" {
 			next.ServeHTTP(w, r)
 			return
 		}

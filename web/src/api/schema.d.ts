@@ -116,6 +116,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNginxInstallations"];
+        put?: never;
+        post: operations["createNginxInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/installations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNginxInstallation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/installations/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeNginxInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/installations/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelNginxInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components": {
         parameters: {
             query?: never;
@@ -1613,6 +1677,62 @@ export interface components {
             reason: string;
             session?: components["schemas"]["MaintenanceSession"];
         };
+        NginxInstallPlan: {
+            maintenance_id: string;
+            plan_id: string;
+            asset_id: string;
+            manifest_sha256: string;
+            trust_sha256: string;
+            prerelease: boolean;
+            start: boolean;
+            enable: boolean;
+        };
+        NginxInstallCreateInput: {
+            maintenance_id: string;
+            prepare_task_id: string;
+            asset_id: string;
+            start: boolean;
+            enable: boolean;
+        };
+        NginxInstallOperation: {
+            /** Format: int64 */
+            protocol: number;
+            /** Format: int64 */
+            sequence: number;
+            /** Format: int64 */
+            deadline: number;
+            /** Format: int64 */
+            updated_at: number;
+            id: string;
+            request_hash: string;
+            command: string;
+            state: string;
+            stage: string;
+            error: string;
+            input: components["schemas"]["NginxInstallPlan"];
+            active: boolean;
+            running: boolean;
+            installation?: components["schemas"]["NginxInstallation"];
+        };
+        NginxInstallTask: {
+            id: string;
+            operation_id: string;
+            prepare_task_id: string;
+            command: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
+            sequence: number;
+            /** Format: int64 */
+            authorization_until: number;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+            input: components["schemas"]["NginxInstallPlan"];
+            result?: components["schemas"]["NginxInstallOperation"];
+        };
         NginxInstallation: {
             owner: string;
             version: string;
@@ -1649,6 +1769,8 @@ export interface components {
             installation?: components["schemas"]["NginxInstallation"];
             running: boolean;
             runtime_reason: string;
+            install_available: boolean;
+            install_reason: string;
         };
         ComponentAsset: {
             id: string;
@@ -3082,6 +3204,93 @@ export interface operations {
             header?: {
                 /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
                 "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listNginxInstallations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createNginxInstallation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NginxInstallCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getNginxInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    resumeNginxInstallation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    cancelNginxInstallation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
             };
             path: {
                 id: components["parameters"]["ID"];

@@ -44,7 +44,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -103,7 +103,7 @@ func run() error {
 	if command == "component-install" && *moduleFile == "" {
 		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
 	}
-	if command != "component-install" && (*installOperation != "" || *installMaintenance != "" || *installEpoch != "" || *installStart || *installEnable || *installResume || *installAbort) {
+	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || *installMaintenance != "" || *installEpoch != "" || *installStart || *installEnable || *installResume || *installAbort) {
 		return errors.New("installation options are only valid for component-install")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
@@ -137,6 +137,9 @@ func run() error {
 		installation = info
 	}
 	switch command {
+	case "nginx-install-worker":
+		_, err := agent.RunNginxInstallation(ctx, absDir, *installOperation)
+		return err
 	case "component-install":
 		if *nginxBinary != "" || *nginxBinding || *devAgent || *moduleFile != "/etc/nginxpanel/nginx-modules.json" {
 			return errors.New("component-install only accepts a prepared signed native Nginx asset")

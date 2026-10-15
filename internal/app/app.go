@@ -33,6 +33,7 @@ import (
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/nginxinstall"
 	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
@@ -231,8 +232,9 @@ func Run(ctx context.Context, o Options) error {
 		dnsService.Agent = agentClient
 	}
 	componentService := &components.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Agent: agentClient}
+	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	migrationService := &migration.Service{Components: componentService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
-	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
+	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, Installations: installationService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -244,14 +246,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 9)
+	result := make(chan error, 10)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(9)
+	workers.Add(10)
 	go func() {
 		defer workers.Done()
 		if o.Dev {
@@ -273,6 +275,7 @@ func Run(ctx context.Context, o Options) error {
 	go func() { defer workers.Done(); result <- dnsService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- migrationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- componentService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- installationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- maintenanceService.Run(runCtx) }()
 	select {
 	case <-ctx.Done():

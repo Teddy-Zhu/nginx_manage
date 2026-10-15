@@ -16,6 +16,9 @@ export type ComponentAsset = components["schemas"]["ComponentAsset"];
 export type ComponentRelease = components["schemas"]["ComponentRelease"];
 export type ComponentOperation = components["schemas"]["ComponentOperation"];
 export type ComponentTask = components["schemas"]["ComponentTask"];
+export type NginxInstallTask = components["schemas"]["NginxInstallTask"];
+export type NginxInstallCreateInput =
+  components["schemas"]["NginxInstallCreateInput"];
 export type Tree = components["schemas"]["Tree"];
 export type ConfigFile = components["schemas"]["File"];
 export type Resource = components["schemas"]["Resource"];
@@ -409,6 +412,25 @@ export const api = {
     request<ComponentOverview>({ url: "/components", signal }),
   componentTasks: (signal?: AbortSignal) =>
     request<ComponentTask[]>({ url: "/components/tasks", signal }),
+  nginxInstallations: (signal?: AbortSignal) =>
+    request<NginxInstallTask[]>({ url: "/components/installations", signal }),
+  createNginxInstallation: (data: NginxInstallCreateInput, key: string) =>
+    request<NginxInstallTask>({
+      url: "/components/installations",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  controlNginxInstallation: (
+    id: string,
+    command: "resume" | "cancel",
+    key: string,
+  ) =>
+    request<NginxInstallTask>({
+      url: `/components/installations/${encodeURIComponent(id)}/${command}`,
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+    }),
   createComponentTask: (data: ComponentCreateInput, key: string) =>
     request<ComponentTask>({
       url: "/components/tasks",

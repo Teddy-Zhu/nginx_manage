@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/secure"
@@ -13,6 +15,24 @@ import (
 // Maintenance admission and release share this lock with the independent
 // installation process. A root receipt is published before the lock is dropped.
 func (j *Journal) maintenanceLock() (func(), error) { return j.rootLock(".maintenance-access.lock") }
+
+func (j *Journal) waitRootLock(ctx context.Context, name string) (func(), error) {
+	call, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		unlock, err := j.rootLock(name)
+		if !errors.Is(err, unix.EWOULDBLOCK) {
+			return unlock, err
+		}
+		select {
+		case <-call.Done():
+			return nil, call.Err()
+		case <-ticker.C:
+		}
+	}
+}
 func (j *Journal) rootLock(name string) (func(), error) {
 	if os.Geteuid() != 0 {
 		return nil, errors.New("独立维护操作需要本机 root")

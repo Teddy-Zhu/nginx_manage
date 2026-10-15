@@ -183,13 +183,13 @@ nginx_hash=
 if [[ $without_nginx == no ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v3\ndata=%s\nlisten=%s\nrelease=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
+printf 'native-install-v4\ndata=%s\nlisten=%s\nrelease=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
 else
   [[ ! -e $data && ! -L $data || -d $data && ! -L $data && -z $(find "$data" -mindepth 1 -maxdepth 1 -print -quit) ]] || die '数据目录非空，禁止将首次安装覆盖到已有数据'
-  for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service; do
+  for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service; do
     [[ $(systemctl show --property=LoadState --value "$unit") == not-found ]] || die "已有同名服务，停止接管：$unit"
   done
   [[ ! -e /opt/nginxpanel/current && ! -L /opt/nginxpanel/current ]] || die '已有程序指针，停止接管'
@@ -375,12 +375,35 @@ SystemCallArchitectures=native
 [Install]
 WantedBy=multi-user.target
 EOF
+cat >"$work/nginxpanel-install@.service" <<EOF
+[Unit]
+Description=NginxPanel first Nginx installation %i
+After=network.target
+
+[Service]
+Type=exec
+User=root
+Group=nginxpanel-ipc
+UMask=0027
+ExecStart=/opt/nginxpanel/current/nginxpanel nginx-install-worker --data-dir $data --install-operation %i
+RuntimeMaxSec=660
+TimeoutStopSec=15
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run $data/bin/components
+InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+EOF
 root_chain /etc/systemd/system
-for unit in nginxpanel-nginx.service nginxpanel-agent.service nginxpanel.service; do
+for unit in nginxpanel-nginx.service nginxpanel-agent.service nginxpanel.service nginxpanel-install@.service; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-printf 'native-install-v3\n' >"$work/ready"
+printf 'native-install-v4\n' >"$work/ready"
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
   start_units=(nginxpanel.service)

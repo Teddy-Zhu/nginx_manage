@@ -35,12 +35,12 @@ func InstallNginx(ctx context.Context, opts NginxInstallOptions) (Record, error)
 		return r, err
 	}
 	j := &Journal{Dir: filepath.Join(in.Source.DataDir, "agent", "operations")}
-	unlock, err := j.rootLock(".nginx-install.lock")
+	unlock, err := j.waitRootLock(ctx, ".nginx-install.lock")
 	if err != nil {
 		return r, err
 	}
 	defer unlock()
-	access, err := j.maintenanceLock()
+	access, err := j.waitRootLock(ctx, ".maintenance-access.lock")
 	if err != nil {
 		return r, err
 	}
@@ -98,6 +98,10 @@ func InstallNginx(ctx context.Context, opts NginxInstallOptions) (Record, error)
 		access()
 		return r, err
 	}
+	if in.API != nil && (r.State != "queued" || !opts.Resume || opts.Abort || r.Deadline <= time.Now().Unix()) {
+		access()
+		return r, errors.New("独立服务只执行原 API 已排队且未过期的安装授权")
+	}
 	if opts.Abort {
 		current, info, e := nginxruntime.Selection(ctx, in.Source.DataDir)
 		if e != nil {
@@ -113,7 +117,10 @@ func InstallNginx(ctx context.Context, opts NginxInstallOptions) (Record, error)
 		access()
 		return r, err
 	}
-	r.State, r.Error, r.MaintenanceEpoch, r.Deadline = "running", "", opts.Epoch, time.Now().Add(10*time.Minute).Unix()
+	if in.API == nil {
+		r.Deadline = time.Now().Add(10 * time.Minute).Unix()
+	}
+	r.State, r.Error, r.MaintenanceEpoch = "running", "", opts.Epoch
 	if err = j.Put(r); err != nil {
 		access()
 		return r, err
@@ -131,7 +138,7 @@ func InstallNginx(ctx context.Context, opts NginxInstallOptions) (Record, error)
 	}
 	r.State, r.Error = "succeeded", ""
 	r.Stage = "installed"
-	if in.Start {
+	if r.NginxInstall.Running {
 		r.Stage = "running"
 	}
 	if err = j.Put(r); err != nil {
@@ -154,7 +161,7 @@ func installationStage(ctx context.Context, j *Journal, r *Record, stage string)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	unlock, err := j.maintenanceLock()
+	unlock, err := j.waitRootLock(ctx, ".maintenance-access.lock")
 	if err != nil {
 		return err
 	}
@@ -187,6 +194,9 @@ func runNginxInstallation(ctx context.Context, j *Journal, r *Record) error {
 		candidate, e := nginxruntime.Admit(ctx, in.Source)
 		if e != nil {
 			return e
+		}
+		if api := in.API; api != nil && (candidate.Signed == nil || candidate.Signed.ManifestSHA256 != api.ManifestSHA256 || candidate.Signed.TrustSHA256 != api.TrustSHA256) {
+			return errors.New("安装资产的清单或信任与原准备任务不一致")
 		}
 		if spec.Candidate != nil && nginxruntime.CandidateHash(candidate) != nginxruntime.CandidateHash(*spec.Candidate) {
 			return errors.New("准备资产与原安装候选不一致")
