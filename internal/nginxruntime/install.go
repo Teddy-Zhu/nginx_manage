@@ -12,7 +12,9 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-func bindingLock(data string) (func(), error) {
+// LockSelection serializes native and container installation admission for the
+// same dedicated Nginx slot. The caller must re-read the selection while held.
+func LockSelection(data string) (func(), error) {
 	name, err := bindingPath(data)
 	if err != nil {
 		return nil, err
@@ -55,7 +57,7 @@ func InstallPrepared(ctx context.Context, in Input, operationID, beforeSHA256 st
 	if err := in.Validate(); err != nil {
 		return Binding{}, err
 	}
-	unlock, err := bindingLock(in.DataDir)
+	unlock, err := LockSelection(in.DataDir)
 	if err != nil {
 		return Binding{}, err
 	}

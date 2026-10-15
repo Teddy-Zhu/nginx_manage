@@ -42,7 +42,7 @@ func installationUnitState(ctx context.Context, id string) (bool, bool, error) {
 
 func installationTemplate(data string) error {
 	intent, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/intent", 4096)
-	if err != nil || !strings.HasPrefix(string(intent), "native-install-v5\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
+	if err != nil || !strings.HasPrefix(string(intent), "native-install-v6\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
 		return fault.Conflict("原生未安装登记未确认")
 	}
 	raw, err := nginxmodules.ReadTrusted("/etc/systemd/system/"+nginxInstallTemplate, 64<<10)

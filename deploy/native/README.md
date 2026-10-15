@@ -140,3 +140,5 @@ Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安
 ## 面板容器模式
 
 首次安装可增加 `--panel-mode docker --panel-image <镜像@sha256:摘要>`，由相同宿主机安装器初始化持久应用版本、UID/GID 和 Agent Socket 权限，生成固定 Compose，且不登记原生 Web unit。`--start` 只启动宿主机服务，面板容器另行使用生成的 Compose 启动。镜像 launcher 必须与安装时提供的程序完全相同；已登记的模式、镜像或版本不能通过重跑首次安装器改换。运行、固定控制接口及真实遗留范围见 [Docker 部署](../docker/README.md)。
+
+配合 `--nginx-image <已在本机准备的镜像@sha256:摘要>` 可同时接入预置模块 Nginx 容器；与原生程序、签名组件和 `--without-nginx` 选择互斥。此分支只登记宿主机 Agent，生成双服务 Compose；不登记原生 Nginx 或原生首次安装 unit。Docker Socket 仅由宿主机 root Agent 访问，不挂入容器。首次安装意图为 v6，首版发布前不保留旧意图兼容路径。

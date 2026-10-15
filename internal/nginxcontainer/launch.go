@@ -1,0 +1,87 @@
+package nginxcontainer
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"golang.org/x/sys/unix"
+	"nginxpanel/internal/secure"
+)
+
+// Launch is the image's fixed PID 1 entry point. The short bootstrap needs
+// SETUID/SETGID/SETPCAP to discard root; the Nginx master and workers run under
+// the dedicated host UID with only NET_BIND_SERVICE, including on host networks
+// that retain the standard privileged-port threshold. No host sysctl is changed.
+func Launch(data string) error {
+	if os.Geteuid() != 0 || os.Getpid() != 1 {
+		return errors.New("Nginx 镜像启动器仅允许作为容器初始 PID 1")
+	}
+	b, err := Read(data)
+	if err != nil {
+		return err
+	}
+	for name, want := range map[string]string{Binary: b.BinarySHA256, Bootstrap: b.BootstrapSHA256} {
+		hash, err := secure.HashRootFile(name, binaryLimit)
+		if err != nil {
+			return err
+		}
+		if hash != want {
+			return errors.New("Nginx 镜像程序与宿主机登记不一致")
+		}
+	}
+	// Capabilities and prctl state are thread-local. This thread immediately
+	// execs Nginx after the process-wide UID/GID transition.
+	runtime.LockOSThread()
+	if err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return err
+	}
+	if err = unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
+		return err
+	}
+	raw, err := os.ReadFile("/proc/sys/kernel/cap_last_cap")
+	if err != nil {
+		return err
+	}
+	last, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || last < unix.CAP_NET_BIND_SERVICE || last > 63 {
+		return errors.New("内核能力范围不受支持")
+	}
+	for cap := 0; cap <= last; cap++ {
+		if cap != unix.CAP_NET_BIND_SERVICE {
+			if err = unix.Prctl(unix.PR_CAPBSET_DROP, uintptr(cap), 0, 0, 0); err != nil {
+				return err
+			}
+		}
+	}
+	if err = syscall.Setgroups([]int{}); err != nil {
+		return err
+	}
+	if err = syscall.Setgid(b.GID); err != nil {
+		return err
+	}
+	if err = syscall.Setuid(b.UID); err != nil {
+		return err
+	}
+	cap := uint32(1) << unix.CAP_NET_BIND_SERVICE
+	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
+	set := [2]unix.CapUserData{{Effective: cap, Permitted: cap, Inheritable: cap}, {}}
+	if err = unix.Capset(&header, &set[0]); err != nil {
+		return err
+	}
+	if err = unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
+		return err
+	}
+	if err = unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_RAISE, unix.CAP_NET_BIND_SERVICE, 0, 0); err != nil {
+		return err
+	}
+	if err = os.Chdir(data); err != nil {
+		return err
+	}
+	args := []string{Binary, "-p", data + "/", "-c", filepath.Join(data, "nginx", "active", "nginx.conf"), "-e", "stderr", "-g", "daemon off;"}
+	return syscall.Exec(Binary, args, []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "TZ=UTC"})
+}

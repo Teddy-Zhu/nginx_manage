@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"nginxpanel/internal/app"
 	"nginxpanel/internal/launcher"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/nginxruntime"
 	"nginxpanel/internal/panelruntime"
@@ -46,7 +49,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-status|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-status|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -75,6 +78,8 @@ func run() error {
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	nginxBinding := flags.Bool("nginx-binding", false, "use the immutable native Nginx installation binding")
+	nginxContainer := flags.Bool("nginx-container", false, "use the immutable fixed-image Nginx container binding")
+	nginxImage := flags.String("nginx-image", "", "already-local fixed Nginx image reference with sha256 digest")
 	nginxUninstalled := flags.Bool("nginx-uninstalled", false, "register an explicitly uninstalled native Nginx slot (component-bind only)")
 	installOperation := flags.String("install-operation", "", "durable native Nginx installation UUID")
 	installMaintenance := flags.String("maintenance-id", "", "held maintenance session UUID for installation")
@@ -109,13 +114,16 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
-		"launcher":              {"data-dir": true},
-		"panel-runtime-bind":    {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
-		"panel-runtime-status":  {"data-dir": true},
-		"panel-runtime-compose": {"data-dir": true},
-		"launcher-status":       {"data-dir": true},
-		"launcher-operation":    {"data-dir": true, "launcher-operation": true},
-		"launcher-restart":      {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true},
+		"launcher":               {"data-dir": true},
+		"panel-runtime-bind":     {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-runtime-status":   {"data-dir": true},
+		"panel-runtime-compose":  {"data-dir": true},
+		"launcher-status":        {"data-dir": true},
+		"launcher-operation":     {"data-dir": true, "launcher-operation": true},
+		"launcher-restart":       {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true},
+		"nginx-container-bind":   {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true},
+		"nginx-container-status": {"data-dir": true},
+		"nginx-container-launch": {"data-dir": true},
 	}
 	var invalidFlag string
 	flags.Visit(func(f *flag.Flag) {
@@ -126,7 +134,19 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
-		case "panel-binary", "launcher-binary", "panel-image", "panel-gid", "ipc-gid":
+		case "launcher-binary":
+			if command != "panel-runtime-bind" && command != "nginx-container-bind" {
+				invalidFlag = f.Name
+			}
+		case "nginx-image":
+			if command != "nginx-container-bind" {
+				invalidFlag = f.Name
+			}
+		case "nginx-container":
+			if command != "agent" && command != "nginx-init" {
+				invalidFlag = f.Name
+			}
+		case "panel-binary", "panel-image", "panel-gid", "ipc-gid":
 			if command != "panel-runtime-bind" {
 				invalidFlag = f.Name
 			}
@@ -166,6 +186,18 @@ func run() error {
 		return errors.New("nginx-runtime-check is only valid for nginx-runtime")
 	}
 	var installation *nginxruntime.Installation
+	var containerRuntime *nginxcontainer.Runtime
+	if *nginxContainer {
+		if *nginxBinding || *nginxBinary != "" || *devAgent || *releasePlan != "" || *releaseSelect != "" || len(catalog) != 0 {
+			return errors.New("Nginx 容器不能混用原生运行或模块选择")
+		}
+		binding, err := nginxcontainer.Read(absDir)
+		if err != nil {
+			return err
+		}
+		containerRuntime = &nginxcontainer.Runtime{Binding: binding}
+		installation = binding.Installation()
+	}
 	if *nginxBinding {
 		if (command != "agent" && command != "nginx-init") || *nginxBinary != "" || *devAgent || *releasePlan != "" || *releaseSelect != "" {
 			return errors.New("nginx-binding requires a native agent or initializer without another binary selection")
@@ -183,6 +215,32 @@ func run() error {
 		installation = info
 	}
 	switch command {
+	case "nginx-container-bind":
+		identity, err := user.Lookup(*nginxUser)
+		if err != nil {
+			return err
+		}
+		uid, err := strconv.Atoi(identity.Uid)
+		if err != nil {
+			return err
+		}
+		gid, err := strconv.Atoi(identity.Gid)
+		if err != nil {
+			return err
+		}
+		out, err := nginxcontainer.Bind(ctx, nginxcontainer.BindInput{DataDir: absDir, Image: *nginxImage, LauncherBinary: *launcherBinary, UID: uid, GID: gid})
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "nginx-container-status":
+		out, err := nginxcontainer.Read(absDir)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "nginx-container-launch":
+		return nginxcontainer.Launch(absDir)
 	case "launcher":
 		return launcher.Run(ctx, absDir)
 	case "panel-runtime-bind":
@@ -354,10 +412,10 @@ func run() error {
 		}
 		return app.Run(ctx, o)
 	case "nginx-init":
-		if *nginxBinary == "" {
-			return errors.New("nginx-init requires --nginx-binary")
+		if *nginxBinary == "" && containerRuntime == nil {
+			return errors.New("nginx-init requires a native binary or fixed container binding")
 		}
-		engine := &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}}
+		engine := &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Container: containerRuntime, Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}}
 		if err := engine.Open(); err != nil {
 			return err
 		}
@@ -389,8 +447,8 @@ func run() error {
 		}
 		journal := &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}
 		var engine *agent.Nginx
-		if *nginxBinary != "" {
-			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Journal: journal}
+		if *nginxBinary != "" || containerRuntime != nil {
+			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Container: containerRuntime, Journal: journal}
 		}
 		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
 	default:

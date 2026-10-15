@@ -175,7 +175,13 @@ onUnmounted(() => {
   <div class="page-stack">
     <section v-if="overview?.installation" class="panel page-stack">
       <div class="toolbar">
-        <h2>原生 Nginx</h2>
+        <h2>
+          {{
+            overview.installation.owner === "docker"
+              ? "容器 Nginx"
+              : "原生 Nginx"
+          }}
+        </h2>
         <NTag :type="overview.running ? 'success' : 'warning'">{{
           overview.running ? "运行已确认" : "运行未确认"
         }}</NTag>
@@ -185,11 +191,16 @@ onUnmounted(() => {
         {{
           overview.installation.owner === "managed"
             ? "签名托管组件"
-            : "本机批准程序"
+            : overview.installation.owner === "docker"
+              ? "固定模块镜像"
+              : "本机批准程序"
         }}
         · {{ date(overview.installation.bound_at) }}
       </p>
       <p class="muted">内容散列：{{ overview.installation.sha256 }}</p>
+      <p v-if="overview.installation.owner === 'docker'" class="muted">
+        镜像：{{ overview.installation.source_url }}
+      </p>
       <p v-if="overview.installation.asset_id">
         资产：{{ overview.installation.asset_id }} ·
         {{ overview.installation.license }}

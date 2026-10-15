@@ -3,16 +3,16 @@
 ## Nginx 固定模块镜像
 
 ```sh
-docker build -f deploy/docker/nginx.Dockerfile -t nginxpanel-nginx:1.30.6 .
+docker build -f deploy/docker/nginx.Dockerfile --build-arg TARGETARCH=amd64 -t nginxpanel-nginx:1.30.6 .
 ```
 
 基础镜像固定为官方 `nginx:1.30.6-alpine-slim` 的多架构摘要；构建时检查静态 HTTP/TLS/realip、Stream/TLS/realip/SSL preread，以及 ACL、基础 WAF、JSON 日志和 HTTP-01 依赖的默认模块。校验脚本发现版本、必需参数或默认模块不满足时中止镜像构建。
 
-镜像提供 `/usr/share/nginxpanel/capabilities.json`、完整 `nginx -V` 输出及 Nginx 二进制 SHA-256。启动入口直接运行 Nginx，清除官方配置模板入口；启动时不下载、安装或编译模块。迁移执行仍以目标 Agent 的实际能力与 `nginx -t` 为准，不能把静态清单当作运行确认。
+镜像构建前先由发行流程准备 `.release/binaries/nginxpanel-amd64`、`nginxpanel-arm64` 静态程序；`TARGETARCH` 应与目标平台一致。镜像提供 `/usr/share/nginxpanel/capabilities.json`、完整 `nginx -V` 输出，以及 Nginx 和固定启动器的 SHA-256。清除官方配置模板入口；固定启动器核对宿主机登记后降权并 exec Nginx，启动时不下载、安装或编译模块。迁移执行仍以目标 Agent 的实际能力与 `nginx -t` 为准，不能把静态清单当作运行确认。
 
 修改模块集合须重新构建并发布镜像；运行环境缺失模块时更换包含对应能力的受信镜像，重新生成迁移计划。镜像不携带源节点二进制、动态模块或业务秘密。
 
-Nginx 镜像尚未执行构建、启动或 ABI 验证。容器 Nginx 的固定实例执行适配及镜像签名发布仍待完成；目前面板容器接入宿主机 Agent，可管理其原生专用 Nginx。
+Nginx 镜像尚未执行构建、启动或 ABI 验证。固定实例执行适配已接入源码；镜像签名发布和 P5 真实系统验证仍待完成。
 
 上游构建及模块参数参见 [Nginx 官方镜像源码](https://github.com/nginx/docker-nginx) 和 [Nginx 构建选项](https://nginx.org/en/docs/configure.html)。
 
@@ -45,7 +45,15 @@ sudo deploy/native/install.sh \
 sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
 ```
 
-`--without-nginx` 可替换为原生安装器支持的本机程序或签名资产选择。此处仍是宿主机专用 Nginx；Nginx 容器接入尚未完成。没有安装 Nginx 时，迁移按原预检及显式授权首次安装流程处理。
+`--without-nginx` 可替换为原生安装器支持的本机程序或签名资产选择，以管理宿主机专用 Nginx。使用配套 Nginx 容器时，替换为 `--nginx-image 'ghcr.io/<owner>/nginxpanel-nginx:1.30.6@sha256:<image-digest>'`；镜像须由本机 root 预先准备到 Docker，不在安装器或普通运行中拉取。该分支生成同时包含 panel/nginx 的完整 Compose 和容器专用 Agent 参数，不登记原生 Nginx 或原生首次安装服务。没有安装 Nginx 时，迁移按原预检及显式授权首次安装流程处理。
+
+固定 Nginx 容器要求支持 API v1.47 的本机 rootful Docker、标准 `/run/docker.sock` 和不重映射的宿主机 UID/GID；具体 Engine/API 对应关系见 [Docker 官方版本矩阵](https://docs.docker.com/reference/api/engine/)。首次登记只检查本地不可变镜像，通过一个从未启动、随后删除的临时容器读取元数据；核对平台、镜像摘要、静态能力、程序及启动器散列后发布 root 只读 `bin/components/nginx-container.json`。与原生安装共用绑定锁，不能直接转换已有实例或替换已登记镜像。
+
+Nginx 镜像的短期 root 启动器仅为切换身份获得 SETUID/SETGID/SETPCAP 和 NET_BIND_SERVICE；exec 前删除 root 身份及转换权限，只保留 NET_BIND_SERVICE 的 bounding/permitted/effective/inheritable/ambient 集合。实际 master/worker 使用独立宿主机 Nginx UID/GID；不修改宿主机低端口 sysctl。面板容器仍删除全部 capabilities。Nginx 的配置和证书只读挂载；私钥仅向独立 Nginx 组开放只读，Web 用户不加入该组；日志、临时目录及 `run/nginx` 单独可写，未挂载业务数据库或 Web 秘密目录。
+
+宿主机 Agent 仅访问固定名称 `nginxpanel-nginx`，逐次核对镜像 ID、入口/参数、命名空间、挂载、只读根和权限；实际 master 必须为该容器 PID 1、专用非 root 身份、允许范围内的 capabilities 和已登记的 Nginx 程序散列。配置校验只在该实例执行固定 `nginx -t`，能力探测只执行 `nginx -V` 并与构建输出比较；中断诊断会尝试通过原 exec 回执、命名空间和 pidfd 确认结束。重载和日志 reopen 使用宿主机 pidfd，生效继续核对修订探针、监听归属及 TLS。容器在诊断期间重启或重建时校验失败；配置发布仍以完整的修订及监听/TLS 生效确认作为成功条件。Docker API 不暴露给 Web，两个容器都不挂载 Docker Socket。接口语义参见 [Docker Engine API v1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)。
+
+诊断前将原 exec ID、容器 ID、宿主机 boot ID 和 master 启动标识持久化到 `agent/nginx-container-exec.json`。恢复只查询/终止原诊断，不重新提交；只有原 exec 终结或原 PID 1 命名空间已结束才清理回执。未确认开始、断连后状态不明或原回执无法取得时保持阻塞，不能继续配置校验或确认旧日志可清理。必要时须由本机管理员显式停止并重建该受管容器，以结束原命名空间后恢复，不能手工将超时标成成功。
 
 持久卷内 `runtime/releases/<内容标识>/` 保存程序、前端逐文件清单及版本信息，`runtime/current` 指向已批准版本，`runtime/launcher.json` 固定镜像、launcher 散列、宿主机 UID/GID、IPC 组及初始监听。以上目录、清单和指针均由 root 持有；Web 仅写自己的业务目录及独立 launcher 运行目录。首次发布先完整复制、核对和同步，再发布指针；重试复核同一记录，不覆盖当前版本或改换部署意图。
 

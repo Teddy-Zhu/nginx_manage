@@ -384,7 +384,11 @@ func (n *Nginx) openLogIdentities(ctx context.Context, master int) (map[string]b
 		if os.IsNotExist(err) {
 			return nil
 		}
-		if err != nil || exe != n.Binary {
+		if n.Container != nil {
+			if err := n.Container.CheckProcess(ctx, pid, master); err != nil {
+				return err
+			}
+		} else if err != nil || exe != n.Binary {
 			return errors.New("Nginx 进程树身份无法确认")
 		}
 		if child {

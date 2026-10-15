@@ -23,6 +23,7 @@ import (
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
 )
@@ -39,6 +40,7 @@ type Nginx struct {
 	LogOwner                    string
 	Policy                      nginxconfig.Policy
 	Modules                     []nginxmodules.Approval
+	Container                   *nginxcontainer.Runtime
 	Journal                     *Journal
 	mu                          sync.Mutex
 	workers                     sync.WaitGroup
@@ -125,9 +127,13 @@ func (n *Nginx) setup() error {
 		return errors.New("invalid Nginx data directory")
 	}
 	var err error
-	n.Binary, err = trustedFile(n.Binary, true)
-	if err != nil {
-		return err
+	if n.Container == nil {
+		n.Binary, err = trustedFile(n.Binary, true)
+		if err != nil {
+			return err
+		}
+	} else if n.Binary != "" || len(n.Modules) != 0 || len(n.Policy.ModulePaths) != 0 {
+		return errors.New("容器 Nginx 不能同时接入宿主机程序或动态模块")
 	}
 	if n.WorkerUser == "" || strings.Trim(n.WorkerUser, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != "" {
 		return errors.New("invalid Nginx worker identity")
@@ -148,6 +154,18 @@ func (n *Nginx) setup() error {
 	n.gid, err = strconv.Atoi(identity.Gid)
 	if err != nil {
 		return err
+	}
+	if n.Container != nil {
+		binding, err := nginxcontainer.Read(n.DataDir)
+		if err != nil {
+			return err
+		}
+		if !sameContainerBinding(binding, n.Container.Binding) || binding.UID != n.uid || binding.GID != n.gid {
+			return errors.New("Nginx 容器登记与宿主机专用身份不一致")
+		}
+		if _, err := containerFeatures(binding); err != nil {
+			return err
+		}
 	}
 	if err := secure.RootDirectory(n.Journal.Dir, 0700); err != nil {
 		return err
@@ -530,6 +548,12 @@ func (n *Nginx) rollback(record Record) {
 }
 
 func (n *Nginx) test(ctx context.Context, dir string) error {
+	if n.Container != nil {
+		if _, err := n.readManifest(dir); err != nil {
+			return err
+		}
+		return n.Container.Test(ctx, dir)
+	}
 	if _, err := trustedFile(n.Binary, true); err != nil {
 		return err
 	}
@@ -670,7 +694,8 @@ func (n *Nginx) sourceHash(p *nginxconfig.Parsed) string {
 		Policy        nginxconfig.Policy
 		Worker, Group string
 		Renderer      int
-	}{p.Tree.Files, policy, n.WorkerUser, n.workerGroup, 7})
+		Runtime       string
+	}{p.Tree.Files, policy, n.WorkerUser, n.workerGroup, 8, n.runtimeIdentity()})
 	return secure.Hash(source)
 }
 
@@ -706,6 +731,9 @@ func (n *Nginx) prepare(id, deployment string, p *nginxconfig.Parsed, modules ma
 	if err := os.Chown(tmp, 0, n.gid); err != nil {
 		return m, err
 	}
+	if err := os.Chmod(tmp, 0750); err != nil {
+		return m, err
+	}
 	names := make([]string, 0, len(contents))
 	for name := range contents {
 		names = append(names, name)
@@ -720,6 +748,9 @@ func (n *Nginx) prepare(id, deployment string, p *nginxconfig.Parsed, modules ma
 		}
 		for at := parent; at != tmp; at = filepath.Dir(at) {
 			if err := os.Chown(at, 0, n.gid); err != nil {
+				return m, err
+			}
+			if err := os.Chmod(at, 0750); err != nil {
 				return m, err
 			}
 		}
@@ -829,6 +860,11 @@ func (n *Nginx) reload() error {
 }
 
 func (n *Nginx) masterPID() (int, error) {
+	if n.Container != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return n.Container.Master(ctx)
+	}
 	name := filepath.Join(n.DataDir, "run", "nginx.pid")
 	if _, err := trustedFile(name, false); err != nil {
 		return 0, ErrRuntimeUnavailable

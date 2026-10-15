@@ -51,6 +51,9 @@ func (n *Nginx) prepareModules(parsed *nginxconfig.Parsed) (map[string]ModuleDep
 	if len(parsed.Tree.ModulePaths) == 0 {
 		return out, nil
 	}
+	if n.Container != nil {
+		return nil, errors.New("Nginx 容器只使用镜像预置模块，缺失能力须更换匹配的受信镜像")
+	}
 	if len(parsed.Tree.ModulePaths) > limits.NginxModules {
 		return nil, errors.New("native module count exceeds budget")
 	}

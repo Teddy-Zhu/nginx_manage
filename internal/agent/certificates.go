@@ -57,7 +57,7 @@ func (n *Nginx) storeCertificate(id, version string, pair *certificates.Pair) er
 	root := filepath.Join(n.DataDir, "certificates")
 	parent := filepath.Join(root, id)
 	target := filepath.Join(parent, version)
-	if err := secure.RootDirectory(parent, 0700); err != nil {
+	if err := n.certificateDirectory(parent); err != nil {
 		return err
 	}
 	if _, err := os.Lstat(target); err == nil {
@@ -105,10 +105,20 @@ func (n *Nginx) storeCertificate(id, version string, pair *certificates.Pair) er
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	if err := durableFile(filepath.Join(tmp, "fullchain.pem"), []byte(pair.ChainPEM), 0600, 0); err != nil {
+	mode, gid := os.FileMode(0600), 0
+	if n.Container != nil {
+		mode, gid = 0640, n.gid
+		if err := os.Chown(tmp, 0, gid); err != nil {
+			return err
+		}
+		if err := os.Chmod(tmp, 0750); err != nil {
+			return err
+		}
+	}
+	if err := durableFile(filepath.Join(tmp, "fullchain.pem"), []byte(pair.ChainPEM), mode, gid); err != nil {
 		return err
 	}
-	if err := durableFile(filepath.Join(tmp, "privatekey.pem"), []byte(pair.KeyPEM), 0600, 0); err != nil {
+	if err := durableFile(filepath.Join(tmp, "privatekey.pem"), []byte(pair.KeyPEM), mode, gid); err != nil {
 		return err
 	}
 	if err := syncDir(tmp); err != nil {

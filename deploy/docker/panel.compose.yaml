@@ -29,3 +29,33 @@ services:
           create_host_path: false
     entrypoint: [/usr/local/bin/nginxpanel-launcher, launcher]
     command: [--data-dir, "{{.DataDir}}"]
+{{if .Nginx}}
+  nginx:
+    image: "{{.Nginx.Image}}"
+    container_name: nginxpanel-nginx
+    network_mode: host
+    user: "0:0"
+    working_dir: "{{.DataDir}}"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    # Bootstrap discards root and these transition capabilities before exec.
+    cap_add: [SETUID, SETGID, SETPCAP, NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 2048
+    stop_signal: SIGQUIT
+    stop_grace_period: 65s
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    volumes:
+{{range .Nginx.Mounts}}
+      - type: bind
+        source: "{{.Source}}"
+        target: "{{.Target}}"
+        read_only: {{.ReadOnly}}
+        bind:
+          create_host_path: false
+{{end}}
+    entrypoint: [/usr/local/bin/nginxpanel-nginx-launcher, nginx-container-launch]
+    command: [--data-dir, "{{.DataDir}}"]
+{{end}}

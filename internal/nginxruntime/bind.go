@@ -24,6 +24,11 @@ func (in Input) Validate() error {
 	if _, err := bindingPath(in.DataDir); err != nil {
 		return err
 	}
+	if _, err := os.Lstat(filepath.Join(in.DataDir, "bin", "components", "nginx-container.json")); err == nil {
+		return errors.New("Nginx 已登记为固定容器，不能同时接入原生组件")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	local := in.Binary != ""
 	managed := in.PlanID != "" && in.AssetID != ""
 	if in.Uninstalled {
@@ -153,7 +158,7 @@ func Bind(ctx context.Context, in Input) (Binding, error) {
 	if err := in.Validate(); err != nil {
 		return Binding{}, err
 	}
-	unlock, err := bindingLock(in.DataDir)
+	unlock, err := LockSelection(in.DataDir)
 	if err != nil {
 		return Binding{}, err
 	}

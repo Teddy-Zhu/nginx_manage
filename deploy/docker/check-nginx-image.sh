@@ -12,9 +12,10 @@ for flag in --with-http_ssl_module --with-http_realip_module --with-stream --wit
     *) echo "Required static module is missing: $flag" >&2; exit 1 ;;
   esac
 done
-for flag in --without-http --without-http_access_module --without-http_proxy_module --without-http_map_module --without-http_rewrite_module --without-http_headers_module --without-http_log_module --without-http_limit_req_module --without-http_limit_conn_module --without-stream_access_module --without-stream_map_module --without-stream_log_module --without-stream_limit_conn_module --without-stream_return_module; do
+for flag in --without-http --without-http_access_module --without-http_proxy_module --without-http_map_module --without-http_rewrite_module --without-http_headers_module --without-http_log_module --without-http_limit_req_module --without-http_limit_conn_module --without-http_fastcgi_module --without-http_uwsgi_module --without-http_scgi_module --without-stream_access_module --without-stream_map_module --without-stream_log_module --without-stream_limit_conn_module --without-stream_return_module; do
   case " $build " in
     *" $flag "*) echo "Required default module is disabled: $flag" >&2; exit 1 ;;
   esac
 done
 sha256sum /usr/sbin/nginx > /usr/share/nginxpanel/nginx.sha256
+sha256sum /usr/local/bin/nginxpanel-nginx-launcher > /usr/share/nginxpanel/launcher.sha256

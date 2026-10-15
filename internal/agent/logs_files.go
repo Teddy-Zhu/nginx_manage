@@ -19,6 +19,11 @@ func (n *Nginx) prepareLogFiles(sources []logSource) error {
 		if err := secure.RootDirectory(base, 0755); err != nil {
 			return err
 		}
+		if n.Container != nil {
+			if err := os.Chmod(base, 0755); err != nil {
+				return err
+			}
+		}
 		dir, err := os.Open(base)
 		if err != nil {
 			return err
@@ -46,6 +51,11 @@ func (n *Nginx) prepareLogFiles(sources []logSource) error {
 		if err := secure.RootDirectory(filepath.Dir(name), 0755); err != nil {
 			return err
 		}
+		if n.Container != nil {
+			if err := os.Chmod(filepath.Dir(name), 0755); err != nil {
+				return err
+			}
+		}
 		fd, err := unix.Open(name, unix.O_WRONLY|unix.O_APPEND|unix.O_CREAT|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0640)
 		if err != nil {
 			return err
@@ -65,7 +75,11 @@ func (n *Nginx) prepareLogFiles(sources []logSource) error {
 			file.Close()
 			return err
 		}
-		if err := file.Chown(-1, n.gid); err != nil {
+		owner := -1
+		if n.Container != nil {
+			owner = n.uid
+		}
+		if err := file.Chown(owner, n.gid); err != nil {
 			file.Close()
 			return err
 		}

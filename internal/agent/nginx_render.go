@@ -191,6 +191,11 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 					continue
 				}
 				switch node.Name {
+				case "pid":
+					if n.Container != nil {
+						arg := node.Args[0]
+						edits = append(edits, nginxconfig.Edit{Start: arg.Start, End: arg.End, Text: nginxQuote(n.runPath("nginx.pid"))})
+					}
 				case "stream":
 					edits = append(edits, nginxconfig.Edit{Start: node.Open + 1, End: node.Open + 1, Text: "\n" + runtimeLogFormat("stream")})
 				case "include":
@@ -213,7 +218,7 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 			if !hasRootErrorLog {
 				edits = append(edits, nginxconfig.Edit{Start: 0, End: 0, Text: "error_log logs/nginx-global/error.log warn;\n"})
 			}
-			probe := "\n" + http01Controls + "    # Reserved local revision probe.\n    server {\n        listen " + nginxQuote("unix:"+filepath.Join(n.DataDir, "run", "nginx-probe.sock")) + ";\n        server_name localhost;\n        access_log off;\n        location = /__nginxpanel_revision { return 200 " + nginxQuote(m.Probe) + "; }\n    }\n"
+			probe := "\n" + http01Controls + "    # Reserved local revision probe.\n    server {\n        listen " + nginxQuote("unix:"+n.runPath("nginx-probe.sock")) + ";\n        server_name localhost;\n        access_log off;\n        location = /__nginxpanel_revision { return 200 " + nginxQuote(m.Probe) + "; }\n    }\n"
 			extras := []string{}
 			for _, policy := range p.Tree.WAFPolicies {
 				if !policy.Config.Metadata.Enabled {
@@ -230,9 +235,16 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 				}
 			}
 			controls := "\n" + runtimeLogFormat("http", extras...) + defaults + "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
+			if n.Container != nil {
+				for _, kind := range []string{"fastcgi", "uwsgi", "scgi"} {
+					controls += "    " + kind + "_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", kind)) + ";\n"
+				}
+			}
 			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Open + 1, End: httpBlock.Open + 1, Text: controls})
 			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Close, End: httpBlock.Close, Text: probe})
-			edits = append(edits, nginxconfig.Edit{Start: 0, End: 0, Text: "# Generated runtime controls; original revision is retained in the database.\nuser " + n.WorkerUser + " " + n.workerGroup + ";\n"})
+			if n.Container == nil {
+				edits = append(edits, nginxconfig.Edit{Start: 0, End: 0, Text: "# Generated runtime controls; original revision is retained in the database.\nuser " + n.WorkerUser + " " + n.workerGroup + ";\n"})
+			}
 		}
 		sort.SliceStable(edits, func(i, j int) bool { return edits[i].Start > edits[j].Start })
 		text := doc.File.Content
@@ -357,8 +369,20 @@ func (n *Nginx) runtimeDirectories() error {
 	if err := secure.RootDirectory(filepath.Join(n.DataDir, "nginx", "tmp"), 0755); err != nil {
 		return err
 	}
+	if err := os.Chmod(filepath.Join(n.DataDir, "nginx", "tmp"), 0755); err != nil {
+		return err
+	}
+	dirs := []string{}
 	for _, name := range []string{"client", "proxy", "cache"} {
-		dir := filepath.Join(n.DataDir, "nginx", "tmp", name)
+		dirs = append(dirs, filepath.Join(n.DataDir, "nginx", "tmp", name))
+	}
+	if n.Container != nil {
+		for _, name := range []string{"fastcgi", "uwsgi", "scgi"} {
+			dirs = append(dirs, filepath.Join(n.DataDir, "nginx", "tmp", name))
+		}
+		dirs = append(dirs, n.runPath(""))
+	}
+	for _, dir := range dirs {
 		info, err := os.Lstat(dir)
 		if os.IsNotExist(err) {
 			if err := os.Mkdir(dir, 0700); err != nil {
@@ -452,8 +476,15 @@ func (n *Nginx) certificateFile(name string) ([]byte, error) {
 	if err != nil || info.Size() > 1<<20 {
 		return nil, errors.New("certificate exceeds size limit")
 	}
-	if strings.HasSuffix(name, "/privatekey.pem") && info.Mode().Perm()&0077 != 0 {
-		return nil, errors.New("certificate private key must be root-private")
+	if strings.HasSuffix(name, "/privatekey.pem") {
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if n.Container != nil {
+			if !ok || int(st.Gid) != n.gid || info.Mode().Perm() != 0640 {
+				return nil, errors.New("容器证书私钥必须仅向专用 Nginx 组只读开放")
+			}
+		} else if info.Mode().Perm()&0077 != 0 {
+			return nil, errors.New("certificate private key must be root-private")
+		}
 	}
 	return os.ReadFile(full)
 }
@@ -591,6 +622,11 @@ func (n *Nginx) systemCA() (string, error) {
 		full := filepath.Join(n.DataDir, name)
 		if err := secure.RootDirectory(filepath.Dir(full), 0755); err != nil {
 			return "", err
+		}
+		if n.Container != nil {
+			if err := n.certificateDirectory(filepath.Dir(full)); err != nil {
+				return "", err
+			}
 		}
 		if _, err := os.Lstat(full); os.IsNotExist(err) {
 			if err := durableFile(full, data, 0640, n.gid); err != nil {

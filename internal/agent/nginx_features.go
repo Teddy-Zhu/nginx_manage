@@ -39,6 +39,20 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 }
 func (n *Nginx) Features(ctx context.Context) NginxFeatures {
 	out := NginxFeatures{Features: map[string]Feature{}, Modules: []NativeModule{}}
+	if n.Container != nil {
+		call, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if _, err := n.Container.Version(call); err != nil {
+			out.Reason = "固定 Nginx 镜像运行身份或编译能力未确认"
+			return out
+		}
+		verified, err := containerFeatures(n.Container.Binding)
+		if err != nil {
+			out.Reason = err.Error()
+			return out
+		}
+		return verified
+	}
 	binary, err := trustedFile(n.Binary, true)
 	if err != nil || binary != n.Binary {
 		out.Reason = "可信 Nginx 二进制不可用"

@@ -1,10 +1,13 @@
 package panelruntime
 
 import (
+	"errors"
 	"io"
+	"os"
 	"text/template"
 
 	"nginxpanel/deploy/docker"
+	"nginxpanel/internal/nginxcontainer"
 )
 
 func WriteCompose(w io.Writer, data string) error {
@@ -16,5 +19,15 @@ func WriteCompose(w io.Writer, data string) error {
 	if err != nil {
 		return err
 	}
-	return t.Execute(w, d)
+	var nginx *nginxcontainer.Binding
+	binding, err := nginxcontainer.Read(data)
+	if err == nil {
+		nginx = &binding
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return t.Execute(w, struct {
+		Deployment
+		Nginx *nginxcontainer.Binding
+	}{d, nginx})
 }

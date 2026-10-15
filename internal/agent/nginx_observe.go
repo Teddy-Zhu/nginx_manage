@@ -41,7 +41,7 @@ func (n *Nginx) observe(ctx context.Context, m manifest) error {
 		return err
 	}
 	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, "unix", n.DataDir+"/run/nginx-probe.sock")
+		return (&net.Dialer{}).DialContext(ctx, "unix", n.runPath("nginx-probe.sock"))
 	}}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("unexpected probe redirect") }}
