@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 
 	"nginxpanel/internal/agent"
@@ -17,6 +19,7 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/platform"
+	"nginxpanel/internal/releases"
 )
 
 var version = "0.1.0-dev"
@@ -30,7 +33,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|doctor|version>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|doctor|version|release-verify|release-prepare>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -56,6 +59,12 @@ func run() error {
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
 	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
 	devAgent := flags.Bool("dev", false, "non-root read-only development agent")
+	releaseTrust := flags.String("release-trust", "/etc/nginxpanel/release-trust.json", "root-owned publisher trust configuration")
+	releaseManifest := flags.String("release-manifest", "", "root-owned signed release manifest")
+	releaseSignature := flags.String("release-signature", "", "root-owned detached release signature")
+	releaseAssets := flags.String("release-assets", "", "root-owned directory of offline release archives")
+	releaseSelect := flags.String("release-select", "", "explicit comma-separated asset IDs")
+	releasePrerelease := flags.Bool("release-prerelease", false, "permit authenticated prerelease assets")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
 	}
@@ -73,8 +82,25 @@ func run() error {
 		return err
 	}
 	switch command {
+	case "release-verify", "release-prepare":
+		if *releaseManifest == "" || *releaseSignature == "" || *releaseSelect == "" {
+			return errors.New("release commands require --release-manifest, --release-signature and --release-select")
+		}
+		host := platform.Detect()
+		verified, err := releases.Verify(releases.Input{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, Assets: strings.Split(*releaseSelect, ","), AllowPrerelease: *releasePrerelease, Host: releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: host.OS, Version: host.Version}, Receiver: releases.Receiver{APIMajor: 1, AgentProtocol: agent.Protocol, Launcher: releases.LauncherVersion}})
+		if err != nil {
+			return err
+		}
+		if command == "release-verify" {
+			return json.NewEncoder(os.Stdout).Encode(verified.Plan())
+		}
+		prepared, err := releases.Prepare(ctx, verified, *releaseAssets)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(prepared)
 	case "version":
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"version": version, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion})
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"version": version, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "launcher_version": releases.LauncherVersion})
 	case "doctor":
 		return json.NewEncoder(os.Stdout).Encode(platform.Detect())
 	case "init", "dev":
