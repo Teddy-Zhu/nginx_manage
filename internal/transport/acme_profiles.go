@@ -85,3 +85,21 @@ func (s *Server) ArchiveACMEProfile(w http.ResponseWriter, r *http.Request, id a
 	}
 	s.ok(w, r, out)
 }
+
+func (s *Server) UpdateACMEPolicy(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.UpdateACMEPolicyParams) {
+	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	if !ok {
+		return
+	}
+	var in acme.PolicyInput
+	if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.ACME.UpdatePolicy(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, id, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}

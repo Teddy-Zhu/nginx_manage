@@ -488,6 +488,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/certificates/{id}/deploy-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description 预览将所有现有 TLS 绑定切换到最新不可变证书版本；有待应用配置或信任链引用时拒绝，不返回配置原文。 */
+        get: operations["previewCertificateDeploy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/certificates/{id}/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 根据预览的基础版本创建配置修订并排队执行标准 Nginx 安全应用任务；排队不代表证书已经生效。 */
+        post: operations["deployCertificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/certificates/{id}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description 根据当前已确认应用修订统计最新版本绑定；包含停用站点的配置引用，不以排队成功或历史任务成功冒充当前运行状态。最近 32 条部署任务。 */
+        get: operations["listCertificateDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/certificates/{id}/versions": {
         parameters: {
             query?: never;
@@ -587,8 +644,27 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 默认恢复原订单及原凭据快照；新版本须显式建立新订单，未知创建结果还须明确确认。签发不自动应用 Nginx 配置。 */
+        /** @description 默认恢复原订单及原凭据快照；新版本须显式建立新订单，未知创建结果还须明确确认。默认不自动应用 Nginx 配置；可通过策略显式开启自动部署。 */
         post: operations["issueACMEProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acme-profiles/{id}/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description 显式启停自动续期和自动部署。开启自动部署还须 security.write；首次申请仍须人工发起。恢复结果不确定的订单须先处理原任务。 */
+        put: operations["updateACMEPolicy"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1063,6 +1139,43 @@ export interface components {
             created_at: number;
             /** Format: int64 */
             updated_at: number;
+            auto_renew: boolean;
+            auto_deploy: boolean;
+            /** Format: int64 */
+            deploy_after: number;
+            deployment_error: string;
+            renewal: components["schemas"]["ACMERenewal"];
+        };
+        ACMERenewal: {
+            version_id: string;
+            /** Format: int64 */
+            renew_at: number;
+            /** @enum {string} */
+            source: "" | "fallback" | "ari";
+            /**
+             * Format: int64
+             * @description 已持久化的 ARI 检查期限；自动续期关闭时仅签发后检查一次。
+             */
+            next_check_at: number;
+            /** Format: int64 */
+            last_check_at: number;
+            /** Format: int64 */
+            window_start: number;
+            /** Format: int64 */
+            window_end: number;
+            explanation_url: string;
+            check_failures: number;
+            failures: number;
+            paused: boolean;
+            last_error: string;
+        };
+        ACMEPolicyInput: {
+            /** Format: int64 */
+            base_version: number;
+            auto_renew: boolean;
+            auto_deploy: boolean;
+            /** @description 显式重置连续失败次数并恢复自动调度，不绕过 CA 冷却或未确认订单。 */
+            reset_failures: boolean;
         };
         ACMEProfileInput: {
             name: string;
@@ -1101,6 +1214,9 @@ export interface components {
             last_error: string;
             /** Format: int64 */
             created_at: number;
+            automatic: boolean;
+            /** @description CA 已明确确认订单或域名授权终止；须显式新建订单。 */
+            terminal: boolean;
             dns_records: components["schemas"]["ACMEDNSRecord"][];
         };
         ACMEChangeResult: {
@@ -1189,6 +1305,57 @@ export interface components {
             historical_references: number;
             /** @description 列表最多展示 10 条当前引用，详情最多 100 条；额外历史引用另计。 */
             bindings_truncated: boolean;
+        };
+        CertificateDeployInput: {
+            /** Format: int64 */
+            base_version: number;
+            /** Format: uuid */
+            version_id: string;
+        };
+        CertificateDeployChange: {
+            file_id: string;
+            resource_id: string;
+            purpose: string;
+            previous_version_id: string;
+        };
+        CertificateDeployPreview: {
+            certificate_id: string;
+            version_id: string;
+            /** Format: int64 */
+            base_version: number;
+            basis_revision: string;
+            changes: components["schemas"]["CertificateDeployChange"][];
+        };
+        CertificateDeployment: {
+            task_id: string;
+            certificate_id: string;
+            version_id: string;
+            basis_revision: string;
+            revision_id: string;
+            automatic: boolean;
+            state: string;
+            stage: string;
+            last_error: string;
+            /** Format: int64 */
+            created_at: number;
+        };
+        CertificateDeploymentStatus: {
+            version_id: string;
+            /** @enum {string} */
+            state: "unbound" | "pending" | "partial" | "applied";
+            /**
+             * Format: int64
+             * @description 已确认应用修订中的全部证书链绑定数。
+             */
+            current_bindings: number;
+            /**
+             * Format: int64
+             * @description 已确认应用修订中使用最新版本的绑定数。
+             */
+            applied_bindings: number;
+            /** Format: int64 */
+            desired_bindings: number;
+            history: components["schemas"]["CertificateDeployment"][];
         };
         CertificateResult: {
             certificate: components["schemas"]["Certificate"] | null;
@@ -2041,6 +2208,59 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
+    previewCertificateDeploy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deployCertificate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificateDeployInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listCertificateDeployments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     replaceCertificate: {
         parameters: {
             query?: never;
@@ -2201,6 +2421,29 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    updateACMEPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACMEPolicyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

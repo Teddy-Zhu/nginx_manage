@@ -29,6 +29,15 @@ export type ACMEProfile = components["schemas"]["ACMEProfile"];
 export type ACMEProfileInput = components["schemas"]["ACMEProfileInput"];
 export type ACMEIssueInput = components["schemas"]["ACMEIssueInput"];
 export type ACMEArchiveInput = components["schemas"]["ACMEArchiveInput"];
+export type ACMEPolicyInput = components["schemas"]["ACMEPolicyInput"];
+export type CertificateDeployPreview =
+  components["schemas"]["CertificateDeployPreview"];
+export type CertificateDeployInput =
+  components["schemas"]["CertificateDeployInput"];
+export type CertificateDeployment =
+  components["schemas"]["CertificateDeployment"];
+export type CertificateDeploymentStatus =
+  components["schemas"]["CertificateDeploymentStatus"];
 export type ACMEOrder = components["schemas"]["ACMEOrder"];
 export type DNSProvider = components["schemas"]["DNSProvider"];
 export type DNSCredential = components["schemas"]["DNSCredential"];
@@ -158,6 +167,13 @@ export const api = {
     request<ACMEChangeResult>({
       method: "POST",
       url: `/acme-profiles/${id}/issue`,
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  updateACMEPolicy: (id: string, data: ACMEPolicyInput, key: string) =>
+    request<ACMEChangeResult>({
+      method: "PUT",
+      url: `/acme-profiles/${id}/policy`,
       data,
       headers: { "Idempotency-Key": key },
     }),
@@ -293,6 +309,21 @@ export const api = {
   certificates: () => request<Certificate[]>({ url: "/certificates" }),
   certificate: (id: string) =>
     request<Certificate>({ url: `/certificates/${encodeURIComponent(id)}` }),
+  certificateDeployments: (id: string) =>
+    request<CertificateDeploymentStatus>({
+      url: `/certificates/${encodeURIComponent(id)}/deployments`,
+    }),
+  previewCertificateDeploy: (id: string) =>
+    request<CertificateDeployPreview>({
+      url: `/certificates/${encodeURIComponent(id)}/deploy-preview`,
+    }),
+  deployCertificate: (id: string, data: CertificateDeployInput, key: string) =>
+    request<CertificateDeployment>({
+      method: "POST",
+      url: `/certificates/${encodeURIComponent(id)}/deploy`,
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
   importCertificate: (id: string | null, data: CertificateInput, key: string) =>
     request<CertificateResult>({
       method: id ? "PUT" : "POST",

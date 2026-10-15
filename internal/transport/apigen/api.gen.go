@@ -146,6 +146,27 @@ func (e ACMEProfileState) Valid() bool {
 	}
 }
 
+// Defines values for ACMERenewalSource.
+const (
+	Ari      ACMERenewalSource = "ari"
+	Empty    ACMERenewalSource = ""
+	Fallback ACMERenewalSource = "fallback"
+)
+
+// Valid indicates whether the value is a known member of the ACMERenewalSource enum.
+func (e ACMERenewalSource) Valid() bool {
+	switch e {
+	case Ari:
+		return true
+	case Empty:
+		return true
+	case Fallback:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AccessListInputMode.
 const (
 	Allowlist AccessListInputMode = "allowlist"
@@ -184,19 +205,43 @@ func (e CertificateSource) Valid() bool {
 
 // Defines values for CertificateBindingRevisionState.
 const (
-	Applied        CertificateBindingRevisionState = "applied"
-	Desired        CertificateBindingRevisionState = "desired"
-	DesiredApplied CertificateBindingRevisionState = "desired_applied"
+	CertificateBindingRevisionStateApplied        CertificateBindingRevisionState = "applied"
+	CertificateBindingRevisionStateDesired        CertificateBindingRevisionState = "desired"
+	CertificateBindingRevisionStateDesiredApplied CertificateBindingRevisionState = "desired_applied"
 )
 
 // Valid indicates whether the value is a known member of the CertificateBindingRevisionState enum.
 func (e CertificateBindingRevisionState) Valid() bool {
 	switch e {
-	case Applied:
+	case CertificateBindingRevisionStateApplied:
 		return true
-	case Desired:
+	case CertificateBindingRevisionStateDesired:
 		return true
-	case DesiredApplied:
+	case CertificateBindingRevisionStateDesiredApplied:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificateDeploymentStatusState.
+const (
+	CertificateDeploymentStatusStateApplied CertificateDeploymentStatusState = "applied"
+	CertificateDeploymentStatusStatePartial CertificateDeploymentStatusState = "partial"
+	CertificateDeploymentStatusStatePending CertificateDeploymentStatusState = "pending"
+	CertificateDeploymentStatusStateUnbound CertificateDeploymentStatusState = "unbound"
+)
+
+// Valid indicates whether the value is a known member of the CertificateDeploymentStatusState enum.
+func (e CertificateDeploymentStatusState) Valid() bool {
+	switch e {
+	case CertificateDeploymentStatusStateApplied:
+		return true
+	case CertificateDeploymentStatusStatePartial:
+		return true
+	case CertificateDeploymentStatusStatePending:
+		return true
+	case CertificateDeploymentStatusStateUnbound:
 		return true
 	default:
 		return false
@@ -573,6 +618,7 @@ type ACMEIssueInput struct {
 
 // ACMEOrder defines model for ACMEOrder.
 type ACMEOrder struct {
+	Automatic            bool            `json:"automatic"`
 	CertificateUrl       string          `json:"certificate_url"`
 	CertificateVersionId string          `json:"certificate_version_id"`
 	CreatedAt            int64           `json:"created_at"`
@@ -583,26 +629,44 @@ type ACMEOrder struct {
 	Stage                string          `json:"stage"`
 	State                string          `json:"state"`
 	TaskId               string          `json:"task_id"`
+
+	// Terminal CA 已明确确认订单或域名授权终止；须显式新建订单。
+	Terminal bool `json:"terminal"`
+}
+
+// ACMEPolicyInput defines model for ACMEPolicyInput.
+type ACMEPolicyInput struct {
+	AutoDeploy  bool  `json:"auto_deploy"`
+	AutoRenew   bool  `json:"auto_renew"`
+	BaseVersion int64 `json:"base_version"`
+
+	// ResetFailures 显式重置连续失败次数并恢复自动调度，不绕过 CA 冷却或未确认订单。
+	ResetFailures bool `json:"reset_failures"`
 }
 
 // ACMEProfile defines model for ACMEProfile.
 type ACMEProfile struct {
-	AccountId      string                 `json:"account_id"`
-	CertificateId  string                 `json:"certificate_id"`
-	CreatedAt      int64                  `json:"created_at"`
-	CredentialId   string                 `json:"credential_id"`
-	CurrentOrderId string                 `json:"current_order_id"`
-	Domains        []string               `json:"domains"`
-	Environment    ACMEProfileEnvironment `json:"environment"`
-	Id             string                 `json:"id"`
-	LastError      string                 `json:"last_error"`
-	Name           string                 `json:"name"`
-	Notes          string                 `json:"notes"`
-	RetryAfter     int64                  `json:"retry_after"`
-	State          ACMEProfileState       `json:"state"`
-	TaskId         string                 `json:"task_id"`
-	UpdatedAt      int64                  `json:"updated_at"`
-	Version        int64                  `json:"version"`
+	AccountId       string                 `json:"account_id"`
+	AutoDeploy      bool                   `json:"auto_deploy"`
+	AutoRenew       bool                   `json:"auto_renew"`
+	CertificateId   string                 `json:"certificate_id"`
+	CreatedAt       int64                  `json:"created_at"`
+	CredentialId    string                 `json:"credential_id"`
+	CurrentOrderId  string                 `json:"current_order_id"`
+	DeployAfter     int64                  `json:"deploy_after"`
+	DeploymentError string                 `json:"deployment_error"`
+	Domains         []string               `json:"domains"`
+	Environment     ACMEProfileEnvironment `json:"environment"`
+	Id              string                 `json:"id"`
+	LastError       string                 `json:"last_error"`
+	Name            string                 `json:"name"`
+	Notes           string                 `json:"notes"`
+	Renewal         ACMERenewal            `json:"renewal"`
+	RetryAfter      int64                  `json:"retry_after"`
+	State           ACMEProfileState       `json:"state"`
+	TaskId          string                 `json:"task_id"`
+	UpdatedAt       int64                  `json:"updated_at"`
+	Version         int64                  `json:"version"`
 }
 
 // ACMEProfileEnvironment defines model for ACMEProfile.Environment.
@@ -619,6 +683,27 @@ type ACMEProfileInput struct {
 	Name         string             `json:"name"`
 	Notes        string             `json:"notes"`
 }
+
+// ACMERenewal defines model for ACMERenewal.
+type ACMERenewal struct {
+	CheckFailures  int    `json:"check_failures"`
+	ExplanationUrl string `json:"explanation_url"`
+	Failures       int    `json:"failures"`
+	LastCheckAt    int64  `json:"last_check_at"`
+	LastError      string `json:"last_error"`
+
+	// NextCheckAt 已持久化的 ARI 检查期限；自动续期关闭时仅签发后检查一次。
+	NextCheckAt int64             `json:"next_check_at"`
+	Paused      bool              `json:"paused"`
+	RenewAt     int64             `json:"renew_at"`
+	Source      ACMERenewalSource `json:"source"`
+	VersionId   string            `json:"version_id"`
+	WindowEnd   int64             `json:"window_end"`
+	WindowStart int64             `json:"window_start"`
+}
+
+// ACMERenewalSource defines model for ACMERenewal.Source.
+type ACMERenewalSource string
 
 // AccessList defines model for AccessList.
 type AccessList struct {
@@ -688,6 +773,59 @@ type CertificateBinding struct {
 
 // CertificateBindingRevisionState defines model for CertificateBinding.RevisionState.
 type CertificateBindingRevisionState string
+
+// CertificateDeployChange defines model for CertificateDeployChange.
+type CertificateDeployChange struct {
+	FileId            string `json:"file_id"`
+	PreviousVersionId string `json:"previous_version_id"`
+	Purpose           string `json:"purpose"`
+	ResourceId        string `json:"resource_id"`
+}
+
+// CertificateDeployInput defines model for CertificateDeployInput.
+type CertificateDeployInput struct {
+	BaseVersion int64              `json:"base_version"`
+	VersionId   openapi_types.UUID `json:"version_id"`
+}
+
+// CertificateDeployPreview defines model for CertificateDeployPreview.
+type CertificateDeployPreview struct {
+	BaseVersion   int64                     `json:"base_version"`
+	BasisRevision string                    `json:"basis_revision"`
+	CertificateId string                    `json:"certificate_id"`
+	Changes       []CertificateDeployChange `json:"changes"`
+	VersionId     string                    `json:"version_id"`
+}
+
+// CertificateDeployment defines model for CertificateDeployment.
+type CertificateDeployment struct {
+	Automatic     bool   `json:"automatic"`
+	BasisRevision string `json:"basis_revision"`
+	CertificateId string `json:"certificate_id"`
+	CreatedAt     int64  `json:"created_at"`
+	LastError     string `json:"last_error"`
+	RevisionId    string `json:"revision_id"`
+	Stage         string `json:"stage"`
+	State         string `json:"state"`
+	TaskId        string `json:"task_id"`
+	VersionId     string `json:"version_id"`
+}
+
+// CertificateDeploymentStatus defines model for CertificateDeploymentStatus.
+type CertificateDeploymentStatus struct {
+	// AppliedBindings 已确认应用修订中使用最新版本的绑定数。
+	AppliedBindings int64 `json:"applied_bindings"`
+
+	// CurrentBindings 已确认应用修订中的全部证书链绑定数。
+	CurrentBindings int64                            `json:"current_bindings"`
+	DesiredBindings int64                            `json:"desired_bindings"`
+	History         []CertificateDeployment          `json:"history"`
+	State           CertificateDeploymentStatusState `json:"state"`
+	VersionId       string                           `json:"version_id"`
+}
+
+// CertificateDeploymentStatusState defines model for CertificateDeploymentStatus.State.
+type CertificateDeploymentStatusState string
 
 // CertificateInput defines model for CertificateInput.
 type CertificateInput struct {
@@ -1224,6 +1362,14 @@ type IssueACMEProfileParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// UpdateACMEPolicyParams defines parameters for UpdateACMEPolicy.
+type UpdateACMEPolicyParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1253,6 +1399,14 @@ type ImportCertificateParams struct {
 
 // DeleteCertificateParams defines parameters for DeleteCertificate.
 type DeleteCertificateParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// DeployCertificateParams defines parameters for DeployCertificate.
+type DeployCertificateParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -1531,6 +1685,9 @@ type ArchiveACMEProfileJSONRequestBody = ACMEArchiveInput
 // IssueACMEProfileJSONRequestBody defines body for IssueACMEProfile for application/json ContentType.
 type IssueACMEProfileJSONRequestBody = ACMEIssueInput
 
+// UpdateACMEPolicyJSONRequestBody defines body for UpdateACMEPolicy for application/json ContentType.
+type UpdateACMEPolicyJSONRequestBody = ACMEPolicyInput
+
 // BootstrapJSONRequestBody defines body for Bootstrap for application/json ContentType.
 type BootstrapJSONRequestBody BootstrapJSONBody
 
@@ -1539,6 +1696,9 @@ type ImportCertificateJSONRequestBody = CertificateInput
 
 // DeleteCertificateJSONRequestBody defines body for DeleteCertificate for application/json ContentType.
 type DeleteCertificateJSONRequestBody = ResourceAction
+
+// DeployCertificateJSONRequestBody defines body for DeployCertificate for application/json ContentType.
+type DeployCertificateJSONRequestBody = CertificateDeployInput
 
 // ReplaceCertificateJSONRequestBody defines body for ReplaceCertificate for application/json ContentType.
 type ReplaceCertificateJSONRequestBody = CertificateInput
@@ -1648,6 +1808,9 @@ type ServerInterface interface {
 	// (GET /acme-profiles/{id}/orders)
 	ListACMEOrders(w http.ResponseWriter, r *http.Request, id ID)
 
+	// (PUT /acme-profiles/{id}/policy)
+	UpdateACMEPolicy(w http.ResponseWriter, r *http.Request, id ID, params UpdateACMEPolicyParams)
+
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
 
@@ -1665,6 +1828,15 @@ type ServerInterface interface {
 
 	// (GET /certificates/{id})
 	GetCertificate(w http.ResponseWriter, r *http.Request, id ID)
+
+	// (POST /certificates/{id}/deploy)
+	DeployCertificate(w http.ResponseWriter, r *http.Request, id ID, params DeployCertificateParams)
+
+	// (GET /certificates/{id}/deploy-preview)
+	PreviewCertificateDeploy(w http.ResponseWriter, r *http.Request, id ID)
+
+	// (GET /certificates/{id}/deployments)
+	ListCertificateDeployments(w http.ResponseWriter, r *http.Request, id ID)
 
 	// (PUT /certificates/{id}/versions)
 	ReplaceCertificate(w http.ResponseWriter, r *http.Request, id ID, params ReplaceCertificateParams)
@@ -2355,6 +2527,79 @@ func (siw *ServerInterfaceWrapper) ListACMEOrders(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// UpdateACMEPolicy operation middleware
+func (siw *ServerInterfaceWrapper) UpdateACMEPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateACMEPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateACMEPolicy(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAudit operation middleware
 func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Request) {
 
@@ -2610,6 +2855,131 @@ func (siw *ServerInterfaceWrapper) GetCertificate(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCertificate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeployCertificate operation middleware
+func (siw *ServerInterfaceWrapper) DeployCertificate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeployCertificateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeployCertificate(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewCertificateDeploy operation middleware
+func (siw *ServerInterfaceWrapper) PreviewCertificateDeploy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewCertificateDeploy(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCertificateDeployments operation middleware
+func (siw *ServerInterfaceWrapper) ListCertificateDeployments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCertificateDeployments(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4799,6 +5169,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/certificates", wrapper.ImportCertificate)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/certificates/{id}", wrapper.DeleteCertificate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/certificates/{id}", wrapper.GetCertificate)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/certificates/{id}/deploy-preview", wrapper.PreviewCertificateDeploy)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/certificates/{id}/deploy", wrapper.DeployCertificate)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/certificates/{id}/deployments", wrapper.ListCertificateDeployments)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/certificates/{id}/versions", wrapper.ReplaceCertificate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/acme-accounts", wrapper.ListACMEAccounts)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-accounts", wrapper.CreateACMEAccount)
@@ -4807,6 +5180,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/acme-profiles", wrapper.ListACMEProfiles)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-profiles", wrapper.CreateACMEProfile)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-profiles/{id}/issue", wrapper.IssueACMEProfile)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/acme-profiles/{id}/policy", wrapper.UpdateACMEPolicy)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-profiles/{id}/archive", wrapper.ArchiveACMEProfile)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/acme-profiles/{id}/orders", wrapper.ListACMEOrders)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/dns-providers", wrapper.ListDNSProviders)

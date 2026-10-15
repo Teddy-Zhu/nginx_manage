@@ -466,6 +466,41 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /certificates/{id}/deploy-preview:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: previewCertificateDeploy
+      description: 预览将所有现有 TLS 绑定切换到最新不可变证书版本；有待应用配置或信任链引用时拒绝，不返回配置原文。
+      x-scopes: [config.write, config.secrets]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /certificates/{id}/deploy:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: deployCertificate
+      description: 根据预览的基础版本创建配置修订并排队执行标准 Nginx 安全应用任务；排队不代表证书已经生效。
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CertificateDeployInput' }
+      responses:
+        '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /certificates/{id}/deployments:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: listCertificateDeployments
+      description: 根据当前已确认应用修订统计最新版本绑定；包含停用站点的配置引用，不以排队成功或历史任务成功冒充当前运行状态。最近 32 条部署任务。
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /certificates/{id}/versions:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     put:
@@ -565,7 +600,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     post:
       operationId: issueACMEProfile
-      description: 默认恢复原订单及原凭据快照；新版本须显式建立新订单，未知创建结果还须明确确认。签发不自动应用 Nginx 配置。
+      description: 默认恢复原订单及原凭据快照；新版本须显式建立新订单，未知创建结果还须明确确认。默认不自动应用 Nginx 配置；可通过策略显式开启自动部署。
       x-scopes: [config.write, config.secrets]
       parameters:
         - { $ref: '#/components/parameters/Idempotency' }
@@ -577,6 +612,23 @@ paths:
             schema: { $ref: '#/components/schemas/ACMEIssueInput' }
       responses:
         '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /acme-profiles/{id}/policy:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    put:
+      operationId: updateACMEPolicy
+      description: 显式启停自动续期和自动部署。开启自动部署还须 security.write；首次申请仍须人工发起。恢复结果不确定的订单须先处理原任务。
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ACMEPolicyInput' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
   /acme-profiles/{id}/archive:
     parameters: [{ $ref: '#/components/parameters/ID' }]
@@ -1019,7 +1071,7 @@ components:
           additionalProperties: { type: string, minLength: 1, maxLength: 2048, writeOnly: true }
     ACMEProfile:
       type: object
-      required: [id, name, notes, version, account_id, credential_id, environment, domains, certificate_id, state, current_order_id, task_id, last_error, retry_after, created_at, updated_at]
+      required: [id, name, notes, version, account_id, credential_id, environment, domains, certificate_id, state, current_order_id, task_id, last_error, retry_after, created_at, updated_at, auto_renew, auto_deploy, deploy_after, deployment_error, renewal]
       properties:
         id: { type: string }
         name: { type: string }
@@ -1037,6 +1089,36 @@ components:
         retry_after: { type: integer, format: int64 }
         created_at: { type: integer, format: int64 }
         updated_at: { type: integer, format: int64 }
+        auto_renew: { type: boolean }
+        auto_deploy: { type: boolean }
+        deploy_after: { type: integer, format: int64 }
+        deployment_error: { type: string }
+        renewal: { $ref: '#/components/schemas/ACMERenewal' }
+    ACMERenewal:
+      type: object
+      required: [version_id, renew_at, source, next_check_at, last_check_at, window_start, window_end, explanation_url, check_failures, failures, paused, last_error]
+      properties:
+        version_id: { type: string }
+        renew_at: { type: integer, format: int64 }
+        source: { type: string, enum: ['', fallback, ari] }
+        next_check_at: { type: integer, format: int64, description: 已持久化的 ARI 检查期限；自动续期关闭时仅签发后检查一次。 }
+        last_check_at: { type: integer, format: int64 }
+        window_start: { type: integer, format: int64 }
+        window_end: { type: integer, format: int64 }
+        explanation_url: { type: string }
+        check_failures: { type: integer }
+        failures: { type: integer }
+        paused: { type: boolean }
+        last_error: { type: string }
+    ACMEPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [base_version, auto_renew, auto_deploy, reset_failures]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 1 }
+        auto_renew: { type: boolean }
+        auto_deploy: { type: boolean }
+        reset_failures: { type: boolean, description: 显式重置连续失败次数并恢复自动调度，不绕过 CA 冷却或未确认订单。 }
     ACMEProfileInput:
       type: object
       additionalProperties: false
@@ -1071,7 +1153,7 @@ components:
         last_error: { type: string }
     ACMEOrder:
       type: object
-      required: [id, task_id, order_url, certificate_url, certificate_version_id, state, stage, last_error, created_at, dns_records]
+      required: [id, task_id, order_url, certificate_url, certificate_version_id, state, stage, last_error, created_at, dns_records, automatic, terminal]
       properties:
         id: { type: string }
         task_id: { type: string }
@@ -1082,6 +1164,8 @@ components:
         stage: { type: string }
         last_error: { type: string }
         created_at: { type: integer, format: int64 }
+        automatic: { type: boolean }
+        terminal: { type: boolean, description: CA 已明确确认订单或域名授权终止；须显式新建订单。 }
         dns_records: { type: array, items: { $ref: '#/components/schemas/ACMEDNSRecord' } }
     ACMEChangeResult:
       type: object
@@ -1156,6 +1240,54 @@ components:
         bindings: { type: array, description: 当前期望及最近确认的已生效修订引用。, items: { $ref: '#/components/schemas/CertificateBinding' } }
         historical_references: { type: integer, format: int64 }
         bindings_truncated: { type: boolean, description: 列表最多展示 10 条当前引用，详情最多 100 条；额外历史引用另计。 }
+    CertificateDeployInput:
+      type: object
+      additionalProperties: false
+      required: [base_version, version_id]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 1 }
+        version_id: { type: string, format: uuid }
+    CertificateDeployChange:
+      type: object
+      required: [file_id, resource_id, purpose, previous_version_id]
+      properties:
+        file_id: { type: string }
+        resource_id: { type: string }
+        purpose: { type: string }
+        previous_version_id: { type: string }
+    CertificateDeployPreview:
+      type: object
+      required: [certificate_id, version_id, base_version, basis_revision, changes]
+      properties:
+        certificate_id: { type: string }
+        version_id: { type: string }
+        base_version: { type: integer, format: int64 }
+        basis_revision: { type: string }
+        changes: { type: array, items: { $ref: '#/components/schemas/CertificateDeployChange' } }
+    CertificateDeployment:
+      type: object
+      required: [task_id, certificate_id, version_id, basis_revision, revision_id, automatic, state, stage, last_error, created_at]
+      properties:
+        task_id: { type: string }
+        certificate_id: { type: string }
+        version_id: { type: string }
+        basis_revision: { type: string }
+        revision_id: { type: string }
+        automatic: { type: boolean }
+        state: { type: string }
+        stage: { type: string }
+        last_error: { type: string }
+        created_at: { type: integer, format: int64 }
+    CertificateDeploymentStatus:
+      type: object
+      required: [version_id, state, current_bindings, applied_bindings, desired_bindings, history]
+      properties:
+        version_id: { type: string }
+        state: { type: string, enum: [unbound, pending, partial, applied] }
+        current_bindings: { type: integer, format: int64, description: 已确认应用修订中的全部证书链绑定数。 }
+        applied_bindings: { type: integer, format: int64, description: 已确认应用修订中使用最新版本的绑定数。 }
+        desired_bindings: { type: integer, format: int64 }
+        history: { type: array, maxItems: 32, items: { $ref: '#/components/schemas/CertificateDeployment' } }
     CertificateResult:
       type: object
       required: [certificate, deleted]

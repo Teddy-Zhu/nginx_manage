@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "ACME 签发",
-    "subtitle": "DNS-01 证书申请与订单恢复",
+    "subtitle": "证书申请、自动续期与订单恢复",
     "nav": false
   }
 }
@@ -15,6 +15,8 @@ import {
   NAlert,
   NButton,
   NEmpty,
+  NModal,
+  NCheckbox,
   NForm,
   NFormItem,
   NInput,
@@ -26,6 +28,7 @@ import {
   type ACMEAccount,
   type ACMEProfile,
   type ACMEProfileInput,
+  type ACMEPolicyInput,
   type ACMEOrder,
   type DNSCredential,
 } from "../api/client";
@@ -53,6 +56,19 @@ const form = ref(emptyForm()),
   now = ref(Date.now());
 const formJSON = computed(() =>
   JSON.stringify([form.value, domainsText.value]),
+);
+const policyID = ref(""),
+  policyName = ref("");
+const policy = ref<ACMEPolicyInput>({
+  base_version: 0,
+  auto_renew: false,
+  auto_deploy: false,
+  reset_failures: false,
+});
+const policyBaseline = ref("");
+const policyDirty = computed(
+  () =>
+    !!policyID.value && JSON.stringify(policy.value) !== policyBaseline.value,
 );
 const dirty = computed(
   () => editing.value && formJSON.value !== baseline.value,
@@ -124,6 +140,47 @@ async function load() {
     credentials.value = c;
     if (selected.value) orders.value = await api.acmeOrders(selected.value);
   });
+}
+function openPolicy(item: ACMEProfile) {
+  policyID.value = item.id;
+  policyName.value = item.name;
+  policy.value = {
+    base_version: item.version,
+    auto_renew: item.auto_renew,
+    auto_deploy: item.auto_deploy,
+    reset_failures: false,
+  };
+  policyBaseline.value = JSON.stringify(policy.value);
+}
+function closePolicy() {
+  if (
+    busy.value ||
+    (policyDirty.value && !window.confirm("调度策略尚未保存，确认取消？"))
+  )
+    return;
+  policyID.value = "";
+}
+async function savePolicy() {
+  if (busy.value || !policyID.value) return;
+  const item = profiles.value.find((value) => value.id === policyID.value);
+  const input = { ...policy.value };
+  if (
+    input.auto_deploy &&
+    !item?.auto_deploy &&
+    !window.confirm(
+      "启用后将自动替换该证书的全部现有 TLS 绑定并应用 Nginx。测试证书仍不受浏览器信任。确认开启？",
+    )
+  )
+    return;
+  await run(async () => {
+    await api.updateACMEPolicy(
+      policyID.value,
+      input,
+      keyFor({ action: "acme-policy", id: policyID.value, input }),
+    );
+    policyID.value = "";
+    profiles.value = await api.acmeProfiles(offset.value);
+  }, "调度策略已保存");
 }
 async function changePage(delta: number) {
   if (busy.value) return;
@@ -250,16 +307,25 @@ async function showOrders(item: ACMEProfile) {
   });
 }
 const beforeUnload = (event: BeforeUnloadEvent) => {
-  if (dirty.value) event.preventDefault();
+  if (dirty.value || policyDirty.value) event.preventDefault();
 };
 onBeforeRouteLeave(
-  () => !dirty.value || window.confirm("签发配置有未保存内容，确认离开？"),
+  () =>
+    (!dirty.value && !policyDirty.value) ||
+    window.confirm("签发配置有未保存内容，确认离开？"),
 );
 onMounted(() => {
   void load();
   timer = setInterval(() => {
     now.value = Date.now();
-    if (!busy.value && profiles.value.some((item) => item.state === "issuing"))
+    if (
+      !busy.value &&
+      !policyID.value &&
+      profiles.value.some(
+        (item) =>
+          item.state === "issuing" || item.auto_renew || item.auto_deploy,
+      )
+    )
       void run(async () => {
         profiles.value = await api.acmeProfiles(offset.value);
         if (selected.value) orders.value = await api.acmeOrders(selected.value);
@@ -293,7 +359,7 @@ onUnmounted(() => {
   <n-alert type="info" :bordered="false" class="notice"
     >DNS-01 支持普通及通配域名。测试证书不受浏览器信任。签发后需在
     <router-link to="/nginx">Nginx 配置</router-link>
-    中绑定证书版本、保存并应用；自动续期尚未启用。</n-alert
+    中建立初始绑定。可为每项配置启用自动续期与自动部署；签发与部署状态分别记录。</n-alert
   >
   <n-alert
     v-if="!accountOptions.length || !credentialOptions.length"
@@ -302,6 +368,46 @@ onUnmounted(() => {
     class="notice"
     >请先添加就绪的 ACME 账户及对应域名的 DNS 凭据。</n-alert
   >
+  <n-modal
+    :show="!!policyID"
+    preset="card"
+    :title="`${policyName} · 调度策略`"
+    style="width: 560px; max-width: 94vw"
+    :mask-closable="false"
+    :close-on-esc="false"
+    :closable="false"
+  >
+    <n-form label-placement="top" :disabled="busy" @submit.prevent="savePolicy">
+      <n-form-item
+        ><n-checkbox v-model:checked="policy.auto_renew"
+          >自动续期</n-checkbox
+        ></n-form-item
+      >
+      <p class="muted">
+        优先采用 CA
+        建议窗口，无法获取时按证书实际寿命调度。连续失败六次或结果不确定时暂停，保留原证书。
+      </p>
+      <n-form-item
+        ><n-checkbox v-model:checked="policy.auto_deploy"
+          >签发后自动部署到现有绑定</n-checkbox
+        ></n-form-item
+      >
+      <p class="muted">
+        首次绑定须手动完成。有待应用配置时等待处理；应用失败后须检查任务并人工恢复。
+      </p>
+      <p class="muted">关闭策略仅停止后续调度，已排队任务继续执行。</p>
+      <n-form-item
+        ><n-checkbox v-model:checked="policy.reset_failures"
+          >重置续期失败次数并恢复调度</n-checkbox
+        ></n-form-item
+      >
+      <div class="inline-gap">
+        <n-button type="primary" attr-type="submit" :loading="busy"
+          >保存策略</n-button
+        ><n-button :disabled="busy" @click="closePolicy">取消</n-button>
+      </div>
+    </n-form>
+  </n-modal>
   <section v-if="editing" class="surface notice">
     <n-form label-placement="top" :disabled="busy" @submit.prevent="create">
       <n-form-item label="名称"
@@ -366,10 +472,61 @@ onUnmounted(() => {
     <p v-if="item.retry_after * 1000 > now" class="muted">
       允许重试时间：{{ date(item.retry_after) }}
     </p>
-    <p v-if="item.certificate_id">
+    <p class="muted">
+      自动续期：{{
+        item.auto_renew ? (item.renewal.paused ? "已暂停" : "已启用") : "已关闭"
+      }}
+      · 自动部署：{{ item.auto_deploy ? "已启用" : "已关闭" }}
+    </p>
+    <p v-if="item.renewal.renew_at" class="muted">
+      {{ item.auto_renew ? "计划续期" : "续期窗口参考" }}：{{
+        date(item.renewal.renew_at)
+      }}（{{ item.renewal.source === "ari" ? "CA 建议" : "实际寿命" }}）
+    </p>
+    <p
+      v-if="
+        item.auto_renew && !item.renewal.paused && item.renewal.next_check_at
+      "
+      class="muted"
+    >
+      下次 ARI 检查：{{ date(item.renewal.next_check_at) }}
+    </p>
+    <p v-if="item.renewal.last_error" class="muted">
+      {{ item.renewal.last_error }}
+    </p>
+    <p v-if="item.renewal.failures" class="muted">
+      连续续期失败：{{ item.renewal.failures }} 次{{
+        item.renewal.paused ? "，须检查原因并恢复调度" : ""
+      }}
+    </p>
+    <p v-if="item.renewal.explanation_url">
+      <a
+        :href="item.renewal.explanation_url"
+        target="_blank"
+        rel="noopener noreferrer"
+        >CA 续期窗口说明</a
+      >
+    </p>
+    <p v-if="item.deployment_error" class="error">
+      自动部署：{{ item.deployment_error }}
+    </p>
+    <p v-if="item.certificate_id" class="inline-gap">
       <router-link to="/certificates">查看已签发证书</router-link>
+      <router-link
+        :to="{
+          path: '/certificate-deployments',
+          query: { certificate: item.certificate_id },
+        }"
+        >部署与绑定状态</router-link
+      >
     </p>
     <div class="inline-gap">
+      <n-button
+        v-if="item.state !== 'archived'"
+        :disabled="busy"
+        @click="openPolicy(item)"
+        >调度策略</n-button
+      >
       <n-button
         v-if="item.state === 'idle'"
         type="primary"
@@ -414,6 +571,9 @@ onUnmounted(() => {
           }}</n-tag>
         </div>
         <p class="muted mono domains">订单 {{ order.id }}</p>
+        <p v-if="order.terminal" class="muted">
+          CA 已确认订单失效，须创建新订单。
+        </p>
         <p v-if="order.last_error" class="error">{{ order.last_error }}</p>
         <p v-if="order.certificate_version_id" class="muted domains">
           已保存证书版本 {{ order.certificate_version_id }}

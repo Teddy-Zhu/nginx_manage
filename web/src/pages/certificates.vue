@@ -269,6 +269,9 @@ onUnmounted(() => {
       <router-link to="/certificate-requests"
         ><n-button :disabled="busy">ACME 签发</n-button></router-link
       >
+      <router-link to="/certificate-deployments"
+        ><n-button :disabled="busy">证书部署</n-button></router-link
+      >
       <router-link to="/acme"
         ><n-button :disabled="busy">ACME 账户与 DNS 凭据</n-button></router-link
       >
@@ -279,9 +282,9 @@ onUnmounted(() => {
     </div>
   </div>
   <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >手动证书需自行续期。导入新版本后，在
+    >手动证书需自行续期。首次绑定在
     <router-link to="/nginx">Nginx 配置</router-link>
-    中选择该版本、保存并应用；原有站点会继续使用已绑定版本。</n-alert
+    中保存并应用；已有绑定可通过证书部署切换到最新版本。</n-alert
   >
   <section class="surface">
     <n-data-table

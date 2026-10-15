@@ -114,6 +114,11 @@ func (s *Service) Save(ctx context.Context, principal auth.Principal, requestID,
 }
 
 func (s *Service) save(ctx context.Context, principal auth.Principal, requestID, key string, in SaveRequest, digest string) (SaveResult, error) {
+	return s.saveLinked(ctx, principal, requestID, key, in, digest, false, nil)
+}
+
+// Certificate deployment links its task in the same transaction as the revision.
+func (s *Service) saveLinked(ctx context.Context, principal auth.Principal, requestID, key string, in SaveRequest, digest string, requireApplied bool, link func(*sql.Tx, SaveResult) error) (SaveResult, error) {
 	if err := principal.Require("config.write", "config.secrets"); err != nil {
 		return SaveResult{}, err
 	}
@@ -164,6 +169,9 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 	}
 	if version != in.BaseVersion {
 		return SaveResult{}, ErrConflict
+	}
+	if requireApplied && (!parent.Valid || parent.String != applied.String) {
+		return SaveResult{}, fault.Conflict("存在待应用的 Nginx 配置，须先处理后再部署证书")
 	}
 	if !in.Draft {
 		if err := s.requireRevisionScopes(ctx, principal, parent.String, dbgen.New(tx)); err != nil {
@@ -237,6 +245,11 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 		}
 	}
 
+	if link != nil {
+		if err := link(tx, result); err != nil {
+			return SaveResult{}, err
+		}
+	}
 	response, err := json.Marshal(result)
 	if err != nil {
 		return SaveResult{}, err

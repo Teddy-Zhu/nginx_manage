@@ -58,24 +58,48 @@ type AcmeOrder struct {
 	CertificateVersionID sql.NullString `json:"certificate_version_id"`
 	CreatedAt            int64          `json:"created_at"`
 	UpdatedAt            int64          `json:"updated_at"`
+	Automatic            int64          `json:"automatic"`
+	Terminal             int64          `json:"terminal"`
+	ReplacesID           string         `json:"replaces_id"`
 }
 
 type AcmeProfile struct {
-	ID             string         `json:"id"`
-	Name           string         `json:"name"`
-	Notes          string         `json:"notes"`
-	Version        int64          `json:"version"`
-	AccountID      sql.NullString `json:"account_id"`
-	CredentialID   sql.NullString `json:"credential_id"`
-	Environment    string         `json:"environment"`
-	Domains        string         `json:"domains"`
-	CertificateID  sql.NullString `json:"certificate_id"`
-	State          string         `json:"state"`
-	CurrentOrderID string         `json:"current_order_id"`
-	LastError      string         `json:"last_error"`
-	RetryAfter     int64          `json:"retry_after"`
-	CreatedAt      int64          `json:"created_at"`
-	UpdatedAt      int64          `json:"updated_at"`
+	ID                        string         `json:"id"`
+	Name                      string         `json:"name"`
+	Notes                     string         `json:"notes"`
+	Version                   int64          `json:"version"`
+	AccountID                 sql.NullString `json:"account_id"`
+	CredentialID              sql.NullString `json:"credential_id"`
+	Environment               string         `json:"environment"`
+	Domains                   string         `json:"domains"`
+	CertificateID             sql.NullString `json:"certificate_id"`
+	State                     string         `json:"state"`
+	CurrentOrderID            string         `json:"current_order_id"`
+	LastError                 string         `json:"last_error"`
+	RetryAfter                int64          `json:"retry_after"`
+	CreatedAt                 int64          `json:"created_at"`
+	UpdatedAt                 int64          `json:"updated_at"`
+	AutoRenew                 int64          `json:"auto_renew"`
+	AutoDeploy                int64          `json:"auto_deploy"`
+	DeployAfter               int64          `json:"deploy_after"`
+	DeploymentError           string         `json:"deployment_error"`
+	DeploymentObservedVersion string         `json:"deployment_observed_version"`
+}
+
+type AcmeRenewal struct {
+	ProfileID      string `json:"profile_id"`
+	VersionID      string `json:"version_id"`
+	RenewAt        int64  `json:"renew_at"`
+	Source         string `json:"source"`
+	NextCheckAt    int64  `json:"next_check_at"`
+	LastCheckAt    int64  `json:"last_check_at"`
+	WindowStart    int64  `json:"window_start"`
+	WindowEnd      int64  `json:"window_end"`
+	ExplanationUrl string `json:"explanation_url"`
+	CheckFailures  int64  `json:"check_failures"`
+	Failures       int64  `json:"failures"`
+	Paused         int64  `json:"paused"`
+	LastError      string `json:"last_error"`
 }
 
 type ApiCredential struct {
@@ -109,6 +133,16 @@ type Certificate struct {
 	Source          string `json:"source"`
 	CreatedAt       int64  `json:"created_at"`
 	UpdatedAt       int64  `json:"updated_at"`
+}
+
+type CertificateDeployment struct {
+	TaskID        string `json:"task_id"`
+	CertificateID string `json:"certificate_id"`
+	VersionID     string `json:"version_id"`
+	BasisRevision string `json:"basis_revision"`
+	RevisionID    string `json:"revision_id"`
+	Automatic     int64  `json:"automatic"`
+	CreatedAt     int64  `json:"created_at"`
 }
 
 type CertificateVersion struct {

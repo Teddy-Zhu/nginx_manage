@@ -31,7 +31,7 @@ const (
 	Depth                    = 32
 	PageSize                 = 100
 	QueuedTasks              = 100
-	TaskWorkers              = 3
+	TaskWorkers              = 4
 	SSEConnections           = 16
 	LogScanBytes             = 16 << 20
 	StagingBytes             = 256 << 20

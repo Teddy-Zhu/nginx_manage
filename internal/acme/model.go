@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
 )
 
@@ -15,6 +16,7 @@ type Service struct {
 	DB           *sql.DB
 	Vault        *secure.Vault
 	Certificates *certificates.Service
+	Config       *nginxconfig.Service
 }
 
 type Account struct {

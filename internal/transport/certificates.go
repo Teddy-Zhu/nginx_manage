@@ -30,6 +30,46 @@ func (s *Server) GetCertificate(w http.ResponseWriter, r *http.Request, id apige
 	}
 	s.ok(w, r, out)
 }
+func (s *Server) PreviewCertificateDeploy(w http.ResponseWriter, r *http.Request, id apigen.ID) {
+	p, ok := s.authorize(w, r, false, "config.write", "config.secrets")
+	if !ok {
+		return
+	}
+	out, err := s.Config.PreviewCertificateDeploy(r.Context(), p, id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}
+func (s *Server) ListCertificateDeployments(w http.ResponseWriter, r *http.Request, id apigen.ID) {
+	if _, ok := s.authorize(w, r, false, "read"); !ok {
+		return
+	}
+	out, err := s.Config.CertificateDeployments(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}
+func (s *Server) DeployCertificate(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DeployCertificateParams) {
+	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	if !ok {
+		return
+	}
+	var in nginxconfig.CertificateDeployInput
+	if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Config.DeployCertificate(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, id, in, false)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.respond(w, r, 202, "OK", "证书部署任务已排队", out)
+}
 func (s *Server) ImportCertificate(w http.ResponseWriter, r *http.Request, params apigen.ImportCertificateParams) {
 	s.writeCertificate(w, r, "", "create", params.IdempotencyKey)
 }

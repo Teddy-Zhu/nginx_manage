@@ -42,6 +42,8 @@ var errOrderUncertain = errors.New("ACME new-order outcome is uncertain")
 type orderJob struct {
 	ID, ProfileID, TaskID, AccountID, Provider, OrderURL, CertificateVersionID string
 	Started                                                                    bool
+	Automatic                                                                  bool
+	ReplacesID                                                                 string
 	NextPollAt                                                                 int64
 	Credentials, Key, CSR                                                      []byte
 }
@@ -51,10 +53,11 @@ func (s *Service) Run(ctx context.Context) error {
 	run, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var workers sync.WaitGroup
-	results := make(chan error, 2)
-	workers.Add(2)
+	results := make(chan error, 3)
+	workers.Add(3)
 	go func() { defer workers.Done(); results <- s.RunAccounts(run) }()
 	go func() { defer workers.Done(); results <- s.runOrders(run) }()
+	go func() { defer workers.Done(); results <- s.runLifecycle(run) }()
 	var err error
 	select {
 	case <-ctx.Done():
@@ -111,7 +114,7 @@ func (s *Service) nextIssue(ctx context.Context) error {
 		return errors.New("ACME issuance task found with disabled Nginx module")
 	}
 	var job orderJob
-	err = tx.QueryRowContext(ctx, "SELECT id,profile_id,task_id,COALESCE(account_id,''),provider,credentials,private_key,csr,submit_started,order_url,next_poll_at,COALESCE(certificate_version_id,'') FROM acme_orders WHERE id=?", p.CurrentOrderID).Scan(&job.ID, &job.ProfileID, &job.TaskID, &job.AccountID, &job.Provider, &job.Credentials, &job.Key, &job.CSR, &job.Started, &job.OrderURL, &job.NextPollAt, &job.CertificateVersionID)
+	err = tx.QueryRowContext(ctx, "SELECT id,profile_id,task_id,COALESCE(account_id,''),provider,credentials,private_key,csr,submit_started,order_url,next_poll_at,COALESCE(certificate_version_id,''),automatic,replaces_id FROM acme_orders WHERE id=?", p.CurrentOrderID).Scan(&job.ID, &job.ProfileID, &job.TaskID, &job.AccountID, &job.Provider, &job.Credentials, &job.Key, &job.CSR, &job.Started, &job.OrderURL, &job.NextPollAt, &job.CertificateVersionID, &job.Automatic, &job.ReplacesID)
 	if err != nil {
 		return err
 	}
@@ -277,7 +280,7 @@ func (s *Service) obtain(ctx context.Context, p Profile, job *orderJob, provider
 		}
 		// Capture Location before decoding the response body. A truncated response
 		// can then be reconciled without another newOrder request.
-		_, createErr := core.Orders.New(ctx, p.Domains, nil)
+		_, createErr := core.Orders.New(ctx, p.Domains, &api.OrderOptions{ReplacesCertID: job.ReplacesID})
 		if err := s.DB.QueryRowContext(ctx, "SELECT order_url FROM acme_orders WHERE id=?", job.ID).Scan(&job.OrderURL); err != nil {
 			return err, transport
 		}
@@ -311,6 +314,9 @@ func (s *Service) obtain(ctx context.Context, p Profile, job *orderJob, provider
 		}
 		switch order.Status {
 		case legoacme.StatusInvalid:
+			if err := s.markTerminal(ctx, *job); err != nil {
+				return err, transport
+			}
 			return issueFailure("order_invalid", "CA 订单已失效，须在允许时间后创建新订单", order.Err()), transport
 		case legoacme.StatusValid:
 			if !approvedCAURL(order.Certificate, transport.host) {
@@ -407,6 +413,9 @@ func (s *Service) solve(ctx context.Context, core *api.Core, job orderJob, p Pro
 			continue
 		}
 		if auth.Status != legoacme.StatusPending && auth.Status != legoacme.StatusProcessing {
+			if err := s.markTerminal(ctx, job); err != nil {
+				return err
+			}
 			return issueFailure("authorization_failed", "CA 域名授权已失效，请核对 DNS 后创建新订单", nil)
 		}
 		for _, ch := range auth.Challenges {
@@ -449,6 +458,9 @@ func (s *Service) solve(ctx context.Context, core *api.Core, job orderJob, p Pro
 				return nil
 			case legoacme.StatusPending, legoacme.StatusProcessing:
 			default:
+				if err := s.markTerminal(ctx, job); err != nil {
+					return err
+				}
 				return issueFailure("authorization_failed", "CA 域名验证失败，请检查 TXT 记录和传播状态", authError(auth))
 			}
 		}
@@ -531,10 +543,17 @@ func (s *Service) storeIssued(ctx context.Context, p Profile, job orderJob, chai
 	if _, err := tx.ExecContext(ctx, "UPDATE acme_orders SET certificate_url=?,certificate_version_id=?,updated_at=? WHERE id=?", uri, job.ID, time.Now().Unix(), job.ID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE acme_profiles SET certificate_id=? WHERE id=? AND current_order_id=?", p.ID, p.ID, job.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE acme_profiles SET certificate_id=?,deploy_after=0,deployment_error='',deployment_observed_version='' WHERE id=? AND current_order_id=?", p.ID, p.ID, job.ID); err != nil {
+		return err
+	}
+	if err := s.scheduleIssued(ctx, tx, p, job.ID, pair.Chain[0]); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+func (s *Service) markTerminal(ctx context.Context, job orderJob) error {
+	_, err := s.DB.ExecContext(ctx, "UPDATE acme_orders SET terminal=1 WHERE id=?", job.ID)
+	return err
 }
 func (s *Service) finishIssue(ctx context.Context, p Profile, job orderJob, state, stage, message string, retry int64) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -547,6 +566,29 @@ func (s *Service) finishIssue(ctx context.Context, p Profile, job orderJob, stat
 		profileState = "issued"
 	}
 	now := time.Now().Unix()
+	if state == "succeeded" {
+		if _, err := tx.ExecContext(ctx, "UPDATE acme_renewals SET failures=0,paused=0 WHERE profile_id=? AND version_id=?", p.ID, job.CertificateVersionID); err != nil {
+			return err
+		}
+	}
+	if job.Automatic && state != "succeeded" {
+		r, err := renewal(ctx, tx, p.ID)
+		if err != nil {
+			return err
+		}
+		r.Failures++
+		r.Paused = state == "recovery_required" || r.Failures >= 6
+		if !r.Paused {
+			next, err := backoff(r.Failures, 5*time.Minute, 6*time.Hour)
+			if err != nil {
+				return err
+			}
+			retry = max(retry, next)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE acme_renewals SET failures=?,paused=? WHERE profile_id=?", r.Failures, r.Paused, p.ID); err != nil {
+			return err
+		}
+	}
 	result, err := tx.ExecContext(ctx, "UPDATE acme_profiles SET state=?,last_error=?,retry_after=?,version=version+1,updated_at=? WHERE id=? AND current_order_id=? AND state='issuing' AND EXISTS(SELECT 1 FROM acme_orders WHERE id=? AND task_id=?)", profileState, message, retry, now, p.ID, job.ID, job.ID, job.TaskID)
 	if err != nil {
 		return err
