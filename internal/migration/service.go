@@ -294,16 +294,16 @@ func (s *Service) inspect(ctx context.Context, st *storedPlan) error {
 		add("enable", "nginx-config", "authorization", "需要本次授权启用 Nginx 配置模块")
 	}
 	if s.Agent == nil {
-		add("component", "nginx", "unavailable", "目标执行器未连接，需安装并接入配套 Nginx 运行镜像")
+		add("component", "nginx", "unavailable", "目标执行器未连接，需安装并接入受管 Nginx 实例及本机 Agent")
 	} else {
 		features, e := s.Agent.NginxFeatures(ctx)
 		if e != nil || !features.Available {
-			add("component", "nginx", "unavailable", "无法确认目标 Nginx 能力；请安装或接入配套运行镜像")
+			add("component", "nginx", "unavailable", "无法确认目标 Nginx 能力；请先安装或接入受管实例")
 		} else {
 			for _, name := range parsed.MigrationFeatures() {
 				f, ok := features.Features[name]
 				if !ok || !f.Available {
-					add("image", name, "unavailable", "目标镜像缺少已确认能力，须换用包含该模块的镜像")
+					add("image", name, "unavailable", "目标 Nginx 缺少已确认能力；Docker 须换用预置对应模块的镜像")
 				} else {
 					add("capability", name, "ready", "目标已具备所需能力")
 				}
