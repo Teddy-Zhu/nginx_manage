@@ -414,7 +414,8 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, e
 	plan.RevisionID = revision
 	plan.TaskID = task
 	plan.LastError = lastError
-	return plan, nil
+	plan.Dependencies, err = s.dependencyStatus(ctx, id)
+	return plan, err
 }
 func (s *Service) List(ctx context.Context, p auth.Principal) ([]Plan, error) {
 	if err := p.Require("backup.restore", "backup.secrets"); err != nil {
@@ -471,6 +472,13 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 	if err != nil {
 		return Plan{}, err
 	}
+	d, err := s.dependencyStatus(ctx, id)
+	if err != nil {
+		return Plan{}, err
+	}
+	if d != nil && (d.State == "queued" || d.State == "running" || d.State == "recovery_required") {
+		return Plan{}, s.migrationBlocked(ctx, "依赖准备尚未结束或结果需要恢复，请先核对原任务", st.Plan)
+	}
 	if st.Plan.State == "failed" {
 		return Plan{}, fault.Conflict("迁移计划已过期或结束，请重新预检")
 	}
@@ -487,10 +495,10 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 			return Plan{}, err
 		}
 		if in.Mode != "draft" && (!st.Plan.CanSave || !st.Plan.NginxEnabled && !in.EnableNginx) {
-			return Plan{}, blockedPlan("配置冲突未解决或未授权启用所需模块", st.Plan)
+			return Plan{}, s.migrationBlocked(ctx, "配置冲突未解决或未授权启用所需模块", st.Plan)
 		}
 		if in.Mode == "apply" && !st.Plan.CanApply {
-			return Plan{}, blockedPlan("目标依赖、镜像能力或运行条件不满足，不能应用", st.Plan)
+			return Plan{}, s.migrationBlocked(ctx, "目标依赖、镜像能力或运行条件不满足，不能应用", st.Plan)
 		}
 	}
 	request := nginxconfig.SaveRequest{BaseVersion: st.Plan.BaseVersion, Files: st.Payload.Files, Draft: in.Mode == "draft", Apply: in.Mode == "apply"}
@@ -596,7 +604,7 @@ func encodeSummary(plan Plan) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > 262144-256 {
+	if len(raw) > 262144-8192 {
 		return nil, fault.Invalid("迁移预览超过大小限制，请减少导出范围")
 	}
 	return raw, nil

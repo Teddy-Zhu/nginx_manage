@@ -43,6 +43,11 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	return s.Agent.ReadComponents(ctx)
 }
 func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key string, in CreateInput) (Task, error) {
+	return s.CreateLinked(ctx, p, requestID, key, in, nil)
+}
+
+// CreateLinked atomically links a child to an already-authorized durable parent.
+func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID, key string, in CreateInput, link func(*sql.Tx, Task) error) (Task, error) {
 	var out Task
 	if err := p.Require("components.manage"); err != nil {
 		return out, err
@@ -80,8 +85,16 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 		if e != nil {
 			return out, e
 		}
-		e = json.Unmarshal(raw, &out)
-		return out, e
+		if e = json.Unmarshal(raw, &out); e != nil {
+			return out, e
+		}
+		if link != nil {
+			if e = link(tx, out); e != nil {
+				return out, e
+			}
+			return out, tx.Commit()
+		}
+		return out, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return out, err
@@ -148,6 +161,11 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	}
 	if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,'queued',?)", secure.ID(), requestID, p.ID, "component."+in.Input.Action, out.ID, now); err != nil {
 		return out, err
+	}
+	if link != nil {
+		if err = link(tx, out); err != nil {
+			return out, err
+		}
 	}
 	return out, tx.Commit()
 }

@@ -128,6 +128,10 @@ export class ApiError extends Error {
   }
 }
 
+export type MigrationDependencyStatus =
+  components["schemas"]["MigrationDependencyStatus"];
+export type MigrationDependencyInput =
+  components["schemas"]["MigrationDependencyInput"];
 export type MigrationPushInput = components["schemas"]["MigrationPushInput"];
 export type MigrationPushTask = components["schemas"]["MigrationPushTask"];
 export type MigrationPushResumeInput =
@@ -328,6 +332,22 @@ export const api = {
       url: "/migrations/plan",
       data,
       timeout: 45_000,
+    }),
+  preflightMigration: (id: string) =>
+    request<MigrationPlan>({
+      url: `/migrations/${id}/preflight`,
+      method: "POST",
+    }),
+  prepareMigrationDependencies: (
+    id: string,
+    data: MigrationDependencyInput,
+    key: string,
+  ) =>
+    request<MigrationPlan>({
+      url: `/migrations/${id}/dependencies`,
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
     }),
   executeMigration: (id: string, data: MigrationExecuteInput, key: string) =>
     request<MigrationPlan>({

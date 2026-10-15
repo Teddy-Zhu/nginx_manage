@@ -1749,6 +1749,23 @@ type Me struct {
 	Username          string   `json:"username"`
 }
 
+// MigrationDependencyInput defines model for MigrationDependencyInput.
+type MigrationDependencyInput struct {
+	Prerelease bool   `json:"prerelease"`
+	Tag        string `json:"tag"`
+}
+
+// MigrationDependencyStatus defines model for MigrationDependencyStatus.
+type MigrationDependencyStatus struct {
+	CheckTaskId   string `json:"check_task_id"`
+	Deadline      int64  `json:"deadline"`
+	Error         string `json:"error"`
+	PrepareTaskId string `json:"prepare_task_id"`
+	Stage         string `json:"stage"`
+	State         string `json:"state"`
+	TaskId        string `json:"task_id"`
+}
+
 // MigrationExecuteInput defines model for MigrationExecuteInput.
 type MigrationExecuteInput struct {
 	EnableNginx bool                      `json:"enable_nginx"`
@@ -1793,21 +1810,22 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
-	BaseVersion   int64           `json:"base_version"`
-	CanApply      bool            `json:"can_apply"`
-	CanSave       bool            `json:"can_save"`
-	ExpiresAt     int64           `json:"expires_at"`
-	Id            string          `json:"id"`
-	LastError     string          `json:"last_error"`
-	NginxEnabled  bool            `json:"nginx_enabled"`
-	Omissions     []string        `json:"omissions"`
-	PackageSha256 string          `json:"package_sha256"`
-	RevisionId    string          `json:"revision_id"`
-	SourceNode    string          `json:"source_node"`
-	SourceVersion string          `json:"source_version"`
-	State         string          `json:"state"`
-	Steps         []MigrationStep `json:"steps"`
-	TaskId        string          `json:"task_id"`
+	BaseVersion   int64                      `json:"base_version"`
+	CanApply      bool                       `json:"can_apply"`
+	CanSave       bool                       `json:"can_save"`
+	Dependencies  *MigrationDependencyStatus `json:"dependencies,omitempty"`
+	ExpiresAt     int64                      `json:"expires_at"`
+	Id            string                     `json:"id"`
+	LastError     string                     `json:"last_error"`
+	NginxEnabled  bool                       `json:"nginx_enabled"`
+	Omissions     []string                   `json:"omissions"`
+	PackageSha256 string                     `json:"package_sha256"`
+	RevisionId    string                     `json:"revision_id"`
+	SourceNode    string                     `json:"source_node"`
+	SourceVersion string                     `json:"source_version"`
+	State         string                     `json:"state"`
+	Steps         []MigrationStep            `json:"steps"`
+	TaskId        string                     `json:"task_id"`
 }
 
 // MigrationPullInput defines model for MigrationPullInput.
@@ -1824,11 +1842,12 @@ type MigrationPullInputMode string
 
 // MigrationPushInput defines model for MigrationPushInput.
 type MigrationPushInput struct {
-	BaseVersion *int64                 `json:"base_version,omitempty"`
-	EnableNginx bool                   `json:"enable_nginx"`
-	Mappings    map[string]string      `json:"mappings"`
-	Mode        MigrationPushInputMode `json:"mode"`
-	Remote      MigrationRemote        `json:"remote"`
+	BaseVersion  *int64                    `json:"base_version,omitempty"`
+	Dependencies *MigrationDependencyInput `json:"dependencies,omitempty"`
+	EnableNginx  bool                      `json:"enable_nginx"`
+	Mappings     map[string]string         `json:"mappings"`
+	Mode         MigrationPushInputMode    `json:"mode"`
+	Remote       MigrationRemote           `json:"remote"`
 }
 
 // MigrationPushInputMode defines model for MigrationPushInput.Mode.
@@ -2668,11 +2687,24 @@ type ReceiveMigrationParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// PrepareMigrationDependenciesParams defines parameters for PrepareMigrationDependencies.
+type PrepareMigrationDependenciesParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // ExecuteMigrationParams defines parameters for ExecuteMigration.
 type ExecuteMigrationParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// PreflightMigrationParams defines parameters for PreflightMigration.
+type PreflightMigrationParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
 // GetMonitoringHistoryParams defines parameters for GetMonitoringHistory.
@@ -3047,6 +3079,9 @@ type ResumeMigrationPushJSONRequestBody = MigrationPushResumeInput
 // ReceiveMigrationJSONRequestBody defines body for ReceiveMigration for application/json ContentType.
 type ReceiveMigrationJSONRequestBody = MigrationImportInput
 
+// PrepareMigrationDependenciesJSONRequestBody defines body for PrepareMigrationDependencies for application/json ContentType.
+type PrepareMigrationDependenciesJSONRequestBody = MigrationDependencyInput
+
 // ExecuteMigrationJSONRequestBody defines body for ExecuteMigration for application/json ContentType.
 type ExecuteMigrationJSONRequestBody = MigrationExecuteInput
 
@@ -3308,8 +3343,14 @@ type ServerInterface interface {
 	// (GET /migrations/{id})
 	GetMigration(w http.ResponseWriter, r *http.Request, id ID)
 
+	// (POST /migrations/{id}/dependencies)
+	PrepareMigrationDependencies(w http.ResponseWriter, r *http.Request, id ID, params PrepareMigrationDependenciesParams)
+
 	// (POST /migrations/{id}/execute)
 	ExecuteMigration(w http.ResponseWriter, r *http.Request, id ID, params ExecuteMigrationParams)
+
+	// (POST /migrations/{id}/preflight)
+	PreflightMigration(w http.ResponseWriter, r *http.Request, id ID, params PreflightMigrationParams)
 
 	// (GET /monitoring/history)
 	GetMonitoringHistory(w http.ResponseWriter, r *http.Request, params GetMonitoringHistoryParams)
@@ -6084,6 +6125,79 @@ func (siw *ServerInterfaceWrapper) GetMigration(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// PrepareMigrationDependencies operation middleware
+func (siw *ServerInterfaceWrapper) PrepareMigrationDependencies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PrepareMigrationDependenciesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PrepareMigrationDependencies(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ExecuteMigration operation middleware
 func (siw *ServerInterfaceWrapper) ExecuteMigration(w http.ResponseWriter, r *http.Request) {
 
@@ -6148,6 +6262,56 @@ func (siw *ServerInterfaceWrapper) ExecuteMigration(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ExecuteMigration(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreflightMigration operation middleware
+func (siw *ServerInterfaceWrapper) PreflightMigration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PreflightMigrationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreflightMigration(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8617,6 +8781,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/plan", wrapper.PrepareMigration)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/pull", wrapper.PullMigration)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations/{id}", wrapper.GetMigration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/{id}/preflight", wrapper.PreflightMigration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/{id}/dependencies", wrapper.PrepareMigrationDependencies)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/{id}/execute", wrapper.ExecuteMigration)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/system/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/system/version", wrapper.GetVersion)

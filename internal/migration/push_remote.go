@@ -107,6 +107,11 @@ func sanitizePushPlan(plan Plan, remote Remote, passphrase string) (Plan, error)
 	if !validTransferID(plan.ID) || !validTransferID(plan.SourceNode) || plan.BaseVersion < 0 || len(plan.Steps) > 129 || len(plan.Omissions) > 64 || len(plan.SourceVersion) > 128 || len(plan.LastError) > 4096 {
 		return Plan{}, errors.New("invalid migration plan")
 	}
+	if d := plan.Dependencies; d != nil {
+		if !validTransferID(d.TaskID) || d.CheckTaskID != "" && !validTransferID(d.CheckTaskID) || d.PrepareTaskID != "" && !validTransferID(d.PrepareTaskID) || len(d.Error) > 1024 || len(d.State) > 32 || len(d.Stage) > 64 || d.Deadline <= 0 {
+			return Plan{}, errors.New("invalid dependency result")
+		}
+	}
 	redact := func(text string) string {
 		for _, secret := range []string{remote.APIKey, passphrase} {
 			if secret != "" {
@@ -114,6 +119,11 @@ func sanitizePushPlan(plan Plan, remote Remote, passphrase string) (Plan, error)
 			}
 		}
 		return text
+	}
+	if d := plan.Dependencies; d != nil {
+		copy := *d
+		copy.Error, copy.Stage, copy.State = redact(d.Error), redact(d.Stage), redact(d.State)
+		plan.Dependencies = &copy
 	}
 	for i := range plan.Steps {
 		step := &plan.Steps[i]

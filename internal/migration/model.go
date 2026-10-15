@@ -9,6 +9,7 @@ import (
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/components"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/notifications"
@@ -86,21 +87,22 @@ type Step struct {
 	Message  string `json:"message"`
 }
 type Plan struct {
-	PackageSHA256 string   `json:"package_sha256"`
-	ID            string   `json:"id"`
-	SourceNode    string   `json:"source_node"`
-	SourceVersion string   `json:"source_version"`
-	BaseVersion   int64    `json:"base_version"`
-	ExpiresAt     int64    `json:"expires_at"`
-	State         string   `json:"state"`
-	Steps         []Step   `json:"steps"`
-	Omissions     []string `json:"omissions"`
-	CanSave       bool     `json:"can_save"`
-	CanApply      bool     `json:"can_apply"`
-	NginxEnabled  bool     `json:"nginx_enabled"`
-	RevisionID    string   `json:"revision_id"`
-	TaskID        string   `json:"task_id"`
-	LastError     string   `json:"last_error"`
+	Dependencies  *DependencyStatus `json:"dependencies,omitempty"`
+	PackageSHA256 string            `json:"package_sha256"`
+	ID            string            `json:"id"`
+	SourceNode    string            `json:"source_node"`
+	SourceVersion string            `json:"source_version"`
+	BaseVersion   int64             `json:"base_version"`
+	ExpiresAt     int64             `json:"expires_at"`
+	State         string            `json:"state"`
+	Steps         []Step            `json:"steps"`
+	Omissions     []string          `json:"omissions"`
+	CanSave       bool              `json:"can_save"`
+	CanApply      bool              `json:"can_apply"`
+	NginxEnabled  bool              `json:"nginx_enabled"`
+	RevisionID    string            `json:"revision_id"`
+	TaskID        string            `json:"task_id"`
+	LastError     string            `json:"last_error"`
 }
 type storedPlan struct {
 	Plan               Plan              `json:"plan"`
@@ -118,6 +120,7 @@ type Host interface {
 	NginxState(context.Context) (agent.NginxState, error)
 }
 type Service struct {
+	Components      *components.Service
 	Maintenance     *maintenance.Service
 	DB              *sql.DB
 	Vault           *secure.Vault

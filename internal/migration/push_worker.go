@@ -81,6 +81,9 @@ func (s *Service) nextPush(ctx context.Context) error {
 		}
 		target := auth.Principal{Scopes: receiver.Scopes}
 		required := []string{"backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write"}
+		if j.Payload.Input.Dependencies != nil {
+			required = append(required, "components.manage")
+		}
 		if j.Payload.Input.EnableNginx {
 			required = append(required, "system.write")
 		}
@@ -122,8 +125,14 @@ func (s *Service) nextPush(ctx context.Context) error {
 			j.Task.State, j.Task.Stage = "succeeded", "preview"
 			return s.savePush(ctx, &j)
 		}
+		if j.Payload.Input.Dependencies != nil {
+			j.Task.Stage, j.Payload.ResumeStage = "dependencies", "dependencies"
+			return s.savePush(ctx, &j)
+		}
 		j.Task.Stage, j.Payload.ResumeStage = "executing", "executing"
 		return s.savePush(ctx, &j)
+	case "dependencies":
+		return s.pushDependencies(call, ctx, &j)
 	case "executing", "observing":
 		if !j.Task.TargetBound || j.Task.Plan == nil {
 			return s.pausePush(ctx, &j, "recovery_required", "invalid_binding", "原目标计划缺失，停止重新提交")
@@ -210,7 +219,7 @@ func (s *Service) observePush(ctx context.Context, j *pushJob) error {
 }
 func (s *Service) pausePush(ctx context.Context, j *pushJob, state, stage, message string) error {
 	// Resume always continues the original persisted stage and immutable target ID.
-	if j.Task.Stage == "connecting" || j.Task.Stage == "preparing" || j.Task.Stage == "executing" || j.Task.Stage == "observing" {
+	if j.Task.Stage == "connecting" || j.Task.Stage == "preparing" || j.Task.Stage == "dependencies" || j.Task.Stage == "executing" || j.Task.Stage == "observing" {
 		j.Payload.ResumeStage = j.Task.Stage
 	}
 	j.Task.State, j.Task.Stage, j.Task.Error = state, stage, message

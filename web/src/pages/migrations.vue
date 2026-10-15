@@ -30,6 +30,7 @@ import {
   type MigrationExecuteInput,
   type MigrationPullInput,
 } from "../api/client";
+import MigrationDependencies from "../components/MigrationDependencies.vue";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const { run, busy, message } = useAction(),
@@ -75,6 +76,15 @@ const mode = ref<MigrationExecuteInput["mode"]>("draft"),
   plan = ref<MigrationPlan | null>(null),
   history = ref<MigrationPlan[]>([]),
   error = ref("");
+const dependencyTag = ref(""),
+  dependencyPrerelease = ref(false);
+const preparingDependencies = computed(
+  () =>
+    !!plan.value?.dependencies &&
+    ["queued", "running", "recovery_required"].includes(
+      plan.value.dependencies.state,
+    ),
+);
 const controller = new AbortController();
 let timer: ReturnType<typeof setInterval> | undefined;
 let loading = false;
@@ -269,6 +279,29 @@ async function pull(execute: boolean) {
   });
   await load();
 }
+async function prepareDependencies() {
+  const id = plan.value?.id;
+  if (!id) return;
+  await run(async () => {
+    const input = {
+      tag: dependencyTag.value.trim(),
+      prerelease: dependencyPrerelease.value,
+    };
+    plan.value = await api.prepareMigrationDependencies(
+      id,
+      input,
+      keyFor({ action: "dependencies", id, input }),
+    );
+  }, "依赖准备任务已受理");
+  await load();
+}
+async function preflight() {
+  const id = plan.value?.id;
+  if (!id) return;
+  await run(async () => {
+    plan.value = await api.preflightMigration(id);
+  });
+}
 async function execute() {
   const selected = plan.value;
   if (!selected) return;
@@ -442,16 +475,33 @@ onUnmounted(() => {
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
         >{{ plan.last_error }}</NAlert
       >
-      <p
+      <MigrationDependencies
+        v-if="plan.dependencies"
+        :status="plan.dependencies"
+      />
+      <div v-if="plan.state === 'planned'" class="actions">
+        <NButton :disabled="busy" @click="preflight">重新预检</NButton>
+      </div>
+      <div
         v-if="
+          plan.state === 'planned' &&
           has('components.manage') &&
-          plan.steps.some(
-            (step) => step.kind === 'component' && step.state === 'unavailable',
-          )
+          !plan.dependencies
         "
       >
-        <router-link to="/components">检查并准备目标原生组件</router-link>
-      </p>
+        <NFormItem label="可信组件发行标签（可选）"
+          ><NInput v-model:value="dependencyTag" placeholder="留空使用稳定版"
+        /></NFormItem>
+        <NCheckbox v-model:checked="dependencyPrerelease"
+          >允许指定的预发布版本</NCheckbox
+        >
+        <NPopconfirm @positive-click="prepareDependencies"
+          ><template #trigger
+            ><NButton :disabled="busy">准备缺失依赖</NButton></template
+          >授权从目标本机信任的发行源检查并准备缺失的 Nginx
+          资产？已有实例不会被替换，Docker 模块由镜像提供。</NPopconfirm
+        >
+      </div>
       <div class="migration-steps">
         <div v-for="(step, i) in plan.steps" :key="i">
           <NTag
@@ -479,6 +529,7 @@ onUnmounted(() => {
             :loading="busy"
             :disabled="
               busy ||
+              preparingDependencies ||
               (mode === 'save' && !plan.can_save) ||
               (mode === 'apply' && !plan.can_apply)
             "

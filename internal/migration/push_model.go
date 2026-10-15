@@ -13,11 +13,12 @@ type Receiver struct {
 	Scopes  []string `json:"scopes"`
 }
 type PushInput struct {
-	Remote      Remote            `json:"remote"`
-	BaseVersion *int64            `json:"base_version,omitempty"`
-	Mappings    map[string]string `json:"mappings"`
-	Mode        string            `json:"mode"`
-	EnableNginx bool              `json:"enable_nginx"`
+	Dependencies *DependencyInput  `json:"dependencies,omitempty"`
+	Remote       Remote            `json:"remote"`
+	BaseVersion  *int64            `json:"base_version,omitempty"`
+	Mappings     map[string]string `json:"mappings"`
+	Mode         string            `json:"mode"`
+	EnableNginx  bool              `json:"enable_nginx"`
 }
 type PushResumeInput struct {
 	APIKey string `json:"api_key"`

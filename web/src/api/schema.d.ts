@@ -228,6 +228,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/migrations/{id}/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preflightMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/migrations/{id}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["prepareMigrationDependencies"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/migrations/{id}/execute": {
         parameters: {
             query?: never;
@@ -1498,6 +1530,20 @@ export interface components {
             version: number;
             scopes: string[];
         };
+        MigrationDependencyInput: {
+            tag: string;
+            prerelease: boolean;
+        };
+        MigrationDependencyStatus: {
+            task_id: string;
+            state: string;
+            stage: string;
+            check_task_id: string;
+            prepare_task_id: string;
+            error: string;
+            /** Format: int64 */
+            deadline: number;
+        };
         MigrationPushInput: {
             remote: components["schemas"]["MigrationRemote"];
             mappings: {
@@ -1508,6 +1554,7 @@ export interface components {
             enable_nginx: boolean;
             /** Format: int64 */
             base_version?: number;
+            dependencies?: components["schemas"]["MigrationDependencyInput"];
         };
         MigrationPushResumeInput: {
             api_key: string;
@@ -2860,6 +2907,7 @@ export interface components {
             task_id: string;
             last_error: string;
             package_sha256: string;
+            dependencies?: components["schemas"]["MigrationDependencyStatus"];
         };
     };
     responses: {
@@ -3177,6 +3225,47 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    preflightMigration: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    prepareMigrationDependencies: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrationDependencyInput"];
+            };
+        };
         responses: {
             200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];

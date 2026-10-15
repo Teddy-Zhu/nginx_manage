@@ -27,6 +27,7 @@ import {
   type MigrationPushInput,
   type MigrationPushTask,
 } from "../api/client";
+import MigrationDependencies from "../components/MigrationDependencies.vue";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const session = useSession(),
@@ -43,6 +44,9 @@ const certificates = ref(false),
   automation = ref(false),
   notifications = ref(false),
   enableNginx = ref(false);
+const prepareDependencies = ref(false),
+  dependencyTag = ref(""),
+  dependencyPrerelease = ref(false);
 const mode = ref<MigrationPushInput["mode"]>("preview"),
   selected = ref<MigrationPushTask | null>(null),
   history = ref<MigrationPushTask[]>([]),
@@ -77,6 +81,9 @@ const modes = [
 const labels: Record<string, string> = {
   connecting: "连接目标",
   preparing: "传输与预检",
+  dependencies: "准备目标依赖",
+  dependencies_failed: "目标依赖准备失败",
+  dependency_recovery: "目标依赖需要恢复",
   executing: "提交目标执行",
   observing: "核对目标结果",
   preview: "预检完成",
@@ -172,6 +179,14 @@ async function submit() {
       mappings: mappingObject(),
       mode: mode.value,
       enable_nginx: enableNginx.value,
+      ...(prepareDependencies.value && mode.value !== "preview"
+        ? {
+            dependencies: {
+              tag: dependencyTag.value.trim(),
+              prerelease: dependencyPrerelease.value,
+            },
+          }
+        : {}),
     };
     selected.value = await api.startMigrationPush(input, keyFor(input));
     keyFor = useIdempotency();
@@ -251,6 +266,26 @@ onUnmounted(() => {
         <NCheckbox v-model:checked="enableNginx"
           >授权启用目标 Nginx 配置模块</NCheckbox
         >
+        <div v-if="mode !== 'preview'">
+          <NCheckbox v-model:checked="prepareDependencies"
+            >授权目标准备缺失的可信组件</NCheckbox
+          >
+          <template v-if="prepareDependencies">
+            <NFormItem label="目标组件发行标签（可选）"
+              ><NInput
+                v-model:value="dependencyTag"
+                placeholder="留空使用稳定版"
+            /></NFormItem>
+            <NCheckbox v-model:checked="dependencyPrerelease"
+              >允许指定的预发布版本</NCheckbox
+            >
+            <p>
+              目标 Key
+              需要组件管理权限。仅准备本机信任的签名资产；已有实例不会被替换，Docker
+              模块由镜像提供。准备后重新检查实际运行条件。
+            </p>
+          </template>
+        </div>
         <p>
           使用创建任务时的源配置快照，源节点继续运行。原生配置始终包含在迁移包内；目标保留管理身份及主机设置，迁入的自动化配置和通知渠道保持停用。
         </p>
@@ -300,6 +335,10 @@ onUnmounted(() => {
           selected.error
         }}</NAlert>
         <template v-if="selected.plan">
+          <MigrationDependencies
+            v-if="selected.plan.dependencies"
+            :status="selected.plan.dependencies"
+          />
           <p>
             目标计划：{{ selected.plan.id
             }}<span v-if="selected.plan.task_id">
