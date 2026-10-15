@@ -183,7 +183,7 @@ paths:
     put:
       operationId: saveConfigTree
       x-scopes: [config.write, config.secrets]
-      description: 原文和投影同事务保存。validate 只请求 Agent 策略复核，不应用 Nginx。
+      description: 原文和投影同事务保存。validate 请求真实 Nginx 校验；apply 请求串行发布、运行确认及失败回滚。
       parameters:
         - { $ref: '#/components/parameters/Idempotency' }
         - { $ref: '#/components/parameters/CSRF' }
@@ -195,6 +195,32 @@ paths:
       responses:
         '201': { $ref: '#/components/responses/JSON' }
         '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/apply:
+    post:
+      operationId: applyConfig
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_version]
+              properties:
+                base_version: { type: integer, format: int64, minimum: 0 }
+      responses:
+        '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/runtime:
+    get:
+      operationId: getNginxRuntime
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
   /nginx/config-tree/preview:
     post:
@@ -388,6 +414,7 @@ components:
         files: { type: array, minItems: 1, maxItems: 128, items: { $ref: '#/components/schemas/File' } }
         draft: { type: boolean }
         validate: { type: boolean }
+        apply: { type: boolean, default: false }
     SaveResult:
       type: object
       required: [tree]
@@ -403,6 +430,15 @@ components:
         csrf: { type: string }
         username: { type: string }
         scopes: { type: array, items: { type: string } }
+    NginxRuntime:
+      type: object
+      required: [available, revision_id, integrity, running, reason]
+      properties:
+        available: { type: boolean }
+        revision_id: { type: string }
+        integrity: { type: boolean }
+        running: { type: boolean }
+        reason: { type: string }
     CredentialInput:
       type: object
       required: [name, scopes, allowed_sources, expires_at]
@@ -423,11 +459,13 @@ components:
         reason: { type: string }
     Task:
       type: object
-      required: [id, kind, state, stage, last_error, created_at]
+      required: [id, kind, state, stage, last_error, created_at, revision_id, observed_revision]
       properties:
         id: { type: string }
         kind: { type: string }
         state: { type: string }
         stage: { type: string }
+        revision_id: { type: string }
+        observed_revision: { type: string }
         last_error: { type: string }
         created_at: { type: integer, format: int64 }

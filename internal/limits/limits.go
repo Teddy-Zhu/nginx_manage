@@ -6,6 +6,9 @@ const (
 	TreeBytes             = 2 << 20
 	FileBytes             = 256 << 10
 	Files                 = 128
+	PublishedRevisions    = 128
+	NginxListeners        = 256
+	CertificateReferences = 128
 	Directives            = 20000
 	Depth                 = 32
 	PageSize              = 100

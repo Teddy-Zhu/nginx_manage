@@ -29,7 +29,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|doctor|version>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|doctor|version>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -47,6 +47,8 @@ func run() error {
 	socket := flags.String("agent-socket", "", "local agent Unix socket")
 	webDir := flags.String("web-dir", "web/dist", "built frontend directory")
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
+	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
+	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
 	devAgent := flags.Bool("dev", false, "non-root read-only development agent")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
@@ -103,6 +105,16 @@ func run() error {
 			o.Socket = *socket
 		}
 		return app.Run(ctx, o)
+	case "nginx-init":
+		if *nginxBinary == "" {
+			return errors.New("nginx-init requires --nginx-binary")
+		}
+		engine := &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: nginxconfig.DefaultPolicy(), Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}}
+		if err := engine.Open(); err != nil {
+			return err
+		}
+		defer engine.Close()
+		return engine.Initialize()
 	case "agent":
 		uid := *allowedUID
 		if *devAgent && uid < 0 {
@@ -115,7 +127,12 @@ func run() error {
 		if *socket != "" {
 			path = *socket
 		}
-		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: nginxconfig.DefaultPolicy(), Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}, Dev: *devAgent}).Run(ctx)
+		journal := &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}
+		var engine *agent.Nginx
+		if *nginxBinary != "" {
+			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: nginxconfig.DefaultPolicy(), Journal: journal}
+		}
+		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: nginxconfig.DefaultPolicy(), Journal: journal, Nginx: engine, Dev: *devAgent}).Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

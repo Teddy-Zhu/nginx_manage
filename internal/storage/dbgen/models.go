@@ -92,18 +92,22 @@ type Setting struct {
 }
 
 type Task struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	ResourceID  string         `json:"resource_id"`
-	RevisionID  sql.NullString `json:"revision_id"`
-	State       string         `json:"state"`
-	Stage       string         `json:"stage"`
-	OperationID string         `json:"operation_id"`
-	Attempts    int64          `json:"attempts"`
-	LeaseUntil  sql.NullInt64  `json:"lease_until"`
-	LastError   string         `json:"last_error"`
-	CreatedAt   int64          `json:"created_at"`
-	UpdatedAt   int64          `json:"updated_at"`
+	ID               string         `json:"id"`
+	Kind             string         `json:"kind"`
+	ResourceID       string         `json:"resource_id"`
+	RevisionID       sql.NullString `json:"revision_id"`
+	ExpectedRevision string         `json:"expected_revision"`
+	ObservedRevision string         `json:"observed_revision"`
+	SubmitStarted    int64          `json:"submit_started"`
+	AgentAccepted    int64          `json:"agent_accepted"`
+	State            string         `json:"state"`
+	Stage            string         `json:"stage"`
+	OperationID      string         `json:"operation_id"`
+	Attempts         int64          `json:"attempts"`
+	LeaseUntil       sql.NullInt64  `json:"lease_until"`
+	LastError        string         `json:"last_error"`
+	CreatedAt        int64          `json:"created_at"`
+	UpdatedAt        int64          `json:"updated_at"`
 }
 
 type User struct {

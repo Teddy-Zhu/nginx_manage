@@ -111,6 +111,15 @@ type Module struct {
 	Reason       *string  `json:"reason,omitempty"`
 }
 
+// NginxRuntime defines model for NginxRuntime.
+type NginxRuntime struct {
+	Available  bool   `json:"available"`
+	Integrity  bool   `json:"integrity"`
+	Reason     string `json:"reason"`
+	RevisionId string `json:"revision_id"`
+	Running    bool   `json:"running"`
+}
+
 // Resource defines model for Resource.
 type Resource struct {
 	BlockKey string           `json:"block_key"`
@@ -136,6 +145,7 @@ type Response struct {
 
 // SaveRequest defines model for SaveRequest.
 type SaveRequest struct {
+	Apply       *bool  `json:"apply,omitempty"`
 	BaseVersion int64  `json:"base_version"`
 	Draft       bool   `json:"draft"`
 	Files       []File `json:"files"`
@@ -150,12 +160,14 @@ type SaveResult struct {
 
 // Task defines model for Task.
 type Task struct {
-	CreatedAt int64  `json:"created_at"`
-	Id        string `json:"id"`
-	Kind      string `json:"kind"`
-	LastError string `json:"last_error"`
-	Stage     string `json:"stage"`
-	State     string `json:"state"`
+	CreatedAt        int64  `json:"created_at"`
+	Id               string `json:"id"`
+	Kind             string `json:"kind"`
+	LastError        string `json:"last_error"`
+	ObservedRevision string `json:"observed_revision"`
+	RevisionId       string `json:"revision_id"`
+	Stage            string `json:"stage"`
+	State            string `json:"state"`
 }
 
 // Tree defines model for Tree.
@@ -224,6 +236,19 @@ type CreateCredentialParams struct {
 
 // RevokeCredentialParams defines parameters for RevokeCredential.
 type RevokeCredentialParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// ApplyConfigJSONBody defines parameters for ApplyConfig.
+type ApplyConfigJSONBody struct {
+	BaseVersion int64 `json:"base_version"`
+}
+
+// ApplyConfigParams defines parameters for ApplyConfig.
+type ApplyConfigParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
@@ -331,6 +356,9 @@ type BootstrapJSONRequestBody BootstrapJSONBody
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
 type CreateCredentialJSONRequestBody = CredentialInput
 
+// ApplyConfigJSONRequestBody defines body for ApplyConfig for application/json ContentType.
+type ApplyConfigJSONRequestBody ApplyConfigJSONBody
+
 // SaveConfigTreeJSONRequestBody defines body for SaveConfigTree for application/json ContentType.
 type SaveConfigTreeJSONRequestBody = SaveRequest
 
@@ -376,6 +404,9 @@ type ServerInterface interface {
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
 
+	// (POST /nginx/apply)
+	ApplyConfig(w http.ResponseWriter, r *http.Request, params ApplyConfigParams)
+
 	// (GET /nginx/config-tree)
 	GetConfigTree(w http.ResponseWriter, r *http.Request)
 
@@ -396,6 +427,9 @@ type ServerInterface interface {
 
 	// (GET /nginx/revisions/{id})
 	GetRevision(w http.ResponseWriter, r *http.Request, id ID)
+
+	// (GET /nginx/runtime)
+	GetNginxRuntime(w http.ResponseWriter, r *http.Request)
 
 	// (DELETE /session)
 	Logout(w http.ResponseWriter, r *http.Request, params LogoutParams)
@@ -678,6 +712,70 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApplyConfig operation middleware
+func (siw *ServerInterfaceWrapper) ApplyConfig(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ApplyConfigParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyConfig(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1006,6 +1104,20 @@ func (siw *ServerInterfaceWrapper) GetRevision(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetRevision(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNginxRuntime operation middleware
+func (siw *ServerInterfaceWrapper) GetNginxRuntime(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNginxRuntime(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1494,6 +1606,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/system/modules/{id}", wrapper.SetModule)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/config-tree", wrapper.GetConfigTree)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/config-tree", wrapper.SaveConfigTree)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/apply", wrapper.ApplyConfig)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/runtime", wrapper.GetNginxRuntime)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/preview", wrapper.PreviewConfigTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources", wrapper.CreateResource)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.PatchResource)

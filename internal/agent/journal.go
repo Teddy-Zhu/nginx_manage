@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,10 @@ type Record struct {
 	Deadline         int64  `json:"deadline,omitempty"`
 	UpdatedAt        int64  `json:"updated_at"`
 	DiagnosticsCount int    `json:"diagnostics_count"`
+	BeforeDir        string `json:"before_dir,omitempty"`
+	CandidateHash    string `json:"candidate_hash,omitempty"`
+	ObservedRevision string `json:"observed_revision"`
+	Error            string `json:"error"`
 }
 type Journal struct {
 	Dir string
@@ -107,4 +112,30 @@ func validID(id string) bool {
 		}
 	}
 	return true
+}
+
+func (j *Journal) List() ([]Record, error) {
+	entries, err := os.ReadDir(j.Dir)
+	if os.IsNotExist(err) {
+		return []Record{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	records := []Record{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".json")
+		record, err := j.Get(id)
+		if err != nil {
+			return nil, err
+		}
+		if record.OperationID != id {
+			return nil, errors.New("journal identity mismatch")
+		}
+		records = append(records, record)
+	}
+	return records, nil
 }

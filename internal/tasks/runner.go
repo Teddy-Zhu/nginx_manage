@@ -8,6 +8,8 @@ import (
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/secure"
+	"nginxpanel/internal/storage/dbgen"
 )
 
 type Runner struct {
@@ -17,12 +19,8 @@ type Runner struct {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	// Policy checks are pure and safe to repeat with the same operation ID.
-	// Never use an expired lease alone to replay an operation with side effects.
-	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='queued',stage='recovering',lease_until=NULL WHERE state='running' AND kind='nginx.policy_check'"); err != nil {
-		return err
-	}
-	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='reconcile_required' WHERE state='running' AND kind<>'nginx.policy_check'"); err != nil {
+	// An expired Web lease is never evidence that the root operation stopped.
+	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate')"); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(2 * time.Second)
@@ -38,46 +36,147 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 }
-
 func (r *Runner) next(ctx context.Context) error {
-	var id, kind, revision, operation string
-	now := time.Now().Unix()
-	err := r.DB.QueryRowContext(ctx, `UPDATE tasks SET state='running',stage='agent_policy_check',attempts=attempts+1,lease_until=?,updated_at=?
-WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT 1)
-RETURNING id,kind,revision_id,operation_id`, now+60, now).Scan(&id, &kind, &revision, &operation)
+	var id string
+	err := r.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE state IN ('running','compensating') OR (state='recovery_required' AND kind IN ('nginx.apply','nginx.validate')) ORDER BY created_at,id LIMIT 1").Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		now := time.Now().Unix()
+		err = r.DB.QueryRowContext(ctx, `UPDATE tasks SET state='running',stage='agent_submit_pending',attempts=attempts+1,lease_until=?,updated_at=?
+WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT 1) RETURNING id`, now+60, now).Scan(&id)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	state, stage, message := "succeeded", "policy_checked", ""
-	if kind != "nginx.policy_check" {
-		state, stage, message = "recovery_required", "unknown_task", "未注册的任务类型"
-	} else {
-		var enabled bool
-		err = r.DB.QueryRowContext(ctx, "SELECT enabled FROM module_settings WHERE id='nginx-config'").Scan(&enabled)
-		if err != nil {
-			return err
+	task, err := dbgen.New(r.DB).GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	if task.Kind != "nginx.apply" && task.Kind != "nginx.validate" {
+		return r.finish(ctx, task, "recovery_required", "unknown_task", "未注册的任务类型", "")
+	}
+	record, err := r.Agent.Operation(ctx, task.OperationID)
+	if errors.Is(err, agent.ErrOperationNotFound) {
+		if task.AgentAccepted != 0 {
+			if task.State == "recovery_required" && task.Stage == "operation_missing" {
+				return nil
+			}
+			return r.finish(ctx, task, "recovery_required", "operation_missing", "已接受操作的 Agent 记录缺失，停止重复执行", "")
 		}
-		if !enabled {
-			state, stage, message = "failed", "module_disabled", "Nginx 配置模块已停用"
-		} else {
-			tree, err := r.Config.Get(ctx, revision)
+		tree, loadErr := r.Config.Get(ctx, task.RevisionID.String)
+		if loadErr != nil {
+			if task.SubmitStarted != 0 {
+				return r.finish(ctx, task, "recovery_required", "load_failed", "提交后的配置修订无法读取", "")
+			}
+			return r.finish(ctx, task, "failed", "load_failed", "读取配置修订失败", "")
+		}
+		if task.SubmitStarted == 0 {
+			var desired sql.NullString
+			var enabled bool
+			if err := r.DB.QueryRowContext(ctx, "SELECT desired_revision FROM config_head WHERE id=1").Scan(&desired); err != nil {
+				return err
+			}
+			if err := r.DB.QueryRowContext(ctx, "SELECT enabled FROM module_settings WHERE id='nginx-config'").Scan(&enabled); err != nil {
+				return err
+			}
+			if !enabled {
+				return r.finish(ctx, task, "failed", "module_disabled", "Nginx 配置模块已停用", "")
+			}
+			if desired.String != task.RevisionID.String {
+				return r.finish(ctx, task, "cancelled", "superseded", "期望修订已变化，未应用旧任务", "")
+			}
+			runtime, err := r.Agent.NginxState(ctx)
 			if err != nil {
-				state, stage, message = "failed", "load_failed", "读取配置修订失败"
-			} else if tree.State != "desired" {
-				state, stage, message = "failed", "invalid_revision", "草稿不能执行"
-			} else {
-				out, err := r.Agent.Check(ctx, agent.CheckRequest{Protocol: agent.Protocol, OperationID: operation, RevisionID: revision, Files: tree.Files})
-				if err != nil {
-					state, stage, message = "failed", "agent_unavailable", err.Error()
-				} else if len(out.Diagnostics) > 0 {
-					state, stage, message = "failed", "policy_rejected", "Agent 安全策略拒绝配置，请重新检查原生配置"
+				return r.progress(ctx, task, "agent_unreachable", "无法查询 Agent 状态，保留操作标识等待核对")
+			}
+			if !runtime.Available || !runtime.Integrity {
+				return r.finish(ctx, task, "failed", "agent_not_ready", runtime.Reason, "")
+			}
+			if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET submit_started=1 WHERE id=?", task.ID); err != nil {
+				return err
+			}
+		}
+		record, err = r.Agent.Apply(ctx, agent.ApplyRequest{Protocol: agent.Protocol, OperationID: task.OperationID, RevisionID: tree.RevisionID, ExpectedRevision: task.ExpectedRevision, ValidateOnly: task.Kind == "nginx.validate", Files: tree.Files})
+		if err != nil {
+			// Reconcile the durable operation before deciding whether a failed IPC
+			// request was rejected or is still executing independently of this process.
+			submissionErr := err
+			record, err = r.Agent.Operation(ctx, task.OperationID)
+			if errors.Is(err, agent.ErrOperationNotFound) {
+				var rejected *agent.HTTPError
+				if errors.As(submissionErr, &rejected) {
+					return r.finish(ctx, task, "failed", "agent_rejected", "Agent 未接受操作；请检查运行修订及本机执行状态", "")
 				}
+				return r.progress(ctx, task, "submit_unconfirmed", "提交结果待确认，将使用原操作标识继续核对")
 			}
 		}
 	}
-	_, err = r.DB.ExecContext(ctx, "UPDATE tasks SET state=?,stage=?,last_error=?,lease_until=NULL,updated_at=? WHERE id=? AND state='running'", state, stage, message, time.Now().Unix(), id)
+	if err != nil {
+		return r.progress(ctx, task, "reconciling", "无法确认 Agent 操作结果，保留原操作标识继续核对")
+	}
+	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET agent_accepted=1 WHERE id=?", task.ID); err != nil {
+		return err
+	}
+	if record.OperationID != task.OperationID || record.AfterRevision != task.RevisionID.String || record.BeforeRevision != task.ExpectedRevision || record.Kind != task.Kind {
+		return r.finish(ctx, task, "recovery_required", "operation_mismatch", "Agent 执行合同与任务不一致", "")
+	}
+	switch record.State {
+	case "succeeded", "rolled_back":
+		if task.Kind == "nginx.apply" {
+			want := task.RevisionID.String
+			if record.State == "rolled_back" {
+				want = task.ExpectedRevision
+			}
+			runtime, err := r.Agent.NginxState(ctx)
+			if err != nil {
+				return r.progress(ctx, task, "reconciling", "等待确认 Agent 当前运行修订")
+			}
+			if !runtime.Integrity || !runtime.Running || runtime.RevisionID != want || record.ObservedRevision != want {
+				return r.finish(ctx, task, "recovery_required", "runtime_mismatch", "执行记录与当前运行修订不一致", "")
+			}
+		}
+		return r.finish(ctx, task, record.State, record.Stage, record.Error, record.ObservedRevision)
+	case "failed", "recovery_required":
+		if record.State == task.State && record.Stage == task.Stage && record.Error == task.LastError {
+			return nil
+		}
+		return r.finish(ctx, task, record.State, record.Stage, record.Error, record.ObservedRevision)
+	case "running", "compensating":
+		task.State = record.State
+		return r.progress(ctx, task, record.Stage, record.Error)
+	default:
+		return r.finish(ctx, task, "recovery_required", "unknown_agent_state", "Agent 返回未知执行状态", "")
+	}
+}
+func (r *Runner) progress(ctx context.Context, t dbgen.Task, stage, message string) error {
+	_, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state=?,stage=?,last_error=?,updated_at=?,lease_until=? WHERE id=? AND state IN ('running','compensating','recovery_required')", t.State, stage, message, time.Now().Unix(), time.Now().Add(time.Minute).Unix(), t.ID)
 	return err
+}
+func (r *Runner) finish(ctx context.Context, t dbgen.Task, state, stage, message, observed string) error {
+	if t.State == state && t.Stage == stage && t.LastError == message && t.ObservedRevision == observed {
+		return nil
+	}
+	tx, err := r.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if t.Kind == "nginx.apply" && (state == "succeeded" || state == "rolled_back") {
+		var revision any
+		if observed != "" {
+			revision = observed
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE config_head SET applied_revision=? WHERE id=1", revision); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE tasks SET state=?,stage=?,last_error=?,observed_revision=?,lease_until=NULL,updated_at=? WHERE id=? AND state IN ('running','compensating','recovery_required')", state, stage, message, observed, time.Now().Unix(), t.ID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,?,?)", secure.ID(), t.OperationID, "system:tasks", t.Kind, t.RevisionID.String, state, time.Now().Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

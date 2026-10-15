@@ -208,6 +208,7 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 	p := &Parsed{Tree: Tree{Files: append([]File(nil), files...), Resources: []Resource{}, Diagnostics: []Diagnostic{}}, Documents: map[string]*Document{}}
 	paths := map[string]File{}
 	size := 0
+	directives := 0
 	for i := range p.Tree.Files {
 		f := &p.Tree.Files[i]
 		if f.ID == "" || len(f.ID) > 64 || strings.ContainsAny(f.ID, "/\\\x00") {
@@ -233,6 +234,10 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 		paths[f.Path] = *f
 		l := lexer{source: f.Content, line: 1}
 		nodes, _, err := l.nodes(0)
+		directives += l.count
+		if directives > limits.Directives {
+			return nil, errors.New("配置树指令数量超过限制")
+		}
 		if err != nil {
 			p.Tree.Diagnostics = append(p.Tree.Diagnostics, Diagnostic{f.ID, l.line, "syntax", err.Error()})
 		}

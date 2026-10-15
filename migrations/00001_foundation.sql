@@ -45,6 +45,9 @@ INSERT INTO config_head (id,version) VALUES (1,0);
 CREATE TABLE tasks (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, resource_id TEXT NOT NULL,
     revision_id TEXT REFERENCES config_revisions(id),
+    expected_revision TEXT NOT NULL DEFAULT '', observed_revision TEXT NOT NULL DEFAULT '',
+    submit_started INTEGER NOT NULL DEFAULT 0 CHECK(submit_started IN (0,1)),
+    agent_accepted INTEGER NOT NULL DEFAULT 0 CHECK(agent_accepted IN (0,1)),
     state TEXT NOT NULL CHECK(state IN ('queued','running','waiting_confirmation','compensating','succeeded','failed','rolled_back','recovery_required','cancelled')),
     stage TEXT NOT NULL, operation_id TEXT NOT NULL UNIQUE,
     attempts INTEGER NOT NULL DEFAULT 0, lease_until INTEGER,

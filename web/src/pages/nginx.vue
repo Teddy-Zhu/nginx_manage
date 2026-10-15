@@ -36,11 +36,14 @@ import {
   type ConfigFile,
   type Resource,
   type SaveResult,
+  type NginxRuntime,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency();
+const runtime = ref<NginxRuntime | null>(null);
+const runtimeError = ref("");
 const tree = ref<Tree | null>(null),
   files = ref<ConfigFile[]>([]),
   selected = ref(""),
@@ -131,7 +134,28 @@ function setTree(value: Tree) {
 }
 async function load() {
   if (dirty.value && !window.confirm("有未保存修改，确认重新加载？")) return;
-  await run(async () => setTree(await api.tree()));
+  await run(async () => {
+    setTree(await api.tree());
+    await loadRuntime();
+  });
+}
+async function loadRuntime() {
+  try {
+    runtime.value = await api.nginxRuntime();
+    runtimeError.value = "";
+  } catch (error) {
+    runtime.value = null;
+    runtimeError.value =
+      error instanceof Error ? error.message : "无法查询运行状态";
+  }
+}
+async function applySaved() {
+  if (dirty.value || !tree.value?.revision_id) return;
+  await run(async () => {
+    const input = { action: "apply", base_version: tree.value!.version };
+    await api.apply(input.base_version, keyFor(input));
+    message.success("配置已加入应用队列，可在任务中查看结果");
+  });
 }
 async function preview() {
   await run(async () => {
@@ -145,12 +169,13 @@ async function preview() {
     if (!result.diagnostics.length) message.success("配置解析与安全校验通过");
   });
 }
-async function save(draft = false, validate = false) {
+async function save(draft = false, validate = false, apply = false) {
   const input = {
     base_version: tree.value?.version ?? 0,
     files: files.value,
     draft,
     validate,
+    apply,
   };
   await run(async () => {
     try {
@@ -163,7 +188,9 @@ async function save(draft = false, validate = false) {
         setTree(result.tree);
         message.success(
           result.task_id
-            ? "有效修订已保存，已加入 Agent 策略复核队列"
+            ? apply
+              ? "修订已保存并加入应用队列"
+              : "修订已保存并加入 Nginx 校验队列"
             : "有效修订已保存",
         );
       }
@@ -292,11 +319,32 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       }}</n-tag
       ><n-tag v-if="dirty" size="small" type="warning" :bordered="false"
         >未保存修改</n-tag
+      ><n-tag
+        v-if="runtime?.running && runtime.integrity"
+        size="small"
+        :type="
+          runtime.revision_id === tree?.revision_id ? 'success' : 'warning'
+        "
+        :bordered="false"
+        >{{
+          runtime.revision_id === tree?.revision_id ? "已生效" : "待应用"
+        }}</n-tag
       ><span class="muted">{{ draftNote }}</span>
     </div>
     <div class="inline-gap">
       <n-button :disabled="busy" @click="showHistory">修订历史</n-button
       ><n-button :disabled="busy" @click="load">重新加载</n-button
+      ><n-button
+        :disabled="
+          busy ||
+          dirty ||
+          !tree?.revision_id ||
+          !runtime?.available ||
+          !runtime.integrity ||
+          !runtime.running
+        "
+        @click="applySaved"
+        >应用已保存修订</n-button
       ><n-button
         type="primary"
         :disabled="busy || differsFromDesired"
@@ -306,8 +354,14 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     </div>
   </div>
   <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >配置保存后成为期望修订；Agent 策略复核只检查安全规则。实际 Nginx
-    应用状态以生效修订为准。</n-alert
+    >配置保存后成为期望修订，应用结果以任务记录和运行确认状态为准。</n-alert
+  >
+  <n-alert
+    v-if="runtimeError || runtime?.reason"
+    type="warning"
+    :bordered="false"
+    style="margin-bottom: 20px"
+    >{{ runtimeError || runtime?.reason }}</n-alert
   >
   <n-tabs type="line" animated
     ><n-tab-pane name="native" tab="原生配置">
@@ -381,7 +435,17 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           <n-button :loading="busy" @click="preview">解析与预览</n-button
           ><n-button :disabled="busy" @click="save(true)">保存草稿</n-button
           ><n-button :disabled="busy" @click="save(false, true)"
-            >保存并复核</n-button
+            >保存并校验</n-button
+          ><n-button
+            type="primary"
+            :disabled="
+              busy ||
+              !runtime?.available ||
+              !runtime.integrity ||
+              !runtime.running
+            "
+            @click="save(false, false, true)"
+            >保存并应用</n-button
           ><n-button type="primary" :loading="busy" @click="save()"
             >保存有效修订</n-button
           >

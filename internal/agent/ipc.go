@@ -40,10 +40,14 @@ type Server struct {
 	AllowedUID uint32
 	Policy     nginxconfig.Policy
 	Journal    *Journal
+	Nginx      *Nginx
 	Dev        bool
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	if !s.Dev && s.AllowedUID == 0 {
+		return errors.New("production Web peer must be a non-root account")
+	}
 	if !s.Dev && os.Geteuid() != 0 {
 		return errors.New("production agent must run as root")
 	}
@@ -84,6 +88,18 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := os.Chmod(s.Socket, 0660); err != nil {
 		return err
 	}
+	if s.Nginx != nil {
+		if s.Dev {
+			return errors.New("development agent cannot execute Nginx")
+		}
+		if err := s.Nginx.Open(); err != nil {
+			return err
+		}
+		defer s.Nginx.Close()
+		if s.Nginx.uid == int(s.AllowedUID) {
+			return errors.New("Nginx workers and Web must use separate accounts")
+		}
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
@@ -93,12 +109,24 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /v1/operations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		record, err := s.Journal.Get(r.PathValue("id"))
 		if err != nil {
-			http.Error(w, "operation not found", 404)
+			if os.IsNotExist(err) {
+				http.Error(w, "operation not found", 404)
+			} else {
+				http.Error(w, "operation journal unavailable", 500)
+			}
 			return
 		}
 		writeJSON(w, record)
 	})
 	mux.HandleFunc("POST /v1/nginx/policy-check", s.check)
+	mux.HandleFunc("POST /v1/nginx/apply", s.apply)
+	mux.HandleFunc("GET /v1/nginx/state", func(w http.ResponseWriter, r *http.Request) {
+		if s.Nginx == nil {
+			writeJSON(w, NginxState{Reason: "专用 Nginx 执行尚未配置"})
+			return
+		}
+		writeJSON(w, s.Nginx.State(r.Context()))
+	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second}
 	go func() {
 		<-ctx.Done()
@@ -196,6 +224,12 @@ func writeJSON(w http.ResponseWriter, v any) {
 
 type Client struct{ http *http.Client }
 
+var ErrOperationNotFound = errors.New("Agent 操作记录不存在")
+
+type HTTPError struct{ Status int }
+
+func (e *HTTPError) Error() string { return fmt.Sprintf("Agent 拒绝操作（HTTP %d）", e.Status) }
+
 func NewClient(socket string) *Client {
 	return &Client{http: &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
@@ -220,8 +254,11 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		return errors.New("无法连接本机 Agent")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == 404 {
+		return ErrOperationNotFound
+	}
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("Agent 拒绝操作（HTTP %d）", resp.StatusCode)
+		return &HTTPError{Status: resp.StatusCode}
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, limits.RequestBytes)).Decode(output)
 }
@@ -236,5 +273,52 @@ func (c *Client) Check(ctx context.Context, in CheckRequest) (CheckResult, error
 	if err == nil && out.Protocol != Protocol {
 		err = errors.New("Agent 协议不兼容")
 	}
+	return out, err
+}
+
+func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
+	if s.Nginx == nil {
+		http.Error(w, "Nginx execution unavailable", 503)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limits.RequestBytes)
+	defer r.Body.Close()
+	var in ApplyRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&in) != nil || decoder.Decode(new(any)) != io.EOF {
+		http.Error(w, "invalid apply request", 400)
+		return
+	}
+	record, err := s.Nginx.Submit(in)
+	if err != nil {
+		status := 409
+		if errors.Is(err, ErrRuntimeUnavailable) {
+			status = 503
+		}
+		http.Error(w, "Nginx operation rejected", status)
+		return
+	}
+	writeJSON(w, record)
+}
+func (c *Client) Apply(ctx context.Context, in ApplyRequest) (Record, error) {
+	var out Record
+	err := c.request(ctx, "POST", "/v1/nginx/apply", in, &out)
+	return out, err
+}
+func (c *Client) Operation(ctx context.Context, id string) (Record, error) {
+	if !validID(id) {
+		return Record{}, errors.New("invalid operation ID")
+	}
+	var out Record
+	err := c.request(ctx, "GET", "/v1/operations/"+id, nil, &out)
+	if err == nil && out.OperationID != id {
+		err = errors.New("Agent 操作身份不匹配")
+	}
+	return out, err
+}
+func (c *Client) NginxState(ctx context.Context) (NginxState, error) {
+	var out NginxState
+	err := c.request(ctx, "GET", "/v1/nginx/state", nil, &out)
 	return out, err
 }

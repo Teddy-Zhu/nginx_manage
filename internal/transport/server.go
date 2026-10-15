@@ -190,6 +190,22 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 		reason = err.Error()
 		host = nil
 	}
+	operations := []string{"nginx.preview", "nginx.save"}
+	var runtime *agent.NginxState
+	if mode == "connected" {
+		state, stateErr := s.Agent.NginxState(r.Context())
+		if stateErr == nil {
+			runtime = &state
+			if state.Available && state.Integrity {
+				operations = append(operations, "nginx.validate")
+				if state.Running {
+					operations = append(operations, "nginx.apply")
+				}
+			}
+		} else {
+			reason = stateErr.Error()
+		}
+	}
 	head, err := dbgen.New(s.DB).GetConfigHead(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
@@ -202,7 +218,7 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	if head.AppliedRevision.Valid {
 		applied = head.AppliedRevision.String
 	}
-	s.ok(w, r, map[string]any{"mode": mode, "reason": reason, "host": host, "desired_revision": desired, "applied_revision": applied, "version": head.Version, "api_version": 1, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": s.Config.Policy.Version, "operations": []string{"nginx.preview", "nginx.save", "nginx.policy_check"}})
+	s.ok(w, r, map[string]any{"mode": mode, "reason": reason, "host": host, "desired_revision": desired, "applied_revision": applied, "version": head.Version, "api_version": 1, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": s.Config.Policy.Version, "operations": operations, "nginx": runtime})
 }
 func (s *Server) GetModules(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authorize(w, r, false, "read"); !ok {
@@ -402,7 +418,7 @@ func (s *Server) GetTask(w http.ResponseWriter, r *http.Request, id apigen.ID) {
 	s.ok(w, r, taskView(data))
 }
 func taskView(t dbgen.Task) apigen.Task {
-	return apigen.Task{Id: t.ID, Kind: t.Kind, State: t.State, Stage: t.Stage, LastError: t.LastError, CreatedAt: t.CreatedAt}
+	return apigen.Task{Id: t.ID, Kind: t.Kind, State: t.State, Stage: t.Stage, LastError: t.LastError, CreatedAt: t.CreatedAt, RevisionId: t.RevisionID.String, ObservedRevision: t.ObservedRevision}
 }
 func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request, params apigen.ListAuditParams) {
 	if _, ok := s.authorize(w, r, false, "read"); !ok {
@@ -423,4 +439,33 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request, params apigen
 func (s *Server) audit(r *http.Request, principal, action, resource, outcome string) error {
 	_, err := s.DB.ExecContext(r.Context(), "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,?,?)", secure.ID(), r.Context().Value(requestIDKey).(string), principal, action, resource, outcome, time.Now().Unix())
 	return err
+}
+
+func (s *Server) ApplyConfig(w http.ResponseWriter, r *http.Request, params apigen.ApplyConfigParams) {
+	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	if !ok {
+		return
+	}
+	var in nginxconfig.ApplySavedRequest
+	if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Config.ApplySaved(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.respond(w, r, 202, "OK", "配置已加入应用队列", out)
+}
+func (s *Server) GetNginxRuntime(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.authorize(w, r, false, "read"); !ok {
+		return
+	}
+	out, err := s.Agent.NginxState(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
 }

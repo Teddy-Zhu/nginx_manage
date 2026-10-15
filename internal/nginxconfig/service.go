@@ -10,7 +10,6 @@ import (
 
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
-	"nginxpanel/internal/limits"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
 )
@@ -29,6 +28,7 @@ type SaveRequest struct {
 	Files       []File `json:"files"`
 	Draft       bool   `json:"draft"`
 	Validate    bool   `json:"validate"`
+	Apply       bool   `json:"apply"`
 }
 type SaveResult struct {
 	Tree   Tree   `json:"tree"`
@@ -111,8 +111,11 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 	if in.BaseVersion < 0 {
 		return SaveResult{}, fault.Invalid("基础修订版本无效")
 	}
-	if in.Draft && in.Validate {
+	if in.Draft && (in.Validate || in.Apply) {
 		return SaveResult{}, fault.Invalid("草稿不能进入执行队列")
+	}
+	if in.Validate && in.Apply {
+		return SaveResult{}, fault.Invalid("请选择校验或应用")
 	}
 	// Replay is checked before parsing and before the optimistic version check.
 	if result, found, err := s.replay(ctx, principal.ID, key, digest); found || err != nil {
@@ -192,20 +195,13 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 		}
 	}
 	result := SaveResult{Tree: p.Tree}
-	if in.Validate {
-		var count int
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running','waiting_confirmation','compensating','recovery_required')").Scan(&count); err != nil {
-			return SaveResult{}, err
-		}
-		if count >= limits.QueuedTasks {
-			return SaveResult{}, fault.Conflict("任务队列已满")
-		}
-		result.TaskID = secure.ID()
-		now := time.Now().Unix()
-		if _, err := tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,revision_id,state,stage,operation_id,created_at,updated_at) VALUES(?,?,?,?,'queued','queued',?,?,?)", result.TaskID, "nginx.policy_check", id, id, secure.ID(), now, now); err != nil {
+	if in.Validate || in.Apply {
+		result.TaskID, err = enqueue(ctx, tx, id, in.Apply)
+		if err != nil {
 			return SaveResult{}, err
 		}
 	}
+
 	response, err := json.Marshal(result)
 	if err != nil {
 		return SaveResult{}, err

@@ -2,9 +2,9 @@
 
 基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前处于基础工程实施阶段，尚未发布，不声明系统兼容性验收通过。
 
-当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；配置树原文/字段映射、不可变修订、并发保护、独立草稿；Unix Socket Agent 身份校验、独立策略复核、持久任务及审计；自动扫描页面路由的管理界面。
+当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；配置树原文/字段映射、不可变修订、并发保护、独立草稿；Unix Socket Agent 身份校验、不可变 Nginx 发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
 
-实际 Nginx 应用/reload、完整代理能力与证书、安全/主机管理、多节点、备份和发布更新尚未完成。策略复核不是实际应用，页面不将保存或策略检查显示为已生效。
+安全发布流程代码已接入，尚未集中验证。完整代理能力与证书、安全/主机管理、多节点、备份和发布更新继续实施；保存与校验不会显示为已生效。
 
 ## 开发
 
@@ -23,11 +23,13 @@ pnpm --dir web dev
 
 访问 `http://127.0.0.1:5173`。API 默认 `127.0.0.1:8080`，Vite 同源代理 `/api`。首次启动生成 `.local/bootstrap/token`，从本机读取该文件，在初始化页面设置管理员；没有默认密码。数据目录不纳入 Git。
 
-需要 Agent 独立策略复核或宿主机只读诊断时，在同一普通用户下另开终端：
+需要 Agent 宿主机只读诊断时，在同一普通用户下另开终端：
 
 ```sh
 go run ./cmd/nginxpanel agent --dev --data-dir=.local
 ```
+
+实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。当前不自动启动或接管已有 Nginx；完整安装接入属于 P4。开发 Agent 不开放实际执行。
 
 未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；当前生产入口仅允许回环 HTTPS。原生安装器、权限分区与 systemd、Docker 持久运行在 P4 提供。
 

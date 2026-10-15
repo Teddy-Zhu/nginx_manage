@@ -226,8 +226,40 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getConfigTree"];
-        /** @description 原文和投影同事务保存。validate 只请求 Agent 策略复核，不应用 Nginx。 */
+        /** @description 原文和投影同事务保存。validate 请求真实 Nginx 校验；apply 请求串行发布、运行确认及失败回滚。 */
         put: operations["saveConfigTree"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["applyConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNginxRuntime"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -433,6 +465,8 @@ export interface components {
             files: components["schemas"]["File"][];
             draft: boolean;
             validate: boolean;
+            /** @default false */
+            apply: boolean;
         };
         SaveResult: {
             tree: components["schemas"]["Tree"];
@@ -444,6 +478,13 @@ export interface components {
             csrf: string;
             username: string;
             scopes: string[];
+        };
+        NginxRuntime: {
+            available: boolean;
+            revision_id: string;
+            integrity: boolean;
+            running: boolean;
+            reason: string;
         };
         CredentialInput: {
             name: string;
@@ -465,6 +506,8 @@ export interface components {
             kind: string;
             state: string;
             stage: string;
+            revision_id: string;
+            observed_revision: string;
             last_error: string;
             /** Format: int64 */
             created_at: number;
@@ -787,6 +830,43 @@ export interface operations {
         responses: {
             201: components["responses"]["JSON"];
             202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    applyConfig: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    base_version: number;
+                };
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getNginxRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

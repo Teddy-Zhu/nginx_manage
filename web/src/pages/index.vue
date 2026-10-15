@@ -20,7 +20,7 @@ import {
   NEmpty,
   type DataTableColumns,
 } from "naive-ui";
-import { request, api, type Task } from "../api/client";
+import { request, api, type Task, type NginxRuntime } from "../api/client";
 import { useAction } from "../composables/action";
 
 interface Tool {
@@ -29,6 +29,7 @@ interface Tool {
   running: boolean | null;
 }
 interface Capabilities {
+  nginx: NginxRuntime | null;
   mode: string;
   reason: string;
   host: null | {
@@ -108,11 +109,15 @@ onMounted(load);
     <div class="stat-card">
       <span class="stat-label">实际生效修订</span
       ><strong>{{
-        capabilities?.applied_revision
-          ? capabilities.applied_revision.slice(0, 8)
-          : "未应用"
+        capabilities?.nginx?.running && capabilities.nginx.integrity
+          ? capabilities.nginx.revision_id.slice(0, 8) || "初始配置"
+          : "未确认"
       }}</strong
-      ><span class="stat-hint">保存与实际生效分别记录</span>
+      ><span class="stat-hint"
+        >最近确认：{{
+          capabilities?.applied_revision?.slice(0, 8) ?? "尚无业务修订"
+        }}</span
+      >
     </div>
     <div class="stat-card">
       <span class="stat-label">最近失败任务</span

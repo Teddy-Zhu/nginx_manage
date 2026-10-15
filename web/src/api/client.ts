@@ -12,6 +12,7 @@ export type SaveRequest = components["schemas"]["SaveRequest"];
 export type Me = components["schemas"]["Me"];
 export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
+export type NginxRuntime = components["schemas"]["NginxRuntime"];
 
 export class ApiError extends Error {
   constructor(
@@ -155,6 +156,14 @@ export const api = {
       data,
       headers: { "Idempotency-Key": key },
     }),
+  apply: (base_version: number, key: string) =>
+    request<SaveResult>({
+      method: "POST",
+      url: "/nginx/apply",
+      data: { base_version },
+      headers: { "Idempotency-Key": key },
+    }),
+  nginxRuntime: () => request<NginxRuntime>({ url: "/nginx/runtime" }),
   tasks: () => request<Task[]>({ url: "/tasks" }),
   modules: () => request<Module[]>({ url: "/system/modules" }),
   setModule: (id: string, enabled: boolean) =>
