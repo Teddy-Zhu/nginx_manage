@@ -20,7 +20,14 @@ import {
   NEmpty,
   type DataTableColumns,
 } from "naive-ui";
-import { request, api, type Task, type NginxRuntime } from "../api/client";
+import {
+  request,
+  api,
+  type Task,
+  type NginxRuntime,
+  type MonitoringLatest,
+} from "../api/client";
+import { RouterLink } from "vue-router";
 import { useAction } from "../composables/action";
 
 interface Tool {
@@ -48,15 +55,24 @@ interface Capabilities {
 }
 const { run, busy } = useAction(),
   capabilities = ref<Capabilities | null>(null),
-  tasks = ref<Task[]>([]);
+  tasks = ref<Task[]>([]),
+  monitoring = ref<MonitoringLatest | null>(null);
+function metric(kind: string, field: string) {
+  const value = monitoring.value?.sample?.metrics.find(
+    (m) => m.kind === kind && m.id === "total",
+  )?.values[field];
+  return value == null ? "—" : `${value.toFixed(1)}%`;
+}
 async function load() {
   await run(async () => {
     const result = await Promise.all([
       request<Capabilities>({ url: "/system/capabilities" }),
       api.tasks(),
+      api.monitoringLatest(),
     ]);
     capabilities.value = result[0];
     tasks.value = result[1];
+    monitoring.value = result[2];
   });
 }
 const columns: DataTableColumns<Task> = [
@@ -129,6 +145,36 @@ onMounted(load);
       ><span class="stat-hint">最近 {{ tasks.length }} 个任务</span>
     </div>
   </div>
+  <section class="surface" style="margin-bottom: 24px">
+    <div class="section-heading">
+      <h2>资源概览</h2>
+      <RouterLink to="/server">查看服务器</RouterLink>
+    </div>
+    <p class="muted">
+      {{
+        monitoring?.reason ||
+        (monitoring?.stale ? "样本已过期" : "宿主机最新样本")
+      }}
+    </p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-label">CPU</span
+        ><strong>{{ metric("cpu", "usage_percent") }}</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">内存</span
+        ><strong>{{ metric("memory", "used_percent") }}</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">采样时间</span
+        ><strong style="font-size: 16px">{{
+          monitoring?.sample
+            ? new Date(monitoring.sample.at * 1000).toLocaleString()
+            : "—"
+        }}</strong>
+      </div>
+    </div>
+  </section>
   <div class="two-columns">
     <section class="surface">
       <div class="section-heading">

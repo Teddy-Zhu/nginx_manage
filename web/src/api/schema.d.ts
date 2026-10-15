@@ -990,10 +990,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/monitoring/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMonitoringLatest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/monitoring/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMonitoringSettings"];
+        put: operations["setMonitoringSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/monitoring/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMonitoringHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        MonitoringCapability: {
+            available: boolean;
+            scope: string;
+            reason: string;
+            /** Format: int64 */
+            cpus: number;
+            /** Format: int64 */
+            interfaces: number;
+            /** Format: int64 */
+            mounts: number;
+        };
+        MonitoringThreshold: {
+            enabled: boolean;
+            /** Format: double */
+            high: number;
+            /** Format: double */
+            recover: number;
+            /** Format: int64 */
+            for_seconds: number;
+            /** Format: int64 */
+            recover_seconds: number;
+        };
+        MonitoringSettings: {
+            /** Format: int64 */
+            interval_seconds: number;
+            /** Format: int64 */
+            retention_hours: number;
+            cpu: components["schemas"]["MonitoringThreshold"];
+            memory: components["schemas"]["MonitoringThreshold"];
+            disk: components["schemas"]["MonitoringThreshold"];
+        };
+        MonitoringSettingsView: {
+            /** Format: int64 */
+            version: number;
+            settings: components["schemas"]["MonitoringSettings"];
+        };
+        MonitoringSettingsInput: {
+            /** Format: int64 */
+            base_version: number;
+            settings: components["schemas"]["MonitoringSettings"];
+        };
+        HostMetric: {
+            kind: string;
+            id: string;
+            label: string;
+            values: {
+                [key: string]: number | null;
+            };
+            reason: string;
+        };
+        MonitoredService: {
+            id: string;
+            load: string;
+            active: string;
+            sub: string;
+            reason: string;
+        };
+        MonitoringSample: {
+            /** Format: int64 */
+            at: number;
+            source: string;
+            boot_id: string;
+            metrics: components["schemas"]["HostMetric"][];
+            services: components["schemas"]["MonitoredService"][];
+            warnings: string[];
+            reason: string;
+        };
+        MonitoringCondition: {
+            kind: string;
+            id: string;
+            label: string;
+            active: boolean;
+            /** Format: int64 */
+            since: number;
+            /** Format: int64 */
+            last_at: number;
+            /** Format: int64 */
+            pending_at: number;
+            /** Format: int64 */
+            recovering_at: number;
+            /** Format: double */
+            value: number | null;
+            available: boolean;
+        };
+        MonitoringLatest: {
+            enabled: boolean;
+            stale: boolean;
+            sample: components["schemas"]["MonitoringSample"] | null;
+            reason: string;
+            conditions: components["schemas"]["MonitoringCondition"][];
+            /** Format: int64 */
+            stored_bytes: number;
+            /** Format: int64 */
+            earliest: number;
+        };
+        MonitoringPoint: {
+            /** Format: int64 */
+            at: number;
+            /** Format: double */
+            average: number | null;
+            /** Format: double */
+            minimum: number | null;
+            /** Format: double */
+            maximum: number | null;
+            /** Format: int64 */
+            count: number;
+            gap: boolean;
+        };
+        MonitoringHistory: {
+            points: components["schemas"]["MonitoringPoint"][];
+            /** Format: int64 */
+            step_seconds: number;
+            /** Format: int64 */
+            until: number;
+            /** Format: int64 */
+            earliest: number;
+            /** Format: int64 */
+            stored_bytes: number;
+            notice: string;
+            /** Format: int64 */
+            from: number;
+        };
         LogPolicy: {
             /** Format: int64 */
             size_mib: number;
@@ -3082,6 +3252,73 @@ export interface operations {
                     "application/x-ndjson": string;
                 };
             };
+            default: components["responses"]["JSON"];
+        };
+    };
+    getMonitoringLatest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getMonitoringSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setMonitoringSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonitoringSettingsInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getMonitoringHistory: {
+        parameters: {
+            query: {
+                kind: string;
+                id: string;
+                value: string;
+                from: number;
+                until: number;
+                points?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

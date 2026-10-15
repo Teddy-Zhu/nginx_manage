@@ -23,7 +23,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 7
+const Protocol = 8
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`
@@ -38,12 +38,14 @@ type CheckResult struct {
 	Diagnostics   []nginxconfig.Diagnostic `json:"diagnostics"`
 }
 type Server struct {
-	Socket     string
-	AllowedUID uint32
-	Policy     nginxconfig.Policy
-	Journal    *Journal
-	Nginx      *Nginx
-	Dev        bool
+	Socket       string
+	AllowedUID   uint32
+	Policy       nginxconfig.Policy
+	Journal      *Journal
+	Nginx        *Nginx
+	Dev          bool
+	MetricsScope string
+	DataDir      string
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -129,9 +131,15 @@ func (s *Server) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	s.http01Handlers(mux)
 	s.logHandlers(mux)
+	sampler := &metricSampler{ctx: ctx, capability: platform.MetricsCapability(s.MetricsScope, s.Dev), collector: platform.MetricsCollector{DataDir: s.DataDir}}
+	s.monitoringHandlers(mux, sampler)
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"
+		if s.Dev {
+			report.Source = "development-agent"
+		}
+		report.Monitoring = sampler.capability
 		writeJSON(w, report)
 	})
 	mux.HandleFunc("GET /v1/operations/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -302,7 +310,7 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		return errors.New("无法连接本机 Agent")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 && strings.HasPrefix(path, "/v1/logs/") {
+	if resp.StatusCode != 200 && (strings.HasPrefix(path, "/v1/logs/") || strings.HasPrefix(path, "/v1/monitoring/")) {
 		var out struct {
 			Protocol int    `json:"protocol"`
 			Code     string `json:"code"`

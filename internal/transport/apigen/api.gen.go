@@ -1192,6 +1192,15 @@ type FileDifference struct {
 // FileDifferenceStatus defines model for FileDifference.Status.
 type FileDifferenceStatus string
 
+// HostMetric defines model for HostMetric.
+type HostMetric struct {
+	Id     string              `json:"id"`
+	Kind   string              `json:"kind"`
+	Label  string              `json:"label"`
+	Reason string              `json:"reason"`
+	Values map[string]*float64 `json:"values"`
+}
+
 // LogPage defines model for LogPage.
 type LogPage struct {
 	Cursor       string   `json:"cursor"`
@@ -1306,6 +1315,112 @@ type Module struct {
 	Id           string   `json:"id"`
 	Name         string   `json:"name"`
 	Reason       *string  `json:"reason,omitempty"`
+}
+
+// MonitoredService defines model for MonitoredService.
+type MonitoredService struct {
+	Active string `json:"active"`
+	Id     string `json:"id"`
+	Load   string `json:"load"`
+	Reason string `json:"reason"`
+	Sub    string `json:"sub"`
+}
+
+// MonitoringCapability defines model for MonitoringCapability.
+type MonitoringCapability struct {
+	Available  bool   `json:"available"`
+	Cpus       int64  `json:"cpus"`
+	Interfaces int64  `json:"interfaces"`
+	Mounts     int64  `json:"mounts"`
+	Reason     string `json:"reason"`
+	Scope      string `json:"scope"`
+}
+
+// MonitoringCondition defines model for MonitoringCondition.
+type MonitoringCondition struct {
+	Active       bool     `json:"active"`
+	Available    bool     `json:"available"`
+	Id           string   `json:"id"`
+	Kind         string   `json:"kind"`
+	Label        string   `json:"label"`
+	LastAt       int64    `json:"last_at"`
+	PendingAt    int64    `json:"pending_at"`
+	RecoveringAt int64    `json:"recovering_at"`
+	Since        int64    `json:"since"`
+	Value        *float64 `json:"value"`
+}
+
+// MonitoringHistory defines model for MonitoringHistory.
+type MonitoringHistory struct {
+	Earliest    int64             `json:"earliest"`
+	From        int64             `json:"from"`
+	Notice      string            `json:"notice"`
+	Points      []MonitoringPoint `json:"points"`
+	StepSeconds int64             `json:"step_seconds"`
+	StoredBytes int64             `json:"stored_bytes"`
+	Until       int64             `json:"until"`
+}
+
+// MonitoringLatest defines model for MonitoringLatest.
+type MonitoringLatest struct {
+	Conditions  []MonitoringCondition `json:"conditions"`
+	Earliest    int64                 `json:"earliest"`
+	Enabled     bool                  `json:"enabled"`
+	Reason      string                `json:"reason"`
+	Sample      *MonitoringSample     `json:"sample"`
+	Stale       bool                  `json:"stale"`
+	StoredBytes int64                 `json:"stored_bytes"`
+}
+
+// MonitoringPoint defines model for MonitoringPoint.
+type MonitoringPoint struct {
+	At      int64    `json:"at"`
+	Average *float64 `json:"average"`
+	Count   int64    `json:"count"`
+	Gap     bool     `json:"gap"`
+	Maximum *float64 `json:"maximum"`
+	Minimum *float64 `json:"minimum"`
+}
+
+// MonitoringSample defines model for MonitoringSample.
+type MonitoringSample struct {
+	At       int64              `json:"at"`
+	BootId   string             `json:"boot_id"`
+	Metrics  []HostMetric       `json:"metrics"`
+	Reason   string             `json:"reason"`
+	Services []MonitoredService `json:"services"`
+	Source   string             `json:"source"`
+	Warnings []string           `json:"warnings"`
+}
+
+// MonitoringSettings defines model for MonitoringSettings.
+type MonitoringSettings struct {
+	Cpu             MonitoringThreshold `json:"cpu"`
+	Disk            MonitoringThreshold `json:"disk"`
+	IntervalSeconds int64               `json:"interval_seconds"`
+	Memory          MonitoringThreshold `json:"memory"`
+	RetentionHours  int64               `json:"retention_hours"`
+}
+
+// MonitoringSettingsInput defines model for MonitoringSettingsInput.
+type MonitoringSettingsInput struct {
+	BaseVersion int64              `json:"base_version"`
+	Settings    MonitoringSettings `json:"settings"`
+}
+
+// MonitoringSettingsView defines model for MonitoringSettingsView.
+type MonitoringSettingsView struct {
+	Settings MonitoringSettings `json:"settings"`
+	Version  int64              `json:"version"`
+}
+
+// MonitoringThreshold defines model for MonitoringThreshold.
+type MonitoringThreshold struct {
+	Enabled        bool    `json:"enabled"`
+	ForSeconds     int64   `json:"for_seconds"`
+	High           float64 `json:"high"`
+	Recover        float64 `json:"recover"`
+	RecoverSeconds int64   `json:"recover_seconds"`
 }
 
 // NativeModule defines model for NativeModule.
@@ -1735,6 +1850,23 @@ type StreamLogsParams struct {
 	Query string `form:"query" json:"query"`
 }
 
+// GetMonitoringHistoryParams defines parameters for GetMonitoringHistory.
+type GetMonitoringHistoryParams struct {
+	Kind   string `form:"kind" json:"kind"`
+	Id     string `form:"id" json:"id"`
+	Value  string `form:"value" json:"value"`
+	From   int64  `form:"from" json:"from"`
+	Until  int64  `form:"until" json:"until"`
+	Points *int   `form:"points,omitempty" json:"points,omitempty"`
+}
+
+// SetMonitoringSettingsParams defines parameters for SetMonitoringSettings.
+type SetMonitoringSettingsParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // CreateAccessListParams defines parameters for CreateAccessList.
 type CreateAccessListParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
@@ -2005,6 +2137,9 @@ type SetLogPolicyJSONRequestBody = LogPolicyInput
 // QueryLogsJSONRequestBody defines body for QueryLogs for application/json ContentType.
 type QueryLogsJSONRequestBody = LogQuery
 
+// SetMonitoringSettingsJSONRequestBody defines body for SetMonitoringSettings for application/json ContentType.
+type SetMonitoringSettingsJSONRequestBody = MonitoringSettingsInput
+
 // CreateAccessListJSONRequestBody defines body for CreateAccessList for application/json ContentType.
 type CreateAccessListJSONRequestBody = AccessListInput
 
@@ -2178,6 +2313,18 @@ type ServerInterface interface {
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+
+	// (GET /monitoring/history)
+	GetMonitoringHistory(w http.ResponseWriter, r *http.Request, params GetMonitoringHistoryParams)
+
+	// (GET /monitoring/latest)
+	GetMonitoringLatest(w http.ResponseWriter, r *http.Request)
+
+	// (GET /monitoring/settings)
+	GetMonitoringSettings(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /monitoring/settings)
+	SetMonitoringSettings(w http.ResponseWriter, r *http.Request, params SetMonitoringSettingsParams)
 
 	// (POST /nginx/access-lists)
 	CreateAccessList(w http.ResponseWriter, r *http.Request, params CreateAccessListParams)
@@ -3978,6 +4125,196 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// GetMonitoringHistory operation middleware
+func (siw *ServerInterfaceWrapper) GetMonitoringHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMonitoringHistoryParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "id", r.URL.Query(), &params.Id, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "value" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "value", r.URL.Query(), &params.Value, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "value"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "until" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "until", r.URL.Query(), &params.Until, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "points" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "points", r.URL.Query(), &params.Points, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "points"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "points", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMonitoringHistory(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMonitoringLatest operation middleware
+func (siw *ServerInterfaceWrapper) GetMonitoringLatest(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMonitoringLatest(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMonitoringSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetMonitoringSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMonitoringSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetMonitoringSettings operation middleware
+func (siw *ServerInterfaceWrapper) SetMonitoringSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetMonitoringSettingsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetMonitoringSettings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateAccessList operation middleware
 func (siw *ServerInterfaceWrapper) CreateAccessList(w http.ResponseWriter, r *http.Request) {
 
@@ -5763,6 +6100,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/logs/cursors/release", wrapper.ReleaseLogCursor)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/logs/stream", wrapper.StreamLogs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/logs/download", wrapper.DownloadLogs)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/monitoring/latest", wrapper.GetMonitoringLatest)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/monitoring/settings", wrapper.GetMonitoringSettings)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/monitoring/settings", wrapper.SetMonitoringSettings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/monitoring/history", wrapper.GetMonitoringHistory)
 
 	return m
 }

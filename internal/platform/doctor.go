@@ -2,6 +2,7 @@ package platform
 
 import (
 	"bufio"
+	"nginxpanel/internal/monitoring"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,15 +22,16 @@ type DNS struct {
 	Reason         string `json:"reason"`
 }
 type Report struct {
-	OS           string          `json:"os"`
-	Version      string          `json:"version"`
-	Architecture string          `json:"architecture"`
-	Kernel       string          `json:"kernel"`
-	Tools        map[string]Tool `json:"tools"`
-	DNS          DNS             `json:"dns"`
-	SELinux      string          `json:"selinux"`
-	AppArmor     string          `json:"apparmor"`
-	Source       string          `json:"source"`
+	OS           string                `json:"os"`
+	Version      string                `json:"version"`
+	Architecture string                `json:"architecture"`
+	Kernel       string                `json:"kernel"`
+	Tools        map[string]Tool       `json:"tools"`
+	DNS          DNS                   `json:"dns"`
+	SELinux      string                `json:"selinux"`
+	AppArmor     string                `json:"apparmor"`
+	Source       string                `json:"source"`
+	Monitoring   monitoring.Capability `json:"monitoring"`
 }
 
 func Detect() Report {

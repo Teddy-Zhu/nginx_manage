@@ -905,6 +905,120 @@ paths:
             application/x-ndjson:
               schema: { type: string, format: binary }
         default: { $ref: '#/components/responses/JSON' }
+  /monitoring/latest:
+    {
+      "get":
+        {
+          "operationId": "getMonitoringLatest",
+          "x-scopes": ["read"],
+          "responses":
+            {
+              "200": { "$ref": "#/components/responses/JSON" },
+              "default": { "$ref": "#/components/responses/JSON" },
+            },
+        },
+    }
+  /monitoring/settings:
+    {
+      "get":
+        {
+          "operationId": "getMonitoringSettings",
+          "x-scopes": ["read"],
+          "responses":
+            {
+              "200": { "$ref": "#/components/responses/JSON" },
+              "default": { "$ref": "#/components/responses/JSON" },
+            },
+        },
+      "put":
+        {
+          "operationId": "setMonitoringSettings",
+          "x-scopes": ["monitoring.write"],
+          "parameters":
+            [
+              { "$ref": "#/components/parameters/CSRF" },
+              { "$ref": "#/components/parameters/Idempotency" },
+            ],
+          "requestBody":
+            {
+              "required": true,
+              "content":
+                {
+                  "application/json":
+                    {
+                      "schema":
+                        {
+                          "$ref": "#/components/schemas/MonitoringSettingsInput",
+                        },
+                    },
+                },
+            },
+          "responses":
+            {
+              "200": { "$ref": "#/components/responses/JSON" },
+              "default": { "$ref": "#/components/responses/JSON" },
+            },
+        },
+    }
+  /monitoring/history:
+    {
+      "get":
+        {
+          "operationId": "getMonitoringHistory",
+          "x-scopes": ["read"],
+          "responses":
+            {
+              "200": { "$ref": "#/components/responses/JSON" },
+              "default": { "$ref": "#/components/responses/JSON" },
+            },
+          "parameters":
+            [
+              {
+                "name": "kind",
+                "in": "query",
+                "required": true,
+                "schema": { "type": "string" },
+              },
+              {
+                "name": "id",
+                "in": "query",
+                "required": true,
+                "schema":
+                  { "type": "string", "minLength": 1, "maxLength": 128 },
+              },
+              {
+                "name": "value",
+                "in": "query",
+                "required": true,
+                "schema": { "type": "string" },
+              },
+              {
+                "name": "from",
+                "in": "query",
+                "required": true,
+                "schema": { "type": "integer", "format": "int64" },
+              },
+              {
+                "name": "until",
+                "in": "query",
+                "required": true,
+                "schema": { "type": "integer", "format": "int64" },
+              },
+              {
+                "name": "points",
+                "in": "query",
+                "required": false,
+                "schema":
+                  {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 300,
+                    "default": 180,
+                  },
+              },
+            ],
+        },
+    }
 components:
   securitySchemes:
     cookieAuth: { type: apiKey, in: cookie, name: nginxpanel_session }
@@ -927,6 +1041,264 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    MonitoringCapability:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required":
+          ["available", "scope", "reason", "cpus", "interfaces", "mounts"],
+        "properties":
+          {
+            "available": { "type": "boolean" },
+            "scope": { "type": "string" },
+            "reason": { "type": "string" },
+            "cpus": { "type": "integer", "format": "int64" },
+            "interfaces": { "type": "integer", "format": "int64" },
+            "mounts": { "type": "integer", "format": "int64" },
+          },
+      }
+    MonitoringThreshold:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required":
+          ["enabled", "high", "recover", "for_seconds", "recover_seconds"],
+        "properties":
+          {
+            "enabled": { "type": "boolean" },
+            "high": { "type": "number", "format": "double" },
+            "recover": { "type": "number", "format": "double" },
+            "for_seconds": { "type": "integer", "format": "int64" },
+            "recover_seconds": { "type": "integer", "format": "int64" },
+          },
+      }
+    MonitoringSettings:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required":
+          ["interval_seconds", "retention_hours", "cpu", "memory", "disk"],
+        "properties":
+          {
+            "interval_seconds":
+              {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 15,
+                "maximum": 300,
+              },
+            "retention_hours":
+              {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 1,
+                "maximum": 24,
+              },
+            "cpu": { "$ref": "#/components/schemas/MonitoringThreshold" },
+            "memory": { "$ref": "#/components/schemas/MonitoringThreshold" },
+            "disk": { "$ref": "#/components/schemas/MonitoringThreshold" },
+          },
+      }
+    MonitoringSettingsView:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "settings"],
+        "properties":
+          {
+            "version": { "type": "integer", "format": "int64" },
+            "settings": { "$ref": "#/components/schemas/MonitoringSettings" },
+          },
+      }
+    MonitoringSettingsInput:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["base_version", "settings"],
+        "properties":
+          {
+            "base_version":
+              { "type": "integer", "format": "int64", "minimum": 1 },
+            "settings": { "$ref": "#/components/schemas/MonitoringSettings" },
+          },
+      }
+    HostMetric:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "label", "values", "reason"],
+        "properties":
+          {
+            "kind": { "type": "string" },
+            "id": { "type": "string" },
+            "label": { "type": "string" },
+            "values":
+              {
+                "type": "object",
+                "additionalProperties":
+                  { "type": "number", "format": "double", "nullable": true },
+              },
+            "reason": { "type": "string" },
+          },
+      }
+    MonitoredService:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "load", "active", "sub", "reason"],
+        "properties":
+          {
+            "id": { "type": "string" },
+            "load": { "type": "string" },
+            "active": { "type": "string" },
+            "sub": { "type": "string" },
+            "reason": { "type": "string" },
+          },
+      }
+    MonitoringSample:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required":
+          [
+            "at",
+            "source",
+            "boot_id",
+            "metrics",
+            "services",
+            "warnings",
+            "reason",
+          ],
+        "properties":
+          {
+            "at": { "type": "integer", "format": "int64" },
+            "source": { "type": "string" },
+            "boot_id": { "type": "string" },
+            "metrics":
+              {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/HostMetric" },
+              },
+            "services":
+              {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/MonitoredService" },
+              },
+            "warnings": { "type": "array", "items": { "type": "string" } },
+            "reason": { "type": "string" },
+          },
+      }
+    MonitoringCondition:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required":
+          [
+            "kind",
+            "id",
+            "label",
+            "active",
+            "since",
+            "last_at",
+            "pending_at",
+            "recovering_at",
+            "value",
+            "available",
+          ],
+        "properties":
+          {
+            "kind": { "type": "string" },
+            "id": { "type": "string" },
+            "label": { "type": "string" },
+            "active": { "type": "boolean" },
+            "since": { "type": "integer", "format": "int64" },
+            "last_at": { "type": "integer", "format": "int64" },
+            "pending_at": { "type": "integer", "format": "int64" },
+            "recovering_at": { "type": "integer", "format": "int64" },
+            "value": { "type": "number", "format": "double", "nullable": true },
+            "available": { "type": "boolean" },
+          },
+      }
+    MonitoringLatest:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required":
+          [
+            "enabled",
+            "stale",
+            "sample",
+            "reason",
+            "conditions",
+            "stored_bytes",
+            "earliest",
+          ],
+        "properties":
+          {
+            "enabled": { "type": "boolean" },
+            "stale": { "type": "boolean" },
+            "sample":
+              {
+                "allOf": [{ "$ref": "#/components/schemas/MonitoringSample" }],
+                "nullable": true,
+              },
+            "reason": { "type": "string" },
+            "conditions":
+              {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/MonitoringCondition" },
+              },
+            "stored_bytes": { "type": "integer", "format": "int64" },
+            "earliest": { "type": "integer", "format": "int64" },
+          },
+      }
+    MonitoringPoint:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "average", "minimum", "maximum", "count", "gap"],
+        "properties":
+          {
+            "at": { "type": "integer", "format": "int64" },
+            "average":
+              { "type": "number", "format": "double", "nullable": true },
+            "minimum":
+              { "type": "number", "format": "double", "nullable": true },
+            "maximum":
+              { "type": "number", "format": "double", "nullable": true },
+            "count": { "type": "integer", "format": "int64" },
+            "gap": { "type": "boolean" },
+          },
+      }
+    MonitoringHistory:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required":
+          [
+            "points",
+            "step_seconds",
+            "until",
+            "earliest",
+            "stored_bytes",
+            "notice",
+            "from",
+          ],
+        "properties":
+          {
+            "points":
+              {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/MonitoringPoint" },
+              },
+            "step_seconds": { "type": "integer", "format": "int64" },
+            "until": { "type": "integer", "format": "int64" },
+            "earliest": { "type": "integer", "format": "int64" },
+            "stored_bytes": { "type": "integer", "format": "int64" },
+            "notice": { "type": "string" },
+            "from": { "type": "integer", "format": "int64" },
+          },
+      }
     LogPolicy:
       type: object
       additionalProperties: false

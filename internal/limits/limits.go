@@ -48,4 +48,10 @@ const (
 	MetricMounts             = 32
 	MetricIntervalSeconds    = 15
 	MetricRetentionHours     = 24
+	MetricDimensions         = 200
+	MetricSampleBytes        = 64 << 10
+	MetricBucketBytes        = 128 << 10
+	MetricHistoryBytes       = 32 << 20
+	MetricHistoryPoints      = 300
+	MetricHistoryMinutes     = 24 * 60
 )

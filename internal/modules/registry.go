@@ -21,7 +21,7 @@ var definitions = []Definition{
 	{ID: "nginx-config", Name: "Nginx 配置", Available: true, Enabled: true, Dependencies: []string{}},
 	{ID: "firewall", Name: "防火墙", Dependencies: []string{}, Reason: "当前版本暂不提供防火墙管理"},
 	{ID: "host-dns", Name: "主机 DNS", Dependencies: []string{}, Reason: "当前 DNS 设置保持只读"},
-	{ID: "monitoring", Name: "基础监控", Dependencies: []string{}, Reason: "当前版本暂不提供资源趋势"},
+	{ID: "monitoring", Name: "基础监控", Available: true, Dependencies: []string{}},
 	{ID: "fail2ban", Name: "Fail2ban", Dependencies: []string{"firewall"}, Reason: "当前版本暂不提供 Fail2ban 管理"},
 	{ID: "notifications", Name: "外部通知", Dependencies: []string{}, Reason: "当前版本暂不提供外部通知"},
 }
@@ -65,7 +65,8 @@ func Set(ctx context.Context, db *sql.DB, p auth.Principal, id string, enabled b
 		return err
 	}
 	defer tx.Rollback()
-	if !enabled {
+	// Passive monitoring owns no apply tasks or protection rules.
+	if !enabled && id != "monitoring" {
 		var pending int
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running','waiting_confirmation','compensating','recovery_required')").Scan(&pending); err != nil {
 			return err

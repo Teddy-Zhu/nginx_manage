@@ -101,6 +101,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/server': RouteRecordInfo<
+      '/server',
+      '/server',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/settings': RouteRecordInfo<
       '/settings',
       '/settings',
@@ -210,6 +217,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/nginx.vue': {
       routes:
         | '/nginx'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/server.vue': {
+      routes:
+        | '/server'
       views:
         | never
       pathParamNames:

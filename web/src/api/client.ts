@@ -58,6 +58,21 @@ export type LogPage = components["schemas"]["LogPage"];
 export type LogRow = components["schemas"]["LogRow"];
 export type LogPolicyView = components["schemas"]["LogPolicyView"];
 export type LogPolicyInput = components["schemas"]["LogPolicyInput"];
+export type MonitoringCapability =
+  components["schemas"]["MonitoringCapability"];
+export type MonitoringThreshold = components["schemas"]["MonitoringThreshold"];
+export type MonitoringSettings = components["schemas"]["MonitoringSettings"];
+export type MonitoringSettingsView =
+  components["schemas"]["MonitoringSettingsView"];
+export type MonitoringSettingsInput =
+  components["schemas"]["MonitoringSettingsInput"];
+export type HostMetric = components["schemas"]["HostMetric"];
+export type MonitoredService = components["schemas"]["MonitoredService"];
+export type MonitoringSample = components["schemas"]["MonitoringSample"];
+export type MonitoringCondition = components["schemas"]["MonitoringCondition"];
+export type MonitoringLatest = components["schemas"]["MonitoringLatest"];
+export type MonitoringPoint = components["schemas"]["MonitoringPoint"];
+export type MonitoringHistory = components["schemas"]["MonitoringHistory"];
 export interface Revision {
   id: string;
   version: number;
@@ -249,6 +264,29 @@ export function followLogs(
 }
 
 export const api = {
+  monitoringLatest: (signal?: AbortSignal) =>
+    request<MonitoringLatest>({ url: "/monitoring/latest", signal }),
+  monitoringSettings: (signal?: AbortSignal) =>
+    request<MonitoringSettingsView>({ url: "/monitoring/settings", signal }),
+  setMonitoringSettings: (data: MonitoringSettingsInput, key: string) =>
+    request<MonitoringSettingsView>({
+      method: "PUT",
+      url: "/monitoring/settings",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  monitoringHistory: (
+    params: {
+      kind: string;
+      id: string;
+      value: string;
+      from: number;
+      until: number;
+      points?: number;
+    },
+    signal?: AbortSignal,
+  ) =>
+    request<MonitoringHistory>({ url: "/monitoring/history", params, signal }),
   logSources: () => request<LogSource[]>({ url: "/logs/sources" }),
   logPolicy: () => request<LogPolicyView>({ url: "/logs/policy" }),
   setLogPolicy: (data: LogPolicyInput, key: string) =>

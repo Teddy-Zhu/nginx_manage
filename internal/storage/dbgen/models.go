@@ -201,10 +201,38 @@ type IdempotencyKey struct {
 	CreatedAt   int64  `json:"created_at"`
 }
 
+type MetricSample struct {
+	Minute  int64  `json:"minute"`
+	Payload []byte `json:"payload"`
+	Bytes   int64  `json:"bytes"`
+}
+
 type ModuleSetting struct {
 	ID      string `json:"id"`
 	Enabled int64  `json:"enabled"`
 	Version int64  `json:"version"`
+}
+
+type MonitoringCondition struct {
+	Kind       string `json:"kind"`
+	ResourceID string `json:"resource_id"`
+	Payload    string `json:"payload"`
+}
+
+type MonitoringEvent struct {
+	ID         string `json:"id"`
+	Kind       string `json:"kind"`
+	ResourceID string `json:"resource_id"`
+	Active     int64  `json:"active"`
+	Summary    string `json:"summary"`
+	CreatedAt  int64  `json:"created_at"`
+	ExpiresAt  int64  `json:"expires_at"`
+}
+
+type MonitoringSetting struct {
+	ID       int64  `json:"id"`
+	Version  int64  `json:"version"`
+	Settings string `json:"settings"`
 }
 
 type NginxCertificateReference struct {

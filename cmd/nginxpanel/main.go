@@ -50,6 +50,7 @@ func run() error {
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
+	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
 	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
 	devAgent := flags.Bool("dev", false, "non-root read-only development agent")
@@ -127,6 +128,9 @@ func run() error {
 		defer engine.Close()
 		return engine.Initialize()
 	case "agent":
+		if *metricsScope != "host" && *metricsScope != "unconfirmed" {
+			return errors.New("metrics-scope must be host or unconfirmed")
+		}
 		uid := *allowedUID
 		if *devAgent && uid < 0 {
 			uid = os.Getuid()
@@ -143,7 +147,7 @@ func run() error {
 		if *nginxBinary != "" {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Journal: journal}
 		}
-		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent}).Run(ctx)
+		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir}).Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}
