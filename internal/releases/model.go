@@ -91,6 +91,8 @@ type Receiver struct {
 type Input struct {
 	TrustPath, ManifestPath, SignaturePath string
 	Assets                                 []string
+	Components                             []string
+	AllowedComponents                      []string
 	AllowPrerelease                        bool
 	Host                                   Host
 	Receiver                               Receiver

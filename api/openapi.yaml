@@ -9,6 +9,10 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /components:
+    {"get": {"operationId": "getComponents", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
+  /components/tasks:
+    {"get": {"operationId": "listComponentTasks", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}, "post": {"operationId": "createComponentTask", "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComponentCreateInput"}}}}, "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /migrations:
     {"get": {"operationId": "listMigrations", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /migrations/export:
@@ -1429,6 +1433,20 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    ComponentInput:
+      {"type": "object", "additionalProperties": false, "required": ["action", "tag", "prerelease", "plan_id", "manifest_sha256", "trust_sha256"], "properties": {"action": {"type": "string", "enum": ["check", "prepare"]}, "tag": {"type": "string"}, "prerelease": {"type": "boolean"}, "components": {"type": "array", "items": {"type": "string", "enum": ["nginx", "fail2ban"]}}, "assets": {"type": "array", "items": {"type": "string"}}, "plan_id": {"type": "string"}, "manifest_sha256": {"type": "string"}, "trust_sha256": {"type": "string"}}}
+    ComponentCreateInput:
+      {"type": "object", "additionalProperties": false, "required": ["input", "check_task_id"], "properties": {"input": {"$ref": "#/components/schemas/ComponentInput"}, "check_task_id": {"type": "string"}}}
+    ComponentOverview:
+      {"type": "object", "additionalProperties": false, "required": ["available", "scope", "reason", "repository", "trust_sha256", "key_ids"], "properties": {"available": {"type": "boolean"}, "scope": {"type": "string"}, "reason": {"type": "string"}, "repository": {"type": "string"}, "trust_sha256": {"type": "string"}, "key_ids": {"type": "array", "items": {"type": "string"}}}}
+    ComponentAsset:
+      {"type": "object", "additionalProperties": false, "required": ["id", "component", "version", "architecture", "distribution", "distribution_version", "abi", "source_url", "license", "maintenance", "features", "dependencies", "runtime_files", "archive_bytes", "unpacked_bytes"], "properties": {"id": {"type": "string"}, "component": {"type": "string"}, "version": {"type": "string"}, "architecture": {"type": "string"}, "distribution": {"type": "string"}, "distribution_version": {"type": "string"}, "abi": {"type": "string"}, "source_url": {"type": "string"}, "license": {"type": "string"}, "maintenance": {"type": "string"}, "features": {"type": "array", "items": {"type": "string"}}, "dependencies": {"type": "array", "items": {"type": "string"}}, "runtime_files": {"type": "integer", "format": "int64"}, "archive_bytes": {"type": "integer", "format": "int64"}, "unpacked_bytes": {"type": "integer", "format": "int64"}}}
+    ComponentRelease:
+      {"type": "object", "additionalProperties": false, "required": ["plan_id", "manifest_sha256", "trust_sha256", "repository", "version", "tag", "channel", "key_id", "expires_at", "selected", "assets", "archive_bytes", "unpacked_bytes"], "properties": {"plan_id": {"type": "string"}, "manifest_sha256": {"type": "string"}, "trust_sha256": {"type": "string"}, "repository": {"type": "string"}, "version": {"type": "string"}, "tag": {"type": "string"}, "channel": {"type": "string"}, "key_id": {"type": "string"}, "expires_at": {"type": "integer", "format": "int64"}, "selected": {"type": "array", "items": {"type": "string"}}, "assets": {"type": "array", "items": {"$ref": "#/components/schemas/ComponentAsset"}}, "archive_bytes": {"type": "integer", "format": "int64"}, "unpacked_bytes": {"type": "integer", "format": "int64"}}}
+    ComponentOperation:
+      {"type": "object", "additionalProperties": false, "required": ["protocol", "id", "request_hash", "input", "state", "stage", "error_code", "error", "created_at", "updated_at", "deadline", "runtime_ready", "runtime_reason"], "properties": {"protocol": {"type": "integer", "format": "int64"}, "id": {"type": "string"}, "request_hash": {"type": "string"}, "input": {"$ref": "#/components/schemas/ComponentInput"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error_code": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "deadline": {"type": "integer", "format": "int64"}, "runtime_ready": {"type": "boolean"}, "runtime_reason": {"type": "string"}, "release": {"$ref": "#/components/schemas/ComponentRelease"}}}
+    ComponentTask:
+      {"type": "object", "additionalProperties": false, "required": ["id", "operation_id", "action", "state", "stage", "error", "created_at", "updated_at"], "properties": {"id": {"type": "string"}, "operation_id": {"type": "string"}, "action": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "result": {"$ref": "#/components/schemas/ComponentOperation"}}}
     NotificationKind:
       {
         "type": "object",

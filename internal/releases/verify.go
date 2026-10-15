@@ -337,14 +337,17 @@ func Verify(in Input) (*Verified, error) {
 	if in.Host.OS != "linux" || !slices.Contains([]string{"amd64", "arm64"}, in.Host.Architecture) || !identifier.MatchString(in.Host.Distribution) || !text(in.Host.Version, 64) {
 		return nil, errors.New("宿主机平台尚未确认")
 	}
-	if len(m.Assets) == 0 || len(m.Assets) > 16 || len(in.Assets) == 0 || len(in.Assets) > 4 {
-		return nil, errors.New("须显式选择 1–4 个资产，清单最多 16 项")
+	if err := selectors(in.Assets, in.Components); err != nil {
+		return nil, err
 	}
 	assets, err := manifestCatalog(m)
 	if err != nil {
 		return nil, err
 	}
-	selected := append([]string{}, in.Assets...)
+	selected, err := selectAssets(m, in.Host, in.Assets, in.Components)
+	if err != nil {
+		return nil, err
+	}
 	sort.Strings(selected)
 	for i, id := range selected {
 		if i > 0 && id == selected[i-1] {
@@ -363,7 +366,10 @@ func Verify(in Input) (*Verified, error) {
 			return nil
 		}
 		a := assets[id]
-		if a.Maintenance != "maintained" || a.OS != in.Host.OS || a.Architecture != "any" && a.Architecture != in.Host.Architecture || a.Distribution != "any" && (a.Distribution != in.Host.Distribution || a.DistributionVersion != in.Host.Version) || a.Distribution == "any" && a.DistributionVersion != "any" {
+		if len(in.AllowedComponents) != 0 && !slices.Contains(in.AllowedComponents, a.Component) {
+			return errors.New("所选资产依赖包含未授权组件")
+		}
+		if !hostAsset(a, in.Host) {
 			return fmt.Errorf("资产 %s 不满足目标系统或维护条件", id)
 		}
 		if previous := components[a.Component]; previous != "" && previous != id {

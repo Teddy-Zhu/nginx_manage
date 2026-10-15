@@ -442,6 +442,16 @@ onUnmounted(() => {
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
         >{{ plan.last_error }}</NAlert
       >
+      <p
+        v-if="
+          has('components.manage') &&
+          plan.steps.some(
+            (step) => step.kind === 'component' && step.state === 'unavailable',
+          )
+        "
+      >
+        <router-link to="/components">检查并准备目标原生组件</router-link>
+      </p>
       <div class="migration-steps">
         <div v-for="(step, i) in plan.steps" :key="i">
           <NTag

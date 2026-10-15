@@ -4,6 +4,38 @@
  */
 
 export interface paths {
+    "/components": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getComponents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listComponentTasks"];
+        put?: never;
+        post: operations["createComponentTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/migrations": {
         parameters: {
             query?: never;
@@ -1346,6 +1378,100 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ComponentInput: {
+            /** @enum {string} */
+            action: "check" | "prepare";
+            tag: string;
+            prerelease: boolean;
+            components?: ("nginx" | "fail2ban")[];
+            assets?: string[];
+            plan_id: string;
+            manifest_sha256: string;
+            trust_sha256: string;
+        };
+        ComponentCreateInput: {
+            input: components["schemas"]["ComponentInput"];
+            check_task_id: string;
+        };
+        ComponentOverview: {
+            available: boolean;
+            scope: string;
+            reason: string;
+            repository: string;
+            trust_sha256: string;
+            key_ids: string[];
+        };
+        ComponentAsset: {
+            id: string;
+            component: string;
+            version: string;
+            architecture: string;
+            distribution: string;
+            distribution_version: string;
+            abi: string;
+            source_url: string;
+            license: string;
+            maintenance: string;
+            features: string[];
+            dependencies: string[];
+            /** Format: int64 */
+            runtime_files: number;
+            /** Format: int64 */
+            archive_bytes: number;
+            /** Format: int64 */
+            unpacked_bytes: number;
+        };
+        ComponentRelease: {
+            plan_id: string;
+            manifest_sha256: string;
+            trust_sha256: string;
+            repository: string;
+            version: string;
+            tag: string;
+            channel: string;
+            key_id: string;
+            /** Format: int64 */
+            expires_at: number;
+            selected: string[];
+            assets: components["schemas"]["ComponentAsset"][];
+            /** Format: int64 */
+            archive_bytes: number;
+            /** Format: int64 */
+            unpacked_bytes: number;
+        };
+        ComponentOperation: {
+            /** Format: int64 */
+            protocol: number;
+            id: string;
+            request_hash: string;
+            input: components["schemas"]["ComponentInput"];
+            state: string;
+            stage: string;
+            error_code: string;
+            error: string;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+            /** Format: int64 */
+            deadline: number;
+            runtime_ready: boolean;
+            runtime_reason: string;
+            release?: components["schemas"]["ComponentRelease"];
+        };
+        ComponentTask: {
+            id: string;
+            operation_id: string;
+            action: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+            result?: components["schemas"]["ComponentOperation"];
+        };
         NotificationKind: {
             id: string;
             label: string;
@@ -2558,6 +2684,53 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getComponents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listComponentTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createComponentTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComponentCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     listMigrations: {
         parameters: {
             query?: never;

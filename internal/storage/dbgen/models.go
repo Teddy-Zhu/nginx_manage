@@ -163,6 +163,13 @@ type CertificateVersion struct {
 	Environment   string `json:"environment"`
 }
 
+type ComponentOperation struct {
+	TaskID    string `json:"task_id"`
+	Principal string `json:"principal"`
+	Payload   []byte `json:"payload"`
+	Result    []byte `json:"result"`
+}
+
 type ConfigHead struct {
 	ID              int64          `json:"id"`
 	DesiredRevision sql.NullString `json:"desired_revision"`

@@ -13,11 +13,14 @@ import (
 )
 
 type OnlineInput struct {
-	TrustPath, TokenPath, Tag string
-	Assets                    []string
-	AllowPrerelease, Prepare  bool
-	Host                      Host
-	Receiver                  Receiver
+	TrustPath, TokenPath, Tag                                   string
+	Assets                                                      []string
+	Components                                                  []string
+	AllowedComponents                                           []string
+	ExpectedPlanID, ExpectedManifestSHA256, ExpectedTrustSHA256 string
+	AllowPrerelease, Prepare                                    bool
+	Host                                                        Host
+	Receiver                                                    Receiver
 }
 
 type ReleaseSource struct {
@@ -146,17 +149,15 @@ func Online(ctx context.Context, in OnlineInput) (OnlineResult, error) {
 	if os.Geteuid() != 0 {
 		return OnlineResult{}, errors.New("在线发行检查和准备需要本机 root")
 	}
-	if in.Tag != "" && (!strings.HasPrefix(in.Tag, "v") || !validVersion(strings.TrimPrefix(in.Tag, "v"))) || in.AllowPrerelease && in.Tag == "" || len(in.Assets) < 1 || len(in.Assets) > 4 {
-		return OnlineResult{}, errors.New("须显式选择 1–4 个资产；标签须为 v 开头的 SemVer，预发布须显式指定标签")
-	}
-	for _, id := range in.Assets {
-		if !identifier.MatchString(id) {
-			return OnlineResult{}, errors.New("所选资产 ID 无效")
-		}
+	if err := ValidateOnlineSelection(in); err != nil {
+		return OnlineResult{}, err
 	}
 	publisher, err := readTrust(in.TrustPath)
 	if err != nil {
 		return OnlineResult{}, err
+	}
+	if in.ExpectedTrustSHA256 != "" && in.ExpectedTrustSHA256 != hash(publisher.raw) {
+		return OnlineResult{}, ErrReleaseChanged
 	}
 	token, tokenHash, err := readGithubToken(in.TokenPath)
 	if err != nil {
@@ -222,7 +223,7 @@ func Online(ctx context.Context, in OnlineInput) (OnlineResult, error) {
 			return OnlineResult{}, err
 		}
 	}
-	verified, err := Verify(Input{TrustPath: in.TrustPath, ManifestPath: filepath.Join(stage, manifest.Name), SignaturePath: filepath.Join(stage, sig.Name), Assets: in.Assets, AllowPrerelease: in.AllowPrerelease, Host: in.Host, Receiver: in.Receiver})
+	verified, err := Verify(Input{TrustPath: in.TrustPath, ManifestPath: filepath.Join(stage, manifest.Name), SignaturePath: filepath.Join(stage, sig.Name), Assets: in.Assets, Components: in.Components, AllowedComponents: in.AllowedComponents, AllowPrerelease: in.AllowPrerelease, Host: in.Host, Receiver: in.Receiver})
 	if err != nil {
 		return OnlineResult{}, err
 	}
@@ -231,6 +232,9 @@ func Online(ctx context.Context, in OnlineInput) (OnlineResult, error) {
 	}
 	if err := s.currentSource(); err != nil {
 		return OnlineResult{}, err
+	}
+	if in.ExpectedPlanID != "" && in.ExpectedPlanID != verified.plan.ID || in.ExpectedManifestSHA256 != "" && in.ExpectedManifestSHA256 != verified.plan.ManifestSHA256 {
+		return OnlineResult{}, ErrReleaseChanged
 	}
 	// Validate every selected archive against the authenticated manifest before
 	// requesting any archive, including dependency assets.

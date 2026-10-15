@@ -88,7 +88,7 @@ func (s *Server) dnsHandlers(mux *http.ServeMux, d *HostDNS, ctx context.Context
 		})
 	}
 }
-func (c *Client) dnsRequest(ctx context.Context, method, path string, in, out any) error {
+func (c *Client) envelopeRequest(ctx context.Context, method, path string, in, out any) error {
 	var reply struct {
 		Protocol int             `json:"protocol"`
 		Code     string          `json:"code"`
@@ -98,23 +98,23 @@ func (c *Client) dnsRequest(ctx context.Context, method, path string, in, out an
 		return err
 	}
 	if reply.Protocol != Protocol || reply.Code != "OK" {
-		return fault.Unavailable("DNS Agent 协议不匹配")
+		return fault.Unavailable("Agent 响应协议不匹配")
 	}
 	return json.Unmarshal(reply.Data, out)
 }
 func (c *Client) ReadHostDNS(ctx context.Context) (hostdns.Observation, error) {
 	var out hostdns.Observation
-	err := c.dnsRequest(ctx, http.MethodGet, "/v1/host-dns", nil, &out)
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/host-dns", nil, &out)
 	return out, err
 }
 func (c *Client) PlanHostDNS(ctx context.Context, input hostdns.PlanInput) (hostdns.Plan, error) {
 	var out hostdns.Plan
-	err := c.dnsRequest(ctx, http.MethodPost, "/v1/host-dns/plan", dnsRequest{Protocol: Protocol, Input: &input}, &out)
+	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/host-dns/plan", dnsRequest{Protocol: Protocol, Input: &input}, &out)
 	return out, err
 }
 func (c *Client) ApplyHostDNS(ctx context.Context, id string, plan hostdns.Plan) (hostdns.Status, error) {
 	var out hostdns.Status
-	err := c.dnsRequest(ctx, http.MethodPost, "/v1/host-dns/apply", dnsRequest{Protocol: Protocol, OperationID: id, Plan: &plan}, &out)
+	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/host-dns/apply", dnsRequest{Protocol: Protocol, OperationID: id, Plan: &plan}, &out)
 	return out, err
 }
 func (c *Client) HostDNSOperation(ctx context.Context, id string) (hostdns.Status, error) {
@@ -122,11 +122,11 @@ func (c *Client) HostDNSOperation(ctx context.Context, id string) (hostdns.Statu
 		return hostdns.Status{}, fault.Invalid("DNS 操作 ID 无效")
 	}
 	var out hostdns.Status
-	err := c.dnsRequest(ctx, http.MethodGet, "/v1/host-dns/operations/"+id, nil, &out)
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/host-dns/operations/"+id, nil, &out)
 	return out, err
 }
 func (c *Client) DecideHostDNS(ctx context.Context, id, action string) (hostdns.Status, error) {
 	var out hostdns.Status
-	err := c.dnsRequest(ctx, http.MethodPost, "/v1/host-dns/decide", dnsRequest{Protocol: Protocol, OperationID: id, Action: action}, &out)
+	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/host-dns/decide", dnsRequest{Protocol: Protocol, OperationID: id, Action: action}, &out)
 	return out, err
 }

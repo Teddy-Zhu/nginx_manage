@@ -392,6 +392,42 @@ func (e CertificateVersionEnvironment) Valid() bool {
 	}
 }
 
+// Defines values for ComponentInputAction.
+const (
+	Check   ComponentInputAction = "check"
+	Prepare ComponentInputAction = "prepare"
+)
+
+// Valid indicates whether the value is a known member of the ComponentInputAction enum.
+func (e ComponentInputAction) Valid() bool {
+	switch e {
+	case Check:
+		return true
+	case Prepare:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentInputComponents.
+const (
+	Fail2ban ComponentInputComponents = "fail2ban"
+	Nginx    ComponentInputComponents = "nginx"
+)
+
+// Valid indicates whether the value is a known member of the ComponentInputComponents enum.
+func (e ComponentInputComponents) Valid() bool {
+	switch e {
+	case Fail2ban:
+		return true
+	case Nginx:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateResourceKind.
 const (
 	CreateResourceKindHttp   CreateResourceKind = "http"
@@ -1104,6 +1140,107 @@ type CertificateVersion struct {
 
 // CertificateVersionEnvironment defines model for CertificateVersion.Environment.
 type CertificateVersionEnvironment string
+
+// ComponentAsset defines model for ComponentAsset.
+type ComponentAsset struct {
+	Abi                 string   `json:"abi"`
+	Architecture        string   `json:"architecture"`
+	ArchiveBytes        int64    `json:"archive_bytes"`
+	Component           string   `json:"component"`
+	Dependencies        []string `json:"dependencies"`
+	Distribution        string   `json:"distribution"`
+	DistributionVersion string   `json:"distribution_version"`
+	Features            []string `json:"features"`
+	Id                  string   `json:"id"`
+	License             string   `json:"license"`
+	Maintenance         string   `json:"maintenance"`
+	RuntimeFiles        int64    `json:"runtime_files"`
+	SourceUrl           string   `json:"source_url"`
+	UnpackedBytes       int64    `json:"unpacked_bytes"`
+	Version             string   `json:"version"`
+}
+
+// ComponentCreateInput defines model for ComponentCreateInput.
+type ComponentCreateInput struct {
+	CheckTaskId string         `json:"check_task_id"`
+	Input       ComponentInput `json:"input"`
+}
+
+// ComponentInput defines model for ComponentInput.
+type ComponentInput struct {
+	Action         ComponentInputAction        `json:"action"`
+	Assets         *[]string                   `json:"assets,omitempty"`
+	Components     *[]ComponentInputComponents `json:"components,omitempty"`
+	ManifestSha256 string                      `json:"manifest_sha256"`
+	PlanId         string                      `json:"plan_id"`
+	Prerelease     bool                        `json:"prerelease"`
+	Tag            string                      `json:"tag"`
+	TrustSha256    string                      `json:"trust_sha256"`
+}
+
+// ComponentInputAction defines model for ComponentInput.Action.
+type ComponentInputAction string
+
+// ComponentInputComponents defines model for ComponentInput.Components.
+type ComponentInputComponents string
+
+// ComponentOperation defines model for ComponentOperation.
+type ComponentOperation struct {
+	CreatedAt     int64             `json:"created_at"`
+	Deadline      int64             `json:"deadline"`
+	Error         string            `json:"error"`
+	ErrorCode     string            `json:"error_code"`
+	Id            string            `json:"id"`
+	Input         ComponentInput    `json:"input"`
+	Protocol      int64             `json:"protocol"`
+	Release       *ComponentRelease `json:"release,omitempty"`
+	RequestHash   string            `json:"request_hash"`
+	RuntimeReady  bool              `json:"runtime_ready"`
+	RuntimeReason string            `json:"runtime_reason"`
+	Stage         string            `json:"stage"`
+	State         string            `json:"state"`
+	UpdatedAt     int64             `json:"updated_at"`
+}
+
+// ComponentOverview defines model for ComponentOverview.
+type ComponentOverview struct {
+	Available   bool     `json:"available"`
+	KeyIds      []string `json:"key_ids"`
+	Reason      string   `json:"reason"`
+	Repository  string   `json:"repository"`
+	Scope       string   `json:"scope"`
+	TrustSha256 string   `json:"trust_sha256"`
+}
+
+// ComponentRelease defines model for ComponentRelease.
+type ComponentRelease struct {
+	ArchiveBytes   int64            `json:"archive_bytes"`
+	Assets         []ComponentAsset `json:"assets"`
+	Channel        string           `json:"channel"`
+	ExpiresAt      int64            `json:"expires_at"`
+	KeyId          string           `json:"key_id"`
+	ManifestSha256 string           `json:"manifest_sha256"`
+	PlanId         string           `json:"plan_id"`
+	Repository     string           `json:"repository"`
+	Selected       []string         `json:"selected"`
+	Tag            string           `json:"tag"`
+	TrustSha256    string           `json:"trust_sha256"`
+	UnpackedBytes  int64            `json:"unpacked_bytes"`
+	Version        string           `json:"version"`
+}
+
+// ComponentTask defines model for ComponentTask.
+type ComponentTask struct {
+	Action      string              `json:"action"`
+	CreatedAt   int64               `json:"created_at"`
+	Error       string              `json:"error"`
+	Id          string              `json:"id"`
+	OperationId string              `json:"operation_id"`
+	Result      *ComponentOperation `json:"result,omitempty"`
+	Stage       string              `json:"stage"`
+	State       string              `json:"state"`
+	UpdatedAt   int64               `json:"updated_at"`
+}
 
 // CreateResource defines model for CreateResource.
 type CreateResource struct {
@@ -2254,6 +2391,13 @@ type ReplaceCertificateParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// CreateComponentTaskParams defines parameters for CreateComponentTask.
+type CreateComponentTaskParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // CreateCredentialParams defines parameters for CreateCredential.
 type CreateCredentialParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -2697,6 +2841,9 @@ type DeployCertificateJSONRequestBody = CertificateDeployInput
 // ReplaceCertificateJSONRequestBody defines body for ReplaceCertificate for application/json ContentType.
 type ReplaceCertificateJSONRequestBody = CertificateInput
 
+// CreateComponentTaskJSONRequestBody defines body for CreateComponentTask for application/json ContentType.
+type CreateComponentTaskJSONRequestBody = ComponentCreateInput
+
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
 type CreateCredentialJSONRequestBody = CredentialInput
 
@@ -2882,6 +3029,15 @@ type ServerInterface interface {
 
 	// (PUT /certificates/{id}/versions)
 	ReplaceCertificate(w http.ResponseWriter, r *http.Request, id ID, params ReplaceCertificateParams)
+
+	// (GET /components)
+	GetComponents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /components/tasks)
+	ListComponentTasks(w http.ResponseWriter, r *http.Request)
+
+	// (POST /components/tasks)
+	CreateComponentTask(w http.ResponseWriter, r *http.Request, params CreateComponentTaskParams)
 
 	// (GET /credentials)
 	ListCredentials(w http.ResponseWriter, r *http.Request)
@@ -4188,6 +4344,98 @@ func (siw *ServerInterfaceWrapper) ReplaceCertificate(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReplaceCertificate(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetComponents operation middleware
+func (siw *ServerInterfaceWrapper) GetComponents(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetComponents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListComponentTasks operation middleware
+func (siw *ServerInterfaceWrapper) ListComponentTasks(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListComponentTasks(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateComponentTask operation middleware
+func (siw *ServerInterfaceWrapper) CreateComponentTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateComponentTaskParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateComponentTask(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7792,6 +8040,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components", wrapper.GetComponents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/tasks", wrapper.ListComponentTasks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/tasks", wrapper.CreateComponentTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations", wrapper.ListMigrations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/export", wrapper.ExportMigration)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/plan", wrapper.PrepareMigration)

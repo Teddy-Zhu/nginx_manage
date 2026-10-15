@@ -10,6 +10,7 @@ import (
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/migration"
@@ -30,6 +31,7 @@ type Server struct {
 	Monitoring    *monitoring.Service
 	Notifications *notifications.Service
 	HostDNS       *hostdns.Service
+	Components    *components.Service
 	Migration     *migration.Service
 	Agent         *agent.Client
 	NodeID        string

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
@@ -39,16 +40,19 @@ type CheckResult struct {
 	Diagnostics   []nginxconfig.Diagnostic `json:"diagnostics"`
 }
 type Server struct {
-	Socket       string
-	AllowedUID   uint32
-	Policy       nginxconfig.Policy
-	Journal      *Journal
-	Nginx        *Nginx
-	Dev          bool
-	MetricsScope string
-	DataDir      string
-	DNSOwner     string
-	DNSScope     string
+	Socket         string
+	AllowedUID     uint32
+	Policy         nginxconfig.Policy
+	Journal        *Journal
+	Nginx          *Nginx
+	Dev            bool
+	MetricsScope   string
+	DataDir        string
+	DNSOwner       string
+	DNSScope       string
+	ComponentScope string
+	ReleaseTrust   string
+	ReleaseToken   string
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -132,6 +136,12 @@ func (s *Server) Run(ctx context.Context) error {
 		}()
 	}
 	mux := http.NewServeMux()
+	componentManager := &components.Manager{Dir: filepath.Join(s.DataDir, "agent", "components"), TrustPath: s.ReleaseTrust, TokenPath: s.ReleaseToken, Scope: s.ComponentScope, Dev: s.Dev}
+	defer componentManager.Close()
+	if err := componentManager.Open(ctx); err != nil {
+		return err
+	}
+	s.componentHandlers(mux, componentManager)
 	dns := &HostDNS{Dir: filepath.Join(s.DataDir, "agent", "reachability"), Owner: s.DNSOwner, Scope: s.DNSScope, Dev: s.Dev, Journal: s.Journal}
 	defer dns.Close()
 	if err := dns.Open(); err != nil {
@@ -328,7 +338,7 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		return errors.New("无法连接本机 Agent")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 && (strings.HasPrefix(path, "/v1/logs/") || strings.HasPrefix(path, "/v1/monitoring/") || strings.HasPrefix(path, "/v1/host-dns")) {
+	if resp.StatusCode != 200 && (strings.HasPrefix(path, "/v1/logs/") || strings.HasPrefix(path, "/v1/monitoring/") || strings.HasPrefix(path, "/v1/host-dns") || strings.HasPrefix(path, "/v1/components")) {
 		var out struct {
 			Protocol int    `json:"protocol"`
 			Code     string `json:"code"`

@@ -26,6 +26,7 @@ import (
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/components"
 	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/migration"
 	"nginxpanel/internal/modules"
@@ -225,7 +226,8 @@ func Run(ctx context.Context, o Options) error {
 		dnsService.Agent = agentClient
 	}
 	migrationService := &migration.Service{DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
-	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
+	componentService := &components.Service{DB: db, Vault: vault, Agent: agentClient}
+	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -237,14 +239,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 7)
+	result := make(chan error, 8)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(7)
+	workers.Add(8)
 	go func() {
 		defer workers.Done()
 		if o.Dev {
@@ -265,6 +267,7 @@ func Run(ctx context.Context, o Options) error {
 	go func() { defer workers.Done(); result <- notificationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- dnsService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- migrationService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- componentService.Run(runCtx) }()
 	select {
 	case <-ctx.Done():
 		err = nil

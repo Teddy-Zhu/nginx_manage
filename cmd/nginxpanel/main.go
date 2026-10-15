@@ -54,6 +54,7 @@ func run() error {
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
+	componentScope := flags.String("component-scope", "unconfirmed", "native component scope: host or unconfirmed")
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd or unconfirmed")
 	dnsScope := flags.String("dns-scope", "unconfirmed", "DNS namespace: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
@@ -173,6 +174,9 @@ func run() error {
 		defer engine.Close()
 		return engine.Initialize()
 	case "agent":
+		if *componentScope != "host" && *componentScope != "unconfirmed" {
+			return errors.New("component-scope must be host or unconfirmed")
+		}
 		if (*dnsOwner != "unconfirmed" && *dnsOwner != "regular-file" && *dnsOwner != "networkmanager" && *dnsOwner != "networkd") || (*dnsScope != "unconfirmed" && *dnsScope != "host") {
 			return errors.New("unsupported DNS owner or namespace")
 		}
@@ -195,7 +199,7 @@ func run() error {
 		if *nginxBinary != "" {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Journal: journal}
 		}
-		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope}).Run(ctx)
+		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, ComponentScope: *componentScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken}).Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

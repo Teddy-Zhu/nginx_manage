@@ -109,6 +109,8 @@ exec 9>/run/nginxpanel-install/lock
 flock -n 9 || die '另一个安装操作正在执行'
 ensure_dir /opt/nginxpanel 755 root root
 ensure_dir /opt/nginxpanel/releases 755 root root
+ensure_dir /opt/nginxpanel/prepared 755 root root
+ensure_dir /opt/nginxpanel/release-downloads 700 root root
 ensure_dir /etc/nginxpanel 755 root root
 ensure_dir /etc/nginxpanel/install 700 root root
 state=/etc/nginxpanel/install
@@ -282,7 +284,7 @@ Type=exec
 User=root
 Group=nginxpanel-ipc
 UMask=0027
-ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid --nginx-binary $nginx --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host
+ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid --nginx-binary $nginx --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=45
@@ -292,7 +294,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host
+ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging
 RestrictSUIDSGID=yes
 LockPersonality=yes

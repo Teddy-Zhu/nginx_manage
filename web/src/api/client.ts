@@ -4,6 +4,14 @@ import type { components } from "./schema";
 type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
+export type ComponentInput = components["schemas"]["ComponentInput"];
+export type ComponentCreateInput =
+  components["schemas"]["ComponentCreateInput"];
+export type ComponentOverview = components["schemas"]["ComponentOverview"];
+export type ComponentAsset = components["schemas"]["ComponentAsset"];
+export type ComponentRelease = components["schemas"]["ComponentRelease"];
+export type ComponentOperation = components["schemas"]["ComponentOperation"];
+export type ComponentTask = components["schemas"]["ComponentTask"];
 export type Tree = components["schemas"]["Tree"];
 export type ConfigFile = components["schemas"]["File"];
 export type Resource = components["schemas"]["Resource"];
@@ -192,7 +200,7 @@ function checkNode(value: string) {
     );
   nodeId = value;
 }
-function apiError(error: unknown): ApiError {
+export function apiError(error: unknown): ApiError {
   let normalized: ApiError;
   if (error instanceof ApiError) normalized = error;
   else if (axios.isCancel(error))
@@ -329,6 +337,18 @@ export const api = {
       headers: { "Idempotency-Key": key },
       timeout: 45_000,
     }),
+  components: (signal?: AbortSignal) =>
+    request<ComponentOverview>({ url: "/components", signal }),
+  componentTasks: (signal?: AbortSignal) =>
+    request<ComponentTask[]>({ url: "/components/tasks", signal }),
+  createComponentTask: (data: ComponentCreateInput, key: string) =>
+    request<ComponentTask>({
+      url: "/components/tasks",
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+      data,
+    }),
+
   migrations: (signal?: AbortSignal) =>
     request<MigrationPlan[]>({ url: "/migrations", signal }),
   migration: (id: string, signal?: AbortSignal) =>
