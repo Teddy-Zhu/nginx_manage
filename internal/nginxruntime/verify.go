@@ -22,6 +22,8 @@ import (
 	"nginxpanel/internal/secure"
 )
 
+var installationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 var digest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var versionValue = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 var versionLine = regexp.MustCompile(`(?m)^nginx version: nginx/([0-9]+\.[0-9]+\.[0-9]+)(?:[ \t][^\r\n]*)?\r?$`)
@@ -61,7 +63,7 @@ func readBinding(data string) (Binding, error) {
 	if err != nil {
 		return b, err
 	}
-	if info.Mode().Perm() != 0444 || b.Schema != Schema || b.DataDir != data || b.BoundAt <= 0 || b.BoundAt > time.Now().Unix()+300 {
+	if info.Mode().Perm() != 0444 || b.Schema != Schema || b.DataDir != data || b.BoundAt <= 0 || b.BoundAt > time.Now().Unix()+300 || b.OperationID != "" && (!installationID.MatchString(b.OperationID) || b.Owner != "managed") {
 		return b, errors.New("Nginx 绑定身份或权限无效")
 	}
 	if b.Owner == "uninstalled" {

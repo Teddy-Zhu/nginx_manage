@@ -31,14 +31,15 @@ type Signed struct {
 	Receiver       releases.Receiver `json:"receiver"`
 }
 type Binding struct {
-	Schema  int     `json:"schema"`
-	DataDir string  `json:"data_dir"`
-	Owner   string  `json:"owner"`
-	Binary  string  `json:"binary"`
-	SHA256  string  `json:"sha256"`
-	Version string  `json:"version"`
-	BoundAt int64   `json:"bound_at"`
-	Signed  *Signed `json:"signed,omitempty"`
+	OperationID string  `json:"operation_id,omitempty"`
+	Schema      int     `json:"schema"`
+	DataDir     string  `json:"data_dir"`
+	Owner       string  `json:"owner"`
+	Binary      string  `json:"binary"`
+	SHA256      string  `json:"sha256"`
+	Version     string  `json:"version"`
+	BoundAt     int64   `json:"bound_at"`
+	Signed      *Signed `json:"signed,omitempty"`
 }
 type Installation struct {
 	Owner     string `json:"owner"`

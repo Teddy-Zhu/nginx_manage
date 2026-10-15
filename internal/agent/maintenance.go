@@ -34,6 +34,11 @@ func (g *maintenanceGate) open() error {
 	if g.dev {
 		return nil
 	}
+	unlock, err := g.journal.maintenanceLock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	records, err := g.records()
 	if err != nil {
 		return err
@@ -129,6 +134,17 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		if r.Kind == nginxInstallKind {
+			if err := validInstallRecord(r); err != nil {
+				return out, err
+			}
+			// This is work owned by the held maintenance session, rather
+			// than ordinary traffic that must drain before it is held.
+			if g.id != "" && r.NginxInstall.Input.MaintenanceID == g.id {
+				continue
+			}
+		}
+
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
 		case "queued", "running", "waiting_confirmation", "compensating", "recovery_required":
@@ -178,6 +194,11 @@ func (g *maintenanceGate) acquire(ctx context.Context, in maintenance.RootReques
 	if g.dev || g.scope != "host" {
 		return maintenance.RootStatus{}, fault.Unavailable("宿主机维护范围尚未确认")
 	}
+	unlock, err := g.journal.maintenanceLock()
+	if err != nil {
+		return maintenance.RootStatus{}, err
+	}
+	defer unlock()
 	if g.id != "" && g.id != in.OperationID {
 		return maintenance.RootStatus{}, fault.Conflict("已有其他独立维护锁")
 	}
@@ -230,11 +251,31 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 	if g.dev || g.scope != "host" {
 		return maintenance.RootStatus{}, fault.Unavailable("宿主机维护范围尚未确认")
 	}
+	unlock, err := g.journal.maintenanceLock()
+	if err != nil {
+		return maintenance.RootStatus{}, err
+	}
+	defer unlock()
 	if g.id != "" && g.id != in.OperationID {
 		return maintenance.RootStatus{}, fault.Conflict("独立维护锁不匹配")
 	}
 	if err := ctx.Err(); err != nil {
 		return maintenance.RootStatus{}, err
+	}
+	records, err := g.records()
+	if err != nil {
+		return maintenance.RootStatus{}, err
+	}
+	for _, record := range records {
+		if record.Kind != nginxInstallKind {
+			continue
+		}
+		if err := validInstallRecord(record); err != nil {
+			return maintenance.RootStatus{}, err
+		}
+		if !installTerminal(record.State) && record.NginxInstall.Input.MaintenanceID == in.OperationID {
+			return maintenance.RootStatus{}, fault.Conflict("原 Nginx 安装仍在执行或待恢复，不能释放维护锁")
+		}
 	}
 	prior, err := g.journal.Get(in.OperationID)
 	if err == nil && prior.Kind != "maintenance.lock" {

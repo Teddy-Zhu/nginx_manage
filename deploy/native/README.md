@@ -26,7 +26,7 @@ sudo bash deploy/native/install.sh \
   --start
 ```
 
-`--without-nginx` 与本机程序、签名资产和预发布选择互斥；不填写选择会拒绝安装。此模式登记 root 所有的明确未安装状态，不创建 Nginx 基线、不启用或启动其服务；Web 和 Agent 可提供目标预检及可信组件准备。实际安装、运行接入和迁移应用仍须分别完成，在线安装流程继续实施。重新运行首次安装器不能改换已登记选择。
+`--without-nginx` 与本机程序、签名资产和预发布选择互斥；不填写选择会拒绝安装。此模式登记 root 所有的明确未安装状态，不创建 Nginx 基线、不启用或启动其服务；Web 和 Agent 可提供目标预检及可信组件准备。准备后可在维护期间使用下述独立首次安装命令；迁移任务自动调用尚未接入。重新运行首次安装器不能改换已登记选择。
 
 数据目录只接受 `/srv/` 或 `/var/lib/` 下的规范路径，父目录须已存在且受 root 保护。已有非空目录、同名外部服务、不同安装计划或权限冲突会停止安装。安装入口不是旧数据接管器，也不用于升级或更换数据根。
 
@@ -66,7 +66,7 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 主机指标来源显式为 host；DNS 接管和日志轮转所有者默认 unconfirmed。启用主机 DNS 写入还须本机确认实际所有者、宿主机范围并调整 Agent unit 的固定写入目录，不能只在业务页面绕过系统沙箱。networkd 写入及其完整恢复仍待实现；其 `RevertDNS` 会清除其他 DNS 运行时覆盖，不能将回写服务器地址视为完整回滚，见 [systemd 源码](https://github.com/systemd/systemd/blob/v257/src/network/networkd-link-bus.c)。
 
-安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新、卸载清理、可信组件在线安装/运行接入及完整 Docker 接入仍在后续范围内。
+安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新、卸载清理、Web/迁移自动安装及完整 Docker 接入仍在后续范围内。
 
 组件准备由原生 Agent 的 `--component-scope host` 启用，发行信任须由本机 root 配置，见 [发行准备](../../docs/releases.md)。安装器预建 `/opt/nginxpanel/prepared`（0755）及 `/opt/nginxpanel/release-downloads`（0700），并仅向 Agent unit 开放这两个额外写目录。缺少有效信任时页面报告不可用，不创建默认发布者。原生首次安装通过下述绑定接入，Web 安装和运行中版本切换仍待后续流程。
 
@@ -87,8 +87,34 @@ sudo bash deploy/native/install.sh \
 
 Nginx 的两个 unit 入口改用 `nginx-runtime`，校验配置后通过 exec 进入 Nginx，保持 systemd 跟踪的 master PID；Agent 使用 `--nginx-binding` 解析同一记录。签名组件每次启动都在无网络、无缓存写入的路径重新核验产物及运行依赖；当前公钥仍须信任签名，文件改动/缺失/运行文件漂移会拒绝启动，不回退系统程序。清单过期限制新安装，已批准安装按本机批准时间复核；新增无关公钥不破坏既有有效回执，撤销签名公钥或修改仓库则阻止后续启动。
 
-安装、启动及运行确认仍分开：默认不启用服务，`--start` 才启动；组件页面展示已登记来源、版本、散列及实际运行确认。首次安装不会切换正在运行的实例；在线升级、维护锁和失败恢复仍须后续流程。此入口及服务沙箱尚未实际运行，待 P5 集中验证。
+安装、启动及运行确认仍分开：默认不启用服务，`--start` 才启动；组件页面展示已登记来源、版本、散列及实际运行确认。首次安装不会切换正在运行的实例；运行中升级及其恢复仍待后续流程。此入口及服务沙箱尚未实际运行，待 P5 集中验证。
 
 安装的 Agent 同时以 `--maintenance-scope host` 确认配置维护范围。面板“配置维护”关闭新写入、等待既有任务结束并取得独立 root 锁；手动进入维护后须显式恢复写入，Web 或 Agent 重启不会把锁当作已释放。状态不可核实时保持写入关闭。此入口尚不执行组件切换或完整备份。
 
 仅面板安装使用 `component-bind --nginx-uninstalled` 保存同一 root 只读记录，其中所有运行文件和签名字段必须为空。Agent 的 `--nginx-binding` 接受这一明确状态并报告执行能力缺失；记录不存在或既有资产丢失仍拒绝启动。`nginx-init` 和 `nginx-runtime` 要求真正的安装绑定，未安装登记不能绕过此检查。`nginx-runtime-status` 是 systemd 的只读条件入口，不执行 Nginx、下载或初始化。该部署方式尚未运行安装器、语法/构建检查、服务或测试，待 P5 集中验证。
+
+## 为已部署的面板首次安装 Nginx
+
+仅适用于原生 `--without-nginx` 节点，且 Web/Agent 已启动、Nginx 签名资产已准备。先从“配置维护”进入维护，等待 Web 与独立 Agent 均为 `held`。从 `GET /api/v1/maintenance` 的统一响应 `data.agent.id`、`data.agent.epoch` 取得当前维护标识和 epoch；安装期间保留该维护会话。
+
+在目标宿主机使用已登记的面板程序执行，安装操作 UUID 须预先生成并留存：
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel component-install \
+  --data-dir /srv/nginxpanel \
+  --install-operation '<本次安装UUID>' \
+  --maintenance-id '<当前维护UUID>' \
+  --maintenance-epoch '<当前Agent epoch>' \
+  --release-plan '<已准备的64位计划ID>' \
+  --release-select '<单一Nginx资产ID>' \
+  --install-enable \
+  --install-start
+```
+
+`--install-enable` 仅设置专用服务开机启用，`--install-start` 才立即启动；均省略时只安装并接入 Agent，不宣称运行已确认。信任文件默认 `/etc/nginxpanel/release-trust.json`，使用其他固定信任或预发布资产时须填写相应 `--release-trust`、`--release-prerelease`。模块批准清单固定为 `/etc/nginxpanel/nginx-modules.json`，不下载、编译或安装模块和系统包。
+
+独立 root 进程先保存 `<DATA_DIR>/agent/operations/<安装UUID>.json`，核对原生服务、原未安装登记和签名资产，再初始化受管空基线并检查配置、原子发布安装绑定，按显式选项控制专用 Nginx，并重启 Agent。最后以 Web 身份通过原有 IPC 权限核对 Agent 的安装来源、基线完整性及所请求的运行状态。安装不会接管已有实例或应用迁移业务配置；结果从标准输出返回独立 JSON 记录，失败同时返回非零退出状态。
+
+中断或失败保留原记录并阻止释放维护锁。核对记录阶段及 systemd 日志后，等待原维护会话再次为 `held`，以**相同安装 UUID、维护 UUID、资产和全部原选项**，更新当前 epoch 并增加 `--resume-install` 续办；不能换新操作或资产掩盖未完成安装。绑定尚未发布时，也可保留上述全部原选项并增加 `--abort-install` 显式取消，已生成的受管空基线和审计记录保留。绑定发布后仅允许续办确认，不按未安装状态取消。成功或有效取消后，再从面板显式结束维护。
+
+该执行器的 Web/API 启动、迁移任务自动协调及运行中版本切换仍待实施；命令、服务操作和故障恢复均未实际执行，待 P5 集中验证。

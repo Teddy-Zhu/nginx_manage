@@ -17,7 +17,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-func (in Input) validate() error {
+func (in Input) Validate() error {
 	if os.Geteuid() != 0 {
 		return errors.New("Nginx 安装绑定需要本机 root")
 	}
@@ -55,7 +55,7 @@ func matches(b Binding, in Input) bool {
 // It does not write, start services or change an existing selection.
 func Inspect(ctx context.Context, in Input) (Binding, error) {
 	var b Binding
-	if err := in.validate(); err != nil {
+	if err := in.Validate(); err != nil {
 		return b, err
 	}
 	name, _ := bindingPath(in.DataDir)
@@ -69,6 +69,16 @@ func Inspect(ctx context.Context, in Input) (Binding, error) {
 		}
 		return prior, nil
 	} else if !os.IsNotExist(err) {
+		return b, err
+	}
+	return Admit(ctx, in)
+}
+
+// Admit verifies a candidate without changing the current selection. Activation
+// must separately prove ownership of an explicitly uninstalled selection.
+func Admit(ctx context.Context, in Input) (Binding, error) {
+	var b Binding
+	if err := in.Validate(); err != nil {
 		return b, err
 	}
 	b = Binding{Schema: Schema, DataDir: in.DataDir, BoundAt: time.Now().Unix()}
@@ -140,6 +150,14 @@ func Inspect(ctx context.Context, in Input) (Binding, error) {
 // Bind publishes a new immutable installation reference. Different bindings are
 // refused; this entry is not an online upgrade or an implicit takeover.
 func Bind(ctx context.Context, in Input) (Binding, error) {
+	if err := in.Validate(); err != nil {
+		return Binding{}, err
+	}
+	unlock, err := bindingLock(in.DataDir)
+	if err != nil {
+		return Binding{}, err
+	}
+	defer unlock()
 	b, err := Inspect(ctx, in)
 	if err != nil {
 		return b, err
@@ -160,6 +178,14 @@ func Bind(ctx context.Context, in Input) (Binding, error) {
 		}
 		return prior, nil
 	} else if !os.IsNotExist(err) {
+		return b, err
+	}
+	return publishBinding(ctx, b, false)
+}
+
+func publishBinding(ctx context.Context, b Binding, replace bool) (Binding, error) {
+	name, err := bindingPath(b.DataDir)
+	if err != nil {
 		return b, err
 	}
 	raw, err := json.Marshal(b)
@@ -195,7 +221,11 @@ func Bind(ctx context.Context, in Input) (Binding, error) {
 	if err = ctx.Err(); err != nil {
 		return b, err
 	}
-	if err = unix.Renameat2(unix.AT_FDCWD, f.Name(), unix.AT_FDCWD, name, unix.RENAME_NOREPLACE); err != nil {
+	flags := uint(unix.RENAME_NOREPLACE)
+	if replace {
+		flags = 0
+	}
+	if err = unix.Renameat2(unix.AT_FDCWD, f.Name(), unix.AT_FDCWD, name, flags); err != nil {
 		return b, err
 	}
 	dir, err := os.Open(filepath.Dir(name))

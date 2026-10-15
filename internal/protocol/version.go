@@ -1,4 +1,4 @@
 // Package protocol holds the wire version shared by agents and release metadata.
 package protocol
 
-const Agent = 14
+const Agent = 15

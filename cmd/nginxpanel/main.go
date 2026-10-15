@@ -44,7 +44,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -65,6 +65,13 @@ func run() error {
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	nginxBinding := flags.Bool("nginx-binding", false, "use the immutable native Nginx installation binding")
 	nginxUninstalled := flags.Bool("nginx-uninstalled", false, "register an explicitly uninstalled native Nginx slot (component-bind only)")
+	installOperation := flags.String("install-operation", "", "durable native Nginx installation UUID")
+	installMaintenance := flags.String("maintenance-id", "", "held maintenance session UUID for installation")
+	installEpoch := flags.String("maintenance-epoch", "", "confirmed root maintenance epoch")
+	installStart := flags.Bool("install-start", false, "start the newly installed dedicated Nginx")
+	installEnable := flags.Bool("install-enable", false, "enable the dedicated Nginx service on boot")
+	installResume := flags.Bool("resume-install", false, "resume the original installation after checking its receipt")
+	installAbort := flags.Bool("abort-install", false, "cancel the original installation only before binding publication")
 	nginxRuntimeCheck := flags.Bool("nginx-runtime-check", false, "only validate the bound native Nginx configuration")
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
@@ -92,6 +99,12 @@ func run() error {
 	}
 	if *nginxUninstalled && command != "component-bind" {
 		return errors.New("nginx-uninstalled is only valid for component-bind")
+	}
+	if command == "component-install" && *moduleFile == "" {
+		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
+	}
+	if command != "component-install" && (*installOperation != "" || *installMaintenance != "" || *installEpoch != "" || *installStart || *installEnable || *installResume || *installAbort) {
+		return errors.New("installation options are only valid for component-install")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
 	if err != nil {
@@ -124,6 +137,29 @@ func run() error {
 		installation = info
 	}
 	switch command {
+	case "component-install":
+		if *nginxBinary != "" || *nginxBinding || *devAgent || *moduleFile != "/etc/nginxpanel/nginx-modules.json" {
+			return errors.New("component-install only accepts a prepared signed native Nginx asset")
+		}
+		out, err := agent.InstallNginx(ctx, agent.NginxInstallOptions{
+			OperationID: *installOperation, Epoch: *installEpoch, Resume: *installResume, Abort: *installAbort,
+			Input: agent.NginxInstallInput{MaintenanceID: *installMaintenance, WorkerUser: *nginxUser, Policy: policy, Modules: catalog, Start: *installStart, Enable: *installEnable,
+				Source: nginxruntime.Input{DataDir: absDir, PlanID: *releasePlan, AssetID: *releaseSelect, TrustPath: *releaseTrust, Prerelease: *releasePrerelease}},
+		})
+		if out.OperationID != "" {
+			if e := json.NewEncoder(os.Stdout).Encode(out); e != nil {
+				return e
+			}
+		}
+		return err
+	case "nginx-install-probe":
+		call, cancel := context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+		out, err := agent.InstallationProbe(call, absDir)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
 	case "component-path", "component-bind":
 		call, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
