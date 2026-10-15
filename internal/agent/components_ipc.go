@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
@@ -30,7 +31,19 @@ func componentReply(w http.ResponseWriter, data any, err error) {
 	}{Protocol, code, message, data})
 }
 func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
-	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) { componentReply(w, m.Overview(), nil) })
+	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {
+		out := m.Overview()
+		out.Installation = s.Installation
+		if s.Nginx != nil {
+			call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+			defer cancel()
+			state := s.Nginx.State(call)
+			out.Running, out.RuntimeReason = state.Running, state.Reason
+		} else {
+			out.RuntimeReason = "未接入受管 Nginx 实例"
+		}
+		componentReply(w, out, nil)
+	})
 	mux.HandleFunc("GET /v1/components/operations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		out, err := m.Status(r.PathValue("id"))
 		componentReply(w, out, err)

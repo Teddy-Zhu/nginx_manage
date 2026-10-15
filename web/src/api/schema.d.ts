@@ -1378,6 +1378,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        NginxInstallation: {
+            owner: string;
+            version: string;
+            sha256: string;
+            plan_id: string;
+            asset_id: string;
+            source_url: string;
+            license: string;
+            /** Format: int64 */
+            bound_at: number;
+        };
         ComponentInput: {
             /** @enum {string} */
             action: "check" | "prepare";
@@ -1400,6 +1411,9 @@ export interface components {
             repository: string;
             trust_sha256: string;
             key_ids: string[];
+            installation?: components["schemas"]["NginxInstallation"];
+            running: boolean;
+            runtime_reason: string;
         };
         ComponentAsset: {
             id: string;

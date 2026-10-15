@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 var ErrReleaseChanged = errors.New("发行材料或本机信任已变化，请重新检查")
@@ -93,19 +93,7 @@ func InspectTrust(name string) (TrustInfo, error) {
 // Prepared reauthenticates a recorded immutable preparation without networking.
 // Missing or changed receipts never trigger an implicit replacement download.
 func Prepared(ctx context.Context, in Input, id string) (Result, error) {
-	if !validHash(id) {
-		return Result{}, errors.New("准备计划标识无效")
-	}
-	dir := filepath.Join(Store, id)
-	in.ManifestPath, in.SignaturePath = filepath.Join(dir, "release-manifest.json"), filepath.Join(dir, "release-manifest.sig")
-	v, err := Verify(in)
-	if err != nil {
-		return Result{}, err
-	}
-	if v.plan.ID != id {
-		return Result{}, ErrReleaseChanged
-	}
-	return Prepare(ctx, v, dir)
+	return inspectPrepared(ctx, in, id, time.Now().Unix(), "")
 }
 
 // RuntimeReadiness only inspects runtime files of already authenticated assets.

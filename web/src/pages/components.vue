@@ -173,6 +173,38 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-stack">
+    <section v-if="overview?.installation" class="panel page-stack">
+      <div class="toolbar">
+        <h2>原生 Nginx</h2>
+        <NTag :type="overview.running ? 'success' : 'warning'">{{
+          overview.running ? "运行已确认" : "运行未确认"
+        }}</NTag>
+      </div>
+      <p>
+        {{ overview.installation.version }} ·
+        {{
+          overview.installation.owner === "managed"
+            ? "签名托管组件"
+            : "本机批准程序"
+        }}
+        · {{ date(overview.installation.bound_at) }}
+      </p>
+      <p class="muted">内容散列：{{ overview.installation.sha256 }}</p>
+      <p v-if="overview.installation.asset_id">
+        资产：{{ overview.installation.asset_id }} ·
+        {{ overview.installation.license }}
+        <a
+          v-if="overview.installation.source_url"
+          :href="overview.installation.source_url"
+          target="_blank"
+          rel="noreferrer"
+          >上游来源</a
+        >
+      </p>
+      <NAlert v-if="overview.runtime_reason" type="warning">{{
+        overview.runtime_reason
+      }}</NAlert>
+    </section>
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">
       <div class="toolbar">

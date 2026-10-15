@@ -6,27 +6,34 @@ umask 077
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web --nginx-binary /usr/sbin/nginx [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--start]
+用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--start]
 仅安装本机 root 已批准的构建产物及专用实例；不下载、编译或接管系统 Nginx。
 EOF
 }
-binary= web= nginx= data=/srv/nginxpanel listen=127.0.0.1:9443 start=no
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json prerelease=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no
 while (($#)); do
   case "$1" in
-    --binary|--web-dir|--nginx-binary|--data-dir|--listen)
+    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--data-dir|--listen)
       (($# >= 2)) || die "参数缺少值：$1"
       case "$1" in
         --binary) binary=$2 ;; --web-dir) web=$2 ;; --nginx-binary) nginx=$2 ;;
+        --nginx-plan) nginx_plan=$2 ;; --nginx-asset) nginx_asset=$2 ;; --release-trust) release_trust=$2 ;;
         --data-dir) data=$2 ;; --listen) listen=$2 ;;
       esac
       shift 2 ;;
+    --release-prerelease) prerelease=yes; shift ;;
     --start) start=yes; shift ;;
     --help) usage; exit 0 ;;
     *) usage; die "未知参数：$1" ;;
   esac
 done
 [[ $EUID == 0 ]] || die '安装需要本机 root'
-[[ -n $binary && -n $web && -n $nginx ]] || { usage; exit 1; }
+[[ -n $binary && -n $web ]] || { usage; exit 1; }
+if [[ -n $nginx ]]; then
+  [[ -z $nginx_plan && -z $nginx_asset && $prerelease == no ]] || die '本机程序与签名组件不能混用'
+else
+  [[ $nginx_plan =~ ^[0-9a-f]{64}$ && $nginx_asset =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$ ]] || die '须指定本机 Nginx 或完整的签名计划与资产 ID'
+fi
 for tool in stat readlink install sha256sum cmp sync flock getent groupadd useradd runuser systemctl mktemp find cut id uname dirname mv ln rm touch chmod od; do
   command -v "$tool" >/dev/null || die "缺少已有系统工具：$tool"
 done
@@ -94,12 +101,25 @@ write_owned() {
 }
 canonical "$data"
 binary=$(readlink -e "$binary")
-nginx=$(readlink -e "$nginx")
-canonical "$binary"; canonical "$nginx"; canonical "$web"
+canonical "$binary"; canonical "$web"
 trusted_file "$binary" $((192 * 1024 * 1024))
+[[ -x $binary ]] || die '指定面板程序不可执行'
+native_elf "$binary"
+nginx_source=()
+if [[ -n $nginx ]]; then
+  nginx=$(readlink -e "$nginx")
+  nginx_source=(--nginx-binary "$nginx")
+else
+  canonical "$release_trust"
+  [[ $release_trust == /etc/nginxpanel/* ]] || die '原生服务发行信任须位于 /etc/nginxpanel'
+  nginx_source=(--release-plan "$nginx_plan" --release-select "$nginx_asset" --release-trust "$release_trust")
+  if [[ $prerelease == yes ]]; then nginx_source+=(--release-prerelease); fi
+fi
+nginx=$("$binary" component-path --data-dir "$data" "${nginx_source[@]}")
+canonical "$nginx"
 trusted_file "$nginx" $((64 * 1024 * 1024))
-[[ -x $binary && -x $nginx ]] || die '指定程序不可执行'
-native_elf "$binary"; native_elf "$nginx"
+[[ -x $nginx ]] || die '指定 Nginx 程序不可执行'
+native_elf "$nginx"
 root_chain "$web"
 [[ -f $web/index.html ]] || die '前端目录缺少构建后的 index.html'
 root_chain "${data%/*}"
@@ -155,7 +175,7 @@ web_hash=$(sha256sum "$manifest" | cut -d ' ' -f1)
 nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1)
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v1\ndata=%s\nlisten=%s\nrelease=%s\nnginx=%s\nnginx_sha256=%s\n' "$data" "$listen" "$release" "$nginx" "$nginx_hash" >"$work/intent"
+printf 'native-install-v2\ndata=%s\nlisten=%s\nrelease=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -237,8 +257,9 @@ printf '{"version":1,"modules":[]}\n' >"$work/nginx-modules.json"
 write_owned "$work/nginx-modules.json" /etc/nginxpanel/nginx-modules.json
 runuser -u nginxpanel -- "$release_dir/nginxpanel" init --data-dir "$data"
 [[ $(sha256sum "$nginx" | cut -d ' ' -f1) == "$nginx_hash" ]] || die 'Nginx 程序已变化'
+"$release_dir/nginxpanel" component-bind --data-dir "$data" "${nginx_source[@]}" >"$work/nginx-binding.json"
 if [[ ! -f $state/ready ]]; then
-  "$release_dir/nginxpanel" nginx-init --data-dir "$data" --nginx-binary "$nginx" --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json
+  "$release_dir/nginxpanel" nginx-init --data-dir "$data" --nginx-binding --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json
 fi
 
 cat >"$work/nginxpanel-nginx.service" <<EOF
@@ -252,10 +273,11 @@ Type=exec
 User=root
 Group=root
 UMask=0027
-ExecStartPre=$nginx -t -p $data/ -c $data/nginx/active/nginx.conf -e stderr
-ExecStart=$nginx -p $data/ -c $data/nginx/active/nginx.conf -e stderr -g "daemon off;"
+ExecStartPre=/opt/nginxpanel/current/nginxpanel nginx-runtime --data-dir $data --nginx-runtime-check
+ExecStart=/opt/nginxpanel/current/nginxpanel nginx-runtime --data-dir $data
 KillSignal=SIGQUIT
 KillMode=mixed
+TimeoutStartSec=180
 TimeoutStopSec=65
 Restart=on-failure
 RestartSec=3
@@ -284,9 +306,10 @@ Type=exec
 User=root
 Group=nginxpanel-ipc
 UMask=0027
-ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid --nginx-binary $nginx --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host
+ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid --nginx-binding --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host
 Restart=on-failure
 RestartSec=3
+TimeoutStartSec=180
 TimeoutStopSec=45
 RuntimeDirectory=nginxpanel-host
 RuntimeDirectoryMode=0700
@@ -343,7 +366,7 @@ for unit in nginxpanel-nginx.service nginxpanel-agent.service nginxpanel.service
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-printf 'native-install-v1\n' >"$work/ready"
+printf 'native-install-v2\n' >"$work/ready"
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
   systemctl enable nginxpanel-nginx.service nginxpanel-agent.service nginxpanel.service

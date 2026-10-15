@@ -20,6 +20,7 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/nginxruntime"
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/secure"
@@ -53,6 +54,7 @@ type Server struct {
 	ComponentScope string
 	ReleaseTrust   string
 	ReleaseToken   string
+	Installation   *nginxruntime.Installation
 }
 
 func (s *Server) Run(ctx context.Context) error {

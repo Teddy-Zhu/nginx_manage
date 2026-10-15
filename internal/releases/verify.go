@@ -302,6 +302,10 @@ func manifestCatalog(m Manifest) (map[string]Asset, error) {
 }
 
 func Verify(in Input) (*Verified, error) {
+	return verifyAt(in, time.Now().Unix())
+}
+
+func verifyAt(in Input, now int64) (*Verified, error) {
 	publisher, err := readTrust(in.TrustPath)
 	if err != nil {
 		return nil, err
@@ -327,7 +331,6 @@ func Verify(in Input) (*Verified, error) {
 	if err := strictJSON(raw, &m); err != nil {
 		return nil, fmt.Errorf("发行清单：%w", err)
 	}
-	now := time.Now().Unix()
 	if m.Schema != Schema || m.Repository != publisher.trust.Repository || !validVersion(m.Version) || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.APIMajor != in.Receiver.APIMajor || m.DatabaseSchema < 1 || m.MinimumAgentProtocol < 1 || m.MinimumAgentProtocol > in.Receiver.AgentProtocol || m.MinimumLauncher < 1 || m.MinimumLauncher > in.Receiver.Launcher || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
 		return nil, errors.New("发行清单身份、有效期或接收端协议条件不满足")
 	}

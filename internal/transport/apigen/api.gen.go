@@ -1204,12 +1204,15 @@ type ComponentOperation struct {
 
 // ComponentOverview defines model for ComponentOverview.
 type ComponentOverview struct {
-	Available   bool     `json:"available"`
-	KeyIds      []string `json:"key_ids"`
-	Reason      string   `json:"reason"`
-	Repository  string   `json:"repository"`
-	Scope       string   `json:"scope"`
-	TrustSha256 string   `json:"trust_sha256"`
+	Available     bool               `json:"available"`
+	Installation  *NginxInstallation `json:"installation,omitempty"`
+	KeyIds        []string           `json:"key_ids"`
+	Reason        string             `json:"reason"`
+	Repository    string             `json:"repository"`
+	Running       bool               `json:"running"`
+	RuntimeReason string             `json:"runtime_reason"`
+	Scope         string             `json:"scope"`
+	TrustSha256   string             `json:"trust_sha256"`
 }
 
 // ComponentRelease defines model for ComponentRelease.
@@ -1933,6 +1936,18 @@ type NginxFeatures struct {
 	Modules   []NativeModule          `json:"modules"`
 	Reason    string                  `json:"reason"`
 	Version   string                  `json:"version"`
+}
+
+// NginxInstallation defines model for NginxInstallation.
+type NginxInstallation struct {
+	AssetId   string `json:"asset_id"`
+	BoundAt   int64  `json:"bound_at"`
+	License   string `json:"license"`
+	Owner     string `json:"owner"`
+	PlanId    string `json:"plan_id"`
+	Sha256    string `json:"sha256"`
+	SourceUrl string `json:"source_url"`
+	Version   string `json:"version"`
 }
 
 // NginxRuntime defines model for NginxRuntime.

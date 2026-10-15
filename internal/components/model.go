@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/nginxruntime"
 	"nginxpanel/internal/releases"
 )
 
@@ -120,12 +121,15 @@ type Operation struct {
 	Release       *Release `json:"release,omitempty"`
 }
 type Overview struct {
-	Available   bool     `json:"available"`
-	Scope       string   `json:"scope"`
-	Reason      string   `json:"reason"`
-	Repository  string   `json:"repository"`
-	TrustSHA256 string   `json:"trust_sha256"`
-	KeyIDs      []string `json:"key_ids"`
+	Installation  *nginxruntime.Installation `json:"installation,omitempty"`
+	Running       bool                       `json:"running"`
+	RuntimeReason string                     `json:"runtime_reason"`
+	Available     bool                       `json:"available"`
+	Scope         string                     `json:"scope"`
+	Reason        string                     `json:"reason"`
+	Repository    string                     `json:"repository"`
+	TrustSHA256   string                     `json:"trust_sha256"`
+	KeyIDs        []string                   `json:"key_ids"`
 }
 type Host interface {
 	ReadComponents(context.Context) (Overview, error)
