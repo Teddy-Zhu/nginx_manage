@@ -22,6 +22,12 @@ export type Certificate = components["schemas"]["Certificate"];
 export type CertificateVersion = components["schemas"]["CertificateVersion"];
 export type CertificateInput = components["schemas"]["CertificateInput"];
 export type CertificateResult = components["schemas"]["CertificateResult"];
+export type ACMEAccount = components["schemas"]["ACMEAccount"];
+export type ACMEAccountInput = components["schemas"]["ACMEAccountInput"];
+export type ACMEChangeResult = components["schemas"]["ACMEChangeResult"];
+export type DNSProvider = components["schemas"]["DNSProvider"];
+export type DNSCredential = components["schemas"]["DNSCredential"];
+export type DNSCredentialInput = components["schemas"]["DNSCredentialInput"];
 export type AccessListInput = components["schemas"]["AccessListInput"];
 export type NginxRuntime = components["schemas"]["NginxRuntime"];
 export type Difference = components["schemas"]["Difference"];
@@ -129,6 +135,48 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
 }
 
 export const api = {
+  acmeAccounts: () => request<ACMEAccount[]>({ url: "/acme-accounts" }),
+  createACMEAccount: (data: ACMEAccountInput, key: string) =>
+    request<ACMEChangeResult>({
+      method: "POST",
+      url: "/acme-accounts",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  registerACMEAccount: (id: string, version: number, key: string) =>
+    request<ACMEChangeResult>({
+      method: "POST",
+      url: `/acme-accounts/${id}/register`,
+      data: { base_version: version, terms_agreed: true },
+      headers: { "Idempotency-Key": key },
+    }),
+  deleteACMEAccount: (id: string, version: number, key: string) =>
+    request<ACMEChangeResult>({
+      method: "DELETE",
+      url: `/acme-accounts/${id}`,
+      data: { base_version: version },
+      headers: { "Idempotency-Key": key },
+    }),
+  dnsProviders: () => request<DNSProvider[]>({ url: "/dns-providers" }),
+  dnsCredentials: () => request<DNSCredential[]>({ url: "/dns-credentials" }),
+  saveDNSCredential: (
+    id: string | null,
+    data: DNSCredentialInput,
+    key: string,
+  ) =>
+    request<ACMEChangeResult>({
+      method: id ? "PUT" : "POST",
+      url: id ? `/dns-credentials/${id}` : "/dns-credentials",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  deleteDNSCredential: (id: string, version: number, key: string) =>
+    request<ACMEChangeResult>({
+      method: "DELETE",
+      url: `/dns-credentials/${id}`,
+      data: { base_version: version },
+      headers: { "Idempotency-Key": key },
+    }),
   me: () => request<Me>({ url: "/me" }),
   login: (username: string, password: string) =>
     request<Me>({

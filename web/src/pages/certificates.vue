@@ -256,6 +256,9 @@ onUnmounted(() => {
   <div class="toolbar">
     <span class="muted">{{ items.length }} 张证书</span>
     <div class="inline-gap">
+      <router-link to="/acme"
+        ><n-button :disabled="busy">ACME 账户与 DNS 凭据</n-button></router-link
+      >
       <n-button :loading="busy" @click="load">刷新</n-button
       ><n-button type="primary" :disabled="busy" @click="startImport(null)"
         >导入证书</n-button
@@ -388,9 +391,7 @@ onUnmounted(() => {
     </p>
     <p v-if="selected.historical_references" class="muted">
       另有
-      {{
-        selected.historical_references
-      }}
+      {{ selected.historical_references }}
       条历史修订引用，证书版本保留用于回滚。
     </p>
     <p v-if="selected.bindings_truncated" class="muted">

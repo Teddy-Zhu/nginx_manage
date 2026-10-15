@@ -13,6 +13,66 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for ACMEAccountEnvironment.
+const (
+	ACMEAccountEnvironmentProduction ACMEAccountEnvironment = "production"
+	ACMEAccountEnvironmentStaging    ACMEAccountEnvironment = "staging"
+)
+
+// Valid indicates whether the value is a known member of the ACMEAccountEnvironment enum.
+func (e ACMEAccountEnvironment) Valid() bool {
+	switch e {
+	case ACMEAccountEnvironmentProduction:
+		return true
+	case ACMEAccountEnvironmentStaging:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEAccountState.
+const (
+	Failed      ACMEAccountState = "failed"
+	Pending     ACMEAccountState = "pending"
+	Ready       ACMEAccountState = "ready"
+	Registering ACMEAccountState = "registering"
+)
+
+// Valid indicates whether the value is a known member of the ACMEAccountState enum.
+func (e ACMEAccountState) Valid() bool {
+	switch e {
+	case Failed:
+		return true
+	case Pending:
+		return true
+	case Ready:
+		return true
+	case Registering:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEAccountInputEnvironment.
+const (
+	ACMEAccountInputEnvironmentProduction ACMEAccountInputEnvironment = "production"
+	ACMEAccountInputEnvironmentStaging    ACMEAccountInputEnvironment = "staging"
+)
+
+// Valid indicates whether the value is a known member of the ACMEAccountInputEnvironment enum.
+func (e ACMEAccountInputEnvironment) Valid() bool {
+	switch e {
+	case ACMEAccountInputEnvironmentProduction:
+		return true
+	case ACMEAccountInputEnvironmentStaging:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AccessListInputMode.
 const (
 	Allowlist AccessListInputMode = "allowlist"
@@ -124,6 +184,27 @@ func (e CreateResourceKind) Valid() bool {
 	case CreateResourceKindHttp:
 		return true
 	case CreateResourceKindStream:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DNSCredentialInputProvider.
+const (
+	Alidns       DNSCredentialInputProvider = "alidns"
+	Cloudflare   DNSCredentialInputProvider = "cloudflare"
+	Tencentcloud DNSCredentialInputProvider = "tencentcloud"
+)
+
+// Valid indicates whether the value is a known member of the DNSCredentialInputProvider enum.
+func (e DNSCredentialInputProvider) Valid() bool {
+	switch e {
+	case Alidns:
+		return true
+	case Cloudflare:
+		return true
+	case Tencentcloud:
 		return true
 	default:
 		return false
@@ -313,6 +394,62 @@ func (e WAFPathMatch) Valid() bool {
 	}
 }
 
+// ACMEAccount defines model for ACMEAccount.
+type ACMEAccount struct {
+	AccountUrl  string                 `json:"account_url"`
+	CreatedAt   int64                  `json:"created_at"`
+	Email       string                 `json:"email"`
+	Environment ACMEAccountEnvironment `json:"environment"`
+	Id          string                 `json:"id"`
+
+	// KeyFingerprint 账户公钥 DER 的 SHA-256，不返回私钥。
+	KeyFingerprint string `json:"key_fingerprint"`
+	LastError      string `json:"last_error"`
+	Name           string `json:"name"`
+
+	// RetryAfter 允许人工重试的最早 Unix 时间，零表示无退避限制。
+	RetryAfter    int64            `json:"retry_after"`
+	State         ACMEAccountState `json:"state"`
+	TaskId        string           `json:"task_id"`
+	TermsAgreedAt int64            `json:"terms_agreed_at"`
+	UpdatedAt     int64            `json:"updated_at"`
+	Version       int64            `json:"version"`
+}
+
+// ACMEAccountEnvironment defines model for ACMEAccount.Environment.
+type ACMEAccountEnvironment string
+
+// ACMEAccountState defines model for ACMEAccount.State.
+type ACMEAccountState string
+
+// ACMEAccountAction defines model for ACMEAccountAction.
+type ACMEAccountAction struct {
+	BaseVersion int64 `json:"base_version"`
+	TermsAgreed bool  `json:"terms_agreed"`
+}
+
+// ACMEAccountInput defines model for ACMEAccountInput.
+type ACMEAccountInput struct {
+	Email       string                      `json:"email"`
+	Environment ACMEAccountInputEnvironment `json:"environment"`
+	Name        string                      `json:"name"`
+
+	// TermsAgreed 须明确同意 CA 当前服务条款。
+	TermsAgreed bool `json:"terms_agreed"`
+}
+
+// ACMEAccountInputEnvironment defines model for ACMEAccountInput.Environment.
+type ACMEAccountInputEnvironment string
+
+// ACMEChangeResult defines model for ACMEChangeResult.
+type ACMEChangeResult struct {
+	Account    *ACMEAccount   `json:"account"`
+	Credential *DNSCredential `json:"credential"`
+	Deleted    bool           `json:"deleted"`
+	Id         string         `json:"id"`
+	TaskId     string         `json:"task_id"`
+}
+
 // AccessList defines model for AccessList.
 type AccessList struct {
 	Editable bool     `json:"editable"`
@@ -454,6 +591,46 @@ type CredentialInput struct {
 	ExpiresAt      int64    `json:"expires_at"`
 	Name           string   `json:"name"`
 	Scopes         []string `json:"scopes"`
+}
+
+// DNSCredential defines model for DNSCredential.
+type DNSCredential struct {
+	CreatedAt int64 `json:"created_at"`
+
+	// FieldNames 仅返回已配置的字段名，所有字段值均不回显。
+	FieldNames []string `json:"field_names"`
+	Id         string   `json:"id"`
+	Name       string   `json:"name"`
+	Provider   string   `json:"provider"`
+	UpdatedAt  int64    `json:"updated_at"`
+	Version    int64    `json:"version"`
+}
+
+// DNSCredentialField defines model for DNSCredentialField.
+type DNSCredentialField struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Required bool   `json:"required"`
+}
+
+// DNSCredentialInput defines model for DNSCredentialInput.
+type DNSCredentialInput struct {
+	BaseVersion int64                      `json:"base_version"`
+	Name        string                     `json:"name"`
+	Provider    DNSCredentialInputProvider `json:"provider"`
+
+	// Secrets 创建时必填。更新时省略以保留原字段；提供时完整替换，删除可选字段须不再提供该键。所有值均作为秘密加密存储。
+	Secrets *map[string]string `json:"secrets,omitempty"`
+}
+
+// DNSCredentialInputProvider defines model for DNSCredentialInput.Provider.
+type DNSCredentialInputProvider string
+
+// DNSProvider defines model for DNSProvider.
+type DNSProvider struct {
+	Fields []DNSCredentialField `json:"fields"`
+	Id     string               `json:"id"`
+	Name   string               `json:"name"`
 }
 
 // Diagnostic defines model for Diagnostic.
@@ -819,6 +996,30 @@ type ChangePasswordParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// CreateACMEAccountParams defines parameters for CreateACMEAccount.
+type CreateACMEAccountParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// DeleteACMEAccountParams defines parameters for DeleteACMEAccount.
+type DeleteACMEAccountParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// RegisterACMEAccountParams defines parameters for RegisterACMEAccount.
+type RegisterACMEAccountParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -870,6 +1071,30 @@ type CreateCredentialParams struct {
 
 // RevokeCredentialParams defines parameters for RevokeCredential.
 type RevokeCredentialParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// CreateDNSCredentialParams defines parameters for CreateDNSCredential.
+type CreateDNSCredentialParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// DeleteDNSCredentialParams defines parameters for DeleteDNSCredential.
+type DeleteDNSCredentialParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// UpdateDNSCredentialParams defines parameters for UpdateDNSCredential.
+type UpdateDNSCredentialParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
@@ -1084,6 +1309,15 @@ type ListTasksParams struct {
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody ChangePasswordJSONBody
 
+// CreateACMEAccountJSONRequestBody defines body for CreateACMEAccount for application/json ContentType.
+type CreateACMEAccountJSONRequestBody = ACMEAccountInput
+
+// DeleteACMEAccountJSONRequestBody defines body for DeleteACMEAccount for application/json ContentType.
+type DeleteACMEAccountJSONRequestBody = ResourceAction
+
+// RegisterACMEAccountJSONRequestBody defines body for RegisterACMEAccount for application/json ContentType.
+type RegisterACMEAccountJSONRequestBody = ACMEAccountAction
+
 // BootstrapJSONRequestBody defines body for Bootstrap for application/json ContentType.
 type BootstrapJSONRequestBody BootstrapJSONBody
 
@@ -1098,6 +1332,15 @@ type ReplaceCertificateJSONRequestBody = CertificateInput
 
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
 type CreateCredentialJSONRequestBody = CredentialInput
+
+// CreateDNSCredentialJSONRequestBody defines body for CreateDNSCredential for application/json ContentType.
+type CreateDNSCredentialJSONRequestBody = DNSCredentialInput
+
+// DeleteDNSCredentialJSONRequestBody defines body for DeleteDNSCredential for application/json ContentType.
+type DeleteDNSCredentialJSONRequestBody = ResourceAction
+
+// UpdateDNSCredentialJSONRequestBody defines body for UpdateDNSCredential for application/json ContentType.
+type UpdateDNSCredentialJSONRequestBody = DNSCredentialInput
 
 // CreateAccessListJSONRequestBody defines body for CreateAccessList for application/json ContentType.
 type CreateAccessListJSONRequestBody = AccessListInput
@@ -1165,6 +1408,18 @@ type ServerInterface interface {
 	// (PUT /account/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams)
 
+	// (GET /acme-accounts)
+	ListACMEAccounts(w http.ResponseWriter, r *http.Request)
+
+	// (POST /acme-accounts)
+	CreateACMEAccount(w http.ResponseWriter, r *http.Request, params CreateACMEAccountParams)
+
+	// (DELETE /acme-accounts/{id})
+	DeleteACMEAccount(w http.ResponseWriter, r *http.Request, id ID, params DeleteACMEAccountParams)
+
+	// (POST /acme-accounts/{id}/register)
+	RegisterACMEAccount(w http.ResponseWriter, r *http.Request, id ID, params RegisterACMEAccountParams)
+
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
 
@@ -1194,6 +1449,21 @@ type ServerInterface interface {
 
 	// (DELETE /credentials/{id})
 	RevokeCredential(w http.ResponseWriter, r *http.Request, id ID, params RevokeCredentialParams)
+
+	// (GET /dns-credentials)
+	ListDNSCredentials(w http.ResponseWriter, r *http.Request)
+
+	// (POST /dns-credentials)
+	CreateDNSCredential(w http.ResponseWriter, r *http.Request, params CreateDNSCredentialParams)
+
+	// (DELETE /dns-credentials/{id})
+	DeleteDNSCredential(w http.ResponseWriter, r *http.Request, id ID, params DeleteDNSCredentialParams)
+
+	// (PUT /dns-credentials/{id})
+	UpdateDNSCredential(w http.ResponseWriter, r *http.Request, id ID, params UpdateDNSCredentialParams)
+
+	// (GET /dns-providers)
+	ListDNSProviders(w http.ResponseWriter, r *http.Request)
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -1342,6 +1612,230 @@ func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ChangePassword(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListACMEAccounts operation middleware
+func (siw *ServerInterfaceWrapper) ListACMEAccounts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListACMEAccounts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateACMEAccount operation middleware
+func (siw *ServerInterfaceWrapper) CreateACMEAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateACMEAccountParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateACMEAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteACMEAccount operation middleware
+func (siw *ServerInterfaceWrapper) DeleteACMEAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteACMEAccountParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteACMEAccount(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegisterACMEAccount operation middleware
+func (siw *ServerInterfaceWrapper) RegisterACMEAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RegisterACMEAccountParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterACMEAccount(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1784,6 +2278,244 @@ func (siw *ServerInterfaceWrapper) RevokeCredential(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RevokeCredential(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDNSCredentials operation middleware
+func (siw *ServerInterfaceWrapper) ListDNSCredentials(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDNSCredentials(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDNSCredential operation middleware
+func (siw *ServerInterfaceWrapper) CreateDNSCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateDNSCredentialParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDNSCredential(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteDNSCredential operation middleware
+func (siw *ServerInterfaceWrapper) DeleteDNSCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteDNSCredentialParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteDNSCredential(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateDNSCredential operation middleware
+func (siw *ServerInterfaceWrapper) UpdateDNSCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateDNSCredentialParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateDNSCredential(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDNSProviders operation middleware
+func (siw *ServerInterfaceWrapper) ListDNSProviders(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDNSProviders(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3558,6 +4290,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/certificates/{id}", wrapper.DeleteCertificate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/certificates/{id}", wrapper.GetCertificate)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/certificates/{id}/versions", wrapper.ReplaceCertificate)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/acme-accounts", wrapper.ListACMEAccounts)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-accounts", wrapper.CreateACMEAccount)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/acme-accounts/{id}", wrapper.DeleteACMEAccount)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-accounts/{id}/register", wrapper.RegisterACMEAccount)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/dns-providers", wrapper.ListDNSProviders)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/dns-credentials", wrapper.ListDNSCredentials)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/dns-credentials", wrapper.CreateDNSCredential)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/dns-credentials/{id}", wrapper.DeleteDNSCredential)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/dns-credentials/{id}", wrapper.UpdateDNSCredential)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/features", wrapper.GetNginxFeatures)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/waf-policies", wrapper.CreateWAFPolicy)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/waf-policies/{id}", wrapper.DeleteWAFPolicy)

@@ -506,6 +506,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/acme-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listACMEAccounts"];
+        put?: never;
+        post: operations["createACMEAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acme-accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description 仅移除本机未被引用的账户记录和密钥，不向 CA 注销账户。 */
+        delete: operations["deleteACMEAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acme-accounts/{id}/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 重试失败账户，先通过原密钥核对远端账户；不生成另一把密钥。 */
+        post: operations["registerACMEAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dns-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDNSProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dns-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDNSCredentials"];
+        put?: never;
+        post: operations["createDNSCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dns-credentials/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateDNSCredential"];
+        post?: never;
+        delete: operations["deleteDNSCredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/features": {
         parameters: {
             query?: never;
@@ -789,6 +893,87 @@ export interface components {
             /** Format: int64 */
             base_version: number;
             snapshot: string;
+        };
+        ACMEAccount: {
+            id: string;
+            name: string;
+            email: string;
+            /** @enum {string} */
+            environment: "production" | "staging";
+            /** Format: int64 */
+            version: number;
+            /** @description 账户公钥 DER 的 SHA-256，不返回私钥。 */
+            key_fingerprint: string;
+            account_url: string;
+            /** @enum {string} */
+            state: "pending" | "registering" | "ready" | "failed";
+            task_id: string;
+            last_error: string;
+            /**
+             * Format: int64
+             * @description 允许人工重试的最早 Unix 时间，零表示无退避限制。
+             */
+            retry_after: number;
+            /** Format: int64 */
+            terms_agreed_at: number;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        ACMEAccountInput: {
+            name: string;
+            email: string;
+            /** @enum {string} */
+            environment: "production" | "staging";
+            /** @description 须明确同意 CA 当前服务条款。 */
+            terms_agreed: boolean;
+        };
+        ACMEAccountAction: {
+            /** Format: int64 */
+            base_version: number;
+            terms_agreed: boolean;
+        };
+        DNSCredentialField: {
+            key: string;
+            label: string;
+            required: boolean;
+        };
+        DNSProvider: {
+            id: string;
+            name: string;
+            fields: components["schemas"]["DNSCredentialField"][];
+        };
+        DNSCredential: {
+            id: string;
+            name: string;
+            provider: string;
+            /** Format: int64 */
+            version: number;
+            /** @description 仅返回已配置的字段名，所有字段值均不回显。 */
+            field_names: string[];
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        DNSCredentialInput: {
+            /** Format: int64 */
+            base_version: number;
+            name: string;
+            /** @enum {string} */
+            provider: "cloudflare" | "alidns" | "tencentcloud";
+            /** @description 创建时必填。更新时省略以保留原字段；提供时完整替换，删除可选字段须不再提供该键。所有值均作为秘密加密存储。 */
+            secrets?: {
+                [key: string]: string;
+            };
+        };
+        ACMEChangeResult: {
+            id: string;
+            account: components["schemas"]["ACMEAccount"] | null;
+            credential: components["schemas"]["DNSCredential"] | null;
+            task_id: string;
+            deleted: boolean;
         };
         CertificateInput: {
             /**
@@ -1738,6 +1923,179 @@ export interface operations {
         };
         responses: {
             201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listACMEAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createACMEAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACMEAccountInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deleteACMEAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAction"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    registerACMEAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACMEAccountAction"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listDNSProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listDNSCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createDNSCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DNSCredentialInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    updateDNSCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DNSCredentialInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deleteDNSCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAction"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

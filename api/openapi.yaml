@@ -482,6 +482,119 @@ paths:
       responses:
         '201': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /acme-accounts:
+    get:
+      operationId: listACMEAccounts
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    post:
+      operationId: createACMEAccount
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ACMEAccountInput' }
+      responses:
+        '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /acme-accounts/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    delete:
+      operationId: deleteACMEAccount
+      description: 仅移除本机未被引用的账户记录和密钥，不向 CA 注销账户。
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceAction' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /acme-accounts/{id}/register:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: registerACMEAccount
+      description: 重试失败账户，先通过原密钥核对远端账户；不生成另一把密钥。
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ACMEAccountAction' }
+      responses:
+        '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /dns-providers:
+    get:
+      operationId: listDNSProviders
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /dns-credentials:
+    get:
+      operationId: listDNSCredentials
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    post:
+      operationId: createDNSCredential
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DNSCredentialInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /dns-credentials/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    put:
+      operationId: updateDNSCredential
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DNSCredentialInput' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    delete:
+      operationId: deleteDNSCredential
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceAction' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /nginx/features:
     get:
       operationId: getNginxFeatures
@@ -766,6 +879,87 @@ components:
       properties:
         base_version: { type: integer, format: int64, minimum: 0 }
         snapshot: { type: string, minLength: 64, maxLength: 64 }
+    ACMEAccount:
+      type: object
+      required: [id, name, email, environment, version, key_fingerprint, account_url, state, task_id, last_error, retry_after, terms_agreed_at, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        environment: { type: string, enum: [production, staging] }
+        version: { type: integer, format: int64 }
+        key_fingerprint: { type: string, description: 账户公钥 DER 的 SHA-256，不返回私钥。 }
+        account_url: { type: string }
+        state: { type: string, enum: [pending, registering, ready, failed] }
+        task_id: { type: string }
+        last_error: { type: string }
+        retry_after: { type: integer, format: int64, description: 允许人工重试的最早 Unix 时间，零表示无退避限制。 }
+        terms_agreed_at: { type: integer, format: int64 }
+        created_at: { type: integer, format: int64 }
+        updated_at: { type: integer, format: int64 }
+    ACMEAccountInput:
+      type: object
+      additionalProperties: false
+      required: [name, email, environment, terms_agreed]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        email: { type: string, maxLength: 254 }
+        environment: { type: string, enum: [production, staging] }
+        terms_agreed: { type: boolean, description: 须明确同意 CA 当前服务条款。 }
+    ACMEAccountAction:
+      type: object
+      additionalProperties: false
+      required: [base_version, terms_agreed]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 1 }
+        terms_agreed: { type: boolean }
+    DNSCredentialField:
+      type: object
+      required: [key, label, required]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        required: { type: boolean }
+    DNSProvider:
+      type: object
+      required: [id, name, fields]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        fields: { type: array, items: { $ref: '#/components/schemas/DNSCredentialField' } }
+    DNSCredential:
+      type: object
+      required: [id, name, provider, version, field_names, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        provider: { type: string }
+        version: { type: integer, format: int64 }
+        field_names: { type: array, description: 仅返回已配置的字段名，所有字段值均不回显。, items: { type: string } }
+        created_at: { type: integer, format: int64 }
+        updated_at: { type: integer, format: int64 }
+    DNSCredentialInput:
+      type: object
+      additionalProperties: false
+      required: [base_version, name, provider]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        provider: { type: string, enum: [cloudflare, alidns, tencentcloud] }
+        secrets:
+          type: object
+          description: 创建时必填。更新时省略以保留原字段；提供时完整替换，删除可选字段须不再提供该键。所有值均作为秘密加密存储。
+          maxProperties: 2
+          additionalProperties: { type: string, minLength: 1, maxLength: 2048, writeOnly: true }
+    ACMEChangeResult:
+      type: object
+      required: [id, account, credential, task_id, deleted]
+      properties:
+        id: { type: string }
+        account: { allOf: [{ $ref: '#/components/schemas/ACMEAccount' }], nullable: true }
+        credential: { allOf: [{ $ref: '#/components/schemas/DNSCredential' }], nullable: true }
+        task_id: { type: string }
+        deleted: { type: boolean }
     CertificateInput:
       type: object
       required: [base_version, name, notes, fullchain_pem, private_key_pem]

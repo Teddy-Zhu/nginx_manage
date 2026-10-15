@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/certificates"
@@ -200,7 +201,8 @@ func Run(ctx context.Context, o Options) error {
 	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: o.Policy, Certificates: certificateStore}
 	agentClient := agent.NewClient(o.Socket)
 	config.RequireFeatures = agentClient.RequireFeatures
-	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, Agent: agentClient, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
+	acmeService := &acme.Service{DB: db, Vault: vault}
+	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -212,14 +214,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 2)
+	result := make(chan error, 3)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(2)
+	workers.Add(3)
 	go func() {
 		defer workers.Done()
 		if o.Dev {
@@ -231,6 +233,10 @@ func Run(ctx context.Context, o Options) error {
 	go func() {
 		defer workers.Done()
 		result <- (&tasks.Runner{DB: db, Config: config, Agent: agentClient}).Run(runCtx)
+	}()
+	go func() {
+		defer workers.Done()
+		result <- acmeService.RunAccounts(runCtx)
 	}()
 	select {
 	case <-ctx.Done():

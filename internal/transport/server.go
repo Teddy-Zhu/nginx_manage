@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
@@ -20,6 +21,7 @@ type Server struct {
 	DB      *sql.DB
 	Auth    *auth.Service
 	Config  *nginxconfig.Service
+	ACME    *acme.Service
 	Agent   *agent.Client
 	NodeID  string
 	Dev     bool

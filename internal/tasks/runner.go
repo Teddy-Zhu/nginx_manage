@@ -20,7 +20,7 @@ type Runner struct {
 
 func (r *Runner) Run(ctx context.Context) error {
 	// An expired Web lease is never evidence that the root operation stopped.
-	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore')"); err != nil {
+	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore','acme.account.register')"); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(2 * time.Second)
@@ -38,11 +38,11 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 func (r *Runner) next(ctx context.Context) error {
 	var id string
-	err := r.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE state IN ('running','compensating') OR (state='recovery_required' AND kind IN ('nginx.apply','nginx.validate','nginx.restore')) ORDER BY created_at,id LIMIT 1").Scan(&id)
+	err := r.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('nginx.apply','nginx.validate','nginx.restore') AND state IN ('running','compensating','recovery_required') ORDER BY created_at,id LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		now := time.Now().Unix()
 		err = r.DB.QueryRowContext(ctx, `UPDATE tasks SET state='running',stage='agent_submit_pending',attempts=attempts+1,lease_until=?,updated_at=?
-WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT 1) RETURNING id`, now+60, now).Scan(&id)
+WHERE id=(SELECT id FROM tasks WHERE state='queued' AND kind IN ('nginx.apply','nginx.validate','nginx.restore') ORDER BY created_at,id LIMIT 1) RETURNING id`, now+60, now).Scan(&id)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil

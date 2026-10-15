@@ -38,6 +38,7 @@ const taskKinds: Record<string, string> = {
   "nginx.validate": "配置校验",
   "nginx.apply": "配置应用",
   "nginx.restore": "受管配置恢复",
+  "acme.account.register": "ACME 账户注册",
 };
 const taskStates: Record<string, string> = {
   queued: "排队中",
@@ -51,6 +52,10 @@ const taskStates: Record<string, string> = {
 };
 const taskStages: Record<string, string> = {
   queued: "等待执行",
+  account_reconciling: "核对 CA 账户",
+  account_registering: "注册 CA 账户",
+  account_ready: "账户已就绪",
+  account_registration_failed: "账户注册失败",
   submit_unconfirmed: "提交待确认",
   operation_missing: "执行记录缺失",
   agent_submit_pending: "等待接收",

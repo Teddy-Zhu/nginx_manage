@@ -16,6 +16,8 @@ const (
 	NginxBinaryBytes         = 64 << 20
 	CertificateReferences    = 128
 	Certificates             = 128
+	ACMEAccounts             = 16
+	DNSCredentials           = 32
 	CertificateVersions      = 32
 	CertificateChain         = 16
 	CertificateMaterialBytes = 128 << 10

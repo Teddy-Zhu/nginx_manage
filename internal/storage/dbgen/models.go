@@ -8,6 +8,25 @@ import (
 	"database/sql"
 )
 
+type AcmeAccount struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Email          string `json:"email"`
+	Environment    string `json:"environment"`
+	Version        int64  `json:"version"`
+	PrivateKey     []byte `json:"private_key"`
+	KeyFingerprint string `json:"key_fingerprint"`
+	Registration   []byte `json:"registration"`
+	AccountUrl     string `json:"account_url"`
+	State          string `json:"state"`
+	TaskID         string `json:"task_id"`
+	LastError      string `json:"last_error"`
+	RetryAfter     int64  `json:"retry_after"`
+	TermsAgreedAt  int64  `json:"terms_agreed_at"`
+	CreatedAt      int64  `json:"created_at"`
+	UpdatedAt      int64  `json:"updated_at"`
+}
+
 type ApiCredential struct {
 	ID             string        `json:"id"`
 	Name           string        `json:"name"`
@@ -68,6 +87,17 @@ type ConfigRevision struct {
 	Diagnostics   string         `json:"diagnostics"`
 	CreatedAt     int64          `json:"created_at"`
 	CreatedBy     string         `json:"created_by"`
+}
+
+type DnsCredential struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Provider   string `json:"provider"`
+	Version    int64  `json:"version"`
+	Secrets    []byte `json:"secrets"`
+	FieldNames string `json:"field_names"`
+	CreatedAt  int64  `json:"created_at"`
+	UpdatedAt  int64  `json:"updated_at"`
 }
 
 type IdempotencyKey struct {
