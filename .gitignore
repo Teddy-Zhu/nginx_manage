@@ -1,5 +1,6 @@
 .local/
 bin/
+.release/
 web/node_modules/
 web/dist/
 web/src/auto-imports.d.ts

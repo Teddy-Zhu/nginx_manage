@@ -17,6 +17,7 @@ const (
 	MaxStoreBytes     = 2 << 30
 	MaxFiles          = 4096
 	MaxEntries        = 8192
+	MaxReleaseAssets  = 64
 )
 
 type Key struct {

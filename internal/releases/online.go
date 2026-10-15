@@ -55,7 +55,7 @@ func parseGithubRelease(raw []byte, in OnlineInput) (githubRelease, error) {
 	if err := decodeJSON(raw, &release, false); err != nil {
 		return githubRelease{}, errors.New("GitHub 发行元数据 JSON 无效")
 	}
-	if release.ID <= 0 || release.Draft || !strings.HasPrefix(release.Tag, "v") || !validVersion(strings.TrimPrefix(release.Tag, "v")) || in.Tag != "" && in.Tag != release.Tag || release.Prerelease && (!in.AllowPrerelease || in.Tag == "") || release.PublishedAt.IsZero() || release.PublishedAt.After(time.Now().Add(5*time.Minute)) || len(release.Assets) < 2 || len(release.Assets) > 32 {
+	if release.ID <= 0 || release.Draft || !strings.HasPrefix(release.Tag, "v") || !validVersion(strings.TrimPrefix(release.Tag, "v")) || in.Tag != "" && in.Tag != release.Tag || release.Prerelease && (!in.AllowPrerelease || in.Tag == "") || release.PublishedAt.IsZero() || release.PublishedAt.After(time.Now().Add(5*time.Minute)) || len(release.Assets) < 2 || len(release.Assets) > MaxReleaseAssets {
 		return githubRelease{}, errors.New("GitHub 发行身份、渠道或资产数量不满足条件")
 	}
 	ids, names := map[int64]bool{}, map[string]bool{}

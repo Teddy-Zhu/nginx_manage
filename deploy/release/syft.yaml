@@ -1,0 +1,5 @@
+# The published SPDX describes source and build dependencies, not a claim that
+# every resolved development package is present in the served JavaScript.
+exclude:
+  - ./.git/**
+  - ./.release/**

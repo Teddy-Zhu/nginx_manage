@@ -1,4 +1,4 @@
-.PHONY: dev generate build verify
+.PHONY: dev generate build release-tool verify
 
 dev:
 	go run ./cmd/nginxpanel dev
@@ -12,6 +12,10 @@ generate:
 build:
 	pnpm --dir web build
 	go build -trimpath -o bin/nginxpanel ./cmd/nginxpanel
+
+release-tool:
+	mkdir -p bin
+	go build -trimpath -o bin/nginxpanel-release ./cmd/nginxpanel-release
 
 # 仅在本次实现及集成稳定后集中执行。
 verify:

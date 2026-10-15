@@ -35,6 +35,8 @@ go run ./cmd/nginxpanel agent --dev --data-dir=.local
 
 本机 `release-verify/release-prepare` 与 `release-check/release-fetch` 已接入固定发布公钥、离线签名清单、固定 GitHub 仓库的受限下载和有界资产准备，见 [发行资产合同](docs/releases.md)。准备好的 panel 可交给原生安装器；此入口不启动组件或切换当前版本，在线更新及迁移自动准备继续实施，尚未运行验证。
 
+面板/web 的 [发布工具与 GitHub 工作流](docs/publishing.md) 已接入打包、实际许可文件、依赖 SBOM、构建来源及 Ed25519 签名，先上传完整草稿再公开。当前尚未运行，正式使用仍需项目许可证和仓库发布密钥配置。
+
 生成代码：`make generate`。构建：`make build`。验证：`make verify`，仅在业务实现和集成稳定后的集中验证阶段执行；不包含 UI 自动化。当前实现尚未执行构建、类型检查或业务验证。
 
 ## 接口与约束

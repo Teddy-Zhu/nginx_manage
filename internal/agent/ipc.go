@@ -20,10 +20,11 @@ import (
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/platform"
+	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 11
+const Protocol = protocol.Agent
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`

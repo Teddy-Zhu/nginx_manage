@@ -242,44 +242,9 @@ func readTrust(name string) (publisher, error) {
 	return publisher{trust: trust, raw: trustRaw, keys: keys}, nil
 }
 
-func Verify(in Input) (*Verified, error) {
-	publisher, err := readTrust(in.TrustPath)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := readRoot(in.ManifestPath, MaxManifestBytes)
-	if err != nil {
-		return nil, err
-	}
-	sigRaw, err := readRoot(in.SignaturePath, 4096)
-	if err != nil {
-		return nil, err
-	}
-	var sig Signature
-	if err := strictJSON(sigRaw, &sig); err != nil {
-		return nil, err
-	}
-	signature, err := base64.StdEncoding.Strict().DecodeString(sig.Signature)
-	key := publisher.keys[sig.KeyID]
-	if err != nil || sig.Schema != Schema || len(signature) != ed25519.SignatureSize || base64.StdEncoding.EncodeToString(signature) != sig.Signature || len(key) != ed25519.PublicKeySize || !ed25519.Verify(key, append([]byte(SignatureDomain), raw...), signature) {
-		return nil, errors.New("发行清单签名无效或公钥未获本机信任")
-	}
-	var m Manifest
-	if err := strictJSON(raw, &m); err != nil {
-		return nil, fmt.Errorf("发行清单：%w", err)
-	}
-	now := time.Now().Unix()
-	if m.Schema != Schema || m.Repository != publisher.trust.Repository || !validVersion(m.Version) || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.APIMajor != in.Receiver.APIMajor || m.DatabaseSchema < 1 || m.MinimumAgentProtocol < 1 || m.MinimumAgentProtocol > in.Receiver.AgentProtocol || m.MinimumLauncher < 1 || m.MinimumLauncher > in.Receiver.Launcher || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
-		return nil, errors.New("发行清单身份、有效期或接收端协议条件不满足")
-	}
-	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "prerelease" && !in.AllowPrerelease || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
-		return nil, errors.New("发行渠道或预发布授权无效")
-	}
-	if in.Host.OS != "linux" || !slices.Contains([]string{"amd64", "arm64"}, in.Host.Architecture) || !identifier.MatchString(in.Host.Distribution) || !text(in.Host.Version, 64) {
-		return nil, errors.New("宿主机平台尚未确认")
-	}
-	if len(m.Assets) == 0 || len(m.Assets) > 16 || len(in.Assets) == 0 || len(in.Assets) > 4 {
-		return nil, errors.New("须显式选择 1–4 个资产，清单最多 16 项")
+func manifestCatalog(m Manifest) (map[string]Asset, error) {
+	if len(m.Assets) == 0 || len(m.Assets) > 16 {
+		return nil, errors.New("发行资产须为 1–16 项")
 	}
 	assets := map[string]Asset{}
 	archiveNames := map[string]bool{}
@@ -332,6 +297,52 @@ func Verify(in Input) (*Verified, error) {
 		if err := visit(a.ID); err != nil {
 			return nil, err
 		}
+	}
+	return assets, nil
+}
+
+func Verify(in Input) (*Verified, error) {
+	publisher, err := readTrust(in.TrustPath)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := readRoot(in.ManifestPath, MaxManifestBytes)
+	if err != nil {
+		return nil, err
+	}
+	sigRaw, err := readRoot(in.SignaturePath, 4096)
+	if err != nil {
+		return nil, err
+	}
+	var sig Signature
+	if err := strictJSON(sigRaw, &sig); err != nil {
+		return nil, err
+	}
+	signature, err := base64.StdEncoding.Strict().DecodeString(sig.Signature)
+	key := publisher.keys[sig.KeyID]
+	if err != nil || sig.Schema != Schema || len(signature) != ed25519.SignatureSize || base64.StdEncoding.EncodeToString(signature) != sig.Signature || len(key) != ed25519.PublicKeySize || !ed25519.Verify(key, append([]byte(SignatureDomain), raw...), signature) {
+		return nil, errors.New("发行清单签名无效或公钥未获本机信任")
+	}
+	var m Manifest
+	if err := strictJSON(raw, &m); err != nil {
+		return nil, fmt.Errorf("发行清单：%w", err)
+	}
+	now := time.Now().Unix()
+	if m.Schema != Schema || m.Repository != publisher.trust.Repository || !validVersion(m.Version) || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.APIMajor != in.Receiver.APIMajor || m.DatabaseSchema < 1 || m.MinimumAgentProtocol < 1 || m.MinimumAgentProtocol > in.Receiver.AgentProtocol || m.MinimumLauncher < 1 || m.MinimumLauncher > in.Receiver.Launcher || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
+		return nil, errors.New("发行清单身份、有效期或接收端协议条件不满足")
+	}
+	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "prerelease" && !in.AllowPrerelease || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
+		return nil, errors.New("发行渠道或预发布授权无效")
+	}
+	if in.Host.OS != "linux" || !slices.Contains([]string{"amd64", "arm64"}, in.Host.Architecture) || !identifier.MatchString(in.Host.Distribution) || !text(in.Host.Version, 64) {
+		return nil, errors.New("宿主机平台尚未确认")
+	}
+	if len(m.Assets) == 0 || len(m.Assets) > 16 || len(in.Assets) == 0 || len(in.Assets) > 4 {
+		return nil, errors.New("须显式选择 1–4 个资产，清单最多 16 项")
+	}
+	assets, err := manifestCatalog(m)
+	if err != nil {
+		return nil, err
 	}
 	selected := append([]string{}, in.Assets...)
 	sort.Strings(selected)
