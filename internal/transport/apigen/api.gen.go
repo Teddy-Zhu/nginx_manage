@@ -88,6 +88,96 @@ func (e ResourceKind) Valid() bool {
 	}
 }
 
+// Defines values for WAFConfigRateUnit.
+const (
+	WAFConfigRateUnitRm WAFConfigRateUnit = "r/m"
+	WAFConfigRateUnitRs WAFConfigRateUnit = "r/s"
+)
+
+// Valid indicates whether the value is a known member of the WAFConfigRateUnit enum.
+func (e WAFConfigRateUnit) Valid() bool {
+	switch e {
+	case WAFConfigRateUnitRm:
+		return true
+	case WAFConfigRateUnitRs:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WAFConfigRejectStatus.
+const (
+	WAFConfigRejectStatusN429 WAFConfigRejectStatus = 429
+	WAFConfigRejectStatusN503 WAFConfigRejectStatus = 503
+)
+
+// Valid indicates whether the value is a known member of the WAFConfigRejectStatus enum.
+func (e WAFConfigRejectStatus) Valid() bool {
+	switch e {
+	case WAFConfigRejectStatusN429:
+		return true
+	case WAFConfigRejectStatusN503:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WAFInputRateUnit.
+const (
+	WAFInputRateUnitRm WAFInputRateUnit = "r/m"
+	WAFInputRateUnitRs WAFInputRateUnit = "r/s"
+)
+
+// Valid indicates whether the value is a known member of the WAFInputRateUnit enum.
+func (e WAFInputRateUnit) Valid() bool {
+	switch e {
+	case WAFInputRateUnitRm:
+		return true
+	case WAFInputRateUnitRs:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WAFInputRejectStatus.
+const (
+	WAFInputRejectStatusN429 WAFInputRejectStatus = 429
+	WAFInputRejectStatusN503 WAFInputRejectStatus = 503
+)
+
+// Valid indicates whether the value is a known member of the WAFInputRejectStatus enum.
+func (e WAFInputRejectStatus) Valid() bool {
+	switch e {
+	case WAFInputRejectStatusN429:
+		return true
+	case WAFInputRejectStatusN503:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WAFPathMatch.
+const (
+	Exact  WAFPathMatch = "exact"
+	Prefix WAFPathMatch = "prefix"
+)
+
+// Valid indicates whether the value is a known member of the WAFPathMatch enum.
+func (e WAFPathMatch) Valid() bool {
+	switch e {
+	case Exact:
+		return true
+	case Prefix:
+		return true
+	default:
+		return false
+	}
+}
+
 // AccessList defines model for AccessList.
 type AccessList struct {
 	Editable bool     `json:"editable"`
@@ -182,6 +272,20 @@ type Module struct {
 	Reason       *string  `json:"reason,omitempty"`
 }
 
+// NginxFeature defines model for NginxFeature.
+type NginxFeature struct {
+	Available bool   `json:"available"`
+	Reason    string `json:"reason"`
+}
+
+// NginxFeatures defines model for NginxFeatures.
+type NginxFeatures struct {
+	Available bool                    `json:"available"`
+	Features  map[string]NginxFeature `json:"features"`
+	Reason    string                  `json:"reason"`
+	Version   string                  `json:"version"`
+}
+
 // NginxRuntime defines model for NginxRuntime.
 type NginxRuntime struct {
 	Available  bool   `json:"available"`
@@ -264,6 +368,89 @@ type Tree struct {
 	RevisionId  string       `json:"revision_id"`
 	State       string       `json:"state"`
 	Version     int64        `json:"version"`
+	WafPolicies []WAFPolicy  `json:"waf_policies"`
+}
+
+// WAFConfig defines model for WAFConfig.
+type WAFConfig struct {
+	// BodySize 空值继承；零表示不限制。
+	BodySize string `json:"body_size"`
+	Burst    int    `json:"burst"`
+
+	// Connections 零表示关闭并发限制。
+	Connections int       `json:"connections"`
+	DeniedPaths []WAFPath `json:"denied_paths"`
+
+	// ExemptPaths 仅豁免方法与限流；ACL、明确拒绝路径和请求体限制继续执行。
+	ExemptPaths []WAFPath        `json:"exempt_paths"`
+	Metadata    ResourceMetadata `json:"metadata"`
+	Methods     []string         `json:"methods"`
+
+	// Observe 只观察请求限速和并发限制；方法和路径拒绝仍执行。
+	Observe bool `json:"observe"`
+
+	// Rate 零表示关闭请求限速。
+	Rate         int                   `json:"rate"`
+	RateUnit     WAFConfigRateUnit     `json:"rate_unit"`
+	RejectStatus WAFConfigRejectStatus `json:"reject_status"`
+}
+
+// WAFConfigRateUnit defines model for WAFConfig.RateUnit.
+type WAFConfigRateUnit string
+
+// WAFConfigRejectStatus defines model for WAFConfig.RejectStatus.
+type WAFConfigRejectStatus int
+
+// WAFInput defines model for WAFInput.
+type WAFInput struct {
+	BaseVersion int64 `json:"base_version"`
+
+	// BodySize 空值继承；零表示不限制。
+	BodySize string `json:"body_size"`
+	Burst    int    `json:"burst"`
+
+	// Connections 零表示关闭并发限制。
+	Connections int       `json:"connections"`
+	DeniedPaths []WAFPath `json:"denied_paths"`
+
+	// ExemptPaths 仅豁免方法与限流；ACL、明确拒绝路径和请求体限制继续执行。
+	ExemptPaths []WAFPath        `json:"exempt_paths"`
+	Metadata    ResourceMetadata `json:"metadata"`
+	Methods     []string         `json:"methods"`
+
+	// Observe 只观察请求限速和并发限制；方法和路径拒绝仍执行。
+	Observe bool `json:"observe"`
+
+	// Rate 零表示关闭请求限速。
+	Rate         int                  `json:"rate"`
+	RateUnit     WAFInputRateUnit     `json:"rate_unit"`
+	RejectStatus WAFInputRejectStatus `json:"reject_status"`
+}
+
+// WAFInputRateUnit defines model for WAFInput.RateUnit.
+type WAFInputRateUnit string
+
+// WAFInputRejectStatus defines model for WAFInput.RejectStatus.
+type WAFInputRejectStatus int
+
+// WAFPath defines model for WAFPath.
+type WAFPath struct {
+	Match WAFPathMatch `json:"match"`
+	Path  string       `json:"path"`
+}
+
+// WAFPathMatch defines model for WAFPath.Match.
+type WAFPathMatch string
+
+// WAFPolicy defines model for WAFPolicy.
+type WAFPolicy struct {
+	Config       WAFConfig `json:"config"`
+	Editable     bool      `json:"editable"`
+	HttpFileId   string    `json:"http_file_id"`
+	Id           string    `json:"id"`
+	Reason       string    `json:"reason"`
+	Resources    []string  `json:"resources"`
+	ServerFileId string    `json:"server_file_id"`
 }
 
 // CSRF defines model for CSRF.
@@ -422,6 +609,30 @@ type ListRevisionsParams struct {
 	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// CreateWAFPolicyParams defines parameters for CreateWAFPolicy.
+type CreateWAFPolicyParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// DeleteWAFPolicyParams defines parameters for DeleteWAFPolicy.
+type DeleteWAFPolicyParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// UpdateWAFPolicyParams defines parameters for UpdateWAFPolicy.
+type UpdateWAFPolicyParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // LogoutParams defines parameters for Logout.
 type LogoutParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -513,6 +724,15 @@ type PatchResourceJSONRequestBody PatchResourceJSONBody
 // CopyResourceJSONRequestBody defines body for CopyResource for application/json ContentType.
 type CopyResourceJSONRequestBody = ResourceAction
 
+// CreateWAFPolicyJSONRequestBody defines body for CreateWAFPolicy for application/json ContentType.
+type CreateWAFPolicyJSONRequestBody = WAFInput
+
+// DeleteWAFPolicyJSONRequestBody defines body for DeleteWAFPolicy for application/json ContentType.
+type DeleteWAFPolicyJSONRequestBody = ResourceAction
+
+// UpdateWAFPolicyJSONRequestBody defines body for UpdateWAFPolicy for application/json ContentType.
+type UpdateWAFPolicyJSONRequestBody = WAFInput
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody LoginJSONBody
 
@@ -567,6 +787,9 @@ type ServerInterface interface {
 	// (POST /nginx/config-tree/preview)
 	PreviewConfigTree(w http.ResponseWriter, r *http.Request, params PreviewConfigTreeParams)
 
+	// (GET /nginx/features)
+	GetNginxFeatures(w http.ResponseWriter, r *http.Request)
+
 	// (POST /nginx/resources)
 	CreateResource(w http.ResponseWriter, r *http.Request, params CreateResourceParams)
 
@@ -587,6 +810,15 @@ type ServerInterface interface {
 
 	// (GET /nginx/runtime)
 	GetNginxRuntime(w http.ResponseWriter, r *http.Request)
+
+	// (POST /nginx/waf-policies)
+	CreateWAFPolicy(w http.ResponseWriter, r *http.Request, params CreateWAFPolicyParams)
+
+	// (DELETE /nginx/waf-policies/{id})
+	DeleteWAFPolicy(w http.ResponseWriter, r *http.Request, id ID, params DeleteWAFPolicyParams)
+
+	// (PUT /nginx/waf-policies/{id})
+	UpdateWAFPolicy(w http.ResponseWriter, r *http.Request, id ID, params UpdateWAFPolicyParams)
 
 	// (DELETE /session)
 	Logout(w http.ResponseWriter, r *http.Request, params LogoutParams)
@@ -1271,6 +1503,20 @@ func (siw *ServerInterfaceWrapper) PreviewConfigTree(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetNginxFeatures operation middleware
+func (siw *ServerInterfaceWrapper) GetNginxFeatures(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNginxFeatures(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateResource operation middleware
 func (siw *ServerInterfaceWrapper) CreateResource(w http.ResponseWriter, r *http.Request) {
 
@@ -1631,6 +1877,216 @@ func (siw *ServerInterfaceWrapper) GetNginxRuntime(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetNginxRuntime(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWAFPolicy operation middleware
+func (siw *ServerInterfaceWrapper) CreateWAFPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateWAFPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWAFPolicy(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWAFPolicy operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWAFPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteWAFPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWAFPolicy(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateWAFPolicy operation middleware
+func (siw *ServerInterfaceWrapper) UpdateWAFPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateWAFPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateWAFPolicy(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2129,6 +2585,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/access-lists", wrapper.CreateAccessList)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/access-lists/{id}", wrapper.DeleteAccessList)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/access-lists/{id}", wrapper.UpdateAccessList)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/features", wrapper.GetNginxFeatures)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/waf-policies", wrapper.CreateWAFPolicy)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/waf-policies/{id}", wrapper.DeleteWAFPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/waf-policies/{id}", wrapper.UpdateWAFPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/revisions", wrapper.ListRevisions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/revisions/{id}", wrapper.GetRevision)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks", wrapper.ListTasks)

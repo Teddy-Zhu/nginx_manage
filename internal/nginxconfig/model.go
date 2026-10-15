@@ -2,8 +2,8 @@ package nginxconfig
 
 import "fmt"
 
-const ParserVersion = "crossplane-0.4.89+spans-2"
-const PolicyVersion = "nginxpanel-2"
+const ParserVersion = "crossplane-0.4.89+spans-3"
+const PolicyVersion = "nginxpanel-3"
 
 type File struct {
 	ID      string `json:"id"`
@@ -20,6 +20,7 @@ type Tree struct {
 	Resources   []Resource   `json:"resources"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
 	AccessLists []AccessList `json:"access_lists"`
+	WAFPolicies []WAFPolicy  `json:"waf_policies"`
 }
 
 type Diagnostic struct {
@@ -77,9 +78,10 @@ type Document struct {
 	Nodes []*Node
 }
 type Parsed struct {
-	Tree           Tree
-	Documents      map[string]*Document
-	RequiredScopes []string
+	Tree            Tree
+	Documents       map[string]*Document
+	RequiredScopes  []string
+	runtimeExcluded map[string]bool
 }
 
 type PatchRequest struct {

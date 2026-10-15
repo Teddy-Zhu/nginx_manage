@@ -133,6 +133,7 @@ const fieldLabels: Record<string, string> = {
   real_ip_header: "真实 IP 头",
   real_ip_recursive: "递归解析真实 IP",
   access_list: "访问列表",
+  waf_policy: "基础 WAF 策略",
 };
 const toggleFields = new Set([
   "buffering",
@@ -153,6 +154,16 @@ function fieldOptions(name: string) {
       { label: "继承默认", value: "" },
       { label: "关闭", value: "off" },
       { label: "受管缓存", value: "nginxpanel_http" },
+    ];
+  if (name === "waf_policy")
+    return [
+      { label: "不绑定", value: "" },
+      ...(tree.value?.waf_policies
+        .filter((item) => item.editable)
+        .map((item) => ({
+          label: `${item.config.metadata.name || item.id.slice(0, 8)}${item.config.metadata.enabled ? "" : "（停用）"}`,
+          value: item.id,
+        })) ?? []),
     ];
   if (name === "access_list")
     return [
@@ -333,7 +344,7 @@ function selectResource(value: Resource) {
   if (formDirty.value && !window.confirm("字段修改尚未保存，确认切换？"))
     return;
   resource.value = value;
-  metadata.value = structuredClone(value.metadata);
+  metadata.value = { ...value.metadata };
   fieldInputs.value = Object.fromEntries(
     Object.entries(value.fields).map(([key, field]) => [key, fieldText(field)]),
   );

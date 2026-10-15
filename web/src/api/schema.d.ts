@@ -369,6 +369,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/nginx/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNginxFeatures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/waf-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createWAFPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/waf-policies/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateWAFPolicy"];
+        post?: never;
+        delete: operations["deleteWAFPolicy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/revisions": {
         parameters: {
             query?: never;
@@ -503,6 +553,7 @@ export interface components {
             state: string;
             files: components["schemas"]["File"][];
             access_lists: components["schemas"]["AccessList"][];
+            waf_policies: components["schemas"]["WAFPolicy"][];
             resources: components["schemas"]["Resource"][];
             diagnostics: components["schemas"]["Diagnostic"][];
         };
@@ -534,6 +585,56 @@ export interface components {
             /** @enum {string} */
             mode: "allowlist" | "denylist";
             entries: string[];
+        };
+        NginxFeature: {
+            available: boolean;
+            reason: string;
+        };
+        NginxFeatures: {
+            available: boolean;
+            version: string;
+            reason: string;
+            features: {
+                [key: string]: components["schemas"]["NginxFeature"];
+            };
+        };
+        WAFPath: {
+            /** @enum {string} */
+            match: "exact" | "prefix";
+            path: string;
+        };
+        WAFConfig: {
+            metadata: components["schemas"]["ResourceMetadata"];
+            /** @description 零表示关闭请求限速。 */
+            rate: number;
+            /** @enum {string} */
+            rate_unit: "r/s" | "r/m";
+            burst: number;
+            /** @description 零表示关闭并发限制。 */
+            connections: number;
+            /** @enum {integer} */
+            reject_status: 429 | 503;
+            /** @description 只观察请求限速和并发限制；方法和路径拒绝仍执行。 */
+            observe: boolean;
+            /** @description 空值继承；零表示不限制。 */
+            body_size: string;
+            methods: string[];
+            denied_paths: components["schemas"]["WAFPath"][];
+            /** @description 仅豁免方法与限流；ACL、明确拒绝路径和请求体限制继续执行。 */
+            exempt_paths: components["schemas"]["WAFPath"][];
+        };
+        WAFInput: components["schemas"]["WAFConfig"] & {
+            /** Format: int64 */
+            base_version: number;
+        };
+        WAFPolicy: {
+            id: string;
+            resources: string[];
+            http_file_id: string;
+            server_file_id: string;
+            config: components["schemas"]["WAFConfig"];
+            editable: boolean;
+            reason: string;
         };
         CreateResource: {
             /** Format: int64 */
@@ -1120,6 +1221,86 @@ export interface operations {
         };
     };
     deleteAccessList: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAction"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getNginxFeatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createWAFPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WAFInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    updateWAFPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WAFInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deleteWAFPolicy: {
         parameters: {
             query?: never;
             header: {

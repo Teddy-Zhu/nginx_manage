@@ -547,7 +547,7 @@ func (n *Nginx) prepare(id string, p *nginxconfig.Parsed) (manifest, error) {
 		Policy        nginxconfig.Policy
 		Worker, Group string
 		Renderer      int
-	}{p.Tree.Files, n.Policy, n.WorkerUser, n.workerGroup, 2})
+	}{p.Tree.Files, n.Policy, n.WorkerUser, n.workerGroup, 3})
 	digest := secure.Hash(source)
 	dir := revisionDir(id)
 	if _, err := os.Lstat(filepath.Dir(n.configPath(dir))); err == nil {

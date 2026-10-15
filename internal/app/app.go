@@ -196,6 +196,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: nginxconfig.DefaultPolicy()}
 	agentClient := agent.NewClient(o.Socket)
+	config.RequireFeatures = agentClient.RequireFeatures
 	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, Agent: agentClient, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

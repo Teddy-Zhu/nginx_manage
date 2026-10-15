@@ -1,0 +1,192 @@
+package agent
+
+import (
+	"context"
+	"errors"
+	"os/exec"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"nginxpanel/internal/fault"
+)
+
+type Feature struct {
+	Available bool   `json:"available"`
+	Reason    string `json:"reason"`
+}
+type NginxFeatures struct {
+	Available bool               `json:"available"`
+	Version   string             `json:"version"`
+	Features  map[string]Feature `json:"features"`
+	Reason    string             `json:"reason"`
+}
+type boundedOutput struct {
+	value strings.Builder
+	limit int
+}
+
+func (b *boundedOutput) Write(p []byte) (int, error) {
+	if b.value.Len()+len(p) > b.limit {
+		return 0, errors.New("Nginx diagnostic output exceeds limit")
+	}
+	return b.value.Write(p)
+}
+func (n *Nginx) Features(ctx context.Context) NginxFeatures {
+	out := NginxFeatures{Features: map[string]Feature{}}
+	binary, err := trustedFile(n.Binary, true)
+	if err != nil || binary != n.Binary {
+		out.Reason = "可信 Nginx 二进制不可用"
+		return out
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, binary, "-V")
+	command.WaitDelay = time.Second
+	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
+	var output boundedOutput
+	output.limit = 64 << 10
+	command.Stdout = &output
+	command.Stderr = &output
+	if err := command.Run(); err != nil {
+		out.Reason = "无法读取 Nginx 编译能力"
+		return out
+	}
+	return parseNginxFeatures(output.value.String())
+}
+func configureWords(value string) ([]string, error) {
+	out := []string{}
+	var word strings.Builder
+	var quote rune
+	escaped, active := false, false
+	flush := func() {
+		if active {
+			out = append(out, word.String())
+			word.Reset()
+			active = false
+		}
+	}
+	for _, char := range value {
+		if escaped {
+			word.WriteRune(char)
+			escaped = false
+			active = true
+			continue
+		}
+		if char == '\\' && quote != '\'' {
+			escaped = true
+			active = true
+			continue
+		}
+		if quote != 0 {
+			if char == quote {
+				quote = 0
+			} else {
+				word.WriteRune(char)
+			}
+			continue
+		}
+		if char == '\'' || char == '"' {
+			quote = char
+			active = true
+			continue
+		}
+		if char == ' ' || char == '\t' {
+			flush()
+			continue
+		}
+		active = true
+		word.WriteRune(char)
+	}
+	if escaped || quote != 0 {
+		return nil, errors.New("invalid configure arguments")
+	}
+	flush()
+	return out, nil
+}
+func parseNginxFeatures(value string) NginxFeatures {
+	out := NginxFeatures{Features: map[string]Feature{}}
+	version := regexp.MustCompile(`(?m)^nginx version: nginx/(\d+)\.(\d+)\.(\d+)(?:\s|$)`).FindStringSubmatch(value)
+	if len(version) != 4 {
+		out.Reason = "未识别 Nginx 版本，模块能力保持未知"
+		return out
+	}
+	major, _ := strconv.Atoi(version[1])
+	minor, _ := strconv.Atoi(version[2])
+	patch, _ := strconv.Atoi(version[3])
+	out.Version = strings.Join(version[1:], ".")
+	var args []string
+	found := false
+	for _, line := range strings.Split(value, "\n") {
+		if strings.HasPrefix(line, "configure arguments:") {
+			var err error
+			args, err = configureWords(strings.TrimSpace(strings.TrimPrefix(line, "configure arguments:")))
+			if err != nil {
+				out.Reason = "无法解析 Nginx 编译参数"
+				return out
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		out.Reason = "Nginx 未提供编译参数"
+		return out
+	}
+	flags := map[string]bool{}
+	for _, arg := range args {
+		flags[arg] = true
+	}
+	atLeast := func(ma, mi, pa int) bool {
+		return major > ma || major == ma && (minor > mi || minor == mi && patch >= pa)
+	}
+	http := !flags["--without-http"]
+	set := func(name string, available bool, reason string) {
+		if available {
+			reason = ""
+		}
+		out.Features[name] = Feature{Available: available, Reason: reason}
+	}
+	set("http", http, "缺少 HTTP 核心模块")
+	set("map", http && !flags["--without-http_map_module"], "缺少 HTTP map 模块")
+	set("map_volatile", http && !flags["--without-http_map_module"] && atLeast(1, 11, 7), "路径规则需要 Nginx 1.11.7 或更新版本的 map 模块")
+	set("rewrite", http && !flags["--without-http_rewrite_module"], "缺少 HTTP rewrite 模块")
+	req := http && !flags["--without-http_limit_req_module"]
+	conn := http && !flags["--without-http_limit_conn_module"]
+	set("limit_req", req, "缺少 HTTP 请求限速模块")
+	set("limit_conn", conn, "缺少 HTTP 并发限制模块")
+	set("limit_req_status", req && atLeast(1, 17, 6), "请求限速状态观测需要 Nginx 1.17.6 或更新版本")
+	set("limit_conn_status", conn && atLeast(1, 17, 6), "并发限制状态观测需要 Nginx 1.17.6 或更新版本")
+	set("limit_req_observe", req && atLeast(1, 17, 1), "限速观察模式需要 Nginx 1.17.1 或更新版本")
+	set("limit_conn_observe", conn && atLeast(1, 17, 6), "并发观察模式需要 Nginx 1.17.6 或更新版本")
+	set("real_ip", http && flags["--with-http_realip_module"], "缺少 HTTP realip 模块")
+	set("tls", http && flags["--with-http_ssl_module"], "缺少 HTTP SSL 模块")
+	set("stream", flags["--with-stream"], "尚未接入匹配的静态 Stream 模块；动态模块需显式登记与加载")
+	out.Available = true
+	return out
+}
+func (c *Client) NginxFeatures(ctx context.Context) (NginxFeatures, error) {
+	var out NginxFeatures
+	err := c.request(ctx, "GET", "/v1/nginx/features", nil, &out)
+	return out, err
+}
+func (c *Client) RequireFeatures(ctx context.Context, names []string) error {
+	out, err := c.NginxFeatures(ctx)
+	if err != nil {
+		return fault.Unavailable("无法连接 Nginx 能力探测")
+	}
+	if !out.Available {
+		return fault.Unavailable(out.Reason)
+	}
+	for _, name := range names {
+		feature, ok := out.Features[name]
+		if !ok {
+			return fault.Unavailable("无法确认 Nginx 能力：" + name)
+		}
+		if !feature.Available {
+			return fault.Unavailable(feature.Reason)
+		}
+	}
+	return nil
+}

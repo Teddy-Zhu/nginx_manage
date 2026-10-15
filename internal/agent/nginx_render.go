@@ -52,6 +52,9 @@ func (n *Nginx) expand(p *nginxconfig.Parsed, nodes []*nginxconfig.Node, depth i
 		}
 		paths := []string{}
 		for _, doc := range p.Documents {
+			if !p.RuntimeFileEnabled(doc.File.Path) {
+				continue
+			}
 			if match, _ := path.Match(node.Args[0].Value, doc.File.Path); match {
 				paths = append(paths, doc.File.Path)
 			}
@@ -160,6 +163,10 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 	}
 	for _, doc := range p.Documents {
 		edits := []nginxconfig.Edit{}
+		if !p.RuntimeFileEnabled(doc.File.Path) {
+			contents[doc.File.Path] = "# Disabled managed WAF policy\n"
+			continue
+		}
 		var walk func([]*nginxconfig.Node) error
 		walk = func(nodes []*nginxconfig.Node) error {
 			for _, node := range nodes {
@@ -200,7 +207,22 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 		}
 		if doc == main {
 			probe := "\n    # Reserved local revision probe.\n    server {\n        listen " + nginxQuote("unix:"+filepath.Join(n.DataDir, "run", "nginx-probe.sock")) + ";\n        server_name localhost;\n        access_log off;\n        location = /__nginxpanel_revision { return 200 " + nginxQuote(m.Probe) + "; }\n    }\n"
-			controls := "\n" + runtimeLogFormat("http") + defaults + "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
+			extras := []string{}
+			for _, policy := range p.Tree.WAFPolicies {
+				if !policy.Config.Metadata.Enabled {
+					continue
+				}
+				if len(extras) == 0 {
+					extras = append(extras, "nginxpanel_waf_policy", "nginxpanel_waf_reason")
+				}
+				if policy.Config.Rate > 0 {
+					extras = append(extras, "limit_req_status")
+				}
+				if policy.Config.Connections > 0 {
+					extras = append(extras, "limit_conn_status")
+				}
+			}
+			controls := "\n" + runtimeLogFormat("http", extras...) + defaults + "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
 			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Open + 1, End: httpBlock.Open + 1, Text: controls})
 			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Close, End: httpBlock.Close, Text: probe})
 			edits = append(edits, nginxconfig.Edit{Start: 0, End: 0, Text: "# Generated runtime controls; original revision is retained in the database.\nuser " + n.WorkerUser + " " + n.workerGroup + ";\n"})
@@ -276,10 +298,17 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 
 // Format names are reserved by policy. JSON values exclude query strings,
 // request bodies, credentials and Stream payloads.
-func runtimeLogFormat(kind string) string {
+func runtimeLogFormat(kind string, extras ...string) string {
 	fields := []string{"time_iso8601", "remote_addr", "host", "request_method", "uri", "status", "body_bytes_sent", "request_time", "upstream_addr", "upstream_status", "upstream_response_time"}
 	if kind == "stream" {
 		fields = []string{"time_iso8601", "remote_addr", "protocol", "status", "session_time", "bytes_sent", "bytes_received", "upstream_addr", "upstream_connect_time", "upstream_bytes_sent", "upstream_bytes_received"}
+	}
+	seen := map[string]bool{}
+	for _, field := range extras {
+		if !seen[field] {
+			fields = append(fields, field)
+			seen[field] = true
+		}
 	}
 	parts := make([]string, len(fields))
 	for i, field := range fields {
@@ -473,6 +502,12 @@ func (n *Nginx) httpDefaults(p *nginxconfig.Parsed, httpBlock *nginxconfig.Node,
 		existing[node.Name] = true
 	}
 	var out strings.Builder
+	for _, policy := range p.Tree.WAFPolicies {
+		if policy.Config.Metadata.Enabled {
+			out.WriteString("    map $host $nginxpanel_waf_policy { default \"\"; }\n    map $host $nginxpanel_waf_reason { default \"\"; }\n")
+			break
+		}
+	}
 	if httpsUpstream && !existing["proxy_ssl_trusted_certificate"] {
 		name, err := n.systemCA()
 		if err != nil {

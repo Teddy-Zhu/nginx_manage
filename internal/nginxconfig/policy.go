@@ -71,6 +71,10 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 					scopes["security.write"] = true
 				}
 				switch n.Name {
+				case "map":
+					if len(n.Args) == 2 && (n.Args[1].Value == "$nginxpanel_waf_policy" || n.Args[1].Value == "$nginxpanel_waf_reason") {
+						add("reserved_name", "WAF 日志默认变量由受管执行器定义")
+					}
 				case "log_format":
 					if len(n.Args) > 0 && strings.HasPrefix(n.Args[0].Value, "nginxpanel_") {
 						add("reserved_name", "nginxpanel_ 日志格式由受管执行器定义")

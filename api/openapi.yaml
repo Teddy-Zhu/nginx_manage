@@ -351,6 +351,58 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /nginx/features:
+    get:
+      operationId: getNginxFeatures
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/waf-policies:
+    post:
+      operationId: createWAFPolicy
+      x-scopes: [config.write, config.secrets, security.write]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WAFInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/waf-policies/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    put:
+      operationId: updateWAFPolicy
+      x-scopes: [config.write, config.secrets, security.write]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WAFInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    delete:
+      operationId: deleteWAFPolicy
+      x-scopes: [config.write, config.secrets, security.write]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceAction' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /nginx/revisions:
     get:
       operationId: listRevisions
@@ -467,13 +519,14 @@ components:
           additionalProperties: { $ref: '#/components/schemas/Field' }
     Tree:
       type: object
-      required: [revision_id, version, state, files, resources, diagnostics, access_lists]
+      required: [revision_id, version, state, files, resources, diagnostics, access_lists, waf_policies]
       properties:
         revision_id: { type: string }
         version: { type: integer, format: int64 }
         state: { type: string }
         files: { type: array, items: { $ref: '#/components/schemas/File' } }
         access_lists: { type: array, items: { $ref: '#/components/schemas/AccessList' } }
+        waf_policies: { type: array, items: { $ref: '#/components/schemas/WAFPolicy' } }
         resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
         diagnostics: { type: array, items: { $ref: '#/components/schemas/Diagnostic' } }
     ResourceMetadata:
@@ -510,6 +563,61 @@ components:
         notes: { type: string, maxLength: 2048 }
         mode: { type: string, enum: [allowlist, denylist] }
         entries: { type: array, maxItems: 128, items: { type: string } }
+    NginxFeature:
+      type: object
+      required: [available, reason]
+      properties:
+        available: { type: boolean }
+        reason: { type: string }
+    NginxFeatures:
+      type: object
+      required: [available, version, features, reason]
+      properties:
+        available: { type: boolean }
+        version: { type: string }
+        reason: { type: string }
+        features:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/NginxFeature' }
+    WAFPath:
+      type: object
+      required: [match, path]
+      properties:
+        match: { type: string, enum: [exact, prefix] }
+        path: { type: string, minLength: 1, maxLength: 512 }
+    WAFConfig:
+      type: object
+      required: [metadata, rate, rate_unit, burst, connections, reject_status, observe, body_size, methods, denied_paths, exempt_paths]
+      properties:
+        metadata: { $ref: '#/components/schemas/ResourceMetadata' }
+        rate: { type: integer, minimum: 0, maximum: 100000, description: 零表示关闭请求限速。 }
+        rate_unit: { type: string, enum: [r/s, r/m] }
+        burst: { type: integer, minimum: 0, maximum: 10000 }
+        connections: { type: integer, minimum: 0, maximum: 65535, description: 零表示关闭并发限制。 }
+        reject_status: { type: integer, enum: [429, 503] }
+        observe: { type: boolean, description: 只观察请求限速和并发限制；方法和路径拒绝仍执行。 }
+        body_size: { type: string, description: 空值继承；零表示不限制。 }
+        methods: { type: array, maxItems: 16, items: { type: string } }
+        denied_paths: { type: array, maxItems: 128, items: { $ref: '#/components/schemas/WAFPath' } }
+        exempt_paths: { type: array, maxItems: 128, description: 仅豁免方法与限流；ACL、明确拒绝路径和请求体限制继续执行。, items: { $ref: '#/components/schemas/WAFPath' } }
+    WAFInput:
+      allOf:
+        - { $ref: '#/components/schemas/WAFConfig' }
+        - type: object
+          required: [base_version]
+          properties:
+            base_version: { type: integer, format: int64, minimum: 0 }
+    WAFPolicy:
+      type: object
+      required: [id, http_file_id, server_file_id, config, editable, reason, resources]
+      properties:
+        id: { type: string }
+        resources: { type: array, items: { type: string } }
+        http_file_id: { type: string }
+        server_file_id: { type: string }
+        config: { $ref: '#/components/schemas/WAFConfig' }
+        editable: { type: boolean }
+        reason: { type: string }
     CreateResource:
       type: object
       required: [base_version, kind, listen, domains, upstream]

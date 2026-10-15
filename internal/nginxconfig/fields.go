@@ -18,6 +18,7 @@ type fieldSpec struct {
 
 var httpFields = map[string]fieldSpec{
 	"access_list": {"include", "server", "value", false},
+	"waf_policy":  {"include", "waf", "value", false},
 	"domains":     {"server_name", "server", "tokens", false}, "listeners": {"listen", "server", "lines", true},
 	"upstream": {"proxy_pass", "location", "value", false}, "upstream_servers": {"server", "group", "lines", true}, "location_prefix": {"location", "prefix", "value", false},
 	"body_size": {"client_max_body_size", "server", "value", false}, "connect_timeout": {"proxy_connect_timeout", "location", "value", false}, "read_timeout": {"proxy_read_timeout", "location", "value", false}, "send_timeout": {"proxy_send_timeout", "location", "value", false},
@@ -106,12 +107,15 @@ func (p *Parsed) resource(id string) (*Resource, *Document, *Node, error) {
 }
 func (p *Parsed) target(doc *Document, server *Node, kind string, spec fieldSpec) (*Document, *Node, string) {
 	target := server
+	if spec.target == "waf" {
+		return doc, server, p.wafBindingReason(server)
+	}
 	if spec.directive == "include" {
 		var conflict bool
 		var walk func([]*Node, bool)
 		walk = func(nodes []*Node, direct bool) {
 			for _, node := range nodes {
-				if node.Name == "allow" || node.Name == "deny" || node.Name == "satisfy" && (len(node.Args) != 1 || node.Args[0].Value != "all") || node.Name == "include" && (!direct || !p.knownAccessInclude(node)) {
+				if node.Name == "allow" || node.Name == "deny" || node.Name == "satisfy" && (len(node.Args) != 1 || node.Args[0].Value != "all") || node.Name == "include" && (!direct || !p.knownAccessInclude(node) && !p.knownWAFInclude(node)) {
 					conflict = true
 				}
 				walk(node.Children, false)
@@ -123,8 +127,11 @@ func (p *Parsed) target(doc *Document, server *Node, kind string, spec fieldSpec
 		}
 	}
 	for _, child := range server.Children {
-		if child.Name == "include" && !p.knownAccessInclude(child) {
+		if child.Name == "include" && !p.knownAccessInclude(child) && !p.knownWAFInclude(child) {
 			return doc, target, "存在共享 include，字段来源无法唯一确定"
+		}
+		if spec.directive == "client_max_body_size" && p.knownWAFInclude(child) {
+			return doc, target, "请求体限制由 WAF 策略管理"
 		}
 	}
 	if spec.target == "location" || spec.target == "prefix" || spec.target == "group" && kind == "http" {
@@ -152,7 +159,7 @@ func (p *Parsed) target(doc *Document, server *Node, kind string, spec fieldSpec
 		return p.upstreamGroup(doc, target, kind)
 	}
 	for _, child := range target.Children {
-		if child.Name == "include" && !p.knownAccessInclude(child) {
+		if child.Name == "include" && !p.knownAccessInclude(child) && !p.knownWAFInclude(child) {
 			return doc, target, "存在共享 include，字段来源无法唯一确定"
 		}
 	}
@@ -288,9 +295,9 @@ func validateField(field string, values []string, kind string) error {
 	}
 	for _, v := range values {
 		switch field {
-		case "access_list":
+		case "access_list", "waf_policy":
 			if !resourceID.MatchString(v) {
-				return errors.New("访问列表 ID 无效")
+				return errors.New("规则资源 ID 无效")
 			}
 		case "domains":
 			if !domain.MatchString(v) {

@@ -120,6 +120,13 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 	mux.HandleFunc("POST /v1/nginx/policy-check", s.check)
 	mux.HandleFunc("POST /v1/nginx/apply", s.apply)
+	mux.HandleFunc("GET /v1/nginx/features", func(w http.ResponseWriter, r *http.Request) {
+		if s.Nginx == nil {
+			writeJSON(w, NginxFeatures{Features: map[string]Feature{}, Reason: "专用 Nginx 执行尚未配置"})
+			return
+		}
+		writeJSON(w, s.Nginx.Features(r.Context()))
+	})
 	mux.HandleFunc("GET /v1/nginx/state", func(w http.ResponseWriter, r *http.Request) {
 		if s.Nginx == nil {
 			writeJSON(w, NginxState{Reason: "专用 Nginx 执行尚未配置"})

@@ -192,7 +192,13 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 	operations := []string{"nginx.preview", "nginx.save"}
 	var runtime *agent.NginxState
+	var features *agent.NginxFeatures
 	if mode == "connected" {
+		featureReport, featureErr := s.Agent.NginxFeatures(r.Context())
+		if featureErr != nil {
+			featureReport = agent.NginxFeatures{Features: map[string]agent.Feature{}, Reason: "无法读取本机 Nginx 模块能力"}
+		}
+		features = &featureReport
 		state, stateErr := s.Agent.NginxState(r.Context())
 		if stateErr == nil {
 			runtime = &state
@@ -218,7 +224,7 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	if head.AppliedRevision.Valid {
 		applied = head.AppliedRevision.String
 	}
-	s.ok(w, r, map[string]any{"mode": mode, "reason": reason, "host": host, "desired_revision": desired, "applied_revision": applied, "version": head.Version, "api_version": 1, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": s.Config.Policy.Version, "operations": operations, "nginx": runtime})
+	s.ok(w, r, map[string]any{"mode": mode, "reason": reason, "host": host, "desired_revision": desired, "applied_revision": applied, "version": head.Version, "api_version": 1, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": s.Config.Policy.Version, "operations": operations, "nginx": runtime, "nginx_features": features})
 }
 func (s *Server) GetModules(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authorize(w, r, false, "read"); !ok {
@@ -535,4 +541,53 @@ func (s *Server) accessList(w http.ResponseWriter, r *http.Request, id, action, 
 		status = 200
 	}
 	s.respond(w, r, status, "OK", "访问列表已保存至新修订", out)
+}
+
+func (s *Server) GetNginxFeatures(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.authorize(w, r, false, "read"); !ok {
+		return
+	}
+	out, err := s.Agent.NginxFeatures(r.Context())
+	if err != nil {
+		s.fail(w, r, fault.Unavailable("无法连接本机 Nginx 能力探测"))
+		return
+	}
+	s.ok(w, r, out)
+}
+func (s *Server) CreateWAFPolicy(w http.ResponseWriter, r *http.Request, params apigen.CreateWAFPolicyParams) {
+	s.wafPolicy(w, r, "", "create", params.IdempotencyKey)
+}
+func (s *Server) UpdateWAFPolicy(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.UpdateWAFPolicyParams) {
+	s.wafPolicy(w, r, id, "update", params.IdempotencyKey)
+}
+func (s *Server) DeleteWAFPolicy(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DeleteWAFPolicyParams) {
+	s.wafPolicy(w, r, id, "delete", params.IdempotencyKey)
+}
+func (s *Server) wafPolicy(w http.ResponseWriter, r *http.Request, id, action, key string) {
+	principal, ok := s.authorize(w, r, true, "config.write", "config.secrets", "security.write")
+	if !ok {
+		return
+	}
+	var in nginxconfig.WAFInput
+	if action == "delete" {
+		var body nginxconfig.ResourceActionRequest
+		if err := decode(w, r, &body); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		in.BaseVersion = body.BaseVersion
+	} else if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Config.WAF(r.Context(), principal, r.Context().Value(requestIDKey).(string), key, id, action, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	status := 201
+	if action == "delete" {
+		status = 200
+	}
+	s.respond(w, r, status, "OK", "WAF 策略已保存至新修订", out)
 }

@@ -223,7 +223,7 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 	if len(files) == 0 || len(files) > limits.Files {
 		return nil, errors.New("配置树必须包含 1–128 个文件")
 	}
-	p := &Parsed{Tree: Tree{Files: append([]File(nil), files...), Resources: []Resource{}, Diagnostics: []Diagnostic{}, AccessLists: []AccessList{}}, Documents: map[string]*Document{}}
+	p := &Parsed{Tree: Tree{Files: append([]File(nil), files...), Resources: []Resource{}, Diagnostics: []Diagnostic{}, AccessLists: []AccessList{}, WAFPolicies: []WAFPolicy{}}, Documents: map[string]*Document{}}
 	paths := map[string]File{}
 	size := 0
 	directives := 0
@@ -267,6 +267,7 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 	if len(p.Tree.Diagnostics) > 0 {
 		return p, nil
 	}
+	p.runtimeExcluded = p.DisabledWAFFiles()
 	// Crossplane reads only the supplied logical tree. No host file is opened.
 	payload, err := crossplane.Parse("nginx.conf", &crossplane.ParseOptions{
 		Open: func(name string) (io.ReadCloser, error) {

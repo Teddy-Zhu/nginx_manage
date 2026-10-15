@@ -19,9 +19,10 @@ var ErrInvalid = errors.New("配置未通过校验；可保存为独立草稿")
 var ErrNotFound = errors.New("资源不存在")
 
 type Service struct {
-	DB     *sql.DB
-	Vault  *secure.Vault
-	Policy Policy
+	DB              *sql.DB
+	Vault           *secure.Vault
+	Policy          Policy
+	RequireFeatures func(context.Context, []string) error
 }
 type SaveRequest struct {
 	BaseVersion int64  `json:"base_version"`
@@ -93,6 +94,11 @@ func (s *Service) get(ctx context.Context, id string, q *dbgen.Queries) (Tree, e
 		tree.Resources = append(tree.Resources, resource)
 	}
 	tree.AccessLists = accessLists(tree.Files)
+	parsed, parseErr := Parse(tree.Files, s.Policy)
+	if parseErr != nil {
+		return tree, parseErr
+	}
+	tree.WAFPolicies = parsed.Tree.WAFPolicies
 	return tree, nil
 }
 

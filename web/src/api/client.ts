@@ -14,6 +14,10 @@ export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
 export type ResourceMetadata = components["schemas"]["ResourceMetadata"];
 export type AccessList = components["schemas"]["AccessList"];
+export type WAFConfig = components["schemas"]["WAFConfig"];
+export type WAFInput = components["schemas"]["WAFInput"];
+export type WAFPolicy = components["schemas"]["WAFPolicy"];
+export type NginxFeatures = components["schemas"]["NginxFeatures"];
 export type AccessListInput = components["schemas"]["AccessListInput"];
 export type NginxRuntime = components["schemas"]["NginxRuntime"];
 
@@ -183,6 +187,21 @@ export const api = {
     request<SaveResult>({
       method: "DELETE",
       url: `/nginx/access-lists/${encodeURIComponent(id)}`,
+      data: { base_version },
+      headers: { "Idempotency-Key": key },
+    }),
+  nginxFeatures: () => request<NginxFeatures>({ url: "/nginx/features" }),
+  saveWAF: (id: string | null, data: WAFInput, key: string) =>
+    request<SaveResult>({
+      method: id ? "PUT" : "POST",
+      url: `/nginx/waf-policies${id ? "/" + encodeURIComponent(id) : ""}`,
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  deleteWAF: (id: string, base_version: number, key: string) =>
+    request<SaveResult>({
+      method: "DELETE",
+      url: `/nginx/waf-policies/${encodeURIComponent(id)}`,
       data: { base_version },
       headers: { "Idempotency-Key": key },
     }),

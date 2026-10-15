@@ -9,6 +9,8 @@ const (
 	PublishedRevisions    = 128
 	NginxListeners        = 256
 	CertificateReferences = 128
+	WAFPolicies           = 32
+	WAFPaths              = 128
 	Directives            = 20000
 	Depth                 = 32
 	PageSize              = 100

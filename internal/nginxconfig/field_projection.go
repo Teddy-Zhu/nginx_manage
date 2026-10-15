@@ -8,6 +8,7 @@ import (
 
 func (p *Parsed) project() {
 	p.Tree.AccessLists = accessLists(p.Tree.Files)
+	p.projectWAF()
 	seen := map[string]bool{}
 	contexts, uses := p.includeContexts()
 	for _, doc := range p.Documents {
@@ -45,7 +46,7 @@ func (p *Parsed) project() {
 								matches = append(matches, target)
 							} else {
 								for _, child := range target.Children {
-									if child.Name == spec.directive && (name != "access_list" || p.knownAccessInclude(child)) {
+									if p.matchesField(child, name, spec) {
 										matches = append(matches, child)
 									}
 								}
@@ -67,6 +68,10 @@ func (p *Parsed) project() {
 								}
 								if name == "access_list" && len(values) == 1 {
 									field.Values = []string{strings.TrimSuffix(strings.TrimPrefix(values[0], "security/acl/"), ".conf")}
+								}
+								if name == "waf_policy" && len(values) == 1 {
+									policyID, _, _ := wafFileID(values[0])
+									field.Values = []string{policyID}
 								}
 							}
 							if len(field.Values) > 0 {
@@ -153,7 +158,7 @@ func (p *Parsed) Patch(id string, changes map[string][]string, metadata *Resourc
 			directives = append(directives, target)
 		} else {
 			for _, child := range target.Children {
-				if child.Name == spec.directive && (name != "access_list" || p.knownAccessInclude(child)) {
+				if p.matchesField(child, name, spec) {
 					directives = append(directives, child)
 				}
 			}
@@ -170,6 +175,18 @@ func (p *Parsed) Patch(id string, changes map[string][]string, metadata *Resourc
 				return nil, fmt.Errorf("访问列表未登记或不可可靠映射")
 			}
 			values = []string{accessListPath(values[0])}
+		}
+		if name == "waf_policy" && len(values) > 0 {
+			found := false
+			for _, policy := range p.Tree.WAFPolicies {
+				if policy.ID == values[0] && policy.Editable {
+					found = true
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("WAF 策略未登记或不可可靠映射")
+			}
+			values = []string{wafPath(values[0], "server")}
 		}
 		rows := [][]string{}
 		if spec.format == "lines" {

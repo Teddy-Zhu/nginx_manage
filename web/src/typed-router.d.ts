@@ -80,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/waf': RouteRecordInfo<
+      '/waf',
+      '/waf',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
   }
 
   /**
@@ -144,6 +151,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/tasks.vue': {
       routes:
         | '/tasks'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/waf.vue': {
+      routes:
+        | '/waf'
       views:
         | never
       pathParamNames:
