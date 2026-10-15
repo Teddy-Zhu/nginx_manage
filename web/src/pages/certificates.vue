@@ -62,7 +62,7 @@ const version = computed(() =>
 const versionOptions = computed(
   () =>
     selected.value?.versions.map((item) => ({
-      label: `版本 ${item.ordinal} · ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()}`,
+      label: `${item.environment === "staging" ? "测试 · " : ""}版本 ${item.ordinal} · ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()}`,
       value: item.id,
     })) ?? [],
 );
@@ -108,6 +108,16 @@ const columns: DataTableColumns<Certificate> = [
     },
   },
   { title: "最新版本", key: "version", render: (row) => `#${row.version}` },
+  {
+    title: "来源",
+    key: "source",
+    render: (row) =>
+      latest(row)?.environment === "staging"
+        ? "ACME 测试"
+        : row.source === "acme"
+          ? "ACME 正式"
+          : "手动导入",
+  },
   { title: "有效期", key: "expiry", render: (row) => expiry(latest(row)) },
 ];
 async function load() {
@@ -256,6 +266,9 @@ onUnmounted(() => {
   <div class="toolbar">
     <span class="muted">{{ items.length }} 张证书</span>
     <div class="inline-gap">
+      <router-link to="/certificate-requests"
+        ><n-button :disabled="busy">ACME 签发</n-button></router-link
+      >
       <router-link to="/acme"
         ><n-button :disabled="busy">ACME 账户与 DNS 凭据</n-button></router-link
       >
@@ -315,10 +328,12 @@ onUnmounted(() => {
         ><n-tag :bordered="false">{{ version.summary.key_algorithm }}</n-tag
         ><n-tag :bordered="false">{{
           version.summary.trust === "system"
-            ? "导入校验通过"
+            ? "系统信任链"
             : version.summary.trust === "private"
               ? "私有 CA"
-              : "自签证书"
+              : version.summary.trust === "acme_staging"
+                ? "ACME 测试证书"
+                : "自签证书"
         }}</n-tag
         ><n-tag
           v-if="version.id === selected.latest_version_id"
@@ -326,7 +341,10 @@ onUnmounted(() => {
           >最新版本</n-tag
         >
       </div>
-      <p v-if="version.summary.trust !== 'system'" class="muted">
+      <p v-if="version.environment === 'staging'" class="muted">
+        测试证书不受浏览器信任，请申请正式环境证书用于公开站点。
+      </p>
+      <p v-else-if="version.summary.trust !== 'system'" class="muted">
         客户端需要信任相应证书或私有 CA。
       </p>
       <p>

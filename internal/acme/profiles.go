@@ -1,0 +1,411 @@
+package acme
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"net"
+	"sort"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"golang.org/x/net/idna"
+	"nginxpanel/internal/auth"
+	"nginxpanel/internal/fault"
+	"nginxpanel/internal/limits"
+	"nginxpanel/internal/secure"
+)
+
+type Profile struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Notes          string   `json:"notes"`
+	Version        int64    `json:"version"`
+	AccountID      string   `json:"account_id"`
+	CredentialID   string   `json:"credential_id"`
+	Environment    string   `json:"environment"`
+	Domains        []string `json:"domains"`
+	CertificateID  string   `json:"certificate_id"`
+	State          string   `json:"state"`
+	CurrentOrderID string   `json:"current_order_id"`
+	TaskID         string   `json:"task_id"`
+	LastError      string   `json:"last_error"`
+	RetryAfter     int64    `json:"retry_after"`
+	CreatedAt      int64    `json:"created_at"`
+	UpdatedAt      int64    `json:"updated_at"`
+}
+type ProfileInput struct {
+	Name         string   `json:"name"`
+	Notes        string   `json:"notes"`
+	AccountID    string   `json:"account_id"`
+	CredentialID string   `json:"credential_id"`
+	Domains      []string `json:"domains"`
+}
+type IssueInput struct {
+	BaseVersion          int64 `json:"base_version"`
+	NewOrder             bool  `json:"new_order"`
+	AcknowledgeUncertain bool  `json:"acknowledge_uncertain"`
+}
+type ArchiveInput struct {
+	BaseVersion          int64 `json:"base_version"`
+	AcknowledgeUncertain bool  `json:"acknowledge_uncertain"`
+}
+type OrderView struct {
+	ID                   string          `json:"id"`
+	TaskID               string          `json:"task_id"`
+	OrderURL             string          `json:"order_url"`
+	CertificateURL       string          `json:"certificate_url"`
+	CertificateVersionID string          `json:"certificate_version_id"`
+	State                string          `json:"state"`
+	Stage                string          `json:"stage"`
+	LastError            string          `json:"last_error"`
+	CreatedAt            int64           `json:"created_at"`
+	DNSRecords           []DNSRecordView `json:"dns_records"`
+}
+type DNSRecordView struct {
+	FQDN      string `json:"fqdn"`
+	State     string `json:"state"`
+	LastError string `json:"last_error"`
+}
+
+const profileColumns = "p.id,p.name,p.notes,p.version,COALESCE(p.account_id,''),COALESCE(p.credential_id,''),p.environment,p.domains,COALESCE(p.certificate_id,''),p.state,p.current_order_id,COALESCE((SELECT task_id FROM acme_orders WHERE id=p.current_order_id),''),p.last_error,p.retry_after,p.created_at,p.updated_at"
+
+func scanProfile(row interface{ Scan(...any) error }) (Profile, error) {
+	var p Profile
+	var domains string
+	err := row.Scan(&p.ID, &p.Name, &p.Notes, &p.Version, &p.AccountID, &p.CredentialID, &p.Environment, &domains, &p.CertificateID, &p.State, &p.CurrentOrderID, &p.TaskID, &p.LastError, &p.RetryAfter, &p.CreatedAt, &p.UpdatedAt)
+	if err == nil {
+		err = json.Unmarshal([]byte(domains), &p.Domains)
+	}
+	return p, err
+}
+func profile(ctx context.Context, q reader, id string) (Profile, error) {
+	p, err := scanProfile(q.QueryRowContext(ctx, "SELECT "+profileColumns+" FROM acme_profiles p WHERE p.id=?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		err = fault.NotFound("ACME 签发配置不存在")
+	}
+	return p, err
+}
+func (s *Service) Profiles(ctx context.Context, limit, offset int64) ([]Profile, error) {
+	if limit < 1 || limit > limits.PageSize || offset < 0 {
+		return nil, fault.Invalid("分页参数无效")
+	}
+	rows, err := s.DB.QueryContext(ctx, "SELECT "+profileColumns+" FROM acme_profiles p ORDER BY CASE p.state WHEN 'archived' THEN 1 ELSE 0 END,p.created_at,p.id LIMIT ? OFFSET ?", limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Profile{}
+	for rows.Next() {
+		p, err := scanProfile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+func normalizeDomains(names []string) ([]string, error) {
+	if len(names) == 0 || len(names) > 64 {
+		return nil, fault.Invalid("申请域名须为 1 至 64 项")
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, name := range names {
+		wildcard := strings.HasPrefix(name, "*.")
+		base := strings.TrimPrefix(name, "*.")
+		ascii, err := idna.Lookup.ToASCII(base)
+		ascii = strings.ToLower(ascii)
+		if err != nil || len(ascii) > 253 || net.ParseIP(ascii) != nil || !strings.Contains(ascii, ".") || strings.HasSuffix(ascii, ".") {
+			return nil, fault.Invalid("须提供有效公网域名，通配符只允许位于最左侧")
+		}
+		for _, label := range strings.Split(ascii, ".") {
+			if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+				return nil, fault.Invalid("域名标签无效")
+			}
+			for _, c := range label {
+				if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+					return nil, fault.Invalid("域名标签无效")
+				}
+			}
+		}
+		if wildcard {
+			ascii = "*." + ascii
+		}
+		if len(ascii) > 253 {
+			return nil, fault.Invalid("申请域名不得超过 253 字节")
+		}
+		if seen[ascii] {
+			return nil, fault.Invalid("申请域名存在重复")
+		}
+		seen[ascii] = true
+		out = append(out, ascii)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+func (s *Service) CreateProfile(ctx context.Context, p auth.Principal, requestID, key string, in ProfileInput) (ChangeResult, error) {
+	return s.change(ctx, p, requestID, key, "acme.profiles.create", "", in, func(tx *sql.Tx) (ChangeResult, error) {
+		domains, err := normalizeDomains(in.Domains)
+		if err != nil {
+			return ChangeResult{}, err
+		}
+		if !validName(in.Name) || !utf8.ValidString(in.Notes) || len(in.Notes) > 2048 || strings.ContainsRune(in.Notes, 0) {
+			return ChangeResult{}, fault.Invalid("名称或备注无效")
+		}
+		a, err := account(ctx, tx, in.AccountID)
+		if err != nil {
+			return ChangeResult{}, err
+		}
+		if a.State != "ready" {
+			return ChangeResult{}, fault.Conflict("须先完成 ACME 账户注册")
+		}
+		if _, err := credential(ctx, tx, in.CredentialID); err != nil {
+			return ChangeResult{}, err
+		}
+		var count int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_profiles WHERE state!='archived'").Scan(&count); err != nil {
+			return ChangeResult{}, err
+		}
+		if count >= limits.Certificates {
+			return ChangeResult{}, fault.Conflict("ACME 签发配置数量已达上限")
+		}
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_profiles").Scan(&count); err != nil {
+			return ChangeResult{}, err
+		}
+		if count >= limits.ACMEProfiles {
+			return ChangeResult{}, fault.Conflict("ACME 签发配置已达保留上限")
+		}
+		id := secure.ID()
+		raw, _ := json.Marshal(domains)
+		now := time.Now().Unix()
+		if _, err := tx.ExecContext(ctx, "INSERT INTO acme_profiles(id,name,notes,version,account_id,credential_id,environment,domains,state,created_at,updated_at) VALUES(?,?,?,1,?,?,?,?,'idle',?,?)", id, in.Name, in.Notes, in.AccountID, in.CredentialID, a.Environment, string(raw), now, now); err != nil {
+			return ChangeResult{}, err
+		}
+		out, err := profile(ctx, tx, id)
+		return ChangeResult{ID: id, Profile: &out}, err
+	})
+}
+func (s *Service) QueueIssue(ctx context.Context, p auth.Principal, requestID, key, id string, in IssueInput) (ChangeResult, error) {
+	return s.change(ctx, p, requestID, key, "acme.profiles.issue", id, in, func(tx *sql.Tx) (ChangeResult, error) {
+		item, err := profile(ctx, tx, id)
+		if err != nil {
+			return ChangeResult{}, err
+		}
+		if item.Version != in.BaseVersion {
+			return ChangeResult{}, fault.Conflict("签发配置已变化，请刷新")
+		}
+		if item.State == "archived" || item.State == "issuing" {
+			return ChangeResult{}, fault.Conflict("签发配置已停用或已有在途任务")
+		}
+		if time.Now().Unix() < item.RetryAfter {
+			return ChangeResult{}, fault.Conflict("尚未到达允许重试时间")
+		}
+		a, err := account(ctx, tx, item.AccountID)
+		if err != nil {
+			return ChangeResult{}, err
+		}
+		if a.State != "ready" {
+			return ChangeResult{}, fault.Conflict("ACME 账户尚未就绪")
+		}
+		var pending int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running','waiting_confirmation','compensating','recovery_required') AND NOT (kind='acme.issue' AND resource_id=? AND state='recovery_required')", id).Scan(&pending); err != nil {
+			return ChangeResult{}, err
+		}
+		if pending >= limits.QueuedTasks {
+			return ChangeResult{}, fault.Conflict("任务队列已满")
+		}
+		orderID := item.CurrentOrderID
+		if !in.NewOrder && orderID != "" {
+			var state string
+			if err := tx.QueryRowContext(ctx, "SELECT t.state FROM acme_orders o JOIN tasks t ON t.id=o.task_id WHERE o.id=?", orderID).Scan(&state); err != nil {
+				return ChangeResult{}, err
+			}
+			if state == "succeeded" {
+				return ChangeResult{}, fault.Conflict("已有签发结果，申请新版本须明确创建新订单")
+			}
+		} else {
+			var records int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_dns_records r JOIN acme_orders o ON o.id=r.order_id WHERE o.profile_id=? AND r.state!='cleaned'", id).Scan(&records); err != nil {
+				return ChangeResult{}, err
+			}
+			if records > 0 {
+				return ChangeResult{}, fault.Conflict("仍有未清理验证记录，请先恢复原任务")
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM acme_dns_locks WHERE order_id IN (SELECT id FROM acme_orders WHERE profile_id=?)", id); err != nil {
+				return ChangeResult{}, err
+			}
+			if item.State == "recovery_required" && !in.AcknowledgeUncertain {
+				return ChangeResult{}, fault.Conflict("须确认原订单可能已在 CA 创建，才可建立新订单")
+			}
+			var retained, total int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders WHERE profile_id=?", id).Scan(&retained); err != nil {
+				return ChangeResult{}, err
+			}
+			if retained >= limits.CertificateVersions {
+				return ChangeResult{}, fault.Conflict("签发订单已达保留上限，须先处理历史保留")
+			}
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders").Scan(&total); err != nil {
+				return ChangeResult{}, err
+			}
+			if total >= limits.ACMEOrders {
+				return ChangeResult{}, fault.Conflict("签发订单总数已达保留上限")
+			}
+			orderID = ""
+		}
+		now := time.Now().Unix()
+		taskID := secure.ID()
+		// Explicit recovery supersedes the old task without rewriting its history.
+		if _, err := tx.ExecContext(ctx, "UPDATE tasks SET state='cancelled',stage='explicit_recovery',lease_until=NULL,updated_at=? WHERE resource_id=? AND kind='acme.issue' AND state='recovery_required'", now, id); err != nil {
+			return ChangeResult{}, err
+		}
+		if orderID != "" {
+			// The original order keeps its key, CSR and credential snapshot. Old task
+			// history is preserved; the new task explicitly adopts that same order.
+			if _, err := tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,state,stage,operation_id,created_at,updated_at) VALUES(?,'acme.issue',?,'queued','queued',?,?,?)", taskID, id, secure.ID(), now, now); err != nil {
+				return ChangeResult{}, err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE acme_orders SET task_id=?,updated_at=? WHERE id=?", taskID, now, orderID); err != nil {
+				return ChangeResult{}, err
+			}
+		} else {
+			var count int
+			if item.CertificateID == "" {
+				if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificates").Scan(&count); err != nil {
+					return ChangeResult{}, err
+				}
+				if count >= limits.Certificates {
+					return ChangeResult{}, fault.Conflict("证书数量已达上限")
+				}
+			} else {
+				if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_versions WHERE certificate_id=?", item.CertificateID).Scan(&count); err != nil {
+					return ChangeResult{}, err
+				}
+				if count >= limits.CertificateVersions {
+					return ChangeResult{}, fault.Conflict("证书版本数量已达保留上限")
+				}
+			}
+			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			if err != nil {
+				return ChangeResult{}, err
+			}
+			der, err := x509.MarshalPKCS8PrivateKey(key)
+			if err != nil {
+				return ChangeResult{}, err
+			}
+			csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{DNSNames: item.Domains}, key)
+			if err != nil {
+				return ChangeResult{}, err
+			}
+			c, err := credential(ctx, tx, item.CredentialID)
+			if err != nil {
+				return ChangeResult{}, err
+			}
+			var encrypted []byte
+			if err := tx.QueryRowContext(ctx, "SELECT secrets FROM dns_credentials WHERE id=?", c.ID).Scan(&encrypted); err != nil {
+				return ChangeResult{}, err
+			}
+			plain, err := s.Vault.Open(encrypted, "acme:dns:"+c.ID)
+			if err != nil {
+				return ChangeResult{}, err
+			}
+			orderID = secure.ID()
+			if _, err := tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,state,stage,operation_id,created_at,updated_at) VALUES(?,'acme.issue',?,'queued','queued',?,?,?)", taskID, id, secure.ID(), now, now); err != nil {
+				return ChangeResult{}, err
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO acme_orders(id,profile_id,task_id,account_id,provider,credentials,private_key,csr,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", orderID, id, taskID, a.ID, c.Provider, s.Vault.Seal(plain, "acme:order:"+orderID+":dns"), s.Vault.Seal(der, "acme:order:"+orderID+":key"), s.Vault.Seal(csr, "acme:order:"+orderID+":csr"), now, now); err != nil {
+				return ChangeResult{}, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE acme_profiles SET state='issuing',version=version+1,current_order_id=?,last_error='',retry_after=0,updated_at=? WHERE id=?", orderID, now, id); err != nil {
+			return ChangeResult{}, err
+		}
+		out, err := profile(ctx, tx, id)
+		return ChangeResult{ID: id, Profile: &out, TaskID: taskID}, err
+	})
+}
+func (s *Service) ArchiveProfile(ctx context.Context, p auth.Principal, requestID, key, id string, in ArchiveInput) (ChangeResult, error) {
+	return s.change(ctx, p, requestID, key, "acme.profiles.archive", id, in, func(tx *sql.Tx) (ChangeResult, error) {
+		item, err := profile(ctx, tx, id)
+		if err != nil {
+			return ChangeResult{}, err
+		}
+		if item.Version != in.BaseVersion {
+			return ChangeResult{}, fault.Conflict("签发配置已变化，请刷新")
+		}
+		if item.State == "issuing" {
+			return ChangeResult{}, fault.Conflict("须先结束在途签发任务")
+		}
+		if item.State == "recovery_required" && !in.AcknowledgeUncertain {
+			return ChangeResult{}, fault.Conflict("须确认保留远端不确定结果并停止恢复，才可停用配置")
+		}
+		var count int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_dns_records r JOIN acme_orders o ON o.id=r.order_id WHERE o.profile_id=? AND r.state!='cleaned'", id).Scan(&count); err != nil {
+			return ChangeResult{}, err
+		}
+		if count > 0 {
+			return ChangeResult{}, fault.Conflict("须先清理验证记录")
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM acme_dns_locks WHERE order_id IN (SELECT id FROM acme_orders WHERE profile_id=?)", id); err != nil {
+			return ChangeResult{}, err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE tasks SET state='cancelled',stage='profile_archived',lease_until=NULL,updated_at=? WHERE resource_id=? AND kind='acme.issue' AND state='recovery_required'", time.Now().Unix(), id); err != nil {
+			return ChangeResult{}, err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE acme_profiles SET state='archived',version=version+1,account_id=NULL,credential_id=NULL,updated_at=? WHERE id=?", time.Now().Unix(), id); err != nil {
+			return ChangeResult{}, err
+		}
+		out, err := profile(ctx, tx, id)
+		return ChangeResult{ID: id, Profile: &out}, err
+	})
+}
+func (s *Service) Orders(ctx context.Context, id string) ([]OrderView, error) {
+	if _, err := profile(ctx, s.DB, id); err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.QueryContext(ctx, "SELECT o.id,o.task_id,o.order_url,o.certificate_url,COALESCE(o.certificate_version_id,''),t.state,t.stage,t.last_error,o.created_at FROM acme_orders o JOIN tasks t ON t.id=o.task_id WHERE o.profile_id=? ORDER BY o.created_at DESC,o.id", id)
+	if err != nil {
+		return nil, err
+	}
+	out := []OrderView{}
+	for rows.Next() {
+		var o OrderView
+		o.DNSRecords = []DNSRecordView{}
+		if err := rows.Scan(&o.ID, &o.TaskID, &o.OrderURL, &o.CertificateURL, &o.CertificateVersionID, &o.State, &o.Stage, &o.LastError, &o.CreatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		records, err := s.DB.QueryContext(ctx, "SELECT fqdn,state,last_error FROM acme_dns_records WHERE order_id=? ORDER BY fqdn,id", out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		for records.Next() {
+			var r DNSRecordView
+			if err := records.Scan(&r.FQDN, &r.State, &r.LastError); err != nil {
+				records.Close()
+				return nil, err
+			}
+			out[i].DNSRecords = append(out[i].DNSRecords, r)
+		}
+		err = records.Err()
+		records.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}

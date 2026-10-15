@@ -20,7 +20,7 @@ type Runner struct {
 
 func (r *Runner) Run(ctx context.Context) error {
 	// An expired Web lease is never evidence that the root operation stopped.
-	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore','acme.account.register')"); err != nil {
+	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore','acme.account.register','acme.issue')"); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(2 * time.Second)

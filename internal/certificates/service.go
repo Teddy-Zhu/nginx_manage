@@ -34,6 +34,7 @@ type Version struct {
 	CreatedAt       int64   `json:"created_at"`
 	CertificatePath string  `json:"certificate_path"`
 	PrivateKeyPath  string  `json:"private_key_path"`
+	Environment     string  `json:"environment"`
 }
 type Binding struct {
 	VersionID       string `json:"version_id"`
@@ -98,14 +99,14 @@ func (s *Service) list(ctx context.Context, q reader, id string, detail bool) ([
 	}
 	for i := range out {
 		c := &out[i]
-		versions, err := q.QueryContext(ctx, "SELECT id,ordinal,summary,created_at FROM certificate_versions WHERE certificate_id=? AND (id=? OR ?) ORDER BY ordinal DESC", c.ID, c.LatestVersionID, detail)
+		versions, err := q.QueryContext(ctx, "SELECT id,ordinal,summary,created_at,environment FROM certificate_versions WHERE certificate_id=? AND (id=? OR ?) ORDER BY ordinal DESC", c.ID, c.LatestVersionID, detail)
 		if err != nil {
 			return nil, err
 		}
 		for versions.Next() {
 			var v Version
 			var data string
-			if err := versions.Scan(&v.ID, &v.Ordinal, &data, &v.CreatedAt); err != nil {
+			if err := versions.Scan(&v.ID, &v.Ordinal, &data, &v.CreatedAt, &v.Environment); err != nil {
 				versions.Close()
 				return nil, err
 			}
@@ -256,6 +257,15 @@ func (s *Service) Write(ctx context.Context, p auth.Principal, requestID, key, i
 	}
 	result := Result{}
 	now := time.Now()
+	if action != "create" {
+		var active int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_profiles WHERE certificate_id=? AND state!='archived'", id).Scan(&active); err != nil {
+			return Result{}, err
+		}
+		if active > 0 {
+			return Result{}, fault.Conflict("此证书仍由 ACME 签发配置管理，请先停用该签发配置")
+		}
+	}
 	if action == "delete" {
 		var refs int
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM nginx_certificate_references WHERE certificate_id=?", id).Scan(&refs); err != nil {
@@ -297,7 +307,7 @@ func (s *Service) Write(ctx context.Context, p auth.Principal, requestID, key, i
 		if action == "create" {
 			_, err = tx.ExecContext(ctx, "INSERT INTO certificates(id,name,notes,version,latest_version_id,source,created_at,updated_at) VALUES(?,?,?,?,?,'manual',?,?)", id, in.Name, in.Notes, 1, versionID, now.Unix(), now.Unix())
 		} else {
-			_, err = tx.ExecContext(ctx, "UPDATE certificates SET name=?,notes=?,version=version+1,latest_version_id=?,updated_at=? WHERE id=?", in.Name, in.Notes, versionID, now.Unix(), id)
+			_, err = tx.ExecContext(ctx, "UPDATE certificates SET name=?,notes=?,source='manual',version=version+1,latest_version_id=?,updated_at=? WHERE id=?", in.Name, in.Notes, versionID, now.Unix(), id)
 		}
 		if err != nil {
 			return Result{}, err
@@ -356,7 +366,8 @@ func (s *Service) Materials(ctx context.Context, q reader, paths []string) ([]Ma
 			continue
 		}
 		var chain, key []byte
-		if err := q.QueryRowContext(ctx, "SELECT fullchain,private_key FROM certificate_versions WHERE certificate_id=? AND id=?", id, version).Scan(&chain, &key); err != nil {
+		var environment string
+		if err := q.QueryRowContext(ctx, "SELECT fullchain,private_key,environment FROM certificate_versions WHERE certificate_id=? AND id=?", id, version).Scan(&chain, &key, &environment); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, fault.Invalid("证书版本不存在")
 			}
@@ -374,7 +385,7 @@ func (s *Service) Materials(ctx context.Context, q reader, paths []string) ([]Ma
 		if total > limits.CertificateBundleBytes {
 			return nil, fault.Invalid("配置引用的证书材料超过 1 MiB")
 		}
-		unique[version] = Material{CertificateID: id, VersionID: version, FullchainPEM: string(plainChain), PrivateKeyPEM: string(plainKey)}
+		unique[version] = Material{CertificateID: id, VersionID: version, FullchainPEM: string(plainChain), PrivateKeyPEM: string(plainKey), Environment: environment}
 	}
 	out := make([]Material, 0, len(unique))
 	for _, material := range unique {

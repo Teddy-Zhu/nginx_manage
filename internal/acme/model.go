@@ -7,12 +7,14 @@ import (
 	"errors"
 	"io"
 
+	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/secure"
 )
 
 type Service struct {
-	DB    *sql.DB
-	Vault *secure.Vault
+	DB           *sql.DB
+	Vault        *secure.Vault
+	Certificates *certificates.Service
 }
 
 type Account struct {
@@ -89,6 +91,7 @@ type ChangeResult struct {
 	Credential *DNSCredential `json:"credential"`
 	TaskID     string         `json:"task_id"`
 	Deleted    bool           `json:"deleted"`
+	Profile    *Profile       `json:"profile"`
 }
 
 type CredentialField struct {

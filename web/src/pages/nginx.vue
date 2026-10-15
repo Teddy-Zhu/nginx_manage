@@ -118,7 +118,7 @@ const certificateOptions = computed(() => [
 const certificateVersionOptions = computed(
   () =>
     certificateDetail.value?.versions.map((item) => ({
-      label: `版本 ${item.ordinal} · ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()} 到期`,
+      label: `${item.environment === "staging" ? "测试 · " : ""}版本 ${item.ordinal} · ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()} 到期`,
       value: item.certificate_path,
     })) ?? [],
 );

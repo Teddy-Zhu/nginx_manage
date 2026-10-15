@@ -118,6 +118,7 @@ func (p *Parsed) ExpandNodes(nodes []*Node, depth int) ([]*Node, error) {
 
 func (p *Parsed) ValidateTLS(materials []certificates.Material) error {
 	pairs := map[string]*certificates.Pair{}
+	environments := map[string]string{}
 	for _, material := range materials {
 		if !material.ValidIdentity() {
 			return errors.New("证书身份无效")
@@ -130,6 +131,7 @@ func (p *Parsed) ValidateTLS(materials []certificates.Material) error {
 			return err
 		}
 		pairs[material.VersionID] = pair
+		environments[material.VersionID] = material.Environment
 	}
 	var main *Document
 	for _, doc := range p.Documents {
@@ -198,7 +200,7 @@ func (p *Parsed) ValidateTLS(materials []certificates.Material) error {
 			if pair == nil {
 				return errors.New("HTTPS 证书材料缺失")
 			}
-			if err := pair.Validate(time.Now()); err != nil {
+			if err := pair.ValidateEnvironment(time.Now(), environments[version]); err != nil {
 				return err
 			}
 			if err := pair.Covers(values(nodes, "server_name")); err != nil {

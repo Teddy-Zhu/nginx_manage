@@ -25,6 +25,11 @@ export type CertificateResult = components["schemas"]["CertificateResult"];
 export type ACMEAccount = components["schemas"]["ACMEAccount"];
 export type ACMEAccountInput = components["schemas"]["ACMEAccountInput"];
 export type ACMEChangeResult = components["schemas"]["ACMEChangeResult"];
+export type ACMEProfile = components["schemas"]["ACMEProfile"];
+export type ACMEProfileInput = components["schemas"]["ACMEProfileInput"];
+export type ACMEIssueInput = components["schemas"]["ACMEIssueInput"];
+export type ACMEArchiveInput = components["schemas"]["ACMEArchiveInput"];
+export type ACMEOrder = components["schemas"]["ACMEOrder"];
 export type DNSProvider = components["schemas"]["DNSProvider"];
 export type DNSCredential = components["schemas"]["DNSCredential"];
 export type DNSCredentialInput = components["schemas"]["DNSCredentialInput"];
@@ -135,6 +140,34 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
 }
 
 export const api = {
+  acmeProfiles: (offset = 0) =>
+    request<ACMEProfile[]>({
+      url: "/acme-profiles",
+      params: { limit: 100, offset },
+    }),
+  acmeOrders: (id: string) =>
+    request<ACMEOrder[]>({ url: `/acme-profiles/${id}/orders` }),
+  createACMEProfile: (data: ACMEProfileInput, key: string) =>
+    request<ACMEChangeResult>({
+      method: "POST",
+      url: "/acme-profiles",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  issueACMEProfile: (id: string, data: ACMEIssueInput, key: string) =>
+    request<ACMEChangeResult>({
+      method: "POST",
+      url: `/acme-profiles/${id}/issue`,
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  archiveACMEProfile: (id: string, data: ACMEArchiveInput, key: string) =>
+    request<ACMEChangeResult>({
+      method: "POST",
+      url: `/acme-profiles/${id}/archive`,
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
   acmeAccounts: () => request<ACMEAccount[]>({ url: "/acme-accounts" }),
   createACMEAccount: (data: ACMEAccountInput, key: string) =>
     request<ACMEChangeResult>({

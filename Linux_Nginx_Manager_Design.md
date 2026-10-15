@@ -872,7 +872,7 @@ A、B 可以互相授权，但不默认允许请求继续递归转发。控制�
 | 原生配置 | `/nginx/config-tree`、按逻辑文件 ID 编辑、字段映射/冲突、安全校验、修订与回滚 |
 | 访问列表 | `/access-lists` CRUD、引用检查 |
 | 基础 WAF | `/waf/policies`、站点绑定、规则能力、事件与观察状态 |
-| 证书 | `/certificates`、`/acme-accounts`、`/dns-credentials`，申请/续期/绑定 |
+| 证书 | `/certificates`、`/acme-accounts`、`/dns-credentials`、`/acme-profiles`，申请/续期/绑定 |
 | 防火墙 | `/firewall/capabilities`、`/firewall/rules`、`/firewall/plans`、apply/confirm/rollback |
 | Fail2ban | `/fail2ban/status`、`/fail2ban/jails`、启停、ban/unban、匹配测试 |
 | 日志 | `/logs/query`、`/logs/stream`、受限下载 |

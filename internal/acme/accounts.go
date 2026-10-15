@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,9 +16,8 @@ import (
 	"time"
 
 	legoacme "github.com/go-acme/lego/v5/acme"
-	"github.com/go-acme/lego/v5/certificate"
+	"github.com/go-acme/lego/v5/acme/api"
 	"github.com/go-acme/lego/v5/lego"
-	legolog "github.com/go-acme/lego/v5/log"
 	"github.com/go-acme/lego/v5/registration"
 
 	"nginxpanel/internal/secure"
@@ -55,6 +52,7 @@ type caTransport struct {
 	base       *http.Transport
 	host       string
 	retryAfter atomic.Int64
+	onResponse func(*http.Request, *http.Response) error
 }
 
 func (t *caTransport) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -66,7 +64,7 @@ func (t *caTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	response.Body = http.MaxBytesReader(nil, response.Body, 1<<20)
-	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusServiceUnavailable {
+	if response.Header.Get("Retry-After") != "" {
 		raw := response.Header.Get("Retry-After")
 		when, parseErr := http.ParseTime(raw)
 		if seconds, err := strconv.ParseInt(raw, 10, 64); err == nil && seconds > 0 && seconds <= 365*24*60*60 {
@@ -80,10 +78,21 @@ func (t *caTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 			}
 		}
 	}
+	if t.onResponse != nil {
+		if err := t.onResponse(request, response); err != nil {
+			response.Body.Close()
+			return nil, err
+		}
+	}
 	return response, nil
 }
 
-func (s *Service) accountClient(ctx context.Context, a Account) (*lego.Client, *caTransport, error) {
+type caClient struct {
+	Core         *api.Core
+	Registration *registration.Registrar
+}
+
+func (s *Service) accountClient(ctx context.Context, a Account) (*caClient, *caTransport, error) {
 	var sealed []byte
 	if err := s.DB.QueryRowContext(ctx, "SELECT private_key FROM acme_accounts WHERE id=?", a.ID).Scan(&sealed); err != nil {
 		return nil, nil, fmt.Errorf("%w: %v", errAccountKey, err)
@@ -118,19 +127,13 @@ func (s *Service) accountClient(ctx context.Context, a Account) (*lego.Client, *
 		TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 20 * time.Second,
 		MaxIdleConns: 4, MaxIdleConnsPerHost: 2, IdleConnTimeout: 30 * time.Second,
 	}}
-	// Construct Config explicitly: lego.NewConfig reads process-wide TLS trust
-	// environment variables, which are not part of this resource's contract.
-	client, err := lego.NewClient(&lego.Config{
-		CADirURL: dir, User: &accountUser{email: a.Email, key: signer},
-		UserAgent:   "nginxpanel/acme",
-		HTTPClient:  &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("ACME redirects are disabled") }},
-		Certificate: lego.CertificateConfig{Timeout: 30 * time.Second, OverallRequestLimit: certificate.DefaultOverallRequestLimit},
-	})
+	// Construct the client explicitly; no process-wide lego TLS overrides.
+	client, err := api.New(&http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("ACME redirects disabled") }}, "nginxpanel/acme", dir, a.AccountURL, signer)
 	if err != nil {
 		transport.base.CloseIdleConnections()
 		return nil, transport, err
 	}
-	return client, transport, nil
+	return &caClient{Core: client, Registration: registration.NewRegistrar(client, &accountUser{email: a.Email, key: signer})}, transport, nil
 }
 
 func accountFailure(err error, transport *caTransport) (string, int64) {
@@ -163,9 +166,6 @@ func accountFailure(err error, transport *caTransport) (string, int64) {
 }
 
 func (s *Service) RunAccounts(ctx context.Context) error {
-	// Library diagnostics can contain contact details and CA response bodies.
-	// Durable task records below expose only classified, non-secret failures.
-	legolog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {

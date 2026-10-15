@@ -341,6 +341,7 @@ onUnmounted(() => {
   <div class="toolbar">
     <router-link to="/certificates">返回证书</router-link>
     <div class="inline-gap">
+      <router-link to="/certificate-requests">ACME 签发</router-link>
       <router-link to="/tasks">查看任务</router-link
       ><n-button :loading="busy" @click="load">刷新</n-button>
     </div>

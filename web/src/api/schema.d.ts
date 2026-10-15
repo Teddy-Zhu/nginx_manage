@@ -560,6 +560,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/acme-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listACMEProfiles"];
+        put?: never;
+        post: operations["createACMEProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acme-profiles/{id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 默认恢复原订单及原凭据快照；新版本须显式建立新订单，未知创建结果还须明确确认。签发不自动应用 Nginx 配置。 */
+        post: operations["issueACMEProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acme-profiles/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 停用签发配置并保留证书、订单和任务历史；未清理的 DNS 记录须先恢复处理。 */
+        post: operations["archiveACMEProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acme-profiles/{id}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get: operations["listACMEOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dns-providers": {
         parameters: {
             query?: never;
@@ -968,10 +1040,74 @@ export interface components {
                 [key: string]: string;
             };
         };
+        ACMEProfile: {
+            id: string;
+            name: string;
+            notes: string;
+            /** Format: int64 */
+            version: number;
+            account_id: string;
+            credential_id: string;
+            /** @enum {string} */
+            environment: "production" | "staging";
+            domains: string[];
+            certificate_id: string;
+            /** @enum {string} */
+            state: "idle" | "issuing" | "issued" | "failed" | "recovery_required" | "archived";
+            current_order_id: string;
+            task_id: string;
+            last_error: string;
+            /** Format: int64 */
+            retry_after: number;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        ACMEProfileInput: {
+            name: string;
+            notes: string;
+            /** Format: uuid */
+            account_id: string;
+            /** Format: uuid */
+            credential_id: string;
+            domains: string[];
+        };
+        ACMEIssueInput: {
+            /** Format: int64 */
+            base_version: number;
+            new_order: boolean;
+            acknowledge_uncertain: boolean;
+        };
+        ACMEArchiveInput: {
+            /** Format: int64 */
+            base_version: number;
+            acknowledge_uncertain: boolean;
+        };
+        ACMEDNSRecord: {
+            fqdn: string;
+            /** @enum {string} */
+            state: "preparing" | "present" | "cleaned" | "blocked";
+            last_error: string;
+        };
+        ACMEOrder: {
+            id: string;
+            task_id: string;
+            order_url: string;
+            certificate_url: string;
+            certificate_version_id: string;
+            state: string;
+            stage: string;
+            last_error: string;
+            /** Format: int64 */
+            created_at: number;
+            dns_records: components["schemas"]["ACMEDNSRecord"][];
+        };
         ACMEChangeResult: {
             id: string;
             account: components["schemas"]["ACMEAccount"] | null;
             credential: components["schemas"]["DNSCredential"] | null;
+            profile: components["schemas"]["ACMEProfile"] | null;
             task_id: string;
             deleted: boolean;
         };
@@ -1004,10 +1140,10 @@ export interface components {
             key_algorithm: "RSA" | "ECDSA" | "Ed25519";
             chain_length: number;
             /**
-             * @description 导入时的链校验结果，不代表所有客户端均信任。
+             * @description 保存时的链校验结果；ACME 测试证书不受浏览器信任。
              * @enum {string}
              */
-            trust: "system" | "private" | "self_signed";
+            trust: "system" | "private" | "self_signed" | "acme_staging";
         };
         CertificateVersion: {
             id: string;
@@ -1018,6 +1154,8 @@ export interface components {
             created_at: number;
             certificate_path: string;
             private_key_path: string;
+            /** @enum {string} */
+            environment: "manual" | "production" | "staging";
         };
         CertificateBinding: {
             version_id: string;
@@ -2003,6 +2141,104 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listACMEProfiles: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createACMEProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACMEProfileInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    issueACMEProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACMEIssueInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    archiveACMEProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ACMEArchiveInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listACMEOrders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

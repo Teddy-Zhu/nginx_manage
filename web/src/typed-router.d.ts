@@ -59,6 +59,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/certificate-requests': RouteRecordInfo<
+      '/certificate-requests',
+      '/certificate-requests',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/certificates': RouteRecordInfo<
       '/certificates',
       '/certificates',
@@ -141,6 +148,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/acme.vue': {
       routes:
         | '/acme'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/certificate-requests.vue': {
+      routes:
+        | '/certificate-requests'
       views:
         | never
       pathParamNames:

@@ -17,7 +17,10 @@ const (
 	CertificateReferences    = 128
 	Certificates             = 128
 	ACMEAccounts             = 16
+	ACMEProfiles             = 2048
 	DNSCredentials           = 32
+	ACMEOrders               = 2048
+	ACMEDNSRecords           = 8192
 	CertificateVersions      = 32
 	CertificateChain         = 16
 	CertificateMaterialBytes = 128 << 10
@@ -28,7 +31,7 @@ const (
 	Depth                    = 32
 	PageSize                 = 100
 	QueuedTasks              = 100
-	TaskWorkers              = 2
+	TaskWorkers              = 3
 	SSEConnections           = 16
 	LogScanBytes             = 16 << 20
 	StagingBytes             = 256 << 20

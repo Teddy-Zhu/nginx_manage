@@ -231,6 +231,13 @@ func (s *Service) AccountAction(ctx context.Context, p auth.Principal, requestID
 			return ChangeResult{}, fault.Conflict("账户注册任务尚未结束")
 		}
 		if action == "delete" {
+			var refs int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_profiles WHERE account_id=?", id).Scan(&refs); err != nil {
+				return ChangeResult{}, err
+			}
+			if refs > 0 {
+				return ChangeResult{}, fault.Conflict("仍有签发配置引用此 ACME 账户，请先停用签发配置")
+			}
 			_, err := tx.ExecContext(ctx, "DELETE FROM acme_accounts WHERE id=?", id)
 			return ChangeResult{ID: id, Deleted: true}, err
 		}
@@ -309,6 +316,13 @@ func (s *Service) WriteCredential(ctx context.Context, p auth.Principal, request
 			}
 		}
 		if action == "delete" {
+			var refs int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_profiles WHERE credential_id=?", id).Scan(&refs); err != nil {
+				return ChangeResult{}, err
+			}
+			if refs > 0 {
+				return ChangeResult{}, fault.Conflict("仍有签发配置引用此 DNS 凭据，请先停用签发配置")
+			}
 			_, err := tx.ExecContext(ctx, "DELETE FROM dns_credentials WHERE id=?", id)
 			return ChangeResult{ID: id, Deleted: true}, err
 		}

@@ -27,6 +27,7 @@ type Material struct {
 	VersionID     string `json:"version_id"`
 	FullchainPEM  string `json:"fullchain_pem"`
 	PrivateKeyPEM string `json:"private_key_pem"`
+	Environment   string `json:"environment"`
 }
 type Summary struct {
 	DNSNames       []string `json:"dns_names"`
@@ -60,7 +61,7 @@ func Reference(name string) (id, version, kind string, ok bool) {
 }
 func IsSystemCA(name string) bool { return systemCA.MatchString(name) }
 func (m Material) ValidIdentity() bool {
-	return uuid.MatchString(m.CertificateID) && uuid.MatchString(m.VersionID)
+	return uuid.MatchString(m.CertificateID) && uuid.MatchString(m.VersionID) && (m.Environment == "manual" || m.Environment == "production" || m.Environment == "staging")
 }
 
 // Parse accepts only an ordered, connected PEM chain and one unencrypted key.
@@ -225,6 +226,41 @@ func (p *Pair) Validate(now time.Time) error {
 	if len(p.Chain) == 1 {
 		p.Summary.Trust = "self_signed"
 	}
+	return nil
+}
+
+// Staging certificates are authenticated by the fixed ACME CA connection and
+// retain an explicit untrusted label. They still require a connected, valid
+// server chain; staging trust never changes the machine's root certificate pool.
+func (p *Pair) ValidateEnvironment(now time.Time, environment string) error {
+	if environment != "staging" {
+		if environment != "manual" && environment != "production" {
+			return errors.New("证书来源环境无效")
+		}
+		if err := p.Validate(now); err != nil {
+			return err
+		}
+		if environment == "production" && p.Summary.Trust != "system" {
+			return errors.New("正式 ACME 证书须通过系统信任链验证")
+		}
+		return nil
+	}
+	if err := p.ValidAt(now); err != nil {
+		return err
+	}
+	if len(p.Chain) < 2 || !p.Chain[len(p.Chain)-1].IsCA {
+		return errors.New("测试 CA 证书缺少完整签发链")
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(p.Chain[len(p.Chain)-1])
+	intermediates := x509.NewCertPool()
+	for _, cert := range p.Chain[1 : len(p.Chain)-1] {
+		intermediates.AddCert(cert)
+	}
+	if _, err := p.Chain[0].Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediates, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
+		return errors.New("测试 CA 证书链不适用于 TLS 服务器")
+	}
+	p.Summary.Trust = "acme_staging"
 	return nil
 }
 func (p *Pair) Covers(names []string) error {

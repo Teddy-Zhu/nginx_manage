@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for ACMEAccountEnvironment.
@@ -33,22 +34,22 @@ func (e ACMEAccountEnvironment) Valid() bool {
 
 // Defines values for ACMEAccountState.
 const (
-	Failed      ACMEAccountState = "failed"
-	Pending     ACMEAccountState = "pending"
-	Ready       ACMEAccountState = "ready"
-	Registering ACMEAccountState = "registering"
+	ACMEAccountStateFailed      ACMEAccountState = "failed"
+	ACMEAccountStatePending     ACMEAccountState = "pending"
+	ACMEAccountStateReady       ACMEAccountState = "ready"
+	ACMEAccountStateRegistering ACMEAccountState = "registering"
 )
 
 // Valid indicates whether the value is a known member of the ACMEAccountState enum.
 func (e ACMEAccountState) Valid() bool {
 	switch e {
-	case Failed:
+	case ACMEAccountStateFailed:
 		return true
-	case Pending:
+	case ACMEAccountStatePending:
 		return true
-	case Ready:
+	case ACMEAccountStateReady:
 		return true
-	case Registering:
+	case ACMEAccountStateRegistering:
 		return true
 	default:
 		return false
@@ -67,6 +68,78 @@ func (e ACMEAccountInputEnvironment) Valid() bool {
 	case ACMEAccountInputEnvironmentProduction:
 		return true
 	case ACMEAccountInputEnvironmentStaging:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEDNSRecordState.
+const (
+	Blocked   ACMEDNSRecordState = "blocked"
+	Cleaned   ACMEDNSRecordState = "cleaned"
+	Preparing ACMEDNSRecordState = "preparing"
+	Present   ACMEDNSRecordState = "present"
+)
+
+// Valid indicates whether the value is a known member of the ACMEDNSRecordState enum.
+func (e ACMEDNSRecordState) Valid() bool {
+	switch e {
+	case Blocked:
+		return true
+	case Cleaned:
+		return true
+	case Preparing:
+		return true
+	case Present:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEProfileEnvironment.
+const (
+	ACMEProfileEnvironmentProduction ACMEProfileEnvironment = "production"
+	ACMEProfileEnvironmentStaging    ACMEProfileEnvironment = "staging"
+)
+
+// Valid indicates whether the value is a known member of the ACMEProfileEnvironment enum.
+func (e ACMEProfileEnvironment) Valid() bool {
+	switch e {
+	case ACMEProfileEnvironmentProduction:
+		return true
+	case ACMEProfileEnvironmentStaging:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEProfileState.
+const (
+	ACMEProfileStateArchived         ACMEProfileState = "archived"
+	ACMEProfileStateFailed           ACMEProfileState = "failed"
+	ACMEProfileStateIdle             ACMEProfileState = "idle"
+	ACMEProfileStateIssued           ACMEProfileState = "issued"
+	ACMEProfileStateIssuing          ACMEProfileState = "issuing"
+	ACMEProfileStateRecoveryRequired ACMEProfileState = "recovery_required"
+)
+
+// Valid indicates whether the value is a known member of the ACMEProfileState enum.
+func (e ACMEProfileState) Valid() bool {
+	switch e {
+	case ACMEProfileStateArchived:
+		return true
+	case ACMEProfileStateFailed:
+		return true
+	case ACMEProfileStateIdle:
+		return true
+	case ACMEProfileStateIssued:
+		return true
+	case ACMEProfileStateIssuing:
+		return true
+	case ACMEProfileStateRecoveryRequired:
 		return true
 	default:
 		return false
@@ -93,16 +166,16 @@ func (e AccessListInputMode) Valid() bool {
 
 // Defines values for CertificateSource.
 const (
-	Acme   CertificateSource = "acme"
-	Manual CertificateSource = "manual"
+	CertificateSourceAcme   CertificateSource = "acme"
+	CertificateSourceManual CertificateSource = "manual"
 )
 
 // Valid indicates whether the value is a known member of the CertificateSource enum.
 func (e CertificateSource) Valid() bool {
 	switch e {
-	case Acme:
+	case CertificateSourceAcme:
 		return true
-	case Manual:
+	case CertificateSourceManual:
 		return true
 	default:
 		return false
@@ -153,19 +226,43 @@ func (e CertificateSummaryKeyAlgorithm) Valid() bool {
 
 // Defines values for CertificateSummaryTrust.
 const (
-	Private    CertificateSummaryTrust = "private"
-	SelfSigned CertificateSummaryTrust = "self_signed"
-	System     CertificateSummaryTrust = "system"
+	AcmeStaging CertificateSummaryTrust = "acme_staging"
+	Private     CertificateSummaryTrust = "private"
+	SelfSigned  CertificateSummaryTrust = "self_signed"
+	System      CertificateSummaryTrust = "system"
 )
 
 // Valid indicates whether the value is a known member of the CertificateSummaryTrust enum.
 func (e CertificateSummaryTrust) Valid() bool {
 	switch e {
+	case AcmeStaging:
+		return true
 	case Private:
 		return true
 	case SelfSigned:
 		return true
 	case System:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificateVersionEnvironment.
+const (
+	CertificateVersionEnvironmentManual     CertificateVersionEnvironment = "manual"
+	CertificateVersionEnvironmentProduction CertificateVersionEnvironment = "production"
+	CertificateVersionEnvironmentStaging    CertificateVersionEnvironment = "staging"
+)
+
+// Valid indicates whether the value is a known member of the CertificateVersionEnvironment enum.
+func (e CertificateVersionEnvironment) Valid() bool {
+	switch e {
+	case CertificateVersionEnvironmentManual:
+		return true
+	case CertificateVersionEnvironmentProduction:
+		return true
+	case CertificateVersionEnvironmentStaging:
 		return true
 	default:
 		return false
@@ -441,13 +538,86 @@ type ACMEAccountInput struct {
 // ACMEAccountInputEnvironment defines model for ACMEAccountInput.Environment.
 type ACMEAccountInputEnvironment string
 
+// ACMEArchiveInput defines model for ACMEArchiveInput.
+type ACMEArchiveInput struct {
+	AcknowledgeUncertain bool  `json:"acknowledge_uncertain"`
+	BaseVersion          int64 `json:"base_version"`
+}
+
 // ACMEChangeResult defines model for ACMEChangeResult.
 type ACMEChangeResult struct {
 	Account    *ACMEAccount   `json:"account"`
 	Credential *DNSCredential `json:"credential"`
 	Deleted    bool           `json:"deleted"`
 	Id         string         `json:"id"`
+	Profile    *ACMEProfile   `json:"profile"`
 	TaskId     string         `json:"task_id"`
+}
+
+// ACMEDNSRecord defines model for ACMEDNSRecord.
+type ACMEDNSRecord struct {
+	Fqdn      string             `json:"fqdn"`
+	LastError string             `json:"last_error"`
+	State     ACMEDNSRecordState `json:"state"`
+}
+
+// ACMEDNSRecordState defines model for ACMEDNSRecord.State.
+type ACMEDNSRecordState string
+
+// ACMEIssueInput defines model for ACMEIssueInput.
+type ACMEIssueInput struct {
+	AcknowledgeUncertain bool  `json:"acknowledge_uncertain"`
+	BaseVersion          int64 `json:"base_version"`
+	NewOrder             bool  `json:"new_order"`
+}
+
+// ACMEOrder defines model for ACMEOrder.
+type ACMEOrder struct {
+	CertificateUrl       string          `json:"certificate_url"`
+	CertificateVersionId string          `json:"certificate_version_id"`
+	CreatedAt            int64           `json:"created_at"`
+	DnsRecords           []ACMEDNSRecord `json:"dns_records"`
+	Id                   string          `json:"id"`
+	LastError            string          `json:"last_error"`
+	OrderUrl             string          `json:"order_url"`
+	Stage                string          `json:"stage"`
+	State                string          `json:"state"`
+	TaskId               string          `json:"task_id"`
+}
+
+// ACMEProfile defines model for ACMEProfile.
+type ACMEProfile struct {
+	AccountId      string                 `json:"account_id"`
+	CertificateId  string                 `json:"certificate_id"`
+	CreatedAt      int64                  `json:"created_at"`
+	CredentialId   string                 `json:"credential_id"`
+	CurrentOrderId string                 `json:"current_order_id"`
+	Domains        []string               `json:"domains"`
+	Environment    ACMEProfileEnvironment `json:"environment"`
+	Id             string                 `json:"id"`
+	LastError      string                 `json:"last_error"`
+	Name           string                 `json:"name"`
+	Notes          string                 `json:"notes"`
+	RetryAfter     int64                  `json:"retry_after"`
+	State          ACMEProfileState       `json:"state"`
+	TaskId         string                 `json:"task_id"`
+	UpdatedAt      int64                  `json:"updated_at"`
+	Version        int64                  `json:"version"`
+}
+
+// ACMEProfileEnvironment defines model for ACMEProfile.Environment.
+type ACMEProfileEnvironment string
+
+// ACMEProfileState defines model for ACMEProfile.State.
+type ACMEProfileState string
+
+// ACMEProfileInput defines model for ACMEProfileInput.
+type ACMEProfileInput struct {
+	AccountId    openapi_types.UUID `json:"account_id"`
+	CredentialId openapi_types.UUID `json:"credential_id"`
+	Domains      []string           `json:"domains"`
+	Name         string             `json:"name"`
+	Notes        string             `json:"notes"`
 }
 
 // AccessList defines model for AccessList.
@@ -549,25 +719,29 @@ type CertificateSummary struct {
 	NotBefore      int64                          `json:"not_before"`
 	Subject        string                         `json:"subject"`
 
-	// Trust 导入时的链校验结果，不代表所有客户端均信任。
+	// Trust 保存时的链校验结果；ACME 测试证书不受浏览器信任。
 	Trust CertificateSummaryTrust `json:"trust"`
 }
 
 // CertificateSummaryKeyAlgorithm defines model for CertificateSummary.KeyAlgorithm.
 type CertificateSummaryKeyAlgorithm string
 
-// CertificateSummaryTrust 导入时的链校验结果，不代表所有客户端均信任。
+// CertificateSummaryTrust 保存时的链校验结果；ACME 测试证书不受浏览器信任。
 type CertificateSummaryTrust string
 
 // CertificateVersion defines model for CertificateVersion.
 type CertificateVersion struct {
-	CertificatePath string             `json:"certificate_path"`
-	CreatedAt       int64              `json:"created_at"`
-	Id              string             `json:"id"`
-	Ordinal         int64              `json:"ordinal"`
-	PrivateKeyPath  string             `json:"private_key_path"`
-	Summary         CertificateSummary `json:"summary"`
+	CertificatePath string                        `json:"certificate_path"`
+	CreatedAt       int64                         `json:"created_at"`
+	Environment     CertificateVersionEnvironment `json:"environment"`
+	Id              string                        `json:"id"`
+	Ordinal         int64                         `json:"ordinal"`
+	PrivateKeyPath  string                        `json:"private_key_path"`
+	Summary         CertificateSummary            `json:"summary"`
 }
+
+// CertificateVersionEnvironment defines model for CertificateVersion.Environment.
+type CertificateVersionEnvironment string
 
 // CreateResource defines model for CreateResource.
 type CreateResource struct {
@@ -1020,6 +1194,36 @@ type RegisterACMEAccountParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// ListACMEProfilesParams defines parameters for ListACMEProfiles.
+type ListACMEProfilesParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// CreateACMEProfileParams defines parameters for CreateACMEProfile.
+type CreateACMEProfileParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// ArchiveACMEProfileParams defines parameters for ArchiveACMEProfile.
+type ArchiveACMEProfileParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// IssueACMEProfileParams defines parameters for IssueACMEProfile.
+type IssueACMEProfileParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1318,6 +1522,15 @@ type DeleteACMEAccountJSONRequestBody = ResourceAction
 // RegisterACMEAccountJSONRequestBody defines body for RegisterACMEAccount for application/json ContentType.
 type RegisterACMEAccountJSONRequestBody = ACMEAccountAction
 
+// CreateACMEProfileJSONRequestBody defines body for CreateACMEProfile for application/json ContentType.
+type CreateACMEProfileJSONRequestBody = ACMEProfileInput
+
+// ArchiveACMEProfileJSONRequestBody defines body for ArchiveACMEProfile for application/json ContentType.
+type ArchiveACMEProfileJSONRequestBody = ACMEArchiveInput
+
+// IssueACMEProfileJSONRequestBody defines body for IssueACMEProfile for application/json ContentType.
+type IssueACMEProfileJSONRequestBody = ACMEIssueInput
+
 // BootstrapJSONRequestBody defines body for Bootstrap for application/json ContentType.
 type BootstrapJSONRequestBody BootstrapJSONBody
 
@@ -1419,6 +1632,21 @@ type ServerInterface interface {
 
 	// (POST /acme-accounts/{id}/register)
 	RegisterACMEAccount(w http.ResponseWriter, r *http.Request, id ID, params RegisterACMEAccountParams)
+
+	// (GET /acme-profiles)
+	ListACMEProfiles(w http.ResponseWriter, r *http.Request, params ListACMEProfilesParams)
+
+	// (POST /acme-profiles)
+	CreateACMEProfile(w http.ResponseWriter, r *http.Request, params CreateACMEProfileParams)
+
+	// (POST /acme-profiles/{id}/archive)
+	ArchiveACMEProfile(w http.ResponseWriter, r *http.Request, id ID, params ArchiveACMEProfileParams)
+
+	// (POST /acme-profiles/{id}/issue)
+	IssueACMEProfile(w http.ResponseWriter, r *http.Request, id ID, params IssueACMEProfileParams)
+
+	// (GET /acme-profiles/{id}/orders)
+	ListACMEOrders(w http.ResponseWriter, r *http.Request, id ID)
 
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
@@ -1836,6 +2064,288 @@ func (siw *ServerInterfaceWrapper) RegisterACMEAccount(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RegisterACMEAccount(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListACMEProfiles operation middleware
+func (siw *ServerInterfaceWrapper) ListACMEProfiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListACMEProfilesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListACMEProfiles(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateACMEProfile operation middleware
+func (siw *ServerInterfaceWrapper) CreateACMEProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateACMEProfileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateACMEProfile(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveACMEProfile operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveACMEProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ArchiveACMEProfileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveACMEProfile(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// IssueACMEProfile operation middleware
+func (siw *ServerInterfaceWrapper) IssueACMEProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params IssueACMEProfileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.IssueACMEProfile(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListACMEOrders operation middleware
+func (siw *ServerInterfaceWrapper) ListACMEOrders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListACMEOrders(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4294,6 +4804,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-accounts", wrapper.CreateACMEAccount)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/acme-accounts/{id}", wrapper.DeleteACMEAccount)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-accounts/{id}/register", wrapper.RegisterACMEAccount)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/acme-profiles", wrapper.ListACMEProfiles)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-profiles", wrapper.CreateACMEProfile)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-profiles/{id}/issue", wrapper.IssueACMEProfile)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/acme-profiles/{id}/archive", wrapper.ArchiveACMEProfile)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/acme-profiles/{id}/orders", wrapper.ListACMEOrders)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/dns-providers", wrapper.ListDNSProviders)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/dns-credentials", wrapper.ListDNSCredentials)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/dns-credentials", wrapper.CreateDNSCredential)

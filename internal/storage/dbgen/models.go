@@ -27,6 +27,57 @@ type AcmeAccount struct {
 	UpdatedAt      int64  `json:"updated_at"`
 }
 
+type AcmeDnsLock struct {
+	Fqdn    string `json:"fqdn"`
+	OrderID string `json:"order_id"`
+}
+
+type AcmeDnsRecord struct {
+	ID        string `json:"id"`
+	OrderID   string `json:"order_id"`
+	Fqdn      string `json:"fqdn"`
+	ValueHash string `json:"value_hash"`
+	Payload   []byte `json:"payload"`
+	State     string `json:"state"`
+	LastError string `json:"last_error"`
+}
+
+type AcmeOrder struct {
+	ID                   string         `json:"id"`
+	ProfileID            string         `json:"profile_id"`
+	TaskID               string         `json:"task_id"`
+	AccountID            sql.NullString `json:"account_id"`
+	Provider             string         `json:"provider"`
+	Credentials          []byte         `json:"credentials"`
+	PrivateKey           []byte         `json:"private_key"`
+	Csr                  []byte         `json:"csr"`
+	SubmitStarted        int64          `json:"submit_started"`
+	OrderUrl             string         `json:"order_url"`
+	CertificateUrl       string         `json:"certificate_url"`
+	NextPollAt           int64          `json:"next_poll_at"`
+	CertificateVersionID sql.NullString `json:"certificate_version_id"`
+	CreatedAt            int64          `json:"created_at"`
+	UpdatedAt            int64          `json:"updated_at"`
+}
+
+type AcmeProfile struct {
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Notes          string         `json:"notes"`
+	Version        int64          `json:"version"`
+	AccountID      sql.NullString `json:"account_id"`
+	CredentialID   sql.NullString `json:"credential_id"`
+	Environment    string         `json:"environment"`
+	Domains        string         `json:"domains"`
+	CertificateID  sql.NullString `json:"certificate_id"`
+	State          string         `json:"state"`
+	CurrentOrderID string         `json:"current_order_id"`
+	LastError      string         `json:"last_error"`
+	RetryAfter     int64          `json:"retry_after"`
+	CreatedAt      int64          `json:"created_at"`
+	UpdatedAt      int64          `json:"updated_at"`
+}
+
 type ApiCredential struct {
 	ID             string        `json:"id"`
 	Name           string        `json:"name"`
@@ -68,6 +119,7 @@ type CertificateVersion struct {
 	PrivateKey    []byte `json:"private_key"`
 	Summary       string `json:"summary"`
 	CreatedAt     int64  `json:"created_at"`
+	Environment   string `json:"environment"`
 }
 
 type ConfigHead struct {
