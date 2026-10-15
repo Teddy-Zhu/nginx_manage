@@ -71,6 +71,10 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 					scopes["security.write"] = true
 				}
 				switch n.Name {
+				case "log_format":
+					if len(n.Args) > 0 && strings.HasPrefix(n.Args[0].Value, "nginxpanel_") {
+						add("reserved_name", "nginxpanel_ 日志格式由受管执行器定义")
+					}
 				case "include":
 					if len(n.Args) != 1 {
 						add("include", "include 必须有一个受管相对路径")
@@ -106,7 +110,7 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 						break
 					}
 					v := n.Args[0].Value
-					if n.Name == "access_log" && v == "off" {
+					if n.Name == "access_log" && v == "off" || n.Name == "error_log" && v == "/dev/null" {
 						break
 					}
 					if !cleanRelative(v) || !(strings.HasPrefix(v, "logs/nginx/") || strings.HasPrefix(v, "logs/stream/") || strings.HasPrefix(v, "logs/nginx-global/")) || strings.Contains(v, "$") {
@@ -117,8 +121,8 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 						add("unsafe_path", "证书路径必须引用受管不可变版本")
 					}
 				case "proxy_cache":
-					if len(n.Args) != 1 || n.Args[0].Value != "off" {
-						add("unsafe_path", "尚未登记受管缓存区域")
+					if len(n.Args) != 1 || n.Args[0].Value != "off" && n.Args[0].Value != "nginxpanel_http" {
+						add("unsafe_path", "只能使用受管缓存区域")
 					}
 				}
 				walk(n.Children, n.Name)

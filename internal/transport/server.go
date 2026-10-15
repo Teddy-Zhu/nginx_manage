@@ -316,12 +316,12 @@ func (s *Server) PatchResource(w http.ResponseWriter, r *http.Request, id apigen
 	if !ok {
 		return
 	}
-	var in apigen.PatchResourceJSONBody
+	var in nginxconfig.PatchRequest
 	if err := decode(w, r, &in); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	data, err := s.Config.Patch(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, id, in.BaseVersion, in.Changes)
+	data, err := s.Config.Patch(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, id, in.BaseVersion, in.Changes, in.Metadata)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -468,4 +468,71 @@ func (s *Server) GetNginxRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ok(w, r, out)
+}
+
+func (s *Server) CopyResource(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.CopyResourceParams) {
+	s.resourceAction(w, r, id, "copy", params.IdempotencyKey)
+}
+func (s *Server) DeleteResource(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DeleteResourceParams) {
+	s.resourceAction(w, r, id, "delete", params.IdempotencyKey)
+}
+func (s *Server) resourceAction(w http.ResponseWriter, r *http.Request, id, action, key string) {
+	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	if !ok {
+		return
+	}
+	var in nginxconfig.ResourceActionRequest
+	if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Config.ResourceAction(r.Context(), p, r.Context().Value(requestIDKey).(string), key, id, action, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	status := 201
+	message := "副本已保存为停用状态"
+	if action == "delete" {
+		status = 200
+		message = "代理已从期望修订移除"
+	}
+	s.respond(w, r, status, "OK", message, out)
+}
+func (s *Server) CreateAccessList(w http.ResponseWriter, r *http.Request, params apigen.CreateAccessListParams) {
+	s.accessList(w, r, "", "create", params.IdempotencyKey)
+}
+func (s *Server) UpdateAccessList(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.UpdateAccessListParams) {
+	s.accessList(w, r, id, "update", params.IdempotencyKey)
+}
+func (s *Server) DeleteAccessList(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DeleteAccessListParams) {
+	s.accessList(w, r, id, "delete", params.IdempotencyKey)
+}
+func (s *Server) accessList(w http.ResponseWriter, r *http.Request, id, action, key string) {
+	p, ok := s.authorize(w, r, true, "config.write", "config.secrets", "security.write")
+	if !ok {
+		return
+	}
+	var in nginxconfig.AccessListRequest
+	if action == "delete" {
+		var body nginxconfig.ResourceActionRequest
+		if err := decode(w, r, &body); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		in.BaseVersion = body.BaseVersion
+	} else if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Config.AccessList(r.Context(), p, r.Context().Value(requestIDKey).(string), key, id, action, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	status := 201
+	if action == "delete" {
+		status = 200
+	}
+	s.respond(w, r, status, "OK", "访问列表已保存至新修订", out)
 }

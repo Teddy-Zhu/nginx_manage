@@ -4,7 +4,7 @@
     "title": "任务与审计",
     "subtitle": "查看执行阶段和操作记录",
     "nav": true,
-    "order": 2,
+    "order": 3,
     "symbol": "☷"
   }
 }

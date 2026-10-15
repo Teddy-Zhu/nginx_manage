@@ -10,6 +10,7 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/storage/dbgen"
 )
 
 func enqueue(ctx context.Context, tx *sql.Tx, revision string, apply bool) (string, error) {
@@ -83,8 +84,9 @@ func (s *Service) ApplySaved(ctx context.Context, p auth.Principal, requestID, k
 	}
 	defer tx.Rollback()
 	var version int64
+	var applied sql.NullString
 	var enabled bool
-	if err := tx.QueryRowContext(ctx, "SELECT version FROM config_head WHERE id=1").Scan(&version); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT version,applied_revision FROM config_head WHERE id=1").Scan(&version, &applied); err != nil {
 		return SaveResult{}, err
 	}
 	if version != in.BaseVersion {
@@ -95,6 +97,9 @@ func (s *Service) ApplySaved(ctx context.Context, p auth.Principal, requestID, k
 	}
 	if !enabled {
 		return SaveResult{}, fault.Conflict("Nginx 配置模块已停用")
+	}
+	if err := s.requireRevisionScopes(ctx, p, applied.String, dbgen.New(tx)); err != nil {
+		return SaveResult{}, err
 	}
 	task, err := enqueue(ctx, tx, tree.RevisionID, true)
 	if err != nil {

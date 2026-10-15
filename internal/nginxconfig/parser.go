@@ -121,13 +121,15 @@ func (l *lexer) nodes(depth int) ([]*Node, int, error) {
 	}
 	nodes := []*Node{}
 	marker := ""
+	var metadata *ResourceMetadata
+	markerStart, markerEnd, metadataStart, metadataEnd := -1, -1, -1, -1
 	for {
 		t, err := l.next()
 		if err == io.EOF {
 			if depth > 0 {
 				return nil, 0, errors.New("缺少闭合大括号")
 			}
-			if marker != "" {
+			if marker != "" || metadata != nil {
 				return nil, 0, errors.New("资源标记没有对应的配置块")
 			}
 			return nodes, l.pos, nil
@@ -136,11 +138,22 @@ func (l *lexer) nodes(depth int) ([]*Node, int, error) {
 			return nil, 0, err
 		}
 		if t.Kind == "comment" {
+			if strings.HasPrefix(t.Value, metadataPrefix) {
+				if metadata != nil {
+					return nil, 0, errors.New("资源元信息重复")
+				}
+				value, err := decodeMetadata(strings.TrimPrefix(t.Value, metadataPrefix))
+				if err != nil {
+					return nil, 0, err
+				}
+				metadata, metadataStart, metadataEnd = &value, t.Start, t.End
+			}
 			if strings.HasPrefix(t.Value, "# nginxpanel:resource ") {
 				if marker != "" {
 					return nil, 0, errors.New("资源标记重复")
 				}
 				marker = strings.TrimSpace(strings.TrimPrefix(t.Value, "# nginxpanel:resource "))
+				markerStart, markerEnd = t.Start, t.End
 				if !resourceID.MatchString(marker) {
 					return nil, 0, errors.New("资源标记无效")
 				}
@@ -148,7 +161,7 @@ func (l *lexer) nodes(depth int) ([]*Node, int, error) {
 			continue
 		}
 		if t.Kind == "punctuation" && t.Value == "}" {
-			if depth == 0 || marker != "" {
+			if depth == 0 || marker != "" || metadata != nil {
 				return nil, 0, errors.New("出现多余的闭合大括号")
 			}
 			return nodes, t.Start, nil
@@ -157,7 +170,12 @@ func (l *lexer) nodes(depth int) ([]*Node, int, error) {
 			return nil, 0, errors.New("此处需要配置指令")
 		}
 		n := &Node{Name: t.Value, Start: t.Start, Line: t.Line, Open: -1, Close: -1, ResourceID: marker}
+		n.Metadata, n.MarkerStart, n.MarkerEnd, n.MetadataStart, n.MetadataEnd = metadata, markerStart, markerEnd, metadataStart, metadataEnd
+		metadata, markerStart, markerEnd, metadataStart, metadataEnd = nil, -1, -1, -1, -1
 		marker = ""
+		if n.Metadata != nil && n.ResourceID == "" {
+			return nil, 0, errors.New("资源元信息须与唯一资源标记绑定")
+		}
 		if n.ResourceID != "" && n.Name != "server" {
 			return nil, 0, errors.New("资源标记必须紧邻 server 块之前")
 		}
@@ -205,7 +223,7 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 	if len(files) == 0 || len(files) > limits.Files {
 		return nil, errors.New("配置树必须包含 1–128 个文件")
 	}
-	p := &Parsed{Tree: Tree{Files: append([]File(nil), files...), Resources: []Resource{}, Diagnostics: []Diagnostic{}}, Documents: map[string]*Document{}}
+	p := &Parsed{Tree: Tree{Files: append([]File(nil), files...), Resources: []Resource{}, Diagnostics: []Diagnostic{}, AccessLists: []AccessList{}}, Documents: map[string]*Document{}}
 	paths := map[string]File{}
 	size := 0
 	directives := 0

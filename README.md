@@ -2,7 +2,7 @@
 
 基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前处于基础工程实施阶段，尚未发布，不声明系统兼容性验收通过。
 
-当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；配置树原文/字段映射、不可变修订、并发保护、独立草稿；Unix Socket Agent 身份校验、不可变 Nginx 发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
+当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单、不可变修订、并发保护和独立草稿；Unix Socket Agent 身份校验、不可变 Nginx 发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
 
 安全发布流程代码已接入，尚未集中验证。完整代理能力与证书、安全/主机管理、多节点、备份和发布更新继续实施；保存与校验不会显示为已生效。
 

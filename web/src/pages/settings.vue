@@ -4,7 +4,7 @@
     "title": "设置",
     "subtitle": "账户、凭据与功能模块",
     "nav": true,
-    "order": 3,
+    "order": 4,
     "symbol": "⚙"
   }
 }

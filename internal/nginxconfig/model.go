@@ -2,8 +2,8 @@ package nginxconfig
 
 import "fmt"
 
-const ParserVersion = "crossplane-0.4.89+spans-1"
-const PolicyVersion = "nginxpanel-1"
+const ParserVersion = "crossplane-0.4.89+spans-2"
+const PolicyVersion = "nginxpanel-2"
 
 type File struct {
 	ID      string `json:"id"`
@@ -19,6 +19,7 @@ type Tree struct {
 	Files       []File       `json:"files"`
 	Resources   []Resource   `json:"resources"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
+	AccessLists []AccessList `json:"access_lists"`
 }
 
 type Diagnostic struct {
@@ -34,6 +35,13 @@ type Field struct {
 	Values   []string `json:"values"`
 	Editable bool     `json:"editable"`
 	Reason   string   `json:"reason,omitempty"`
+	Format   string   `json:"format"`
+}
+
+type ResourceMetadata struct {
+	Name    string `json:"name"`
+	Notes   string `json:"notes"`
+	Enabled bool   `json:"enabled"`
 }
 
 type Resource struct {
@@ -43,6 +51,7 @@ type Resource struct {
 	BlockKey string           `json:"block_key"`
 	Line     int              `json:"line"`
 	Fields   map[string]Field `json:"fields"`
+	Metadata ResourceMetadata `json:"metadata"`
 }
 
 type Token struct {
@@ -51,13 +60,17 @@ type Token struct {
 	Kind             string
 }
 type Node struct {
-	Name                          string
-	Args                          []Token
-	Children                      []*Node
-	Start, End, Open, Close, Line int
-	ResourceID                    string
-	ArgumentComments              bool
+	Name                                               string
+	Args                                               []Token
+	Children                                           []*Node
+	Start, End, Open, Close, Line                      int
+	ResourceID                                         string
+	ArgumentComments                                   bool
+	Metadata                                           *ResourceMetadata
+	MarkerStart, MarkerEnd, MetadataStart, MetadataEnd int
 }
+
+func (n *Node) Enabled() bool { return n.Metadata == nil || n.Metadata.Enabled }
 
 type Document struct {
 	File  File
@@ -67,6 +80,12 @@ type Parsed struct {
 	Tree           Tree
 	Documents      map[string]*Document
 	RequiredScopes []string
+}
+
+type PatchRequest struct {
+	BaseVersion int64               `json:"base_version"`
+	Changes     map[string][]string `json:"changes"`
+	Metadata    *ResourceMetadata   `json:"metadata,omitempty"`
 }
 
 type Edit struct {

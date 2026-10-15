@@ -267,6 +267,7 @@ paths:
               required: [base_version, changes]
               properties:
                 base_version: { type: integer, format: int64, minimum: 0 }
+                metadata: { $ref: '#/components/schemas/ResourceMetadata' }
                 changes:
                   type: object
                   additionalProperties:
@@ -274,6 +275,81 @@ paths:
                     items: { type: string }
       responses:
         '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    delete:
+      operationId: deleteResource
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceAction' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/resources/{id}/copy:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: copyResource
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceAction' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/access-lists:
+    post:
+      operationId: createAccessList
+      x-scopes: [config.write, config.secrets, security.write]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccessListInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/access-lists/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    put:
+      operationId: updateAccessList
+      x-scopes: [config.write, config.secrets, security.write]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccessListInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    delete:
+      operationId: deleteAccessList
+      x-scopes: [config.write, config.secrets, security.write]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceAction' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
   /nginx/revisions:
     get:
@@ -370,42 +446,81 @@ components:
         message: { type: string }
     Field:
       type: object
-      required: [values, editable]
+      required: [values, editable, format]
       properties:
         values: { type: array, items: { type: string } }
         editable: { type: boolean }
+        format: { type: string, enum: [value, tokens, lines] }
         reason: { type: string }
     Resource:
       type: object
-      required: [id, kind, file_id, block_key, line, fields]
+      required: [id, kind, file_id, block_key, line, fields, metadata]
       properties:
         id: { type: string }
         kind: { type: string, enum: [http, stream] }
         file_id: { type: string }
         block_key: { type: string }
+        metadata: { $ref: '#/components/schemas/ResourceMetadata' }
         line: { type: integer }
         fields:
           type: object
           additionalProperties: { $ref: '#/components/schemas/Field' }
     Tree:
       type: object
-      required: [revision_id, version, state, files, resources, diagnostics]
+      required: [revision_id, version, state, files, resources, diagnostics, access_lists]
       properties:
         revision_id: { type: string }
         version: { type: integer, format: int64 }
         state: { type: string }
         files: { type: array, items: { $ref: '#/components/schemas/File' } }
+        access_lists: { type: array, items: { $ref: '#/components/schemas/AccessList' } }
         resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
         diagnostics: { type: array, items: { $ref: '#/components/schemas/Diagnostic' } }
+    ResourceMetadata:
+      type: object
+      required: [name, notes, enabled]
+      properties:
+        name: { type: string, maxLength: 128 }
+        notes: { type: string, maxLength: 2048 }
+        enabled: { type: boolean }
+    ResourceAction:
+      type: object
+      required: [base_version]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        name: { type: string, maxLength: 128 }
+    AccessList:
+      type: object
+      required: [id, file_id, name, notes, mode, entries, editable, reason]
+      properties:
+        id: { type: string }
+        file_id: { type: string }
+        name: { type: string }
+        notes: { type: string }
+        mode: { type: string }
+        entries: { type: array, items: { type: string } }
+        editable: { type: boolean }
+        reason: { type: string }
+    AccessListInput:
+      type: object
+      required: [base_version, name, notes, mode, entries]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        name: { type: string, maxLength: 128 }
+        notes: { type: string, maxLength: 2048 }
+        mode: { type: string, enum: [allowlist, denylist] }
+        entries: { type: array, maxItems: 128, items: { type: string } }
     CreateResource:
       type: object
       required: [base_version, kind, listen, domains, upstream]
       properties:
         base_version: { type: integer, format: int64, minimum: 0 }
         kind: { type: string, enum: [http, stream] }
-        listen: { type: array, items: { type: string } }
+        listen: { type: array, minItems: 1, maxItems: 128, description: 每项为一条监听的地址及选项。, items: { type: string } }
         domains: { type: array, items: { type: string } }
         upstream: { type: string }
+        upstream_servers: { type: array, maxItems: 128, items: { type: string } }
+        metadata: { $ref: '#/components/schemas/ResourceMetadata' }
     SaveRequest:
       type: object
       required: [base_version, files, draft, validate]

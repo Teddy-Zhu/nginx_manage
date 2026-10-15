@@ -52,7 +52,9 @@ func (s *Service) Current(ctx context.Context) (Tree, error) {
 }
 
 func (s *Service) Get(ctx context.Context, id string) (Tree, error) {
-	q := dbgen.New(s.DB)
+	return s.get(ctx, id, dbgen.New(s.DB))
+}
+func (s *Service) get(ctx context.Context, id string, q *dbgen.Queries) (Tree, error) {
 	r, err := q.GetRevision(ctx, id)
 	if err == sql.ErrNoRows {
 		return Tree{}, ErrNotFound
@@ -90,6 +92,7 @@ func (s *Service) Get(ctx context.Context, id string) (Tree, error) {
 		}
 		tree.Resources = append(tree.Resources, resource)
 	}
+	tree.AccessLists = accessLists(tree.Files)
 	return tree, nil
 }
 
@@ -146,12 +149,22 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 		return SaveResult{}, fault.Conflict("Nginx 配置模块已停用")
 	}
 	var version int64
-	var parent sql.NullString
-	if err := tx.QueryRowContext(ctx, "SELECT version,desired_revision FROM config_head WHERE id=1").Scan(&version, &parent); err != nil {
+	var parent, applied sql.NullString
+	if err := tx.QueryRowContext(ctx, "SELECT version,desired_revision,applied_revision FROM config_head WHERE id=1").Scan(&version, &parent, &applied); err != nil {
 		return SaveResult{}, err
 	}
 	if version != in.BaseVersion {
 		return SaveResult{}, ErrConflict
+	}
+	if !in.Draft {
+		if err := s.requireRevisionScopes(ctx, principal, parent.String, dbgen.New(tx)); err != nil {
+			return SaveResult{}, err
+		}
+		if in.Apply && applied.String != parent.String {
+			if err := s.requireRevisionScopes(ctx, principal, applied.String, dbgen.New(tx)); err != nil {
+				return SaveResult{}, err
+			}
+		}
 	}
 	var next int64
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0)+1 FROM config_revisions").Scan(&next); err != nil {
@@ -240,7 +253,7 @@ func (s *Service) replay(ctx context.Context, principal, key, digest string) (Sa
 	return result, true, err
 }
 
-func (s *Service) Patch(ctx context.Context, p auth.Principal, requestID, key, resourceID string, base int64, changes map[string][]string) (SaveResult, error) {
+func (s *Service) Patch(ctx context.Context, p auth.Principal, requestID, key, resourceID string, base int64, changes map[string][]string, metadata *ResourceMetadata) (SaveResult, error) {
 	if err := p.Require("config.write", "config.secrets"); err != nil {
 		return SaveResult{}, err
 	}
@@ -248,13 +261,17 @@ func (s *Service) Patch(ctx context.Context, p auth.Principal, requestID, key, r
 		Action, ID string
 		Base       int64
 		Changes    map[string][]string
-	}{"patch", resourceID, base, changes})
+		Metadata   *ResourceMetadata
+	}{"patch", resourceID, base, changes, metadata})
 	if err != nil {
 		return SaveResult{}, err
 	}
 	digest := secure.Hash(encoded)
 	if result, found, err := s.replay(ctx, p.ID, key, digest); found || err != nil {
 		return result, err
+	}
+	if len(changes) == 0 && metadata == nil {
+		return SaveResult{}, fault.Invalid("没有待保存的字段")
 	}
 	tree, err := s.Current(ctx)
 	if err != nil {
@@ -267,9 +284,27 @@ func (s *Service) Patch(ctx context.Context, p auth.Principal, requestID, key, r
 	if err != nil {
 		return SaveResult{}, fault.Invalid(err.Error())
 	}
-	files, err := parsed.Patch(resourceID, changes)
+	files, err := parsed.Patch(resourceID, changes, metadata)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return SaveResult{}, err
+		}
 		return SaveResult{}, fault.Invalid(err.Error())
 	}
 	return s.save(ctx, p, requestID, key, SaveRequest{BaseVersion: base, Files: files}, digest)
+}
+
+func (s *Service) requireRevisionScopes(ctx context.Context, p auth.Principal, id string, q *dbgen.Queries) error {
+	if id == "" || p.Require("security.write") == nil {
+		return nil
+	}
+	tree, err := s.get(ctx, id, q)
+	if err != nil {
+		return err
+	}
+	parsed, err := Parse(tree.Files, s.Policy)
+	if err != nil || len(parsed.Tree.Diagnostics) > 0 {
+		return p.Require("security.write")
+	}
+	return p.Require(parsed.RequiredScopes...)
 }

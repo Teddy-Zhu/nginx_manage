@@ -17,7 +17,8 @@ const links = computed(() =>
   router
     .getRoutes()
     .filter((item) => item.meta.nav)
-    .sort((a, b) => (a.meta.order ?? 0) - (b.meta.order ?? 0)),
+    .sort((a, b) => (a.meta.order ?? 0) - (b.meta.order ?? 0))
+    .map(({ path, meta }) => ({ path, meta, active: route.path === path })),
 );
 function requestReauth() {
   reauth.value = true;
@@ -57,7 +58,7 @@ onUnmounted(() =>
           :key="link.path"
           :to="link.path"
           class="nav-link"
-          :class="{ active: route.path === link.path }"
+          :class="{ active: link.active }"
           ><span class="nav-symbol">{{ link.meta.symbol }}</span
           >{{ link.meta.title }}</router-link
         >

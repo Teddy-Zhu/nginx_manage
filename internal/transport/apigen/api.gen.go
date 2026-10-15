@@ -13,6 +13,24 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for AccessListInputMode.
+const (
+	Allowlist AccessListInputMode = "allowlist"
+	Denylist  AccessListInputMode = "denylist"
+)
+
+// Valid indicates whether the value is a known member of the AccessListInputMode enum.
+func (e AccessListInputMode) Valid() bool {
+	switch e {
+	case Allowlist:
+		return true
+	case Denylist:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateResourceKind.
 const (
 	CreateResourceKindHttp   CreateResourceKind = "http"
@@ -25,6 +43,27 @@ func (e CreateResourceKind) Valid() bool {
 	case CreateResourceKindHttp:
 		return true
 	case CreateResourceKindStream:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FieldFormat.
+const (
+	Lines  FieldFormat = "lines"
+	Tokens FieldFormat = "tokens"
+	Value  FieldFormat = "value"
+)
+
+// Valid indicates whether the value is a known member of the FieldFormat enum.
+func (e FieldFormat) Valid() bool {
+	switch e {
+	case Lines:
+		return true
+	case Tokens:
+		return true
+	case Value:
 		return true
 	default:
 		return false
@@ -49,13 +88,41 @@ func (e ResourceKind) Valid() bool {
 	}
 }
 
+// AccessList defines model for AccessList.
+type AccessList struct {
+	Editable bool     `json:"editable"`
+	Entries  []string `json:"entries"`
+	FileId   string   `json:"file_id"`
+	Id       string   `json:"id"`
+	Mode     string   `json:"mode"`
+	Name     string   `json:"name"`
+	Notes    string   `json:"notes"`
+	Reason   string   `json:"reason"`
+}
+
+// AccessListInput defines model for AccessListInput.
+type AccessListInput struct {
+	BaseVersion int64               `json:"base_version"`
+	Entries     []string            `json:"entries"`
+	Mode        AccessListInputMode `json:"mode"`
+	Name        string              `json:"name"`
+	Notes       string              `json:"notes"`
+}
+
+// AccessListInputMode defines model for AccessListInput.Mode.
+type AccessListInputMode string
+
 // CreateResource defines model for CreateResource.
 type CreateResource struct {
 	BaseVersion int64              `json:"base_version"`
 	Domains     []string           `json:"domains"`
 	Kind        CreateResourceKind `json:"kind"`
-	Listen      []string           `json:"listen"`
-	Upstream    string             `json:"upstream"`
+
+	// Listen 每项为一条监听的地址及选项。
+	Listen          []string          `json:"listen"`
+	Metadata        *ResourceMetadata `json:"metadata,omitempty"`
+	Upstream        string            `json:"upstream"`
+	UpstreamServers *[]string         `json:"upstream_servers,omitempty"`
 }
 
 // CreateResourceKind defines model for CreateResource.Kind.
@@ -79,10 +146,14 @@ type Diagnostic struct {
 
 // Field defines model for Field.
 type Field struct {
-	Editable bool     `json:"editable"`
-	Reason   *string  `json:"reason,omitempty"`
-	Values   []string `json:"values"`
+	Editable bool        `json:"editable"`
+	Format   FieldFormat `json:"format"`
+	Reason   *string     `json:"reason,omitempty"`
+	Values   []string    `json:"values"`
 }
+
+// FieldFormat defines model for Field.Format.
+type FieldFormat string
 
 // File defines model for File.
 type File struct {
@@ -128,10 +199,24 @@ type Resource struct {
 	Id       string           `json:"id"`
 	Kind     ResourceKind     `json:"kind"`
 	Line     int              `json:"line"`
+	Metadata ResourceMetadata `json:"metadata"`
 }
 
 // ResourceKind defines model for Resource.Kind.
 type ResourceKind string
+
+// ResourceAction defines model for ResourceAction.
+type ResourceAction struct {
+	BaseVersion int64   `json:"base_version"`
+	Name        *string `json:"name,omitempty"`
+}
+
+// ResourceMetadata defines model for ResourceMetadata.
+type ResourceMetadata struct {
+	Enabled bool   `json:"enabled"`
+	Name    string `json:"name"`
+	Notes   string `json:"notes"`
+}
 
 // Response defines model for Response.
 type Response struct {
@@ -172,6 +257,7 @@ type Task struct {
 
 // Tree defines model for Tree.
 type Tree struct {
+	AccessLists []AccessList `json:"access_lists"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
 	Files       []File       `json:"files"`
 	Resources   []Resource   `json:"resources"`
@@ -240,6 +326,30 @@ type RevokeCredentialParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// CreateAccessListParams defines parameters for CreateAccessList.
+type CreateAccessListParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// DeleteAccessListParams defines parameters for DeleteAccessList.
+type DeleteAccessListParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// UpdateAccessListParams defines parameters for UpdateAccessList.
+type UpdateAccessListParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // ApplyConfigJSONBody defines parameters for ApplyConfig.
 type ApplyConfigJSONBody struct {
 	BaseVersion int64 `json:"base_version"`
@@ -275,14 +385,31 @@ type CreateResourceParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// DeleteResourceParams defines parameters for DeleteResource.
+type DeleteResourceParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // PatchResourceJSONBody defines parameters for PatchResource.
 type PatchResourceJSONBody struct {
 	BaseVersion int64               `json:"base_version"`
 	Changes     map[string][]string `json:"changes"`
+	Metadata    *ResourceMetadata   `json:"metadata,omitempty"`
 }
 
 // PatchResourceParams defines parameters for PatchResource.
 type PatchResourceParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// CopyResourceParams defines parameters for CopyResource.
+type CopyResourceParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -356,6 +483,15 @@ type BootstrapJSONRequestBody BootstrapJSONBody
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
 type CreateCredentialJSONRequestBody = CredentialInput
 
+// CreateAccessListJSONRequestBody defines body for CreateAccessList for application/json ContentType.
+type CreateAccessListJSONRequestBody = AccessListInput
+
+// DeleteAccessListJSONRequestBody defines body for DeleteAccessList for application/json ContentType.
+type DeleteAccessListJSONRequestBody = ResourceAction
+
+// UpdateAccessListJSONRequestBody defines body for UpdateAccessList for application/json ContentType.
+type UpdateAccessListJSONRequestBody = AccessListInput
+
 // ApplyConfigJSONRequestBody defines body for ApplyConfig for application/json ContentType.
 type ApplyConfigJSONRequestBody ApplyConfigJSONBody
 
@@ -368,8 +504,14 @@ type PreviewConfigTreeJSONRequestBody = SaveRequest
 // CreateResourceJSONRequestBody defines body for CreateResource for application/json ContentType.
 type CreateResourceJSONRequestBody = CreateResource
 
+// DeleteResourceJSONRequestBody defines body for DeleteResource for application/json ContentType.
+type DeleteResourceJSONRequestBody = ResourceAction
+
 // PatchResourceJSONRequestBody defines body for PatchResource for application/json ContentType.
 type PatchResourceJSONRequestBody PatchResourceJSONBody
+
+// CopyResourceJSONRequestBody defines body for CopyResource for application/json ContentType.
+type CopyResourceJSONRequestBody = ResourceAction
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody LoginJSONBody
@@ -404,6 +546,15 @@ type ServerInterface interface {
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
 
+	// (POST /nginx/access-lists)
+	CreateAccessList(w http.ResponseWriter, r *http.Request, params CreateAccessListParams)
+
+	// (DELETE /nginx/access-lists/{id})
+	DeleteAccessList(w http.ResponseWriter, r *http.Request, id ID, params DeleteAccessListParams)
+
+	// (PUT /nginx/access-lists/{id})
+	UpdateAccessList(w http.ResponseWriter, r *http.Request, id ID, params UpdateAccessListParams)
+
 	// (POST /nginx/apply)
 	ApplyConfig(w http.ResponseWriter, r *http.Request, params ApplyConfigParams)
 
@@ -419,8 +570,14 @@ type ServerInterface interface {
 	// (POST /nginx/resources)
 	CreateResource(w http.ResponseWriter, r *http.Request, params CreateResourceParams)
 
+	// (DELETE /nginx/resources/{id})
+	DeleteResource(w http.ResponseWriter, r *http.Request, id ID, params DeleteResourceParams)
+
 	// (PATCH /nginx/resources/{id})
 	PatchResource(w http.ResponseWriter, r *http.Request, id ID, params PatchResourceParams)
+
+	// (POST /nginx/resources/{id}/copy)
+	CopyResource(w http.ResponseWriter, r *http.Request, id ID, params CopyResourceParams)
 
 	// (GET /nginx/revisions)
 	ListRevisions(w http.ResponseWriter, r *http.Request, params ListRevisionsParams)
@@ -721,6 +878,216 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// CreateAccessList operation middleware
+func (siw *ServerInterfaceWrapper) CreateAccessList(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateAccessListParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAccessList(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteAccessList operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAccessList(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteAccessListParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAccessList(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAccessList operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAccessList(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateAccessListParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAccessList(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ApplyConfig operation middleware
 func (siw *ServerInterfaceWrapper) ApplyConfig(w http.ResponseWriter, r *http.Request) {
 
@@ -968,6 +1335,79 @@ func (siw *ServerInterfaceWrapper) CreateResource(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteResource operation middleware
+func (siw *ServerInterfaceWrapper) DeleteResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteResourceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteResource(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PatchResource operation middleware
 func (siw *ServerInterfaceWrapper) PatchResource(w http.ResponseWriter, r *http.Request) {
 
@@ -1032,6 +1472,79 @@ func (siw *ServerInterfaceWrapper) PatchResource(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PatchResource(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CopyResource operation middleware
+func (siw *ServerInterfaceWrapper) CopyResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CopyResourceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CopyResource(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1610,7 +2123,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/runtime", wrapper.GetNginxRuntime)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/preview", wrapper.PreviewConfigTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources", wrapper.CreateResource)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.DeleteResource)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.PatchResource)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources/{id}/copy", wrapper.CopyResource)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/access-lists", wrapper.CreateAccessList)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/access-lists/{id}", wrapper.DeleteAccessList)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/access-lists/{id}", wrapper.UpdateAccessList)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/revisions", wrapper.ListRevisions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/revisions/{id}", wrapper.GetRevision)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks", wrapper.ListTasks)

@@ -12,6 +12,9 @@ export type SaveRequest = components["schemas"]["SaveRequest"];
 export type Me = components["schemas"]["Me"];
 export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
+export type ResourceMetadata = components["schemas"]["ResourceMetadata"];
+export type AccessList = components["schemas"]["AccessList"];
+export type AccessListInput = components["schemas"]["AccessListInput"];
 export type NginxRuntime = components["schemas"]["NginxRuntime"];
 
 export class ApiError extends Error {
@@ -139,11 +142,12 @@ export const api = {
     base_version: number,
     changes: Record<string, string[]>,
     key: string,
+    metadata?: ResourceMetadata,
   ) =>
     request<SaveResult>({
       method: "PATCH",
       url: `/nginx/resources/${encodeURIComponent(id)}`,
-      data: { base_version, changes },
+      data: { base_version, changes, metadata },
       headers: { "Idempotency-Key": key },
     }),
   createResource: (
@@ -154,6 +158,32 @@ export const api = {
       method: "POST",
       url: "/nginx/resources",
       data,
+      headers: { "Idempotency-Key": key },
+    }),
+  resourceAction: (
+    id: string,
+    action: "copy" | "delete",
+    base_version: number,
+    key: string,
+  ) =>
+    request<SaveResult>({
+      method: action === "copy" ? "POST" : "DELETE",
+      url: `/nginx/resources/${encodeURIComponent(id)}${action === "copy" ? "/copy" : ""}`,
+      data: { base_version },
+      headers: { "Idempotency-Key": key },
+    }),
+  saveAccessList: (id: string | null, data: AccessListInput, key: string) =>
+    request<SaveResult>({
+      method: id ? "PUT" : "POST",
+      url: `/nginx/access-lists${id ? "/" + encodeURIComponent(id) : ""}`,
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  deleteAccessList: (id: string, base_version: number, key: string) =>
+    request<SaveResult>({
+      method: "DELETE",
+      url: `/nginx/access-lists/${encodeURIComponent(id)}`,
+      data: { base_version },
       headers: { "Idempotency-Key": key },
     }),
   apply: (base_version: number, key: string) =>

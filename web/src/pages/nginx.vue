@@ -25,6 +25,7 @@ import {
   NForm,
   NFormItem,
   NSelect,
+  NSwitch,
   NDataTable,
   type DataTableColumns,
 } from "naive-ui";
@@ -37,6 +38,7 @@ import {
   type Resource,
   type SaveResult,
   type NginxRuntime,
+  type ResourceMetadata,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 
@@ -54,6 +56,10 @@ const diagnostics = ref<Tree["diagnostics"]>([]),
 const createVisible = ref(false),
   fileVisible = ref(false),
   newPath = ref("");
+const createName = ref(""),
+  createNotes = ref(""),
+  createMembers = ref("");
+const metadata = ref<ResourceMetadata>({ name: "", notes: "", enabled: true });
 const createKind = ref<"http" | "stream">("http"),
   createListen = ref("8080"),
   createDomains = ref(""),
@@ -71,11 +77,13 @@ const sourceJSON = computed(() =>
 const formDirty = computed(
   () =>
     resource.value &&
-    Object.entries(resource.value.fields).some(
-      ([name, field]) =>
-        field.editable &&
-        (fieldInputs.value[name] ?? "") !== field.values.join(" "),
-    ),
+    (JSON.stringify(metadata.value) !==
+      JSON.stringify(resource.value.metadata) ||
+      Object.entries(resource.value.fields).some(
+        ([name, field]) =>
+          field.editable &&
+          (fieldInputs.value[name] ?? "") !== fieldText(field),
+      )),
 );
 const dirty = computed(
   () => sourceJSON.value !== persisted.value || !!formDirty.value,
@@ -91,15 +99,132 @@ const differsFromDesired = computed(
       })) ?? [],
     ),
 );
+function fieldText(field: Resource["fields"][string]) {
+  return field.values.join(field.format === "lines" ? "\n" : " ");
+}
 const fieldLabels: Record<string, string> = {
-  listen: "监听地址 / 端口与选项",
+  listeners: "监听（每行一项）",
   domains: "域名",
   upstream: "上游地址",
+  upstream_servers: "上游组成员（每行一项，支持 weight=权重）",
+  location_prefix: "匹配路径前缀",
   body_size: "最大请求体",
   connect_timeout: "连接超时",
   read_timeout: "读取超时",
+  send_timeout: "发送超时",
   session_timeout: "会话超时",
+  responses: "UDP 会话预期响应次数",
+  http_version: "上游 HTTP 版本",
+  buffering: "响应缓冲",
+  request_buffering: "请求缓冲",
+  request_headers: "转发请求头（每行：名称 参数值）",
+  response_headers: "响应头（每行：名称 参数值 [always]）",
+  upstream_tls_verify: "校验上游 TLS",
+  upstream_tls_sni: "发送上游 SNI",
+  upstream_tls_name: "上游 TLS 校验名称",
+  upstream_tls_ca: "上游受信 CA 路径",
+  certificate: "证书链路径",
+  certificate_key: "证书私钥路径",
+  tls_protocols: "TLS 协议",
+  access_log: "访问日志路径及格式，或 off",
+  error_log: "错误日志路径及级别",
+  cache: "响应缓存",
+  trusted_sources: "可信代理来源（每行一个 IP/CIDR）",
+  real_ip_header: "真实 IP 头",
+  real_ip_recursive: "递归解析真实 IP",
+  access_list: "访问列表",
 };
+const toggleFields = new Set([
+  "buffering",
+  "request_buffering",
+  "upstream_tls_verify",
+  "upstream_tls_sni",
+  "real_ip_recursive",
+]);
+function fieldOptions(name: string) {
+  if (toggleFields.has(name))
+    return [
+      { label: "继承默认", value: "" },
+      { label: "开启", value: "on" },
+      { label: "关闭", value: "off" },
+    ];
+  if (name === "cache")
+    return [
+      { label: "继承默认", value: "" },
+      { label: "关闭", value: "off" },
+      { label: "受管缓存", value: "nginxpanel_http" },
+    ];
+  if (name === "access_list")
+    return [
+      { label: "不绑定", value: "" },
+      ...(tree.value?.access_lists
+        .filter((item) => item.editable)
+        .map((item) => ({
+          label: item.name || item.id.slice(0, 8),
+          value: item.id,
+        })) ?? []),
+    ];
+  return null;
+}
+function canPreset(kind: "websocket" | "streaming" | "http") {
+  const fields =
+    kind === "streaming"
+      ? ["buffering", "request_buffering", "cache", "read_timeout"]
+      : ["request_headers", "http_version"];
+  return fields.every((field) => resource.value?.fields[field]?.editable);
+}
+function preset(kind: "websocket" | "streaming" | "http") {
+  if (
+    !resource.value ||
+    busy.value ||
+    differsFromDesired.value ||
+    !canPreset(kind)
+  )
+    return;
+  if (kind === "streaming") {
+    for (const [name, value] of Object.entries({
+      buffering: "off",
+      request_buffering: "off",
+      cache: "off",
+      read_timeout: "3600s",
+    }))
+      if (resource.value.fields[name]?.editable)
+        fieldInputs.value[name] = value;
+  } else if (
+    resource.value.fields.request_headers?.editable &&
+    resource.value.fields.http_version?.editable
+  ) {
+    const headers = (fieldInputs.value.request_headers ?? "")
+      .split("\n")
+      .filter((line) => !/^(Upgrade|Connection)\s/i.test(line.trim()));
+    if (kind === "websocket")
+      headers.push("Upgrade $http_upgrade", "Connection upgrade");
+    fieldInputs.value.request_headers = headers.filter(Boolean).join("\n");
+    fieldInputs.value.http_version = "1.1";
+  }
+}
+const upstreamURI = computed({
+  get: () =>
+    fieldInputs.value.upstream?.match(/^https?:\/\/[^/]+(\/.*)$/)?.[1] ?? "",
+  set: (value: string) => {
+    const origin =
+      fieldInputs.value.upstream?.match(/^(https?:\/\/[^/]+)/)?.[1];
+    if (origin) fieldInputs.value.upstream = origin + value;
+  },
+});
+const rewritePrefix = computed({
+  get: () => !!upstreamURI.value,
+  set: (value: boolean) => {
+    upstreamURI.value = value ? upstreamURI.value || "/" : "";
+  },
+});
+const pathExample = computed(() => {
+  const prefix = fieldInputs.value.location_prefix || "/";
+  const incoming = prefix + (prefix.endsWith("/") ? "" : "/") + "example";
+  const uri = upstreamURI.value;
+  return `${incoming} → ${uri ? uri + incoming.slice(prefix.length) : incoming}`;
+});
+
 interface Revision {
   id: string;
   version: number;
@@ -170,6 +295,7 @@ async function preview() {
   });
 }
 async function save(draft = false, validate = false, apply = false) {
+  if (formDirty.value) return;
   const input = {
     base_version: tree.value?.version ?? 0,
     files: files.value,
@@ -207,23 +333,26 @@ function selectResource(value: Resource) {
   if (formDirty.value && !window.confirm("字段修改尚未保存，确认切换？"))
     return;
   resource.value = value;
+  metadata.value = structuredClone(value.metadata);
   fieldInputs.value = Object.fromEntries(
-    Object.entries(value.fields).map(([key, field]) => [
-      key,
-      field.values.join(" "),
-    ]),
+    Object.entries(value.fields).map(([key, field]) => [key, fieldText(field)]),
   );
 }
 async function saveFields() {
-  if (!resource.value || !tree.value) return;
+  if (!resource.value || !tree.value || differsFromDesired.value) return;
   const changes: Record<string, string[]> = {};
   for (const [name, field] of Object.entries(resource.value.fields)) {
     const value = fieldInputs.value[name] ?? "";
-    if (field.editable && value !== field.values.join(" "))
+    if (field.editable && value !== fieldText(field))
       changes[name] = value.trim()
-        ? name === "listen" || name === "domains"
+        ? field.format === "tokens"
           ? value.trim().split(/\s+/)
-          : [value.trim()]
+          : field.format === "lines"
+            ? value
+                .split("\n")
+                .map((line) => line.trim())
+                .filter(Boolean)
+            : [value.trim()]
         : [];
   }
   const id = resource.value.id,
@@ -233,12 +362,46 @@ async function saveFields() {
       id,
       version,
       changes,
-      keyFor({ id, version, changes }),
+      keyFor({ id, version, changes, metadata: metadata.value }),
+      metadata.value,
     );
     setTree(result.tree);
     const updated = result.tree.resources.find((r) => r.id === id);
     if (updated) selectResource(updated);
   }, "常用字段已保存");
+}
+async function resourceAction(action: "copy" | "delete") {
+  if (!resource.value || !tree.value || dirty.value) return;
+  const id = resource.value.id,
+    version = tree.value.version;
+  if (
+    action === "delete" &&
+    !window.confirm(
+      `确认从期望配置移除 ${resource.value.metadata.name || id}？`,
+    )
+  )
+    return;
+  const previous = new Set(tree.value.resources.map((item) => item.id));
+  await run(
+    async () => {
+      const result = await api.resourceAction(
+        id,
+        action,
+        version,
+        keyFor({ action, id, version }),
+      );
+      setTree(result.tree);
+      if (action === "copy") {
+        const copy = result.tree.resources.find(
+          (item) => !previous.has(item.id),
+        );
+        if (copy) selectResource(copy);
+      }
+    },
+    action === "copy"
+      ? "副本已保存为停用状态"
+      : "代理已从期望配置移除，尚未应用",
+  );
 }
 function addFile() {
   const path = newPath.value.trim();
@@ -260,10 +423,23 @@ function removeFile() {
   selected.value = files.value[0]?.id ?? "";
 }
 async function createResource() {
+  if (dirty.value) return;
   const input = {
     base_version: tree.value?.version ?? 0,
     kind: createKind.value,
-    listen: createListen.value.trim().split(/\s+/),
+    listen: createListen.value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    upstream_servers: createMembers.value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    metadata: {
+      name: createName.value.trim(),
+      notes: createNotes.value,
+      enabled: true,
+    },
     domains:
       createKind.value === "http"
         ? createDomains.value.trim().split(/\s+/)
@@ -347,7 +523,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         >应用已保存修订</n-button
       ><n-button
         type="primary"
-        :disabled="busy || differsFromDesired"
+        :disabled="busy || dirty"
         @click="createVisible = true"
         >＋ 新建代理配置</n-button
       >
@@ -369,7 +545,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         <aside class="file-tree">
           <div class="section-heading">
             <h2>配置文件</h2>
-            <n-button text title="添加文件" @click="fileVisible = true"
+            <n-button
+              text
+              title="添加文件"
+              :disabled="busy || !!formDirty"
+              @click="fileVisible = true"
               >＋</n-button
             >
           </div>
@@ -395,6 +575,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   v-if="currentFile.path !== 'nginx.conf'"
                   text
                   type="error"
+                  :disabled="busy || !!formDirty"
                   @click="removeFile"
                   >移除</n-button
                 >
@@ -403,6 +584,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             <textarea
               v-model="currentFile.content"
               class="code-editor"
+              :disabled="busy || !!formDirty"
               spellcheck="false"
               :aria-label="currentFile.path"
               :maxlength="262144"
@@ -432,21 +614,28 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           >{{ files.length }} 个文件 · 原文与字段共享修订</span
         >
         <div class="inline-gap">
-          <n-button :loading="busy" @click="preview">解析与预览</n-button
-          ><n-button :disabled="busy" @click="save(true)">保存草稿</n-button
-          ><n-button :disabled="busy" @click="save(false, true)"
+          <n-button :loading="busy" :disabled="!!formDirty" @click="preview"
+            >解析与预览</n-button
+          ><n-button :disabled="busy || !!formDirty" @click="save(true)"
+            >保存草稿</n-button
+          ><n-button :disabled="busy || !!formDirty" @click="save(false, true)"
             >保存并校验</n-button
           ><n-button
             type="primary"
             :disabled="
               busy ||
+              !!formDirty ||
               !runtime?.available ||
               !runtime.integrity ||
               !runtime.running
             "
             @click="save(false, false, true)"
             >保存并应用</n-button
-          ><n-button type="primary" :loading="busy" @click="save()"
+          ><n-button
+            type="primary"
+            :loading="busy"
+            :disabled="!!formDirty"
+            @click="save()"
             >保存有效修订</n-button
           >
         </div>
@@ -467,10 +656,16 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             :key="item.id"
             class="file-item"
             :class="{ selected: resource?.id === item.id }"
+            :disabled="busy"
             @click="selectResource(item)"
           >
             {{ item.kind.toUpperCase() }} ·
-            {{ item.fields.domains?.values[0] ?? item.id.slice(0, 8) }}
+            {{
+              item.metadata.name ||
+              item.fields.domains?.values[0] ||
+              item.id.slice(0, 8)
+            }}
+            · {{ item.metadata.enabled ? "启用" : "停用" }}
           </button>
         </aside>
         <div class="resource-form">
@@ -479,20 +674,99 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               <h2>{{ resource.kind.toUpperCase() }} 代理</h2>
               <span class="mono muted">{{ resource.id.slice(0, 8) }}</span>
             </div>
-            <n-form label-placement="top"
-              ><n-form-item
+            <div class="toolbar">
+              <n-button
+                :disabled="busy || dirty"
+                @click="resourceAction('copy')"
+                >复制</n-button
+              >
+              <n-button
+                type="error"
+                :disabled="busy || dirty"
+                @click="resourceAction('delete')"
+                >移除</n-button
+              >
+            </div>
+            <n-form label-placement="top">
+              <n-form-item label="名称"
+                ><n-input
+                  v-model:value="metadata.name"
+                  :disabled="busy || differsFromDesired"
+                  :maxlength="128"
+              /></n-form-item>
+              <n-form-item label="备注"
+                ><n-input
+                  v-model:value="metadata.notes"
+                  type="textarea"
+                  :disabled="busy || differsFromDesired"
+                  :maxlength="2048"
+              /></n-form-item>
+              <n-form-item label="启用"
+                ><n-switch
+                  v-model:value="metadata.enabled"
+                  :disabled="busy || differsFromDesired"
+              /></n-form-item>
+              <template v-if="resource.kind === 'http'">
+                <div class="toolbar">
+                  <n-button
+                    :disabled="
+                      busy || differsFromDesired || !canPreset('websocket')
+                    "
+                    @click="preset('websocket')"
+                    >WebSocket</n-button
+                  ><n-button
+                    :disabled="
+                      busy || differsFromDesired || !canPreset('streaming')
+                    "
+                    @click="preset('streaming')"
+                    >SSE / 流式响应</n-button
+                  ><n-button
+                    :disabled="busy || differsFromDesired || !canPreset('http')"
+                    @click="preset('http')"
+                    >普通 HTTP</n-button
+                  >
+                </div>
+                <n-form-item label="替换匹配前缀"
+                  ><n-switch
+                    v-model:value="rewritePrefix"
+                    :disabled="
+                      busy ||
+                      differsFromDesired ||
+                      !resource.fields.upstream?.editable
+                    "
+                /></n-form-item>
+                <n-form-item v-if="rewritePrefix" label="转发到上游子路径"
+                  ><n-input
+                    v-model:value="upstreamURI"
+                    :disabled="
+                      busy ||
+                      differsFromDesired ||
+                      !resource.fields.upstream?.editable
+                    "
+                    placeholder="/"
+                /></n-form-item>
+                <p class="muted">路径示例：{{ pathExample }}</p>
+              </template>
+              <n-form-item
                 v-for="(field, name) in resource.fields"
                 :key="name"
                 :label="fieldLabels[name] ?? name"
                 :feedback="field.reason"
-                ><n-input
+                ><n-select
+                  v-if="fieldOptions(name)"
                   v-model:value="fieldInputs[name]"
-                  :disabled="!field.editable || differsFromDesired"
+                  :options="fieldOptions(name) ?? []"
+                  :disabled="busy || !field.editable || differsFromDesired" />
+                <n-input
+                  v-else
+                  v-model:value="fieldInputs[name]"
+                  :type="field.format === 'lines' ? 'textarea' : 'text'"
+                  :disabled="busy || !field.editable || differsFromDesired"
                   placeholder="未设置" /></n-form-item
               ><n-button
                 type="primary"
                 :loading="busy"
-                :disabled="differsFromDesired || !formDirty"
+                :disabled="busy || differsFromDesired || !formDirty"
                 @click="saveFields"
                 >保存字段</n-button
               ></n-form
@@ -502,9 +776,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       </div>
       <n-empty v-else description="暂无受管代理配置"
         ><template #extra
-          ><n-button
-            :disabled="differsFromDesired"
-            @click="createVisible = true"
+          ><n-button :disabled="busy || dirty" @click="createVisible = true"
             >新建代理配置</n-button
           ></template
         ></n-empty
@@ -516,8 +788,14 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     preset="card"
     title="新建代理配置"
     style="width: 480px; max-width: 94vw"
-    ><n-form @submit.prevent="createResource"
-      ><n-form-item label="类型"
+    ><n-form :disabled="busy" @submit.prevent="createResource">
+      <n-form-item label="名称"
+        ><n-input v-model:value="createName" :maxlength="128"
+      /></n-form-item>
+      <n-form-item label="备注"
+        ><n-input v-model:value="createNotes" type="textarea" :maxlength="2048"
+      /></n-form-item>
+      <n-form-item label="类型"
         ><n-select
           v-model:value="createKind"
           :options="[
@@ -527,7 +805,8 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       ><n-form-item label="监听"
         ><n-input
           v-model:value="createListen"
-          placeholder="8080 或 [::]:8080；UDP 添加 udp" /></n-form-item
+          type="textarea"
+          placeholder="每行一项：8080 或 [::]:8080；UDP 添加 udp" /></n-form-item
       ><n-form-item v-if="createKind === 'http'" label="域名"
         ><n-input
           v-model:value="createDomains"
@@ -538,7 +817,16 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           :placeholder="
             createKind === 'http' ? 'http://127.0.0.1:3000' : '127.0.0.1:5432'
           " /></n-form-item
-      ><n-button block type="primary" attr-type="submit" :loading="busy"
+      ><n-form-item label="可选上游组成员"
+        ><n-input
+          v-model:value="createMembers"
+          type="textarea"
+          placeholder="127.0.0.1:3000 weight=2&#10;127.0.0.1:3001 weight=1"
+      /></n-form-item>
+      <p class="muted">
+        上游组成员留空时使用单一地址。HTTPS 上游地址的主机名用于 TLS 校验。
+      </p>
+      <n-button block type="primary" attr-type="submit" :loading="busy"
         >保存配置</n-button
       ></n-form
     ></n-modal

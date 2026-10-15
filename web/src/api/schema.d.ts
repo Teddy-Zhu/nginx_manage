@@ -311,10 +311,62 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["deleteResource"];
         options?: never;
         head?: never;
         patch: operations["patchResource"];
+        trace?: never;
+    };
+    "/nginx/resources/{id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["copyResource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/access-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createAccessList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/access-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateAccessList"];
+        post?: never;
+        delete: operations["deleteAccessList"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/nginx/revisions": {
@@ -428,6 +480,8 @@ export interface components {
         Field: {
             values: string[];
             editable: boolean;
+            /** @enum {string} */
+            format: "value" | "tokens" | "lines";
             reason?: string;
         };
         Resource: {
@@ -436,6 +490,7 @@ export interface components {
             kind: "http" | "stream";
             file_id: string;
             block_key: string;
+            metadata: components["schemas"]["ResourceMetadata"];
             line: number;
             fields: {
                 [key: string]: components["schemas"]["Field"];
@@ -447,17 +502,50 @@ export interface components {
             version: number;
             state: string;
             files: components["schemas"]["File"][];
+            access_lists: components["schemas"]["AccessList"][];
             resources: components["schemas"]["Resource"][];
             diagnostics: components["schemas"]["Diagnostic"][];
+        };
+        ResourceMetadata: {
+            name: string;
+            notes: string;
+            enabled: boolean;
+        };
+        ResourceAction: {
+            /** Format: int64 */
+            base_version: number;
+            name?: string;
+        };
+        AccessList: {
+            id: string;
+            file_id: string;
+            name: string;
+            notes: string;
+            mode: string;
+            entries: string[];
+            editable: boolean;
+            reason: string;
+        };
+        AccessListInput: {
+            /** Format: int64 */
+            base_version: number;
+            name: string;
+            notes: string;
+            /** @enum {string} */
+            mode: "allowlist" | "denylist";
+            entries: string[];
         };
         CreateResource: {
             /** Format: int64 */
             base_version: number;
             /** @enum {string} */
             kind: "http" | "stream";
+            /** @description 每项为一条监听的地址及选项。 */
             listen: string[];
             domains: string[];
             upstream: string;
+            upstream_servers?: string[];
+            metadata?: components["schemas"]["ResourceMetadata"];
         };
         SaveRequest: {
             /** Format: int64 */
@@ -911,6 +999,29 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
+    deleteResource: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAction"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     patchResource: {
         parameters: {
             query?: never;
@@ -929,6 +1040,7 @@ export interface operations {
                 "application/json": {
                     /** Format: int64 */
                     base_version: number;
+                    metadata?: components["schemas"]["ResourceMetadata"];
                     changes: {
                         [key: string]: string[];
                     };
@@ -937,6 +1049,96 @@ export interface operations {
         };
         responses: {
             201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    copyResource: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAction"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createAccessList: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessListInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    updateAccessList: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessListInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deleteAccessList: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAction"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

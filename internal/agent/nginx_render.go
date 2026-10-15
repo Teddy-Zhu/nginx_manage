@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -110,12 +111,71 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 		return nil, errors.New("the managed http and pid entry points are required")
 	}
 	m.Dependencies = map[string]string{}
+	httpsUpstream, cacheEnabled := false, false
+	var scan func([]*nginxconfig.Node) error
+	scan = func(nodes []*nginxconfig.Node) error {
+		expanded, err := n.expand(p, nodes, 0)
+		if err != nil {
+			return err
+		}
+		for _, node := range expanded {
+			if node.ResourceID != "" && !node.Enabled() {
+				continue
+			}
+			if node.Name == "proxy_pass" && len(node.Args) == 1 && strings.HasPrefix(node.Args[0].Value, "https://") {
+				httpsUpstream = true
+			}
+			if node.Name == "proxy_cache" && len(node.Args) == 1 && node.Args[0].Value == "nginxpanel_http" {
+				cacheEnabled = true
+			}
+			switch node.Name {
+			case "ssl_certificate", "ssl_certificate_key", "ssl_trusted_certificate", "proxy_ssl_trusted_certificate":
+				if len(node.Args) != 1 {
+					return errors.New("invalid certificate reference")
+				}
+				name := node.Args[0].Value
+				if _, ok := m.Dependencies[name]; !ok {
+					if len(m.Dependencies) >= limits.CertificateReferences {
+						return errors.New("certificate reference limit reached")
+					}
+					data, err := n.certificateFile(name)
+					if err != nil {
+						return err
+					}
+					m.Dependencies[name] = secure.Hash(data)
+				}
+			}
+			if err := scan(node.Children); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := scan(main.Nodes); err != nil {
+		return nil, err
+	}
+	defaults, err := n.httpDefaults(p, httpBlock, httpsUpstream, cacheEnabled, m)
+	if err != nil {
+		return nil, err
+	}
 	for _, doc := range p.Documents {
 		edits := []nginxconfig.Edit{}
 		var walk func([]*nginxconfig.Node) error
 		walk = func(nodes []*nginxconfig.Node) error {
 			for _, node := range nodes {
+				if node.ResourceID != "" && !node.Enabled() {
+					edits = append(edits, nginxconfig.Edit{Start: node.Start, End: node.End, Text: "# Disabled managed resource " + node.ResourceID + "\n"})
+					if node.MarkerStart >= 0 {
+						edits = append(edits, nginxconfig.Edit{Start: node.MarkerStart, End: node.MarkerEnd})
+					}
+					if node.MetadataStart >= 0 {
+						edits = append(edits, nginxconfig.Edit{Start: node.MetadataStart, End: node.MetadataEnd})
+					}
+					continue
+				}
 				switch node.Name {
+				case "stream":
+					edits = append(edits, nginxconfig.Edit{Start: node.Open + 1, End: node.Open + 1, Text: "\n" + runtimeLogFormat("stream")})
 				case "include":
 					if len(node.Args) != 1 {
 						return errors.New("invalid include")
@@ -123,27 +183,11 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 					arg := node.Args[0]
 					edits = append(edits, nginxconfig.Edit{Start: arg.Start, End: arg.End, Text: nginxQuote(filepath.Join(filepath.Dir(n.configPath(revisionDir(m.RevisionID))), arg.Value))})
 				case "access_log", "error_log":
-					if len(node.Args) > 0 && node.Args[0].Value != "off" {
+					if len(node.Args) > 0 && node.Args[0].Value != "off" && node.Args[0].Value != "/dev/null" {
 						if err := secure.RootDirectory(filepath.Dir(filepath.Join(n.DataDir, node.Args[0].Value)), 0755); err != nil {
 							return err
 						}
 					}
-				case "ssl_certificate", "ssl_certificate_key", "ssl_trusted_certificate", "proxy_ssl_trusted_certificate":
-					if len(node.Args) != 1 {
-						return errors.New("invalid certificate reference")
-					}
-					name := node.Args[0].Value
-					if _, ok := m.Dependencies[name]; ok {
-						break
-					}
-					if len(m.Dependencies) >= limits.CertificateReferences {
-						return errors.New("certificate reference limit reached")
-					}
-					b, err := n.certificateFile(name)
-					if err != nil {
-						return err
-					}
-					m.Dependencies[name] = secure.Hash(b)
 				}
 				if err := walk(node.Children); err != nil {
 					return err
@@ -156,7 +200,8 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 		}
 		if doc == main {
 			probe := "\n    # Reserved local revision probe.\n    server {\n        listen " + nginxQuote("unix:"+filepath.Join(n.DataDir, "run", "nginx-probe.sock")) + ";\n        server_name localhost;\n        access_log off;\n        location = /__nginxpanel_revision { return 200 " + nginxQuote(m.Probe) + "; }\n    }\n"
-			probe += "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
+			controls := "\n" + runtimeLogFormat("http") + defaults + "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
+			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Open + 1, End: httpBlock.Open + 1, Text: controls})
 			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Close, End: httpBlock.Close, Text: probe})
 			edits = append(edits, nginxconfig.Edit{Start: 0, End: 0, Text: "# Generated runtime controls; original revision is retained in the database.\nuser " + n.WorkerUser + " " + n.workerGroup + ";\n"})
 		}
@@ -184,7 +229,7 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 			return nil, err
 		}
 		for _, server := range children {
-			if server.Name != "server" {
+			if server.Name != "server" || !server.Enabled() {
 				continue
 			}
 			directives, err := n.expand(p, server.Children, 0)
@@ -229,6 +274,20 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, e
 	return contents, nil
 }
 
+// Format names are reserved by policy. JSON values exclude query strings,
+// request bodies, credentials and Stream payloads.
+func runtimeLogFormat(kind string) string {
+	fields := []string{"time_iso8601", "remote_addr", "host", "request_method", "uri", "status", "body_bytes_sent", "request_time", "upstream_addr", "upstream_status", "upstream_response_time"}
+	if kind == "stream" {
+		fields = []string{"time_iso8601", "remote_addr", "protocol", "status", "session_time", "bytes_sent", "bytes_received", "upstream_addr", "upstream_connect_time", "upstream_bytes_sent", "upstream_bytes_received"}
+	}
+	parts := make([]string, len(fields))
+	for i, field := range fields {
+		parts[i] = `"` + field + `":"$` + field + `"`
+	}
+	return "    log_format nginxpanel_" + kind + " escape=json '{" + strings.Join(parts, ",") + "}';\n"
+}
+
 func (n *Nginx) expandedBudget(p *nginxconfig.Parsed, nodes []*nginxconfig.Node, depth int, count *int) error {
 	if depth > limits.Depth {
 		return errors.New("expanded configuration depth limit")
@@ -238,6 +297,9 @@ func (n *Nginx) expandedBudget(p *nginxconfig.Parsed, nodes []*nginxconfig.Node,
 		return err
 	}
 	for _, node := range expanded {
+		if node.ResourceID != "" && !node.Enabled() {
+			continue
+		}
 		*count += 1
 		if *count > limits.Directives {
 			return errors.New("expanded configuration directive limit")
@@ -253,7 +315,7 @@ func (n *Nginx) runtimeDirectories() error {
 	if err := secure.RootDirectory(filepath.Join(n.DataDir, "nginx", "tmp"), 0755); err != nil {
 		return err
 	}
-	for _, name := range []string{"client", "proxy"} {
+	for _, name := range []string{"client", "proxy", "cache"} {
 		dir := filepath.Join(n.DataDir, "nginx", "tmp", name)
 		info, err := os.Lstat(dir)
 		if os.IsNotExist(err) {
@@ -399,4 +461,82 @@ func (n *Nginx) tlsExpectation(l listener, server, parent []*nginxconfig.Node) (
 		sni = "nginxpanel-probe" + sni
 	}
 	return tlsProbe{Address: listenerAddress(l), ServerName: sni, Fingerprint: secure.Hash(cert.Raw)}, nil
+}
+
+func (n *Nginx) httpDefaults(p *nginxconfig.Parsed, httpBlock *nginxconfig.Node, httpsUpstream, cacheEnabled bool, m *manifest) (string, error) {
+	nodes, err := n.expand(p, httpBlock.Children, 0)
+	if err != nil {
+		return "", err
+	}
+	existing := map[string]bool{}
+	for _, node := range nodes {
+		existing[node.Name] = true
+	}
+	var out strings.Builder
+	if httpsUpstream && !existing["proxy_ssl_trusted_certificate"] {
+		name, err := n.systemCA()
+		if err != nil {
+			return "", err
+		}
+		b, err := n.certificateFile(name)
+		if err != nil {
+			return "", err
+		}
+		if _, known := m.Dependencies[name]; !known && len(m.Dependencies) >= limits.CertificateReferences {
+			return "", errors.New("certificate reference limit reached")
+		}
+		m.Dependencies[name] = secure.Hash(b)
+		out.WriteString("    proxy_ssl_trusted_certificate " + nginxQuote(name) + ";\n")
+	}
+	if cacheEnabled {
+		out.WriteString("    proxy_cache_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "cache")) + " levels=1:2 keys_zone=nginxpanel_http:10m max_size=256m inactive=60m use_temp_path=off;\n")
+		defaults := []struct{ name, value string }{{"proxy_cache_key", `"$scheme$host$proxy_host$request_uri"`}, {"proxy_cache_bypass", "$http_authorization $http_cookie"}, {"proxy_no_cache", "$http_authorization $http_cookie $upstream_http_set_cookie"}}
+		for _, directive := range defaults {
+			if !existing[directive.name] {
+				out.WriteString("    " + directive.name + " " + directive.value + ";\n")
+			}
+		}
+	}
+	return out.String(), nil
+}
+func (n *Nginx) systemCA() (string, error) {
+	for _, candidate := range []string{"/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt"} {
+		resolved, err := trustedFile(candidate, false)
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(resolved)
+		if err != nil || info.Size() > 1<<20 {
+			continue
+		}
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			return "", err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(data) {
+			return "", errors.New("invalid system CA bundle")
+		}
+		name := "certificates/ca/system/" + secure.Hash(data) + ".pem"
+		full := filepath.Join(n.DataDir, name)
+		if err := secure.RootDirectory(filepath.Dir(full), 0755); err != nil {
+			return "", err
+		}
+		if _, err := os.Lstat(full); os.IsNotExist(err) {
+			if err := durableFile(full, data, 0640, n.gid); err != nil {
+				return "", err
+			}
+			if err := syncDir(filepath.Dir(full)); err != nil {
+				return "", err
+			}
+		} else if err != nil {
+			return "", err
+		}
+		saved, err := n.certificateFile(name)
+		if err != nil || !bytes.Equal(saved, data) {
+			return "", ErrExternalChange
+		}
+		return name, nil
+	}
+	return "", errors.New("trusted system CA bundle is unavailable")
 }
