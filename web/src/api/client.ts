@@ -30,6 +30,8 @@ export type CaptureExternalRequest =
   components["schemas"]["CaptureExternalRequest"];
 export type RestoreExternalRequest =
   components["schemas"]["RestoreExternalRequest"];
+export type NativeModulesRequest =
+  components["schemas"]["NativeModulesRequest"];
 export interface Revision {
   id: string;
   version: number;
@@ -272,6 +274,13 @@ export const api = {
     request<SaveResult>({
       method: "POST",
       url: "/nginx/external/restore",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  setNativeModules: (data: NativeModulesRequest, key: string) =>
+    request<SaveResult>({
+      method: "PUT",
+      url: "/nginx/native-modules",
       data,
       headers: { "Idempotency-Key": key },
     }),

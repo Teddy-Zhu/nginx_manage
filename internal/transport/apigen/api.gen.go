@@ -511,12 +511,13 @@ type ExternalSnapshot struct {
 	Dependencies []ExternalFile `json:"dependencies"`
 
 	// DeploymentId 不可变发布身份，初始发布为空；相同逻辑修订可有不同发布身份。
-	DeploymentId string          `json:"deployment_id"`
-	Detail       *ExternalDetail `json:"detail"`
-	Files        []ExternalFile  `json:"files"`
-	Integrity    bool            `json:"integrity"`
-	RevisionId   string          `json:"revision_id"`
-	Snapshot     string          `json:"snapshot"`
+	DeploymentId       string          `json:"deployment_id"`
+	Detail             *ExternalDetail `json:"detail"`
+	Files              []ExternalFile  `json:"files"`
+	Integrity          bool            `json:"integrity"`
+	ModuleDependencies []ExternalFile  `json:"module_dependencies"`
+	RevisionId         string          `json:"revision_id"`
+	Snapshot           string          `json:"snapshot"`
 }
 
 // Field defines model for Field.
@@ -575,6 +576,27 @@ type Module struct {
 	Reason       *string  `json:"reason,omitempty"`
 }
 
+// NativeModule defines model for NativeModule.
+type NativeModule struct {
+	// Available 批准内容与当前二进制绑定及文件校验通过，不代表已加载或 ABI 校验完成。
+	Available bool     `json:"available"`
+	Features  []string `json:"features"`
+	Id        string   `json:"id"`
+	Name      string   `json:"name"`
+	Path      string   `json:"path"`
+	Reason    string   `json:"reason"`
+
+	// Running 相同散列副本所属发布已确认运行。
+	Running bool   `json:"running"`
+	Sha256  string `json:"sha256"`
+}
+
+// NativeModulesRequest defines model for NativeModulesRequest.
+type NativeModulesRequest struct {
+	BaseVersion int64    `json:"base_version"`
+	Paths       []string `json:"paths"`
+}
+
 // NginxFeature defines model for NginxFeature.
 type NginxFeature struct {
 	Available bool   `json:"available"`
@@ -585,6 +607,7 @@ type NginxFeature struct {
 type NginxFeatures struct {
 	Available bool                    `json:"available"`
 	Features  map[string]NginxFeature `json:"features"`
+	Modules   []NativeModule          `json:"modules"`
 	Reason    string                  `json:"reason"`
 	Version   string                  `json:"version"`
 }
@@ -675,11 +698,14 @@ type Tree struct {
 	AccessLists []AccessList `json:"access_lists"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
 	Files       []File       `json:"files"`
-	Resources   []Resource   `json:"resources"`
-	RevisionId  string       `json:"revision_id"`
-	State       string       `json:"state"`
-	Version     int64        `json:"version"`
-	WafPolicies []WAFPolicy  `json:"waf_policies"`
+
+	// ModulePaths 原文中的模块选择，草稿可能含重复或未批准路径，诊断会明确指出。
+	ModulePaths []string    `json:"module_paths"`
+	Resources   []Resource  `json:"resources"`
+	RevisionId  string      `json:"revision_id"`
+	State       string      `json:"state"`
+	Version     int64       `json:"version"`
+	WafPolicies []WAFPolicy `json:"waf_policies"`
 }
 
 // WAFConfig defines model for WAFConfig.
@@ -926,6 +952,14 @@ type RestoreNginxExternalParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// SetNginxNativeModulesParams defines parameters for SetNginxNativeModules.
+type SetNginxNativeModulesParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // CreateResourceParams defines parameters for CreateResource.
 type CreateResourceParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
@@ -1092,6 +1126,9 @@ type CaptureNginxExternalJSONRequestBody = CaptureExternalRequest
 // RestoreNginxExternalJSONRequestBody defines body for RestoreNginxExternal for application/json ContentType.
 type RestoreNginxExternalJSONRequestBody = RestoreExternalRequest
 
+// SetNginxNativeModulesJSONRequestBody defines body for SetNginxNativeModules for application/json ContentType.
+type SetNginxNativeModulesJSONRequestBody = NativeModulesRequest
+
 // CreateResourceJSONRequestBody defines body for CreateResource for application/json ContentType.
 type CreateResourceJSONRequestBody = CreateResource
 
@@ -1196,6 +1233,9 @@ type ServerInterface interface {
 
 	// (GET /nginx/features)
 	GetNginxFeatures(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /nginx/native-modules)
+	SetNginxNativeModules(w http.ResponseWriter, r *http.Request, params SetNginxNativeModulesParams)
 
 	// (POST /nginx/resources)
 	CreateResource(w http.ResponseWriter, r *http.Request, params CreateResourceParams)
@@ -2376,6 +2416,70 @@ func (siw *ServerInterfaceWrapper) GetNginxFeatures(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// SetNginxNativeModules operation middleware
+func (siw *ServerInterfaceWrapper) SetNginxNativeModules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetNginxNativeModulesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetNginxNativeModules(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateResource operation middleware
 func (siw *ServerInterfaceWrapper) CreateResource(w http.ResponseWriter, r *http.Request) {
 
@@ -3440,6 +3544,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/external", wrapper.InspectNginxExternal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/external/capture", wrapper.CaptureNginxExternal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/external/restore", wrapper.RestoreNginxExternal)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/native-modules", wrapper.SetNginxNativeModules)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/preview", wrapper.PreviewConfigTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources", wrapper.CreateResource)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.DeleteResource)

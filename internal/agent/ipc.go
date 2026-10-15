@@ -21,7 +21,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 3
+const Protocol = 4
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`
@@ -123,7 +123,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("POST /v1/nginx/inspect", s.inspect)
 	mux.HandleFunc("GET /v1/nginx/features", func(w http.ResponseWriter, r *http.Request) {
 		if s.Nginx == nil {
-			writeJSON(w, NginxFeatures{Features: map[string]Feature{}, Reason: "专用 Nginx 执行尚未配置"})
+			writeJSON(w, NginxFeatures{Features: map[string]Feature{}, Modules: []NativeModule{}, Reason: "专用 Nginx 执行尚未配置"})
 			return
 		}
 		writeJSON(w, s.Nginx.Features(r.Context()))

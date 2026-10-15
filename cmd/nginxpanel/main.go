@@ -15,6 +15,7 @@ import (
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/app"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/platform"
 )
 
@@ -49,6 +50,7 @@ func run() error {
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
+	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
 	devAgent := flags.Bool("dev", false, "non-root read-only development agent")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
@@ -56,6 +58,12 @@ func run() error {
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
 	}
+	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
+	if err != nil {
+		return fmt.Errorf("read native module catalog: %w", err)
+	}
+	policy := nginxconfig.DefaultPolicy()
+	policy.ModulePaths = nginxmodules.Paths(catalog)
 	absDir, err := filepath.Abs(*dataDir)
 	if err != nil {
 		return err
@@ -85,6 +93,7 @@ func run() error {
 			return nil
 		}
 		o := app.Defaults(absDir, true)
+		o.Policy = policy
 		o.Version = version
 		o.WebDir = *webDir
 		if *listen != "" {
@@ -96,6 +105,7 @@ func run() error {
 		return app.Run(ctx, o)
 	case "serve":
 		o := app.Defaults(absDir, false)
+		o.Policy = policy
 		o.Version = version
 		o.WebDir = *webDir
 		if *listen != "" {
@@ -109,7 +119,7 @@ func run() error {
 		if *nginxBinary == "" {
 			return errors.New("nginx-init requires --nginx-binary")
 		}
-		engine := &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: nginxconfig.DefaultPolicy(), Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}}
+		engine := &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: policy, Modules: catalog, Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}}
 		if err := engine.Open(); err != nil {
 			return err
 		}
@@ -130,9 +140,9 @@ func run() error {
 		journal := &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}
 		var engine *agent.Nginx
 		if *nginxBinary != "" {
-			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: nginxconfig.DefaultPolicy(), Journal: journal}
+			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: policy, Modules: catalog, Journal: journal}
 		}
-		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: nginxconfig.DefaultPolicy(), Journal: journal, Nginx: engine, Dev: *devAgent}).Run(ctx)
+		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent}).Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

@@ -36,6 +36,7 @@ import (
 type Options struct {
 	DataDir, Listen, Socket, WebDir, TLSCert, TLSKey, Version string
 	Dev                                                       bool
+	Policy                                                    nginxconfig.Policy
 }
 
 func Init(ctx context.Context, dataDir string) (string, error) {
@@ -196,7 +197,7 @@ func Run(ctx context.Context, o Options) error {
 		return errors.New("data directory is not initialized; run init first")
 	}
 	certificateStore := &certificates.Service{DB: db, Vault: vault}
-	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: nginxconfig.DefaultPolicy(), Certificates: certificateStore}
+	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: o.Policy, Certificates: certificateStore}
 	agentClient := agent.NewClient(o.Socket)
 	config.RequireFeatures = agentClient.RequireFeatures
 	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, Agent: agentClient, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
@@ -291,7 +292,7 @@ func Defaults(dataDir string, dev bool) Options {
 	if dev {
 		listen = "127.0.0.1:8080"
 	}
-	return Options{DataDir: dataDir, Listen: listen, Socket: SocketPath(dataDir), WebDir: "web/dist", TLSCert: filepath.Join(dataDir, "secrets", "node-tls", "cert.pem"), TLSKey: filepath.Join(dataDir, "secrets", "node-tls", "key.pem"), Dev: dev}
+	return Options{DataDir: dataDir, Listen: listen, Socket: SocketPath(dataDir), WebDir: "web/dist", TLSCert: filepath.Join(dataDir, "secrets", "node-tls", "cert.pem"), TLSKey: filepath.Join(dataDir, "secrets", "node-tls", "key.pem"), Dev: dev, Policy: nginxconfig.DefaultPolicy()}
 }
 
 func Fingerprint(dataDir string) (string, error) {

@@ -45,6 +45,7 @@ import {
 import { useAction, useIdempotency } from "../composables/action";
 import ConfigurationChanges from "../components/ConfigurationChanges.vue";
 import NginxExternal from "../components/NginxExternal.vue";
+import NginxModules from "../components/NginxModules.vue";
 
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency();
@@ -79,6 +80,7 @@ const diagnostics = ref<Tree["diagnostics"]>([]),
   historyVisible = ref(false);
 const changesVisible = ref(false),
   externalVisible = ref(false);
+const modulesVisible = ref(false);
 const createVisible = ref(false),
   fileVisible = ref(false),
   newPath = ref("");
@@ -736,6 +738,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       <n-button :disabled="busy || dirty" @click="externalVisible = true"
         >外部修改</n-button
       >
+      <n-button :disabled="busy || dirty" @click="modulesVisible = true"
+        >受信模块</n-button
+      >
       <n-button :disabled="busy" @click="showHistory">修订历史</n-button
       ><n-button :disabled="busy" @click="load">重新加载</n-button
       ><n-button
@@ -1102,6 +1107,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     :tree="tree"
     @captured="capturedExternal"
     @restored="loadRuntime"
+  />
+  <nginx-modules
+    v-model:show="modulesVisible"
+    :tree="tree"
+    @saved="setTree($event.tree)"
   />
   <n-modal
     v-model:show="createVisible"

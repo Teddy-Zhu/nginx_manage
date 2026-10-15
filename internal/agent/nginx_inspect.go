@@ -41,14 +41,15 @@ type ExternalDetail struct {
 	Note           string `json:"note"`
 }
 type ExternalSnapshot struct {
-	DeploymentID string          `json:"deployment_id"`
-	RevisionID   string          `json:"revision_id"`
-	Snapshot     string          `json:"snapshot"`
-	Integrity    bool            `json:"integrity"`
-	Complete     bool            `json:"complete"`
-	Files        []ExternalFile  `json:"files"`
-	Dependencies []ExternalFile  `json:"dependencies"`
-	Detail       *ExternalDetail `json:"detail"`
+	DeploymentID       string          `json:"deployment_id"`
+	RevisionID         string          `json:"revision_id"`
+	Snapshot           string          `json:"snapshot"`
+	Integrity          bool            `json:"integrity"`
+	Complete           bool            `json:"complete"`
+	Files              []ExternalFile  `json:"files"`
+	Dependencies       []ExternalFile  `json:"dependencies"`
+	ModuleDependencies []ExternalFile  `json:"module_dependencies"`
+	Detail             *ExternalDetail `json:"detail"`
 }
 
 func inspectPath(name string) bool {
@@ -188,7 +189,7 @@ func (n *Nginx) inspectLocked(in InspectRequest) (ExternalSnapshot, error) {
 // Scan metadata and hashes without requiring source plaintext. Recovery uses the
 // durable fingerprint to reject another external change before switching.
 func (n *Nginx) scanExternal(dir string, m manifest, filePath string, expected map[string]string, p *nginxconfig.Parsed, trace map[string][]renderReplacement) (ExternalSnapshot, error) {
-	out := ExternalSnapshot{RevisionID: m.RevisionID, DeploymentID: m.DeploymentID, Files: []ExternalFile{}, Dependencies: []ExternalFile{}, Complete: true, Integrity: true}
+	out := ExternalSnapshot{RevisionID: m.RevisionID, DeploymentID: m.DeploymentID, Files: []ExternalFile{}, Dependencies: []ExternalFile{}, ModuleDependencies: []ExternalFile{}, Complete: true, Integrity: true}
 	target := filepath.Join("revisions", dir)
 	root := filepath.Dir(n.configPath(dir))
 	names := map[string]bool{}
@@ -298,11 +299,21 @@ func (n *Nginx) scanExternal(dir string, m manifest, filePath string, expected m
 		}
 		out.Dependencies = append(out.Dependencies, file)
 	}
+	out.ModuleDependencies, err = n.scanModules(m.Modules)
+	if err != nil {
+		return out, err
+	}
+	for _, file := range out.ModuleDependencies {
+		if file.Status != "unchanged" {
+			out.Integrity = false
+		}
+	}
 	encoded, _ := json.Marshal(struct {
 		Target, Manifest    string
 		Files, Dependencies []ExternalFile
+		Modules             []ExternalFile
 		Complete            bool
-	}{target, manifestHash(m), out.Files, out.Dependencies, out.Complete})
+	}{target, manifestHash(m), out.Files, out.Dependencies, out.ModuleDependencies, out.Complete})
 	out.Snapshot = secure.Hash(encoded)
 	if active, err := os.Readlink(n.activePath()); err != nil || active != target {
 		return out, ErrExternalChange

@@ -63,6 +63,12 @@ const dependencies = computed(
       (file) => file.status !== "unchanged",
     ) ?? [],
 );
+const moduleDependencies = computed(
+  () =>
+    snapshot.value?.module_dependencies.filter(
+      (file) => file.status !== "unchanged",
+    ) ?? [],
+);
 const options = computed(() =>
   changed.value.map((file) => ({
     label: `${file.path} · ${status(file.status)}`,
@@ -199,7 +205,7 @@ watch(show, (visible) => {
     </div>
     <n-alert type="info" :bordered="false" style="margin-bottom: 16px"
       >差异基于磁盘副本，不代表这些内容已经被 Nginx
-      加载。捕获只保存草稿；恢复会发布已保存期望修订并重新加载。损坏的证书须导入新版本、重新绑定并保存后再恢复。</n-alert
+      加载。捕获只保存草稿；恢复会发布已保存期望修订并重新加载。损坏的证书或模块须选择有效的新版本并保存，或由本机管理员修复。</n-alert
     >
     <template v-if="snapshot">
       <n-alert
@@ -227,6 +233,24 @@ watch(show, (visible) => {
           </p>
         </div></template
       >
+      <template v-if="moduleDependencies.length">
+        <h3>模块与 Nginx 二进制依赖</h3>
+        <div
+          v-for="file in moduleDependencies"
+          :key="`${file.path}:${file.expected_sha256}`"
+          class="dependency"
+        >
+          <n-tag type="warning" :bordered="false">{{
+            status(file.status)
+          }}</n-tag
+          ><span class="mono">{{ file.path }}</span>
+          <p class="muted">{{ file.reason }}</p>
+          <p class="muted mono">
+            预期 {{ file.expected_sha256 }}<br />磁盘
+            {{ file.observed_sha256 || "不可读取" }}
+          </p>
+        </div>
+      </template>
       <n-select
         v-if="options.length"
         :value="selected || null"

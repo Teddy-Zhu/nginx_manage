@@ -3,7 +3,7 @@ package nginxconfig
 import "fmt"
 
 const ParserVersion = "crossplane-0.4.89+spans-4"
-const PolicyVersion = "nginxpanel-4"
+const PolicyVersion = "nginxpanel-5"
 
 type File struct {
 	ID      string `json:"id"`
@@ -21,6 +21,7 @@ type Tree struct {
 	Diagnostics []Diagnostic `json:"diagnostics"`
 	AccessLists []AccessList `json:"access_lists"`
 	WAFPolicies []WAFPolicy  `json:"waf_policies"`
+	ModulePaths []string     `json:"module_paths"`
 }
 
 type Diagnostic struct {

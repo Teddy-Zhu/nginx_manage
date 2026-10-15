@@ -278,6 +278,22 @@ paths:
       responses:
         '202': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /nginx/native-modules:
+    put:
+      operationId: setNginxNativeModules
+      x-scopes: [config.write, config.secrets, security.write]
+      description: 从本机 root 批准清单选择模块路径，按清单顺序定点更新主配置 load_module；只保存期望修订，仍须应用。
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NativeModulesRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /nginx/config-tree/preview:
     post:
       operationId: previewConfigTree
@@ -634,7 +650,7 @@ components:
           additionalProperties: { $ref: '#/components/schemas/Field' }
     Tree:
       type: object
-      required: [revision_id, version, state, files, resources, diagnostics, access_lists, waf_policies]
+      required: [revision_id, version, state, files, resources, diagnostics, access_lists, waf_policies, module_paths]
       properties:
         revision_id: { type: string }
         version: { type: integer, format: int64 }
@@ -642,6 +658,7 @@ components:
         files: { type: array, items: { $ref: '#/components/schemas/File' } }
         access_lists: { type: array, items: { $ref: '#/components/schemas/AccessList' } }
         waf_policies: { type: array, items: { $ref: '#/components/schemas/WAFPolicy' } }
+        module_paths: { type: array, maxItems: 20000, description: 原文中的模块选择，草稿可能含重复或未批准路径，诊断会明确指出。, items: { type: string } }
         resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
         diagnostics: { type: array, items: { $ref: '#/components/schemas/Diagnostic' } }
     ResourceMetadata:
@@ -725,7 +742,7 @@ components:
         note: { type: string }
     ExternalSnapshot:
       type: object
-      required: [revision_id, deployment_id, snapshot, integrity, complete, files, dependencies, detail]
+      required: [revision_id, deployment_id, snapshot, integrity, complete, files, dependencies, module_dependencies, detail]
       properties:
         revision_id: { type: string }
         deployment_id: { type: string, description: 不可变发布身份，初始发布为空；相同逻辑修订可有不同发布身份。 }
@@ -734,6 +751,7 @@ components:
         complete: { type: boolean }
         files: { type: array, items: { $ref: '#/components/schemas/ExternalFile' } }
         dependencies: { type: array, items: { $ref: '#/components/schemas/ExternalFile' } }
+        module_dependencies: { type: array, items: { $ref: '#/components/schemas/ExternalFile' } }
         detail: { allOf: [{ $ref: '#/components/schemas/ExternalDetail' }], nullable: true }
     CaptureExternalRequest:
       type: object
@@ -824,14 +842,33 @@ components:
         reason: { type: string }
     NginxFeatures:
       type: object
-      required: [available, version, features, reason]
+      required: [available, version, features, reason, modules]
       properties:
         available: { type: boolean }
         version: { type: string }
         reason: { type: string }
+        modules: { type: array, maxItems: 32, items: { $ref: '#/components/schemas/NativeModule' } }
         features:
           type: object
           additionalProperties: { $ref: '#/components/schemas/NginxFeature' }
+    NativeModule:
+      type: object
+      required: [id, name, path, sha256, available, running, features, reason]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        path: { type: string }
+        sha256: { type: string }
+        available: { type: boolean, description: 批准内容与当前二进制绑定及文件校验通过，不代表已加载或 ABI 校验完成。 }
+        running: { type: boolean, description: 相同散列副本所属发布已确认运行。 }
+        features: { type: array, items: { type: string } }
+        reason: { type: string }
+    NativeModulesRequest:
+      type: object
+      required: [base_version, paths]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        paths: { type: array, maxItems: 16, items: { type: string, maxLength: 128 } }
     WAFPath:
       type: object
       required: [match, path]

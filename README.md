@@ -2,9 +2,9 @@
 
 基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前处于基础工程实施阶段，尚未发布，不声明系统兼容性验收通过。
 
-当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单与基础 WAF 策略、手动证书版本与 HTTPS 绑定/跳转/HSTS、不可变修订、原文差异、外部快照/草稿捕获/受管恢复、并发保护和独立草稿；Unix Socket Agent 身份校验、Nginx 编译能力探测、不可变发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
+当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单与基础 WAF 策略、手动证书版本与 HTTPS 绑定/跳转/HSTS、不可变修订、原文差异、外部快照/草稿捕获/受管恢复、并发保护和独立草稿；Unix Socket Agent 身份校验、Nginx 编译/受信动态模块能力、不可变发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
 
-安全发布流程代码已接入，尚未集中验证。ACME 自动申请/续期、完整代理与动态模块能力、安全/主机管理、多节点、备份和发布更新继续实施；保存与校验不会显示为已生效。
+安全发布流程代码已接入，尚未集中验证。ACME 自动申请/续期、完整代理能力、安全/主机管理、多节点、备份和发布更新继续实施；保存与校验不会显示为已生效。
 
 ## 开发
 
@@ -29,7 +29,7 @@ pnpm --dir web dev
 go run ./cmd/nginxpanel agent --dev --data-dir=.local
 ```
 
-实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。当前不自动启动或接管已有 Nginx；完整安装接入属于 P4。开发 Agent 不开放实际执行。
+实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。当前不自动启动或接管已有 Nginx；完整安装接入属于 P4。开发 Agent 不开放实际执行。
 
 未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；当前生产入口仅允许回环 HTTPS。原生安装器、权限分区与 systemd、Docker 持久运行在 P4 提供。
 

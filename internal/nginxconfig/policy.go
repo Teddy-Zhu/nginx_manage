@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/nginxmodules"
 )
 
 // Policy additions are supplied by local trusted setup, never by API or import.
@@ -13,9 +14,12 @@ import (
 type Policy struct {
 	Version         string   `json:"version"`
 	ExtraDirectives []string `json:"extra_directives"`
+	ModulePaths     []string `json:"module_paths"`
 }
 
-func DefaultPolicy() Policy { return Policy{Version: PolicyVersion, ExtraDirectives: []string{}} }
+func DefaultPolicy() Policy {
+	return Policy{Version: PolicyVersion, ExtraDirectives: []string{}, ModulePaths: []string{}}
+}
 
 var safeDirectives = strings.Fields(`worker_processes worker_connections events http stream server upstream location
 listen server_name proxy_pass proxy_http_version proxy_set_header proxy_hide_header proxy_buffering proxy_request_buffering
@@ -41,6 +45,17 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 	for _, name := range safeDirectives {
 		allowed[name] = true
 	}
+	approvedModules := map[string]bool{}
+	for _, name := range policy.ModulePaths {
+		if nginxmodules.Reference(name) {
+			approvedModules[name] = true
+		}
+	}
+	if len(approvedModules) > 0 {
+		allowed["load_module"] = true
+	}
+	p.Tree.ModulePaths = []string{}
+	seenModules := map[string]bool{}
 	// Root extensions cannot enable executable directives or arbitrary path writers.
 	for _, name := range policy.ExtraDirectives {
 		if !forbidden(name) {
@@ -66,13 +81,34 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 					}
 					continue
 				}
-				if forbidden(n.Name) || !allowed[n.Name] {
+				if (forbidden(n.Name) && n.Name != "load_module") || !allowed[n.Name] {
 					add("unsafe_directive", "未批准的指令："+n.Name)
 				}
 				if security[n.Name] {
 					scopes["security.write"] = true
 				}
 				switch n.Name {
+				case "load_module":
+					scopes["security.write"] = true
+					if doc.File.Path != "nginx.conf" || parent != "" || n.Open >= 0 || len(n.Args) != 1 {
+						add("native_module", "模块只能在主配置顶层引用一个批准路径")
+						break
+					}
+					name := n.Args[0].Value
+					if !approvedModules[name] {
+						add("native_module", "模块路径未获本机 root 批准")
+					}
+					if seenModules[name] {
+						add("native_module", "模块重复加载")
+					}
+					seenModules[name] = true
+					p.Tree.ModulePaths = append(p.Tree.ModulePaths, name)
+					for _, earlier := range doc.Nodes {
+						if earlier.Start < n.Start && earlier.Open >= 0 {
+							add("native_module", "模块须在所有顶层配置块之前加载")
+							break
+						}
+					}
 				case "map":
 					if len(n.Args) == 2 && (n.Args[1].Value == "$nginxpanel_waf_policy" || n.Args[1].Value == "$nginxpanel_waf_reason") {
 						add("reserved_name", "WAF 日志默认变量由受管执行器定义")

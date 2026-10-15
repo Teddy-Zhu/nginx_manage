@@ -23,6 +23,7 @@ import (
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
 )
 
@@ -35,6 +36,7 @@ var ErrRuntimeUnavailable = errors.New("专用 Nginx 实例未初始化或未运
 type Nginx struct {
 	DataDir, Binary, WorkerUser string
 	Policy                      nginxconfig.Policy
+	Modules                     []nginxmodules.Approval
 	Journal                     *Journal
 	mu                          sync.Mutex
 	workers                     sync.WaitGroup
@@ -68,14 +70,15 @@ type NginxState struct {
 }
 
 type manifest struct {
-	RevisionID   string            `json:"revision_id"`
-	DeploymentID string            `json:"deployment_id"`
-	SourceHash   string            `json:"source_hash"`
-	Probe        string            `json:"probe"`
-	Files        map[string]string `json:"files"`
-	Listeners    []listener        `json:"listeners"`
-	TLS          []tlsProbe        `json:"tls"`
-	Dependencies map[string]string `json:"dependencies"`
+	RevisionID   string                      `json:"revision_id"`
+	DeploymentID string                      `json:"deployment_id"`
+	SourceHash   string                      `json:"source_hash"`
+	Probe        string                      `json:"probe"`
+	Files        map[string]string           `json:"files"`
+	Listeners    []listener                  `json:"listeners"`
+	TLS          []tlsProbe                  `json:"tls"`
+	Dependencies map[string]string           `json:"dependencies"`
+	Modules      map[string]ModuleDependency `json:"modules"`
 }
 
 func (n *Nginx) configPath(dir string) string {
@@ -172,7 +175,7 @@ func (n *Nginx) Initialize() error {
 	if err != nil || len(parsed.Tree.Diagnostics) != 0 {
 		return errors.New("invalid bootstrap configuration")
 	}
-	if _, err := n.prepare("", "", parsed); err != nil {
+	if _, err := n.prepare("", "", parsed, map[string]ModuleDependency{}); err != nil {
 		return err
 	}
 	return n.switchTo("bootstrap", "")
@@ -343,7 +346,15 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 		}
 		return record, nil
 	}
-	candidate, err := n.prepare(in.RevisionID, record.AfterDir, parsed)
+	modules, err := n.prepareModules(parsed)
+	if err != nil {
+		record.State, record.Stage, record.Error = "failed", "module_prepare_failed", "模块批准、散列、二进制绑定或不可变副本校验失败；运行修订未改变"
+		if putErr := n.persist(record); putErr != nil {
+			return Record{}, putErr
+		}
+		return record, nil
+	}
+	candidate, err := n.prepare(in.RevisionID, record.AfterDir, parsed, modules)
 	if err != nil {
 		record.State, record.Stage, record.Error = "failed", "prepare_failed", "无法生成不可变候选配置"
 		if putErr := n.persist(record); putErr != nil {
@@ -556,7 +567,10 @@ func (n *Nginx) manifestMetadata(dir string) (manifest, error) {
 	if err := json.Unmarshal(b, &m); err != nil || revisionDir(m.DeploymentID) != dir || m.RevisionID != "" && !validID(m.RevisionID) || m.Probe == "" {
 		return m, ErrExternalChange
 	}
-	if len(m.Files) == 0 || len(m.Files) > limits.Files || len(m.Dependencies) > limits.CertificateReferences {
+	if len(m.Files) == 0 || len(m.Files) > limits.Files || len(m.Dependencies) > limits.CertificateReferences || len(m.Modules) > limits.NginxModules {
+		return m, ErrExternalChange
+	}
+	if !moduleHeader(m.Modules) {
 		return m, ErrExternalChange
 	}
 	return m, nil
@@ -616,22 +630,29 @@ func (n *Nginx) readManifest(dir string) (manifest, error) {
 			return m, ErrExternalChange
 		}
 	}
+	if err := n.verifyModules(m.Modules); err != nil {
+		return m, ErrExternalChange
+	}
 	return m, nil
 }
 
 func manifestHash(m manifest) string { b, _ := json.Marshal(m); return secure.Hash(b) }
 
 func (n *Nginx) sourceHash(p *nginxconfig.Parsed) string {
+	policy := n.Policy
+	// Adding another approved version must not change the source identity of a
+	// publication which does not use it. Revoked paths still fail parsing.
+	policy.ModulePaths = p.Tree.ModulePaths
 	source, _ := json.Marshal(struct {
 		Files         []nginxconfig.File
 		Policy        nginxconfig.Policy
 		Worker, Group string
 		Renderer      int
-	}{p.Tree.Files, n.Policy, n.WorkerUser, n.workerGroup, 4})
+	}{p.Tree.Files, policy, n.WorkerUser, n.workerGroup, 5})
 	return secure.Hash(source)
 }
 
-func (n *Nginx) prepare(id, deployment string, p *nginxconfig.Parsed) (manifest, error) {
+func (n *Nginx) prepare(id, deployment string, p *nginxconfig.Parsed, modules map[string]ModuleDependency) (manifest, error) {
 	digest := n.sourceHash(p)
 	dir := revisionDir(deployment)
 	if _, err := os.Lstat(filepath.Dir(n.configPath(dir))); err == nil {
@@ -643,7 +664,7 @@ func (n *Nginx) prepare(id, deployment string, p *nginxconfig.Parsed) (manifest,
 	} else if !os.IsNotExist(err) {
 		return manifest{}, err
 	}
-	m := manifest{RevisionID: id, DeploymentID: deployment, SourceHash: digest, Probe: secure.Token(), Files: map[string]string{}, Listeners: []listener{}, TLS: []tlsProbe{}}
+	m := manifest{RevisionID: id, DeploymentID: deployment, SourceHash: digest, Probe: secure.Token(), Files: map[string]string{}, Listeners: []listener{}, TLS: []tlsProbe{}, Modules: modules}
 	contents, err := n.render(p, &m, nil)
 	if err != nil {
 		return m, err
@@ -763,6 +784,9 @@ func (n *Nginx) switchTo(id, expected string) error {
 }
 
 func (n *Nginx) reload() error {
+	if _, _, err := n.active(); err != nil {
+		return err
+	}
 	pid, err := n.masterPID()
 	if err != nil {
 		return err

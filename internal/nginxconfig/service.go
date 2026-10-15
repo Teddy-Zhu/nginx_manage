@@ -101,6 +101,7 @@ func (s *Service) get(ctx context.Context, id string, q *dbgen.Queries) (Tree, e
 		return tree, parseErr
 	}
 	tree.WAFPolicies = parsed.Tree.WAFPolicies
+	tree.ModulePaths = parsed.Tree.ModulePaths
 	return tree, nil
 }
 

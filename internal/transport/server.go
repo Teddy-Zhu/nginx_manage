@@ -196,7 +196,7 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	if mode == "connected" {
 		featureReport, featureErr := s.Agent.NginxFeatures(r.Context())
 		if featureErr != nil {
-			featureReport = agent.NginxFeatures{Features: map[string]agent.Feature{}, Reason: "无法读取本机 Nginx 模块能力"}
+			featureReport = agent.NginxFeatures{Features: map[string]agent.Feature{}, Modules: []agent.NativeModule{}, Reason: "无法读取本机 Nginx 模块能力"}
 		}
 		features = &featureReport
 		state, stateErr := s.Agent.NginxState(r.Context())

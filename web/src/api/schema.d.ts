@@ -335,6 +335,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/nginx/native-modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description 从本机 root 批准清单选择模块路径，按清单顺序定点更新主配置 load_module；只保存期望修订，仍须应用。 */
+        put: operations["setNginxNativeModules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/config-tree/preview": {
         parameters: {
             query?: never;
@@ -674,6 +691,8 @@ export interface components {
             files: components["schemas"]["File"][];
             access_lists: components["schemas"]["AccessList"][];
             waf_policies: components["schemas"]["WAFPolicy"][];
+            /** @description 原文中的模块选择，草稿可能含重复或未批准路径，诊断会明确指出。 */
+            module_paths: string[];
             resources: components["schemas"]["Resource"][];
             diagnostics: components["schemas"]["Diagnostic"][];
         };
@@ -757,6 +776,7 @@ export interface components {
             complete: boolean;
             files: components["schemas"]["ExternalFile"][];
             dependencies: components["schemas"]["ExternalFile"][];
+            module_dependencies: components["schemas"]["ExternalFile"][];
             detail: components["schemas"]["ExternalDetail"] | null;
         };
         CaptureExternalRequest: {
@@ -859,9 +879,27 @@ export interface components {
             available: boolean;
             version: string;
             reason: string;
+            modules: components["schemas"]["NativeModule"][];
             features: {
                 [key: string]: components["schemas"]["NginxFeature"];
             };
+        };
+        NativeModule: {
+            id: string;
+            name: string;
+            path: string;
+            sha256: string;
+            /** @description 批准内容与当前二进制绑定及文件校验通过，不代表已加载或 ABI 校验完成。 */
+            available: boolean;
+            /** @description 相同散列副本所属发布已确认运行。 */
+            running: boolean;
+            features: string[];
+            reason: string;
+        };
+        NativeModulesRequest: {
+            /** Format: int64 */
+            base_version: number;
+            paths: string[];
         };
         WAFPath: {
             /** @enum {string} */
@@ -1400,6 +1438,27 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setNginxNativeModules: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeModulesRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

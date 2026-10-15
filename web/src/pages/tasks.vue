@@ -77,6 +77,7 @@ const taskStages: Record<string, string> = {
   prepare_failed: "候选配置生成失败",
   candidate_changed: "恢复候选已变化",
   previous_load_failed: "快照基础修订读取失败",
+  module_prepare_failed: "受信模块准备失败",
   restore_switch_pending: "准备切换恢复候选",
   restore_switched: "确认恢复运行状态",
   restore_confirmed: "已确认受管恢复",

@@ -5,11 +5,14 @@ import (
 	"errors"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/limits"
+	"nginxpanel/internal/nginxmodules"
 )
 
 type Feature struct {
@@ -21,6 +24,7 @@ type NginxFeatures struct {
 	Version   string             `json:"version"`
 	Features  map[string]Feature `json:"features"`
 	Reason    string             `json:"reason"`
+	Modules   []NativeModule     `json:"modules"`
 }
 type boundedOutput struct {
 	value strings.Builder
@@ -34,7 +38,7 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 	return b.value.Write(p)
 }
 func (n *Nginx) Features(ctx context.Context) NginxFeatures {
-	out := NginxFeatures{Features: map[string]Feature{}}
+	out := NginxFeatures{Features: map[string]Feature{}, Modules: []NativeModule{}}
 	binary, err := trustedFile(n.Binary, true)
 	if err != nil || binary != n.Binary {
 		out.Reason = "可信 Nginx 二进制不可用"
@@ -53,7 +57,9 @@ func (n *Nginx) Features(ctx context.Context) NginxFeatures {
 		out.Reason = "无法读取 Nginx 编译能力"
 		return out
 	}
-	return parseNginxFeatures(output.value.String())
+	out = parseNginxFeatures(output.value.String())
+	n.nativeModuleFeatures(ctx, &out)
+	return out
 }
 func configureWords(value string) ([]string, error) {
 	out := []string{}
@@ -106,7 +112,7 @@ func configureWords(value string) ([]string, error) {
 	return out, nil
 }
 func parseNginxFeatures(value string) NginxFeatures {
-	out := NginxFeatures{Features: map[string]Feature{}}
+	out := NginxFeatures{Features: map[string]Feature{}, Modules: []NativeModule{}}
 	version := regexp.MustCompile(`(?m)^nginx version: nginx/(\d+)\.(\d+)\.(\d+)(?:\s|$)`).FindStringSubmatch(value)
 	if len(version) != 4 {
 		out.Reason = "未识别 Nginx 版本，模块能力保持未知"
@@ -164,7 +170,10 @@ func parseNginxFeatures(value string) NginxFeatures {
 	set("tls", http && flags["--with-http_ssl_module"], "缺少 HTTP SSL 模块")
 	set("https_redirect", http && flags["--with-http_ssl_module"] && !flags["--without-http_rewrite_module"] && atLeast(1, 13, 0), "HTTPS 308 跳转需要 HTTP SSL、rewrite 模块及 Nginx 1.13.0 或更新版本")
 	set("hsts", http && flags["--with-http_ssl_module"] && !flags["--without-http_headers_module"] && atLeast(1, 7, 5), "HSTS 需要 HTTP SSL、headers 模块及 Nginx 1.7.5 或更新版本")
-	set("stream", flags["--with-stream"], "尚未接入匹配的静态 Stream 模块；动态模块需显式登记与加载")
+	set("stream", flags["--with-stream"], "缺少静态 Stream 模块，或批准的动态模块尚未确认运行")
+	set("stream_tls", flags["--with-stream"] && flags["--with-stream_ssl_module"], "Stream TLS 模块尚未确认可用")
+	set("stream_real_ip", flags["--with-stream"] && flags["--with-stream_realip_module"], "Stream realip 模块尚未确认可用")
+	set("stream_ssl_preread", flags["--with-stream"] && flags["--with-stream_ssl_preread_module"], "Stream SSL preread 模块尚未确认可用")
 	out.Available = true
 	return out
 }
@@ -191,4 +200,66 @@ func (c *Client) RequireFeatures(ctx context.Context, names []string) error {
 		}
 	}
 	return nil
+}
+
+// A compiled dynamic module is usable only after the selected immutable copy
+// belongs to a publication whose running probe was confirmed. Catalog presence
+// and a matching ELF symbol alone never establish a running capability.
+func (n *Nginx) nativeModuleFeatures(ctx context.Context, out *NginxFeatures) {
+	if len(n.Modules) == 0 {
+		if _, header, err := n.activeMetadata(); err != nil || len(header.Modules) == 0 {
+			return
+		}
+	}
+	binaryHash, hashErr := nginxmodules.HashTrusted(n.Binary, limits.NginxBinaryBytes)
+	running := map[string]ModuleDependency{}
+	if _, active, err := n.active(); err == nil {
+		observed, cancel := context.WithTimeout(ctx, time.Second)
+		err = n.observe(observed, active)
+		cancel()
+		if err == nil {
+			running = active.Modules
+		}
+	}
+	reported := map[string]bool{}
+	for _, item := range n.Modules {
+		reported[item.Path()] = true
+		status := NativeModule{ID: item.ID, Name: item.Name, Path: item.Path(), SHA256: item.SHA256, Features: []string{}}
+		if hashErr != nil {
+			status.Reason = "无法核对 Nginx 二进制散列"
+		} else {
+			_, features, err := n.approvedModule(item, binaryHash)
+			if err != nil {
+				status.Reason = "模块未安装、散列或权限已变化，或批准的 Nginx 二进制不匹配"
+			} else {
+				status.Available = true
+				status.Features = features
+			}
+		}
+		dependency, ok := running[item.Path()]
+		status.Running = ok && dependency.SHA256 == item.SHA256 && dependency.BinarySHA256 == binaryHash
+		out.Modules = append(out.Modules, status)
+	}
+	retired := []string{}
+	for name := range running {
+		if !reported[name] {
+			retired = append(retired, name)
+		}
+	}
+	sort.Strings(retired)
+	for _, name := range retired {
+		dependency := running[name]
+		if !reported[name] {
+			parts := strings.Split(name, "/")
+			out.Modules = append(out.Modules, NativeModule{ID: parts[1], Name: parts[1], Path: name, SHA256: dependency.SHA256, Running: true, Features: dependency.Features, Reason: "运行版本已不在本机批准清单中；后续配置须移除此版本或由本机管理员重新批准"})
+		}
+	}
+	if !out.Available {
+		return
+	}
+	for _, dependency := range running {
+		for _, name := range dependency.Features {
+			out.Features[name] = Feature{Available: true}
+		}
+	}
 }

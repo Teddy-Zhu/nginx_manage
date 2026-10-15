@@ -8,6 +8,12 @@ const (
 	Files                    = 128
 	PublishedRevisions       = 128
 	NginxListeners           = 256
+	NginxModules             = 16
+	StoredNginxModules       = 128
+	StoredNginxModuleBytes   = 256 << 20
+	NginxModuleBytes         = 8 << 20
+	NginxModuleBundleBytes   = 32 << 20
+	NginxBinaryBytes         = 64 << 20
 	CertificateReferences    = 128
 	Certificates             = 128
 	CertificateVersions      = 32
