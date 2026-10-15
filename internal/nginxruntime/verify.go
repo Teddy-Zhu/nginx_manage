@@ -61,8 +61,15 @@ func readBinding(data string) (Binding, error) {
 	if err != nil {
 		return b, err
 	}
-	if info.Mode().Perm() != 0444 || b.Schema != Schema || b.DataDir != data || b.BoundAt <= 0 || b.BoundAt > time.Now().Unix()+300 || !digest.MatchString(b.SHA256) || len(b.Version) > 64 || !versionValue.MatchString(b.Version) || !filepath.IsAbs(b.Binary) || filepath.Clean(b.Binary) != b.Binary || (b.Owner == "managed") != (b.Signed != nil) || b.Owner != "managed" && b.Owner != "local" {
+	if info.Mode().Perm() != 0444 || b.Schema != Schema || b.DataDir != data || b.BoundAt <= 0 || b.BoundAt > time.Now().Unix()+300 {
 		return b, errors.New("Nginx 绑定身份或权限无效")
+	}
+	if b.Owner == "uninstalled" {
+		if b.Binary != "" || b.SHA256 != "" || b.Version != "" || b.Signed != nil {
+			return b, errors.New("未安装登记包含无效运行信息")
+		}
+	} else if !digest.MatchString(b.SHA256) || len(b.Version) > 64 || !versionValue.MatchString(b.Version) || !filepath.IsAbs(b.Binary) || filepath.Clean(b.Binary) != b.Binary || (b.Owner == "managed") != (b.Signed != nil) || b.Owner != "managed" && b.Owner != "local" {
+		return b, errors.New("Nginx 安装绑定内容无效")
 	}
 	return b, nil
 }
@@ -70,34 +77,53 @@ func readBinding(data string) (Binding, error) {
 // Read verifies the installed receipt using current keys and exact files. Its
 // approval time is read only from the immutable local binding, not caller input.
 func Read(ctx context.Context, data string) (Binding, Installation, error) {
-	b, err := readBinding(data)
+	b, info, err := Selection(ctx, data)
 	if err != nil {
 		return b, Installation{}, err
+	}
+	if info == nil {
+		return b, Installation{}, ErrNotInstalled
+	}
+	return b, *info, nil
+}
+
+// Selection accepts only a valid root-owned record. A missing record or missing
+// installed asset remains an error; neither is an uninstalled selection.
+func Selection(ctx context.Context, data string) (Binding, *Installation, error) {
+	b, err := readBinding(data)
+	if err != nil {
+		return b, nil, err
+	}
+	if err = ctx.Err(); err != nil {
+		return b, nil, err
+	}
+	if b.Owner == "uninstalled" {
+		return b, nil, nil
 	}
 	info := Installation{Owner: b.Owner, Version: b.Version, SHA256: b.SHA256, BoundAt: b.BoundAt}
 	if b.Signed != nil {
 		s := *b.Signed
 		current := receiver()
 		if s.Host != host() || s.Receiver.APIMajor != current.APIMajor || s.Receiver.AgentProtocol > current.AgentProtocol || s.Receiver.Launcher > current.Launcher {
-			return b, info, errors.New("本机平台或接收端不满足已安装组件")
+			return b, nil, errors.New("本机平台或接收端不满足已安装组件")
 		}
 		p, e := releases.Installed(ctx, inputFor(s), s.PlanID, b.BoundAt, s.TrustSHA256)
 		if e != nil {
-			return b, info, e
+			return b, nil, e
 		}
 		asset, binary, e := fromPlan(p, s.AssetID)
 		if e != nil {
-			return b, info, e
+			return b, nil, e
 		}
 		if binary != b.Binary || p.Plan.ManifestSHA256 != s.ManifestSHA256 || asset.Version != b.Version {
-			return b, info, errors.New("已安装 Nginx 与签名资产不一致")
+			return b, nil, errors.New("已安装 Nginx 与签名资产不一致")
 		}
 		info.PlanID, info.AssetID, info.SourceURL, info.License = s.PlanID, s.AssetID, asset.SourceURL, asset.License
 	}
 	if err = verifyExecutable(b.Binary, b.SHA256); err != nil {
-		return b, info, err
+		return b, nil, err
 	}
-	return b, info, nil
+	return b, &info, nil
 }
 func verifyExecutable(binary, expected string) error {
 	raw, err := nginxmodules.ReadTrusted(binary, limits.NginxBinaryBytes)

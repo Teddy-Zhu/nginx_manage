@@ -29,7 +29,7 @@ pnpm --dir web dev
 go run ./cmd/nginxpanel agent --dev --data-dir=.local
 ```
 
-实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。[原生安装入口](deploy/native/README.md) 已接入账户/目录分区、不可变产物及三个 systemd 服务，显式 `--start` 才启用启动；不接管已有系统 Nginx。安装与实际服务尚未验证。开发 Agent 不开放实际执行。
+实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。[原生安装入口](deploy/native/README.md) 已接入账户/目录分区、不可变产物及三个 systemd 服务，支持 `--without-nginx` 仅安装 Web/Agent，显式 `--start` 才按所选组件启用启动；不接管已有系统 Nginx。安装与实际服务尚未验证。开发 Agent 不开放实际执行。
 
 未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；当前生产入口仅允许回环 HTTPS。P4 原生首次安装已开始接入，签名发布、可信组件自动准备及完整 Docker 持久运行继续实施。
 

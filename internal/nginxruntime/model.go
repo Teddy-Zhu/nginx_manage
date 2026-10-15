@@ -1,5 +1,6 @@
 // Package nginxruntime binds a locally approved Nginx executable to a native
-// installation. Bindings are immutable; runtime replacement uses maintenance.
+// installation, including an explicitly uninstalled slot. Bindings are
+// immutable; installing into a slot or replacing a runtime uses maintenance.
 package nginxruntime
 
 import (
@@ -12,9 +13,12 @@ import (
 
 const Schema = 1
 
+var ErrNotInstalled = errors.New("本机已明确登记为未安装 Nginx")
+
 type Input struct {
 	DataDir, Binary, PlanID, AssetID, TrustPath string
 	Prerelease                                  bool
+	Uninstalled                                 bool
 }
 type Signed struct {
 	PlanID         string            `json:"plan_id"`

@@ -26,6 +26,12 @@ func (in Input) validate() error {
 	}
 	local := in.Binary != ""
 	managed := in.PlanID != "" && in.AssetID != ""
+	if in.Uninstalled {
+		if local || in.PlanID != "" || in.AssetID != "" || in.Prerelease {
+			return errors.New("未安装登记不能携带 Nginx 程序、签名资产或预发布选择")
+		}
+		return nil
+	}
 	if local == managed || local && (in.PlanID != "" || in.AssetID != "" || in.Prerelease) || !local && !digest.MatchString(in.PlanID) {
 		return errors.New("须选择一个本机 Nginx 程序或完整的已准备签名资产")
 	}
@@ -35,6 +41,9 @@ func (in Input) validate() error {
 	return nil
 }
 func matches(b Binding, in Input) bool {
+	if in.Uninstalled {
+		return b.Owner == "uninstalled"
+	}
 	if in.Binary != "" {
 		binary, err := filepath.EvalSymlinks(in.Binary)
 		return err == nil && b.Owner == "local" && b.Binary == binary
@@ -51,7 +60,7 @@ func Inspect(ctx context.Context, in Input) (Binding, error) {
 	}
 	name, _ := bindingPath(in.DataDir)
 	if _, err := os.Lstat(name); err == nil {
-		prior, _, e := Read(ctx, in.DataDir)
+		prior, _, e := Selection(ctx, in.DataDir)
 		if e != nil {
 			return b, e
 		}
@@ -63,6 +72,10 @@ func Inspect(ctx context.Context, in Input) (Binding, error) {
 		return b, err
 	}
 	b = Binding{Schema: Schema, DataDir: in.DataDir, BoundAt: time.Now().Unix()}
+	if in.Uninstalled {
+		b.Owner = "uninstalled"
+		return b, ctx.Err()
+	}
 	var expectedVersion string
 	var expires int64
 	if in.Binary != "" {
@@ -138,7 +151,7 @@ func Bind(ctx context.Context, in Input) (Binding, error) {
 		}
 	}
 	if _, err = os.Lstat(name); err == nil {
-		prior, _, e := Read(ctx, in.DataDir)
+		prior, _, e := Selection(ctx, in.DataDir)
 		if e != nil {
 			return b, e
 		}

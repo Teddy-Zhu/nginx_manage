@@ -29,13 +29,22 @@ var version = "0.1.0-dev"
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	if err := run(); err != nil {
+		if len(os.Args) > 1 && os.Args[1] == "nginx-runtime-status" {
+			// systemd skips ExecCondition for 1..254, but treats 255 as a
+			// failure. Only an explicit uninstalled record may skip Nginx.
+			if errors.Is(err, nginxruntime.ErrNotInstalled) {
+				os.Exit(1)
+			}
+			slog.Error("Nginx installation status failed", "error", err)
+			os.Exit(255)
+		}
 		slog.Error("command failed", "error", err)
 		os.Exit(1)
 	}
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|nginx-runtime|component-path|component-bind|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -55,6 +64,7 @@ func run() error {
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	nginxBinding := flags.Bool("nginx-binding", false, "use the immutable native Nginx installation binding")
+	nginxUninstalled := flags.Bool("nginx-uninstalled", false, "register an explicitly uninstalled native Nginx slot (component-bind only)")
 	nginxRuntimeCheck := flags.Bool("nginx-runtime-check", false, "only validate the bound native Nginx configuration")
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
@@ -80,6 +90,9 @@ func run() error {
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
 	}
+	if *nginxUninstalled && command != "component-bind" {
+		return errors.New("nginx-uninstalled is only valid for component-bind")
+	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
 	if err != nil {
 		return fmt.Errorf("read native module catalog: %w", err)
@@ -99,19 +112,22 @@ func run() error {
 			return errors.New("nginx-binding requires a native agent or initializer without another binary selection")
 		}
 		call, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		binding, info, e := nginxruntime.Read(call, absDir)
+		binding, info, e := nginxruntime.Selection(call, absDir)
 		cancel()
 		if e != nil {
 			return e
 		}
+		if info == nil && command == "nginx-init" {
+			return nginxruntime.ErrNotInstalled
+		}
 		*nginxBinary = binding.Binary
-		installation = &info
+		installation = info
 	}
 	switch command {
 	case "component-path", "component-bind":
 		call, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
-		in := nginxruntime.Input{DataDir: absDir, Binary: *nginxBinary, PlanID: *releasePlan, AssetID: *releaseSelect, TrustPath: *releaseTrust, Prerelease: *releasePrerelease}
+		in := nginxruntime.Input{DataDir: absDir, Binary: *nginxBinary, PlanID: *releasePlan, AssetID: *releaseSelect, TrustPath: *releaseTrust, Prerelease: *releasePrerelease, Uninstalled: *nginxUninstalled}
 		if command == "component-path" {
 			binding, e := nginxruntime.Inspect(call, in)
 			if e != nil {
@@ -125,12 +141,16 @@ func run() error {
 			return e
 		}
 		return json.NewEncoder(os.Stdout).Encode(binding)
-	case "nginx-runtime":
+	case "nginx-runtime", "nginx-runtime-status":
 		if *nginxBinary != "" || *releasePlan != "" || *releaseSelect != "" || *devAgent {
 			return errors.New("nginx-runtime only uses the installed local binding")
 		}
 		call, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
+		if command == "nginx-runtime-status" {
+			_, _, err := nginxruntime.Read(call, absDir)
+			return err
+		}
 		return nginxruntime.Launch(call, absDir, *nginxRuntimeCheck)
 	case "release-verify", "release-prepare", "release-check", "release-fetch":
 		if *releaseSelect == "" {
