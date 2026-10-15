@@ -52,6 +52,12 @@ export type RestoreExternalRequest =
   components["schemas"]["RestoreExternalRequest"];
 export type NativeModulesRequest =
   components["schemas"]["NativeModulesRequest"];
+export type LogSource = components["schemas"]["LogSource"];
+export type LogQuery = components["schemas"]["LogQuery"];
+export type LogPage = components["schemas"]["LogPage"];
+export type LogRow = components["schemas"]["LogRow"];
+export type LogPolicyView = components["schemas"]["LogPolicyView"];
+export type LogPolicyInput = components["schemas"]["LogPolicyInput"];
 export interface Revision {
   id: string;
   version: number;
@@ -96,59 +102,177 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
       headers,
       signal: config.signal ?? controller.signal,
     });
-    const body = result.data;
-    if (
-      !body ||
-      typeof body.code !== "string" ||
-      typeof body.message !== "string" ||
-      !("data" in body) ||
-      !body.request_id ||
-      !body.node_id
-    ) {
-      throw new ApiError("INVALID_RESPONSE", "服务返回格式无效", result.status);
-    }
-    if (nodeId && nodeId !== body.node_id)
-      throw new ApiError(
-        "NODE_IDENTITY_CHANGED",
-        "节点身份已变化，请重新连接",
-        409,
-      );
-    nodeId = body.node_id;
-    if (body.code !== "OK")
-      throw new ApiError(
-        body.code,
-        body.message,
-        result.status,
-        body.data,
-        body.request_id,
-      );
-    return body.data;
+    return responseData(result.data, result.status);
   } catch (error) {
-    if (error instanceof ApiError) throw error;
-    if (axios.isCancel(error)) throw new ApiError("CANCELLED", "请求已取消", 0);
-    if (error instanceof AxiosError) {
-      const body = error.response?.data as ResponseBody<unknown> | undefined;
-      const normalized = new ApiError(
-        body?.code ?? "NETWORK_ERROR",
-        body?.message ??
-          (error.code === "ECONNABORTED"
-            ? "请求超时，请先查询任务状态"
-            : "无法连接服务"),
-        error.response?.status ?? 0,
-        body?.data,
-        body?.request_id,
-      );
-      if (normalized.status === 401)
-        window.dispatchEvent(new Event("session-expired"));
-      if (normalized.code === "REAUTHENTICATION_REQUIRED")
-        window.dispatchEvent(new Event("reauthentication-required"));
-      throw normalized;
-    }
-    throw new ApiError("CLIENT_ERROR", "请求处理失败", 0);
+    throw apiError(error);
   }
 }
 
+function responseData<T>(body: ResponseBody<T>, status: number): T {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    typeof body.code !== "string" ||
+    typeof body.message !== "string" ||
+    !("data" in body) ||
+    typeof body.request_id !== "string" ||
+    !body.request_id ||
+    typeof body.node_id !== "string" ||
+    !body.node_id
+  )
+    throw new ApiError("INVALID_RESPONSE", "服务返回格式无效", status);
+  checkNode(body.node_id);
+  if (body.code !== "OK")
+    throw new ApiError(
+      body.code,
+      body.message,
+      status,
+      body.data,
+      body.request_id,
+    );
+  return body.data;
+}
+function checkNode(value: string) {
+  if (!value) throw new ApiError("INVALID_RESPONSE", "响应缺少节点身份", 502);
+  if (nodeId && nodeId !== value)
+    throw new ApiError(
+      "NODE_IDENTITY_CHANGED",
+      "节点身份已变化，请重新连接",
+      409,
+    );
+  nodeId = value;
+}
+function apiError(error: unknown): ApiError {
+  let normalized: ApiError;
+  if (error instanceof ApiError) normalized = error;
+  else if (axios.isCancel(error))
+    normalized = new ApiError("CANCELLED", "请求已取消", 0);
+  else if (error instanceof AxiosError) {
+    const body = error.response?.data as ResponseBody<unknown> | undefined;
+    normalized = new ApiError(
+      body?.code ?? "NETWORK_ERROR",
+      body?.message ??
+        (error.code === "ECONNABORTED"
+          ? "请求超时，请先查询任务状态"
+          : "无法连接服务"),
+      error.response?.status ?? 0,
+      body?.data,
+      body?.request_id,
+    );
+  } else normalized = new ApiError("CLIENT_ERROR", "请求处理失败", 0);
+  if (normalized.status === 401 || normalized.code === "UNAUTHENTICATED")
+    window.dispatchEvent(new Event("session-expired"));
+  if (normalized.code === "REAUTHENTICATION_REQUIRED")
+    window.dispatchEvent(new Event("reauthentication-required"));
+  return normalized;
+}
+
+export async function downloadLogFile(data: LogQuery) {
+  try {
+    const result = await http.post<Blob>("/logs/download", data, {
+      responseType: "blob",
+      timeout: 25_000,
+      headers: { "X-CSRF-Token": csrf },
+      signal: controller.signal,
+    });
+    checkNode(String(result.headers["x-node-id"] ?? ""));
+    if (
+      !String(result.headers["content-type"]).startsWith("application/x-ndjson")
+    )
+      throw new ApiError("INVALID_RESPONSE", "下载返回格式无效", result.status);
+    return {
+      blob: result.data,
+      gap: result.headers["x-log-gap"] === "true",
+      truncated: result.headers["x-log-truncated"] === "true",
+    };
+  } catch (error) {
+    if (
+      error instanceof AxiosError &&
+      error.response?.data instanceof Blob &&
+      error.response.data.size <= 65536
+    ) {
+      try {
+        error.response.data = JSON.parse(await error.response.data.text());
+      } catch {
+        /* Retain the transport error for a non-JSON response. */
+      }
+    }
+    throw apiError(error);
+  }
+}
+
+export function followLogs(
+  query: LogQuery,
+  page: (value: LogPage) => void,
+  error: (value: ApiError) => void,
+) {
+  const signal = controller.signal;
+  const source = new EventSource(
+    `/api/v1/logs/stream?${new URLSearchParams({ query: JSON.stringify(query) })}`,
+    { withCredentials: true },
+  );
+  const aborted = () => {
+    close();
+    error(new ApiError("CANCELLED", "节点请求已取消", 0));
+  };
+  const close = () => {
+    source.close();
+    signal.removeEventListener("abort", aborted);
+  };
+  signal.addEventListener("abort", aborted, { once: true });
+  source.addEventListener("page", (event) => {
+    try {
+      page(
+        responseData<LogPage>(
+          JSON.parse((event as MessageEvent<string>).data),
+          200,
+        ),
+      );
+    } catch (cause) {
+      close();
+      error(apiError(cause));
+    }
+  });
+  const failed = (event: Event) => {
+    close();
+    try {
+      if (event instanceof MessageEvent && event.data)
+        responseData<unknown>(JSON.parse(event.data), 200);
+      throw new ApiError("LOG_STREAM_ENDED", "实时连接已结束，请重新连接", 0);
+    } catch (cause) {
+      error(apiError(cause));
+    }
+  };
+  source.addEventListener("error", failed);
+  source.addEventListener("end", failed);
+  return close;
+}
+
 export const api = {
+  logSources: () => request<LogSource[]>({ url: "/logs/sources" }),
+  logPolicy: () => request<LogPolicyView>({ url: "/logs/policy" }),
+  setLogPolicy: (data: LogPolicyInput, key: string) =>
+    request<{ operation_id: string; version: number }>({
+      method: "PUT",
+      url: "/logs/policy",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  queryLogs: (data: LogQuery, signal?: AbortSignal) =>
+    request<LogPage>({
+      method: "POST",
+      url: "/logs/query",
+      data,
+      signal: signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal,
+    }),
+  releaseLogCursor: (cursor: string) =>
+    request<null>({
+      method: "POST",
+      url: "/logs/cursors/release",
+      data: { cursor },
+    }),
   acmeProfiles: (offset = 0) =>
     request<ACMEProfile[]>({
       url: "/acme-profiles",

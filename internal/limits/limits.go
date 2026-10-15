@@ -34,6 +34,13 @@ const (
 	TaskWorkers              = 4
 	SSEConnections           = 16
 	LogScanBytes             = 16 << 20
+	LogSources               = 2048
+	PublishedLogSources      = 512
+	LogArchives              = 16384
+	LogSourceArchives        = 128
+	LogLineBytes             = 64 << 10
+	LogCursorSessions        = 32
+	LogQueryConcurrency      = 4
 	StagingBytes             = 256 << 20
 	BackupBytes              = 2 << 30
 	MetricCPUs               = 128

@@ -506,6 +506,45 @@ func (e FileDifferenceStatus) Valid() bool {
 	}
 }
 
+// Defines values for LogPolicyViewOwner.
+const (
+	Agent       LogPolicyViewOwner = "agent"
+	External    LogPolicyViewOwner = "external"
+	Unconfirmed LogPolicyViewOwner = "unconfirmed"
+)
+
+// Valid indicates whether the value is a known member of the LogPolicyViewOwner enum.
+func (e LogPolicyViewOwner) Valid() bool {
+	switch e {
+	case Agent:
+		return true
+	case External:
+		return true
+	case Unconfirmed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LogQueryMode.
+const (
+	History LogQueryMode = "history"
+	Recent  LogQueryMode = "recent"
+)
+
+// Valid indicates whether the value is a known member of the LogQueryMode enum.
+func (e LogQueryMode) Valid() bool {
+	switch e {
+	case History:
+		return true
+	case Recent:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceKind.
 const (
 	ResourceKindHttp   ResourceKind = "http"
@@ -1153,6 +1192,103 @@ type FileDifference struct {
 // FileDifferenceStatus defines model for FileDifference.Status.
 type FileDifferenceStatus string
 
+// LogPage defines model for LogPage.
+type LogPage struct {
+	Cursor       string   `json:"cursor"`
+	Gap          bool     `json:"gap"`
+	More         bool     `json:"more"`
+	Notice       string   `json:"notice"`
+	Rows         []LogRow `json:"rows"`
+	ScannedBytes int64    `json:"scanned_bytes"`
+	Skipped      int      `json:"skipped"`
+}
+
+// LogPolicy defines model for LogPolicy.
+type LogPolicy struct {
+	AccessDays    int64 `json:"access_days"`
+	Compress      bool  `json:"compress"`
+	ErrorDays     int64 `json:"error_days"`
+	IntervalHours int64 `json:"interval_hours"`
+	ResourceMib   int64 `json:"resource_mib"`
+	SizeMib       int64 `json:"size_mib"`
+	TotalMib      int64 `json:"total_mib"`
+}
+
+// LogPolicyInput defines model for LogPolicyInput.
+type LogPolicyInput struct {
+	BaseVersion int64     `json:"base_version"`
+	Policy      LogPolicy `json:"policy"`
+}
+
+// LogPolicyView defines model for LogPolicyView.
+type LogPolicyView struct {
+	Bytes       int64              `json:"bytes"`
+	Editable    bool               `json:"editable"`
+	LastSweepAt int64              `json:"last_sweep_at"`
+	Owner       LogPolicyViewOwner `json:"owner"`
+	Policy      LogPolicy          `json:"policy"`
+	Version     int64              `json:"version"`
+	Warning     string             `json:"warning"`
+}
+
+// LogPolicyViewOwner defines model for LogPolicyView.Owner.
+type LogPolicyViewOwner string
+
+// LogQuery defines model for LogQuery.
+type LogQuery struct {
+	Cursor     string       `json:"cursor"`
+	EventsOnly bool         `json:"events_only"`
+	From       int64        `json:"from"`
+	Ip         string       `json:"ip"`
+	Keyword    string       `json:"keyword"`
+	Limit      int          `json:"limit"`
+	Mode       LogQueryMode `json:"mode"`
+	Path       string       `json:"path"`
+	PolicyId   string       `json:"policy_id"`
+	Reason     string       `json:"reason"`
+	SourceId   string       `json:"source_id"`
+	Status     int          `json:"status"`
+	Until      int64        `json:"until"`
+}
+
+// LogQueryMode defines model for LogQuery.Mode.
+type LogQueryMode string
+
+// LogRow defines model for LogRow.
+type LogRow struct {
+	BytesReceived  string `json:"bytes_received"`
+	BytesSent      string `json:"bytes_sent"`
+	Duration       string `json:"duration"`
+	Event          string `json:"event"`
+	Host           string `json:"host"`
+	Ip             string `json:"ip"`
+	Level          string `json:"level"`
+	Message        string `json:"message"`
+	Method         string `json:"method"`
+	Path           string `json:"path"`
+	PolicyId       string `json:"policy_id"`
+	Protocol       string `json:"protocol"`
+	Reason         string `json:"reason"`
+	Status         int    `json:"status"`
+	Time           int64  `json:"time"`
+	Upstream       string `json:"upstream"`
+	UpstreamStatus string `json:"upstream_status"`
+}
+
+// LogSource defines model for LogSource.
+type LogSource struct {
+	Active     bool   `json:"active"`
+	Archives   int    `json:"archives"`
+	Bytes      int64  `json:"bytes"`
+	Category   string `json:"category"`
+	Format     string `json:"format"`
+	Id         string `json:"id"`
+	Label      string `json:"label"`
+	Reason     string `json:"reason"`
+	ResourceId string `json:"resource_id"`
+	Sensitive  bool   `json:"sensitive"`
+}
+
 // Me defines model for Me.
 type Me struct {
 	Authenticated     bool     `json:"authenticated"`
@@ -1564,6 +1700,41 @@ type UpdateDNSCredentialParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// ReleaseLogCursorJSONBody defines parameters for ReleaseLogCursor.
+type ReleaseLogCursorJSONBody struct {
+	Cursor string `json:"cursor"`
+}
+
+// ReleaseLogCursorParams defines parameters for ReleaseLogCursor.
+type ReleaseLogCursorParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// DownloadLogsParams defines parameters for DownloadLogs.
+type DownloadLogsParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// SetLogPolicyParams defines parameters for SetLogPolicy.
+type SetLogPolicyParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// QueryLogsParams defines parameters for QueryLogs.
+type QueryLogsParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// StreamLogsParams defines parameters for StreamLogs.
+type StreamLogsParams struct {
+	Query string `form:"query" json:"query"`
+}
+
 // CreateAccessListParams defines parameters for CreateAccessList.
 type CreateAccessListParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
@@ -1822,6 +1993,18 @@ type DeleteDNSCredentialJSONRequestBody = ResourceAction
 // UpdateDNSCredentialJSONRequestBody defines body for UpdateDNSCredential for application/json ContentType.
 type UpdateDNSCredentialJSONRequestBody = DNSCredentialInput
 
+// ReleaseLogCursorJSONRequestBody defines body for ReleaseLogCursor for application/json ContentType.
+type ReleaseLogCursorJSONRequestBody ReleaseLogCursorJSONBody
+
+// DownloadLogsJSONRequestBody defines body for DownloadLogs for application/json ContentType.
+type DownloadLogsJSONRequestBody = LogQuery
+
+// SetLogPolicyJSONRequestBody defines body for SetLogPolicy for application/json ContentType.
+type SetLogPolicyJSONRequestBody = LogPolicyInput
+
+// QueryLogsJSONRequestBody defines body for QueryLogs for application/json ContentType.
+type QueryLogsJSONRequestBody = LogQuery
+
 // CreateAccessListJSONRequestBody defines body for CreateAccessList for application/json ContentType.
 type CreateAccessListJSONRequestBody = AccessListInput
 
@@ -1971,6 +2154,27 @@ type ServerInterface interface {
 
 	// (GET /dns-providers)
 	ListDNSProviders(w http.ResponseWriter, r *http.Request)
+
+	// (POST /logs/cursors/release)
+	ReleaseLogCursor(w http.ResponseWriter, r *http.Request, params ReleaseLogCursorParams)
+
+	// (POST /logs/download)
+	DownloadLogs(w http.ResponseWriter, r *http.Request, params DownloadLogsParams)
+
+	// (GET /logs/policy)
+	GetLogPolicy(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /logs/policy)
+	SetLogPolicy(w http.ResponseWriter, r *http.Request, params SetLogPolicyParams)
+
+	// (POST /logs/query)
+	QueryLogs(w http.ResponseWriter, r *http.Request, params QueryLogsParams)
+
+	// (GET /logs/sources)
+	ListLogSources(w http.ResponseWriter, r *http.Request)
+
+	// (GET /logs/stream)
+	StreamLogs(w http.ResponseWriter, r *http.Request, params StreamLogsParams)
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -3503,6 +3707,254 @@ func (siw *ServerInterfaceWrapper) ListDNSProviders(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListDNSProviders(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReleaseLogCursor operation middleware
+func (siw *ServerInterfaceWrapper) ReleaseLogCursor(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReleaseLogCursorParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReleaseLogCursor(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadLogs operation middleware
+func (siw *ServerInterfaceWrapper) DownloadLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DownloadLogsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadLogs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLogPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetLogPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLogPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetLogPolicy operation middleware
+func (siw *ServerInterfaceWrapper) SetLogPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetLogPolicyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetLogPolicy(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// QueryLogs operation middleware
+func (siw *ServerInterfaceWrapper) QueryLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params QueryLogsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.QueryLogs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLogSources operation middleware
+func (siw *ServerInterfaceWrapper) ListLogSources(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLogSources(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamLogs operation middleware
+func (siw *ServerInterfaceWrapper) StreamLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamLogsParams
+
+	// ------------- Required query parameter "query" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "query", r.URL.Query(), &params.Query, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "query"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "query", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamLogs(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5304,6 +5756,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks", wrapper.ListTasks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks/{id}", wrapper.GetTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/logs/sources", wrapper.ListLogSources)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/logs/policy", wrapper.GetLogPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/logs/policy", wrapper.SetLogPolicy)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/logs/query", wrapper.QueryLogs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/logs/cursors/release", wrapper.ReleaseLogCursor)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/logs/stream", wrapper.StreamLogs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/logs/download", wrapper.DownloadLogs)
 
 	return m
 }

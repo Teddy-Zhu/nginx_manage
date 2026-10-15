@@ -3,7 +3,7 @@ package nginxconfig
 import "fmt"
 
 const ParserVersion = "crossplane-0.4.89+spans-4"
-const PolicyVersion = "nginxpanel-6"
+const PolicyVersion = "nginxpanel-7"
 
 type File struct {
 	ID      string `json:"id"`

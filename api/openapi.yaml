@@ -811,6 +811,100 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /logs/sources:
+    get:
+      operationId: listLogSources
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /logs/policy:
+    get:
+      operationId: getLogPolicy
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    put:
+      operationId: setLogPolicy
+      x-scopes: [system.write]
+      parameters:
+        - { $ref: '#/components/parameters/CSRF' }
+        - { $ref: '#/components/parameters/Idempotency' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogPolicyInput' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /logs/query:
+    post:
+      operationId: queryLogs
+      x-scopes: [read]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogQuery' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /logs/cursors/release:
+    post:
+      operationId: releaseLogCursor
+      x-scopes: [read]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cursor]
+              properties:
+                cursor: { type: string, maxLength: 128 }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /logs/stream:
+    get:
+      operationId: streamLogs
+      x-scopes: [read]
+      description: 最近模式、开放结束时间。事件 page/error/end 均带统一 JSON 外壳；id 为下一页游标，支持 Last-Event-ID。每次连接最多十分钟；缓冲溢出发送 gap 提示。
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema: { type: string, maxLength: 4096, description: JSON 编码的 LogQuery，不接受文件路径或认证凭据。 }
+      responses:
+        '200':
+          description: 有界实时日志流。
+          content:
+            text/event-stream:
+              schema: { type: string }
+        default: { $ref: '#/components/responses/JSON' }
+  /logs/download:
+    post:
+      operationId: downloadLogs
+      x-scopes: [read]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      description: 从新查询导出脱敏 JSONL，最多 10000 行、8 MiB、16 MiB 扫描和二十秒。首行是范围及缺口摘要；与查询使用相同权限。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogQuery' }
+      responses:
+        '200':
+          description: 脱敏 JSONL 下载。
+          content:
+            application/x-ndjson:
+              schema: { type: string, format: binary }
+        default: { $ref: '#/components/responses/JSON' }
 components:
   securitySchemes:
     cookieAuth: { type: apiKey, in: cookie, name: nginxpanel_session }
@@ -833,6 +927,104 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    LogPolicy:
+      type: object
+      additionalProperties: false
+      required: [size_mib, interval_hours, access_days, error_days, resource_mib, total_mib, compress]
+      properties:
+        size_mib: { type: integer, format: int64, minimum: 1, maximum: 1024 }
+        interval_hours: { type: integer, format: int64, minimum: 1, maximum: 168 }
+        access_days: { type: integer, format: int64, minimum: 1, maximum: 90 }
+        error_days: { type: integer, format: int64, minimum: 1, maximum: 90 }
+        resource_mib: { type: integer, format: int64, maximum: 16384 }
+        total_mib: { type: integer, format: int64, maximum: 65536 }
+        compress: { type: boolean }
+    LogPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [base_version, policy]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 1 }
+        policy: { $ref: '#/components/schemas/LogPolicy' }
+    LogPolicyView:
+      type: object
+      additionalProperties: false
+      required: [version, policy, owner, editable, last_sweep_at, bytes, warning]
+      properties:
+        version: { type: integer, format: int64 }
+        policy: { $ref: '#/components/schemas/LogPolicy' }
+        owner: { type: string, enum: [agent, external, unconfirmed] }
+        editable: { type: boolean }
+        last_sweep_at: { type: integer, format: int64 }
+        bytes: { type: integer, format: int64 }
+        warning: { type: string }
+    LogSource:
+      type: object
+      additionalProperties: false
+      required: [id, resource_id, category, label, format, sensitive, active, bytes, archives, reason]
+      properties:
+        id: { type: string }
+        resource_id: { type: string }
+        category: { type: string }
+        label: { type: string }
+        format: { type: string }
+        sensitive: { type: boolean }
+        active: { type: boolean }
+        bytes: { type: integer, format: int64 }
+        archives: { type: integer }
+        reason: { type: string }
+    LogQuery:
+      type: object
+      additionalProperties: false
+      required: [source_id, mode, from, until, status, ip, path, keyword, policy_id, reason, events_only, limit, cursor]
+      properties:
+        source_id: { type: string, minLength: 64, maxLength: 64 }
+        mode: { type: string, enum: [recent, history] }
+        from: { type: integer, format: int64 }
+        until: { type: integer, format: int64 }
+        status: { type: integer }
+        ip: { type: string, maxLength: 64 }
+        path: { type: string, maxLength: 256 }
+        keyword: { type: string, maxLength: 256 }
+        policy_id: { type: string, maxLength: 256 }
+        reason: { type: string, maxLength: 256 }
+        events_only: { type: boolean }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        cursor: { type: string, maxLength: 128 }
+    LogRow:
+      type: object
+      additionalProperties: false
+      required: [time, level, ip, host, method, path, protocol, duration, bytes_sent, bytes_received, upstream, upstream_status, policy_id, reason, event, message, status]
+      properties:
+        time: { type: integer, format: int64 }
+        level: { type: string }
+        ip: { type: string }
+        host: { type: string }
+        method: { type: string }
+        path: { type: string }
+        protocol: { type: string }
+        duration: { type: string }
+        bytes_sent: { type: string }
+        bytes_received: { type: string }
+        upstream: { type: string }
+        upstream_status: { type: string }
+        policy_id: { type: string }
+        reason: { type: string }
+        event: { type: string }
+        message: { type: string }
+        status: { type: integer }
+    LogPage:
+      type: object
+      additionalProperties: false
+      required: [rows, cursor, more, scanned_bytes, skipped, gap, notice]
+      properties:
+        rows: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/LogRow' } }
+        cursor: { type: string }
+        more: { type: boolean }
+        scanned_bytes: { type: integer, format: int64 }
+        skipped: { type: integer }
+        gap: { type: boolean }
+        notice: { type: string }
     Response:
       type: object
       required: [code, message, data, request_id, node_id]

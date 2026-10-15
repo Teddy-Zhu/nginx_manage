@@ -1,11 +1,29 @@
 package auth
 
 import (
+	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"time"
 )
 
 type SessionStore struct{ DB *sql.DB }
+
+// Long-lived responses must consult the store again; the request's loaded
+// session alone cannot observe logout or renewal from another request.
+func (s *Service) SessionAlive(ctx context.Context) (bool, error) {
+	token := s.Sessions.Token(ctx)
+	if token == "" {
+		return false, nil
+	}
+	if s.Sessions.HashTokenInStore {
+		sum := sha256.Sum256([]byte(token))
+		token = base64.RawURLEncoding.EncodeToString(sum[:])
+	}
+	_, found, err := s.Sessions.Store.Find(token)
+	return found, err
+}
 
 func (s SessionStore) Delete(token string) error {
 	_, err := s.DB.Exec("DELETE FROM sessions WHERE token=?", token)

@@ -892,10 +892,202 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/logs/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listLogSources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logs/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getLogPolicy"];
+        put: operations["setLogPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logs/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["queryLogs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logs/cursors/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["releaseLogCursor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logs/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 最近模式、开放结束时间。事件 page/error/end 均带统一 JSON 外壳；id 为下一页游标，支持 Last-Event-ID。每次连接最多十分钟；缓冲溢出发送 gap 提示。 */
+        get: operations["streamLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logs/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 从新查询导出脱敏 JSONL，最多 10000 行、8 MiB、16 MiB 扫描和二十秒。首行是范围及缺口摘要；与查询使用相同权限。 */
+        post: operations["downloadLogs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LogPolicy: {
+            /** Format: int64 */
+            size_mib: number;
+            /** Format: int64 */
+            interval_hours: number;
+            /** Format: int64 */
+            access_days: number;
+            /** Format: int64 */
+            error_days: number;
+            /** Format: int64 */
+            resource_mib: number;
+            /** Format: int64 */
+            total_mib: number;
+            compress: boolean;
+        };
+        LogPolicyInput: {
+            /** Format: int64 */
+            base_version: number;
+            policy: components["schemas"]["LogPolicy"];
+        };
+        LogPolicyView: {
+            /** Format: int64 */
+            version: number;
+            policy: components["schemas"]["LogPolicy"];
+            /** @enum {string} */
+            owner: "agent" | "external" | "unconfirmed";
+            editable: boolean;
+            /** Format: int64 */
+            last_sweep_at: number;
+            /** Format: int64 */
+            bytes: number;
+            warning: string;
+        };
+        LogSource: {
+            id: string;
+            resource_id: string;
+            category: string;
+            label: string;
+            format: string;
+            sensitive: boolean;
+            active: boolean;
+            /** Format: int64 */
+            bytes: number;
+            archives: number;
+            reason: string;
+        };
+        LogQuery: {
+            source_id: string;
+            /** @enum {string} */
+            mode: "recent" | "history";
+            /** Format: int64 */
+            from: number;
+            /** Format: int64 */
+            until: number;
+            status: number;
+            ip: string;
+            path: string;
+            keyword: string;
+            policy_id: string;
+            reason: string;
+            events_only: boolean;
+            limit: number;
+            cursor: string;
+        };
+        LogRow: {
+            /** Format: int64 */
+            time: number;
+            level: string;
+            ip: string;
+            host: string;
+            method: string;
+            path: string;
+            protocol: string;
+            duration: string;
+            bytes_sent: string;
+            bytes_received: string;
+            upstream: string;
+            upstream_status: string;
+            policy_id: string;
+            reason: string;
+            event: string;
+            message: string;
+            status: number;
+        };
+        LogPage: {
+            rows: components["schemas"]["LogRow"][];
+            cursor: string;
+            more: boolean;
+            /** Format: int64 */
+            scanned_bytes: number;
+            skipped: number;
+            gap: boolean;
+            notice: string;
+        };
         Response: {
             /** @description 成功固定为 OK，失败使用稳定语义错误码。 */
             code: string;
@@ -2750,6 +2942,146 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listLogSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getLogPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setLogPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogPolicyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    queryLogs: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogQuery"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    releaseLogCursor: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cursor: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    streamLogs: {
+        parameters: {
+            query: {
+                query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 有界实时日志流。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            default: components["responses"]["JSON"];
+        };
+    };
+    downloadLogs: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogQuery"];
+            };
+        };
+        responses: {
+            /** @description 脱敏 JSONL 下载。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
             default: components["responses"]["JSON"];
         };
     };

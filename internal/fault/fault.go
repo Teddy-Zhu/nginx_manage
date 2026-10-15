@@ -7,6 +7,9 @@ type Error struct {
 }
 
 func (e *Error) Error() string { return e.Message }
+func New(status int, code, message string) *Error {
+	return &Error{Status: status, Code: code, Message: message}
+}
 func Invalid(message string) error {
 	return &Error{Status: 400, Code: "VALIDATION_FAILED", Message: message}
 }

@@ -166,8 +166,8 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 					if n.Name == "access_log" && v == "off" || n.Name == "error_log" && v == "/dev/null" {
 						break
 					}
-					if !cleanRelative(v) || !(strings.HasPrefix(v, "logs/nginx/") || strings.HasPrefix(v, "logs/stream/") || strings.HasPrefix(v, "logs/nginx-global/")) || strings.Contains(v, "$") {
-						add("unsafe_path", "日志只能写入受管日志目录")
+					if _, _, ok := ManagedLogPath(v); !ok || n.Name == "error_log" && !strings.HasSuffix(v, "/error.log") || n.Name == "access_log" && strings.HasSuffix(v, "/error.log") {
+						add("unsafe_path", "日志须使用资源 UUID 目录或 nginx-global 下的固定 access.log、error.log 或 Stream session.log")
 					}
 				case "ssl_certificate", "ssl_certificate_key", "ssl_trusted_certificate", "proxy_ssl_trusted_certificate":
 					if len(n.Args) != 1 || !cleanRelative(n.Args[0].Value) || !strings.HasPrefix(n.Args[0].Value, "certificates/") || strings.Contains(n.Args[0].Value, "$") {

@@ -49,6 +49,7 @@ func run() error {
 	webDir := flags.String("web-dir", "web/dist", "built frontend directory")
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
+	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
 	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
 	devAgent := flags.Bool("dev", false, "non-root read-only development agent")
@@ -119,7 +120,7 @@ func run() error {
 		if *nginxBinary == "" {
 			return errors.New("nginx-init requires --nginx-binary")
 		}
-		engine := &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: policy, Modules: catalog, Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}}
+		engine := &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}}
 		if err := engine.Open(); err != nil {
 			return err
 		}
@@ -140,7 +141,7 @@ func run() error {
 		journal := &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}
 		var engine *agent.Nginx
 		if *nginxBinary != "" {
-			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, Policy: policy, Modules: catalog, Journal: journal}
+			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Journal: journal}
 		}
 		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent}).Run(ctx)
 	default:

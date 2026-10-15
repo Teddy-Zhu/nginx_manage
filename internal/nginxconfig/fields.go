@@ -450,8 +450,8 @@ func validateField(field string, values []string, kind string) error {
 			if field == "error_log" && len(args) == 2 && args[0] == "/dev/null" {
 				continue
 			}
-			if !cleanRelative(args[0]) || !(strings.HasPrefix(args[0], "logs/nginx/") || strings.HasPrefix(args[0], "logs/stream/")) || strings.Contains(args[0], "$") {
-				return errors.New("日志须使用受管路径")
+			if _, _, ok := ManagedLogPath(args[0]); !ok || field == "error_log" && !strings.HasSuffix(args[0], "/error.log") || field == "access_log" && strings.HasSuffix(args[0], "/error.log") {
+				return errors.New("日志须使用资源 UUID 目录或 nginx-global 下的固定 access.log、error.log 或 Stream session.log")
 			}
 			if len(args) > 2 {
 				return errors.New("日志参数过多")

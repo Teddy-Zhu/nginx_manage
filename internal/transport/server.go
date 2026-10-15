@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"nginxpanel/internal/acme"
@@ -18,14 +19,15 @@ import (
 )
 
 type Server struct {
-	DB      *sql.DB
-	Auth    *auth.Service
-	Config  *nginxconfig.Service
-	ACME    *acme.Service
-	Agent   *agent.Client
-	NodeID  string
-	Dev     bool
-	Version string
+	DB         *sql.DB
+	Auth       *auth.Service
+	Config     *nginxconfig.Service
+	ACME       *acme.Service
+	Agent      *agent.Client
+	NodeID     string
+	Dev        bool
+	Version    string
+	logStreams atomic.Int32
 }
 
 var _ apigen.ServerInterface = (*Server)(nil)

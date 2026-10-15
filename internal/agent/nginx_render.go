@@ -89,6 +89,14 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 	if httpBlock == nil || pidCount != 1 {
 		return nil, errors.New("the managed http and pid entry points are required")
 	}
+	rootNodes, err := p.ExpandNodes(main.Nodes, 0)
+	if err != nil {
+		return nil, err
+	}
+	hasRootErrorLog := false
+	for _, node := range rootNodes {
+		hasRootErrorLog = hasRootErrorLog || node.Name == "error_log"
+	}
 	if inspection == nil {
 		m.Dependencies = map[string]string{}
 	}
@@ -145,8 +153,16 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 	if err != nil {
 		return nil, err
 	}
+	logSources, err := collectLogSources(p)
+	if err != nil {
+		return nil, err
+	}
 	if inspection == nil {
 		m.HTTP01 = http01Bindings
+		m.Logs = logSources
+		if err := n.prepareLogFiles(logSources); err != nil {
+			return nil, err
+		}
 	}
 	defaults, err := n.httpDefaults(p, httpBlock, httpsUpstream, cacheEnabled, m, inspection != nil)
 	if err != nil {
@@ -183,12 +199,6 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 					}
 					arg := node.Args[0]
 					edits = append(edits, nginxconfig.Edit{Start: arg.Start, End: arg.End, Text: nginxQuote(filepath.Join(filepath.Dir(n.configPath(revisionDir(m.DeploymentID))), arg.Value))})
-				case "access_log", "error_log":
-					if inspection == nil && len(node.Args) > 0 && node.Args[0].Value != "off" && node.Args[0].Value != "/dev/null" {
-						if err := secure.RootDirectory(filepath.Dir(filepath.Join(n.DataDir, node.Args[0].Value)), 0755); err != nil {
-							return err
-						}
-					}
 				}
 				if err := walk(node.Children); err != nil {
 					return err
@@ -200,6 +210,9 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 			return nil, err
 		}
 		if doc == main {
+			if !hasRootErrorLog {
+				edits = append(edits, nginxconfig.Edit{Start: 0, End: 0, Text: "error_log logs/nginx-global/error.log warn;\n"})
+			}
 			probe := "\n" + http01Controls + "    # Reserved local revision probe.\n    server {\n        listen " + nginxQuote("unix:"+filepath.Join(n.DataDir, "run", "nginx-probe.sock")) + ";\n        server_name localhost;\n        access_log off;\n        location = /__nginxpanel_revision { return 200 " + nginxQuote(m.Probe) + "; }\n    }\n"
 			extras := []string{}
 			for _, policy := range p.Tree.WAFPolicies {
@@ -505,6 +518,9 @@ func (n *Nginx) httpDefaults(p *nginxconfig.Parsed, httpBlock *nginxconfig.Node,
 		existing[node.Name] = true
 	}
 	var out strings.Builder
+	if !existing["access_log"] {
+		out.WriteString("    access_log logs/nginx-global/access.log nginxpanel_http;\n")
+	}
 	for _, policy := range p.Tree.WAFPolicies {
 		if policy.Config.Metadata.Enabled {
 			out.WriteString("    map $host $nginxpanel_waf_policy { default \"\"; }\n    map $host $nginxpanel_waf_reason { default \"\"; }\n")

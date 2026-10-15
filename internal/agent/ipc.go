@@ -11,17 +11,19 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/fault"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 6
+const Protocol = 7
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`
@@ -101,6 +103,10 @@ func (s *Server) Run(ctx context.Context) error {
 		if s.Nginx.uid == int(s.AllowedUID) {
 			return errors.New("Nginx workers and Web must use separate accounts")
 		}
+		logContext, stopLogs := context.WithCancel(ctx)
+		logsDone := make(chan struct{})
+		go func() { defer close(logsDone); s.Nginx.RunLogs(logContext) }()
+		defer func() { stopLogs(); <-logsDone }()
 	}
 	var challengeServer *http.Server
 	challengeErrors := make(chan error, 1)
@@ -122,6 +128,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	mux := http.NewServeMux()
 	s.http01Handlers(mux)
+	s.logHandlers(mux)
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"
@@ -295,6 +302,17 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		return errors.New("无法连接本机 Agent")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 && strings.HasPrefix(path, "/v1/logs/") {
+		var out struct {
+			Protocol int    `json:"protocol"`
+			Code     string `json:"code"`
+			Message  string `json:"message"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&out) == nil && out.Protocol == Protocol && out.Code != "" {
+			return fault.New(resp.StatusCode, out.Code, out.Message)
+		}
+		return &HTTPError{Status: resp.StatusCode}
+	}
 	if resp.StatusCode == 404 {
 		return ErrOperationNotFound
 	}

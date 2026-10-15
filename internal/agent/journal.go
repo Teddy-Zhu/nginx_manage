@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"nginxpanel/internal/logs"
 	"nginxpanel/internal/secure"
 )
 
@@ -16,22 +17,25 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
-	OperationID      string `json:"operation_id"`
-	RequestHash      string `json:"request_hash"`
-	Kind             string `json:"kind"`
-	State            string `json:"state"`
-	Stage            string `json:"stage"`
-	BeforeRevision   string `json:"before_revision,omitempty"`
-	AfterRevision    string `json:"after_revision,omitempty"`
-	Deadline         int64  `json:"deadline,omitempty"`
-	UpdatedAt        int64  `json:"updated_at"`
-	DiagnosticsCount int    `json:"diagnostics_count"`
-	BeforeDir        string `json:"before_dir,omitempty"`
-	AfterDir         string `json:"after_dir,omitempty"`
-	RestoreSnapshot  string `json:"restore_snapshot,omitempty"`
-	CandidateHash    string `json:"candidate_hash,omitempty"`
-	ObservedRevision string `json:"observed_revision"`
-	Error            string `json:"error"`
+	OperationID      string       `json:"operation_id"`
+	RequestHash      string       `json:"request_hash"`
+	Kind             string       `json:"kind"`
+	State            string       `json:"state"`
+	Stage            string       `json:"stage"`
+	BeforeRevision   string       `json:"before_revision,omitempty"`
+	AfterRevision    string       `json:"after_revision,omitempty"`
+	Deadline         int64        `json:"deadline,omitempty"`
+	UpdatedAt        int64        `json:"updated_at"`
+	DiagnosticsCount int          `json:"diagnostics_count"`
+	BeforeDir        string       `json:"before_dir,omitempty"`
+	AfterDir         string       `json:"after_dir,omitempty"`
+	RestoreSnapshot  string       `json:"restore_snapshot,omitempty"`
+	CandidateHash    string       `json:"candidate_hash,omitempty"`
+	ObservedRevision string       `json:"observed_revision"`
+	Error            string       `json:"error"`
+	LogPolicy        *logs.Policy `json:"log_policy,omitempty"`
+	LogPolicyBase    int64        `json:"log_policy_base,omitempty"`
+	LogPolicyVersion int64        `json:"log_policy_version,omitempty"`
 }
 type Journal struct {
 	Dir string

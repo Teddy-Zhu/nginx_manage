@@ -87,6 +87,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/logs': RouteRecordInfo<
+      '/logs',
+      '/logs',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/nginx': RouteRecordInfo<
       '/nginx',
       '/nginx',
@@ -187,6 +194,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/login.vue': {
       routes:
         | '/login'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/logs.vue': {
+      routes:
+        | '/logs'
       views:
         | never
       pathParamNames:

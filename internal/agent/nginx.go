@@ -35,6 +35,7 @@ var ErrRuntimeUnavailable = errors.New("专用 Nginx 实例未初始化或未运
 // An API request cannot select an executable, prefix, worker identity or PID.
 type Nginx struct {
 	DataDir, Binary, WorkerUser string
+	LogOwner                    string
 	Policy                      nginxconfig.Policy
 	Modules                     []nginxmodules.Approval
 	Journal                     *Journal
@@ -46,6 +47,7 @@ type Nginx struct {
 	uid                         int
 	workerGroup                 string
 	http01                      *http01Store
+	logs                        *managedLogs
 }
 
 type ApplyRequest struct {
@@ -81,6 +83,7 @@ type manifest struct {
 	Dependencies map[string]string           `json:"dependencies"`
 	Modules      map[string]ModuleDependency `json:"modules"`
 	HTTP01       map[string][]listener       `json:"http01"`
+	Logs         []logSource                 `json:"logs"`
 }
 
 func (n *Nginx) configPath(dir string) string {
@@ -201,6 +204,11 @@ func (n *Nginx) Open() error {
 		n.Close()
 		return err
 	}
+	n.logs, err = openManagedLogs(n)
+	if err != nil {
+		n.Close()
+		return err
+	}
 	records, err := n.Journal.List()
 	if err != nil {
 		n.Close()
@@ -239,6 +247,9 @@ func (n *Nginx) Close() {
 	n.closed = true
 	n.mu.Unlock()
 	n.workers.Wait()
+	if n.logs != nil {
+		n.logs.reader.Close()
+	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.unlock != nil {
@@ -580,7 +591,7 @@ func (n *Nginx) manifestMetadata(dir string) (manifest, error) {
 	if len(m.Files) == 0 || len(m.Files) > limits.Files || len(m.Dependencies) > limits.CertificateReferences || len(m.Modules) > limits.NginxModules {
 		return m, ErrExternalChange
 	}
-	if !moduleHeader(m.Modules) || !validHTTP01Bindings(m.HTTP01) {
+	if !moduleHeader(m.Modules) || !validHTTP01Bindings(m.HTTP01) || !validLogSources(m.Logs) {
 		return m, ErrExternalChange
 	}
 	return m, nil
@@ -658,7 +669,7 @@ func (n *Nginx) sourceHash(p *nginxconfig.Parsed) string {
 		Policy        nginxconfig.Policy
 		Worker, Group string
 		Renderer      int
-	}{p.Tree.Files, policy, n.WorkerUser, n.workerGroup, 6})
+	}{p.Tree.Files, policy, n.WorkerUser, n.workerGroup, 7})
 	return secure.Hash(source)
 }
 
@@ -718,6 +729,9 @@ func (n *Nginx) prepare(id, deployment string, p *nginxconfig.Parsed, modules ma
 	b, err := json.Marshal(m)
 	if err != nil {
 		return m, err
+	}
+	if len(b) > 256<<10 {
+		return m, errors.New("published manifest exceeds limit")
 	}
 	if err := durableFile(filepath.Join(tmp, ".nginxpanel.json"), b, 0600, 0); err != nil {
 		return m, err

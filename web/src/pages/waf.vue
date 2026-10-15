@@ -232,6 +232,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       tree?.version ? `期望修订 #${tree.version}` : "尚未保存"
     }}</span>
     <div class="inline-gap">
+      <router-link :to="{ path: '/logs', query: { events: '1' } }"
+        >防护事件</router-link
+      >
       <n-button :loading="busy" @click="load">刷新</n-button
       ><n-button type="primary" :disabled="busy" @click="open(null)"
         >新建策略</n-button
