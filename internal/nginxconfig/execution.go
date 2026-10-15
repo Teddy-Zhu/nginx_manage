@@ -35,6 +35,12 @@ func enqueueOperation(ctx context.Context, tx *sql.Tx, revision, kind, snapshot 
 	if count > 0 {
 		return "", fault.Conflict("已有 Nginx 操作等待完成或恢复")
 	}
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders o JOIN tasks t ON t.id=o.task_id WHERE o.challenge_type='http-01' AND t.state IN ('queued','running','recovery_required')").Scan(&count); err != nil {
+		return "", err
+	}
+	if count > 0 {
+		return "", fault.Conflict("HTTP-01 验证或材料恢复尚未完成，暂不能执行 Nginx 操作")
+	}
 	var expected sql.NullString
 	if err := tx.QueryRowContext(ctx, "SELECT applied_revision FROM config_head WHERE id=1").Scan(&expected); err != nil {
 		return "", err

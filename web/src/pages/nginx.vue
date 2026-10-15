@@ -179,12 +179,16 @@ function chooseCertificateVersion(value: unknown) {
   fieldInputs.value.certificate = version.certificate_path;
   fieldInputs.value.certificate_key = version.private_key_path;
 }
-function tlsFieldReason(name: string) {
-  if (name !== "https_redirect" && name !== "hsts") return "";
+function fieldFeatureReason(name: string) {
+  if (name !== "https_redirect" && name !== "hsts" && name !== "http01")
+    return "";
   const feature = nginxFeatures.value?.features[name];
   return nginxFeatures.value?.available && feature?.available
     ? ""
-    : feature?.reason || tlsReason.value;
+    : feature?.reason ||
+        (name === "http01"
+          ? "无法确认 HTTP-01 所需 Nginx 能力"
+          : tlsReason.value);
 }
 function addHTTPSListener() {
   if (
@@ -243,6 +247,7 @@ function fieldText(field: Resource["fields"][string]) {
   return field.values.join(field.format === "lines" ? "\n" : " ");
 }
 const fieldLabels: Record<string, string> = {
+  http01: "HTTP-01 验证入口（需 80 端口，保存并应用）",
   listeners: "监听（每行一项）",
   domains: "域名",
   upstream: "上游地址",
@@ -285,6 +290,11 @@ const toggleFields = new Set([
   "real_ip_recursive",
 ]);
 function fieldOptions(name: string) {
+  if (name === "http01")
+    return [
+      { label: "关闭", value: "" },
+      { label: "启用", value: "on" },
+    ];
   if (name === "hsts")
     return [
       { label: "继承默认", value: "" },
@@ -1054,7 +1064,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                 v-for="(field, name) in regularFields"
                 :key="name"
                 :label="fieldLabels[name] ?? name"
-                :feedback="field.reason || tlsFieldReason(name)"
+                :feedback="field.reason || fieldFeatureReason(name)"
                 ><n-select
                   v-if="fieldOptions(name)"
                   v-model:value="fieldInputs[name]"
@@ -1063,7 +1073,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                     busy ||
                     !field.editable ||
                     differsFromDesired ||
-                    !!tlsFieldReason(name)
+                    !!fieldFeatureReason(name)
                   " />
                 <n-input
                   v-else
@@ -1073,7 +1083,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                     busy ||
                     !field.editable ||
                     differsFromDesired ||
-                    !!tlsFieldReason(name)
+                    !!fieldFeatureReason(name)
                   "
                   placeholder="未设置" /></n-form-item
               ><n-button

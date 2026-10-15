@@ -158,6 +158,7 @@ func parseNginxFeatures(value string) NginxFeatures {
 	set("map", http && !flags["--without-http_map_module"], "缺少 HTTP map 模块")
 	set("map_volatile", http && !flags["--without-http_map_module"] && atLeast(1, 11, 7), "路径规则需要 Nginx 1.11.7 或更新版本的 map 模块")
 	set("rewrite", http && !flags["--without-http_rewrite_module"], "缺少 HTTP rewrite 模块")
+	set("http01", http && !flags["--without-http_rewrite_module"] && !flags["--without-http_proxy_module"], "HTTP-01 需要 HTTP rewrite 和 proxy 模块")
 	req := http && !flags["--without-http_limit_req_module"]
 	conn := http && !flags["--without-http_limit_conn_module"]
 	set("limit_req", req, "缺少 HTTP 请求限速模块")

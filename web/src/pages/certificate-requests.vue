@@ -48,6 +48,8 @@ const emptyForm = (): ACMEProfileInput => ({
   notes: "",
   account_id: "",
   credential_id: "",
+  challenge_type: "dns-01",
+  http01_confirmed: false,
   domains: [],
 });
 const form = ref(emptyForm()),
@@ -83,7 +85,10 @@ const valid = computed(
   () =>
     form.value.name.trim() &&
     form.value.account_id &&
-    form.value.credential_id &&
+    (form.value.challenge_type === "dns-01"
+      ? !!form.value.credential_id
+      : form.value.http01_confirmed &&
+        !domains.value.some((domain) => domain.startsWith("*."))) &&
     domains.value.length > 0 &&
     domains.value.length <= 64,
 );
@@ -113,6 +118,18 @@ const taskStates: Record<string, string> = {
   failed: "失败",
   recovery_required: "待恢复",
   cancelled: "已取消",
+};
+function changeChallengeType(value: unknown) {
+  if (value !== "dns-01" && value !== "http-01") return;
+  form.value.challenge_type = value;
+  form.value.credential_id = "";
+  form.value.http01_confirmed = false;
+}
+const http01States: Record<ACMEOrder["http01_state"], string> = {
+  none: "尚未发布",
+  unknown: "发布待确认",
+  active: "验证材料有效",
+  cleaned: "已清理",
 };
 const dnsStates: Record<string, string> = {
   preparing: "准备发布",
@@ -234,14 +251,17 @@ async function create() {
 }
 async function issue(item: ACMEProfile, newOrder: boolean) {
   if (!canIssue(item)) return;
-  const uncertain = item.state === "recovery_required";
+  const uncertain =
+    item.state === "recovery_required" || item.order_unconfirmed;
   const prompt = newOrder
     ? uncertain
       ? "原任务存在未确认结果，CA 可能已经接受订单。确认承担重复申请的限制，并建立新订单？"
       : "确认建立新订单并申请证书新版本？新版本签发后需另行绑定站点并应用。"
     : item.current_order_id
-      ? "确认恢复原订单？将使用该订单原有的密钥和 DNS 凭据，核对签发结果并清理验证记录。"
-      : "确认向所选 CA 申请证书并临时添加 DNS TXT 验证记录？";
+      ? "确认恢复原订单？将使用原订单密钥与验证方式，核对签发结果并清理临时验证材料。"
+      : item.challenge_type === "http-01"
+        ? "确认向所选 CA 申请证书并发布临时 HTTP 验证材料？验证期间暂不能执行 Nginx 配置操作。"
+        : "确认向所选 CA 申请证书并临时添加 DNS TXT 验证记录？";
   if (!window.confirm(prompt)) return;
   const input = {
     base_version: item.version,
@@ -266,7 +286,8 @@ async function issue(item: ACMEProfile, newOrder: boolean) {
 async function archive(item: ACMEProfile) {
   if (busy.value || item.state === "issuing" || item.state === "archived")
     return;
-  const uncertain = item.state === "recovery_required";
+  const uncertain =
+    item.state === "recovery_required" || item.order_unconfirmed;
   if (
     !window.confirm(
       uncertain
@@ -350,23 +371,24 @@ onUnmounted(() => {
       <n-button :loading="busy" @click="load">刷新</n-button
       ><n-button
         type="primary"
-        :disabled="busy || !accountOptions.length || !credentialOptions.length"
+        :disabled="busy || !accountOptions.length"
         @click="start"
         >添加签发配置</n-button
       >
     </div>
   </div>
   <n-alert type="info" :bordered="false" class="notice"
-    >DNS-01 支持普通及通配域名。测试证书不受浏览器信任。签发后需在
+    >支持 DNS-01 和 HTTP-01；通配域名须使用
+    DNS-01。测试证书不受浏览器信任。签发后需在
     <router-link to="/nginx">Nginx 配置</router-link>
     中建立初始绑定。可为每项配置启用自动续期与自动部署；签发与部署状态分别记录。</n-alert
   >
   <n-alert
-    v-if="!accountOptions.length || !credentialOptions.length"
+    v-if="!accountOptions.length"
     type="warning"
     :bordered="false"
     class="notice"
-    >请先添加就绪的 ACME 账户及对应域名的 DNS 凭据。</n-alert
+    >请先添加并完成 ACME 账户注册。</n-alert
   >
   <n-modal
     :show="!!policyID"
@@ -419,7 +441,33 @@ onUnmounted(() => {
       <n-form-item label="ACME 账户与环境"
         ><n-select v-model:value="form.account_id" :options="accountOptions"
       /></n-form-item>
-      <n-form-item label="DNS 凭据"
+      <n-form-item label="验证方式">
+        <n-select
+          :value="form.challenge_type"
+          :options="[
+            { label: 'DNS-01', value: 'dns-01' },
+            { label: 'HTTP-01', value: 'http-01' },
+          ]"
+          @update:value="changeChallengeType"
+        />
+      </n-form-item>
+      <n-alert
+        v-if="form.challenge_type === 'http-01'"
+        type="info"
+        :bordered="false"
+        class="notice"
+      >
+        请先在
+        <router-link to="/nginx">Nginx 配置</router-link> 中为全部申请域名启用
+        80 端口和 HTTP-01 验证入口，并保存、应用。公网 A/AAAA 应指向本节点，80
+        端口须可达；存在多个入口时每个入口均须响应验证。实际可达性由 CA 验证。
+      </n-alert>
+      <n-form-item v-if="form.challenge_type === 'http-01'">
+        <n-checkbox v-model:checked="form.http01_confirmed"
+          >已确认公网 80 端口可达及域名指向</n-checkbox
+        >
+      </n-form-item>
+      <n-form-item v-if="form.challenge_type === 'dns-01'" label="DNS 凭据"
         ><n-select
           v-model:value="form.credential_id"
           :options="credentialOptions"
@@ -429,7 +477,11 @@ onUnmounted(() => {
           v-model:value="domainsText"
           type="textarea"
           :maxlength="16384"
-          placeholder="example.com&#10;*.example.com"
+          :placeholder="
+            form.challenge_type === 'dns-01'
+              ? 'example.com\n*.example.com'
+              : 'example.com\nwww.example.com'
+          "
       /></n-form-item>
       <div class="inline-gap">
         <n-button
@@ -448,6 +500,7 @@ onUnmounted(() => {
       <div>
         <h2>{{ item.name }}</h2>
         <p class="muted">{{ item.notes }}</p>
+        <p class="muted">{{ item.challenge_type.toUpperCase() }}</p>
       </div>
       <div class="inline-gap">
         <n-tag
@@ -572,7 +625,14 @@ onUnmounted(() => {
         </div>
         <p class="muted mono domains">订单 {{ order.id }}</p>
         <p v-if="order.terminal" class="muted">
-          CA 已确认订单失效，须创建新订单。
+          CA
+          已确认订单失效；若有未清理材料，请先恢复原任务完成清理，再创建新订单。
+        </p>
+        <p v-if="order.challenge_type === 'http-01'" class="muted">
+          HTTP-01 · {{ http01States[order.http01_state]
+          }}<span v-if="order.http01_expires_at">
+            · 到期时间 {{ date(order.http01_expires_at) }}</span
+          >
         </p>
         <p v-if="order.last_error" class="error">{{ order.last_error }}</p>
         <p v-if="order.certificate_version_id" class="muted domains">

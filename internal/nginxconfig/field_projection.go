@@ -73,6 +73,9 @@ func (p *Parsed) project() {
 									policyID, _, _ := wafFileID(values[0])
 									field.Values = []string{policyID}
 								}
+								if name == "http01" {
+									field.Values = []string{"on"}
+								}
 								if name == "https_redirect" {
 									port, _ := httpsRedirect(directive)
 									field.Values = []string{port}
@@ -203,6 +206,18 @@ func (p *Parsed) Patch(id string, changes map[string][]string, metadata *Resourc
 				return nil, fmt.Errorf("WAF 策略未登记或不可可靠映射")
 			}
 			values = []string{wafPath(values[0], "server")}
+		}
+		if name == "http01" {
+			if len(values) == 0 {
+				for _, directive := range directives {
+					edits[owner.File.ID] = append(edits[owner.File.ID], Edit{directive.Start, directive.End, ""})
+				}
+			} else if len(directives) == 0 {
+				pos, indent := blockInsertion(owner.File.Content, target.Close)
+				key := insertion{owner.File.ID, pos, indent}
+				inserts[key] = append(inserts[key], indent+"    "+HTTP01Placeholder+"\n")
+			}
+			continue
 		}
 		if name == "https_redirect" {
 			if len(values) > 0 {

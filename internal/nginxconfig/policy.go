@@ -87,6 +87,14 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 				if security[n.Name] {
 					scopes["security.write"] = true
 				}
+				if n.Name == "set" && len(n.Args) > 0 && strings.HasPrefix(n.Args[0].Value, "$nginxpanel_http01_") {
+					add("reserved_name", "HTTP-01 运行变量由执行器管理")
+				}
+				for _, arg := range n.Args {
+					if strings.Contains(arg.Value, "nginxpanel_http01_req") || strings.Contains(arg.Value, "nginxpanel_http01_conn") {
+						add("reserved_name", "HTTP-01 限流区域由执行器管理")
+					}
+				}
 				switch n.Name {
 				case "load_module":
 					scopes["security.write"] = true
@@ -110,6 +118,9 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 						}
 					}
 				case "map":
+					if len(n.Args) == 2 && strings.HasPrefix(n.Args[1].Value, "$nginxpanel_http01_") {
+						add("reserved_name", "HTTP-01 运行变量由执行器管理")
+					}
 					if len(n.Args) == 2 && (n.Args[1].Value == "$nginxpanel_waf_policy" || n.Args[1].Value == "$nginxpanel_waf_reason") {
 						add("reserved_name", "WAF 日志默认变量由受管执行器定义")
 					}

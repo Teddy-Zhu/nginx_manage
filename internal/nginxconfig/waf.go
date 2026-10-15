@@ -433,6 +433,9 @@ func (p *Parsed) DisabledWAFFiles() map[string]bool {
 }
 func (p *Parsed) RuntimeFileEnabled(name string) bool { return !p.runtimeExcluded[name] }
 func (p *Parsed) matchesField(node *Node, name string, spec fieldSpec) bool {
+	if name == "http01" {
+		return IsHTTP01(node)
+	}
 	if node.Name != spec.directive {
 		return false
 	}

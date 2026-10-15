@@ -40,12 +40,16 @@ func issueFailure(stage, message string, cause error) error {
 var errOrderUncertain = errors.New("ACME new-order outcome is uncertain")
 
 type orderJob struct {
+	HTTP01Epoch                                                                int64
 	ID, ProfileID, TaskID, AccountID, Provider, OrderURL, CertificateVersionID string
 	Started                                                                    bool
 	Automatic                                                                  bool
 	ReplacesID                                                                 string
 	NextPollAt                                                                 int64
 	Credentials, Key, CSR                                                      []byte
+	ChallengeType, HTTP01State, HTTP01Revision                                 string
+	HTTP01ExpiresAt                                                            int64
+	Terminal                                                                   bool
 }
 
 func (s *Service) Run(ctx context.Context) error {
@@ -114,7 +118,7 @@ func (s *Service) nextIssue(ctx context.Context) error {
 		return errors.New("ACME issuance task found with disabled Nginx module")
 	}
 	var job orderJob
-	err = tx.QueryRowContext(ctx, "SELECT id,profile_id,task_id,COALESCE(account_id,''),provider,credentials,private_key,csr,submit_started,order_url,next_poll_at,COALESCE(certificate_version_id,''),automatic,replaces_id FROM acme_orders WHERE id=?", p.CurrentOrderID).Scan(&job.ID, &job.ProfileID, &job.TaskID, &job.AccountID, &job.Provider, &job.Credentials, &job.Key, &job.CSR, &job.Started, &job.OrderURL, &job.NextPollAt, &job.CertificateVersionID, &job.Automatic, &job.ReplacesID)
+	err = tx.QueryRowContext(ctx, "SELECT id,profile_id,task_id,COALESCE(account_id,''),provider,credentials,private_key,csr,submit_started,order_url,next_poll_at,COALESCE(certificate_version_id,''),automatic,replaces_id,challenge_type,http01_state,http01_revision,http01_expires_at,terminal,http01_epoch FROM acme_orders WHERE id=?", p.CurrentOrderID).Scan(&job.ID, &job.ProfileID, &job.TaskID, &job.AccountID, &job.Provider, &job.Credentials, &job.Key, &job.CSR, &job.Started, &job.OrderURL, &job.NextPollAt, &job.CertificateVersionID, &job.Automatic, &job.ReplacesID, &job.ChallengeType, &job.HTTP01State, &job.HTTP01Revision, &job.HTTP01ExpiresAt, &job.Terminal, &job.HTTP01Epoch)
 	if err != nil {
 		return err
 	}
@@ -127,55 +131,72 @@ func (s *Service) nextIssue(ctx context.Context) error {
 	}
 	work, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
-	plain, loadErr := s.Vault.Open(job.Credentials, "acme:order:"+job.ID+":dns")
-	var secrets map[string]string
-	if loadErr == nil {
-		loadErr = json.Unmarshal(plain, &secrets)
-	}
-	var dnsClient *dnsAPI
-	if loadErr == nil {
-		dnsClient, loadErr = newDNSAPI(job.Provider, secrets)
-	}
-	if dnsClient != nil {
-		defer dnsClient.http.CloseIdleConnections()
-	}
 	var operationErr error
 	var transport *caTransport
-	if loadErr != nil {
-		var records int
-		if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_dns_records WHERE order_id=? AND state!='cleaned'", job.ID).Scan(&records); err != nil {
-			return err
-		}
-		if records > 0 {
-			return s.finishIssue(ctx, p, job, "recovery_required", "dns_credentials_failed", "DNS 凭据快照或适配器无法读取，验证记录尚待清理；请检查本机密钥、凭据及 SDK 调试设置后恢复原任务", 0)
-		}
-		operationErr = issueFailure("dns_credentials_failed", "DNS 凭据快照无法读取或适配器配置无效，请检查本机密钥、凭据及 SDK 调试设置", loadErr)
-	} else {
-		provider := &journalDNS{service: s, orderID: job.ID, api: dnsClient}
-		if job.CertificateVersionID == "" {
-			operationErr, transport = s.obtain(work, p, &job, provider)
-		}
+	if job.ChallengeType == "http-01" {
+		var cleanupErr error
+		operationErr, transport, cleanupErr = s.runHTTP01(work, ctx, p, &job)
 		if transport != nil {
 			defer transport.base.CloseIdleConnections()
 		}
 		if ctx.Err() != nil {
 			return nil
 		}
-		if err := s.stage(ctx, job, "dns_cleaning"); err != nil {
-			return err
-		}
-		cleanup, stop := context.WithTimeout(ctx, 3*time.Minute)
-		cleanupErr := provider.cleanup(cleanup)
-		stop()
-		if ctx.Err() != nil {
-			return nil
-		}
 		if cleanupErr != nil {
-			message := "DNS 验证记录清理未确认，请恢复原任务；已取得的证书版本会保留"
-			if errors.Is(cleanupErr, errDNSCreateUnconfirmed) {
-				message = "DNS 创建结果不确定，查询尚未发现记录；保留恢复记录并停止重复写入，请恢复原任务核对，持续无法确认须本机处理"
+			return s.finishIssue(ctx, p, job, "recovery_required", "http01_cleanup_unconfirmed", "HTTP-01 临时材料清理未确认，请恢复原任务；已取得的证书版本会保留，验证材料到期后将停止响应", 0)
+		}
+	} else {
+		plain, loadErr := s.Vault.Open(job.Credentials, "acme:order:"+job.ID+":dns")
+		var secrets map[string]string
+		if loadErr == nil {
+			loadErr = json.Unmarshal(plain, &secrets)
+		}
+		var dnsClient *dnsAPI
+		if loadErr == nil {
+			dnsClient, loadErr = newDNSAPI(job.Provider, secrets)
+		}
+		if dnsClient != nil {
+			defer dnsClient.http.CloseIdleConnections()
+		}
+		if loadErr != nil {
+			var records int
+			if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_dns_records WHERE order_id=? AND state!='cleaned'", job.ID).Scan(&records); err != nil {
+				return err
 			}
-			return s.finishIssue(ctx, p, job, "recovery_required", "dns_cleanup_unconfirmed", message, 0)
+			if records > 0 {
+				return s.finishIssue(ctx, p, job, "recovery_required", "dns_credentials_failed", "DNS 凭据快照或适配器无法读取，验证记录尚待清理；请检查本机密钥、凭据及 SDK 调试设置后恢复原任务", 0)
+			}
+			operationErr = issueFailure("dns_credentials_failed", "DNS 凭据快照无法读取或适配器配置无效，请检查本机密钥、凭据及 SDK 调试设置", loadErr)
+		} else {
+			provider := &journalDNS{service: s, orderID: job.ID, api: dnsClient}
+			if job.Terminal {
+				operationErr = issueFailure("order_invalid", "原订单已失效，材料清理后须明确创建新订单", nil)
+			}
+			if job.CertificateVersionID == "" && !job.Terminal {
+				operationErr, transport = s.obtain(work, p, &job, provider)
+			}
+			if transport != nil {
+				defer transport.base.CloseIdleConnections()
+			}
+			if ctx.Err() != nil {
+				return nil
+			}
+			if err := s.stage(ctx, job, "dns_cleaning"); err != nil {
+				return err
+			}
+			cleanup, stop := context.WithTimeout(ctx, 3*time.Minute)
+			cleanupErr := provider.cleanup(cleanup)
+			stop()
+			if ctx.Err() != nil {
+				return nil
+			}
+			if cleanupErr != nil {
+				message := "DNS 验证记录清理未确认，请恢复原任务；已取得的证书版本会保留"
+				if errors.Is(cleanupErr, errDNSCreateUnconfirmed) {
+					message = "DNS 创建结果不确定，查询尚未发现记录；保留恢复记录并停止重复写入，请恢复原任务核对，持续无法确认须本机处理"
+				}
+				return s.finishIssue(ctx, p, job, "recovery_required", "dns_cleanup_unconfirmed", message, 0)
+			}
 		}
 	}
 	if ctx.Err() != nil {
@@ -198,7 +219,7 @@ func (s *Service) nextIssue(ctx context.Context) error {
 		case legoacme.CaaErrorType:
 			message = "域名 CAA 策略阻止签发，请核对 CAA 后创建新订单"
 		case legoacme.UnauthorizedErrorType:
-			message = "CA 未能验证域名控制权，请核对 DNS 权限与传播状态"
+			message = "CA 未能验证域名控制权，请核对所选验证方式、域名指向和可达性"
 		}
 	}
 	if errors.Is(operationErr, errOrderUncertain) {
@@ -349,8 +370,14 @@ func (s *Service) obtain(ctx context.Context, p Profile, job *orderJob, provider
 				return issueFailure("order_finalization_unconfirmed", "提交 CSR 的结果未确认，请恢复原订单", err), transport
 			}
 		case legoacme.StatusPending:
-			if err := s.solve(ctx, core, *job, p, order, provider, transport); err != nil {
-				return err, transport
+			var solveErr error
+			if job.ChallengeType == "http-01" {
+				solveErr = s.solveHTTP01(ctx, core, *job, p, order, transport)
+			} else {
+				solveErr = s.solve(ctx, core, *job, p, order, provider, transport)
+			}
+			if solveErr != nil {
+				return solveErr, transport
 			}
 		case legoacme.StatusProcessing:
 		default:
@@ -433,37 +460,7 @@ func (s *Service) solve(ctx context.Context, core *api.Core, job orderJob, p Pro
 		if !ok {
 			return issueFailure("authorization_failed", "验证入口与保存的授权不一致", nil)
 		}
-		current, err := core.Challenges.Get(ctx, ch.URL)
-		if err != nil {
-			return err
-		}
-		if current.Status == legoacme.StatusPending {
-			current, err = core.Challenges.New(ctx, ch.URL)
-			if err != nil {
-				return err
-			}
-		}
-		interval := max(current.RetryAfter, 5*time.Second)
-		for {
-			if err := waitCA(ctx, transport, interval); err != nil {
-				return err
-			}
-			interval = min(interval*2, time.Minute)
-			auth, err := core.Authorizations.Get(ctx, uri)
-			if err != nil {
-				return err
-			}
-			switch auth.Status {
-			case legoacme.StatusValid:
-				return nil
-			case legoacme.StatusPending, legoacme.StatusProcessing:
-			default:
-				if err := s.markTerminal(ctx, job); err != nil {
-					return err
-				}
-				return issueFailure("authorization_failed", "CA 域名验证失败，请检查 TXT 记录和传播状态", authError(auth))
-			}
-		}
+		return s.validateAuthorization(ctx, core, job, uri, ch, transport)
 	}, provider)
 	if err := s.stage(ctx, job, "dns_publishing"); err != nil {
 		return err
@@ -486,6 +483,39 @@ func (s *Service) solve(ctx context.Context, core *api.Core, job orderJob, p Pro
 		}
 	}
 	return nil
+}
+func (s *Service) validateAuthorization(ctx context.Context, core *api.Core, job orderJob, uri string, ch legoacme.Challenge, transport *caTransport) error {
+	current, err := core.Challenges.Get(ctx, ch.URL)
+	if err != nil {
+		return err
+	}
+	if current.Status == legoacme.StatusPending {
+		current, err = core.Challenges.New(ctx, ch.URL)
+		if err != nil {
+			return err
+		}
+	}
+	interval := max(current.RetryAfter, 5*time.Second)
+	for {
+		if err := waitCA(ctx, transport, interval); err != nil {
+			return err
+		}
+		interval = min(interval*2, time.Minute)
+		auth, err := core.Authorizations.Get(ctx, uri)
+		if err != nil {
+			return err
+		}
+		switch auth.Status {
+		case legoacme.StatusValid:
+			return nil
+		case legoacme.StatusPending, legoacme.StatusProcessing:
+		default:
+			if err := s.markTerminal(ctx, job); err != nil {
+				return err
+			}
+			return issueFailure("authorization_failed", "CA 域名验证失败，请核对所选验证方式、域名指向与验证入口", authError(auth))
+		}
+	}
 }
 func authError(auth legoacme.Authorization) error {
 	for _, ch := range auth.Challenges {

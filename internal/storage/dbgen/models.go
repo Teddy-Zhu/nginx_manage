@@ -61,6 +61,11 @@ type AcmeOrder struct {
 	Automatic            int64          `json:"automatic"`
 	Terminal             int64          `json:"terminal"`
 	ReplacesID           string         `json:"replaces_id"`
+	ChallengeType        string         `json:"challenge_type"`
+	Http01State          string         `json:"http01_state"`
+	Http01Revision       string         `json:"http01_revision"`
+	Http01ExpiresAt      int64          `json:"http01_expires_at"`
+	Http01Epoch          int64          `json:"http01_epoch"`
 }
 
 type AcmeProfile struct {
@@ -84,6 +89,8 @@ type AcmeProfile struct {
 	DeployAfter               int64          `json:"deploy_after"`
 	DeploymentError           string         `json:"deployment_error"`
 	DeploymentObservedVersion string         `json:"deployment_observed_version"`
+	ChallengeType             string         `json:"challenge_type"`
+	Http01Confirmed           int64          `json:"http01_confirmed"`
 }
 
 type AcmeRenewal struct {

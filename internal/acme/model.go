@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 
+	"nginxpanel/internal/agent"
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
@@ -17,6 +18,7 @@ type Service struct {
 	Vault        *secure.Vault
 	Certificates *certificates.Service
 	Config       *nginxconfig.Service
+	Agent        *agent.Client
 }
 
 type Account struct {

@@ -45,6 +45,7 @@ type Nginx struct {
 	gid                         int
 	uid                         int
 	workerGroup                 string
+	http01                      *http01Store
 }
 
 type ApplyRequest struct {
@@ -79,6 +80,7 @@ type manifest struct {
 	TLS          []tlsProbe                  `json:"tls"`
 	Dependencies map[string]string           `json:"dependencies"`
 	Modules      map[string]ModuleDependency `json:"modules"`
+	HTTP01       map[string][]listener       `json:"http01"`
 }
 
 func (n *Nginx) configPath(dir string) string {
@@ -194,6 +196,11 @@ func (n *Nginx) Open() error {
 		return errors.New("another agent owns Nginx execution")
 	}
 	n.unlock = lock
+	n.http01, err = openHTTP01Store(n.DataDir)
+	if err != nil {
+		n.Close()
+		return err
+	}
 	records, err := n.Journal.List()
 	if err != nil {
 		n.Close()
@@ -294,6 +301,9 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 		return old, nil
 	} else if !os.IsNotExist(err) {
 		return Record{}, err
+	}
+	if n.http01 != nil && n.http01.busy() {
+		return Record{}, errors.New("HTTP-01 验证进行中，暂不能切换或检查 Nginx 配置")
 	}
 	records, err := n.Journal.List()
 	if err != nil {
@@ -570,7 +580,7 @@ func (n *Nginx) manifestMetadata(dir string) (manifest, error) {
 	if len(m.Files) == 0 || len(m.Files) > limits.Files || len(m.Dependencies) > limits.CertificateReferences || len(m.Modules) > limits.NginxModules {
 		return m, ErrExternalChange
 	}
-	if !moduleHeader(m.Modules) {
+	if !moduleHeader(m.Modules) || !validHTTP01Bindings(m.HTTP01) {
 		return m, ErrExternalChange
 	}
 	return m, nil
@@ -648,7 +658,7 @@ func (n *Nginx) sourceHash(p *nginxconfig.Parsed) string {
 		Policy        nginxconfig.Policy
 		Worker, Group string
 		Renderer      int
-	}{p.Tree.Files, policy, n.WorkerUser, n.workerGroup, 5})
+	}{p.Tree.Files, policy, n.WorkerUser, n.workerGroup, 6})
 	return secure.Hash(source)
 }
 

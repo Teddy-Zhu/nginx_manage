@@ -21,7 +21,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 5
+const Protocol = 6
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`
@@ -45,6 +45,8 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	ctx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
 	if !s.Dev && s.AllowedUID == 0 {
 		return errors.New("production Web peer must be a non-root account")
 	}
@@ -100,7 +102,26 @@ func (s *Server) Run(ctx context.Context) error {
 			return errors.New("Nginx workers and Web must use separate accounts")
 		}
 	}
+	var challengeServer *http.Server
+	challengeErrors := make(chan error, 1)
+	if s.Nginx != nil {
+		var challengeListener *net.UnixListener
+		challengeServer, challengeListener, err = s.Nginx.http01Server()
+		if err != nil {
+			return err
+		}
+		defer challengeListener.Close()
+		defer challengeServer.Close()
+		go func() {
+			err := challengeServer.Serve(&credentialListener{UnixListener: challengeListener, uid: uint32(s.Nginx.uid)})
+			if !errors.Is(err, http.ErrServerClosed) {
+				challengeErrors <- err
+				cancelRun()
+			}
+		}()
+	}
 	mux := http.NewServeMux()
+	s.http01Handlers(mux)
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"
@@ -140,10 +161,18 @@ func (s *Server) Run(ctx context.Context) error {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		if challengeServer != nil {
+			challengeServer.Shutdown(shutdown)
+		}
 		server.Shutdown(shutdown)
 	}()
 	err = server.Serve(&credentialListener{UnixListener: l, uid: s.AllowedUID})
 	if errors.Is(err, http.ErrServerClosed) {
+		select {
+		case challengeErr := <-challengeErrors:
+			return challengeErr
+		default:
+		}
 		return nil
 	}
 	return err

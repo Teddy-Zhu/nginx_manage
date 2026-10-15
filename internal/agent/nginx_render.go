@@ -141,12 +141,19 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 	if err := scan(main.Nodes); err != nil {
 		return nil, err
 	}
+	http01Edits, http01Controls, http01Bindings, err := n.renderHTTP01(p)
+	if err != nil {
+		return nil, err
+	}
+	if inspection == nil {
+		m.HTTP01 = http01Bindings
+	}
 	defaults, err := n.httpDefaults(p, httpBlock, httpsUpstream, cacheEnabled, m, inspection != nil)
 	if err != nil {
 		return nil, err
 	}
 	for _, doc := range p.Documents {
-		edits := []nginxconfig.Edit{}
+		edits := append([]nginxconfig.Edit{}, http01Edits[doc.File.ID]...)
 		if !p.RuntimeFileEnabled(doc.File.Path) {
 			contents[doc.File.Path] = "# Disabled managed WAF policy\n"
 			if inspection != nil {
@@ -193,7 +200,7 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 			return nil, err
 		}
 		if doc == main {
-			probe := "\n    # Reserved local revision probe.\n    server {\n        listen " + nginxQuote("unix:"+filepath.Join(n.DataDir, "run", "nginx-probe.sock")) + ";\n        server_name localhost;\n        access_log off;\n        location = /__nginxpanel_revision { return 200 " + nginxQuote(m.Probe) + "; }\n    }\n"
+			probe := "\n" + http01Controls + "    # Reserved local revision probe.\n    server {\n        listen " + nginxQuote("unix:"+filepath.Join(n.DataDir, "run", "nginx-probe.sock")) + ";\n        server_name localhost;\n        access_log off;\n        location = /__nginxpanel_revision { return 200 " + nginxQuote(m.Probe) + "; }\n    }\n"
 			extras := []string{}
 			for _, policy := range p.Tree.WAFPolicies {
 				if !policy.Config.Metadata.Enabled {

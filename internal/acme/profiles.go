@@ -23,34 +23,39 @@ import (
 )
 
 type Profile struct {
-	ID              string       `json:"id"`
-	Name            string       `json:"name"`
-	Notes           string       `json:"notes"`
-	Version         int64        `json:"version"`
-	AccountID       string       `json:"account_id"`
-	CredentialID    string       `json:"credential_id"`
-	Environment     string       `json:"environment"`
-	Domains         []string     `json:"domains"`
-	CertificateID   string       `json:"certificate_id"`
-	State           string       `json:"state"`
-	CurrentOrderID  string       `json:"current_order_id"`
-	TaskID          string       `json:"task_id"`
-	LastError       string       `json:"last_error"`
-	RetryAfter      int64        `json:"retry_after"`
-	CreatedAt       int64        `json:"created_at"`
-	UpdatedAt       int64        `json:"updated_at"`
-	AutoRenew       bool         `json:"auto_renew"`
-	AutoDeploy      bool         `json:"auto_deploy"`
-	DeployAfter     int64        `json:"deploy_after"`
-	DeploymentError string       `json:"deployment_error"`
-	Renewal         RenewalState `json:"renewal"`
+	ID               string       `json:"id"`
+	Name             string       `json:"name"`
+	Notes            string       `json:"notes"`
+	Version          int64        `json:"version"`
+	AccountID        string       `json:"account_id"`
+	CredentialID     string       `json:"credential_id"`
+	ChallengeType    string       `json:"challenge_type"`
+	HTTP01Confirmed  bool         `json:"http01_confirmed"`
+	OrderUnconfirmed bool         `json:"order_unconfirmed"`
+	Environment      string       `json:"environment"`
+	Domains          []string     `json:"domains"`
+	CertificateID    string       `json:"certificate_id"`
+	State            string       `json:"state"`
+	CurrentOrderID   string       `json:"current_order_id"`
+	TaskID           string       `json:"task_id"`
+	LastError        string       `json:"last_error"`
+	RetryAfter       int64        `json:"retry_after"`
+	CreatedAt        int64        `json:"created_at"`
+	UpdatedAt        int64        `json:"updated_at"`
+	AutoRenew        bool         `json:"auto_renew"`
+	AutoDeploy       bool         `json:"auto_deploy"`
+	DeployAfter      int64        `json:"deploy_after"`
+	DeploymentError  string       `json:"deployment_error"`
+	Renewal          RenewalState `json:"renewal"`
 }
 type ProfileInput struct {
-	Name         string   `json:"name"`
-	Notes        string   `json:"notes"`
-	AccountID    string   `json:"account_id"`
-	CredentialID string   `json:"credential_id"`
-	Domains      []string `json:"domains"`
+	Name            string   `json:"name"`
+	Notes           string   `json:"notes"`
+	AccountID       string   `json:"account_id"`
+	CredentialID    string   `json:"credential_id"`
+	ChallengeType   string   `json:"challenge_type"`
+	HTTP01Confirmed bool     `json:"http01_confirmed"`
+	Domains         []string `json:"domains"`
 }
 type IssueInput struct {
 	BaseVersion          int64 `json:"base_version"`
@@ -74,6 +79,10 @@ type OrderView struct {
 	LastError            string          `json:"last_error"`
 	CreatedAt            int64           `json:"created_at"`
 	DNSRecords           []DNSRecordView `json:"dns_records"`
+	ChallengeType        string          `json:"challenge_type"`
+	HTTP01State          string          `json:"http01_state"`
+	HTTP01Revision       string          `json:"http01_revision"`
+	HTTP01ExpiresAt      int64           `json:"http01_expires_at"`
 }
 type DNSRecordView struct {
 	FQDN      string `json:"fqdn"`
@@ -81,12 +90,12 @@ type DNSRecordView struct {
 	LastError string `json:"last_error"`
 }
 
-const profileColumns = "p.id,p.name,p.notes,p.version,COALESCE(p.account_id,''),COALESCE(p.credential_id,''),p.environment,p.domains,COALESCE(p.certificate_id,''),p.state,p.current_order_id,COALESCE((SELECT task_id FROM acme_orders WHERE id=p.current_order_id),''),p.last_error,p.retry_after,p.created_at,p.updated_at,p.auto_renew,p.auto_deploy,p.deploy_after,p.deployment_error"
+const profileColumns = "p.id,p.name,p.notes,p.version,COALESCE(p.account_id,''),COALESCE(p.credential_id,''),p.environment,p.domains,COALESCE(p.certificate_id,''),p.state,p.current_order_id,COALESCE((SELECT task_id FROM acme_orders WHERE id=p.current_order_id),''),p.last_error,p.retry_after,p.created_at,p.updated_at,p.auto_renew,p.auto_deploy,p.deploy_after,p.deployment_error,p.challenge_type,p.http01_confirmed,EXISTS(SELECT 1 FROM acme_orders u WHERE u.id=p.current_order_id AND u.submit_started=1 AND u.order_url='' AND u.certificate_version_id IS NULL)"
 
 func scanProfile(row interface{ Scan(...any) error }) (Profile, error) {
 	var p Profile
 	var domains string
-	err := row.Scan(&p.ID, &p.Name, &p.Notes, &p.Version, &p.AccountID, &p.CredentialID, &p.Environment, &domains, &p.CertificateID, &p.State, &p.CurrentOrderID, &p.TaskID, &p.LastError, &p.RetryAfter, &p.CreatedAt, &p.UpdatedAt, &p.AutoRenew, &p.AutoDeploy, &p.DeployAfter, &p.DeploymentError)
+	err := row.Scan(&p.ID, &p.Name, &p.Notes, &p.Version, &p.AccountID, &p.CredentialID, &p.Environment, &domains, &p.CertificateID, &p.State, &p.CurrentOrderID, &p.TaskID, &p.LastError, &p.RetryAfter, &p.CreatedAt, &p.UpdatedAt, &p.AutoRenew, &p.AutoDeploy, &p.DeployAfter, &p.DeploymentError, &p.ChallengeType, &p.HTTP01Confirmed, &p.OrderUnconfirmed)
 	if err == nil {
 		err = json.Unmarshal([]byte(domains), &p.Domains)
 	}
@@ -187,8 +196,25 @@ func (s *Service) CreateProfile(ctx context.Context, p auth.Principal, requestID
 		if a.State != "ready" {
 			return ChangeResult{}, fault.Conflict("须先完成 ACME 账户注册")
 		}
-		if _, err := credential(ctx, tx, in.CredentialID); err != nil {
-			return ChangeResult{}, err
+		switch in.ChallengeType {
+		case "dns-01":
+			if in.HTTP01Confirmed {
+				return ChangeResult{}, fault.Invalid("DNS-01 不使用 HTTP-01 确认")
+			}
+			if _, err := credential(ctx, tx, in.CredentialID); err != nil {
+				return ChangeResult{}, err
+			}
+		case "http-01":
+			if !in.HTTP01Confirmed || in.CredentialID != "" {
+				return ChangeResult{}, fault.Invalid("HTTP-01 须确认公网 80 端口与域名指向，且不使用 DNS 凭据")
+			}
+			for _, domain := range domains {
+				if strings.HasPrefix(domain, "*.") {
+					return ChangeResult{}, fault.Invalid("HTTP-01 不支持通配域名，请使用 DNS-01")
+				}
+			}
+		default:
+			return ChangeResult{}, fault.Invalid("验证方式须为 dns-01 或 http-01")
 		}
 		var count int
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_profiles WHERE state!='archived'").Scan(&count); err != nil {
@@ -206,7 +232,7 @@ func (s *Service) CreateProfile(ctx context.Context, p auth.Principal, requestID
 		id := secure.ID()
 		raw, _ := json.Marshal(domains)
 		now := time.Now().Unix()
-		if _, err := tx.ExecContext(ctx, "INSERT INTO acme_profiles(id,name,notes,version,account_id,credential_id,environment,domains,state,created_at,updated_at) VALUES(?,?,?,1,?,?,?,?,'idle',?,?)", id, in.Name, in.Notes, in.AccountID, in.CredentialID, a.Environment, string(raw), now, now); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO acme_profiles(id,name,notes,version,account_id,credential_id,environment,domains,state,created_at,updated_at,challenge_type,http01_confirmed) VALUES(?,?,?,1,?,NULLIF(?,''),?,?,'idle',?,?,?,?)", id, in.Name, in.Notes, in.AccountID, in.CredentialID, a.Environment, string(raw), now, now, in.ChallengeType, in.HTTP01Confirmed); err != nil {
 			return ChangeResult{}, err
 		}
 		out, err := profile(ctx, tx, id)
@@ -240,6 +266,15 @@ func (s *Service) queueIssue(ctx context.Context, tx *sql.Tx, id string, in Issu
 	if item.State == "archived" || item.State == "issuing" {
 		return ChangeResult{}, fault.Conflict("签发配置已停用或已有在途任务")
 	}
+	if item.ChallengeType == "http-01" {
+		var busy int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('nginx.apply','nginx.validate','nginx.restore') AND state IN ('queued','running','compensating','recovery_required')").Scan(&busy); err != nil {
+			return ChangeResult{}, err
+		}
+		if busy > 0 {
+			return ChangeResult{}, fault.Conflict("HTTP-01 须等待 Nginx 操作完成或恢复")
+		}
+	}
 	if time.Now().Unix() < item.RetryAfter {
 		return ChangeResult{}, fault.Conflict("尚未到达允许重试时间")
 	}
@@ -265,7 +300,13 @@ func (s *Service) queueIssue(ctx context.Context, tx *sql.Tx, id string, in Issu
 			return ChangeResult{}, err
 		}
 		if terminal {
-			return ChangeResult{}, fault.Conflict("原订单已失效，须明确创建新订单")
+			var pending int
+			if err := tx.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM acme_dns_records WHERE order_id=? AND state!='cleaned')+(SELECT COUNT(*) FROM acme_orders WHERE id=? AND http01_state IN ('unknown','active'))", orderID, orderID).Scan(&pending); err != nil {
+				return ChangeResult{}, err
+			}
+			if pending == 0 {
+				return ChangeResult{}, fault.Conflict("原订单已失效，须明确创建新订单")
+			}
 		}
 		if state == "succeeded" {
 			return ChangeResult{}, fault.Conflict("已有签发结果，申请新版本须明确创建新订单")
@@ -278,10 +319,17 @@ func (s *Service) queueIssue(ctx context.Context, tx *sql.Tx, id string, in Issu
 		if records > 0 {
 			return ChangeResult{}, fault.Conflict("仍有未清理验证记录，请先恢复原任务")
 		}
+		if err := requireHTTP01Clean(ctx, tx, id); err != nil {
+			return ChangeResult{}, err
+		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM acme_dns_locks WHERE order_id IN (SELECT id FROM acme_orders WHERE profile_id=?)", id); err != nil {
 			return ChangeResult{}, err
 		}
-		if item.State == "recovery_required" && !in.AcknowledgeUncertain {
+		uncertain, err := unconfirmedOrder(ctx, tx, id)
+		if err != nil {
+			return ChangeResult{}, err
+		}
+		if (item.State == "recovery_required" || uncertain) && !in.AcknowledgeUncertain {
 			return ChangeResult{}, fault.Conflict("须确认原订单可能已在 CA 创建，才可建立新订单")
 		}
 		var retained, total int
@@ -343,17 +391,21 @@ func (s *Service) queueIssue(ctx context.Context, tx *sql.Tx, id string, in Issu
 		if err != nil {
 			return ChangeResult{}, err
 		}
-		c, err := credential(ctx, tx, item.CredentialID)
-		if err != nil {
-			return ChangeResult{}, err
-		}
-		var encrypted []byte
-		if err := tx.QueryRowContext(ctx, "SELECT secrets FROM dns_credentials WHERE id=?", c.ID).Scan(&encrypted); err != nil {
-			return ChangeResult{}, err
-		}
-		plain, err := s.Vault.Open(encrypted, "acme:dns:"+c.ID)
-		if err != nil {
-			return ChangeResult{}, err
+		provider, plain := "", []byte("{}")
+		if item.ChallengeType == "dns-01" {
+			c, err := credential(ctx, tx, item.CredentialID)
+			if err != nil {
+				return ChangeResult{}, err
+			}
+			provider = c.Provider
+			var encrypted []byte
+			if err := tx.QueryRowContext(ctx, "SELECT secrets FROM dns_credentials WHERE id=?", c.ID).Scan(&encrypted); err != nil {
+				return ChangeResult{}, err
+			}
+			plain, err = s.Vault.Open(encrypted, "acme:dns:"+c.ID)
+			if err != nil {
+				return ChangeResult{}, err
+			}
 		}
 		replaces, err := s.replacesID(ctx, tx, item)
 		if err != nil {
@@ -363,7 +415,7 @@ func (s *Service) queueIssue(ctx context.Context, tx *sql.Tx, id string, in Issu
 		if _, err := tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,state,stage,operation_id,created_at,updated_at) VALUES(?,'acme.issue',?,'queued','queued',?,?,?)", taskID, id, secure.ID(), now, now); err != nil {
 			return ChangeResult{}, err
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO acme_orders(id,profile_id,task_id,account_id,provider,credentials,private_key,csr,created_at,updated_at,automatic,replaces_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", orderID, id, taskID, a.ID, c.Provider, s.Vault.Seal(plain, "acme:order:"+orderID+":dns"), s.Vault.Seal(der, "acme:order:"+orderID+":key"), s.Vault.Seal(csr, "acme:order:"+orderID+":csr"), now, now, automatic, replaces); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO acme_orders(id,profile_id,task_id,account_id,provider,credentials,private_key,csr,created_at,updated_at,automatic,replaces_id,challenge_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", orderID, id, taskID, a.ID, provider, s.Vault.Seal(plain, "acme:order:"+orderID+":dns"), s.Vault.Seal(der, "acme:order:"+orderID+":key"), s.Vault.Seal(csr, "acme:order:"+orderID+":csr"), now, now, automatic, replaces, item.ChallengeType); err != nil {
 			return ChangeResult{}, err
 		}
 	}
@@ -386,7 +438,11 @@ func (s *Service) ArchiveProfile(ctx context.Context, p auth.Principal, requestI
 		if item.State == "issuing" {
 			return ChangeResult{}, fault.Conflict("须先结束在途签发任务")
 		}
-		if item.State == "recovery_required" && !in.AcknowledgeUncertain {
+		uncertain, err := unconfirmedOrder(ctx, tx, id)
+		if err != nil {
+			return ChangeResult{}, err
+		}
+		if (item.State == "recovery_required" || uncertain) && !in.AcknowledgeUncertain {
 			return ChangeResult{}, fault.Conflict("须确认保留远端不确定结果并停止恢复，才可停用配置")
 		}
 		var count int
@@ -395,6 +451,9 @@ func (s *Service) ArchiveProfile(ctx context.Context, p auth.Principal, requestI
 		}
 		if count > 0 {
 			return ChangeResult{}, fault.Conflict("须先清理验证记录")
+		}
+		if err := requireHTTP01Clean(ctx, tx, id); err != nil {
+			return ChangeResult{}, err
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM acme_dns_locks WHERE order_id IN (SELECT id FROM acme_orders WHERE profile_id=?)", id); err != nil {
 			return ChangeResult{}, err
@@ -413,7 +472,7 @@ func (s *Service) Orders(ctx context.Context, id string) ([]OrderView, error) {
 	if _, err := profile(ctx, s.DB, id); err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT o.id,o.task_id,o.order_url,o.certificate_url,COALESCE(o.certificate_version_id,''),t.state,t.stage,t.last_error,o.created_at,o.automatic,o.terminal FROM acme_orders o JOIN tasks t ON t.id=o.task_id WHERE o.profile_id=? ORDER BY o.created_at DESC,o.id", id)
+	rows, err := s.DB.QueryContext(ctx, "SELECT o.id,o.task_id,o.order_url,o.certificate_url,COALESCE(o.certificate_version_id,''),t.state,t.stage,t.last_error,o.created_at,o.automatic,o.terminal,o.challenge_type,o.http01_state,o.http01_revision,o.http01_expires_at FROM acme_orders o JOIN tasks t ON t.id=o.task_id WHERE o.profile_id=? ORDER BY o.created_at DESC,o.id", id)
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +480,7 @@ func (s *Service) Orders(ctx context.Context, id string) ([]OrderView, error) {
 	for rows.Next() {
 		var o OrderView
 		o.DNSRecords = []DNSRecordView{}
-		if err := rows.Scan(&o.ID, &o.TaskID, &o.OrderURL, &o.CertificateURL, &o.CertificateVersionID, &o.State, &o.Stage, &o.LastError, &o.CreatedAt, &o.Automatic, &o.Terminal); err != nil {
+		if err := rows.Scan(&o.ID, &o.TaskID, &o.OrderURL, &o.CertificateURL, &o.CertificateVersionID, &o.State, &o.Stage, &o.LastError, &o.CreatedAt, &o.Automatic, &o.Terminal, &o.ChallengeType, &o.HTTP01State, &o.HTTP01Revision, &o.HTTP01ExpiresAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -452,4 +511,21 @@ func (s *Service) Orders(ctx context.Context, id string) ([]OrderView, error) {
 		}
 	}
 	return out, nil
+}
+
+func requireHTTP01Clean(ctx context.Context, q reader, id string) error {
+	var count int
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders WHERE profile_id=? AND http01_state IN ('unknown','active')", id).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return fault.Conflict("HTTP-01 临时材料尚未确认清理，请恢复原任务")
+	}
+	return nil
+}
+
+func unconfirmedOrder(ctx context.Context, q reader, id string) (bool, error) {
+	var count int
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders o JOIN acme_profiles p ON p.current_order_id=o.id WHERE p.id=? AND o.submit_started=1 AND o.order_url='' AND o.certificate_version_id IS NULL", id).Scan(&count)
+	return count > 0, err
 }

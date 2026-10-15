@@ -17,6 +17,7 @@ type fieldSpec struct {
 }
 
 var httpFields = map[string]fieldSpec{
+	"http01":         {"location", "http01", "value", false},
 	"access_list":    {"include", "server", "value", false},
 	"waf_policy":     {"include", "waf", "value", false},
 	"https_redirect": {"if", "redirect", "value", false},
@@ -109,6 +110,9 @@ func (p *Parsed) resource(id string) (*Resource, *Document, *Node, error) {
 }
 func (p *Parsed) target(doc *Document, server *Node, kind string, spec fieldSpec) (*Document, *Node, string) {
 	target := server
+	if spec.target == "http01" {
+		return doc, server, p.http01Reason(server)
+	}
 	if spec.target == "redirect" {
 		return doc, server, p.redirectTargetReason(server)
 	}
@@ -305,6 +309,10 @@ func validateField(field string, values []string, kind string) error {
 	}
 	for _, v := range values {
 		switch field {
+		case "http01":
+			if v != "on" {
+				return errors.New("HTTP-01 仅允许 on 或留空关闭")
+			}
 		case "https_redirect":
 			number, err := strconv.Atoi(v)
 			if err != nil || number < 1 || number > 65535 || strconv.Itoa(number) != v {

@@ -1125,6 +1125,12 @@ export interface components {
             account_id: string;
             credential_id: string;
             /** @enum {string} */
+            challenge_type: "dns-01" | "http-01";
+            /** @description 操作者已确认公网 80 端口及 A/AAAA 指向；不代表 CA 可达性验证结果。 */
+            http01_confirmed: boolean;
+            /** @description 当前订单的创建结果尚未确认，显式新建或停用前须确认重复申请风险。 */
+            order_unconfirmed: boolean;
+            /** @enum {string} */
             environment: "production" | "staging";
             domains: string[];
             certificate_id: string;
@@ -1182,8 +1188,12 @@ export interface components {
             notes: string;
             /** Format: uuid */
             account_id: string;
-            /** Format: uuid */
+            /** @description DNS-01 必须提供有效凭据 ID；HTTP-01 必须为空字符串。 */
             credential_id: string;
+            /** @enum {string} */
+            challenge_type: "dns-01" | "http-01";
+            /** @description HTTP-01 必须为 true，且申请域名不得包含通配符；DNS-01 必须为 false。 */
+            http01_confirmed: boolean;
             domains: string[];
         };
         ACMEIssueInput: {
@@ -1217,6 +1227,13 @@ export interface components {
             automatic: boolean;
             /** @description CA 已明确确认订单或域名授权终止；须显式新建订单。 */
             terminal: boolean;
+            /** @enum {string} */
+            challenge_type: "dns-01" | "http-01";
+            /** @enum {string} */
+            http01_state: "none" | "unknown" | "active" | "cleaned";
+            http01_revision: string;
+            /** Format: int64 */
+            http01_expires_at: number;
             dns_records: components["schemas"]["ACMEDNSRecord"][];
         };
         ACMEChangeResult: {

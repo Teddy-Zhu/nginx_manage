@@ -312,6 +312,11 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 	}
 	p.validate(policy, paths)
 	if len(p.Tree.Diagnostics) == 0 {
+		if _, err := p.HTTP01Servers(); err != nil {
+			p.Tree.Diagnostics = append(p.Tree.Diagnostics, Diagnostic{paths["nginx.conf"].ID, 1, "http01", err.Error()})
+		}
+	}
+	if len(p.Tree.Diagnostics) == 0 {
 		p.project()
 	}
 	return p, nil

@@ -76,22 +76,82 @@ func (e ACMEAccountInputEnvironment) Valid() bool {
 
 // Defines values for ACMEDNSRecordState.
 const (
-	Blocked   ACMEDNSRecordState = "blocked"
-	Cleaned   ACMEDNSRecordState = "cleaned"
-	Preparing ACMEDNSRecordState = "preparing"
-	Present   ACMEDNSRecordState = "present"
+	ACMEDNSRecordStateBlocked   ACMEDNSRecordState = "blocked"
+	ACMEDNSRecordStateCleaned   ACMEDNSRecordState = "cleaned"
+	ACMEDNSRecordStatePreparing ACMEDNSRecordState = "preparing"
+	ACMEDNSRecordStatePresent   ACMEDNSRecordState = "present"
 )
 
 // Valid indicates whether the value is a known member of the ACMEDNSRecordState enum.
 func (e ACMEDNSRecordState) Valid() bool {
 	switch e {
-	case Blocked:
+	case ACMEDNSRecordStateBlocked:
 		return true
-	case Cleaned:
+	case ACMEDNSRecordStateCleaned:
 		return true
-	case Preparing:
+	case ACMEDNSRecordStatePreparing:
 		return true
-	case Present:
+	case ACMEDNSRecordStatePresent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEOrderChallengeType.
+const (
+	ACMEOrderChallengeTypeDns01  ACMEOrderChallengeType = "dns-01"
+	ACMEOrderChallengeTypeHttp01 ACMEOrderChallengeType = "http-01"
+)
+
+// Valid indicates whether the value is a known member of the ACMEOrderChallengeType enum.
+func (e ACMEOrderChallengeType) Valid() bool {
+	switch e {
+	case ACMEOrderChallengeTypeDns01:
+		return true
+	case ACMEOrderChallengeTypeHttp01:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEOrderHttp01State.
+const (
+	ACMEOrderHttp01StateActive  ACMEOrderHttp01State = "active"
+	ACMEOrderHttp01StateCleaned ACMEOrderHttp01State = "cleaned"
+	ACMEOrderHttp01StateNone    ACMEOrderHttp01State = "none"
+	ACMEOrderHttp01StateUnknown ACMEOrderHttp01State = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the ACMEOrderHttp01State enum.
+func (e ACMEOrderHttp01State) Valid() bool {
+	switch e {
+	case ACMEOrderHttp01StateActive:
+		return true
+	case ACMEOrderHttp01StateCleaned:
+		return true
+	case ACMEOrderHttp01StateNone:
+		return true
+	case ACMEOrderHttp01StateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEProfileChallengeType.
+const (
+	ACMEProfileChallengeTypeDns01  ACMEProfileChallengeType = "dns-01"
+	ACMEProfileChallengeTypeHttp01 ACMEProfileChallengeType = "http-01"
+)
+
+// Valid indicates whether the value is a known member of the ACMEProfileChallengeType enum.
+func (e ACMEProfileChallengeType) Valid() bool {
+	switch e {
+	case ACMEProfileChallengeTypeDns01:
+		return true
+	case ACMEProfileChallengeTypeHttp01:
 		return true
 	default:
 		return false
@@ -140,6 +200,24 @@ func (e ACMEProfileState) Valid() bool {
 	case ACMEProfileStateIssuing:
 		return true
 	case ACMEProfileStateRecoveryRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ACMEProfileInputChallengeType.
+const (
+	ACMEProfileInputChallengeTypeDns01  ACMEProfileInputChallengeType = "dns-01"
+	ACMEProfileInputChallengeTypeHttp01 ACMEProfileInputChallengeType = "http-01"
+)
+
+// Valid indicates whether the value is a known member of the ACMEProfileInputChallengeType enum.
+func (e ACMEProfileInputChallengeType) Valid() bool {
+	switch e {
+	case ACMEProfileInputChallengeTypeDns01:
+		return true
+	case ACMEProfileInputChallengeTypeHttp01:
 		return true
 	default:
 		return false
@@ -618,21 +696,31 @@ type ACMEIssueInput struct {
 
 // ACMEOrder defines model for ACMEOrder.
 type ACMEOrder struct {
-	Automatic            bool            `json:"automatic"`
-	CertificateUrl       string          `json:"certificate_url"`
-	CertificateVersionId string          `json:"certificate_version_id"`
-	CreatedAt            int64           `json:"created_at"`
-	DnsRecords           []ACMEDNSRecord `json:"dns_records"`
-	Id                   string          `json:"id"`
-	LastError            string          `json:"last_error"`
-	OrderUrl             string          `json:"order_url"`
-	Stage                string          `json:"stage"`
-	State                string          `json:"state"`
-	TaskId               string          `json:"task_id"`
+	Automatic            bool                   `json:"automatic"`
+	CertificateUrl       string                 `json:"certificate_url"`
+	CertificateVersionId string                 `json:"certificate_version_id"`
+	ChallengeType        ACMEOrderChallengeType `json:"challenge_type"`
+	CreatedAt            int64                  `json:"created_at"`
+	DnsRecords           []ACMEDNSRecord        `json:"dns_records"`
+	Http01ExpiresAt      int64                  `json:"http01_expires_at"`
+	Http01Revision       string                 `json:"http01_revision"`
+	Http01State          ACMEOrderHttp01State   `json:"http01_state"`
+	Id                   string                 `json:"id"`
+	LastError            string                 `json:"last_error"`
+	OrderUrl             string                 `json:"order_url"`
+	Stage                string                 `json:"stage"`
+	State                string                 `json:"state"`
+	TaskId               string                 `json:"task_id"`
 
 	// Terminal CA 已明确确认订单或域名授权终止；须显式新建订单。
 	Terminal bool `json:"terminal"`
 }
+
+// ACMEOrderChallengeType defines model for ACMEOrder.ChallengeType.
+type ACMEOrderChallengeType string
+
+// ACMEOrderHttp01State defines model for ACMEOrder.Http01State.
+type ACMEOrderHttp01State string
 
 // ACMEPolicyInput defines model for ACMEPolicyInput.
 type ACMEPolicyInput struct {
@@ -646,28 +734,38 @@ type ACMEPolicyInput struct {
 
 // ACMEProfile defines model for ACMEProfile.
 type ACMEProfile struct {
-	AccountId       string                 `json:"account_id"`
-	AutoDeploy      bool                   `json:"auto_deploy"`
-	AutoRenew       bool                   `json:"auto_renew"`
-	CertificateId   string                 `json:"certificate_id"`
-	CreatedAt       int64                  `json:"created_at"`
-	CredentialId    string                 `json:"credential_id"`
-	CurrentOrderId  string                 `json:"current_order_id"`
-	DeployAfter     int64                  `json:"deploy_after"`
-	DeploymentError string                 `json:"deployment_error"`
-	Domains         []string               `json:"domains"`
-	Environment     ACMEProfileEnvironment `json:"environment"`
-	Id              string                 `json:"id"`
-	LastError       string                 `json:"last_error"`
-	Name            string                 `json:"name"`
-	Notes           string                 `json:"notes"`
-	Renewal         ACMERenewal            `json:"renewal"`
-	RetryAfter      int64                  `json:"retry_after"`
-	State           ACMEProfileState       `json:"state"`
-	TaskId          string                 `json:"task_id"`
-	UpdatedAt       int64                  `json:"updated_at"`
-	Version         int64                  `json:"version"`
+	AccountId       string                   `json:"account_id"`
+	AutoDeploy      bool                     `json:"auto_deploy"`
+	AutoRenew       bool                     `json:"auto_renew"`
+	CertificateId   string                   `json:"certificate_id"`
+	ChallengeType   ACMEProfileChallengeType `json:"challenge_type"`
+	CreatedAt       int64                    `json:"created_at"`
+	CredentialId    string                   `json:"credential_id"`
+	CurrentOrderId  string                   `json:"current_order_id"`
+	DeployAfter     int64                    `json:"deploy_after"`
+	DeploymentError string                   `json:"deployment_error"`
+	Domains         []string                 `json:"domains"`
+	Environment     ACMEProfileEnvironment   `json:"environment"`
+
+	// Http01Confirmed 操作者已确认公网 80 端口及 A/AAAA 指向；不代表 CA 可达性验证结果。
+	Http01Confirmed bool   `json:"http01_confirmed"`
+	Id              string `json:"id"`
+	LastError       string `json:"last_error"`
+	Name            string `json:"name"`
+	Notes           string `json:"notes"`
+
+	// OrderUnconfirmed 当前订单的创建结果尚未确认，显式新建或停用前须确认重复申请风险。
+	OrderUnconfirmed bool             `json:"order_unconfirmed"`
+	Renewal          ACMERenewal      `json:"renewal"`
+	RetryAfter       int64            `json:"retry_after"`
+	State            ACMEProfileState `json:"state"`
+	TaskId           string           `json:"task_id"`
+	UpdatedAt        int64            `json:"updated_at"`
+	Version          int64            `json:"version"`
 }
+
+// ACMEProfileChallengeType defines model for ACMEProfile.ChallengeType.
+type ACMEProfileChallengeType string
 
 // ACMEProfileEnvironment defines model for ACMEProfile.Environment.
 type ACMEProfileEnvironment string
@@ -677,12 +775,21 @@ type ACMEProfileState string
 
 // ACMEProfileInput defines model for ACMEProfileInput.
 type ACMEProfileInput struct {
-	AccountId    openapi_types.UUID `json:"account_id"`
-	CredentialId openapi_types.UUID `json:"credential_id"`
-	Domains      []string           `json:"domains"`
-	Name         string             `json:"name"`
-	Notes        string             `json:"notes"`
+	AccountId     openapi_types.UUID            `json:"account_id"`
+	ChallengeType ACMEProfileInputChallengeType `json:"challenge_type"`
+
+	// CredentialId DNS-01 必须提供有效凭据 ID；HTTP-01 必须为空字符串。
+	CredentialId string   `json:"credential_id"`
+	Domains      []string `json:"domains"`
+
+	// Http01Confirmed HTTP-01 必须为 true，且申请域名不得包含通配符；DNS-01 必须为 false。
+	Http01Confirmed bool   `json:"http01_confirmed"`
+	Name            string `json:"name"`
+	Notes           string `json:"notes"`
 }
+
+// ACMEProfileInputChallengeType defines model for ACMEProfileInput.ChallengeType.
+type ACMEProfileInputChallengeType string
 
 // ACMERenewal defines model for ACMERenewal.
 type ACMERenewal struct {
