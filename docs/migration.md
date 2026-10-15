@@ -63,9 +63,9 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 ## 源端推送式一键迁出
 
-源节点调用 `POST /api/v1/migrations/push` 并提供 `Idempotency-Key`，或使用自动扫描的“迁出到节点”页面。输入格式沿用 `remote.url/api_key/fingerprint/node_id/selection`，但 remote 指向目标；另有 `mappings`、`mode=preview|draft|save|apply`、`enable_nginx`、可选 `base_version` 和可选 `dependencies: {tag, prerelease}`。未提供基础版本时，首次受信连接读取并固定目标当前配置版本，后续不自动改用新版本。首次响应为 HTTP 202 的父任务；`GET /migrations/push` 列表及 `GET /migrations/push/{id}` 查询同一任务和目标逐项结果。preview/draft/save 的完成只表示对应步骤完成，apply 须等目标执行器确认生效才报告应用成功。
+源节点调用 `POST /api/v1/migrations/push` 并提供 `Idempotency-Key`，或使用自动扫描的“迁出到节点”页面。输入格式沿用 `remote.url/api_key/fingerprint/node_id/selection`，但 remote 指向目标；另有 `mappings`、`mode=preview|draft|save|apply`、`enable_nginx`、可选 `base_version` 和可选 `dependencies: {tag, prerelease, install?: {start, enable}}`。未提供基础版本时，首次受信连接读取并固定目标当前配置版本，后续不自动改用新版本。首次响应为 HTTP 202 的父任务；`GET /migrations/push` 列表及 `GET /migrations/push/{id}` 查询同一任务和目标逐项结果。preview/draft/save 的完成只表示对应步骤完成，apply 须等目标执行器确认生效才报告应用成功。
 
-源端要求 backup.export、backup.secrets、config.secrets 和 nodes.manage，浏览器需近期认证。目标 Key 需 backup.restore、backup.secrets、config.write、config.secrets、security.write；迁入通知另需 notifications.write，启用配置模块另需 system.write，授权准备组件另需 components.manage。目标通过 `GET /migrations/receiver` 提供当前版本和本 Key 权限，身份在首次连接后持久绑定；每个响应核对同一节点。目标接收使用 `PUT /migrations/receive/{id}`，固定 ID、配置包散列、映射及基础版本的回执和计划同事务保存；重复 ID 的不同内容会被拒绝。执行沿用 `/migrations/{id}/execute` 和原幂等键，不另建导入执行器。
+源端要求 backup.export、backup.secrets、config.secrets 和 nodes.manage，浏览器需近期认证。目标 Key 需 backup.restore、backup.secrets、config.write、config.secrets、security.write；迁入通知另需 notifications.write，启用配置模块另需 system.write，授权准备组件另需 components.manage，授权首次安装另需 system.write。目标通过 `GET /migrations/receiver` 提供当前版本和本 Key 权限，身份在首次连接后持久绑定；每个响应核对同一节点。目标接收使用 `PUT /migrations/receive/{id}`，固定 ID、配置包散列、映射及基础版本的回执和计划同事务保存；重复 ID 的不同内容会被拒绝。执行沿用 `/migrations/{id}/execute` 和原幂等键，不另建导入执行器。
 
 源端只导出一次并冻结包，在自己主密钥保护下暂存包、随机口令及本次目标授权；Key、口令和包正文不出现在任务响应、通用任务及审计中。授权一小时、单轮请求 35 秒、每次授权最多 128 轮，网络失败有限退避并遵守 Retry-After；串行 worker 在重启后先查询原目标计划。已确认计划缺失、身份变化、目标补偿不明或结果不符时停止新提交，不因超时判定目标停止。授权到期清除活动 Key：未提交者失败；可能已提交者保留加密恢复材料和待恢复状态。终态任务清除活动包及授权，保留加密摘要与审计；不宣称 SQLite 历史页已物理擦除。
 
@@ -73,8 +73,8 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 推送最多保留 64 条父任务，列表覆盖全部保留任务；推送暂存与导入计划共享 128 MiB，单条暂存最多 12 MiB、父任务摘要 264 KiB（目标结果及父任务元数据），目标响应最多 256 KiB。创建请求最多 2 MiB。未执行真实网络迁移、构建或测试，待 P5 集中验证。
 
-目标 `Plan.dependencies` 展示准备父任务、检查/准备子任务及结果；GET 读取摘要，不解密整个迁移包。源端推送会跟随同一准备任务，再进入原配置执行器；准备失败停止应用，结果不明保留恢复状态。`prepared` 只表示签名资产准备好，安装和运行接入仍未自动执行；运行条件不满足时原配置预检继续阻塞，不报告迁移已应用。
+目标 `Plan.dependencies` 展示父任务、检查/准备/维护/首次安装子任务及结果；GET 读取摘要，不解密整个迁移包。`install` 未提供时，`prepared` 只表示签名资产准备好。显式提供 `install: {start: true, enable: false}` 时，额外要求 system.write，且两个选项均须明确指定；仅支持已登记为未安装的原生目标，不接管已有实例。父任务自动进入维护、等待其他在途任务结束、提交原首次安装执行器、跟随同一安装结果、等待独立维护释放确认，然后用原包、映射、基础版本及资源 ID 重新预检。源端推送跟随同一父任务，再进入原配置执行器；文件导入仍由用户确认应用。`installed` 不表示迁移配置已应用；未启动、缺少依赖或存在配置冲突时，原预检继续阻塞。
 
 环境修复后可在有效期内调用 `POST /migrations/{id}/preflight` 或页面“重新预检”，沿用原包、映射、基础版本和资源 ID 更新预检结果；不会延长计划或替换配置。过期计划或基础版本变化需要重新创建预检。准备失败的父任务保留审计及子任务关联，重新准备需要新迁移计划，不能借恢复授权切换原准备选项。尚未执行构建、测试、真实下载或迁移，待 P5 集中验证。
 
-新的原生目标节点可通过 [仅面板安装](../deploy/native/README.md) 的 `--without-nginx` 方式部署 Web/Agent，随后导入预检并按次授权准备可信资产。在没有迁移执行中任务时，可手动进入配置维护，通过“组件安装”页面/API 或同一文档中的独立 root `component-install` 命令首次安装并确认 Agent 接入，结束维护后再重新预检和应用迁移计划。计划超过有效期须重新创建；安装不应用迁移配置，也不替换已有实例。组件未安装、资产已准备和实例已运行是独立状态；迁移父任务自动协调维护与安装仍待接入，尚未形成自动迁移安装闭环。
+新的原生目标节点可通过 [仅面板安装](../deploy/native/README.md) 的 `--without-nginx` 方式部署 Web/Agent，随后导入预检并按次授权准备及首次安装，或从源节点推送时设置上述选项。维护仅排除原子关联的协调父任务；其他任务和迁移仍须排空。同一目标一次只接收一个未结束的迁移依赖父任务。首次安装子任务和父关联同事务提交，安装授权不超过父授权期限且最多 10 分钟；断连或重启只核对原操作，不自动重建或续装。结果待恢复时保留维护，并通过“组件安装”页面/API 显式恢复或取消原任务。原任务终结后父任务继续核对并释放维护；授权到期停止新提交，已接收操作仍须核对真实结果。安装已完成但计划过期或目标版本变化时，不继续写入配置，需要新建迁移预检。Docker 仍使用预置模块镜像，不进入原生首次安装。自动协调尚未执行构建、测试、真实下载、安装或迁移，统一留待 P5。

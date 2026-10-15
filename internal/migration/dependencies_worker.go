@@ -14,11 +14,6 @@ import (
 )
 
 func (s *Service) nextDependencies(ctx context.Context) error {
-	done, ok := s.Maintenance.Progress()
-	if !ok {
-		return nil
-	}
-	defer done()
 	if !s.mu.TryLock() {
 		return nil
 	}
@@ -38,8 +33,14 @@ func (s *Service) nextDependencies(ctx context.Context) error {
 		return err
 	}
 	finish := func(state, stage, message string) error { return s.saveDependency(ctx, id, d, state, stage, message) }
-	if d.Deadline <= time.Now().Unix() {
-		return s.expireDependencies(ctx, id, owner, d)
+	// An owned coordinator must keep observing its original child while ordinary
+	// admission is closed. Preparation still participates in the shared drain.
+	if d.MaintenanceTaskID == "" {
+		done, ok := s.Maintenance.Progress()
+		if !ok {
+			return nil
+		}
+		defer done()
 	}
 	plain, err := s.Vault.Open(raw, "migration-dependencies:"+id)
 	if err != nil {
@@ -49,8 +50,11 @@ func (s *Service) nextDependencies(ctx context.Context) error {
 	if json.Unmarshal(plain, &input) != nil || input.validate() != nil {
 		return finish("recovery_required", "input_invalid", "依赖准备授权无法确认，停止提交")
 	}
-	// The durable parent is the grant. Its children receive only the component
-	// permission authorized at admission, never the caller's unrelated scopes.
+	if d.MaintenanceTaskID == "" && d.Deadline <= time.Now().Unix() {
+		return s.expireDependencies(ctx, id, owner, d, input.Install != nil)
+	}
+	// Preparation children receive only the component permission from the durable
+	// grant, never the caller's unrelated scopes.
 	p := auth.Principal{ID: owner, Scopes: []string{"components.manage"}}
 	st, err := s.load(ctx, auth.Principal{ID: planOwner}, id)
 	if err != nil {
@@ -59,6 +63,9 @@ func (s *Service) nextDependencies(ctx context.Context) error {
 	var version int64
 	if err = s.DB.QueryRowContext(ctx, "SELECT version FROM config_head WHERE id=1").Scan(&version); err != nil {
 		return err
+	}
+	if d.MaintenanceTaskID != "" {
+		return s.coordinateDependencyInstallation(ctx, id, owner, planOwner, d, input, st.Plan, version)
 	}
 	if st.Plan.State != "planned" || version != st.Plan.BaseVersion {
 		return finish("failed", "target_changed", "目标配置或迁移状态已变化，停止后续准备；已创建的组件任务保留原记录")
@@ -158,6 +165,9 @@ func (s *Service) nextDependencies(ctx context.Context) error {
 	if prepared.Result == nil || prepared.Result.Stage != "prepared" || prepared.Result.Release == nil || prepared.Result.Release.PlanID != r.PlanID {
 		return finish("recovery_required", "prepare_unconfirmed", "资产准备结果无法与原检查计划对应，须核对原组件任务")
 	}
+	if input.Install != nil {
+		return s.startDependencyMaintenance(ctx, id, owner, d, st.Plan.BaseVersion)
+	}
 	return finish("succeeded", "prepared", "")
 }
 
@@ -186,11 +196,11 @@ func (s *Service) dependencyChildError(ctx context.Context, id string, d *Depend
 func (s *Service) saveDependency(ctx context.Context, id string, d *DependencyStatus, state, stage, message string) error {
 	if d.State == state && d.Stage == stage && d.Error == message {
 		// Child IDs may have changed while the visible stage stayed the same.
-		var check, prepare string
-		if err := s.DB.QueryRowContext(ctx, "SELECT check_task_id,prepare_task_id FROM migration_dependencies WHERE plan_id=?", id).Scan(&check, &prepare); err != nil {
+		var check, prepare, maintenanceID, install, settlementState, settlementStage, settlementError string
+		if err := s.DB.QueryRowContext(ctx, "SELECT check_task_id,prepare_task_id,maintenance_task_id,install_task_id,settlement_state,settlement_stage,settlement_error FROM migration_dependencies WHERE plan_id=?", id).Scan(&check, &prepare, &maintenanceID, &install, &settlementState, &settlementStage, &settlementError); err != nil {
 			return err
 		}
-		if check == d.CheckTaskID && prepare == d.PrepareTaskID {
+		if check == d.CheckTaskID && prepare == d.PrepareTaskID && maintenanceID == d.MaintenanceTaskID && install == d.InstallTaskID && settlementState == d.SettlementState && settlementStage == d.SettlementStage && settlementError == d.SettlementError {
 			return nil
 		}
 	}
@@ -199,7 +209,7 @@ func (s *Service) saveDependency(ctx context.Context, id string, d *DependencySt
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, "UPDATE migration_dependencies SET check_task_id=?,prepare_task_id=? WHERE plan_id=?", d.CheckTaskID, d.PrepareTaskID, id); err != nil {
+	if _, err = tx.ExecContext(ctx, "UPDATE migration_dependencies SET check_task_id=?,prepare_task_id=?,maintenance_task_id=?,install_task_id=?,settlement_state=?,settlement_stage=?,settlement_error=? WHERE plan_id=?", d.CheckTaskID, d.PrepareTaskID, d.MaintenanceTaskID, d.InstallTaskID, d.SettlementState, d.SettlementStage, d.SettlementError, id); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE tasks SET state=?,stage=?,last_error=?,updated_at=? WHERE id=? AND state IN ('queued','running','recovery_required')", state, stage, message, time.Now().Unix(), d.TaskID); err != nil {

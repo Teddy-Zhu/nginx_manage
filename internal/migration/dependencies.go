@@ -14,8 +14,9 @@ import (
 
 func (s *Service) dependencyStatus(ctx context.Context, id string) (*DependencyStatus, error) {
 	var d DependencyStatus
-	err := s.DB.QueryRowContext(ctx, `SELECT t.id,t.state,t.stage,d.check_task_id,d.prepare_task_id,t.last_error,d.deadline
- FROM migration_dependencies d JOIN tasks t ON t.id=d.task_id WHERE d.plan_id=?`, id).Scan(&d.TaskID, &d.State, &d.Stage, &d.CheckTaskID, &d.PrepareTaskID, &d.Error, &d.Deadline)
+	err := s.DB.QueryRowContext(ctx, `SELECT t.id,t.state,t.stage,d.check_task_id,d.prepare_task_id,t.last_error,d.deadline,
+ d.maintenance_task_id,d.install_task_id,d.settlement_state,d.settlement_stage,d.settlement_error
+ FROM migration_dependencies d JOIN tasks t ON t.id=d.task_id WHERE d.plan_id=?`, id).Scan(&d.TaskID, &d.State, &d.Stage, &d.CheckTaskID, &d.PrepareTaskID, &d.Error, &d.Deadline, &d.MaintenanceTaskID, &d.InstallTaskID, &d.SettlementState, &d.SettlementStage, &d.SettlementError)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -42,6 +43,14 @@ func (s *Service) PrepareDependencies(ctx context.Context, p auth.Principal, req
 	}
 	if err := in.validate(); err != nil {
 		return Plan{}, err
+	}
+	if in.Install != nil {
+		if err := p.Require("system.write"); err != nil {
+			return Plan{}, err
+		}
+		if s.Installations == nil || s.Maintenance == nil {
+			return Plan{}, fault.Unavailable("首次安装协调服务未配置")
+		}
 	}
 	if s.Components == nil {
 		return Plan{}, fault.Unavailable("组件服务未配置")
@@ -90,6 +99,13 @@ func (s *Service) PrepareDependencies(ctx context.Context, p auth.Principal, req
 	} else if errors.Is(err, sql.ErrNoRows) {
 		if plan.State != "planned" || plan.ExpiresAt <= time.Now().Unix() {
 			return Plan{}, fault.Conflict("仅有效的待执行迁移可以准备依赖")
+		}
+		var active int
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind='migration.dependencies' AND state IN ('queued','running','recovery_required')").Scan(&active); err != nil {
+			return Plan{}, err
+		}
+		if active != 0 {
+			return Plan{}, fault.Conflict("已有迁移依赖任务执行中或待恢复")
 		}
 		input, e := json.Marshal(in)
 		if e != nil {

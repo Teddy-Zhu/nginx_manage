@@ -138,6 +138,11 @@ func (s *Service) receipt(ctx context.Context, tx *sql.Tx, p auth.Principal, req
 }
 
 func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key string, in CreateInput) (Task, error) {
+	return s.CreateLinked(ctx, p, requestID, key, in, 0, nil)
+}
+
+// CreateLinked commits the installation intent and coordinator link atomically.
+func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID, key string, in CreateInput, authorizationUntil int64, link func(*sql.Tx, Task) error) (Task, error) {
 	var out Task
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return out, err
@@ -146,7 +151,22 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 		return out, fault.Invalid("安装任务参数或幂等键无效")
 	}
 	hash := requestHash("nginx.install", in)
-	if t, found, err := s.replay(ctx, p, key, hash); err != nil || found {
+	replay := func() (Task, bool, error) {
+		t, found, err := s.replay(ctx, p, key, hash)
+		if err != nil || !found || link == nil {
+			return t, found, err
+		}
+		tx, err := s.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return t, true, err
+		}
+		defer tx.Rollback()
+		if err = link(tx, t); err != nil {
+			return t, true, err
+		}
+		return t, true, tx.Commit()
+	}
+	if t, found, err := replay(); err != nil || found {
 		return t, err
 	}
 	if s.Agent == nil || s.Components == nil {
@@ -189,7 +209,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	}
 	defer done()
 	// Recheck the receipt while holding admission, before opening a transaction.
-	if t, found, e := s.replay(ctx, p, key, hash); e != nil || found {
+	if t, found, e := replay(); e != nil || found {
 		return t, e
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -218,7 +238,14 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 		return out, fault.Conflict("首次安装记录达到 64 项上限，须本机维护")
 	}
 	now := time.Now().Unix()
-	out = Task{ID: secure.ID(), OperationID: secure.ID(), PrepareTaskID: in.PrepareTaskID, Input: Input{MaintenanceID: in.MaintenanceID, PlanID: r.Release.PlanID, AssetID: in.AssetID, ManifestSHA256: r.Release.ManifestSHA256, TrustSHA256: r.Release.TrustSHA256, Prerelease: r.Input.Prerelease, Start: in.Start, Enable: in.Enable}, Sequence: 1, Command: "install", State: "queued", Stage: "queued", CreatedAt: now, UpdatedAt: now, AuthorizationUntil: now + 600}
+	if authorizationUntil != 0 && authorizationUntil <= now {
+		return out, fault.Conflict("安装父任务授权已过期")
+	}
+	until := now + 600
+	if authorizationUntil != 0 {
+		until = min(until, authorizationUntil)
+	}
+	out = Task{ID: secure.ID(), OperationID: secure.ID(), PrepareTaskID: in.PrepareTaskID, Input: Input{MaintenanceID: in.MaintenanceID, PlanID: r.Release.PlanID, AssetID: in.AssetID, ManifestSHA256: r.Release.ManifestSHA256, TrustSHA256: r.Release.TrustSHA256, Prerelease: r.Input.Prerelease, Start: in.Start, Enable: in.Enable}, Sequence: 1, Command: "install", State: "queued", Stage: "queued", CreatedAt: now, UpdatedAt: now, AuthorizationUntil: until}
 	if err = out.Input.Validate(); err != nil {
 		return out, err
 	}
@@ -234,6 +261,11 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	}
 	if err = s.receipt(ctx, tx, p, requestID, key, hash, "component.install", out); err != nil {
 		return out, err
+	}
+	if link != nil {
+		if err = link(tx, out); err != nil {
+			return out, err
+		}
 	}
 	return out, tx.Commit()
 }

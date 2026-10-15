@@ -32,6 +32,7 @@ type StartInput struct {
 }
 type Session struct {
 	TaskID        string `json:"task_id"`
+	OwnerTaskID   string `json:"owner_task_id"`
 	Phase         string `json:"phase"`
 	Deadline      int64  `json:"deadline"`
 	RootRequested bool   `json:"root_requested"`

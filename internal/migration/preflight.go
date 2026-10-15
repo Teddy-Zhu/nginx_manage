@@ -19,6 +19,11 @@ func (s *Service) Preflight(ctx context.Context, p auth.Principal, requestID, id
 		return Plan{}, fault.Conflict("已有迁移正在处理")
 	}
 	defer s.mu.Unlock()
+	return s.preflight(ctx, p, requestID, id)
+}
+
+// The caller holds the migration coordinator lock.
+func (s *Service) preflight(ctx context.Context, p auth.Principal, requestID, id string) (Plan, error) {
 	st, err := s.load(ctx, p, id)
 	if err != nil {
 		return Plan{}, err

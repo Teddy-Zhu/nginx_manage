@@ -15,11 +15,11 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const columns = "task_id,phase,deadline,root_requested,root_epoch,last_error,created_at,updated_at"
+const columns = "task_id,phase,deadline,root_requested,root_epoch,last_error,created_at,updated_at,COALESCE(owner_task_id,'')"
 
 func readSession(row interface{ Scan(...any) error }) (*Session, error) {
 	var s Session
-	err := row.Scan(&s.TaskID, &s.Phase, &s.Deadline, &s.RootRequested, &s.RootEpoch, &s.Error, &s.CreatedAt, &s.UpdatedAt)
+	err := row.Scan(&s.TaskID, &s.Phase, &s.Deadline, &s.RootRequested, &s.RootEpoch, &s.Error, &s.CreatedAt, &s.UpdatedAt, &s.OwnerTaskID)
 	return &s, err
 }
 func (s *Service) publish(session *Session, phase, reason string) {
@@ -44,6 +44,19 @@ func (s *Service) Init(ctx context.Context) error {
 	return s.step(ctx)
 }
 func (s *Service) Start(ctx context.Context, p auth.Principal, requestID, key string, in StartInput) (Session, error) {
+	return s.start(ctx, p, requestID, key, in, "", nil)
+}
+
+// StartLinked drains everything except the authorized coordinator itself. The
+// child and its parent link commit together, before either worker can proceed.
+func (s *Service) StartLinked(ctx context.Context, p auth.Principal, requestID, key string, in StartInput, ownerTaskID string, link func(*sql.Tx, Session) error) (Session, error) {
+	if !validID(ownerTaskID) || link == nil {
+		return Session{}, fault.Invalid("维护父任务关联无效")
+	}
+	return s.start(ctx, p, requestID, key, in, ownerTaskID, link)
+}
+
+func (s *Service) start(ctx context.Context, p auth.Principal, requestID, key string, in StartInput, ownerTaskID string, link func(*sql.Tx, Session) error) (Session, error) {
 	var out Session
 	if err := p.Require("system.write"); err != nil {
 		return out, err
@@ -55,9 +68,10 @@ func (s *Service) Start(ctx context.Context, p auth.Principal, requestID, key st
 		return out, fault.Invalid("幂等键无效")
 	}
 	raw, err := json.Marshal(struct {
-		Action string
-		Input  StartInput
-	}{"maintenance.enter", in})
+		Action      string
+		Input       StartInput
+		OwnerTaskID string
+	}{"maintenance.enter", in, ownerTaskID})
 	if err != nil {
 		return out, err
 	}
@@ -80,8 +94,16 @@ func (s *Service) Start(ctx context.Context, p auth.Principal, requestID, key st
 		if e != nil {
 			return out, e
 		}
-		e = json.Unmarshal(plain, &out)
-		return out, e
+		if e = json.Unmarshal(plain, &out); e != nil {
+			return out, e
+		}
+		if link != nil {
+			if e = link(tx, out); e != nil {
+				return out, e
+			}
+			return out, tx.Commit()
+		}
+		return out, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return out, err
@@ -114,9 +136,14 @@ func (s *Service) Start(ctx context.Context, p auth.Principal, requestID, key st
 		return out, fault.Conflict("维护记录达到 64 项保留上限，须本机维护")
 	}
 	now := time.Now().Unix()
-	out = Session{TaskID: secure.ID(), Phase: "draining", Deadline: now + in.DrainSeconds, CreatedAt: now, UpdatedAt: now}
+	out = Session{TaskID: secure.ID(), OwnerTaskID: ownerTaskID, Phase: "draining", Deadline: now + in.DrainSeconds, CreatedAt: now, UpdatedAt: now}
 	if err = s.insert(ctx, tx, p, out); err != nil {
 		return out, err
+	}
+	if link != nil {
+		if err = link(tx, out); err != nil {
+			return out, err
+		}
 	}
 	response, err := json.Marshal(out)
 	if err != nil {
@@ -140,7 +167,7 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p auth.Principal, in S
 	if _, err := tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,state,stage,operation_id,created_at,updated_at) VALUES(?,'maintenance.enter','host','running',?,?,?,?)", in.TaskID, in.Phase, in.TaskID, in.CreatedAt, in.UpdatedAt); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, "INSERT INTO maintenance_sessions(task_id,principal,phase,deadline,root_requested,root_epoch,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)", in.TaskID, p.ID, in.Phase, in.Deadline, in.RootRequested, in.RootEpoch, in.Error, in.CreatedAt, in.UpdatedAt)
+	_, err := tx.ExecContext(ctx, "INSERT INTO maintenance_sessions(task_id,principal,phase,deadline,root_requested,root_epoch,last_error,created_at,updated_at,owner_task_id) VALUES(?,?,?,?,?,?,?,?,?,NULLIF(?,''))", in.TaskID, p.ID, in.Phase, in.Deadline, in.RootRequested, in.RootEpoch, in.Error, in.CreatedAt, in.UpdatedAt, in.OwnerTaskID)
 	return err
 }
 func audit(ctx context.Context, tx *sql.Tx, p auth.Principal, requestID, id, action, outcome string) error {
@@ -288,8 +315,8 @@ func (s *Service) save(ctx context.Context, in *Session) error {
 func (s *Service) busy(ctx context.Context, id string) (bool, error) {
 	var n int
 	err := s.DB.QueryRowContext(ctx, `SELECT
- (SELECT COUNT(*) FROM tasks WHERE id!=? AND state NOT IN ('succeeded','failed','rolled_back','cancelled'))+
- (SELECT COUNT(*) FROM migration_plans WHERE state IN ('applying','recovery_required'))`, id).Scan(&n)
+ (SELECT COUNT(*) FROM tasks WHERE id!=? AND id!=COALESCE((SELECT owner_task_id FROM maintenance_sessions WHERE task_id=?),'') AND state NOT IN ('succeeded','failed','rolled_back','cancelled'))+
+ (SELECT COUNT(*) FROM migration_plans WHERE state IN ('applying','recovery_required'))`, id, id).Scan(&n)
 	return n != 0, err
 }
 func (s *Service) step(ctx context.Context) error {

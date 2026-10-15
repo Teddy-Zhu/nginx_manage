@@ -4,9 +4,9 @@ import type { MigrationDependencyStatus } from "../api/client";
 defineProps<{ status: MigrationDependencyStatus }>();
 const states: Record<string, string> = {
   queued: "已排队",
-  running: "准备中",
-  succeeded: "准备完成",
-  failed: "准备失败",
+  running: "处理中",
+  succeeded: "处理完成",
+  failed: "处理失败",
   recovery_required: "需要恢复",
 };
 const stages: Record<string, string> = {
@@ -26,12 +26,30 @@ const stages: Record<string, string> = {
   child_missing: "组件记录缺失",
   preparation_blocked: "准备未获准",
   input_invalid: "准备授权待核对",
+  maintenance: "等待独占维护",
+  installing: "首次安装中",
+  installed: "首次安装完成",
+  releasing: "恢复写入中",
+  installation_unavailable: "安装服务不可用",
+  installation_wait: "等待安装服务",
+  installation_failed: "首次安装失败",
+  installation_blocked: "首次安装未获准",
+  installation_recovery: "安装结果需要恢复",
+  install_missing: "安装记录缺失",
+  install_mismatch: "安装结果待核对",
+  maintenance_blocked: "维护未获准",
+  maintenance_missing: "维护记录缺失",
+  maintenance_mismatch: "维护归属待核对",
+  maintenance_recovery: "维护结果需要恢复",
+  maintenance_lost: "维护已结束",
+  release_blocked: "维护释放待核对",
+  preflight_blocked: "重新预检未获准",
 };
 </script>
 <template>
   <div class="dependency-status">
     <p>
-      <strong>依赖准备</strong>
+      <strong>依赖处理</strong>
       <NTag>{{ states[status.state] || status.state }}</NTag>
       {{ stages[status.stage] || status.stage }}
     </p>
@@ -48,6 +66,14 @@ const stages: Record<string, string> = {
       ><template v-if="status.prepare_task_id"
         ><dt>资产准备任务</dt>
         <dd>{{ status.prepare_task_id }}</dd></template
+      >
+      <template v-if="status.maintenance_task_id"
+        ><dt>维护任务</dt>
+        <dd>{{ status.maintenance_task_id }}</dd></template
+      >
+      <template v-if="status.install_task_id"
+        ><dt>首次安装任务</dt>
+        <dd>{{ status.install_task_id }}</dd></template
       >
     </dl>
   </div>

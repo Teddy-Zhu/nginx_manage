@@ -44,7 +44,7 @@ func (s *Service) pushDependencies(call, ctx context.Context, j *pushJob) error 
 		j.NextAttempt = time.Now().Unix() + 15
 		return s.savePush(ctx, j)
 	case "succeeded":
-		if d.Stage != "prepared" && d.Stage != "not_required" {
+		if d.Stage != "prepared" && d.Stage != "not_required" && d.Stage != "installed" {
 			return s.pushPeerFailure(ctx, j, &pushPeerError{Identity: true})
 		}
 		j.Task.Stage, j.Payload.ResumeStage = "executing", "executing"

@@ -1594,9 +1594,14 @@ export interface components {
             version: number;
             scopes: string[];
         };
+        MigrationDependencyInstallInput: {
+            start: boolean;
+            enable: boolean;
+        };
         MigrationDependencyInput: {
             tag: string;
             prerelease: boolean;
+            install?: components["schemas"]["MigrationDependencyInstallInput"];
         };
         MigrationDependencyStatus: {
             task_id: string;
@@ -1607,6 +1612,8 @@ export interface components {
             error: string;
             /** Format: int64 */
             deadline: number;
+            maintenance_task_id: string;
+            install_task_id: string;
         };
         MigrationPushInput: {
             remote: components["schemas"]["MigrationRemote"];
@@ -1668,6 +1675,7 @@ export interface components {
             created_at: number;
             /** Format: int64 */
             updated_at: number;
+            owner_task_id: string;
         };
         MaintenanceView: {
             phase: string;

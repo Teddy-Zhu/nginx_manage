@@ -77,7 +77,10 @@ const mode = ref<MigrationExecuteInput["mode"]>("draft"),
   history = ref<MigrationPlan[]>([]),
   error = ref("");
 const dependencyTag = ref(""),
-  dependencyPrerelease = ref(false);
+  dependencyPrerelease = ref(false),
+  dependencyInstall = ref(false),
+  dependencyStart = ref(true),
+  dependencyEnable = ref(false);
 const preparingDependencies = computed(
   () =>
     !!plan.value?.dependencies &&
@@ -286,6 +289,14 @@ async function prepareDependencies() {
     const input = {
       tag: dependencyTag.value.trim(),
       prerelease: dependencyPrerelease.value,
+      ...(dependencyInstall.value
+        ? {
+            install: {
+              start: dependencyStart.value,
+              enable: dependencyEnable.value,
+            },
+          }
+        : {}),
     };
     plan.value = await api.prepareMigrationDependencies(
       id,
@@ -495,11 +506,23 @@ onUnmounted(() => {
         <NCheckbox v-model:checked="dependencyPrerelease"
           >允许指定的预发布版本</NCheckbox
         >
+        <div v-if="has('system.write')">
+          <NCheckbox v-model:checked="dependencyInstall"
+            >授权缺失时首次安装 Nginx</NCheckbox
+          >
+          <template v-if="dependencyInstall">
+            <NCheckbox v-model:checked="dependencyStart">安装后启动</NCheckbox>
+            <NCheckbox v-model:checked="dependencyEnable"
+              >开机自动启动</NCheckbox
+            >
+            <p>安装期间暂停配置写入，完成后恢复并重新预检。</p>
+          </template>
+        </div>
         <NPopconfirm @positive-click="prepareDependencies"
           ><template #trigger
             ><NButton :disabled="busy">准备缺失依赖</NButton></template
-          >授权从目标本机信任的发行源检查并准备缺失的 Nginx
-          资产？已有实例不会被替换，Docker 模块由镜像提供。</NPopconfirm
+          >按所选选项准备缺失依赖？首次安装仅适用于未安装 Nginx
+          的原生部署，Docker 模块由镜像提供。</NPopconfirm
         >
       </div>
       <div class="migration-steps">

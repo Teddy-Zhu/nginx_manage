@@ -46,7 +46,10 @@ const certificates = ref(false),
   enableNginx = ref(false);
 const prepareDependencies = ref(false),
   dependencyTag = ref(""),
-  dependencyPrerelease = ref(false);
+  dependencyPrerelease = ref(false),
+  dependencyInstall = ref(false),
+  dependencyStart = ref(true),
+  dependencyEnable = ref(false);
 const mode = ref<MigrationPushInput["mode"]>("preview"),
   selected = ref<MigrationPushTask | null>(null),
   history = ref<MigrationPushTask[]>([]),
@@ -184,6 +187,14 @@ async function submit() {
             dependencies: {
               tag: dependencyTag.value.trim(),
               prerelease: dependencyPrerelease.value,
+              ...(dependencyInstall.value
+                ? {
+                    install: {
+                      start: dependencyStart.value,
+                      enable: dependencyEnable.value,
+                    },
+                  }
+                : {}),
             },
           }
         : {}),
@@ -279,10 +290,27 @@ onUnmounted(() => {
             <NCheckbox v-model:checked="dependencyPrerelease"
               >允许指定的预发布版本</NCheckbox
             >
+            <div>
+              <NCheckbox v-model:checked="dependencyInstall"
+                >授权目标缺失时首次安装 Nginx</NCheckbox
+              >
+              <template v-if="dependencyInstall">
+                <NCheckbox v-model:checked="dependencyStart"
+                  >安装后启动</NCheckbox
+                >
+                <NCheckbox v-model:checked="dependencyEnable"
+                  >开机自动启动</NCheckbox
+                >
+                <p>
+                  目标 Key
+                  须具备系统写入权限。安装期间暂停目标配置写入，完成后恢复并重新预检。
+                </p>
+              </template>
+            </div>
             <p>
               目标 Key
-              需要组件管理权限。仅准备本机信任的签名资产；已有实例不会被替换，Docker
-              模块由镜像提供。准备后重新检查实际运行条件。
+              需要组件管理权限。使用目标信任的签名资产；首次安装仅适用于未安装
+              Nginx 的原生部署，Docker 模块由镜像提供。
             </p>
           </template>
         </div>

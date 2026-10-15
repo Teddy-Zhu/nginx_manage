@@ -1721,6 +1721,7 @@ type MaintenanceSession struct {
 	CreatedAt     int64  `json:"created_at"`
 	Deadline      int64  `json:"deadline"`
 	Error         string `json:"error"`
+	OwnerTaskId   string `json:"owner_task_id"`
 	Phase         string `json:"phase"`
 	RootEpoch     string `json:"root_epoch"`
 	RootRequested bool   `json:"root_requested"`
@@ -1753,19 +1754,28 @@ type Me struct {
 
 // MigrationDependencyInput defines model for MigrationDependencyInput.
 type MigrationDependencyInput struct {
-	Prerelease bool   `json:"prerelease"`
-	Tag        string `json:"tag"`
+	Install    *MigrationDependencyInstallInput `json:"install,omitempty"`
+	Prerelease bool                             `json:"prerelease"`
+	Tag        string                           `json:"tag"`
+}
+
+// MigrationDependencyInstallInput defines model for MigrationDependencyInstallInput.
+type MigrationDependencyInstallInput struct {
+	Enable bool `json:"enable"`
+	Start  bool `json:"start"`
 }
 
 // MigrationDependencyStatus defines model for MigrationDependencyStatus.
 type MigrationDependencyStatus struct {
-	CheckTaskId   string `json:"check_task_id"`
-	Deadline      int64  `json:"deadline"`
-	Error         string `json:"error"`
-	PrepareTaskId string `json:"prepare_task_id"`
-	Stage         string `json:"stage"`
-	State         string `json:"state"`
-	TaskId        string `json:"task_id"`
+	CheckTaskId       string `json:"check_task_id"`
+	Deadline          int64  `json:"deadline"`
+	Error             string `json:"error"`
+	InstallTaskId     string `json:"install_task_id"`
+	MaintenanceTaskId string `json:"maintenance_task_id"`
+	PrepareTaskId     string `json:"prepare_task_id"`
+	Stage             string `json:"stage"`
+	State             string `json:"state"`
+	TaskId            string `json:"task_id"`
 }
 
 // MigrationExecuteInput defines model for MigrationExecuteInput.

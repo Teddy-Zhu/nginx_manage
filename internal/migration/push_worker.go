@@ -84,7 +84,7 @@ func (s *Service) nextPush(ctx context.Context) error {
 		if j.Payload.Input.Dependencies != nil {
 			required = append(required, "components.manage")
 		}
-		if j.Payload.Input.EnableNginx {
+		if j.Payload.Input.EnableNginx || j.Payload.Input.Dependencies != nil && j.Payload.Input.Dependencies.Install != nil {
 			required = append(required, "system.write")
 		}
 		if target.Require(required...) != nil {

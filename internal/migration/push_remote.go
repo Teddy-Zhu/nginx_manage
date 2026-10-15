@@ -108,7 +108,7 @@ func sanitizePushPlan(plan Plan, remote Remote, passphrase string) (Plan, error)
 		return Plan{}, errors.New("invalid migration plan")
 	}
 	if d := plan.Dependencies; d != nil {
-		if !validTransferID(d.TaskID) || d.CheckTaskID != "" && !validTransferID(d.CheckTaskID) || d.PrepareTaskID != "" && !validTransferID(d.PrepareTaskID) || len(d.Error) > 1024 || len(d.State) > 32 || len(d.Stage) > 64 || d.Deadline <= 0 {
+		if !validTransferID(d.TaskID) || d.CheckTaskID != "" && !validTransferID(d.CheckTaskID) || d.PrepareTaskID != "" && !validTransferID(d.PrepareTaskID) || d.MaintenanceTaskID != "" && !validTransferID(d.MaintenanceTaskID) || d.InstallTaskID != "" && !validTransferID(d.InstallTaskID) || len(d.Error) > 1024 || len(d.State) > 32 || len(d.Stage) > 64 || d.Deadline <= 0 {
 			return Plan{}, errors.New("invalid dependency result")
 		}
 	}

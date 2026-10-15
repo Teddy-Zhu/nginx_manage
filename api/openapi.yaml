@@ -1461,10 +1461,12 @@ components:
   schemas:
     MigrationReceiver:
       {"type": "object", "required": ["schema", "node_id", "version", "scopes"], "properties": {"schema": {"type": "integer", "format": "int64"}, "node_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "scopes": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false}
+    MigrationDependencyInstallInput:
+      {"type": "object", "required": ["start", "enable"], "properties": {"start": {"type": "boolean"}, "enable": {"type": "boolean"}}, "additionalProperties": false}
     MigrationDependencyInput:
-      {"type": "object", "required": ["tag", "prerelease"], "properties": {"tag": {"type": "string", "maxLength": 128}, "prerelease": {"type": "boolean"}}, "additionalProperties": false}
+      {"type": "object", "required": ["tag", "prerelease"], "properties": {"tag": {"type": "string", "maxLength": 128}, "prerelease": {"type": "boolean"}, "install": {"$ref": "#/components/schemas/MigrationDependencyInstallInput"}}, "additionalProperties": false}
     MigrationDependencyStatus:
-      {"type": "object", "required": ["task_id", "state", "stage", "check_task_id", "prepare_task_id", "error", "deadline"], "properties": {"task_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "check_task_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "error": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}}, "additionalProperties": false}
+      {"type": "object", "required": ["task_id", "state", "stage", "check_task_id", "prepare_task_id", "error", "deadline", "maintenance_task_id", "install_task_id"], "properties": {"task_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "check_task_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "error": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "maintenance_task_id": {"type": "string"}, "install_task_id": {"type": "string"}}, "additionalProperties": false}
     MigrationPushInput:
       {"type": "object", "required": ["remote", "mappings", "mode", "enable_nginx"], "properties": {"remote": {"$ref": "#/components/schemas/MigrationRemote"}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "mode": {"type": "string", "enum": ["preview", "draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "dependencies": {"$ref": "#/components/schemas/MigrationDependencyInput"}}, "additionalProperties": false}
     MigrationPushResumeInput:
@@ -1476,7 +1478,7 @@ components:
     MaintenanceRootStatus:
       {"type": "object", "required": ["available", "id", "phase", "epoch", "busy", "reason"], "properties": {"available": {"type": "boolean"}, "id": {"type": "string"}, "phase": {"type": "string"}, "epoch": {"type": "string"}, "busy": {"type": "integer", "format": "int64"}, "reason": {"type": "string"}}}
     MaintenanceSession:
-      {"type": "object", "required": ["task_id", "phase", "deadline", "root_requested", "root_epoch", "error", "created_at", "updated_at"], "properties": {"task_id": {"type": "string"}, "phase": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "root_requested": {"type": "boolean"}, "root_epoch": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}}}
+      {"type": "object", "required": ["task_id", "phase", "deadline", "root_requested", "root_epoch", "error", "created_at", "updated_at", "owner_task_id"], "properties": {"task_id": {"type": "string"}, "phase": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "root_requested": {"type": "boolean"}, "root_epoch": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "owner_task_id": {"type": "string"}}}
     MaintenanceView:
       {"type": "object", "required": ["phase", "active", "agent", "reason"], "properties": {"phase": {"type": "string"}, "active": {"type": "integer", "format": "int64"}, "agent": {"$ref": "#/components/schemas/MaintenanceRootStatus"}, "reason": {"type": "string"}, "session": {"$ref": "#/components/schemas/MaintenanceSession"}}}
     NginxInstallPlan:

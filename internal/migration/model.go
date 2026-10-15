@@ -12,6 +12,7 @@ import (
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/nginxinstall"
 	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/secure"
 )
@@ -121,6 +122,7 @@ type Host interface {
 }
 type Service struct {
 	Components      *components.Service
+	Installations   *nginxinstall.Service
 	Maintenance     *maintenance.Service
 	DB              *sql.DB
 	Vault           *secure.Vault
