@@ -26,6 +26,7 @@ import (
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
@@ -218,7 +219,11 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	notificationService := &notifications.Service{DB: db, Vault: vault, NodeID: nodeID, DataDir: o.DataDir}
-	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
+	dnsService := &hostdns.Service{DB: db, Vault: vault}
+	if agentClient != nil {
+		dnsService.Agent = agentClient
+	}
+	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -230,14 +235,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 5)
+	result := make(chan error, 6)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(5)
+	workers.Add(6)
 	go func() {
 		defer workers.Done()
 		if o.Dev {
@@ -256,6 +261,7 @@ func Run(ctx context.Context, o Options) error {
 	}()
 	go func() { defer workers.Done(); result <- monitoringService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- notificationService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- dnsService.Run(runCtx) }()
 	select {
 	case <-ctx.Done():
 		err = nil

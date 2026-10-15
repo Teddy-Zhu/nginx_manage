@@ -12,6 +12,10 @@ export type SaveRequest = components["schemas"]["SaveRequest"];
 export type Me = components["schemas"]["Me"];
 export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
+export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
+export type HostDNSPlan = components["schemas"]["HostDNSPlan"];
+export type HostDNSPlanInput = components["schemas"]["HostDNSPlanInput"];
+export type HostDNSChange = components["schemas"]["HostDNSChange"];
 export type ResourceMetadata = components["schemas"]["ResourceMetadata"];
 export type AccessList = components["schemas"]["AccessList"];
 export type WAFConfig = components["schemas"]["WAFConfig"];
@@ -285,6 +289,28 @@ export function followLogs(
 export const api = {
   notifications: (signal?: AbortSignal) =>
     request<NotificationOverview>({ url: "/notifications", signal }),
+  hostDNS: (signal?: AbortSignal) =>
+    request<HostDNSOverview>({ url: "/host/dns", signal }),
+  planHostDNS: (data: HostDNSPlanInput, key: string) =>
+    request<HostDNSPlan>({
+      url: "/host/dns/plan",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  applyHostDNS: (plan_id: string, key: string) =>
+    request<HostDNSChange>({
+      url: "/host/dns/apply",
+      method: "POST",
+      data: { plan_id },
+      headers: { "Idempotency-Key": key },
+    }),
+  decideHostDNS: (id: string, action: "confirm" | "rollback", key: string) =>
+    request<HostDNSChange>({
+      url: `/host/dns/tasks/${id}/${action}`,
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+    }),
   notificationEvents: (limit = 30, offset = 0, signal?: AbortSignal) =>
     request<NotificationEvent[]>({
       url: "/notifications/events",
@@ -633,7 +659,8 @@ export const api = {
       headers: { "Idempotency-Key": key },
     }),
   tasks: () => request<Task[]>({ url: "/tasks" }),
-  modules: () => request<Module[]>({ url: "/system/modules" }),
+  modules: (signal?: AbortSignal) =>
+    request<Module[]>({ url: "/system/modules", signal }),
   setModule: (id: string, enabled: boolean) =>
     request<null>({
       method: "PUT",

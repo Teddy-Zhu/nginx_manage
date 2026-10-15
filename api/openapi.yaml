@@ -1252,6 +1252,149 @@ paths:
             },
         },
     }
+  /host/dns:
+    {
+      "get": {
+        "operationId": "getHostDNS",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/JSON"
+          }
+        }
+      }
+    }
+  /host/dns/plan:
+    {
+      "post": {
+        "operationId": "createHostDNSPlan",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostDNSPlanInput"
+              }
+            }
+          }
+        }
+      }
+    }
+  /host/dns/apply:
+    {
+      "post": {
+        "operationId": "applyHostDNS",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostDNSApplyInput"
+              }
+            }
+          }
+        }
+      }
+    }
+  /host/dns/tasks/{id}/confirm:
+    {
+      "post": {
+        "operationId": "confirmHostDNS",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/JSON"
+          }
+        }
+      }
+    }
+  /host/dns/tasks/{id}/rollback:
+    {
+      "post": {
+        "operationId": "rollbackHostDNS",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ID"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/JSON"
+          }
+        }
+      }
+    }
 components:
   securitySchemes:
     cookieAuth: { type: apiKey, in: cookie, name: nginxpanel_session }
@@ -2545,3 +2688,318 @@ components:
         observed_revision: { type: string }
         last_error: { type: string }
         created_at: { type: integer, format: int64 }
+
+    HostDNSConfig:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "servers",
+          "search"
+        ],
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "search": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+
+    HostDNSStatus:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation_id",
+          "plan_id",
+          "state",
+          "stage",
+          "deadline",
+          "source_hash",
+          "error"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_hash": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+
+    HostDNSObservation:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "owner",
+          "source",
+          "link_target",
+          "writable",
+          "reason",
+          "source_hash",
+          "current",
+          "persistent",
+          "pending"
+        ],
+        "properties": {
+          "owner": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "link_target": {
+            "type": "string"
+          },
+          "writable": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "source_hash": {
+            "type": "string"
+          },
+          "current": {
+            "$ref": "#/components/schemas/HostDNSConfig"
+          },
+          "persistent": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSConfig"
+              }
+            ],
+            "nullable": true
+          },
+          "pending": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSStatus"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      }
+
+    HostDNSPlanInput:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_hash",
+          "config",
+          "verify_names",
+          "timeout_seconds",
+          "takeover"
+        ],
+        "properties": {
+          "source_hash": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/HostDNSConfig"
+          },
+          "verify_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "takeover": {
+            "type": "boolean"
+          }
+        }
+      }
+
+    HostDNSPlan:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "owner",
+          "input",
+          "before",
+          "created_at",
+          "expires_at",
+          "impact"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "input": {
+            "$ref": "#/components/schemas/HostDNSPlanInput"
+          },
+          "before": {
+            "$ref": "#/components/schemas/HostDNSConfig"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "impact": {
+            "type": "string"
+          }
+        }
+      }
+
+    HostDNSDesired:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "config",
+          "source_hash",
+          "updated_at"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "config": {
+            "$ref": "#/components/schemas/HostDNSConfig"
+          },
+          "source_hash": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      }
+
+    HostDNSTask:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "operation_id",
+          "state",
+          "stage",
+          "error",
+          "decision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          }
+        }
+      }
+
+    HostDNSOverview:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observed",
+          "desired",
+          "task"
+        ],
+        "properties": {
+          "observed": {
+            "$ref": "#/components/schemas/HostDNSObservation"
+          },
+          "desired": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSDesired"
+              }
+            ],
+            "nullable": true
+          },
+          "task": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSTask"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      }
+
+    HostDNSApplyInput:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plan_id"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "string"
+          }
+        }
+      }
+
+    HostDNSChange:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "task_id"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string"
+          }
+        }
+      }

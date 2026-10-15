@@ -193,6 +193,27 @@ type DnsCredential struct {
 	UpdatedAt  int64  `json:"updated_at"`
 }
 
+type HostDnsDesired struct {
+	ID         int64  `json:"id"`
+	Version    int64  `json:"version"`
+	Payload    []byte `json:"payload"`
+	SourceHash string `json:"source_hash"`
+	UpdatedAt  int64  `json:"updated_at"`
+}
+
+type HostDnsOperation struct {
+	TaskID   string `json:"task_id"`
+	Payload  []byte `json:"payload"`
+	Decision string `json:"decision"`
+}
+
+type HostDnsPlan struct {
+	ID        string `json:"id"`
+	Principal string `json:"principal"`
+	Payload   []byte `json:"payload"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
 type IdempotencyKey struct {
 	Principal   string `json:"principal"`
 	Key         string `json:"key"`

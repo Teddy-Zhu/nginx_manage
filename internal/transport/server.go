@@ -11,6 +11,7 @@ import (
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
@@ -27,6 +28,7 @@ type Server struct {
 	ACME          *acme.Service
 	Monitoring    *monitoring.Service
 	Notifications *notifications.Service
+	HostDNS       *hostdns.Service
 	Agent         *agent.Client
 	NodeID        string
 	Dev           bool

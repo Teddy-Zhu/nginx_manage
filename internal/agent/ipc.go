@@ -23,7 +23,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 8
+const Protocol = 9
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`
@@ -46,6 +46,8 @@ type Server struct {
 	Dev          bool
 	MetricsScope string
 	DataDir      string
+	DNSOwner     string
+	DNSScope     string
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -129,6 +131,16 @@ func (s *Server) Run(ctx context.Context) error {
 		}()
 	}
 	mux := http.NewServeMux()
+	dns := &HostDNS{Dir: filepath.Join(s.DataDir, "agent", "reachability"), Owner: s.DNSOwner, Scope: s.DNSScope, Dev: s.Dev, Journal: s.Journal}
+	defer dns.Close()
+	if err := dns.Open(); err != nil {
+		return err
+	}
+	dnsCtx, stopDNS := context.WithCancel(ctx)
+	dnsDone := make(chan struct{})
+	go func() { defer close(dnsDone); dns.Run(dnsCtx) }()
+	defer func() { stopDNS(); <-dnsDone }()
+	s.dnsHandlers(mux, dns, ctx)
 	s.http01Handlers(mux)
 	s.logHandlers(mux)
 	sampler := &metricSampler{ctx: ctx, capability: platform.MetricsCapability(s.MetricsScope, s.Dev), collector: platform.MetricsCollector{DataDir: s.DataDir}}
@@ -140,6 +152,11 @@ func (s *Server) Run(ctx context.Context) error {
 			report.Source = "development-agent"
 		}
 		report.Monitoring = sampler.capability
+		dnsState := dns.Read()
+		report.DNS.CandidateOwner = dnsState.Owner
+		report.DNS.Writable = dnsState.Writable
+		report.DNS.Reason = dnsState.Reason
+		report.DNS.LinkTarget = dnsState.LinkTarget
 		writeJSON(w, report)
 	})
 	mux.HandleFunc("GET /v1/operations/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -310,7 +327,7 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		return errors.New("无法连接本机 Agent")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 && (strings.HasPrefix(path, "/v1/logs/") || strings.HasPrefix(path, "/v1/monitoring/")) {
+	if resp.StatusCode != 200 && (strings.HasPrefix(path, "/v1/logs/") || strings.HasPrefix(path, "/v1/monitoring/") || strings.HasPrefix(path, "/v1/host-dns")) {
 		var out struct {
 			Protocol int    `json:"protocol"`
 			Code     string `json:"code"`

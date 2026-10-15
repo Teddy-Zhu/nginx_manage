@@ -80,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/host-dns': RouteRecordInfo<
+      '/host-dns',
+      '/host-dns',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/login': RouteRecordInfo<
       '/login',
       '/login',
@@ -200,6 +207,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/certificates.vue': {
       routes:
         | '/certificates'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/host-dns.vue': {
+      routes:
+        | '/host-dns'
       views:
         | never
       pathParamNames:

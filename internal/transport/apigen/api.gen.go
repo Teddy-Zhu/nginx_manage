@@ -1225,6 +1225,91 @@ type FileDifference struct {
 // FileDifferenceStatus defines model for FileDifference.Status.
 type FileDifferenceStatus string
 
+// HostDNSApplyInput defines model for HostDNSApplyInput.
+type HostDNSApplyInput struct {
+	PlanId string `json:"plan_id"`
+}
+
+// HostDNSChange defines model for HostDNSChange.
+type HostDNSChange struct {
+	TaskId string `json:"task_id"`
+}
+
+// HostDNSConfig defines model for HostDNSConfig.
+type HostDNSConfig struct {
+	Search  []string `json:"search"`
+	Servers []string `json:"servers"`
+}
+
+// HostDNSDesired defines model for HostDNSDesired.
+type HostDNSDesired struct {
+	Config     HostDNSConfig `json:"config"`
+	SourceHash string        `json:"source_hash"`
+	UpdatedAt  int64         `json:"updated_at"`
+	Version    int64         `json:"version"`
+}
+
+// HostDNSObservation defines model for HostDNSObservation.
+type HostDNSObservation struct {
+	Current    HostDNSConfig  `json:"current"`
+	LinkTarget string         `json:"link_target"`
+	Owner      string         `json:"owner"`
+	Pending    *HostDNSStatus `json:"pending"`
+	Persistent *HostDNSConfig `json:"persistent"`
+	Reason     string         `json:"reason"`
+	Source     string         `json:"source"`
+	SourceHash string         `json:"source_hash"`
+	Writable   bool           `json:"writable"`
+}
+
+// HostDNSOverview defines model for HostDNSOverview.
+type HostDNSOverview struct {
+	Desired  *HostDNSDesired    `json:"desired"`
+	Observed HostDNSObservation `json:"observed"`
+	Task     *HostDNSTask       `json:"task"`
+}
+
+// HostDNSPlan defines model for HostDNSPlan.
+type HostDNSPlan struct {
+	Before    HostDNSConfig    `json:"before"`
+	CreatedAt int64            `json:"created_at"`
+	ExpiresAt int64            `json:"expires_at"`
+	Id        string           `json:"id"`
+	Impact    string           `json:"impact"`
+	Input     HostDNSPlanInput `json:"input"`
+	Owner     string           `json:"owner"`
+}
+
+// HostDNSPlanInput defines model for HostDNSPlanInput.
+type HostDNSPlanInput struct {
+	Config         HostDNSConfig `json:"config"`
+	SourceHash     string        `json:"source_hash"`
+	Takeover       bool          `json:"takeover"`
+	TimeoutSeconds int64         `json:"timeout_seconds"`
+	VerifyNames    []string      `json:"verify_names"`
+}
+
+// HostDNSStatus defines model for HostDNSStatus.
+type HostDNSStatus struct {
+	Deadline    int64  `json:"deadline"`
+	Error       string `json:"error"`
+	OperationId string `json:"operation_id"`
+	PlanId      string `json:"plan_id"`
+	SourceHash  string `json:"source_hash"`
+	Stage       string `json:"stage"`
+	State       string `json:"state"`
+}
+
+// HostDNSTask defines model for HostDNSTask.
+type HostDNSTask struct {
+	Decision    string `json:"decision"`
+	Error       string `json:"error"`
+	Id          string `json:"id"`
+	OperationId string `json:"operation_id"`
+	Stage       string `json:"stage"`
+	State       string `json:"state"`
+}
+
 // HostMetric defines model for HostMetric.
 type HostMetric struct {
 	Id     string              `json:"id"`
@@ -1984,6 +2069,34 @@ type UpdateDNSCredentialParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// ApplyHostDNSParams defines parameters for ApplyHostDNS.
+type ApplyHostDNSParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// CreateHostDNSPlanParams defines parameters for CreateHostDNSPlan.
+type CreateHostDNSPlanParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// ConfirmHostDNSParams defines parameters for ConfirmHostDNS.
+type ConfirmHostDNSParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// RollbackHostDNSParams defines parameters for RollbackHostDNS.
+type RollbackHostDNSParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // ReleaseLogCursorJSONBody defines parameters for ReleaseLogCursor.
 type ReleaseLogCursorJSONBody struct {
 	Cursor string `json:"cursor"`
@@ -2349,6 +2462,12 @@ type DeleteDNSCredentialJSONRequestBody = ResourceAction
 // UpdateDNSCredentialJSONRequestBody defines body for UpdateDNSCredential for application/json ContentType.
 type UpdateDNSCredentialJSONRequestBody = DNSCredentialInput
 
+// ApplyHostDNSJSONRequestBody defines body for ApplyHostDNS for application/json ContentType.
+type ApplyHostDNSJSONRequestBody = HostDNSApplyInput
+
+// CreateHostDNSPlanJSONRequestBody defines body for CreateHostDNSPlan for application/json ContentType.
+type CreateHostDNSPlanJSONRequestBody = HostDNSPlanInput
+
 // ReleaseLogCursorJSONRequestBody defines body for ReleaseLogCursor for application/json ContentType.
 type ReleaseLogCursorJSONRequestBody ReleaseLogCursorJSONBody
 
@@ -2528,6 +2647,21 @@ type ServerInterface interface {
 
 	// (GET /dns-providers)
 	ListDNSProviders(w http.ResponseWriter, r *http.Request)
+
+	// (GET /host/dns)
+	GetHostDNS(w http.ResponseWriter, r *http.Request)
+
+	// (POST /host/dns/apply)
+	ApplyHostDNS(w http.ResponseWriter, r *http.Request, params ApplyHostDNSParams)
+
+	// (POST /host/dns/plan)
+	CreateHostDNSPlan(w http.ResponseWriter, r *http.Request, params CreateHostDNSPlanParams)
+
+	// (POST /host/dns/tasks/{id}/confirm)
+	ConfirmHostDNS(w http.ResponseWriter, r *http.Request, id ID, params ConfirmHostDNSParams)
+
+	// (POST /host/dns/tasks/{id}/rollback)
+	RollbackHostDNS(w http.ResponseWriter, r *http.Request, id ID, params RollbackHostDNSParams)
 
 	// (POST /logs/cursors/release)
 	ReleaseLogCursor(w http.ResponseWriter, r *http.Request, params ReleaseLogCursorParams)
@@ -4120,6 +4254,294 @@ func (siw *ServerInterfaceWrapper) ListDNSProviders(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListDNSProviders(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHostDNS operation middleware
+func (siw *ServerInterfaceWrapper) GetHostDNS(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHostDNS(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApplyHostDNS operation middleware
+func (siw *ServerInterfaceWrapper) ApplyHostDNS(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ApplyHostDNSParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyHostDNS(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateHostDNSPlan operation middleware
+func (siw *ServerInterfaceWrapper) CreateHostDNSPlan(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateHostDNSPlanParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateHostDNSPlan(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmHostDNS operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmHostDNS(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ConfirmHostDNSParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmHostDNS(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RollbackHostDNS operation middleware
+func (siw *ServerInterfaceWrapper) RollbackHostDNS(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RollbackHostDNSParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RollbackHostDNS(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6918,6 +7340,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/events", wrapper.ListNotificationEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/deliveries", wrapper.ListNotificationDeliveries)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/notifications/deliveries/{id}/retry", wrapper.RetryNotificationDelivery)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/host/dns", wrapper.GetHostDNS)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/plan", wrapper.CreateHostDNSPlan)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/apply", wrapper.ApplyHostDNS)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/tasks/{id}/confirm", wrapper.ConfirmHostDNS)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/tasks/{id}/rollback", wrapper.RollbackHostDNS)
 
 	return m
 }

@@ -1166,6 +1166,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/host/dns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getHostDNS"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/host/dns/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createHostDNSPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/host/dns/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["applyHostDNS"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/host/dns/tasks/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmHostDNS"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/host/dns/tasks/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rollbackHostDNS"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2132,6 +2212,77 @@ export interface components {
             last_error: string;
             /** Format: int64 */
             created_at: number;
+        };
+        HostDNSConfig: {
+            servers: string[];
+            search: string[];
+        };
+        HostDNSStatus: {
+            operation_id: string;
+            plan_id: string;
+            state: string;
+            stage: string;
+            /** Format: int64 */
+            deadline: number;
+            source_hash: string;
+            error: string;
+        };
+        HostDNSObservation: {
+            owner: string;
+            source: string;
+            link_target: string;
+            writable: boolean;
+            reason: string;
+            source_hash: string;
+            current: components["schemas"]["HostDNSConfig"];
+            persistent: components["schemas"]["HostDNSConfig"] | null;
+            pending: components["schemas"]["HostDNSStatus"] | null;
+        };
+        HostDNSPlanInput: {
+            source_hash: string;
+            config: components["schemas"]["HostDNSConfig"];
+            verify_names: string[];
+            /** Format: int64 */
+            timeout_seconds: number;
+            takeover: boolean;
+        };
+        HostDNSPlan: {
+            id: string;
+            owner: string;
+            input: components["schemas"]["HostDNSPlanInput"];
+            before: components["schemas"]["HostDNSConfig"];
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            expires_at: number;
+            impact: string;
+        };
+        HostDNSDesired: {
+            /** Format: int64 */
+            version: number;
+            config: components["schemas"]["HostDNSConfig"];
+            source_hash: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        HostDNSTask: {
+            id: string;
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            decision: string;
+        };
+        HostDNSOverview: {
+            observed: components["schemas"]["HostDNSObservation"];
+            desired: components["schemas"]["HostDNSDesired"] | null;
+            task: components["schemas"]["HostDNSTask"] | null;
+        };
+        HostDNSApplyInput: {
+            plan_id: string;
+        };
+        HostDNSChange: {
+            task_id: string;
         };
     };
     responses: {
@@ -3738,6 +3889,99 @@ export interface operations {
         };
     };
     retryNotificationDelivery: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getHostDNS: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createHostDNSPlan: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostDNSPlanInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    applyHostDNS: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostDNSApplyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    confirmHostDNS: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    rollbackHostDNS: {
         parameters: {
             query?: never;
             header: {
