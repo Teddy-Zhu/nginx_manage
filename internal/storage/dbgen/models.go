@@ -262,6 +262,75 @@ type NginxResourceBinding struct {
 	Projection []byte `json:"projection"`
 }
 
+type NotificationChannel struct {
+	ID            string `json:"id"`
+	Version       int64  `json:"version"`
+	Name          string `json:"name"`
+	Kind          string `json:"kind"`
+	Enabled       int64  `json:"enabled"`
+	Subscriptions string `json:"subscriptions"`
+	Config        []byte `json:"config"`
+	NextSendAt    int64  `json:"next_send_at"`
+	CreatedAt     int64  `json:"created_at"`
+	UpdatedAt     int64  `json:"updated_at"`
+}
+
+type NotificationDelivery struct {
+	ID             string         `json:"id"`
+	EventID        string         `json:"event_id"`
+	ChannelID      sql.NullString `json:"channel_id"`
+	ChannelName    string         `json:"channel_name"`
+	ChannelVersion int64          `json:"channel_version"`
+	Payload        []byte         `json:"payload"`
+	State          string         `json:"state"`
+	Attempts       int64          `json:"attempts"`
+	MaxAttempts    int64          `json:"max_attempts"`
+	NextAttemptAt  int64          `json:"next_attempt_at"`
+	RetryNotBefore int64          `json:"retry_not_before"`
+	LeaseUntil     int64          `json:"lease_until"`
+	LastError      string         `json:"last_error"`
+	HttpStatus     int64          `json:"http_status"`
+	CreatedAt      int64          `json:"created_at"`
+	LastAttemptAt  int64          `json:"last_attempt_at"`
+	CompletedAt    int64          `json:"completed_at"`
+	ExpiresAt      int64          `json:"expires_at"`
+}
+
+type NotificationEvent struct {
+	ID           string `json:"id"`
+	DedupKey     string `json:"dedup_key"`
+	Kind         string `json:"kind"`
+	ResourceKind string `json:"resource_kind"`
+	ResourceID   string `json:"resource_id"`
+	Severity     string `json:"severity"`
+	State        string `json:"state"`
+	Summary      string `json:"summary"`
+	Occurrences  int64  `json:"occurrences"`
+	CreatedAt    int64  `json:"created_at"`
+	LastSeenAt   int64  `json:"last_seen_at"`
+	ExpiresAt    int64  `json:"expires_at"`
+	FanoutAt     int64  `json:"fanout_at"`
+}
+
+type NotificationHealth struct {
+	ID                int64 `json:"id"`
+	EvictedEvents     int64 `json:"evicted_events"`
+	DroppedDeliveries int64 `json:"dropped_deliveries"`
+}
+
+type NotificationSetting struct {
+	ID       int64  `json:"id"`
+	Version  int64  `json:"version"`
+	Settings string `json:"settings"`
+}
+
+type NotificationSignal struct {
+	ID        string         `json:"id"`
+	Active    int64          `json:"active"`
+	Episode   int64          `json:"episode"`
+	VersionID sql.NullString `json:"version_id"`
+}
+
 type Session struct {
 	Token  string `json:"token"`
 	Data   []byte `json:"data"`

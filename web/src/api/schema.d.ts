@@ -1038,10 +1038,268 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setNotificationPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createNotificationChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/channels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateNotificationChannel"];
+        post?: never;
+        delete: operations["deleteNotificationChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/channels/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["testNotificationChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNotificationEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNotificationDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/deliveries/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retryNotificationDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        NotificationKind: {
+            id: string;
+            label: string;
+        };
+        NotificationPolicy: {
+            /** Format: int64 */
+            expiry_days: number;
+            /** Format: int64 */
+            ttl_hours: number;
+            max_attempts: number;
+            /** Format: int64 */
+            disk_mib: number;
+            /** Format: double */
+            disk_percent: number;
+        };
+        NotificationPolicyView: {
+            /** Format: int64 */
+            version: number;
+            policy: components["schemas"]["NotificationPolicy"];
+        };
+        NotificationPolicyInput: {
+            /** Format: int64 */
+            base_version: number;
+            policy: components["schemas"]["NotificationPolicy"];
+        };
+        NotificationVersionInput: {
+            /** Format: int64 */
+            base_version: number;
+        };
+        NotificationChannelInput: {
+            /** Format: int64 */
+            base_version: number;
+            name: string;
+            /** @enum {string} */
+            kind: "telegram" | "webhook";
+            enabled: boolean;
+            subscriptions: string[];
+            url?: string | null;
+            chat_id?: string | null;
+            bot_token?: string | null;
+            bearer_token?: string | null;
+            signing_secret?: string | null;
+            /** Format: int64 */
+            thread_id?: number | null;
+        };
+        NotificationChannel: {
+            id: string;
+            /** Format: int64 */
+            version: number;
+            name: string;
+            kind: string;
+            enabled: boolean;
+            subscriptions: string[];
+            target: string;
+            configured: boolean;
+            has_bot_token: boolean;
+            has_bearer_token: boolean;
+            has_signing_secret: boolean;
+            reason: string;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        NotificationEvent: {
+            id: string;
+            kind: string;
+            resource_kind: string;
+            resource_id: string;
+            severity: string;
+            state: string;
+            summary: string;
+            /** Format: int64 */
+            occurrences: number;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            last_seen_at: number;
+            /** Format: int64 */
+            expires_at: number;
+        };
+        NotificationPayload: {
+            /** @enum {integer} */
+            version: 1;
+            node_id: string;
+            event: components["schemas"]["NotificationEvent"];
+        };
+        NotificationDelivery: {
+            id: string;
+            event_id: string;
+            channel_id: string;
+            channel_name: string;
+            state: string;
+            attempts: number;
+            max_attempts: number;
+            /** Format: int64 */
+            next_attempt_at: number;
+            last_error: string;
+            http_status: number;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            last_attempt_at: number;
+            /** Format: int64 */
+            completed_at: number;
+            /** Format: int64 */
+            expires_at: number;
+        };
+        NotificationChange: {
+            id: string;
+            /** Format: int64 */
+            version: number;
+            delivery_id: string;
+        };
+        NotificationHealth: {
+            /** Format: int64 */
+            evicted_events: number;
+            /** Format: int64 */
+            dropped_deliveries: number;
+            pending: number;
+            failed: number;
+            reason: string;
+        };
+        NotificationOverview: {
+            enabled: boolean;
+            policy: components["schemas"]["NotificationPolicyView"];
+            channels: components["schemas"]["NotificationChannel"][];
+            kinds: components["schemas"]["NotificationKind"][];
+            health: components["schemas"]["NotificationHealth"];
+        };
         MonitoringCapability: {
             available: boolean;
             scope: string;
@@ -3314,6 +3572,182 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setNotificationPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPolicyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createNotificationChannel: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationChannelInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    updateNotificationChannel: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationChannelInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deleteNotificationChannel: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationVersionInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    testNotificationChannel: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationVersionInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listNotificationEvents: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listNotificationDeliveries: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+                channel_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    retryNotificationDelivery: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
             cookie?: never;
         };
         requestBody?: never;

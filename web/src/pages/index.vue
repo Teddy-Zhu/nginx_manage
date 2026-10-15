@@ -26,6 +26,7 @@ import {
   type Task,
   type NginxRuntime,
   type MonitoringLatest,
+  type NotificationOverview,
 } from "../api/client";
 import { RouterLink } from "vue-router";
 import { useAction } from "../composables/action";
@@ -56,7 +57,8 @@ interface Capabilities {
 const { run, busy } = useAction(),
   capabilities = ref<Capabilities | null>(null),
   tasks = ref<Task[]>([]),
-  monitoring = ref<MonitoringLatest | null>(null);
+  monitoring = ref<MonitoringLatest | null>(null),
+  notifications = ref<NotificationOverview | null>(null);
 function metric(kind: string, field: string) {
   const value = monitoring.value?.sample?.metrics.find(
     (m) => m.kind === kind && m.id === "total",
@@ -69,10 +71,12 @@ async function load() {
       request<Capabilities>({ url: "/system/capabilities" }),
       api.tasks(),
       api.monitoringLatest(),
+      api.notifications(),
     ]);
     capabilities.value = result[0];
     tasks.value = result[1];
     monitoring.value = result[2];
+    notifications.value = result[3];
   });
 }
 const columns: DataTableColumns<Task> = [
@@ -100,6 +104,21 @@ onMounted(load);
     style="margin-bottom: 24px"
     title="预览模式"
     >未连接宿主机 Agent。配置可保存与预览，宿主机状态与实际应用不可用。</n-alert
+  >
+  <n-alert
+    v-if="
+      notifications &&
+      (notifications.health.failed ||
+        notifications.health.reason ||
+        notifications.health.dropped_deliveries)
+    "
+    type="warning"
+    :bordered="false"
+    style="margin-bottom: 24px"
+    >通知投递存在异常：{{
+      notifications.health.reason ||
+      `${notifications.health.failed} 条失败，${notifications.health.dropped_deliveries} 条因容量限制未完成`
+    }}。<RouterLink to="/notifications">查看投递记录</RouterLink></n-alert
   >
   <div class="stat-grid">
     <div class="stat-card">

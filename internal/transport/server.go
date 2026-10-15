@@ -14,23 +14,25 @@ import (
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
 	"nginxpanel/internal/transport/apigen"
 )
 
 type Server struct {
-	DB          *sql.DB
-	Auth        *auth.Service
-	Config      *nginxconfig.Service
-	ACME        *acme.Service
-	Monitoring  *monitoring.Service
-	Agent       *agent.Client
-	NodeID      string
-	Dev         bool
-	Version     string
-	logStreams  atomic.Int32
-	metricReads atomic.Int32
+	DB            *sql.DB
+	Auth          *auth.Service
+	Config        *nginxconfig.Service
+	ACME          *acme.Service
+	Monitoring    *monitoring.Service
+	Notifications *notifications.Service
+	Agent         *agent.Client
+	NodeID        string
+	Dev           bool
+	Version       string
+	logStreams    atomic.Int32
+	metricReads   atomic.Int32
 }
 
 var _ apigen.ServerInterface = (*Server)(nil)
@@ -269,6 +271,13 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 	}
 	if id == "monitoring" && s.Monitoring != nil {
 		s.Monitoring.Wake()
+	}
+	if id == "notifications" && s.Notifications != nil {
+		if *in.Enabled {
+			s.Notifications.Wake()
+		} else {
+			s.Notifications.Pause()
+		}
 	}
 	if err := s.audit(r, p.ID, "modules.set", id, "succeeded"); err != nil {
 		s.fail(w, r, err)

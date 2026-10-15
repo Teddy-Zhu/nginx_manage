@@ -29,6 +29,7 @@ import (
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 	"nginxpanel/internal/tasks"
@@ -81,6 +82,9 @@ func Init(ctx context.Context, dataDir string) (string, error) {
 		return "", err
 	}
 	if err := monitoring.Ensure(ctx, db); err != nil {
+		return "", err
+	}
+	if err := notifications.Ensure(ctx, db); err != nil {
 		return "", err
 	}
 	if _, err := db.ExecContext(ctx, "INSERT INTO settings(key,value) VALUES('node_id',?) ON CONFLICT(key) DO NOTHING", secure.ID()); err != nil {
@@ -210,7 +214,11 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	monitoringService := &monitoring.Service{DB: db, Vault: vault, Agent: agentClient}
-	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
+	if err := notifications.Ensure(ctx, db); err != nil {
+		return err
+	}
+	notificationService := &notifications.Service{DB: db, Vault: vault, NodeID: nodeID, DataDir: o.DataDir}
+	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -222,14 +230,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 4)
+	result := make(chan error, 5)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(4)
+	workers.Add(5)
 	go func() {
 		defer workers.Done()
 		if o.Dev {
@@ -247,6 +255,7 @@ func Run(ctx context.Context, o Options) error {
 		result <- acmeService.Run(runCtx)
 	}()
 	go func() { defer workers.Done(); result <- monitoringService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- notificationService.Run(runCtx) }()
 	select {
 	case <-ctx.Done():
 		err = nil

@@ -23,7 +23,7 @@ var definitions = []Definition{
 	{ID: "host-dns", Name: "主机 DNS", Dependencies: []string{}, Reason: "当前 DNS 设置保持只读"},
 	{ID: "monitoring", Name: "基础监控", Available: true, Dependencies: []string{}},
 	{ID: "fail2ban", Name: "Fail2ban", Dependencies: []string{"firewall"}, Reason: "当前版本暂不提供 Fail2ban 管理"},
-	{ID: "notifications", Name: "外部通知", Dependencies: []string{}, Reason: "当前版本暂不提供外部通知"},
+	{ID: "notifications", Name: "外部通知", Available: true, Dependencies: []string{}},
 }
 
 func Init(ctx context.Context, db *sql.DB) error {
@@ -65,8 +65,8 @@ func Set(ctx context.Context, db *sql.DB, p auth.Principal, id string, enabled b
 		return err
 	}
 	defer tx.Rollback()
-	// Passive monitoring owns no apply tasks or protection rules.
-	if !enabled && id != "monitoring" {
+	// Passive sampling and notification delivery own no protection rules.
+	if !enabled && id != "monitoring" && id != "notifications" {
 		var pending int
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running','waiting_confirmation','compensating','recovery_required')").Scan(&pending); err != nil {
 			return err

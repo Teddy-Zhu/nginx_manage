@@ -73,6 +73,25 @@ export type MonitoringCondition = components["schemas"]["MonitoringCondition"];
 export type MonitoringLatest = components["schemas"]["MonitoringLatest"];
 export type MonitoringPoint = components["schemas"]["MonitoringPoint"];
 export type MonitoringHistory = components["schemas"]["MonitoringHistory"];
+export type NotificationKind = components["schemas"]["NotificationKind"];
+export type NotificationPolicy = components["schemas"]["NotificationPolicy"];
+export type NotificationPolicyView =
+  components["schemas"]["NotificationPolicyView"];
+export type NotificationPolicyInput =
+  components["schemas"]["NotificationPolicyInput"];
+export type NotificationVersionInput =
+  components["schemas"]["NotificationVersionInput"];
+export type NotificationChannelInput =
+  components["schemas"]["NotificationChannelInput"];
+export type NotificationChannel = components["schemas"]["NotificationChannel"];
+export type NotificationEvent = components["schemas"]["NotificationEvent"];
+export type NotificationPayload = components["schemas"]["NotificationPayload"];
+export type NotificationDelivery =
+  components["schemas"]["NotificationDelivery"];
+export type NotificationChange = components["schemas"]["NotificationChange"];
+export type NotificationHealth = components["schemas"]["NotificationHealth"];
+export type NotificationOverview =
+  components["schemas"]["NotificationOverview"];
 export interface Revision {
   id: string;
   version: number;
@@ -264,6 +283,61 @@ export function followLogs(
 }
 
 export const api = {
+  notifications: (signal?: AbortSignal) =>
+    request<NotificationOverview>({ url: "/notifications", signal }),
+  notificationEvents: (limit = 30, offset = 0, signal?: AbortSignal) =>
+    request<NotificationEvent[]>({
+      url: "/notifications/events",
+      params: { limit, offset },
+      signal,
+    }),
+  notificationDeliveries: (
+    channel_id = "",
+    limit = 30,
+    offset = 0,
+    signal?: AbortSignal,
+  ) =>
+    request<NotificationDelivery[]>({
+      url: "/notifications/deliveries",
+      params: { channel_id, limit, offset },
+      signal,
+    }),
+  setNotificationPolicy: (data: NotificationPolicyInput, key: string) =>
+    request<NotificationChange>({
+      method: "PUT",
+      url: "/notifications/policy",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  saveNotificationChannel: (
+    id: string,
+    data: NotificationChannelInput,
+    key: string,
+  ) =>
+    request<NotificationChange>({
+      method: id ? "PUT" : "POST",
+      url: id ? `/notifications/channels/${id}` : "/notifications/channels",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  notificationChannelAction: (
+    id: string,
+    base_version: number,
+    action: "delete" | "test",
+    key: string,
+  ) =>
+    request<NotificationChange>({
+      method: action === "delete" ? "DELETE" : "POST",
+      url: `/notifications/channels/${id}${action === "test" ? "/test" : ""}`,
+      data: { base_version },
+      headers: { "Idempotency-Key": key },
+    }),
+  retryNotification: (id: string, key: string) =>
+    request<NotificationChange>({
+      method: "POST",
+      url: `/notifications/deliveries/${id}/retry`,
+      headers: { "Idempotency-Key": key },
+    }),
   monitoringLatest: (signal?: AbortSignal) =>
     request<MonitoringLatest>({ url: "/monitoring/latest", signal }),
   monitoringSettings: (signal?: AbortSignal) =>
