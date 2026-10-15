@@ -31,6 +31,87 @@ func (e AccessListInputMode) Valid() bool {
 	}
 }
 
+// Defines values for CertificateSource.
+const (
+	Acme   CertificateSource = "acme"
+	Manual CertificateSource = "manual"
+)
+
+// Valid indicates whether the value is a known member of the CertificateSource enum.
+func (e CertificateSource) Valid() bool {
+	switch e {
+	case Acme:
+		return true
+	case Manual:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificateBindingRevisionState.
+const (
+	Applied        CertificateBindingRevisionState = "applied"
+	Desired        CertificateBindingRevisionState = "desired"
+	DesiredApplied CertificateBindingRevisionState = "desired_applied"
+)
+
+// Valid indicates whether the value is a known member of the CertificateBindingRevisionState enum.
+func (e CertificateBindingRevisionState) Valid() bool {
+	switch e {
+	case Applied:
+		return true
+	case Desired:
+		return true
+	case DesiredApplied:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificateSummaryKeyAlgorithm.
+const (
+	ECDSA   CertificateSummaryKeyAlgorithm = "ECDSA"
+	Ed25519 CertificateSummaryKeyAlgorithm = "Ed25519"
+	RSA     CertificateSummaryKeyAlgorithm = "RSA"
+)
+
+// Valid indicates whether the value is a known member of the CertificateSummaryKeyAlgorithm enum.
+func (e CertificateSummaryKeyAlgorithm) Valid() bool {
+	switch e {
+	case ECDSA:
+		return true
+	case Ed25519:
+		return true
+	case RSA:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificateSummaryTrust.
+const (
+	Private    CertificateSummaryTrust = "private"
+	SelfSigned CertificateSummaryTrust = "self_signed"
+	System     CertificateSummaryTrust = "system"
+)
+
+// Valid indicates whether the value is a known member of the CertificateSummaryTrust enum.
+func (e CertificateSummaryTrust) Valid() bool {
+	switch e {
+	case Private:
+		return true
+	case SelfSigned:
+		return true
+	case System:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateResourceKind.
 const (
 	CreateResourceKindHttp   CreateResourceKind = "http"
@@ -201,6 +282,94 @@ type AccessListInput struct {
 
 // AccessListInputMode defines model for AccessListInput.Mode.
 type AccessListInputMode string
+
+// Certificate defines model for Certificate.
+type Certificate struct {
+	// Bindings 当前期望及最近确认的已生效修订引用。
+	Bindings []CertificateBinding `json:"bindings"`
+
+	// BindingsTruncated 列表最多展示 10 条当前引用，详情最多 100 条；额外历史引用另计。
+	BindingsTruncated    bool              `json:"bindings_truncated"`
+	CreatedAt            int64             `json:"created_at"`
+	HistoricalReferences int64             `json:"historical_references"`
+	Id                   string            `json:"id"`
+	LatestVersionId      string            `json:"latest_version_id"`
+	Name                 string            `json:"name"`
+	Notes                string            `json:"notes"`
+	Source               CertificateSource `json:"source"`
+	UpdatedAt            int64             `json:"updated_at"`
+	Version              int64             `json:"version"`
+
+	// Versions 列表仅含最新版本，详情包含全部保留版本。
+	Versions []CertificateVersion `json:"versions"`
+}
+
+// CertificateSource defines model for Certificate.Source.
+type CertificateSource string
+
+// CertificateBinding defines model for CertificateBinding.
+type CertificateBinding struct {
+	FileId          string                          `json:"file_id"`
+	Purpose         string                          `json:"purpose"`
+	ResourceId      string                          `json:"resource_id"`
+	RevisionId      string                          `json:"revision_id"`
+	RevisionState   CertificateBindingRevisionState `json:"revision_state"`
+	RevisionVersion int64                           `json:"revision_version"`
+	VersionId       string                          `json:"version_id"`
+}
+
+// CertificateBindingRevisionState defines model for CertificateBinding.RevisionState.
+type CertificateBindingRevisionState string
+
+// CertificateInput defines model for CertificateInput.
+type CertificateInput struct {
+	// BaseVersion 证书资源版本；新建为零，与配置树版本独立。
+	BaseVersion   int64   `json:"base_version"`
+	FullchainPem  string  `json:"fullchain_pem"`
+	Name          string  `json:"name"`
+	Notes         string  `json:"notes"`
+	PrivateKeyPem *string `json:"private_key_pem,omitempty"`
+}
+
+// CertificateResult defines model for CertificateResult.
+type CertificateResult struct {
+	Certificate *Certificate `json:"certificate"`
+	Deleted     bool         `json:"deleted"`
+}
+
+// CertificateSummary defines model for CertificateSummary.
+type CertificateSummary struct {
+	ChainLength    int                            `json:"chain_length"`
+	ChainNotAfter  int64                          `json:"chain_not_after"`
+	ChainNotBefore int64                          `json:"chain_not_before"`
+	DnsNames       []string                       `json:"dns_names"`
+	Fingerprint    string                         `json:"fingerprint"`
+	IpAddresses    []string                       `json:"ip_addresses"`
+	Issuer         string                         `json:"issuer"`
+	KeyAlgorithm   CertificateSummaryKeyAlgorithm `json:"key_algorithm"`
+	NotAfter       int64                          `json:"not_after"`
+	NotBefore      int64                          `json:"not_before"`
+	Subject        string                         `json:"subject"`
+
+	// Trust 导入时的链校验结果，不代表所有客户端均信任。
+	Trust CertificateSummaryTrust `json:"trust"`
+}
+
+// CertificateSummaryKeyAlgorithm defines model for CertificateSummary.KeyAlgorithm.
+type CertificateSummaryKeyAlgorithm string
+
+// CertificateSummaryTrust 导入时的链校验结果，不代表所有客户端均信任。
+type CertificateSummaryTrust string
+
+// CertificateVersion defines model for CertificateVersion.
+type CertificateVersion struct {
+	CertificatePath string             `json:"certificate_path"`
+	CreatedAt       int64              `json:"created_at"`
+	Id              string             `json:"id"`
+	Ordinal         int64              `json:"ordinal"`
+	PrivateKeyPath  string             `json:"private_key_path"`
+	Summary         CertificateSummary `json:"summary"`
+}
 
 // CreateResource defines model for CreateResource.
 type CreateResource struct {
@@ -501,6 +670,30 @@ type BootstrapParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// ImportCertificateParams defines parameters for ImportCertificate.
+type ImportCertificateParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// DeleteCertificateParams defines parameters for DeleteCertificate.
+type DeleteCertificateParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// ReplaceCertificateParams defines parameters for ReplaceCertificate.
+type ReplaceCertificateParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // CreateCredentialParams defines parameters for CreateCredential.
 type CreateCredentialParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -691,6 +884,15 @@ type ChangePasswordJSONRequestBody ChangePasswordJSONBody
 // BootstrapJSONRequestBody defines body for Bootstrap for application/json ContentType.
 type BootstrapJSONRequestBody BootstrapJSONBody
 
+// ImportCertificateJSONRequestBody defines body for ImportCertificate for application/json ContentType.
+type ImportCertificateJSONRequestBody = CertificateInput
+
+// DeleteCertificateJSONRequestBody defines body for DeleteCertificate for application/json ContentType.
+type DeleteCertificateJSONRequestBody = ResourceAction
+
+// ReplaceCertificateJSONRequestBody defines body for ReplaceCertificate for application/json ContentType.
+type ReplaceCertificateJSONRequestBody = CertificateInput
+
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
 type CreateCredentialJSONRequestBody = CredentialInput
 
@@ -753,6 +955,21 @@ type ServerInterface interface {
 
 	// (POST /bootstrap)
 	Bootstrap(w http.ResponseWriter, r *http.Request, params BootstrapParams)
+
+	// (GET /certificates)
+	ListCertificates(w http.ResponseWriter, r *http.Request)
+
+	// (POST /certificates)
+	ImportCertificate(w http.ResponseWriter, r *http.Request, params ImportCertificateParams)
+
+	// (DELETE /certificates/{id})
+	DeleteCertificate(w http.ResponseWriter, r *http.Request, id ID, params DeleteCertificateParams)
+
+	// (GET /certificates/{id})
+	GetCertificate(w http.ResponseWriter, r *http.Request, id ID)
+
+	// (PUT /certificates/{id}/versions)
+	ReplaceCertificate(w http.ResponseWriter, r *http.Request, id ID, params ReplaceCertificateParams)
 
 	// (GET /credentials)
 	ListCredentials(w http.ResponseWriter, r *http.Request)
@@ -982,6 +1199,256 @@ func (siw *ServerInterfaceWrapper) Bootstrap(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Bootstrap(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCertificates operation middleware
+func (siw *ServerInterfaceWrapper) ListCertificates(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCertificates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportCertificate operation middleware
+func (siw *ServerInterfaceWrapper) ImportCertificate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ImportCertificateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportCertificate(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCertificate operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCertificate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteCertificateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCertificate(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCertificate operation middleware
+func (siw *ServerInterfaceWrapper) GetCertificate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCertificate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceCertificate operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceCertificate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceCertificateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceCertificate(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2585,6 +3052,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/access-lists", wrapper.CreateAccessList)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/access-lists/{id}", wrapper.DeleteAccessList)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/access-lists/{id}", wrapper.UpdateAccessList)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/certificates", wrapper.ListCertificates)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/certificates", wrapper.ImportCertificate)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/certificates/{id}", wrapper.DeleteCertificate)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/certificates/{id}", wrapper.GetCertificate)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/certificates/{id}/versions", wrapper.ReplaceCertificate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/features", wrapper.GetNginxFeatures)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/waf-policies", wrapper.CreateWAFPolicy)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/waf-policies/{id}", wrapper.DeleteWAFPolicy)

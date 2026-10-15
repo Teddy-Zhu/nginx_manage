@@ -72,6 +72,13 @@ WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT
 			}
 			return r.finish(ctx, task, "failed", "load_failed", "读取配置修订失败", "")
 		}
+		materials, materialErr := r.Config.CertificateMaterials(ctx, tree)
+		if materialErr != nil {
+			if task.SubmitStarted != 0 {
+				return r.finish(ctx, task, "recovery_required", "certificate_load_failed", "提交后的证书版本无法读取", "")
+			}
+			return r.finish(ctx, task, "failed", "certificate_load_failed", "读取修订引用的证书版本失败", "")
+		}
 		if task.SubmitStarted == 0 {
 			var desired sql.NullString
 			var enabled bool
@@ -98,13 +105,16 @@ WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT
 				return err
 			}
 		}
-		record, err = r.Agent.Apply(ctx, agent.ApplyRequest{Protocol: agent.Protocol, OperationID: task.OperationID, RevisionID: tree.RevisionID, ExpectedRevision: task.ExpectedRevision, ValidateOnly: task.Kind == "nginx.validate", Files: tree.Files})
+		record, err = r.Agent.Apply(ctx, agent.ApplyRequest{Protocol: agent.Protocol, OperationID: task.OperationID, RevisionID: tree.RevisionID, ExpectedRevision: task.ExpectedRevision, ValidateOnly: task.Kind == "nginx.validate", Files: tree.Files, Certificates: materials})
 		if err != nil {
 			// Reconcile the durable operation before deciding whether a failed IPC
 			// request was rejected or is still executing independently of this process.
 			submissionErr := err
 			record, err = r.Agent.Operation(ctx, task.OperationID)
 			if errors.Is(err, agent.ErrOperationNotFound) {
+				if errors.Is(submissionErr, agent.ErrRequestTooLarge) {
+					return r.finish(ctx, task, "failed", "request_too_large", submissionErr.Error(), "")
+				}
 				var rejected *agent.HTTPError
 				if errors.As(submissionErr, &rejected) {
 					return r.finish(ctx, task, "failed", "agent_rejected", "Agent 未接受操作；请检查运行修订及本机执行状态", "")

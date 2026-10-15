@@ -18,6 +18,10 @@ export type WAFConfig = components["schemas"]["WAFConfig"];
 export type WAFInput = components["schemas"]["WAFInput"];
 export type WAFPolicy = components["schemas"]["WAFPolicy"];
 export type NginxFeatures = components["schemas"]["NginxFeatures"];
+export type Certificate = components["schemas"]["Certificate"];
+export type CertificateVersion = components["schemas"]["CertificateVersion"];
+export type CertificateInput = components["schemas"]["CertificateInput"];
+export type CertificateResult = components["schemas"]["CertificateResult"];
 export type AccessListInput = components["schemas"]["AccessListInput"];
 export type NginxRuntime = components["schemas"]["NginxRuntime"];
 
@@ -191,6 +195,23 @@ export const api = {
       headers: { "Idempotency-Key": key },
     }),
   nginxFeatures: () => request<NginxFeatures>({ url: "/nginx/features" }),
+  certificates: () => request<Certificate[]>({ url: "/certificates" }),
+  certificate: (id: string) =>
+    request<Certificate>({ url: `/certificates/${encodeURIComponent(id)}` }),
+  importCertificate: (id: string | null, data: CertificateInput, key: string) =>
+    request<CertificateResult>({
+      method: id ? "PUT" : "POST",
+      url: `/certificates${id ? "/" + encodeURIComponent(id) + "/versions" : ""}`,
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  deleteCertificate: (id: string, base_version: number, key: string) =>
+    request<CertificateResult>({
+      method: "DELETE",
+      url: `/certificates/${encodeURIComponent(id)}`,
+      data: { base_version },
+      headers: { "Idempotency-Key": key },
+    }),
   saveWAF: (id: string | null, data: WAFInput, key: string) =>
     request<SaveResult>({
       method: id ? "PUT" : "POST",

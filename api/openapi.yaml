@@ -351,6 +351,65 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /certificates:
+    get:
+      operationId: listCertificates
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    post:
+      operationId: importCertificate
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CertificateInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /certificates/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getCertificate
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    delete:
+      operationId: deleteCertificate
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceAction' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /certificates/{id}/versions:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    put:
+      operationId: replaceCertificate
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CertificateInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /nginx/features:
     get:
       operationId: getNginxFeatures
@@ -563,6 +622,74 @@ components:
         notes: { type: string, maxLength: 2048 }
         mode: { type: string, enum: [allowlist, denylist] }
         entries: { type: array, maxItems: 128, items: { type: string } }
+    CertificateInput:
+      type: object
+      required: [base_version, name, notes, fullchain_pem, private_key_pem]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0, description: 证书资源版本；新建为零，与配置树版本独立。 }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        notes: { type: string, maxLength: 2048 }
+        fullchain_pem: { type: string, maxLength: 131072 }
+        private_key_pem: { type: string, maxLength: 16384, writeOnly: true }
+    CertificateSummary:
+      type: object
+      required: [dns_names, ip_addresses, issuer, subject, not_before, not_after, chain_not_before, chain_not_after, fingerprint, key_algorithm, chain_length, trust]
+      properties:
+        dns_names: { type: array, maxItems: 64, items: { type: string } }
+        ip_addresses: { type: array, maxItems: 64, items: { type: string } }
+        issuer: { type: string }
+        subject: { type: string }
+        not_before: { type: integer, format: int64 }
+        not_after: { type: integer, format: int64 }
+        chain_not_before: { type: integer, format: int64 }
+        chain_not_after: { type: integer, format: int64 }
+        fingerprint: { type: string }
+        key_algorithm: { type: string, enum: [RSA, ECDSA, Ed25519] }
+        chain_length: { type: integer }
+        trust: { type: string, enum: [system, private, self_signed], description: 导入时的链校验结果，不代表所有客户端均信任。 }
+    CertificateVersion:
+      type: object
+      required: [id, ordinal, summary, created_at, certificate_path, private_key_path]
+      properties:
+        id: { type: string }
+        ordinal: { type: integer, format: int64 }
+        summary: { $ref: '#/components/schemas/CertificateSummary' }
+        created_at: { type: integer, format: int64 }
+        certificate_path: { type: string }
+        private_key_path: { type: string }
+    CertificateBinding:
+      type: object
+      required: [version_id, revision_id, revision_version, revision_state, resource_id, file_id, purpose]
+      properties:
+        version_id: { type: string }
+        revision_id: { type: string }
+        revision_version: { type: integer, format: int64 }
+        revision_state: { type: string, enum: [desired, applied, desired_applied] }
+        resource_id: { type: string }
+        file_id: { type: string }
+        purpose: { type: string }
+    Certificate:
+      type: object
+      required: [id, name, notes, version, latest_version_id, source, created_at, updated_at, versions, bindings, historical_references, bindings_truncated]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        notes: { type: string }
+        version: { type: integer, format: int64 }
+        latest_version_id: { type: string }
+        source: { type: string, enum: [manual, acme] }
+        created_at: { type: integer, format: int64 }
+        updated_at: { type: integer, format: int64 }
+        versions: { type: array, description: 列表仅含最新版本，详情包含全部保留版本。, items: { $ref: '#/components/schemas/CertificateVersion' } }
+        bindings: { type: array, description: 当前期望及最近确认的已生效修订引用。, items: { $ref: '#/components/schemas/CertificateBinding' } }
+        historical_references: { type: integer, format: int64 }
+        bindings_truncated: { type: boolean, description: 列表最多展示 10 条当前引用，详情最多 100 条；额外历史引用另计。 }
+    CertificateResult:
+      type: object
+      required: [certificate, deleted]
+      properties:
+        certificate: { allOf: [{ $ref: '#/components/schemas/Certificate' }], nullable: true }
+        deleted: { type: boolean }
     NginxFeature:
       type: object
       required: [available, reason]

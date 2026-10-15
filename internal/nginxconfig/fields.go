@@ -17,9 +17,11 @@ type fieldSpec struct {
 }
 
 var httpFields = map[string]fieldSpec{
-	"access_list": {"include", "server", "value", false},
-	"waf_policy":  {"include", "waf", "value", false},
-	"domains":     {"server_name", "server", "tokens", false}, "listeners": {"listen", "server", "lines", true},
+	"access_list":    {"include", "server", "value", false},
+	"waf_policy":     {"include", "waf", "value", false},
+	"https_redirect": {"if", "redirect", "value", false},
+	"hsts":           {"add_header", "hsts", "value", false},
+	"domains":        {"server_name", "server", "tokens", false}, "listeners": {"listen", "server", "lines", true},
 	"upstream": {"proxy_pass", "location", "value", false}, "upstream_servers": {"server", "group", "lines", true}, "location_prefix": {"location", "prefix", "value", false},
 	"body_size": {"client_max_body_size", "server", "value", false}, "connect_timeout": {"proxy_connect_timeout", "location", "value", false}, "read_timeout": {"proxy_read_timeout", "location", "value", false}, "send_timeout": {"proxy_send_timeout", "location", "value", false},
 	"http_version": {"proxy_http_version", "location", "value", false}, "buffering": {"proxy_buffering", "location", "value", false}, "request_buffering": {"proxy_request_buffering", "location", "value", false},
@@ -107,6 +109,14 @@ func (p *Parsed) resource(id string) (*Resource, *Document, *Node, error) {
 }
 func (p *Parsed) target(doc *Document, server *Node, kind string, spec fieldSpec) (*Document, *Node, string) {
 	target := server
+	if spec.target == "redirect" {
+		return doc, server, p.redirectTargetReason(server)
+	}
+	if spec.target == "hsts" {
+		if reason := p.hstsTargetReason(server); reason != "" {
+			return doc, server, reason
+		}
+	}
 	if spec.target == "waf" {
 		return doc, server, p.wafBindingReason(server)
 	}
@@ -295,6 +305,15 @@ func validateField(field string, values []string, kind string) error {
 	}
 	for _, v := range values {
 		switch field {
+		case "https_redirect":
+			number, err := strconv.Atoi(v)
+			if err != nil || number < 1 || number > 65535 || strconv.Itoa(number) != v {
+				return errors.New("HTTPS 跳转端口须为 1–65535")
+			}
+		case "hsts":
+			if err := validateHSTS(v); err != nil {
+				return err
+			}
 		case "access_list", "waf_policy":
 			if !resourceID.MatchString(v) {
 				return errors.New("规则资源 ID 无效")

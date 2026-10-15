@@ -4,6 +4,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"nginxpanel/internal/certificates"
 )
 
 // Policy additions are supplied by local trusted setup, never by API or import.
@@ -123,6 +125,12 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 				case "ssl_certificate", "ssl_certificate_key", "ssl_trusted_certificate", "proxy_ssl_trusted_certificate":
 					if len(n.Args) != 1 || !cleanRelative(n.Args[0].Value) || !strings.HasPrefix(n.Args[0].Value, "certificates/") || strings.Contains(n.Args[0].Value, "$") {
 						add("unsafe_path", "证书路径必须引用受管不可变版本")
+					} else {
+						_, _, kind, managed := certificates.Reference(n.Args[0].Value)
+						ca := (n.Name == "ssl_trusted_certificate" || n.Name == "proxy_ssl_trusted_certificate") && certificates.IsSystemCA(n.Args[0].Value)
+						if !managed && !ca || managed && (n.Name == "ssl_certificate_key" && kind != "privatekey" || n.Name != "ssl_certificate_key" && kind != "fullchain") {
+							add("unsafe_path", "证书路径或用途未登记")
+						}
 					}
 				case "proxy_cache":
 					if len(n.Args) != 1 || n.Args[0].Value != "off" && n.Args[0].Value != "nginxpanel_http" {

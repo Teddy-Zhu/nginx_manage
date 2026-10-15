@@ -73,6 +73,22 @@ func (p *Parsed) project() {
 									policyID, _, _ := wafFileID(values[0])
 									field.Values = []string{policyID}
 								}
+								if name == "https_redirect" {
+									port, _ := httpsRedirect(directive)
+									field.Values = []string{port}
+									if directive.Children[0].ArgumentComments {
+										field.Editable = false
+										field.Reason = "跳转参数中存在注释，请使用原生配置"
+									}
+								}
+								if name == "hsts" {
+									if len(values) == 2 || len(values) == 3 && values[2] == "always" {
+										field.Values = []string{values[1]}
+									} else {
+										field.Editable = false
+										field.Reason = "HSTS 参数无法可靠映射"
+									}
+								}
 							}
 							if len(field.Values) > 0 {
 								if err := validateField(name, field.Values, context); err != nil {
@@ -187,6 +203,54 @@ func (p *Parsed) Patch(id string, changes map[string][]string, metadata *Resourc
 				return nil, fmt.Errorf("WAF 策略未登记或不可可靠映射")
 			}
 			values = []string{wafPath(values[0], "server")}
+		}
+		if name == "https_redirect" {
+			if len(values) > 0 {
+				nodes, err := p.ExpandNodes(server.Children, 0)
+				if err != nil {
+					return nil, err
+				}
+				if listeners, changed := changes["listeners"]; changed {
+					kept := []*Node{}
+					for _, node := range nodes {
+						if node.Name != "listen" {
+							kept = append(kept, node)
+						}
+					}
+					nodes = kept
+					for _, line := range listeners {
+						args, err := lineTokens(line)
+						if err != nil {
+							return nil, err
+						}
+						node := &Node{Name: "listen"}
+						for _, arg := range args {
+							node.Args = append(node.Args, Token{Value: arg})
+						}
+						nodes = append(nodes, node)
+					}
+				}
+				if !sslPorts(nodes)[values[0]] {
+					return nil, fmt.Errorf("跳转目标端口未在当前站点启用 HTTPS")
+				}
+			}
+			if len(directives) > 0 {
+				node := directives[0]
+				if len(values) == 0 {
+					edits[owner.File.ID] = append(edits[owner.File.ID], Edit{node.Start, node.End, ""})
+				} else {
+					arg := node.Children[0].Args[1]
+					edits[owner.File.ID] = append(edits[owner.File.ID], Edit{arg.Start, arg.End, quote(httpsRedirectURL(values[0]))})
+				}
+			} else if len(values) > 0 {
+				pos, indent := blockInsertion(owner.File.Content, target.Close)
+				key := insertion{owner.File.ID, pos, indent}
+				inserts[key] = append(inserts[key], indent+"    if ($scheme = http) {\n"+indent+"        return 308 "+quote(httpsRedirectURL(values[0]))+";\n"+indent+"    }\n")
+			}
+			continue
+		}
+		if name == "hsts" && len(values) > 0 {
+			values = []string{"Strict-Transport-Security", values[0], "always"}
 		}
 		rows := [][]string{}
 		if spec.format == "lines" {

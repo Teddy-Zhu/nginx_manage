@@ -138,6 +138,9 @@ func (p *Parsed) wafBindingReason(server *Node) string {
 	var walk func([]*Node, bool)
 	walk = func(nodes []*Node, direct bool) {
 		for _, node := range nodes {
+			if _, known := httpsRedirect(node); known && direct {
+				continue
+			}
 			if node.Name == "include" {
 				if direct && p.knownWAFInclude(node) {
 					bindings++

@@ -162,6 +162,8 @@ func parseNginxFeatures(value string) NginxFeatures {
 	set("limit_conn_observe", conn && atLeast(1, 17, 6), "并发观察模式需要 Nginx 1.17.6 或更新版本")
 	set("real_ip", http && flags["--with-http_realip_module"], "缺少 HTTP realip 模块")
 	set("tls", http && flags["--with-http_ssl_module"], "缺少 HTTP SSL 模块")
+	set("https_redirect", http && flags["--with-http_ssl_module"] && !flags["--without-http_rewrite_module"] && atLeast(1, 13, 0), "HTTPS 308 跳转需要 HTTP SSL、rewrite 模块及 Nginx 1.13.0 或更新版本")
+	set("hsts", http && flags["--with-http_ssl_module"] && !flags["--without-http_headers_module"] && atLeast(1, 7, 5), "HSTS 需要 HTTP SSL、headers 模块及 Nginx 1.7.5 或更新版本")
 	set("stream", flags["--with-stream"], "尚未接入匹配的静态 Stream 模块；动态模块需显式登记与加载")
 	out.Available = true
 	return out

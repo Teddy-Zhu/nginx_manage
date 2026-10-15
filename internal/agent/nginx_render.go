@@ -38,44 +38,7 @@ func nginxQuote(s string) string {
 }
 
 func (n *Nginx) expand(p *nginxconfig.Parsed, nodes []*nginxconfig.Node, depth int) ([]*nginxconfig.Node, error) {
-	if depth > limits.Depth {
-		return nil, errors.New("include nesting limit")
-	}
-	out := []*nginxconfig.Node{}
-	for _, node := range nodes {
-		if node.Name != "include" {
-			out = append(out, node)
-			continue
-		}
-		if len(node.Args) != 1 {
-			return nil, errors.New("invalid include")
-		}
-		paths := []string{}
-		for _, doc := range p.Documents {
-			if !p.RuntimeFileEnabled(doc.File.Path) {
-				continue
-			}
-			if match, _ := path.Match(node.Args[0].Value, doc.File.Path); match {
-				paths = append(paths, doc.File.Path)
-			}
-		}
-		sort.Strings(paths)
-		for _, name := range paths {
-			for _, doc := range p.Documents {
-				if doc.File.Path == name {
-					children, err := n.expand(p, doc.Nodes, depth+1)
-					if err != nil {
-						return nil, err
-					}
-					out = append(out, children...)
-				}
-			}
-		}
-		if len(out) > limits.Directives {
-			return nil, errors.New("expanded directive limit")
-		}
-	}
-	return out, nil
+	return p.ExpandNodes(nodes, depth)
 }
 
 func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest) (map[string]string, error) {
@@ -438,6 +401,9 @@ func (n *Nginx) certificateFile(name string) ([]byte, error) {
 	info, err := os.Stat(full)
 	if err != nil || info.Size() > 1<<20 {
 		return nil, errors.New("certificate exceeds size limit")
+	}
+	if strings.HasSuffix(name, "/privatekey.pem") && info.Mode().Perm()&0077 != 0 {
+		return nil, errors.New("certificate private key must be root-private")
 	}
 	return os.ReadFile(full)
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
@@ -23,6 +24,7 @@ type Service struct {
 	Vault           *secure.Vault
 	Policy          Policy
 	RequireFeatures func(context.Context, []string) error
+	Certificates    *certificates.Service
 }
 type SaveRequest struct {
 	BaseVersion int64  `json:"base_version"`
@@ -172,6 +174,13 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 			}
 		}
 	}
+	var certificateUses []CertificateUse
+	if !in.Draft {
+		certificateUses, err = s.validateCertificates(ctx, tx, p)
+		if err != nil {
+			return SaveResult{}, err
+		}
+	}
 	var next int64
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0)+1 FROM config_revisions").Scan(&next); err != nil {
 		return SaveResult{}, err
@@ -193,6 +202,12 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 	}
 	for _, f := range p.Tree.Files {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO nginx_config_files(revision_id,id,path,content,sha256) VALUES(?,?,?,?,?)", id, f.ID, f.Path, s.Vault.Seal([]byte(f.Content), "nginx:"+id+":"+f.ID), f.SHA256); err != nil {
+			return SaveResult{}, err
+		}
+	}
+	for _, use := range certificateUses {
+		certificateID, versionID, _, _ := certificates.Reference(use.Path)
+		if _, err := tx.ExecContext(ctx, "INSERT INTO nginx_certificate_references(revision_id,file_id,position,resource_id,certificate_id,version_id,purpose) VALUES(?,?,?,?,?,?,?)", id, use.FileID, use.Position, use.ResourceID, certificateID, versionID, use.Purpose); err != nil {
 			return SaveResult{}, err
 		}
 	}

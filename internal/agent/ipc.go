@@ -21,7 +21,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 1
+const Protocol = 2
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`
@@ -232,6 +232,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 type Client struct{ http *http.Client }
 
 var ErrOperationNotFound = errors.New("Agent 操作记录不存在")
+var ErrRequestTooLarge = errors.New("Agent 请求包含的配置及证书材料超过 4 MiB")
 
 type HTTPError struct{ Status int }
 
@@ -248,6 +249,9 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		b, err := json.Marshal(input)
 		if err != nil {
 			return err
+		}
+		if len(b) > limits.RequestBytes {
+			return ErrRequestTooLarge
 		}
 		body = bytes.NewReader(b)
 	}

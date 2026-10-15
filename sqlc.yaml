@@ -1,7 +1,7 @@
 version: '2'
 sql:
   - engine: sqlite
-    schema: migrations/00001_foundation.sql
+    schema: migrations
     queries: internal/storage/queries
     gen:
       go:

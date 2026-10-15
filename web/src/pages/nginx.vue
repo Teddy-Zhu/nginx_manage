@@ -39,6 +39,8 @@ import {
   type SaveResult,
   type NginxRuntime,
   type ResourceMetadata,
+  type Certificate,
+  type NginxFeatures,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 
@@ -46,6 +48,26 @@ const { run, busy, message } = useAction(),
   keyFor = useIdempotency();
 const runtime = ref<NginxRuntime | null>(null);
 const runtimeError = ref("");
+const certificateItems = ref<Certificate[]>([]),
+  certificateDetail = ref<Certificate | null>(null),
+  certificateChoice = ref(""),
+  certificateLoading = ref(false),
+  certificateError = ref("");
+const nginxFeatures = ref<NginxFeatures | null>(null),
+  featureError = ref("");
+let certificateRequest = 0;
+const tlsAvailable = computed(
+  () =>
+    nginxFeatures.value?.available === true &&
+    nginxFeatures.value.features.tls?.available === true,
+);
+const tlsReason = computed(
+  () =>
+    featureError.value ||
+    nginxFeatures.value?.features.tls?.reason ||
+    nginxFeatures.value?.reason ||
+    "尚未确认 HTTPS 模块能力",
+);
 const tree = ref<Tree | null>(null),
   files = ref<ConfigFile[]>([]),
   selected = ref(""),
@@ -66,6 +88,118 @@ const createKind = ref<"http" | "stream">("http"),
   createUpstream = ref("");
 const resource = ref<Resource | null>(null),
   fieldInputs = ref<Record<string, string>>({});
+const regularFields = computed(() =>
+  Object.fromEntries(
+    Object.entries(resource.value?.fields ?? {}).filter(
+      ([name]) => name !== "certificate" && name !== "certificate_key",
+    ),
+  ),
+);
+const certificateEditable = computed(
+  () =>
+    !busy.value &&
+    !differsFromDesired.value &&
+    resource.value?.fields.certificate?.editable === true &&
+    resource.value?.fields.certificate_key?.editable === true,
+);
+const certificateOptions = computed(() => [
+  { label: "不绑定", value: "" },
+  ...certificateItems.value.map((item) => ({
+    label: item.name,
+    value: item.id,
+  })),
+]);
+const certificateVersionOptions = computed(
+  () =>
+    certificateDetail.value?.versions.map((item) => ({
+      label: `版本 ${item.ordinal} · ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()} 到期`,
+      value: item.certificate_path,
+    })) ?? [],
+);
+const boundCertificateVersion = computed(() =>
+  certificateDetail.value?.versions.find(
+    (item) => item.certificate_path === fieldInputs.value.certificate,
+  ),
+);
+async function loadCertificateDetail(id: string, chooseLatest: boolean) {
+  const current = ++certificateRequest;
+  certificateLoading.value = true;
+  certificateError.value = "";
+  try {
+    const detail = await api.certificate(id);
+    if (certificateChoice.value !== id || current !== certificateRequest)
+      return;
+    certificateDetail.value = detail;
+    if (chooseLatest) {
+      const version = detail.versions.find(
+        (item) => item.id === detail.latest_version_id,
+      );
+      if (version) chooseCertificateVersion(version.certificate_path);
+    }
+  } catch (error) {
+    if (certificateChoice.value === id && current === certificateRequest)
+      certificateError.value =
+        error instanceof Error ? error.message : "无法读取证书版本";
+  } finally {
+    if (certificateChoice.value === id && current === certificateRequest)
+      certificateLoading.value = false;
+  }
+}
+function chooseCertificate(id: unknown) {
+  if (
+    typeof id !== "string" ||
+    !certificateEditable.value ||
+    !tlsAvailable.value
+  )
+    return;
+  certificateRequest++;
+  certificateChoice.value = id;
+  certificateDetail.value = null;
+  certificateError.value = "";
+  if (!id) {
+    certificateLoading.value = false;
+    fieldInputs.value.certificate = "";
+    fieldInputs.value.certificate_key = "";
+    return;
+  }
+  void loadCertificateDetail(id, true);
+}
+function chooseCertificateVersion(value: unknown) {
+  if (typeof value !== "string") return;
+  const version = certificateDetail.value?.versions.find(
+    (item) => item.certificate_path === value,
+  );
+  if (!version) return;
+  fieldInputs.value.certificate = version.certificate_path;
+  fieldInputs.value.certificate_key = version.private_key_path;
+}
+function tlsFieldReason(name: string) {
+  if (name !== "https_redirect" && name !== "hsts") return "";
+  const feature = nginxFeatures.value?.features[name];
+  return nginxFeatures.value?.available && feature?.available
+    ? ""
+    : feature?.reason || tlsReason.value;
+}
+function addHTTPSListener() {
+  if (
+    !resource.value?.fields.listeners?.editable ||
+    busy.value ||
+    differsFromDesired.value ||
+    !tlsAvailable.value
+  )
+    return;
+  const lines = (fieldInputs.value.listeners ?? "")
+    .split("\n")
+    .filter((line) => line.trim());
+  let found = false;
+  const updated = lines.map((line) => {
+    if (!/(?:^|:)443(?:\s|$)/.test(line)) return line;
+    found = true;
+    return /(?:^|\s)ssl(?:\s|$)/.test(line) ? line : line + " ssl";
+  });
+  if (!found) updated.push("443 ssl");
+  fieldInputs.value.listeners = updated.join("\n");
+}
 const currentFile = computed(() =>
   files.value.find((f) => f.id === selected.value),
 );
@@ -125,6 +259,8 @@ const fieldLabels: Record<string, string> = {
   upstream_tls_ca: "上游受信 CA 路径",
   certificate: "证书链路径",
   certificate_key: "证书私钥路径",
+  https_redirect: "HTTP 跳转 HTTPS（目标端口，留空关闭）",
+  hsts: "HSTS",
   tls_protocols: "TLS 协议",
   access_log: "访问日志路径及格式，或 off",
   error_log: "错误日志路径及级别",
@@ -143,6 +279,20 @@ const toggleFields = new Set([
   "real_ip_recursive",
 ]);
 function fieldOptions(name: string) {
+  if (name === "hsts")
+    return [
+      { label: "继承默认", value: "" },
+      { label: "清除 HSTS（max-age=0）", value: "max-age=0" },
+      { label: "启用一年", value: "max-age=31536000" },
+      {
+        label: "启用一年，含所有子域名",
+        value: "max-age=31536000; includeSubDomains",
+      },
+      {
+        label: "启用一年、子域名及 preload",
+        value: "max-age=31536000; includeSubDomains; preload",
+      },
+    ];
   if (toggleFields.has(name))
     return [
       { label: "继承默认", value: "" },
@@ -267,13 +417,44 @@ function setTree(value: Tree) {
   draftNote.value = "";
   resource.value = null;
   fieldInputs.value = {};
+  certificateRequest++;
+  certificateChoice.value = "";
+  certificateDetail.value = null;
+  certificateLoading.value = false;
+  certificateError.value = "";
 }
 async function load() {
   if (dirty.value && !window.confirm("有未保存修改，确认重新加载？")) return;
   await run(async () => {
     setTree(await api.tree());
-    await loadRuntime();
+    await Promise.all([loadRuntime(), loadTLSChoices()]);
   });
+}
+async function loadTLSChoices() {
+  await Promise.all([
+    api
+      .certificates()
+      .then((items) => {
+        certificateItems.value = items;
+        certificateError.value = "";
+      })
+      .catch((error: unknown) => {
+        certificateItems.value = [];
+        certificateError.value =
+          error instanceof Error ? error.message : "无法读取证书列表";
+      }),
+    api
+      .nginxFeatures()
+      .then((features) => {
+        nginxFeatures.value = features;
+        featureError.value = "";
+      })
+      .catch((error: unknown) => {
+        nginxFeatures.value = null;
+        featureError.value =
+          error instanceof Error ? error.message : "无法读取 HTTPS 模块能力";
+      }),
+  ]);
 }
 async function loadRuntime() {
   try {
@@ -348,6 +529,14 @@ function selectResource(value: Resource) {
   fieldInputs.value = Object.fromEntries(
     Object.entries(value.fields).map(([key, field]) => [key, fieldText(field)]),
   );
+  certificateRequest++;
+  certificateChoice.value =
+    (value.fields.certificate?.values[0] ?? "").split("/")[1] ?? "";
+  certificateDetail.value = null;
+  certificateError.value = "";
+  certificateLoading.value = false;
+  if (certificateChoice.value)
+    void loadCertificateDetail(certificateChoice.value, false);
 }
 async function saveFields() {
   if (!resource.value || !tree.value || differsFromDesired.value) return;
@@ -757,22 +946,102 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                     placeholder="/"
                 /></n-form-item>
                 <p class="muted">路径示例：{{ pathExample }}</p>
+                <h3>HTTPS 证书</h3>
+                <n-alert
+                  v-if="!tlsAvailable"
+                  type="warning"
+                  :bordered="false"
+                  style="margin-bottom: 16px"
+                  >{{ tlsReason }}</n-alert
+                >
+                <n-alert
+                  v-if="certificateError"
+                  type="warning"
+                  :bordered="false"
+                  style="margin-bottom: 16px"
+                  >{{ certificateError }}</n-alert
+                >
+                <n-form-item
+                  label="证书"
+                  :feedback="
+                    resource.fields.certificate?.reason ||
+                    resource.fields.certificate_key?.reason
+                  "
+                  ><n-select
+                    :value="certificateChoice"
+                    :options="certificateOptions"
+                    :disabled="
+                      !certificateEditable ||
+                      !tlsAvailable ||
+                      certificateLoading
+                    "
+                    @update:value="chooseCertificate"
+                /></n-form-item>
+                <n-form-item v-if="certificateChoice" label="不可变版本"
+                  ><n-select
+                    :value="fieldInputs.certificate || null"
+                    :options="certificateVersionOptions"
+                    :loading="certificateLoading"
+                    :disabled="
+                      !certificateEditable ||
+                      !tlsAvailable ||
+                      certificateLoading
+                    "
+                    @update:value="chooseCertificateVersion"
+                /></n-form-item>
+                <p v-if="boundCertificateVersion" class="muted">
+                  SAN：{{
+                    [
+                      ...boundCertificateVersion.summary.dns_names,
+                      ...boundCertificateVersion.summary.ip_addresses,
+                    ].join("、")
+                  }}
+                </p>
+                <n-button
+                  :disabled="
+                    busy ||
+                    differsFromDesired ||
+                    !tlsAvailable ||
+                    !resource.fields.listeners?.editable ||
+                    !fieldInputs.certificate
+                  "
+                  @click="addHTTPSListener"
+                  >添加 443 HTTPS 监听</n-button
+                >
+                <p class="muted">
+                  证书链与私钥成对保存。更换版本后须应用配置；移除证书前先移除
+                  SSL 监听。HSTS 仅对 HTTPS 客户端生效；包含子域名或 preload
+                  前须确认相应域名都支持 HTTPS。preload
+                  标记不会自动提交预加载名单。<router-link to="/certificates"
+                    >管理证书</router-link
+                  >
+                </p>
               </template>
               <n-form-item
-                v-for="(field, name) in resource.fields"
+                v-for="(field, name) in regularFields"
                 :key="name"
                 :label="fieldLabels[name] ?? name"
-                :feedback="field.reason"
+                :feedback="field.reason || tlsFieldReason(name)"
                 ><n-select
                   v-if="fieldOptions(name)"
                   v-model:value="fieldInputs[name]"
                   :options="fieldOptions(name) ?? []"
-                  :disabled="busy || !field.editable || differsFromDesired" />
+                  :disabled="
+                    busy ||
+                    !field.editable ||
+                    differsFromDesired ||
+                    !!tlsFieldReason(name)
+                  " />
                 <n-input
                   v-else
                   v-model:value="fieldInputs[name]"
                   :type="field.format === 'lines' ? 'textarea' : 'text'"
-                  :disabled="busy || !field.editable || differsFromDesired"
+                  :disabled="
+                    busy ||
+                    !field.editable ||
+                    differsFromDesired ||
+                    !!tlsFieldReason(name)
+                  "
                   placeholder="未设置" /></n-form-item
               ><n-button
                 type="primary"

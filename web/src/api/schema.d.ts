@@ -369,6 +369,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/certificates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCertificates"];
+        put?: never;
+        post: operations["importCertificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/certificates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get: operations["getCertificate"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteCertificate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/certificates/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["replaceCertificate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/features": {
         parameters: {
             query?: never;
@@ -585,6 +637,87 @@ export interface components {
             /** @enum {string} */
             mode: "allowlist" | "denylist";
             entries: string[];
+        };
+        CertificateInput: {
+            /**
+             * Format: int64
+             * @description 证书资源版本；新建为零，与配置树版本独立。
+             */
+            base_version: number;
+            name: string;
+            notes: string;
+            fullchain_pem: string;
+            private_key_pem: string;
+        };
+        CertificateSummary: {
+            dns_names: string[];
+            ip_addresses: string[];
+            issuer: string;
+            subject: string;
+            /** Format: int64 */
+            not_before: number;
+            /** Format: int64 */
+            not_after: number;
+            /** Format: int64 */
+            chain_not_before: number;
+            /** Format: int64 */
+            chain_not_after: number;
+            fingerprint: string;
+            /** @enum {string} */
+            key_algorithm: "RSA" | "ECDSA" | "Ed25519";
+            chain_length: number;
+            /**
+             * @description 导入时的链校验结果，不代表所有客户端均信任。
+             * @enum {string}
+             */
+            trust: "system" | "private" | "self_signed";
+        };
+        CertificateVersion: {
+            id: string;
+            /** Format: int64 */
+            ordinal: number;
+            summary: components["schemas"]["CertificateSummary"];
+            /** Format: int64 */
+            created_at: number;
+            certificate_path: string;
+            private_key_path: string;
+        };
+        CertificateBinding: {
+            version_id: string;
+            revision_id: string;
+            /** Format: int64 */
+            revision_version: number;
+            /** @enum {string} */
+            revision_state: "desired" | "applied" | "desired_applied";
+            resource_id: string;
+            file_id: string;
+            purpose: string;
+        };
+        Certificate: {
+            id: string;
+            name: string;
+            notes: string;
+            /** Format: int64 */
+            version: number;
+            latest_version_id: string;
+            /** @enum {string} */
+            source: "manual" | "acme";
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+            /** @description 列表仅含最新版本，详情包含全部保留版本。 */
+            versions: components["schemas"]["CertificateVersion"][];
+            /** @description 当前期望及最近确认的已生效修订引用。 */
+            bindings: components["schemas"]["CertificateBinding"][];
+            /** Format: int64 */
+            historical_references: number;
+            /** @description 列表最多展示 10 条当前引用，详情最多 100 条；额外历史引用另计。 */
+            bindings_truncated: boolean;
+        };
+        CertificateResult: {
+            certificate: components["schemas"]["Certificate"] | null;
+            deleted: boolean;
         };
         NginxFeature: {
             available: boolean;
@@ -1240,6 +1373,101 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listCertificates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    importCertificate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificateInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getCertificate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deleteCertificate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAction"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    replaceCertificate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificateInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

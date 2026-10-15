@@ -30,6 +30,27 @@ type AuditLog struct {
 	CreatedAt  int64  `json:"created_at"`
 }
 
+type Certificate struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Notes           string `json:"notes"`
+	Version         int64  `json:"version"`
+	LatestVersionID string `json:"latest_version_id"`
+	Source          string `json:"source"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
+}
+
+type CertificateVersion struct {
+	ID            string `json:"id"`
+	CertificateID string `json:"certificate_id"`
+	Ordinal       int64  `json:"ordinal"`
+	Fullchain     []byte `json:"fullchain"`
+	PrivateKey    []byte `json:"private_key"`
+	Summary       string `json:"summary"`
+	CreatedAt     int64  `json:"created_at"`
+}
+
 type ConfigHead struct {
 	ID              int64          `json:"id"`
 	DesiredRevision sql.NullString `json:"desired_revision"`
@@ -61,6 +82,16 @@ type ModuleSetting struct {
 	ID      string `json:"id"`
 	Enabled int64  `json:"enabled"`
 	Version int64  `json:"version"`
+}
+
+type NginxCertificateReference struct {
+	RevisionID    string `json:"revision_id"`
+	FileID        string `json:"file_id"`
+	Position      int64  `json:"position"`
+	ResourceID    string `json:"resource_id"`
+	CertificateID string `json:"certificate_id"`
+	VersionID     string `json:"version_id"`
+	Purpose       string `json:"purpose"`
 }
 
 type NginxConfigFile struct {

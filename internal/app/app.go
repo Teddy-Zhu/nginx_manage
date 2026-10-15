@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
@@ -194,7 +195,8 @@ func Run(ctx context.Context, o Options) error {
 	if err := db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key='node_id'").Scan(&nodeID); err != nil {
 		return errors.New("data directory is not initialized; run init first")
 	}
-	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: nginxconfig.DefaultPolicy()}
+	certificateStore := &certificates.Service{DB: db, Vault: vault}
+	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: nginxconfig.DefaultPolicy(), Certificates: certificateStore}
 	agentClient := agent.NewClient(o.Socket)
 	config.RequireFeatures = agentClient.RequireFeatures
 	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, Agent: agentClient, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()

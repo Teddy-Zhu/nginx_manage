@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
@@ -45,12 +46,13 @@ type Nginx struct {
 }
 
 type ApplyRequest struct {
-	Protocol         int                `json:"protocol"`
-	OperationID      string             `json:"operation_id"`
-	RevisionID       string             `json:"revision_id"`
-	ExpectedRevision string             `json:"expected_revision"`
-	ValidateOnly     bool               `json:"validate_only"`
-	Files            []nginxconfig.File `json:"files"`
+	Protocol         int                     `json:"protocol"`
+	OperationID      string                  `json:"operation_id"`
+	RevisionID       string                  `json:"revision_id"`
+	ExpectedRevision string                  `json:"expected_revision"`
+	ValidateOnly     bool                    `json:"validate_only"`
+	Files            []nginxconfig.File      `json:"files"`
+	Certificates     []certificates.Material `json:"certificates"`
 }
 
 type NginxState struct {
@@ -292,6 +294,13 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 	record := Record{OperationID: in.OperationID, RequestHash: digest, Kind: kind, BeforeRevision: current.RevisionID, AfterRevision: in.RevisionID, BeforeDir: before, State: "running", Stage: "preparing"}
 	if err := n.persist(record); err != nil {
 		return Record{}, err
+	}
+	if err := n.prepareCertificates(parsed, in.Certificates); err != nil {
+		record.State, record.Stage, record.Error = "failed", "certificate_prepare_failed", "证书材料、域名覆盖或不可变版本校验失败；运行修订未改变"
+		if putErr := n.persist(record); putErr != nil {
+			return Record{}, putErr
+		}
+		return record, nil
 	}
 	candidate, err := n.prepare(in.RevisionID, parsed)
 	if err != nil {

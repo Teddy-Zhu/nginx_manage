@@ -442,6 +442,16 @@ func (p *Parsed) matchesField(node *Node, name string, spec fieldSpec) bool {
 	if name == "waf_policy" {
 		return p.knownWAFInclude(node)
 	}
+	if name == "https_redirect" {
+		_, known := httpsRedirect(node)
+		return known
+	}
+	if name == "hsts" {
+		return isHSTS(node)
+	}
+	if name == "response_headers" {
+		return !isHSTS(node)
+	}
 	return true
 }
 func (p *Parsed) projectWAFBindings() {

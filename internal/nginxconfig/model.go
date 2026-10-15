@@ -2,8 +2,8 @@ package nginxconfig
 
 import "fmt"
 
-const ParserVersion = "crossplane-0.4.89+spans-3"
-const PolicyVersion = "nginxpanel-3"
+const ParserVersion = "crossplane-0.4.89+spans-4"
+const PolicyVersion = "nginxpanel-4"
 
 type File struct {
 	ID      string `json:"id"`
