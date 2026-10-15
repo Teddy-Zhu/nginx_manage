@@ -1,0 +1,433 @@
+openapi: 3.0.3
+info:
+  title: NginxPanel Management API
+  version: 0.1.0
+  description: 首版发布前直接维护当前唯一合同。所有 JSON 响应使用统一外壳。
+servers:
+  - url: /api/v1
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+paths:
+  /system/health:
+    get:
+      operationId: getHealth
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+  /system/version:
+    get:
+      operationId: getVersion
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+  /me:
+    get:
+      operationId: getMe
+      security: []
+      description: 匿名访问也返回 CSRF 与是否需要一次性引导初始化。
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+  /bootstrap:
+    post:
+      operationId: bootstrap
+      security: []
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, username, password]
+              properties:
+                token: { type: string, maxLength: 100 }
+                username: { type: string, maxLength: 64 }
+                password: { type: string, minLength: 12, maxLength: 256 }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /session:
+    post:
+      operationId: login
+      security: []
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, maxLength: 64 }
+                password: { type: string, maxLength: 256 }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    delete:
+      operationId: logout
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /session/reauthenticate:
+    post:
+      operationId: reauthenticate
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      description: 仅浏览器会话使用，更新五分钟的近期认证时间。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, maxLength: 256 }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /account/password:
+    put:
+      operationId: changePassword
+      x-scopes: [auth.manage]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, minLength: 12, maxLength: 256 }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /sessions/revoke-all:
+    post:
+      operationId: revokeSessions
+      x-scopes: [auth.manage]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /credentials:
+    get:
+      operationId: listCredentials
+      x-scopes: [auth.manage]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    post:
+      operationId: createCredential
+      x-scopes: [auth.manage]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CredentialInput' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /credentials/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    delete:
+      operationId: revokeCredential
+      x-scopes: [auth.manage]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /system/capabilities:
+    get:
+      operationId: getCapabilities
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /system/modules:
+    get:
+      operationId: getModules
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /system/modules/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    put:
+      operationId: setModule
+      x-scopes: [system.write]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/config-tree:
+    get:
+      operationId: getConfigTree
+      x-scopes: [config.secrets]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    put:
+      operationId: saveConfigTree
+      x-scopes: [config.write, config.secrets]
+      description: 原文和投影同事务保存。validate 只请求 Agent 策略复核，不应用 Nginx。
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SaveRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/config-tree/preview:
+    post:
+      operationId: previewConfigTree
+      x-scopes: [config.write, config.secrets]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SaveRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/resources:
+    post:
+      operationId: createResource
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateResource' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/resources/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    patch:
+      operationId: patchResource
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_version, changes]
+              properties:
+                base_version: { type: integer, format: int64, minimum: 0 }
+                changes:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    items: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/revisions:
+    get:
+      operationId: listRevisions
+      x-scopes: [read]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/revisions/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getRevision
+      x-scopes: [config.secrets]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /tasks:
+    get:
+      operationId: listTasks
+      x-scopes: [read]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /tasks/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getTask
+      x-scopes: [read]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /audit:
+    get:
+      operationId: listAudit
+      x-scopes: [read]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: nginxpanel_session }
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    ID: { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } }
+    CSRF:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+      schema: { type: string }
+    Idempotency: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+    Offset: { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000, default: 0 } }
+  responses:
+    JSON:
+      description: 统一响应；业务类型位于 data，失败时可为 null 或字段级诊断。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Response' }
+  schemas:
+    Response:
+      type: object
+      required: [code, message, data, request_id, node_id]
+      properties:
+        code: { type: string, description: 成功固定为 OK，失败使用稳定语义错误码。 }
+        message: { type: string }
+        data: { nullable: true }
+        request_id: { type: string }
+        node_id: { type: string }
+    File:
+      type: object
+      required: [id, path, content, sha256]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64 }
+        path: { type: string, maxLength: 256 }
+        content: { type: string, maxLength: 262144 }
+        sha256: { type: string }
+    Diagnostic:
+      type: object
+      required: [file_id, line, code, message]
+      properties:
+        file_id: { type: string }
+        line: { type: integer }
+        code: { type: string }
+        message: { type: string }
+    Field:
+      type: object
+      required: [values, editable]
+      properties:
+        values: { type: array, items: { type: string } }
+        editable: { type: boolean }
+        reason: { type: string }
+    Resource:
+      type: object
+      required: [id, kind, file_id, block_key, line, fields]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [http, stream] }
+        file_id: { type: string }
+        block_key: { type: string }
+        line: { type: integer }
+        fields:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Field' }
+    Tree:
+      type: object
+      required: [revision_id, version, state, files, resources, diagnostics]
+      properties:
+        revision_id: { type: string }
+        version: { type: integer, format: int64 }
+        state: { type: string }
+        files: { type: array, items: { $ref: '#/components/schemas/File' } }
+        resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
+        diagnostics: { type: array, items: { $ref: '#/components/schemas/Diagnostic' } }
+    CreateResource:
+      type: object
+      required: [base_version, kind, listen, domains, upstream]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        kind: { type: string, enum: [http, stream] }
+        listen: { type: array, items: { type: string } }
+        domains: { type: array, items: { type: string } }
+        upstream: { type: string }
+    SaveRequest:
+      type: object
+      required: [base_version, files, draft, validate]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        files: { type: array, minItems: 1, maxItems: 128, items: { $ref: '#/components/schemas/File' } }
+        draft: { type: boolean }
+        validate: { type: boolean }
+    SaveResult:
+      type: object
+      required: [tree]
+      properties:
+        tree: { $ref: '#/components/schemas/Tree' }
+        task_id: { type: string }
+    Me:
+      type: object
+      required: [authenticated, bootstrap_required, csrf, username, scopes]
+      properties:
+        authenticated: { type: boolean }
+        bootstrap_required: { type: boolean }
+        csrf: { type: string }
+        username: { type: string }
+        scopes: { type: array, items: { type: string } }
+    CredentialInput:
+      type: object
+      required: [name, scopes, allowed_sources, expires_at]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        scopes: { type: array, items: { type: string } }
+        allowed_sources: { type: array, items: { type: string } }
+        expires_at: { type: integer, format: int64 }
+    Module:
+      type: object
+      required: [id, name, available, enabled, dependencies]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        available: { type: boolean }
+        enabled: { type: boolean }
+        dependencies: { type: array, items: { type: string } }
+        reason: { type: string }
+    Task:
+      type: object
+      required: [id, kind, state, stage, last_error, created_at]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        state: { type: string }
+        stage: { type: string }
+        last_error: { type: string }
+        created_at: { type: integer, format: int64 }

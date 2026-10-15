@@ -154,7 +154,7 @@ CentOS 按 SELinux Enforcing 验收；提供本应用目录的文件标签和必
 | Go | 1.27.2 | 构建工具链固定到补丁版本 [^R04] |
 | Vue | 3.5.44 | 不采用 3.6 RC [^R05] |
 | Naive UI | 2.45.3 | 唯一主组件库 [^R06] |
-| Vue Router | 5.4.0 | 官方 `VueRouterAutoImports` 自动导入路由 API；显式路由声明保留节点上下文与鉴权管理 [^R07] |
+| Vue Router | 5.4.0 | 官方 `vue-router/vite` 扫描页面生成文件路由，`VueRouterAutoImports` 自动导入路由 API；集中管理节点上下文与鉴权 [^R07] |
 | Pinia | 4.1.0 | ESM-only；用于会话、当前节点、主题和全局设置，配套 `@vue/devtools-api ^8.2.1` 等 peerDependencies [^R08] |
 | Vite | 8.3.4 | 配套 `@vitejs/plugin-vue` [^R09] |
 | Node.js | 24 LTS | 核实时 26 仍为 Current；服务器运行已构建应用不需要 Node.js [^R10] |
@@ -182,7 +182,7 @@ ESLint + Prettier
 
 前端业务 HTTP 请求统一使用 Axios，OpenAPI 生成的接口类型复用同一请求层；集中处理基础地址、会话与 CSRF、超时、错误、取消请求和节点上下文。Axios 的兼容稳定版本在 P0 精确锁定，不再维护另一套业务请求客户端。
 
-首版使用 Naive UI 主题变量和 scoped CSS，不强制增加 Tailwind/UnoCSS，保持单一主组件库和状态管理方案。路由 API 自动导入与文件路由生成分别配置；首版使用显式路由。Vue Router 5 已包含原 `unplugin-vue-router` 的能力，后续启用文件路由时使用官方 `vue-router/vite` 插件，不重复安装旧插件。[^R07]
+首版使用 Naive UI 主题变量和 scoped CSS，不强制增加 Tailwind/UnoCSS，保持单一主组件库和状态管理方案。路由使用官方 `vue-router/vite` 插件自动扫描 `src/pages`，从 `vue-router/auto-routes` 读取生成路由，不手工拼接业务路由数组。标题、导航排序、公开页面等元信息放在页面内，菜单从生成路由的元信息派生；鉴权与节点上下文集中维护。Vue Router 5 已包含原 `unplugin-vue-router` 的能力，不重复安装旧插件；路由 API 自动导入单独配置。[^R07]
 
 ### 3.3 后端与系统操作选型
 
@@ -856,7 +856,7 @@ A、B 可以互相授权，但不默认允许请求继续递归转发。控制�
 
 ### 12.3 接口约定
 
-采用 `/api/v1`，OpenAPI 合同优先。响应携带 `request_id`、`node_id`；异步操作返回 `202` 和 `task_id`，通过任务 API/SSE 查看阶段结果。
+采用 `/api/v1`，OpenAPI 合同优先。所有普通 JSON 响应统一为 `code`、`message`、`data`、`request_id`、`node_id`，成功与失败均不另设结构。异步操作返回 HTTP `202`，任务标识放在 `data.task_id`，通过任务 API/SSE 查看阶段结果。首个版本正式发布前，代码、接口、数据库与需求变更无需保留历史兼容路径，直接维护当前唯一合同；正式发布后的兼容策略另行确定。这不改变目标 Linux、Nginx 与依赖能力的适配要求。
 
 | 接口组 | 主要接口/动作 |
 |---|---|
@@ -884,23 +884,22 @@ A、B 可以互相授权，但不默认允许请求继续递归转发。控制�
 
 配置树编辑以完整树修订作为并发前提，表单请求也引用该修订及资源版本；不只检查单个文件而忽略共享 include。原生配置接口不接收任意宿主机路径，原文读取/编辑按第 10.2 节检查敏感配置与相关模块权限。通知配置和 Token 管理等敏感接口默认返回脱敏结果。
 
-统一错误模型示例：
+统一响应模型示例（成功使用 `code: "OK"`；失败使用明确业务错误码，`data` 无内容时为 `null`）：
 
 ```json
 {
-  "error": {
-    "code": "FIREWALL_CONFIRMATION_REQUIRED",
-    "message": "变更已临时应用，需要在期限内确认",
-    "fields": {},
-    "details": {"confirmation_required": true}
+  "code": "OK",
+  "message": "变更已临时应用，需要在期限内确认",
+  "data": {
+    "task_id": "task-uuid",
+    "confirmation_required": true
   },
   "request_id": "request-uuid",
-  "node_id": "node-uuid",
-  "task_id": "task-uuid"
+  "node_id": "node-uuid"
 }
 ```
 
-接口校验失败、权限不足、资源版本冲突、能力不支持、超时与任务失败使用不同错误码。远程请求超时不等于目标执行失败，控制节点先查询原任务，而不是直接重发创建证书或升级操作。
+前端只通过统一 Axios 请求层解包 `data`、规范化网络/业务错误及处理认证状态；页面不分别判断不同响应外壳。HTTP 状态码保留语义：例如 `400` 校验失败、`401` 未认证、`403` 权限不足、`409` 修订冲突、`429` 限流、`500` 内部错误，不能全部返回 `200`。文件下载和 SSE 使用其内容类型，并单独声明失败与事件合同。接口校验失败、权限不足、资源版本冲突、能力不支持、超时与任务失败使用不同错误码。远程请求超时不等于目标执行失败，控制节点先查询原任务，而不是直接重发创建证书或升级操作。
 
 ### 12.4 版本与页面隔离
 

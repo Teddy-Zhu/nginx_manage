@@ -1,0 +1,11 @@
+version: '2'
+sql:
+  - engine: sqlite
+    schema: migrations/00001_foundation.sql
+    queries: internal/storage/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/storage/dbgen
+        emit_json_tags: true
+        emit_empty_slices: true

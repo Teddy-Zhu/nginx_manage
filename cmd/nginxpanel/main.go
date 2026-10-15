@@ -1,0 +1,122 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+
+	"nginxpanel/internal/agent"
+	"nginxpanel/internal/app"
+	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/platform"
+)
+
+var version = "0.1.0-dev"
+
+func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+	if err := run(); err != nil {
+		slog.Error("command failed", "error", err)
+		os.Exit(1)
+	}
+}
+func run() error {
+	if len(os.Args) < 2 {
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|doctor|version>")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	command := os.Args[1]
+	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	defaultDir := os.Getenv("NGINXPANEL_DATA_DIR")
+	if defaultDir == "" {
+		defaultDir = "/srv/nginxpanel"
+	}
+	if command == "dev" {
+		defaultDir = ".local"
+	}
+	dataDir := flags.String("data-dir", defaultDir, "node data directory")
+	listen := flags.String("listen", "", "management listener (loopback only)")
+	socket := flags.String("agent-socket", "", "local agent Unix socket")
+	webDir := flags.String("web-dir", "web/dist", "built frontend directory")
+	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
+	devAgent := flags.Bool("dev", false, "non-root read-only development agent")
+	if err := flags.Parse(os.Args[2:]); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("unexpected positional arguments")
+	}
+	absDir, err := filepath.Abs(*dataDir)
+	if err != nil {
+		return err
+	}
+	switch command {
+	case "version":
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"version": version, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion})
+	case "doctor":
+		return json.NewEncoder(os.Stdout).Encode(platform.Detect())
+	case "init", "dev":
+		if command == "dev" && os.Geteuid() == 0 {
+			return errors.New("development mode must not run as root")
+		}
+		path, err := app.Init(ctx, absDir)
+		if err != nil {
+			return err
+		}
+		if path != "" {
+			fmt.Fprintf(os.Stderr, "一次性引导令牌文件：%s\n", path)
+		}
+		if command == "init" {
+			fingerprint, err := app.Fingerprint(absDir)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "管理 TLS SHA-256：%s\n", fingerprint)
+			return nil
+		}
+		o := app.Defaults(absDir, true)
+		o.Version = version
+		o.WebDir = *webDir
+		if *listen != "" {
+			o.Listen = *listen
+		}
+		if *socket != "" {
+			o.Socket = *socket
+		}
+		return app.Run(ctx, o)
+	case "serve":
+		o := app.Defaults(absDir, false)
+		o.Version = version
+		o.WebDir = *webDir
+		if *listen != "" {
+			o.Listen = *listen
+		}
+		if *socket != "" {
+			o.Socket = *socket
+		}
+		return app.Run(ctx, o)
+	case "agent":
+		uid := *allowedUID
+		if *devAgent && uid < 0 {
+			uid = os.Getuid()
+		}
+		if uid < 0 {
+			return errors.New("agent requires --allowed-uid")
+		}
+		path := app.SocketPath(absDir)
+		if *socket != "" {
+			path = *socket
+		}
+		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: nginxconfig.DefaultPolicy(), Journal: &agent.Journal{Dir: filepath.Join(absDir, "agent", "operations")}, Dev: *devAgent}).Run(ctx)
+	default:
+		return fmt.Errorf("unknown subcommand %q", command)
+	}
+}
