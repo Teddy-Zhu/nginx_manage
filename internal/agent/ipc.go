@@ -41,20 +41,21 @@ type CheckResult struct {
 	Diagnostics   []nginxconfig.Diagnostic `json:"diagnostics"`
 }
 type Server struct {
-	Socket         string
-	AllowedUID     uint32
-	Policy         nginxconfig.Policy
-	Journal        *Journal
-	Nginx          *Nginx
-	Dev            bool
-	MetricsScope   string
-	DataDir        string
-	DNSOwner       string
-	DNSScope       string
-	ComponentScope string
-	ReleaseTrust   string
-	ReleaseToken   string
-	Installation   *nginxruntime.Installation
+	Socket           string
+	AllowedUID       uint32
+	Policy           nginxconfig.Policy
+	Journal          *Journal
+	Nginx            *Nginx
+	Dev              bool
+	MaintenanceScope string
+	MetricsScope     string
+	DataDir          string
+	DNSOwner         string
+	DNSScope         string
+	ComponentScope   string
+	ReleaseTrust     string
+	ReleaseToken     string
+	Installation     *nginxruntime.Installation
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -103,6 +104,13 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := os.Chmod(s.Socket, 0660); err != nil {
 		return err
 	}
+	rootMaintenance := &maintenanceGate{journal: s.Journal, scope: s.MaintenanceScope, dev: s.Dev, nginx: s.Nginx}
+	if err := rootMaintenance.open(); err != nil {
+		return err
+	}
+	if s.Nginx != nil {
+		s.Nginx.maintenance = rootMaintenance
+	}
 	if s.Nginx != nil {
 		if s.Dev {
 			return errors.New("development agent cannot execute Nginx")
@@ -143,6 +151,8 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := componentManager.Open(ctx); err != nil {
 		return err
 	}
+	rootMaintenance.components = componentManager
+	s.maintenanceHandlers(mux, rootMaintenance)
 	s.componentHandlers(mux, componentManager)
 	dns := &HostDNS{Dir: filepath.Join(s.DataDir, "agent", "reachability"), Owner: s.DNSOwner, Scope: s.DNSScope, Dev: s.Dev, Journal: s.Journal}
 	defer dns.Close()
@@ -201,7 +211,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		writeJSON(w, s.Nginx.State(r.Context()))
 	})
-	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second}
+	server := &http.Server{Handler: rootMaintenance.handler(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -340,7 +350,7 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		return errors.New("无法连接本机 Agent")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 && (strings.HasPrefix(path, "/v1/logs/") || strings.HasPrefix(path, "/v1/monitoring/") || strings.HasPrefix(path, "/v1/host-dns") || strings.HasPrefix(path, "/v1/components")) {
+	if resp.StatusCode != 200 && strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
 		var out struct {
 			Protocol int    `json:"protocol"`
 			Code     string `json:"code"`

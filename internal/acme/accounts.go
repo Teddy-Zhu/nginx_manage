@@ -181,6 +181,11 @@ func (s *Service) RunAccounts(ctx context.Context) error {
 }
 
 func (s *Service) nextAccount(ctx context.Context) error {
+	done, ok := s.Maintenance.Progress()
+	if !ok {
+		return nil
+	}
+	defer done()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err

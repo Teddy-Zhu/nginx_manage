@@ -12,10 +12,12 @@ import (
 
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/secure"
 )
 
 type Service struct {
+	Maintenance     *maintenance.Service
 	DB              *sql.DB
 	Vault           *secure.Vault
 	NodeID, DataDir string

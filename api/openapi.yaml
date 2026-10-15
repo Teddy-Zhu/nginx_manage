@@ -9,6 +9,10 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /maintenance:
+    {"get": {"operationId": "getMaintenance", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}, "post": {"operationId": "enterMaintenance", "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MaintenanceStartInput"}}}}, "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
+  /maintenance/{id}/release:
+    {"post": {"operationId": "releaseMaintenance", "parameters": [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}], "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /components:
     {"get": {"operationId": "getComponents", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /components/tasks:
@@ -1433,6 +1437,14 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    MaintenanceStartInput:
+      {"type": "object", "required": ["drain_seconds"], "properties": {"drain_seconds": {"type": "integer", "format": "int64", "minimum": 30, "maximum": 300}}}
+    MaintenanceRootStatus:
+      {"type": "object", "required": ["available", "id", "phase", "epoch", "busy", "reason"], "properties": {"available": {"type": "boolean"}, "id": {"type": "string"}, "phase": {"type": "string"}, "epoch": {"type": "string"}, "busy": {"type": "integer", "format": "int64"}, "reason": {"type": "string"}}}
+    MaintenanceSession:
+      {"type": "object", "required": ["task_id", "phase", "deadline", "root_requested", "root_epoch", "error", "created_at", "updated_at"], "properties": {"task_id": {"type": "string"}, "phase": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "root_requested": {"type": "boolean"}, "root_epoch": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}}}
+    MaintenanceView:
+      {"type": "object", "required": ["phase", "active", "agent", "reason"], "properties": {"phase": {"type": "string"}, "active": {"type": "integer", "format": "int64"}, "agent": {"$ref": "#/components/schemas/MaintenanceRootStatus"}, "reason": {"type": "string"}, "session": {"$ref": "#/components/schemas/MaintenanceSession"}}}
     NginxInstallation:
       {"type": "object", "additionalProperties": false, "required": ["owner", "version", "sha256", "plan_id", "asset_id", "source_url", "license", "bound_at"], "properties": {"owner": {"type": "string"}, "version": {"type": "string"}, "sha256": {"type": "string"}, "plan_id": {"type": "string"}, "asset_id": {"type": "string"}, "source_url": {"type": "string"}, "license": {"type": "string"}, "bound_at": {"type": "integer", "format": "int64"}}}
     ComponentInput:

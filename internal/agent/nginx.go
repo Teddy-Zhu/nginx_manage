@@ -34,6 +34,7 @@ var ErrRuntimeUnavailable = errors.New("专用 Nginx 实例未初始化或未运
 // These paths and identities come only from the local root service definition.
 // An API request cannot select an executable, prefix, worker identity or PID.
 type Nginx struct {
+	maintenance                 *maintenanceGate
 	DataDir, Binary, WorkerUser string
 	LogOwner                    string
 	Policy                      nginxconfig.Policy

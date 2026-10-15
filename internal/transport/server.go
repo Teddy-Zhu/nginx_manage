@@ -13,6 +13,7 @@ import (
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/hostdns"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/migration"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
@@ -24,6 +25,7 @@ import (
 )
 
 type Server struct {
+	Maintenance   *maintenance.Service
 	DB            *sql.DB
 	Auth          *auth.Service
 	Config        *nginxconfig.Service
@@ -52,7 +54,7 @@ func (s *Server) Handler() http.Handler {
 		s.respond(w, r, 404, "NOT_FOUND", "接口不存在", nil)
 	})
 	s.Auth.Sessions.ErrorFunc = func(w http.ResponseWriter, r *http.Request, err error) { s.fail(w, r, err) }
-	return s.middleware(s.Auth.Sessions.LoadAndSave(s.protect(mux)))
+	return s.middleware(s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux))))
 }
 
 func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {

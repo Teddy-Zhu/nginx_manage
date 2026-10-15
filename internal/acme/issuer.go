@@ -90,6 +90,11 @@ func (s *Service) stage(ctx context.Context, job orderJob, stage string) error {
 	return err
 }
 func (s *Service) nextIssue(ctx context.Context) error {
+	done, ok := s.Maintenance.Progress()
+	if !ok {
+		return nil
+	}
+	defer done()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err

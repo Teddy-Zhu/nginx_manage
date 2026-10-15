@@ -59,6 +59,7 @@ func run() error {
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
 	componentScope := flags.String("component-scope", "unconfirmed", "native component scope: host or unconfirmed")
+	maintenanceScope := flags.String("maintenance-scope", "unconfirmed", "host configuration maintenance scope: host or unconfirmed")
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd or unconfirmed")
 	dnsScope := flags.String("dns-scope", "unconfirmed", "DNS namespace: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
@@ -220,6 +221,9 @@ func run() error {
 		defer engine.Close()
 		return engine.Initialize()
 	case "agent":
+		if *maintenanceScope != "host" && *maintenanceScope != "unconfirmed" {
+			return errors.New("maintenance-scope must be host or unconfirmed")
+		}
 		if *componentScope != "host" && *componentScope != "unconfirmed" {
 			return errors.New("component-scope must be host or unconfirmed")
 		}
@@ -245,7 +249,7 @@ func run() error {
 		if *nginxBinary != "" {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Journal: journal}
 		}
-		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, ComponentScope: *componentScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
+		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

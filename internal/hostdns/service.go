@@ -10,6 +10,7 @@ import (
 
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/secure"
 )
 
@@ -21,9 +22,10 @@ type Host interface {
 	DecideHostDNS(context.Context, string, string) (Status, error)
 }
 type Service struct {
-	DB    *sql.DB
-	Vault *secure.Vault
-	Agent Host
+	Maintenance *maintenance.Service
+	DB          *sql.DB
+	Vault       *secure.Vault
+	Agent       Host
 }
 
 func (s *Service) Overview(ctx context.Context) (Overview, error) {

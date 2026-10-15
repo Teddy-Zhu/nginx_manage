@@ -259,3 +259,33 @@ func (m *Manager) run(out Operation) {
 		m.mu.Unlock()
 	}
 }
+
+// Pending inspects independent root receipts; an unreadable receipt blocks drain.
+func (m *Manager) Pending() (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Dev || m.Scope != "host" {
+		return 0, nil
+	}
+	if m.poisoned {
+		return 0, errors.New("组件执行记录待本机恢复")
+	}
+	entries, _, err := m.entries()
+	if err != nil {
+		return 0, err
+	}
+	pending := 0
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		op, err := m.read(strings.TrimSuffix(e.Name(), ".json"))
+		if err != nil {
+			return 0, err
+		}
+		if op.State == "queued" || op.State == "running" || op.State == "recovery_required" {
+			pending++
+		}
+	}
+	return pending, nil
+}

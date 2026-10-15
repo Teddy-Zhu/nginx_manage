@@ -68,6 +68,16 @@ func (n *Nginx) RunLogs(ctx context.Context) {
 }
 
 func (n *Nginx) sweepLogs(ctx context.Context) {
+	closing := false
+	if n.maintenance != nil {
+		done, ok := n.maintenance.enter(true)
+		if !ok {
+			return
+		}
+		defer done()
+		closing = n.maintenance.closing()
+	}
+
 	n.mu.Lock()
 	if n.closed || n.logs == nil {
 		n.mu.Unlock()
@@ -105,6 +115,9 @@ func (n *Nginx) sweepLogs(ctx context.Context) {
 		}
 		if err := m.reopenLocked(); err != nil {
 			return err
+		}
+		if closing {
+			return nil
 		}
 		if err := m.retainLocked(); err != nil {
 			return err

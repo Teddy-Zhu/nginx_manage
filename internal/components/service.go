@@ -10,13 +10,15 @@ import (
 
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/secure"
 )
 
 type Service struct {
-	DB    *sql.DB
-	Vault *secure.Vault
-	Agent Host
+	Maintenance *maintenance.Service
+	DB          *sql.DB
+	Vault       *secure.Vault
+	Agent       Host
 }
 type CreateInput struct {
 	Input       Input  `json:"input"`

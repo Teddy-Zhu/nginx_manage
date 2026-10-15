@@ -9,11 +9,13 @@ import (
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
 )
 
 type Service struct {
+	Maintenance  *maintenance.Service
 	DB           *sql.DB
 	Vault        *secure.Vault
 	Certificates *certificates.Service

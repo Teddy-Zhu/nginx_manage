@@ -28,6 +28,7 @@ import (
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/hostdns"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/migration"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
@@ -211,8 +212,12 @@ func Run(ctx context.Context, o Options) error {
 	certificateStore := &certificates.Service{DB: db, Vault: vault}
 	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: o.Policy, Certificates: certificateStore}
 	agentClient := agent.NewClient(o.Socket)
+	maintenanceService := &maintenance.Service{DB: db, Vault: vault, Agent: agentClient}
+	if err := maintenanceService.Init(ctx); err != nil {
+		return err
+	}
 	config.RequireFeatures = agentClient.RequireFeatures
-	acmeService := &acme.Service{DB: db, Vault: vault, Certificates: certificateStore, Config: config, Agent: agentClient}
+	acmeService := &acme.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Certificates: certificateStore, Config: config, Agent: agentClient}
 	if err := monitoring.Ensure(ctx, db); err != nil {
 		return err
 	}
@@ -220,14 +225,14 @@ func Run(ctx context.Context, o Options) error {
 	if err := notifications.Ensure(ctx, db); err != nil {
 		return err
 	}
-	notificationService := &notifications.Service{DB: db, Vault: vault, NodeID: nodeID, DataDir: o.DataDir}
-	dnsService := &hostdns.Service{DB: db, Vault: vault}
+	notificationService := &notifications.Service{Maintenance: maintenanceService, DB: db, Vault: vault, NodeID: nodeID, DataDir: o.DataDir}
+	dnsService := &hostdns.Service{Maintenance: maintenanceService, DB: db, Vault: vault}
 	if agentClient != nil {
 		dnsService.Agent = agentClient
 	}
-	migrationService := &migration.Service{DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
-	componentService := &components.Service{DB: db, Vault: vault, Agent: agentClient}
-	api := (&transport.Server{DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
+	migrationService := &migration.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
+	componentService := &components.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Agent: agentClient}
+	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -239,14 +244,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 8)
+	result := make(chan error, 9)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(8)
+	workers.Add(9)
 	go func() {
 		defer workers.Done()
 		if o.Dev {
@@ -257,7 +262,7 @@ func Run(ctx context.Context, o Options) error {
 	}()
 	go func() {
 		defer workers.Done()
-		result <- (&tasks.Runner{DB: db, Config: config, Agent: agentClient}).Run(runCtx)
+		result <- (&tasks.Runner{Maintenance: maintenanceService, DB: db, Config: config, Agent: agentClient}).Run(runCtx)
 	}()
 	go func() {
 		defer workers.Done()
@@ -268,6 +273,7 @@ func Run(ctx context.Context, o Options) error {
 	go func() { defer workers.Done(); result <- dnsService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- migrationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- componentService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- maintenanceService.Run(runCtx) }()
 	select {
 	case <-ctx.Done():
 		err = nil

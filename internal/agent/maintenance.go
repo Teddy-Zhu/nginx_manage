@@ -1,0 +1,320 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"nginxpanel/internal/components"
+	"nginxpanel/internal/fault"
+	"nginxpanel/internal/maintenance"
+	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/secure"
+)
+
+type maintenanceGate struct {
+	mu               sync.Mutex
+	active           int
+	id, phase, epoch string
+	poisoned         bool
+	journal          *Journal
+	scope            string
+	dev              bool
+	nginx            *Nginx
+	components       *components.Manager
+}
+
+func (g *maintenanceGate) open() error {
+	g.epoch = secure.ID()
+	if g.dev {
+		return nil
+	}
+	records, err := g.records()
+	if err != nil {
+		return err
+	}
+	for _, r := range records {
+		if r.Kind != "maintenance.lock" {
+			continue
+		}
+		if r.RequestHash != maintenanceHash(maintenance.RootRequest{Protocol: Protocol, OperationID: r.OperationID}) || !validID(r.MaintenanceEpoch) || !(r.State == "succeeded" && r.Stage == "released" || r.State == "running" && r.Stage == "closing" || r.State == "waiting_confirmation" && r.Stage == "held") {
+			return errors.New("独立维护记录无效，须本机恢复")
+		}
+		if r.State == "succeeded" {
+			continue
+		}
+		if g.id != "" {
+			return errors.New("存在多个独立维护锁，须本机恢复")
+		}
+		g.id, g.phase = r.OperationID, "closing"
+		r.State, r.Stage, r.MaintenanceEpoch = "running", "closing", g.epoch
+		if err = g.journal.Put(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (g *maintenanceGate) records() ([]Record, error) {
+	entries, err := os.ReadDir(g.journal.Dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) > 2048 {
+		return nil, errors.New("Agent 记录超出维护扫描预算")
+	}
+	records := []Record{}
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		id := e.Name()[:len(e.Name())-5]
+		if !validID(id) {
+			return nil, errors.New("Agent 记录名称无效")
+		}
+		raw, err := nginxmodules.ReadTrusted(filepath.Join(g.journal.Dir, e.Name()), 256<<10)
+		if err != nil {
+			return nil, err
+		}
+		var r Record
+		if json.Unmarshal(raw, &r) != nil || r.OperationID != id || r.Kind == "" {
+			return nil, errors.New("Agent 记录身份无效")
+		}
+		records = append(records, r)
+	}
+	return records, nil
+}
+func (g *maintenanceGate) enter(progress bool) (func(), bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.poisoned || g.id != "" && (!progress || g.phase != "closing") {
+		return nil, false
+	}
+	g.active++
+	var once sync.Once
+	return func() { once.Do(func() { g.mu.Lock(); g.active--; g.mu.Unlock() }) }, true
+}
+func (g *maintenanceGate) closing() bool { g.mu.Lock(); defer g.mu.Unlock(); return g.id != "" }
+func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootStatus, error) {
+	out := maintenance.RootStatus{Available: !g.dev && g.scope == "host", ID: g.id, Phase: g.phase, Epoch: g.epoch}
+	if out.Phase == "" {
+		out.Phase = "open"
+	}
+	if !out.Available {
+		out.Reason = "须由本机确认宿主机维护范围"
+	}
+	if g.poisoned {
+		out.Phase, out.Reason = "recovery_required", "维护记录无法持久保存，须本机恢复"
+		return out, nil
+	}
+	if g.dev {
+		return out, nil
+	}
+	out.Busy = g.active
+	if g.active != 0 {
+		return out, nil
+	}
+	records, err := g.records()
+	if err != nil {
+		return out, err
+	}
+	for _, r := range records {
+		if err = ctx.Err(); err != nil {
+			return out, err
+		}
+		if r.Kind == "maintenance.lock" {
+			continue
+		}
+		switch r.State {
+		case "succeeded", "failed", "rolled_back", "cancelled":
+		case "queued", "running", "waiting_confirmation", "compensating", "recovery_required":
+			out.Busy++
+		default:
+			return out, errors.New("Agent 存在未知执行状态")
+		}
+	}
+	if g.components != nil {
+		busy, err := g.components.Pending()
+		if err != nil {
+			return out, err
+		}
+		out.Busy += busy
+	}
+	if g.nginx != nil {
+		if g.nginx.http01 != nil && g.nginx.http01.busy() {
+			out.Busy++
+		}
+		if g.nginx.logs != nil {
+			m := g.nginx.logs
+			m.mu.Lock()
+			if m.policyUncertain {
+				out.Busy++
+			}
+			for _, a := range m.state.Archives {
+				if a.State == "planned" || a.State == "reopening" || a.State == "compressing" || a.State == "deleting" {
+					out.Busy++
+				}
+			}
+			if m.compression != nil {
+				out.Busy++
+			}
+			m.mu.Unlock()
+		}
+	}
+	return out, nil
+}
+func (g *maintenanceGate) status(ctx context.Context) (maintenance.RootStatus, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.statusLocked(ctx)
+}
+func (g *maintenanceGate) acquire(ctx context.Context, in maintenance.RootRequest) (maintenance.RootStatus, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.dev || g.scope != "host" {
+		return maintenance.RootStatus{}, fault.Unavailable("宿主机维护范围尚未确认")
+	}
+	if g.id != "" && g.id != in.OperationID {
+		return maintenance.RootStatus{}, fault.Conflict("已有其他独立维护锁")
+	}
+	if err := ctx.Err(); err != nil {
+		return maintenance.RootStatus{}, err
+	}
+	if g.id == "" {
+		prior, err := g.journal.Get(in.OperationID)
+		if err == nil {
+			if prior.Kind != "maintenance.lock" || prior.State == "succeeded" {
+				return maintenance.RootStatus{}, fault.Conflict("维护标识不可重用")
+			}
+		} else if !os.IsNotExist(err) {
+			return maintenance.RootStatus{}, err
+		}
+		g.id, g.phase = in.OperationID, "closing"
+		if err = g.journal.Put(Record{OperationID: in.OperationID, RequestHash: maintenanceHash(in), Kind: "maintenance.lock", State: "running", Stage: "closing", MaintenanceEpoch: g.epoch}); err != nil {
+			g.poisoned = true
+			return maintenance.RootStatus{}, err
+		}
+	}
+	out, err := g.statusLocked(ctx)
+	if err != nil {
+		return out, err
+	}
+	if out.Busy == 0 && !g.poisoned && g.phase != "held" {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		r, err := g.journal.Get(g.id)
+		if err != nil {
+			return out, err
+		}
+		r.State, r.Stage, r.MaintenanceEpoch = "waiting_confirmation", "held", g.epoch
+		if err = g.journal.Put(r); err != nil {
+			g.poisoned = true
+			return out, err
+		}
+		g.phase, out.Phase = "held", "held"
+	}
+	return out, nil
+}
+func maintenanceHash(in maintenance.RootRequest) string {
+	raw, _ := json.Marshal(in)
+	return secure.Hash(raw)
+}
+func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootRequest) (maintenance.RootStatus, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.dev || g.scope != "host" {
+		return maintenance.RootStatus{}, fault.Unavailable("宿主机维护范围尚未确认")
+	}
+	if g.id != "" && g.id != in.OperationID {
+		return maintenance.RootStatus{}, fault.Conflict("独立维护锁不匹配")
+	}
+	if err := ctx.Err(); err != nil {
+		return maintenance.RootStatus{}, err
+	}
+	prior, err := g.journal.Get(in.OperationID)
+	if err == nil && prior.Kind != "maintenance.lock" {
+		return maintenance.RootStatus{}, fault.Conflict("维护标识已被其他操作占用")
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return maintenance.RootStatus{}, err
+	}
+	// A release tombstone also fences an acquire whose response was lost or which
+	// arrives after cancellation. Reusing the identifier can never reopen the gate.
+	if err = g.journal.Put(Record{OperationID: in.OperationID, RequestHash: maintenanceHash(in), Kind: "maintenance.lock", State: "succeeded", Stage: "released", MaintenanceEpoch: g.epoch}); err != nil {
+		g.poisoned = true
+		return maintenance.RootStatus{}, err
+	}
+	g.id, g.phase, g.poisoned = "", "", false
+	return maintenance.RootStatus{Available: true, ID: in.OperationID, Phase: "released", Epoch: g.epoch}, nil
+}
+func maintenanceReply(w http.ResponseWriter, data any, err error) {
+	if err != nil {
+		var known *fault.Error
+		if !errors.As(err, &known) {
+			err = fault.New(http.StatusServiceUnavailable, "MAINTENANCE_UNAVAILABLE", "维护记录或执行器不可用")
+		}
+	}
+	componentReply(w, data, err)
+}
+func (s *Server) maintenanceHandlers(mux *http.ServeMux, g *maintenanceGate) {
+	mux.HandleFunc("GET /v1/maintenance", func(w http.ResponseWriter, r *http.Request) {
+		out, err := g.status(r.Context())
+		maintenanceReply(w, out, err)
+	})
+	for _, action := range []string{"acquire", "release"} {
+		mux.HandleFunc("POST /v1/maintenance/"+action, func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 1024)
+			defer r.Body.Close()
+			var in maintenance.RootRequest
+			d := json.NewDecoder(r.Body)
+			d.DisallowUnknownFields()
+			if d.Decode(&in) != nil || d.Decode(new(any)) != io.EOF || in.Protocol != Protocol || !validID(in.OperationID) {
+				maintenanceReply(w, nil, fault.Invalid("维护协议或标识无效"))
+				return
+			}
+			var out maintenance.RootStatus
+			var err error
+			if action == "acquire" {
+				out, err = g.acquire(r.Context(), in)
+			} else {
+				out, err = g.release(r.Context(), in)
+			}
+			maintenanceReply(w, out, err)
+		})
+	}
+}
+func (g *maintenanceGate) handler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/v1/maintenance/acquire" || r.URL.Path == "/v1/maintenance/release" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		done, ok := g.enter(false)
+		if !ok {
+			maintenanceReply(w, nil, fault.New(409, "MAINTENANCE_ACTIVE", "Agent 已关闭配置写入准入"))
+			return
+		}
+		defer done()
+		next.ServeHTTP(w, r)
+	})
+}
+func (c *Client) MaintenanceStatus(ctx context.Context) (maintenance.RootStatus, error) {
+	var out maintenance.RootStatus
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/maintenance", nil, &out)
+	return out, err
+}
+func (c *Client) AcquireMaintenance(ctx context.Context, in maintenance.RootRequest) (maintenance.RootStatus, error) {
+	var out maintenance.RootStatus
+	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/maintenance/acquire", in, &out)
+	return out, err
+}
+func (c *Client) ReleaseMaintenance(ctx context.Context, in maintenance.RootRequest) (maintenance.RootStatus, error) {
+	var out maintenance.RootStatus
+	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/maintenance/release", in, &out)
+	return out, err
+}

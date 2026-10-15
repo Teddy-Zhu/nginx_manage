@@ -4,6 +4,10 @@ import type { components } from "./schema";
 type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
+export type MaintenanceView = components["schemas"]["MaintenanceView"];
+export type MaintenanceSession = components["schemas"]["MaintenanceSession"];
+export type MaintenanceStartInput =
+  components["schemas"]["MaintenanceStartInput"];
 export type ComponentInput = components["schemas"]["ComponentInput"];
 export type ComponentCreateInput =
   components["schemas"]["ComponentCreateInput"];
@@ -336,6 +340,20 @@ export const api = {
       data,
       headers: { "Idempotency-Key": key },
       timeout: 45_000,
+    }),
+  maintenance: (signal?: AbortSignal) =>
+    request<MaintenanceView>({ url: "/maintenance", signal }),
+  enterMaintenance: (data: MaintenanceStartInput, key: string) =>
+    request<MaintenanceSession>({
+      url: "/maintenance",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  releaseMaintenance: (id: string) =>
+    request<MaintenanceSession>({
+      url: `/maintenance/${encodeURIComponent(id)}/release`,
+      method: "POST",
     }),
   components: (signal?: AbortSignal) =>
     request<ComponentOverview>({ url: "/components", signal }),

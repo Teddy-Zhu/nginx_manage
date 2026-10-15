@@ -7,20 +7,22 @@ import (
 	"time"
 
 	"nginxpanel/internal/agent"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
 )
 
 type Runner struct {
-	DB     *sql.DB
-	Config *nginxconfig.Service
-	Agent  *agent.Client
+	Maintenance *maintenance.Service
+	DB          *sql.DB
+	Config      *nginxconfig.Service
+	Agent       *agent.Client
 }
 
 func (r *Runner) Run(ctx context.Context) error {
 	// An expired Web lease is never evidence that the root operation stopped.
-	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore','acme.account.register','acme.issue','host.dns.apply','component.check','component.prepare')"); err != nil {
+	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore','acme.account.register','acme.issue','host.dns.apply','component.check','component.prepare','maintenance.enter')"); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(2 * time.Second)
@@ -37,6 +39,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 }
 func (r *Runner) next(ctx context.Context) error {
+	done, ok := r.Maintenance.Progress()
+	if !ok {
+		return nil
+	}
+	defer done()
 	var id string
 	err := r.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('nginx.apply','nginx.validate','nginx.restore') AND state IN ('running','compensating','recovery_required') ORDER BY created_at,id LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {

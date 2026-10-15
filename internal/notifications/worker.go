@@ -346,8 +346,20 @@ func (s *Service) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
+		done, admitted := s.Maintenance.Admit()
+		if !admitted {
+			timer := time.NewTimer(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil
+			case <-timer.C:
+			}
+			continue
+		}
 		view, err := s.policy(ctx)
 		if err != nil {
+			done()
 			return err
 		}
 		cycle, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -368,6 +380,7 @@ func (s *Service) Run(ctx context.Context) error {
 			}
 		}
 		cancel()
+		done()
 		if ctx.Err() != nil {
 			return nil
 		}

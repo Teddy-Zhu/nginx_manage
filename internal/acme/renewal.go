@@ -128,23 +128,8 @@ func (s *Service) runLifecycle(ctx context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
-		var enabled bool
-		if err := s.DB.QueryRowContext(ctx, "SELECT enabled FROM module_settings WHERE id='nginx-config'").Scan(&enabled); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
+		if err := s.lifecycleStep(ctx); err != nil && ctx.Err() == nil {
 			return err
-		}
-		if enabled {
-			if err := s.checkRenewal(ctx); err != nil && ctx.Err() == nil {
-				return err
-			}
-			if err := s.queueRenewal(ctx); err != nil && ctx.Err() == nil {
-				return err
-			}
-			if err := s.deployIssued(ctx); err != nil && ctx.Err() == nil {
-				return err
-			}
 		}
 		select {
 		case <-ctx.Done():
@@ -152,6 +137,33 @@ func (s *Service) runLifecycle(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+func (s *Service) lifecycleStep(ctx context.Context) error {
+	done, ok := s.Maintenance.Admit()
+	if !ok {
+		return nil
+	}
+	defer done()
+	var enabled bool
+	if err := s.DB.QueryRowContext(ctx, "SELECT enabled FROM module_settings WHERE id='nginx-config'").Scan(&enabled); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
+	if enabled {
+		if err := s.checkRenewal(ctx); err != nil && ctx.Err() == nil {
+			return err
+		}
+		if err := s.queueRenewal(ctx); err != nil && ctx.Err() == nil {
+			return err
+		}
+		if err := s.deployIssued(ctx); err != nil && ctx.Err() == nil {
+			return err
+		}
+	}
+	return nil
 }
 func (s *Service) checkRenewal(ctx context.Context) error {
 	var id string

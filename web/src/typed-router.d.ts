@@ -108,6 +108,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/maintenance': RouteRecordInfo<
+      '/maintenance',
+      '/maintenance',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/migrations': RouteRecordInfo<
       '/migrations',
       '/migrations',
@@ -253,6 +260,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/logs.vue': {
       routes:
         | '/logs'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/maintenance.vue': {
+      routes:
+        | '/maintenance'
       views:
         | never
       pathParamNames:

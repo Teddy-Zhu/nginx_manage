@@ -17,6 +17,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	MaintenanceEpoch string       `json:"maintenance_epoch,omitempty"`
 	OperationID      string       `json:"operation_id"`
 	RequestHash      string       `json:"request_hash"`
 	Kind             string       `json:"kind"`

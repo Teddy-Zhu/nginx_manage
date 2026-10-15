@@ -25,6 +25,11 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 func (s *Service) reconcile(ctx context.Context) error {
+	done, ok := s.Maintenance.Progress()
+	if !ok {
+		return nil
+	}
+	defer done()
 	var id, principal, basis, taskID, revision, basisApplied string
 	err := s.DB.QueryRowContext(ctx, "SELECT id,principal,basis_revision,task_id,revision_id,basis_applied FROM migration_plans WHERE state IN ('applying','recovery_required') ORDER BY created_at LIMIT 1").Scan(&id, &principal, &basis, &taskID, &revision, &basisApplied)
 	if errors.Is(err, sql.ErrNoRows) {

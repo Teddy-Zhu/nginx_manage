@@ -43,6 +43,11 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 func (s *Service) next(ctx context.Context) error {
+	done, ok := s.Maintenance.Progress()
+	if !ok {
+		return nil
+	}
+	defer done()
 	var id string
 	err := s.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('component.check','component.prepare') AND state IN ('queued','running','recovery_required') ORDER BY created_at,id LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {

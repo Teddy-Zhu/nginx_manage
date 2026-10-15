@@ -9,6 +9,7 @@ import (
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/secure"
@@ -116,6 +117,7 @@ type Host interface {
 	NginxState(context.Context) (agent.NginxState, error)
 }
 type Service struct {
+	Maintenance     *maintenance.Service
 	DB              *sql.DB
 	Vault           *secure.Vault
 	Config          *nginxconfig.Service
