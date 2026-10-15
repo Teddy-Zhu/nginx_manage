@@ -12,6 +12,7 @@ import (
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/hostdns"
+	"nginxpanel/internal/migration"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
@@ -29,6 +30,7 @@ type Server struct {
 	Monitoring    *monitoring.Service
 	Notifications *notifications.Service
 	HostDNS       *hostdns.Service
+	Migration     *migration.Service
 	Agent         *agent.Client
 	NodeID        string
 	Dev           bool

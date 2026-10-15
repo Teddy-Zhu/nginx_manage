@@ -39,7 +39,16 @@ type SaveResult struct {
 }
 
 func (s *Service) Current(ctx context.Context) (Tree, error) {
-	head, err := dbgen.New(s.DB).GetConfigHead(ctx)
+	return s.snapshot(ctx, dbgen.New(s.DB))
+}
+
+// Snapshot participates in the caller's consistent logical export transaction.
+func (s *Service) Snapshot(ctx context.Context, tx *sql.Tx) (Tree, error) {
+	return s.snapshot(ctx, dbgen.New(tx))
+}
+
+func (s *Service) snapshot(ctx context.Context, q *dbgen.Queries) (Tree, error) {
+	head, err := q.GetConfigHead(ctx)
 	if err != nil {
 		return Tree{}, err
 	}
@@ -49,9 +58,12 @@ func (s *Service) Current(ctx context.Context) (Tree, error) {
 			return Tree{}, err
 		}
 		p.Tree.State = "unsaved"
+		p.Tree.Version = head.Version
 		return p.Tree, nil
 	}
-	return s.Get(ctx, head.DesiredRevision.String)
+	tree, err := s.get(ctx, head.DesiredRevision.String, q)
+	tree.Version = head.Version
+	return tree, err
 }
 
 func (s *Service) Get(ctx context.Context, id string) (Tree, error) {
@@ -119,6 +131,26 @@ func (s *Service) save(ctx context.Context, principal auth.Principal, requestID,
 
 // Certificate deployment links its task in the same transaction as the revision.
 func (s *Service) saveLinked(ctx context.Context, principal auth.Principal, requestID, key string, in SaveRequest, digest string, requireApplied bool, link func(*sql.Tx, SaveResult) error) (SaveResult, error) {
+	return s.savePrepared(ctx, principal, requestID, key, in, digest, requireApplied, nil, link)
+}
+
+// SaveImported inserts dependencies and links the migration in the same commit
+// as its revision and execution intent. Imported material never bypasses Parse.
+func (s *Service) SaveImported(ctx context.Context, principal auth.Principal, requestID, key, planID string, in SaveRequest, prepare func(*sql.Tx) error, link func(*sql.Tx, SaveResult) error) (SaveResult, error) {
+	if err := principal.Require("backup.restore"); err != nil {
+		return SaveResult{}, err
+	}
+	raw, err := json.Marshal(struct {
+		PlanID string
+		Input  SaveRequest
+	}{planID, in})
+	if err != nil {
+		return SaveResult{}, err
+	}
+	return s.savePrepared(ctx, principal, requestID, key, in, secure.Hash(raw), false, prepare, link)
+}
+
+func (s *Service) savePrepared(ctx context.Context, principal auth.Principal, requestID, key string, in SaveRequest, digest string, requireApplied bool, prepare func(*sql.Tx) error, link func(*sql.Tx, SaveResult) error) (SaveResult, error) {
 	if err := principal.Require("config.write", "config.secrets"); err != nil {
 		return SaveResult{}, err
 	}
@@ -155,6 +187,18 @@ func (s *Service) saveLinked(ctx context.Context, principal auth.Principal, requ
 		return SaveResult{}, err
 	}
 	defer tx.Rollback()
+	var migrating int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE state IN ('applying','recovery_required')").Scan(&migrating); err != nil {
+		return SaveResult{}, err
+	}
+	if migrating > 0 {
+		return SaveResult{}, fault.Conflict("迁移正在应用或等待恢复，暂不能修改 Nginx 配置")
+	}
+	if prepare != nil {
+		if err := prepare(tx); err != nil {
+			return SaveResult{}, err
+		}
+	}
 	var enabled bool
 	if err := tx.QueryRowContext(ctx, "SELECT enabled FROM module_settings WHERE id='nginx-config'").Scan(&enabled); err != nil {
 		return SaveResult{}, err
@@ -193,6 +237,9 @@ func (s *Service) saveLinked(ctx context.Context, principal auth.Principal, requ
 	var next int64
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0)+1 FROM config_revisions").Scan(&next); err != nil {
 		return SaveResult{}, err
+	}
+	if next <= version {
+		next = version + 1
 	}
 	id := secure.ID()
 	state := "desired"

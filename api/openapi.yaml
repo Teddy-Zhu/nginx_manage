@@ -9,6 +9,18 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /migrations:
+    {"get": {"operationId": "listMigrations", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
+  /migrations/export:
+    {"post": {"operationId": "exportMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationExportInput"}}}}}}
+  /migrations/plan:
+    {"post": {"operationId": "prepareMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationImportInput"}}}}}}
+  /migrations/pull:
+    {"post": {"operationId": "pullMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationPullInput"}}}}}}
+  /migrations/{id}:
+    {"get": {"operationId": "getMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/ID"}]}}
+  /migrations/{id}/execute:
+    {"post": {"operationId": "executeMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationExecuteInput"}}}}}}
   /system/health:
     get:
       operationId: getHealth
@@ -3360,3 +3372,23 @@ components:
           }
         }
       }
+    MigrationSelection:
+      {"type": "object", "additionalProperties": false, "required": ["certificates", "dns_credentials", "automation", "notifications"], "properties": {"certificates": {"type": "boolean"}, "dns_credentials": {"type": "boolean"}, "automation": {"type": "boolean"}, "notifications": {"type": "boolean"}}}
+    MigrationExportInput:
+      {"type": "object", "additionalProperties": false, "required": ["passphrase", "selection"], "properties": {"passphrase": {"type": "string", "minLength": 16, "maxLength": 256}, "selection": {"$ref": "#/components/schemas/MigrationSelection"}}}
+    MigrationManifest:
+      {"type": "object", "additionalProperties": false, "required": ["schema", "source_node", "source_version", "created_at", "selection", "files", "omissions"], "properties": {"schema": {"type": "integer"}, "source_node": {"type": "string"}, "source_version": {"type": "string"}, "created_at": {"type": "integer", "format": "int64", "minimum": 0}, "selection": {"$ref": "#/components/schemas/MigrationSelection"}, "files": {"type": "object", "additionalProperties": {"type": "string"}}, "omissions": {"type": "array", "items": {"type": "string"}}}}
+    MigrationPackage:
+      {"type": "object", "additionalProperties": false, "required": ["filename", "content", "sha256", "manifest"], "properties": {"filename": {"type": "string"}, "content": {"type": "string", "format": "byte"}, "sha256": {"type": "string"}, "manifest": {"$ref": "#/components/schemas/MigrationManifest"}}}
+    MigrationImportInput:
+      {"type": "object", "additionalProperties": false, "required": ["content", "passphrase", "base_version", "mappings"], "properties": {"content": {"type": "string", "format": "byte"}, "passphrase": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}}}
+    MigrationExecuteInput:
+      {"type": "object", "additionalProperties": false, "required": ["mode", "enable_nginx"], "properties": {"mode": {"type": "string", "enum": ["draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}}}
+    MigrationRemote:
+      {"type": "object", "additionalProperties": false, "required": ["url", "api_key", "fingerprint", "node_id", "selection"], "properties": {"url": {"type": "string"}, "api_key": {"type": "string"}, "fingerprint": {"type": "string"}, "node_id": {"type": "string"}, "selection": {"$ref": "#/components/schemas/MigrationSelection"}}}
+    MigrationPullInput:
+      {"type": "object", "additionalProperties": false, "required": ["remote", "base_version", "mappings", "mode", "enable_nginx"], "properties": {"remote": {"$ref": "#/components/schemas/MigrationRemote"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "mode": {"type": "string", "enum": ["preview", "draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}}}
+    MigrationStep:
+      {"type": "object", "additionalProperties": false, "required": ["kind", "resource", "state", "message"], "properties": {"kind": {"type": "string"}, "resource": {"type": "string"}, "state": {"type": "string"}, "message": {"type": "string"}}}
+    MigrationPlan:
+      {"type": "object", "additionalProperties": false, "required": ["id", "source_node", "source_version", "base_version", "expires_at", "state", "steps", "omissions", "can_save", "can_apply", "nginx_enabled", "revision_id", "task_id", "last_error"], "properties": {"id": {"type": "string"}, "source_node": {"type": "string"}, "source_version": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "expires_at": {"type": "integer", "format": "int64", "minimum": 0}, "state": {"type": "string"}, "steps": {"type": "array", "items": {"$ref": "#/components/schemas/MigrationStep"}}, "omissions": {"type": "array", "items": {"type": "string"}}, "can_save": {"type": "boolean"}, "can_apply": {"type": "boolean"}, "nginx_enabled": {"type": "boolean"}, "revision_id": {"type": "string"}, "task_id": {"type": "string"}, "last_error": {"type": "string"}}}

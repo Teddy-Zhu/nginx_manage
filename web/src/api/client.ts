@@ -116,6 +116,17 @@ export class ApiError extends Error {
   }
 }
 
+export type MigrationSelection = components["schemas"]["MigrationSelection"];
+export type MigrationExportInput =
+  components["schemas"]["MigrationExportInput"];
+export type MigrationImportInput =
+  components["schemas"]["MigrationImportInput"];
+export type MigrationPullInput = components["schemas"]["MigrationPullInput"];
+export type MigrationExecuteInput =
+  components["schemas"]["MigrationExecuteInput"];
+export type MigrationPlan = components["schemas"]["MigrationPlan"];
+export type MigrationPackage = components["schemas"]["MigrationPackage"];
+
 const http = axios.create({
   baseURL: "/api/v1",
   timeout: 20_000,
@@ -288,6 +299,43 @@ export function followLogs(
 }
 
 export const api = {
+  exportMigration: (data: MigrationExportInput) =>
+    request<MigrationPackage>({
+      method: "POST",
+      url: "/migrations/export",
+      data,
+      timeout: 45_000,
+    }),
+  prepareMigration: (data: MigrationImportInput) =>
+    request<MigrationPlan>({
+      method: "POST",
+      url: "/migrations/plan",
+      data,
+      timeout: 45_000,
+    }),
+  executeMigration: (id: string, data: MigrationExecuteInput, key: string) =>
+    request<MigrationPlan>({
+      method: "POST",
+      url: `/migrations/${encodeURIComponent(id)}/execute`,
+      data,
+      headers: { "Idempotency-Key": key },
+      timeout: 45_000,
+    }),
+  pullMigration: (data: MigrationPullInput, key: string) =>
+    request<MigrationPlan>({
+      method: "POST",
+      url: "/migrations/pull",
+      data,
+      headers: { "Idempotency-Key": key },
+      timeout: 45_000,
+    }),
+  migrations: (signal?: AbortSignal) =>
+    request<MigrationPlan[]>({ url: "/migrations", signal }),
+  migration: (id: string, signal?: AbortSignal) =>
+    request<MigrationPlan>({
+      url: `/migrations/${encodeURIComponent(id)}`,
+      signal,
+    }),
   notifications: (signal?: AbortSignal) =>
     request<NotificationOverview>({ url: "/notifications", signal }),
   hostDNS: (signal?: AbortSignal) =>

@@ -228,6 +228,31 @@ type MetricSample struct {
 	Bytes   int64  `json:"bytes"`
 }
 
+type MigrationPlan struct {
+	ID            string `json:"id"`
+	Principal     string `json:"principal"`
+	Payload       []byte `json:"payload"`
+	Summary       []byte `json:"summary"`
+	State         string `json:"state"`
+	RevisionID    string `json:"revision_id"`
+	TaskID        string `json:"task_id"`
+	BasisRevision string `json:"basis_revision"`
+	BasisVersion  int64  `json:"basis_version"`
+	BasisApplied  string `json:"basis_applied"`
+	ExpiresAt     int64  `json:"expires_at"`
+	CreatedAt     int64  `json:"created_at"`
+	UpdatedAt     int64  `json:"updated_at"`
+	LastError     string `json:"last_error"`
+}
+
+type MigrationPull struct {
+	Principal   string `json:"principal"`
+	Key         string `json:"key"`
+	RequestHash string `json:"request_hash"`
+	PlanID      string `json:"plan_id"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
 type ModuleSetting struct {
 	ID      string `json:"id"`
 	Enabled int64  `json:"enabled"`

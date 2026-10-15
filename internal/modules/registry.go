@@ -65,6 +65,15 @@ func Set(ctx context.Context, db *sql.DB, p auth.Principal, id string, enabled b
 		return err
 	}
 	defer tx.Rollback()
+	if id == "nginx-config" {
+		var pending int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE state IN ('applying','recovery_required')").Scan(&pending); err != nil {
+			return err
+		}
+		if pending > 0 {
+			return fault.Conflict("迁移正在应用或等待恢复，暂不能修改 Nginx 模块状态")
+		}
+	}
 	// Passive sampling and notification delivery own no protection rules.
 	if !enabled && id != "monitoring" && id != "notifications" {
 		var pending int

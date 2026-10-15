@@ -23,6 +23,12 @@ func enqueue(ctx context.Context, tx *sql.Tx, revision string, apply bool) (stri
 
 func enqueueOperation(ctx context.Context, tx *sql.Tx, revision, kind, snapshot string) (string, error) {
 	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE state IN ('applying','recovery_required')").Scan(&count); err != nil {
+		return "", err
+	}
+	if count > 0 {
+		return "", fault.Conflict("迁移正在应用或等待恢复，暂不能提交其他 Nginx 操作")
+	}
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running','waiting_confirmation','compensating','recovery_required')").Scan(&count); err != nil {
 		return "", err
 	}

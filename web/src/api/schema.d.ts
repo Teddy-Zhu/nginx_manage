@@ -4,6 +4,102 @@
  */
 
 export interface paths {
+    "/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMigrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/migrations/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exportMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/migrations/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["prepareMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/migrations/pull": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pullMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/migrations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMigration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/migrations/{id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["executeMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/health": {
         parameters: {
             query?: never;
@@ -2350,6 +2446,92 @@ export interface components {
         HostDNSChange: {
             task_id: string;
         };
+        MigrationSelection: {
+            certificates: boolean;
+            dns_credentials: boolean;
+            automation: boolean;
+            notifications: boolean;
+        };
+        MigrationExportInput: {
+            passphrase: string;
+            selection: components["schemas"]["MigrationSelection"];
+        };
+        MigrationManifest: {
+            schema: number;
+            source_node: string;
+            source_version: string;
+            /** Format: int64 */
+            created_at: number;
+            selection: components["schemas"]["MigrationSelection"];
+            files: {
+                [key: string]: string;
+            };
+            omissions: string[];
+        };
+        MigrationPackage: {
+            filename: string;
+            /** Format: byte */
+            content: string;
+            sha256: string;
+            manifest: components["schemas"]["MigrationManifest"];
+        };
+        MigrationImportInput: {
+            /** Format: byte */
+            content: string;
+            passphrase: string;
+            /** Format: int64 */
+            base_version: number;
+            mappings: {
+                [key: string]: string;
+            };
+        };
+        MigrationExecuteInput: {
+            /** @enum {string} */
+            mode: "draft" | "save" | "apply";
+            enable_nginx: boolean;
+        };
+        MigrationRemote: {
+            url: string;
+            api_key: string;
+            fingerprint: string;
+            node_id: string;
+            selection: components["schemas"]["MigrationSelection"];
+        };
+        MigrationPullInput: {
+            remote: components["schemas"]["MigrationRemote"];
+            /** Format: int64 */
+            base_version: number;
+            mappings: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            mode: "preview" | "draft" | "save" | "apply";
+            enable_nginx: boolean;
+        };
+        MigrationStep: {
+            kind: string;
+            resource: string;
+            state: string;
+            message: string;
+        };
+        MigrationPlan: {
+            id: string;
+            source_node: string;
+            source_version: string;
+            /** Format: int64 */
+            base_version: number;
+            /** Format: int64 */
+            expires_at: number;
+            state: string;
+            steps: components["schemas"]["MigrationStep"][];
+            omissions: string[];
+            can_save: boolean;
+            can_apply: boolean;
+            nginx_enabled: boolean;
+            revision_id: string;
+            task_id: string;
+            last_error: string;
+        };
     };
     responses: {
         /** @description 统一响应；业务类型位于 data，失败时可为 null 或字段级诊断。 */
@@ -2376,6 +2558,118 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listMigrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    exportMigration: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrationExportInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    prepareMigration: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrationImportInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    pullMigration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrationPullInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    executeMigration: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrationExecuteInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     getHealth: {
         parameters: {
             query?: never;

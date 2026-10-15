@@ -545,6 +545,51 @@ func (e LogQueryMode) Valid() bool {
 	}
 }
 
+// Defines values for MigrationExecuteInputMode.
+const (
+	MigrationExecuteInputModeApply MigrationExecuteInputMode = "apply"
+	MigrationExecuteInputModeDraft MigrationExecuteInputMode = "draft"
+	MigrationExecuteInputModeSave  MigrationExecuteInputMode = "save"
+)
+
+// Valid indicates whether the value is a known member of the MigrationExecuteInputMode enum.
+func (e MigrationExecuteInputMode) Valid() bool {
+	switch e {
+	case MigrationExecuteInputModeApply:
+		return true
+	case MigrationExecuteInputModeDraft:
+		return true
+	case MigrationExecuteInputModeSave:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MigrationPullInputMode.
+const (
+	MigrationPullInputModeApply   MigrationPullInputMode = "apply"
+	MigrationPullInputModeDraft   MigrationPullInputMode = "draft"
+	MigrationPullInputModePreview MigrationPullInputMode = "preview"
+	MigrationPullInputModeSave    MigrationPullInputMode = "save"
+)
+
+// Valid indicates whether the value is a known member of the MigrationPullInputMode enum.
+func (e MigrationPullInputMode) Valid() bool {
+	switch e {
+	case MigrationPullInputModeApply:
+		return true
+	case MigrationPullInputModeDraft:
+		return true
+	case MigrationPullInputModePreview:
+		return true
+	case MigrationPullInputModeSave:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NotificationChannelInputKind.
 const (
 	Telegram NotificationChannelInputKind = "telegram"
@@ -1504,6 +1549,103 @@ type Me struct {
 	Username          string   `json:"username"`
 }
 
+// MigrationExecuteInput defines model for MigrationExecuteInput.
+type MigrationExecuteInput struct {
+	EnableNginx bool                      `json:"enable_nginx"`
+	Mode        MigrationExecuteInputMode `json:"mode"`
+}
+
+// MigrationExecuteInputMode defines model for MigrationExecuteInput.Mode.
+type MigrationExecuteInputMode string
+
+// MigrationExportInput defines model for MigrationExportInput.
+type MigrationExportInput struct {
+	Passphrase string             `json:"passphrase"`
+	Selection  MigrationSelection `json:"selection"`
+}
+
+// MigrationImportInput defines model for MigrationImportInput.
+type MigrationImportInput struct {
+	BaseVersion int64             `json:"base_version"`
+	Content     []byte            `json:"content"`
+	Mappings    map[string]string `json:"mappings"`
+	Passphrase  string            `json:"passphrase"`
+}
+
+// MigrationManifest defines model for MigrationManifest.
+type MigrationManifest struct {
+	CreatedAt     int64              `json:"created_at"`
+	Files         map[string]string  `json:"files"`
+	Omissions     []string           `json:"omissions"`
+	Schema        int                `json:"schema"`
+	Selection     MigrationSelection `json:"selection"`
+	SourceNode    string             `json:"source_node"`
+	SourceVersion string             `json:"source_version"`
+}
+
+// MigrationPackage defines model for MigrationPackage.
+type MigrationPackage struct {
+	Content  []byte            `json:"content"`
+	Filename string            `json:"filename"`
+	Manifest MigrationManifest `json:"manifest"`
+	Sha256   string            `json:"sha256"`
+}
+
+// MigrationPlan defines model for MigrationPlan.
+type MigrationPlan struct {
+	BaseVersion   int64           `json:"base_version"`
+	CanApply      bool            `json:"can_apply"`
+	CanSave       bool            `json:"can_save"`
+	ExpiresAt     int64           `json:"expires_at"`
+	Id            string          `json:"id"`
+	LastError     string          `json:"last_error"`
+	NginxEnabled  bool            `json:"nginx_enabled"`
+	Omissions     []string        `json:"omissions"`
+	RevisionId    string          `json:"revision_id"`
+	SourceNode    string          `json:"source_node"`
+	SourceVersion string          `json:"source_version"`
+	State         string          `json:"state"`
+	Steps         []MigrationStep `json:"steps"`
+	TaskId        string          `json:"task_id"`
+}
+
+// MigrationPullInput defines model for MigrationPullInput.
+type MigrationPullInput struct {
+	BaseVersion int64                  `json:"base_version"`
+	EnableNginx bool                   `json:"enable_nginx"`
+	Mappings    map[string]string      `json:"mappings"`
+	Mode        MigrationPullInputMode `json:"mode"`
+	Remote      MigrationRemote        `json:"remote"`
+}
+
+// MigrationPullInputMode defines model for MigrationPullInput.Mode.
+type MigrationPullInputMode string
+
+// MigrationRemote defines model for MigrationRemote.
+type MigrationRemote struct {
+	ApiKey      string             `json:"api_key"`
+	Fingerprint string             `json:"fingerprint"`
+	NodeId      string             `json:"node_id"`
+	Selection   MigrationSelection `json:"selection"`
+	Url         string             `json:"url"`
+}
+
+// MigrationSelection defines model for MigrationSelection.
+type MigrationSelection struct {
+	Automation     bool `json:"automation"`
+	Certificates   bool `json:"certificates"`
+	DnsCredentials bool `json:"dns_credentials"`
+	Notifications  bool `json:"notifications"`
+}
+
+// MigrationStep defines model for MigrationStep.
+type MigrationStep struct {
+	Kind     string `json:"kind"`
+	Message  string `json:"message"`
+	Resource string `json:"resource"`
+	State    string `json:"state"`
+}
+
 // Module defines model for Module.
 type Module struct {
 	Available    bool     `json:"available"`
@@ -2211,6 +2353,32 @@ type StreamLogsParams struct {
 	Query string `form:"query" json:"query"`
 }
 
+// ExportMigrationParams defines parameters for ExportMigration.
+type ExportMigrationParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// PrepareMigrationParams defines parameters for PrepareMigration.
+type PrepareMigrationParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// PullMigrationParams defines parameters for PullMigration.
+type PullMigrationParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// ExecuteMigrationParams defines parameters for ExecuteMigration.
+type ExecuteMigrationParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // GetMonitoringHistoryParams defines parameters for GetMonitoringHistory.
 type GetMonitoringHistoryParams struct {
 	Kind   string `form:"kind" json:"kind"`
@@ -2559,6 +2727,18 @@ type SetLogPolicyJSONRequestBody = LogPolicyInput
 // QueryLogsJSONRequestBody defines body for QueryLogs for application/json ContentType.
 type QueryLogsJSONRequestBody = LogQuery
 
+// ExportMigrationJSONRequestBody defines body for ExportMigration for application/json ContentType.
+type ExportMigrationJSONRequestBody = MigrationExportInput
+
+// PrepareMigrationJSONRequestBody defines body for PrepareMigration for application/json ContentType.
+type PrepareMigrationJSONRequestBody = MigrationImportInput
+
+// PullMigrationJSONRequestBody defines body for PullMigration for application/json ContentType.
+type PullMigrationJSONRequestBody = MigrationPullInput
+
+// ExecuteMigrationJSONRequestBody defines body for ExecuteMigration for application/json ContentType.
+type ExecuteMigrationJSONRequestBody = MigrationExecuteInput
+
 // SetMonitoringSettingsJSONRequestBody defines body for SetMonitoringSettings for application/json ContentType.
 type SetMonitoringSettingsJSONRequestBody = MonitoringSettingsInput
 
@@ -2765,6 +2945,24 @@ type ServerInterface interface {
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+
+	// (GET /migrations)
+	ListMigrations(w http.ResponseWriter, r *http.Request)
+
+	// (POST /migrations/export)
+	ExportMigration(w http.ResponseWriter, r *http.Request, params ExportMigrationParams)
+
+	// (POST /migrations/plan)
+	PrepareMigration(w http.ResponseWriter, r *http.Request, params PrepareMigrationParams)
+
+	// (POST /migrations/pull)
+	PullMigration(w http.ResponseWriter, r *http.Request, params PullMigrationParams)
+
+	// (GET /migrations/{id})
+	GetMigration(w http.ResponseWriter, r *http.Request, id ID)
+
+	// (POST /migrations/{id}/execute)
+	ExecuteMigration(w http.ResponseWriter, r *http.Request, id ID, params ExecuteMigrationParams)
 
 	// (GET /monitoring/history)
 	GetMonitoringHistory(w http.ResponseWriter, r *http.Request, params GetMonitoringHistoryParams)
@@ -4883,6 +5081,265 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListMigrations operation middleware
+func (siw *ServerInterfaceWrapper) ListMigrations(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMigrations(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportMigration operation middleware
+func (siw *ServerInterfaceWrapper) ExportMigration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportMigrationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportMigration(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PrepareMigration operation middleware
+func (siw *ServerInterfaceWrapper) PrepareMigration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PrepareMigrationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PrepareMigration(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PullMigration operation middleware
+func (siw *ServerInterfaceWrapper) PullMigration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PullMigrationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PullMigration(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMigration operation middleware
+func (siw *ServerInterfaceWrapper) GetMigration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMigration(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExecuteMigration operation middleware
+func (siw *ServerInterfaceWrapper) ExecuteMigration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExecuteMigrationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExecuteMigration(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7335,6 +7792,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations", wrapper.ListMigrations)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/export", wrapper.ExportMigration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/plan", wrapper.PrepareMigration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/pull", wrapper.PullMigration)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations/{id}", wrapper.GetMigration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/{id}/execute", wrapper.ExecuteMigration)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/system/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/system/version", wrapper.GetVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)

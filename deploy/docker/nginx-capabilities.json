@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "nginx_version": "1.30.6",
+  "module_policy": "image-only",
+  "static_features": [
+    "http", "tls", "real_ip", "stream", "stream_tls", "stream_real_ip",
+    "stream_ssl_preread", "map", "map_volatile", "rewrite", "http01",
+    "limit_req", "limit_conn", "limit_req_status", "limit_conn_status",
+    "limit_req_observe", "limit_conn_observe", "https_redirect", "hsts"
+  ],
+  "runtime_module_installation": false,
+  "runtime_module_compilation": false,
+  "dynamic_modules": [],
+  "build_information": "/usr/share/nginxpanel/nginx-build.txt",
+  "binary_digest": "/usr/share/nginxpanel/nginx.sha256"
+}

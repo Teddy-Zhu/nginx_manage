@@ -116,3 +116,12 @@ networkd/resolved 观测通过本机 network1 的 ListLinks/Describe 和 resolve
 此处仅观测已实现，networkd 的 Plan/Apply/Confirm/Rollback 与 netplan 源写入仍未实现。安全应用需要对实际已加载源与磁盘源建立一致性依据，并控制原生重载影响范围：network1 的常规 Reload 可处理多个接口，Reconfigure 进入完整配置流程，SetDNS 覆盖自动来源，RevertDNS 同时清除其他运行 DNS 选项。后续写入须保留 IP/路由及原有自动获取与解析选项，并处理未知调用、并发源变化、期限和重启恢复，不能以临时 resolved 值或单次重载成功替代持久确认。
 
 原生语义依据 [systemd network1 接口](https://github.com/systemd/systemd/blob/main/man/org.freedesktop.network1.xml)、[resolve1 接口](https://github.com/systemd/systemd/blob/main/man/org.freedesktop.resolve1.xml)、[systemd.network](https://github.com/systemd/systemd/blob/main/man/systemd.network.xml) 及对应 networkd 实现。源码调查和接口生成不构成系统能力验收；集中验证仍在 P5。
+
+
+## 跨环境配置迁移与固定镜像模块
+
+`/migrations/export`、`/migrations/plan`、`/migrations/{id}/execute` 与 `/migrations/pull` 使用同一严格归档、目标预检及配置事务；状态读取为 `/migrations`、`/migrations/{id}`。加密原生树和显式选择的逻辑秘密在目标重新加密，节点身份、管理通道及目标主机设置保留。API 拉取只访问本次授权源端的固定 HTTPS 导出方法，拒绝重定向，不持久保存源 Key；拉取与执行均保存幂等结果。缺失镜像模块、证书/配置冲突或未就绪运行状态不能应用，草稿不代表生效。权限、边界与实际未实现范围见 [迁移合同](migration.md)。
+
+迁移依赖、修订、任务与审计同事务保存。应用失败须先确认原运行修订，再补偿原期望指针及本次启用模块；发生外部变化时保留恢复状态。当前树的 `version` 是配置头代次，历史读取仍返回不可变修订自身版本；恢复旧指针会递增配置头代次，下一次保存分配更大的修订版本，避免旧客户端继续写入。导入的停用自动化配置及不可变依赖保留用于审计重试。
+
+[Docker Nginx 配方](../deploy/docker/README.md) 在构建阶段检查并预置所需静态模块，发布能力清单、编译参数及二进制散列；运行时不下载、编译或增装模块。迁移/应用仍核对实际执行器能力，不凭镜像清单伪造运行确认。完整 Docker 接入及可信组件安装、签名发布仍待 P4，当前未构建镜像或执行真实迁移。

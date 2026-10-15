@@ -75,11 +75,14 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 func decode(w http.ResponseWriter, r *http.Request, out any) error {
+	return decodeLimit(w, r, out, limits.RequestBytes)
+}
+func decodeLimit(w http.ResponseWriter, r *http.Request, out any, limit int64) error {
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" {
 		return fault.Invalid("请求须使用 application/json")
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, limits.RequestBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	defer r.Body.Close()
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
