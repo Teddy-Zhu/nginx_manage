@@ -267,6 +267,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/nginx/config-tree/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 比较指定修订与请求中的完整原文树；原文差异包含秘密，浏览器需重新认证。 */
+        post: operations["diffConfigTree"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/external": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 只读核对当前发布副本与已记录修订。path 只选择受管目录内已发现的文件；依赖只返回散列，不返回证书材料。 */
+        get: operations["inspectNginxExternal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nginx/external/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 重新核对快照后，将选中文件合并为独立草稿；期望或磁盘内容冲突则拒绝，不应用外部配置。 */
+        post: operations["captureNginxExternal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/config-tree/preview": {
         parameters: {
             query?: never;
@@ -638,6 +689,63 @@ export interface components {
             mode: "allowlist" | "denylist";
             entries: string[];
         };
+        DiffRequest: {
+            /** @description 空值表示无站点初始配置。 */
+            base_revision: string;
+            files: components["schemas"]["File"][];
+        };
+        FileDifference: {
+            file_id: string;
+            before_path: string;
+            after_path: string;
+            /** @enum {string} */
+            status: "added" | "removed" | "modified" | "moved";
+            before_content: string;
+            after_content: string;
+            /** @description 可能受影响的资源，包含共享上下文的保守影响范围。 */
+            affected_resources: string[];
+            affected_resource_count: number;
+            affected_resources_truncated: boolean;
+        };
+        Difference: {
+            base_revision: string;
+            files: components["schemas"]["FileDifference"][];
+            diagnostics: components["schemas"]["Diagnostic"][];
+        };
+        ExternalFile: {
+            path: string;
+            /** @enum {string} */
+            status: "unchanged" | "modified" | "added" | "missing" | "unsafe" | "unreadable";
+            expected_sha256: string;
+            observed_sha256: string;
+            reason: string;
+        };
+        ExternalDetail: {
+            path: string;
+            /** @description 按原发布身份重建的预期运行副本。 */
+            before_content: string;
+            /** @description 磁盘中的运行副本。 */
+            after_content: string;
+            /** @description 可精确还原时去除生成控制；否则保留磁盘原文，仍须安全整理。 */
+            draft_content: string;
+            capture_allowed: boolean;
+            note: string;
+        };
+        ExternalSnapshot: {
+            revision_id: string;
+            snapshot: string;
+            integrity: boolean;
+            complete: boolean;
+            files: components["schemas"]["ExternalFile"][];
+            dependencies: components["schemas"]["ExternalFile"][];
+            detail: components["schemas"]["ExternalDetail"] | null;
+        };
+        CaptureExternalRequest: {
+            /** Format: int64 */
+            base_version: number;
+            snapshot: string;
+            path: string;
+        };
         CertificateInput: {
             /**
              * Format: int64
@@ -802,6 +910,7 @@ export interface components {
             scopes: string[];
         };
         NginxRuntime: {
+            external_change: boolean;
             available: boolean;
             revision_id: string;
             integrity: boolean;
@@ -1189,6 +1298,62 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    diffConfigTree: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiffRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    inspectNginxExternal: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    captureNginxExternal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureExternalRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

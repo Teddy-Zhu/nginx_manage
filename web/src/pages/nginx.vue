@@ -43,6 +43,8 @@ import {
   type NginxFeatures,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+import ConfigurationChanges from "../components/ConfigurationChanges.vue";
+import NginxExternal from "../components/NginxExternal.vue";
 
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency();
@@ -75,6 +77,8 @@ const tree = ref<Tree | null>(null),
   draftNote = ref("");
 const diagnostics = ref<Tree["diagnostics"]>([]),
   historyVisible = ref(false);
+const changesVisible = ref(false),
+  externalVisible = ref(false);
 const createVisible = ref(false),
   fileVisible = ref(false),
   newPath = ref("");
@@ -674,6 +678,18 @@ async function loadRevision(row: Revision) {
     historyVisible.value = false;
   });
 }
+function capturedExternal(result: SaveResult) {
+  files.value = structuredClone(result.tree.files);
+  selected.value = files.value[0]?.id ?? "";
+  diagnostics.value = result.tree.diagnostics;
+  draftNote.value = `外部草稿 #${result.tree.version} 已保存，尚未应用`;
+  resource.value = null;
+  fieldInputs.value = {};
+  certificateRequest++;
+  certificateDetail.value = null;
+  certificateChoice.value = "";
+  certificateLoading.value = false;
+}
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (dirty.value) event.preventDefault();
 };
@@ -693,6 +709,12 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       <n-tag size="small" :bordered="false">{{
         tree?.version ? `期望修订 #${tree.version}` : "尚未保存"
       }}</n-tag
+      ><n-tag
+        v-if="runtime?.external_change"
+        size="small"
+        type="error"
+        :bordered="false"
+        >存在外部修改</n-tag
       ><n-tag v-if="dirty" size="small" type="warning" :bordered="false"
         >未保存修改</n-tag
       ><n-tag
@@ -708,6 +730,12 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       ><span class="muted">{{ draftNote }}</span>
     </div>
     <div class="inline-gap">
+      <n-button :disabled="busy || !!formDirty" @click="changesVisible = true"
+        >配置差异</n-button
+      >
+      <n-button :disabled="busy || dirty" @click="externalVisible = true"
+        >外部修改</n-button
+      >
       <n-button :disabled="busy" @click="showHistory">修订历史</n-button
       ><n-button :disabled="busy" @click="load">重新加载</n-button
       ><n-button
@@ -1063,6 +1091,17 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       >
     </n-tab-pane></n-tabs
   >
+  <configuration-changes
+    v-model:show="changesVisible"
+    :tree="tree"
+    :files="files"
+    :applied-revision="runtime?.revision_id ?? ''"
+  />
+  <nginx-external
+    v-model:show="externalVisible"
+    :base-version="tree?.version ?? 0"
+    @captured="capturedExternal"
+  />
   <n-modal
     v-model:show="createVisible"
     preset="card"

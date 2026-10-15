@@ -130,6 +130,36 @@ func (e CreateResourceKind) Valid() bool {
 	}
 }
 
+// Defines values for ExternalFileStatus.
+const (
+	ExternalFileStatusAdded      ExternalFileStatus = "added"
+	ExternalFileStatusMissing    ExternalFileStatus = "missing"
+	ExternalFileStatusModified   ExternalFileStatus = "modified"
+	ExternalFileStatusUnchanged  ExternalFileStatus = "unchanged"
+	ExternalFileStatusUnreadable ExternalFileStatus = "unreadable"
+	ExternalFileStatusUnsafe     ExternalFileStatus = "unsafe"
+)
+
+// Valid indicates whether the value is a known member of the ExternalFileStatus enum.
+func (e ExternalFileStatus) Valid() bool {
+	switch e {
+	case ExternalFileStatusAdded:
+		return true
+	case ExternalFileStatusMissing:
+		return true
+	case ExternalFileStatusModified:
+		return true
+	case ExternalFileStatusUnchanged:
+		return true
+	case ExternalFileStatusUnreadable:
+		return true
+	case ExternalFileStatusUnsafe:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FieldFormat.
 const (
 	Lines  FieldFormat = "lines"
@@ -145,6 +175,30 @@ func (e FieldFormat) Valid() bool {
 	case Tokens:
 		return true
 	case Value:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FileDifferenceStatus.
+const (
+	FileDifferenceStatusAdded    FileDifferenceStatus = "added"
+	FileDifferenceStatusModified FileDifferenceStatus = "modified"
+	FileDifferenceStatusMoved    FileDifferenceStatus = "moved"
+	FileDifferenceStatusRemoved  FileDifferenceStatus = "removed"
+)
+
+// Valid indicates whether the value is a known member of the FileDifferenceStatus enum.
+func (e FileDifferenceStatus) Valid() bool {
+	switch e {
+	case FileDifferenceStatusAdded:
+		return true
+	case FileDifferenceStatusModified:
+		return true
+	case FileDifferenceStatusMoved:
+		return true
+	case FileDifferenceStatusRemoved:
 		return true
 	default:
 		return false
@@ -283,6 +337,13 @@ type AccessListInput struct {
 // AccessListInputMode defines model for AccessListInput.Mode.
 type AccessListInputMode string
 
+// CaptureExternalRequest defines model for CaptureExternalRequest.
+type CaptureExternalRequest struct {
+	BaseVersion int64  `json:"base_version"`
+	Path        string `json:"path"`
+	Snapshot    string `json:"snapshot"`
+}
+
 // Certificate defines model for Certificate.
 type Certificate struct {
 	// Bindings 当前期望及最近确认的已生效修订引用。
@@ -403,6 +464,58 @@ type Diagnostic struct {
 	Message string `json:"message"`
 }
 
+// DiffRequest defines model for DiffRequest.
+type DiffRequest struct {
+	// BaseRevision 空值表示无站点初始配置。
+	BaseRevision string `json:"base_revision"`
+	Files        []File `json:"files"`
+}
+
+// Difference defines model for Difference.
+type Difference struct {
+	BaseRevision string           `json:"base_revision"`
+	Diagnostics  []Diagnostic     `json:"diagnostics"`
+	Files        []FileDifference `json:"files"`
+}
+
+// ExternalDetail defines model for ExternalDetail.
+type ExternalDetail struct {
+	// AfterContent 磁盘中的运行副本。
+	AfterContent string `json:"after_content"`
+
+	// BeforeContent 按原发布身份重建的预期运行副本。
+	BeforeContent  string `json:"before_content"`
+	CaptureAllowed bool   `json:"capture_allowed"`
+
+	// DraftContent 可精确还原时去除生成控制；否则保留磁盘原文，仍须安全整理。
+	DraftContent string `json:"draft_content"`
+	Note         string `json:"note"`
+	Path         string `json:"path"`
+}
+
+// ExternalFile defines model for ExternalFile.
+type ExternalFile struct {
+	ExpectedSha256 string             `json:"expected_sha256"`
+	ObservedSha256 string             `json:"observed_sha256"`
+	Path           string             `json:"path"`
+	Reason         string             `json:"reason"`
+	Status         ExternalFileStatus `json:"status"`
+}
+
+// ExternalFileStatus defines model for ExternalFile.Status.
+type ExternalFileStatus string
+
+// ExternalSnapshot defines model for ExternalSnapshot.
+type ExternalSnapshot struct {
+	Complete     bool            `json:"complete"`
+	Dependencies []ExternalFile  `json:"dependencies"`
+	Detail       *ExternalDetail `json:"detail"`
+	Files        []ExternalFile  `json:"files"`
+	Integrity    bool            `json:"integrity"`
+	RevisionId   string          `json:"revision_id"`
+	Snapshot     string          `json:"snapshot"`
+}
+
 // Field defines model for Field.
 type Field struct {
 	Editable bool        `json:"editable"`
@@ -421,6 +534,24 @@ type File struct {
 	Path    string `json:"path"`
 	Sha256  string `json:"sha256"`
 }
+
+// FileDifference defines model for FileDifference.
+type FileDifference struct {
+	AffectedResourceCount int `json:"affected_resource_count"`
+
+	// AffectedResources 可能受影响的资源，包含共享上下文的保守影响范围。
+	AffectedResources          []string             `json:"affected_resources"`
+	AffectedResourcesTruncated bool                 `json:"affected_resources_truncated"`
+	AfterContent               string               `json:"after_content"`
+	AfterPath                  string               `json:"after_path"`
+	BeforeContent              string               `json:"before_content"`
+	BeforePath                 string               `json:"before_path"`
+	FileId                     string               `json:"file_id"`
+	Status                     FileDifferenceStatus `json:"status"`
+}
+
+// FileDifferenceStatus defines model for FileDifference.Status.
+type FileDifferenceStatus string
 
 // Me defines model for Me.
 type Me struct {
@@ -457,11 +588,12 @@ type NginxFeatures struct {
 
 // NginxRuntime defines model for NginxRuntime.
 type NginxRuntime struct {
-	Available  bool   `json:"available"`
-	Integrity  bool   `json:"integrity"`
-	Reason     string `json:"reason"`
-	RevisionId string `json:"revision_id"`
-	Running    bool   `json:"running"`
+	Available      bool   `json:"available"`
+	ExternalChange bool   `json:"external_change"`
+	Integrity      bool   `json:"integrity"`
+	Reason         string `json:"reason"`
+	RevisionId     string `json:"revision_id"`
+	Running        bool   `json:"running"`
 }
 
 // Resource defines model for Resource.
@@ -751,8 +883,27 @@ type SaveConfigTreeParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// DiffConfigTreeParams defines parameters for DiffConfigTree.
+type DiffConfigTreeParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // PreviewConfigTreeParams defines parameters for PreviewConfigTree.
 type PreviewConfigTreeParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// InspectNginxExternalParams defines parameters for InspectNginxExternal.
+type InspectNginxExternalParams struct {
+	Path *string `form:"path,omitempty" json:"path,omitempty"`
+}
+
+// CaptureNginxExternalParams defines parameters for CaptureNginxExternal.
+type CaptureNginxExternalParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
@@ -911,8 +1062,14 @@ type ApplyConfigJSONRequestBody ApplyConfigJSONBody
 // SaveConfigTreeJSONRequestBody defines body for SaveConfigTree for application/json ContentType.
 type SaveConfigTreeJSONRequestBody = SaveRequest
 
+// DiffConfigTreeJSONRequestBody defines body for DiffConfigTree for application/json ContentType.
+type DiffConfigTreeJSONRequestBody = DiffRequest
+
 // PreviewConfigTreeJSONRequestBody defines body for PreviewConfigTree for application/json ContentType.
 type PreviewConfigTreeJSONRequestBody = SaveRequest
+
+// CaptureNginxExternalJSONRequestBody defines body for CaptureNginxExternal for application/json ContentType.
+type CaptureNginxExternalJSONRequestBody = CaptureExternalRequest
 
 // CreateResourceJSONRequestBody defines body for CreateResource for application/json ContentType.
 type CreateResourceJSONRequestBody = CreateResource
@@ -1001,8 +1158,17 @@ type ServerInterface interface {
 	// (PUT /nginx/config-tree)
 	SaveConfigTree(w http.ResponseWriter, r *http.Request, params SaveConfigTreeParams)
 
+	// (POST /nginx/config-tree/diff)
+	DiffConfigTree(w http.ResponseWriter, r *http.Request, params DiffConfigTreeParams)
+
 	// (POST /nginx/config-tree/preview)
 	PreviewConfigTree(w http.ResponseWriter, r *http.Request, params PreviewConfigTreeParams)
+
+	// (GET /nginx/external)
+	InspectNginxExternal(w http.ResponseWriter, r *http.Request, params InspectNginxExternalParams)
+
+	// (POST /nginx/external/capture)
+	CaptureNginxExternal(w http.ResponseWriter, r *http.Request, params CaptureNginxExternalParams)
 
 	// (GET /nginx/features)
 	GetNginxFeatures(w http.ResponseWriter, r *http.Request)
@@ -1929,6 +2095,47 @@ func (siw *ServerInterfaceWrapper) SaveConfigTree(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// DiffConfigTree operation middleware
+func (siw *ServerInterfaceWrapper) DiffConfigTree(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DiffConfigTreeParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DiffConfigTree(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PreviewConfigTree operation middleware
 func (siw *ServerInterfaceWrapper) PreviewConfigTree(w http.ResponseWriter, r *http.Request) {
 
@@ -1961,6 +2168,103 @@ func (siw *ServerInterfaceWrapper) PreviewConfigTree(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PreviewConfigTree(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// InspectNginxExternal operation middleware
+func (siw *ServerInterfaceWrapper) InspectNginxExternal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params InspectNginxExternalParams
+
+	// ------------- Optional query parameter "path" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InspectNginxExternal(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CaptureNginxExternal operation middleware
+func (siw *ServerInterfaceWrapper) CaptureNginxExternal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CaptureNginxExternalParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CaptureNginxExternal(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3044,6 +3348,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/config-tree", wrapper.SaveConfigTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/apply", wrapper.ApplyConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/runtime", wrapper.GetNginxRuntime)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/diff", wrapper.DiffConfigTree)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/external", wrapper.InspectNginxExternal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/external/capture", wrapper.CaptureNginxExternal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/preview", wrapper.PreviewConfigTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources", wrapper.CreateResource)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.DeleteResource)

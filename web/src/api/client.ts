@@ -24,6 +24,16 @@ export type CertificateInput = components["schemas"]["CertificateInput"];
 export type CertificateResult = components["schemas"]["CertificateResult"];
 export type AccessListInput = components["schemas"]["AccessListInput"];
 export type NginxRuntime = components["schemas"]["NginxRuntime"];
+export type Difference = components["schemas"]["Difference"];
+export type ExternalSnapshot = components["schemas"]["ExternalSnapshot"];
+export type CaptureExternalRequest =
+  components["schemas"]["CaptureExternalRequest"];
+export interface Revision {
+  id: string;
+  version: number;
+  state: string;
+  created_at: number;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -234,6 +244,28 @@ export const api = {
       headers: { "Idempotency-Key": key },
     }),
   nginxRuntime: () => request<NginxRuntime>({ url: "/nginx/runtime" }),
+  revisions: () =>
+    request<Revision[]>({ url: "/nginx/revisions", params: { limit: 100 } }),
+  revision: (id: string) =>
+    request<Tree>({ url: `/nginx/revisions/${encodeURIComponent(id)}` }),
+  diff: (base_revision: string, files: ConfigFile[]) =>
+    request<Difference>({
+      method: "POST",
+      url: "/nginx/config-tree/diff",
+      data: { base_revision, files },
+    }),
+  external: (path?: string) =>
+    request<ExternalSnapshot>({
+      url: "/nginx/external",
+      params: path ? { path } : undefined,
+    }),
+  captureExternal: (data: CaptureExternalRequest, key: string) =>
+    request<SaveResult>({
+      method: "POST",
+      url: "/nginx/external/capture",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
   tasks: () => request<Task[]>({ url: "/tasks" }),
   modules: () => request<Module[]>({ url: "/system/modules" }),
   setModule: (id: string, enabled: boolean) =>

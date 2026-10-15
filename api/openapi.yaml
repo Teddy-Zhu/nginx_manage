@@ -222,6 +222,46 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /nginx/config-tree/diff:
+    post:
+      operationId: diffConfigTree
+      x-scopes: [config.secrets]
+      description: 比较指定修订与请求中的完整原文树；原文差异包含秘密，浏览器需重新认证。
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiffRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/external:
+    get:
+      operationId: inspectNginxExternal
+      x-scopes: [config.secrets]
+      description: 只读核对当前发布副本与已记录修订。path 只选择受管目录内已发现的文件；依赖只返回散列，不返回证书材料。
+      parameters:
+        - { name: path, in: query, schema: { type: string, maxLength: 1024 } }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /nginx/external/capture:
+    post:
+      operationId: captureNginxExternal
+      x-scopes: [config.write, config.secrets]
+      description: 重新核对快照后，将选中文件合并为独立草稿；期望或磁盘内容冲突则拒绝，不应用外部配置。
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CaptureExternalRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /nginx/config-tree/preview:
     post:
       operationId: previewConfigTree
@@ -622,6 +662,69 @@ components:
         notes: { type: string, maxLength: 2048 }
         mode: { type: string, enum: [allowlist, denylist] }
         entries: { type: array, maxItems: 128, items: { type: string } }
+    DiffRequest:
+      type: object
+      required: [base_revision, files]
+      properties:
+        base_revision: { type: string, description: 空值表示无站点初始配置。 }
+        files: { type: array, maxItems: 128, items: { $ref: '#/components/schemas/File' } }
+    FileDifference:
+      type: object
+      required: [file_id, before_path, after_path, status, before_content, after_content, affected_resources, affected_resource_count, affected_resources_truncated]
+      properties:
+        file_id: { type: string }
+        before_path: { type: string }
+        after_path: { type: string }
+        status: { type: string, enum: [added, removed, modified, moved] }
+        before_content: { type: string }
+        after_content: { type: string }
+        affected_resources: { type: array, maxItems: 100, description: 可能受影响的资源，包含共享上下文的保守影响范围。, items: { type: string } }
+        affected_resource_count: { type: integer }
+        affected_resources_truncated: { type: boolean }
+    Difference:
+      type: object
+      required: [base_revision, files, diagnostics]
+      properties:
+        base_revision: { type: string }
+        files: { type: array, items: { $ref: '#/components/schemas/FileDifference' } }
+        diagnostics: { type: array, items: { $ref: '#/components/schemas/Diagnostic' } }
+    ExternalFile:
+      type: object
+      required: [path, status, expected_sha256, observed_sha256, reason]
+      properties:
+        path: { type: string }
+        status: { type: string, enum: [unchanged, modified, added, missing, unsafe, unreadable] }
+        expected_sha256: { type: string }
+        observed_sha256: { type: string }
+        reason: { type: string }
+    ExternalDetail:
+      type: object
+      required: [path, before_content, after_content, draft_content, capture_allowed, note]
+      properties:
+        path: { type: string }
+        before_content: { type: string, description: 按原发布身份重建的预期运行副本。 }
+        after_content: { type: string, description: 磁盘中的运行副本。 }
+        draft_content: { type: string, description: 可精确还原时去除生成控制；否则保留磁盘原文，仍须安全整理。 }
+        capture_allowed: { type: boolean }
+        note: { type: string }
+    ExternalSnapshot:
+      type: object
+      required: [revision_id, snapshot, integrity, complete, files, dependencies, detail]
+      properties:
+        revision_id: { type: string }
+        snapshot: { type: string }
+        integrity: { type: boolean }
+        complete: { type: boolean }
+        files: { type: array, items: { $ref: '#/components/schemas/ExternalFile' } }
+        dependencies: { type: array, items: { $ref: '#/components/schemas/ExternalFile' } }
+        detail: { allOf: [{ $ref: '#/components/schemas/ExternalDetail' }], nullable: true }
+    CaptureExternalRequest:
+      type: object
+      required: [base_version, snapshot, path]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        snapshot: { type: string, minLength: 64, maxLength: 64 }
+        path: { type: string, minLength: 1, maxLength: 1024 }
     CertificateInput:
       type: object
       required: [base_version, name, notes, fullchain_pem, private_key_pem]
@@ -782,8 +885,9 @@ components:
         scopes: { type: array, items: { type: string } }
     NginxRuntime:
       type: object
-      required: [available, revision_id, integrity, running, reason]
+      required: [available, revision_id, integrity, running, reason, external_change]
       properties:
+        external_change: { type: boolean }
         available: { type: boolean }
         revision_id: { type: string }
         integrity: { type: boolean }

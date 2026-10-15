@@ -56,11 +56,12 @@ type ApplyRequest struct {
 }
 
 type NginxState struct {
-	Available  bool   `json:"available"`
-	RevisionID string `json:"revision_id"`
-	Integrity  bool   `json:"integrity"`
-	Running    bool   `json:"running"`
-	Reason     string `json:"reason"`
+	Available      bool   `json:"available"`
+	RevisionID     string `json:"revision_id"`
+	Integrity      bool   `json:"integrity"`
+	Running        bool   `json:"running"`
+	Reason         string `json:"reason"`
+	ExternalChange bool   `json:"external_change"`
 }
 
 type manifest struct {
@@ -233,6 +234,7 @@ func (n *Nginx) State(ctx context.Context) NginxState {
 	s.Available = true
 	_, m, err := n.active()
 	if err != nil {
+		s.ExternalChange = errors.Is(err, ErrExternalChange)
 		s.Reason = err.Error()
 		return s
 	}
@@ -478,7 +480,7 @@ func (n *Nginx) active() (string, manifest, error) {
 	return dir, m, err
 }
 
-func (n *Nginx) readManifest(dir string) (manifest, error) {
+func (n *Nginx) manifestMetadata(dir string) (manifest, error) {
 	var m manifest
 	if dir != "bootstrap" && !validID(dir) {
 		return m, ErrExternalChange
@@ -502,8 +504,25 @@ func (n *Nginx) readManifest(dir string) (manifest, error) {
 	if err := json.Unmarshal(b, &m); err != nil || revisionDir(m.RevisionID) != dir || m.Probe == "" {
 		return m, ErrExternalChange
 	}
+	if len(m.Files) == 0 || len(m.Files) > limits.Files || len(m.Dependencies) > limits.CertificateReferences {
+		return m, ErrExternalChange
+	}
+	return m, nil
+}
+
+func (n *Nginx) readManifest(dir string) (manifest, error) {
+	m, err := n.manifestMetadata(dir)
+	if err != nil {
+		return m, err
+	}
+	root := filepath.Dir(n.configPath(dir))
 	seen := 0
+	entries := 0
 	err = filepath.WalkDir(root, func(name string, entry fs.DirEntry, walkErr error) error {
+		entries++
+		if entries > limits.Files*4 {
+			return ErrExternalChange
+		}
 		if walkErr != nil {
 			return walkErr
 		}
@@ -518,7 +537,7 @@ func (n *Nginx) readManifest(dir string) (manifest, error) {
 		if entry.IsDir() {
 			return nil
 		}
-		if !info.Mode().IsRegular() {
+		if !info.Mode().IsRegular() || stat.Nlink != 1 {
 			return ErrExternalChange
 		}
 		rel, _ := filepath.Rel(root, name)
@@ -550,14 +569,18 @@ func (n *Nginx) readManifest(dir string) (manifest, error) {
 
 func manifestHash(m manifest) string { b, _ := json.Marshal(m); return secure.Hash(b) }
 
-func (n *Nginx) prepare(id string, p *nginxconfig.Parsed) (manifest, error) {
+func (n *Nginx) sourceHash(p *nginxconfig.Parsed) string {
 	source, _ := json.Marshal(struct {
 		Files         []nginxconfig.File
 		Policy        nginxconfig.Policy
 		Worker, Group string
 		Renderer      int
 	}{p.Tree.Files, n.Policy, n.WorkerUser, n.workerGroup, 3})
-	digest := secure.Hash(source)
+	return secure.Hash(source)
+}
+
+func (n *Nginx) prepare(id string, p *nginxconfig.Parsed) (manifest, error) {
+	digest := n.sourceHash(p)
 	dir := revisionDir(id)
 	if _, err := os.Lstat(filepath.Dir(n.configPath(dir))); err == nil {
 		m, err := n.readManifest(dir)
@@ -569,7 +592,7 @@ func (n *Nginx) prepare(id string, p *nginxconfig.Parsed) (manifest, error) {
 		return manifest{}, err
 	}
 	m := manifest{RevisionID: id, SourceHash: digest, Probe: secure.Token(), Files: map[string]string{}, Listeners: []listener{}, TLS: []tlsProbe{}}
-	contents, err := n.render(p, &m)
+	contents, err := n.render(p, &m, nil)
 	if err != nil {
 		return m, err
 	}
