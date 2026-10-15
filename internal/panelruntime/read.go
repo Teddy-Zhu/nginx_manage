@@ -1,0 +1,246 @@
+package panelruntime
+
+import (
+	"bytes"
+	"debug/buildinfo"
+	"debug/elf"
+	"encoding/json"
+	"errors"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
+
+	"nginxpanel/internal/secure"
+)
+
+func decode(raw []byte, out any) error {
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(out); err != nil {
+		return err
+	}
+	if err := d.Decode(new(any)); err != io.EOF {
+		return errors.New("运行清单包含额外数据")
+	}
+	return nil
+}
+func ReadDeployment(data string) (Deployment, error) {
+	var d Deployment
+	root, err := Root(data)
+	if err != nil {
+		return d, err
+	}
+	info, err := os.Lstat(filepath.Join(root, "launcher.json"))
+	if err != nil {
+		return d, err
+	}
+	if info.Mode().Perm() != 0444 {
+		return d, errors.New("面板运行绑定须为只读记录")
+	}
+	raw, err := secure.ReadRootFile(filepath.Join(root, "launcher.json"), 4096)
+	if err != nil {
+		return d, err
+	}
+	if err = decode(raw, &d); err != nil {
+		return d, err
+	}
+	canonical, err := json.Marshal(d)
+	if err != nil || !bytes.Equal(canonical, raw) {
+		return d, errors.New("面板运行绑定不是原始规范记录")
+	}
+	return d, d.validate(data)
+}
+func executable(name, expected string) error {
+	f, info, err := secure.OpenRootFile(name, BinaryLimit)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if info.Mode().Perm()&0111 == 0 {
+		return errors.New("面板程序不可执行")
+	}
+	e, err := elf.NewFile(f)
+	if err != nil {
+		return err
+	}
+	machine := elf.EM_X86_64
+	if runtime.GOARCH == "arm64" {
+		machine = elf.EM_AARCH64
+	} else if runtime.GOARCH != "amd64" {
+		return errors.New("面板运行架构不受支持")
+	}
+	if e.Class != elf.ELFCLASS64 || e.Data != elf.ELFDATA2LSB || e.Machine != machine || (e.Type != elf.ET_EXEC && e.Type != elf.ET_DYN) {
+		return errors.New("面板程序 ELF 架构无效")
+	}
+	for _, p := range e.Progs {
+		if p.Type == elf.PT_INTERP {
+			return errors.New("容器面板须使用无动态解释器的静态程序")
+		}
+	}
+	needed, err := e.ImportedLibraries()
+	if err != nil || len(needed) != 0 {
+		return errors.New("容器面板不能依赖动态共享库")
+	}
+	b, err := buildinfo.Read(f)
+	if err != nil {
+		return err
+	}
+	static := false
+	for _, setting := range b.Settings {
+		if setting.Key == "CGO_ENABLED" && setting.Value == "0" {
+			static = true
+		}
+	}
+	if !static || !secure.RootFileUnchanged(f, info) {
+		return errors.New("容器面板须来自 CGO_ENABLED=0 的稳定产物")
+	}
+	actual, err := secure.HashRootFile(name, BinaryLimit)
+	if err != nil {
+		return err
+	}
+	if actual != expected {
+		return errors.New("面板程序散列已变化")
+	}
+	return nil
+}
+func inventory(dir string, published bool) (map[string]File, error) {
+	files := map[string]File{}
+	var size int64
+	count := 0
+	err := filepath.WalkDir(dir, func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, name)
+		if err != nil {
+			return err
+		}
+		if rel != "." && !validRelative(rel) {
+			return errors.New("前端产物路径无效")
+		}
+		count++
+		if count > FileCountLimit*2 {
+			return errors.New("前端目录及文件数量超过限制")
+		}
+		info, err := os.Lstat(name)
+		if err != nil {
+			return err
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || st.Uid != 0 || info.Mode().Perm()&0022 != 0 {
+			return errors.New("前端产物须由 root 持有且不可被其他账户写入")
+		}
+		if entry.IsDir() && info.IsDir() {
+			if published && info.Mode().Perm() != 0755 {
+				return errors.New("已发布前端目录权限已变化")
+			}
+			return nil
+		}
+		if !info.Mode().IsRegular() || info.Mode().Perm()&0111 != 0 {
+			return errors.New("前端产物只能包含不可执行的普通文件")
+		}
+		// The native installer adds its own inventory beside the assets. The
+		// persistent release has one canonical inventory in release.json.
+		if !published && rel == ".web.sha256" {
+			_, err := secure.ReadRootFile(name, 1<<20)
+			return err
+		}
+		if published && info.Mode().Perm() != 0444 {
+			return errors.New("已发布前端文件须为只读产物")
+		}
+		hash, err := secure.HashRootFile(name, WebFileLimit)
+		if err != nil {
+			return err
+		}
+		size += info.Size()
+		if len(files) >= FileCountLimit || size > WebLimit {
+			return errors.New("前端产物超过容量限制")
+		}
+		files[rel] = File{SHA256: hash, Size: info.Size()}
+		return nil
+	})
+	return files, err
+}
+func readRelease(dir, id string) (Release, error) {
+	var r Release
+	for _, entry := range []struct {
+		name string
+		mode os.FileMode
+	}{{dir, 0755}, {filepath.Join(dir, "release.json"), 0444}, {filepath.Join(dir, "nginxpanel"), 0555}} {
+		info, err := os.Lstat(entry.name)
+		if err != nil {
+			return r, err
+		}
+		if info.Mode().Perm() != entry.mode {
+			return r, errors.New("面板发布目录或文件权限已变化")
+		}
+	}
+	raw, err := secure.ReadRootFile(filepath.Join(dir, "release.json"), 1<<20)
+	if err != nil {
+		return r, err
+	}
+	if err = decode(raw, &r); err != nil {
+		return r, err
+	}
+	canonical, err := json.Marshal(r)
+	if err != nil || !bytes.Equal(canonical, raw) {
+		return r, errors.New("面板发布清单不是原始规范记录")
+	}
+	if err = r.validate(); err != nil {
+		return r, err
+	}
+	if r.ID != id || r.Architecture != runtime.GOARCH {
+		return r, errors.New("面板发布目录身份或架构不匹配")
+	}
+	if err = executable(filepath.Join(dir, "nginxpanel"), r.BinarySHA256); err != nil {
+		return r, err
+	}
+	actual, err := inventory(filepath.Join(dir, "web"), true)
+	if err != nil {
+		return r, err
+	}
+	if len(actual) != len(r.Web) {
+		return r, errors.New("面板前端文件清单已变化")
+	}
+	for name, f := range r.Web {
+		if actual[name] != f {
+			return r, errors.New("面板前端文件已变化")
+		}
+	}
+	return r, nil
+}
+
+func Read(data string) (Snapshot, error) {
+	var out Snapshot
+	d, err := ReadDeployment(data)
+	if err != nil {
+		return out, err
+	}
+	root, _ := Root(data)
+	current := filepath.Join(root, "current")
+	info, err := os.Lstat(current)
+	if err != nil {
+		return out, err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || st.Uid != 0 || info.Mode()&os.ModeSymlink == 0 {
+		return out, errors.New("面板当前版本须为 root 持有的发布指针")
+	}
+	target, err := os.Readlink(current)
+	if err != nil || !strings.HasPrefix(target, "releases/") || !digest.MatchString(strings.TrimPrefix(target, "releases/")) {
+		return out, errors.New("面板当前版本指针无效")
+	}
+	dir := filepath.Join(root, target)
+	r, err := readRelease(dir, strings.TrimPrefix(target, "releases/"))
+	if err != nil {
+		return out, err
+	}
+	if after, err := os.Readlink(current); err != nil || after != target {
+		return out, errors.New("面板版本在核对期间变化")
+	}
+	return Snapshot{Deployment: d, Release: r, Directory: dir}, nil
+}

@@ -20,6 +20,7 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
 	"nginxpanel/internal/notifications"
+	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
 	"nginxpanel/internal/transport/apigen"
@@ -41,6 +42,7 @@ type Server struct {
 	NodeID        string
 	Dev           bool
 	Version       string
+	PanelRuntime  string
 	logStreams    atomic.Int32
 	metricReads   atomic.Int32
 }
@@ -63,7 +65,7 @@ func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, map[string]any{"status": "ok", "development": s.Dev})
 }
 func (s *Server) GetVersion(w http.ResponseWriter, r *http.Request) {
-	s.ok(w, r, map[string]any{"version": s.Version, "api_version": 1, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": nginxconfig.PolicyVersion})
+	s.ok(w, r, apigen.SystemVersion{Version: s.Version, ApiVersion: 1, AgentProtocol: agent.Protocol, ParserVersion: nginxconfig.ParserVersion, PolicyVersion: nginxconfig.PolicyVersion, LauncherVersion: releases.LauncherVersion, Runtime: apigen.SystemVersionRuntime(s.PanelRuntime)})
 }
 func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 	var count int

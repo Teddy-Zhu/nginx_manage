@@ -27,6 +27,7 @@ export type SaveRequest = components["schemas"]["SaveRequest"];
 export type Me = components["schemas"]["Me"];
 export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
+export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
 export type HostDNSPlan = components["schemas"]["HostDNSPlan"];
@@ -322,6 +323,8 @@ export function followLogs(
 }
 
 export const api = {
+  systemVersion: (signal?: AbortSignal) =>
+    request<SystemVersion>({ url: "/system/version", signal }),
   exportMigration: (data: MigrationExportInput) =>
     request<MigrationPackage>({
       method: "POST",

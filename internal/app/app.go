@@ -43,6 +43,7 @@ import (
 
 type Options struct {
 	DataDir, Listen, Socket, WebDir, TLSCert, TLSKey, Version string
+	PanelRuntime                                              string
 	Dev                                                       bool
 	Policy                                                    nginxconfig.Policy
 }
@@ -181,6 +182,12 @@ func Lock(dataDir string) (func(), error) {
 }
 
 func Run(ctx context.Context, o Options) error {
+	if o.PanelRuntime != "native" && o.PanelRuntime != "docker" && o.PanelRuntime != "development" {
+		return errors.New("面板运行模式未明确配置")
+	}
+	if o.Dev != (o.PanelRuntime == "development") {
+		return errors.New("面板运行模式与开发开关不一致")
+	}
 	if !o.Dev && os.Geteuid() == 0 {
 		return errors.New("serve must run as a dedicated non-root user")
 	}
@@ -234,7 +241,7 @@ func Run(ctx context.Context, o Options) error {
 	componentService := &components.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Agent: agentClient}
 	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	migrationService := &migration.Service{Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
-	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, Installations: installationService, NodeID: nodeID, Dev: o.Dev, Version: o.Version}).Handler()
+	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, Installations: installationService, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -337,7 +344,11 @@ func Defaults(dataDir string, dev bool) Options {
 	if dev {
 		listen = "127.0.0.1:8080"
 	}
-	return Options{DataDir: dataDir, Listen: listen, Socket: SocketPath(dataDir), WebDir: "web/dist", TLSCert: filepath.Join(dataDir, "secrets", "node-tls", "cert.pem"), TLSKey: filepath.Join(dataDir, "secrets", "node-tls", "key.pem"), Dev: dev, Policy: nginxconfig.DefaultPolicy()}
+	mode := "native"
+	if dev {
+		mode = "development"
+	}
+	return Options{DataDir: dataDir, Listen: listen, Socket: SocketPath(dataDir), WebDir: "web/dist", TLSCert: filepath.Join(dataDir, "secrets", "node-tls", "cert.pem"), TLSKey: filepath.Join(dataDir, "secrets", "node-tls", "key.pem"), Dev: dev, Policy: nginxconfig.DefaultPolicy(), PanelRuntime: mode}
 }
 
 func Fingerprint(dataDir string) (string, error) {

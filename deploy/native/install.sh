@@ -7,18 +7,20 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
 用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--start]
+面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要>。镜像中的 launcher 必须与 --binary 相同；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image=
 while (($#)); do
   case "$1" in
-    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--data-dir|--listen)
+    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--data-dir|--listen|--panel-mode|--panel-image)
       (($# >= 2)) || die "参数缺少值：$1"
       case "$1" in
         --binary) binary=$2 ;; --web-dir) web=$2 ;; --nginx-binary) nginx=$2 ;;
         --nginx-plan) nginx_plan=$2 ;; --nginx-asset) nginx_asset=$2 ;; --release-trust) release_trust=$2 ;;
         --data-dir) data=$2 ;; --listen) listen=$2 ;;
+        --panel-mode) panel_mode=$2 ;; --panel-image) panel_image=$2 ;;
       esac
       shift 2 ;;
     --release-prerelease) prerelease=yes; shift ;;
@@ -30,6 +32,11 @@ while (($#)); do
 done
 [[ $EUID == 0 ]] || die '安装需要本机 root'
 [[ -n $binary && -n $web ]] || { usage; exit 1; }
+case "$panel_mode" in
+  native) [[ -z $panel_image ]] || die '原生面板模式不能指定容器镜像' ;;
+  docker) [[ $panel_image =~ ^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$ ]] || die '面板镜像须显式固定 sha256 摘要' ;;
+  *) die 'panel-mode 仅允许 native 或 docker' ;;
+esac
 if [[ $without_nginx == yes ]]; then
   [[ -z $nginx && -z $nginx_plan && -z $nginx_asset && $prerelease == no ]] || die '仅面板安装不能同时选择 Nginx 程序或签名组件'
 elif [[ -n $nginx ]]; then
@@ -183,7 +190,7 @@ nginx_hash=
 if [[ $without_nginx == no ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v4\ndata=%s\nlisten=%s\nrelease=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
+printf 'native-install-v5\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -227,6 +234,7 @@ ensure_dir "$data" 755 root root
 for dir in app bootstrap secrets staging; do ensure_dir "$data/$dir" 700 nginxpanel nginxpanel; done
 ensure_dir "$data/run" 755 root root
 ensure_dir "$data/run/agent" 2750 root nginxpanel-ipc
+if [[ $panel_mode == docker ]]; then ensure_dir "$data/run/launcher" 700 nginxpanel nginxpanel; fi
 ensure_dir "$data/agent" 700 root root
 ensure_dir "$data/acme" 700 root root
 ensure_dir "$data/certificates" 700 root root
@@ -268,6 +276,12 @@ else ln -s "releases/$release" /opt/nginxpanel/current; sync -f /opt/nginxpanel;
 printf '{"version":1,"modules":[]}\n' >"$work/nginx-modules.json"
 write_owned "$work/nginx-modules.json" /etc/nginxpanel/nginx-modules.json
 runuser -u nginxpanel -- "$release_dir/nginxpanel" init --data-dir "$data"
+if [[ $panel_mode == docker ]]; then
+  "$release_dir/nginxpanel" panel-runtime-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --launcher-binary "$release_dir/nginxpanel" --panel-image "$panel_image" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" >"$work/panel-runtime.json"
+  ensure_dir /etc/nginxpanel/docker 755 root root
+  "$release_dir/nginxpanel" panel-runtime-compose --data-dir "$data" >"$work/compose.yaml"
+  write_owned "$work/compose.yaml" /etc/nginxpanel/docker/compose.yaml 444
+fi
 if [[ $without_nginx == no ]]; then
   [[ $(sha256sum "$nginx" | cut -d ' ' -f1) == "$nginx_hash" ]] || die 'Nginx 程序已变化'
 fi
@@ -399,15 +413,21 @@ LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 EOF
 root_chain /etc/systemd/system
-for unit in nginxpanel-nginx.service nginxpanel-agent.service nginxpanel.service nginxpanel-install@.service; do
+install_units=(nginxpanel-nginx.service nginxpanel-agent.service nginxpanel-install@.service)
+if [[ $panel_mode == native ]]; then install_units+=(nginxpanel.service); fi
+for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-printf 'native-install-v4\n' >"$work/ready"
+printf 'native-install-v5\n' >"$work/ready"
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
-  start_units=(nginxpanel.service)
-  enabled_units=(nginxpanel-agent.service nginxpanel.service)
+  start_units=(nginxpanel-agent.service)
+  enabled_units=(nginxpanel-agent.service)
+  if [[ $panel_mode == native ]]; then
+    start_units+=(nginxpanel.service)
+    enabled_units+=(nginxpanel.service)
+  fi
   if [[ $without_nginx == no ]]; then
     enabled_units+=(nginxpanel-nginx.service)
     start_units+=(nginxpanel-nginx.service)
@@ -418,6 +438,7 @@ if [[ $start == yes ]]; then
     systemctl is-active --quiet "$unit" || die "服务未进入 active：$unit；保留安装记录，请检查 systemd 日志"
   done
 fi
-printf '已准备原生部署：%s\n管理地址：https://%s\n' "$data" "$listen"
+printf '已准备宿主机部署：%s\n面板运行模式：%s\n管理地址：https://%s\n' "$data" "$panel_mode" "$listen"
+if [[ $panel_mode == docker ]]; then printf '%s\n' '面板 Compose：/etc/nginxpanel/docker/compose.yaml；使用 docker compose -f /etc/nginxpanel/docker/compose.yaml up -d 启动。'; fi
 if [[ $without_nginx == yes ]]; then printf '%s\n' 'Nginx 未安装；配置导入可预检并准备可信资产，安装与运行接入仍须明确完成。'; fi
 if [[ -f $data/bootstrap/token ]]; then printf '一次性引导文件：%s/bootstrap/token\n' "$data"; fi

@@ -17,9 +17,11 @@ import (
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/app"
+	"nginxpanel/internal/launcher"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/nginxruntime"
+	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/releases"
 )
@@ -44,7 +46,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-status|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -61,6 +63,15 @@ func run() error {
 	listen := flags.String("listen", "", "management listener (loopback only)")
 	socket := flags.String("agent-socket", "", "local agent Unix socket")
 	webDir := flags.String("web-dir", "web/dist", "built frontend directory")
+	panelBinary := flags.String("panel-binary", "", "locally root-approved panel binary for persistent bootstrap")
+	launcherBinary := flags.String("launcher-binary", "", "exact fixed-image launcher binary approved on the host")
+	panelImage := flags.String("panel-image", "", "explicit immutable panel image reference with sha256 digest")
+	panelGID := flags.Int("panel-gid", -1, "dedicated panel primary group")
+	ipcGID := flags.Int("ipc-gid", -1, "host Agent socket group")
+	panelRuntime := flags.String("panel-runtime", "native", "serve deployment: native or docker")
+	launcherOperation := flags.String("launcher-operation", "", "fixed launcher operation UUID")
+	launcherBoot := flags.String("launcher-boot", "", "observed launcher boot UUID")
+	launcherRelease := flags.String("launcher-release", "", "exact root-approved current panel release digest")
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	nginxBinding := flags.Bool("nginx-binding", false, "use the immutable native Nginx installation binding")
@@ -96,6 +107,41 @@ func run() error {
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
+	}
+	runtimeFlags := map[string]map[string]bool{
+		"launcher":              {"data-dir": true},
+		"panel-runtime-bind":    {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-runtime-status":  {"data-dir": true},
+		"panel-runtime-compose": {"data-dir": true},
+		"launcher-status":       {"data-dir": true},
+		"launcher-operation":    {"data-dir": true, "launcher-operation": true},
+		"launcher-restart":      {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true},
+	}
+	var invalidFlag string
+	flags.Visit(func(f *flag.Flag) {
+		if allowed, ok := runtimeFlags[command]; ok && !allowed[f.Name] {
+			invalidFlag = f.Name
+		}
+		if f.Name == "panel-runtime" && command != "serve" {
+			invalidFlag = f.Name
+		}
+		switch f.Name {
+		case "panel-binary", "launcher-binary", "panel-image", "panel-gid", "ipc-gid":
+			if command != "panel-runtime-bind" {
+				invalidFlag = f.Name
+			}
+		case "launcher-boot", "launcher-release":
+			if command != "launcher-restart" {
+				invalidFlag = f.Name
+			}
+		case "launcher-operation":
+			if command != "launcher-restart" && command != "launcher-operation" {
+				invalidFlag = f.Name
+			}
+		}
+	})
+	if invalidFlag != "" {
+		return fmt.Errorf("%s does not accept --%s", command, invalidFlag)
 	}
 	if *nginxUninstalled && command != "component-bind" {
 		return errors.New("nginx-uninstalled is only valid for component-bind")
@@ -137,6 +183,40 @@ func run() error {
 		installation = info
 	}
 	switch command {
+	case "launcher":
+		return launcher.Run(ctx, absDir)
+	case "panel-runtime-bind":
+		out, err := panelruntime.Bind(ctx, panelruntime.BindInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, LauncherBinary: *launcherBinary, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID, Image: *panelImage})
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-runtime-status":
+		out, err := panelruntime.Read(absDir)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-runtime-compose":
+		return panelruntime.WriteCompose(os.Stdout, absDir)
+	case "launcher-status":
+		out, err := (launcher.Client{DataDir: absDir}).Status(ctx)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "launcher-operation":
+		out, err := (launcher.Client{DataDir: absDir}).Operation(ctx, *launcherOperation)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "launcher-restart":
+		out, err := (launcher.Client{DataDir: absDir}).Restart(ctx, launcher.Request{Protocol: launcher.Protocol, BootID: *launcherBoot, OperationID: *launcherOperation, ReleaseID: *launcherRelease})
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
 	case "nginx-install-worker":
 		_, err := agent.RunNginxInstallation(ctx, absDir, *installOperation)
 		return err
@@ -258,7 +338,11 @@ func run() error {
 		}
 		return app.Run(ctx, o)
 	case "serve":
+		if *panelRuntime != "native" && *panelRuntime != "docker" {
+			return errors.New("panel-runtime must be native or docker")
+		}
 		o := app.Defaults(absDir, false)
+		o.PanelRuntime = *panelRuntime
 		o.Policy = policy
 		o.Version = version
 		o.WebDir = *webDir

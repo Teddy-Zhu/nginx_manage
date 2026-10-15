@@ -1,0 +1,31 @@
+name: nginxpanel
+services:
+  panel:
+    image: "{{.Image}}"
+    container_name: nginxpanel
+    network_mode: host
+    user: "{{.UID}}:{{.GID}}"
+    group_add:
+      - "{{.IPCGID}}"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    stop_grace_period: 60s
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    volumes:
+      - type: bind
+        source: "{{.DataDir}}"
+        target: "{{.DataDir}}"
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /etc/nginxpanel
+        target: /etc/nginxpanel
+        read_only: true
+        bind:
+          create_host_path: false
+    entrypoint: [/usr/local/bin/nginxpanel-launcher, launcher]
+    command: [--data-dir, "{{.DataDir}}"]

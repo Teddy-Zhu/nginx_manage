@@ -1586,6 +1586,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SystemVersion: {
+            version: string;
+            /** Format: int64 */
+            api_version: number;
+            /** Format: int64 */
+            agent_protocol: number;
+            parser_version: string;
+            policy_version: string;
+            /** Format: int64 */
+            launcher_version: number;
+            /** @enum {string} */
+            runtime: "native" | "docker" | "development";
+        };
         MigrationReceiver: {
             /** Format: int64 */
             schema: number;

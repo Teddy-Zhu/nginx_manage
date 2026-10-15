@@ -1459,6 +1459,8 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    SystemVersion:
+      {"type": "object", "required": ["version", "api_version", "agent_protocol", "parser_version", "policy_version", "launcher_version", "runtime"], "properties": {"version": {"type": "string"}, "api_version": {"type": "integer", "format": "int64"}, "agent_protocol": {"type": "integer", "format": "int64"}, "parser_version": {"type": "string"}, "policy_version": {"type": "string"}, "launcher_version": {"type": "integer", "format": "int64"}, "runtime": {"type": "string", "enum": ["native", "docker", "development"]}}, "additionalProperties": false}
     MigrationReceiver:
       {"type": "object", "required": ["schema", "node_id", "version", "scopes"], "properties": {"schema": {"type": "integer", "format": "int64"}, "node_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "scopes": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false}
     MigrationDependencyInstallInput:

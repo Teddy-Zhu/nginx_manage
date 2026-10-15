@@ -701,6 +701,27 @@ func (e ResourceKind) Valid() bool {
 	}
 }
 
+// Defines values for SystemVersionRuntime.
+const (
+	Development SystemVersionRuntime = "development"
+	Docker      SystemVersionRuntime = "docker"
+	Native      SystemVersionRuntime = "native"
+)
+
+// Valid indicates whether the value is a known member of the SystemVersionRuntime enum.
+func (e SystemVersionRuntime) Valid() bool {
+	switch e {
+	case Development:
+		return true
+	case Docker:
+		return true
+	case Native:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WAFConfigRateUnit.
 const (
 	WAFConfigRateUnitRm WAFConfigRateUnit = "r/m"
@@ -2345,6 +2366,20 @@ type SaveResult struct {
 	TaskId *string `json:"task_id,omitempty"`
 	Tree   Tree    `json:"tree"`
 }
+
+// SystemVersion defines model for SystemVersion.
+type SystemVersion struct {
+	AgentProtocol   int64                `json:"agent_protocol"`
+	ApiVersion      int64                `json:"api_version"`
+	LauncherVersion int64                `json:"launcher_version"`
+	ParserVersion   string               `json:"parser_version"`
+	PolicyVersion   string               `json:"policy_version"`
+	Runtime         SystemVersionRuntime `json:"runtime"`
+	Version         string               `json:"version"`
+}
+
+// SystemVersionRuntime defines model for SystemVersion.Runtime.
+type SystemVersionRuntime string
 
 // Task defines model for Task.
 type Task struct {

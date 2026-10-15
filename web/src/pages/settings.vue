@@ -26,7 +26,7 @@ import {
   NDataTable,
   type DataTableColumns,
 } from "naive-ui";
-import { api, request, type Module } from "../api/client";
+import { api, request, type Module, type SystemVersion } from "../api/client";
 import { useSession } from "../stores/session";
 import { useAction } from "../composables/action";
 
@@ -43,6 +43,12 @@ const { run, busy, message } = useAction(),
   router = useRouter();
 const modules = ref<Module[]>([]),
   credentials = ref<Credential[]>([]);
+const systemVersion = ref<SystemVersion | null>(null);
+const runtimeNames: Record<SystemVersion["runtime"], string> = {
+  native: "原生服务",
+  docker: "Docker · 持久应用版本",
+  development: "开发环境",
+};
 const credentialVisible = ref(false),
   tokenVisible = ref(false),
   name = ref(""),
@@ -65,9 +71,11 @@ async function load() {
     const result = await Promise.all([
       api.modules(),
       request<Credential[]>({ url: "/credentials" }),
+      api.systemVersion(),
     ]);
     modules.value = result[0];
     credentials.value = result[1];
+    systemVersion.value = result[2];
   });
 }
 async function toggle(module: Module, enabled: boolean) {
@@ -145,6 +153,16 @@ onMounted(load);
 </script>
 
 <template>
+  <section v-if="systemVersion" class="surface">
+    <div class="section-heading">
+      <h2>运行环境</h2>
+      <NTag>{{ runtimeNames[systemVersion.runtime] }}</NTag>
+    </div>
+    <dl class="detail-list">
+      <dt>应用版本</dt>
+      <dd>{{ systemVersion.version }}</dd>
+    </dl>
+  </section>
   <div class="two-columns">
     <section class="surface">
       <div class="section-heading">
