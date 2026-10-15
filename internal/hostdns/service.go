@@ -27,7 +27,7 @@ type Service struct {
 }
 
 func (s *Service) Overview(ctx context.Context) (Overview, error) {
-	out := Overview{Observed: Observation{Owner: "unknown", Source: "/etc/resolv.conf", Reason: "未连接宿主机 Agent", Current: Config{Servers: []string{}, Search: []string{}}}}
+	out := Overview{Observed: Observation{Connections: []Connection{}, Owner: "unknown", Source: "/etc/resolv.conf", Reason: "未连接宿主机 Agent", Current: Config{Servers: []string{}, Search: []string{}}}}
 	var err error
 	if s.Agent != nil {
 		out.Observed, err = s.Agent.ReadHostDNS(ctx)
@@ -35,19 +35,32 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 			return out, err
 		}
 	}
-	var raw []byte
-	desired := Desired{}
-	err = s.DB.QueryRowContext(ctx, "SELECT version,payload,source_hash,updated_at FROM host_dns_desired WHERE id=1").Scan(&desired.Version, &raw, &desired.SourceHash, &desired.UpdatedAt)
-	if err == nil {
-		plain, e := s.Vault.Open(raw, "host-dns:desired")
+	out.Desired = []Desired{}
+	rows, err := s.DB.QueryContext(ctx, "SELECT target,version,payload,source_hash,updated_at FROM host_dns_desired ORDER BY target")
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var raw []byte
+		var desired Desired
+		if err = rows.Scan(&desired.Target, &desired.Version, &raw, &desired.SourceHash, &desired.UpdatedAt); err != nil {
+			rows.Close()
+			return out, err
+		}
+		plain, e := s.Vault.Open(raw, "host-dns:desired:"+desired.Target)
 		if e != nil {
+			rows.Close()
 			return out, e
 		}
 		if e = json.Unmarshal(plain, &desired.Config); e != nil {
+			rows.Close()
 			return out, e
 		}
-		out.Desired = &desired
-	} else if !errors.Is(err, sql.ErrNoRows) {
+		out.Desired = append(out.Desired, desired)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
 		return out, err
 	}
 	item := Task{}
@@ -124,9 +137,17 @@ func (s *Service) CreatePlan(ctx context.Context, p auth.Principal, requestID, k
 	if err := input.Validate(); err != nil {
 		return out, err
 	}
+	input = input.Normalize()
 	raw, err := s.write(ctx, p, requestID, key, "host.dns.plan", input, func(tx *sql.Tx) (any, error) {
 		if s.Agent == nil {
 			return nil, fault.Unavailable("未连接宿主机 Agent")
+		}
+		var desiredCount int
+		if e := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM host_dns_desired WHERE target!=?", input.Target).Scan(&desiredCount); e != nil {
+			return nil, e
+		}
+		if desiredCount >= 64 {
+			return nil, fault.Conflict("已保存 DNS 目标达到上限")
 		}
 		call, cancel := context.WithTimeout(ctx, 4*time.Second)
 		defer cancel()

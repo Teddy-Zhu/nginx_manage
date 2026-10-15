@@ -2689,13 +2689,14 @@ components:
         last_error: { type: string }
         created_at: { type: integer, format: int64 }
 
-    HostDNSConfig:
+    HostDNSFamily:
       {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "servers",
-          "search"
+          "search",
+          "automatic"
         ],
         "properties": {
           "servers": {
@@ -2709,6 +2710,127 @@ components:
             "items": {
               "type": "string"
             }
+          },
+          "automatic": {
+            "type": "boolean"
+          }
+        }
+      }
+
+    HostDNSConnection:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target",
+          "name",
+          "interface",
+          "method4",
+          "method6",
+          "applied",
+          "persistent",
+          "effective",
+          "routing_domains",
+          "source_hash",
+          "writable",
+          "reason"
+        ],
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "interface": {
+            "type": "string"
+          },
+          "method4": {
+            "type": "string"
+          },
+          "method6": {
+            "type": "string"
+          },
+          "source_hash": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "applied": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSConfig"
+              }
+            ],
+            "nullable": true
+          },
+          "persistent": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSConfig"
+              }
+            ],
+            "nullable": true
+          },
+          "effective": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSConfig"
+              }
+            ],
+            "nullable": true
+          },
+          "routing_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "writable": {
+            "type": "boolean"
+          }
+        }
+      }
+
+    HostDNSConfig:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "servers",
+          "search",
+          "ipv4",
+          "ipv6"
+        ],
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "search": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ipv4": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSFamily"
+              }
+            ],
+            "nullable": true
+          },
+          "ipv6": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostDNSFamily"
+              }
+            ],
+            "nullable": true
           }
         }
       }
@@ -2765,7 +2887,8 @@ components:
           "source_hash",
           "current",
           "persistent",
-          "pending"
+          "pending",
+          "connections"
         ],
         "properties": {
           "owner": {
@@ -2804,6 +2927,12 @@ components:
               }
             ],
             "nullable": true
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostDNSConnection"
+            }
           }
         }
       }
@@ -2817,7 +2946,8 @@ components:
           "config",
           "verify_names",
           "timeout_seconds",
-          "takeover"
+          "takeover",
+          "target"
         ],
         "properties": {
           "source_hash": {
@@ -2838,6 +2968,9 @@ components:
           },
           "takeover": {
             "type": "boolean"
+          },
+          "target": {
+            "type": "string"
           }
         }
       }
@@ -2890,7 +3023,8 @@ components:
           "version",
           "config",
           "source_hash",
-          "updated_at"
+          "updated_at",
+          "target"
         ],
         "properties": {
           "version": {
@@ -2906,6 +3040,9 @@ components:
           "updated_at": {
             "type": "integer",
             "format": "int64"
+          },
+          "target": {
+            "type": "string"
           }
         }
       }
@@ -2958,12 +3095,10 @@ components:
             "$ref": "#/components/schemas/HostDNSObservation"
           },
           "desired": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HostDNSDesired"
-              }
-            ],
-            "nullable": true
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostDNSDesired"
+            }
           },
           "task": {
             "allOf": [

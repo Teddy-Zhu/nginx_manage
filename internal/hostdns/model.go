@@ -3,6 +3,7 @@ package hostdns
 import (
 	"encoding/json"
 	"net/netip"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -15,6 +16,27 @@ const SourceLimit = 16 << 10
 type Config struct {
 	Servers []string `json:"servers"`
 	Search  []string `json:"search"`
+	IPv4    *Family  `json:"ipv4"`
+	IPv6    *Family  `json:"ipv6"`
+}
+type Family struct {
+	Servers   []string `json:"servers"`
+	Search    []string `json:"search"`
+	Automatic bool     `json:"automatic"`
+}
+type Connection struct {
+	Target         string   `json:"target"`
+	Name           string   `json:"name"`
+	Interface      string   `json:"interface"`
+	Method4        string   `json:"method4"`
+	Method6        string   `json:"method6"`
+	Applied        *Config  `json:"applied"`
+	Persistent     *Config  `json:"persistent"`
+	Effective      *Config  `json:"effective"`
+	RoutingDomains []string `json:"routing_domains"`
+	SourceHash     string   `json:"source_hash"`
+	Writable       bool     `json:"writable"`
+	Reason         string   `json:"reason"`
 }
 type Status struct {
 	OperationID string `json:"operation_id"`
@@ -26,17 +48,19 @@ type Status struct {
 	Error       string `json:"error"`
 }
 type Observation struct {
-	Owner      string  `json:"owner"`
-	Source     string  `json:"source"`
-	LinkTarget string  `json:"link_target"`
-	Writable   bool    `json:"writable"`
-	Reason     string  `json:"reason"`
-	SourceHash string  `json:"source_hash"`
-	Current    Config  `json:"current"`
-	Persistent *Config `json:"persistent"`
-	Pending    *Status `json:"pending"`
+	Connections []Connection `json:"connections"`
+	Owner       string       `json:"owner"`
+	Source      string       `json:"source"`
+	LinkTarget  string       `json:"link_target"`
+	Writable    bool         `json:"writable"`
+	Reason      string       `json:"reason"`
+	SourceHash  string       `json:"source_hash"`
+	Current     Config       `json:"current"`
+	Persistent  *Config      `json:"persistent"`
+	Pending     *Status      `json:"pending"`
 }
 type PlanInput struct {
+	Target         string   `json:"target"`
 	SourceHash     string   `json:"source_hash"`
 	Config         Config   `json:"config"`
 	VerifyNames    []string `json:"verify_names"`
@@ -78,43 +102,106 @@ func (p PlanInput) Validate() error {
 	if !p.Takeover || len(p.SourceHash) != 64 || p.TimeoutSeconds < 45 || p.TimeoutSeconds > 180 {
 		return fault.Invalid("须明确接管并提供源版本，确认期限须为 45–180 秒")
 	}
-	if len(p.Config.Servers) < 1 || len(p.Config.Servers) > 3 || len(p.Config.Search) > 6 || len(p.VerifyNames) < 1 || len(p.VerifyNames) > 2 {
-		return fault.Invalid("需配置 1–3 个 DNS 地址、最多 6 个搜索域及 1–2 个验证域名")
+	if len(p.VerifyNames) < 1 || len(p.VerifyNames) > 2 {
+		return fault.Invalid("需配置 1–2 个验证域名")
+	}
+	if p.Target == "" {
+		if p.Config.IPv4 != nil || p.Config.IPv6 != nil || len(p.Config.Servers) < 1 || len(p.Config.Servers) > 3 {
+			return fault.Invalid("普通文件需配置 1–3 个 DNS 地址")
+		}
+		if err := validateFamily(Family{Servers: p.Config.Servers, Search: p.Config.Search}, 0); err != nil {
+			return err
+		}
+	} else {
+		if !ValidTarget(p.Target) || len(p.Config.Servers) != 0 || len(p.Config.Search) != 0 || p.Config.IPv4 == nil && p.Config.IPv6 == nil {
+			return fault.Invalid("连接 DNS 目标或配置无效")
+		}
+		hasDNS := false
+		for i, f := range []*Family{p.Config.IPv4, p.Config.IPv6} {
+			if f != nil {
+				if err := validateFamily(*f, 4+2*i); err != nil {
+					return err
+				}
+				hasDNS = hasDNS || f.Automatic || len(f.Servers) > 0
+			}
+		}
+		if !hasDNS {
+			return fault.Invalid("至少一个地址族须配置 DNS 地址或启用自动获取")
+		}
 	}
 	seen := map[string]bool{}
-	for _, s := range p.Config.Servers {
-		ip, err := netip.ParseAddr(s)
-		if err != nil || ip.IsUnspecified() || ip.IsMulticast() || ip.Is4In6() || seen[ip.String()] {
-			return fault.Invalid("DNS 地址无效或重复")
+	for _, s := range p.VerifyNames {
+		if !Hostname(s) || seen[strings.ToLower(s)] {
+			return fault.Invalid("验证域名无效或重复")
 		}
-		if zone := ip.Zone(); zone != "" {
-			if len(zone) > 15 || strings.Trim(zone, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") != "" {
-				return fault.Invalid("IPv6 DNS 接口区域无效")
-			}
-		}
-		seen[ip.String()] = true
-	}
-	for _, list := range [][]string{p.Config.Search, p.VerifyNames} {
-		seen = map[string]bool{}
-		for _, s := range list {
-			if !Hostname(s) || seen[strings.ToLower(s)] {
-				return fault.Invalid("搜索域或验证域名无效、重复")
-			}
-			seen[strings.ToLower(s)] = true
-		}
+		seen[strings.ToLower(s)] = true
 	}
 	for _, name := range p.VerifyNames {
 		if _, err := netip.ParseAddr(name); err == nil || !strings.Contains(name, ".") || strings.EqualFold(strings.TrimSuffix(name, "."), "localhost") || strings.HasSuffix(strings.ToLower(strings.TrimSuffix(name, ".")), ".localhost") {
 			return fault.Invalid("验证域名须为非 IP 的完整域名")
 		}
 	}
-	if len(strings.Join(p.Config.Search, " ")) > 253 {
-		return fault.Invalid("搜索域合计不能超过 253 字节")
+	return nil
+}
+
+var targetPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@[a-zA-Z0-9_.:-]{1,15}$`)
+
+func ValidTarget(target string) bool { return targetPattern.MatchString(target) }
+
+// Normalize only after validation. Canonical addresses and non-null arrays
+// keep observed, desired and API representations consistent.
+func (p PlanInput) Normalize() PlanInput {
+	addresses := func(src []string) []string {
+		out := []string{}
+		for _, s := range src {
+			ip, _ := netip.ParseAddr(s)
+			out = append(out, ip.String())
+		}
+		return out
+	}
+	p.Config.Servers = addresses(p.Config.Servers)
+	p.Config.Search = append([]string{}, p.Config.Search...)
+	family := func(f *Family) *Family {
+		if f == nil {
+			return nil
+		}
+		copy := *f
+		copy.Servers = addresses(f.Servers)
+		copy.Search = append([]string{}, f.Search...)
+		return &copy
+	}
+	p.Config.IPv4 = family(p.Config.IPv4)
+	p.Config.IPv6 = family(p.Config.IPv6)
+	return p
+}
+
+func validateFamily(f Family, family int) error {
+	if len(f.Servers) > 3 || len(f.Search) > 6 || len(strings.Join(f.Search, " ")) > 253 {
+		return fault.Invalid("每类 DNS 最多 3 个地址及 6 个搜索域，搜索域合计最多 253 字节")
+	}
+	seen := map[string]bool{}
+	for _, s := range f.Servers {
+		ip, err := netip.ParseAddr(s)
+		if err != nil || ip.IsUnspecified() || ip.IsMulticast() || ip.Is4In6() || family == 4 && !ip.Is4() || family == 6 && !ip.Is6() || family != 0 && ip.Zone() != "" || seen[ip.String()] {
+			return fault.Invalid("DNS 地址无效、重复或地址族不匹配")
+		}
+		if zone := ip.Zone(); zone != "" && (len(zone) > 15 || strings.Trim(zone, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") != "") {
+			return fault.Invalid("IPv6 DNS 接口区域无效")
+		}
+		seen[ip.String()] = true
+	}
+	seen = map[string]bool{}
+	for _, s := range f.Search {
+		if !Hostname(s) || seen[strings.ToLower(s)] {
+			return fault.Invalid("搜索域无效或重复")
+		}
+		seen[strings.ToLower(s)] = true
 	}
 	return nil
 }
 
 type Desired struct {
+	Target     string `json:"target"`
 	Version    int64  `json:"version"`
 	Config     Config `json:"config"`
 	SourceHash string `json:"source_hash"`
@@ -130,7 +217,7 @@ type Task struct {
 }
 type Overview struct {
 	Observed Observation `json:"observed"`
-	Desired  *Desired    `json:"desired"`
+	Desired  []Desired   `json:"desired"`
 	Task     *Task       `json:"task"`
 }
 type Change struct {

@@ -1237,34 +1237,61 @@ type HostDNSChange struct {
 
 // HostDNSConfig defines model for HostDNSConfig.
 type HostDNSConfig struct {
-	Search  []string `json:"search"`
-	Servers []string `json:"servers"`
+	Ipv4    *HostDNSFamily `json:"ipv4"`
+	Ipv6    *HostDNSFamily `json:"ipv6"`
+	Search  []string       `json:"search"`
+	Servers []string       `json:"servers"`
+}
+
+// HostDNSConnection defines model for HostDNSConnection.
+type HostDNSConnection struct {
+	Applied        *HostDNSConfig `json:"applied"`
+	Effective      *HostDNSConfig `json:"effective"`
+	Interface      string         `json:"interface"`
+	Method4        string         `json:"method4"`
+	Method6        string         `json:"method6"`
+	Name           string         `json:"name"`
+	Persistent     *HostDNSConfig `json:"persistent"`
+	Reason         string         `json:"reason"`
+	RoutingDomains []string       `json:"routing_domains"`
+	SourceHash     string         `json:"source_hash"`
+	Target         string         `json:"target"`
+	Writable       bool           `json:"writable"`
 }
 
 // HostDNSDesired defines model for HostDNSDesired.
 type HostDNSDesired struct {
 	Config     HostDNSConfig `json:"config"`
 	SourceHash string        `json:"source_hash"`
+	Target     string        `json:"target"`
 	UpdatedAt  int64         `json:"updated_at"`
 	Version    int64         `json:"version"`
 }
 
+// HostDNSFamily defines model for HostDNSFamily.
+type HostDNSFamily struct {
+	Automatic bool     `json:"automatic"`
+	Search    []string `json:"search"`
+	Servers   []string `json:"servers"`
+}
+
 // HostDNSObservation defines model for HostDNSObservation.
 type HostDNSObservation struct {
-	Current    HostDNSConfig  `json:"current"`
-	LinkTarget string         `json:"link_target"`
-	Owner      string         `json:"owner"`
-	Pending    *HostDNSStatus `json:"pending"`
-	Persistent *HostDNSConfig `json:"persistent"`
-	Reason     string         `json:"reason"`
-	Source     string         `json:"source"`
-	SourceHash string         `json:"source_hash"`
-	Writable   bool           `json:"writable"`
+	Connections []HostDNSConnection `json:"connections"`
+	Current     HostDNSConfig       `json:"current"`
+	LinkTarget  string              `json:"link_target"`
+	Owner       string              `json:"owner"`
+	Pending     *HostDNSStatus      `json:"pending"`
+	Persistent  *HostDNSConfig      `json:"persistent"`
+	Reason      string              `json:"reason"`
+	Source      string              `json:"source"`
+	SourceHash  string              `json:"source_hash"`
+	Writable    bool                `json:"writable"`
 }
 
 // HostDNSOverview defines model for HostDNSOverview.
 type HostDNSOverview struct {
-	Desired  *HostDNSDesired    `json:"desired"`
+	Desired  []HostDNSDesired   `json:"desired"`
 	Observed HostDNSObservation `json:"observed"`
 	Task     *HostDNSTask       `json:"task"`
 }
@@ -1285,6 +1312,7 @@ type HostDNSPlanInput struct {
 	Config         HostDNSConfig `json:"config"`
 	SourceHash     string        `json:"source_hash"`
 	Takeover       bool          `json:"takeover"`
+	Target         string        `json:"target"`
 	TimeoutSeconds int64         `json:"timeout_seconds"`
 	VerifyNames    []string      `json:"verify_names"`
 }

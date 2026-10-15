@@ -23,7 +23,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const Protocol = 9
+const Protocol = 10
 
 type CheckRequest struct {
 	Protocol    int                `json:"protocol"`

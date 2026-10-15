@@ -18,6 +18,7 @@ import {
   NFormItem,
   NInput,
   NInputNumber,
+  NSelect,
   NSwitch,
   NTag,
 } from "naive-ui";
@@ -46,6 +47,74 @@ const servers = ref(""),
   verifyNames = ref(""),
   takeover = ref(false),
   timeout = ref<number | null>(120);
+const target = ref("");
+const families = ref([
+  {
+    label: "IPv4",
+    method: "",
+    enabled: false,
+    servers: "",
+    search: "",
+    automatic: false,
+  },
+  {
+    label: "IPv6",
+    method: "",
+    enabled: false,
+    servers: "",
+    search: "",
+    automatic: false,
+  },
+]);
+const networkManager = computed(
+  () => observed.value?.owner === "networkmanager",
+);
+const connection = computed(() =>
+  observed.value?.connections.find((c) => c.target === target.value),
+);
+const sourceHash = computed(() =>
+  networkManager.value
+    ? connection.value?.source_hash
+    : observed.value?.source_hash,
+);
+const writable = computed(
+  () =>
+    observed.value?.writable &&
+    (!networkManager.value || connection.value?.writable),
+);
+const choices = computed(
+  () =>
+    observed.value?.connections.map((c) => ({
+      label: `${c.name} · ${c.interface}${c.writable ? "" : "（只读）"}`,
+      value: c.target,
+    })) ?? [],
+);
+const configText = (config: HostDNSPlanInput["config"] | null | undefined) => {
+  if (!config) return "无法读取";
+  if (!config.ipv4 && !config.ipv6)
+    return `${config.servers.join("、") || "无"}；搜索域：${config.search.join("、") || "无"}`;
+  return [config.ipv4, config.ipv6]
+    .map((f, i) =>
+      f
+        ? `${i === 0 ? "IPv4" : "IPv6"}：${f.servers.join("、") || "无手动地址"}；${f.automatic ? "自动获取 DNS" : "手动 DNS"}；搜索域：${f.search.join("、") || "无"}`
+        : "",
+    )
+    .filter(Boolean)
+    .join(" / ");
+};
+const effectiveText = (
+  config: HostDNSPlanInput["config"] | null | undefined,
+) =>
+  config
+    ? [config.ipv4, config.ipv6]
+        .map((f, i) =>
+          f
+            ? `${i === 0 ? "IPv4" : "IPv6"}：${f.servers.join("、") || "无"}；搜索域：${f.search.join("、") || "无"}`
+            : "",
+        )
+        .filter(Boolean)
+        .join(" / ") || "无"
+    : "无法读取";
 const controller = new AbortController();
 let poll: ReturnType<typeof setInterval> | undefined;
 let pendingRead = false,
@@ -91,13 +160,22 @@ const remaining = computed(() =>
     ? Math.max(0, Math.ceil(pending.value.deadline - now.value / 1000))
     : 0,
 );
-const drift = computed(
-  () =>
-    overview.value?.desired &&
-    observed.value?.source_hash &&
-    overview.value.desired.source_hash !== observed.value.source_hash &&
-    !pending.value,
-);
+const drift = computed(() => {
+  const desired = overview.value?.desired.find(
+    (d) => d.target === (networkManager.value ? target.value : ""),
+  );
+  const actual = networkManager.value
+    ? connection.value?.persistent
+    : observed.value?.persistent;
+  return (
+    desired &&
+    !pending.value &&
+    (networkManager.value
+      ? actual && configText(desired.config) !== configText(actual)
+      : observed.value?.source_hash &&
+        desired.source_hash !== observed.value.source_hash)
+  );
+});
 const labels: Record<string, string> = {
   queued: "等待执行",
   running: "执行中",
@@ -109,6 +187,7 @@ const labels: Record<string, string> = {
   failed: "失败",
   cancelled: "已取消",
   applying: "写入中",
+  persisting: "保存持久配置",
   verification_pending: "解析核验中",
   awaiting_confirmation: "等待确认",
   confirmed: "已确认",
@@ -143,12 +222,20 @@ async function read() {
       api.modules(controller.signal),
     ]);
     overview.value = state;
+    if (!target.value && state.observed.connections.length)
+      target.value = (state.observed.connections.find((c) => c.writable) ??
+        state.observed.connections[0])!.target;
     module.value = modules.find((m) => m.id === "host-dns") ?? null;
     error.value = "";
     if (
       plan.value &&
       (plan.value.expires_at * 1000 <= Date.now() ||
-        plan.value.input.source_hash !== state.observed.source_hash)
+        plan.value.input.source_hash !==
+          (plan.value.input.target
+            ? state.observed.connections.find(
+                (c) => c.target === plan.value!.input.target,
+              )?.source_hash
+            : state.observed.source_hash))
     )
       plan.value = null;
   } catch (cause) {
@@ -166,6 +253,15 @@ function edit() {
   if (!observed.value) return;
   servers.value = observed.value.current.servers.join("\n");
   search.value = observed.value.current.search.join("\n");
+  const c = connection.value;
+  for (const [i, f] of families.value.entries()) {
+    const value = i === 0 ? c?.applied?.ipv4 : c?.applied?.ipv6;
+    f.enabled = !!value;
+    f.method = (i === 0 ? c?.method4 : c?.method6) ?? "";
+    f.servers = value?.servers.join("\n") ?? "";
+    f.search = value?.search.join("\n") ?? "";
+    f.automatic = value?.automatic ?? false;
+  }
   takeover.value = false;
   plan.value = null;
   editing.value = true;
@@ -181,8 +277,33 @@ async function preview() {
     return;
   }
   const input: HostDNSPlanInput = {
-    source_hash: observed.value.source_hash,
-    config: { servers: split(servers.value), search: split(search.value) },
+    target: networkManager.value ? target.value : "",
+    source_hash: sourceHash.value ?? "",
+    config: networkManager.value
+      ? {
+          servers: [],
+          search: [],
+          ipv4: families.value[0]!.enabled
+            ? {
+                servers: split(families.value[0]!.servers),
+                search: split(families.value[0]!.search),
+                automatic: families.value[0]!.automatic,
+              }
+            : null,
+          ipv6: families.value[1]!.enabled
+            ? {
+                servers: split(families.value[1]!.servers),
+                search: split(families.value[1]!.search),
+                automatic: families.value[1]!.automatic,
+              }
+            : null,
+        }
+      : {
+          servers: split(servers.value),
+          search: split(search.value),
+          ipv4: null,
+          ipv6: null,
+        },
     verify_names: split(verifyNames.value),
     timeout_seconds: timeout.value,
     takeover: takeover.value,
@@ -317,18 +438,44 @@ onUnmounted(() => {
       type="warning"
       :bordered="false"
       style="margin-top: 12px"
-      >当前源版本与最近确认的期望配置不同，请检查外部修改后重新规划。</n-alert
+      >当前配置与最近确认的期望不同，请检查外部修改后重新规划。</n-alert
     >
+    <template v-if="networkManager">
+      <n-form-item label="目标连接" style="margin-top: 16px">
+        <n-select
+          v-model:value="target"
+          :options="choices"
+          :disabled="busy || editing || activeTask"
+          @update:value="invalidate"
+        />
+      </n-form-item>
+      <template v-if="connection">
+        <dl>
+          <dt>接口 / IP 方法</dt>
+          <dd>
+            {{ connection.interface }} · IPv4 {{ connection.method4 || "—" }} /
+            IPv6 {{ connection.method6 || "—" }}
+          </dd>
+          <dt>当前有效 DNS</dt>
+          <dd>{{ effectiveText(connection.effective) }}</dd>
+          <dt>运行中的设置</dt>
+          <dd>{{ configText(connection.applied) }}</dd>
+          <dt>持久设置</dt>
+          <dd>{{ configText(connection.persistent) }}</dd>
+          <dt>保留的路由域</dt>
+          <dd>{{ connection.routing_domains.join("、") || "无" }}</dd>
+        </dl>
+        <n-alert v-if="connection.reason" type="warning" :bordered="false">{{
+          connection.reason
+        }}</n-alert>
+      </template>
+    </template>
     <n-button
       v-if="!editing"
       type="primary"
       style="margin-top: 16px"
       :disabled="
-        !canWrite ||
-        !module?.enabled ||
-        !observed.writable ||
-        activeTask ||
-        busy
+        !canWrite || !module?.enabled || !writable || activeTask || busy
       "
       @click="edit"
       >配置 DNS</n-button
@@ -377,22 +524,56 @@ onUnmounted(() => {
   </section>
   <section v-if="editing" class="panel">
     <h3>DNS 变更计划</h3>
-    <n-form-item label="DNS 服务器（1–3 个 IPv4 / IPv6 地址）"
-      ><n-input
-        v-model:value="servers"
-        :disabled="busy"
-        type="textarea"
-        placeholder="每行一个地址"
-        @update:value="invalidate"
-    /></n-form-item>
-    <n-form-item label="搜索域（最多 6 个，可留空）"
-      ><n-input
-        v-model:value="search"
-        :disabled="busy"
-        type="textarea"
-        placeholder="每行一个搜索域"
-        @update:value="invalidate"
-    /></n-form-item>
+    <template v-if="!networkManager">
+      <n-form-item label="DNS 服务器（1–3 个 IPv4 / IPv6 地址）"
+        ><n-input
+          v-model:value="servers"
+          :disabled="busy"
+          type="textarea"
+          placeholder="每行一个地址"
+          @update:value="invalidate"
+      /></n-form-item>
+      <n-form-item label="搜索域（最多 6 个，可留空）"
+        ><n-input
+          v-model:value="search"
+          :disabled="busy"
+          type="textarea"
+          placeholder="每行一个搜索域"
+          @update:value="invalidate"
+      /></n-form-item>
+    </template>
+    <template v-else
+      ><template v-for="family in families" :key="family.label">
+        <div v-if="family.enabled">
+          <h4>{{ family.label }}</h4>
+          <n-form-item label="自动获取 DNS">
+            <n-switch
+              v-model:value="family.automatic"
+              :disabled="busy || !['auto', 'dhcp'].includes(family.method)"
+              @update:value="invalidate"
+            />
+          </n-form-item>
+          <n-form-item label="手动 DNS 地址（最多 3 个）">
+            <n-input
+              v-model:value="family.servers"
+              :disabled="busy"
+              type="textarea"
+              placeholder="每行一个地址，可留空"
+              @update:value="invalidate"
+            />
+          </n-form-item>
+          <n-form-item label="搜索域（最多 6 个）">
+            <n-input
+              v-model:value="family.search"
+              :disabled="busy"
+              type="textarea"
+              placeholder="每行一个搜索域"
+              @update:value="invalidate"
+            />
+          </n-form-item>
+        </div>
+      </template>
+    </template>
     <n-form-item label="本机解析验证域名（1–2 个）"
       ><n-input
         v-model:value="verifyNames"
@@ -416,16 +597,16 @@ onUnmounted(() => {
       v-model:checked="takeover"
       :disabled="busy"
       @update:checked="invalidate"
-      >确认接管该主机的普通 DNS 配置文件</n-checkbox
+      >{{
+        networkManager
+          ? "确认接管所选连接的 DNS 设置"
+          : "确认接管该主机的普通 DNS 配置文件"
+      }}</n-checkbox
     >
     <div class="actions" style="margin-top: 16px">
       <n-button
         :disabled="
-          !canWrite ||
-          busy ||
-          !takeover ||
-          !observed?.writable ||
-          !module?.enabled
+          !canWrite || busy || !takeover || !writable || !module?.enabled
         "
         @click="preview"
         >生成计划</n-button
@@ -444,14 +625,11 @@ onUnmounted(() => {
       }}</n-alert>
       <dl>
         <dt>原 DNS</dt>
-        <dd>{{ plan.before.servers.join("、") }}</dd>
+        <dd>{{ configText(plan.before) }}</dd>
         <dt>新 DNS</dt>
-        <dd>{{ plan.input.config.servers.join("、") }}</dd>
-        <dt>搜索域</dt>
-        <dd>
-          {{ plan.before.search.join("、") || "无" }} →
-          {{ plan.input.config.search.join("、") || "无" }}
-        </dd>
+        <dd>{{ configText(plan.input.config) }}</dd>
+        <dt v-if="plan.input.target">目标连接</dt>
+        <dd v-if="plan.input.target">{{ plan.input.target }}</dd>
         <dt>验证域名</dt>
         <dd>{{ plan.input.verify_names.join("、") }}</dd>
         <dt>未确认恢复</dt>
@@ -459,9 +637,7 @@ onUnmounted(() => {
       </dl>
       <n-button
         type="primary"
-        :disabled="
-          busy || !module?.enabled || !observed?.writable || activeTask
-        "
+        :disabled="busy || !module?.enabled || !writable || activeTask"
         @click="apply"
         >临时应用</n-button
       ></template

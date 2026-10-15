@@ -2213,9 +2213,30 @@ export interface components {
             /** Format: int64 */
             created_at: number;
         };
+        HostDNSFamily: {
+            servers: string[];
+            search: string[];
+            automatic: boolean;
+        };
+        HostDNSConnection: {
+            target: string;
+            name: string;
+            interface: string;
+            method4: string;
+            method6: string;
+            source_hash: string;
+            reason: string;
+            applied: components["schemas"]["HostDNSConfig"] | null;
+            persistent: components["schemas"]["HostDNSConfig"] | null;
+            effective: components["schemas"]["HostDNSConfig"] | null;
+            routing_domains: string[];
+            writable: boolean;
+        };
         HostDNSConfig: {
             servers: string[];
             search: string[];
+            ipv4: components["schemas"]["HostDNSFamily"] | null;
+            ipv6: components["schemas"]["HostDNSFamily"] | null;
         };
         HostDNSStatus: {
             operation_id: string;
@@ -2237,6 +2258,7 @@ export interface components {
             current: components["schemas"]["HostDNSConfig"];
             persistent: components["schemas"]["HostDNSConfig"] | null;
             pending: components["schemas"]["HostDNSStatus"] | null;
+            connections: components["schemas"]["HostDNSConnection"][];
         };
         HostDNSPlanInput: {
             source_hash: string;
@@ -2245,6 +2267,7 @@ export interface components {
             /** Format: int64 */
             timeout_seconds: number;
             takeover: boolean;
+            target: string;
         };
         HostDNSPlan: {
             id: string;
@@ -2264,6 +2287,7 @@ export interface components {
             source_hash: string;
             /** Format: int64 */
             updated_at: number;
+            target: string;
         };
         HostDNSTask: {
             id: string;
@@ -2275,7 +2299,7 @@ export interface components {
         };
         HostDNSOverview: {
             observed: components["schemas"]["HostDNSObservation"];
-            desired: components["schemas"]["HostDNSDesired"] | null;
+            desired: components["schemas"]["HostDNSDesired"][];
             task: components["schemas"]["HostDNSTask"] | null;
         };
         HostDNSApplyInput: {

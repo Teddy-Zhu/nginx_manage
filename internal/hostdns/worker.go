@@ -163,12 +163,12 @@ func (s *Service) update(ctx context.Context, task dbgen.Task, status Status, pl
 		if e != nil {
 			return e
 		}
-		if _, err = tx.ExecContext(ctx, "INSERT INTO host_dns_desired(id,version,payload,source_hash,updated_at) VALUES(1,1,?,?,?) ON CONFLICT(id) DO UPDATE SET version=version+1,payload=excluded.payload,source_hash=excluded.source_hash,updated_at=excluded.updated_at", s.Vault.Seal(raw, "host-dns:desired"), status.SourceHash, now); err != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO host_dns_desired(target,version,payload,source_hash,updated_at) VALUES(?,1,?,?,?) ON CONFLICT(target) DO UPDATE SET version=version+1,payload=excluded.payload,source_hash=excluded.source_hash,updated_at=excluded.updated_at", plan.Input.Target, s.Vault.Seal(raw, "host-dns:desired:"+plan.Input.Target), status.SourceHash, now); err != nil {
 			return err
 		}
 	}
 	if status.State == "rolled_back" && plan != nil {
-		if _, err = tx.ExecContext(ctx, "UPDATE host_dns_desired SET source_hash=? WHERE id=1 AND source_hash=?", status.SourceHash, plan.Input.SourceHash); err != nil {
+		if _, err = tx.ExecContext(ctx, "UPDATE host_dns_desired SET source_hash=? WHERE target=? AND source_hash=?", status.SourceHash, plan.Input.Target, plan.Input.SourceHash); err != nil {
 			return err
 		}
 	}

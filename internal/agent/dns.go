@@ -26,6 +26,7 @@ type dnsCheckpoint struct {
 	Plan        hostdns.Plan   `json:"plan"`
 	Before      dnsFile        `json:"before"`
 	After       dnsFile        `json:"after"`
+	NM          *nmCheckpoint  `json:"networkmanager"`
 	VerifyAfter int64          `json:"verify_after"`
 }
 
@@ -104,7 +105,7 @@ func (d *HostDNS) Open() error {
 	if err := d.lock(filepath.Join(d.Dir, "lock")); err != nil {
 		return err
 	}
-	if d.Owner == "regular-file" && d.Scope == "host" {
+	if (d.Owner == "regular-file" || d.Owner == "networkmanager") && d.Scope == "host" {
 		if err := d.lockHost(); err != nil {
 			return err
 		}
@@ -134,13 +135,22 @@ func (d *HostDNS) Open() error {
 	if decoder.Decode(new(any)) != io.EOF {
 		return errors.New("invalid reachability checkpoint")
 	}
-	if c.Kind != "host.dns.apply" || !validID(c.Status.OperationID) || c.Plan.ID != c.Plan.Hash() || c.Plan.Input.Validate() != nil || c.Before.UID != 0 || c.Before.Mode&0022 != 0 || len(c.Before.Data) > hostdns.SourceLimit || len(c.After.Data) > hostdns.SourceLimit {
+	if c.Kind != "host.dns.apply" || !validID(c.Status.OperationID) || c.Plan.ID != c.Plan.Hash() || c.Plan.Input.Validate() != nil || c.Status.PlanID != c.Plan.ID || c.Status.Deadline <= c.Plan.CreatedAt {
 		return errors.New("unrecognized reachability recovery checkpoint")
 	}
-	expected := c.Before
-	expected.Data, err = renderDNS(c.Before.Data, c.Plan.Input.Config)
-	if err != nil || c.Before.Mode&^uint32(0777) != 0 || c.Before.hash() != c.Plan.Input.SourceHash || !sameDNSFile(expected, c.After) || c.Status.PlanID != c.Plan.ID || c.Status.Deadline <= c.Plan.CreatedAt {
-		return errors.New("DNS recovery snapshot does not match the approved plan")
+	if c.Plan.Owner == "networkmanager" {
+		if err = c.validateNM(); err != nil {
+			return err
+		}
+	} else {
+		if c.NM != nil || c.Plan.Owner != "regular-file" || c.Plan.Input.Target != "" || c.Before.UID != 0 || c.Before.Mode&0022 != 0 || len(c.Before.Data) > hostdns.SourceLimit || len(c.After.Data) > hostdns.SourceLimit {
+			return errors.New("invalid DNS file snapshot")
+		}
+		expected := c.Before
+		expected.Data, err = renderDNS(c.Before.Data, c.Plan.Input.Config)
+		if err != nil || c.Before.Mode&^uint32(0777) != 0 || c.Before.hash() != c.Plan.Input.SourceHash || !sameDNSFile(expected, c.After) {
+			return errors.New("DNS recovery snapshot does not match the approved plan")
+		}
 	}
 	d.checkpoint = &c
 	if c.Status.State != "running" && c.Status.State != "waiting_confirmation" && c.Status.State != "compensating" && c.Status.State != "recovery_required" && c.Status.State != "succeeded" && c.Status.State != "rolled_back" {
@@ -181,6 +191,9 @@ func (d *HostDNS) Close() {
 	d.locks = nil
 }
 func (d *HostDNS) observe() hostdns.Observation {
+	if d.Owner == "networkmanager" {
+		return d.observeNM()
+	}
 	out := hostdns.Observation{Owner: "unknown", Source: dnsSource, Current: hostdns.Config{Servers: []string{}, Search: []string{}}, Reason: "尚未确认持久配置所有者"}
 	path := dnsSource
 	if target, err := os.Readlink(path); err == nil {
@@ -254,26 +267,9 @@ func (d *HostDNS) observe() hostdns.Observation {
 		out.Reason = "解析器禁止自动重载，不能安全应用 DNS"
 		return d.withPending(out)
 	}
-	if d.Dev || d.Scope != "host" {
-		out.Reason = "开发模式或未由本机确认宿主机范围，禁止 DNS 写入"
+	if reason := d.hostScopeReason(); reason != "" {
+		out.Reason = reason
 		return d.withPending(out)
-	}
-	for _, p := range []string{"/.dockerenv", "/run/.containerenv", "/run/systemd/container"} {
-		if _, e := os.Stat(p); e == nil {
-			out.Reason = "容器 Agent 不允许修改宿主机 DNS"
-			return d.withPending(out)
-		}
-	}
-	if raw, e := dnsCgroup(); e != nil {
-		out.Reason = "无法核实宿主机控制组"
-		return d.withPending(out)
-	} else {
-		for _, marker := range []string{"docker", "kubepods", "libpod", "lxc"} {
-			if strings.Contains(string(raw), marker) {
-				out.Reason = "容器控制组不允许修改宿主机 DNS"
-				return d.withPending(out)
-			}
-		}
 	}
 	if d.Owner != "regular-file" {
 		out.Reason = "须先由本机确认无外部管理器，并设置 --dns-owner=regular-file"
@@ -282,6 +278,26 @@ func (d *HostDNS) observe() hostdns.Observation {
 	out.Writable = true
 	out.Reason = ""
 	return d.withPending(out)
+}
+func (d *HostDNS) hostScopeReason() string {
+	if d.Dev || d.Scope != "host" {
+		return "开发模式或未由本机确认宿主机范围，禁止 DNS 写入"
+	}
+	for _, p := range []string{"/.dockerenv", "/run/.containerenv", "/run/systemd/container"} {
+		if _, e := os.Stat(p); e == nil {
+			return "容器 Agent 不允许修改宿主机 DNS"
+		}
+	}
+	if raw, e := dnsCgroup(); e != nil {
+		return "无法核实宿主机控制组"
+	} else {
+		for _, marker := range []string{"docker", "kubepods", "libpod", "lxc"} {
+			if strings.Contains(string(raw), marker) {
+				return "容器控制组不允许修改宿主机 DNS"
+			}
+		}
+	}
+	return ""
 }
 func dnsCgroup() ([]byte, error) {
 	f, err := os.Open("/proc/1/cgroup")
@@ -296,6 +312,9 @@ func dnsCgroup() ([]byte, error) {
 	return b, err
 }
 func (d *HostDNS) withPending(out hostdns.Observation) hostdns.Observation {
+	if out.Connections == nil {
+		out.Connections = []hostdns.Connection{}
+	}
 	if d.checkpoint != nil && dnsActive(d.checkpoint.Status.State) {
 		copy := d.checkpoint.Status
 		out.Pending = &copy
@@ -314,6 +333,10 @@ func (d *HostDNS) Plan(input hostdns.PlanInput) (hostdns.Plan, error) {
 	defer d.mu.Unlock()
 	if err := input.Validate(); err != nil {
 		return hostdns.Plan{}, err
+	}
+	input = input.Normalize()
+	if input.Target != "" {
+		return d.nmPlan(input)
 	}
 	view := d.observe()
 	if !view.Writable {
@@ -351,7 +374,7 @@ func (d *HostDNS) status(id string) (hostdns.Status, error) {
 func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if !validID(id) || plan.ID != plan.Hash() || plan.Owner != "regular-file" {
+	if !validID(id) || plan.ID != plan.Hash() || (plan.Owner != "regular-file" && plan.Owner != "networkmanager") {
 		return hostdns.Status{}, fault.Invalid("DNS 计划无效")
 	}
 	if err := plan.Input.Validate(); err != nil {
@@ -369,13 +392,19 @@ func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	} else if !os.IsNotExist(err) {
 		return hostdns.Status{}, err
 	}
-	view := d.observe()
-	if !view.Writable {
-		return hostdns.Status{}, fault.Unavailable(view.Reason)
-	}
 	now := time.Now().Unix()
 	if now >= plan.ExpiresAt || plan.ExpiresAt-plan.CreatedAt != 300 || plan.CreatedAt > now {
 		return hostdns.Status{}, fault.Conflict("DNS 计划已过期")
+	}
+	if plan.Owner == "networkmanager" {
+		return d.nmApply(id, plan)
+	}
+	if plan.Input.Target != "" {
+		return hostdns.Status{}, fault.Invalid("普通文件计划不能包含连接目标")
+	}
+	view := d.observe()
+	if !view.Writable || view.Owner != "regular-file" {
+		return hostdns.Status{}, fault.Unavailable("普通文件源不可接管")
 	}
 	if view.SourceHash != plan.Input.SourceHash {
 		return hostdns.Status{}, fault.Conflict("DNS 源已变化")
@@ -412,9 +441,23 @@ func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	return d.checkpoint.Status, nil
 }
 func (d *HostDNS) verify(ctx context.Context) error {
-	current, err := readDNSFile(dnsSource)
-	if err != nil || !sameDNSFile(current, d.checkpoint.After) {
-		return fault.Conflict("DNS 文件已被外部修改")
+	checkSource := func() error {
+		if d.checkpoint.NM != nil {
+			hash, e := d.nmCheck(ctx, false)
+			if e == nil {
+				d.checkpoint.Status.SourceHash = hash
+			}
+			return e
+		}
+		current, e := readDNSFile(dnsSource)
+		if e != nil || !sameDNSFile(current, d.checkpoint.After) {
+			return fault.Conflict("DNS 文件已被外部修改")
+		}
+		d.checkpoint.Status.SourceHash = current.hash()
+		return nil
+	}
+	if err := checkSource(); err != nil {
+		return err
 	}
 	resolver := &net.Resolver{PreferGo: false}
 	check, cancel := context.WithTimeout(ctx, 8*time.Second)
@@ -425,13 +468,9 @@ func (d *HostDNS) verify(ctx context.Context) error {
 			return fault.Unavailable("配置的验证域名未通过本机解析链核验")
 		}
 	}
-	current, err = readDNSFile(dnsSource)
-	if err != nil || !sameDNSFile(current, d.checkpoint.After) {
-		return fault.Conflict("DNS 文件已被外部修改")
-	}
-	d.checkpoint.Status.SourceHash = current.hash()
-	return nil
+	return checkSource()
 }
+
 func (d *HostDNS) rollback(reason string) error {
 	c := d.checkpoint
 	c.Status.State = "compensating"
@@ -441,31 +480,39 @@ func (d *HostDNS) rollback(reason string) error {
 	// must not prevent an attempt to restore merely because this stage cannot
 	// be recorded again; persist reports the failure through health and logs.
 	_ = d.persist()
-	current, err := readDNSFile(dnsSource)
-	if err == nil && !sameDNSFile(current, c.Before) {
-		if !sameDNSFile(current, c.After) {
-			err = errors.New("external DNS change prevents automatic rollback")
-		} else {
-			err = writeDNSFile(current, c.Before, c.Status.OperationID)
-		}
-	}
-	if err == nil {
+	var hash string
+	var err error
+	if c.NM != nil {
+		hash, err = d.nmRollback()
+	} else {
+		var current dnsFile
 		current, err = readDNSFile(dnsSource)
 		if err == nil && !sameDNSFile(current, c.Before) {
-			err = errors.New("DNS rollback could not be confirmed")
+			if !sameDNSFile(current, c.After) {
+				err = errors.New("external DNS change prevents automatic rollback")
+			} else {
+				err = writeDNSFile(current, c.Before, c.Status.OperationID)
+			}
 		}
-	}
-	if err == nil {
-		err = cleanDNSTemp(c.Status.OperationID)
+		if err == nil {
+			current, err = readDNSFile(dnsSource)
+			if err == nil && !sameDNSFile(current, c.Before) {
+				err = errors.New("DNS rollback could not be confirmed")
+			}
+		}
+		if err == nil {
+			err = cleanDNSTemp(c.Status.OperationID)
+			hash = current.hash()
+		}
 	}
 	if err != nil {
 		c.Status.State = "recovery_required"
 		c.Status.Stage = "rollback_unconfirmed"
-		c.Status.Error = "DNS 恢复未确认；保留快照，须本机处理外部修改或文件权限"
+		c.Status.Error = "DNS 恢复未确认；保留快照，须本机处理外部修改、源权限或未决连接调用"
 	} else {
 		c.Status.State = "rolled_back"
 		c.Status.Stage = "rolled_back"
-		c.Status.SourceHash = current.hash()
+		c.Status.SourceHash = hash
 	}
 	if saveErr := d.persist(); saveErr != nil {
 		c.Status.State = "compensating"
@@ -507,6 +554,16 @@ func (d *HostDNS) Decide(ctx context.Context, id, action string) (hostdns.Status
 		err = d.rollback("解析核验期间确认期限已到")
 		return d.checkpoint.Status, err
 	}
+	if d.checkpoint.NM != nil {
+		if err = d.nmConfirm(ctx); err != nil {
+			err = d.rollback("连接 DNS 持久化未确认，恢复原设置")
+			return d.checkpoint.Status, err
+		}
+		if d.expired() {
+			err = d.rollback("保存期间确认期限已到")
+			return d.checkpoint.Status, err
+		}
+	}
 	before := d.checkpoint.Status
 	d.checkpoint.Status.State = "succeeded"
 	d.checkpoint.Status.Stage = "confirmed"
@@ -540,7 +597,7 @@ func (d *HostDNS) Run(ctx context.Context) {
 			c := d.checkpoint
 			if c != nil && dnsActive(c.Status.State) && c.Status.State != "recovery_required" {
 				var err error
-				if d.expired() || c.Status.Stage == "applying" || c.Status.State == "compensating" {
+				if d.expired() || (c.Status.Stage == "applying" || c.Status.Stage == "persisting") || c.Status.State == "compensating" {
 					err = d.rollback("DNS 未在期限内确认，恢复原设置")
 				} else if c.Status.Stage == "verification_pending" && time.Now().Unix() >= c.VerifyAfter {
 					if err = d.verify(ctx); err != nil {

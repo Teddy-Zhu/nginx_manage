@@ -51,7 +51,7 @@ func run() error {
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
-	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file or unconfirmed")
+	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager or unconfirmed")
 	dnsScope := flags.String("dns-scope", "unconfirmed", "DNS namespace: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
 	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
@@ -130,7 +130,7 @@ func run() error {
 		defer engine.Close()
 		return engine.Initialize()
 	case "agent":
-		if (*dnsOwner != "unconfirmed" && *dnsOwner != "regular-file") || (*dnsScope != "unconfirmed" && *dnsScope != "host") {
+		if (*dnsOwner != "unconfirmed" && *dnsOwner != "regular-file" && *dnsOwner != "networkmanager") || (*dnsScope != "unconfirmed" && *dnsScope != "host") {
 			return errors.New("unsupported DNS owner or namespace")
 		}
 		if *metricsScope != "host" && *metricsScope != "unconfirmed" {

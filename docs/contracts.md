@@ -47,7 +47,7 @@ Agent 仅对本机 root 登记的可信 Nginx 执行有时限、输出有界的 
 
 `POST /nginx/external/restore` 显式恢复当前已保存期望修订，要求 `config.write/config.secrets/security.write`、浏览器重新认证、期望基础版本及完整冲突快照。浏览器先展示目标与最近生效修订的原文差异，再确认重新加载；若要恢复历史内容，应先将其保存为期望修订。幂等响应、任务、快照摘要及排队审计同事务保存。Agent 独立重建已生效源树证明、核对快照，在自己的持久操作记录之后准备证书和新候选，并在切换前再次核对快照。普通应用仍拒绝外部冲突。
 
-逻辑配置修订与物理发布身份分开；每个新操作使用操作 ID 作为不可变发布目录和独立运行探针。恢复保留原外部目录，不覆盖、删除或将其作为回滚目标。切换前失败保持原发布指针；可能切换之后无法确认则进入 `recovery_required` 并阻止冲突操作。Agent 重启仅依照独立记录继续验证、切换和确认已授权候选，不重新执行外部内容。任务必须同时匹配逻辑修订和物理发布身份，确认运行后才更新已生效修订。既有证书和模块版本不覆盖；依赖损坏时须选择有效新版本并保存，或本机修复，不能声称自动恢复任意依赖或损坏清单。当前 Agent 协议为 9，不提供首版之前的协议或目录兼容分支。
+逻辑配置修订与物理发布身份分开；每个新操作使用操作 ID 作为不可变发布目录和独立运行探针。恢复保留原外部目录，不覆盖、删除或将其作为回滚目标。切换前失败保持原发布指针；可能切换之后无法确认则进入 `recovery_required` 并阻止冲突操作。Agent 重启仅依照独立记录继续验证、切换和确认已授权候选，不重新执行外部内容。任务必须同时匹配逻辑修订和物理发布身份，确认运行后才更新已生效修订。既有证书和模块版本不覆盖；依赖损坏时须选择有效新版本并保存，或本机修复，不能声称自动恢复任意依赖或损坏清单。当前 Agent 协议为 10，不提供首版之前的协议或目录兼容分支。
 
 配置树 `base_version` 指向当前有效期望状态；草稿使用独立不可变修订，不改变该版本。错误草稿没有有效投影、不会创建任务。保存不等于实际应用。`validate` 创建真实 `nginx -t` 任务，不改变运行修订；`apply` 创建应用任务，也可用 `/nginx/apply` 应用已保存修订。校验、应用和外部恢复互斥且不能用于草稿。执行保留幂等操作标识、提交意图及 Agent 接受记录；超时先查询独立执行记录，已接受记录缺失时转为恢复状态。任务终态和已观察修订同事务记录，只有确认成功或确认回滚才更新 `config_head.applied_revision`。
 
@@ -89,7 +89,7 @@ Webhook 请求体为版本 1 的 NotificationPayload，包含 node_id 与事件 
 本机事件最多 2048 条/7 天、投递最多 8192 条、渠道最多 16 个，正文与加密渠道各最多 8 KiB；容量压力优先清理终态投递，丢弃未完成项与事件历史截断的计数在通知页显示。通知页面由 pages 自动扫描，概览提示投递异常，页面隐藏暂停轮询、卸载取消读取。配置/队列/API/页面已接入并生成合同代码；尚未运行构建、类型检查、lint、测试或实际通知投递，P5 统一验证。
 
 
-主机 DNS 与 ACME DNS 凭据分离。`/host/dns` 返回解析器入口、所有者线索、IPv4/IPv6 地址、搜索域、可确认的持久配置、最近期望与当前任务；入口值不冒充 NetworkManager/resolved 的完整运行解析状态。首个写入适配仅覆盖无外部管理器的普通 `/etc/resolv.conf`，须本机设置 `--dns-scope=host --dns-owner=regular-file` 并在请求中明确接管；开发、容器、符号链接、自动生成标记、已发现的网络管理器、netplan 或未知组合保持只读。NetworkManager、networkd/resolved、netplan 的连接/网卡与持久写入适配尚未实现，不能将普通文件支持标记为 DNS 全范围完成。
+主机 DNS 与 ACME DNS 凭据分离。`/host/dns` 返回解析器入口、所有者线索、IPv4/IPv6 地址、搜索域、可确认的持久配置、最近期望与当前任务；入口值不冒充 NetworkManager/resolved 的完整运行解析状态。普通文件适配覆盖无外部管理器的普通 `/etc/resolv.conf`，须本机设置 `--dns-scope=host --dns-owner=regular-file` 并在请求中明确接管；开发、容器、符号链接、自动生成标记、已发现的网络管理器、netplan 或未知组合保持只读。NetworkManager 已接入下述连接级适配；networkd/resolved、netplan 源配置与 ifcfg 等组合仍待实现，不能将已接入适配标记为 DNS 全范围完成。
 
 DNS 使用 Plan → Apply → Confirm/Rollback。计划 5 分钟有效，绑定源内容、文件身份、权限与扩展属性的散列；每用户独立存放加密计划，最多保留 64 个未过期计划。所有写操作要求 host.dns.write、浏览器近期认证和幂等键；计划/任务/审计/幂等响应按业务事务保存，已提交任务保留独立加密快照。确认后的期望配置才进入 host_dns_desired；恢复只刷新匹配原期望的文件身份证明，不将外部配置当作原期望。未提交任务可取消，提交后由同一 Agent 操作 ID 查询和恢复，不能依据 API 超时重复创建 root 操作。
 
@@ -98,3 +98,12 @@ DNS 使用 Plan → Apply → Confirm/Rollback。计划 5 分钟有效，绑定�
 Agent 的 `agent/reachability/reachability.json` 在任何 DNS 副作用前保存本次原文/属性、候选、期限与状态，最多 128 KiB，root 私有且不进入业务备份；普通操作日志只保存摘要。节点锁与宿主机全局 DNS 锁阻止重复所有者，同时业务库对 DNS/防火墙/管理监听待确认任务排他。确认期限 45–180 秒，进程内同时使用单调时钟；API 停机不确认也不取消该期限，Agent 停止/重启先尝试恢复未确认变更。自动恢复遇到外部内容或属性变化时不覆盖，保留 recovery_required 和快照，禁止后续写入；磁盘不足时仍尝试使用既有持久意图恢复，不能因记录新阶段失败就跳过恢复。仅清理该操作的受限临时文件。
 
 DNS 文件路由页面自动扫描，提供只读来源、显式接管、计划差异、确认倒计时、提交/取消/恢复和期望偏差；轮询不重叠，隐藏暂停，卸载取消读取，待确认时提高轮询频率。接口、数据库模型和路由代码已生成；未修改实际主机 DNS、启动服务或执行构建/类型检查/lint/测试，真实管理器组合与断电恢复留待 P5。
+
+
+NetworkManager 适配须本机设置 `--dns-scope=host --dns-owner=networkmanager`；固定本机 system bus，不接受远程 D-Bus 地址、对象路径或 nmcli 命令。当前写入条件为 NetworkManager ≥ 1.44、已激活且无待保存修改的直接以太网/Wi-Fi 连接、安全的 `/etc/NetworkManager/system-connections/*.nmconnection` 持久源及可用的连接版本接口，并核对 DnsManager 与解析器入口归属（default 文件/链接，或 systemd-resolved 的标准链接）。unmanaged 默认模式、dnsmasq/resolvconf/netconfig 等其他入口组合、生成/临时/外部连接、netplan 生成源、ifcfg、控制器从属设备、加密/特殊 DNS 地址、缺少接口或其他未知组合保持只读；具体系统组合尚待 P5 验收。
+
+连接以 UUID 与接口绑定目标，IPv4/IPv6 分别编辑服务器、搜索域及自动获取；入口、连接有效 DNS、运行设置与持久设置分开展示，读取不到保持未知。临时应用使用 `GetAppliedConnection` 版本检查和保留外部 IP 的 `Reapply`；确认前不保存 profile，确认后使用 `Update2(to-disk|no-reapply,version-id)`，再次核对运行和持久状态。仅修改 DNS 地址、非路由搜索域与 ignore-auto-dns，保留路由域、DNS 优先级/选项、IP/网关/路由及其他连接；不重连设备或重启整套网络。完整设置仅在 root 内存中用于带版本的更新，不调用 GetSecrets，不将 keyfile、密码或全量 profile 进入 Web/业务备份；读取帧、设备数、属性及文件大小均有上限。各目标期望配置分别加密保存，只有确认成功才更新。
+
+独立 root 恢复记录分别保存原始运行/持久 DNS 属性和已授权的新值。期限到达、解析失败或未确认的 Agent 重启恢复两份原值；从最新设置合并 DNS 字段，不恢复整个旧网络 profile。未知 RPC 保留对应 daemon/对象/连接身份及版本，恢复须通过版本推进阻止迟到写入：运行值尚未改变时，必要时短暂重用已授权的新 DNS 再恢复，以避免无变化 Reapply 不推进版本；只看到旧值不能宣称恢复完成。未知调用跨 daemon、system bus 或连接身份变化、出现非快照 DNS 或无法确认版本推进时进入 recovery_required，保留快照并阻止后续冲突写入。此实现尚未启动服务或修改真实 DNS，恢复与系统矩阵验证留至 P5。
+
+D-Bus 语义依据 [NetworkManager Device](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Device.html)、[Settings.Connection](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Settings.Connection.html) 和 NetworkManager 官方实现；使用的 godbus 版本固定为 v5.2.4。

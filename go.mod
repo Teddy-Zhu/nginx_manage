@@ -11,6 +11,7 @@ require (
 	github.com/go-acme/alidns-20150109/v5 v5.6.1
 	github.com/go-acme/lego/v5 v5.5.2
 	github.com/go-acme/tencentclouddnspod v1.3.131
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/nginxinc/nginx-go-crossplane v0.4.89
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/pressly/goose/v3 v3.29.0

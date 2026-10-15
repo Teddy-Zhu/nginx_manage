@@ -194,7 +194,7 @@ type DnsCredential struct {
 }
 
 type HostDnsDesired struct {
-	ID         int64  `json:"id"`
+	Target     string `json:"target"`
 	Version    int64  `json:"version"`
 	Payload    []byte `json:"payload"`
 	SourceHash string `json:"source_hash"`
