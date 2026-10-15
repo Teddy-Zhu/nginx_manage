@@ -28,6 +28,9 @@ var pythonInterpreter = regexp.MustCompile(`^/usr/bin/python3(\.[0-9]+)?$`)
 // Check duplicate names before typed decoding: signatures cover bytes, and all
 // consumers must agree on their meaning. Bound nesting and token allocations.
 func strictJSON(raw []byte, out any) error {
+	return decodeJSON(raw, out, true)
+}
+func decodeJSON(raw []byte, out any, rejectUnknown bool) error {
 	if !utf8.Valid(raw) {
 		return errors.New("JSON 编码无效")
 	}
@@ -90,7 +93,9 @@ func strictJSON(raw []byte, out any) error {
 		return errors.New("JSON 存在尾随内容")
 	}
 	d = json.NewDecoder(bytes.NewReader(raw))
-	d.DisallowUnknownFields()
+	if rejectUnknown {
+		d.DisallowUnknownFields()
+	}
 	if err := d.Decode(out); err != nil {
 		return err
 	}
@@ -207,25 +212,40 @@ func validateAsset(a Asset) error {
 	}
 	return nil
 }
-func Verify(in Input) (*Verified, error) {
-	trustRaw, err := readRoot(in.TrustPath, 16<<10)
+
+type publisher struct {
+	trust Trust
+	raw   []byte
+	keys  map[string]ed25519.PublicKey
+}
+
+func readTrust(name string) (publisher, error) {
+	trustRaw, err := readRoot(name, 16<<10)
 	if err != nil {
-		return nil, err
+		return publisher{}, err
 	}
 	var trust Trust
 	if err := strictJSON(trustRaw, &trust); err != nil {
-		return nil, fmt.Errorf("发行信任配置：%w", err)
+		return publisher{}, fmt.Errorf("发行信任配置：%w", err)
 	}
 	if trust.Schema != Schema || !repository.MatchString(trust.Repository) || len(trust.Keys) == 0 || len(trust.Keys) > 8 {
-		return nil, errors.New("发行信任配置无效")
+		return publisher{}, errors.New("发行信任配置无效")
 	}
 	keys := map[string]ed25519.PublicKey{}
 	for _, key := range trust.Keys {
 		raw, err := base64.StdEncoding.Strict().DecodeString(key.PublicKey)
 		if err != nil || len(raw) != ed25519.PublicKeySize || base64.StdEncoding.EncodeToString(raw) != key.PublicKey || !identifier.MatchString(key.ID) || keys[key.ID] != nil {
-			return nil, errors.New("发行信任公钥无效或重复")
+			return publisher{}, errors.New("发行信任公钥无效或重复")
 		}
 		keys[key.ID] = ed25519.PublicKey(raw)
+	}
+	return publisher{trust: trust, raw: trustRaw, keys: keys}, nil
+}
+
+func Verify(in Input) (*Verified, error) {
+	publisher, err := readTrust(in.TrustPath)
+	if err != nil {
+		return nil, err
 	}
 	raw, err := readRoot(in.ManifestPath, MaxManifestBytes)
 	if err != nil {
@@ -240,7 +260,7 @@ func Verify(in Input) (*Verified, error) {
 		return nil, err
 	}
 	signature, err := base64.StdEncoding.Strict().DecodeString(sig.Signature)
-	key := keys[sig.KeyID]
+	key := publisher.keys[sig.KeyID]
 	if err != nil || sig.Schema != Schema || len(signature) != ed25519.SignatureSize || base64.StdEncoding.EncodeToString(signature) != sig.Signature || len(key) != ed25519.PublicKeySize || !ed25519.Verify(key, append([]byte(SignatureDomain), raw...), signature) {
 		return nil, errors.New("发行清单签名无效或公钥未获本机信任")
 	}
@@ -249,7 +269,7 @@ func Verify(in Input) (*Verified, error) {
 		return nil, fmt.Errorf("发行清单：%w", err)
 	}
 	now := time.Now().Unix()
-	if m.Schema != Schema || m.Repository != trust.Repository || !validVersion(m.Version) || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.APIMajor != in.Receiver.APIMajor || m.DatabaseSchema < 1 || m.MinimumAgentProtocol < 1 || m.MinimumAgentProtocol > in.Receiver.AgentProtocol || m.MinimumLauncher < 1 || m.MinimumLauncher > in.Receiver.Launcher || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
+	if m.Schema != Schema || m.Repository != publisher.trust.Repository || !validVersion(m.Version) || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.APIMajor != in.Receiver.APIMajor || m.DatabaseSchema < 1 || m.MinimumAgentProtocol < 1 || m.MinimumAgentProtocol > in.Receiver.AgentProtocol || m.MinimumLauncher < 1 || m.MinimumLauncher > in.Receiver.Launcher || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
 		return nil, errors.New("发行清单身份、有效期或接收端协议条件不满足")
 	}
 	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "prerelease" && !in.AllowPrerelease || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
@@ -323,7 +343,7 @@ func Verify(in Input) (*Verified, error) {
 			return nil, errors.New("所选资产不存在")
 		}
 	}
-	p := Plan{State: "manifest_verified", ManifestSHA256: hash(raw), TrustSHA256: hash(trustRaw), KeyID: sig.KeyID, Manifest: m, Host: in.Host, Receiver: in.Receiver, Selected: selected, Assets: []Asset{}}
+	p := Plan{State: "manifest_verified", ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), KeyID: sig.KeyID, Manifest: m, Host: in.Host, Receiver: in.Receiver, Selected: selected, Assets: []Asset{}}
 	added := map[string]bool{}
 	components := map[string]string{}
 	var include func(string) error

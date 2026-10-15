@@ -1,10 +1,10 @@
-# 签名发行资产与离线准备
+# 签名发行资产与准备
 
-已接入 `release-verify` 和 `release-prepare` 本机命令。前者只验签、检查清单及解析依赖闭包，返回 `state=manifest_verified`；后者继续核对离线归档、宿主机运行依赖并发布不可变副本，返回 `state=prepared`。准备不等于安装、启用或运行；不执行包内程序、脚本、包管理器或网络下载，也不迁移数据库或切换当前版本。构建、测试、命令运行及真实系统矩阵仍待 P5 集中验证。
+已接入离线 `release-verify/release-prepare` 和在线 `release-check/release-fetch` 本机命令。验证入口只验签、检查清单及解析依赖闭包，返回 `state=manifest_verified`；准备入口继续核对归档、宿主机运行依赖并发布不可变副本，返回 `state=prepared`。准备不等于安装、启用或运行；不执行包内程序、脚本或包管理器，也不迁移数据库或切换当前版本。构建、测试、命令运行及真实系统矩阵仍待 P5 集中验证。
 
 ## 信任与签名
 
-安装时由本机 root 保存 `/etc/nginxpanel/release-trust.json`。目录及其上层必须由 root 持有且不可被组/其他账户写入，文件不允许链接或额外硬链接。最多 8 个固定公钥；轮换/撤销只修改此本机配置，普通配置迁移不覆盖它。`repository` 为固定 `owner/repo` 身份；目前不从该值下载。
+安装时由本机 root 保存 `/etc/nginxpanel/release-trust.json`。目录及其上层必须由 root 持有且不可被组/其他账户写入，文件不允许链接或额外硬链接。最多 8 个固定公钥；轮换/撤销只修改此本机配置，普通配置迁移不覆盖它。`repository` 为固定 `owner/repo` 身份，也是在线发现和下载唯一仓库。
 
 ```json
 {
@@ -53,10 +53,31 @@ sudo /opt/approved/nginxpanel release-prepare \
 
 准备好的 panel 路径可以作为 [原生安装器](../deploy/native/README.md) 的 `--binary` 和 `--web-dir` 输入，仍须由本机 root 明确安装/启动。预备资产不会改变已有系统 Nginx、管理监听、业务开关或当前程序指针。
 
+## 在线发现与下载
+
+在线命令需要本机 root，使用同一信任配置、显式资产 ID 和准备目录。未指定标签时只查询最新稳定版；预发布必须同时指定完整 `v` 前缀 SemVer 标签和 `--release-prerelease`。GitHub 的发行标签、渠道与签名清单必须一致。
+
+```sh
+sudo /opt/approved/nginxpanel release-check --release-select panel-linux-amd64
+sudo /opt/approved/nginxpanel release-fetch --release-select panel-linux-amd64
+sudo /opt/approved/nginxpanel release-fetch \
+  --release-tag v1.2.3-rc.1 --release-prerelease \
+  --release-select panel-linux-amd64 \
+  --release-token-file /etc/nginxpanel/github-token
+```
+
+公开仓库无需 Token。私有仓库可使用仅授予目标仓库 Contents 读取权限的 Token，放在 root 持有的 0600 文件中；只接受文件路径，不接受明文命令参数或环境代理。Token 不进入缓存、输出或日志；信任和 Token 在请求前重新核对，变更时停止原操作。
+
+请求只发往 `api.github.com`；下载路径根据固定仓库和资产数字 ID 构造，不使用响应中的任意 URL。仅资产下载可重定向到 `release-assets.githubusercontent.com` 或 `objects.githubusercontent.com`，最多两次；跨主机删除 Authorization，禁止 HTTP、用户信息、其他主机及非公网解析。TLS 正常验证，响应头/正文/时间均有上限，失败不自动重试。只有完整清单验签、发行身份及整个选择闭包匹配后才下载归档；逐归档校验签名长度/散列后交给同一 `Prepare`，不下载未选择的可选组件，不进行 Docker 模块增装。
+
+`/opt/nginxpanel/release-downloads` 为 root 0700 缓存目录，同机在线操作串行。单槽元数据使用 ETag/304、Cache-Control 和 Age；发现请求至少间隔 60 秒，缓存新鲜期最多一小时，no-cache 要求重验证、no-store 不保留响应。已认证清单可缓存，每次使用仍验签并核对有效期、信任、目标平台和选择项；缓存身份绑定仓库、标签、信任文件及 Token 身份。403/429、Retry-After 和主限流重置期限会持久记录，等待期不继续联网，也不将陈旧响应当作成功。
+
+单次在线流程最多 10 分钟，单请求最多 3 分钟；元数据最多 2 MiB/32 个资产，缓存记录最多 6 MiB。下载目录最多 8 组暂存、256 项和 512 MiB，创建和下载前预留容量。失败只清理本次暂存；崩溃残留计入预算，需本机管理员核对维护，不自动删除恢复材料。
+
 ## 资源边界与后续
 
 manifest 最多 2 MiB/16 个资产/合计 4096 个文件，准备计划最多 4 MiB，显式选择最多 4 项。单归档最多 128 MiB，展开最多 256 MiB，闭包压缩加展开合计最多 512 MiB；系统依赖核验合计最多 128 MiB。准备文件与目录合计最多 8192 项；保留目录最多 32 组、32768 项、2 GiB，预算不足时停止并要求本机维护。
 
 仅接收单一 gzip 流包裹的 root USTAR，物理头逐块检查，拒绝 PAX/GNU 扩展、链接、设备、未知/重复文件、非零填充及额外压缩流。归档首先校验完整签名散列，再解包；复制期间再次散列并检查文件身份，gzip CRC 和完整文件清单通过后才发布。
 
-在线 GitHub 发现/受限下载、发布构建与私钥签名工具、SBOM、Web 上传/组件 API、安装/切换任务、维护准入、独立更新 worker 及回滚、迁移自动准备和完整 Docker 激活仍在 P4 后续范围内；本入口不宣称这些能力已经交付。
+发布构建与私钥签名工具、SBOM、Web 上传/组件 API、安装/切换任务、维护准入、独立更新 worker 及回滚、迁移自动准备和完整 Docker 激活仍在 P4 后续范围内；本入口不宣称这些能力已经交付。

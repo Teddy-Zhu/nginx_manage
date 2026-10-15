@@ -33,7 +33,7 @@ go run ./cmd/nginxpanel agent --dev --data-dir=.local
 
 未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；当前生产入口仅允许回环 HTTPS。P4 原生首次安装已开始接入，签名发布、可信组件自动准备及完整 Docker 持久运行继续实施。
 
-本机 `release-verify/release-prepare` 已接入固定发布公钥、离线签名清单和有界资产准备，见 [发行资产合同](docs/releases.md)。准备好的 panel 可交给原生安装器；此入口不启动组件或切换当前版本，在线更新及迁移自动准备继续实施，尚未运行验证。
+本机 `release-verify/release-prepare` 与 `release-check/release-fetch` 已接入固定发布公钥、离线签名清单、固定 GitHub 仓库的受限下载和有界资产准备，见 [发行资产合同](docs/releases.md)。准备好的 panel 可交给原生安装器；此入口不启动组件或切换当前版本，在线更新及迁移自动准备继续实施，尚未运行验证。
 
 生成代码：`make generate`。构建：`make build`。验证：`make verify`，仅在业务实现和集成稳定后的集中验证阶段执行；不包含 UI 自动化。当前实现尚未执行构建、类型检查或业务验证。
 

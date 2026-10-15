@@ -33,7 +33,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|doctor|version|release-verify|release-prepare>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|nginx-init|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -65,6 +65,8 @@ func run() error {
 	releaseAssets := flags.String("release-assets", "", "root-owned directory of offline release archives")
 	releaseSelect := flags.String("release-select", "", "explicit comma-separated asset IDs")
 	releasePrerelease := flags.Bool("release-prerelease", false, "permit authenticated prerelease assets")
+	releaseTag := flags.String("release-tag", "", "exact v-prefixed GitHub release tag; empty selects latest stable")
+	releaseToken := flags.String("release-token-file", "", "root-owned 0600 GitHub read-only token file; public releases need no token")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
 	}
@@ -82,12 +84,27 @@ func run() error {
 		return err
 	}
 	switch command {
-	case "release-verify", "release-prepare":
-		if *releaseManifest == "" || *releaseSignature == "" || *releaseSelect == "" {
-			return errors.New("release commands require --release-manifest, --release-signature and --release-select")
+	case "release-verify", "release-prepare", "release-check", "release-fetch":
+		if *releaseSelect == "" {
+			return errors.New("release commands require --release-select")
 		}
 		host := platform.Detect()
-		verified, err := releases.Verify(releases.Input{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, Assets: strings.Split(*releaseSelect, ","), AllowPrerelease: *releasePrerelease, Host: releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: host.OS, Version: host.Version}, Receiver: releases.Receiver{APIMajor: 1, AgentProtocol: agent.Protocol, Launcher: releases.LauncherVersion}})
+		target := releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: host.OS, Version: host.Version}
+		receiver := releases.Receiver{APIMajor: 1, AgentProtocol: agent.Protocol, Launcher: releases.LauncherVersion}
+		if command == "release-check" || command == "release-fetch" {
+			if *releaseManifest != "" || *releaseSignature != "" || *releaseAssets != "" {
+				return errors.New("online release commands do not accept offline file arguments")
+			}
+			result, err := releases.Online(ctx, releases.OnlineInput{TrustPath: *releaseTrust, TokenPath: *releaseToken, Tag: *releaseTag, Assets: strings.Split(*releaseSelect, ","), AllowPrerelease: *releasePrerelease, Prepare: command == "release-fetch", Host: target, Receiver: receiver})
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(os.Stdout).Encode(result)
+		}
+		if *releaseManifest == "" || *releaseSignature == "" {
+			return errors.New("offline release commands require --release-manifest and --release-signature")
+		}
+		verified, err := releases.Verify(releases.Input{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, Assets: strings.Split(*releaseSelect, ","), AllowPrerelease: *releasePrerelease, Host: target, Receiver: receiver})
 		if err != nil {
 			return err
 		}
