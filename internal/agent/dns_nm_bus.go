@@ -86,14 +86,20 @@ func (w *dnsBusWire) Read(p []byte) (int, error) {
 const nmName = "org.freedesktop.NetworkManager"
 const nmRoot = dbus.ObjectPath("/org/freedesktop/NetworkManager")
 
-type nmBus struct {
+type dnsBus struct {
 	conn         *dbus.Conn
 	ctx          context.Context
 	cancel       context.CancelFunc
 	owner, busID string
+	service      string
 }
 
-func openDNSBus(parent context.Context) (*nmBus, error) {
+func openDNSBus(parent context.Context) (*dnsBus, error) { return openDNSService(parent, nmName) }
+func openDNSService(parent context.Context, service string) (*dnsBus, error) {
+	if service != nmName && service != networkdName && service != resolvedName {
+		return nil, errors.New("unsupported DNS service")
+	}
+
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	raw, e := (&net.Dialer{}).DialContext(ctx, "unix", "/run/dbus/system_bus_socket")
 	if e != nil {
@@ -108,12 +114,12 @@ func openDNSBus(parent context.Context) (*nmBus, error) {
 		cancel()
 		return nil, e
 	}
-	b := &nmBus{conn: conn, ctx: ctx, cancel: cancel}
+	b := &dnsBus{conn: conn, ctx: ctx, cancel: cancel, service: service}
 	if e = conn.Auth([]dbus.Auth{dbus.AuthExternal(strconv.Itoa(os.Getuid()))}); e == nil {
 		e = conn.Hello()
 	}
 	if e == nil {
-		e = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", dbus.FlagNoAutoStart, nmName).Store(&b.owner)
+		e = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", dbus.FlagNoAutoStart, service).Store(&b.owner)
 	}
 	if e == nil {
 		e = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", dbus.FlagNoAutoStart).Store(&b.busID)
@@ -124,20 +130,32 @@ func openDNSBus(parent context.Context) (*nmBus, error) {
 	}
 	return b, nil
 }
-func (b *nmBus) close() { b.conn.Close(); b.cancel() }
-func (b *nmBus) call(path dbus.ObjectPath, method string, args ...any) *dbus.Call {
+func (b *dnsBus) close() { b.conn.Close(); b.cancel() }
+func (b *dnsBus) call(path dbus.ObjectPath, method string, args ...any) *dbus.Call {
 	return b.conn.Object(b.owner, path).CallWithContext(b.ctx, method, dbus.FlagNoAutoStart, args...)
 }
-func (b *nmBus) property(path dbus.ObjectPath, iface, key string) (dbus.Variant, error) {
+func (b *dnsBus) property(path dbus.ObjectPath, iface, key string) (dbus.Variant, error) {
 	var v dbus.Variant
 	e := b.call(path, "org.freedesktop.DBus.Properties.Get", iface, key).Store(&v)
 	return v, e
 }
-func (b *nmBus) unchangedOwner() error {
+func (b *dnsBus) unchangedOwner() error {
 	var owner string
-	e := b.conn.BusObject().CallWithContext(b.ctx, "org.freedesktop.DBus.GetNameOwner", dbus.FlagNoAutoStart, nmName).Store(&owner)
+	e := b.conn.BusObject().CallWithContext(b.ctx, "org.freedesktop.DBus.GetNameOwner", dbus.FlagNoAutoStart, b.service).Store(&owner)
 	if e == nil && owner != b.owner {
-		e = errors.New("NetworkManager owner changed")
+		e = errors.New("DNS service owner changed")
 	}
 	return e
+}
+
+func dnsProperty[T any](b *dnsBus, path dbus.ObjectPath, iface, key string) (T, error) {
+	var out T
+	v, e := b.property(path, iface, key)
+	if e != nil {
+		return out, e
+	}
+	if e = dbus.Store([]any{v.Value()}, &out); e != nil {
+		return out, e
+	}
+	return out, nil
 }

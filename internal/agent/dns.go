@@ -191,6 +191,9 @@ func (d *HostDNS) Close() {
 	d.locks = nil
 }
 func (d *HostDNS) observe() hostdns.Observation {
+	if d.Owner == "networkd" {
+		return d.observeNetworkd()
+	}
 	if d.Owner == "networkmanager" {
 		return d.observeNM()
 	}
@@ -312,6 +315,9 @@ func dnsCgroup() ([]byte, error) {
 	return b, err
 }
 func (d *HostDNS) withPending(out hostdns.Observation) hostdns.Observation {
+	if out.Links == nil {
+		out.Links = []hostdns.NetworkLink{}
+	}
 	if out.Connections == nil {
 		out.Connections = []hostdns.Connection{}
 	}

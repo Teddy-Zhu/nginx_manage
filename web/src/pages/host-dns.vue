@@ -26,6 +26,7 @@ import {
   api,
   apiError,
   type HostDNSOverview,
+  type HostLinkDNS,
   type HostDNSPlan,
   type HostDNSPlanInput,
   type Module,
@@ -115,6 +116,40 @@ const effectiveText = (
         .filter(Boolean)
         .join(" / ") || "无"
     : "无法读取";
+const linkServers = (state: HostLinkDNS | null) =>
+  state
+    ? state.servers
+        .map(
+          (s) =>
+            `${s.address.includes(":") && s.port && s.port !== 53 ? `[${s.address}]` : s.address}${s.port && s.port !== 53 ? `:${s.port}` : ""}${s.server_name ? ` #${s.server_name}` : ""}${s.source && s.source !== "resolved" ? `（${s.source}）` : ""}`,
+        )
+        .join("、") || "无"
+    : "无法读取";
+const linkDomains = (state: HostLinkDNS | null) =>
+  state
+    ? state.domains
+        .map(
+          (d) =>
+            `${d.routing ? "~" : ""}${d.domain}${d.source && d.source !== "resolved" ? `（${d.source}）` : ""}`,
+        )
+        .join("、") || "无"
+    : "无法读取";
+const autoPolicy = (value: boolean | null) =>
+  value === null ? "未显式设置" : value ? "允许获取" : "忽略";
+const domainPolicyLabels: Record<string, string> = {
+  yes: "搜索域",
+  no: "忽略",
+  route: "路由域",
+};
+const sourceOwnerLabels: Record<string, string> = {
+  networkd: "本机 networkd 源",
+  generated: "运行时生成源",
+  vendor: "系统提供的源",
+  unknown: "未确认",
+};
+const domainPolicy = (value: string | null) =>
+  value === null ? "未显式设置" : (domainPolicyLabels[value] ?? "无法识别");
+const sourceOwner = (value: string) => sourceOwnerLabels[value] ?? "未确认";
 const controller = new AbortController();
 let poll: ReturnType<typeof setInterval> | undefined;
 let pendingRead = false,
@@ -480,6 +515,72 @@ onUnmounted(() => {
       @click="edit"
       >配置 DNS</n-button
     >
+  </section>
+  <section
+    v-for="link in observed?.links ?? []"
+    :key="link.target"
+    class="panel"
+  >
+    <div class="page-toolbar">
+      <h3>{{ link.interface }} · networkd</h3>
+      <n-tag type="warning">只读</n-tag>
+    </div>
+    <dl>
+      <dt>网卡状态</dt>
+      <dd>{{ link.state || "无法读取" }}</dd>
+      <dt>持久源归属</dt>
+      <dd>{{ sourceOwner(link.owner) }}</dd>
+      <dt>已加载源文件</dt>
+      <dd>{{ link.loaded_sources.join("、") || "未确认" }}</dd>
+      <dt>当前磁盘源文件</dt>
+      <dd>{{ link.disk_sources.join("、") || "无法读取" }}</dd>
+      <dt>networkd 已加载 DNS</dt>
+      <dd>{{ linkServers(link.loaded) }}</dd>
+      <dt>已加载搜索 / 路由域</dt>
+      <dd>{{ linkDomains(link.loaded) }}</dd>
+      <dt>resolved 当前 DNS</dt>
+      <dd>{{ linkServers(link.effective) }}</dd>
+      <dt>resolved 搜索 / 路由域</dt>
+      <dd>{{ linkDomains(link.effective) }}</dd>
+      <template v-if="link.persistent">
+        <dt>磁盘 DNS 字段</dt>
+        <dd>{{ link.persistent.servers.join("、") || "无显式地址" }}</dd>
+        <dt>磁盘搜索 / 路由域</dt>
+        <dd>
+          {{
+            [
+              ...link.persistent.search,
+              ...link.persistent.routing_domains,
+            ].join("、") || "无"
+          }}
+        </dd>
+        <dt>DHCPv4 DNS 策略</dt>
+        <dd>
+          {{ autoPolicy(link.persistent.dhcp4) }}；域名：{{
+            domainPolicy(link.persistent.domains4)
+          }}
+        </dd>
+        <dt>DHCPv6 DNS 策略</dt>
+        <dd>
+          {{ autoPolicy(link.persistent.dhcp6) }}；域名：{{
+            domainPolicy(link.persistent.domains6)
+          }}
+        </dd>
+        <dt>IPv6 RA DNS 策略</dt>
+        <dd>
+          {{ autoPolicy(link.persistent.ipv6_ra) }}；域名：{{
+            domainPolicy(link.persistent.domains_ra)
+          }}
+        </dd>
+      </template>
+      <template v-else
+        ><dt>磁盘 DNS 字段</dt>
+        <dd>无法完整确认</dd></template
+      >
+    </dl>
+    <n-alert v-if="link.reason" type="warning" :bordered="false">{{
+      link.reason
+    }}</n-alert>
   </section>
   <section v-if="pending || task" class="panel">
     <div class="page-toolbar">

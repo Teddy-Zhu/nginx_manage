@@ -2874,6 +2874,221 @@ components:
         }
       }
 
+    HostDNSServer:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "address",
+          "source",
+          "port",
+          "server_name"
+        ],
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "server_name": {
+            "type": "string"
+          }
+        }
+      }
+
+    HostDNSDomain:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "source",
+          "routing"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "routing": {
+            "type": "boolean"
+          }
+        }
+      }
+
+    HostLinkDNS:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "servers",
+          "domains"
+        ],
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostDNSServer"
+            }
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostDNSDomain"
+            }
+          }
+        }
+      }
+
+    HostNetworkDNS:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "servers",
+          "search",
+          "routing_domains",
+          "dhcp4",
+          "dhcp6",
+          "ipv6_ra",
+          "domains4",
+          "domains6",
+          "domains_ra"
+        ],
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "search": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "routing_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dhcp4": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "dhcp6": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "ipv6_ra": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "domains4": {
+            "type": "string",
+            "nullable": true
+          },
+          "domains6": {
+            "type": "string",
+            "nullable": true
+          },
+          "domains_ra": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+
+    HostNetworkLink:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target",
+          "interface",
+          "index",
+          "state",
+          "owner",
+          "loaded_sources",
+          "disk_sources",
+          "source_hash",
+          "persistent",
+          "loaded",
+          "effective",
+          "reason"
+        ],
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "interface": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "state": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "loaded_sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "disk_sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_hash": {
+            "type": "string"
+          },
+          "persistent": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostNetworkDNS"
+              }
+            ],
+            "nullable": true
+          },
+          "loaded": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostLinkDNS"
+              }
+            ],
+            "nullable": true
+          },
+          "effective": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HostLinkDNS"
+              }
+            ],
+            "nullable": true
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+
     HostDNSObservation:
       {
         "type": "object",
@@ -2888,7 +3103,8 @@ components:
           "current",
           "persistent",
           "pending",
-          "connections"
+          "connections",
+          "links"
         ],
         "properties": {
           "owner": {
@@ -2932,6 +3148,12 @@ components:
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/HostDNSConnection"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostNetworkLink"
             }
           }
         }

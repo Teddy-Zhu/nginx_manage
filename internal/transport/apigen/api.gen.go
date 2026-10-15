@@ -1268,6 +1268,13 @@ type HostDNSDesired struct {
 	Version    int64         `json:"version"`
 }
 
+// HostDNSDomain defines model for HostDNSDomain.
+type HostDNSDomain struct {
+	Domain  string `json:"domain"`
+	Routing bool   `json:"routing"`
+	Source  string `json:"source"`
+}
+
 // HostDNSFamily defines model for HostDNSFamily.
 type HostDNSFamily struct {
 	Automatic bool     `json:"automatic"`
@@ -1280,6 +1287,7 @@ type HostDNSObservation struct {
 	Connections []HostDNSConnection `json:"connections"`
 	Current     HostDNSConfig       `json:"current"`
 	LinkTarget  string              `json:"link_target"`
+	Links       []HostNetworkLink   `json:"links"`
 	Owner       string              `json:"owner"`
 	Pending     *HostDNSStatus      `json:"pending"`
 	Persistent  *HostDNSConfig      `json:"persistent"`
@@ -1317,6 +1325,14 @@ type HostDNSPlanInput struct {
 	VerifyNames    []string      `json:"verify_names"`
 }
 
+// HostDNSServer defines model for HostDNSServer.
+type HostDNSServer struct {
+	Address    string `json:"address"`
+	Port       int    `json:"port"`
+	ServerName string `json:"server_name"`
+	Source     string `json:"source"`
+}
+
 // HostDNSStatus defines model for HostDNSStatus.
 type HostDNSStatus struct {
 	Deadline    int64  `json:"deadline"`
@@ -1338,6 +1354,12 @@ type HostDNSTask struct {
 	State       string `json:"state"`
 }
 
+// HostLinkDNS defines model for HostLinkDNS.
+type HostLinkDNS struct {
+	Domains []HostDNSDomain `json:"domains"`
+	Servers []HostDNSServer `json:"servers"`
+}
+
 // HostMetric defines model for HostMetric.
 type HostMetric struct {
 	Id     string              `json:"id"`
@@ -1345,6 +1367,35 @@ type HostMetric struct {
 	Label  string              `json:"label"`
 	Reason string              `json:"reason"`
 	Values map[string]*float64 `json:"values"`
+}
+
+// HostNetworkDNS defines model for HostNetworkDNS.
+type HostNetworkDNS struct {
+	Dhcp4          *bool    `json:"dhcp4"`
+	Dhcp6          *bool    `json:"dhcp6"`
+	Domains4       *string  `json:"domains4"`
+	Domains6       *string  `json:"domains6"`
+	DomainsRa      *string  `json:"domains_ra"`
+	Ipv6Ra         *bool    `json:"ipv6_ra"`
+	RoutingDomains []string `json:"routing_domains"`
+	Search         []string `json:"search"`
+	Servers        []string `json:"servers"`
+}
+
+// HostNetworkLink defines model for HostNetworkLink.
+type HostNetworkLink struct {
+	DiskSources   []string        `json:"disk_sources"`
+	Effective     *HostLinkDNS    `json:"effective"`
+	Index         int32           `json:"index"`
+	Interface     string          `json:"interface"`
+	Loaded        *HostLinkDNS    `json:"loaded"`
+	LoadedSources []string        `json:"loaded_sources"`
+	Owner         string          `json:"owner"`
+	Persistent    *HostNetworkDNS `json:"persistent"`
+	Reason        string          `json:"reason"`
+	SourceHash    string          `json:"source_hash"`
+	State         string          `json:"state"`
+	Target        string          `json:"target"`
 }
 
 // LogPage defines model for LogPage.

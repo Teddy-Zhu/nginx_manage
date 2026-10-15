@@ -47,7 +47,7 @@ Agent 仅对本机 root 登记的可信 Nginx 执行有时限、输出有界的 
 
 `POST /nginx/external/restore` 显式恢复当前已保存期望修订，要求 `config.write/config.secrets/security.write`、浏览器重新认证、期望基础版本及完整冲突快照。浏览器先展示目标与最近生效修订的原文差异，再确认重新加载；若要恢复历史内容，应先将其保存为期望修订。幂等响应、任务、快照摘要及排队审计同事务保存。Agent 独立重建已生效源树证明、核对快照，在自己的持久操作记录之后准备证书和新候选，并在切换前再次核对快照。普通应用仍拒绝外部冲突。
 
-逻辑配置修订与物理发布身份分开；每个新操作使用操作 ID 作为不可变发布目录和独立运行探针。恢复保留原外部目录，不覆盖、删除或将其作为回滚目标。切换前失败保持原发布指针；可能切换之后无法确认则进入 `recovery_required` 并阻止冲突操作。Agent 重启仅依照独立记录继续验证、切换和确认已授权候选，不重新执行外部内容。任务必须同时匹配逻辑修订和物理发布身份，确认运行后才更新已生效修订。既有证书和模块版本不覆盖；依赖损坏时须选择有效新版本并保存，或本机修复，不能声称自动恢复任意依赖或损坏清单。当前 Agent 协议为 10，不提供首版之前的协议或目录兼容分支。
+逻辑配置修订与物理发布身份分开；每个新操作使用操作 ID 作为不可变发布目录和独立运行探针。恢复保留原外部目录，不覆盖、删除或将其作为回滚目标。切换前失败保持原发布指针；可能切换之后无法确认则进入 `recovery_required` 并阻止冲突操作。Agent 重启仅依照独立记录继续验证、切换和确认已授权候选，不重新执行外部内容。任务必须同时匹配逻辑修订和物理发布身份，确认运行后才更新已生效修订。既有证书和模块版本不覆盖；依赖损坏时须选择有效新版本并保存，或本机修复，不能声称自动恢复任意依赖或损坏清单。当前 Agent 协议为 11，不提供首版之前的协议或目录兼容分支。
 
 配置树 `base_version` 指向当前有效期望状态；草稿使用独立不可变修订，不改变该版本。错误草稿没有有效投影、不会创建任务。保存不等于实际应用。`validate` 创建真实 `nginx -t` 任务，不改变运行修订；`apply` 创建应用任务，也可用 `/nginx/apply` 应用已保存修订。校验、应用和外部恢复互斥且不能用于草稿。执行保留幂等操作标识、提交意图及 Agent 接受记录；超时先查询独立执行记录，已接受记录缺失时转为恢复状态。任务终态和已观察修订同事务记录，只有确认成功或确认回滚才更新 `config_head.applied_revision`。
 
@@ -107,3 +107,12 @@ NetworkManager 适配须本机设置 `--dns-scope=host --dns-owner=networkmanage
 独立 root 恢复记录分别保存原始运行/持久 DNS 属性和已授权的新值。期限到达、解析失败或未确认的 Agent 重启恢复两份原值；从最新设置合并 DNS 字段，不恢复整个旧网络 profile。未知 RPC 保留对应 daemon/对象/连接身份及版本，恢复须通过版本推进阻止迟到写入：运行值尚未改变时，必要时短暂重用已授权的新 DNS 再恢复，以避免无变化 Reapply 不推进版本；只看到旧值不能宣称恢复完成。未知调用跨 daemon、system bus 或连接身份变化、出现非快照 DNS 或无法确认版本推进时进入 recovery_required，保留快照并阻止后续冲突写入。此实现尚未启动服务或修改真实 DNS，恢复与系统矩阵验证留至 P5。
 
 D-Bus 语义依据 [NetworkManager Device](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Device.html)、[Settings.Connection](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Settings.Connection.html) 和 NetworkManager 官方实现；使用的 godbus 版本固定为 v5.2.4。
+
+
+networkd/resolved 观测通过本机 network1 的 ListLinks/Describe 和 resolve1 的逐网卡 DNSEx/Domains 读取。须由本机确认 `--dns-scope=host --dns-owner=networkd`；开发、容器和未确认范围保留只读原因。接口分别返回已加载源路径、按当前磁盘优先级解析的源路径与散列、磁盘 DNS 字段、networkd 已加载的静态/运行时/DHCP/RA 值，以及 resolved 链路值；resolved 存在本身不能证明持久所有者。生成目录只标记为 generated，不据文件名猜测某个 netplan YAML 的归属。
+
+磁盘投影覆盖固定系统目录中的同名 `.network` 及 `.network.d/*.conf` 优先级、空值重置、`/dev/null` 屏蔽、连续行、搜索/路由域及显式 DHCPv4/DHCPv6/RA DNS 和域名策略。未显式设置的策略保持 null；不填入公共 DNS 或臆测继承值。未知转义/语法、旧 DHCP 节继承规则、超限、非安全 root 文件/目录、符号链接及读取期间变化均保留未知状态与原因。仅散列和 DNS 投影进入 API，原始配置文本不进入 Web。接口按固定帧、网卡、文件、属性及总量预算读取。
+
+此处仅观测已实现，networkd 的 Plan/Apply/Confirm/Rollback 与 netplan 源写入仍未实现。安全应用需要对实际已加载源与磁盘源建立一致性依据，并控制原生重载影响范围：network1 的常规 Reload 可处理多个接口，Reconfigure 进入完整配置流程，SetDNS 覆盖自动来源，RevertDNS 同时清除其他运行 DNS 选项。后续写入须保留 IP/路由及原有自动获取与解析选项，并处理未知调用、并发源变化、期限和重启恢复，不能以临时 resolved 值或单次重载成功替代持久确认。
+
+原生语义依据 [systemd network1 接口](https://github.com/systemd/systemd/blob/main/man/org.freedesktop.network1.xml)、[resolve1 接口](https://github.com/systemd/systemd/blob/main/man/org.freedesktop.resolve1.xml)、[systemd.network](https://github.com/systemd/systemd/blob/main/man/systemd.network.xml) 及对应 networkd 实现。源码调查和接口生成不构成系统能力验收；集中验证仍在 P5。

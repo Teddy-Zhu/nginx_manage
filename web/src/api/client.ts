@@ -12,6 +12,7 @@ export type SaveRequest = components["schemas"]["SaveRequest"];
 export type Me = components["schemas"]["Me"];
 export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
+export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
 export type HostDNSPlan = components["schemas"]["HostDNSPlan"];
 export type HostDNSPlanInput = components["schemas"]["HostDNSPlanInput"];

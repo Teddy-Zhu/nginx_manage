@@ -2248,6 +2248,47 @@ export interface components {
             source_hash: string;
             error: string;
         };
+        HostDNSServer: {
+            address: string;
+            source: string;
+            port: number;
+            server_name: string;
+        };
+        HostDNSDomain: {
+            domain: string;
+            source: string;
+            routing: boolean;
+        };
+        HostLinkDNS: {
+            servers: components["schemas"]["HostDNSServer"][];
+            domains: components["schemas"]["HostDNSDomain"][];
+        };
+        HostNetworkDNS: {
+            servers: string[];
+            search: string[];
+            routing_domains: string[];
+            dhcp4: boolean | null;
+            dhcp6: boolean | null;
+            ipv6_ra: boolean | null;
+            domains4: string | null;
+            domains6: string | null;
+            domains_ra: string | null;
+        };
+        HostNetworkLink: {
+            target: string;
+            interface: string;
+            /** Format: int32 */
+            index: number;
+            state: string;
+            owner: string;
+            loaded_sources: string[];
+            disk_sources: string[];
+            source_hash: string;
+            persistent: components["schemas"]["HostNetworkDNS"] | null;
+            loaded: components["schemas"]["HostLinkDNS"] | null;
+            effective: components["schemas"]["HostLinkDNS"] | null;
+            reason: string;
+        };
         HostDNSObservation: {
             owner: string;
             source: string;
@@ -2259,6 +2300,7 @@ export interface components {
             persistent: components["schemas"]["HostDNSConfig"] | null;
             pending: components["schemas"]["HostDNSStatus"] | null;
             connections: components["schemas"]["HostDNSConnection"][];
+            links: components["schemas"]["HostNetworkLink"][];
         };
         HostDNSPlanInput: {
             source_hash: string;

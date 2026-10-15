@@ -29,17 +29,6 @@ type nmTarget struct {
 	ResolverState                  string
 }
 
-func nmGet[T any](b *nmBus, path dbus.ObjectPath, iface, key string) (T, error) {
-	var out T
-	v, e := b.property(path, iface, key)
-	if e != nil {
-		return out, e
-	}
-	if e = dbus.Store([]any{v.Value()}, &out); e != nil {
-		return out, e
-	}
-	return out, nil
-}
 func nmProfileHash(path string) (string, error) {
 	if filepath.Dir(path) != "/etc/NetworkManager/system-connections" || !strings.HasSuffix(path, ".nmconnection") {
 		return "", errors.New("profile is not a persistent NetworkManager keyfile")
@@ -76,8 +65,8 @@ func nmProfileHash(path string) (string, error) {
 	// Only the hash leaves this function: keyfiles can contain Wi-Fi secrets.
 	return secure.Hash(raw), nil
 }
-func nmSupported(b *nmBus) error {
-	v, e := nmGet[string](b, nmRoot, nmName, "Version")
+func nmSupported(b *dnsBus) error {
+	v, e := dnsProperty[string](b, nmRoot, nmName, "Version")
 	if e != nil {
 		return e
 	}
@@ -98,7 +87,7 @@ func nmSupported(b *nmBus) error {
 	}
 	return nil
 }
-func nmDevices(b *nmBus) ([]dbus.ObjectPath, error) {
+func nmDevices(b *dnsBus) ([]dbus.ObjectPath, error) {
 	var paths []dbus.ObjectPath
 	e := b.call(nmRoot, nmName+".GetDevices").Store(&paths)
 	if e == nil && len(paths) > 32 {
@@ -106,25 +95,25 @@ func nmDevices(b *nmBus) ([]dbus.ObjectPath, error) {
 	}
 	return paths, e
 }
-func nmReadDevice(b *nmBus, path dbus.ObjectPath) (*nmTarget, error) {
+func nmReadDevice(b *dnsBus, path dbus.ObjectPath) (*nmTarget, error) {
 	t := &nmTarget{Device: path}
 	t.View.RoutingDomains = []string{}
 	t.View.Reason = "连接无法完整读取，保持只读"
-	iface, e := nmGet[string](b, path, nmName+".Device", "Interface")
+	iface, e := dnsProperty[string](b, path, nmName+".Device", "Interface")
 	if e != nil {
 		return nil, e
 	}
 	t.View.Interface = iface
-	active, e := nmGet[dbus.ObjectPath](b, path, nmName+".Device", "ActiveConnection")
+	active, e := dnsProperty[dbus.ObjectPath](b, path, nmName+".Device", "ActiveConnection")
 	if e != nil || active == "/" {
 		return nil, errors.New("device is not active")
 	}
 	t.Active = active
-	t.Profile, e = nmGet[dbus.ObjectPath](b, active, nmName+".Connection.Active", "Connection")
+	t.Profile, e = dnsProperty[dbus.ObjectPath](b, active, nmName+".Connection.Active", "Connection")
 	if e != nil {
 		return nil, e
 	}
-	t.ProfileVersion, e = nmGet[uint64](b, t.Profile, nmName+".Settings.Connection", "VersionId")
+	t.ProfileVersion, e = dnsProperty[uint64](b, t.Profile, nmName+".Settings.Connection", "VersionId")
 	profileVersionErr := e
 	if e = b.call(t.Profile, nmName+".Settings.Connection.GetSettings").Store(&t.Persistent); e != nil {
 		return nil, e
@@ -173,31 +162,31 @@ func nmReadDevice(b *nmBus, path dbus.ObjectPath) (*nmTarget, error) {
 	if len(dbus.MakeVariant(t.Persistent).String()) > 256<<10 || len(dbus.MakeVariant(t.Applied).String()) > 256<<10 {
 		return t, errors.New("connection settings exceed budget")
 	}
-	state, e := nmGet[uint32](b, path, nmName+".Device", "State")
+	state, e := dnsProperty[uint32](b, path, nmName+".Device", "State")
 	if e != nil || state != 100 {
 		t.View.Reason = "连接尚未激活，不能变更 DNS"
 		return t, errors.New("device is not activated")
 	}
-	kind, e := nmGet[uint32](b, path, nmName+".Device", "DeviceType")
+	kind, e := dnsProperty[uint32](b, path, nmName+".Device", "DeviceType")
 	if e != nil || kind != 1 && kind != 2 {
 		t.View.Reason = "当前仅支持直接连接的以太网和 Wi-Fi 设备"
 		return t, errors.New("unsupported device type")
 	}
-	managed, e := nmGet[bool](b, path, nmName+".Device", "Managed")
+	managed, e := dnsProperty[bool](b, path, nmName+".Device", "Managed")
 	if e != nil || !managed {
 		return t, errors.New("device is not managed")
 	}
-	unsaved, e := nmGet[bool](b, t.Profile, nmName+".Settings.Connection", "Unsaved")
+	unsaved, e := dnsProperty[bool](b, t.Profile, nmName+".Settings.Connection", "Unsaved")
 	if e != nil || unsaved {
 		t.View.Reason = "连接有未保存修改，须先由本机处理"
 		return t, errors.New("profile is unsaved")
 	}
-	flags, e := nmGet[uint32](b, t.Profile, nmName+".Settings.Connection", "Flags")
+	flags, e := dnsProperty[uint32](b, t.Profile, nmName+".Settings.Connection", "Flags")
 	if e != nil || flags != 0 {
 		t.View.Reason = "生成、临时或外部连接保持只读"
 		return t, errors.New("profile is generated or external")
 	}
-	t.Filename, e = nmGet[string](b, t.Profile, nmName+".Settings.Connection", "Filename")
+	t.Filename, e = dnsProperty[string](b, t.Profile, nmName+".Settings.Connection", "Filename")
 	if e != nil {
 		return t, e
 	}
@@ -206,7 +195,7 @@ func nmReadDevice(b *nmBus, path dbus.ObjectPath) (*nmTarget, error) {
 		t.View.Reason = "持久源不是安全的 NetworkManager keyfile；netplan、ifcfg 等源保持只读"
 		return t, e
 	}
-	profileVersion, e := nmGet[uint64](b, t.Profile, nmName+".Settings.Connection", "VersionId")
+	profileVersion, e := dnsProperty[uint64](b, t.Profile, nmName+".Settings.Connection", "VersionId")
 	if e != nil || profileVersionErr != nil || t.ProfileVersion == 0 || profileVersion != t.ProfileVersion || t.AppliedVersion == 0 {
 		t.View.Reason = "缺少连接版本检查接口"
 		return t, errors.New("connection versions unavailable")
@@ -230,11 +219,11 @@ func nmReadDevice(b *nmBus, path dbus.ObjectPath) (*nmTarget, error) {
 		return t, e
 	}
 	t.View.Effective, _ = nmEffective(b, t)
-	activeNow, e := nmGet[dbus.ObjectPath](b, path, nmName+".Device", "ActiveConnection")
+	activeNow, e := dnsProperty[dbus.ObjectPath](b, path, nmName+".Device", "ActiveConnection")
 	if e != nil || activeNow != t.Active {
 		return t, errors.New("active connection changed")
 	}
-	profileNow, e := nmGet[uint64](b, t.Profile, nmName+".Settings.Connection", "VersionId")
+	profileNow, e := dnsProperty[uint64](b, t.Profile, nmName+".Settings.Connection", "VersionId")
 	if e != nil || profileNow != t.ProfileVersion {
 		return t, errors.New("persistent connection changed")
 	}
@@ -243,11 +232,11 @@ func nmReadDevice(b *nmBus, path dbus.ObjectPath) (*nmTarget, error) {
 	t.View.Reason = ""
 	return t, nil
 }
-func (t *nmTarget) hash(b *nmBus) string {
+func (t *nmTarget) hash(b *dnsBus) string {
 	raw, _ := json.Marshal([]any{b.busID, b.owner, t.View.Target, t.Device, t.Profile, t.Filename, t.FileHash, t.ResolverState, t.AppliedVersion, t.ProfileVersion, dbus.MakeVariant(t.Persistent).String(), dbus.MakeVariant(t.Applied).String()})
 	return secure.Hash(raw)
 }
-func nmFind(b *nmBus, target string) (*nmTarget, error) {
+func nmFind(b *dnsBus, target string) (*nmTarget, error) {
 	if !hostdns.ValidTarget(target) {
 		return nil, errors.New("invalid connection target")
 	}
@@ -257,7 +246,7 @@ func nmFind(b *nmBus, target string) (*nmTarget, error) {
 		return nil, e
 	}
 	for _, path := range paths {
-		iface, e := nmGet[string](b, path, nmName+".Device", "Interface")
+		iface, e := dnsProperty[string](b, path, nmName+".Device", "Interface")
 		if e != nil {
 			return nil, e
 		}
@@ -344,7 +333,7 @@ func (d *HostDNS) observeNM() hostdns.Observation {
 
 var errNMSourceChanged = errors.New("NetworkManager keyfile changed before update")
 
-func nmUpdate(b *nmBus, t *nmTarget, persistent bool, s nmSettings) error {
+func nmUpdate(b *dnsBus, t *nmTarget, persistent bool, s nmSettings) error {
 	hash, err := nmProfileHash(t.Filename)
 	if err != nil || hash != t.FileHash {
 		return errNMSourceChanged
@@ -377,10 +366,10 @@ func nmReadError() error {
 	return errors.New("NetworkManager 连接或持久源发生变化，无法确认 DNS 操作")
 }
 
-func nmEffective(b *nmBus, t *nmTarget) (*hostdns.Config, error) {
+func nmEffective(b *dnsBus, t *nmTarget) (*hostdns.Config, error) {
 	c := &hostdns.Config{Servers: []string{}, Search: []string{}}
 	for i, key := range []string{"Ip4Config", "Ip6Config"} {
-		path, e := nmGet[dbus.ObjectPath](b, t.Device, nmName+".Device", key)
+		path, e := dnsProperty[dbus.ObjectPath](b, t.Device, nmName+".Device", key)
 		if e != nil {
 			return nil, e
 		}
@@ -390,7 +379,7 @@ func nmEffective(b *nmBus, t *nmTarget) (*hostdns.Config, error) {
 		iface := nmName + []string{".IP4Config", ".IP6Config"}[i]
 		f := &hostdns.Family{Servers: []string{}, Search: []string{}}
 		if i == 0 {
-			data, e := nmGet[[]uint32](b, path, iface, "Nameservers")
+			data, e := dnsProperty[[]uint32](b, path, iface, "Nameservers")
 			if e != nil || len(data) > 32 {
 				return nil, errors.New("effective IPv4 DNS unavailable")
 			}
@@ -400,7 +389,7 @@ func nmEffective(b *nmBus, t *nmTarget) (*hostdns.Config, error) {
 				f.Servers = append(f.Servers, netip.AddrFrom4(a).String())
 			}
 		} else {
-			data, e := nmGet[[][]byte](b, path, iface, "Nameservers")
+			data, e := dnsProperty[[][]byte](b, path, iface, "Nameservers")
 			if e != nil || len(data) > 32 {
 				return nil, errors.New("effective IPv6 DNS unavailable")
 			}
@@ -412,7 +401,7 @@ func nmEffective(b *nmBus, t *nmTarget) (*hostdns.Config, error) {
 				f.Servers = append(f.Servers, ip.String())
 			}
 		}
-		search, e := nmGet[[]string](b, path, iface, "Searches")
+		search, e := dnsProperty[[]string](b, path, iface, "Searches")
 		if e != nil || len(search) > 64 {
 			return nil, errors.New("effective DNS searches unavailable")
 		}
@@ -431,13 +420,13 @@ func nmEffective(b *nmBus, t *nmTarget) (*hostdns.Config, error) {
 	return c, nil
 }
 
-func nmResolverOwner(b *nmBus) (string, error) {
+func nmResolverOwner(b *dnsBus) (string, error) {
 	path := dbus.ObjectPath("/org/freedesktop/NetworkManager/DnsManager")
-	mode, e := nmGet[string](b, path, nmName+".DnsManager", "Mode")
+	mode, e := dnsProperty[string](b, path, nmName+".DnsManager", "Mode")
 	if e != nil {
 		return "", e
 	}
-	rc, e := nmGet[string](b, path, nmName+".DnsManager", "RcManager")
+	rc, e := dnsProperty[string](b, path, nmName+".DnsManager", "RcManager")
 	if e != nil {
 		return "", e
 	}

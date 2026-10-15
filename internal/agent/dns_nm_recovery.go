@@ -142,7 +142,7 @@ func (d *HostDNS) nmApply(id string, plan hostdns.Plan) (hostdns.Status, error) 
 	d.checkpoint.Status.Stage = "verification_pending"
 	return d.checkpoint.Status, d.persist()
 }
-func (d *HostDNS) nmSession(ctx context.Context) (*nmBus, *nmTarget, error) {
+func (d *HostDNS) nmSession(ctx context.Context) (*dnsBus, *nmTarget, error) {
 	b, e := openDNSBus(ctx)
 	if e != nil {
 		return nil, nil, e
@@ -161,7 +161,7 @@ func (d *HostDNS) nmSession(ctx context.Context) (*nmBus, *nmTarget, error) {
 // The durable pending version is retained on any unknown RPC result. A later
 // compensating write must advance that same daemon's version before success;
 // observing the old DNS alone does not fence an asynchronously authorized call.
-func (d *HostDNS) nmWrite(b *nmBus, t *nmTarget, persistent bool, want nmDNS) error {
+func (d *HostDNS) nmWrite(b *dnsBus, t *nmTarget, persistent bool, want nmDNS) error {
 	n := d.checkpoint.NM
 	if n.Pending != nil {
 		return errors.New("unfenced NetworkManager call")

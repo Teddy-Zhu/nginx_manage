@@ -27,7 +27,7 @@ type Service struct {
 }
 
 func (s *Service) Overview(ctx context.Context) (Overview, error) {
-	out := Overview{Observed: Observation{Connections: []Connection{}, Owner: "unknown", Source: "/etc/resolv.conf", Reason: "未连接宿主机 Agent", Current: Config{Servers: []string{}, Search: []string{}}}}
+	out := Overview{Observed: Observation{Links: []NetworkLink{}, Connections: []Connection{}, Owner: "unknown", Source: "/etc/resolv.conf", Reason: "未连接宿主机 Agent", Current: Config{Servers: []string{}, Search: []string{}}}}
 	var err error
 	if s.Agent != nil {
 		out.Observed, err = s.Agent.ReadHostDNS(ctx)

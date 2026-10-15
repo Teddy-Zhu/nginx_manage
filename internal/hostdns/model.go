@@ -47,17 +47,58 @@ type Status struct {
 	SourceHash  string `json:"source_hash"`
 	Error       string `json:"error"`
 }
+type DNSServer struct {
+	Address    string `json:"address"`
+	Source     string `json:"source"`
+	Port       uint16 `json:"port"`
+	ServerName string `json:"server_name"`
+}
+type DNSDomain struct {
+	Domain  string `json:"domain"`
+	Source  string `json:"source"`
+	Routing bool   `json:"routing"`
+}
+type LinkDNS struct {
+	Servers []DNSServer `json:"servers"`
+	Domains []DNSDomain `json:"domains"`
+}
+type NetworkDNS struct {
+	Servers        []string `json:"servers"`
+	Search         []string `json:"search"`
+	RoutingDomains []string `json:"routing_domains"`
+	DHCP4          *bool    `json:"dhcp4"`
+	DHCP6          *bool    `json:"dhcp6"`
+	IPv6RA         *bool    `json:"ipv6_ra"`
+	Domains4       *string  `json:"domains4"`
+	Domains6       *string  `json:"domains6"`
+	DomainsRA      *string  `json:"domains_ra"`
+}
+type NetworkLink struct {
+	Target        string      `json:"target"`
+	Interface     string      `json:"interface"`
+	Index         int32       `json:"index"`
+	State         string      `json:"state"`
+	Owner         string      `json:"owner"`
+	LoadedSources []string    `json:"loaded_sources"`
+	DiskSources   []string    `json:"disk_sources"`
+	SourceHash    string      `json:"source_hash"`
+	Persistent    *NetworkDNS `json:"persistent"`
+	Loaded        *LinkDNS    `json:"loaded"`
+	Effective     *LinkDNS    `json:"effective"`
+	Reason        string      `json:"reason"`
+}
 type Observation struct {
-	Connections []Connection `json:"connections"`
-	Owner       string       `json:"owner"`
-	Source      string       `json:"source"`
-	LinkTarget  string       `json:"link_target"`
-	Writable    bool         `json:"writable"`
-	Reason      string       `json:"reason"`
-	SourceHash  string       `json:"source_hash"`
-	Current     Config       `json:"current"`
-	Persistent  *Config      `json:"persistent"`
-	Pending     *Status      `json:"pending"`
+	Links       []NetworkLink `json:"links"`
+	Connections []Connection  `json:"connections"`
+	Owner       string        `json:"owner"`
+	Source      string        `json:"source"`
+	LinkTarget  string        `json:"link_target"`
+	Writable    bool          `json:"writable"`
+	Reason      string        `json:"reason"`
+	SourceHash  string        `json:"source_hash"`
+	Current     Config        `json:"current"`
+	Persistent  *Config       `json:"persistent"`
+	Pending     *Status       `json:"pending"`
 }
 type PlanInput struct {
 	Target         string   `json:"target"`
