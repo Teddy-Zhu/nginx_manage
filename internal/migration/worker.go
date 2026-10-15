@@ -17,6 +17,9 @@ func (s *Service) Run(ctx context.Context) error {
 		if err := s.reconcile(ctx); err != nil && ctx.Err() == nil {
 			return err
 		}
+		if err := s.nextPush(ctx); err != nil && !errors.Is(err, errPushChanged) && ctx.Err() == nil {
+			return err
+		}
 		select {
 		case <-ctx.Done():
 			return nil

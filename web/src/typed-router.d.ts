@@ -115,6 +115,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/migration-push': RouteRecordInfo<
+      '/migration-push',
+      '/migration-push',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/migrations': RouteRecordInfo<
       '/migrations',
       '/migrations',
@@ -268,6 +275,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/maintenance.vue': {
       routes:
         | '/maintenance'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/migration-push.vue': {
+      routes:
+        | '/migration-push'
       views:
         | never
       pathParamNames:

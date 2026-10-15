@@ -26,7 +26,7 @@ type pullReservation struct{ Principal, Key, Digest string }
 func remoteClient(remote Remote) (*http.Client, string, error) {
 	u, err := url.Parse(remote.URL)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || len(remote.URL) > 2048 || (u.Path != "" && u.Path != "/" && u.Path != "/api/v1") || strings.ContainsAny(remote.APIKey, "\x00\r\n") || len(remote.APIKey) < 20 || len(remote.APIKey) > 512 {
-		return nil, "", fault.Invalid("源 API 须为 HTTPS 根地址或 /api/v1，并提供有效 Key")
+		return nil, "", fault.Invalid("远程 API 须为 HTTPS 根地址或 /api/v1，并提供有效 Key")
 	}
 	config := &tls.Config{MinVersion: tls.VersionTLS12}
 	if remote.Fingerprint != "" {
@@ -169,7 +169,7 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		if manifest.SourceNode != envelope.NodeID {
 			return Plan{}, redactedRemoteError()
 		}
-		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, &pullReservation{p.ID, key, digest})
+		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, &pullReservation{p.ID, key, digest}, nil)
 	}()
 	if err != nil {
 		return Plan{}, err

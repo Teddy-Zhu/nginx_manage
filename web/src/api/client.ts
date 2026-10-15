@@ -128,6 +128,10 @@ export class ApiError extends Error {
   }
 }
 
+export type MigrationPushInput = components["schemas"]["MigrationPushInput"];
+export type MigrationPushTask = components["schemas"]["MigrationPushTask"];
+export type MigrationPushResumeInput =
+  components["schemas"]["MigrationPushResumeInput"];
 export type MigrationSelection = components["schemas"]["MigrationSelection"];
 export type MigrationExportInput =
   components["schemas"]["MigrationExportInput"];
@@ -332,6 +336,32 @@ export const api = {
       data,
       headers: { "Idempotency-Key": key },
       timeout: 45_000,
+    }),
+  startMigrationPush: (data: MigrationPushInput, key: string) =>
+    request<MigrationPushTask>({
+      method: "POST",
+      url: "/migrations/push",
+      data,
+      headers: { "Idempotency-Key": key },
+      timeout: 45_000,
+    }),
+  migrationPushes: (signal?: AbortSignal) =>
+    request<MigrationPushTask[]>({ url: "/migrations/push", signal }),
+  migrationPush: (id: string, signal?: AbortSignal) =>
+    request<MigrationPushTask>({
+      url: `/migrations/push/${encodeURIComponent(id)}`,
+      signal,
+    }),
+  resumeMigrationPush: (
+    id: string,
+    data: MigrationPushResumeInput,
+    key: string,
+  ) =>
+    request<MigrationPushTask>({
+      method: "POST",
+      url: `/migrations/push/${encodeURIComponent(id)}/resume`,
+      data,
+      headers: { "Idempotency-Key": key },
     }),
   pullMigration: (data: MigrationPullInput, key: string) =>
     request<MigrationPlan>({

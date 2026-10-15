@@ -106,10 +106,10 @@ func (s *Service) Prepare(ctx context.Context, p auth.Principal, requestID strin
 	if err != nil {
 		return Plan{}, err
 	}
-	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, nil)
+	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, nil, nil)
 }
 
-func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, pull *pullReservation) (Plan, error) {
+func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, pull *pullReservation, receive *receiveReservation) (Plan, error) {
 	if base < 0 || m.SourceNode == s.NodeID {
 		return Plan{}, fault.Invalid("基础版本无效或来源为当前节点")
 	}
@@ -123,6 +123,10 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 		m.Omissions = []string{}
 	}
 	st := storedPlan{Plan: Plan{ID: secure.ID(), SourceNode: m.SourceNode, SourceVersion: m.SourceVersion, BaseVersion: base, ExpiresAt: time.Now().Add(30 * time.Minute).Unix(), State: "planned", Steps: []Step{}, Omissions: m.Omissions}, Payload: payload, Manifest: m, Mappings: mappings, CertificateIDs: map[string]string{}, VersionIDs: map[string]string{}, CredentialIDs: map[string]string{}}
+	if receive != nil {
+		st.Plan.ID = receive.ID
+		st.Plan.PackageSHA256 = receive.PackageSHA256
+	}
 	for _, c := range payload.Certificates {
 		if st.CertificateIDs[c.Material.CertificateID] == "" {
 			st.CertificateIDs[c.Material.CertificateID] = secure.ID()
@@ -187,7 +191,7 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 		return Plan{}, fault.Invalid("迁移计划内容超过暂存上限")
 	}
 	var retained int64
-	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans").Scan(&retained); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes)").Scan(&retained); err != nil {
 		return Plan{}, err
 	}
 	if retained+int64(len(raw))+256 > 128<<20 {
@@ -202,6 +206,11 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	}
 	if pull != nil {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO migration_pulls(principal,key,request_hash,plan_id,created_at) VALUES(?,?,?,?,?)", pull.Principal, pull.Key, pull.Digest, st.Plan.ID, now); err != nil {
+			return Plan{}, err
+		}
+	}
+	if receive != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO migration_receives(plan_id,request_hash) VALUES(?,?)", receive.ID, receive.Digest); err != nil {
 			return Plan{}, err
 		}
 	}
@@ -563,7 +572,7 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 			return err
 		}
 		var retained int64
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans WHERE id!=?", id).Scan(&retained); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans WHERE id!=?)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes)", id).Scan(&retained); err != nil {
 			return err
 		}
 		if len(raw) > MaxRequestBytes-256 || retained+int64(len(raw))+256 > 128<<20 {

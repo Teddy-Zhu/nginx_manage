@@ -1,6 +1,6 @@
 # 跨环境配置迁移
 
-“配置迁移”页面由 `src/pages/migrations.vue` 自动扫描接入。当前实现加密配置包与 API 拉取，两者使用同一目标预检、修订保存及 Nginx 执行器。尚未运行构建、类型检查、测试、镜像构建或真实迁移，等待 P5 集中验收。
+“配置迁移”页面由 `src/pages/migrations.vue` 自动扫描接入。当前实现加密配置包、API 拉取及源端推送，均使用同一目标预检、修订保存及 Nginx 执行器。尚未运行构建、类型检查、测试、镜像构建或真实迁移，等待 P5 集中验收。
 
 ## 迁移内容
 
@@ -60,3 +60,15 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 最多 8 个待执行计划、128 条保留记录及 128 MiB 迁移材料；状态摘要单独加密且不超过 256 KiB，列表不解密原始归档。预检展示最多 128 项，超限明确提示，所有项目仍参与准入判断。API 请求上限 12 MiB，远程响应与超时均有界；实际容量冲突会阻止事务提交。
 
 迁移计划报告原生组件缺失时，具有 `components.manage` 权限的用户可从计划进入 `/components` 检查并准备受信预编译资产。准备完成不解除实例未运行、完整性或模块能力阻塞；安装与运行接入尚待后续流程，完成后须重新生成迁移计划。Docker 缺少 Nginx 能力仍需更换预置模块的镜像。
+
+## 源端推送式一键迁出
+
+源节点调用 `POST /api/v1/migrations/push` 并提供 `Idempotency-Key`，或使用自动扫描的“迁出到节点”页面。输入格式沿用 `remote.url/api_key/fingerprint/node_id/selection`，但 remote 指向目标；另有 `mappings`、`mode=preview|draft|save|apply`、`enable_nginx` 和可选 `base_version`。未提供基础版本时，首次受信连接读取并固定目标当前配置版本，后续不自动改用新版本。首次响应为 HTTP 202 的父任务；`GET /migrations/push` 列表及 `GET /migrations/push/{id}` 查询同一任务和目标逐项结果。preview/draft/save 的完成只表示对应步骤完成，apply 须等目标执行器确认生效才报告应用成功。
+
+源端要求 backup.export、backup.secrets、config.secrets 和 nodes.manage，浏览器需近期认证。目标 Key 需 backup.restore、backup.secrets、config.write、config.secrets、security.write；迁入通知另需 notifications.write，启用配置模块另需 system.write。目标通过 `GET /migrations/receiver` 提供当前版本和本 Key 权限，身份在首次连接后持久绑定；每个响应核对同一节点。目标接收使用 `PUT /migrations/receive/{id}`，固定 ID、配置包散列、映射及基础版本的回执和计划同事务保存；重复 ID 的不同内容会被拒绝。执行沿用 `/migrations/{id}/execute` 和原幂等键，不另建导入执行器。
+
+源端只导出一次并冻结包，在自己主密钥保护下暂存包、随机口令及本次目标授权；Key、口令和包正文不出现在任务响应、通用任务及审计中。授权一小时、单轮请求 35 秒、每次授权最多 128 轮，网络失败有限退避并遵守 Retry-After；串行 worker 在重启后先查询原目标计划。已确认计划缺失、身份变化、目标补偿不明或结果不符时停止新提交，不因超时判定目标停止。授权到期清除活动 Key：未提交者失败；可能已提交者保留加密恢复材料和待恢复状态。终态任务清除活动包及授权，保留加密摘要与审计；不宣称 SQLite 历史页已物理擦除。
+
+预检未通过、权限不足或目标待恢复时可处理逐项结果，再调用 `POST /migrations/push/{id}/resume`，提供新的 `api_key` 和幂等键。此操作续授一小时，只继续原包、原节点、原模式和原阶段；更换目标 Key 后仍须有原计划所有者权限或 auth.manage，不绕过目标权限。映射、目标或基础版本需要改变时须创建新的迁移。依赖准备/安装和完整快照尚待接入；Docker 所需模块仍必须来自预置镜像。
+
+推送最多保留 64 条父任务，列表覆盖全部保留任务；推送暂存与导入计划共享 128 MiB，单条暂存最多 12 MiB、父任务摘要 264 KiB（目标结果及父任务元数据），目标响应最多 256 KiB。创建请求最多 2 MiB。未执行真实网络迁移、构建或测试，待 P5 集中验证。

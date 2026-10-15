@@ -86,6 +86,7 @@ type Step struct {
 	Message  string `json:"message"`
 }
 type Plan struct {
+	PackageSHA256 string   `json:"package_sha256"`
 	ID            string   `json:"id"`
 	SourceNode    string   `json:"source_node"`
 	SourceVersion string   `json:"source_version"`
@@ -126,4 +127,5 @@ type Service struct {
 	Agent           Host
 	NodeID, Version string
 	mu              sync.Mutex
+	pushMu          sync.Mutex
 }
