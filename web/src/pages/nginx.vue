@@ -1099,8 +1099,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
   />
   <nginx-external
     v-model:show="externalVisible"
-    :base-version="tree?.version ?? 0"
+    :tree="tree"
     @captured="capturedExternal"
+    @restored="loadRuntime"
   />
   <n-modal
     v-model:show="createVisible"

@@ -167,7 +167,7 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 						return errors.New("invalid include")
 					}
 					arg := node.Args[0]
-					edits = append(edits, nginxconfig.Edit{Start: arg.Start, End: arg.End, Text: nginxQuote(filepath.Join(filepath.Dir(n.configPath(revisionDir(m.RevisionID))), arg.Value))})
+					edits = append(edits, nginxconfig.Edit{Start: arg.Start, End: arg.End, Text: nginxQuote(filepath.Join(filepath.Dir(n.configPath(revisionDir(m.DeploymentID))), arg.Value))})
 				case "access_log", "error_log":
 					if inspection == nil && len(node.Args) > 0 && node.Args[0].Value != "off" && node.Args[0].Value != "/dev/null" {
 						if err := secure.RootDirectory(filepath.Dir(filepath.Join(n.DataDir, node.Args[0].Value)), 0755); err != nil {

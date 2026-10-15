@@ -202,6 +202,9 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 		state, stateErr := s.Agent.NginxState(r.Context())
 		if stateErr == nil {
 			runtime = &state
+			if state.Available && state.ExternalChange {
+				operations = append(operations, "nginx.restore")
+			}
 			if state.Available && state.Integrity {
 				operations = append(operations, "nginx.validate")
 				if state.Running {

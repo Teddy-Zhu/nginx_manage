@@ -507,8 +507,11 @@ type ExternalFileStatus string
 
 // ExternalSnapshot defines model for ExternalSnapshot.
 type ExternalSnapshot struct {
-	Complete     bool            `json:"complete"`
-	Dependencies []ExternalFile  `json:"dependencies"`
+	Complete     bool           `json:"complete"`
+	Dependencies []ExternalFile `json:"dependencies"`
+
+	// DeploymentId 不可变发布身份，初始发布为空；相同逻辑修订可有不同发布身份。
+	DeploymentId string          `json:"deployment_id"`
 	Detail       *ExternalDetail `json:"detail"`
 	Files        []ExternalFile  `json:"files"`
 	Integrity    bool            `json:"integrity"`
@@ -589,6 +592,7 @@ type NginxFeatures struct {
 // NginxRuntime defines model for NginxRuntime.
 type NginxRuntime struct {
 	Available      bool   `json:"available"`
+	DeploymentId   string `json:"deployment_id"`
 	ExternalChange bool   `json:"external_change"`
 	Integrity      bool   `json:"integrity"`
 	Reason         string `json:"reason"`
@@ -631,6 +635,12 @@ type Response struct {
 	Message   string      `json:"message"`
 	NodeId    string      `json:"node_id"`
 	RequestId string      `json:"request_id"`
+}
+
+// RestoreExternalRequest defines model for RestoreExternalRequest.
+type RestoreExternalRequest struct {
+	BaseVersion int64  `json:"base_version"`
+	Snapshot    string `json:"snapshot"`
 }
 
 // SaveRequest defines model for SaveRequest.
@@ -908,6 +918,14 @@ type CaptureNginxExternalParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// RestoreNginxExternalParams defines parameters for RestoreNginxExternal.
+type RestoreNginxExternalParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // CreateResourceParams defines parameters for CreateResource.
 type CreateResourceParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
@@ -1071,6 +1089,9 @@ type PreviewConfigTreeJSONRequestBody = SaveRequest
 // CaptureNginxExternalJSONRequestBody defines body for CaptureNginxExternal for application/json ContentType.
 type CaptureNginxExternalJSONRequestBody = CaptureExternalRequest
 
+// RestoreNginxExternalJSONRequestBody defines body for RestoreNginxExternal for application/json ContentType.
+type RestoreNginxExternalJSONRequestBody = RestoreExternalRequest
+
 // CreateResourceJSONRequestBody defines body for CreateResource for application/json ContentType.
 type CreateResourceJSONRequestBody = CreateResource
 
@@ -1169,6 +1190,9 @@ type ServerInterface interface {
 
 	// (POST /nginx/external/capture)
 	CaptureNginxExternal(w http.ResponseWriter, r *http.Request, params CaptureNginxExternalParams)
+
+	// (POST /nginx/external/restore)
+	RestoreNginxExternal(w http.ResponseWriter, r *http.Request, params RestoreNginxExternalParams)
 
 	// (GET /nginx/features)
 	GetNginxFeatures(w http.ResponseWriter, r *http.Request)
@@ -2274,6 +2298,70 @@ func (siw *ServerInterfaceWrapper) CaptureNginxExternal(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// RestoreNginxExternal operation middleware
+func (siw *ServerInterfaceWrapper) RestoreNginxExternal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RestoreNginxExternalParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestoreNginxExternal(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNginxFeatures operation middleware
 func (siw *ServerInterfaceWrapper) GetNginxFeatures(w http.ResponseWriter, r *http.Request) {
 
@@ -3351,6 +3439,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/diff", wrapper.DiffConfigTree)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/external", wrapper.InspectNginxExternal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/external/capture", wrapper.CaptureNginxExternal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/external/restore", wrapper.RestoreNginxExternal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/preview", wrapper.PreviewConfigTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources", wrapper.CreateResource)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.DeleteResource)

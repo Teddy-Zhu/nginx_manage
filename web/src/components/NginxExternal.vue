@@ -1,16 +1,58 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { NAlert, NButton, NEmpty, NModal, NSelect, NTag } from "naive-ui";
-import { api, type ExternalSnapshot, type SaveResult } from "../api/client";
+import {
+  api,
+  type Difference,
+  type ExternalSnapshot,
+  type SaveResult,
+  type Tree,
+} from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import SourceDiff from "./SourceDiff.vue";
 const show = defineModel<boolean>("show", { required: true });
-const props = defineProps<{ baseVersion: number }>();
-const emit = defineEmits<{ captured: [result: SaveResult] }>();
+const props = defineProps<{ tree: Tree | null }>();
+const emit = defineEmits<{
+  captured: [result: SaveResult];
+  restored: [result: SaveResult];
+}>();
 const { run, busy } = useAction(),
   keyFor = useIdempotency();
 const snapshot = ref<ExternalSnapshot | null>(null),
   selected = ref("");
+const restoreReview = ref<{
+    difference: Difference;
+    snapshot: string;
+    version: number;
+    revision: string;
+  } | null>(null),
+  restoreSelected = ref("");
+const restorable = computed(
+  () =>
+    !!props.tree?.revision_id &&
+    props.tree.state === "desired" &&
+    !!snapshot.value?.complete &&
+    !snapshot.value.integrity,
+);
+const reviewed = computed(
+  () =>
+    restorable.value &&
+    restoreReview.value?.snapshot === snapshot.value?.snapshot &&
+    restoreReview.value?.version === props.tree?.version &&
+    restoreReview.value?.revision === props.tree?.revision_id,
+);
+const restoreOptions = computed(
+  () =>
+    restoreReview.value?.difference.files.map((file) => ({
+      label: file.after_path || file.before_path,
+      value: file.file_id,
+    })) ?? [],
+);
+const restoreFile = computed(() =>
+  restoreReview.value?.difference.files.find(
+    (file) => file.file_id === restoreSelected.value,
+  ),
+);
 const changed = computed(
   () =>
     snapshot.value?.files.filter((file) => file.status !== "unchanged") ?? [],
@@ -44,6 +86,7 @@ function status(value: string) {
   );
 }
 async function load() {
+  restoreReview.value = null;
   snapshot.value = null;
   selected.value = "";
   await run(async () => {
@@ -55,7 +98,9 @@ async function detail(value: unknown) {
   selected.value = value;
   if (snapshot.value) snapshot.value.detail = null;
   await run(async () => {
-    snapshot.value = await api.external(value);
+    const next = await api.external(value);
+    if (snapshot.value?.snapshot !== next.snapshot) restoreReview.value = null;
+    snapshot.value = next;
   });
 }
 async function capture() {
@@ -69,7 +114,7 @@ async function capture() {
   )
     return;
   const input = {
-    base_version: props.baseVersion,
+    base_version: props.tree?.version ?? 0,
     snapshot: report.snapshot,
     path: report.detail.path,
   };
@@ -80,9 +125,62 @@ async function capture() {
     snapshot.value = null;
   }, "外部内容已保存为草稿，尚未应用");
 }
+async function previewRestore() {
+  const report = snapshot.value,
+    tree = props.tree;
+  if (!restorable.value || !report || !tree || busy.value) return;
+  restoreReview.value = null;
+  await run(async () => {
+    const difference = await api.diff(report.revision_id, tree.files);
+    if (
+      snapshot.value?.snapshot !== report.snapshot ||
+      props.tree?.version !== tree.version ||
+      !show.value
+    )
+      return;
+    restoreReview.value = {
+      difference,
+      snapshot: report.snapshot,
+      version: tree.version,
+      revision: tree.revision_id,
+    };
+    restoreSelected.value = difference.files[0]?.file_id ?? "";
+  });
+}
+async function restore() {
+  const review = restoreReview.value;
+  if (
+    !reviewed.value ||
+    !review ||
+    review.difference.diagnostics.length ||
+    busy.value
+  )
+    return;
+  if (
+    !window.confirm(
+      `发布已保存期望修订 #${review.version} 并重新加载 Nginx？原外部副本会保留；切换后若无法确认运行结果，将暂停后续配置操作。`,
+    )
+  )
+    return;
+  const input = { base_version: review.version, snapshot: review.snapshot };
+  await run(async () => {
+    const result = await api.restoreExternal(input, keyFor(input));
+    emit("restored", result);
+    show.value = false;
+  }, "受管恢复已加入队列，请在任务中查看运行确认结果");
+}
+watch(
+  () => props.tree?.version,
+  () => {
+    restoreReview.value = null;
+  },
+);
 watch(show, (visible) => {
   if (visible) void load();
-  else snapshot.value = null;
+  else {
+    snapshot.value = null;
+    restoreReview.value = null;
+  }
 });
 </script>
 <template>
@@ -101,7 +199,7 @@ watch(show, (visible) => {
     </div>
     <n-alert type="info" :bordered="false" style="margin-bottom: 16px"
       >差异基于磁盘副本，不代表这些内容已经被 Nginx
-      加载。冲突期间继续暂停应用；捕获只保存草稿，证书材料需通过证书管理导入新版本。</n-alert
+      加载。捕获只保存草稿；恢复会发布已保存期望修订并重新加载。损坏的证书须导入新版本、重新绑定并保存后再恢复。</n-alert
     >
     <template v-if="snapshot">
       <n-alert
@@ -109,7 +207,7 @@ watch(show, (visible) => {
         type="warning"
         :bordered="false"
         style="margin-bottom: 16px"
-        >目录无法完整检查，禁止捕获草稿。请在本机检查目录权限、链接及文件数量。</n-alert
+        >目录无法完整检查，禁止捕获和恢复。请在本机检查目录权限、链接及文件数量。</n-alert
       >
       <n-empty
         v-if="snapshot.integrity"
@@ -162,6 +260,59 @@ watch(show, (visible) => {
           >保存选中文件为草稿</n-button
         ></template
       >
+      <section v-if="!snapshot.integrity" class="restore-section">
+        <h3>恢复受管配置</h3>
+        <p class="muted">
+          恢复目标为已保存期望修订。请先查看它与最近生效修订的原文差异；原外部发布副本保留，恢复后若无法确认运行结果，将暂停后续配置操作。
+        </p>
+        <n-alert v-if="!tree?.revision_id" type="warning" :bordered="false"
+          >请先保存有效的期望修订。</n-alert
+        >
+        <n-button
+          :disabled="busy || !restorable"
+          :loading="busy"
+          @click="previewRestore"
+          >预览恢复目标</n-button
+        >
+        <template v-if="reviewed && restoreReview">
+          <p>
+            目标：期望修订 #{{ restoreReview.version
+            }}<span class="muted mono"> · {{ restoreReview.revision }}</span>
+          </p>
+          <n-alert
+            v-if="restoreReview.difference.diagnostics.length"
+            type="warning"
+            :bordered="false"
+            >目标原文存在诊断，请整理并保存有效修订后再恢复。</n-alert
+          >
+          <n-select
+            v-if="restoreOptions.length"
+            v-model:value="restoreSelected"
+            :options="restoreOptions"
+            :disabled="busy"
+            style="margin: 16px 0"
+          />
+          <source-diff
+            v-if="restoreFile"
+            :before="restoreFile.before_content"
+            :after="restoreFile.after_content"
+            before-label="最近生效修订原文"
+            after-label="恢复目标原文"
+          />
+          <n-empty
+            v-else
+            description="目标与最近生效修订原文一致；恢复将重新生成受管发布副本"
+          />
+          <n-button
+            type="warning"
+            :disabled="busy || !!restoreReview.difference.diagnostics.length"
+            :loading="busy"
+            style="margin-top: 16px"
+            @click="restore"
+            >确认恢复并重新加载</n-button
+          >
+        </template>
+      </section>
     </template>
   </n-modal>
 </template>
@@ -176,5 +327,10 @@ watch(show, (visible) => {
 }
 .dependency p {
   margin-bottom: 0;
+}
+.restore-section {
+  margin-top: 24px;
+  border-top: 1px solid #e2e9e5;
+  padding-top: 12px;
 }
 </style>

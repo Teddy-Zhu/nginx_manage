@@ -41,6 +41,7 @@ type ExternalDetail struct {
 	Note           string `json:"note"`
 }
 type ExternalSnapshot struct {
+	DeploymentID string          `json:"deployment_id"`
 	RevisionID   string          `json:"revision_id"`
 	Snapshot     string          `json:"snapshot"`
 	Integrity    bool            `json:"integrity"`
@@ -137,6 +138,10 @@ func reverseRuntime(expected, observed, source string, edits []renderReplacement
 func (n *Nginx) Inspect(in InspectRequest) (ExternalSnapshot, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	return n.inspectLocked(in)
+}
+
+func (n *Nginx) inspectLocked(in InspectRequest) (ExternalSnapshot, error) {
 	out := ExternalSnapshot{RevisionID: in.RevisionID, Files: []ExternalFile{}, Dependencies: []ExternalFile{}, Complete: true, Integrity: true}
 	if n.closed || n.unlock == nil {
 		return out, ErrRuntimeUnavailable
@@ -153,14 +158,12 @@ func (n *Nginx) Inspect(in InspectRequest) (ExternalSnapshot, error) {
 			return out, ErrBusy
 		}
 	}
-	dir := revisionDir(in.RevisionID)
-	target, err := os.Readlink(n.activePath())
-	if err != nil || target != filepath.Join("revisions", dir) {
-		return out, ErrExternalChange
-	}
-	m, err := n.manifestMetadata(dir)
+	dir, m, err := n.activeMetadata()
 	if err != nil {
 		return out, err
+	}
+	if m.RevisionID != in.RevisionID {
+		return out, ErrExternalChange
 	}
 	p, err := nginxconfig.Parse(in.Files, n.Policy)
 	if err != nil || len(p.Tree.Diagnostics) > 0 || n.sourceHash(p) != m.SourceHash {
@@ -179,13 +182,21 @@ func (n *Nginx) Inspect(in InspectRequest) (ExternalSnapshot, error) {
 			return out, ErrExternalChange
 		}
 	}
+	return n.scanExternal(dir, m, in.Path, expected, p, trace)
+}
+
+// Scan metadata and hashes without requiring source plaintext. Recovery uses the
+// durable fingerprint to reject another external change before switching.
+func (n *Nginx) scanExternal(dir string, m manifest, filePath string, expected map[string]string, p *nginxconfig.Parsed, trace map[string][]renderReplacement) (ExternalSnapshot, error) {
+	out := ExternalSnapshot{RevisionID: m.RevisionID, DeploymentID: m.DeploymentID, Files: []ExternalFile{}, Dependencies: []ExternalFile{}, Complete: true, Integrity: true}
+	target := filepath.Join("revisions", dir)
 	root := filepath.Dir(n.configPath(dir))
 	names := map[string]bool{}
-	for name := range expected {
+	for name := range m.Files {
 		names[name] = true
 	}
 	entries := 0
-	err = filepath.WalkDir(root, func(full string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(root, func(full string, entry fs.DirEntry, walkErr error) error {
 		entries++
 		if entries > limits.Files*4 {
 			return errors.New("inspection entry budget exceeded")
@@ -243,10 +254,10 @@ func (n *Nginx) Inspect(in InspectRequest) (ExternalSnapshot, error) {
 			out.Integrity = false
 		}
 		out.Files = append(out.Files, file)
-		if name == in.Path {
+		if name == filePath {
 			detail := &ExternalDetail{Path: name, BeforeContent: expected[name], AfterContent: text, CaptureAllowed: out.Complete && (state == "readable" || state == "missing") && file.Status != "unchanged"}
 			detail.DraftContent = text
-			if original, exists := expected[name]; exists && state == "readable" {
+			if original, exists := expected[name]; exists && state == "readable" && p != nil {
 				for _, source := range p.Tree.Files {
 					if source.Path == name {
 						detail.DraftContent, detail.Note = reverseRuntime(original, text, source.Content, trace[name])
@@ -296,7 +307,10 @@ func (n *Nginx) Inspect(in InspectRequest) (ExternalSnapshot, error) {
 	if active, err := os.Readlink(n.activePath()); err != nil || active != target {
 		return out, ErrExternalChange
 	}
-	if in.Path != "" && out.Detail == nil {
+	if verified, err := n.manifestMetadata(dir); err != nil || manifestHash(verified) != manifestHash(m) {
+		return out, ErrExternalChange
+	}
+	if filePath != "" && out.Detail == nil {
 		return out, errors.New("inspection file not found")
 	}
 	encoded, err = json.Marshal(out)

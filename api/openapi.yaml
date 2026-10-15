@@ -262,6 +262,22 @@ paths:
       responses:
         '201': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /nginx/external/restore:
+    post:
+      operationId: restoreNginxExternal
+      x-scopes: [config.write, config.secrets, security.write]
+      description: 重新核对外部快照，将当前已保存期望修订部署到新受管目录并确认运行结果；保留原外部目录，切换后不向外部内容回滚。浏览器需重新认证。
+      parameters:
+        - { $ref: '#/components/parameters/Idempotency' }
+        - { $ref: '#/components/parameters/CSRF' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RestoreExternalRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /nginx/config-tree/preview:
     post:
       operationId: previewConfigTree
@@ -709,9 +725,10 @@ components:
         note: { type: string }
     ExternalSnapshot:
       type: object
-      required: [revision_id, snapshot, integrity, complete, files, dependencies, detail]
+      required: [revision_id, deployment_id, snapshot, integrity, complete, files, dependencies, detail]
       properties:
         revision_id: { type: string }
+        deployment_id: { type: string, description: 不可变发布身份，初始发布为空；相同逻辑修订可有不同发布身份。 }
         snapshot: { type: string }
         integrity: { type: boolean }
         complete: { type: boolean }
@@ -725,6 +742,12 @@ components:
         base_version: { type: integer, format: int64, minimum: 0 }
         snapshot: { type: string, minLength: 64, maxLength: 64 }
         path: { type: string, minLength: 1, maxLength: 1024 }
+    RestoreExternalRequest:
+      type: object
+      required: [base_version, snapshot]
+      properties:
+        base_version: { type: integer, format: int64, minimum: 0 }
+        snapshot: { type: string, minLength: 64, maxLength: 64 }
     CertificateInput:
       type: object
       required: [base_version, name, notes, fullchain_pem, private_key_pem]
@@ -885,11 +908,12 @@ components:
         scopes: { type: array, items: { type: string } }
     NginxRuntime:
       type: object
-      required: [available, revision_id, integrity, running, reason, external_change]
+      required: [available, revision_id, deployment_id, integrity, running, reason, external_change]
       properties:
         external_change: { type: boolean }
         available: { type: boolean }
         revision_id: { type: string }
+        deployment_id: { type: string }
         integrity: { type: boolean }
         running: { type: boolean }
         reason: { type: string }

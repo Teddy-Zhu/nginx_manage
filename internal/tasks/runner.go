@@ -20,7 +20,7 @@ type Runner struct {
 
 func (r *Runner) Run(ctx context.Context) error {
 	// An expired Web lease is never evidence that the root operation stopped.
-	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate')"); err != nil {
+	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore')"); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(2 * time.Second)
@@ -38,7 +38,7 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 func (r *Runner) next(ctx context.Context) error {
 	var id string
-	err := r.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE state IN ('running','compensating') OR (state='recovery_required' AND kind IN ('nginx.apply','nginx.validate')) ORDER BY created_at,id LIMIT 1").Scan(&id)
+	err := r.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE state IN ('running','compensating') OR (state='recovery_required' AND kind IN ('nginx.apply','nginx.validate','nginx.restore')) ORDER BY created_at,id LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		now := time.Now().Unix()
 		err = r.DB.QueryRowContext(ctx, `UPDATE tasks SET state='running',stage='agent_submit_pending',attempts=attempts+1,lease_until=?,updated_at=?
@@ -54,7 +54,7 @@ WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT
 	if err != nil {
 		return err
 	}
-	if task.Kind != "nginx.apply" && task.Kind != "nginx.validate" {
+	if task.Kind != "nginx.apply" && task.Kind != "nginx.validate" && task.Kind != "nginx.restore" {
 		return r.finish(ctx, task, "recovery_required", "unknown_task", "未注册的任务类型", "")
 	}
 	record, err := r.Agent.Operation(ctx, task.OperationID)
@@ -79,6 +79,21 @@ WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT
 			}
 			return r.finish(ctx, task, "failed", "certificate_load_failed", "读取修订引用的证书版本失败", "")
 		}
+		var previousFiles []nginxconfig.File
+		if task.Kind == "nginx.restore" {
+			previousFiles = nginxconfig.InitialFiles()
+			if task.ExpectedRevision != "" {
+				previous, previousErr := r.Config.Get(ctx, task.ExpectedRevision)
+				if previousErr != nil {
+					state := "failed"
+					if task.SubmitStarted != 0 {
+						state = "recovery_required"
+					}
+					return r.finish(ctx, task, state, "previous_load_failed", "无法读取外部快照对应的已生效修订", "")
+				}
+				previousFiles = previous.Files
+			}
+		}
 		if task.SubmitStarted == 0 {
 			var desired sql.NullString
 			var enabled bool
@@ -98,14 +113,14 @@ WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT
 			if err != nil {
 				return r.progress(ctx, task, "agent_unreachable", "无法查询 Agent 状态，保留操作标识等待核对")
 			}
-			if !runtime.Available || !runtime.Integrity {
+			if !runtime.Available || task.Kind != "nginx.restore" && !runtime.Integrity {
 				return r.finish(ctx, task, "failed", "agent_not_ready", runtime.Reason, "")
 			}
 			if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET submit_started=1 WHERE id=?", task.ID); err != nil {
 				return err
 			}
 		}
-		record, err = r.Agent.Apply(ctx, agent.ApplyRequest{Protocol: agent.Protocol, OperationID: task.OperationID, RevisionID: tree.RevisionID, ExpectedRevision: task.ExpectedRevision, ValidateOnly: task.Kind == "nginx.validate", Files: tree.Files, Certificates: materials})
+		record, err = r.Agent.Apply(ctx, agent.ApplyRequest{Protocol: agent.Protocol, OperationID: task.OperationID, RevisionID: tree.RevisionID, ExpectedRevision: task.ExpectedRevision, ValidateOnly: task.Kind == "nginx.validate", Files: tree.Files, Certificates: materials, RestoreSnapshot: task.RestoreSnapshot, PreviousFiles: previousFiles})
 		if err != nil {
 			// Reconcile the durable operation before deciding whether a failed IPC
 			// request was rejected or is still executing independently of this process.
@@ -129,21 +144,26 @@ WHERE id=(SELECT id FROM tasks WHERE state='queued' ORDER BY created_at,id LIMIT
 	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET agent_accepted=1 WHERE id=?", task.ID); err != nil {
 		return err
 	}
-	if record.OperationID != task.OperationID || record.AfterRevision != task.RevisionID.String || record.BeforeRevision != task.ExpectedRevision || record.Kind != task.Kind {
+	if record.OperationID != task.OperationID || record.AfterDir != task.OperationID || record.AfterRevision != task.RevisionID.String || record.BeforeRevision != task.ExpectedRevision || record.Kind != task.Kind || record.RestoreSnapshot != task.RestoreSnapshot || task.Kind == "nginx.restore" && record.State == "rolled_back" {
 		return r.finish(ctx, task, "recovery_required", "operation_mismatch", "Agent 执行合同与任务不一致", "")
 	}
 	switch record.State {
 	case "succeeded", "rolled_back":
-		if task.Kind == "nginx.apply" {
+		if task.Kind == "nginx.apply" || task.Kind == "nginx.restore" {
 			want := task.RevisionID.String
+			deployment := record.AfterDir
 			if record.State == "rolled_back" {
 				want = task.ExpectedRevision
+				deployment = record.BeforeDir
+				if deployment == "bootstrap" {
+					deployment = ""
+				}
 			}
 			runtime, err := r.Agent.NginxState(ctx)
 			if err != nil {
 				return r.progress(ctx, task, "reconciling", "等待确认 Agent 当前运行修订")
 			}
-			if !runtime.Integrity || !runtime.Running || runtime.RevisionID != want || record.ObservedRevision != want {
+			if !runtime.Integrity || !runtime.Running || runtime.RevisionID != want || runtime.DeploymentID != deployment || record.ObservedRevision != want {
 				return r.finish(ctx, task, "recovery_required", "runtime_mismatch", "执行记录与当前运行修订不一致", "")
 			}
 		}
@@ -173,7 +193,7 @@ func (r *Runner) finish(ctx context.Context, t dbgen.Task, state, stage, message
 		return err
 	}
 	defer tx.Rollback()
-	if t.Kind == "nginx.apply" && (state == "succeeded" || state == "rolled_back") {
+	if (t.Kind == "nginx.apply" || t.Kind == "nginx.restore") && (state == "succeeded" || state == "rolled_back") {
 		var revision any
 		if observed != "" {
 			revision = observed

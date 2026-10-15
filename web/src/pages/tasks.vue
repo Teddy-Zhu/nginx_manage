@@ -37,6 +37,7 @@ const audits = ref<Audit[]>([]),
 const taskKinds: Record<string, string> = {
   "nginx.validate": "配置校验",
   "nginx.apply": "配置应用",
+  "nginx.restore": "受管配置恢复",
 };
 const taskStates: Record<string, string> = {
   queued: "排队中",
@@ -74,6 +75,12 @@ const taskStages: Record<string, string> = {
   superseded: "修订已被替换",
   interrupted_before_switch: "切换前中断",
   prepare_failed: "候选配置生成失败",
+  candidate_changed: "恢复候选已变化",
+  previous_load_failed: "快照基础修订读取失败",
+  restore_switch_pending: "准备切换恢复候选",
+  restore_switched: "确认恢复运行状态",
+  restore_confirmed: "已确认受管恢复",
+  restore_unconfirmed: "受管恢复待确认",
 };
 const taskColumns: DataTableColumns<Task> = [
   { title: "任务 ID", key: "id", render: (r) => r.id.slice(0, 8) },

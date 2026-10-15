@@ -318,6 +318,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/nginx/external/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 重新核对外部快照，将当前已保存期望修订部署到新受管目录并确认运行结果；保留原外部目录，切换后不向外部内容回滚。浏览器需重新认证。 */
+        post: operations["restoreNginxExternal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/config-tree/preview": {
         parameters: {
             query?: never;
@@ -733,6 +750,8 @@ export interface components {
         };
         ExternalSnapshot: {
             revision_id: string;
+            /** @description 不可变发布身份，初始发布为空；相同逻辑修订可有不同发布身份。 */
+            deployment_id: string;
             snapshot: string;
             integrity: boolean;
             complete: boolean;
@@ -745,6 +764,11 @@ export interface components {
             base_version: number;
             snapshot: string;
             path: string;
+        };
+        RestoreExternalRequest: {
+            /** Format: int64 */
+            base_version: number;
+            snapshot: string;
         };
         CertificateInput: {
             /**
@@ -913,6 +937,7 @@ export interface components {
             external_change: boolean;
             available: boolean;
             revision_id: string;
+            deployment_id: string;
             integrity: boolean;
             running: boolean;
             reason: string;
@@ -1354,6 +1379,27 @@ export interface operations {
         };
         responses: {
             201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    restoreNginxExternal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreExternalRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

@@ -27,6 +27,8 @@ type Record struct {
 	UpdatedAt        int64  `json:"updated_at"`
 	DiagnosticsCount int    `json:"diagnostics_count"`
 	BeforeDir        string `json:"before_dir,omitempty"`
+	AfterDir         string `json:"after_dir,omitempty"`
+	RestoreSnapshot  string `json:"restore_snapshot,omitempty"`
 	CandidateHash    string `json:"candidate_hash,omitempty"`
 	ObservedRevision string `json:"observed_revision"`
 	Error            string `json:"error"`

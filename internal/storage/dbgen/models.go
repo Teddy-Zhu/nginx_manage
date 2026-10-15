@@ -139,6 +139,7 @@ type Task struct {
 	LastError        string         `json:"last_error"`
 	CreatedAt        int64          `json:"created_at"`
 	UpdatedAt        int64          `json:"updated_at"`
+	RestoreSnapshot  string         `json:"restore_snapshot"`
 }
 
 type User struct {

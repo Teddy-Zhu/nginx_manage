@@ -53,6 +53,8 @@ type ApplyRequest struct {
 	ValidateOnly     bool                    `json:"validate_only"`
 	Files            []nginxconfig.File      `json:"files"`
 	Certificates     []certificates.Material `json:"certificates"`
+	RestoreSnapshot  string                  `json:"restore_snapshot"`
+	PreviousFiles    []nginxconfig.File      `json:"previous_files"`
 }
 
 type NginxState struct {
@@ -62,10 +64,12 @@ type NginxState struct {
 	Running        bool   `json:"running"`
 	Reason         string `json:"reason"`
 	ExternalChange bool   `json:"external_change"`
+	DeploymentID   string `json:"deployment_id"`
 }
 
 type manifest struct {
 	RevisionID   string            `json:"revision_id"`
+	DeploymentID string            `json:"deployment_id"`
 	SourceHash   string            `json:"source_hash"`
 	Probe        string            `json:"probe"`
 	Files        map[string]string `json:"files"`
@@ -168,10 +172,10 @@ func (n *Nginx) Initialize() error {
 	if err != nil || len(parsed.Tree.Diagnostics) != 0 {
 		return errors.New("invalid bootstrap configuration")
 	}
-	if _, err := n.prepare("", parsed); err != nil {
+	if _, err := n.prepare("", "", parsed); err != nil {
 		return err
 	}
-	return n.switchTo("", "")
+	return n.switchTo("bootstrap", "")
 }
 
 func (n *Nginx) Open() error {
@@ -193,6 +197,18 @@ func (n *Nginx) Open() error {
 		return err
 	}
 	for _, record := range records {
+		if record.Kind == "nginx.restore" && (record.State == "running" || record.State == "compensating" || record.State == "recovery_required") {
+			if record.Stage == "preparing" || record.Stage == "prepared" || record.Stage == "testing" {
+				record.State, record.Stage, record.Error = "failed", "interrupted_before_switch", "恢复准备期间 Agent 重启，原发布指针未改变"
+				if err := n.persist(record); err != nil {
+					n.Close()
+					return err
+				}
+			} else {
+				n.executeRestore(record)
+			}
+			continue
+		}
 		if (record.Kind == "nginx.apply" || record.Kind == "nginx.validate") && (record.State == "running" || record.State == "compensating" || record.State == "recovery_required") {
 			if record.Stage == "preparing" || record.Stage == "prepared" || record.Stage == "testing" || record.Kind == "nginx.validate" {
 				record.State, record.Stage, record.Error = "failed", "interrupted_before_switch", "配置校验期间 Agent 重启，运行修订未改变"
@@ -238,7 +254,7 @@ func (n *Nginx) State(ctx context.Context) NginxState {
 		s.Reason = err.Error()
 		return s
 	}
-	s.Integrity, s.RevisionID = true, m.RevisionID
+	s.Integrity, s.RevisionID, s.DeploymentID = true, m.RevisionID, m.DeploymentID
 	if err := n.observe(ctx, m); err != nil {
 		s.Reason = "专用 Nginx 运行状态尚未确认"
 		return s
@@ -255,6 +271,13 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 	}
 	if in.Protocol != Protocol || !validID(in.OperationID) || !validID(in.RevisionID) || (in.ExpectedRevision != "" && !validID(in.ExpectedRevision)) {
 		return Record{}, errors.New("invalid operation contract")
+	}
+	if in.RestoreSnapshot != "" {
+		if len(in.RestoreSnapshot) != 64 || in.ValidateOnly || len(in.PreviousFiles) == 0 {
+			return Record{}, errors.New("invalid restoration contract")
+		}
+	} else if len(in.PreviousFiles) > 0 {
+		return Record{}, errors.New("unexpected previous source tree")
 	}
 	encoded, err := json.Marshal(in)
 	if err != nil {
@@ -278,7 +301,20 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 			return Record{}, ErrBusy
 		}
 	}
-	before, current, err := n.active()
+	var before string
+	var current manifest
+	if in.RestoreSnapshot != "" {
+		snapshot, inspectErr := n.inspectLocked(InspectRequest{Protocol: Protocol, RevisionID: in.ExpectedRevision, Files: in.PreviousFiles})
+		if inspectErr != nil {
+			return Record{}, inspectErr
+		}
+		if !snapshot.Complete || snapshot.Integrity || snapshot.Snapshot != in.RestoreSnapshot {
+			return Record{}, ErrExternalChange
+		}
+		before, current, err = n.activeMetadata()
+	} else {
+		before, current, err = n.active()
+	}
 	if err != nil {
 		return Record{}, err
 	}
@@ -293,7 +329,10 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 	if in.ValidateOnly {
 		kind = "nginx.validate"
 	}
-	record := Record{OperationID: in.OperationID, RequestHash: digest, Kind: kind, BeforeRevision: current.RevisionID, AfterRevision: in.RevisionID, BeforeDir: before, State: "running", Stage: "preparing"}
+	if in.RestoreSnapshot != "" {
+		kind = "nginx.restore"
+	}
+	record := Record{OperationID: in.OperationID, RequestHash: digest, Kind: kind, BeforeRevision: current.RevisionID, AfterRevision: in.RevisionID, BeforeDir: before, AfterDir: in.OperationID, RestoreSnapshot: in.RestoreSnapshot, State: "running", Stage: "preparing"}
 	if err := n.persist(record); err != nil {
 		return Record{}, err
 	}
@@ -304,7 +343,7 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 		}
 		return record, nil
 	}
-	candidate, err := n.prepare(in.RevisionID, parsed)
+	candidate, err := n.prepare(in.RevisionID, record.AfterDir, parsed)
 	if err != nil {
 		record.State, record.Stage, record.Error = "failed", "prepare_failed", "无法生成不可变候选配置"
 		if putErr := n.persist(record); putErr != nil {
@@ -322,6 +361,10 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 }
 
 func (n *Nginx) execute(record Record) {
+	if record.Kind == "nginx.restore" {
+		n.executeRestore(record)
+		return
+	}
 	fail := func(stage, message string) {
 		record.State, record.Stage, record.Error = "failed", stage, message
 		n.persist(record)
@@ -331,7 +374,7 @@ func (n *Nginx) execute(record Record) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	err := n.test(ctx, revisionDir(record.AfterRevision))
+	err := n.test(ctx, record.AfterDir)
 	cancel()
 	if err != nil {
 		fail("nginx_test_failed", "Nginx 配置校验失败；运行修订未改变")
@@ -354,12 +397,12 @@ func (n *Nginx) execute(record Record) {
 		fail("runtime_unconfirmed", "发布前无法确认旧修订，已停止应用")
 		return
 	}
-	candidate, err := n.readManifest(revisionDir(record.AfterRevision))
+	candidate, err := n.readManifest(record.AfterDir)
 	if err != nil || manifestHash(candidate) != record.CandidateHash {
 		fail("external_conflict", ErrExternalChange.Error())
 		return
 	}
-	if record.BeforeRevision == record.AfterRevision {
+	if record.BeforeDir == record.AfterDir {
 		record.State, record.Stage, record.ObservedRevision = "succeeded", "runtime_confirmed", record.AfterRevision
 		_ = n.persist(record)
 		return
@@ -370,7 +413,7 @@ func (n *Nginx) execute(record Record) {
 	if n.persist(record) != nil {
 		return
 	}
-	if err := n.switchTo(record.AfterRevision, record.BeforeDir); err != nil {
+	if err := n.switchTo(record.AfterDir, record.BeforeDir); err != nil {
 		n.rollback(record)
 		return
 	}
@@ -391,7 +434,7 @@ func (n *Nginx) execute(record Record) {
 		return
 	}
 	active, verified, err := n.active()
-	if err != nil || active != revisionDir(record.AfterRevision) || manifestHash(verified) != record.CandidateHash {
+	if err != nil || active != record.AfterDir || manifestHash(verified) != record.CandidateHash {
 		n.rollback(record)
 		return
 	}
@@ -418,12 +461,12 @@ func (n *Nginx) rollback(record Record) {
 		failed()
 		return
 	}
-	if active != filepath.Join("revisions", record.BeforeDir) && active != filepath.Join("revisions", revisionDir(record.AfterRevision)) {
+	if active != filepath.Join("revisions", record.BeforeDir) && active != filepath.Join("revisions", record.AfterDir) {
 		failed()
 		return
 	}
 	if active != filepath.Join("revisions", record.BeforeDir) {
-		if err := n.switchTo(record.BeforeRevision, revisionDir(record.AfterRevision)); err != nil {
+		if err := n.switchTo(record.BeforeDir, record.AfterDir); err != nil {
 			failed()
 			return
 		}
@@ -468,6 +511,15 @@ func (n *Nginx) test(ctx context.Context, dir string) error {
 }
 
 func (n *Nginx) active() (string, manifest, error) {
+	dir, m, err := n.activeMetadata()
+	if err != nil {
+		return dir, m, err
+	}
+	m, err = n.readManifest(dir)
+	return dir, m, err
+}
+
+func (n *Nginx) activeMetadata() (string, manifest, error) {
 	target, err := os.Readlink(n.activePath())
 	if err != nil {
 		return "", manifest{}, ErrRuntimeUnavailable
@@ -476,7 +528,7 @@ func (n *Nginx) active() (string, manifest, error) {
 	if target != "revisions/"+dir || (dir != "bootstrap" && !validID(dir)) {
 		return "", manifest{}, ErrExternalChange
 	}
-	m, err := n.readManifest(dir)
+	m, err := n.manifestMetadata(dir)
 	return dir, m, err
 }
 
@@ -501,7 +553,7 @@ func (n *Nginx) manifestMetadata(dir string) (manifest, error) {
 	if err != nil || len(b) > 256<<10 {
 		return m, ErrExternalChange
 	}
-	if err := json.Unmarshal(b, &m); err != nil || revisionDir(m.RevisionID) != dir || m.Probe == "" {
+	if err := json.Unmarshal(b, &m); err != nil || revisionDir(m.DeploymentID) != dir || m.RevisionID != "" && !validID(m.RevisionID) || m.Probe == "" {
 		return m, ErrExternalChange
 	}
 	if len(m.Files) == 0 || len(m.Files) > limits.Files || len(m.Dependencies) > limits.CertificateReferences {
@@ -575,23 +627,23 @@ func (n *Nginx) sourceHash(p *nginxconfig.Parsed) string {
 		Policy        nginxconfig.Policy
 		Worker, Group string
 		Renderer      int
-	}{p.Tree.Files, n.Policy, n.WorkerUser, n.workerGroup, 3})
+	}{p.Tree.Files, n.Policy, n.WorkerUser, n.workerGroup, 4})
 	return secure.Hash(source)
 }
 
-func (n *Nginx) prepare(id string, p *nginxconfig.Parsed) (manifest, error) {
+func (n *Nginx) prepare(id, deployment string, p *nginxconfig.Parsed) (manifest, error) {
 	digest := n.sourceHash(p)
-	dir := revisionDir(id)
+	dir := revisionDir(deployment)
 	if _, err := os.Lstat(filepath.Dir(n.configPath(dir))); err == nil {
 		m, err := n.readManifest(dir)
-		if err != nil || m.SourceHash != digest {
+		if err != nil || m.SourceHash != digest || m.RevisionID != id {
 			return m, ErrExternalChange
 		}
 		return m, nil
 	} else if !os.IsNotExist(err) {
 		return manifest{}, err
 	}
-	m := manifest{RevisionID: id, SourceHash: digest, Probe: secure.Token(), Files: map[string]string{}, Listeners: []listener{}, TLS: []tlsProbe{}}
+	m := manifest{RevisionID: id, DeploymentID: deployment, SourceHash: digest, Probe: secure.Token(), Files: map[string]string{}, Listeners: []listener{}, TLS: []tlsProbe{}}
 	contents, err := n.render(p, &m, nil)
 	if err != nil {
 		return m, err
@@ -688,6 +740,9 @@ func syncTree(root string) error {
 	})
 }
 func (n *Nginx) switchTo(id, expected string) error {
+	if id != "bootstrap" && !validID(id) {
+		return ErrExternalChange
+	}
 	if expected != "" {
 		target, err := os.Readlink(n.activePath())
 		if err != nil || target != filepath.Join("revisions", expected) {
@@ -697,7 +752,7 @@ func (n *Nginx) switchTo(id, expected string) error {
 		return ErrExternalChange
 	}
 	tmp := filepath.Join(n.DataDir, "nginx", ".active-"+secure.ID())
-	if err := os.Symlink(filepath.Join("revisions", revisionDir(id)), tmp); err != nil {
+	if err := os.Symlink(filepath.Join("revisions", id), tmp); err != nil {
 		return err
 	}
 	defer os.Remove(tmp)

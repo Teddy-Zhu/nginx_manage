@@ -28,6 +28,8 @@ export type Difference = components["schemas"]["Difference"];
 export type ExternalSnapshot = components["schemas"]["ExternalSnapshot"];
 export type CaptureExternalRequest =
   components["schemas"]["CaptureExternalRequest"];
+export type RestoreExternalRequest =
+  components["schemas"]["RestoreExternalRequest"];
 export interface Revision {
   id: string;
   version: number;
@@ -263,6 +265,13 @@ export const api = {
     request<SaveResult>({
       method: "POST",
       url: "/nginx/external/capture",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  restoreExternal: (data: RestoreExternalRequest, key: string) =>
+    request<SaveResult>({
+      method: "POST",
+      url: "/nginx/external/restore",
       data,
       headers: { "Idempotency-Key": key },
     }),

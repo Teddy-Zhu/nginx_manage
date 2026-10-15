@@ -126,7 +126,7 @@ func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, kind, resource_id, revision_id, expected_revision, observed_revision, submit_started, agent_accepted, state, stage, operation_id, attempts, lease_until, last_error, created_at, updated_at FROM tasks WHERE id=?
+SELECT id, kind, resource_id, revision_id, expected_revision, observed_revision, submit_started, agent_accepted, state, stage, operation_id, attempts, lease_until, last_error, created_at, updated_at, restore_snapshot FROM tasks WHERE id=?
 `
 
 func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
@@ -149,6 +149,7 @@ func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RestoreSnapshot,
 	)
 	return i, err
 }
@@ -259,7 +260,7 @@ func (q *Queries) ListRevisions(ctx context.Context, arg ListRevisionsParams) ([
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, kind, resource_id, revision_id, expected_revision, observed_revision, submit_started, agent_accepted, state, stage, operation_id, attempts, lease_until, last_error, created_at, updated_at FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?
+SELECT id, kind, resource_id, revision_id, expected_revision, observed_revision, submit_started, agent_accepted, state, stage, operation_id, attempts, lease_until, last_error, created_at, updated_at, restore_snapshot FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?
 `
 
 type ListTasksParams struct {
@@ -293,6 +294,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]Task, e
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RestoreSnapshot,
 		); err != nil {
 			return nil, err
 		}

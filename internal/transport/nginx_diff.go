@@ -112,3 +112,30 @@ func (s *Server) CaptureNginxExternal(w http.ResponseWriter, r *http.Request, pa
 	}
 	s.respond(w, r, 201, "OK", "外部内容已保存为独立草稿", out)
 }
+
+func (s *Server) RestoreNginxExternal(w http.ResponseWriter, r *http.Request, params apigen.RestoreNginxExternalParams) {
+	p, ok := s.authorize(w, r, true, "config.write", "config.secrets", "security.write")
+	if !ok {
+		return
+	}
+	var in nginxconfig.RestoreRequest
+	if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Config.RestoreManaged(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, in, func() (string, error) {
+		snapshot, _, err := s.externalSnapshot(r, "")
+		if err != nil {
+			return "", err
+		}
+		if !snapshot.Complete || snapshot.Integrity || snapshot.Snapshot != in.Snapshot {
+			return "", fault.Conflict("外部冲突快照已变化或无法完整核对，请重新检查")
+		}
+		return snapshot.RevisionID, nil
+	})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.respond(w, r, 202, "OK", "受管恢复已加入任务队列", out)
+}
