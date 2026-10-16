@@ -105,3 +105,6 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 
 内核格式与规则代次依据：[Linux v6.1 nf_tables UAPI](https://github.com/torvalds/linux/blob/v6.1/include/uapi/linux/netfilter/nf_tables.h)、[nf_tables GET/代次实现](https://github.com/torvalds/linux/blob/v6.1/net/netfilter/nf_tables_api.c)、[nfnetlink batch 代次前置条件](https://github.com/torvalds/linux/blob/v6.1/net/netfilter/nfnetlink.c)。这些源码依据不能替代 P5 真实内核矩阵验收。
+
+
+Fail2ban 宿主机动作的基础预检使用独立固定目标 `inet nginxpanel_fail2ban`。共享快照、编码和语义证明通过闭合目标枚举选择布局，不接受调用方表名；人工端口规则的所有公开写入仍固定 `nginxpanel_host`。新动作的空集合编译摘要与内核读取不是登记或执行授权，已有专用表保持阻塞，当前不提交该动作的事务。详情见 [Fail2ban 宿主机动作](fail2ban.md)。Agent 为 49；实际双目标隔离和内核矩阵留待 P5。

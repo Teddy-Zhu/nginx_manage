@@ -1855,6 +1855,26 @@ type FirewallProtectionObservation struct {
 	Protections  []FirewallProtection `json:"protections"`
 	Reason       string               `json:"reason"`
 }
+type Fail2banHostInputPreview struct {
+	ManagerObservedAt int64              `json:"manager_observed_at"`
+	At                int64              `json:"at"`
+	Scope             string             `json:"scope"`
+	Available         bool               `json:"available"`
+	Manager           string             `json:"manager"`
+	Backend           string             `json:"backend"`
+	Table             string             `json:"table"`
+	Hook              string             `json:"hook"`
+	Priority          int                `json:"priority"`
+	CanPrepare        bool               `json:"can_prepare"`
+	CanApply          bool               `json:"can_apply"`
+	Kernel            FirewallKernelView `json:"kernel"`
+	ProtectedSources  []string           `json:"protected_sources"`
+	ProgramHash       string             `json:"program_hash"`
+	TransactionHash   string             `json:"transaction_hash"`
+	TransactionBytes  int                `json:"transaction_bytes"`
+	GeneratedRules    int                `json:"generated_rules"`
+	Reason            string             `json:"reason"`
+}
 type Fail2banPanelLoginEvent struct {
 	TimeIso8601 string `json:"time_iso8601"`
 	Event       string `json:"event"`
@@ -2150,14 +2170,15 @@ type Fail2banApplyTask struct {
 type ApplyFail2banParams = SetFail2banPolicyParams
 type ApplyFail2banJSONRequestBody = Fail2banApplyInput
 type Fail2banPolicyPreview struct {
-	Runtime        Fail2banJailsRuntime    `json:"runtime"`
-	Removed        []string                `json:"removed"`
-	TemplateChecks []Fail2banTemplateCheck `json:"template_checks"`
-	Version        int64                   `json:"version"`
-	PolicyHash     string                  `json:"policy_hash"`
-	CanApply       bool                    `json:"can_apply"`
-	Entries        []Fail2banJailPreview   `json:"entries"`
-	Warnings       []string                `json:"warnings"`
+	HostInput      *Fail2banHostInputPreview `json:"host_input,omitempty"`
+	Runtime        Fail2banJailsRuntime      `json:"runtime"`
+	Removed        []string                  `json:"removed"`
+	TemplateChecks []Fail2banTemplateCheck   `json:"template_checks"`
+	Version        int64                     `json:"version"`
+	PolicyHash     string                    `json:"policy_hash"`
+	CanApply       bool                      `json:"can_apply"`
+	Entries        []Fail2banJailPreview     `json:"entries"`
+	Warnings       []string                  `json:"warnings"`
 }
 type MigrationMonitoringInput struct {
 	Mode        string `json:"mode"`
@@ -4431,6 +4452,7 @@ type ServerInterface interface {
 	SetFail2banPolicy(w http.ResponseWriter, r *http.Request, params SetFail2banPolicyParams)
 	GetFail2banTemplates(w http.ResponseWriter, r *http.Request)
 	GetFail2banPanelLogin(w http.ResponseWriter, r *http.Request)
+	GetFail2banHostInput(w http.ResponseWriter, r *http.Request)
 	PreviewFail2ban(w http.ResponseWriter, r *http.Request, params PreviewFail2banParams)
 	GetFail2banInstance(w http.ResponseWriter, r *http.Request)
 	GetFail2banJail(w http.ResponseWriter, r *http.Request, name string)
@@ -7344,6 +7366,13 @@ func (siw *ServerInterfaceWrapper) PreviewFail2ban(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+func (siw *ServerInterfaceWrapper) GetFail2banHostInput(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banHostInput(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
 func (siw *ServerInterfaceWrapper) GetFail2banPanelLogin(w http.ResponseWriter, r *http.Request) {
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banPanelLogin(w, r) }))
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11345,6 +11374,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/fail2ban/policy", wrapper.SetFail2banPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/templates", wrapper.GetFail2banTemplates)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/panel-login", wrapper.GetFail2banPanelLogin)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/host-input", wrapper.GetFail2banHostInput)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/preview", wrapper.PreviewFail2ban)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/templates/check", wrapper.CheckFail2banTemplates)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/instance", wrapper.GetFail2banInstance)

@@ -207,7 +207,8 @@ func (s *Server) Run(ctx context.Context) error {
 	s.logHandlers(mux)
 	sampler := &metricSampler{ctx: ctx, capability: platform.MetricsCapability(s.MetricsScope, s.Dev), collector: platform.MetricsCollector{DataDir: s.DataDir}}
 	s.monitoringHandlers(mux, sampler)
-	s.firewallHandlers(mux, ctx)
+	firewallObserver := s.firewallHandlers(mux, ctx)
+	s.fail2banHostInputHandlers(mux, ctx, firewallObserver)
 	s.fail2banHandlers(mux, ctx)
 	loginLog := panelLoginLog{server: s}
 	if loginLog.available() {

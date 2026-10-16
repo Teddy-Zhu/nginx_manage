@@ -15,6 +15,7 @@ import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
 import Fail2banAddressPanel from "../components/Fail2banAddressPanel.vue";
 import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
 import Fail2banLoginLogPanel from "../components/Fail2banLoginLogPanel.vue";
+import Fail2banHostInputPanel from "../components/Fail2banHostInputPanel.vue";
 import { computed, h, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -230,6 +231,7 @@ onUnmounted(() => {
       @changed="load"
     />
     <Fail2banLoginLogPanel />
+    <Fail2banHostInputPanel />
     <Fail2banPolicyEditor />
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">

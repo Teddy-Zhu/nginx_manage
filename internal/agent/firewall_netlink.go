@@ -30,6 +30,7 @@ const nftReadObjects = firewall.MaxEntries + 256
 // Receive processes one bounded datagram at a time instead of accumulating an
 // unbounded multipart dump in netlink.Conn.Receive.
 type nftReadSocket struct {
+	table          string
 	fd             int
 	pid, sequence  uint32
 	bytes, objects int
@@ -55,7 +56,7 @@ func openNFTRead() (*nftReadSocket, error) {
 		unix.Close(fd)
 		return nil, errors.New("invalid netlink port")
 	}
-	return &nftReadSocket{fd: fd, pid: local.Pid, buffer: make([]byte, nftDatagramBytes)}, nil
+	return &nftReadSocket{table: firewall.NFTHostTable, fd: fd, pid: local.Pid, buffer: make([]byte, nftDatagramBytes)}, nil
 }
 func (s *nftReadSocket) close() { unix.Close(s.fd) }
 func (s *nftReadSocket) wait(ctx context.Context, event int16) error {
@@ -217,9 +218,12 @@ func (s *nftReadSocket) query(ctx context.Context, kind, reply uint16, dump bool
 	}
 	data := []byte{family, unix.NFNETLINK_V0, 0, 0}
 	if table {
+		if s.table != firewall.NFTHostTable && s.table != firewall.NFTFail2banTable {
+			return errors.New("unsupported fixed nftables read target")
+		}
 		// TABLE_NAME, CHAIN_TABLE, RULE_TABLE, SET_TABLE, OBJ_TABLE and
 		// FLOWTABLE_TABLE all have UAPI attribute number 1.
-		attributes, e := netlink.MarshalAttributes([]netlink.Attribute{{Type: 1, Data: []byte(firewall.NFTHostTable + "\x00")}})
+		attributes, e := netlink.MarshalAttributes([]netlink.Attribute{{Type: 1, Data: []byte(s.table + "\x00")}})
 		if e != nil {
 			return e
 		}
@@ -381,7 +385,14 @@ func snapshotNFTKernel(ctx context.Context) (firewall.KernelView, error) {
 }
 
 func snapshotNFTKernelInspect(ctx context.Context, inspect func(uint16, map[uint16]netlink.Attribute) error) (firewall.KernelView, error) {
+	return snapshotNFTTargetInspect(ctx, firewall.NFTPortInput, inspect)
+}
+func snapshotNFTTargetInspect(ctx context.Context, target firewall.NFTTarget, inspect func(uint16, map[uint16]netlink.Attribute) error) (firewall.KernelView, error) {
 	var out firewall.KernelView
+	layout, e := target.Layout()
+	if e != nil {
+		return out, e
+	}
 	namespace, e := nftNamespace()
 	if e != nil {
 		return out, e
@@ -391,6 +402,7 @@ func snapshotNFTKernelInspect(ctx context.Context, inspect func(uint16, map[uint
 		return out, e
 	}
 	defer s.close()
+	s.table = layout.Table
 	generation, e := s.generation(ctx)
 	if e != nil {
 		return out, e
@@ -409,7 +421,7 @@ func snapshotNFTKernelInspect(ctx context.Context, inspect func(uint16, map[uint
 			return e
 		}
 		name, e := nftString(attrs[unix.NFTA_TABLE_NAME])
-		if e != nil || name != firewall.NFTHostTable {
+		if e != nil || name != layout.Table {
 			return errors.New("unexpected nftables table")
 		}
 		if inspect != nil {
@@ -445,7 +457,7 @@ func snapshotNFTKernelInspect(ctx context.Context, inspect func(uint16, map[uint
 				if e != nil {
 					return e
 				}
-				if table != firewall.NFTHostTable {
+				if table != layout.Table {
 					return nil
 				}
 				switch query.category {

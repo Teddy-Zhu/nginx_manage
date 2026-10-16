@@ -140,7 +140,7 @@ func CompileNFT(policy Policy) (*NFTProgram, error) {
 func finishNFT(program *NFTProgram) (*NFTProgram, error) {
 	hash := sha256.New()
 	frame := func(raw []byte) { hash.Write(binary.BigEndian.AppendUint32(nil, uint32(len(raw)))); hash.Write(raw) }
-	frame([]byte("inet/" + NFTHostTable + "/" + NFTHostChain + "/input/10/accept"))
+	frame([]byte("inet/" + program.Table.Name + "/" + program.Chain.Name + "/input/" + strconv.Itoa(int(*program.Chain.Priority)) + "/accept"))
 	for _, r := range program.Rules {
 		frame(r.UserData)
 		frame(binary.BigEndian.AppendUint32(nil, uint32(len(r.Exprs))))

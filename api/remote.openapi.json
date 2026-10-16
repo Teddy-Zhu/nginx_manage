@@ -4962,6 +4962,39 @@
         }
       }
     },
+    "/nodes/{connection}/fail2ban/host-input": {
+      "get": {
+        "operationId": "remoteGetFail2banHostInput",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banHostInput",
+        "x-forward-path": "/fail2ban/host-input",
+        "x-response-kind": "json",
+        "x-body-limit": 65536,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "description": "只读检查目标宿主机入口动作的基础准备条件；不创建表、不授予所有权、不应用封禁。"
+      }
+    },
     "/nodes/{connection}/fail2ban/panel-login": {
       "get": {
         "operationId": "remoteGetFail2banPanelLogin",

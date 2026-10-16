@@ -19,14 +19,15 @@ type PreviewInput struct {
 	Version int64 `json:"version"`
 }
 type PolicyPreview struct {
-	TemplateChecks []TemplateCheck `json:"template_checks"`
-	Version        int64           `json:"version"`
-	PolicyHash     string          `json:"policy_hash"`
-	CanApply       bool            `json:"can_apply"`
-	Entries        []JailPreview   `json:"entries"`
-	Warnings       []string        `json:"warnings"`
-	Runtime        JailsRuntime    `json:"runtime"`
-	Removed        []string        `json:"removed"`
+	HostInput      *HostInputPreview `json:"host_input,omitempty"`
+	TemplateChecks []TemplateCheck   `json:"template_checks"`
+	Version        int64             `json:"version"`
+	PolicyHash     string            `json:"policy_hash"`
+	CanApply       bool              `json:"can_apply"`
+	Entries        []JailPreview     `json:"entries"`
+	Warnings       []string          `json:"warnings"`
+	Runtime        JailsRuntime      `json:"runtime"`
+	Removed        []string          `json:"removed"`
 }
 type JailPreview struct {
 	TemplateReady bool     `json:"template_ready"`
@@ -57,10 +58,12 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 	out.PolicyHash = view.Policy.Hash()
 	ids := []string{}
 	seen := map[string]bool{}
+	needsHostInput := false
 	for _, j := range view.Policy.Jails {
 		if !j.Enabled {
 			continue
 		}
+		needsHostInput = needsHostInput || j.Action == "host-input"
 		if !seen[j.Template] {
 			ids = append(ids, j.Template)
 			seen[j.Template] = true
@@ -68,16 +71,28 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 	}
 	sources := []logs.Source{}
 	panelLogin := EmptyPanelLogin("unconfirmed", "未连接面板登录日志来源")
+	if needsHostInput {
+		value := EmptyHostInput("unconfirmed", "未连接宿主机动作预检")
+		out.HostInput = &value
+	}
 	var instance Instance
 	if s.Agent != nil {
 		call, cancel := context.WithTimeout(ctx, 12*time.Second)
 		defer cancel()
-		var logErr, instanceErr, templateErr, runtimeErr, panelLogErr error
+		var logErr, instanceErr, templateErr, runtimeErr, panelLogErr, hostInputErr error
 		var wg sync.WaitGroup
 		wg.Add(3)
 		go func() { defer wg.Done(); sources, logErr = s.Agent.LogSources(call) }()
 		go func() { defer wg.Done(); out.Runtime, runtimeErr = s.Runtime(call) }()
 		go func() { defer wg.Done(); instance, instanceErr = s.Agent.ReadFail2banInstance(call) }()
+		if needsHostInput {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				value, err := s.HostInput(call)
+				out.HostInput, hostInputErr = &value, err
+			}()
+		}
 		if seen[PanelLoginTemplate] {
 			wg.Add(1)
 			go func() { defer wg.Done(); panelLogin, panelLogErr = s.PanelLogin(call) }()
@@ -109,6 +124,10 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		}
 		if panelLogErr != nil || !panelLogin.Valid() {
 			panelLogin = EmptyPanelLogin("unconfirmed", "面板登录日志来源暂不可核对")
+		}
+		if needsHostInput && (hostInputErr != nil || !out.HostInput.Valid()) {
+			value := EmptyHostInput("unconfirmed", "宿主机动作预检暂不可核对")
+			out.HostInput = &value
 		}
 	} else {
 		out.Runtime.Reason = "未连接宿主机 Agent"
@@ -147,6 +166,9 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		}
 		if !e.TemplateReady {
 			e.Errors = append(e.Errors, "过滤器检查须通过，且须与已确认实例使用相同组件及版本")
+		}
+		if j.Action == "host-input" && out.HostInput != nil && !out.HostInput.CanPrepare {
+			e.Errors = append(e.Errors, out.HostInput.Reason)
 		}
 		if j.Template == PanelLoginTemplate {
 			e.Errors = append(e.Errors, "面板登录保护所需的宿主机入口封禁尚不可用；日志和模板就绪不代表保护已生效")

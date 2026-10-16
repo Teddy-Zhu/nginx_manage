@@ -17,6 +17,7 @@ export interface paths {
  "/fail2ban/apply": { post: operations["applyFail2ban"]; };
     "/fail2ban/templates/check": { post: operations["checkFail2banTemplates"]; };
     "/fail2ban/policy": { get: operations["getFail2banPolicy"]; put: operations["setFail2banPolicy"]; };
+    "/fail2ban/host-input": { get: operations["getFail2banHostInput"]; };
     "/fail2ban/panel-login": { get: operations["getFail2banPanelLogin"]; };
     "/fail2ban/templates": { get: operations["getFail2banTemplates"]; };
     "/fail2ban/preview": { post: operations["previewFail2ban"]; };
@@ -1744,6 +1745,7 @@ export interface components {
         FirewallPlan: { action: "apply" | "remove"; id: string; version: number; policy_hash: string; program_hash: string; baseline: components["schemas"]["FirewallKernelView"]; protections: components["schemas"]["FirewallProtection"][]; ssh_profile: string; ssh_listeners: string[]; listener_version: number; listener: string; control_source: string; confirmation_seconds: number; expires_at: number; transaction_hash: string; transaction_bytes: number; generated_rules: number; };
         FirewallOperation: { action: "apply" | "remove"; id: string; plan_id: string; version: number; policy_hash: string; program_hash: string; state: "running" | "waiting_confirmation" | "compensating" | "recovery_required" | "succeeded" | "rolled_back" | "failed"; stage: string; deadline: number; updated_at: number; confirmed_source: string; verification_scope: string; error: string; };
         FirewallProtectionObservation: { state: "unavailable" | "not_applicable" | "current" | "changed"; plan_id: string; observed_at: number; ssh_profile: string; ssh_listeners: string[]; protections: components["schemas"]["FirewallProtection"][]; reason: string; };
+        Fail2banHostInputPreview: { manager_observed_at: number; at: number; scope: string; available: boolean; manager: string; backend: "direct-nftables"; table: "nginxpanel_fail2ban"; hook: "input"; priority: -10; can_prepare: boolean; can_apply: false; kernel: components["schemas"]["FirewallKernelView"]; protected_sources: string[]; program_hash: string; transaction_hash: string; transaction_bytes: number; generated_rules: number; reason: string; };
         Fail2banPanelLoginEvent: { time_iso8601: string; event: "login_failed"; peer_addr: string; source: "tcp_peer"; request_id: string; };
         Fail2banPanelLoginStatus: { at: number; available: boolean; source_id: "panel:login"; format: "nginxpanel_auth"; scope: string; reason: string; bytes: number; limit_bytes: 8388608; events: components["schemas"]["Fail2banPanelLoginEvent"][]; };
         Fail2banFilterSample: { name: string; line: string; expected_ip: string; };
@@ -1778,7 +1780,7 @@ export interface components {
         Fail2banApplyInput: { version:number;policy_hash:string;base_id:string;target:string; };
         Fail2banApplyTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number; };
         Fail2banApplyTask: { task_id:string;operation_id:string;version:number; };
-        Fail2banPolicyPreview: { runtime:components["schemas"]["Fail2banJailsRuntime"];removed:string[]; template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
+        Fail2banPolicyPreview: { host_input?: components["schemas"]["Fail2banHostInputPreview"]; runtime:components["schemas"]["Fail2banJailsRuntime"];removed:string[]; template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
         MigrationMonitoringInput: { mode: "preserve" | "replace"; base_version?: number; };
         MigrationMonitoringPlan: { mode: "preserve" | "replace"; state: "preserved" | "pending_import" | "not_imported" | "saved" | "restored" | "recovery_required"; base_version: number; saved_version: number; settings: components["schemas"]["MonitoringSettings"]; settings_hash: string; };
         MigrationFail2banInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; };
@@ -3540,6 +3542,7 @@ export interface operations {
  getFail2banRuntime: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  applyFail2ban: { parameters:{query?:never;header:{"X-CSRF-Token"?:string;"Idempotency-Key":string;};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banApplyInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
     checkFail2banTemplates: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banTemplateCheckInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    getFail2banHostInput: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getFail2banPanelLogin: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getFail2banTemplates: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     previewFail2ban: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPreviewInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

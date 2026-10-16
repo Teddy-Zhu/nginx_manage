@@ -58,6 +58,16 @@ func nftNestedMap(raw []byte, padding uint16) (map[uint16]netlink.Attribute, err
 // Handles remain in the returned fingerprint to detect later replacement, but
 // semantic matching also works after an interrupted first submission/reboot.
 func snapshotNFTProgram(ctx context.Context, program *firewall.NFTProgram, marker string) (firewall.KernelView, error) {
+	return snapshotNFTTargetProgram(ctx, firewall.NFTPortInput, program, marker)
+}
+func snapshotNFTTargetProgram(ctx context.Context, target firewall.NFTTarget, program *firewall.NFTProgram, marker string) (firewall.KernelView, error) {
+	layout, err := target.Layout()
+	if err != nil {
+		return firewall.KernelView{}, err
+	}
+	if program != nil && (program.Table == nil || program.Chain == nil || program.Table.Name != layout.Table || program.Chain.Table != program.Table || program.Chain.Name != layout.Chain || program.Chain.Priority == nil || int(*program.Chain.Priority) != layout.Priority) {
+		return firewall.KernelView{}, errors.New("受管表编译目标与读取目标不匹配")
+	}
 	chains, rules := 0, 0
 	handles := map[uint64]bool{}
 	var previous uint64
@@ -65,7 +75,7 @@ func snapshotNFTProgram(ctx context.Context, program *firewall.NFTProgram, marke
 	if program != nil {
 		expectedRules = len(program.Rules)
 	}
-	view, err := snapshotNFTKernelInspect(ctx, func(kind uint16, attrs map[uint16]netlink.Attribute) error {
+	view, err := snapshotNFTTargetInspect(ctx, target, func(kind uint16, attrs map[uint16]netlink.Attribute) error {
 		switch kind {
 		case unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWTABLE:
 			use := uint32(0)
@@ -73,7 +83,7 @@ func snapshotNFTProgram(ctx context.Context, program *firewall.NFTProgram, marke
 				use = 1
 			}
 			_, validHandle := nftHandle(attrs, unix.NFTA_TABLE_HANDLE)
-			if len(attrs) != 5 || !validHandle || !nftBytes(attrs, unix.NFTA_TABLE_NAME, []byte(firewall.NFTHostTable+"\x00")) || !nftUint32(attrs, unix.NFTA_TABLE_FLAGS, 0) || !nftUint32(attrs, unix.NFTA_TABLE_USE, use) || !nftBytes(attrs, 6, []byte(marker)) {
+			if len(attrs) != 5 || !validHandle || !nftBytes(attrs, unix.NFTA_TABLE_NAME, []byte(layout.Table+"\x00")) || !nftUint32(attrs, unix.NFTA_TABLE_FLAGS, 0) || !nftUint32(attrs, unix.NFTA_TABLE_USE, use) || !nftBytes(attrs, 6, []byte(marker)) {
 				return errors.New("受管表与独立登记或编译结果不匹配")
 			}
 		case unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWCHAIN:
@@ -82,7 +92,7 @@ func snapshotNFTProgram(ctx context.Context, program *firewall.NFTProgram, marke
 				return errors.New("受管表包含未预期的链")
 			}
 			_, validHandle := nftHandle(attrs, unix.NFTA_CHAIN_HANDLE)
-			if !validHandle || !nftBytes(attrs, unix.NFTA_CHAIN_TABLE, []byte(firewall.NFTHostTable+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_NAME, []byte(firewall.NFTHostChain+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_TYPE, []byte("filter\x00")) || !nftUint32(attrs, unix.NFTA_CHAIN_POLICY, uint32(expr.VerdictAccept)) || !nftUint32(attrs, unix.NFTA_CHAIN_FLAGS, 1 /* NFT_CHAIN_BASE, Linux UAPI */) || !nftUint32(attrs, unix.NFTA_CHAIN_USE, uint32(expectedRules)) {
+			if !validHandle || !nftBytes(attrs, unix.NFTA_CHAIN_TABLE, []byte(layout.Table+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_NAME, []byte(layout.Chain+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_TYPE, []byte("filter\x00")) || !nftUint32(attrs, unix.NFTA_CHAIN_POLICY, uint32(expr.VerdictAccept)) || !nftUint32(attrs, unix.NFTA_CHAIN_FLAGS, 1 /* NFT_CHAIN_BASE, Linux UAPI */) || !nftUint32(attrs, unix.NFTA_CHAIN_USE, uint32(expectedRules)) {
 				return errors.New("受管基础链的结构、策略或引用数变化")
 			}
 			hook, ok := attrs[unix.NFTA_CHAIN_HOOK]
@@ -90,7 +100,7 @@ func snapshotNFTProgram(ctx context.Context, program *firewall.NFTProgram, marke
 				return errors.New("受管基础链 hook 无效")
 			}
 			hookAttrs, err := nftNestedMap(hook.Data, 0)
-			if err != nil || len(hookAttrs) != 2 || !nftUint32(hookAttrs, unix.NFTA_HOOK_HOOKNUM, unix.NF_INET_LOCAL_IN) || !nftUint32(hookAttrs, unix.NFTA_HOOK_PRIORITY, uint32(firewall.NFTHostPriority)) {
+			if err != nil || len(hookAttrs) != 2 || !nftUint32(hookAttrs, unix.NFTA_HOOK_HOOKNUM, unix.NF_INET_LOCAL_IN) || !nftUint32(hookAttrs, unix.NFTA_HOOK_PRIORITY, uint32(int32(layout.Priority))) {
 				return errors.New("受管基础链 hook 或优先级变化")
 			}
 			count := 8
@@ -112,7 +122,7 @@ func snapshotNFTProgram(ctx context.Context, program *firewall.NFTProgram, marke
 				return errors.New("受管表包含未预期的规则")
 			}
 			handle, ok := nftHandle(attrs, unix.NFTA_RULE_HANDLE)
-			if !ok || handles[handle] || !nftBytes(attrs, unix.NFTA_RULE_TABLE, []byte(firewall.NFTHostTable+"\x00")) || !nftBytes(attrs, unix.NFTA_RULE_CHAIN, []byte(firewall.NFTHostChain+"\x00")) || !nftBytes(attrs, unix.NFTA_RULE_USERDATA, program.Rules[rules].UserData) {
+			if !ok || handles[handle] || !nftBytes(attrs, unix.NFTA_RULE_TABLE, []byte(layout.Table+"\x00")) || !nftBytes(attrs, unix.NFTA_RULE_CHAIN, []byte(layout.Chain+"\x00")) || !nftBytes(attrs, unix.NFTA_RULE_USERDATA, program.Rules[rules].UserData) {
 				return errors.New("受管规则的身份、链或标记变化")
 			}
 			count := 5

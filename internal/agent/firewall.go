@@ -147,9 +147,10 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	}
 	return out
 }
-func (s *Server) firewallHandlers(mux *http.ServeMux, ctx context.Context) {
+func (s *Server) firewallHandlers(mux *http.ServeMux, ctx context.Context) *firewallObserver {
 	f := &firewallObserver{ctx: ctx, scope: s.MetricsScope, dev: s.Dev, dataDir: s.DataDir}
 	mux.HandleFunc("GET /v1/firewall", func(w http.ResponseWriter, r *http.Request) { out, e := f.read(r.Context()); dnsReply(w, out, e) })
+	return f
 }
 func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error) {
 	var out firewall.Observation

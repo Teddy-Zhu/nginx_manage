@@ -121,6 +121,12 @@ paths:
       description: 保存类型化 jail 期望配置，要求近期认证、幂等键与基础版本；不安装、启用或修改实例。
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPolicyInput'}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/host-input:
+    get:
+      operationId: getFail2banHostInput
+      x-scopes: [read]
+      description: 返回 Fail2banHostInputPreview。只读检查实际管理器、独立固定 inet 目标表、本地地址保护和空封禁集合的事务准备摘要；can_prepare 仅表示可生成基础准备材料，can_apply 始终为 false，不创建表、不登记所有权、不应用封禁。模块停用时仍可读取。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/panel-login:
     get:
       operationId: getFail2banPanelLogin
@@ -1882,6 +1888,8 @@ components:
         ssh_listeners: {type: array, maxItems: 512, items: {type: string}}
         protections: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/FirewallProtection"}}
         reason: {type: string}
+    Fail2banHostInputPreview:
+      {"type": "object", "additionalProperties": false, "required": ["at", "scope", "available", "manager", "backend", "table", "hook", "priority", "can_prepare", "can_apply", "kernel", "protected_sources", "program_hash", "transaction_hash", "transaction_bytes", "generated_rules", "reason", "manager_observed_at"], "properties": {"at": {"type": "integer", "format": "int64", "minimum": 1}, "scope": {"type": "string"}, "available": {"type": "boolean"}, "manager": {"type": "string"}, "backend": {"type": "string", "enum": ["direct-nftables"]}, "table": {"type": "string", "enum": ["nginxpanel_fail2ban"]}, "hook": {"type": "string", "enum": ["input"]}, "priority": {"type": "integer", "enum": [-10]}, "can_prepare": {"type": "boolean", "description": "只能准备当前空集合的基础材料，不授予所有权，不保证后续写入基线仍有效"}, "can_apply": {"type": "boolean", "enum": [false]}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protected_sources": {"type": "array", "maxItems": 1024, "items": {"type": "string"}, "description": "本次采样的本地单地址及固定保留网段，尚不包含待批准的代理和管理来源"}, "program_hash": {"type": "string"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "minimum": 0, "maximum": 8388608}, "generated_rules": {"type": "integer", "minimum": 0, "maximum": 1026}, "reason": {"type": "string"}, "manager_observed_at": {"type": "integer", "format": "int64", "minimum": 0, "description": "管理器缓存采样时间，区别本次独立目标表采样；尚未取得为 0"}}}
     Fail2banPanelLoginEvent:
       {"type": "object", "additionalProperties": false, "required": ["time_iso8601", "event", "peer_addr", "source", "request_id"], "properties": {"time_iso8601": {"type": "string", "format": "date-time"}, "event": {"type": "string", "enum": ["login_failed"]}, "peer_addr": {"type": "string", "description": "规范化数值 TCP 对端，不采信转发头"}, "source": {"type": "string", "enum": ["tcp_peer"]}, "request_id": {"type": "string", "format": "uuid"}}}
     Fail2banPanelLoginStatus:
@@ -1951,7 +1959,7 @@ components:
     Fail2banJailPreview:
       {"type": "object", "additionalProperties": false, "required": ["id", "jail_name", "enabled", "source_id", "source_ready", "errors", "template_ready"], "properties": {"id": {"type": "string"}, "jail_name": {"type": "string"}, "enabled": {"type": "boolean"}, "source_id": {"type": "string"}, "source_ready": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}, "template_ready": {"type": "boolean"}}}
     Fail2banPolicyPreview:
-      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "can_apply", "entries", "warnings", "template_checks", "runtime", "removed"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "can_apply": {"type": "boolean"}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailPreview"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "template_checks": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banTemplateCheck"}}, "runtime": {"$ref": "#/components/schemas/Fail2banJailsRuntime"}, "removed": {"type": "array", "items": {"type": "string"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "can_apply", "entries", "warnings", "template_checks", "runtime", "removed"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "can_apply": {"type": "boolean"}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailPreview"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "template_checks": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banTemplateCheck"}}, "runtime": {"$ref": "#/components/schemas/Fail2banJailsRuntime"}, "removed": {"type": "array", "items": {"type": "string"}}, "host_input": {"$ref": "#/components/schemas/Fail2banHostInputPreview"}}}
     MigrationMonitoringInput:
       {"type": "object", "additionalProperties": false, "required": ["mode"], "properties": {"mode": {"type": "string", "enum": ["preserve", "replace"]}, "base_version": {"type": "integer", "format": "int64", "minimum": 1}}}
     MigrationMonitoringPlan:
