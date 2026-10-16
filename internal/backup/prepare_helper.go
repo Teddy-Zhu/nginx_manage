@@ -155,8 +155,12 @@ func runPreparationHelper(ctx context.Context, data, command, id string, input [
 			return errors.New("恢复接入助手缺少固定资源描述符或输入超过限制")
 		}
 	case "backup-restore-plan-verify-data":
-		if len(files) != len(resources) || len(input) > 256<<10 {
+		if len(files) != len(resources)+1 || len(input) > 256<<10 {
 			return errors.New("恢复发布核对缺少固定描述符或输入超过限制")
+		}
+	case "backup-restore-runtime-data":
+		if len(files) != 0 || len(input) > 8192 {
+			return errors.New("恢复运行助手只接受有界恢复授权")
 		}
 	case "backup-preparation-data", "backup-preparation-cleanup-data", "backup-restore-plan-cleanup-data":
 		if len(files) != 0 || len(input) != 0 {

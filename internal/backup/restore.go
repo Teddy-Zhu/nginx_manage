@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"nginxpanel/internal/agent"
@@ -41,6 +42,23 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 		}
 		if in.PlanID != "" && in.PlanID != i.PlanID || in.PlanSHA256 != "" && in.PlanSHA256 != i.PlanSHA256 {
 			return out, errors.New("补偿请求指定了不同的原目标计划")
+		}
+		status, e := agent.DisasterRuntime(data, id)
+		if e != nil {
+			return out, e
+		}
+		if (strings.HasPrefix(status.Restore.Stage, "runtime_") || status.Restore.Stage == "files_installed" && status.Nginx != nil) && status.Restore.Stage != "runtime_compensated" {
+			status, e = advanceRestorationRuntime(call, data, id, in, true)
+			if e != nil {
+				return status.Restore, e
+			}
+			if status.Restore.Stage != "runtime_compensated" {
+				return status.Restore, nil
+			}
+		} else if status.Restore.Stage == "files_installed" || status.Restore.Stage == "runtime_compensated" || status.Nginx != nil && status.Restore.Stage != "files_compensated" {
+			if e = agent.AuthorizeDisasterRuntime(call, data, id, in.Epoch, true); e != nil {
+				return status.Restore, e
+			}
 		}
 		return agent.RestoreDisaster(call, data, id, in.Epoch, i, true)
 	}
@@ -85,7 +103,7 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 		}
 		files[index] = panelrecovery.File{Name: i.Rollback.Manifest.Files[index].Name, Size: file.Size, SHA256: file.SHA256}
 	}
-	input := panelrecovery.DisasterIntent{Schema: 1, DataDir: data, OperationID: id, AdoptionSHA256: a.SHA256, PlanID: plan.ID, PlanSHA256: plan.SHA256, Stop: i.Stop, Rollback: i.Rollback, Files: files, Before: i.Before, ReleaseID: i.Preparation.Target.ReleaseID, BinarySHA256: i.BinarySHA256, ExpiresAt: i.ExpiresAt}
+	input := panelrecovery.DisasterIntent{Schema: 1, DataDir: data, OperationID: id, AdoptionSHA256: a.SHA256, PlanID: plan.ID, PlanSHA256: plan.SHA256, NginxRequest: panelrecovery.File{Name: plan.Preview.Publication.NginxRequest.Name, Size: plan.Preview.Publication.NginxRequest.Size, SHA256: plan.Preview.Publication.NginxRequest.SHA256}, NginxBeforeRevision: plan.Preview.Runtime.RevisionID, NginxBeforeDeployment: plan.Preview.Runtime.DeploymentID, NginxCapabilitiesSHA256: plan.Preview.CapabilitiesSHA256, Stop: i.Stop, Rollback: i.Rollback, Files: files, Before: i.Before, ReleaseID: i.Preparation.Target.ReleaseID, BinarySHA256: i.BinarySHA256, ExpiresAt: i.ExpiresAt}
 	return agent.RestoreDisaster(call, data, id, in.Epoch, input, false)
 }
 

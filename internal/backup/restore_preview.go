@@ -171,7 +171,7 @@ func PreviewRestorationDescriptors(ctx context.Context, data, id string, in Rest
 		add("host", "network", "preserved", "保留目标 DNS、网络与防火墙状态，变更须重新计划和确认")
 		add("automation", "modules", "disabled", "通知、定期备份、ACME 自动化及其他模块保持停用")
 		if out.CanInstall {
-			publication, e := publishRestorationDatabase(call, data, in.PlanID, in.Preparation, files[0], vault, policy, mapped, out.PendingChecks)
+			publication, e := publishRestorationDatabase(call, data, in.PlanID, in.Preparation, files[0], vault, policy, mapped, materials, runtime.RevisionID, out.PendingChecks)
 			if e != nil {
 				return e
 			}

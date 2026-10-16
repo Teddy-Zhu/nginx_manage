@@ -218,7 +218,7 @@ func CreateRestorePlan(ctx context.Context, data, id string, in RestorePlanInput
 			}
 			var proof MaterialVerification
 			verifyInput := RestorePublicationInput{Preparation: i.Preparation, Preview: preview, Mappings: in.Mappings}
-			if e = callRestorationMaterialHelper(call, data, id, dir, i, "backup-restore-plan-verify-data", verifyInput, &proof, &preview.Publication.File, restorePublicationPath(data, in.PlanID)); e != nil {
+			if e = callRestorationMaterialHelper(call, data, id, dir, i, "backup-restore-plan-verify-data", verifyInput, &proof, &preview.Publication.File, restorePublicationPath(data, in.PlanID), filepath.Join(filepath.Dir(restorePublicationPath(data, in.PlanID)), "nginx.json")); e != nil {
 				return e
 			}
 			p.PublicationProof = &proof

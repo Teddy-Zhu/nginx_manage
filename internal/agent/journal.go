@@ -18,6 +18,8 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	DisasterRestoreID string `json:"disaster_restore_id,omitempty"`
+
 	RemoteListener   *remotelisten.Operation `json:"remote_listener,omitempty"`
 	PanelUpdate      *PanelUpdateOperation   `json:"panel_update,omitempty"`
 	PanelService     *PanelServiceOperation  `json:"panel_service,omitempty"`

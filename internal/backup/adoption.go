@@ -260,10 +260,10 @@ func verifyAdoptionMaterial(ctx context.Context, data, id, dir string, intent Ad
 }
 
 func callAdoptionMaterialHelper(ctx context.Context, data, id, dir string, intent AdoptionIntent, command string, input, out any) (err error) {
-	return callRestorationMaterialHelper(ctx, data, id, dir, intent, command, input, out, nil, "")
+	return callRestorationMaterialHelper(ctx, data, id, dir, intent, command, input, out, nil, "", "")
 }
 
-func callRestorationMaterialHelper(ctx context.Context, data, id, dir string, intent AdoptionIntent, command string, input, out any, database *File, databasePath string) (err error) {
+func callRestorationMaterialHelper(ctx context.Context, data, id, dir string, intent AdoptionIntent, command string, input, out any, database *File, databasePath, nginxPath string) (err error) {
 	intent.Preparation.Files = append([]File(nil), intent.Preparation.Files...)
 	if database != nil {
 		intent.Preparation.Files[0] = *database
@@ -292,6 +292,16 @@ func callRestorationMaterialHelper(ctx context.Context, data, id, dir string, in
 		files = append(files, f)
 		if info.Mode().Perm() != 0400 || info.Size() != intent.Preparation.Files[i].Size {
 			return errors.New("恢复接入资源尚未全部固定")
+		}
+	}
+	if nginxPath != "" {
+		f, info, e := secure.OpenRootFile(nginxPath, panelrecovery.DisasterNginxRequestMax)
+		if e != nil {
+			return e
+		}
+		files = append(files, f)
+		if info.Mode().Perm() != 0400 {
+			return errors.New("恢复 Nginx 材料尚未固定")
 		}
 	}
 	raw, err := json.Marshal(input)

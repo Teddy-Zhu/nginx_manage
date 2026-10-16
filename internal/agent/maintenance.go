@@ -14,6 +14,7 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 )
@@ -165,6 +166,26 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 				return out, err
 			}
 			if g.id != "" && r.PanelSelection.MaintenanceID == g.id {
+				continue
+			}
+		}
+		if r.DisasterRestoreID != "" {
+			data := filepath.Dir(filepath.Dir(g.journal.Dir))
+			i, err := panelrecovery.ReadDisasterIntent(data, r.DisasterRestoreID)
+			if err != nil {
+				return out, err
+			}
+			if err = validDisasterNginxRecord(i, r); err != nil {
+				return out, err
+			}
+			parent, err := readDisasterRestore(data, i.OperationID)
+			if err != nil {
+				return out, err
+			}
+			if parent.State == "rolled_back" && r.State != "rolled_back" {
+				return out, errors.New("恢复文件补偿与 Nginx 子操作未协调")
+			}
+			if g.id != "" && i.Stop.MaintenanceID == g.id {
 				continue
 			}
 		}
@@ -443,7 +464,7 @@ func (s *Server) maintenanceHandlers(mux *http.ServeMux, g *maintenanceGate) {
 }
 func (g *maintenanceGate) handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/v1/maintenance/acquire" || r.URL.Path == "/v1/maintenance/release" || r.Method == http.MethodPost && (r.URL.Path == "/v1/components/nginx-installations" || r.URL.Path == "/v1/panel/updates") {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/v1/maintenance/acquire" || r.URL.Path == "/v1/maintenance/release" || r.Method == http.MethodPost && (r.URL.Path == "/v1/components/nginx-installations" || r.URL.Path == "/v1/panel/updates" || r.URL.Path == "/v1/nginx/disaster") {
 			next.ServeHTTP(w, r)
 			return
 		}

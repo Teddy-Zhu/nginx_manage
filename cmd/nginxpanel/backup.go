@@ -20,7 +20,7 @@ type backupCLIOptions struct {
 
 func isBackupRecoveryCommand(command string) bool {
 	switch command {
-	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status", "backup-restore-plan", "backup-restore-plan-status", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-plan-cleanup", "backup-restore-plan-cleanup-data":
+	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status", "backup-restore-plan", "backup-restore-plan-status", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-plan-cleanup", "backup-restore-plan-cleanup-data", "backup-restore-apply", "backup-restore-runtime-status", "backup-restore-runtime-data":
 		return true
 	default:
 		return false
@@ -71,6 +71,28 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 		return true, err
 	}
 	switch command {
+	case "backup-restore-apply":
+		var input backup.RestoreInput
+		if err = readBackupInput(&input); err != nil {
+			return true, err
+		}
+		out, err := backup.ApplyRestoration(ctx, data, options.OperationID, input)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
+	case "backup-restore-runtime-status":
+		out, err := agent.DisasterRuntime(data, options.OperationID)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
+	case "backup-restore-runtime-data":
+		var input agent.DisasterRuntimeRequest
+		if err = readBackupInput(&input); err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(backup.AdvanceRestorationAsPanel(ctx, data, options.OperationID, input))
 	case "backup-restore-plan":
 		if os.Geteuid() != 0 {
 			return true, errors.New("恢复目标计划须由 root 调用")
@@ -154,7 +176,11 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			return true, errors.New("恢复材料核对助手须使用非 root 身份")
 		}
 		var files []*os.File
-		for fd := 3; fd <= 6; fd++ {
+		lastFD := 6
+		if command == "backup-restore-plan-verify-data" {
+			lastFD = 7
+		}
+		for fd := 3; fd <= lastFD; fd++ {
 			f := os.NewFile(uintptr(fd), "root-recovery-material")
 			if f == nil {
 				return true, errors.New("恢复材料核对缺少固定描述符")

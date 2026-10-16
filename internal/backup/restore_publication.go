@@ -11,22 +11,28 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/agent"
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 )
 
 type RestorePublication struct {
-	RevisionID string   `json:"revision_id"`
-	Database   Database `json:"database"`
-	File       File     `json:"file"`
-	CreatedAt  int64    `json:"created_at"`
+	RevisionID   string   `json:"revision_id"`
+	Database     Database `json:"database"`
+	File         File     `json:"file"`
+	NginxRequest File     `json:"nginx_request"`
+	CreatedAt    int64    `json:"created_at"`
 }
 
 func (p RestorePublication) validate(source Preparation) error {
 	if !validID.MatchString(p.RevisionID) || p.RevisionID == source.OperationID || p.Database.NodeID != source.Database.NodeID || p.Database.SchemaVersion != source.Database.SchemaVersion || p.Database.AppliedRevision != "" || p.Database.DesiredRevision != p.RevisionID || p.Database.HeadVersion <= source.Database.HeadVersion || p.Database.HeadVersion > 1<<62 || p.File.Name != resources[0].name || p.File.Size < 1 || p.File.Size > DatabaseMax || !validHash.MatchString(p.File.SHA256) || p.CreatedAt < source.PreparedAt || p.CreatedAt > time.Now().Unix()+300 {
 		return errors.New("恢复发布副本与原准备身份不一致")
+	}
+	if p.NginxRequest.Name != "nginx.json" || p.NginxRequest.Size < 1 || p.NginxRequest.Size > panelrecovery.DisasterNginxRequestMax || !validHash.MatchString(p.NginxRequest.SHA256) {
+		return errors.New("恢复发布副本缺少有界 Nginx 材料")
 	}
 	return nil
 }
@@ -58,7 +64,7 @@ func CleanupRestorationWork(data, id string) error {
 	if err := privateDir(dir); err != nil {
 		return err
 	}
-	items, err := boundedEntries(dir, 2)
+	items, err := boundedEntries(dir, 3)
 	if err != nil {
 		return err
 	}
@@ -66,6 +72,8 @@ func CleanupRestorationWork(data, id string) error {
 		limit := DatabaseMax
 		if item.Name() == "panel.db-journal" {
 			limit = preparationJournalMax
+		} else if item.Name() == "nginx.json" {
+			limit = panelrecovery.DisasterNginxRequestMax
 		} else if item.Name() != "panel.db" {
 			return errors.New("恢复发布暂存包含未知文件")
 		}
@@ -86,7 +94,7 @@ func CleanupRestorationWork(data, id string) error {
 	return syncDir(filepath.Dir(dir))
 }
 
-func publishRestorationDatabase(ctx context.Context, data, planID string, p Preparation, source *os.File, vault *secure.Vault, policy nginxconfig.Policy, files []nginxconfig.File, pending []string) (out RestorePublication, err error) {
+func publishRestorationDatabase(ctx context.Context, data, planID string, p Preparation, source *os.File, vault *secure.Vault, policy nginxconfig.Policy, files []nginxconfig.File, materials []certificates.Material, beforeRevision string, pending []string) (out RestorePublication, err error) {
 	if err = CleanupRestorationWork(data, planID); err != nil {
 		return out, err
 	}
@@ -188,6 +196,24 @@ func publishRestorationDatabase(ctx context.Context, data, planID string, p Prep
 		return out, err
 	}
 	out.File.Name, out.RevisionID, out.CreatedAt = resources[0].name, tree.RevisionID, at
+	request := agent.ApplyRequest{Protocol: agent.Protocol, OperationID: planID, RevisionID: planID, ExpectedRevision: beforeRevision, Files: tree.Files, Certificates: materials}
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return out, err
+	}
+	defer clear(raw)
+	if int64(len(raw)) > panelrecovery.DisasterNginxRequestMax {
+		return out, errors.New("恢复 Nginx 材料超过容量限制")
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "nginx.json"), os.O_CREATE|os.O_EXCL|os.O_WRONLY|unix.O_NOFOLLOW, 0600)
+	if err != nil {
+		return out, err
+	}
+	_, writeErr := f.Write(raw)
+	if err = errors.Join(writeErr, f.Sync(), f.Close()); err != nil {
+		return out, err
+	}
+	out.NginxRequest = File{Name: "nginx.json", Size: int64(len(raw)), SHA256: secure.Hash(raw)}
 	if err = out.validate(p); err != nil {
 		return out, err
 	}
@@ -205,14 +231,14 @@ type RestorePublicationInput struct {
 // writable helper has exited. Its proof binds the new revision to the preview.
 func VerifyRestorationPublication(ctx context.Context, data, id string, in RestorePublicationInput, files []*os.File) (MaterialVerification, error) {
 	preview, p := in.Preview, in.Preparation
-	if !preview.CanInstall || preview.Publication == nil {
+	if !preview.CanInstall || preview.Publication == nil || len(files) != len(resources)+1 {
 		return MaterialVerification{}, errors.New("恢复发布缺少可安装计划")
 	}
 	hash, err := adoptionValueHash(preview.Policy)
 	if err != nil || hash != preview.PolicySHA256 {
 		return MaterialVerification{}, errors.New("恢复发布策略与原预览不一致")
 	}
-	return verifyRestorationDescriptors(ctx, data, id, p, files, preview.Publication, func(call context.Context, db *sql.DB, vault *secure.Vault) error {
+	return verifyRestorationDescriptors(ctx, data, id, p, files[:len(resources)], preview.Publication, func(call context.Context, db *sql.DB, vault *secure.Vault) error {
 		source, err := restoreRevisionFiles(call, db, vault, p.Database.DesiredRevision)
 		if err != nil {
 			return err
@@ -261,6 +287,13 @@ func VerifyRestorationPublication(ctx context.Context, data, id string, in Resto
 		}
 		if err = parsed.ValidateTLS(materials); err != nil {
 			return err
+		}
+		request, err := agent.ReadDisasterNginxDescriptor(call, files[len(resources)], panelrecovery.File{Name: pub.NginxRequest.Name, Size: pub.NginxRequest.Size, SHA256: pub.NginxRequest.SHA256})
+		if err != nil {
+			return err
+		}
+		if request.OperationID != pub.RevisionID || request.RevisionID != pub.RevisionID || request.ExpectedRevision != preview.Runtime.RevisionID || request.ValidateOnly || request.RestoreSnapshot != "" || len(request.PreviousFiles) != 0 || !sameAdoptionValue(request.Files, parsed.Tree.Files) || !sameAdoptionValue(request.Certificates, materials) {
+			return errors.New("恢复 Nginx 请求与固定发布数据库不一致")
 		}
 		return nil
 	})

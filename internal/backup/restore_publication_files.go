@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/secure"
 )
 
@@ -28,7 +29,7 @@ func publicationEntries(dir string) ([]os.DirEntry, int64, error) {
 	if err := privateAdoptionDirectory(dir, false); err != nil {
 		return nil, 0, err
 	}
-	items, err := boundedEntries(dir, 4)
+	items, err := boundedEntries(dir, 5)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -37,6 +38,8 @@ func publicationEntries(dir string) ([]os.DirEntry, int64, error) {
 		limit := DatabaseMax
 		if item.Name() == "publication.json" || item.Name() == ".json-copy" {
 			limit = adoptionRecordMax
+		} else if item.Name() == "nginx.json" {
+			limit = panelrecovery.DisasterNginxRequestMax
 		} else if item.Name() != "panel.db" && item.Name() != ".copy" {
 			return nil, 0, errors.New("恢复发布存储包含未知文件")
 		}
@@ -92,14 +95,14 @@ func freezeRestorationPublication(ctx context.Context, data string, p RestorePub
 			return errors.New("原恢复计划副本已进入清理，须使用新计划标识")
 		}
 	}
-	if !found && (active >= AdoptionMax || len(items) >= AdoptionRecordMax) || used+p.File.Size > StoreMax {
+	if !found && (active >= AdoptionMax || len(items) >= AdoptionRecordMax) || used+p.File.Size+p.NginxRequest.Size > StoreMax {
 		return errors.New("恢复发布副本达到数量或容量上限，请先清理未被安装事务占用的副本")
 	}
 	var disk unix.Statfs_t
 	if err = unix.Statfs(root, &disk); err != nil {
 		return err
 	}
-	if disk.Bsize <= 0 || disk.Bavail < uint64((p.File.Size+(32<<20)+int64(disk.Bsize)-1)/int64(disk.Bsize)) {
+	if disk.Bsize <= 0 || disk.Bavail < uint64((p.File.Size+p.NginxRequest.Size+(32<<20)+int64(disk.Bsize)-1)/int64(disk.Bsize)) {
 		return errors.New("恢复发布固定副本的磁盘余量不足")
 	}
 	dir := filepath.Join(root, p.RevisionID)
@@ -118,13 +121,23 @@ func freezeRestorationPublication(ctx context.Context, data string, p RestorePub
 	} else if err = writeAdoptionJSON(receiptPath, receipt); err != nil {
 		return err
 	}
-	target := restorePublicationPath(data, p.RevisionID)
-	if err = hashAdoptionFile(ctx, target, p.File); err == nil {
+	if err = freezeRestorationFile(ctx, data, p.RevisionID, dir, "panel.db", p.File, intent); err != nil {
+		return err
+	}
+	if err = freezeRestorationFile(ctx, data, p.RevisionID, dir, "nginx.json", p.NginxRequest, intent); err != nil {
+		return err
+	}
+	return errors.Join(syncDir(dir), syncDir(root))
+}
+
+func freezeRestorationFile(ctx context.Context, data, planID, dir, local string, expected File, intent AdoptionIntent) error {
+	target := filepath.Join(dir, local)
+	if err := hashAdoptionFile(ctx, target, expected); err == nil {
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	for _, parent := range []string{filepath.Join(data, "staging"), filepath.Dir(restorePublicationWork(data, p.RevisionID)), restorePublicationWork(data, p.RevisionID)} {
+	for _, parent := range []string{filepath.Join(data, "staging"), filepath.Dir(restorePublicationWork(data, planID)), restorePublicationWork(data, planID)} {
 		info, e := os.Lstat(parent)
 		if e != nil {
 			return e
@@ -134,7 +147,7 @@ func freezeRestorationPublication(ctx context.Context, data string, p RestorePub
 			return errors.New("恢复发布暂存目录归属无效")
 		}
 	}
-	path := filepath.Join(restorePublicationWork(data, p.RevisionID), "panel.db")
+	path := filepath.Join(restorePublicationWork(data, planID), local)
 	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
 	if err != nil {
 		return err
@@ -146,7 +159,7 @@ func freezeRestorationPublication(ctx context.Context, data string, p RestorePub
 		return err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || int(st.Uid) != intent.UID || int(st.Gid) != intent.GID || st.Nlink != 1 || info.Size() != p.File.Size {
+	if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || int(st.Uid) != intent.UID || int(st.Gid) != intent.GID || st.Nlink != 1 || info.Size() != expected.Size {
 		return errors.New("恢复发布暂存文件身份无效")
 	}
 	scratch := filepath.Join(dir, ".copy")
@@ -159,11 +172,11 @@ func freezeRestorationPublication(ctx context.Context, data string, p RestorePub
 	}
 	defer dst.Close()
 	hash := sha256.New()
-	n, err := io.Copy(io.MultiWriter(dst, hash), contextReader{ctx, io.LimitReader(source, p.File.Size+1)})
+	n, err := io.Copy(io.MultiWriter(dst, hash), contextReader{ctx, io.LimitReader(source, expected.Size+1)})
 	if err != nil {
 		return err
 	}
-	if n != p.File.Size || hex.EncodeToString(hash.Sum(nil)) != p.File.SHA256 || !secure.RootFileUnchanged(source, info) {
+	if n != expected.Size || hex.EncodeToString(hash.Sum(nil)) != expected.SHA256 || !secure.RootFileUnchanged(source, info) {
 		return errors.New("恢复发布副本与助手报告摘要不一致")
 	}
 	if err = dst.Chmod(0400); err != nil {
@@ -178,7 +191,7 @@ func freezeRestorationPublication(ctx context.Context, data string, p RestorePub
 	if err = unix.Renameat2(unix.AT_FDCWD, scratch, unix.AT_FDCWD, target, unix.RENAME_NOREPLACE); err != nil {
 		return err
 	}
-	return errors.Join(syncDir(dir), syncDir(root))
+	return syncDir(dir)
 }
 
 func restorationPlanStatus(data string, p RestorePlan) (out RestorePlanStatus, err error) {
@@ -186,16 +199,22 @@ func restorationPlanStatus(data string, p RestorePlan) (out RestorePlanStatus, e
 	if p.Preview.Publication == nil {
 		return out, nil
 	}
-	f, info, err := secure.OpenRootFile(restorePublicationPath(data, p.ID), DatabaseMax)
-	if os.IsNotExist(err) {
-		return out, nil
-	}
-	if err != nil {
-		return out, err
-	}
-	f.Close()
-	if info.Mode().Perm() != 0400 || info.Size() != p.Preview.Publication.File.Size {
-		return out, errors.New("恢复发布副本的权限或大小与原计划不一致")
+	for _, file := range []File{p.Preview.Publication.File, p.Preview.Publication.NginxRequest} {
+		local := file.Name
+		if local == resources[0].name {
+			local = "panel.db"
+		}
+		f, info, err := secure.OpenRootFile(filepath.Join(filepath.Dir(restorePublicationPath(data, p.ID)), local), DatabaseMax)
+		if os.IsNotExist(err) {
+			return out, nil
+		}
+		if err != nil {
+			return out, err
+		}
+		f.Close()
+		if info.Mode().Perm() != 0400 || info.Size() != file.Size {
+			return out, errors.New("恢复发布副本的权限或大小与原计划不一致")
+		}
 	}
 	out.PublicationAvailable = true
 	return out, nil

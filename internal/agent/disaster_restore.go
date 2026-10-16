@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"nginxpanel/internal/panelrecovery"
@@ -24,7 +25,7 @@ func validDisasterRestore(data string, r Record) (panelrecovery.DisasterIntent, 
 	if err != nil {
 		return i, err
 	}
-	if r.Kind != disasterRestoreKind || !validID(r.MaintenanceEpoch) || r.RequestHash != i.SHA256() || r.CandidateHash != i.AdoptionSHA256 || r.RestoreSnapshot != i.Rollback.Manifest.OperationID || r.Deadline != i.ExpiresAt || r.PanelRestore != nil || r.PanelUpdate != nil || r.PanelSelection != nil || r.PanelService != nil || r.NginxInstall != nil || r.RemoteListener != nil || r.LogPolicy != nil {
+	if r.DisasterRestoreID != "" || r.Kind != disasterRestoreKind || !validID(r.MaintenanceEpoch) || r.RequestHash != i.SHA256() || r.CandidateHash != i.AdoptionSHA256 || r.RestoreSnapshot != i.Rollback.Manifest.OperationID || r.Deadline != i.ExpiresAt || r.PanelRestore != nil || r.PanelUpdate != nil || r.PanelSelection != nil || r.PanelService != nil || r.NginxInstall != nil || r.RemoteListener != nil || r.LogPolicy != nil {
 		return i, errors.New("独立灾备恢复记录与原批准不一致")
 	}
 	switch r.Stage {
@@ -32,7 +33,7 @@ func validDisasterRestore(data string, r Record) (panelrecovery.DisasterIntent, 
 		if r.State != "running" && r.State != "recovery_required" {
 			return i, errors.New("独立灾备恢复执行状态无效")
 		}
-	case "files_installed":
+	case "files_installed", "runtime_preparing", "runtime_applying", "runtime_confirmed", "runtime_compensating", "runtime_compensated":
 		if r.State != "recovery_required" {
 			return i, errors.New("灾备文件安装不能宣告完整恢复成功")
 		}
@@ -165,29 +166,18 @@ func RestoreDisaster(ctx context.Context, data, id, epoch string, input panelrec
 	if err = i.Validate(); err != nil {
 		return out, err
 	}
+	if _, e := panelrecovery.ReadDisasterRuntimeApproval(i, true); e == nil {
+		if !rollback {
+			return out, errors.New("原恢复已持久批准补偿，禁止继续安装")
+		}
+	} else if !os.IsNotExist(e) {
+		return out, e
+	}
 	if err = checkDisasterRuntime(data, i); err != nil {
 		return out, err
 	}
-	records, err := (&maintenanceGate{journal: j}).records()
-	if err != nil {
+	if err = checkDisasterRecords(j, i, !fresh); err != nil {
 		return out, err
-	}
-	for _, r := range records {
-		if r.OperationID == id || r.Kind == "maintenance.lock" {
-			continue
-		}
-		settled, e := settledPanelUpdate(r, i.Stop.MaintenanceID)
-		if e != nil {
-			return out, e
-		}
-		if settled {
-			continue
-		}
-		switch r.State {
-		case "succeeded", "failed", "rolled_back", "cancelled":
-		default:
-			return out, errors.New("其他独立副作用任务未结束，禁止灾备安装或补偿")
-		}
 	}
 	unlockWriter, err := storage.LockWriterForRecovery(data, i.Rollback.Manifest.GID)
 	if err != nil {
@@ -247,8 +237,20 @@ func RestoreDisaster(ctx context.Context, data, id, epoch string, input panelrec
 		}
 		return out, storage.ClearWriterFence(data, i.Fence())
 	}
-	if out.Stage == "compensating" && !rollback {
+	if (out.Stage == "compensating" || strings.HasPrefix(out.Stage, "runtime_compensat")) && !rollback {
 		return out, errors.New("原恢复已进入补偿，只能继续原补偿")
+	}
+	if rollback && strings.HasPrefix(out.Stage, "runtime_") && out.Stage != "runtime_compensated" {
+		return out, errors.New("须先完成原 Nginx 运行补偿，再恢复目标原文件")
+	}
+	if rollback {
+		child, e := readDisasterNginx(data, i)
+		if e == nil && child.State != "rolled_back" {
+			return out, errors.New("Nginx 子操作尚未确认补偿，不能恢复原文件")
+		}
+		if e != nil && !os.IsNotExist(e) {
+			return out, e
+		}
 	}
 	if err = storage.BindWriterFence(data, i.Fence()); err != nil {
 		return out, err
@@ -287,7 +289,7 @@ func runDisasterFiles(ctx context.Context, i panelrecovery.DisasterIntent, r *Re
 		}
 		return finishDisasterCompensation(r, save)
 	}
-	if r.Stage == "files_installed" {
+	if r.Stage == "files_installed" || strings.HasPrefix(r.Stage, "runtime_") {
 		return panelrecovery.CheckDisasterTarget(ctx, i, true)
 	}
 	if i.ExpiresAt <= time.Now().Unix() {

@@ -34,6 +34,11 @@ type DisasterIntent struct {
 	ApprovalEpoch  string              `json:"approval_epoch"`
 	CreatedAt      int64               `json:"created_at"`
 	ExpiresAt      int64               `json:"expires_at"`
+
+	NginxRequest            File   `json:"nginx_request"`
+	NginxBeforeRevision     string `json:"nginx_before_revision"`
+	NginxBeforeDeployment   string `json:"nginx_before_deployment"`
+	NginxCapabilitiesSHA256 string `json:"nginx_capabilities_sha256"`
 }
 
 func (i DisasterIntent) Validate() error {
@@ -43,6 +48,9 @@ func (i DisasterIntent) Validate() error {
 	h := i.Stop
 	if !idValue.MatchString(i.PlanID) || i.PlanID == i.OperationID || !hashValue.MatchString(i.PlanSHA256) {
 		return errors.New("独立恢复缺少原目标计划批准摘要")
+	}
+	if i.NginxRequest.Name != "nginx.json" || i.NginxRequest.Size < 1 || i.NginxRequest.Size > DisasterNginxRequestMax || !hashValue.MatchString(i.NginxRequest.SHA256) || !hashValue.MatchString(i.NginxCapabilitiesSHA256) || i.NginxBeforeRevision != i.Rollback.Manifest.Database.AppliedRevision || (i.NginxBeforeDeployment != "" && !idValue.MatchString(i.NginxBeforeDeployment)) || (i.NginxBeforeDeployment == "" && i.NginxBeforeRevision != "") {
+		return errors.New("独立恢复缺少计划绑定的 Nginx 材料或原运行依据")
 	}
 	if i.Schema != 1 || !idValue.MatchString(i.OperationID) || !hashValue.MatchString(i.AdoptionSHA256) || !hashValue.MatchString(i.ReleaseID) || !hashValue.MatchString(i.BinarySHA256) || !idValue.MatchString(i.ApprovalEpoch) || i.CreatedAt <= 0 || i.CreatedAt > time.Now().Unix()+300 || i.ExpiresAt <= i.CreatedAt || i.ExpiresAt > i.Rollback.Manifest.ExpiresAt || i.ExpiresAt-i.CreatedAt > 24*60*60 || h.Schema != 1 || !idValue.MatchString(h.OperationID) || !idValue.MatchString(h.MaintenanceID) || !hashValue.MatchString(h.RequestSHA256) || !hashValue.MatchString(h.BindingSHA256) || h.ReleaseID != i.ReleaseID || h.OperationID == i.OperationID || h.MaintenanceID == i.OperationID {
 		return errors.New("独立恢复安装意图无效")
@@ -74,6 +82,8 @@ func (i DisasterIntent) Validate() error {
 	}
 	return nil
 }
+
+const DisasterNginxRequestMax = int64(24 << 20)
 
 func (i DisasterIntent) SHA256() string { raw, _ := json.Marshal(i); return secure.Hash(raw) }
 func (i DisasterIntent) Fence() storage.WriterFence {
@@ -227,7 +237,7 @@ func disasterBudget(root, current string, i DisasterIntent) error {
 		if err = checkPrivateDir(dir); err != nil {
 			return err
 		}
-		items, e := disasterEntries(dir, 3)
+		items, e := disasterEntries(dir, 7)
 		if e != nil {
 			return e
 		}
@@ -265,7 +275,7 @@ func disasterBudget(root, current string, i DisasterIntent) error {
 					}
 					used += info.Size()
 				}
-			} else if item.Name() == "intent.json" || item.Name() == "intent.copy" {
+			} else if item.Name() == "intent.json" || item.Name() == "intent.copy" || item.Name() == "runtime-apply.json" || item.Name() == "runtime-apply.json.copy" || item.Name() == "runtime-rollback.json" || item.Name() == "runtime-rollback.json.copy" {
 				f, info, e := secure.OpenRootFile(name, 32<<10)
 				if e != nil {
 					return e

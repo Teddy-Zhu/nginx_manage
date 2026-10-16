@@ -25,6 +25,7 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/secure"
 )
 
@@ -45,6 +46,7 @@ type Nginx struct {
 	mu                          sync.Mutex
 	workers                     sync.WaitGroup
 	closed                      bool
+	disasterBusy                string
 	unlock                      *os.File
 	gid                         int
 	uid                         int
@@ -234,6 +236,19 @@ func (n *Nginx) Open() error {
 		return err
 	}
 	for _, record := range records {
+		if record.DisasterRestoreID != "" {
+			i, e := panelrecovery.ReadDisasterIntent(n.DataDir, record.DisasterRestoreID)
+			if e == nil {
+				e = validDisasterNginxRecord(i, record)
+			}
+			if e == nil {
+				_, e = panelrecovery.ReadDisasterRuntimeApproval(i, false)
+			}
+			if e != nil {
+				n.Close()
+				return e
+			}
+		}
 		if record.Kind == "nginx.restore" && (record.State == "running" || record.State == "compensating" || record.State == "recovery_required") {
 			if record.Stage == "preparing" || record.Stage == "prepared" || record.Stage == "testing" {
 				record.State, record.Stage, record.Error = "failed", "interrupted_before_switch", "恢复准备期间 Agent 重启，原发布指针未改变"
@@ -304,6 +319,10 @@ func (n *Nginx) State(ctx context.Context) NginxState {
 }
 
 func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
+	return n.submit(in, "", "", "")
+}
+
+func (n *Nginx) submit(in ApplyRequest, disasterID, epoch, disasterBefore string) (Record, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.closed || n.unlock == nil {
@@ -325,12 +344,15 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 	}
 	digest := secure.Hash(encoded)
 	if old, err := n.Journal.Get(in.OperationID); err == nil {
-		if old.RequestHash != digest {
+		if old.RequestHash != digest || old.DisasterRestoreID != disasterID {
 			return Record{}, errors.New("operation ID conflicts with a different request")
 		}
 		return old, nil
 	} else if !os.IsNotExist(err) {
 		return Record{}, err
+	}
+	if disasterID != "" && n.disasterBusy != "" {
+		return Record{}, ErrBusy
 	}
 	if n.http01 != nil && n.http01.busy() {
 		return Record{}, errors.New("HTTP-01 验证进行中，暂不能切换或检查 Nginx 配置")
@@ -361,6 +383,9 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	if disasterID != "" && before != disasterBefore {
+		return Record{}, ErrExternalChange
+	}
 	if current.RevisionID != in.ExpectedRevision {
 		return Record{}, errors.New("当前运行修订与请求基础不一致")
 	}
@@ -376,6 +401,10 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 		kind = "nginx.restore"
 	}
 	record := Record{OperationID: in.OperationID, RequestHash: digest, Kind: kind, BeforeRevision: current.RevisionID, AfterRevision: in.RevisionID, BeforeDir: before, AfterDir: in.OperationID, RestoreSnapshot: in.RestoreSnapshot, State: "running", Stage: "preparing"}
+	record.DisasterRestoreID = disasterID
+	if disasterID != "" {
+		record.MaintenanceEpoch = epoch
+	}
 	if err := n.persist(record); err != nil {
 		return Record{}, err
 	}
@@ -407,7 +436,16 @@ func (n *Nginx) Submit(in ApplyRequest) (Record, error) {
 		return Record{}, err
 	}
 	n.workers.Add(1)
-	go func() { defer n.workers.Done(); n.execute(record) }()
+	if disasterID != "" {
+		n.disasterBusy = in.OperationID
+	}
+	go func() {
+		defer n.workers.Done()
+		if disasterID != "" {
+			defer func() { n.mu.Lock(); n.disasterBusy = ""; n.mu.Unlock() }()
+		}
+		n.execute(record)
+	}()
 	return record, nil
 }
 
@@ -497,7 +535,9 @@ func (n *Nginx) execute(record Record) {
 
 func (n *Nginx) rollback(record Record) {
 	record.State, record.Stage = "compensating", "rollback_pending"
-	_ = n.persist(record)
+	if n.persist(record) != nil {
+		return
+	}
 	failed := func() {
 		record.State, record.Stage, record.Error = "recovery_required", "rollback_unconfirmed", "无法确认 Nginx 回滚结果，需要本机恢复"
 		n.persist(record)
@@ -544,6 +584,9 @@ func (n *Nginx) rollback(record Record) {
 		return
 	}
 	record.State, record.Stage, record.Error, record.ObservedRevision = "rolled_back", "rollback_confirmed", "新配置未确认生效，已恢复上一受管修订", record.BeforeRevision
+	if record.DisasterRestoreID != "" {
+		record.Error = "已按原恢复批准回滚 Nginx，原运行修订已确认"
+	}
 	n.persist(record)
 }
 
