@@ -35,6 +35,7 @@ type PublicationSpec struct {
 type PublishInput struct {
 	InputRoot, SpecPath, Output, KeyPath, KeyID, PublicKey string
 	Repository, Version, Commit                            string
+	ImagesPath                                             string
 }
 type PublicationResult struct {
 	State          string `json:"state"`
@@ -180,7 +181,11 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	if !filepath.IsAbs(in.KeyPath) || filepath.Clean(in.KeyPath) != in.KeyPath {
 		return PublicationResult{}, errors.New("发布私钥须为规范绝对路径")
 	}
-	for _, root := range []string{in.InputRoot, in.Output} {
+	inputTrees := []string{in.InputRoot, in.Output}
+	if in.ImagesPath != "" {
+		inputTrees = append(inputTrees, filepath.Dir(in.ImagesPath))
+	}
+	for _, root := range inputTrees {
 		if rel, err := filepath.Rel(root, in.KeyPath); err != nil || rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return PublicationResult{}, errors.New("发布私钥须位于输入与输出树之外")
 		}
@@ -203,7 +208,7 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	if err != nil {
 		return PublicationResult{}, err
 	}
-	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || m.AutomaticRollback || len(m.Assets) != 0 || len(spec.Packages) == 0 || len(spec.Packages) > 16 {
+	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || m.AutomaticRollback || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) == 0 || len(spec.Packages) > 16 {
 		return PublicationResult{}, errors.New("发布清单身份、有效期、协议或回滚条件不满足")
 	}
 	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
@@ -279,10 +284,26 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 		}
 		m.Assets = append(m.Assets, a)
 	}
+	var imageEvidence map[string][]byte
+	m.Images, imageEvidence, err = publicationImages(in, spec, m)
+	if err != nil {
+		return PublicationResult{}, err
+	}
+	for name, data := range imageEvidence {
+		if names[name] {
+			return PublicationResult{}, errors.New("镜像证据与既有发行文件重名")
+		}
+		names[name], evidence[name] = true, data
+		budget += int64(len(data))
+	}
+	if budget > MaxStoreBytes {
+		return PublicationResult{}, errors.New("整次发布的输入与输出超过 2 GiB")
+	}
 	if _, err := manifestCatalog(m); err != nil {
 		return PublicationResult{}, err
 	}
 	slices.SortFunc(m.Assets, func(a, b Asset) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(m.Images, func(a, b ContainerImage) int { return strings.Compare(a.ID, b.ID) })
 	manifest, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return PublicationResult{}, err

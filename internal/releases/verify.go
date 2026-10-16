@@ -243,6 +243,9 @@ func readTrust(name string) (publisher, error) {
 }
 
 func manifestCatalog(m Manifest) (map[string]Asset, error) {
+	if err := validateImages(m); err != nil {
+		return nil, err
+	}
 	if len(m.Assets) == 0 || len(m.Assets) > 16 {
 		return nil, errors.New("发行资产须为 1–16 项")
 	}

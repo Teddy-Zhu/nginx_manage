@@ -3,6 +3,7 @@
 FROM nginx:1.30.6-alpine-slim@sha256:3028fc1419f99b95c1c69f844bbaf49dc1b881750c51b497fc721ac4f02a14e6
 ARG TARGETARCH
 COPY --chown=0:0 --chmod=0555 .release/binaries/nginxpanel-${TARGETARCH} /usr/local/bin/nginxpanel-nginx-launcher
+COPY --chown=0:0 .release/binaries/licenses-${TARGETARCH}/ /usr/share/licenses/nginxpanel/
 COPY deploy/docker/nginx-capabilities.json /usr/share/nginxpanel/capabilities.json
 COPY deploy/docker/check-nginx-image.sh /usr/local/libexec/check-nginx-image
 RUN /bin/sh /usr/local/libexec/check-nginx-image \

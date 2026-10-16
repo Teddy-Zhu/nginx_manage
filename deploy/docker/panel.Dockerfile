@@ -6,6 +6,7 @@ ARG TARGETARCH
 COPY --from=trust /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # Build context: .release/binaries containing the matching CGO_ENABLED=0 outputs.
 COPY --chown=0:0 --chmod=0555 nginxpanel-${TARGETARCH} /usr/local/bin/nginxpanel-launcher
+COPY --chown=0:0 licenses-${TARGETARCH}/ /usr/share/licenses/nginxpanel/
 WORKDIR /srv/nginxpanel
 USER 10001:10001
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt

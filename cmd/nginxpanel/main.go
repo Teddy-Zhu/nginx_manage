@@ -49,7 +49,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-status|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-status|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -124,6 +124,7 @@ func run() error {
 		"nginx-container-bind":   {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true},
 		"nginx-container-status": {"data-dir": true},
 		"nginx-container-launch": {"data-dir": true},
+		"release-images":         {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
 	}
 	var invalidFlag string
 	flags.Visit(func(f *flag.Flag) {
@@ -329,8 +330,8 @@ func run() error {
 			return err
 		}
 		return nginxruntime.Launch(call, absDir, *nginxRuntimeCheck)
-	case "release-verify", "release-prepare", "release-check", "release-fetch":
-		if *releaseSelect == "" {
+	case "release-verify", "release-prepare", "release-check", "release-fetch", "release-images":
+		if *releaseSelect == "" && command != "release-images" {
 			return errors.New("release commands require --release-select")
 		}
 		host := platform.Detect()
@@ -348,6 +349,16 @@ func run() error {
 		}
 		if *releaseManifest == "" || *releaseSignature == "" {
 			return errors.New("offline release commands require --release-manifest and --release-signature")
+		}
+		if command == "release-images" {
+			if *releaseSelect != "" || *releaseAssets != "" || *releaseToken != "" || *releaseTag != "" {
+				return errors.New("release-images only accepts the offline manifest, signature and local trust")
+			}
+			result, err := releases.VerifyImages(releases.Input{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, Host: target, Receiver: receiver})
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(os.Stdout).Encode(result)
 		}
 		verified, err := releases.Verify(releases.Input{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, Assets: strings.Split(*releaseSelect, ","), AllowPrerelease: *releasePrerelease, Host: target, Receiver: receiver})
 		if err != nil {

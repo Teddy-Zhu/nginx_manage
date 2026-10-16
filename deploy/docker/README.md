@@ -8,11 +8,11 @@ docker build -f deploy/docker/nginx.Dockerfile --build-arg TARGETARCH=amd64 -t n
 
 基础镜像固定为官方 `nginx:1.30.6-alpine-slim` 的多架构摘要；构建时检查静态 HTTP/TLS/realip、Stream/TLS/realip/SSL preread，以及 ACL、基础 WAF、JSON 日志和 HTTP-01 依赖的默认模块。校验脚本发现版本、必需参数或默认模块不满足时中止镜像构建。
 
-镜像构建前先由发行流程准备 `.release/binaries/nginxpanel-amd64`、`nginxpanel-arm64` 静态程序；`TARGETARCH` 应与目标平台一致。镜像提供 `/usr/share/nginxpanel/capabilities.json`、完整 `nginx -V` 输出，以及 Nginx 和固定启动器的 SHA-256。清除官方配置模板入口；固定启动器核对宿主机登记后降权并 exec Nginx，启动时不下载、安装或编译模块。迁移执行仍以目标 Agent 的实际能力与 `nginx -t` 为准，不能把静态清单当作运行确认。
+镜像构建前由发行流程准备 `.release/binaries/nginxpanel-amd64`、`nginxpanel-arm64` 静态程序，以及对应的 `licenses-amd64/`、`licenses-arm64/` 项目和第三方许可文本；`TARGETARCH` 应与目标平台一致。镜像提供 `/usr/share/nginxpanel/capabilities.json`、完整 `nginx -V` 输出，以及 Nginx 和固定启动器的 SHA-256。清除官方配置模板入口；固定启动器核对宿主机登记后降权并 exec Nginx，启动时不下载、安装或编译模块。迁移执行仍以目标 Agent 的实际能力与 `nginx -t` 为准，不能把静态清单当作运行确认。
 
 修改模块集合须重新构建并发布镜像；运行环境缺失模块时更换包含对应能力的受信镜像，重新生成迁移计划。镜像不携带源节点二进制、动态模块或业务秘密。
 
-Nginx 镜像尚未执行构建、启动或 ABI 验证。固定实例执行适配已接入源码；镜像签名发布和 P5 真实系统验证仍待完成。
+Nginx 镜像尚未执行构建、启动或 ABI 验证。固定实例执行适配及镜像摘要/OCI 证据签名发布已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)；真实构建、发布与系统验证仍待 P5。安装器不自动拉取或验签镜像，须由本机管理员先使用 `release-images` 认证清单、按返回摘要准备镜像，再显式绑定。
 
 上游构建及模块参数参见 [Nginx 官方镜像源码](https://github.com/nginx/docker-nginx) 和 [Nginx 构建选项](https://nginx.org/en/docs/configure.html)。
 

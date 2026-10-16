@@ -33,6 +33,7 @@ func run() error {
 	output := f.String("output", "", "new output file (spec) or directory (bundle)")
 	specFile := f.String("spec", "", "publication specification (bundle)")
 	inputRoot := f.String("input-root", "", "prepared package input tree (bundle)")
+	images := f.String("images", "", "optional OCI image publication input (bundle)")
 	keyFile := f.String("key-file", "", "private 0600 Ed25519 seed file outside input/output (bundle)")
 	keyID := f.String("key-id", "", "approved signing key ID (bundle)")
 	public := f.String("public-key", "", "independently approved Base64 public key (bundle)")
@@ -72,6 +73,9 @@ func run() error {
 		return errors.New("bundle 须提供 --spec、--input-root 和 --key-file")
 	}
 	paths := []*string{output, specFile, inputRoot, keyFile}
+	if *images != "" {
+		paths = append(paths, images)
+	}
 	for _, value := range paths {
 		abs, err := filepath.Abs(*value)
 		if err != nil {
@@ -81,7 +85,7 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	result, err := releases.Publish(ctx, releases.PublishInput{InputRoot: *inputRoot, SpecPath: *specFile, Output: *output, KeyPath: *keyFile, KeyID: *keyID, PublicKey: *public, Repository: *repo, Version: *version, Commit: *commit})
+	result, err := releases.Publish(ctx, releases.PublishInput{InputRoot: *inputRoot, SpecPath: *specFile, Output: *output, KeyPath: *keyFile, KeyID: *keyID, PublicKey: *public, Repository: *repo, Version: *version, Commit: *commit, ImagesPath: *images})
 	if err != nil {
 		return err
 	}

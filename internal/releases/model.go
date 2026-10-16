@@ -63,19 +63,20 @@ type Asset struct {
 	Features            []string `json:"features"`
 }
 type Manifest struct {
-	Schema               int     `json:"schema"`
-	Repository           string  `json:"repository"`
-	Version              string  `json:"version"`
-	Channel              string  `json:"channel"`
-	CreatedAt            int64   `json:"created_at"`
-	ExpiresAt            int64   `json:"expires_at"`
-	APIMajor             int     `json:"api_major"`
-	DatabaseSchema       int64   `json:"database_schema"`
-	MinimumAgentProtocol int     `json:"minimum_agent_protocol"`
-	MinimumLauncher      int     `json:"minimum_launcher"`
-	FrontendVersion      string  `json:"frontend_version"`
-	AutomaticRollback    bool    `json:"automatic_rollback"`
-	Assets               []Asset `json:"assets"`
+	Schema               int              `json:"schema"`
+	Repository           string           `json:"repository"`
+	Version              string           `json:"version"`
+	Channel              string           `json:"channel"`
+	CreatedAt            int64            `json:"created_at"`
+	ExpiresAt            int64            `json:"expires_at"`
+	APIMajor             int              `json:"api_major"`
+	DatabaseSchema       int64            `json:"database_schema"`
+	MinimumAgentProtocol int              `json:"minimum_agent_protocol"`
+	MinimumLauncher      int              `json:"minimum_launcher"`
+	FrontendVersion      string           `json:"frontend_version"`
+	AutomaticRollback    bool             `json:"automatic_rollback"`
+	Assets               []Asset          `json:"assets"`
+	Images               []ContainerImage `json:"images"`
 }
 type Host struct {
 	OS           string `json:"os"`
@@ -126,6 +127,7 @@ func (v *Verified) Plan() Plan {
 	out.Selected = slices.Clone(out.Selected)
 	out.Assets = cloneAssets(out.Assets)
 	out.Manifest.Assets = cloneAssets(out.Manifest.Assets)
+	out.Manifest.Images = cloneImages(out.Manifest.Images)
 	return out
 }
 func cloneAssets(input []Asset) []Asset {
