@@ -17,34 +17,35 @@ type backupCLIOptions struct {
 	InputFD                    int
 }
 
-func isBackupPreparationCommand(command string) bool {
+func isBackupRecoveryCommand(command string) bool {
 	switch command {
-	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data":
+	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data":
 		return true
 	default:
 		return false
 	}
 }
 
-func readBackupInput(out any) error {
-	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 8193))
+func readBackupInput(out any) error { return readBackupJSON(out, 8192) }
+func readBackupJSON(out any, limit int64) error {
+	raw, err := io.ReadAll(io.LimitReader(os.Stdin, limit+1))
 	if err != nil {
 		return err
 	}
 	defer clear(raw)
-	if len(raw) > 8192 {
-		return errors.New("备份解密输入超过限制")
+	if int64(len(raw)) > limit {
+		return errors.New("备份恢复命令输入超过限制")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(out) != nil || decoder.Decode(new(any)) != io.EOF {
-		return errors.New("备份解密输入须为单个 JSON 对象")
+		return errors.New("备份恢复命令输入须为单个 JSON 对象")
 	}
 	return nil
 }
 
 func runBackupCommand(ctx context.Context, command string, options backupCLIOptions) (bool, error) {
-	if command != "backup-inspect" && !isBackupPreparationCommand(command) {
+	if command != "backup-inspect" && !isBackupRecoveryCommand(command) {
 		return false, nil
 	}
 	if command == "backup-inspect" {
@@ -62,13 +63,62 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 		return true, json.NewEncoder(os.Stdout).Encode(out)
 	}
 	if options.OperationID == "" {
-		return true, errors.New("恢复准备命令须指定 --restore-operation")
+		return true, errors.New("恢复命令须指定 --restore-operation")
 	}
 	data, err := filepath.Abs(options.DataDir)
 	if err != nil {
 		return true, err
 	}
 	switch command {
+	case "backup-adopt":
+		if os.Geteuid() != 0 {
+			return true, errors.New("恢复材料接入须由 root 调用")
+		}
+		var input backup.AdoptInput
+		if err = readBackupInput(&input); err != nil {
+			return true, err
+		}
+		out, err := backup.AdoptPreparation(ctx, data, options.OperationID, input)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
+	case "backup-adoption":
+		out, err := backup.QueryAdoption(ctx, data, options.OperationID)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
+	case "backup-adoption-cleanup":
+		if err = backup.CleanupAdoption(ctx, data, options.OperationID); err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(struct {
+			OperationID string `json:"operation_id"`
+			Cleaned     bool   `json:"cleaned"`
+		}{options.OperationID, true})
+	case "backup-adoption-verify-data":
+		if os.Geteuid() == 0 {
+			return true, errors.New("恢复材料核对助手须使用非 root 身份")
+		}
+		var input backup.Preparation
+		if err = readBackupJSON(&input, 128<<10); err != nil {
+			return true, err
+		}
+		var files []*os.File
+		for fd := 3; fd <= 6; fd++ {
+			f := os.NewFile(uintptr(fd), "root-recovery-material")
+			if f == nil {
+				return true, errors.New("恢复材料核对缺少固定描述符")
+			}
+			defer f.Close()
+			files = append(files, f)
+		}
+		out, err := backup.VerifyAdoptionDescriptors(ctx, data, options.OperationID, input, files)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
 	case "backup-prepare", "backup-prepare-data":
 		if command == "backup-prepare" && (os.Geteuid() != 0 || options.File == "") {
 			return true, errors.New("backup-prepare 须由 root 调用并指定 --backup-file")

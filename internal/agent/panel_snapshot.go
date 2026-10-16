@@ -16,9 +16,24 @@ import (
 // release. The caller cannot authorize a new snapshot with a stale Agent epoch.
 // A snapshot alone never authorizes a later restore after maintenance is released.
 func CapturePanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch string) (panelrecovery.Result, error) {
+	return accessPanelSnapshot(ctx, data, id, maintenanceID, epoch, false, nil)
+}
+
+// WithCheckedPanelSnapshot retains independent maintenance admission while a
+// local root recovery coordinator consumes the authenticated rollback receipt.
+// The callback is a Go-only entry point, never an IPC-supplied action.
+func WithCheckedPanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch string, visit func(panelrecovery.Result) error) error {
+	if visit == nil {
+		return errors.New("恢复快照协调缺少本机处理入口")
+	}
+	_, err := accessPanelSnapshot(ctx, data, id, maintenanceID, epoch, true, visit)
+	return err
+}
+
+func accessPanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch string, inspect bool, visit func(panelrecovery.Result) error) (panelrecovery.Result, error) {
 	var out panelrecovery.Result
 	if os.Geteuid() != 0 || !validID(id) || !validID(maintenanceID) || !validID(epoch) {
-		return out, errors.New("快照捕获须由 root 提供原维护会话和 epoch")
+		return out, errors.New("恢复快照操作须由 root 提供原维护会话和 epoch")
 	}
 	if _, err := panelruntime.Root(data); err != nil {
 		return out, err
@@ -29,7 +44,7 @@ func CapturePanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch st
 		return out, err
 	}
 	defer unlock()
-	if err = installGrant(j, maintenanceID, epoch, false); err != nil {
+	if err = installGrant(j, maintenanceID, epoch, inspect); err != nil {
 		return out, err
 	}
 	records, err := (&maintenanceGate{journal: j}).records()
@@ -55,6 +70,20 @@ func CapturePanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch st
 	}
 	uid, gid, err := panelSnapshotIdentity(data)
 	if err != nil {
+		return out, err
+	}
+	if inspect {
+		out, err = panelrecovery.Inspect(ctx, data, id)
+		if err != nil {
+			return out, err
+		}
+		m := out.Receipt.Manifest
+		if m.MaintenanceID != maintenanceID || m.UID != uid || m.GID != gid {
+			return panelrecovery.Result{}, errors.New("本机快照与原维护会话或当前面板账户不一致")
+		}
+		if visit != nil {
+			err = visit(out)
+		}
 		return out, err
 	}
 	return panelrecovery.Capture(ctx, panelrecovery.Input{DataDir: data, OperationID: id, MaintenanceID: maintenanceID, Epoch: epoch, UID: uid, GID: gid})

@@ -62,7 +62,7 @@ func PrepareStopped(ctx context.Context, data, id, path string, in PrepareInput)
 		return out, err
 	}
 	defer clear(raw)
-	if err = runPreparationHelper(ctx, data, "backup-prepare-data", id, raw, f, &out); err != nil {
+	if err = runPreparationHelper(ctx, data, "backup-prepare-data", id, raw, []*os.File{f}, &out); err != nil {
 		return out, err
 	}
 	if err = out.Validate(); err != nil {
@@ -91,6 +91,13 @@ func QueryPreparation(ctx context.Context, data, id string) (out PreparationStat
 	}
 	if out.Preparation.OperationID != id {
 		return out, errors.New("恢复准备查询返回了不同操作身份")
+	}
+	hash, err := preparationHash(out.Preparation)
+	if err != nil {
+		return out, err
+	}
+	if out.SHA256 != hash {
+		return out, errors.New("恢复准备查询返回无效摘要")
 	}
 	return out, nil
 }
@@ -134,17 +141,21 @@ func CleanupStoppedPreparation(ctx context.Context, data, id string) error {
 	return nil
 }
 
-func runPreparationHelper(ctx context.Context, data, command, id string, input []byte, ciphertext *os.File, out any) error {
-	if os.Geteuid() != 0 || !validID.MatchString(id) || len(input) > 8192 {
+func runPreparationHelper(ctx context.Context, data, command, id string, input []byte, files []*os.File, out any) error {
+	if os.Geteuid() != 0 || !validID.MatchString(id) {
 		return errors.New("恢复准备助手须由 root 调用并使用有界固定身份")
 	}
 	switch command {
 	case "backup-prepare-data":
-		if ciphertext == nil {
+		if len(files) != 1 || len(input) > 8192 {
 			return errors.New("恢复准备缺少加密文件描述符")
 		}
+	case "backup-adoption-verify-data":
+		if len(files) != len(resources) || len(input) > 128<<10 {
+			return errors.New("恢复接入助手缺少固定资源描述符或输入超过限制")
+		}
 	case "backup-preparation-data", "backup-preparation-cleanup-data":
-		if ciphertext != nil || len(input) != 0 {
+		if len(files) != 0 || len(input) != 0 {
 			return errors.New("恢复准备查询或清理不接受解密材料")
 		}
 	default:
@@ -173,7 +184,7 @@ func runPreparationHelper(ctx context.Context, data, command, id string, input [
 	call, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
 	args := []string{command, "--data-dir", data, "--restore-operation", id}
-	if ciphertext != nil {
+	if command == "backup-prepare-data" {
 		args = append(args, "--backup-input-fd", "3")
 	}
 	cmd := exec.CommandContext(call, filepath.Join(running.Directory, "nginxpanel"), args...)
@@ -183,9 +194,7 @@ func runPreparationHelper(ctx context.Context, data, command, id string, input [
 	cmd.WaitDelay = 5 * time.Second
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Stderr = io.Discard
-	if ciphertext != nil {
-		cmd.ExtraFiles = []*os.File{ciphertext}
-	}
+	cmd.ExtraFiles = files
 	var output bytes.Buffer
 	cmd.Stdout = &boundedWriter{w: &output, max: 128 << 10}
 	if err = cmd.Run(); err != nil {

@@ -51,6 +51,14 @@ func LoadKey(filename string) (*Vault, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer clear(key)
+	return NewVault(key)
+}
+
+// NewVault also accepts key bytes read from an already authorized descriptor.
+// The caller owns and clears the input; the vault retains independent cipher
+// and digest state.
+func NewVault(key []byte) (*Vault, error) {
 	if len(key) != 32 {
 		return nil, errors.New("invalid master key length")
 	}

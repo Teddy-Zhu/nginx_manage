@@ -3,7 +3,6 @@ package backup
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -20,6 +19,7 @@ const preparationJournalMax = DatabaseMax + (16 << 20)
 
 type PreparationStatus struct {
 	Preparation Preparation `json:"preparation"`
+	SHA256      string      `json:"preparation_sha256"`
 	Expired     bool        `json:"expired"`
 }
 
@@ -76,10 +76,12 @@ func preparationFiles(dir string) (os.FileInfo, []os.DirEntry, int64, error) {
 }
 
 func removePreparationDirectory(dir string) error {
-	_, items, _, err := preparationFiles(dir)
-	if os.IsNotExist(err) {
+	if _, err := os.Lstat(dir); os.IsNotExist(err) {
 		return nil
+	} else if err != nil {
+		return err
 	}
+	_, items, _, err := preparationFiles(dir)
 	if err != nil {
 		return err
 	}
@@ -183,38 +185,14 @@ func GetPreparation(ctx context.Context, data, id string) (out PreparationStatus
 		return out, err
 	}
 	defer db.Close()
-	if err = storage.VerifyCurrentSchema(call, db); err != nil {
+	if err = verifyPreparedDatabase(call, db, vault, p); err != nil {
 		return out, err
-	}
-	meta, err := databaseMetadata(call, db)
-	if err != nil {
-		return out, err
-	}
-	if meta != p.Database {
-		return out, errors.New("恢复准备数据库身份不一致")
-	}
-	var matches bool
-	err = db.QueryRowContext(call, "SELECT COUNT(*)=1 FROM restore_barriers WHERE id=? AND state='prepared' AND source_node_id=? AND target_node_id=? AND archive_sha256=? AND mode=? AND prepared_at=?", p.OperationID, p.Source.Database.NodeID, p.Database.NodeID, p.ArchiveSHA256, p.Mode, p.PreparedAt).Scan(&matches)
-	if err != nil {
-		return out, err
-	}
-	if !matches {
-		return out, errors.New("恢复准备启动屏障不匹配")
-	}
-	admin, err := readRestoreAdmin(call, db)
-	if err != nil {
-		return out, err
-	}
-	epoch := admin.Epoch
-	admin.Epoch = 0
-	raw, err := json.Marshal(admin)
-	if err != nil {
-		return out, err
-	}
-	if epoch != p.SessionEpoch || secure.Hash(raw) != p.Target.AdminSHA256 {
-		return out, errors.New("恢复准备管理员身份不一致")
 	}
 	out.Preparation = p
+	out.SHA256, err = preparationHash(p)
+	if err != nil {
+		return out, err
+	}
 	out.Expired = p.ExpiresAt <= time.Now().Unix()
 	return out, nil
 }

@@ -80,6 +80,33 @@ func observe(ctx context.Context, m Manifest, name string, limit int64) (Origina
 	return out, f, info, nil
 }
 
+// ObserveTarget hashes only the fixed business resources of an approved
+// snapshot. It neither parses SQLite nor changes or preserves live files.
+func ObserveTarget(ctx context.Context, receipt Receipt) ([]Original, error) {
+	if os.Geteuid() != 0 {
+		return nil, errors.New("恢复目标资源核对需要 root")
+	}
+	m := receipt.Manifest
+	if err := receipt.Validate(m.DataDir, m.OperationID); err != nil {
+		return nil, err
+	}
+	var out []Original
+	for _, spec := range restoreFiles {
+		original, f, _, err := observe(ctx, m, spec.name, spec.limit)
+		if f != nil {
+			f.Close()
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, original)
+	}
+	if err := ValidateOriginals(out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PreserveOriginals does not alter business files. The caller must durably save
 // the returned inventory before Install may make its first live change.
 func PreserveOriginals(ctx context.Context, p Prepared) ([]Original, error) {

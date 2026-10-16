@@ -1,6 +1,6 @@
 # 完整加密备份
 
-当前已接入一致性捕获、加密归档、定期任务、保留与清理、鉴权下载，以及非 root 离线检查、停机恢复准备、准备报告查询与清理。页面 `src/pages/backups.vue` 由页面元信息自动扫描，固定操作当前本机。实现尚未运行生成器、构建、类型检查或业务测试，等待 P5 集中验证。
+当前已接入一致性捕获、加密归档、定期任务、保留与清理、鉴权下载，以及非 root 离线检查、停机恢复准备、准备报告查询与清理，以及绑定目标回退快照的 root 固定材料接入。页面 `src/pages/backups.vue` 由页面元信息自动扫描，固定操作当前本机。实现尚未运行生成器、构建、类型检查或业务测试，等待 P5 集中验证。
 
 完整备份与[跨环境配置迁移](migration.md)、面板更新使用的本机 root 救援快照是三种不同用途和格式。跨环境业务导入继续使用迁移预检及执行器。当前完整备份支持灾备/克隆材料准备，尚不提供数据库安装与激活事务，不能直接将解包数据库覆盖到运行目录启动。
 
@@ -100,3 +100,43 @@ nginxpanel backup-preparation-cleanup --data-dir /srv/nginxpanel --restore-opera
 准备数据库持有独立的 `restore_barriers` 启动屏障，正常数据库入口在运行迁移或启动 worker 前拒绝打开未完成恢复的数据。复制准备文件不能构成可用恢复；禁止手动改表或清除屏障来启动。报告中的待检查项包括 root 回退快照、目标可信组件与预置镜像能力、路径及端口映射、配置重新发布、旧任务实际结果和外部授权协调。安装、补偿与解除屏障仍须由后续独立恢复事务实现。
 
 材料位于 `DATA/staging/restore` 的 0700 目录，固定文件为 0600，最多两项准备；配额 2 GiB，另预留 SQLite 回滚日志与可用磁盘余量。创建时间在解密前落盘，报告有效期为 15 分钟；查询重新核对资源散列、密钥、TLS、数据库身份、管理员及启动屏障，过期显示 `expired=true`。服务运行时按原期限清理，持续停机时不会自动执行 TTL，需要上述清理命令；清理要求持久停机及写锁，只删除本操作的固定私有文件，并识别有界 SQLite 回滚日志，遇到未知文件或归属变化拒绝删除。准备清理不会更改原加密备份、目标业务文件或 Agent 独立记录。
+
+
+## 固定材料接入与目标回退依据
+
+`backup-adopt` 将指定准备报告对应的四项材料固定到 `DATA/agent/disaster-recovery`，并绑定同一维护会话下的目标回退快照。此阶段生成 `adopted` 记录，仍不安装文件、启动业务、解除启动屏障或宣称恢复成功。
+
+先保持原持久停机和维护授权，通过当前已批准程序捕获目标本机回退快照，再接入准备材料。快照与准备的顺序不影响含义，但目标数据库、主密钥、入口 TLS 及 WAL 身份必须保持一致；不要使用旧维护会话的快照。捕获程序的二进制散列须等于当前已批准程序：
+
+```sh
+/srv/nginxpanel/runtime/current/nginxpanel panel-snapshot-capture \
+  --data-dir /srv/nginxpanel --recovery-operation "$RESTORE_SNAPSHOT_ID" \
+  --maintenance-id "$RESTORE_MAINTENANCE_ID" --maintenance-epoch "$RESTORE_EPOCH"
+/srv/nginxpanel/runtime/current/nginxpanel backup-adopt \
+  --data-dir /srv/nginxpanel --restore-operation "$RESTORE_ID" < ./adopt-input.json
+/srv/nginxpanel/runtime/current/nginxpanel backup-adoption \
+  --data-dir /srv/nginxpanel --restore-operation "$RESTORE_ID"
+/srv/nginxpanel/runtime/current/nginxpanel backup-adoption-cleanup \
+  --data-dir /srv/nginxpanel --restore-operation "$RESTORE_ID"
+```
+
+接入输入最多 8 KiB，不再提供恢复私钥或口令：
+
+```json
+{
+  "preparation_sha256": "backup-preparation 返回的 preparation_sha256",
+  "snapshot_id": "目标本机回退快照 UUID",
+  "maintenance_id": "原持久停机的维护 UUID",
+  "epoch": "该维护会话当前 Agent epoch"
+}
+```
+
+准备摘要由程序对准备报告规范 JSON 计算，调用者明确指定，不能仅依赖可变暂存路径。root 在独立维护准入及业务写锁内核对原停机、当前批准程序、目标回退快照和目标文件；回退快照通过本机密钥完整认证，不接受只有清单而没有可用密文的快照。Agent 重启后仍须提供原维护会话的当前 epoch；回退快照的历史捕获 epoch 和首次接入批准记录保留。
+
+材料复制到 root 专用目录并逐项比对大小及散列，固定文件为 root 0400。随后固定非 root 助手核对这份副本的业务密钥、管理 TLS、可信 schema、数据库及管理员身份、源修订解密和隔离状态。SQLite 通过 root 持有且面板组只读的固定临时数据库投影打开，不通过面板可写路径解析；临时投影位于 `DATA/run/disaster-check`，不含额外私钥，完成或失败后清理。root 不解析归档 SQLite，非 root 助手不能修改固定材料和核对投影。
+
+接入意图和批准记录先落盘，再原子发布目录；重复请求只续办原准备摘要、原停机、原程序与原回退快照。查询显示 `intent_incomplete`、`copying`、`adopted`、`cleaning`、`cleaned` 或 `absent`。原准备过期后不能从 Web 暂存新增材料，但已经固定完整的副本可以在接入期限内继续核对。接入期限最多 24 小时，且不超过原回退快照期限；过期显示 `expired=true`，不重新授权安装，也不自动删除恢复依据。
+
+root 接入区最多两项活动操作、配额 2 GiB；连同清理历史最多保留 128 项，到达上限后停止新接入，等待后续受控归档。核对区最多两项数据库投影，每项最大 512 MiB，另检查实际磁盘余量。进程被终止时可能留下固定暂存或只读投影，原操作续办或显式清理会核对并处理。清理要求仍处于原停机且没有恢复写屏障，先持久进入 `cleaning`，删除材料后保存完成记录并进入 `cleaned`，断电后可按原标识继续。原意图、已有批准记录和清理记录继续保留，原标识不能复用于新接入。只删除本操作的固定材料和核对投影，不删除目标回退快照、业务文件、其他归档或 Agent 执行记录；未知文件、链接、权限变化及阶段冲突均停止处理。
+
+该入口为本机 root 命令，不新增 Agent/Web 的暂存目录访问权限，也未新增安装执行服务。实际文件安装、运行依赖与期望/生效协调、失败补偿、屏障解除及激活仍由后续独立恢复事务补齐。
