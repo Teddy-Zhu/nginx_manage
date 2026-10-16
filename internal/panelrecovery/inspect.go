@@ -17,7 +17,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-func (r Receipt) validate(data, id string) error {
+func (r Receipt) Validate(data, id string) error {
 	m := r.Manifest
 	if err := Validate(Input{DataDir: m.DataDir, OperationID: m.OperationID, MaintenanceID: m.MaintenanceID, Epoch: m.Epoch, UID: m.UID, GID: m.GID}); err != nil {
 		return err
@@ -48,6 +48,10 @@ func validHeader(h *tar.Header, name string, size int64) bool {
 // Expiry is reported, never used to delete the only surviving recovery evidence.
 // It creates no files and does not open the business database or business key.
 func Inspect(ctx context.Context, data, id string) (Result, error) {
+	return inspect(ctx, data, id, nil)
+}
+
+func inspect(ctx context.Context, data, id string, visit func(File, io.Reader) (int64, error)) (Result, error) {
 	var out Result
 	if os.Geteuid() != 0 || !idValue.MatchString(id) {
 		return out, errors.New("本机恢复快照检查需要 root 和原操作标识")
@@ -66,7 +70,7 @@ func Inspect(ctx context.Context, data, id string) (Result, error) {
 	if err != nil {
 		return out, err
 	}
-	if err = r.validate(data, id); err != nil {
+	if err = r.Validate(data, id); err != nil {
 		return out, err
 	}
 	identity, err := key(store, false)
@@ -110,8 +114,17 @@ func Inspect(ctx context.Context, data, id string) (Result, error) {
 			return out, errors.New("加密快照资源头无效")
 		}
 		hash := sha256.New()
-		n, err := io.Copy(hash, contextReader{ctx, io.LimitReader(tr, file.Size+1)})
-		if err != nil || n != file.Size || hex.EncodeToString(hash.Sum(nil)) != file.SHA256 {
+		reader := io.TeeReader(contextReader{ctx, io.LimitReader(tr, file.Size+1)}, hash)
+		var n int64
+		if visit == nil {
+			n, err = io.Copy(io.Discard, reader)
+		} else {
+			n, err = visit(file, reader)
+		}
+		if err != nil {
+			return out, errors.Join(errors.New("快照资源读取或暂存失败"), err)
+		}
+		if n != file.Size || hex.EncodeToString(hash.Sum(nil)) != file.SHA256 {
 			return out, errors.New("加密快照资源不完整或散列不匹配")
 		}
 	}

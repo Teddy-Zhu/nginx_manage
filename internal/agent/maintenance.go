@@ -15,6 +15,7 @@ import (
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/storage"
 )
 
 type maintenanceGate struct {
@@ -133,6 +134,14 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		}
 		if r.Kind == "maintenance.lock" {
 			continue
+		}
+		if r.Kind == panelRestoreKind {
+			if err := validPanelRestoreRecord(r); err != nil {
+				return out, err
+			}
+			if g.id != "" && r.PanelRestore.Receipt.Manifest.MaintenanceID == g.id {
+				continue
+			}
 		}
 		if r.Kind == nginxInstallKind {
 			if err := validInstallRecord(r); err != nil {
@@ -266,7 +275,24 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 	if err != nil {
 		return maintenance.RootStatus{}, err
 	}
+	data := filepath.Dir(filepath.Dir(g.journal.Dir))
+	fenced, err := storage.WriterFenced(data)
+	if err != nil {
+		return maintenance.RootStatus{}, err
+	}
+	if fenced {
+		return maintenance.RootStatus{}, fault.Conflict("本机恢复标记尚未解除，不能释放维护锁")
+	}
 	for _, record := range records {
+		if record.Kind == panelRestoreKind {
+			if err := validPanelRestoreRecord(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if record.State != "succeeded" && record.PanelRestore.Receipt.Manifest.MaintenanceID == in.OperationID {
+				return maintenance.RootStatus{}, fault.Conflict("面板恢复仍在执行或待恢复，不能释放维护锁")
+			}
+			continue
+		}
 		if record.Kind != nginxInstallKind {
 			continue
 		}

@@ -217,7 +217,7 @@ nginx_hash=
 if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v7\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
+printf 'native-install-v8\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -302,6 +302,7 @@ else ln -s "releases/$release" /opt/nginxpanel/current; sync -f /opt/nginxpanel;
 
 printf '{"version":1,"modules":[]}\n' >"$work/nginx-modules.json"
 write_owned "$work/nginx-modules.json" /etc/nginxpanel/nginx-modules.json
+"$release_dir/nginxpanel" panel-writer-bind --data-dir "$data" --panel-gid "$(id -g nginxpanel)"
 runuser -u nginxpanel -- "$release_dir/nginxpanel" init --data-dir "$data"
 if [[ $panel_mode == docker ]]; then
   "$release_dir/nginxpanel" panel-runtime-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --launcher-binary "$release_dir/nginxpanel" --panel-image "$panel_image" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" "${image_source[@]}" >"$work/panel-runtime.json"
@@ -414,7 +415,7 @@ ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectProc=invisible
-ReadWritePaths=$data/app $data/bootstrap $data/secrets $data/staging
+ReadWritePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/run/panel-writer.lock
 InaccessiblePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs
 RestrictSUIDSGID=yes
 LockPersonality=yes
@@ -455,7 +456,7 @@ for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-printf 'native-install-v7\n' >"$work/ready"
+printf 'native-install-v8\n' >"$work/ready"
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
   start_units=(nginxpanel-agent.service)

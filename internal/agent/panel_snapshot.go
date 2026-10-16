@@ -46,24 +46,32 @@ func CapturePanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch st
 			return out, errors.New("仍有独立副作用任务执行中或待恢复，不能捕获面板快照")
 		}
 	}
-	identity, err := user.Lookup("nginxpanel")
+	uid, gid, err := panelSnapshotIdentity(data)
 	if err != nil {
-		return out, err
-	}
-	uid, err := strconv.Atoi(identity.Uid)
-	if err != nil {
-		return out, err
-	}
-	gid, err := strconv.Atoi(identity.Gid)
-	if err != nil {
-		return out, err
-	}
-	if binding, err := panelruntime.ReadDeployment(data); err == nil {
-		if binding.UID != uid || binding.GID != gid {
-			return out, errors.New("面板运行绑定与本机专用账户不匹配")
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err
 	}
 	return panelrecovery.Capture(ctx, panelrecovery.Input{DataDir: data, OperationID: id, MaintenanceID: maintenanceID, Epoch: epoch, UID: uid, GID: gid})
+}
+
+func panelSnapshotIdentity(data string) (int, int, error) {
+	identity, err := user.Lookup("nginxpanel")
+	if err != nil {
+		return 0, 0, err
+	}
+	uid, err := strconv.Atoi(identity.Uid)
+	if err != nil {
+		return 0, 0, err
+	}
+	gid, err := strconv.Atoi(identity.Gid)
+	if err != nil {
+		return 0, 0, err
+	}
+	if binding, err := panelruntime.ReadDeployment(data); err == nil {
+		if binding.UID != uid || binding.GID != gid {
+			return 0, 0, errors.New("面板运行绑定与本机专用账户不匹配")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return 0, 0, err
+	}
+	return uid, gid, nil
 }

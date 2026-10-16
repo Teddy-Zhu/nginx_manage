@@ -31,7 +31,13 @@ func privateDir(name string) error {
 	if err := secure.RootDirectory(name, 0700); err != nil {
 		return err
 	}
-	return checkPrivateDir(name)
+	if err := checkPrivateDir(name); err != nil {
+		return err
+	}
+	if err := syncDir(name); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(name))
 }
 
 func checkPrivateDir(name string) error {
@@ -109,6 +115,10 @@ func key(store string, create bool) (*age.X25519Identity, error) {
 // openOwned checks every parent and the open inode. Business files belong to
 // the serve UID, so OpenRootFile would reject these valid snapshot resources.
 func openOwned(name string, uid, gid int, limit int64) (*os.File, os.FileInfo, error) {
+	return openBusinessFile(name, uid, gid, limit, false)
+}
+
+func openBusinessFile(name string, uid, gid int, limit int64, allowEmpty bool) (*os.File, os.FileInfo, error) {
 	if !filepath.IsAbs(name) || filepath.Clean(name) != name {
 		return nil, nil, errors.New("快照资源路径无效")
 	}
@@ -135,7 +145,7 @@ func openOwned(name string, uid, gid int, limit int64) (*os.File, os.FileInfo, e
 	info, err := f.Stat()
 	if err == nil {
 		st, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || int(st.Uid) != uid || int(st.Gid) != gid || st.Nlink != 1 || info.Size() <= 0 || info.Size() > limit {
+		if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || int(st.Uid) != uid || int(st.Gid) != gid || st.Nlink != 1 || info.Size() < 0 || !allowEmpty && info.Size() == 0 || info.Size() > limit {
 			err = errors.New("快照资源的归属、类型、权限或容量无效")
 		}
 	}

@@ -48,7 +48,7 @@ type Options struct {
 	Policy                                                    nginxconfig.Policy
 }
 
-func Init(ctx context.Context, dataDir string) (string, error) {
+func Init(ctx context.Context, dataDir string, development bool) (string, error) {
 	if !filepath.IsAbs(dataDir) {
 		return "", errors.New("data directory must be absolute")
 	}
@@ -60,7 +60,7 @@ func Init(ctx context.Context, dataDir string) (string, error) {
 			return "", err
 		}
 	}
-	unlock, err := Lock(dataDir)
+	unlock, err := Lock(dataDir, development)
 	if err != nil {
 		return "", err
 	}
@@ -169,7 +169,10 @@ func createLocalTLS(dir string) error {
 
 // The process lock prevents a second serve instance, including migration or
 // lease recovery, from treating the same node database as shared application state.
-func Lock(dataDir string) (func(), error) {
+func Lock(dataDir string, development bool) (func(), error) {
+	if !development {
+		return storage.LockWriter(dataDir, os.Getegid())
+	}
 	f, err := os.OpenFile(filepath.Join(dataDir, "app", ".writer.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
@@ -199,7 +202,7 @@ func Run(ctx context.Context, o Options) error {
 	if ip == nil || !ip.IsLoopback() {
 		return errors.New("当前仅开放回环管理入口；远程监听须先实现可达性确认与回滚")
 	}
-	unlock, err := Lock(o.DataDir)
+	unlock, err := Lock(o.DataDir, o.Dev)
 	if err != nil {
 		return err
 	}

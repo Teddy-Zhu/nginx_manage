@@ -17,6 +17,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	PanelRestore     *PanelRestoreIntent `json:"panel_restore,omitempty"`
 	NginxInstall     *NginxInstallIntent `json:"nginx_install,omitempty"`
 	MaintenanceEpoch string              `json:"maintenance_epoch,omitempty"`
 	OperationID      string              `json:"operation_id"`

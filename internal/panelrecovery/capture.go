@@ -316,7 +316,7 @@ func seal(ctx context.Context, store, sourceDir string, m Manifest, identity *ag
 		return out, err
 	}
 	r := Receipt{Manifest: m, ManifestSHA256: secure.Hash(raw), ArchiveSize: info.Size(), ArchiveSHA256: hex.EncodeToString(h.Sum(nil)), KeyID: secure.Hash([]byte(identity.Recipient().String()))}
-	if err = r.validate(m.DataDir, m.OperationID); err != nil {
+	if err = r.Validate(m.DataDir, m.OperationID); err != nil {
 		return out, err
 	}
 	receipt, err := json.Marshal(r)
