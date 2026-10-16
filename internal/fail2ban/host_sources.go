@@ -11,6 +11,7 @@ import (
 // Ready means a complete current engine sample, never a kernel enforcement
 // receipt. Calendar strings from an existing server do not prove UTC expiry.
 type HostInputSourcesView struct {
+	Managed        bool     `json:"managed"`
 	At             int64    `json:"at"`
 	State          string   `json:"state"`
 	ID             string   `json:"id"`
@@ -43,13 +44,13 @@ func (v HostInputSourcesView) Valid() bool {
 		return false
 	}
 	if v.State == "ready" {
-		return policyID.MatchString(v.ID) && v.ApprovedAt > 0 && len(v.Jails) > 0 && v.CollectedAt > 0 && len(v.SourceHash) == 64 && strings.Trim(v.SourceHash, "0123456789abcdef") == "" && v.Reason == ""
+		return policyID.MatchString(v.ID) && v.ApprovedAt > 0 && (len(v.Jails) > 0 || v.Managed) && v.CollectedAt > 0 && len(v.SourceHash) == 64 && strings.Trim(v.SourceHash, "0123456789abcdef") == "" && v.Reason == ""
 	}
 	if v.Reason == "" || v.CollectedAt != 0 || v.SourceHash != "" || v.BannedCount != 0 || v.ProtectedCount != 0 {
 		return false
 	}
 	if v.ID == "" {
-		return (v.State == "unavailable" || v.State == "unapproved") && v.ApprovedAt == 0 && len(v.Jails) == 0
+		return (v.State == "unavailable" || v.State == "unapproved") && v.ApprovedAt == 0 && len(v.Jails) == 0 && !v.Managed
 	}
-	return policyID.MatchString(v.ID) && v.ApprovedAt > 0 && (v.State == "revoked" && len(v.Jails) == 0 || (v.State == "unavailable" || v.State == "stale") && len(v.Jails) > 0)
+	return policyID.MatchString(v.ID) && v.ApprovedAt > 0 && (v.State == "revoked" && len(v.Jails) == 0 && !v.Managed || (v.State == "unavailable" || v.State == "stale") && (len(v.Jails) > 0 || v.Managed))
 }

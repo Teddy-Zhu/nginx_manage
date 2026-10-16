@@ -197,7 +197,7 @@ Fail2ban 的 `binding.engine` 与模板检查 `engine` 统一携带 existing/man
 
 Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝入口而不启动或应用 jail。当前 Agent 合同为 44、策略 nginxpanel-8，数据库为 26、迁移 schema 为 4。独立类型化集合、逐站点可信代理保护及集合代次探针接入发布/回滚/外部检查；本机 root 的独立 Socket 接受固定 bind/unbind/refresh/status，使用 Agent 统一外壳，授权 CAS 与不可变事件、官方当前封禁合并、串行更新及单槽恢复快照已经接通。排队与运行确认分开，root 授权和实际封禁不迁移；公开 jail 应用复用同一执行器，独立动作授权和刷新仍仅 root 可用。详情见 [Fail2ban 客户端入口](fail2ban.md)。
 
-受管 jail 使用 `POST /v1/fail2ban/nginx/jails/apply`、`GET /v1/fail2ban/nginx/jails/status` 与 `GET /v1/fail2ban/nginx/jails/operations/{id}`，由 root Socket 与受限 Web Agent Socket 共用同一执行器。请求固定 protocol/operation_id/base_id/target/policy，完整类型化策略最多 64 KiB，配置包 UUID 做 CAS、请求摘要做幂等；提交返回排队操作，状态中的 selected_id 只表示所选配置，运行及 Nginx 集合分别核对。仅明确登记且可读取的本应用 jail 返回 managed=true，所有 jail 仍 writable=false，公开预览按目标基准及启用项检查计算 can_apply；代码来源与配置包选择共同使读取缓存失效。失败恢复原配置、授权及官方剩余封禁时间，无法确认时保留恢复阻塞。所有 root 配置包、身份、备份树、封禁时间证明及执行记录不迁移。数据库及归档版本不变；实际验证留待 P5。
+受管 jail 使用 `POST /v1/fail2ban/jails/apply`、`GET /v1/fail2ban/jails/status` 与 `GET /v1/fail2ban/jails/operations/{id}`，由 root Socket 与受限 Web Agent Socket 共用同一执行器。请求固定 protocol/operation_id/base_id/target/policy，完整类型化策略最多 64 KiB，配置包 UUID 做 CAS、请求摘要做幂等；提交返回排队操作，状态中的 selected_id 只表示所选配置，运行及 Nginx 集合分别核对。仅明确登记且可读取的本应用 jail 返回 managed=true，所有 jail 仍 writable=false，公开预览按目标基准及启用项检查计算 can_apply；代码来源与配置包选择共同使读取缓存失效。失败恢复原配置、授权及官方剩余封禁时间，无法确认时保留恢复阻塞。所有 root 配置包、身份、备份树、封禁时间证明及执行记录不迁移。数据库及归档版本不变；实际验证留待 P5。
 
 
 受管 jail 的公开合同新增 `GET /fail2ban/runtime`、`POST /fail2ban/apply` 与 `GET /fail2ban/tasks` 及对应显式远程资源。应用固定 version/policy_hash/base_id/target，要求 security.write、幂等与近期认证，HTTP 202 返回持久任务；复用独立 root 执行器，只允许已运行受管实例的 nginx-client 动作。预览返回运行基准和将停用项，can_apply 按实际条件计算；单 jail 查询仍 writable=false。目标摘要纳入安装、服务代次、Nginx 部署/清单、所选配置与动作授权，返回操作增加 request_hash/target 供后台严格核对。模块可显式启用且不安装/启动/停止服务；应用与恢复期间阻止对应期望写入。新增加密 fail2ban_operations 表，数据库为 26，Agent 为 44，归档 schema 仍为 4；无旧协议兼容。未执行生成器与运行验证，留待 P5。
@@ -228,3 +228,6 @@ Python 依赖公开合同新增 `POST /fail2ban/python`、`GET /fail2ban/python/
 
 
 protection 返回目标本机 root 管理/代理来源批准的状态、ID、时间、策略散列和规范来源，不接受 Web 写入。三个 fail2ban-host-protection-* 本机命令提供明确列表批准、状态及撤销，使用操作 UUID/CAS、先不可变事件后原子指针，关联旧批准但不改写审计。批准绑定 root 所有者、登记操作及命名空间；漂移、撤销、缺失、未知格式或无法完整核对均不能准备。两个来源列表必须明确，管理来源非空、每类最多 128；本地来源持续采样并与批准来源合并。新增批准与维护互斥，撤销只改变后续准入且不直接删除封禁；所有状态不随备份/迁移复制。Agent 为 51，数据库/归档仍为 26/6，声明同步；运行恢复和封禁桥接仍待实施，生成器与运行验证仍待 P5。
+
+
+受管 jail 的 root 执行器独立于 Nginx，jail 事务冻结官方实例、所选配置及可选 Nginx/宿主机授权摘要。面板登录宿主机动作仅使用固定 root 日志和不带 IP/jail 参数的同步通知；须目标本机明确批准 managed 来源及持续会话。官方完整来源动态派生自当前受管配置并核对真实名单，最多 32 项；配置切换使旧同步观察等待新采样。公开 runtime 增加 host_ready/host_reason、nginx_ready/nginx_reason，sources 增加 managed；配置成功、官方记录及动作执行状态保持独立，Agent 为 55、数据库/迁移为 26/6，不兼容旧合同。仅 Nginx 相关事务包含其运行/登记及恢复材料，宿主机事务无需 Nginx。所有 root 授权、配置包和运行检查点仍不进入配置迁移。实际验收留待 P5。

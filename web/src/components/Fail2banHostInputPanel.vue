@@ -198,6 +198,9 @@ onUnmounted(() => {
         <NDescriptionsItem label="内核代次">{{
           view.kernel.available ? view.kernel.generation : "未确认"
         }}</NDescriptionsItem>
+        <NDescriptionsItem label="受管宿主机来源">{{
+          view.sources.managed ? "已授权" : "未授权"
+        }}</NDescriptionsItem>
         <NDescriptionsItem label="官方封禁来源">{{
           sources[view.sources.state] || "未确认"
         }}</NDescriptionsItem>

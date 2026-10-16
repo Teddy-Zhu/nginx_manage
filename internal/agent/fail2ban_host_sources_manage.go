@@ -17,6 +17,7 @@ func fail2banHostSourcesMetadata(event *fail2banHostSourcesEvent) fail2ban.HostI
 		out.State, out.Reason = "unapproved", "尚未由目标本机 root 批准官方 jail 封禁来源"
 		return out
 	}
+	out.Managed = event.Policy.Managed
 	out.ID, out.ApprovedAt, out.Jails = event.ID, event.ApprovedAt, append([]string{}, event.Policy.Jails...)
 	if event.Action == "revoke" {
 		out.State, out.Reason = "revoked", "官方封禁来源批准已撤销，未直接移除运行封禁"
@@ -106,7 +107,8 @@ func readFail2banHostSourcesStatus(ctx context.Context, dataDir string) (fail2ba
 }
 
 // No HTTP/IPC write entry, Nginx manifest or caller-provided ban IP exists here.
-// Only the fixed official client reads the root-approved list of jail names.
+// The fixed official client reads explicitly approved names or host jails
+// derived from the approved managed installation's current configuration.
 func ManageFail2banHostSources(ctx context.Context, dataDir, scope, action, operationID, base, policyFile string) (fail2ban.HostInputSourcesView, error) {
 	out := fail2ban.EmptyHostInputSources("尚未核对宿主机官方封禁来源")
 	if action != "approve" && action != "revoke" && action != "status" {
@@ -152,7 +154,7 @@ func ManageFail2banHostSources(ctx context.Context, dataDir, scope, action, oper
 		return out, err
 	}
 	if current != nil && current.ID == operationID {
-		if current.Action != action || current.PreviousID != base || !sameFail2banHostJails(policy.Jails, current.Policy.Jails) {
+		if current.Action != action || current.PreviousID != base || policy.Managed != current.Policy.Managed || !sameFail2banHostJails(policy.Jails, current.Policy.Jails) {
 			return out, errors.New("相同来源操作标识的请求内容变化")
 		}
 		out, err = readFail2banHostSourcesStatus(ctx, dataDir)

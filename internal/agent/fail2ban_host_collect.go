@@ -26,11 +26,12 @@ type fail2banHostBanTime struct {
 }
 
 type fail2banHostSample struct {
-	view      fail2ban.HostInputSourcesView
-	addresses []string
-	binding   *fail2banBinding
-	live      fail2banLiveService
-	program   fail2banProgram
+	managedSelection *string
+	view             fail2ban.HostInputSourcesView
+	addresses        []string
+	binding          *fail2banBinding
+	live             fail2banLiveService
+	program          fail2banProgram
 }
 
 func parseFail2banHostBanTimes(raw []byte) (map[string]fail2banHostBanTime, error) {
@@ -106,6 +107,16 @@ func readFail2banHostJail(ctx context.Context, program fail2banProgram, socket, 
 }
 
 func (s fail2banHostSample) unchanged(ctx context.Context, dataDir string) error {
+	if s.managedSelection != nil {
+		if s.binding == nil || s.binding.managed == nil {
+			return errors.New("受管来源实例缺失")
+		}
+		id, _, err := selectedFail2banJails(s.binding.managed)
+		if err != nil || id != *s.managedSelection {
+			return errors.New("采集期间受管 jail 选择变化")
+		}
+	}
+
 	if err := s.program.unchanged(ctx, dataDir); err != nil {
 		return err
 	}
@@ -126,6 +137,7 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 	if event == nil || event.Action != "approve" || !event.valid() {
 		return out, errors.New("宿主机封禁来源未获 root 批准")
 	}
+	out.view.Managed = event.Policy.Managed
 	out.view.ID, out.view.ApprovedAt, out.view.Jails = event.ID, event.ApprovedAt, append([]string{}, event.Policy.Jails...)
 	set, err := (firewall.NFTBanSet{Addresses: []string{}, Protected: protected}).Normalize()
 	if err != nil {
@@ -157,7 +169,35 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 	if err != nil || strings.TrimSpace(string(server)) != "1.1.1" {
 		return out, errors.New("宿主机动作服务端版本无法核对")
 	}
-	proofs := make([]map[string]fail2banHostBanTime, len(event.Policy.Jails))
+	if event.Policy.Managed {
+		if b.managed == nil {
+			return out, errors.New("受管宿主机来源须绑定本应用的受管官方实例")
+		}
+		selected, bundle, e := selectedFail2banJails(b.managed)
+		if e != nil {
+			return out, e
+		}
+		out.managedSelection = &selected
+		raw, e := program.run(ctx, fail2banReadArgs(b.Socket, "status"), 128<<10)
+		if e != nil {
+			return out, e
+		}
+		if e = checkFail2banJailNames(raw, bundle); e != nil {
+			return out, e
+		}
+		if bundle != nil {
+			for _, jail := range bundle.Policy.Jails {
+				if jail.Enabled && jail.Action == "host-input" {
+					out.view.Jails = append(out.view.Jails, fail2banJailNameFor(jail.ID))
+				}
+			}
+		}
+		sort.Strings(out.view.Jails)
+		if len(out.view.Jails) > fail2ban.MaxJails {
+			return out, errors.New("合并的宿主机来源 jail 超过 32 项")
+		}
+	}
+	proofs := make([]map[string]fail2banHostBanTime, len(out.view.Jails))
 	failures := make([]error, len(proofs))
 	for start := 0; start < len(proofs); start += 4 {
 		var wg sync.WaitGroup
@@ -165,7 +205,7 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				proofs[i], failures[i] = readFail2banHostJail(ctx, program, b.Socket, event.Policy.Jails[i])
+				proofs[i], failures[i] = readFail2banHostJail(ctx, program, b.Socket, out.view.Jails[i])
 			}(i)
 		}
 		wg.Wait()
@@ -174,7 +214,7 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 		}
 		for i := start; i < min(start+4, len(proofs)); i++ {
 			if failures[i] != nil {
-				return out, errors.New("宿主机来源 jail 未完整采集：" + event.Policy.Jails[i] + "：" + failures[i].Error())
+				return out, errors.New("宿主机来源 jail 未完整采集：" + out.view.Jails[i] + "：" + failures[i].Error())
 			}
 		}
 	}
@@ -208,9 +248,11 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 	out.view.CollectedAt = time.Now().Unix()
 	raw, err := json.Marshal(struct {
 		Registry, Engine, Invocation, Socket string
+		ManagedSelection                     *string
+		Jails                                []string
 		CollectedAt                          int64
 		Proofs                               []map[string]fail2banHostBanTime
-	}{event.ID, event.EngineKey, before.invocation, before.inode, out.view.CollectedAt, proofs})
+	}{event.ID, event.EngineKey, before.invocation, before.inode, out.managedSelection, out.view.Jails, out.view.CollectedAt, proofs})
 	if err != nil {
 		return out, err
 	}

@@ -10,10 +10,10 @@ import (
 
 func (c *Client) ReadFail2banJailsRuntime(ctx context.Context) (fail2ban.JailsRuntime, error) {
 	var out fail2ban.JailsRuntime
-	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/nginx/jails/status", nil, &out)
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/jails/status", nil, &out)
 	if err == nil {
 		_, policyErr := out.Policy.Normalize()
-		if policyErr != nil || out.Pending == nil || out.Resources == nil || len(out.Pending) > 1 || len(out.Resources) > 32 || out.SelectedID != "" && !validID(out.SelectedID) || out.Available && !fail2banDigest.MatchString(out.Target) {
+		if out.NginxReady && out.NginxReason != "" || !out.NginxReady && out.NginxReason == "" || out.HostReady && out.HostReason != "" || !out.HostReady && out.HostReason == "" || policyErr != nil || out.Pending == nil || out.Resources == nil || len(out.Pending) > 1 || len(out.Resources) > 32 || out.SelectedID != "" && !validID(out.SelectedID) || out.Available && !fail2banDigest.MatchString(out.Target) {
 			err = errors.New("受管 jail 运行基准格式无效")
 		}
 		for _, id := range out.Resources {
@@ -27,7 +27,7 @@ func (c *Client) ReadFail2banJailsRuntime(ctx context.Context) (fail2ban.JailsRu
 
 func (c *Client) ApplyFail2banJails(ctx context.Context, in fail2ban.JailsRequest) (fail2ban.JailsOperation, error) {
 	var out fail2ban.JailsOperation
-	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/fail2ban/nginx/jails/apply", in, &out)
+	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/fail2ban/jails/apply", in, &out)
 	if err == nil {
 		err = validateFail2banJailsOperation(out, in.OperationID)
 	}
@@ -38,7 +38,7 @@ func (c *Client) Fail2banJailsOperation(ctx context.Context, id string) (fail2ba
 	if !validID(id) {
 		return out, errors.New("受管 jail 操作 UUID 无效")
 	}
-	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/nginx/jails/operations/"+id, nil, &out)
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/jails/operations/"+id, nil, &out)
 	if err == nil {
 		err = validateFail2banJailsOperation(out, id)
 	}

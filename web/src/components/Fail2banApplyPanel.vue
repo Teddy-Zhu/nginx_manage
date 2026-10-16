@@ -147,8 +147,7 @@ onUnmounted(() => {
       应用此版本将更新本应用的受管 jail，并停用本次移除的 jail。确认继续？
     </NPopconfirm>
     <p class="muted">
-      jail 参数确认与 Nginx 拒绝集合生效分别核对；应用任务成功不表示每个地址已被
-      Nginx 拒绝。
+      jail 配置应用成功后，请核对 Nginx 拒绝状态或宿主机同步状态。
     </p>
     <div v-for="task in tasks" :key="task.id" class="page-stack">
       <strong>{{ states[task.state] || task.state }} · {{ task.id }}</strong>

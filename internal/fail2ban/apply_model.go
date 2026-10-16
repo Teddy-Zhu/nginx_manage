@@ -10,8 +10,8 @@ import (
 )
 
 // JailTarget freezes installation, service generation, Nginx and authorization.
-func JailTarget(engine, base, directory, manifest, registry, invocation string) string {
-	raw, _ := json.Marshal([]string{engine, base, directory, manifest, registry, invocation})
+func JailTarget(engine, base, directory, manifest, registry, invocation, host string) string {
+	raw, _ := json.Marshal([]string{engine, base, directory, manifest, registry, invocation, host})
 	return secure.Hash(raw)
 }
 
@@ -37,13 +37,17 @@ type JailsOperation struct {
 }
 
 type JailsRuntime struct {
-	Available  bool             `json:"available"`
-	Target     string           `json:"target"`
-	SelectedID string           `json:"selected_id"`
-	Policy     Policy           `json:"policy"`
-	Resources  []string         `json:"resources"`
-	Pending    []JailsOperation `json:"pending"`
-	Reason     string           `json:"reason"`
+	NginxReady  bool             `json:"nginx_ready"`
+	NginxReason string           `json:"nginx_reason"`
+	HostReady   bool             `json:"host_ready"`
+	HostReason  string           `json:"host_reason"`
+	Available   bool             `json:"available"`
+	Target      string           `json:"target"`
+	SelectedID  string           `json:"selected_id"`
+	Policy      Policy           `json:"policy"`
+	Resources   []string         `json:"resources"`
+	Pending     []JailsOperation `json:"pending"`
+	Reason      string           `json:"reason"`
 }
 
 type ApplyInput struct {

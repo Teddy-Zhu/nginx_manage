@@ -71,13 +71,10 @@ func (f *fail2banNginxExecutor) run(ctx context.Context) {
 		addressCall, stopAddress := context.WithTimeout(ctx, 40*time.Second)
 		addressErr := f.advanceAddress(addressCall)
 		stopAddress()
-		jailCall, stopJails := context.WithTimeout(ctx, 90*time.Second)
-		jailErr := f.advanceJails(jailCall)
-		stopJails()
 		call, cancel := context.WithTimeout(ctx, 45*time.Second)
 		result, err := f.reconcile(call)
 		cancel()
-		err = errors.Join(addressErr, jailErr, err)
+		err = errors.Join(addressErr, err)
 		f.mu.Lock()
 		result.Queued = f.value.Queued
 		if f.registryVersion != registryVersion {

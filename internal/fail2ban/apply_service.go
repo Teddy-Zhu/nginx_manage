@@ -126,8 +126,8 @@ func (s *PolicyService) Apply(ctx context.Context, p auth.Principal, requestID, 
 		return out, fault.Conflict("jail 期望版本已变化，请重新预览")
 	}
 	for _, j := range view.Policy.Jails {
-		if j.Enabled && j.Action != "nginx-client" {
-			return out, fault.Conflict("当前应用只支持 Nginx 客户端动作")
+		if j.Enabled && !(j.Action == "nginx-client" && j.Template != PanelLoginTemplate || j.Action == "host-input" && j.Template == PanelLoginTemplate) {
+			return out, fault.Conflict("当前支持 Nginx 客户端动作及面板登录宿主机入口")
 		}
 	}
 	var count int

@@ -177,7 +177,7 @@ func (f *fail2banNginxExecutor) addressContext(ctx context.Context, name, addres
 	if index < len(values) && values[index] == address {
 		out.action = "denied"
 	}
-	out.target = fail2ban.JailTarget(bundle.EngineKey, selected, dir, manifestHash(m), registry.ID, out.live.invocation)
+	out.target = fail2ban.JailTarget(bundle.EngineKey, selected, dir, manifestHash(m), registry.ID, out.live.invocation, "")
 	return out, ctx.Err()
 }
 

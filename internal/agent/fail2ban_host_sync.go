@@ -13,11 +13,12 @@ import (
 )
 
 type fail2banHostSyncExecutor struct {
-	server *Server
-	gate   *maintenanceGate
-	wake   chan struct{}
-	mu     sync.Mutex
-	value  fail2ban.HostInputSyncView
+	server    *Server
+	gate      *maintenanceGate
+	wake      chan struct{}
+	mu        sync.Mutex
+	value     fail2ban.HostInputSyncView
+	selection string
 }
 
 func (f *fail2banHostSyncExecutor) enqueue() {
@@ -54,12 +55,21 @@ func (f *fail2banHostSyncExecutor) status() fail2ban.HostInputSyncView {
 	}
 	f.mu.Lock()
 	value := f.value
+	selection := f.selection
 	f.mu.Unlock()
 	if value.ID == event.ID {
 		out = value
 		out.At = time.Now().Unix()
 		if out.State == "current" && (out.CollectedAt > out.At || out.At-out.CollectedAt > 60) {
 			out.State, out.Reason = "waiting", "完整同步样本已过期，等待重新核对"
+		}
+		if out.State == "current" && sources.Policy.Managed {
+			r, e := loadFail2banManaged(f.server.DataDir)
+			if e != nil || r == nil || r.State != "installed" || fail2banNginxEngineKey(r.binding()) != event.EngineKey {
+				out.State, out.Reason = "paused", "受管实例身份无法核对"
+			} else if r.jailSelection != selection {
+				out.State, out.Reason = "waiting", "受管 jail 配置变化，等待完整新采样"
+			}
 		}
 	}
 	return out
@@ -209,5 +219,16 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 	out.State, out.Reason = "current", ""
 	out.CollectedAt, out.ConfirmedAt = status.Sources.CollectedAt, time.Now().Unix()
 	out.SourceHash, out.KernelOperationID = status.Sources.SourceHash, status.Runtime.OperationID
+	selection := ""
+	if sources.Policy.Managed {
+		r, e := loadFail2banManaged(dataDir)
+		if e != nil || r == nil || r.State != "installed" {
+			return out, errors.Join(errors.New("已同步样本的受管来源选择无法核对"), e)
+		}
+		selection = r.jailSelection
+	}
+	f.mu.Lock()
+	f.selection = selection
+	f.mu.Unlock()
 	return out, nil
 }

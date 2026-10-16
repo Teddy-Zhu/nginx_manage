@@ -1868,6 +1868,7 @@ type Fail2banHostInputProtectionView struct {
 }
 
 type Fail2banHostInputSourcesView struct {
+	Managed        bool     `json:"managed"`
 	At             int64    `json:"at"`
 	State          string   `json:"state"`
 	ID             string   `json:"id"`
@@ -2040,13 +2041,17 @@ type Fail2banJailsOperation struct {
 	Error       string `json:"error"`
 }
 type Fail2banJailsRuntime struct {
-	Available  bool                     `json:"available"`
-	Target     string                   `json:"target"`
-	SelectedId string                   `json:"selected_id"`
-	Policy     Fail2banPolicy           `json:"policy"`
-	Resources  []string                 `json:"resources"`
-	Pending    []Fail2banJailsOperation `json:"pending"`
-	Reason     string                   `json:"reason"`
+	NginxReady  bool                     `json:"nginx_ready"`
+	NginxReason string                   `json:"nginx_reason"`
+	HostReady   bool                     `json:"host_ready"`
+	HostReason  string                   `json:"host_reason"`
+	Available   bool                     `json:"available"`
+	Target      string                   `json:"target"`
+	SelectedId  string                   `json:"selected_id"`
+	Policy      Fail2banPolicy           `json:"policy"`
+	Resources   []string                 `json:"resources"`
+	Pending     []Fail2banJailsOperation `json:"pending"`
+	Reason      string                   `json:"reason"`
 }
 type Fail2banPythonPackage struct {
 	Name           string `json:"name"`

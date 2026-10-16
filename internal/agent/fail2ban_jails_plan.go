@@ -14,7 +14,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJailsRequest) (Fail2banJailsOperation, error) {
+func (f *fail2banJailsExecutor) submitJails(ctx context.Context, in Fail2banJailsRequest) (Fail2banJailsOperation, error) {
 	var out Fail2banJailsOperation
 	normalized, err := in.Policy.Normalize()
 	if err != nil {
@@ -25,24 +25,17 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 		return out, fault.Invalid("受管 jail 应用合同无效")
 	}
 	for _, j := range in.Policy.Jails {
-		if j.Enabled && j.Template == fail2ban.PanelLoginTemplate {
-			return out, fault.Invalid("面板登录保护所需的宿主机入口封禁尚不可用")
+		if j.Enabled && !(j.Action == "nginx-client" && j.Template != fail2ban.PanelLoginTemplate || j.Action == "host-input" && j.Template == fail2ban.PanelLoginTemplate) {
+			return out, fault.Invalid("当前支持 Nginx 客户端动作及面板登录宿主机入口")
 		}
 	}
-	raw, _ := json.Marshal(in)
-	hash := secure.Hash(raw)
-	n := f.nginx
-	leave, ok := n.maintenance.enter(false)
-	if !ok {
-		return out, ErrBusy
+	hash := in.Hash()
+	leave, err := f.lock(false)
+	if err != nil {
+		return out, err
 	}
 	defer leave()
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.closed || n.unlock == nil {
-		return out, ErrRuntimeUnavailable
-	}
-	if old, e := n.Journal.Get(in.OperationID); e == nil {
+	if old, e := f.journal().Get(in.OperationID); e == nil {
 		if old.Kind != fail2banJailsKind || old.RequestHash != hash || old.Fail2banJails == nil {
 			return out, fault.Conflict("受管 jail 操作 ID 冲突")
 		}
@@ -50,10 +43,7 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 	} else if !os.IsNotExist(e) {
 		return out, e
 	}
-	if n.disasterBusy != "" || n.http01 != nil && n.http01.busy() {
-		return out, ErrBusy
-	}
-	records, err := n.Journal.List()
+	records, err := f.journal().List()
 	if err != nil {
 		return out, err
 	}
@@ -62,14 +52,24 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 			return out, ErrBusy
 		}
 	}
-	unlock, err := (&Journal{Dir: fail2banBindingDir(n.DataDir)}).rootLock("binding.lock")
+	// Persisting a new operation also shares admission with an offline root CLI.
+	admit, err := f.journal().maintenanceLock()
 	if err != nil {
 		return out, err
 	}
-	defer unlock()
-	binding, err := selectFail2banBinding(n.DataDir)
+	defer admit()
+	records, err = f.journal().List()
+	if err != nil {
+		return out, err
+	}
+	for _, record := range records {
+		if record.Kind == "maintenance.lock" && record.State != "succeeded" {
+			return out, ErrBusy
+		}
+	}
+	binding, err := selectFail2banBinding(f.server.DataDir)
 	if err != nil || binding == nil || binding.managed == nil {
-		return out, errors.New("jail 安装仅允许已批准的独立受管实例；已有实例保持只读")
+		return out, errors.New("jail 应用仅允许独立受管实例；已有实例保持只读")
 	}
 	r := binding.managed
 	if err = verifyFail2banManaged(ctx, r, true); err != nil {
@@ -89,14 +89,12 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 	if err != nil {
 		return out, err
 	}
-	dir, m, err := n.active()
-	if err != nil {
-		return out, err
+	basis, m, host, nginxReason := f.basis(ctx, r)
+	if in.Target != fail2ban.JailTarget(fail2banNginxEngineKey(binding), beforeID, basis.NginxDir, basis.NginxHash, basis.RegistryID, live.invocation, basis.HostHash) {
+		return out, fault.Conflict("jail 目标实例、日志或动作批准已变化，请重新预览")
 	}
-	if err = n.observe(ctx, m); err != nil {
-		return out, errors.New("受管 jail 安装前无法确认当前 Nginx 运行修订")
-	}
-	bundle := fail2banJailBundle{Schema: 1, ID: in.OperationID, InstallationID: r.OperationID, EngineKey: fail2banNginxEngineKey(binding), NginxDir: dir, NginxHash: manifestHash(m), Policy: in.Policy, Sources: map[string]string{}, Proxies: map[string][]string{}}
+	bundle := fail2banJailBundle{Schema: 1, ID: in.OperationID, InstallationID: r.OperationID, EngineKey: fail2banNginxEngineKey(binding), Policy: in.Policy, Sources: map[string]string{}, Proxies: map[string][]string{}, HostProtected: []string{}}
+	needsNginx := fail2banJailNeedsNginx(before)
 	old := map[string]fail2ban.DesiredJail{}
 	if before != nil {
 		for _, j := range before.Policy.Jails {
@@ -110,10 +108,22 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 			continue
 		}
 		if previous, ok := old[j.ID]; ok && (previous.ResourceID != j.ResourceID || previous.Template != j.Template || previous.Action != j.Action) {
-			return out, fault.Invalid("同一 jail 标识不能转移站点、模板或动作；请创建新 jail 标识")
+			return out, fault.Invalid("同一 jail 标识不能转移站点、模板或动作")
 		}
-		if j.Action != "nginx-client" || len(m.ClientDeny[j.ResourceID]) == 0 {
-			return out, fault.Invalid("当前执行器仅允许已发布客户端拒绝入口的 Nginx 动作")
+		if j.Template == fail2ban.PanelLoginTemplate {
+			if !host.ready {
+				return out, errors.New(host.reason)
+			}
+			if err = (panelLoginLog{server: f.server}).prepare(); err != nil {
+				return out, err
+			}
+			bundle.Sources[j.ID] = fail2banPanelLoginPath
+			bundle.HostProtectionID, bundle.HostProtected = host.protectionID, append([]string{}, host.protected...)
+			continue
+		}
+		needsNginx = true
+		if basis.NginxDir == "" || len(m.ClientDeny[j.ResourceID]) == 0 {
+			return out, fault.Invalid("Nginx jail 须有已发布的客户端拒绝入口及可信代理配置")
 		}
 		matches := 0
 		for _, source := range m.Logs {
@@ -123,31 +133,41 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 			}
 		}
 		if matches != 1 {
-			return out, fault.Invalid("jail 须引用唯一且包含认证标记的当前受管 HTTP 日志")
+			return out, fault.Invalid("jail 须引用唯一的当前受管 HTTP 日志")
 		}
 		bundle.Proxies[j.ResourceID] = append([]string{}, m.ClientDeny[j.ResourceID]...)
 	}
-	registry, err := loadFail2banNginxRegistry(n.DataDir)
-	if err != nil {
-		return out, err
+	if needsNginx {
+		if basis.NginxDir == "" {
+			return out, errors.New(nginxReason)
+		}
+		bundle.NginxDir, bundle.NginxHash = basis.NginxDir, basis.NginxHash
 	}
-	if in.Target != fail2ban.JailTarget(bundle.EngineKey, beforeID, dir, bundle.NginxHash, registry.ID, live.invocation) {
-		return out, fault.Conflict("jail 目标实例、Nginx 修订或动作授权已变化，请重新预览")
-	}
-	afterGrants, err := fail2banJailGrants(registry, before, &bundle)
-	if err != nil {
-		return out, err
-	}
-	now := time.Now().Unix()
-	afterRegistry := fail2banNginxRegistry{Schema: 1, ID: in.OperationID, PreviousID: registry.ID, RequestHash: hash, ApprovedAt: now, Grants: afterGrants}
-	rollbackRegistry := fail2banNginxRegistry{Schema: 1, ID: secure.ID(), PreviousID: in.OperationID, RequestHash: secure.Hash([]byte("fail2ban.jails.rollback:" + hash)), ApprovedAt: now, Grants: registry.Grants}
-	if err = validFail2banNginxRegistry(afterRegistry, false); err != nil {
-		return out, err
-	}
-	if _, err = os.Lstat(filepath.Join(fail2banNginxDir(n.DataDir), "grants", in.OperationID+".json")); err == nil {
-		return out, fault.Conflict("该操作 UUID 已用于 Nginx 动作授权")
-	} else if !os.IsNotExist(err) {
-		return out, err
+	intent := &fail2banJailIntent{Basis: basis, Nginx: needsNginx, InstallationID: r.OperationID, EngineKey: bundle.EngineKey, Target: in.Target, BeforeID: beforeID, AfterID: bundle.ID, Invocation: live.invocation, SocketInode: live.inode}
+	if needsNginx {
+		registry, e := loadFail2banNginxRegistry(f.server.DataDir)
+		if e != nil {
+			return out, e
+		}
+		if registry.ID != basis.RegistryID {
+			return out, ErrExternalChange
+		}
+		grants, e := fail2banJailGrants(registry, before, &bundle)
+		if e != nil {
+			return out, e
+		}
+		now := time.Now().Unix()
+		intent.BeforeRegistry = registry
+		intent.AfterRegistry = fail2banNginxRegistry{Schema: 1, ID: in.OperationID, PreviousID: registry.ID, RequestHash: hash, ApprovedAt: now, Grants: grants}
+		intent.RollbackRegistry = fail2banNginxRegistry{Schema: 1, ID: secure.ID(), PreviousID: in.OperationID, RequestHash: secure.Hash([]byte("fail2ban.jails.rollback:" + hash)), ApprovedAt: now, Grants: registry.Grants}
+		if err = validFail2banNginxRegistry(intent.AfterRegistry, false); err != nil {
+			return out, err
+		}
+		if _, err = os.Lstat(filepath.Join(fail2banNginxDir(f.server.DataDir), "grants", in.OperationID+".json")); err == nil {
+			return out, fault.Conflict("操作 UUID 已用于动作批准")
+		} else if !os.IsNotExist(err) {
+			return out, err
+		}
 	}
 	if err = ctx.Err(); err != nil {
 		return out, err
@@ -158,9 +178,11 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 	if err = saveFail2banJailBundle(r, bundle); err != nil {
 		return out, err
 	}
-	intent := &fail2banJailIntent{InstallationID: r.OperationID, EngineKey: bundle.EngineKey, Target: in.Target, BeforeID: beforeID, AfterID: bundle.ID, Invocation: live.invocation, SocketInode: live.inode, BeforeRegistry: registry, AfterRegistry: afterRegistry, RollbackRegistry: rollbackRegistry}
-	record := Record{OperationID: in.OperationID, RequestHash: hash, Kind: fail2banJailsKind, State: "running", Stage: "queued", BeforeDir: dir, AfterDir: dir, BeforeRevision: m.RevisionID, AfterRevision: m.RevisionID, Fail2banJails: intent}
-	if err = n.persist(record); err != nil {
+	record := Record{OperationID: in.OperationID, RequestHash: hash, Kind: fail2banJailsKind, State: "running", Stage: "queued", BeforeDir: bundle.NginxDir, AfterDir: bundle.NginxDir, Fail2banJails: intent}
+	if needsNginx {
+		record.BeforeRevision, record.AfterRevision = m.RevisionID, m.RevisionID
+	}
+	if err = f.persist(record); err != nil {
 		return out, err
 	}
 	f.enqueue()
@@ -171,7 +193,7 @@ func fail2banJailGrants(registry fail2banNginxRegistry, before, after *fail2banJ
 	owned := map[string]fail2banNginxGrant{}
 	if before != nil {
 		for _, j := range before.Policy.Jails {
-			if j.Enabled {
+			if j.Enabled && j.Action == "nginx-client" {
 				owned[fail2banJailNameFor(j.ID)] = fail2banNginxGrant{Jail: fail2banJailNameFor(j.ID), ResourceID: j.ResourceID, EngineKey: before.EngineKey}
 			}
 		}
@@ -191,7 +213,7 @@ func fail2banJailGrants(registry fail2banNginxRegistry, before, after *fail2banJ
 		return nil, errors.New("原受管 jail 的动作授权已被撤销，须先本机核对")
 	}
 	for _, j := range after.Policy.Jails {
-		if !j.Enabled {
+		if !j.Enabled || j.Action != "nginx-client" {
 			continue
 		}
 		name := fail2banJailNameFor(j.ID)

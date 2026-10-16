@@ -18,18 +18,16 @@ import (
 
 type Fail2banJailsStatus = fail2ban.JailsRuntime
 
-func (f *fail2banNginxExecutor) jailsStatus(ctx context.Context) (Fail2banJailsStatus, error) {
-	out := Fail2banJailsStatus{Policy: fail2ban.DefaultPolicy(), Resources: []string{}, Pending: []Fail2banJailsOperation{}}
-	n := f.nginx
-	// Pending execution stays observable without waiting for its long-lived lock.
-	records, err := n.Journal.List()
+func (f *fail2banJailsExecutor) jailsStatus(ctx context.Context) (Fail2banJailsStatus, error) {
+	out := Fail2banJailsStatus{Policy: fail2ban.DefaultPolicy(), Resources: []string{}, Pending: []Fail2banJailsOperation{}, HostReason: "尚未核对宿主机动作批准", NginxReason: "尚未核对 Nginx 动作"}
+	records, err := f.journal().List()
 	if err != nil {
 		return out, err
 	}
 	for _, record := range records {
 		if record.Kind == fail2banJailsKind && pendingNginxRecord(record) {
 			if record.Fail2banJails == nil {
-				return out, errors.New("受管 jail 执行记录损坏")
+				return out, errors.New("受管 jail 记录损坏")
 			}
 			out.Pending = append(out.Pending, fail2banJailsView(record))
 		}
@@ -38,46 +36,27 @@ func (f *fail2banNginxExecutor) jailsStatus(ctx context.Context) (Fail2banJailsS
 		out.Reason = "受管 jail 正在应用或等待恢复"
 		return out, nil
 	}
-	leave, ok := n.maintenance.enter(false)
-	if !ok {
-		out.Reason = "宿主机处于维护状态"
-		return out, nil
+	leave, err := f.lock(false)
+	if err != nil {
+		return out, err
 	}
 	defer leave()
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.closed || n.unlock == nil {
-		return out, ErrRuntimeUnavailable
-	}
-	records, err = n.Journal.List()
+	records, err = f.journal().List()
 	if err != nil {
 		return out, err
 	}
 	for _, record := range records {
 		if pendingNginxRecord(record) {
-			out.Reason = "Nginx 执行尚未完成"
+			out.Reason = "共享执行操作尚未完成"
 			return out, nil
 		}
 	}
-	if n.disasterBusy != "" || n.http01 != nil && n.http01.busy() {
-		out.Reason = "Nginx 正在处理恢复或证书挑战"
-		return out, nil
-	}
-	unlock, err := (&Journal{Dir: fail2banBindingDir(n.DataDir)}).rootLock("binding.lock")
+	binding, err := selectFail2banBinding(f.server.DataDir)
 	if err != nil {
 		return out, err
 	}
-	defer unlock()
-	binding, err := selectFail2banBinding(n.DataDir)
-	if err != nil {
-		return out, err
-	}
-	if binding == nil {
-		out.Reason = "须先安装并启动独立受管 Fail2ban 实例"
-		return out, nil
-	}
-	if binding.managed == nil {
-		out.Reason = "当前接入为已有实例，jail 保持只读"
+	if binding == nil || binding.managed == nil {
+		out.Reason = "须先安装并启动独立受管 Fail2ban 实例；已有实例的 jail 保持只读"
 		return out, nil
 	}
 	r := binding.managed
@@ -100,19 +79,14 @@ func (f *fail2banNginxExecutor) jailsStatus(ctx context.Context) (Fail2banJailsS
 	if err != nil {
 		return out, err
 	}
-	dir, m, err := n.active()
-	if err != nil {
-		return out, err
-	}
-	if err = n.observe(ctx, m); err != nil {
-		out.Reason = "当前 Nginx 运行修订无法确认"
+	basis, m, host, nginxReason := f.basis(ctx, r)
+	out.NginxReady, out.NginxReason = basis.NginxDir != "", nginxReason
+	out.HostReady, out.HostReason = host.ready, host.reason
+	if fail2banJailNeedsNginx(b) && basis.NginxDir == "" {
+		out.Reason = nginxReason
 		return out, nil
 	}
-	registry, err := loadFail2banNginxRegistry(n.DataDir)
-	if err != nil {
-		return out, err
-	}
-	out.Target = fail2ban.JailTarget(fail2banNginxEngineKey(binding), id, dir, manifestHash(m), registry.ID, live.invocation)
+	out.Target = fail2ban.JailTarget(fail2banNginxEngineKey(binding), id, basis.NginxDir, basis.NginxHash, basis.RegistryID, live.invocation, basis.HostHash)
 	for resource := range m.ClientDeny {
 		out.Resources = append(out.Resources, resource)
 	}
@@ -122,29 +96,29 @@ func (f *fail2banNginxExecutor) jailsStatus(ctx context.Context) (Fail2banJailsS
 }
 
 func (s *Server) fail2banJailsHandlers(mux *http.ServeMux) {
-	if s.fail2banNginx != nil {
-		s.fail2banNginx.jailHandlers(mux)
+	if s.fail2banJails != nil {
+		s.fail2banJails.jailHandlers(mux)
 		return
 	}
-	for _, route := range []string{"GET /v1/fail2ban/nginx/jails/status", "GET /v1/fail2ban/nginx/jails/operations/{id}", "POST /v1/fail2ban/nginx/jails/apply"} {
+	for _, route := range []string{"GET /v1/fail2ban/jails/status", "GET /v1/fail2ban/jails/operations/{id}", "POST /v1/fail2ban/jails/apply"} {
 		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
 			fail2banNginxReply(w, nil, fault.Unavailable("本机受管 jail 执行器不可用"))
 		})
 	}
 }
 
-func (f *fail2banNginxExecutor) jailHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/fail2ban/nginx/jails/status", func(w http.ResponseWriter, r *http.Request) {
+func (f *fail2banJailsExecutor) jailHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/fail2ban/jails/status", func(w http.ResponseWriter, r *http.Request) {
 		call, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
 		out, err := f.jailsStatus(call)
 		fail2banNginxReply(w, out, err)
 	})
-	mux.HandleFunc("GET /v1/fail2ban/nginx/jails/operations/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/fail2ban/jails/operations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		out, err := f.jailOperation(r.PathValue("id"))
 		fail2banNginxReply(w, out, err)
 	})
-	mux.HandleFunc("POST /v1/fail2ban/nginx/jails/apply", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/fail2ban/jails/apply", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, fail2ban.PolicyBytes+4096)
 		defer r.Body.Close()
 		var in Fail2banJailsRequest
@@ -157,8 +131,6 @@ func (f *fail2banNginxExecutor) jailHandlers(mux *http.ServeMux) {
 		call, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
 		out, err := f.submitJails(call, in)
-		// A completed admission response is a rejection, never evidence that an
-		// accepted journal stopped. Callers still query the original operation.
 		var known *fault.Error
 		if err != nil && !errors.As(err, &known) && !errors.Is(err, ErrBusy) && !errors.Is(err, ErrRuntimeUnavailable) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			err = fault.New(409, "FAIL2BAN_JAIL_REJECTED", err.Error())
@@ -177,7 +149,7 @@ func ManageFail2banJails(ctx context.Context, data, scope, action, operation, ba
 	if action == "status" && (base != "" || policyFile != "" || operation != "" && !validID(operation)) {
 		return nil, fault.Invalid("受管 jail 状态参数无效")
 	}
-	socket := fail2banNginxSocket(data)
+	socket := fail2banJailsSocket(data)
 	if err := existingRootDirectory(filepath.Dir(socket)); err != nil {
 		return nil, err
 	}
@@ -192,9 +164,9 @@ func ManageFail2banJails(ctx context.Context, data, scope, action, operation, ba
 	client := NewClient(socket)
 	var out json.RawMessage
 	if action == "status" {
-		route := "/v1/fail2ban/nginx/jails/status"
+		route := "/v1/fail2ban/jails/status"
 		if operation != "" {
-			route = "/v1/fail2ban/nginx/jails/operations/" + operation
+			route = "/v1/fail2ban/jails/operations/" + operation
 		}
 		err = client.envelopeRequest(ctx, http.MethodGet, route, nil, &out)
 	} else {
@@ -233,14 +205,14 @@ func ManageFail2banJails(ctx context.Context, data, scope, action, operation, ba
 			return nil, oldErr
 		}
 		var runtime Fail2banJailsStatus
-		if err = client.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/nginx/jails/status", nil, &runtime); err != nil {
+		if err = client.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/jails/status", nil, &runtime); err != nil {
 			return nil, err
 		}
 		if !runtime.Available || runtime.SelectedID != base {
 			return nil, fault.Conflict("受管 jail 目标尚未就绪或配置基准已变化")
 		}
 		in := Fail2banJailsRequest{Protocol: Protocol, OperationID: operation, BaseID: base, Target: runtime.Target, Policy: normalized}
-		err = client.envelopeRequest(ctx, http.MethodPost, "/v1/fail2ban/nginx/jails/apply", in, &out)
+		err = client.envelopeRequest(ctx, http.MethodPost, "/v1/fail2ban/jails/apply", in, &out)
 		if err != nil {
 			return nil, err
 		}

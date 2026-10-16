@@ -40,7 +40,7 @@ type JailPreview struct {
 }
 
 func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPreview, error) {
-	out := PolicyPreview{Version: version, Entries: []JailPreview{}, TemplateChecks: []TemplateCheck{}, Warnings: []string{"应用只更新本应用的受管 jail；Nginx 拒绝集合另有独立运行确认"}, Runtime: JailsRuntime{Policy: DefaultPolicy(), Resources: []string{}, Pending: []JailsOperation{}}, Removed: []string{}}
+	out := PolicyPreview{Version: version, Entries: []JailPreview{}, TemplateChecks: []TemplateCheck{}, Warnings: []string{"应用更新本应用的受管 jail；Nginx 拒绝集合和宿主机同步状态分别核对"}, Runtime: JailsRuntime{HostReason: "尚未核对宿主机动作批准", NginxReason: "尚未核对 Nginx 动作", Policy: DefaultPolicy(), Resources: []string{}, Pending: []JailsOperation{}}, Removed: []string{}}
 	if version < 1 {
 		return out, fault.Invalid("须先保存 jail 配置并提供版本")
 	}
@@ -59,11 +59,13 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 	ids := []string{}
 	seen := map[string]bool{}
 	needsHostInput := false
+	needsNginxLogs := false
 	for _, j := range view.Policy.Jails {
 		if !j.Enabled {
 			continue
 		}
 		needsHostInput = needsHostInput || j.Action == "host-input"
+		needsNginxLogs = needsNginxLogs || j.Template != PanelLoginTemplate
 		if !seen[j.Template] {
 			ids = append(ids, j.Template)
 			seen[j.Template] = true
@@ -81,8 +83,11 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		defer cancel()
 		var logErr, instanceErr, templateErr, runtimeErr, panelLogErr, hostInputErr error
 		var wg sync.WaitGroup
-		wg.Add(3)
-		go func() { defer wg.Done(); sources, logErr = s.Agent.LogSources(call) }()
+		wg.Add(2)
+		if needsNginxLogs {
+			wg.Add(1)
+			go func() { defer wg.Done(); sources, logErr = s.Agent.LogSources(call) }()
+		}
 		go func() { defer wg.Done(); out.Runtime, runtimeErr = s.Runtime(call) }()
 		go func() { defer wg.Done(); instance, instanceErr = s.Agent.ReadFail2banInstance(call) }()
 		if needsHostInput {
@@ -106,7 +111,7 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		}
 		wg.Wait()
 		if runtimeErr != nil {
-			out.Runtime = JailsRuntime{Policy: DefaultPolicy(), Resources: []string{}, Pending: []JailsOperation{}, Reason: "受管 jail 执行基准暂不可读取"}
+			out.Runtime = JailsRuntime{HostReason: "宿主机动作基准暂不可读取", NginxReason: "Nginx 动作基准暂不可读取", Policy: DefaultPolicy(), Resources: []string{}, Pending: []JailsOperation{}, Reason: "受管 jail 执行基准暂不可读取"}
 		}
 		if instanceErr != nil {
 			instance = Instance{}
@@ -171,9 +176,11 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			e.Errors = append(e.Errors, out.HostInput.Reason)
 		}
 		if j.Template == PanelLoginTemplate {
-			e.Errors = append(e.Errors, "面板登录保护所需的宿主机入口封禁尚不可用；日志和模板就绪不代表保护已生效")
+			if !out.Runtime.HostReady {
+				e.Errors = append(e.Errors, out.Runtime.HostReason)
+			}
 		} else if j.Action != "nginx-client" {
-			e.Errors = append(e.Errors, "当前应用只支持 Nginx 客户端动作")
+			e.Errors = append(e.Errors, "该日志来源当前只支持 Nginx 客户端动作")
 		}
 		bound := false
 		for _, resource := range out.Runtime.Resources {
@@ -181,7 +188,10 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 				bound = true
 			}
 		}
-		if j.Template != PanelLoginTemplate && !bound {
+		if j.Template != PanelLoginTemplate && !out.Runtime.NginxReady {
+			e.Errors = append(e.Errors, out.Runtime.NginxReason)
+		}
+		if j.Template != PanelLoginTemplate && out.Runtime.NginxReady && !bound {
 			e.Errors = append(e.Errors, "站点须先发布明确的客户端拒绝入口及可信代理配置")
 		}
 		out.Entries = append(out.Entries, e)

@@ -71,7 +71,11 @@ func parseFail2banBanTimes(raw []byte) (map[string]fail2banBanTime, error) {
 
 func fail2banIgnoreSet(j fail2ban.DesiredJail, b *fail2banJailBundle) ([]string, error) {
 	values := append([]string{"127.0.0.0/8", "::1"}, j.IgnoreIPs...)
-	values = append(values, b.Proxies[j.ResourceID]...)
+	if j.Action == "host-input" {
+		values = append(values, b.HostProtected...)
+	} else {
+		values = append(values, b.Proxies[j.ResourceID]...)
+	}
 	return canonicalFail2banIgnore(values)
 }
 
@@ -111,6 +115,13 @@ func readFail2banJailRuntime(ctx context.Context, r *fail2banManagedRecord, b *f
 	raw, err := managedFail2banRead(ctx, r, "get", "dbfile")
 	if err != nil || strings.TrimSpace(string(raw)) != "Current database file is:\n`- "+r.work()+"/state/fail2ban.sqlite3" {
 		return nil, errors.New("受管引擎的实际状态库无法核对")
+	}
+	raw, err = managedFail2banRead(ctx, r, "status")
+	if err != nil {
+		return nil, err
+	}
+	if err = checkFail2banJailNames(raw, b); err != nil {
+		return nil, err
 	}
 	jails := []fail2ban.DesiredJail{}
 	if b != nil {
@@ -153,7 +164,10 @@ func readFail2banJailDetails(ctx context.Context, r *fail2banManagedRecord, b *f
 	filter, _ := fail2ban.FilterConfig(j.Template)
 	_, regex, _ := strings.Cut(filter, "failregex = ")
 	regex, _, _ = strings.Cut(regex, "\n")
-	command := r.ManagerPath + " fail2ban-nginx-refresh --data-dir " + r.DataDir + " --fail2ban-scope host"
+	action, command, err := fail2banJailAction(r, j)
+	if err != nil {
+		return nil, err
+	}
 	checks := []struct {
 		args     []string
 		expected string
@@ -163,9 +177,11 @@ func readFail2banJailDetails(ctx context.Context, r *fail2banManagedRecord, b *f
 		{[]string{"maxretry"}, strconv.Itoa(j.MaxRetry)},
 		{[]string{"logpath"}, "Current monitored log file(s):\n`- " + r.DataDir + "/" + b.Sources[j.ID]},
 		{[]string{"failregex"}, "The following regular expression are defined:\n`- [0]: " + regex},
-		{[]string{"actions"}, "The jail " + name + " has the following actions:\nnginxpanel-nginx"},
-		{[]string{"action", "nginxpanel-nginx", "actionban"}, command},
-		{[]string{"action", "nginxpanel-nginx", "actionunban"}, command},
+		{[]string{"actions"}, "The jail " + name + " has the following actions:\n" + action},
+		{[]string{"action", action, "actionstart"}, command},
+		{[]string{"action", action, "actionstop"}, command},
+		{[]string{"action", action, "actionban"}, command},
+		{[]string{"action", action, "actionunban"}, command},
 	}
 	for _, check := range checks {
 		raw, err := managedFail2banRead(ctx, r, append([]string{"get", name}, check.args...)...)
@@ -206,6 +222,22 @@ func readFail2banJailDetails(ctx context.Context, r *fail2banManagedRecord, b *f
 		return nil, err
 	}
 	return parseFail2banBanTimes(raw)
+}
+
+func checkFail2banJailNames(raw []byte, b *fail2banJailBundle) error {
+	actual, err := parseFail2banJails(raw)
+	if err != nil {
+		return err
+	}
+	names := []string{}
+	for _, jail := range actual {
+		names = append(names, jail.Name)
+	}
+	sort.Strings(names)
+	if !sameFail2banHostJails(names, fail2banJailNames(b)) {
+		return errors.New("受管实例实际完整 jail 名单与所选配置不一致")
+	}
+	return nil
 }
 
 func checkFail2banBanPreservation(before, after fail2banBanProof) error {

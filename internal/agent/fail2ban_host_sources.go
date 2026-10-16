@@ -12,13 +12,17 @@ import (
 )
 
 type fail2banHostSourcesPolicy struct {
-	Jails []string `json:"jails"`
+	Managed bool     `json:"managed"`
+	Jails   []string `json:"jails"`
 }
 
 func (p fail2banHostSourcesPolicy) normalize() (fail2banHostSourcesPolicy, error) {
-	out := fail2banHostSourcesPolicy{Jails: []string{}}
-	if len(p.Jails) == 0 || len(p.Jails) > fail2ban.MaxJails {
-		return out, errors.New("须明确 1 至 32 个官方 jail 名称")
+	out := fail2banHostSourcesPolicy{Managed: p.Managed, Jails: []string{}}
+	if p.Managed && len(p.Jails) != 0 {
+		return out, errors.New("受管来源须使用空显式名单，由当前受管配置派生宿主机 jail")
+	}
+	if p.Jails == nil || len(p.Jails) == 0 && !p.Managed || len(p.Jails) > fail2ban.MaxJails {
+		return out, errors.New("须明确官方 jail 数组，最多 32 项；空列表须显式批准受管宿主机 jail")
 	}
 	seen := map[string]bool{}
 	for _, jail := range p.Jails {
@@ -57,7 +61,7 @@ func (e fail2banHostSourcesEvent) valid() bool {
 		return false
 	}
 	if e.Action == "revoke" {
-		return e.PreviousID != "" && len(e.Policy.Jails) == 0
+		return e.PreviousID != "" && len(e.Policy.Jails) == 0 && !e.Policy.Managed
 	}
 	policy, err := e.Policy.normalize()
 	return e.Action == "approve" && err == nil && sameFail2banHostJails(policy.Jails, e.Policy.Jails)

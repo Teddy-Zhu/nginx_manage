@@ -244,7 +244,7 @@ onUnmounted(() => {
       /></NFormItem>
       <NAlert v-if="jail.template === panelTemplate" type="warning">
         来源为面板密码认证失败日志，仅记录 TCP
-        对端。当前版本尚不支持面板登录自动封禁。
+        对端。面板登录保护仅适用于本机直连；启用前须核对宿主机动作授权和持续同步状态。
       </NAlert>
       <NFormItem v-else label="站点结构化访问日志"
         ><NSelect

@@ -60,6 +60,7 @@ type Server struct {
 	ReleaseTrust     string
 	ReleaseToken     string
 	Installation     *nginxruntime.Installation
+	fail2banJails    *fail2banJailsExecutor
 	fail2banNginx    *fail2banNginxExecutor
 	fail2banHostSync *fail2banHostSyncExecutor
 }
@@ -140,6 +141,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	defer stopFail2banNginx()
+	stopJails, err := s.startFail2banJails(ctx, rootMaintenance, cancelRun, challengeErrors)
+	if err != nil {
+		return err
+	}
+	defer stopJails()
 	stopHostSync, err := s.startFail2banHostSync(ctx, rootMaintenance, cancelRun, challengeErrors)
 	if err != nil {
 		return err
