@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -132,16 +133,23 @@ func BindWriter(data string, gid int) error {
 	return syncWriterDirectory(data)
 }
 
-func LockWriter(data string, gid int) (func(), error) { return lockWriter(data, gid, false) }
+func LockWriter(data string, gid int) (func(), error) { return lockWriter(data, gid, false, false) }
+
+func LockWriterForMaintenance(data string, gid int) (func(), error) {
+	if os.Geteuid() != 0 {
+		return nil, errors.New("维护写锁仅允许 root 使用")
+	}
+	return lockWriter(data, gid, false, true)
+}
 
 func LockWriterForRecovery(data string, gid int) (func(), error) {
 	if os.Geteuid() != 0 {
 		return nil, errors.New("恢复写锁仅允许 root 使用")
 	}
-	return lockWriter(data, gid, true)
+	return lockWriter(data, gid, true, true)
 }
 
-func lockWriter(data string, gid int, recovery bool) (func(), error) {
+func lockWriter(data string, gid int, recovery, maintenance bool) (func(), error) {
 	f, err := writerFile(data, gid)
 	if err != nil {
 		return nil, err
@@ -155,6 +163,13 @@ func lockWriter(data string, gid int, recovery bool) (func(), error) {
 		if e != nil || present {
 			f.Close()
 			return nil, errors.Join(e, errors.New("本机恢复尚未完成，须继续原恢复操作"))
+		}
+	}
+	if !maintenance {
+		present, e := ServiceHeld(data)
+		if e != nil || present {
+			f.Close()
+			return nil, errors.Join(e, errors.New("面板处于持久停机状态，须由原维护流程启动"))
 		}
 	}
 	return func() { unix.Flock(int(f.Fd()), unix.LOCK_UN); f.Close() }, nil
@@ -220,7 +235,24 @@ func BindWriterFence(data string, expected WriterFence) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Join(data, "run"), ".panel-fence-")
+	return publishWriterMarker(data, "panel-writer-fence.json", raw)
+}
+
+func publishWriterMarker(data, name string, raw []byte) error {
+	entries, err := os.ReadDir(filepath.Join(data, "run"))
+	if err != nil {
+		return err
+	}
+	scratch := 0
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".panel-marker-") {
+			scratch++
+		}
+	}
+	if scratch >= 32 {
+		return errors.New("面板标记的中断暂存达到保留上限，须本机处理")
+	}
+	f, err := os.CreateTemp(filepath.Join(data, "run"), ".panel-marker-")
 	if err != nil {
 		return err
 	}
@@ -238,7 +270,7 @@ func BindWriterFence(data string, expected WriterFence) error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	if err = unix.Renameat2(unix.AT_FDCWD, f.Name(), unix.AT_FDCWD, WriterFencePath(data), unix.RENAME_NOREPLACE); err != nil {
+	if err = unix.Renameat2(unix.AT_FDCWD, f.Name(), unix.AT_FDCWD, filepath.Join(data, "run", name), unix.RENAME_NOREPLACE); err != nil {
 		return err
 	}
 	return syncWriterDirectory(data)

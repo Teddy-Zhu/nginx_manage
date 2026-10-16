@@ -133,7 +133,15 @@ func SelectPanelVersion(ctx context.Context, in panelruntime.StageInput, id, sna
 	if err != nil {
 		return out, err
 	}
-	unlockWriter, err := storage.LockWriter(in.DataDir, gid)
+	hold, holdErr := storage.ReadServiceHold(in.DataDir)
+	if holdErr == nil {
+		if hold.MaintenanceID != maintenanceID {
+			return out, errors.New("面板由其他维护会话停机")
+		}
+	} else if !errors.Is(holdErr, os.ErrNotExist) {
+		return out, holdErr
+	}
+	unlockWriter, err := storage.LockWriterForMaintenance(in.DataDir, gid)
 	if err != nil {
 		return out, err
 	}
@@ -144,6 +152,9 @@ func SelectPanelVersion(ctx context.Context, in panelruntime.StageInput, id, sna
 	}
 	if current.Deployment.UID != uid || current.Deployment.GID != gid {
 		return out, errors.New("版本选择与专用面板账户不一致")
+	}
+	if holdErr == nil && (hold.BindingSHA256 != selectionValueHash(current.Deployment) || fresh && current.Release.ID != hold.ReleaseID) {
+		return out, errors.New("持久停机期间只能从原停机版本选择一次目标程序")
 	}
 	var recovery panelrecovery.Result
 	if fresh || current.Release.ID == out.PanelSelection.BeforeID {

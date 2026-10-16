@@ -15,4 +15,4 @@ CMD ["--data-dir", "/srv/nginxpanel"]
 STOPSIGNAL SIGTERM
 LABEL org.opencontainers.image.title="NginxPanel fixed launcher runtime" \
       org.nginxpanel.runtime.policy="persistent-root-approved-release" \
-      org.nginxpanel.launcher.protocol="1"
+      org.nginxpanel.launcher.protocol="2"

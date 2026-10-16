@@ -12,6 +12,8 @@ import (
 const Protocol = releases.LauncherVersion
 
 type Request struct {
+	Action      string `json:"action"`
+	InstanceID  string `json:"instance_id"`
 	Protocol    int    `json:"protocol"`
 	BootID      string `json:"boot_id"`
 	OperationID string `json:"operation_id"`
@@ -24,14 +26,27 @@ type Operation struct {
 	Forced  bool    `json:"forced"`
 }
 
+func validRequest(r Request) bool {
+	if r.Protocol != Protocol || !idValue.MatchString(r.BootID) || !idValue.MatchString(r.OperationID) || !releaseValue.MatchString(r.ReleaseID) {
+		return false
+	}
+	return r.Action == "start" && r.InstanceID == "" || (r.Action == "stop" || r.Action == "restart") && idValue.MatchString(r.InstanceID)
+}
+
 func validOperation(op Operation) bool {
 	r := op.Request
-	if r.Protocol != Protocol || !idValue.MatchString(r.BootID) || !idValue.MatchString(r.OperationID) || !releaseValue.MatchString(r.ReleaseID) || len(op.Error) > 1024 {
+	if !validRequest(r) || len(op.Error) > 1024 {
 		return false
 	}
 	switch op.State {
-	case "queued", "validating", "stopping", "started":
+	case "queued", "validating":
 		return op.Error == ""
+	case "stopping":
+		return op.Error == "" && r.Action != "start"
+	case "started":
+		return op.Error == "" && r.Action != "stop"
+	case "stopped":
+		return op.Error == "" && r.Action == "stop"
 	case "failed":
 		return op.Error != ""
 	default:
@@ -40,14 +55,15 @@ func validOperation(op Operation) bool {
 }
 
 type Status struct {
-	Protocol  int        `json:"protocol"`
-	BootID    string     `json:"boot_id"`
-	State     string     `json:"state"`
-	PID       int        `json:"pid"`
-	ReleaseID string     `json:"release_id"`
-	Version   string     `json:"version"`
-	LastExit  int        `json:"last_exit"`
-	Operation *Operation `json:"operation,omitempty"`
+	Protocol   int        `json:"protocol"`
+	BootID     string     `json:"boot_id"`
+	State      string     `json:"state"`
+	PID        int        `json:"pid"`
+	InstanceID string     `json:"instance_id"`
+	ReleaseID  string     `json:"release_id"`
+	Version    string     `json:"version"`
+	LastExit   int        `json:"last_exit"`
+	Operation  *Operation `json:"operation,omitempty"`
 }
 type supervisor struct {
 	mu         sync.Mutex

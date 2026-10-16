@@ -119,6 +119,30 @@ sudo /opt/nginxpanel/current/nginxpanel panel-selection-status \
 
 `version_selected` 仅表示程序指针已持久化；本入口不重启服务、打开数据库或释放维护会话，不报告应用健康。独立 worker 的启停、readiness、匹配程序与数据的自动回滚及成功清理仍待接入；不应将此命令作为已完成的升级 API。尚未运行以上入口、服务、安装器、构建或测试，统一留到 P5。
 
+## 面板进程维护
+
+本机 root 的 `panel-service-control` 仅控制已绑定的管理面板，要求同一未释放维护会话及当前 Agent epoch；本阶段合同使用 Agent 协议 17、launcher 协议 2。原生模式核对安装意图 v9、已加载且没有 drop-in 的固定 `nginxpanel.service`，检查 UID/GID、主进程、实例与启动标识、执行文件、固定参数及 systemd cgroup；Docker 模式认证 launcher 的 UID、独立容器 PID 1 和执行散列，使用 boot ID 与 serve 实例 UUID 区分进程。Docker 状态中的 PID 属于容器命名空间，原生 PID 属于宿主机。
+
+停止前同步独立 `panel.service` 意图，再发布 root 只读的 `run/panel-service-hold.json`。普通 `init/serve` 在写锁内检查标记；launcher 在容器重启后保留控制入口并保持停机。停止确认同时要求受管进程已结束、面板写锁可获取；保留停机标记后才能继续快照与版本选择；一次持久停机只允许从原停机版本确认一次目标选择，其原操作仍可续行。恢复与停机标记共用原子发布，最多保留 32 份未批准的中断临时标记，超限需本机处理。管理进程的维护范围不包含正在服务流量的 Nginx 或 Fail2ban。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel panel-service-control \
+  --data-dir /srv/nginxpanel --panel-service-operation <新的停机UUID> \
+  --panel-service-action stop --maintenance-id <原维护UUID> --maintenance-epoch <当前Agent-epoch>
+sudo /opt/nginxpanel/current/nginxpanel panel-service-status --data-dir /srv/nginxpanel
+# 按前文入口捕获快照并完成签名版本选择后，以新的操作标识启动。
+sudo /opt/nginxpanel/current/nginxpanel panel-service-control \
+  --data-dir /srv/nginxpanel --panel-service-operation <新的启动UUID> \
+  --panel-service-action start --panel-service-stop <原停机UUID> --panel-selection <原版本选择UUID> \
+  --maintenance-id <原维护UUID> --maintenance-epoch <当前Agent-epoch>
+sudo /opt/nginxpanel/current/nginxpanel panel-service-operation \
+  --data-dir /srv/nginxpanel --panel-service-operation <原操作UUID>
+```
+
+启动原版本时省略 `--panel-selection`；启动新版本须关联该次停机后的完整版本选择记录，并再次核对当前公钥与批准。启动意图落盘、确认数据恢复标记已解除后，才移除匹配原停机事务的标记并启动固定入口。中断后按原操作续行，先查询实际受管状态；同一 launcher boot 中只有明确不存在原回执才派发，跨 boot 的派发先持久记录并有数量上限。未知进程身份或结果保留 `recovery_required`。成功请求重放返回历史记录，后来的进程与停机标记不被历史重放改变。
+
+持久停机标记或未完成的进程记录会阻止维护释放。`started` 表示已观测到目标进程实例；readiness、当前 Nginx 状态检查、完整程序/数据回滚、升级提交及清理仍待独立更新 worker 编排。尚未执行控制入口、systemd、launcher、服务、构建或测试，统一留到 P5。
+
 ## 本机面板恢复快照
 
 本机 root 的 `panel-snapshot-capture` 须提供已经 held 的维护会话及当前 Agent epoch。捕获期间持有维护释放所用的 root 锁，拒绝尚有独立副作用任务执行中或待恢复的节点。SQLite 助手降为 `nginxpanel` 专用账户，使用 [VACUUM INTO](https://www.sqlite.org/lang_vacuum.html) 生成包含 WAL 中已提交内容的一致性副本，不直接复制活动数据库，也不以 root 解析业务数据库。助手有两分钟期限、512 MiB 单文件限制，整次捕获期限五分钟，输出仅在 root 分配的私有暂存目录中生成。

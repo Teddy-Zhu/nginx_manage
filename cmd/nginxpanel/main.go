@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -77,6 +77,7 @@ func run() error {
 	panelRuntime := flags.String("panel-runtime", "native", "serve deployment: native or docker")
 	launcherOperation := flags.String("launcher-operation", "", "fixed launcher operation UUID")
 	launcherBoot := flags.String("launcher-boot", "", "observed launcher boot UUID")
+	launcherInstance := flags.String("launcher-instance", "", "observed live serve instance UUID")
 	launcherRelease := flags.String("launcher-release", "", "exact root-approved current panel release digest")
 	allowedUID := flags.Int("allowed-uid", -1, "authorized Web process UID (required for production agent)")
 	nginxBinary := flags.String("nginx-binary", "", "root-approved Nginx executable (enables execution in the agent)")
@@ -90,6 +91,9 @@ func run() error {
 	recoveryOperation := flags.String("recovery-operation", "", "local panel recovery snapshot UUID")
 	recoverySnapshot := flags.String("recovery-snapshot", "", "exact root-approved local panel snapshot UUID")
 	panelSelection := flags.String("panel-selection", "", "durable panel version selection UUID")
+	panelServiceOperation := flags.String("panel-service-operation", "", "durable management process operation UUID")
+	panelServiceAction := flags.String("panel-service-action", "", "fixed management process action: stop or start")
+	panelServiceStop := flags.String("panel-service-stop", "", "original completed management process stop UUID")
 	installStart := flags.Bool("install-start", false, "start the newly installed dedicated Nginx")
 	installEnable := flags.Bool("install-enable", false, "enable the dedicated Nginx service on boot")
 	installResume := flags.Bool("resume-install", false, "resume the original installation after checking its receipt")
@@ -121,31 +125,34 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
-		"launcher":               {"data-dir": true},
-		"panel-native-bind":      {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
-		"panel-native-serve":     {"data-dir": true},
-		"panel-runtime-bind":     {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-verify":   {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-status":   {"data-dir": true},
-		"panel-runtime-stage":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
-		"panel-runtime-staged":   {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
-		"panel-runtime-select":   {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "panel-selection": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-selection-status": {"data-dir": true, "panel-selection": true},
-		"panel-snapshot-capture": {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-snapshot-check":   {"data-dir": true, "recovery-operation": true},
-		"panel-snapshot-db":      {"data-dir": true, "recovery-operation": true},
-		"panel-writer-bind":      {"data-dir": true, "panel-gid": true},
-		"panel-snapshot-restore": {"data-dir": true, "recovery-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-restore-status":   {"data-dir": true, "recovery-operation": true},
-		"panel-runtime-compose":  {"data-dir": true},
-		"launcher-status":        {"data-dir": true},
-		"launcher-operation":     {"data-dir": true, "launcher-operation": true},
-		"launcher-restart":       {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true},
-		"nginx-container-bind":   {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"nginx-container-verify": {"data-dir": true, "nginx-image": true, "launcher-binary": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"nginx-container-status": {"data-dir": true},
-		"nginx-container-launch": {"data-dir": true},
-		"release-images":         {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
+		"launcher":                {"data-dir": true},
+		"panel-native-bind":       {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-native-serve":      {"data-dir": true},
+		"panel-runtime-bind":      {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-verify":    {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-status":    {"data-dir": true},
+		"panel-runtime-stage":     {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-staged":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-select":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "panel-selection": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-selection-status":  {"data-dir": true, "panel-selection": true},
+		"panel-service-status":    {"data-dir": true},
+		"panel-service-operation": {"data-dir": true, "panel-service-operation": true},
+		"panel-service-control":   {"data-dir": true, "panel-service-operation": true, "panel-service-action": true, "panel-service-stop": true, "panel-selection": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-snapshot-capture":  {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-snapshot-check":    {"data-dir": true, "recovery-operation": true},
+		"panel-snapshot-db":       {"data-dir": true, "recovery-operation": true},
+		"panel-writer-bind":       {"data-dir": true, "panel-gid": true},
+		"panel-snapshot-restore":  {"data-dir": true, "recovery-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-restore-status":    {"data-dir": true, "recovery-operation": true},
+		"panel-runtime-compose":   {"data-dir": true},
+		"launcher-status":         {"data-dir": true},
+		"launcher-operation":      {"data-dir": true, "launcher-operation": true},
+		"launcher-restart":        {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true, "launcher-instance": true},
+		"nginx-container-bind":    {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-verify":  {"data-dir": true, "nginx-image": true, "launcher-binary": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-status":  {"data-dir": true},
+		"nginx-container-launch":  {"data-dir": true},
+		"release-images":          {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
 	}
 	var invalidFlag string
 	flags.Visit(func(f *flag.Flag) {
@@ -156,8 +163,16 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "panel-service-operation":
+			if command != "panel-service-operation" && command != "panel-service-control" {
+				invalidFlag = f.Name
+			}
+		case "panel-service-action", "panel-service-stop":
+			if command != "panel-service-control" {
+				invalidFlag = f.Name
+			}
 		case "panel-selection":
-			if command != "panel-runtime-select" && command != "panel-selection-status" {
+			if command != "panel-runtime-select" && command != "panel-selection-status" && command != "panel-service-control" {
 				invalidFlag = f.Name
 			}
 		case "recovery-snapshot":
@@ -188,7 +203,7 @@ func run() error {
 			if command != "panel-runtime-bind" && command != "panel-runtime-verify" && command != "panel-native-bind" {
 				invalidFlag = f.Name
 			}
-		case "launcher-boot", "launcher-release":
+		case "launcher-boot", "launcher-release", "launcher-instance":
 			if command != "launcher-restart" {
 				invalidFlag = f.Name
 			}
@@ -211,8 +226,8 @@ func run() error {
 	if command == "component-install" && *moduleFile == "" {
 		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
 	}
-	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
-		return errors.New("installation options require component-install; maintenance identity also permits panel snapshot capture/restore and version selection")
+	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-service-control" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
+		return errors.New("installation options require component-install; maintenance identity also permits panel snapshot, version and process operations")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
 	if err != nil {
@@ -354,6 +369,24 @@ func run() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-service-status":
+		out, err := agent.PanelServiceStatus(ctx, absDir)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-service-operation":
+		out, err := agent.PanelServiceOperationStatus(absDir, *panelServiceOperation)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-service-control":
+		out, err := agent.ControlPanelService(ctx, agent.PanelServiceInput{DataDir: absDir, Action: *panelServiceAction, MaintenanceID: *installMaintenance, StopID: *panelServiceStop, SelectionID: *panelSelection}, *panelServiceOperation, *installEpoch)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
 	case "panel-runtime-select":
 		out, err := agent.SelectPanelVersion(ctx, panelruntime.StageInput{DataDir: absDir, PlanID: *releasePlan, TrustPath: *releaseTrust, AllowPrerelease: *releasePrerelease}, *panelSelection, *recoverySnapshot, *installMaintenance, *installEpoch)
 		if err != nil {
@@ -394,7 +427,7 @@ func run() error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
 	case "launcher-restart":
-		out, err := (launcher.Client{DataDir: absDir}).Restart(ctx, launcher.Request{Protocol: launcher.Protocol, BootID: *launcherBoot, OperationID: *launcherOperation, ReleaseID: *launcherRelease})
+		out, err := (launcher.Client{DataDir: absDir}).Control(ctx, launcher.Request{Protocol: launcher.Protocol, Action: "restart", InstanceID: *launcherInstance, BootID: *launcherBoot, OperationID: *launcherOperation, ReleaseID: *launcherRelease})
 		if err != nil {
 			return err
 		}

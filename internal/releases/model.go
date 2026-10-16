@@ -6,7 +6,7 @@ import "slices"
 
 const (
 	Schema            = 1
-	LauncherVersion   = 1
+	LauncherVersion   = 2
 	SignatureDomain   = "nginxpanel-release-manifest-v1\n"
 	Store             = "/opt/nginxpanel/prepared"
 	MaxManifestBytes  = 2 << 20

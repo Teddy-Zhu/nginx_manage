@@ -135,6 +135,14 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		if r.Kind == panelServiceKind {
+			if err := validPanelService(r); err != nil {
+				return out, err
+			}
+			if g.id != "" && r.PanelService.Intent.Input.MaintenanceID == g.id {
+				continue
+			}
+		}
 		if r.Kind == panelSelectKind {
 			if err := validPanelSelection(r); err != nil {
 				return out, err
@@ -291,7 +299,23 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 	if fenced {
 		return maintenance.RootStatus{}, fault.Conflict("本机恢复标记尚未解除，不能释放维护锁")
 	}
+	held, err := storage.ServiceHeld(data)
+	if err != nil {
+		return maintenance.RootStatus{}, err
+	}
+	if held {
+		return maintenance.RootStatus{}, fault.Conflict("面板仍处于持久停机状态，不能释放维护锁")
+	}
 	for _, record := range records {
+		if record.Kind == panelServiceKind {
+			if err := validPanelService(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if record.State != "succeeded" && record.PanelService.Intent.Input.MaintenanceID == in.OperationID {
+				return maintenance.RootStatus{}, fault.Conflict("面板进程操作尚未完成，不能释放维护锁")
+			}
+			continue
+		}
 		if record.Kind == panelSelectKind {
 			if err := validPanelSelection(record); err != nil {
 				return maintenance.RootStatus{}, err

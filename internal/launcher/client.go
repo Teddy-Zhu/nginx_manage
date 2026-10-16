@@ -23,6 +23,8 @@ import (
 
 type Client struct{ DataDir string }
 
+var ErrOperationNotFound = errors.New("当前 launcher 启动中没有原操作记录")
+
 // A same-UID serve process can replace a writable socket inode. SO_PEERCRED,
 // namespace PID 1 and the immutable launcher digest authenticate the responder.
 func verifyPeer(c *net.UnixConn, d panelruntime.Deployment) error {
@@ -139,6 +141,9 @@ func (c Client) call(ctx context.Context, method, path string, in, out any) erro
 		return errors.New("launcher 响应格式无效")
 	}
 	if response.StatusCode != 200 && response.StatusCode != 202 || envelope.Code != "OK" {
+		if response.StatusCode == http.StatusNotFound && envelope.Code == "NOT_FOUND" {
+			return ErrOperationNotFound
+		}
 		return fmt.Errorf("launcher 拒绝请求：HTTP %d，%s", response.StatusCode, envelope.Code)
 	}
 	dec = json.NewDecoder(bytes.NewReader(envelope.Data))
@@ -151,14 +156,17 @@ func (c Client) call(ctx context.Context, method, path string, in, out any) erro
 func (c Client) Status(ctx context.Context) (Status, error) {
 	var out Status
 	err := c.call(ctx, http.MethodGet, "/v1/status", nil, &out)
-	if err == nil && (out.Protocol != Protocol || !idValue.MatchString(out.BootID) || out.ReleaseID != "" && !releaseValue.MatchString(out.ReleaseID) || out.Operation != nil && (!validOperation(*out.Operation) || out.Operation.Request.BootID != out.BootID)) {
+	if err == nil && (out.Protocol != Protocol || !idValue.MatchString(out.BootID) || out.ReleaseID != "" && !releaseValue.MatchString(out.ReleaseID) || out.PID < 0 || out.PID > 0 && !idValue.MatchString(out.InstanceID) || out.PID == 0 && out.InstanceID != "" || out.Operation != nil && (!validOperation(*out.Operation) || out.Operation.Request.BootID != out.BootID)) {
 		err = errors.New("launcher 状态身份无效")
 	}
 	return out, err
 }
-func (c Client) Restart(ctx context.Context, in Request) (Operation, error) {
+func (c Client) Control(ctx context.Context, in Request) (Operation, error) {
 	var out Operation
-	err := c.call(ctx, http.MethodPost, "/v1/restart", in, &out)
+	if !validRequest(in) {
+		return out, errors.New("launcher 控制请求无效")
+	}
+	err := c.call(ctx, http.MethodPost, "/v1/control", in, &out)
 	if err == nil && (out.Request != in || !validOperation(out)) {
 		err = errors.New("launcher 操作回执不匹配")
 	}

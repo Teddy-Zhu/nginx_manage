@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/storage"
 )
 
 type child struct{ cmd *exec.Cmd }
@@ -31,7 +32,7 @@ func (s *supervisor) start(snapshot panelruntime.Snapshot) (*child, error) {
 		return nil, err
 	}
 	s.mu.Lock()
-	s.status.State, s.status.PID, s.status.ReleaseID, s.status.Version = "running", cmd.Process.Pid, snapshot.Release.ID, snapshot.Release.Version
+	s.status.State, s.status.PID, s.status.ReleaseID, s.status.Version, s.status.InstanceID = "running", cmd.Process.Pid, snapshot.Release.ID, snapshot.Release.Version, secure.ID()
 	s.mu.Unlock()
 	return &child{cmd: cmd}, nil
 }
@@ -65,7 +66,7 @@ func (s *supervisor) reap(c *child) (bool, bool, error) {
 			}
 			c.cmd = nil
 			s.mu.Lock()
-			s.status.PID, s.status.LastExit = 0, exit
+			s.status.PID, s.status.LastExit, s.status.InstanceID = 0, exit, ""
 			if s.status.State == "running" {
 				s.status.State = "failed"
 			}
@@ -94,7 +95,7 @@ func (s *supervisor) stop(c *child) (bool, error) {
 		}
 		if !children && c.cmd == nil {
 			s.mu.Lock()
-			s.status.State = "stopped"
+			s.status.State, s.status.PID, s.status.InstanceID = "stopped", 0, ""
 			s.mu.Unlock()
 			return forced, nil
 		}
@@ -144,9 +145,20 @@ func Run(ctx context.Context, data string) (runErr error) {
 	defer server.Close()
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.Serve(l) }()
-	c, err := s.start(snapshot)
+	c := &child{}
+	held, err := storage.ServiceHeld(data)
 	if err != nil {
 		return err
+	}
+	if held {
+		s.mu.Lock()
+		s.status.State, s.status.ReleaseID, s.status.Version = "stopped", snapshot.Release.ID, snapshot.Release.Version
+		s.mu.Unlock()
+	} else {
+		c, err = s.start(snapshot)
+		if err != nil {
+			return err
+		}
 	}
 	defer func() {
 		if c != nil {
@@ -173,21 +185,44 @@ func Run(ctx context.Context, data string) (runErr error) {
 			}
 		case req := <-s.queue:
 			s.operation(req, "validating", "", false)
+			held, err := storage.ServiceHeld(data)
+			if err != nil || held != (req.Action == "stop") {
+				s.operation(req, "failed", "持久停机标记已变化", false)
+				continue
+			}
+			if req.Action == "stop" {
+				s.operation(req, "stopping", "", false)
+				forced, err := s.stop(c)
+				if err != nil {
+					s.operation(req, "failed", "旧进程结束状态无法确认", forced)
+					return err
+				}
+				c = &child{}
+				s.operation(req, "stopped", "", forced)
+				continue
+			}
 			next, err := panelruntime.Read(data)
 			if err != nil || next.Release.ID != req.ReleaseID || next.Deployment != s.deployment {
 				s.operation(req, "failed", "当前受信发布无法核对，保留原 serve", false)
 				continue
 			}
-			s.operation(req, "stopping", "", false)
-			previous := c
-			c = nil
-			forced, err := s.stop(previous)
-			if err != nil {
-				s.operation(req, "failed", "旧进程结束状态无法确认", forced)
-				return err
+			forced := false
+			if req.Action == "restart" {
+				s.operation(req, "stopping", "", false)
+				forced, err = s.stop(c)
+				if err != nil {
+					s.operation(req, "failed", "旧进程结束状态无法确认", forced)
+					return err
+				}
+				c = &child{}
 			}
 			if ctx.Err() != nil {
 				return nil
+			}
+			held, err = storage.ServiceHeld(data)
+			if err != nil || held {
+				s.operation(req, "failed", "面板已进入持久停机状态", forced)
+				continue
 			}
 			c, err = s.start(next)
 			if err != nil {

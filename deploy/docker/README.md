@@ -76,18 +76,18 @@ Compose 从程序内嵌的 `panel.compose.yaml` 模板生成，固定镜像摘�
 
 ## 宿主机固定控制接口
 
-launcher 只在 `DATA/run/launcher/launcher.sock` 提供状态查询、原操作查询及重启当前 root 批准版本。只接受 UID 0 的 Unix 对端；宿主机客户端同时核对对端 UID、容器 PID 1 和执行文件散列。Web 无权调用控制接口；客户端不能选择可执行文件、前端目录、命令或进程号。
+launcher 只在 `DATA/run/launcher/launcher.sock` 提供状态查询、原操作查询及固定的停止、启动和重启控制；控制协议为 2，更新流程通过独立 root 进程记录和维护授权调用。只接受 UID 0 的 Unix 对端；宿主机客户端同时核对对端 UID、容器 PID 1 和执行文件散列。Web 无权调用控制接口；客户端不能选择可执行文件、前端目录、命令或进程号。
 
 ```sh
 sudo /opt/nginxpanel/current/nginxpanel panel-runtime-status --data-dir /srv/nginxpanel
 sudo /opt/nginxpanel/current/nginxpanel launcher-status --data-dir /srv/nginxpanel
 sudo /opt/nginxpanel/current/nginxpanel launcher-restart --data-dir /srv/nginxpanel \
   --launcher-operation <new-uuid> --launcher-boot <observed-boot-uuid> \
-  --launcher-release <approved-current-release-id>
+  --launcher-release <approved-current-release-id> --launcher-instance <observed-live-instance-uuid>
 sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginxpanel \
   --launcher-operation <original-uuid>
 ```
 
-一次启动保留最多 64 个操作回执，同一操作 ID 的不同请求被拒绝。同一 boot ID 内重试返回原记录，容器重建改变 boot ID，原请求不可重新提交；调用方须核对真实运行版本，不能将断连、进程启动或回执缺失视为升级成功。控制客户端需要宿主机 root 的进程检查权限。当前尚未接入发布激活、独立更新/回滚 worker，UI 仅显示运行模式及版本。
+一次启动保留最多 64 个操作回执，同一操作 ID 的不同请求被拒绝。同一 boot ID 内重试返回原记录，容器重建改变 boot ID，原请求不能原样派发到新启动；独立进程维护记录先查询实际状态，再记录新的启动身份，并保留最多四次派发。运行实例另有 UUID，停止或重启须匹配观测的实例。root 持久停机标记存在时 launcher 保持控制入口在线并不启动 serve，容器重建也保留停机状态。标记及维护释放由独立 root 事务核对，生命周期入口见 [发行说明](../../docs/releases.md#面板进程维护)。控制客户端需要宿主机 root 的进程检查权限。持久版本选择和面板进程维护已接入；完整独立更新/回滚 worker、readiness 和成功清理仍待补齐，UI 仅显示运行模式及版本。
 
 本阶段只实施并审阅源码和配置，尚未运行镜像构建、安装器、launcher、Compose、服务、类型检查、lint 或测试，统一留待 P5 集中验证。

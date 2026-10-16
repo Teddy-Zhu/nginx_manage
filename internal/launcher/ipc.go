@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/storage"
 )
 
 var idValue = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -105,13 +106,13 @@ func (s *supervisor) handler() http.Handler {
 		}
 		reply(w, 200, "OK", "", op)
 	})
-	mux.HandleFunc("POST /v1/restart", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/control", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		defer r.Body.Close()
 		d := json.NewDecoder(r.Body)
 		d.DisallowUnknownFields()
 		var req Request
-		if d.Decode(&req) != nil || d.Decode(new(any)) != io.EOF || req.Protocol != Protocol || !idValue.MatchString(req.BootID) || !idValue.MatchString(req.OperationID) || !releaseValue.MatchString(req.ReleaseID) {
+		if d.Decode(&req) != nil || d.Decode(new(any)) != io.EOF || !validRequest(req) {
 			reply(w, 400, "INVALID_ARGUMENT", "launcher 请求无效", nil)
 			return
 		}
@@ -129,11 +130,16 @@ func (s *supervisor) handler() http.Handler {
 			reply(w, 200, "OK", "", op)
 			return
 		}
-		if s.status.State != "running" {
-			reply(w, 409, "CONFLICT", "launcher 当前不接收新的重启操作", nil)
+		if req.Action == "start" && (s.status.State != "stopped" || s.status.PID != 0) || req.Action != "start" && (s.status.State != "running" || s.status.InstanceID != req.InstanceID) || req.Action == "stop" && s.status.ReleaseID != req.ReleaseID {
+			reply(w, 409, "CONFLICT", "launcher 进程状态或实例身份不匹配", nil)
 			return
 		}
-		if s.status.Operation != nil && s.status.Operation.State != "started" && s.status.Operation.State != "failed" {
+		held, err := storage.ServiceHeld(s.data)
+		if err != nil || held != (req.Action == "stop") {
+			reply(w, 409, "CONFLICT", "持久停机标记与控制动作不一致", nil)
+			return
+		}
+		if s.status.Operation != nil && s.status.Operation.State != "started" && s.status.Operation.State != "stopped" && s.status.Operation.State != "failed" {
 			reply(w, 409, "CONFLICT", "已有 launcher 操作执行中", nil)
 			return
 		}
