@@ -24,6 +24,7 @@ import (
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/nginxruntime"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/releases"
@@ -49,7 +50,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-compose|panel-snapshot-capture|panel-snapshot-check|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -82,8 +83,9 @@ func run() error {
 	nginxImage := flags.String("nginx-image", "", "already-local fixed Nginx image reference with sha256 digest")
 	nginxUninstalled := flags.Bool("nginx-uninstalled", false, "register an explicitly uninstalled native Nginx slot (component-bind only)")
 	installOperation := flags.String("install-operation", "", "durable native Nginx installation UUID")
-	installMaintenance := flags.String("maintenance-id", "", "held maintenance session UUID for installation")
+	installMaintenance := flags.String("maintenance-id", "", "held maintenance session UUID")
 	installEpoch := flags.String("maintenance-epoch", "", "confirmed root maintenance epoch")
+	recoveryOperation := flags.String("recovery-operation", "", "local panel recovery snapshot UUID")
 	installStart := flags.Bool("install-start", false, "start the newly installed dedicated Nginx")
 	installEnable := flags.Bool("install-enable", false, "enable the dedicated Nginx service on boot")
 	installResume := flags.Bool("resume-install", false, "resume the original installation after checking its receipt")
@@ -121,6 +123,9 @@ func run() error {
 		"panel-runtime-status":   {"data-dir": true},
 		"panel-runtime-stage":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
 		"panel-runtime-staged":   {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-snapshot-capture": {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-snapshot-check":   {"data-dir": true, "recovery-operation": true},
+		"panel-snapshot-db":      {"data-dir": true, "recovery-operation": true},
 		"panel-runtime-compose":  {"data-dir": true},
 		"launcher-status":        {"data-dir": true},
 		"launcher-operation":     {"data-dir": true, "launcher-operation": true},
@@ -140,6 +145,10 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "recovery-operation":
+			if command != "panel-snapshot-capture" && command != "panel-snapshot-check" && command != "panel-snapshot-db" {
+				invalidFlag = f.Name
+			}
 		case "launcher-binary":
 			if command != "panel-runtime-bind" && command != "nginx-container-bind" && command != "panel-runtime-verify" && command != "nginx-container-verify" {
 				invalidFlag = f.Name
@@ -179,8 +188,8 @@ func run() error {
 	if command == "component-install" && *moduleFile == "" {
 		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
 	}
-	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || *installMaintenance != "" || *installEpoch != "" || *installStart || *installEnable || *installResume || *installAbort) {
-		return errors.New("installation options are only valid for component-install")
+	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
+		return errors.New("installation options require component-install; maintenance identity also permits panel-snapshot-capture")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
 	if err != nil {
@@ -272,6 +281,24 @@ func run() error {
 			return json.NewEncoder(os.Stdout).Encode(out)
 		}
 		out, err := panelruntime.Bind(ctx, input)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-snapshot-capture":
+		out, err := agent.CapturePanelSnapshot(ctx, absDir, *recoveryOperation, *installMaintenance, *installEpoch)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-snapshot-check":
+		out, err := panelrecovery.Inspect(ctx, absDir, *recoveryOperation)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-snapshot-db":
+		out, err := panelrecovery.CaptureDatabase(ctx, absDir, *recoveryOperation)
 		if err != nil {
 			return err
 		}

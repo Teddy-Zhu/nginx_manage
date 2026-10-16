@@ -96,7 +96,26 @@ sudo /opt/nginxpanel/current/nginxpanel panel-runtime-staged \
 
 自定义本机信任文件须与准备一致；预发布须显式传入 `--release-prerelease`。完整目录同步并不覆盖发布后，才写入 root 只读的 `runtime/approvals/<计划散列>.json`。首次绑定和暂存共用发布锁，最多保留 32 个版本和 64 个批准记录；中断前已复制但未批准的目录不能作为更新授权。相同计划重复暂存使用原批准时间、主机/协议身份和初始信任散列重新认证当前公钥，增加无关公钥不改变计划，撤销签名公钥则拒绝续用。续用仍需保留原准备计划及签名材料；只读查询不下载或执行程序。
 
-`state=staged` 仅表示持久副本及其批准记录就绪，返回数据库 schema、协议门槛和签名回滚声明供后续准入使用。不切换当前版本、不迁移数据库、不重启面板或 Nginx/Fail2ban；独立 worker、维护快照、健康检查与失败回滚仍待接入。本入口尚未运行，统一留到 P5 集中验证。
+`state=staged` 仅表示持久副本及其批准记录就绪，返回数据库 schema、协议门槛和签名回滚声明供后续准入使用。不切换当前版本、不迁移数据库、不重启面板或 Nginx/Fail2ban；独立 worker、快照恢复、健康检查与失败回滚仍待接入。本入口尚未运行，统一留到 P5 集中验证。
+
+## 本机面板恢复快照
+
+本机 root 的 `panel-snapshot-capture` 须提供已经 held 的维护会话及当前 Agent epoch。捕获期间持有维护释放所用的 root 锁，拒绝尚有独立副作用任务执行中或待恢复的节点。SQLite 助手降为 `nginxpanel` 专用账户，使用 [VACUUM INTO](https://www.sqlite.org/lang_vacuum.html) 生成包含 WAL 中已提交内容的一致性副本，不直接复制活动数据库，也不以 root 解析业务数据库。助手有两分钟期限、512 MiB 单文件限制，整次捕获期限五分钟，输出仅在 root 分配的私有暂存目录中生成。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel panel-snapshot-capture \
+  --data-dir /srv/nginxpanel --recovery-operation <新操作UUID> \
+  --maintenance-id <已持有的维护UUID> --maintenance-epoch <当前Agent epoch>
+
+sudo /opt/nginxpanel/current/nginxpanel panel-snapshot-check \
+  --data-dir /srv/nginxpanel --recovery-operation <原操作UUID>
+```
+
+快照按固定资源清单捕获 `app/panel.db`、`secrets/master.key` 和节点 TLS 证书/私钥；配置树原文、证书/ACME 私钥和凭据的权威数据已在数据库中。此入口只服务面板维护，不打包整个数据目录，不修改 Nginx/Fail2ban、Agent 执行记录或主机运行状态，也不替代完整灾备。节点身份、数据库 schema、期望/生效修订、资源散列、捕获程序散列及维护授权一起进入清单。
+
+使用 `DATA/agent/panel-recovery/recovery.key` 中独立生成的 root 本机 age 密钥加密，不使用业务主密钥或离线灾备私钥。密文和批准记录在 root 专用目录同步并不覆盖发布后才返回 `captured`。原操作重复捕获只检查既有批准副本，不重新生成未知捕获；检查入口不依赖运行中的面板、业务数据库或业务密钥，会认证完整密文、加密清单、逐项资源及流尾部。已有快照而本机恢复密钥缺失时拒绝生成替代密钥。
+
+单份期限 24 小时、最多八份、密文总预算 2 GiB，新增前按最大单份预留容量；超限明确失败。期限只报告 `expired`，不自动删除救援依据。中断留下的不完整密文或助手暂存须本机处理；不能将一次捕获成功视为已授权后续恢复，恢复仍须核对未释放的同一维护会话。快照安装恢复、独立更新 worker 和成功后的清理策略尚待接入；未执行这些命令或测试，统一留到 P5。
 
 ## 组件页面与任务
 
