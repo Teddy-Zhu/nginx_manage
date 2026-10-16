@@ -219,3 +219,6 @@ Python 依赖公开合同新增 `POST /fail2ban/python`、`GET /fail2ban/python/
 
 
 配置迁移当前为 schema 6，ExportInput/Manifest/Plan 明确 `mode=portable|encrypted`。portable 普通归档口令为空、selection 全 false，仅从受管字段重建 HTTP/Stream、ACL 与基础 WAF，站点停用并列出省略；不转移原文、自由字符串或其他可选材料。encrypted 继续强制口令和秘密权限，按选择实际写入文件。导出基础权限为 backup.export，完整原文额外检查 backup.secrets/config.secrets，均要求浏览器近期认证；目标替换权限不降低。普通导入强制模式/封装一致及规范化重建核对，加密包先认证完整 age 流；共用映射、依赖、执行和恢复。API 拉取/推送显式使用加密模式。Agent/数据库仍为 47/26，接口声明已同步，生成器及运行验收留待 P5；无首版旧包兼容。详见 [配置迁移](migration.md)。
+
+
+面板密码认证失败新增 root 私有 `POST /v1/fail2ban/panel-login`、只读 GET 及公开 `GET /fail2ban/panel-login` 与显式节点资源。事件由 Web 的真实 TCP 对端和请求 UUID 提交，root 生成 UTC 时间及固定类型，拒绝非数值地址；不接收公开事件写入或自定义日志路径。公开统一外壳中的 Fail2banPanelLoginStatus 携带来源/格式/范围/原因、8 MiB 容量边界和最近 20 条 Fail2banPanelLoginEvent。追加回执不明不重放，不改变密码认证拒绝结果；日志就绪不等于封禁生效。内置模板增加 panel-login-failure，官方检查最多 3 个模板；面板 resource_id 为空且仅 host-input，Nginx 模板仍要求站点 UUID。保存/迁移不应用保护，预览及 root 明确拒绝面板启用项，等待宿主机动作后端。当前 Agent/数据库/归档为 48/26/6；首版不兼容旧协议，声明同步，项目生成器及运行验证留待 P5。详见 [Fail2ban](fail2ban.md)。

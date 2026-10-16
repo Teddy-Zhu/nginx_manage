@@ -121,6 +121,12 @@ paths:
       description: 保存类型化 jail 期望配置，要求近期认证、幂等键与基础版本；不安装、启用或修改实例。
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPolicyInput'}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/panel-login:
+    get:
+      operationId: getFail2banPanelLogin
+      x-scopes: [read]
+      description: 返回 Fail2banPanelLoginStatus；读取独立密码认证失败日志、容量和最近 20 条 TCP 对端事件。日志就绪不表示封禁已启用，反向代理对端不是原客户端；模块停用时仍可读取。不接受公开事件写入。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/templates:
     get:
       operationId: getFail2banTemplates
@@ -133,7 +139,7 @@ paths:
       x-scopes: [read]
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
-      description: 返回 Fail2banPolicyPreview，核对保存版本的运行日志来源与实例状态；只有模块启用、独立受管实例及已发布客户端入口可核对时 can_apply 为 true；列出将停用的受管 jail。
+      description: 返回 Fail2banPolicyPreview，核对保存版本的运行日志来源与实例状态；只有模块启用、独立受管实例及已发布客户端入口可核对时 can_apply 为 true。面板模板单独核对密码失败日志，宿主机入口封禁未接通时启用项始终阻止应用；列出将停用的受管 jail。
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPreviewInput'}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/instance:
@@ -1876,14 +1882,18 @@ components:
         ssh_listeners: {type: array, maxItems: 512, items: {type: string}}
         protections: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/FirewallProtection"}}
         reason: {type: string}
+    Fail2banPanelLoginEvent:
+      {"type": "object", "additionalProperties": false, "required": ["time_iso8601", "event", "peer_addr", "source", "request_id"], "properties": {"time_iso8601": {"type": "string", "format": "date-time"}, "event": {"type": "string", "enum": ["login_failed"]}, "peer_addr": {"type": "string", "description": "规范化数值 TCP 对端，不采信转发头"}, "source": {"type": "string", "enum": ["tcp_peer"]}, "request_id": {"type": "string", "format": "uuid"}}}
+    Fail2banPanelLoginStatus:
+      {"type": "object", "additionalProperties": false, "required": ["at", "available", "source_id", "format", "scope", "reason", "bytes", "limit_bytes", "events"], "properties": {"at": {"type": "integer", "format": "int64", "minimum": 1}, "available": {"type": "boolean"}, "source_id": {"type": "string", "enum": ["panel:login"]}, "format": {"type": "string", "enum": ["nginxpanel_auth"]}, "scope": {"type": "string"}, "reason": {"type": "string"}, "bytes": {"type": "integer", "format": "int64", "minimum": 0, "maximum": 8388608}, "limit_bytes": {"type": "integer", "format": "int64", "enum": [8388608]}, "events": {"type": "array", "maxItems": 20, "items": {"$ref": "#/components/schemas/Fail2banPanelLoginEvent"}}}}
     Fail2banFilterSample:
       {"type": "object", "additionalProperties": false, "required": ["name", "line", "expected_ip"], "properties": {"name": {"type": "string"}, "line": {"type": "string"}, "expected_ip": {"type": "string", "description": "空字符串表示不应匹配"}}}
     Fail2banTemplateCheckInput:
-      {"type": "object", "additionalProperties": false, "required": ["templates"], "properties": {"templates": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401"]}}}}
+      {"type": "object", "additionalProperties": false, "required": ["templates"], "properties": {"templates": {"type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401", "panel-login-failure"]}}}}
     Fail2banTemplateCheck:
       {"type": "object", "additionalProperties": false, "required": ["template", "at", "source", "scope", "available", "passed", "filter_sha256", "samples_sha256", "tool_path", "tool_sha256", "tool_version", "expected_ips", "matched_ips", "reason", "engine"], "properties": {"template": {"type": "string"}, "source": {"type": "string"}, "scope": {"type": "string"}, "filter_sha256": {"type": "string"}, "samples_sha256": {"type": "string"}, "tool_path": {"type": "string"}, "tool_sha256": {"type": "string"}, "tool_version": {"type": "string"}, "reason": {"type": "string"}, "at": {"type": "integer", "format": "int64"}, "available": {"type": "boolean"}, "passed": {"type": "boolean"}, "expected_ips": {"type": "array", "items": {"type": "string"}}, "matched_ips": {"type": "array", "items": {"type": "string"}}, "engine": {"$ref": "#/components/schemas/Fail2banEngineIdentity"}}}
     Fail2banDesiredJail:
-      {"type": "object", "additionalProperties": false, "required": ["id", "name", "enabled", "template", "resource_id", "action", "ban_time", "find_time", "max_retry", "ignore_ips"], "properties": {"id": {"type": "string", "format": "uuid"}, "name": {"type": "string", "minLength": 1, "maxLength": 120}, "enabled": {"type": "boolean"}, "template": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401"]}, "resource_id": {"type": "string", "format": "uuid"}, "action": {"type": "string", "enum": ["host-input", "docker-forward", "nginx-client"]}, "ban_time": {"type": "integer", "format": "int64", "minimum": -1, "maximum": 31536000, "not": {"enum": [0]}, "description": "-1 永久封禁，否则为 1–31536000 秒"}, "find_time": {"type": "integer", "format": "int64", "minimum": 1, "maximum": 86400}, "max_retry": {"type": "integer", "minimum": 1, "maximum": 1000}, "ignore_ips": {"type": "array", "maxItems": 64, "items": {"type": "string"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "name", "enabled", "template", "resource_id", "action", "ban_time", "find_time", "max_retry", "ignore_ips"], "properties": {"id": {"type": "string", "format": "uuid"}, "name": {"type": "string", "minLength": 1, "maxLength": 120}, "enabled": {"type": "boolean"}, "template": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401", "panel-login-failure"]}, "resource_id": {"type": "string", "description": "面板登录模板须为空；Nginx 模板须为站点 UUID"}, "action": {"type": "string", "enum": ["host-input", "docker-forward", "nginx-client"]}, "ban_time": {"type": "integer", "format": "int64", "minimum": -1, "maximum": 31536000, "not": {"enum": [0]}, "description": "-1 永久封禁，否则为 1–31536000 秒"}, "find_time": {"type": "integer", "format": "int64", "minimum": 1, "maximum": 86400}, "max_retry": {"type": "integer", "minimum": 1, "maximum": 1000}, "ignore_ips": {"type": "array", "maxItems": 64, "items": {"type": "string"}}}, "oneOf": [{"properties": {"template": {"enum": ["panel-login-failure"]}, "resource_id": {"enum": [""]}, "action": {"enum": ["host-input"]}}}, {"properties": {"template": {"enum": ["nginx-http-401", "nginx-authorization-401"]}, "resource_id": {"format": "uuid"}}}]}
     Fail2banPolicy:
       {"type": "object", "additionalProperties": false, "required": ["jails"], "properties": {"jails": {"type": "array", "maxItems": 32, "items": {"$ref": "#/components/schemas/Fail2banDesiredJail"}}}}
     Fail2banPolicyView:
@@ -1891,7 +1901,7 @@ components:
     Fail2banPolicyInput:
       {"type": "object", "additionalProperties": false, "required": ["base_version", "policy"], "properties": {"base_version": {"type": "integer", "format": "int64", "minimum": 0}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}}}
     Fail2banTemplate:
-      {"type": "object", "additionalProperties": false, "required": ["id", "name", "description", "category", "format", "ban_time", "find_time", "max_retry", "filter_sha256", "samples_sha256", "samples"], "properties": {"id": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401"]}, "name": {"type": "string"}, "description": {"type": "string"}, "category": {"type": "string"}, "format": {"type": "string"}, "ban_time": {"type": "integer", "format": "int64"}, "find_time": {"type": "integer", "format": "int64"}, "max_retry": {"type": "integer"}, "filter_sha256": {"type": "string"}, "samples_sha256": {"type": "string"}, "samples": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banFilterSample"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "name", "description", "category", "format", "ban_time", "find_time", "max_retry", "filter_sha256", "samples_sha256", "samples"], "properties": {"id": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401", "panel-login-failure"]}, "name": {"type": "string"}, "description": {"type": "string"}, "category": {"type": "string"}, "format": {"type": "string"}, "ban_time": {"type": "integer", "format": "int64"}, "find_time": {"type": "integer", "format": "int64"}, "max_retry": {"type": "integer"}, "filter_sha256": {"type": "string"}, "samples_sha256": {"type": "string"}, "samples": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banFilterSample"}}}}
     Fail2banJailsOperation:
       {"type": "object", "additionalProperties": false, "required": ["id", "state", "stage", "before_id", "after_id", "request_hash", "target", "error"], "properties": {"id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "before_id": {"type": "string"}, "after_id": {"type": "string"}, "request_hash": {"type": "string"}, "target": {"type": "string"}, "error": {"type": "string"}}}
     Fail2banJailsRuntime:

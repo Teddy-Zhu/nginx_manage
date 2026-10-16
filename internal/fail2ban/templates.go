@@ -42,8 +42,8 @@ type TemplateCheck struct {
 
 func (in TemplateCheckInput) Normalize() (TemplateCheckInput, error) {
 	out := TemplateCheckInput{Templates: append([]string{}, in.Templates...)}
-	if len(out.Templates) < 1 || len(out.Templates) > 2 {
-		return out, fault.Invalid("请选择 1–2 个内置模板")
+	if len(out.Templates) < 1 || len(out.Templates) > 3 {
+		return out, fault.Invalid("请选择 1–3 个内置模板")
 	}
 	sort.Strings(out.Templates)
 	for i, id := range out.Templates {
@@ -53,7 +53,9 @@ func (in TemplateCheckInput) Normalize() (TemplateCheckInput, error) {
 	}
 	return out, nil
 }
-func KnownTemplate(id string) bool { return id == HTTP401Template || id == Authorization401Template }
+func KnownTemplate(id string) bool {
+	return id == HTTP401Template || id == Authorization401Template || id == PanelLoginTemplate
+}
 
 // Use the numeric ip4/ip6 captures understood by the official filter engine.
 // Enumerating compressed IPv6 group counts keeps matching bounded and excludes
@@ -94,6 +96,11 @@ func FilterConfig(id string) (string, error) {
 	if !KnownTemplate(id) {
 		return "", fault.Invalid("未知内置模板")
 	}
+	if id == PanelLoginTemplate {
+		identity := strings.TrimSuffix(strings.TrimPrefix(policyID.String(), "^"), "$")
+		regex := `^\{"time_iso8601":"","event":"login_failed","peer_addr":"` + numericAddressPattern() + `","source":"tcp_peer","request_id":"` + identity + `"\}$`
+		return "[Definition]\nfailregex = " + regex + "\nignoreregex =\ndatepattern = %%Y-%%m-%%dT%%H:%%M:%%S%%z\nmaxlines = 1\n", nil
+	}
 	text := `(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*`
 	fields := []string{}
 	for _, field := range logs.HTTPFields() {
@@ -119,6 +126,9 @@ func FilterConfig(id string) (string, error) {
 func FilterSamples(id string) []FilterSample {
 	if !KnownTemplate(id) {
 		return []FilterSample{}
+	}
+	if id == PanelLoginTemplate {
+		return panelLoginSamples()
 	}
 	line := func(ip, status, auth, uri string) string {
 		fields := map[string]string{"time_iso8601": "2026-01-02T03:04:05+00:00", "remote_addr": ip, "host": "example.invalid", "request_method": "GET", "uri": uri, "status": status, "body_bytes_sent": "0", "request_time": "0.001", "upstream_addr": "-", "upstream_status": "-", "upstream_response_time": "-", logs.HTTPAuthPresent: auth}

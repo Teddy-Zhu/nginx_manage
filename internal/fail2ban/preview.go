@@ -67,16 +67,21 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		}
 	}
 	sources := []logs.Source{}
+	panelLogin := EmptyPanelLogin("unconfirmed", "未连接面板登录日志来源")
 	var instance Instance
 	if s.Agent != nil {
 		call, cancel := context.WithTimeout(ctx, 12*time.Second)
 		defer cancel()
-		var logErr, instanceErr, templateErr, runtimeErr error
+		var logErr, instanceErr, templateErr, runtimeErr, panelLogErr error
 		var wg sync.WaitGroup
 		wg.Add(3)
 		go func() { defer wg.Done(); sources, logErr = s.Agent.LogSources(call) }()
 		go func() { defer wg.Done(); out.Runtime, runtimeErr = s.Runtime(call) }()
 		go func() { defer wg.Done(); instance, instanceErr = s.Agent.ReadFail2banInstance(call) }()
+		if seen[PanelLoginTemplate] {
+			wg.Add(1)
+			go func() { defer wg.Done(); panelLogin, panelLogErr = s.PanelLogin(call) }()
+		}
 		if len(ids) > 0 {
 			wg.Add(1)
 			go func() {
@@ -102,6 +107,9 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			out.TemplateChecks = []TemplateCheck{}
 			out.Warnings = append(out.Warnings, "官方模板检查暂不可读取")
 		}
+		if panelLogErr != nil || !panelLogin.Valid() {
+			panelLogin = EmptyPanelLogin("unconfirmed", "面板登录日志来源暂不可核对")
+		}
 	} else {
 		out.Runtime.Reason = "未连接宿主机 Agent"
 		out.Warnings = append(out.Warnings, "未连接宿主机 Agent")
@@ -112,17 +120,25 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			out.Entries = append(out.Entries, e)
 			continue
 		}
-		matches := 0
-		for _, source := range sources {
-			if source.Active && source.ResourceID == j.ResourceID && source.Category == "http_access" && source.Format == "nginxpanel_http" && source.AuthPresence {
-				matches++
-				e.SourceID = source.ID
+		if j.Template == PanelLoginTemplate {
+			e.SourceID = PanelLoginSource
+			e.SourceReady = panelLogin.Available
+			if !e.SourceReady {
+				e.Errors = append(e.Errors, panelLogin.Reason)
 			}
-		}
-		e.SourceReady = matches == 1
-		if !e.SourceReady {
-			e.SourceID = ""
-			e.Errors = append(e.Errors, "须存在唯一且包含认证头存在标记的站点结构化日志；请先发布当前 Nginx 配置。匹配数量："+strconv.Itoa(matches))
+		} else {
+			matches := 0
+			for _, source := range sources {
+				if source.Active && source.ResourceID == j.ResourceID && source.Category == "http_access" && source.Format == "nginxpanel_http" && source.AuthPresence {
+					matches++
+					e.SourceID = source.ID
+				}
+			}
+			e.SourceReady = matches == 1
+			if !e.SourceReady {
+				e.SourceID = ""
+				e.Errors = append(e.Errors, "须存在唯一且包含认证头存在标记的站点结构化日志；请先发布当前 Nginx 配置。匹配数量："+strconv.Itoa(matches))
+			}
 		}
 		for _, check := range out.TemplateChecks {
 			if check.Template == j.Template {
@@ -132,7 +148,9 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		if !e.TemplateReady {
 			e.Errors = append(e.Errors, "过滤器检查须通过，且须与已确认实例使用相同组件及版本")
 		}
-		if j.Action != "nginx-client" {
+		if j.Template == PanelLoginTemplate {
+			e.Errors = append(e.Errors, "面板登录保护所需的宿主机入口封禁尚不可用；日志和模板就绪不代表保护已生效")
+		} else if j.Action != "nginx-client" {
 			e.Errors = append(e.Errors, "当前应用只支持 Nginx 客户端动作")
 		}
 		bound := false
@@ -141,7 +159,7 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 				bound = true
 			}
 		}
-		if !bound {
+		if j.Template != PanelLoginTemplate && !bound {
 			e.Errors = append(e.Errors, "站点须先发布明确的客户端拒绝入口及可信代理配置")
 		}
 		out.Entries = append(out.Entries, e)

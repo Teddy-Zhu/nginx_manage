@@ -49,6 +49,18 @@ const actions = [
   { label: "Docker 转发", value: "docker-forward" },
   { label: "Nginx 客户端", value: "nginx-client" },
 ];
+const panelTemplate = "panel-login-failure";
+function selectTemplate(jail: Fail2banDesiredJail, value: string) {
+  if (jail.template === value) return;
+  const panelSourceChanged =
+    jail.template === panelTemplate || value === panelTemplate;
+  jail.template = value as Fail2banDesiredJail["template"];
+  if (panelSourceChanged) {
+    jail.resource_id = "";
+    jail.action = value === panelTemplate ? "host-input" : "nginx-client";
+  }
+  preview.value = null;
+}
 const sourceOptions = computed(() => {
   const known = new Map<string, string>();
   for (const source of sources.value)
@@ -111,7 +123,7 @@ function add() {
     enabled: false,
     template: template.id,
     resource_id: "",
-    action: "nginx-client",
+    action: template.id === panelTemplate ? "host-input" : "nginx-client",
     ban_time: template.ban_time,
     find_time: template.find_time,
     max_retry: template.max_retry,
@@ -221,7 +233,8 @@ onUnmounted(() => {
       /></NFormItem>
       <NFormItem label="内置模板">
         <NSelect
-          v-model:value="jail.template"
+          :value="jail.template"
+          @update:value="selectTemplate(jail, $event)"
           :disabled="busy"
           :options="templateOptions"
         />
@@ -229,7 +242,11 @@ onUnmounted(() => {
       <NFormItem label="期望启用"
         ><NSwitch v-model:value="jail.enabled" :disabled="busy"
       /></NFormItem>
-      <NFormItem label="站点结构化访问日志"
+      <NAlert v-if="jail.template === panelTemplate" type="warning">
+        来源为面板密码认证失败日志，仅记录 TCP
+        对端。当前版本尚不支持面板登录自动封禁。
+      </NAlert>
+      <NFormItem v-else label="站点结构化访问日志"
         ><NSelect
           v-model:value="jail.resource_id"
           :disabled="busy"
@@ -239,7 +256,7 @@ onUnmounted(() => {
       <NFormItem label="期望动作"
         ><NSelect
           v-model:value="jail.action"
-          :disabled="busy"
+          :disabled="busy || jail.template === panelTemplate"
           :options="actions"
       /></NFormItem>
       <div class="actions">

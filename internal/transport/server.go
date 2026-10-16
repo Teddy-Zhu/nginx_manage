@@ -56,6 +56,7 @@ type Server struct {
 	Version       string
 	PanelRuntime  string
 	logStreams    atomic.Int32
+	loginLogWarn  atomic.Int64
 	metricReads   atomic.Int32
 	firewallReads atomic.Int32
 	fail2banReads atomic.Int32
@@ -123,6 +124,9 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request, _ apigen.LoginPar
 		return
 	}
 	err := s.Auth.Login(r.Context(), auth.ClientIP(r), in.Username, in.Password)
+	if errors.Is(err, auth.ErrUnauthorized) {
+		s.recordPanelLoginFailure(r)
+	}
 	outcome := "succeeded"
 	if err != nil {
 		outcome = "failed"

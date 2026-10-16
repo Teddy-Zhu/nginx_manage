@@ -1855,6 +1855,24 @@ type FirewallProtectionObservation struct {
 	Protections  []FirewallProtection `json:"protections"`
 	Reason       string               `json:"reason"`
 }
+type Fail2banPanelLoginEvent struct {
+	TimeIso8601 string `json:"time_iso8601"`
+	Event       string `json:"event"`
+	PeerAddr    string `json:"peer_addr"`
+	Source      string `json:"source"`
+	RequestId   string `json:"request_id"`
+}
+type Fail2banPanelLoginStatus struct {
+	At         int64                     `json:"at"`
+	Available  bool                      `json:"available"`
+	SourceId   string                    `json:"source_id"`
+	Format     string                    `json:"format"`
+	Scope      string                    `json:"scope"`
+	Reason     string                    `json:"reason"`
+	Bytes      int64                     `json:"bytes"`
+	LimitBytes int64                     `json:"limit_bytes"`
+	Events     []Fail2banPanelLoginEvent `json:"events"`
+}
 type Fail2banFilterSample struct {
 	Name       string `json:"name"`
 	Line       string `json:"line"`
@@ -4412,6 +4430,7 @@ type ServerInterface interface {
 	GetFail2banPolicy(w http.ResponseWriter, r *http.Request)
 	SetFail2banPolicy(w http.ResponseWriter, r *http.Request, params SetFail2banPolicyParams)
 	GetFail2banTemplates(w http.ResponseWriter, r *http.Request)
+	GetFail2banPanelLogin(w http.ResponseWriter, r *http.Request)
 	PreviewFail2ban(w http.ResponseWriter, r *http.Request, params PreviewFail2banParams)
 	GetFail2banInstance(w http.ResponseWriter, r *http.Request)
 	GetFail2banJail(w http.ResponseWriter, r *http.Request, name string)
@@ -7325,6 +7344,13 @@ func (siw *ServerInterfaceWrapper) PreviewFail2ban(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+func (siw *ServerInterfaceWrapper) GetFail2banPanelLogin(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banPanelLogin(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
 func (siw *ServerInterfaceWrapper) GetFail2banTemplates(w http.ResponseWriter, r *http.Request) {
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banTemplates(w, r) }))
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11318,6 +11344,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/policy", wrapper.GetFail2banPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/fail2ban/policy", wrapper.SetFail2banPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/templates", wrapper.GetFail2banTemplates)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/panel-login", wrapper.GetFail2banPanelLogin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/preview", wrapper.PreviewFail2ban)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/templates/check", wrapper.CheckFail2banTemplates)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/instance", wrapper.GetFail2banInstance)

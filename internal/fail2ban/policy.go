@@ -62,6 +62,7 @@ func Templates() []Template {
 	out := []Template{
 		{ID: Authorization401Template, Name: "HTTP 认证响应 401", Description: "统计携带 Authorization 后返回的 HTTP 401，排除无认证头的首次挑战；不覆盖仅凭 Cookie 认证的失败", Category: "http_access", Format: "nginxpanel_http", BanTime: 600, FindTime: 600, MaxRetry: 10},
 		{ID: HTTP401Template, Name: "Nginx HTTP 401", Description: "统计站点结构化访问日志中的全部 HTTP 401，包含首次认证挑战；请按实际流量设置阈值", Category: "http_access", Format: "nginxpanel_http", BanTime: 600, FindTime: 600, MaxRetry: 10},
+		{ID: PanelLoginTemplate, Name: "面板登录密码失败", Description: "仅统计密码认证拒绝的 TCP 对端，不采信转发头；反向代理的对端不能当作原客户端。日志就绪不代表封禁动作已生效", Category: "panel_auth", Format: PanelLoginFormat, BanTime: 600, FindTime: 600, MaxRetry: 5},
 	}
 	for i := range out {
 		out[i].FilterSHA256, out[i].SamplesSHA256 = FilterIdentity(out[i].ID)
@@ -79,7 +80,7 @@ func (p Policy) Normalize() (Policy, error) {
 	ids, sources := map[string]bool{}, map[string]bool{}
 	for _, j := range p.Jails {
 		j.Name = strings.TrimSpace(j.Name)
-		if !policyID.MatchString(j.ID) || !policyID.MatchString(j.ResourceID) || ids[j.ID] || j.Name == "" || len(j.Name) > 120 || !utf8.ValidString(j.Name) || strings.IndexFunc(j.Name, unicode.IsControl) >= 0 {
+		if !policyID.MatchString(j.ID) || (j.Template == PanelLoginTemplate && j.ResourceID != "" || j.Template != PanelLoginTemplate && !policyID.MatchString(j.ResourceID)) || ids[j.ID] || j.Name == "" || len(j.Name) > 120 || !utf8.ValidString(j.Name) || strings.IndexFunc(j.Name, unicode.IsControl) >= 0 {
 			return out, fault.Invalid("jail 标识、名称或站点标识无效")
 		}
 		if !KnownTemplate(j.Template) {
@@ -88,12 +89,15 @@ func (p Policy) Normalize() (Policy, error) {
 		if j.Action != "host-input" && j.Action != "docker-forward" && j.Action != "nginx-client" {
 			return out, fault.Invalid("jail 动作须为宿主机入口、Docker 转发或 Nginx 客户端")
 		}
+		if j.Template == PanelLoginTemplate && j.Action != "host-input" {
+			return out, fault.Invalid("面板登录模板仅用于宿主机入口，不关联 Nginx 站点或 Docker 转发")
+		}
 		if (j.BanTime != -1 && (j.BanTime < 1 || j.BanTime > 31536000)) || j.FindTime < 1 || j.FindTime > 86400 || j.MaxRetry < 1 || j.MaxRetry > 1000 || j.IgnoreIPs == nil || len(j.IgnoreIPs) > 64 {
 			return out, fault.Invalid("封禁时间、统计窗口、重试阈值或白名单超出限制")
 		}
 		key := j.Template + ":" + j.ResourceID
 		if sources[key] {
-			return out, fault.Invalid("同一站点不能重复配置相同 jail 模板")
+			return out, fault.Invalid("同一日志来源不能重复配置相同 jail 模板")
 		}
 		ids[j.ID], sources[key] = true, true
 		j.IgnoreIPs = append([]string{}, j.IgnoreIPs...)

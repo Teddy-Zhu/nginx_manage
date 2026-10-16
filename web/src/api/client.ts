@@ -53,6 +53,8 @@ export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
 export type Fail2banTemplateCheck = components["schemas"]["Fail2banTemplateCheck"];
+export type Fail2banPanelLoginEvent = components["schemas"]["Fail2banPanelLoginEvent"];
+export type Fail2banPanelLoginStatus = components["schemas"]["Fail2banPanelLoginStatus"];
 export type Fail2banTemplateCheckInput = components["schemas"]["Fail2banTemplateCheckInput"];
 export type Fail2banDesiredJail = components["schemas"]["Fail2banDesiredJail"];
 export type Fail2banPolicyView = components["schemas"]["Fail2banPolicyView"];
@@ -601,6 +603,7 @@ function createAPI(scope: RequestScope) {
   checkFail2banTemplates: (data: Fail2banTemplateCheckInput, signal?: AbortSignal) => request<Fail2banTemplateCheck[]>({url:"/fail2ban/templates/check",method:"POST",data,signal}),
   fail2banPolicy: (signal?: AbortSignal) => request<Fail2banPolicyView>({url:"/fail2ban/policy",signal}),
   fail2banTemplates: (signal?: AbortSignal) => request<Fail2banTemplate[]>({url:"/fail2ban/templates",signal}),
+  fail2banPanelLogin: (signal?: AbortSignal) => request<Fail2banPanelLoginStatus>({url:"/fail2ban/panel-login",signal}),
   saveFail2banPolicy: (data:Fail2banPolicyInput,key:string) => request<Fail2banPolicyView>({url:"/fail2ban/policy",method:"PUT",data,headers:{"Idempotency-Key":key}}),
   previewFail2ban: (version:number,signal?:AbortSignal) => request<Fail2banPolicyPreview>({url:"/fail2ban/preview",method:"POST",data:{version},signal}),
   fail2banPythonTasks: (signal?: AbortSignal) =>

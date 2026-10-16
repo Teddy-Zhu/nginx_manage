@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -208,6 +209,13 @@ func (s *Server) Run(ctx context.Context) error {
 	s.monitoringHandlers(mux, sampler)
 	s.firewallHandlers(mux, ctx)
 	s.fail2banHandlers(mux, ctx)
+	loginLog := panelLoginLog{server: s}
+	if loginLog.available() {
+		if err := loginLog.prepare(); err != nil {
+			slog.Warn("Panel login log initialization failed", "error", err)
+		}
+	}
+	loginLog.handlers(mux)
 	s.fail2banJailsHandlers(mux)
 	s.fail2banAddressHandlers(mux)
 	lifecycle := &fail2banLifecycle{server: s, gate: rootMaintenance}

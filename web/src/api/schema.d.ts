@@ -17,6 +17,7 @@ export interface paths {
  "/fail2ban/apply": { post: operations["applyFail2ban"]; };
     "/fail2ban/templates/check": { post: operations["checkFail2banTemplates"]; };
     "/fail2ban/policy": { get: operations["getFail2banPolicy"]; put: operations["setFail2banPolicy"]; };
+    "/fail2ban/panel-login": { get: operations["getFail2banPanelLogin"]; };
     "/fail2ban/templates": { get: operations["getFail2banTemplates"]; };
     "/fail2ban/preview": { post: operations["previewFail2ban"]; };
     "/fail2ban/instance": { get: operations["getFail2banInstance"]; };
@@ -1743,14 +1744,16 @@ export interface components {
         FirewallPlan: { action: "apply" | "remove"; id: string; version: number; policy_hash: string; program_hash: string; baseline: components["schemas"]["FirewallKernelView"]; protections: components["schemas"]["FirewallProtection"][]; ssh_profile: string; ssh_listeners: string[]; listener_version: number; listener: string; control_source: string; confirmation_seconds: number; expires_at: number; transaction_hash: string; transaction_bytes: number; generated_rules: number; };
         FirewallOperation: { action: "apply" | "remove"; id: string; plan_id: string; version: number; policy_hash: string; program_hash: string; state: "running" | "waiting_confirmation" | "compensating" | "recovery_required" | "succeeded" | "rolled_back" | "failed"; stage: string; deadline: number; updated_at: number; confirmed_source: string; verification_scope: string; error: string; };
         FirewallProtectionObservation: { state: "unavailable" | "not_applicable" | "current" | "changed"; plan_id: string; observed_at: number; ssh_profile: string; ssh_listeners: string[]; protections: components["schemas"]["FirewallProtection"][]; reason: string; };
+        Fail2banPanelLoginEvent: { time_iso8601: string; event: "login_failed"; peer_addr: string; source: "tcp_peer"; request_id: string; };
+        Fail2banPanelLoginStatus: { at: number; available: boolean; source_id: "panel:login"; format: "nginxpanel_auth"; scope: string; reason: string; bytes: number; limit_bytes: 8388608; events: components["schemas"]["Fail2banPanelLoginEvent"][]; };
         Fail2banFilterSample: { name: string; line: string; expected_ip: string; };
-        Fail2banTemplateCheckInput: { templates: ("nginx-http-401" | "nginx-authorization-401")[]; };
+        Fail2banTemplateCheckInput: { templates: ("nginx-http-401" | "nginx-authorization-401" | "panel-login-failure")[]; };
         Fail2banTemplateCheck: { engine: components["schemas"]["Fail2banEngineIdentity"]; template: string; at: number; source: string; scope: string; available: boolean; passed: boolean; filter_sha256: string; samples_sha256: string; tool_path: string; tool_sha256: string; tool_version: string; expected_ips: string[]; matched_ips: string[]; reason: string; };
-        Fail2banDesiredJail: { id: string; name: string; enabled: boolean; template: "nginx-http-401" | "nginx-authorization-401"; resource_id: string; action: "host-input" | "docker-forward" | "nginx-client"; ban_time: number; find_time: number; max_retry: number; ignore_ips: string[]; };
+        Fail2banDesiredJail: { id: string; name: string; enabled: boolean; template: "nginx-http-401" | "nginx-authorization-401" | "panel-login-failure"; resource_id: string; action: "host-input" | "docker-forward" | "nginx-client"; ban_time: number; find_time: number; max_retry: number; ignore_ips: string[]; };
         Fail2banPolicy: { jails: components["schemas"]["Fail2banDesiredJail"][]; };
         Fail2banPolicyView: { version: number; policy: components["schemas"]["Fail2banPolicy"]; updated_at: number; };
         Fail2banPolicyInput: { base_version: number; policy: components["schemas"]["Fail2banPolicy"]; };
-        Fail2banTemplate: { id: "nginx-http-401" | "nginx-authorization-401"; filter_sha256: string; samples_sha256: string; samples: components["schemas"]["Fail2banFilterSample"][]; name: string; description: string; category: string; format: string; ban_time: number; find_time: number; max_retry: number; };
+        Fail2banTemplate: { id: "nginx-http-401" | "nginx-authorization-401" | "panel-login-failure"; filter_sha256: string; samples_sha256: string; samples: components["schemas"]["Fail2banFilterSample"][]; name: string; description: string; category: string; format: string; ban_time: number; find_time: number; max_retry: number; };
         Fail2banPreviewInput: { version: number; };
         Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
         Fail2banJailsOperation: { id:string;state:string;stage:string;before_id:string;after_id:string;request_hash:string;target:string;error:string; };
@@ -3537,6 +3540,7 @@ export interface operations {
  getFail2banRuntime: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  applyFail2ban: { parameters:{query?:never;header:{"X-CSRF-Token"?:string;"Idempotency-Key":string;};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banApplyInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
     checkFail2banTemplates: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banTemplateCheckInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    getFail2banPanelLogin: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getFail2banTemplates: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     previewFail2ban: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPreviewInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     setFail2banPolicy: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPolicyInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

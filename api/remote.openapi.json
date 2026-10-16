@@ -4962,6 +4962,39 @@
         }
       }
     },
+    "/nodes/{connection}/fail2ban/panel-login": {
+      "get": {
+        "operationId": "remoteGetFail2banPanelLogin",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banPanelLogin",
+        "x-forward-path": "/fail2ban/panel-login",
+        "x-response-kind": "json",
+        "x-body-limit": 65536,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "description": "读取目标独立面板密码认证失败日志与最近 TCP 对端事件；不写入事件或启用封禁。"
+      }
+    },
     "/nodes/{connection}/fail2ban/templates": {
       "get": {
         "operationId": "remoteGetFail2banTemplates",

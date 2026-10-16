@@ -24,6 +24,11 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 	if !in.Valid() || !fail2banDigest.MatchString(in.Target) || in.OperationID == in.BaseID {
 		return out, fault.Invalid("受管 jail 应用合同无效")
 	}
+	for _, j := range in.Policy.Jails {
+		if j.Enabled && j.Template == fail2ban.PanelLoginTemplate {
+			return out, fault.Invalid("面板登录保护所需的宿主机入口封禁尚不可用")
+		}
+	}
 	raw, _ := json.Marshal(in)
 	hash := secure.Hash(raw)
 	n := f.nginx
