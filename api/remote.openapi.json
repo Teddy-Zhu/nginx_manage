@@ -5147,6 +5147,139 @@
         ],
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/fail2ban/addresses/status": {
+      "get": {
+        "operationId": "remoteGetFail2banAddress",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banAddress",
+        "x-forward-path": "/fail2ban/addresses/status",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "jail",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "ip",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 45
+            }
+          }
+        ],
+        "x-query-keys": [
+          "jail",
+          "ip"
+        ]
+      }
+    },
+    "/nodes/{connection}/fail2ban/addresses": {
+      "post": {
+        "operationId": "remoteChangeFail2banAddress",
+        "x-scopes": [
+          "security.write"
+        ],
+        "responses": {
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "changeFail2banAddress",
+        "x-forward-path": "/fail2ban/addresses",
+        "x-response-kind": "json",
+        "x-body-limit": 2048,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banAddressInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/addresses/tasks": {
+      "get": {
+        "operationId": "remoteGetFail2banAddressTasks",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banAddressTasks",
+        "x-forward-path": "/fail2ban/addresses/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
     }
   },
   "security": [

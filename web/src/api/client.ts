@@ -59,6 +59,15 @@ export type Fail2banPolicyView = components["schemas"]["Fail2banPolicyView"];
 export type Fail2banPolicyInput = components["schemas"]["Fail2banPolicyInput"];
 export type Fail2banTemplate = components["schemas"]["Fail2banTemplate"];
 export type Fail2banPolicyPreview = components["schemas"]["Fail2banPolicyPreview"];
+export type Fail2banAddressInput =
+  components["schemas"]["Fail2banAddressInput"];
+export type Fail2banAddressStatus =
+  components["schemas"]["Fail2banAddressStatus"];
+export type Fail2banAddressOperation =
+  components["schemas"]["Fail2banAddressOperation"];
+export type Fail2banAddressTask = components["schemas"]["Fail2banAddressTask"];
+export type Fail2banAddressTaskStatus =
+  components["schemas"]["Fail2banAddressTaskStatus"];
 export type Fail2banApplyInput = components["schemas"]["Fail2banApplyInput"];
 export type Fail2banApplyTask = components["schemas"]["Fail2banApplyTask"];
 export type Fail2banApplyTaskStatus = components["schemas"]["Fail2banApplyTaskStatus"];
@@ -579,6 +588,24 @@ function createAPI(scope: RequestScope) {
   fail2banTemplates: (signal?: AbortSignal) => request<Fail2banTemplate[]>({url:"/fail2ban/templates",signal}),
   saveFail2banPolicy: (data:Fail2banPolicyInput,key:string) => request<Fail2banPolicyView>({url:"/fail2ban/policy",method:"PUT",data,headers:{"Idempotency-Key":key}}),
   previewFail2ban: (version:number,signal?:AbortSignal) => request<Fail2banPolicyPreview>({url:"/fail2ban/preview",method:"POST",data:{version},signal}),
+  fail2banAddress: (jail: string, ip: string, signal?: AbortSignal) =>
+    request<Fail2banAddressStatus>({
+      url: "/fail2ban/addresses/status",
+      params: { jail, ip },
+      signal,
+    }),
+  fail2banAddressTasks: (signal?: AbortSignal) =>
+    request<Fail2banAddressTaskStatus[]>({
+      url: "/fail2ban/addresses/tasks",
+      signal,
+    }),
+  changeFail2banAddress: (data: Fail2banAddressInput, key: string) =>
+    request<Fail2banAddressTask>({
+      url: "/fail2ban/addresses",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
   fail2banRuntime: (signal?:AbortSignal) => request<Fail2banJailsRuntime>({url:"/fail2ban/runtime",signal}),
   fail2banTasks: (signal?:AbortSignal) => request<Fail2banApplyTaskStatus[]>({url:"/fail2ban/tasks",signal}),
   applyFail2ban: (data:Fail2banApplyInput,key:string) => request<Fail2banApplyTask>({url:"/fail2ban/apply",method:"POST",data,headers:{"Idempotency-Key":key}}),

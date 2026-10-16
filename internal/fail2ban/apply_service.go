@@ -21,11 +21,11 @@ type jailTaskPayload struct {
 
 func (s *PolicyService) applyIdle(ctx context.Context, q PolicyReader) error {
 	var pending int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind='fail2ban.apply' AND state IN ('queued','running','compensating','recovery_required')").Scan(&pending); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('fail2ban.apply','fail2ban.address') AND state IN ('queued','running','compensating','recovery_required')").Scan(&pending); err != nil {
 		return err
 	}
 	if pending > 0 {
-		return fault.Conflict("jail 正在应用或等待恢复，暂不能修改期望配置或创建新应用")
+		return fault.Conflict("Fail2ban 操作正在执行或等待恢复，暂不能修改配置或创建新操作")
 	}
 	return nil
 }
@@ -50,7 +50,7 @@ func (s *PolicyService) Runtime(ctx context.Context) (JailsRuntime, error) {
 }
 
 func (s *PolicyService) ApplyTasks(ctx context.Context) ([]ApplyTaskStatus, error) {
-	rows, err := s.DB.QueryContext(ctx, "SELECT t.id,t.operation_id,t.state,t.stage,t.last_error,t.created_at FROM tasks t JOIN fail2ban_operations o ON o.task_id=t.id ORDER BY t.created_at DESC,t.id DESC LIMIT 16")
+	rows, err := s.DB.QueryContext(ctx, "SELECT t.id,t.operation_id,t.state,t.stage,t.last_error,t.created_at FROM tasks t JOIN fail2ban_operations o ON o.task_id=t.id WHERE t.kind='fail2ban.apply' ORDER BY t.created_at DESC,t.id DESC LIMIT 16")
 	if err != nil {
 		return nil, err
 	}

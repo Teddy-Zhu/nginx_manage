@@ -204,3 +204,6 @@ Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝
 
 
 主机 DNS 配置迁移新增 `selection.host_dns`、`host_dns.mode=preserve|map`、逐源显式目标及可选目标配置，文件导入、API 拉取与推送共用同一逻辑。只导出已确认期望配置；映射要求 host.dns.write，缺失/重复目标、跨配置类型及接口区域转换须明确处理。计划返回候选及目标就绪条件，保存只暂存加密材料，不改写运行 DNS 或伪造已确认期望；目标 DNS 页面载入后重新生成原计划并单独确认。推送严格核对源包散列、映射、配置与阶段，不重放接管或恢复授权。迁移归档当前 schema 为 5，Agent 仍为 44、数据库仍为 26；统一 JSON 与自动扫描路由不变。未运行生成器、构建、类型检查、测试或真实操作，待 P5；详见 [主机 DNS 迁移](migration.md#主机-dns-配置迁移)。
+
+
+受管地址的公开合同新增 `GET /fail2ban/addresses/status`、`POST /fail2ban/addresses`、`GET /fail2ban/addresses/tasks` 及显式远程资源。输入限定本应用 nginx-client jail、单个规范数值 IP、ban/unban 与本次 target；提交要求 security.write、近期认证、幂等和模块启用。root 固定官方客户端参数，派发前持久标记，结果不明只观察原操作，拒绝自动重发或逆向补偿；已封禁 ban 不续期，unban 同时清除所选 jail 的持久记录。本机/忽略/代理地址禁止 ban。引擎当前状态、客户端回执和 Nginx 受管集合运行代次独立返回，其他 jail 可继续拒绝同一地址。共享加密任务材料、审计、恢复隔离和容量上限；手动操作不进入业务迁移。Agent 为 45，数据库仍为 26、归档 schema 为 5；单 jail 诊断 writable=false 不充当写入授权。声明与页面已接入，未执行生成器或运行验证，待 P5；详见 [Fail2ban](fail2ban.md)。

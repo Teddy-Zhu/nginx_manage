@@ -10,6 +10,7 @@
 }
 </route>
 <script setup lang="ts">
+import Fail2banAddressPanel from "../components/Fail2banAddressPanel.vue";
 import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
 import { computed, h, onMounted, onUnmounted, ref } from "vue";
 import {
@@ -56,7 +57,7 @@ const jailRows: DataTableColumns<Fail2banInstance["jails"][number]> = [
   {
     title: "归属",
     key: "managed",
-    render: (row) => (row.managed ? "本应用管理 · 只读" : "原实例管理 · 只读"),
+    render: (row) => (row.managed ? "本应用管理" : "原实例管理 · 只读"),
   },
   {
     title: "状态",
@@ -342,6 +343,12 @@ onUnmounted(() => {
             :pagination="{ pageSize: 25 }"
           />
         </template>
+        <Fail2banAddressPanel
+          v-if="jail.managed"
+          :key="jail.name"
+          :jail="jail.name"
+          :module-enabled="moduleEnabled === true"
+        />
       </template>
     </section>
     <template v-if="view?.available">

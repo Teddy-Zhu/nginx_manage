@@ -12,6 +12,31 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/addresses/status:
+    get:
+      operationId: getFail2banAddress
+      x-scopes: [read]
+      description: 返回 Fail2banAddressStatus。仅检查本应用独立受管的 nginx-client jail，核对官方引擎当前状态、保护地址及 Nginx 受管集合的运行代次。集合未包含地址不表示其他保护允许访问；须使用本次 target 提交操作。
+      parameters:
+        - {name: jail, in: query, required: true, schema: {type: string, maxLength: 64}}
+        - {name: ip, in: query, required: true, schema: {type: string, maxLength: 45}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/addresses:
+    post:
+      operationId: changeFail2banAddress
+      x-scopes: [security.write]
+      description: 返回 Fail2banAddressTask，浏览器要求近期认证。通过官方客户端执行单 jail 的 ban/unban，不接受全局解封、命令或时长覆盖；ban 使用当前 jail 时长，已封禁地址不续期。已记录派发后不重复客户端调用，回执不明仅核对当前引擎状态；任务成功不等于 Nginx 集合已经生效。
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banAddressInput'}}}}
+      responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/addresses/tasks:
+    get:
+      operationId: getFail2banAddressTasks
+      x-scopes: [read]
+      description: 返回最近 16 条 Fail2banAddressTaskStatus。保留手动操作及引擎观测快照，区别客户端派发回执；不是自动封禁全历史。解封仅影响所选 jail，其他 jail 可继续拒绝同一地址。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/tasks:
     get:
       operationId: getFail2banTasks
@@ -1833,6 +1858,16 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["id", "state", "stage", "before_id", "after_id", "request_hash", "target", "error"], "properties": {"id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "before_id": {"type": "string"}, "after_id": {"type": "string"}, "request_hash": {"type": "string"}, "target": {"type": "string"}, "error": {"type": "string"}}}
     Fail2banJailsRuntime:
       {"type": "object", "additionalProperties": false, "required": ["available", "target", "selected_id", "policy", "resources", "pending", "reason"], "properties": {"available": {"type": "boolean"}, "target": {"type": "string"}, "selected_id": {"type": "string"}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}, "resources": {"type": "array", "items": {"type": "string"}}, "pending": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailsOperation"}}, "reason": {"type": "string"}}}
+    Fail2banAddressInput:
+      {"type": "object", "additionalProperties": false, "required": ["jail", "ip", "action", "target"], "properties": {"jail": {"type": "string", "maxLength": 64}, "ip": {"type": "string", "maxLength": 45}, "action": {"type": "string", "enum": ["ban", "unban"]}, "target": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+    Fail2banAddressStatus:
+      {"type": "object", "additionalProperties": false, "required": ["at", "jail", "ip", "available", "target", "engine_state", "expires_at", "permanent", "ban_time", "can_ban", "action_state", "generation", "reason"], "properties": {"at": {"type": "integer", "format": "int64"}, "jail": {"type": "string"}, "ip": {"type": "string"}, "available": {"type": "boolean"}, "target": {"type": "string"}, "engine_state": {"type": "string", "enum": ["unknown", "banned", "clear"]}, "expires_at": {"type": "integer", "format": "int64"}, "permanent": {"type": "boolean"}, "ban_time": {"type": "integer", "format": "int64"}, "can_ban": {"type": "boolean"}, "action_state": {"type": "string", "enum": ["unknown", "denied", "clear"]}, "generation": {"type": "string"}, "reason": {"type": "string"}}}
+    Fail2banAddressOperation:
+      {"type": "object", "additionalProperties": false, "required": ["id", "request_hash", "input", "state", "stage", "submission", "engine_state", "observed_at", "expires_at", "permanent", "error"], "properties": {"id": {"type": "string"}, "request_hash": {"type": "string"}, "input": {"$ref": "#/components/schemas/Fail2banAddressInput"}, "state": {"type": "string", "enum": ["running", "succeeded", "failed"]}, "stage": {"type": "string"}, "submission": {"type": "string", "enum": ["not_sent", "not_needed", "unknown", "acknowledged"]}, "engine_state": {"type": "string", "enum": ["unknown", "banned", "clear"]}, "observed_at": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "permanent": {"type": "boolean"}, "error": {"type": "string"}}}
+    Fail2banAddressTask:
+      {"type": "object", "additionalProperties": false, "required": ["task_id", "operation_id"], "properties": {"task_id": {"type": "string", "format": "uuid"}, "operation_id": {"type": "string", "format": "uuid"}}}
+    Fail2banAddressTaskStatus:
+      {"type": "object", "additionalProperties": false, "required": ["id", "operation_id", "state", "stage", "error", "created_at", "input", "result"], "properties": {"id": {"type": "string"}, "operation_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "input": {"$ref": "#/components/schemas/Fail2banAddressInput"}, "result": {"allOf": [{"$ref": "#/components/schemas/Fail2banAddressOperation"}], "nullable": true}}}
     Fail2banApplyInput:
       {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "base_id", "target"], "properties": {"version": {"type": "integer", "format": "int64", "minimum": 1}, "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "base_id": {"type": "string"}, "target": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
     Fail2banApplyTaskStatus:

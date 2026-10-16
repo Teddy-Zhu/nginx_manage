@@ -209,6 +209,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.firewallHandlers(mux, ctx)
 	s.fail2banHandlers(mux, ctx)
 	s.fail2banJailsHandlers(mux)
+	s.fail2banAddressHandlers(mux)
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"

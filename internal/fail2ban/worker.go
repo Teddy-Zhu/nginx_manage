@@ -49,7 +49,7 @@ func (s *PolicyService) nextJailTask(ctx context.Context, executor JailsExecutor
 	}
 	defer done()
 	var id string
-	err := s.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind='fail2ban.apply' AND state IN ('queued','running','compensating','recovery_required') ORDER BY created_at,id LIMIT 1").Scan(&id)
+	err := s.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('fail2ban.apply','fail2ban.address') AND state IN ('queued','running','compensating','recovery_required') ORDER BY created_at,id LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -62,6 +62,13 @@ func (s *PolicyService) nextJailTask(ctx context.Context, executor JailsExecutor
 	}
 	if task.Stage == "restore_isolated" {
 		return nil
+	}
+	if task.Kind == "fail2ban.address" {
+		addressExecutor, ok := s.Agent.(AddressExecutor)
+		if !ok {
+			return fault.Unavailable("未连接手动封禁执行器")
+		}
+		return s.nextAddressTask(ctx, addressExecutor, task)
 	}
 	var sealed []byte
 	if err = s.DB.QueryRowContext(ctx, "SELECT payload FROM fail2ban_operations WHERE task_id=?", id).Scan(&sealed); err != nil {
@@ -139,7 +146,10 @@ func (s *PolicyService) nextJailTask(ctx context.Context, executor JailsExecutor
 }
 
 func (s *PolicyService) jailTaskUpdate(ctx context.Context, task dbgen.Task, state, stage, message string, accepted bool) error {
-	if task.State == state && task.Stage == stage && task.LastError == message && (!accepted || task.AgentAccepted != 0) {
+	return s.fail2banTaskUpdate(ctx, task, state, stage, message, accepted, nil)
+}
+func (s *PolicyService) fail2banTaskUpdate(ctx context.Context, task dbgen.Task, state, stage, message string, accepted bool, payload []byte) error {
+	if payload == nil && task.State == state && task.Stage == stage && task.LastError == message && (!accepted || task.AgentAccepted != 0) {
 		return nil
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -150,8 +160,13 @@ func (s *PolicyService) jailTaskUpdate(ctx context.Context, task dbgen.Task, sta
 	if _, err = tx.ExecContext(ctx, "UPDATE tasks SET state=?,stage=?,last_error=?,agent_accepted=MAX(agent_accepted,?),updated_at=? WHERE id=? AND state IN ('queued','running','compensating','recovery_required')", state, stage, message, accepted, time.Now().Unix(), task.ID); err != nil {
 		return err
 	}
+	if payload != nil {
+		if _, err = tx.ExecContext(ctx, "UPDATE fail2ban_operations SET payload=? WHERE task_id=?", s.Vault.Seal(payload, "fail2ban:operation:"+task.ID), task.ID); err != nil {
+			return err
+		}
+	}
 	if state == "succeeded" || state == "failed" || state == "cancelled" || state == "recovery_required" && task.State != state {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,'system:fail2ban','fail2ban.apply',?,?,?)", secure.ID(), task.OperationID, task.ID, state, time.Now().Unix()); err != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,'system:fail2ban',?,?,?,?)", secure.ID(), task.OperationID, task.Kind, task.ID, state, time.Now().Unix()); err != nil {
 			return err
 		}
 	}

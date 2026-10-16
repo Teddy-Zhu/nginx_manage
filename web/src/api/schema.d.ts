@@ -4,6 +4,9 @@
  */
 
 export interface paths {
+ "/fail2ban/addresses/status": { get: operations["getFail2banAddress"]; };
+ "/fail2ban/addresses": { post: operations["changeFail2banAddress"]; };
+ "/fail2ban/addresses/tasks": { get: operations["getFail2banAddressTasks"]; };
  "/fail2ban/tasks": { get: operations["getFail2banTasks"]; };
  "/fail2ban/runtime": { get: operations["getFail2banRuntime"]; };
  "/fail2ban/apply": { post: operations["applyFail2ban"]; };
@@ -1747,6 +1750,11 @@ export interface components {
         Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
         Fail2banJailsOperation: { id:string;state:string;stage:string;before_id:string;after_id:string;request_hash:string;target:string;error:string; };
         Fail2banJailsRuntime: { available:boolean;target:string;selected_id:string;policy:components["schemas"]["Fail2banPolicy"];resources:string[];pending:components["schemas"]["Fail2banJailsOperation"][];reason:string; };
+        Fail2banAddressInput: { jail:string;ip:string;action:"ban"|"unban";target:string; };
+        Fail2banAddressStatus: { at:number;jail:string;ip:string;available:boolean;target:string;engine_state:"unknown"|"banned"|"clear";expires_at:number;permanent:boolean;ban_time:number;can_ban:boolean;action_state:"unknown"|"denied"|"clear";generation:string;reason:string; };
+        Fail2banAddressOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banAddressInput"];state:"running"|"succeeded"|"failed";stage:string;submission:"not_sent"|"not_needed"|"unknown"|"acknowledged";engine_state:"unknown"|"banned"|"clear";observed_at:number;expires_at:number;permanent:boolean;error:string; };
+        Fail2banAddressTask: { task_id:string;operation_id:string; };
+        Fail2banAddressTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banAddressInput"];result:components["schemas"]["Fail2banAddressOperation"]|null; };
         Fail2banApplyInput: { version:number;policy_hash:string;base_id:string;target:string; };
         Fail2banApplyTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number; };
         Fail2banApplyTask: { task_id:string;operation_id:string;version:number; };
@@ -3494,6 +3502,10 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+ getFail2banAddress: { parameters:{query:{jail:string;ip:string;};header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ getFail2banAddressTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ changeFail2banAddress: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banAddressInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+
  getFail2banTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  getFail2banRuntime: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  applyFail2ban: { parameters:{query?:never;header:{"X-CSRF-Token"?:string;"Idempotency-Key":string;};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banApplyInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };

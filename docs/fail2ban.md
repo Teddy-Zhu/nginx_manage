@@ -2,7 +2,7 @@
 
 `GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记操作；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用，可显式启用管理入口；启用不安装或启动引擎，不自动停止现有保护。诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
 
-仅 root Agent 在本机以 `--metrics-scope=host` 确认宿主机范围后执行采集。开发、容器、范围未确认或无 Agent 时返回不可用原因，不在面板容器内探测或补装程序。诊断的 `available` 仅表示宿主机读取获准；实例和 jail 的 `available` 表示该次完整采样成功，采样时间明确返回。所有 `writable` 及已有 jail 的 `managed` 均为 false。
+仅 root Agent 在本机以 `--metrics-scope=host` 确认宿主机范围后执行采集。开发、容器、范围未确认或无 Agent 时返回不可用原因，不在面板容器内探测或补装程序。诊断的 `available` 仅表示宿主机读取获准；实例和 jail 的 `available` 表示该次完整采样成功，采样时间明确返回。单 jail 诊断保持 `writable=false`；明确登记且可读取的本应用 jail 返回 `managed=true`，手动写入须另行核对当前目标基准。
 
 ## 未接入时的固定读取
 
@@ -168,6 +168,19 @@ nginxpanel fail2ban-nginx-jails-status --data-dir /var/lib/nginxpanel --fail2ban
 
 `POST /fail2ban/apply` 接收 `version/policy_hash/base_id/target`，要求 `security.write`、幂等键和浏览器近期认证，返回 HTTP 202 的 `task_id/operation_id/version`。版本、加密任务材料、原操作 UUID、幂等响应和排队审计同事务提交；后台只提交冻结策略，复用原 Agent jail 执行器，不引入另一份配置渲染或恢复逻辑。首次排队超过五分钟未提交则过期；已开始提交的未知结果始终先核对原记录，不把超时视为操作停止。
 
-`GET /fail2ban/tasks` 返回最近 16 条该模块任务，普通 `/tasks/{id}` 也可查询。页面显示应用/补偿/待恢复和终态，提交未知时重试原幂等请求；任务成功只表示 jail 参数和原未过期封禁核对完成，Nginx 集合仍独立确认。已接受记录缺失、冻结材料或响应合同不匹配时保持恢复阻塞，明确拒绝且未接受的请求才结束为失败。完整备份中的隔离任务禁止重新提交。任务及加密材料最多保留 256 份，耗尽须本机维护。
+`GET /fail2ban/tasks` 返回最近 16 条 jail 配置应用任务，普通 `/tasks/{id}` 也可查询。页面显示应用/补偿/待恢复和终态，提交未知时重试原幂等请求；任务成功只表示 jail 参数和原未过期封禁核对完成，Nginx 集合仍独立确认。已接受记录缺失、冻结材料或响应合同不匹配时保持恢复阻塞，明确拒绝且未接受的请求才结束为失败。完整备份中的隔离任务禁止重新提交。配置应用和手动地址任务共享最多 256 份加密材料，耗尽须本机维护。
 
-本机 root Socket 继续保留独立动作授权和刷新；Web Agent Socket 仅开放同一类型化 jail 应用/查询入口，不开放 bind/unbind/refresh 或任意命令。所有公开接口与显式远程资源沿用统一 JSON 外壳及权限，页面路由继续自动扫描。API/Go/TypeScript 声明已同步；尚未运行生成器、构建、类型检查、lint、测试、浏览器或真实实例，统一留待 P5。验收需覆盖模块边界、版本/目标漂移、任务幂等和断连恢复、拒绝/记录缺失、迁移/备份隔离及空策略停用。
+本机 root Socket 继续保留独立动作授权和刷新；Web Agent Socket 仅开放同一类型化 jail 应用/查询及下述手动地址入口，不开放 bind/unbind/refresh 或任意命令。所有公开接口与显式远程资源沿用统一 JSON 外壳及权限，页面路由继续自动扫描。API/Go/TypeScript 声明已同步；尚未运行生成器、构建、类型检查、lint、测试、浏览器或真实实例，统一留待 P5。验收需覆盖模块边界、版本/目标漂移、任务幂等和断连恢复、拒绝/记录缺失、迁移/备份隔离及空策略停用。
+
+
+## 受管 jail 的手动封禁与解封
+
+在受管 jail 详情中输入单个数值 IPv4/IPv6 地址，先查询实时状态。`GET /fail2ban/addresses/status?jail=…&ip=…` 要求 `read`，核对独立受管引擎、当前配置包、官方 jail 参数与固定动作、当前站点日志/代理和动作授权，以及 Nginx 运行探针和集合代次。返回规范地址、`target`、引擎当前封禁/到期时间、当前 jail 时长、`can_ban` 及 Nginx 受管拒绝集合状态；不使用旧诊断缓存作为写入依据。本机接口、回环/未指定/组播地址、忽略列表及当前可信代理拒绝手动 ban，但允许明确 unban。
+
+`POST /fail2ban/addresses` 接收 `jail/ip/action/target`，其中 `action=ban|unban`。要求启用管理模块、`security.write`、幂等键及浏览器近期认证；HTTP 202 返回 `task_id/operation_id`。请求材料、幂等响应及排队审计同事务保存，复用持久后台任务与 root Nginx 操作互斥；未接管 jail、全局解封、CIDR、任意命令及封禁时长覆盖均不支持。目标服务、配置或授权变化须重新查询，不自动切换到新目标。首次排队超过五分钟未提交会过期；应用、手动操作、配置变更及服务控制之间互相阻止冲突。
+
+root 在固定官方客户端调用前持久记录已派发；进程中断、超时或丢失回执只观察原操作，不再次调用 ban/unban，也不自动执行相反动作补偿。已封禁地址的 ban 跳过调用，避免续期；unban 即使当前列表没有地址仍调用官方单 jail 入口，以清除该 jail 的持久封禁记录。官方引擎仍决定自动封禁、过期与并发行为，查询与派发之间出现新封禁时以引擎实际结果为准，不承诺独占引擎或精确条件交换。客户端数字回执与当前引擎状态分别保存；回执未知但目标当前状态可证明时明确标注，不把超时或客户端返回成功直接视为动作生效。依据见官方 [BanManager](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/banmanager.py)、[Actions](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/actions.py) 及 [Transmitter](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/transmitter.py)。
+
+`GET /fail2ban/addresses/tasks` 返回最近 16 条手动任务及加密保存的引擎观测快照，Agent 暂离线仍可读取已有快照；不是自动封禁全历史。任务成功只表示所选 jail 的当前引擎状态已证明，Nginx 动作仍由原周期对账执行并独立查询：多个 jail 合并后，其他 jail 可使同一地址继续处于拒绝集合，集合未包含地址也不证明其他保护放行。公开接口及显式远程转发均使用统一 JSON；页面沿用自动扫描，不增加路由数组。
+
+完整备份中的隔离任务不重放，业务迁移不导出手动记录或运行封禁。当前 Agent 协议为 45，数据库仍为 26、迁移 schema 仍为 5。实现与源码接入审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、官方程序或真实服务，统一留待 P5。运行验收需覆盖派发前后中断/回执未知、已封禁不续期、未列出地址的持久解封、保护地址、目标漂移、任务审计/备份隔离、跨 jail 合并及 Nginx 集合独立确认。

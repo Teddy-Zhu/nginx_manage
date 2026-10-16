@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	Fail2banAddress    *fail2banAddressIntent       `json:"fail2ban_address,omitempty"`
 	Fail2banJails      *fail2banJailIntent          `json:"fail2ban_jails,omitempty"`
 	ClientDeny         *clientDenyIntent            `json:"client_deny,omitempty"`
 	Firewall           *firewall.Operation          `json:"firewall,omitempty"`

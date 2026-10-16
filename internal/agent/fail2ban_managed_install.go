@@ -270,8 +270,8 @@ func ManageFail2banManaged(ctx context.Context, data, scope, action string) (out
 		return out, err
 	}
 	for _, record := range records {
-		if record.Kind == fail2banJailsKind && pendingNginxRecord(record) {
-			return out, errors.New("受管 jail 应用或恢复尚未确认，暂不能控制实例服务")
+		if (record.Kind == fail2banJailsKind || record.Kind == fail2banAddressKind) && pendingNginxRecord(record) {
+			return out, errors.New("Fail2ban 操作尚未结束，暂不能控制实例服务")
 		}
 	}
 	r, err := loadFail2banManaged(data)
