@@ -49,6 +49,7 @@ type remoteListener struct {
 	journal         *Journal
 	dns             *HostDNS
 	firewallPending func() bool
+	firewallCheck   func(context.Context, remotelisten.Config) error
 	state           listenerCheckpoint
 	deadline        time.Time
 	problem         string
@@ -334,7 +335,7 @@ func listenerCertificate(listen string) (string, string, error) {
 	}
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), nil
 }
-func (m *remoteListener) apply(id, hash string, in remotelisten.Input, connection string) (remotelisten.Operation, error) {
+func (m *remoteListener) apply(ctx context.Context, id, hash string, in remotelisten.Input, connection string) (remotelisten.Operation, error) {
 	// DNS and listener mutations take these locks in the same order. Their
 	// recovery workers only need their own lock, so one cannot trap the other.
 	m.dns.mu.Lock()
@@ -385,6 +386,11 @@ func (m *remoteListener) apply(id, hash string, in remotelisten.Input, connectio
 	if err := config.Validate(true); err != nil {
 		return remotelisten.Operation{}, err
 	}
+	if m.firewallCheck != nil {
+		if err := m.firewallCheck(ctx, config); err != nil {
+			return remotelisten.Operation{}, err
+		}
+	}
 	op := &remotelisten.Operation{ID: id, Version: m.state.Version + 1, State: "waiting_confirmation", Stage: "awaiting_connection", Deadline: time.Now().Unix() + remotelisten.ConfirmationSeconds, Config: config.Public()}
 	m.state.Version = op.Version
 	m.state.Operation = op
@@ -421,7 +427,7 @@ func (m *remoteListener) apply(id, hash string, in remotelisten.Input, connectio
 	}
 	return *m.state.Operation, nil
 }
-func (m *remoteListener) decide(id, action, connection string) (remotelisten.Operation, error) {
+func (m *remoteListener) decide(ctx context.Context, id, action, connection string) (remotelisten.Operation, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -447,6 +453,23 @@ func (m *remoteListener) decide(id, action, connection string) (remotelisten.Ope
 	c, ok := m.connections[connection]
 	if !ok || c.version != m.state.Version || m.web == nil {
 		return out, fault.Conflict("须通过新监听建立新的 TCP/TLS 连接后确认")
+	}
+	var checkErr error
+	if m.firewallCheck != nil {
+		deadline := time.Unix(m.state.Operation.Deadline, 0)
+		if !m.deadline.IsZero() && m.deadline.Before(deadline) {
+			deadline = m.deadline
+		}
+		checkCtx, cancel := context.WithDeadline(ctx, deadline)
+		checkErr = m.firewallCheck(checkCtx, *m.state.Candidate)
+		cancel()
+	}
+	if m.expired() {
+		err = m.rollback("核对期间确认期限已到，恢复原入口")
+		return *m.state.Operation, err
+	}
+	if checkErr != nil {
+		return out, checkErr
 	}
 	before := m.state
 	op := *m.state.Operation

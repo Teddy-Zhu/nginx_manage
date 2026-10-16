@@ -64,14 +64,14 @@ func (s *Server) listenerHandlers(mux *http.ServeMux, m *remoteListener) {
 					listenerReply(w, nil, err)
 					return
 				}
-				out, err := m.apply(in.OperationID, secure.Hash(encoded), *in.Input, in.ConnectionID)
+				out, err := m.apply(r.Context(), in.OperationID, secure.Hash(encoded), *in.Input, in.ConnectionID)
 				listenerReply(w, out, err)
 			} else {
 				if in.Input != nil {
 					listenerReply(w, nil, fault.Invalid("监听确认请求无效"))
 					return
 				}
-				out, err := m.decide(in.OperationID, in.Action, in.ConnectionID)
+				out, err := m.decide(r.Context(), in.OperationID, in.Action, in.ConnectionID)
 				listenerReply(w, out, err)
 			}
 		})

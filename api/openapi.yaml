@@ -148,7 +148,7 @@ paths:
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
     post:
       operationId: applyManagementListener
-      description: 直接连接本节点并近期认证后暂用新监听。Agent 独立持久保存旧配置与 120 秒期限；新 TCP/TLS 连接确认后生效。相同幂等键只重放原操作。停用须从回环入口执行。拒绝递归转发，不返回私钥。
+      description: 直接连接本节点并近期认证后暂用新监听。提交前证明当前受管防火墙对象并按已确认策略核对候选端口和完整允许来源，冲突时保留原入口。Agent 独立持久保存旧配置与 120 秒期限；新 TCP/TLS 连接确认后生效。相同幂等键只重放原操作。停用须从回环入口执行。拒绝递归转发，不返回私钥。
       x-scopes: [read, system.write]
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/ManagementListenerInput"}}}}
@@ -162,7 +162,7 @@ paths:
   /management/listener/operations/{id}/confirm:
     post:
       operationId: confirmManagementListener
-      description: 须直接通过当前候选监听建立的新 TCP/TLS 连接确认。只证明当前观察来源到该节点的可达性，不推断其他公网来源。禁止使用回环入口或变更前已有连接确认。
+      description: 须直接通过当前候选监听建立的新 TCP/TLS 连接确认，再次核对当前已确认防火墙对象及完整候选允许来源；核对期间超时仍恢复原入口。只证明当前观察来源到该节点的可达性，不推断其他公网来源。禁止使用回环入口或变更前已有连接确认。
       x-scopes: [read, system.write]
       parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}

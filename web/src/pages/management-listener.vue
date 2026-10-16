@@ -105,6 +105,7 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
         <div class="toolbar"><h2>配置远程监听</h2><NButton :disabled="busy || pending" @click="resetForm">载入已确认配置</NButton></div>
         <NAlert v-if="version !== view.version && !pending" type="warning">监听版本已变化，请重新载入已确认配置。</NAlert>
         <p>地址、来源或证书变更均需在 120 秒内确认。变更时已有远程连接会断开。</p>
+        <NAlert type="info">端口和允许来源须与已确认的防火墙策略一致。冲突时请先调整并确认防火墙策略；云安全组和其他系统规则需另行核对。</NAlert>
         <NFormItem label="监听 IP 与端口"><NInput v-model:value="form.listen" :disabled="busy || pending" placeholder="0.0.0.0:9444 或 [::]:9444" :maxlength="64" /></NFormItem>
         <NFormItem label="允许来源 CIDR"><NInput v-model:value="form.sources" type="textarea" :disabled="busy || pending" placeholder="203.0.113.10/32，每行一个来源" /></NFormItem>
         <NFormItem label="证书 PEM"><NInput v-model:value="form.certificate" type="textarea" :disabled="busy || pending" :maxlength="16384" placeholder="留空沿用已确认的证书；首次启用生成自签证书" /></NFormItem>

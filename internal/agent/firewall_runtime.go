@@ -55,6 +55,7 @@ type hostFirewall struct {
 	dataDir, sshMode string
 	available        bool
 	recovering       bool
+	policyUncertain  bool
 	journal          *Journal
 	remote           *remoteListener
 	dns              *HostDNS
@@ -184,17 +185,21 @@ func (f *hostFirewall) program(record *firewallPolicyRecord) (*firewall.NFTProgr
 	return p, record.Marker, nil
 }
 func (f *hostFirewall) snapshot(record *firewallPolicyRecord) (firewall.KernelView, error) {
+	return f.snapshotContext(context.Background(), record)
+}
+func (f *hostFirewall) snapshotContext(ctx context.Context, record *firewallPolicyRecord) (firewall.KernelView, error) {
 	p, marker, err := f.program(record)
 	if err != nil {
 		return firewall.KernelView{}, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	return snapshotNFTProgram(ctx, p, marker)
 }
 func (f *hostFirewall) Open() error {
 	f.plans = map[string]firewallPrivatePlan{}
 	value, err := loadFirewallState(f.dataDir)
+	f.policyUncertain = err != nil || value != nil
 	if err != nil {
 		f.problem = "防火墙独立恢复记录无效，须本机处理"
 		return nil
@@ -224,6 +229,7 @@ func (f *hostFirewall) Open() error {
 	} else {
 		f.state = *value
 	}
+	f.policyUncertain = false
 	f.recovering = true
 	// Startup never resumes an unconfirmed policy. Its recovery direction is
 	// persisted and completed before the Agent accepts any new operation.
