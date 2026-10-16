@@ -149,6 +149,10 @@ func (f *fail2banJailsExecutor) hostScope(ctx context.Context, r *fail2banManage
 	if root == nil || protection == nil || sources == nil || sync == nil || root.State != "registered" || protection.Action != "approve" || sources.Action != "approve" || !sources.Policy.Managed || sync.Action != "enable" || stopping != nil {
 		return out
 	}
+	if err := fail2banHostBootSyncAuthority(f.server.DataDir, sync); err != nil {
+		out.reason = err.Error()
+		return out
+	}
 	if sources.EngineKey != fail2banNginxEngineKey(r.binding()) || sync.EngineKey != sources.EngineKey || sync.SourcesID != sources.ID || sync.ProtectionID != protection.ID || sync.RegistrationID != root.OperationID || sync.Owner != root.Owner || sync.NamespaceID != root.Confirmed.NamespaceID {
 		out.reason = "宿主机会话所属实例或批准变化，须本机重新批准"
 		return out

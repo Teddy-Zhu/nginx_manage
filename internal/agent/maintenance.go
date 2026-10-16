@@ -144,6 +144,18 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		if r.Kind == fail2banHostBootRecoveryKind {
+			boot, err := loadFail2banHostBootRecoveryEvent(filepath.Dir(filepath.Dir(g.journal.Dir)), r.OperationID)
+			if err != nil {
+				return out, err
+			}
+			if err = boot.validateRecord(r); err != nil {
+				return out, err
+			}
+			// Child registration journals cover uncertain kernel writes. The
+			// coordinator may pause before any new grant while maintenance holds.
+			continue
+		}
 		if r.Kind == fail2banHostSyncKind {
 			idle, err := fail2banHostSyncMaintenanceIdle(filepath.Dir(filepath.Dir(g.journal.Dir)), r)
 			if err != nil {

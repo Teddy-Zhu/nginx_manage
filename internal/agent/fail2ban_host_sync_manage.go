@@ -18,6 +18,7 @@ func fail2banHostSyncMetadata(e *fail2banHostSyncEvent) fail2ban.HostInputSyncVi
 		return out
 	}
 	out.ID, out.SessionID, out.ApprovedAt, out.RetirementID = e.ID, e.SessionID, e.ApprovedAt, e.RetirementID
+	out.RecoverOnBoot, out.RecoveryID = e.Action == "enable" && e.RecoverOnBoot, e.RecoveryID
 	if e.Action == "enable" {
 		out.Enabled, out.State, out.Reason = true, "waiting", "已批准持续同步，等待独立执行器核对"
 	} else {
@@ -178,7 +179,7 @@ func finishFail2banHostSyncStop(ctx context.Context, dataDir string, event, stop
 
 // Enabling and stopping are explicit local root policy operations. A stop
 // intent freezes new samples before any cleanup, and survives a CLI disconnect.
-func ManageFail2banHostSync(ctx context.Context, dataDir, scope, action, operationID, base, runtimeBase string) (fail2ban.HostInputSyncView, error) {
+func ManageFail2banHostSync(ctx context.Context, dataDir, scope, action, operationID, base, runtimeBase string, recoverOnBoot bool) (fail2ban.HostInputSyncView, error) {
 	out := fail2ban.EmptyHostInputSync("持续同步操作尚未核对")
 	if os.Geteuid() != 0 || scope != "host" || (&HostDNS{Scope: scope}).hostScopeReason() != "" || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir {
 		return out, errors.New("持续同步操作须本机 root、宿主机范围及规范绝对数据目录")
@@ -187,12 +188,12 @@ func ManageFail2banHostSync(ctx context.Context, dataDir, scope, action, operati
 		return out, errors.New("未知持续同步操作")
 	}
 	if action == "status" || action == "refresh" {
-		if operationID != "" || base != "" || runtimeBase != "" {
+		if operationID != "" || base != "" || runtimeBase != "" || recoverOnBoot {
 			return out, errors.New("同步状态及通知不接受操作、基础标识或封禁配置")
 		}
 		return callFail2banHostSync(ctx, dataDir, action)
 	}
-	if !validID(operationID) || base != "" && !validID(base) || runtimeBase != "" && !validID(runtimeBase) || operationID == base || action == "disable" && runtimeBase != "" {
+	if !validID(operationID) || base != "" && !validID(base) || runtimeBase != "" && !validID(runtimeBase) || operationID == base || action == "disable" && (runtimeBase != "" || recoverOnBoot) {
 		return out, errors.New("同步操作 UUID 或基础标识无效，停用不接受运行基础标识")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -210,7 +211,7 @@ func ManageFail2banHostSync(ctx context.Context, dataDir, scope, action, operati
 		return out, err
 	}
 	if current != nil && current.ID == operationID {
-		if current.Action != action || current.PreviousID != base || action == "enable" && current.RuntimeBaseID != runtimeBase {
+		if current.Action != action || current.PreviousID != base || action == "enable" && (current.RuntimeBaseID != runtimeBase || current.RecoverOnBoot != recoverOnBoot) {
 			return out, errors.New("同一持续同步操作的请求内容变化")
 		}
 		return fail2banHostSyncMetadata(current), nil
@@ -300,6 +301,13 @@ func ManageFail2banHostSync(ctx context.Context, dataDir, scope, action, operati
 		return out, err
 	}
 	event := &fail2banHostSyncEvent{Schema: 1, ID: operationID, PreviousID: base, Action: action, SessionID: operationID, Owner: basis.root.Owner, RegistrationID: basis.root.OperationID, NamespaceID: basis.kernel.NamespaceID, EngineKey: sources.EngineKey, ProtectionID: protection.ID, SourcesID: sources.ID, RuntimeBaseID: runtimeBase, ApprovedAt: time.Now().Unix()}
+	if recoverOnBoot {
+		event.MachineIDHash, event.BootID, err = fail2banHostBootIdentity()
+		if err != nil {
+			return out, err
+		}
+		event.RecoverOnBoot = true
+	}
 	event.RequestHash = event.requestHash()
 	if err = writeFail2banHostSyncEvent(dataDir, event); err != nil {
 		return out, err

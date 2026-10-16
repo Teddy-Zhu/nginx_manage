@@ -51,6 +51,9 @@ func ManageFail2banHostRetirement(ctx context.Context, dataDir, scope, action, o
 		return out, err
 	}
 	defer leave()
+	if err = fail2banHostBootRecoveryIdle(dataDir); err != nil {
+		return out, err
+	}
 	j := &Journal{Dir: filepath.Join(dataDir, "agent", "operations")}
 	admit, err := j.maintenanceLock()
 	if err != nil {
@@ -70,107 +73,9 @@ func ManageFail2banHostRetirement(ctx context.Context, dataDir, scope, action, o
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err
 	} else {
-		if _, e := j.Get(operationID); !errors.Is(e, os.ErrNotExist) {
-			return out, errors.New("退役操作标识已使用或无法核对")
-		}
-		previous, e := loadFail2banHostRetirement(dataDir)
-		if e != nil {
-			return out, e
-		}
-		if e = fail2banHostRetirementIdle(dataDir); e != nil {
-			return out, e
-		}
-		records, e := j.List()
-		if e != nil {
-			return out, e
-		}
-		for _, record := range records {
-			if record.Kind == "maintenance.lock" && record.State != "succeeded" || pendingNginxRecord(record) {
-				return out, ErrBusy
-			}
-		}
-		root, e := loadFail2banHostRegistration(dataDir)
-		if e != nil {
-			return out, e
-		}
-		if root == nil || root.OperationID != base {
-			return out, errors.New("当前登记基础变化，须重新核对")
-		}
-		if root.State != "registered" {
-			return out, errors.New("仅已确认登记的失联范围可退役；未确认的空表登记须先恢复原操作")
-		}
-		if !fail2banHostRegistrationReceipt(dataDir, root) {
-			if e = saveFail2banHostRegistration(dataDir, root); e != nil {
-				return out, e
-			}
-		}
-		r = &fail2banHostRetirement{Schema: 1, ID: operationID, RegistrationID: secure.ID(), Root: *root, RequestedAt: time.Now().Unix(), RequestHash: fail2banHostRetirementRequest(operationID, base)}
-		if previous != nil {
-			r.PreviousID = previous.ID
-		}
-		r.Runtime, e = loadFail2banHostRuntimeRecord(dataDir)
-		if e != nil {
-			return out, e
-		}
-		selected, e := loadFail2banHostRuntime(dataDir)
-		if e != nil {
-			return out, e
-		}
-		if selected != nil {
-			r.RuntimeCurrent = fail2banHostRuntimeMatches(selected, root)
-			if !r.RuntimeCurrent && (selected.State == "running" || selected.State == "recovery_required" || !fail2banHostRuntimeReceipt(dataDir, selected) || selected.effective().Set != nil) {
-				return out, errors.New("存在不属于待退役登记的未释放运行记录")
-			}
-			if r.RuntimeCurrent && selected.Intent.ControllerID == "" {
-				old, e := j.Get(selected.Intent.OperationID)
-				if e == nil {
-					r.RuntimeJournal = &old
-				} else if !errors.Is(e, os.ErrNotExist) {
-					return out, e
-				}
-			}
-		}
-		r.Sync, e = loadFail2banHostSync(dataDir)
-		if e != nil {
-			return out, e
-		}
-		if r.Sync != nil && r.Sync.Action == "enable" {
-			parent, e := j.Get(r.Sync.ID)
-			if e != nil {
-				return out, e
-			}
-			r.SyncParent, r.StopID = &parent, secure.ID()
-			r.Stopping, e = loadFail2banHostSyncStop(dataDir, r.Sync)
-			if e != nil {
-				return out, e
-			}
-		}
-		call, stop := context.WithTimeout(ctx, 3*time.Second)
-		r.Absent, e = snapshotNFTTargetInspect(call, firewall.NFTFail2banInput, nil)
-		stop()
-		if e != nil {
-			return out, e
-		}
-		if e = r.valid(dataDir); e != nil {
-			return out, e
-		}
-		dir := filepath.Join(fail2banHostRetirementDir(dataDir), "events")
-		if e = secure.RootDirectory(dir, 0700); e != nil {
-			return out, e
-		}
-		entries, e := os.ReadDir(dir)
-		if e != nil {
-			return out, e
-		}
-		if len(entries) >= 2048 {
-			return out, errors.New("退役记录容量已满，须本机维护")
-		}
-		raw, e := json.Marshal(r)
-		if e != nil {
-			return out, e
-		}
-		if e = writeFail2banJailImmutable(filepath.Join(dir, r.ID+".json"), raw, fail2banHostRetirementBytes); e != nil {
-			return out, e
+		r, err = prepareFail2banHostRetirement(ctx, dataDir, operationID, base)
+		if err != nil {
+			return out, err
 		}
 	}
 	selected, err := loadFail2banHostRetirement(dataDir)
@@ -280,4 +185,113 @@ func advanceFail2banHostRetirement(ctx context.Context, dataDir string) (bool, e
 		return true, err
 	}
 	return true, finishFail2banHostRetirement(ctx, dataDir, r)
+}
+
+// Caller holds host/binding and maintenance admission locks. Preparing does not
+// select the intent or close any grant, so boot recovery can freeze it first.
+func prepareFail2banHostRetirement(ctx context.Context, dataDir, operationID, base string) (*fail2banHostRetirement, error) {
+	j := &Journal{Dir: filepath.Join(dataDir, "agent", "operations")}
+	if _, e := j.Get(operationID); !errors.Is(e, os.ErrNotExist) {
+		return nil, errors.New("退役操作标识已使用或无法核对")
+	}
+	previous, e := loadFail2banHostRetirement(dataDir)
+	if e != nil {
+		return nil, e
+	}
+	if e = fail2banHostRetirementIdle(dataDir); e != nil {
+		return nil, e
+	}
+	records, e := j.List()
+	if e != nil {
+		return nil, e
+	}
+	for _, record := range records {
+		if record.Kind == "maintenance.lock" && record.State != "succeeded" || pendingNginxRecord(record) {
+			return nil, ErrBusy
+		}
+	}
+	root, e := loadFail2banHostRegistration(dataDir)
+	if e != nil {
+		return nil, e
+	}
+	if root == nil || root.OperationID != base {
+		return nil, errors.New("当前登记基础变化，须重新核对")
+	}
+	if root.State != "registered" {
+		return nil, errors.New("仅已确认登记的失联范围可退役；未确认的空表登记须先恢复原操作")
+	}
+	if !fail2banHostRegistrationReceipt(dataDir, root) {
+		if e = saveFail2banHostRegistration(dataDir, root); e != nil {
+			return nil, e
+		}
+	}
+	r := &fail2banHostRetirement{Schema: 1, ID: operationID, RegistrationID: secure.ID(), Root: *root, RequestedAt: time.Now().Unix(), RequestHash: fail2banHostRetirementRequest(operationID, base)}
+	if previous != nil {
+		r.PreviousID = previous.ID
+	}
+	r.Runtime, e = loadFail2banHostRuntimeRecord(dataDir)
+	if e != nil {
+		return nil, e
+	}
+	selected, e := loadFail2banHostRuntime(dataDir)
+	if e != nil {
+		return nil, e
+	}
+	if selected != nil {
+		r.RuntimeCurrent = fail2banHostRuntimeMatches(selected, root)
+		if !r.RuntimeCurrent && (selected.State == "running" || selected.State == "recovery_required" || !fail2banHostRuntimeReceipt(dataDir, selected) || selected.effective().Set != nil) {
+			return nil, errors.New("存在不属于待退役登记的未释放运行记录")
+		}
+		if r.RuntimeCurrent && selected.Intent.ControllerID == "" {
+			old, e := j.Get(selected.Intent.OperationID)
+			if e == nil {
+				r.RuntimeJournal = &old
+			} else if !errors.Is(e, os.ErrNotExist) {
+				return nil, e
+			}
+		}
+	}
+	r.Sync, e = loadFail2banHostSync(dataDir)
+	if e != nil {
+		return nil, e
+	}
+	if r.Sync != nil && r.Sync.Action == "enable" {
+		parent, e := j.Get(r.Sync.ID)
+		if e != nil {
+			return nil, e
+		}
+		r.SyncParent, r.StopID = &parent, secure.ID()
+		r.Stopping, e = loadFail2banHostSyncStop(dataDir, r.Sync)
+		if e != nil {
+			return nil, e
+		}
+	}
+	call, stop := context.WithTimeout(ctx, 3*time.Second)
+	r.Absent, e = snapshotNFTTargetInspect(call, firewall.NFTFail2banInput, nil)
+	stop()
+	if e != nil {
+		return nil, e
+	}
+	if e = r.valid(dataDir); e != nil {
+		return nil, e
+	}
+	dir := filepath.Join(fail2banHostRetirementDir(dataDir), "events")
+	if e = secure.RootDirectory(dir, 0700); e != nil {
+		return nil, e
+	}
+	entries, e := os.ReadDir(dir)
+	if e != nil {
+		return nil, e
+	}
+	if len(entries) >= 2048 {
+		return nil, errors.New("退役记录容量已满，须本机维护")
+	}
+	raw, e := json.Marshal(r)
+	if e != nil {
+		return nil, e
+	}
+	if e = writeFail2banJailImmutable(filepath.Join(dir, r.ID+".json"), raw, fail2banHostRetirementBytes); e != nil {
+		return nil, e
+	}
+	return r, nil
 }

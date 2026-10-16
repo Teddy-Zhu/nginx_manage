@@ -68,6 +68,7 @@ const syncStates: Record<string, string> = {
   paused: "已暂停",
   failed: "同步失败",
   recovery_required: "原事务待核对",
+  recovering: "正在恢复启动范围",
 };
 async function load() {
   if (busy.value) return;
@@ -147,6 +148,12 @@ onUnmounted(() => {
         }}</NDescriptionsItem>
         <NDescriptionsItem v-if="view.sync.retirement_id" label="退役操作">{{
           view.sync.retirement_id
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="重启恢复">{{
+          view.sync.recover_on_boot ? "已批准" : "未启用"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem v-if="view.sync.recovery_id" label="启动恢复操作">{{
+          view.sync.recovery_id
         }}</NDescriptionsItem>
         <NDescriptionsItem label="同步采样时间">{{
           view.sync.collected_at

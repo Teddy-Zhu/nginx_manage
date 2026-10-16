@@ -28,6 +28,10 @@ type fail2banHostSyncEvent struct {
 	SourcesID      string `json:"sources_id"`
 	RuntimeBaseID  string `json:"runtime_base_id"`
 	RetirementID   string `json:"retirement_id"`
+	RecoverOnBoot  bool   `json:"recover_on_boot"`
+	MachineIDHash  string `json:"machine_id_hash"`
+	BootID         string `json:"boot_id"`
+	RecoveryID     string `json:"recovery_id"`
 	ApprovedAt     int64  `json:"approved_at"`
 	RequestHash    string `json:"request_hash"`
 }
@@ -39,6 +43,13 @@ func (e fail2banHostSyncEvent) requestHash() string {
 }
 
 func (e fail2banHostSyncEvent) valid() bool {
+	if e.RecoverOnBoot {
+		if !fail2banDigest.MatchString(e.MachineIDHash) || !validID(e.BootID) || e.RecoveryID != "" && !validID(e.RecoveryID) {
+			return false
+		}
+	} else if e.MachineIDHash != "" || e.BootID != "" || e.RecoveryID != "" {
+		return false
+	}
 	if e.Schema != 1 || !validID(e.ID) || e.PreviousID != "" && !validID(e.PreviousID) || e.ID == e.PreviousID || !validID(e.SessionID) || !validID(e.Owner) || !validID(e.RegistrationID) || !fail2banDigest.MatchString(e.NamespaceID) || !fail2banDigest.MatchString(e.EngineKey) || !validID(e.ProtectionID) || !validID(e.SourcesID) || e.RuntimeBaseID != "" && !validID(e.RuntimeBaseID) || e.ApprovedAt <= 0 || e.RequestHash != e.requestHash() {
 		return false
 	}

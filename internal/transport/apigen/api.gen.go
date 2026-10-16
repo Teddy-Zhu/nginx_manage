@@ -1900,6 +1900,8 @@ type Fail2banHostInputSyncView struct {
 	ID                string `json:"id"`
 	SessionID         string `json:"session_id"`
 	RetirementID      string `json:"retirement_id"`
+	RecoverOnBoot     bool   `json:"recover_on_boot"`
+	RecoveryID        string `json:"recovery_id"`
 	Enabled           bool   `json:"enabled"`
 	ApprovedAt        int64  `json:"approved_at"`
 	State             string `json:"state"`

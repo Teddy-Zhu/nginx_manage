@@ -36,8 +36,12 @@ func (f *fail2banHostSyncExecutor) status() fail2ban.HostInputSyncView {
 	if err != nil {
 		return fail2ban.EmptyHostInputSync("持续同步批准无法完整读取")
 	}
-	out := fail2banHostRetirementSyncView(f.server.DataDir, fail2banHostSyncMetadata(event))
-	if !out.Enabled || out.State == "recovery_required" {
+	out := fail2banHostBootRecoveryView(f.server.DataDir, fail2banHostRetirementSyncView(f.server.DataDir, fail2banHostSyncMetadata(event)))
+	if !out.Enabled || out.State == "recovery_required" || out.State == "recovering" || out.RecoveryID != "" && out.State == "paused" {
+		return out
+	}
+	if err = fail2banHostBootSyncAuthority(f.server.DataDir, event); err != nil {
+		out.State, out.Reason = "paused", err.Error()
 		return out
 	}
 	if stopping, e := loadFail2banHostSyncStop(f.server.DataDir, event); e != nil {
@@ -107,16 +111,23 @@ func (f *fail2banHostSyncExecutor) run(ctx context.Context) {
 		cancel()
 		last = time.Now()
 		if err != nil {
-			if value.State != "recovery_required" {
+			if value.RecoveryID != "" {
+				value.State, value.Queued = "recovery_required", false
+			} else if value.State != "recovery_required" {
 				value.State = "failed"
 			}
 			value.Reason = err.Error()
-			if errors.Is(err, ErrBusy) || errors.Is(err, unix.EWOULDBLOCK) {
+			if value.RecoveryID == "" && (errors.Is(err, ErrBusy) || errors.Is(err, unix.EWOULDBLOCK)) {
 				value.State, value.Reason, value.Queued, dirty = "paused", "维护或实例变更期间暂停同步，保留已核对规则", true, true
 			}
 		}
+		if err == nil && (value.State == "recovering" || value.RecoveryID != "" && value.State == "waiting") {
+			dirty = true
+		}
 		f.mu.Lock()
-		value.Queued = value.Queued || f.value.Queued
+		if value.State != "recovering" && value.State != "recovery_required" {
+			value.Queued = value.Queued || f.value.Queued
+		}
 		f.value = value
 		f.mu.Unlock()
 	}
@@ -141,13 +152,25 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 	defer leave()
 	if changed, e := advanceFail2banHostRetirement(ctx, dataDir); e != nil || changed {
 		latest, readErr := loadFail2banHostSync(dataDir)
-		out = fail2banHostRetirementSyncView(dataDir, fail2banHostSyncMetadata(latest))
+		out = fail2banHostBootRecoveryView(dataDir, fail2banHostRetirementSyncView(dataDir, fail2banHostSyncMetadata(latest)))
+		return out, errors.Join(e, readErr)
+	}
+	latest, err := loadFail2banHostSync(dataDir)
+	if err != nil {
+		return out, err
+	}
+	if handled, e := f.bootRecovery(ctx, latest); handled || e != nil {
+		latest, readErr := loadFail2banHostSync(dataDir)
+		out = fail2banHostBootRecoveryView(dataDir, fail2banHostRetirementSyncView(dataDir, fail2banHostSyncMetadata(latest)))
+		if e != nil && out.State != "recovering" && out.State != "recovery_required" {
+			out.State, out.Reason = "paused", e.Error()
+		}
 		return out, errors.Join(e, readErr)
 	}
 	if event == nil || event.Action != "enable" {
 		return out, nil
 	}
-	latest, err := loadFail2banHostSync(dataDir)
+	latest, err = loadFail2banHostSync(dataDir)
 	if err != nil || latest == nil || latest.ID != event.ID {
 		return out, errors.Join(errors.New("持续同步批准已变化，等待新观察"), err)
 	}

@@ -150,6 +150,14 @@ func ManageFail2banHostInputRegistration(ctx context.Context, dataDir, scope, ac
 		v.OperationID, v.BaseOperationID, v.Action = operationID, base, action
 		v.State, v.OperationState, v.RequestHash, v.Baseline, v.Error = "removing", "running", requestHash, kernel, ""
 	}
+	return submitFail2banHostRegistration(ctx, dataDir, v)
+}
+
+// The durable creating/removing intent must precede the single send. A caller
+// that later finds that intent may only observe it through recovery.
+func submitFail2banHostRegistration(ctx context.Context, dataDir string, v *fail2banHostRegistration) (Fail2banHostInputRegistrationStatus, error) {
+	var out Fail2banHostInputRegistrationStatus
+	action := v.Action
 	batch, err := prepareNFTTargetRegistration(firewall.NFTFail2banInput, v.Baseline, v.Owner, action == "remove")
 	if err != nil {
 		return out, err
@@ -158,7 +166,7 @@ func ManageFail2banHostInputRegistration(ctx context.Context, dataDir, scope, ac
 	if err = saveFail2banHostRegistration(dataDir, v); err != nil {
 		return out, err
 	}
-	call, cancel = context.WithTimeout(ctx, 3*time.Second)
+	call, cancel := context.WithTimeout(ctx, 3*time.Second)
 	namespace, err := nftNamespace()
 	if err == nil && namespace != v.Baseline.NamespaceID {
 		err = errors.New("提交宿主机动作登记前网络命名空间变化")
