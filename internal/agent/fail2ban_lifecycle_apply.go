@@ -58,7 +58,7 @@ func (l *fail2banLifecycle) advance(ctx context.Context) error {
 			continue
 		}
 		if pending != nil {
-			return errors.New("存在多个未结束的受管引擎操作")
+			return errors.New("存在多个未结束的 Fail2ban 实例操作")
 		}
 		copy := r
 		pending = &copy
@@ -80,13 +80,13 @@ func (l *fail2banLifecycle) advance(ctx context.Context) error {
 	finish := func(stage, message string) error {
 		record.State, record.Stage, record.Error = "failed", stage, message
 		i.Managed = readFail2banManaged(l.server.DataDir)
-		if service, _, readErr := lifecycleService(ctx); readErr == nil || errors.Is(readErr, errFail2banLifecycleJobPending) {
+		if service, _, readErr := lifecycleServiceFor(ctx, i.Service.ID); readErr == nil || errors.Is(readErr, errFail2banLifecycleJobPending) {
 			i.Service = service
 			if i.Sent && (readErr != nil || service.Active == "activating" || service.Active == "deactivating" || service.Active == "reloading") {
 				record.State, record.Stage = "running", "service_pending"
 			}
 		} else {
-			i.Service = fail2ban.Service{ID: fail2banManagedService, Reason: "当前服务状态无法确认"}
+			i.Service = fail2ban.Service{ID: i.Service.ID, Reason: "当前服务状态无法确认"}
 			if i.Sent {
 				record.State, record.Stage = "recovery_required", "service_unconfirmed"
 			}
@@ -95,7 +95,7 @@ func (l *fail2banLifecycle) advance(ctx context.Context) error {
 	}
 	if !i.Sent {
 		if record.Deadline <= time.Now().Unix() {
-			return finish("authorization_expired", "受管引擎操作排队超过五分钟，请重新预览")
+			return finish("authorization_expired", "Fail2ban 实例操作排队超过五分钟，请重新预览")
 		}
 		bindingUnlock, err := (&Journal{Dir: fail2banBindingDir(l.server.DataDir)}).rootLock("binding.lock")
 		if err != nil {
@@ -104,7 +104,7 @@ func (l *fail2banLifecycle) advance(ctx context.Context) error {
 		plan, planErr := l.plan(ctx, i.Request.Input.LifecyclePreviewInput, record.OperationID)
 		bindingUnlock()
 		if planErr != nil {
-			return finish("preflight_failed", "执行前无法核对原受管引擎或依赖："+planErr.Error())
+			return finish("preflight_failed", "执行前无法核对原实例或依赖："+planErr.Error())
 		}
 		if plan.Input != i.Request.Input {
 			return finish("target_changed", "原实例、服务、配置或签名资产已变化，请重新预览")
@@ -116,18 +116,22 @@ func (l *fail2banLifecycle) advance(ctx context.Context) error {
 		}
 		var callErr error
 		input := i.Request.Input
-		switch input.Action {
-		case "install":
-			_, callErr = installFail2ban(ctx, Fail2banInstallOptions{DataDir: l.server.DataDir, Scope: l.server.MetricsScope, OperationID: record.OperationID, PlanID: input.PlanID, AssetID: input.AssetID, TrustPath: l.server.ReleaseTrust, Prerelease: input.Prerelease}, record.OperationID)
-		case "resume":
-			r, readErr := loadFail2banManaged(l.server.DataDir)
-			if readErr != nil || r == nil {
-				callErr = errors.New("原受管安装记录无法核对")
-			} else {
-				_, callErr = installFail2ban(ctx, Fail2banInstallOptions{DataDir: l.server.DataDir, Scope: l.server.MetricsScope, OperationID: r.OperationID, PlanID: r.PlanID, AssetID: r.AssetID, TrustPath: r.TrustPath, Prerelease: r.Prerelease, Start: r.Start, Enable: r.Enable, Resume: true}, record.OperationID)
+		if input.EngineOwner == "existing" {
+			callErr = l.dispatchExisting(ctx, i.Request)
+		} else {
+			switch input.Action {
+			case "install":
+				_, callErr = installFail2ban(ctx, Fail2banInstallOptions{DataDir: l.server.DataDir, Scope: l.server.MetricsScope, OperationID: record.OperationID, PlanID: input.PlanID, AssetID: input.AssetID, TrustPath: l.server.ReleaseTrust, Prerelease: input.Prerelease}, record.OperationID)
+			case "resume":
+				r, readErr := loadFail2banManaged(l.server.DataDir)
+				if readErr != nil || r == nil {
+					callErr = errors.New("原受管安装记录无法核对")
+				} else {
+					_, callErr = installFail2ban(ctx, Fail2banInstallOptions{DataDir: l.server.DataDir, Scope: l.server.MetricsScope, OperationID: r.OperationID, PlanID: r.PlanID, AssetID: r.AssetID, TrustPath: r.TrustPath, Prerelease: r.Prerelease, Start: r.Start, Enable: r.Enable, Resume: true}, record.OperationID)
+				}
+			default:
+				_, callErr = manageFail2banManaged(ctx, l.server.DataDir, l.server.MetricsScope, input.Action, record.OperationID)
 			}
-		default:
-			_, callErr = manageFail2banManaged(ctx, l.server.DataDir, l.server.MetricsScope, input.Action, record.OperationID)
 		}
 		// Cancellation can interrupt a service call after it took effect. Preserve
 		// the sent marker for the next Agent to observe, never to replay the call.
@@ -141,8 +145,8 @@ func (l *fail2banLifecycle) advance(ctx context.Context) error {
 		if err = l.persist(&record); err != nil {
 			return err
 		}
-		if callErr != nil {
-			return finish("execution_unconfirmed", "受管引擎操作未确认完成，须重新预览实际状态；原操作不会重发："+callErr.Error())
+		if callErr != nil && input.EngineOwner != "existing" {
+			return finish("execution_unconfirmed", "Fail2ban 实例操作未确认完成，须重新预览实际状态；原操作不会重发："+callErr.Error())
 		}
 	}
 	bindingUnlock, err := (&Journal{Dir: fail2banBindingDir(l.server.DataDir)}).rootLock("binding.lock")
@@ -172,6 +176,10 @@ func (l *fail2banLifecycle) advance(ctx context.Context) error {
 }
 func (l *fail2banLifecycle) prove(ctx context.Context, request fail2ban.LifecycleRequest) (fail2ban.Managed, fail2ban.Service, error) {
 	managed := readFail2banManaged(l.server.DataDir)
+	if request.Input.EngineOwner == "existing" {
+		service, err := l.proveExisting(ctx, request.Input)
+		return managed, service, err
+	}
 	var service fail2ban.Service
 	r, err := loadFail2banManaged(l.server.DataDir)
 	if err != nil || r == nil {

@@ -109,7 +109,7 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 ## Fail2ban jail 期望配置
 
-文件导出及 API 拉取/推送可选 `selection.fail2ban=true`，固定归档项 `config/fail2ban.json` 保存类型化 jail 期望；未选择时为 null。导入 `fail2ban: {mode: preserve|merge|replace, base_version?: number}` 默认保留目标，合并/替换与 Nginx 配置同事务保存，并支持失败补偿及目标版本冲突检测。源 jail ID 重新分配，站点逻辑 ID 随同一业务配置树保留；不复制实例、Socket、客户端批准、所有权、计数或封禁状态。预检展示源/目标数量和状态；须在目标核对日志、白名单、流量路径及动作。本机受管实例提供 root 命令及独立网页/API jail 应用任务，迁移流程不自动应用或启动 jail；迁移保存不表示保护生效，详见 [Fail2ban](fail2ban.md)。
+文件导出及 API 拉取/推送可选 `selection.fail2ban=true`，固定归档项 `config/fail2ban.json` 保存类型化 jail 期望；未选择时为 null。导入 `fail2ban: {mode: preserve|merge|replace, base_version?: number}` 默认保留目标，合并/替换与 Nginx 配置同事务保存，并支持失败补偿及目标版本冲突检测。源 jail ID 重新分配，站点逻辑 ID 随同一业务配置树保留；不复制实例、Socket、客户端批准、全局服务控制授权及加载单元摘要、所有权、计数或封禁状态。预检展示源/目标数量和状态；须在目标核对日志、白名单、流量路径及动作。本机受管实例提供 root 命令及独立网页/API jail 应用任务，迁移流程不自动应用或启动 jail；迁移保存不表示保护生效，详见 [Fail2ban](fail2ban.md)。
 
 ## 监控配置迁移
 

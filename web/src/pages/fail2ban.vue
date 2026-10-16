@@ -221,6 +221,8 @@ onUnmounted(() => {
     />
     <Fail2banLifecyclePanel
       :module-enabled="moduleEnabled === true"
+      :binding="view?.binding ?? null"
+      :instance="instance"
       :managed="view?.managed ?? null"
       :service="
         view?.services.find(

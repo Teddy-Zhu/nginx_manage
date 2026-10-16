@@ -20,7 +20,7 @@ import (
 
 const fail2banLifecycleKind = "nginx.fail2ban-lifecycle"
 
-var errFail2banLifecycleJobPending = errors.New("专用服务仍有排队或执行中的 systemd 作业")
+var errFail2banLifecycleJobPending = errors.New("目标服务仍有排队或执行中的 systemd 作业")
 
 type fail2banLifecycleIntent struct {
 	Request        fail2ban.LifecycleRequest `json:"request"`
@@ -78,43 +78,49 @@ func (l *fail2banLifecycle) nginxLock() (func(), error) {
 	return n.mu.Unlock, nil
 }
 func lifecycleService(ctx context.Context) (fail2ban.Service, string, error) {
-	out := fail2ban.Service{ID: fail2banManagedService}
-	raw, callErr := fail2banRun(ctx, fail2banTool("systemctl"), []string{"show", "--all", "--no-pager", "--property=Id,LoadState,ActiveState,SubState,UnitFileState,MainPID,InvocationID,Job", fail2banManagedService}, 4096)
+	return lifecycleServiceFor(ctx, fail2banManagedService)
+}
+func lifecycleServiceFor(ctx context.Context, id string) (fail2ban.Service, string, error) {
+	out := fail2ban.Service{ID: id}
+	if !fail2banUnit.MatchString(id) {
+		return out, "", errors.New("服务名称无效")
+	}
+	raw, callErr := fail2banRun(ctx, fail2banTool("systemctl"), []string{"show", "--all", "--no-pager", "--property=Id,LoadState,ActiveState,SubState,UnitFileState,MainPID,InvocationID,Job", id}, 4096)
 	values := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
 		key, value, ok := strings.Cut(line, "=")
 		if !ok || len(value) > 128 {
-			return out, "", errors.New("专用服务元数据格式未知")
+			return out, "", errors.New("目标服务元数据格式未知")
 		}
 		switch key {
 		case "Id", "LoadState", "ActiveState", "SubState", "UnitFileState", "MainPID", "InvocationID", "Job":
 		default:
-			return out, "", errors.New("专用服务元数据包含未知字段")
+			return out, "", errors.New("目标服务元数据包含未知字段")
 		}
 		if _, duplicate := values[key]; duplicate {
-			return out, "", errors.New("专用服务元数据重复")
+			return out, "", errors.New("目标服务元数据重复")
 		}
 		values[key] = value
 	}
-	if len(values) != 8 || values["Id"] != fail2banManagedService {
-		return out, "", errors.New("专用服务身份或元数据无法完整核对")
+	if len(values) != 8 || values["Id"] != id {
+		return out, "", errors.New("目标服务身份或元数据无法完整核对")
 	}
 	if callErr != nil {
 		var exit *exec.ExitError
 		if !errors.As(callErr, &exit) || ctx.Err() != nil || values["LoadState"] != "not-found" {
-			return out, "", errors.New("专用服务状态无法完整读取")
+			return out, "", errors.New("目标服务状态无法完整读取")
 		}
 	}
 	if !fail2banServiceWord.MatchString(values["LoadState"]) || !fail2banServiceWord.MatchString(values["ActiveState"]) || !fail2banServiceWord.MatchString(values["SubState"]) || values["UnitFileState"] != "" && !fail2banServiceWord.MatchString(values["UnitFileState"]) {
-		return out, "", errors.New("专用服务状态格式未知")
+		return out, "", errors.New("目标服务状态格式未知")
 	}
 	pid, err := strconv.ParseInt(values["MainPID"], 10, 32)
 	if err != nil || pid < 0 {
-		return out, "", errors.New("专用服务进程无法核对")
+		return out, "", errors.New("目标服务进程无法核对")
 	}
 	invocation := values["InvocationID"]
 	if invocation != "" && !fail2banInvocation.MatchString(invocation) || values["ActiveState"] == "active" && (invocation == "" || invocation == strings.Repeat("0", 32)) {
-		return out, "", errors.New("专用服务运行代次无法核对")
+		return out, "", errors.New("目标服务运行代次无法核对")
 	}
 	// systemctl renders Unit.Job as an empty value for no job, or a uint32 job
 	// ID. ActiveState can remain stable while a job waits for dependencies.
@@ -122,10 +128,10 @@ func lifecycleService(ctx context.Context) (fail2ban.Service, string, error) {
 	if job != "" {
 		id, err := strconv.ParseUint(job, 10, 32)
 		if err != nil || id == 0 || strconv.FormatUint(id, 10) != job {
-			return out, "", errors.New("专用服务作业状态无法核对")
+			return out, "", errors.New("目标服务作业状态无法核对")
 		}
 	}
-	out = fail2ban.Service{ID: fail2banManagedService, Available: true, Load: values["LoadState"], Active: values["ActiveState"], Sub: values["SubState"], UnitFile: values["UnitFileState"], MainPID: &pid}
+	out = fail2ban.Service{ID: id, Available: true, Load: values["LoadState"], Active: values["ActiveState"], Sub: values["SubState"], UnitFile: values["UnitFileState"], MainPID: &pid}
 	if job != "" {
 		return out, invocation, errFail2banLifecycleJobPending
 	}
@@ -140,6 +146,9 @@ func (l *fail2banLifecycle) plan(ctx context.Context, input fail2ban.LifecyclePr
 	}
 	if err := fail2banManagedIdle(l.server.DataDir, allowed); err != nil {
 		return out, err
+	}
+	if input.EngineOwner == "existing" {
+		return l.existingPlan(ctx, out)
 	}
 	r, err := loadFail2banManaged(l.server.DataDir)
 	if err != nil {
@@ -321,13 +330,13 @@ func (l *fail2banLifecycle) operation(id string) (fail2ban.LifecycleOperation, e
 	}
 	r, err := l.server.Journal.Get(id)
 	if os.IsNotExist(err) {
-		return out, fault.New(404, "FAIL2BAN_LIFECYCLE_OPERATION_MISSING", "受管引擎操作记录不存在")
+		return out, fault.New(404, "FAIL2BAN_LIFECYCLE_OPERATION_MISSING", "Fail2ban 实例操作记录不存在")
 	}
 	if err != nil {
 		return out, err
 	}
 	if r.Kind != fail2banLifecycleKind || r.Fail2banLifecycle == nil || !r.Fail2banLifecycle.Request.Valid() || r.Fail2banLifecycle.Request.OperationID != id || r.RequestHash != r.Fail2banLifecycle.Request.Hash() {
-		return out, fault.Conflict("受管引擎操作持久合同无法核对")
+		return out, fault.Conflict("Fail2ban 实例操作持久合同无法核对")
 	}
 	return lifecycleView(r), nil
 }
@@ -337,7 +346,7 @@ func (l *fail2banLifecycle) submit(ctx context.Context, in fail2ban.LifecycleReq
 		return out, err
 	}
 	if !in.Valid() {
-		return out, fault.Invalid("受管引擎操作合同无效")
+		return out, fault.Invalid("Fail2ban 实例操作合同无效")
 	}
 	if old, err := l.operation(in.OperationID); err == nil {
 		if old.RequestHash != in.Hash() {

@@ -32,6 +32,8 @@ type fail2banBinding struct {
 	ClientResolved string `json:"client_resolved"`
 	ClientSHA256   string `json:"client_sha256"`
 	ClientVersion  string `json:"client_version"`
+	ServiceControl bool   `json:"service_control"`
+	UnitSHA256     string `json:"unit_sha256"`
 	ApprovedAt     int64  `json:"approved_at"`
 }
 
@@ -39,10 +41,11 @@ func (b *fail2banBinding) view() fail2ban.BindingView {
 	if b == nil {
 		return fail2ban.BindingView{Engine: fail2ban.EngineIdentity{Owner: "none"}, State: "unbound", Reason: "尚未由本机 root 接入已有实例"}
 	}
-	out := fail2ban.BindingView{Engine: fail2ban.EngineIdentity{Owner: "existing"}, State: b.State, ID: b.ID, Service: b.Service, Socket: b.Socket, ClientPath: b.ClientResolved, ClientVersion: b.ClientVersion, ApprovedAt: b.ApprovedAt}
+	out := fail2ban.BindingView{Engine: fail2ban.EngineIdentity{Owner: "existing"}, State: b.State, ID: b.ID, Service: b.Service, Socket: b.Socket, ClientPath: b.ClientResolved, ClientVersion: b.ClientVersion, ServiceControl: b.ServiceControl, ApprovedAt: b.ApprovedAt}
 	if b.managed != nil {
 		out.Engine = b.managed.engine()
-		out.Reason = "受管安装授权只读观察；jail 配置及保护状态须分别核对"
+		out.ServiceControl = true
+		out.Reason = "受管安装可单独控制服务；jail 配置及保护状态须分别核对"
 	}
 	if b.State == "unbound" {
 		out.Engine = fail2ban.EngineIdentity{Owner: "none"}
@@ -81,11 +84,14 @@ func loadFail2banBinding(data string) (*fail2banBinding, error) {
 		return nil, errors.New("Fail2ban 接入记录无效")
 	}
 	if b.State == "unbound" {
-		if b.Service != "" || b.Socket != "" || b.ClientPath != "" || b.ClientResolved != "" || b.ClientSHA256 != "" || b.ClientVersion != "" {
+		if b.Service != "" || b.Socket != "" || b.ClientPath != "" || b.ClientResolved != "" || b.ClientSHA256 != "" || b.ClientVersion != "" || b.ServiceControl || b.UnitSHA256 != "" {
 			return nil, errors.New("Fail2ban 撤销记录无效")
 		}
 	} else if b.State != "bound" || !fail2banUnit.MatchString(b.Service) || !validFail2banSocket(b.Socket) || !fail2banDigest.MatchString(b.ClientSHA256) || !fail2banVersion.MatchString(b.ClientVersion) || !filepath.IsAbs(b.ClientResolved) || filepath.Clean(b.ClientResolved) != b.ClientResolved || !validFail2banClientPath(b.ClientPath) {
 		return nil, errors.New("Fail2ban 固定实例登记无效")
+	}
+	if b.ServiceControl && (!fail2banDigest.MatchString(b.UnitSHA256) || b.Service == fail2banManagedService) || !b.ServiceControl && b.UnitSHA256 != "" {
+		return nil, errors.New("Fail2ban 服务控制授权无效")
 	}
 	return &b, nil
 }
@@ -141,8 +147,8 @@ func saveFail2banBinding(data string, b *fail2banBinding) error {
 }
 
 // ManageFail2banBinding is local-root-only, without an IPC or public write route.
-// A binding grants bounded reads, never ownership of existing jails.
-func ManageFail2banBinding(ctx context.Context, data, scope, action, service, socket string) (fail2ban.BindingView, error) {
+// Optional service control does not grant ownership of existing jails.
+func ManageFail2banBinding(ctx context.Context, data, scope, action, service, socket string, serviceControl bool) (fail2ban.BindingView, error) {
 	out := fail2ban.UnknownBinding()
 	if os.Geteuid() != 0 || scope != "host" || (&HostDNS{Scope: scope}).hostScopeReason() != "" {
 		return out, errors.New("Fail2ban 接入须在宿主机由 root 指定 --fail2ban-scope=host")
@@ -152,6 +158,9 @@ func ManageFail2banBinding(ctx context.Context, data, scope, action, service, so
 	}
 	if action != "bind" && action != "binding" && action != "unbind" {
 		return out, errors.New("未知 Fail2ban 接入操作")
+	}
+	if action != "bind" && serviceControl {
+		return out, errors.New("仅接入操作可以授予服务控制")
 	}
 	if action == "binding" {
 		b, err := loadFail2banBinding(data)
@@ -165,7 +174,7 @@ func ManageFail2banBinding(ctx context.Context, data, scope, action, service, so
 		return out, err
 	}
 	defer unlock()
-	if err = fail2banHostRuntimeIdle(data); err != nil {
+	if err = fail2banManagedIdle(data, ""); err != nil {
 		return out, err
 	}
 	prior, err := loadFail2banBinding(data)
@@ -212,7 +221,17 @@ func ManageFail2banBinding(ctx context.Context, data, scope, action, service, so
 			return out, err
 		}
 		b.ClientVersion = version
-		if prior != nil && prior.State == "bound" && prior.Service == b.Service && prior.Socket == b.Socket && prior.ClientPath == b.ClientPath && prior.ClientResolved == b.ClientResolved && prior.ClientSHA256 == b.ClientSHA256 && prior.ClientVersion == b.ClientVersion {
+		if serviceControl {
+			if service == fail2banManagedService {
+				return out, errors.New("已有实例控制不能占用独立受管服务名称")
+			}
+			b.UnitSHA256, err = fail2banExistingUnitHash(call, service)
+			if err != nil {
+				return out, err
+			}
+			b.ServiceControl = true
+		}
+		if prior != nil && prior.State == "bound" && prior.Service == b.Service && prior.Socket == b.Socket && prior.ClientPath == b.ClientPath && prior.ClientResolved == b.ClientResolved && prior.ClientSHA256 == b.ClientSHA256 && prior.ClientVersion == b.ClientVersion && prior.ServiceControl == b.ServiceControl && prior.UnitSHA256 == b.UnitSHA256 {
 			return prior.view(), nil
 		}
 	}

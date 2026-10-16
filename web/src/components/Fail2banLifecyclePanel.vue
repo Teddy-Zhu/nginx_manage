@@ -12,6 +12,8 @@ import {
   type Fail2banLifecycleTaskStatus,
   type Fail2banManaged,
   type Fail2banService,
+  type Fail2banInstance,
+  type Fail2banObservation,
 } from "../api/client";
 import { useSession } from "../stores/session";
 
@@ -20,12 +22,32 @@ const props = defineProps<{
   managed: Fail2banManaged | null;
   service: Fail2banService | null;
   observedAt: number;
+  binding: Fail2banObservation["binding"] | null;
+  instance: Fail2banInstance | null;
 }>();
 const emit = defineEmits<{ changed: [] }>();
 const api = useNodeAPI(),
   session = useSession(),
   controller = new AbortController();
 type Action = Fail2banLifecyclePreviewInput["action"];
+type EngineOwner = Fail2banLifecyclePreviewInput["engine_owner"];
+const owner = ref<EngineOwner>("managed");
+const ownerOptions = [
+  { value: "managed", label: "独立受管实例" },
+  { value: "existing", label: "已接入的全局实例" },
+];
+const existingAuthorized = computed(
+  () =>
+    props.binding?.state === "bound" &&
+    props.binding.engine.owner === "existing" &&
+    props.binding.service_control,
+);
+const existingInstance = computed(() =>
+  props.instance?.binding.id === props.binding?.id &&
+  props.instance?.binding.engine.owner === "existing"
+    ? props.instance
+    : null,
+);
 const names: Record<Action, string> = {
   install: "安装独立实例",
   resume: "续办原安装",
@@ -89,6 +111,11 @@ function permitted(value: Action) {
 }
 const options = computed(() =>
   Object.entries(names)
+    .filter(
+      ([value]) =>
+        owner.value === "managed" ||
+        !["install", "resume", "rollback"].includes(value),
+    )
     .filter(([value]) => permitted(value as Action))
     .map(([value, label]) => ({ value, label })),
 );
@@ -123,12 +150,34 @@ const chosen = computed(() =>
 const latest = computed(
   () =>
     tasks.value.find(
-      (task) => task.result && task.result.at >= props.observedAt,
+      (task) =>
+        task.input.engine_owner === owner.value &&
+        task.result &&
+        task.result.at >=
+          (owner.value === "existing"
+            ? (existingInstance.value?.at ?? 0)
+            : props.observedAt) &&
+        (owner.value !== "existing" ||
+          task.input.base_id === props.binding?.id),
     )?.result ?? null,
 );
 const currentManaged = computed(() => latest.value?.managed ?? props.managed);
-const currentService = computed(() => latest.value?.service ?? props.service);
-const currentAt = computed(() => latest.value?.at ?? props.observedAt);
+const currentService = computed(
+  () =>
+    plan.value?.service ??
+    latest.value?.service ??
+    (owner.value === "existing"
+      ? (existingInstance.value?.service ?? null)
+      : props.service),
+);
+const currentAt = computed(
+  () =>
+    plan.value?.at ??
+    latest.value?.at ??
+    (owner.value === "existing"
+      ? (existingInstance.value?.at ?? 0)
+      : props.observedAt),
+);
 const needsEnabled = computed(
   () =>
     !!plan.value &&
@@ -143,6 +192,9 @@ const canSubmit = computed(
   () =>
     !!plan.value &&
     permitted(plan.value.input.action) &&
+    (plan.value.input.engine_owner !== "existing" ||
+      (existingAuthorized.value &&
+        plan.value.input.base_id === props.binding?.id)) &&
     (!needsEnabled.value || props.moduleEnabled) &&
     loaded.value &&
     !active.value &&
@@ -151,10 +203,21 @@ const canSubmit = computed(
 );
 let closed = false,
   timer: ReturnType<typeof setTimeout> | undefined;
-watch([action, selected], () => {
+watch([action, selected, owner, () => props.binding?.id], () => {
   plan.value = null;
   notice.value = "";
 });
+watch(owner, () => {
+  action.value = null;
+});
+watch(
+  () => props.binding?.engine.owner,
+  (value) => {
+    if (!pending.value && !busy.value)
+      owner.value = value === "existing" ? "existing" : "managed";
+  },
+  { immediate: true },
+);
 async function loadAssets() {
   if (assetsReading.value || !session.me?.scopes.includes("components.manage"))
     return;
@@ -216,10 +279,12 @@ async function preview() {
     active.value ||
     pending.value ||
     !action.value ||
+    (owner.value === "existing" && !existingAuthorized.value) ||
     !permitted(action.value)
   )
     return;
   const input: Fail2banLifecyclePreviewInput = {
+    engine_owner: owner.value,
     action: action.value,
     plan_id: "",
     asset_id: "",
@@ -292,16 +357,36 @@ onUnmounted(() => {
 <template>
   <section class="panel page-stack">
     <div class="toolbar">
-      <h3>独立实例安装与服务控制</h3>
+      <h3>实例安装与服务控制</h3>
       <NButton size="small" :loading="reading" @click="refresh"
         >刷新任务</NButton
       >
     </div>
-    <p>
-      安装登记、服务运行、开机设置与 jail
-      保护分别核对。以下操作只控制本应用的独立实例。
+    <NFormItem label="目标实例"
+      ><NSelect
+        v-model:value="owner"
+        :options="ownerOptions"
+        :disabled="busy || active || !!pending"
+    /></NFormItem>
+    <p v-if="owner === 'managed'">
+      独立实例的安装登记、服务运行、开机设置与 jail 保护分别核对。
     </p>
-    <p v-if="currentManaged">
+    <template v-else>
+      <p>
+        全局服务：{{
+          binding?.engine.owner === "existing"
+            ? binding.service || "—"
+            : "未接入"
+        }}
+      </p>
+      <NAlert v-if="!existingAuthorized" type="warning"
+        >已有实例服务控制未获本机授权。</NAlert
+      >
+      <NAlert v-else type="warning"
+        >全局服务操作影响该实例的全部 jail，包括 SSH 等系统保护。</NAlert
+      >
+    </template>
+    <p v-if="owner === 'managed' && currentManaged">
       安装：{{ managedStates[currentManaged.state] || "未知" }} ·
       {{ currentManaged.version || "—" }}
     </p>
@@ -309,7 +394,7 @@ onUnmounted(() => {
       服务：{{ currentService.active }} / {{ currentService.sub }} ·
       开机设置：{{ currentService.unit_file || "未知" }}
     </p>
-    <p v-else>专用服务状态未知</p>
+    <p v-else>服务状态未知</p>
     <p v-if="currentAt">
       状态快照 {{ new Date(currentAt * 1000).toLocaleString() }}
     </p>
@@ -353,6 +438,7 @@ onUnmounted(() => {
             active ||
             !!pending ||
             !loaded ||
+            (owner === 'existing' && !existingAuthorized) ||
             (action === 'install' && !chosen)
           "
           @click="preview"
@@ -372,7 +458,13 @@ onUnmounted(() => {
       <ul>
         <li v-for="impact in plan.impacts" :key="impact">{{ impact }}</li>
       </ul>
-      <p v-if="plan.jails.length">受管 jail：{{ plan.jails.join("、") }}</p>
+      <p v-if="plan.jails.length">
+        {{
+          plan.input.engine_owner === "existing"
+            ? "当前运行 jail"
+            : "受管 jail"
+        }}：{{ plan.jails.join("、") }}
+      </p>
       <NAlert v-if="needsEnabled && !moduleEnabled" type="warning"
         >此操作包含安装、续办、启动或开机启用，需要先启用 Fail2ban
         管理模块。</NAlert
@@ -383,14 +475,27 @@ onUnmounted(() => {
             >确认{{ names[plan.input.action] }}</NButton
           ></template
         >
-        确认执行{{ names[plan.input.action] }}？将按以上影响操作独立受管实例。
+        <template
+          v-if="
+            plan.input.engine_owner === 'existing' &&
+            plan.input.action === 'stop'
+          "
+          >确认停止全局服务 {{ plan.service.id }}？全部 jail（包括 SSH
+          等系统保护）将停止工作。</template
+        >
+        <template v-else
+          >确认执行{{ names[plan.input.action] }}？目标服务：{{
+            plan.service.id
+          }}。</template
+        >
       </NPopconfirm>
     </section>
     <NAlert v-if="historyError" type="error">{{ historyError }}</NAlert>
     <p v-if="active">存在尚未结束的 Fail2ban 实例任务。</p>
-    <p v-if="loaded && !tasks.length">暂无独立实例操作记录。</p>
+    <p v-if="loaded && !tasks.length">暂无实例操作记录。</p>
     <article v-for="task in tasks" :key="task.id" class="surface page-stack">
       <p>
+        {{ task.input.engine_owner === "existing" ? "全局实例" : "独立实例" }} ·
         {{ names[task.input.action] }} ·
         {{ states[task.state] || "状态未知" }} ·
         {{ new Date(task.created_at * 1000).toLocaleString() }}
@@ -406,10 +511,15 @@ onUnmounted(() => {
                 ? "执行器回执未确认"
                 : "尚未派发"
           }}
-          · {{ managedStates[task.result.managed.state] || "安装状态未知" }}
+          <template v-if="task.input.engine_owner === 'managed'">
+            ·
+            {{
+              managedStates[task.result.managed.state] || "安装状态未知"
+            }}</template
+          >
         </p>
         <p v-if="task.result.service.available">
-          服务快照：{{ task.result.service.active }} /
+          {{ task.result.service.id }}：{{ task.result.service.active }} /
           {{ task.result.service.unit_file || "开机设置未知" }} ·
           {{ new Date(task.result.at * 1000).toLocaleString() }}
         </p>

@@ -133,6 +133,11 @@ func (f *fail2banInstanceReader) readInstance(ctx context.Context) (fail2ban.Ins
 		version, service, raw, readErr := readFail2banBound(call, f.data, b, true, "")
 		if readErr != nil {
 			value.Reason = readErr.Error()
+			// A stopped bound service still has observable systemd status; it
+			// provides no evidence about the contents of its offline jails.
+			if service, _, err := lifecycleServiceFor(call, b.Service); err == nil || errors.Is(err, errFail2banLifecycleJobPending) {
+				value.Service = service
+			}
 			return value
 		}
 		jails, readErr := parseFail2banJails(raw)

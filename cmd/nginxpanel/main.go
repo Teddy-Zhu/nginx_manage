@@ -122,7 +122,8 @@ func run() error {
 	fail2banPythonPlan := flags.String("fail2ban-python-plan", "", "exact approved Python system package plan digest")
 	fail2banPythonRefresh := flags.Bool("fail2ban-python-refresh", false, "explicitly refresh existing system repository metadata when planning Python dependencies")
 	fail2banPythonConfirm := flags.Bool("fail2ban-python-confirm", false, "confirm installation of the exact Python system package plan")
-	fail2banService := flags.String("fail2ban-service", "", "exact already-running systemd Fail2ban service for read-only binding")
+	fail2banService := flags.String("fail2ban-service", "", "exact already-running systemd Fail2ban service for binding; read-only by default")
+	fail2banServiceControl := flags.Bool("fail2ban-service-control", false, "explicitly authorize global service start/stop and boot settings for the bound existing instance, affecting all jails")
 	fail2banSocket := flags.String("fail2ban-socket", "", "fixed root-protected Fail2ban Socket below /run")
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
 	componentScope := flags.String("component-scope", "unconfirmed", "native component scope: host or unconfirmed")
@@ -198,7 +199,7 @@ func run() error {
 		"fail2ban-managed-enable":         {"data-dir": true, "fail2ban-scope": true},
 		"fail2ban-managed-disable":        {"data-dir": true, "fail2ban-scope": true},
 		"fail2ban-managed-rollback":       {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-bind":                   {"data-dir": true, "fail2ban-scope": true, "fail2ban-service": true, "fail2ban-socket": true},
+		"fail2ban-bind":                   {"data-dir": true, "fail2ban-scope": true, "fail2ban-service": true, "fail2ban-socket": true, "fail2ban-service-control": true},
 		"fail2ban-binding":                {"data-dir": true, "fail2ban-scope": true},
 		"fail2ban-unbind":                 {"data-dir": true, "fail2ban-scope": true},
 		"firewall-rollback":               {"data-dir": true},
@@ -338,6 +339,10 @@ func run() error {
 			}
 		case "fail2ban-scope":
 			if command != "fail2ban-bind" && command != "fail2ban-binding" && command != "fail2ban-unbind" && command != "fail2ban-install" && !strings.HasPrefix(command, "fail2ban-python-") && !strings.HasPrefix(command, "fail2ban-managed") && !strings.HasPrefix(command, "fail2ban-nginx-") && !strings.HasPrefix(command, "fail2ban-jails-") && !strings.HasPrefix(command, "fail2ban-host-input-") && !strings.HasPrefix(command, "fail2ban-host-protection-") && !strings.HasPrefix(command, "fail2ban-host-sources-") && !strings.HasPrefix(command, "fail2ban-host-runtime-") && !strings.HasPrefix(command, "fail2ban-host-sync-") && !strings.HasPrefix(command, "fail2ban-host-recovery-") {
+				invalidFlag = f.Name
+			}
+		case "fail2ban-service-control":
+			if command != "fail2ban-bind" {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-service", "fail2ban-socket":
@@ -585,7 +590,7 @@ func run() error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
 	case "fail2ban-bind", "fail2ban-binding", "fail2ban-unbind":
-		out, err := agent.ManageFail2banBinding(ctx, absDir, *fail2banScope, strings.TrimPrefix(command, "fail2ban-"), *fail2banService, *fail2banSocket)
+		out, err := agent.ManageFail2banBinding(ctx, absDir, *fail2banScope, strings.TrimPrefix(command, "fail2ban-"), *fail2banService, *fail2banSocket, *fail2banServiceControl)
 		if err != nil {
 			return err
 		}

@@ -40,9 +40,9 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 49、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 59、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
-已有实例当前只读接入。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 jail 接管、全局服务控制、宿主机入口/Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
+已有实例默认只读，可由本机 root 另行授予全局服务控制。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 jail 接管、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
 实现与集成源码审阅已完成，未运行生成器、构建、类型检查、lint、测试、浏览器、服务或真实宿主机探测/接入命令；发行版、Python、systemd、Fail2ban 与日志后端组合留待 P5 集中验证。
 
@@ -186,9 +186,9 @@ root 在固定官方客户端调用前持久记录已派发；进程中断、超
 完整备份中的隔离任务不重放，业务迁移不导出手动记录或运行封禁。当前 Agent 协议为 56，数据库仍为 26、迁移 schema 仍为 6。实现与源码接入审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、官方程序或真实服务，统一留待 P5。运行验收需覆盖派发前后中断/回执未知、已封禁不续期、未列出地址的持久解封、保护地址、目标漂移、任务审计/备份隔离、跨 jail 合并及动作集合独立确认。
 
 
-## 网页与 API 的安装及独立服务控制
+## 网页与 API 的安装及服务控制
 
-`POST /fail2ban/lifecycle/preview` 接收 `action/plan_id/asset_id/prerelease`，返回影响清单、受管 jail/动作授权范围、安装及服务快照和冻结后的 `input`。`action` 为 install/resume/rollback/start/stop/enable/disable；除 install 选择单个已经准备的签名 Fail2ban 资产外，其他操作的源选择字段必须为空。安装沿用组件页的检查/准备结果、固定发行信任和本机 Python 核对，不接受用户路径、服务名、Socket、命令或 pip。缺失 Python 时显示诊断与原因，不假装已安装系统依赖。
+`POST /fail2ban/lifecycle/preview` 接收 `engine_owner/action/plan_id/asset_id/prerelease`，`engine_owner=managed|existing` 明确目标；已有实例仅支持 start/stop/enable/disable。返回影响清单、当前 jail 范围、安装及服务快照和冻结后的 `input`。`action` 为 install/resume/rollback/start/stop/enable/disable；除 install 选择单个已经准备的签名 Fail2ban 资产外，其他操作的源选择字段必须为空。安装沿用组件页的检查/准备结果、固定发行信任和本机 Python 核对，不接受用户路径、服务名、Socket、命令或 pip。缺失 Python 时显示诊断与原因，不假装已安装系统依赖。
 
 权限按动作明确检查：install 要求 `components.manage`；start/stop/enable/disable 要求 `security.write`；resume/rollback 要求两者。预览另需 `read`，写操作要求近期认证和幂等键，OpenAPI 与显式远程合同用 `x-action-scopes` 逐项声明，转发不扩大调用者范围。`POST /fail2ban/lifecycle` 提交预览返回的完整 `input`，HTTP 202 返回持久任务；`GET /fail2ban/lifecycle/tasks` 返回最近 16 条任务及保存的结果快照。资料、任务、幂等响应与排队审计同事务提交，沿用模块操作共享的 256 份容量及备份隔离规则。
 
@@ -428,3 +428,20 @@ nginxpanel fail2ban-host-recovery-cancel --data-dir /srv/nginxpanel --fail2ban-s
 只读 `sync` 增加 `recover_on_boot`、`recovery_id` 和 `recovering` 状态。恢复父操作成功只表示新授权和会话已发布，不表示当前封禁已生效；须结合后续 `current`、实际采样/核对时间和 `runtime` 查看。原意图、恢复父回执及新授权链留在 root 的 `agent/fail2ban/host-boot-recovery/` 及既有独立目录，每次启动的准备重试使用同一组标识，不按轮询新增历史。归档和 journal 均保留既有限额，容量不足明确停止，不删除原审计。
 
 Agent 为 58，数据库/归档为 26/6，首版无旧合同兼容。源码实现与集成审阅后统一整理格式及差异；生成器、构建、类型检查、lint、测试、浏览器、官方工具及真实主机重启/内核操作统一留待 P5。集中验收需覆盖身份/实例变化、显式停止、准备与各发布点中断、创建未知结果、恢复期间再次重启、维护及取消，不新增 UI 测试。已有实例 jail 接管、全局控制和其他动作/防火墙后端仍待完成。
+
+
+## 已有实例的全局服务控制
+
+只读接入不会授予启停权。本机 root 可在重新接入正常运行的既有服务时显式附加授权：
+
+```sh
+nginxpanel fail2ban-bind --data-dir /srv/nginxpanel --fail2ban-scope host --fail2ban-service fail2ban.service --fail2ban-socket /run/fail2ban/fail2ban.sock --fail2ban-service-control
+```
+
+此授权固定到该接入 UUID、服务、Socket 和客户端，并记录实际加载的 unit 及最多 16 个 drop-in 的规范路径、解析路径和 root 文件摘要。待 daemon-reload、其他激活来源、无法完整读取或文件/客户端漂移均拒绝服务控制；变更须本机重新接入。重复相同授权返回原 UUID，变更控制权产生新的不可变接入事件；无该选项重新接入可撤销服务控制，unbind 则撤销整个接入。服务离线时可 unbind，重新 bind 仍要求原所有者先正常启动实例。授权调整与在途任务互斥，有效宿主机持续会话须先显式停用并确认清除。
+
+`BindingView.service_control` 单独展示服务控制授权，不改变 jail 的 managed/writable。网页选择“已接入的全局实例”，使用原 lifecycle 预览、幂等持久任务、security.write 和近期认证链路；既有实例不能通过安装/续办/撤回操作变为独立受管实例。请求不接受服务名或任意命令，BaseID 固定原接入 UUID，摘要包含加载单元授权、客户端、服务状态/代次及当前完整 jail 列表；提交与实际派发前重新核对。停止弹窗明确提示全部 jail（包括 SSH 等系统保护）停止工作，开机设置单独确认。
+
+执行仅调用受信 systemctl 的固定 start/stop/enable/disable，派发前持久标记；取消、超时或 Agent 中断后只观察原目标，绝不重发。启动成功须完整核对官方实例、版本、Socket/主进程归属及 jail 列表；停止成功须服务无 PID、inactive/failed，且 Socket 文件与内核引用都不存在。enable/disable 只核对开机设置，不声称当前保护生效；未知结果与成功回执分别显示。服务控制不改写已有 jail、配置、状态库或动作集合；服务停止也不代表动作集合已清空。离线实例仍可返回 systemd 状态，jail 数据保持不可用，不返回虚构空列表成功。
+
+授权事件、单元摘要和实例任务沿用 root 隔离规则，不随文件/API 逻辑迁移或完整备份授予目标控制权。目标须由本机 root 重新接入并授权。Agent 为 59，数据库/归档仍为 26/6，首版不兼容旧合同。实现及集成源码审阅后统一整理格式和差异；生成器、构建、类型检查、lint、测试、浏览器、官方工具与真实服务操作留待 P5，届时集中覆盖只读拒绝、身份/单元变化、全局停止、离线重启、开机设置、中断及维护互斥，不新增 UI 测试。已有 jail 接管、其他动作/防火墙后端及其余 P0–P5 缺口继续实施。

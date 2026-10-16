@@ -2111,20 +2111,22 @@ type Fail2banPythonTaskStatus struct {
 type ChangeFail2banPythonParams = SetFail2banPolicyParams
 type ChangeFail2banPythonJSONRequestBody = Fail2banPythonTaskInput
 type Fail2banLifecyclePreviewInput struct {
-	Action     string `json:"action"`
-	PlanId     string `json:"plan_id"`
-	AssetId    string `json:"asset_id"`
-	Prerelease bool   `json:"prerelease"`
+	EngineOwner string `json:"engine_owner"`
+	Action      string `json:"action"`
+	PlanId      string `json:"plan_id"`
+	AssetId     string `json:"asset_id"`
+	Prerelease  bool   `json:"prerelease"`
 }
 type Fail2banLifecycleInput struct {
-	Action     string `json:"action"`
-	PlanId     string `json:"plan_id"`
-	AssetId    string `json:"asset_id"`
-	Prerelease bool   `json:"prerelease"`
-	BaseId     string `json:"base_id"`
-	Target     string `json:"target"`
-	Start      bool   `json:"start"`
-	Enable     bool   `json:"enable"`
+	EngineOwner string `json:"engine_owner"`
+	Action      string `json:"action"`
+	PlanId      string `json:"plan_id"`
+	AssetId     string `json:"asset_id"`
+	Prerelease  bool   `json:"prerelease"`
+	BaseId      string `json:"base_id"`
+	Target      string `json:"target"`
+	Start       bool   `json:"start"`
+	Enable      bool   `json:"enable"`
 }
 type Fail2banLifecyclePlan struct {
 	At      int64                  `json:"at"`
@@ -2300,15 +2302,16 @@ type Fail2banEngineIdentity struct {
 	PythonSha256   string `json:"python_sha256"`
 }
 type Fail2banBindingView struct {
-	Engine        Fail2banEngineIdentity `json:"engine"`
-	State         string                 `json:"state"`
-	Id            string                 `json:"id"`
-	Service       string                 `json:"service"`
-	Socket        string                 `json:"socket"`
-	ClientPath    string                 `json:"client_path"`
-	ClientVersion string                 `json:"client_version"`
-	ApprovedAt    int64                  `json:"approved_at"`
-	Reason        string                 `json:"reason"`
+	ServiceControl bool                   `json:"service_control"`
+	Engine         Fail2banEngineIdentity `json:"engine"`
+	State          string                 `json:"state"`
+	Id             string                 `json:"id"`
+	Service        string                 `json:"service"`
+	Socket         string                 `json:"socket"`
+	ClientPath     string                 `json:"client_path"`
+	ClientVersion  string                 `json:"client_version"`
+	ApprovedAt     int64                  `json:"approved_at"`
+	Reason         string                 `json:"reason"`
 }
 type Fail2banJailSummary struct {
 	Name    string `json:"name"`

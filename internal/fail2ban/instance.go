@@ -1,15 +1,16 @@
 package fail2ban
 
 type BindingView struct {
-	Engine        EngineIdentity `json:"engine"`
-	State         string         `json:"state"`
-	ID            string         `json:"id"`
-	Service       string         `json:"service"`
-	Socket        string         `json:"socket"`
-	ClientPath    string         `json:"client_path"`
-	ClientVersion string         `json:"client_version"`
-	ApprovedAt    int64          `json:"approved_at"`
-	Reason        string         `json:"reason"`
+	Engine         EngineIdentity `json:"engine"`
+	State          string         `json:"state"`
+	ID             string         `json:"id"`
+	Service        string         `json:"service"`
+	Socket         string         `json:"socket"`
+	ClientPath     string         `json:"client_path"`
+	ClientVersion  string         `json:"client_version"`
+	ServiceControl bool           `json:"service_control"`
+	ApprovedAt     int64          `json:"approved_at"`
+	Reason         string         `json:"reason"`
 }
 
 func ValidBindingView(v BindingView) bool {
@@ -20,9 +21,9 @@ func ValidBindingView(v BindingView) bool {
 	case "bound":
 		return v.Engine.Owner == "existing" || v.Engine.Owner == "managed"
 	case "unbound":
-		return v.Engine.Owner == "none"
+		return v.Engine.Owner == "none" && !v.ServiceControl
 	case "unavailable":
-		return v.Engine.Owner == "unavailable"
+		return v.Engine.Owner == "unavailable" && !v.ServiceControl
 	default:
 		return false
 	}

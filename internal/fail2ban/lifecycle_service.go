@@ -53,7 +53,7 @@ func (s *PolicyService) LifecycleTasks(ctx context.Context) ([]LifecycleTaskStat
 		}
 		var payload lifecycleTaskPayload
 		if json.Unmarshal(plain, &payload) != nil || !payload.valid(item.OperationID) {
-			return nil, errors.New("受管引擎操作历史材料无法核对")
+			return nil, errors.New("Fail2ban 实例操作历史材料无法核对")
 		}
 		item.Input, item.Result = payload.Input, payload.Result
 		out = append(out, item)

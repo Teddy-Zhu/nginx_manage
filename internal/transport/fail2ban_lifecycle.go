@@ -45,7 +45,7 @@ func (s *Server) ChangeFail2banLifecycle(w http.ResponseWriter, r *http.Request,
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, http.StatusAccepted, "OK", "受管引擎操作任务已创建", out)
+	s.respond(w, r, http.StatusAccepted, "OK", "Fail2ban 实例操作任务已创建", out)
 }
 func (s *Server) GetFail2banLifecycleTasks(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {

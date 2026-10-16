@@ -11,13 +11,20 @@ import (
 )
 
 type LifecyclePreviewInput struct {
-	Action     string `json:"action"`
-	PlanID     string `json:"plan_id"`
-	AssetID    string `json:"asset_id"`
-	Prerelease bool   `json:"prerelease"`
+	EngineOwner string `json:"engine_owner"`
+	Action      string `json:"action"`
+	PlanID      string `json:"plan_id"`
+	AssetID     string `json:"asset_id"`
+	Prerelease  bool   `json:"prerelease"`
 }
 
 func (in LifecyclePreviewInput) Validate() error {
+	if in.EngineOwner != "managed" && in.EngineOwner != "existing" {
+		return fault.Invalid("须明确选择受管或已接入实例")
+	}
+	if in.EngineOwner == "existing" && (in.Action == "install" || in.Action == "resume" || in.Action == "rollback") {
+		return fault.Invalid("已有实例仅允许明确授权的服务控制")
+	}
 	switch in.Action {
 	case "install":
 		if len(in.PlanID) != 64 || strings.Trim(in.PlanID, "0123456789abcdef") != "" || in.AssetID == "" || len(in.AssetID) > 128 || strings.ContainsAny(in.AssetID, "/\\\x00\r\n") {
@@ -28,7 +35,7 @@ func (in LifecyclePreviewInput) Validate() error {
 			return fault.Invalid("服务和恢复操作不能更换签名资产")
 		}
 	default:
-		return fault.Invalid("未知受管引擎操作")
+		return fault.Invalid("未知 Fail2ban 实例操作")
 	}
 	return nil
 }
@@ -56,7 +63,7 @@ func (in LifecycleInput) Validate() error {
 		return err
 	}
 	if in.BaseID != "" && !policyID.MatchString(in.BaseID) || in.Action != "install" && in.BaseID == "" || len(in.Target) != 64 || strings.Trim(in.Target, "0123456789abcdef") != "" || in.Action != "resume" && (in.Start || in.Enable) {
-		return fault.Invalid("受管引擎操作的实例、目标基准或恢复意图无效")
+		return fault.Invalid("Fail2ban 实例操作的实例、目标基准或恢复意图无效")
 	}
 	return nil
 }
