@@ -4,6 +4,7 @@
  */
 
 export interface paths {
+    "/fail2ban": { get: operations["getFail2ban"]; };
     "/firewall/runtime": { get: operations["getFirewallRuntime"]; };
     "/firewall/plan": { post: operations["planFirewall"]; };
     "/firewall/apply": { post: operations["applyFirewall"]; };
@@ -1725,6 +1726,13 @@ export interface components {
         FirewallPlan: { action: "apply" | "remove"; id: string; version: number; policy_hash: string; program_hash: string; baseline: components["schemas"]["FirewallKernelView"]; protections: components["schemas"]["FirewallProtection"][]; ssh_profile: string; ssh_listeners: string[]; listener_version: number; listener: string; control_source: string; confirmation_seconds: number; expires_at: number; transaction_hash: string; transaction_bytes: number; generated_rules: number; };
         FirewallOperation: { action: "apply" | "remove"; id: string; plan_id: string; version: number; policy_hash: string; program_hash: string; state: "running" | "waiting_confirmation" | "compensating" | "recovery_required" | "succeeded" | "rolled_back" | "failed"; stage: string; deadline: number; updated_at: number; confirmed_source: string; verification_scope: string; error: string; };
         FirewallProtectionObservation: { state: "unavailable" | "not_applicable" | "current" | "changed"; plan_id: string; observed_at: number; ssh_profile: string; ssh_listeners: string[]; protections: components["schemas"]["FirewallProtection"][]; reason: string; };
+        Fail2banTool: { id: string; present: boolean | null; trusted: boolean; path: string; resolved: string; reason: string; };
+        Fail2banPythonModule: { name: string; available: boolean; };
+        Fail2banPackage: { available: boolean; manager: string; name: string; version: string; reason: string; };
+        Fail2banPython: { executable: components["schemas"]["Fail2banTool"]; version: string; standard_library: boolean | null; sqlite_version: string; modules: components["schemas"]["Fail2banPythonModule"][]; package: components["schemas"]["Fail2banPackage"]; reason: string; };
+        Fail2banService: { id: string; available: boolean; load: string; active: string; sub: string; unit_file: string; main_pid: number | null; reason: string; };
+        Fail2banSocket: { path: string; present: boolean | null; root_protected: boolean; reason: string; };
+        Fail2banObservation: { at: number; source: string; scope: string; available: boolean; writable: boolean; reason: string; tools: components["schemas"]["Fail2banTool"][]; client_version: string; python: components["schemas"]["Fail2banPython"]; services: components["schemas"]["Fail2banService"][]; socket: components["schemas"]["Fail2banSocket"]; missing: string[]; warnings: string[]; };
         FirewallRuntime: { protection_observation: components["schemas"]["FirewallProtectionObservation"]; confirmed_action: "none" | "apply" | "remove"; confirmed_plan_id: string; confirmed_operation_id: string; available: boolean; reason: string; confirmed_version: number; confirmed_policy_hash: string; kernel: components["schemas"]["FirewallKernelView"]; protections: components["schemas"]["FirewallProtection"][]; operation: components["schemas"]["FirewallOperation"] | null; };
         FirewallPortRange: { from: number; to: number; };
         FirewallRule: { id: string; name: string; enabled: boolean; scope: string; family: string; protocol: string; ports: components["schemas"]["FirewallPortRange"][]; sources: string[]; action: string; priority: number; interface: string; comment: string; };
@@ -3430,6 +3438,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getFail2ban: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getFirewallRuntime: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     planFirewall: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallPlanInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     applyFirewall: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallApplyInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

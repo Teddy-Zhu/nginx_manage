@@ -23,7 +23,7 @@ var definitions = []Definition{
 	{ID: "firewall", Name: "防火墙", Available: true, Dependencies: []string{}},
 	{ID: "host-dns", Name: "主机 DNS", Available: true, Dependencies: []string{}},
 	{ID: "monitoring", Name: "基础监控", Available: true, Dependencies: []string{}},
-	{ID: "fail2ban", Name: "Fail2ban", Dependencies: []string{"firewall"}, Reason: "当前版本暂不提供 Fail2ban 管理"},
+	{ID: "fail2ban", Name: "Fail2ban", Dependencies: []string{"firewall"}, Reason: "宿主机诊断已接入，实例接入与 jail 管理尚不可用"},
 	{ID: "notifications", Name: "外部通知", Available: true, Dependencies: []string{}},
 	{ID: "automatic-backups", Name: "定期备份", Available: true, Dependencies: []string{}},
 }

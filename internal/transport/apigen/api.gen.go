@@ -1855,6 +1855,65 @@ type FirewallProtectionObservation struct {
 	Protections  []FirewallProtection `json:"protections"`
 	Reason       string               `json:"reason"`
 }
+type Fail2banTool struct {
+	Id       string `json:"id"`
+	Present  *bool  `json:"present"`
+	Trusted  bool   `json:"trusted"`
+	Path     string `json:"path"`
+	Resolved string `json:"resolved"`
+	Reason   string `json:"reason"`
+}
+type Fail2banPythonModule struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+}
+type Fail2banPackage struct {
+	Available bool   `json:"available"`
+	Manager   string `json:"manager"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Reason    string `json:"reason"`
+}
+type Fail2banPython struct {
+	Executable      Fail2banTool           `json:"executable"`
+	Version         string                 `json:"version"`
+	StandardLibrary *bool                  `json:"standard_library"`
+	SqliteVersion   string                 `json:"sqlite_version"`
+	Modules         []Fail2banPythonModule `json:"modules"`
+	Package         Fail2banPackage        `json:"package"`
+	Reason          string                 `json:"reason"`
+}
+type Fail2banService struct {
+	Id        string `json:"id"`
+	Available bool   `json:"available"`
+	Load      string `json:"load"`
+	Active    string `json:"active"`
+	Sub       string `json:"sub"`
+	UnitFile  string `json:"unit_file"`
+	MainPid   *int64 `json:"main_pid"`
+	Reason    string `json:"reason"`
+}
+type Fail2banSocket struct {
+	Path          string `json:"path"`
+	Present       *bool  `json:"present"`
+	RootProtected bool   `json:"root_protected"`
+	Reason        string `json:"reason"`
+}
+type Fail2banObservation struct {
+	At            int64             `json:"at"`
+	Source        string            `json:"source"`
+	Scope         string            `json:"scope"`
+	Available     bool              `json:"available"`
+	Writable      bool              `json:"writable"`
+	Reason        string            `json:"reason"`
+	Tools         []Fail2banTool    `json:"tools"`
+	ClientVersion string            `json:"client_version"`
+	Python        Fail2banPython    `json:"python"`
+	Services      []Fail2banService `json:"services"`
+	Socket        Fail2banSocket    `json:"socket"`
+	Missing       []string          `json:"missing"`
+	Warnings      []string          `json:"warnings"`
+}
 type FirewallRuntime struct {
 	ProtectionObservation FirewallProtectionObservation `json:"protection_observation"`
 	ConfirmedAction       string                        `json:"confirmed_action"`
@@ -3897,6 +3956,8 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// (GET /fail2ban)
+	GetFail2ban(w http.ResponseWriter, r *http.Request)
 	ListBackups(w http.ResponseWriter, r *http.Request)
 	CreateBackup(w http.ResponseWriter, r *http.Request, params CreateBackupParams)
 	GetBackup(w http.ResponseWriter, r *http.Request, id ID)
@@ -6614,6 +6675,14 @@ func (siw *ServerInterfaceWrapper) RollbackFirewall(w http.ResponseWriter, r *ht
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RollbackFirewall(w, r, r.PathValue("id"), params)
 	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+
+func (siw *ServerInterfaceWrapper) GetFail2ban(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2ban(w, r) }))
 	for _, middleware := range siw.HandlerMiddlewares {
 		handler = middleware(handler)
 	}
@@ -10564,6 +10633,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/confirm", wrapper.ConfirmFirewall)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/rollback", wrapper.RollbackFirewall)
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban", wrapper.GetFail2ban)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall", wrapper.GetFirewall)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/policy", wrapper.GetFirewallPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/firewall/policy", wrapper.SetFirewallPolicy)

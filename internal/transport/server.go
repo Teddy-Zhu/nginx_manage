@@ -56,6 +56,7 @@ type Server struct {
 	logStreams    atomic.Int32
 	metricReads   atomic.Int32
 	firewallReads atomic.Int32
+	fail2banReads atomic.Int32
 }
 
 var _ apigen.ServerInterface = (*Server)(nil)

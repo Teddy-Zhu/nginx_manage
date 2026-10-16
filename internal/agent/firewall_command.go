@@ -11,12 +11,14 @@ import (
 )
 
 type firewallOutput struct {
-	data  bytes.Buffer
-	limit int
+	data     bytes.Buffer
+	limit    int
+	exceeded bool
 }
 
 func (w *firewallOutput) Write(p []byte) (int, error) {
 	if w.data.Len()+len(p) > w.limit {
+		w.exceeded = true
 		return 0, errors.New("firewall read exceeds output budget")
 	}
 	return w.data.Write(p)

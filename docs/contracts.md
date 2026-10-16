@@ -161,11 +161,11 @@ Agent 合同为 35。主回环 HTTPS 与部署/就绪绑定不变，可选远程
 迁移与完整恢复的目标能力预检沿 nginx.conf 的实际 include 关系区分 HTTP/Stream，保留共享 include 的各自上下文，只统计启用且可达的配置。map/geo/types/split_clients 的行按数据处理，map 的 volatile 参数及其 include 单独识别。HTTP 与 Stream 的 map、连接限制、访问控制和日志不能互相替代；HTTP proxy/headers/geo/split_clients/charset/gzip 与 Stream 默认子模块同时检查目标编译参数和必要版本。已选且当前本机批准的动态模块可作为待加载候选，必须继续经过 Agent 的配置、ABI 和运行确认；仅有当前运行能力不能替代本次 load_module 路径批准。Docker 缺失能力须更换预置镜像；源模块只能显式映射至批准路径或在静态能力已预置时移除，不传输模块二进制。编译参数及 Stream 模块边界依据 [Nginx 构建源码](https://github.com/nginx/nginx/blob/release-1.30.6/auto/options)、[Stream map](https://nginx.org/en/docs/stream/ngx_stream_map_module.html) 和 [Stream 连接限制](https://nginx.org/en/docs/stream/ngx_stream_limit_conn_module.html)。
 
 
-宿主机防火墙只读诊断通过 `GET /firewall` 和显式远程资源返回 FirewallObservation，区分管理器、命令后端、独立 IPv4/IPv6 规则结构和 Docker 路径标记。未知/超限不作为停用或完整读取；本机宿主机观测授权、读取预算和未交付边界见 [防火墙诊断](firewall.md)。统一 JSON 外壳及自动扫描页面沿用当前合同，Agent 协议为 35，真实系统验收留待 P5。
+宿主机防火墙只读诊断通过 `GET /firewall` 和显式远程资源返回 FirewallObservation，区分管理器、命令后端、独立 IPv4/IPv6 规则结构和 Docker 路径标记。未知/超限不作为停用或完整读取；本机宿主机观测授权、读取预算和未交付边界见 [防火墙诊断](firewall.md)。统一 JSON 外壳及自动扫描页面沿用当前合同，Agent 协议为 36，真实系统验收留待 P5。
 
-防火墙期望策略通过 `GET/PUT /firewall/policy` 读写，版本 CAS、加密载荷、幂等响应与审计同事务；写入要求 `security.write` 和浏览器近期认证。`POST /firewall/preview` 要求 `read`，固定已保存版本，生成直接 nftables 表达式与程序摘要并核对 Agent 环境和目标接口。全部使用统一 JSON 外壳与显式远程资源；页面自动扫描。保存与预览不触发内核写入，`can_apply` 恒为 false，不替代独立恢复或新连接确认。数据库迁移为 24，Agent 协议为 35；边界见 [防火墙](firewall.md)。
+防火墙期望策略通过 `GET/PUT /firewall/policy` 读写，版本 CAS、加密载荷、幂等响应与审计同事务；写入要求 `security.write` 和浏览器近期认证。`POST /firewall/preview` 要求 `read`，固定已保存版本，生成直接 nftables 表达式与程序摘要并核对 Agent 环境和目标接口。全部使用统一 JSON 外壳与显式远程资源；页面自动扫描。保存与预览不触发内核写入，`can_apply` 恒为 false，不替代独立恢复或新连接确认。数据库迁移为 24，Agent 协议为 36；边界见 [防火墙](firewall.md)。
 
-防火墙 `kernel` 子视图由 root 在宿主机范围内通过只读 NETLINK_NETFILTER 固定 GET 操作采集。前后内核代次和命名空间须一致，未知原始表达式保留参与摘要，不以宽松解码后的子集认领规则；不完整读取不产生可用快照。预览在目标表不存在时编码带 `NFNL_BATCH_GENID` 的独占新建事务并返回摘要/规模，摘要绑定命名空间和快照，不提供执行授权。该策略预览事务仍没有发送入口；本机 root 已另行接入固定空表登记、提交回执/完整后读、中断核对及受管空表移除，公开 registration 子视图返回核对状态。direct-nftables 主机入站执行现通过独立计划、原子应用、120 秒新 TCP/TLS 确认及 root 超时/重启恢复接入；运行 API 仅允许直接连接目标节点，写入还需模块启用和本机授权。其余适配继续实施。Agent 协议为 35，数据库仍为 24；详见 [防火墙](firewall.md)。
+防火墙 `kernel` 子视图由 root 在宿主机范围内通过只读 NETLINK_NETFILTER 固定 GET 操作采集。前后内核代次和命名空间须一致，未知原始表达式保留参与摘要，不以宽松解码后的子集认领规则；不完整读取不产生可用快照。预览在目标表不存在时编码带 `NFNL_BATCH_GENID` 的独占新建事务并返回摘要/规模，摘要绑定命名空间和快照，不提供执行授权。该策略预览事务仍没有发送入口；本机 root 已另行接入固定空表登记、提交回执/完整后读、中断核对及受管空表移除，公开 registration 子视图返回核对状态。direct-nftables 主机入站执行现通过独立计划、原子应用、120 秒新 TCP/TLS 确认及 root 超时/重启恢复接入；运行 API 仅允许直接连接目标节点，写入还需模块启用和本机授权。其余适配继续实施。Agent 协议为 36，数据库仍为 24；详见 [防火墙](firewall.md)。
 
 防火墙运行合同：`/firewall/runtime`、`/firewall/plan`、`/firewall/apply` 与 `/firewall/operations/{id}`（含 confirm/rollback）使用统一外壳并拒绝递归转发。计划绑定保存版本、完整内核基线、实际管理连接与 SSH 保护；应用先保存 root 意图，独立操作不依赖业务库恢复。确认须使用规则生效后重建监听的新非回环 TCP/TLS 连接，范围限于该管理入口；未确认、Web 失联、Agent 停止/重启均恢复原确认策略。root 运行记录及恢复意图不进入业务备份/迁移；已确认对象缺失按原版本恢复，漂移拒绝覆盖。模块停用须明确选择保留规则或引用已确认的移除操作；既有确认与恢复继续可用。Agent 为 35，数据库仍为 24；其他后端、Docker 及 P5 真实系统验收仍未完成。
 
@@ -174,3 +174,8 @@ Agent 合同为 35。主回环 HTTPS 与部署/就绪绑定不变，可选远程
 防火墙执行合同明确 `action=apply|remove`，计划/提交/操作均固定动作。移除绑定已确认运行版本，保留期望草稿，将经完整证明的受管表原子替换为空表；新连接确认前恢复旧规则，确认后只维护已移除的空表状态。停用 `firewall_rules=remove` 须引用当前已成功确认的移除操作；已核对的初始空表可直接停用。核对与最终开关写入同公共执行锁；keep 明确保留规则，未完成移除不报告模块停用。Agent 为 35、root 运行记录为 3，数据库仍为 24；无旧格式兼容，详见 [防火墙](firewall.md)。
 
 防火墙 `protection_observation` 返回绑定原确认计划的独立保护依据采样，区分 current/changed/unavailable/not_applicable，包含采样时间、当前 SSH 方式/实际监听及重新核对的保护项。30 秒后台采样、3 秒读取期限、45 秒有效期，不由 GET 启动采集或根据调用方新增来源；模块停用后的已保留保护仍核对。应用确认前另行新采集：依据变化恢复原策略并返回真实 rolled_back，读取未知不允许确认，核对不延长原期限。差异只能经明确重新计划、应用、新连接确认更新，不自动重写 SSH 或内核；root 记录为 3、Agent 为 35，数据库仍为 24。详见 [保护来源核对](firewall.md)。
+
+
+## Fail2ban 宿主机诊断
+
+`GET /fail2ban` 与显式远程读取资源返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。默认停用时仍可诊断：root Agent 确认宿主机范围后，有界读取固定系统程序/客户端版本、隔离 Python 标准库及 SQLite 内存能力、解释器软件包归属、固定 systemd 单元与默认 Socket 文件。只读元数据不连接实例，不触发 Socket 激活或安装/启动；程序存在、服务活动、完整引擎就绪与 jail 保护不互相替代，未知保持可见。采集单份在途、30 秒缓存，页面自动扫描且仅首次/手动刷新。模块暂不可启用，实例接入及 jail 管理继续实施；当前 Agent 协议为 36、数据库仍为 24。边界及官方依据见 [Fail2ban](fail2ban.md)，真实系统验证留待 P5。

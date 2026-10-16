@@ -52,6 +52,7 @@ export type Module = components["schemas"]["Module"];
 export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
+export type Fail2banObservation = components["schemas"]["Fail2banObservation"];
 export type FirewallObservation = components["schemas"]["FirewallObservation"];
 export type FirewallRule = components["schemas"]["FirewallRule"];
 export type FirewallPolicy = components["schemas"]["FirewallPolicy"];
@@ -553,6 +554,8 @@ function createAPI(scope: RequestScope) {
       url: `/firewall/operations/${id}/${action}`,
       method: "POST",
     }),
+  fail2ban: (signal?: AbortSignal) =>
+    request<Fail2banObservation>({ url: "/fail2ban", signal }),
   firewall: (signal?: AbortSignal) =>
     request<FirewallObservation>({ url: "/firewall", signal }),
   firewallPolicy: (signal?: AbortSignal) =>

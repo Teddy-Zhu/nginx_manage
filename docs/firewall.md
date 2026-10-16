@@ -2,7 +2,7 @@
 
 `GET /api/v1/firewall` 要求 `read`，返回统一 `code/message/data/request_id/node_id` 外壳，`data` 为 `FirewallObservation`。已登记远程资源 `/nodes/{connection}/firewall`，沿用目标权限和永久节点身份检查。防火墙页面由 `src/pages/firewall.vue` 自动扫描接入。
 
-仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行诊断命令。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；`writable` 及 `docker.writable` 始终为 false。本机 root 空表登记命令使用独立范围授权，不由 API、模块开关或观测授权触发。防火墙模块默认停用，可显式启用；执行还须满足下述独立授权。Fail2ban 仍不可启用。
+仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行诊断命令。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；`writable` 及 `docker.writable` 始终为 false。本机 root 空表登记命令使用独立范围授权，不由 API、模块开关或观测授权触发。防火墙模块默认停用，可显式启用；执行还须满足下述独立授权。Fail2ban 仍不可启用，默认停用时可读取独立的[宿主机诊断](fail2ban.md)。
 
 诊断分别返回：
 
@@ -64,7 +64,7 @@ nginxpanel firewall-remove --data-dir /srv/nginxpanel --firewall-scope host
 
 先停止 Agent，由本机 root 完成空表登记，再在现有 Agent 启动参数中明确设置 `--firewall-scope host --firewall-owner direct-nftables --firewall-ssh openssh`，保留原 `--maintenance-scope host`。默认均为 unconfirmed；开发/容器不允许执行。仅在本机确认没有 SSH 保护需求时才选择 `--firewall-ssh none`，不从命令缺失推断无 SSH。诊断仍用独立 `--metrics-scope host`。执行器持有跨数据目录的宿主机登记锁，已接受的恢复意图不因后续关闭模块或去掉新应用授权而撤销。
 
-直接访问目标节点已确认的受控管理 HTTPS 监听，启用防火墙模块并先保存期望策略。`POST /firewall/plan` 接收 `action=apply` 及保存版本，返回 300 秒有效的 root 私有计划摘要及保护项；`POST /firewall/apply` 接收原 `action/plan_id/version` 和幂等键，返回 202 与独立操作。`GET /firewall/runtime`、`GET /firewall/operations/{id}` 查询 root 状态；`POST /firewall/operations/{id}/confirm` 或 `/rollback` 决定原操作。接口要求 `read/security.write`，变更要求近期认证及浏览器 CSRF；全部拒绝递归转发。期望策略保存和编译预览仍可通过显式远程资源使用。全部 JSON 沿用统一外壳；Agent 协议为 35、数据库为 24。
+直接访问目标节点已确认的受控管理 HTTPS 监听，启用防火墙模块并先保存期望策略。`POST /firewall/plan` 接收 `action=apply` 及保存版本，返回 300 秒有效的 root 私有计划摘要及保护项；`POST /firewall/apply` 接收原 `action/plan_id/version` 和幂等键，返回 202 与独立操作。`GET /firewall/runtime`、`GET /firewall/operations/{id}` 查询 root 状态；`POST /firewall/operations/{id}/confirm` 或 `/rollback` 决定原操作。接口要求 `read/security.write`，变更要求近期认证及浏览器 CSRF；全部拒绝递归转发。期望策略保存和编译预览仍可通过显式远程资源使用。全部 JSON 沿用统一外壳；Agent 协议为 36、数据库为 24。
 
 计划与应用都重新核对实际管理 TCP 对端、已确认监听/来源 ACL、OpenSSH 有效端口、root 监听描述符和现有 SSH 对端，不固定猜测端口 22，不信任代理头。来源与管理端口保护、SSH 端口保护插入业务规则之前；IPv6 通配 SSH 监听保守保护同端口 IPv4。没有可核对保护来源的地址族，若策略可能阻止该地址族 SSH 端口则拒绝执行。保护限于列出的端口及来源，所有接口共享；没有本地目标地址选择语义。SSH 或监听、来源、接口、保存版本、内核代次变化均要求重新计划。存在其他管理器、legacy/混合后端或任一后端规则视图不完整时拒绝新应用。
 
