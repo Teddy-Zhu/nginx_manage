@@ -1899,6 +1899,7 @@ export interface components {
             agent_protocol: number;
             parser_version: string;
             policy_version: string;
+            remote_protocol: number;
         };
         NodeConnection: {
             id: string;

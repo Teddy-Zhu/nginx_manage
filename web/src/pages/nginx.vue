@@ -30,8 +30,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
-  api,
-  request,
+  useNodeAPI,
   ApiError,
   type Tree,
   type ConfigFile,
@@ -46,6 +45,8 @@ import { useAction, useIdempotency } from "../composables/action";
 import ConfigurationChanges from "../components/ConfigurationChanges.vue";
 import NginxExternal from "../components/NginxExternal.vue";
 import NginxModules from "../components/NginxModules.vue";
+const api = useNodeAPI();
+const { request } = api;
 
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency();

@@ -28,7 +28,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   apiError,
   type NotificationChannel,
   type NotificationChannelInput,
@@ -39,6 +39,8 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+const api = useNodeAPI();
+
 const { run, busy, message } = useAction(),
   session = useSession(),
   idempotency = useIdempotency();

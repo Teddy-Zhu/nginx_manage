@@ -23,7 +23,7 @@ import {
   NTag,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   apiError,
   ApiError,
   type MigrationPlan,
@@ -33,6 +33,8 @@ import {
 import MigrationDependencies from "../components/MigrationDependencies.vue";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+const api = useNodeAPI();
+
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency(),
   session = useSession();

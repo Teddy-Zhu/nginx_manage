@@ -21,8 +21,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
-  request,
-  api,
+  useNodeAPI,
   type Task,
   type NginxRuntime,
   type MonitoringLatest,
@@ -30,6 +29,8 @@ import {
 } from "../api/client";
 import { RouterLink } from "vue-router";
 import { useAction } from "../composables/action";
+const api = useNodeAPI();
+const { request } = api;
 
 interface Tool {
   installed: boolean;

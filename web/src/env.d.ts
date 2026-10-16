@@ -6,6 +6,7 @@ import "vue-router";
 declare module "vue-router" {
   interface RouteMeta {
     public?: boolean;
+    localOnly?: boolean;
     title?: string;
     subtitle?: string;
     nav?: boolean;

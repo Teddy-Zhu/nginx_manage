@@ -3,6 +3,9 @@ info:
   title: NginxPanel Management API
   version: 0.1.0
   description: 首版发布前直接维护当前唯一合同。所有 JSON 响应使用统一外壳。
+externalDocs:
+  description: 受控远程资源 API 合同
+  url: ./remote.openapi.json
 servers:
   - url: /api/v1
 security:
@@ -1516,7 +1519,7 @@ components:
     NodeCreateInput:
       {"type": "object", "additionalProperties": false, "required": ["name", "url", "api_key", "fingerprint"], "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 100}, "url": {"type": "string", "maxLength": 2048}, "api_key": {"type": "string", "minLength": 20, "maxLength": 193, "writeOnly": true}, "fingerprint": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}}}
     NodeIdentity:
-      {"type": "object", "additionalProperties": false, "required": ["node_id", "credential_id", "scopes", "expires_at", "api_version", "database_schema", "agent_protocol", "parser_version", "policy_version"], "properties": {"node_id": {"type": "string"}, "credential_id": {"type": "string"}, "scopes": {"type": "array", "items": {"type": "string"}}, "expires_at": {"type": "integer", "format": "int64"}, "api_version": {"type": "integer", "format": "int64"}, "database_schema": {"type": "integer", "format": "int64"}, "agent_protocol": {"type": "integer", "format": "int64"}, "parser_version": {"type": "string"}, "policy_version": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["node_id", "credential_id", "scopes", "expires_at", "api_version", "database_schema", "agent_protocol", "parser_version", "policy_version", "remote_protocol"], "properties": {"node_id": {"type": "string"}, "credential_id": {"type": "string"}, "scopes": {"type": "array", "items": {"type": "string"}}, "expires_at": {"type": "integer", "format": "int64"}, "api_version": {"type": "integer", "format": "int64"}, "database_schema": {"type": "integer", "format": "int64"}, "agent_protocol": {"type": "integer", "format": "int64"}, "parser_version": {"type": "string"}, "policy_version": {"type": "string"}, "remote_protocol": {"type": "integer", "format": "int64"}}}
     NodeConnection:
       {"type": "object", "additionalProperties": false, "required": ["id", "node_id", "name", "url", "fingerprint", "credential_id", "scopes", "expires_at", "api_version", "capabilities", "state", "error", "checked_at", "created_at", "updated_at", "removed_at", "revocation", "version"], "properties": {"id": {"type": "string"}, "node_id": {"type": "string"}, "name": {"type": "string"}, "url": {"type": "string"}, "fingerprint": {"type": "string"}, "credential_id": {"type": "string"}, "scopes": {"type": "array", "items": {"type": "string"}}, "expires_at": {"type": "integer", "format": "int64"}, "api_version": {"type": "integer", "format": "int64"}, "capabilities": {"type": "object", "additionalProperties": true, "nullable": true}, "state": {"type": "string"}, "error": {"type": "string"}, "checked_at": {"type": "integer", "format": "int64"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "removed_at": {"type": "integer", "format": "int64"}, "revocation": {"type": "string"}, "version": {"type": "integer", "format": "int64"}}}
     PanelUpdateInput:

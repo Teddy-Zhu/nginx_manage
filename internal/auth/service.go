@@ -14,6 +14,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
 )
@@ -24,10 +25,13 @@ var ErrRateLimited = errors.New("登录尝试过多，请稍后重试")
 var AllScopes = []string{"read", "config.write", "config.secrets", "security.write", "system.write", "host.dns.write", "monitoring.write", "components.manage", "auth.manage", "backup.export", "backup.secrets", "backup.restore", "update.execute", "nodes.manage", "notifications.write"}
 
 type Principal struct {
-	ID       string   `json:"id"`
-	Username string   `json:"username"`
-	Scopes   []string `json:"scopes"`
-	Machine  bool     `json:"machine"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	Scopes      []string `json:"scopes"`
+	Machine     bool     `json:"machine"`
+	Delegated   bool     `json:"-"`
+	Recent      bool     `json:"-"`
+	GrantScopes []string `json:"-"`
 }
 
 func (p Principal) Has(scope string) bool {
@@ -195,6 +199,40 @@ func (s *Service) Authenticate(r *http.Request) (Principal, error) {
 		p := Principal{ID: id, Username: name, Machine: true}
 		if err := json.Unmarshal([]byte(scopes), &p.Scopes); err != nil {
 			return p, err
+		}
+		p.GrantScopes = append([]string(nil), p.Scopes...)
+		if r.Header.Get(remoteapi.HopHeader) != "" {
+			var allowed []string
+			if r.Header.Get(remoteapi.HopHeader) != "1" || len(r.Header.Get(remoteapi.ScopesHeader)) > 4096 || json.Unmarshal([]byte(r.Header.Get(remoteapi.ScopesHeader)), &allowed) != nil || len(allowed) > len(AllScopes) {
+				return Principal{}, ErrForbidden
+			}
+			grant := p.Scopes
+			p.Scopes = []string{}
+			seen := map[string]bool{}
+			for _, scope := range allowed {
+				if seen[scope] {
+					return Principal{}, ErrForbidden
+				}
+				seen[scope] = true
+				known := false
+				for _, candidate := range AllScopes {
+					if candidate == scope {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return Principal{}, ErrForbidden
+				}
+				for _, candidate := range grant {
+					if candidate == scope {
+						p.Scopes = append(p.Scopes, scope)
+						break
+					}
+				}
+			}
+			p.Delegated = true
+			p.Recent = r.Header.Get(remoteapi.RecentHeader) == "true"
 		}
 		if _, err := s.DB.ExecContext(r.Context(), "UPDATE api_credentials SET last_used_at=? WHERE id=? AND (last_used_at IS NULL OR last_used_at<?)", time.Now().Unix(), id, time.Now().Add(-time.Minute).Unix()); err != nil {
 			return Principal{}, err

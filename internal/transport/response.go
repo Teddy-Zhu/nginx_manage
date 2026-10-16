@@ -16,6 +16,7 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxconfig"
+	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
 )
 
@@ -99,6 +100,8 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		id := secure.ID()
 		r = r.WithContext(context.WithValue(r.Context(), requestIDKey, id))
 		w.Header().Set("X-Request-ID", id)
+		w.Header().Set("X-Node-ID", s.NodeID)
+		w.Header().Set(remoteapi.ProtocolHeader, "1")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -157,9 +160,16 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, recent bool, 
 		s.fail(w, r, err)
 		return p, false
 	}
-	if !p.Machine && recent && !s.Auth.Recent(r.Context()) {
+	if recent && !s.recentAuthentication(r, p) {
 		s.respond(w, r, 403, "REAUTHENTICATION_REQUIRED", "请重新验证密码后继续", nil)
 		return p, false
 	}
 	return p, true
+}
+
+func (s *Server) recentAuthentication(r *http.Request, p auth.Principal) bool {
+	if p.Delegated {
+		return p.Recent
+	}
+	return p.Machine || s.Auth.Recent(r.Context())
 }

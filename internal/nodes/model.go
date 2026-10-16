@@ -7,21 +7,24 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
 )
 
-const RemoteHopHeader = "X-Nginxpanel-Remote-Hop"
-const TargetNodeHeader = "X-Nginxpanel-Target-Node"
+const RemoteHopHeader = remoteapi.HopHeader
+const TargetNodeHeader = remoteapi.TargetHeader
 
 var uuid = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 var pin = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type Service struct {
-	DB     *sql.DB
-	Vault  *secure.Vault
-	NodeID string
-	locks  sync.Map
-	active atomic.Int32
+	DB            *sql.DB
+	Vault         *secure.Vault
+	NodeID        string
+	locks         sync.Map
+	active        atomic.Int32
+	forwardActive atomic.Int32
+	streamActive  atomic.Int32
 }
 
 type CreateInput struct {
@@ -41,6 +44,7 @@ type Identity struct {
 	AgentProtocol  int      `json:"agent_protocol"`
 	ParserVersion  string   `json:"parser_version"`
 	PolicyVersion  string   `json:"policy_version"`
+	RemoteProtocol int      `json:"remote_protocol"`
 }
 
 type Connection struct {

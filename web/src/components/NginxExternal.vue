@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { NAlert, NButton, NEmpty, NModal, NSelect, NTag } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   type Difference,
   type ExternalSnapshot,
   type SaveResult,
@@ -10,6 +10,7 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import SourceDiff from "./SourceDiff.vue";
+const api = useNodeAPI();
 const show = defineModel<boolean>("show", { required: true });
 const props = defineProps<{ tree: Tree | null }>();
 const emit = defineEmits<{

@@ -25,9 +25,8 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   apiError,
-  request,
   type HostMetric,
   type MonitoringCapability,
   type MonitoringHistory,
@@ -40,6 +39,8 @@ import {
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 import MetricTrend from "../components/MetricTrend.vue";
+const api = useNodeAPI();
+const { request } = api;
 
 const { run, busy } = useAction(),
   session = useSession(),

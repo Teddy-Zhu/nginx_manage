@@ -20,8 +20,11 @@ import {
   NAlert,
   type DataTableColumns,
 } from "naive-ui";
-import { request, type Task } from "../api/client";
+import { useNodeAPI, type Task } from "../api/client";
 import { useAction } from "../composables/action";
+const api = useNodeAPI();
+const { request } = api;
+
 const { run, busy } = useAction(),
   tasks = ref<Task[]>([]);
 interface Audit {

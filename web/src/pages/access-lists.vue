@@ -24,8 +24,9 @@ import {
   NSelect,
   type DataTableColumns,
 } from "naive-ui";
-import { api, type AccessList, type Tree } from "../api/client";
+import { useNodeAPI, type AccessList, type Tree } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+const api = useNodeAPI();
 
 const { run, busy } = useAction(),
   keyFor = useIdempotency();

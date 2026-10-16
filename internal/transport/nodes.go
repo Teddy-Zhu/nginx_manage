@@ -9,6 +9,7 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nodes"
+	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/transport/apigen"
 	"nginxpanel/migrations"
@@ -113,7 +114,7 @@ func (s *Server) GetRemoteIdentity(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.ok(w, r, nodes.Identity{NodeID: s.NodeID, CredentialID: p.ID, Scopes: p.Scopes, ExpiresAt: expires, APIVersion: 1, DatabaseSchema: schema, AgentProtocol: agent.Protocol, ParserVersion: nginxconfig.ParserVersion, PolicyVersion: s.Config.Policy.Version})
+	s.ok(w, r, nodes.Identity{NodeID: s.NodeID, CredentialID: p.ID, Scopes: p.GrantScopes, ExpiresAt: expires, APIVersion: 1, DatabaseSchema: schema, AgentProtocol: agent.Protocol, ParserVersion: nginxconfig.ParserVersion, PolicyVersion: s.Config.Policy.Version, RemoteProtocol: remoteapi.Protocol})
 }
 
 func (s *Server) RevokeRemoteAuthorization(w http.ResponseWriter, r *http.Request, params apigen.RevokeRemoteAuthorizationParams) {

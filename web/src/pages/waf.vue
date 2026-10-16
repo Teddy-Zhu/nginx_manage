@@ -27,13 +27,14 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   type Tree,
   type WAFConfig,
   type WAFPolicy,
   type NginxFeatures,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+const api = useNodeAPI();
 
 function emptyConfig(): WAFConfig {
   return {

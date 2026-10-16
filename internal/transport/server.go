@@ -23,9 +23,11 @@ import (
 	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/panelupdates"
 	"nginxpanel/internal/releases"
+	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
 	"nginxpanel/internal/transport/apigen"
+	"nginxpanel/migrations"
 )
 
 type Server struct {
@@ -62,7 +64,8 @@ func (s *Server) Handler() http.Handler {
 		s.respond(w, r, 404, "NOT_FOUND", "接口不存在", nil)
 	})
 	s.Auth.Sessions.ErrorFunc = func(w http.ResponseWriter, r *http.Request, err error) { s.fail(w, r, err) }
-	return s.middleware(s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux))))
+	s.remoteRoutes(mux)
+	return s.middleware(s.remoteBoundary(s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux)))))
 }
 
 func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +206,13 @@ func (s *Server) RevokeSessions(w http.ResponseWriter, r *http.Request, _ apigen
 	s.ok(w, r, nil)
 }
 func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	p, ok := s.authorize(w, r, false, "read")
+	if !ok {
+		return
+	}
+	schema, schemaErr := migrations.LatestVersion()
+	if schemaErr != nil {
+		s.fail(w, r, schemaErr)
 		return
 	}
 	report, err := s.Agent.Capabilities(r.Context())
@@ -252,7 +261,7 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	if head.AppliedRevision.Valid {
 		applied = head.AppliedRevision.String
 	}
-	s.ok(w, r, map[string]any{"mode": mode, "reason": reason, "host": host, "desired_revision": desired, "applied_revision": applied, "version": head.Version, "api_version": 1, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": s.Config.Policy.Version, "operations": operations, "nginx": runtime, "nginx_features": features})
+	s.ok(w, r, map[string]any{"mode": mode, "reason": reason, "host": host, "desired_revision": desired, "applied_revision": applied, "version": head.Version, "api_version": 1, "database_schema": schema, "remote_protocol": remoteapi.Protocol, "authorization": map[string]any{"scopes": p.Scopes, "machine": p.Machine, "delegated": p.Delegated}, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": s.Config.Policy.Version, "operations": operations, "nginx": runtime, "nginx_features": features})
 }
 func (s *Server) GetModules(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authorize(w, r, false, "read"); !ok {

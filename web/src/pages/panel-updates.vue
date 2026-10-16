@@ -13,9 +13,10 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { NAlert, NButton, NFormItem, NPopconfirm, NSelect, NTag } from "naive-ui";
-import { api, apiError, type ComponentTask, type MaintenanceView, type PanelUpdateTask } from "../api/client";
+import { useNodeAPI, apiError, type ComponentTask, type MaintenanceView, type PanelUpdateTask } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+const api = useNodeAPI();
 
 const session = useSession(), { run, busy } = useAction();
 let keyFor = useIdempotency();

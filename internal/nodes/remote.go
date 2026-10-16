@@ -43,6 +43,9 @@ func call(ctx context.Context, in remoteapi.Endpoint, expected, method, path str
 	req.Header.Set("Authorization", "Bearer "+in.APIKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set(RemoteHopHeader, "1")
+	req.Header.Set(remoteapi.ProtocolHeader, "1")
+	req.Header.Set(remoteapi.ScopesHeader, `["read"]`)
+	req.Header.Set(remoteapi.RecentHeader, "false")
 	if expected != "" {
 		req.Header.Set(TargetNodeHeader, expected)
 	}
@@ -62,6 +65,9 @@ func call(ctx context.Context, in remoteapi.Endpoint, expected, method, path str
 	if expected != "" && body.NodeID != expected {
 		return body, &probeError{"identity_changed", "目标永久节点身份已变化，连接已停用"}
 	}
+	if resp.Header.Get(remoteapi.ProtocolHeader) != "1" || resp.Header.Get("X-Node-ID") != body.NodeID {
+		return body, &probeError{"incompatible", "目标远程协议或响应身份无法核验"}
+	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return body, &probeError{"authorization_failed", "目标授权不可用；请检查 Token、来源限制及授权范围"}
 	}
@@ -72,6 +78,9 @@ func call(ctx context.Context, in remoteapi.Endpoint, expected, method, path str
 }
 
 func validateIdentity(i Identity, nodeID string) error {
+	if i.RemoteProtocol != remoteapi.Protocol {
+		return &probeError{"incompatible", "目标不支持当前远程授权协议"}
+	}
 	if !uuid.MatchString(i.NodeID) || i.NodeID != nodeID || !uuid.MatchString(i.CredentialID) || i.ExpiresAt <= time.Now().Unix() || i.APIVersion < 1 || i.DatabaseSchema < 1 || i.AgentProtocol < 1 || len(i.ParserVersion) == 0 || len(i.ParserVersion) > 128 || len(i.PolicyVersion) == 0 || len(i.PolicyVersion) > 128 || len(i.Scopes) == 0 || len(i.Scopes) > len(auth.AllScopes) {
 		return &probeError{"identity_changed", "目标身份或授权信息不完整"}
 	}
@@ -115,13 +124,15 @@ func probe(ctx context.Context, in remoteapi.Endpoint, expected, credential stri
 		return identity, nil, err
 	}
 	var version struct {
-		APIVersion    int    `json:"api_version"`
-		AgentProtocol int    `json:"agent_protocol"`
-		ParserVersion string `json:"parser_version"`
-		PolicyVersion string `json:"policy_version"`
-		Mode          string `json:"mode"`
+		APIVersion     int    `json:"api_version"`
+		DatabaseSchema int64  `json:"database_schema"`
+		RemoteProtocol int    `json:"remote_protocol"`
+		AgentProtocol  int    `json:"agent_protocol"`
+		ParserVersion  string `json:"parser_version"`
+		PolicyVersion  string `json:"policy_version"`
+		Mode           string `json:"mode"`
 	}
-	if json.Unmarshal(capabilities.Data, &version) != nil || version.APIVersion != identity.APIVersion || version.AgentProtocol != identity.AgentProtocol || version.ParserVersion != identity.ParserVersion || version.PolicyVersion != identity.PolicyVersion || (version.Mode != "connected" && version.Mode != "preview") {
+	if json.Unmarshal(capabilities.Data, &version) != nil || version.APIVersion != identity.APIVersion || version.DatabaseSchema != identity.DatabaseSchema || version.RemoteProtocol != identity.RemoteProtocol || version.AgentProtocol != identity.AgentProtocol || version.ParserVersion != identity.ParserVersion || version.PolicyVersion != identity.PolicyVersion || (version.Mode != "connected" && version.Mode != "preview") {
 		return identity, nil, &probeError{"incompatible", "目标能力与身份版本信息不一致"}
 	}
 	return identity, capabilities.Data, nil

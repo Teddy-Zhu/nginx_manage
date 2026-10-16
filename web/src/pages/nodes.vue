@@ -4,6 +4,7 @@
     "title": "节点连接",
     "subtitle": "远程授权与连接状态",
     "nav": true,
+    "localOnly": true,
     "order": 8,
     "symbol": "◎"
   }
@@ -12,21 +13,25 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { NAlert, NButton, NCheckbox, NFormItem, NInput, NPopconfirm, NTag } from "naive-ui";
-import { api, apiError, type NodeConnection } from "../api/client";
+import { useNodeAPI, apiError, type NodeConnection } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+const api = useNodeAPI();
 
 const session = useSession(), { run, busy, message } = useAction();
 const nodes = ref<NodeConnection[]>([]), error = ref(""), selected = ref<string[]>([]), checking = ref<string[]>([]);
 const form = reactive({ name: "", url: "", api_key: "", fingerprint: "" });
-const canManage = computed(() => !!session.me?.scopes.includes("nodes.manage") && !!session.me?.scopes.includes("read"));
+const canManage = computed(() => !!session.localMe?.scopes.includes("nodes.manage") && !!session.localMe?.scopes.includes("read"));
 const active = computed(() => nodes.value.filter((n) => !n.removed_at));
 const removed = computed(() => nodes.value.filter((n) => n.removed_at));
 const states: Record<string, string> = { connected: "连接正常", stale: "需要重新检查", unreachable: "无法连接", identity_changed: "身份已变化", authorization_failed: "授权不可用", incompatible: "版本不兼容", removing: "删除待完成", removed: "连接已删除" };
 let keyFor = useIdempotency(), closed = false;
 const controller = new AbortController();
 function date(value: number) { return value ? new Date(value * 1000).toLocaleString() : "—"; }
-function replace(value: NodeConnection) { nodes.value = [value, ...nodes.value.filter((n) => n.id !== value.id)]; }
+function replace(value: NodeConnection) {
+  nodes.value = [value, ...nodes.value.filter((n) => n.id !== value.id)];
+  window.dispatchEvent(new Event("node-connections-changed"));
+}
 async function load() {
   if (!canManage.value) return;
   try { const result = await api.nodes(controller.signal); if (!closed) { nodes.value = result; selected.value = selected.value.filter((id) => result.some((n) => n.id === id && !n.removed_at)); error.value = ""; } }

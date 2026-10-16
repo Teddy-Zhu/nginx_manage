@@ -1,13 +1,15 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
-import { api, setCSRF, cancelNodeRequests, type Me } from "../api/client";
+import { computed, ref } from "vue";
+import { api, setCSRF, type Me } from "../api/client";
+import { resetAPIContext, selectedTarget } from "../api/context";
 
 export const useSession = defineStore("session", () => {
-  const me = ref<Me | null>(null);
+  const localMe = ref<Me | null>(null);
+  const me = computed(() => localMe.value && selectedTarget.value ? { ...localMe.value, scopes: localMe.value.scopes.filter((scope) => selectedTarget.value!.scopes.includes(scope)) } : localMe.value);
   const ready = ref(false);
   let restoring: Promise<void> | null = null;
   function set(value: Me) {
-    me.value = value;
+    localMe.value = value;
     setCSRF(value.csrf);
   }
   async function restore() {
@@ -29,10 +31,10 @@ export const useSession = defineStore("session", () => {
     clear();
   }
   function clear() {
-    cancelNodeRequests();
-    me.value = null;
+    resetAPIContext();
+    localMe.value = null;
     ready.value = false;
     setCSRF("");
   }
-  return { me, ready, restore, login, logout, clear };
+  return { me, localMe, ready, restore, login, logout, clear };
 });

@@ -24,7 +24,7 @@ import {
   NTag,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   type ACMEAccount,
   type ACMEProfile,
   type ACMEProfileInput,
@@ -33,6 +33,7 @@ import {
   type DNSCredential,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+const api = useNodeAPI();
 
 const { busy, run } = useAction(),
   keyFor = useIdempotency();

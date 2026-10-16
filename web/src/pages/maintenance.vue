@@ -19,9 +19,11 @@ import {
   NPopconfirm,
   NTag,
 } from "naive-ui";
-import { api, apiError, type MaintenanceView } from "../api/client";
+import { useNodeAPI, apiError, type MaintenanceView } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+const api = useNodeAPI();
+
 const session = useSession(),
   { run, busy } = useAction();
 const view = ref<MaintenanceView | null>(null),

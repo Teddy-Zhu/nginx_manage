@@ -1,9 +1,13 @@
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import type { components } from "./schema";
+import { onScopeDispose } from "vue";
+import { useRoute } from "vue-router";
+import { invalidateNodeScope, nodeGeneration, nodeRequestError, pageScope, scopeSignal, selectedTarget, sourceNodeId, type RequestScope } from "./context";
 
 type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
+type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
 export type MaintenanceView = components["schemas"]["MaintenanceView"];
 export type MaintenanceSession = components["schemas"]["MaintenanceSession"];
 export type MaintenanceStartInput =
@@ -131,6 +135,7 @@ export class ApiError extends Error {
     public status: number,
     public data: unknown = null,
     public requestId = "",
+    public originNodeId = "",
   ) {
     super(message);
   }
@@ -161,65 +166,51 @@ const http = axios.create({
   withCredentials: true,
 });
 let csrf = "";
-let nodeId = "";
-let controller = new AbortController();
-export function setCSRF(value: string) {
-  csrf = value;
+const controlScope: RequestScope = { target: null, generation: null };
+export function setCSRF(value: string) { csrf = value; }
+export function cancelNodeRequests() { invalidateNodeScope(); }
+function assertScope(scope: RequestScope) {
+  if (scopeSignal(scope).aborted || (scope.generation !== null && scope.generation !== nodeGeneration.value)) throw new ApiError("CANCELLED", "节点请求已取消", 0);
 }
-export function cancelNodeRequests() {
-  controller.abort();
-  controller = new AbortController();
-  nodeId = "";
+function endpoint(url: string, scope: RequestScope) {
+  assertScope(scope);
+  if (!url.startsWith("/") || url.startsWith("//")) throw new ApiError("INVALID_REQUEST", "接口路径无效", 0);
+  return scope.target ? `/nodes/${scope.target.connection}${url}` : url;
 }
-
-export async function request<T>(config: AxiosRequestConfig): Promise<T> {
-  const headers = { ...config.headers, "X-CSRF-Token": csrf };
+export function request<T>(config: RequestConfig): Promise<T> { return scopedRequest<T>(config, controlScope); }
+async function scopedRequest<T>(config: RequestConfig, scope: RequestScope): Promise<T> {
+	 scope = { ...scope, signal: scopeSignal(scope) };
+  assertScope(scope);
   try {
-    const result = await http.request<ResponseBody<T>>({
-      ...config,
-      headers,
-      signal: config.signal ?? controller.signal,
-    });
-    return responseData(result.data, result.status);
-  } catch (error) {
-    throw apiError(error);
+    const result = await http.request<ResponseBody<T>>({ ...config, baseURL: "/api/v1", url: endpoint(String(config.url ?? ""), scope), headers: { ...config.headers, "X-CSRF-Token": csrf }, signal: config.signal ? AbortSignal.any([config.signal, scopeSignal(scope)]) : scopeSignal(scope) });
+    return responseData(result.data, result.status, scope);
+  } catch (cause) {
+    assertScope(scope);
+    if (cause instanceof AxiosError && cause.response?.data && !(cause.response.data instanceof Blob)) {
+      try { responseData(cause.response.data, cause.response.status, scope); } catch (validated) { throw apiError(validated); }
+    }
+    throw apiError(cause);
+  }
+}
+function responseData<T>(body: ResponseBody<T>, status: number, scope: RequestScope): T {
+  assertScope(scope);
+  if (!body || typeof body !== "object" || typeof body.code !== "string" || typeof body.message !== "string" || !("data" in body) || typeof body.request_id !== "string" || !body.request_id || typeof body.node_id !== "string" || !body.node_id) throw new ApiError("INVALID_RESPONSE", "服务返回格式无效", status);
+  if ((status >= 200 && status < 300) !== (body.code === "OK")) throw new ApiError("INVALID_RESPONSE", "响应状态与结果不一致", status);
+  checkNode(body.node_id, scope, status, body.code);
+  if (body.code !== "OK") throw new ApiError(body.code, body.message, status, body.data, body.request_id, body.node_id);
+  return body.data;
+}
+function checkNode(value: string, scope: RequestScope, status = 200, code = "OK") {
+  assertScope(scope);
+  if (!value) throw new ApiError("INVALID_RESPONSE", "响应缺少节点身份", 502);
+  if (scope.target) {
+    if (value !== scope.target.nodeId && !(status >= 400 && code !== "OK" && value === sourceNodeId.value)) throw new ApiError("NODE_IDENTITY_CHANGED", "目标节点身份已变化，请重新检查连接", 409);
+  } else {
+    if (sourceNodeId.value && sourceNodeId.value !== value) throw new ApiError("NODE_IDENTITY_CHANGED", "本机节点身份已变化，请重新连接", 409);
+    sourceNodeId.value = value;
   }
 }
 
-function responseData<T>(body: ResponseBody<T>, status: number): T {
-  if (
-    !body ||
-    typeof body !== "object" ||
-    typeof body.code !== "string" ||
-    typeof body.message !== "string" ||
-    !("data" in body) ||
-    typeof body.request_id !== "string" ||
-    !body.request_id ||
-    typeof body.node_id !== "string" ||
-    !body.node_id
-  )
-    throw new ApiError("INVALID_RESPONSE", "服务返回格式无效", status);
-  checkNode(body.node_id);
-  if (body.code !== "OK")
-    throw new ApiError(
-      body.code,
-      body.message,
-      status,
-      body.data,
-      body.request_id,
-    );
-  return body.data;
-}
-function checkNode(value: string) {
-  if (!value) throw new ApiError("INVALID_RESPONSE", "响应缺少节点身份", 502);
-  if (nodeId && nodeId !== value)
-    throw new ApiError(
-      "NODE_IDENTITY_CHANGED",
-      "节点身份已变化，请重新连接",
-      409,
-    );
-  nodeId = value;
-}
 export function apiError(error: unknown): ApiError {
   let normalized: ApiError;
   if (error instanceof ApiError) normalized = error;
@@ -236,24 +227,28 @@ export function apiError(error: unknown): ApiError {
       error.response?.status ?? 0,
       body?.data,
       body?.request_id,
+      body?.node_id,
     );
   } else normalized = new ApiError("CLIENT_ERROR", "请求处理失败", 0);
-  if (normalized.status === 401 || normalized.code === "UNAUTHENTICATED")
-    window.dispatchEvent(new Event("session-expired"));
+  if ((normalized.status === 401 || normalized.code === "UNAUTHENTICATED") && (!normalized.originNodeId || normalized.originNodeId === sourceNodeId.value)) window.dispatchEvent(new Event("session-expired"));
+  const targetUnauthorized = !!selectedTarget.value && normalized.originNodeId === selectedTarget.value.nodeId && (normalized.status === 401 || normalized.code === "UNAUTHENTICATED");
+  if (selectedTarget.value && normalized.code !== "CANCELLED" && (normalized.code.startsWith("REMOTE_") || normalized.code === "NODE_IDENTITY_CHANGED" || targetUnauthorized)) nodeRequestError.value = targetUnauthorized ? "目标节点授权不可用，请检查节点连接" : normalized.message;
   if (normalized.code === "REAUTHENTICATION_REQUIRED")
     window.dispatchEvent(new Event("reauthentication-required"));
   return normalized;
 }
 
-export async function downloadLogFile(data: LogQuery) {
+async function downloadLogFileFor(data: LogQuery, scope: RequestScope) {
+  scope = { ...scope, signal: scopeSignal(scope) };
+  assertScope(scope);
   try {
-    const result = await http.post<Blob>("/logs/download", data, {
+    const result = await http.post<Blob>(endpoint("/logs/download", scope), data, {
       responseType: "blob",
       timeout: 25_000,
       headers: { "X-CSRF-Token": csrf },
-      signal: controller.signal,
+      signal: scopeSignal(scope),
     });
-    checkNode(String(result.headers["x-node-id"] ?? ""));
+    checkNode(String(result.headers["x-node-id"] ?? ""), scope);
     if (
       !String(result.headers["content-type"]).startsWith("application/x-ndjson")
     )
@@ -264,6 +259,7 @@ export async function downloadLogFile(data: LogQuery) {
       truncated: result.headers["x-log-truncated"] === "true",
     };
   } catch (error) {
+    assertScope(scope);
     if (
       error instanceof AxiosError &&
       error.response?.data instanceof Blob &&
@@ -275,18 +271,24 @@ export async function downloadLogFile(data: LogQuery) {
         /* Retain the transport error for a non-JSON response. */
       }
     }
+    if (error instanceof AxiosError && error.response?.data && !(error.response.data instanceof Blob)) {
+      try { responseData(error.response.data, error.response.status, scope); } catch (validated) { throw apiError(validated); }
+    }
     throw apiError(error);
   }
 }
 
-export function followLogs(
+function followLogsFor(
+  scope: RequestScope,
   query: LogQuery,
   page: (value: LogPage) => void,
   error: (value: ApiError) => void,
 ) {
-  const signal = controller.signal;
+  scope = { ...scope, signal: scopeSignal(scope) };
+  assertScope(scope);
+  const signal = scopeSignal(scope);
   const source = new EventSource(
-    `/api/v1/logs/stream?${new URLSearchParams({ query: JSON.stringify(query) })}`,
+    `/api/v1${endpoint("/logs/stream", scope)}?${new URLSearchParams({ query: JSON.stringify(query) })}`,
     { withCredentials: true },
   );
   const aborted = () => {
@@ -303,7 +305,7 @@ export function followLogs(
       page(
         responseData<LogPage>(
           JSON.parse((event as MessageEvent<string>).data),
-          200,
+          200, scope,
         ),
       );
     } catch (cause) {
@@ -315,7 +317,7 @@ export function followLogs(
     close();
     try {
       if (event instanceof MessageEvent && event.data)
-        responseData<unknown>(JSON.parse(event.data), 200);
+        responseData<unknown>(JSON.parse(event.data), 400, scope);
       throw new ApiError("LOG_STREAM_ENDED", "实时连接已结束，请重新连接", 0);
     } catch (cause) {
       error(apiError(cause));
@@ -326,7 +328,12 @@ export function followLogs(
   return close;
 }
 
-export const api = {
+function createAPI(scope: RequestScope) {
+  const request = <T>(config: RequestConfig) => scopedRequest<T>(config, scope);
+  return {
+  request,
+  downloadLogFile: (data: LogQuery) => downloadLogFileFor(data, scope),
+  followLogs: (query: LogQuery, page: (value: LogPage) => void, error: (value: ApiError) => void) => followLogsFor(scope, query, page, error),
   nodes: (signal?: AbortSignal) => request<NodeConnection[]>({ url: "/nodes", signal }),
   createNode: (data: NodeCreateInput, key: string) => request<NodeConnection>({ url: "/nodes", method: "POST", data, timeout: 30_000, headers: { "Idempotency-Key": key } }),
   refreshNode: (id: string, key: string) => request<NodeConnection>({ url: `/nodes/${id}/refresh`, method: "POST", timeout: 30_000, headers: { "Idempotency-Key": key } }),
@@ -587,8 +594,8 @@ export const api = {
       url: "/logs/query",
       data,
       signal: signal
-        ? AbortSignal.any([signal, controller.signal])
-        : controller.signal,
+        ? AbortSignal.any([signal, scopeSignal(scope)])
+        : scopeSignal(scope),
     }),
   releaseLogCursor: (cursor: string) =>
     request<null>({
@@ -852,4 +859,13 @@ export const api = {
       url: `/system/modules/${encodeURIComponent(id)}`,
       data: { enabled },
     }),
-};
+  };
+}
+export const api = createAPI(controlScope);
+export function useNodeAPI() {
+  const route = useRoute();
+  const controller = new AbortController();
+  const scope = pageScope(!!route.meta.localOnly || !!route.meta.public, controller.signal);
+  onScopeDispose(() => controller.abort());
+  return createAPI(scope);
+}

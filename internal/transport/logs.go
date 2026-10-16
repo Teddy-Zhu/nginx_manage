@@ -133,7 +133,7 @@ func (s *Server) logPrincipal(r *http.Request, q logs.Query) (auth.Principal, bo
 	}
 	for _, source := range sources {
 		if source.ID == q.SourceID {
-			allow := p.Has("config.secrets") && (p.Machine || s.Auth.Recent(r.Context()))
+			allow := p.Has("config.secrets") && s.recentAuthentication(r, p)
 			if source.Sensitive && !p.Has("config.secrets") {
 				return p, false, auth.ErrForbidden
 			}
@@ -334,7 +334,7 @@ func (s *Server) StreamLogs(w http.ResponseWriter, r *http.Request, params apige
 				return logs.Page{}, auth.ErrUnauthorized
 			}
 		}
-		canRead := current.Has("config.secrets") && (current.Machine || s.Auth.Recent(r.Context()))
+		canRead := current.Has("config.secrets") && s.recentAuthentication(r, current)
 		page, err := s.Agent.QueryLogs(ctx, agent.LogReadRequest{Subject: subject, AllowSensitive: canRead, Query: q})
 		if errors.Is(err, logs.ErrCursor) || isLogCursorExpired(err) {
 			q.Cursor = ""

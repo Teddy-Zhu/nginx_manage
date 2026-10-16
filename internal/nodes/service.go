@@ -25,8 +25,8 @@ func (s *Service) slot() (func(), error) {
 }
 
 func (s *Service) lock(id string) (func(), error) {
-	value, _ := s.locks.LoadOrStore(id, &sync.Mutex{})
-	mu := value.(*sync.Mutex)
+	value, _ := s.locks.LoadOrStore(id, &sync.RWMutex{})
+	mu := value.(*sync.RWMutex)
 	if !mu.TryLock() {
 		return nil, fault.Conflict("此节点正在检查或删除，请稍后重试")
 	}

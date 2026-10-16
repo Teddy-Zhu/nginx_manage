@@ -1,0 +1,4600 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "NginxPanel remote resource API",
+    "version": "0.1.0",
+    "description": "Explicit remote resource allowlist. Target schemas and response envelopes use the local API contract. Credentials and connection administration remain local."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "x-forward-response-limit": 33554432,
+  "paths": {
+    "/nodes/{connection}/panel/updates": {
+      "get": {
+        "operationId": "remoteListPanelUpdates",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listPanelUpdates",
+        "x-forward-path": "/panel/updates",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteCreatePanelUpdate",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/PanelUpdateCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createPanelUpdate",
+        "x-forward-path": "/panel/updates",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/panel/updates/{id}": {
+      "get": {
+        "operationId": "remoteGetPanelUpdate",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getPanelUpdate",
+        "x-forward-path": "/panel/updates/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/panel/updates/{id}/resume": {
+      "post": {
+        "operationId": "remoteResumePanelUpdate",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resumePanelUpdate",
+        "x-forward-path": "/panel/updates/{id}/resume",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/receiver": {
+      "get": {
+        "operationId": "remoteGetMigrationReceiver",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getMigrationReceiver",
+        "x-forward-path": "/migrations/receiver",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/receive/{id}": {
+      "put": {
+        "operationId": "remoteReceiveMigration",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationImportInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "receiveMigration",
+        "x-forward-path": "/migrations/receive/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/push": {
+      "get": {
+        "operationId": "remoteListMigrationPushes",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listMigrationPushes",
+        "x-forward-path": "/migrations/push",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteStartMigrationPush",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationPushInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "startMigrationPush",
+        "x-forward-path": "/migrations/push",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/push/{id}": {
+      "get": {
+        "operationId": "remoteGetMigrationPush",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getMigrationPush",
+        "x-forward-path": "/migrations/push/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/push/{id}/resume": {
+      "post": {
+        "operationId": "remoteResumeMigrationPush",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationPushResumeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resumeMigrationPush",
+        "x-forward-path": "/migrations/push/{id}/resume",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/maintenance": {
+      "get": {
+        "operationId": "remoteGetMaintenance",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getMaintenance",
+        "x-forward-path": "/maintenance",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteEnterMaintenance",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MaintenanceStartInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "enterMaintenance",
+        "x-forward-path": "/maintenance",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/maintenance/{id}/release": {
+      "post": {
+        "operationId": "remoteReleaseMaintenance",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "releaseMaintenance",
+        "x-forward-path": "/maintenance/{id}/release",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/installations": {
+      "get": {
+        "operationId": "remoteListNginxInstallations",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listNginxInstallations",
+        "x-forward-path": "/components/installations",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteCreateNginxInstallation",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NginxInstallCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createNginxInstallation",
+        "x-forward-path": "/components/installations",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/installations/{id}": {
+      "get": {
+        "operationId": "remoteGetNginxInstallation",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getNginxInstallation",
+        "x-forward-path": "/components/installations/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/installations/{id}/resume": {
+      "post": {
+        "operationId": "remoteResumeNginxInstallation",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resumeNginxInstallation",
+        "x-forward-path": "/components/installations/{id}/resume",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/installations/{id}/cancel": {
+      "post": {
+        "operationId": "remoteCancelNginxInstallation",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "cancelNginxInstallation",
+        "x-forward-path": "/components/installations/{id}/cancel",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components": {
+      "get": {
+        "operationId": "remoteGetComponents",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getComponents",
+        "x-forward-path": "/components",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/tasks": {
+      "get": {
+        "operationId": "remoteListComponentTasks",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listComponentTasks",
+        "x-forward-path": "/components/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteCreateComponentTask",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ComponentCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createComponentTask",
+        "x-forward-path": "/components/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations": {
+      "get": {
+        "operationId": "remoteListMigrations",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listMigrations",
+        "x-forward-path": "/migrations",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/export": {
+      "post": {
+        "operationId": "remoteExportMigration",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationExportInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "exportMigration",
+        "x-forward-path": "/migrations/export",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/plan": {
+      "post": {
+        "operationId": "remotePrepareMigration",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationImportInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "prepareMigration",
+        "x-forward-path": "/migrations/plan",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/pull": {
+      "post": {
+        "operationId": "remotePullMigration",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationPullInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "pullMigration",
+        "x-forward-path": "/migrations/pull",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/{id}": {
+      "get": {
+        "operationId": "remoteGetMigration",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "x-local-operation": "getMigration",
+        "x-forward-path": "/migrations/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/{id}/preflight": {
+      "post": {
+        "operationId": "remotePreflightMigration",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "preflightMigration",
+        "x-forward-path": "/migrations/{id}/preflight",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/{id}/dependencies": {
+      "post": {
+        "operationId": "remotePrepareMigrationDependencies",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationDependencyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "prepareMigrationDependencies",
+        "x-forward-path": "/migrations/{id}/dependencies",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/migrations/{id}/execute": {
+      "post": {
+        "operationId": "remoteExecuteMigration",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MigrationExecuteInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "executeMigration",
+        "x-forward-path": "/migrations/{id}/execute",
+        "x-response-kind": "json",
+        "x-body-limit": 12582912,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/system/health": {
+      "get": {
+        "operationId": "remoteGetHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getHealth",
+        "x-forward-path": "/system/health",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/system/version": {
+      "get": {
+        "operationId": "remoteGetVersion",
+        "security": [],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getVersion",
+        "x-forward-path": "/system/version",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/system/capabilities": {
+      "get": {
+        "operationId": "remoteGetCapabilities",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getCapabilities",
+        "x-forward-path": "/system/capabilities",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/system/modules": {
+      "get": {
+        "operationId": "remoteGetModules",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getModules",
+        "x-forward-path": "/system/modules",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/system/modules/{id}": {
+      "put": {
+        "operationId": "remoteSetModule",
+        "x-scopes": [
+          "system.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setModule",
+        "x-forward-path": "/system/modules/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/config-tree": {
+      "get": {
+        "operationId": "remoteGetConfigTree",
+        "x-scopes": [
+          "config.secrets"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getConfigTree",
+        "x-forward-path": "/nginx/config-tree",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "put": {
+        "operationId": "remoteSaveConfigTree",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "description": "原文和投影同事务保存。validate 请求真实 Nginx 校验；apply 请求串行发布、运行确认及失败回滚。",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/SaveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "saveConfigTree",
+        "x-forward-path": "/nginx/config-tree",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/apply": {
+      "post": {
+        "operationId": "remoteApplyConfig",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "base_version"
+                ],
+                "properties": {
+                  "base_version": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "applyConfig",
+        "x-forward-path": "/nginx/apply",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/runtime": {
+      "get": {
+        "operationId": "remoteGetNginxRuntime",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getNginxRuntime",
+        "x-forward-path": "/nginx/runtime",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/config-tree/diff": {
+      "post": {
+        "operationId": "remoteDiffConfigTree",
+        "x-scopes": [
+          "config.secrets"
+        ],
+        "description": "比较指定修订与请求中的完整原文树；原文差异包含秘密，浏览器需重新认证。",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/DiffRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "diffConfigTree",
+        "x-forward-path": "/nginx/config-tree/diff",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/external": {
+      "get": {
+        "operationId": "remoteInspectNginxExternal",
+        "x-scopes": [
+          "config.secrets"
+        ],
+        "description": "只读核对当前发布副本与已记录修订。path 只选择受管目录内已发现的文件；依赖只返回散列，不返回证书材料。",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "inspectNginxExternal",
+        "x-forward-path": "/nginx/external",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "path"
+        ]
+      }
+    },
+    "/nodes/{connection}/nginx/external/capture": {
+      "post": {
+        "operationId": "remoteCaptureNginxExternal",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "description": "重新核对快照后，将选中文件合并为独立草稿；期望或磁盘内容冲突则拒绝，不应用外部配置。",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/CaptureExternalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "captureNginxExternal",
+        "x-forward-path": "/nginx/external/capture",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/external/restore": {
+      "post": {
+        "operationId": "remoteRestoreNginxExternal",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "description": "重新核对外部快照，将当前已保存期望修订部署到新受管目录并确认运行结果；保留原外部目录，切换后不向外部内容回滚。浏览器需重新认证。",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/RestoreExternalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "restoreNginxExternal",
+        "x-forward-path": "/nginx/external/restore",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/native-modules": {
+      "put": {
+        "operationId": "remoteSetNginxNativeModules",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "description": "从本机 root 批准清单选择模块路径，按清单顺序定点更新主配置 load_module；只保存期望修订，仍须应用。",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NativeModulesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setNginxNativeModules",
+        "x-forward-path": "/nginx/native-modules",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/config-tree/preview": {
+      "post": {
+        "operationId": "remotePreviewConfigTree",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/SaveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "previewConfigTree",
+        "x-forward-path": "/nginx/config-tree/preview",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/resources": {
+      "post": {
+        "operationId": "remoteCreateResource",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/CreateResource"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createResource",
+        "x-forward-path": "/nginx/resources",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/resources/{id}": {
+      "patch": {
+        "operationId": "remotePatchResource",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "base_version",
+                  "changes"
+                ],
+                "properties": {
+                  "base_version": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  },
+                  "metadata": {
+                    "$ref": "./openapi.yaml#/components/schemas/ResourceMetadata"
+                  },
+                  "changes": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "patchResource",
+        "x-forward-path": "/nginx/resources/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      },
+      "delete": {
+        "operationId": "remoteDeleteResource",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ResourceAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "deleteResource",
+        "x-forward-path": "/nginx/resources/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/resources/{id}/copy": {
+      "post": {
+        "operationId": "remoteCopyResource",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ResourceAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "copyResource",
+        "x-forward-path": "/nginx/resources/{id}/copy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/access-lists": {
+      "post": {
+        "operationId": "remoteCreateAccessList",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/AccessListInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createAccessList",
+        "x-forward-path": "/nginx/access-lists",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/access-lists/{id}": {
+      "put": {
+        "operationId": "remoteUpdateAccessList",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/AccessListInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "updateAccessList",
+        "x-forward-path": "/nginx/access-lists/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      },
+      "delete": {
+        "operationId": "remoteDeleteAccessList",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ResourceAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "deleteAccessList",
+        "x-forward-path": "/nginx/access-lists/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/certificates": {
+      "get": {
+        "operationId": "remoteListCertificates",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listCertificates",
+        "x-forward-path": "/certificates",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteImportCertificate",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/CertificateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "importCertificate",
+        "x-forward-path": "/certificates",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/certificates/{id}": {
+      "get": {
+        "operationId": "remoteGetCertificate",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getCertificate",
+        "x-forward-path": "/certificates/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "delete": {
+        "operationId": "remoteDeleteCertificate",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ResourceAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "deleteCertificate",
+        "x-forward-path": "/certificates/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/certificates/{id}/deploy-preview": {
+      "get": {
+        "operationId": "remotePreviewCertificateDeploy",
+        "description": "预览将所有现有 TLS 绑定切换到最新不可变证书版本；有待应用配置或信任链引用时拒绝，不返回配置原文。",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "previewCertificateDeploy",
+        "x-forward-path": "/certificates/{id}/deploy-preview",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/certificates/{id}/deploy": {
+      "post": {
+        "operationId": "remoteDeployCertificate",
+        "description": "根据预览的基础版本创建配置修订并排队执行标准 Nginx 安全应用任务；排队不代表证书已经生效。",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/CertificateDeployInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "deployCertificate",
+        "x-forward-path": "/certificates/{id}/deploy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/certificates/{id}/deployments": {
+      "get": {
+        "operationId": "remoteListCertificateDeployments",
+        "description": "根据当前已确认应用修订统计最新版本绑定；包含停用站点的配置引用，不以排队成功或历史任务成功冒充当前运行状态。最近 32 条部署任务。",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listCertificateDeployments",
+        "x-forward-path": "/certificates/{id}/deployments",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/certificates/{id}/versions": {
+      "put": {
+        "operationId": "remoteReplaceCertificate",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/CertificateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "replaceCertificate",
+        "x-forward-path": "/certificates/{id}/versions",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-accounts": {
+      "get": {
+        "operationId": "remoteListACMEAccounts",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listACMEAccounts",
+        "x-forward-path": "/acme-accounts",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteCreateACMEAccount",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ACMEAccountInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createACMEAccount",
+        "x-forward-path": "/acme-accounts",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-accounts/{id}": {
+      "delete": {
+        "operationId": "remoteDeleteACMEAccount",
+        "description": "仅移除本机未被引用的账户记录和密钥，不向 CA 注销账户。",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ResourceAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "deleteACMEAccount",
+        "x-forward-path": "/acme-accounts/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-accounts/{id}/register": {
+      "post": {
+        "operationId": "remoteRegisterACMEAccount",
+        "description": "重试失败账户，先通过原密钥核对远端账户；不生成另一把密钥。",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ACMEAccountAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "registerACMEAccount",
+        "x-forward-path": "/acme-accounts/{id}/register",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-profiles": {
+      "get": {
+        "operationId": "remoteListACMEProfiles",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Limit"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listACMEProfiles",
+        "x-forward-path": "/acme-profiles",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "limit",
+          "offset"
+        ]
+      },
+      "post": {
+        "operationId": "remoteCreateACMEProfile",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ACMEProfileInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createACMEProfile",
+        "x-forward-path": "/acme-profiles",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-profiles/{id}/issue": {
+      "post": {
+        "operationId": "remoteIssueACMEProfile",
+        "description": "默认恢复原订单及原凭据快照；新版本须显式建立新订单，未知创建结果还须明确确认。默认不自动应用 Nginx 配置；可通过策略显式开启自动部署。",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ACMEIssueInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "issueACMEProfile",
+        "x-forward-path": "/acme-profiles/{id}/issue",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-profiles/{id}/policy": {
+      "put": {
+        "operationId": "remoteUpdateACMEPolicy",
+        "description": "显式启停自动续期和自动部署。开启自动部署还须 security.write；首次申请仍须人工发起。恢复结果不确定的订单须先处理原任务。",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ACMEPolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "updateACMEPolicy",
+        "x-forward-path": "/acme-profiles/{id}/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-profiles/{id}/archive": {
+      "post": {
+        "operationId": "remoteArchiveACMEProfile",
+        "description": "停用签发配置并保留证书、订单和任务历史；未清理的 DNS 记录须先恢复处理。",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ACMEArchiveInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "archiveACMEProfile",
+        "x-forward-path": "/acme-profiles/{id}/archive",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/acme-profiles/{id}/orders": {
+      "get": {
+        "operationId": "remoteListACMEOrders",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listACMEOrders",
+        "x-forward-path": "/acme-profiles/{id}/orders",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/dns-providers": {
+      "get": {
+        "operationId": "remoteListDNSProviders",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listDNSProviders",
+        "x-forward-path": "/dns-providers",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/dns-credentials": {
+      "get": {
+        "operationId": "remoteListDNSCredentials",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listDNSCredentials",
+        "x-forward-path": "/dns-credentials",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteCreateDNSCredential",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/DNSCredentialInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createDNSCredential",
+        "x-forward-path": "/dns-credentials",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/dns-credentials/{id}": {
+      "put": {
+        "operationId": "remoteUpdateDNSCredential",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/DNSCredentialInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "updateDNSCredential",
+        "x-forward-path": "/dns-credentials/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      },
+      "delete": {
+        "operationId": "remoteDeleteDNSCredential",
+        "x-scopes": [
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ResourceAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "deleteDNSCredential",
+        "x-forward-path": "/dns-credentials/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/features": {
+      "get": {
+        "operationId": "remoteGetNginxFeatures",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getNginxFeatures",
+        "x-forward-path": "/nginx/features",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/waf-policies": {
+      "post": {
+        "operationId": "remoteCreateWAFPolicy",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/WAFInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createWAFPolicy",
+        "x-forward-path": "/nginx/waf-policies",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/waf-policies/{id}": {
+      "put": {
+        "operationId": "remoteUpdateWAFPolicy",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/WAFInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "updateWAFPolicy",
+        "x-forward-path": "/nginx/waf-policies/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      },
+      "delete": {
+        "operationId": "remoteDeleteWAFPolicy",
+        "x-scopes": [
+          "config.write",
+          "config.secrets",
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ResourceAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "deleteWAFPolicy",
+        "x-forward-path": "/nginx/waf-policies/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/nginx/revisions": {
+      "get": {
+        "operationId": "remoteListRevisions",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Limit"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listRevisions",
+        "x-forward-path": "/nginx/revisions",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "limit",
+          "offset"
+        ]
+      }
+    },
+    "/nodes/{connection}/nginx/revisions/{id}": {
+      "get": {
+        "operationId": "remoteGetRevision",
+        "x-scopes": [
+          "config.secrets"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getRevision",
+        "x-forward-path": "/nginx/revisions/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/tasks": {
+      "get": {
+        "operationId": "remoteListTasks",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Limit"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listTasks",
+        "x-forward-path": "/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "limit",
+          "offset"
+        ]
+      }
+    },
+    "/nodes/{connection}/tasks/{id}": {
+      "get": {
+        "operationId": "remoteGetTask",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getTask",
+        "x-forward-path": "/tasks/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/audit": {
+      "get": {
+        "operationId": "remoteListAudit",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Limit"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listAudit",
+        "x-forward-path": "/audit",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "limit",
+          "offset"
+        ]
+      }
+    },
+    "/nodes/{connection}/logs/sources": {
+      "get": {
+        "operationId": "remoteListLogSources",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listLogSources",
+        "x-forward-path": "/logs/sources",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/logs/policy": {
+      "get": {
+        "operationId": "remoteGetLogPolicy",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getLogPolicy",
+        "x-forward-path": "/logs/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "put": {
+        "operationId": "remoteSetLogPolicy",
+        "x-scopes": [
+          "system.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/LogPolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setLogPolicy",
+        "x-forward-path": "/logs/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/logs/query": {
+      "post": {
+        "operationId": "remoteQueryLogs",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/LogQuery"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "queryLogs",
+        "x-forward-path": "/logs/query",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/logs/cursors/release": {
+      "post": {
+        "operationId": "remoteReleaseLogCursor",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "cursor"
+                ],
+                "properties": {
+                  "cursor": {
+                    "type": "string",
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "releaseLogCursor",
+        "x-forward-path": "/logs/cursors/release",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/logs/stream": {
+      "get": {
+        "operationId": "remoteStreamLogs",
+        "x-scopes": [
+          "read"
+        ],
+        "description": "最近模式、开放结束时间。事件 page/error/end 均带统一 JSON 外壳；id 为下一页游标，支持 Last-Event-ID。每次连接最多十分钟；缓冲溢出发送 gap 提示。",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "JSON 编码的 LogQuery，不接受文件路径或认证凭据。"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "有界实时日志流。",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "streamLogs",
+        "x-forward-path": "/logs/stream",
+        "x-response-kind": "sse",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "query"
+        ]
+      }
+    },
+    "/nodes/{connection}/logs/download": {
+      "post": {
+        "operationId": "remoteDownloadLogs",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "description": "从新查询导出脱敏 JSONL，最多 10000 行、8 MiB、16 MiB 扫描和二十秒。首行是范围及缺口摘要；与查询使用相同权限。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/LogQuery"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "脱敏 JSONL 下载。",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "downloadLogs",
+        "x-forward-path": "/logs/download",
+        "x-response-kind": "ndjson",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/monitoring/latest": {
+      "get": {
+        "operationId": "remoteGetMonitoringLatest",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getMonitoringLatest",
+        "x-forward-path": "/monitoring/latest",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/monitoring/settings": {
+      "get": {
+        "operationId": "remoteGetMonitoringSettings",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getMonitoringSettings",
+        "x-forward-path": "/monitoring/settings",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "put": {
+        "operationId": "remoteSetMonitoringSettings",
+        "x-scopes": [
+          "monitoring.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/MonitoringSettingsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setMonitoringSettings",
+        "x-forward-path": "/monitoring/settings",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/monitoring/history": {
+      "get": {
+        "operationId": "remoteGetMonitoringHistory",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "value",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "points",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300,
+              "default": 180
+            }
+          }
+        ],
+        "x-local-operation": "getMonitoringHistory",
+        "x-forward-path": "/monitoring/history",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "kind",
+          "id",
+          "value",
+          "from",
+          "until",
+          "points"
+        ]
+      }
+    },
+    "/nodes/{connection}/notifications": {
+      "get": {
+        "operationId": "remoteGetNotifications",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getNotifications",
+        "x-forward-path": "/notifications",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/notifications/policy": {
+      "put": {
+        "operationId": "remoteSetNotificationPolicy",
+        "x-scopes": [
+          "notifications.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NotificationPolicyInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "setNotificationPolicy",
+        "x-forward-path": "/notifications/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/notifications/channels": {
+      "post": {
+        "operationId": "remoteCreateNotificationChannel",
+        "x-scopes": [
+          "notifications.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NotificationChannelInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "createNotificationChannel",
+        "x-forward-path": "/notifications/channels",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/notifications/channels/{id}": {
+      "put": {
+        "operationId": "remoteUpdateNotificationChannel",
+        "x-scopes": [
+          "notifications.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NotificationChannelInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "updateNotificationChannel",
+        "x-forward-path": "/notifications/channels/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      },
+      "delete": {
+        "operationId": "remoteDeleteNotificationChannel",
+        "x-scopes": [
+          "notifications.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NotificationVersionInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "deleteNotificationChannel",
+        "x-forward-path": "/notifications/channels/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/notifications/channels/{id}/test": {
+      "post": {
+        "operationId": "remoteTestNotificationChannel",
+        "x-scopes": [
+          "notifications.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NotificationVersionInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "testNotificationChannel",
+        "x-forward-path": "/notifications/channels/{id}/test",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/notifications/events": {
+      "get": {
+        "operationId": "remoteListNotificationEvents",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Limit"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Offset"
+          }
+        ],
+        "x-local-operation": "listNotificationEvents",
+        "x-forward-path": "/notifications/events",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "limit",
+          "offset"
+        ]
+      }
+    },
+    "/nodes/{connection}/notifications/deliveries": {
+      "get": {
+        "operationId": "remoteListNotificationDeliveries",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Limit"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Offset"
+          },
+          {
+            "name": "channel_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "x-local-operation": "listNotificationDeliveries",
+        "x-forward-path": "/notifications/deliveries",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [
+          "limit",
+          "offset",
+          "channel_id"
+        ]
+      }
+    },
+    "/nodes/{connection}/notifications/deliveries/{id}/retry": {
+      "post": {
+        "operationId": "remoteRetryNotificationDelivery",
+        "x-scopes": [
+          "notifications.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "retryNotificationDelivery",
+        "x-forward-path": "/notifications/deliveries/{id}/retry",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/host/dns": {
+      "get": {
+        "operationId": "remoteGetHostDNS",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getHostDNS",
+        "x-forward-path": "/host/dns",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/host/dns/plan": {
+      "post": {
+        "operationId": "remoteCreateHostDNSPlan",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/HostDNSPlanInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "createHostDNSPlan",
+        "x-forward-path": "/host/dns/plan",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/host/dns/apply": {
+      "post": {
+        "operationId": "remoteApplyHostDNS",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/HostDNSApplyInput"
+              }
+            }
+          }
+        },
+        "x-local-operation": "applyHostDNS",
+        "x-forward-path": "/host/dns/apply",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/host/dns/tasks/{id}/confirm": {
+      "post": {
+        "operationId": "remoteConfirmHostDNS",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "confirmHostDNS",
+        "x-forward-path": "/host/dns/tasks/{id}/confirm",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/host/dns/tasks/{id}/rollback": {
+      "post": {
+        "operationId": "remoteRollbackHostDNS",
+        "x-scopes": [
+          "host.dns.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "rollbackHostDNS",
+        "x-forward-path": "/host/dns/tasks/{id}/rollback",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    }
+  },
+  "security": [
+    {
+      "cookieAuth": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "$ref": "./openapi.yaml#/components/securitySchemes/cookieAuth"
+      },
+      "bearerAuth": {
+        "$ref": "./openapi.yaml#/components/securitySchemes/bearerAuth"
+      }
+    }
+  },
+  "x-source-scopes": [
+    "read",
+    "nodes.manage"
+  ]
+}

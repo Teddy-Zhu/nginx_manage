@@ -23,7 +23,7 @@ import {
   NTag,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   apiError,
   type HostDNSOverview,
   type HostLinkDNS,
@@ -33,6 +33,7 @@ import {
 } from "../api/client";
 import { useAction } from "../composables/action";
 import { useSession } from "../stores/session";
+const api = useNodeAPI();
 
 const session = useSession(),
   { run, busy, message } = useAction();

@@ -2,8 +2,9 @@
 {
   "meta": {
     "title": "设置",
-    "subtitle": "账户、凭据与功能模块",
+    "subtitle": "账户与机器凭据",
     "nav": true,
+    "localOnly": true,
     "order": 6,
     "symbol": "⚙"
   }
@@ -21,14 +22,15 @@ import {
   NModal,
   NSelect,
   NTag,
-  NSwitch,
   NAlert,
   NDataTable,
   type DataTableColumns,
 } from "naive-ui";
-import { api, request, type Module, type SystemVersion } from "../api/client";
+import { useNodeAPI, type SystemVersion } from "../api/client";
 import { useSession } from "../stores/session";
 import { useAction } from "../composables/action";
+const api = useNodeAPI();
+const { request } = api;
 
 interface Credential {
   id: string;
@@ -41,8 +43,7 @@ interface Credential {
 const { run, busy, message } = useAction(),
   session = useSession(),
   router = useRouter();
-const modules = ref<Module[]>([]),
-  credentials = ref<Credential[]>([]);
+const credentials = ref<Credential[]>([]);
 const systemVersion = ref<SystemVersion | null>(null);
 const runtimeNames: Record<SystemVersion["runtime"], string> = {
   native: "原生服务",
@@ -69,22 +70,12 @@ const selectedCredential = ref<string | null>(null);
 async function load() {
   await run(async () => {
     const result = await Promise.all([
-      api.modules(),
       request<Credential[]>({ url: "/credentials" }),
       api.systemVersion(),
     ]);
-    modules.value = result[0];
-    credentials.value = result[1];
-    systemVersion.value = result[2];
+    credentials.value = result[0];
+    systemVersion.value = result[1];
   });
-}
-async function toggle(module: Module, enabled: boolean) {
-  if (!window.confirm(`${enabled ? "启用" : "停用"}${module.name}的面板管理？`))
-    return;
-  await run(async () => {
-    await api.setModule(module.id, enabled);
-    modules.value = await api.modules();
-  }, "模块设置已更新");
 }
 async function createCredential() {
   await run(async () => {
@@ -171,7 +162,7 @@ onMounted(load);
       </div>
       <dl class="detail-list">
         <dt>用户名</dt>
-        <dd>{{ session.me?.username }}</dd>
+        <dd>{{ session.localMe?.username }}</dd>
       </dl>
       <n-form @submit.prevent="changePassword"
         ><n-form-item label="新密码（12–256 字节）"
@@ -194,23 +185,6 @@ onMounted(load);
           >
         </div></n-form
       >
-    </section>
-    <section class="surface">
-      <div class="section-heading">
-        <h2>功能模块</h2>
-        <n-button text :loading="busy" @click="load">刷新</n-button>
-      </div>
-      <div v-for="module in modules" :key="module.id" class="module-row">
-        <div>
-          <strong>{{ module.name }}</strong>
-          <p v-if="module.reason" class="muted">{{ module.reason }}</p>
-        </div>
-        <n-switch
-          :value="module.enabled"
-          :disabled="!module.available || busy"
-          :on-update:value="(value: boolean) => toggle(module, value)"
-        />
-      </div>
     </section>
   </div>
   <section class="surface">
@@ -257,7 +231,7 @@ onMounted(load);
           v-model:value="scopes"
           multiple
           :options="
-            (session.me?.scopes ?? []).map((scope) => ({
+            (session.localMe?.scopes ?? []).map((scope) => ({
               label: scope,
               value: scope,
             }))

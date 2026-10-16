@@ -27,12 +27,13 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   type Certificate,
   type CertificateVersion,
   type CertificateInput,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+const api = useNodeAPI();
 
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency();

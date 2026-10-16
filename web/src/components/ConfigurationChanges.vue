@@ -10,7 +10,7 @@ import {
   NTag,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   type ConfigFile,
   type Difference,
   type Revision,
@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { useAction } from "../composables/action";
 import SourceDiff from "./SourceDiff.vue";
+const api = useNodeAPI();
 const show = defineModel<boolean>("show", { required: true });
 const props = defineProps<{
   tree: Tree | null;

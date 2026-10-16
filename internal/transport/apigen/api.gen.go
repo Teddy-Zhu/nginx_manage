@@ -1238,6 +1238,7 @@ type NodeIdentity struct {
 	AgentProtocol  int64    `json:"agent_protocol"`
 	ParserVersion  string   `json:"parser_version"`
 	PolicyVersion  string   `json:"policy_version"`
+	RemoteProtocol int64    `json:"remote_protocol"`
 }
 type NodeConnection struct {
 	Id           string                  `json:"id"`

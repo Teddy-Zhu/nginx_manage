@@ -22,7 +22,7 @@ import {
   NTag,
 } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   apiError,
   type ComponentOverview,
   type ComponentTask,
@@ -30,6 +30,8 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+const api = useNodeAPI();
+
 const session = useSession(),
   { run, busy } = useAction();
 let keyFor = useIdempotency();

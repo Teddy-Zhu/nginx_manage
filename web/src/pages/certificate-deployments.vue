@@ -13,12 +13,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NAlert, NButton, NEmpty, NSelect, NTag } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   type Certificate,
   type CertificateDeploymentStatus,
   type CertificateDeployPreview,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+const api = useNodeAPI();
 
 const route = useRoute(),
   router = useRouter();

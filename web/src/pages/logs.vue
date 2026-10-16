@@ -29,9 +29,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
-  api,
-  downloadLogFile,
-  followLogs,
+  useNodeAPI,
   type LogPage,
   type LogPolicyInput,
   type LogPolicyView,
@@ -40,6 +38,8 @@ import {
   type LogSource,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+const api = useNodeAPI();
+const { downloadLogFile, followLogs } = api;
 
 const route = useRoute(),
   { run, busy, message } = useAction(),

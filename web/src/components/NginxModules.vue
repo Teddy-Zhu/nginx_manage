@@ -2,12 +2,13 @@
 import { computed, ref, watch } from "vue";
 import { NAlert, NButton, NEmpty, NModal, NSelect, NTag } from "naive-ui";
 import {
-  api,
+  useNodeAPI,
   type NginxFeatures,
   type SaveResult,
   type Tree,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+const api = useNodeAPI();
 const show = defineModel<boolean>("show", { required: true });
 const props = defineProps<{ tree: Tree | null }>();
 const emit = defineEmits<{ saved: [result: SaveResult] }>();
