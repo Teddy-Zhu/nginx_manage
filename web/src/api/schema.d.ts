@@ -4,6 +4,9 @@
  */
 
 export interface paths {
+ "/fail2ban/tasks": { get: operations["getFail2banTasks"]; };
+ "/fail2ban/runtime": { get: operations["getFail2banRuntime"]; };
+ "/fail2ban/apply": { post: operations["applyFail2ban"]; };
     "/fail2ban/templates/check": { post: operations["checkFail2banTemplates"]; };
     "/fail2ban/policy": { get: operations["getFail2banPolicy"]; put: operations["setFail2banPolicy"]; };
     "/fail2ban/templates": { get: operations["getFail2banTemplates"]; };
@@ -1742,7 +1745,12 @@ export interface components {
         Fail2banTemplate: { id: "nginx-http-401" | "nginx-authorization-401"; filter_sha256: string; samples_sha256: string; samples: components["schemas"]["Fail2banFilterSample"][]; name: string; description: string; category: string; format: string; ban_time: number; find_time: number; max_retry: number; };
         Fail2banPreviewInput: { version: number; };
         Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
-        Fail2banPolicyPreview: { template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
+        Fail2banJailsOperation: { id:string;state:string;stage:string;before_id:string;after_id:string;request_hash:string;target:string;error:string; };
+        Fail2banJailsRuntime: { available:boolean;target:string;selected_id:string;policy:components["schemas"]["Fail2banPolicy"];resources:string[];pending:components["schemas"]["Fail2banJailsOperation"][];reason:string; };
+        Fail2banApplyInput: { version:number;policy_hash:string;base_id:string;target:string; };
+        Fail2banApplyTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number; };
+        Fail2banApplyTask: { task_id:string;operation_id:string;version:number; };
+        Fail2banPolicyPreview: { runtime:components["schemas"]["Fail2banJailsRuntime"];removed:string[]; template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
         MigrationMonitoringInput: { mode: "preserve" | "replace"; base_version?: number; };
         MigrationMonitoringPlan: { mode: "preserve" | "replace"; state: "preserved" | "pending_import" | "not_imported" | "saved" | "restored" | "recovery_required"; base_version: number; saved_version: number; settings: components["schemas"]["MonitoringSettings"]; settings_hash: string; };
         MigrationFail2banInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; };
@@ -3477,6 +3485,9 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+ getFail2banTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ getFail2banRuntime: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ applyFail2ban: { parameters:{query?:never;header:{"X-CSRF-Token"?:string;"Idempotency-Key":string;};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banApplyInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
     checkFail2banTemplates: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banTemplateCheckInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getFail2banTemplates: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     previewFail2ban: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPreviewInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

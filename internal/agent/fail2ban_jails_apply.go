@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nginxpanel/internal/fail2ban"
+	"nginxpanel/internal/fault"
 	"nginxpanel/internal/secure"
 )
 
@@ -28,7 +29,11 @@ func validFail2banJailRecord(record Record, r *fail2banManagedRecord) (*fail2ban
 	if err != nil {
 		return nil, nil, err
 	}
-	raw, _ := json.Marshal(Fail2banJailsRequest{Protocol: Protocol, OperationID: record.OperationID, BaseID: i.BeforeID, Policy: after.Policy})
+	target := fail2ban.JailTarget(i.EngineKey, i.BeforeID, after.NginxDir, after.NginxHash, i.BeforeRegistry.ID, i.Invocation)
+	if target != i.Target {
+		return nil, nil, errors.New("受管 jail 的目标基准不匹配")
+	}
+	raw, _ := json.Marshal(Fail2banJailsRequest{Protocol: Protocol, OperationID: record.OperationID, BaseID: i.BeforeID, Target: target, Policy: after.Policy})
 	if record.RequestHash != secure.Hash(raw) || after.NginxDir != record.BeforeDir || record.BeforeDir != record.AfterDir || after.EngineKey != i.EngineKey || i.AfterRegistry.ID != record.OperationID || i.AfterRegistry.PreviousID != i.BeforeRegistry.ID || i.AfterRegistry.RequestHash != record.RequestHash || !validID(i.RollbackRegistry.ID) || i.RollbackRegistry.PreviousID != i.AfterRegistry.ID || i.BansHash != "" && !fail2banDigest.MatchString(i.BansHash) {
 		return nil, nil, errors.New("受管 jail 恢复合同无法核对")
 	}
@@ -263,6 +268,7 @@ func (f *fail2banNginxExecutor) executeJails(ctx context.Context, record Record,
 		return n.persist(record)
 	}()
 	if err != nil {
+		record.Error = err.Error()
 		return errors.Join(err, f.recoverJails(record, r, before, after))
 	}
 	return nil
@@ -379,7 +385,10 @@ func (f *fail2banNginxExecutor) recoverJails(record Record, r *fail2banManagedRe
 	if err != nil {
 		return f.jailsRecoveryRequired(record, err)
 	}
-	record.State, record.Stage, record.Error = "failed", "jails_rolled_back", "原受管 jail 配置、动作授权及未过期封禁已经确认恢复"
+	if record.Error == "" {
+		record.Error = "jail 应用中断"
+	}
+	record.State, record.Stage, record.Error = "failed", "jails_rolled_back", record.Error+"；原受管 jail 配置、动作授权及未过期封禁已经确认恢复"
 	return n.persist(record)
 }
 
@@ -389,10 +398,13 @@ func (f *fail2banNginxExecutor) jailOperation(id string) (Fail2banJailsOperation
 	}
 	r, err := f.nginx.Journal.Get(id)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return Fail2banJailsOperation{}, fault.New(404, "FAIL2BAN_JAIL_OPERATION_MISSING", "受管 jail 操作记录不存在")
+		}
 		return Fail2banJailsOperation{}, err
 	}
 	if r.Kind != fail2banJailsKind || r.Fail2banJails == nil {
-		return Fail2banJailsOperation{}, os.ErrNotExist
+		return Fail2banJailsOperation{}, fault.Conflict("操作 UUID 已用于其他任务")
 	}
 	return fail2banJailsView(r), nil
 }

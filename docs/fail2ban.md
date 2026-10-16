@@ -1,6 +1,6 @@
 # Fail2ban 配置、诊断与实例接入
 
-`GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记操作；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用且控制入口暂不可启用，诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
+`GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记操作；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用，可显式启用管理入口；启用不安装或启动引擎，不自动停止现有保护。诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
 
 仅 root Agent 在本机以 `--metrics-scope=host` 确认宿主机范围后执行采集。开发、容器、范围未确认或无 Agent 时返回不可用原因，不在面板容器内探测或补装程序。诊断的 `available` 仅表示宿主机读取获准；实例和 jail 的 `available` 表示该次完整采样成功，采样时间明确返回。所有 `writable` 及已有 jail 的 `managed` 均为 false。
 
@@ -50,7 +50,7 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 `GET/PUT /fail2ban/policy` 持久保存最多 32 个 jail，采用加密存储、基础版本比较、幂等保存及同事务审计。保存不要求模块启用，也不改变实例。内置 `nginx-http-401`（全部 401，包含首次认证挑战）及 `nginx-authorization-401`（仅携带 Authorization 后的 401，不覆盖仅凭 Cookie 的认证失败），参数为日志资源标识、动作类型、封禁秒数、统计窗口、阈值和数值 IP/CIDR 白名单；不接收任意路径、正则或 shell。面板登录失败模板尚未接入独立日志来源。
 
-`GET /fail2ban/templates` 返回模板；`POST /fail2ban/preview` 核对保存版本、唯一运行日志来源及已有实例，显示当前执行缺口，`can_apply=false`。日志资源按站点逻辑 ID 绑定，实例授权、动作后端及实际流量路径仍须在应用前核对。jail 持久安装、动作桥接及 ban/unban 继续实施；当前页面只保存期望配置和只读观察。
+`GET /fail2ban/templates` 返回模板；`POST /fail2ban/preview` 核对保存版本、唯一运行日志来源、固定模板、受管实例及已发布客户端拒绝入口，返回当前可应用性及将停用项。日志资源按站点逻辑 ID 绑定，实例授权、动作后端及实际流量路径在应用前重新核对。网页可保存、预览和确认应用受管 jail；手动 ban/unban 仍待接入。
 
 schema 4 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.json` 携带期望配置。文件、API 拉取及推送均支持 preserve/merge/replace，默认保留目标；导入重新分配 jail ID，沿用同一业务配置树中的站点标识，冻结目标版本与内容，同 Nginx 配置导入事务保存。失败补偿以新版本恢复原期望，检测外部变更时保留待恢复，不覆盖。源服务、Socket、客户端批准、所有权及封禁/计数不迁移，也不自动安装、启用模块或应用 jail。须核对目标白名单、日志来源和动作路径；保留的目标 jail 可能引用本次已替换的站点。
 
@@ -64,7 +64,7 @@ schema 4 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.js
 
 受管 Nginx 访问日志新增 `nginxpanel_auth_present`，只记录入站 Authorization 是否非空（0/1），不记录认证头内容。执行器生成 map，原生配置禁止重定义该变量；迁移/恢复预检包含 map 模块，Docker 镜像已预置此能力。日志目录声明 `auth_presence`，jail 保存预览要求来源包含该标记，同时执行固定过滤器检查；须先发布当前 Nginx 配置，再核对实际来源。旧运行日志或缺少标记的来源不据格式名推断可匹配。模块开关不控制日志中的保护状态。
 
-实现及源码集成审阅完成，尚未执行官方工具、生成器、构建、类型检查、lint、测试、浏览器或真实配置发布。P5 需集中核对 Python 正则/日期解析、IPv4/IPv6、首次挑战、转义与字段伪造、实际日志样例及轮转衔接；当前不是已通过验证的模板发布声明。固定 CLI/输出行为依据 [Fail2ban 1.1.1 fail2ban-regex](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banregex.py) 及[日期剥离实现](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)。本机受管 jail 安装见下文，公开应用与封禁控制仍在实施。
+实现及源码集成审阅完成，尚未执行官方工具、生成器、构建、类型检查、lint、测试、浏览器或真实配置发布。P5 需集中核对 Python 正则/日期解析、IPv4/IPv6、首次挑战、转义与字段伪造、实际日志样例及轮转衔接；当前不是已通过验证的模板发布声明。固定 CLI/输出行为依据 [Fail2ban 1.1.1 fail2ban-regex](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banregex.py) 及[日期剥离实现](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)。本机及网页/API 受管 jail 应用见下文，手动封禁控制仍在实施。
 
 ## 签名受管引擎的本机安装
 
@@ -104,7 +104,7 @@ installed 状态的 root 安装登记授权对其专用服务、Socket 和固定
 
 受管服务采集还核对 systemd 的实际单元/覆盖项/加载版本、主进程所持监听 Socket、实际解释器文件 inode 及完整前台入口参数，前后核对服务代次。签名包及解释器验证纳入最多 10 秒的共享采集任务；仍限制 2 份在途、30 秒窗口 16 份新任务与有界输出，官方工具每次最多 2 秒。30 秒缓存命中返回原采样时间的结果，不作为新的执行校验证据；登记事件变化或撤回时不返回旧选择的成功结果。
 
-保存预览仅在运行实例可确认、版本为当前支持的 1.1.1，且过滤器结果与实例的 `engine` 一致时将 `template_ready` 标为 true。来源不同、版本不同或实例读取错误会阻塞对应 jail；样例检查的原始结果仍保留供核对。网页尚未提供 jail 应用入口，`can_apply=false`、所有 jail 的 `writable=false`。`managed=true` 仅用于本机受管配置包明确登记且实际可读取的 jail，不根据实例代码来源或名称单独推断所有权和保护状态。
+保存预览仅在运行实例可确认、版本为当前支持的 1.1.1，且过滤器结果与实例的 `engine` 一致时将 `template_ready` 标为 true。来源不同、版本不同或实例读取错误会阻塞对应 jail；样例检查的原始结果仍保留供核对。网页提供独立的整份策略应用入口，`can_apply` 按模块、目标运行基准及启用项检查结果计算；单 jail 读取接口的 `writable=false`。`managed=true` 仅用于本机受管配置包明确登记且实际可读取的 jail，不根据实例代码来源或名称单独推断所有权和保护状态。
 
 接口合同及自动扫描页面已同步；Agent 为 40、数据库为 25。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器、官方工具和真实实例操作均未执行，留待 P5。需集中核对托管与已有实例的选择/冲突/撤回、事件变化及缓存、实际进程入口与 Socket、签名/解释器漂移、官方模块入口及同源同版本预览等行为。
 
@@ -150,7 +150,7 @@ nginxpanel fail2ban-nginx-jails-status --data-dir /var/lib/nginxpanel --fail2ban
   --fail2ban-operation <NEW_UUID>
 ```
 
-首次应用省略 `--fail2ban-nginx-base`，后续必须为状态返回的 `selected_id`；策略文件是未包裹的 `{"jails":[...]}`，字段与期望策略一致，不是 `PolicyView` 或迁移归档。操作 UUID 与规范化请求绑定，重复提交只返回原操作。普通 status 返回所选配置及待完成操作，不作为运行生效证明；应用提交先返回排队状态，查询操作的 `succeeded/jails_confirmed` 才表示本次 jail 参数核对完成，Nginx 拒绝集合仍有独立确认状态。
+首次应用省略 `--fail2ban-nginx-base`，后续必须为状态返回的 `selected_id`；CLI 首次提交还会固定状态返回的目标摘要，重试同 UUID 先核对原请求；策略文件是未包裹的 `{"jails":[...]}`，字段与期望策略一致，不是 `PolicyView` 或迁移归档。操作 UUID 与规范化请求绑定，重复提交只返回原操作。普通 status 返回所选配置及待完成操作，不作为运行生效证明；应用提交先返回排队状态，查询操作的 `succeeded/jails_confirmed` 才表示本次 jail 参数核对完成，Nginx 拒绝集合仍有独立确认状态。
 
 执行先冻结安装、服务代次、Nginx 修订与动作授权，持久化配置包和恢复意图；固定过滤器样例及官方候选配置检查通过后，以原子目录交换安装精确的 jail/filter/action 树，使用官方 `reload --all`。固定 action 仅排队刷新，不携带 IP，也不在 Fail2ban 动作内同步查询自己。执行后读取实际 jail、日志、正则、参数、忽略集合及动作命令，并核对原未过期封禁的到期时间。服务使用 UTC；程序不重放缓存封禁、不自行延长到期时间。命令及 reload 语义依据 [官方客户端](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banclient.py)，封禁时间读取依据 [BanManager](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/banmanager.py)。
 
@@ -158,4 +158,16 @@ nginxpanel fail2ban-nginx-jails-status --data-dir /var/lib/nginxpanel --fail2ban
 
 配置包及备份树位于安装 UUID 下的 `jail-bundles/`、`jail-configs/`，`jail-current.json` 指向所选包，`jail-identities/` 保留身份约束；以上均为 root 私有、禁止迁移的运行材料。单策略最多 32 项、64 KiB，配置包最多 256 KiB；原封禁时间证明独立存储，最多 4 MiB、每 jail 1024 个地址，journal 仅保存其摘要。
 
-当前 Agent 为 43，策略为 nginxpanel-8，数据库为 25、迁移 schema 为 4。实现及源码集成审阅完成；生成器、构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收均未执行，统一留待 P5。P5 还须核对目录交换/掉电恢复、官方 reload 与状态库的剩余封禁时间、动作回调无死锁、服务停止及维护衔接。公开 jail 应用、手动封禁/解封与历史尚未接通。
+当前 Agent 为 44，策略为 nginxpanel-8，数据库为 26、迁移 schema 为 4。实现及源码集成审阅完成；生成器、构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收均未执行，统一留待 P5。P5 还须核对目录交换/掉电恢复、官方 reload 与状态库的剩余封禁时间、动作回调无死锁、服务停止及维护衔接。手动封禁/解封、历史、公开安装/服务控制及其他动作后端仍待接通。
+
+## 网页与 API 的受管 jail 应用
+
+启用 Fail2ban 模块后，在页面保存期望、预览并确认应用。仅支持已由本机 root 安装并启动的独立受管实例及 `nginx-client` 动作；不依赖防火墙模块开关，内核和 Docker 转发动作仍不可应用。诊断、读取和保存期望在停用时仍可使用；停用只关闭新应用入口，已有保护继续运行，不隐式卸载或停止服务。在途任务及待恢复状态会阻止停用与对应期望配置修改。
+
+`GET /fail2ban/runtime` 返回明确的可用性、目标摘要、所选配置和待完成操作；所选配置不是实际运行确认。预览增加 `runtime` 与 `removed`，后者列出本次会停用的受管 jail。目标摘要固定安装、服务代次、当前 Nginx 物理部署与清单、所选配置及动作授权；源发生变化必须重新预览。启用项须具备固定模板检查、唯一认证标记日志和已发布客户端拒绝入口，停用项不依赖日志仍存在。
+
+`POST /fail2ban/apply` 接收 `version/policy_hash/base_id/target`，要求 `security.write`、幂等键和浏览器近期认证，返回 HTTP 202 的 `task_id/operation_id/version`。版本、加密任务材料、原操作 UUID、幂等响应和排队审计同事务提交；后台只提交冻结策略，复用原 Agent jail 执行器，不引入另一份配置渲染或恢复逻辑。首次排队超过五分钟未提交则过期；已开始提交的未知结果始终先核对原记录，不把超时视为操作停止。
+
+`GET /fail2ban/tasks` 返回最近 16 条该模块任务，普通 `/tasks/{id}` 也可查询。页面显示应用/补偿/待恢复和终态，提交未知时重试原幂等请求；任务成功只表示 jail 参数和原未过期封禁核对完成，Nginx 集合仍独立确认。已接受记录缺失、冻结材料或响应合同不匹配时保持恢复阻塞，明确拒绝且未接受的请求才结束为失败。完整备份中的隔离任务禁止重新提交。任务及加密材料最多保留 256 份，耗尽须本机维护。
+
+本机 root Socket 继续保留独立动作授权和刷新；Web Agent Socket 仅开放同一类型化 jail 应用/查询入口，不开放 bind/unbind/refresh 或任意命令。所有公开接口与显式远程资源沿用统一 JSON 外壳及权限，页面路由继续自动扫描。API/Go/TypeScript 声明已同步；尚未运行生成器、构建、类型检查、lint、测试、浏览器或真实实例，统一留待 P5。验收需覆盖模块边界、版本/目标漂移、任务幂等和断连恢复、拒绝/记录缺失、迁移/备份隔离及空策略停用。

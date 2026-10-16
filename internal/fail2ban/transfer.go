@@ -33,6 +33,9 @@ func (s *PolicyService) Export(ctx context.Context, q PolicyReader) (*Transfer, 
 // Callers own authorization, idempotency, migration admission and audit records.
 func (s *PolicyService) StorePolicy(ctx context.Context, tx *sql.Tx, base int64, policy Policy) (PolicyView, error) {
 	var out PolicyView
+	if err := s.applyIdle(ctx, tx); err != nil {
+		return out, err
+	}
 	if base < 0 || base == math.MaxInt64 {
 		return out, fault.Invalid("Fail2ban jail 配置版本无效")
 	}

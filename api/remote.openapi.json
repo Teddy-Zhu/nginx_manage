@@ -5035,6 +5035,118 @@
           }
         }
       }
+    },
+    "/nodes/{connection}/fail2ban/runtime": {
+      "get": {
+        "operationId": "remoteGetFail2banRuntime",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banRuntime",
+        "x-forward-path": "/fail2ban/runtime",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/fail2ban/apply": {
+      "post": {
+        "operationId": "remoteApplyFail2ban",
+        "x-scopes": [
+          "security.write"
+        ],
+        "responses": {
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "applyFail2ban",
+        "x-forward-path": "/fail2ban/apply",
+        "x-response-kind": "json",
+        "x-body-limit": 2048,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banApplyInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/tasks": {
+      "get": {
+        "operationId": "remoteGetFail2banTasks",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banTasks",
+        "x-forward-path": "/fail2ban/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
     }
   },
   "security": [

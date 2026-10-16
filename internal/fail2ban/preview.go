@@ -25,6 +25,8 @@ type PolicyPreview struct {
 	CanApply       bool            `json:"can_apply"`
 	Entries        []JailPreview   `json:"entries"`
 	Warnings       []string        `json:"warnings"`
+	Runtime        JailsRuntime    `json:"runtime"`
+	Removed        []string        `json:"removed"`
 }
 type JailPreview struct {
 	TemplateReady bool     `json:"template_ready"`
@@ -37,7 +39,7 @@ type JailPreview struct {
 }
 
 func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPreview, error) {
-	out := PolicyPreview{Version: version, Entries: []JailPreview{}, TemplateChecks: []TemplateCheck{}, Warnings: []string{"保存期望配置后需单独应用；实际保护以运行状态及动作确认结果为准"}}
+	out := PolicyPreview{Version: version, Entries: []JailPreview{}, TemplateChecks: []TemplateCheck{}, Warnings: []string{"应用只更新本应用的受管 jail；Nginx 拒绝集合另有独立运行确认"}, Runtime: JailsRuntime{Policy: DefaultPolicy(), Resources: []string{}, Pending: []JailsOperation{}}, Removed: []string{}}
 	if version < 1 {
 		return out, fault.Invalid("须先保存 jail 配置并提供版本")
 	}
@@ -56,6 +58,9 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 	ids := []string{}
 	seen := map[string]bool{}
 	for _, j := range view.Policy.Jails {
+		if !j.Enabled {
+			continue
+		}
 		if !seen[j.Template] {
 			ids = append(ids, j.Template)
 			seen[j.Template] = true
@@ -66,10 +71,11 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 	if s.Agent != nil {
 		call, cancel := context.WithTimeout(ctx, 12*time.Second)
 		defer cancel()
-		var logErr, instanceErr, templateErr error
+		var logErr, instanceErr, templateErr, runtimeErr error
 		var wg sync.WaitGroup
-		wg.Add(2)
+		wg.Add(3)
 		go func() { defer wg.Done(); sources, logErr = s.Agent.LogSources(call) }()
+		go func() { defer wg.Done(); out.Runtime, runtimeErr = s.Runtime(call) }()
 		go func() { defer wg.Done(); instance, instanceErr = s.Agent.ReadFail2banInstance(call) }()
 		if len(ids) > 0 {
 			wg.Add(1)
@@ -79,6 +85,9 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			}()
 		}
 		wg.Wait()
+		if runtimeErr != nil {
+			out.Runtime = JailsRuntime{Policy: DefaultPolicy(), Resources: []string{}, Pending: []JailsOperation{}, Reason: "受管 jail 执行基准暂不可读取"}
+		}
 		if instanceErr != nil {
 			instance = Instance{}
 		}
@@ -94,10 +103,15 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			out.Warnings = append(out.Warnings, "官方模板检查暂不可读取")
 		}
 	} else {
+		out.Runtime.Reason = "未连接宿主机 Agent"
 		out.Warnings = append(out.Warnings, "未连接宿主机 Agent")
 	}
 	for _, j := range view.Policy.Jails {
 		e := JailPreview{ID: j.ID, JailName: "nginxpanel-" + j.ID, Enabled: j.Enabled, Errors: []string{}}
+		if !j.Enabled {
+			out.Entries = append(out.Entries, e)
+			continue
+		}
 		matches := 0
 		for _, source := range sources {
 			if source.Active && source.ResourceID == j.ResourceID && source.Category == "http_access" && source.Format == "nginxpanel_http" && source.AuthPresence {
@@ -118,8 +132,52 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		if !e.TemplateReady {
 			e.Errors = append(e.Errors, "过滤器检查须通过，且须与已确认实例使用相同组件及版本")
 		}
-		e.Errors = append(e.Errors, "当前仅支持保存期望配置，运行配置需由本机管理员应用")
+		if j.Action != "nginx-client" {
+			e.Errors = append(e.Errors, "当前应用只支持 Nginx 客户端动作")
+		}
+		bound := false
+		for _, resource := range out.Runtime.Resources {
+			if resource == j.ResourceID {
+				bound = true
+			}
+		}
+		if !bound {
+			e.Errors = append(e.Errors, "站点须先发布明确的客户端拒绝入口及可信代理配置")
+		}
 		out.Entries = append(out.Entries, e)
+	}
+	out.CanApply = out.Runtime.Available
+	if !out.Runtime.Available {
+		out.Warnings = append(out.Warnings, out.Runtime.Reason)
+		out.CanApply = false
+	}
+	if err = s.moduleEnabled(ctx, s.DB); err != nil {
+		out.Warnings = append(out.Warnings, err.Error())
+		out.CanApply = false
+	}
+	if err = s.migrationIdle(ctx, s.DB); err != nil {
+		out.Warnings = append(out.Warnings, err.Error())
+		out.CanApply = false
+	}
+	if err = s.applyIdle(ctx, s.DB); err != nil {
+		out.Warnings = append(out.Warnings, err.Error())
+		out.CanApply = false
+	}
+	wanted := map[string]bool{}
+	for _, j := range view.Policy.Jails {
+		if j.Enabled {
+			wanted[j.ID] = true
+		}
+	}
+	for _, j := range out.Runtime.Policy.Jails {
+		if j.Enabled && !wanted[j.ID] {
+			out.Removed = append(out.Removed, "nginxpanel-"+j.ID)
+		}
+	}
+	for _, e := range out.Entries {
+		if len(e.Errors) > 0 {
+			out.CanApply = false
+		}
 	}
 	current, err := s.Policy(ctx)
 	if err != nil {

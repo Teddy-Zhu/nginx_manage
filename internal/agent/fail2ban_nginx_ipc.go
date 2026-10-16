@@ -78,6 +78,7 @@ func (s *Server) startFail2banNginx(ctx context.Context, cancelRun context.Cance
 		return nil, err
 	}
 	f := &fail2banNginxExecutor{nginx: s.Nginx, wake: make(chan struct{}, 1), value: Fail2banNginxStatus{State: "starting", Registry: fail2banNginxRegistry{Schema: 1, Grants: []fail2banNginxGrant{}}}}
+	s.fail2banNginx = f
 	registry, registryErr := loadFail2banNginxRegistry(s.DataDir)
 	f.value.Registry = registry
 	if registryErr != nil {

@@ -179,3 +179,50 @@ func (s *Server) CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, 
 	}
 	s.ok(w, r, out)
 }
+
+func (s *Server) GetFail2banRuntime(w http.ResponseWriter, r *http.Request) {
+	ctx, done, ok := s.fail2banReadContext(w, r)
+	if !ok {
+		return
+	}
+	defer done()
+	if !s.fail2banReady(w, r) {
+		return
+	}
+	out, err := s.Fail2ban.Runtime(ctx)
+	if err != nil {
+		s.fail2banReadError(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}
+
+func (s *Server) ApplyFail2ban(w http.ResponseWriter, r *http.Request, params apigen.ApplyFail2banParams) {
+	p, ok := s.authorize(w, r, true, "security.write")
+	if !ok || !s.fail2banReady(w, r) {
+		return
+	}
+	var in fail2ban.ApplyInput
+	if err := decodeLimit(w, r, &in, 2048); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Fail2ban.Apply(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.respond(w, r, http.StatusAccepted, "OK", "jail 应用任务已创建", out)
+}
+
+func (s *Server) GetFail2banTasks(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+		return
+	}
+	out, err := s.Fail2ban.ApplyTasks(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}

@@ -14,15 +14,17 @@ import (
 
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/secure"
 )
 
 type PolicyService struct {
-	DB         *sql.DB
-	Vault      *secure.Vault
-	Agent      PolicyObserver
-	previewing atomic.Bool
-	runtimeMu  sync.Mutex
+	DB          *sql.DB
+	Vault       *secure.Vault
+	Agent       PolicyObserver
+	Maintenance *maintenance.Service
+	previewing  atomic.Bool
+	runtimeMu   sync.Mutex
 }
 
 func policyAAD(version int64) string { return fmt.Sprintf("fail2ban:policy:%d", version) }

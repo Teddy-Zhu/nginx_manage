@@ -264,7 +264,10 @@ func Run(ctx context.Context, o Options) error {
 	componentService := &components.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Agent: agentClient}
 	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	updateService := &panelupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
-	fail2banService := &fail2ban.PolicyService{DB: db, Vault: vault, Agent: agentClient}
+	fail2banService := &fail2ban.PolicyService{DB: db, Vault: vault, Maintenance: maintenanceService}
+	if agentClient != nil {
+		fail2banService.Agent = agentClient
+	}
 	firewallService := &firewall.Service{DB: db, Vault: vault, Agent: agentClient}
 	migrationService := &migration.Service{Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
 	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
@@ -280,14 +283,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 14)
+	result := make(chan error, 15)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(12)
+	workers.Add(13)
 	if !o.Dev {
 		readyListener, err := panelready.Listen(o.DataDir)
 		if err != nil {
@@ -324,6 +327,7 @@ func Run(ctx context.Context, o Options) error {
 	go func() { defer workers.Done(); result <- monitoringService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- notificationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- dnsService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- fail2banService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- migrationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- backupService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- componentService.Run(runCtx) }()

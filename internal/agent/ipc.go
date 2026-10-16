@@ -59,6 +59,7 @@ type Server struct {
 	ReleaseTrust     string
 	ReleaseToken     string
 	Installation     *nginxruntime.Installation
+	fail2banNginx    *fail2banNginxExecutor
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -207,6 +208,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.monitoringHandlers(mux, sampler)
 	s.firewallHandlers(mux, ctx)
 	s.fail2banHandlers(mux, ctx)
+	s.fail2banJailsHandlers(mux)
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"

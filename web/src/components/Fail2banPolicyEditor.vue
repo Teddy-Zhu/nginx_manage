@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Fail2banTemplateCatalog from "./Fail2banTemplateCatalog.vue";
+import Fail2banApplyPanel from "./Fail2banApplyPanel.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -110,7 +111,7 @@ function add() {
     enabled: false,
     template: template.id,
     resource_id: "",
-    action: "host-input",
+    action: "nginx-client",
     ban_time: template.ban_time,
     find_time: template.find_time,
     max_retry: template.max_retry,
@@ -195,8 +196,8 @@ onUnmounted(() => {
       <span v-if="view" class="muted">版本 {{ view.version }}</span>
     </div>
     <NAlert type="info"
-      >配置保存后需单独应用。现有实例的 jail 保持只读，当前尚未提供受管 jail
-      应用能力。</NAlert
+      >配置保存后需预览并确认应用。当前支持独立受管实例的 Nginx
+      客户端动作，已有实例的 jail 保持只读。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
@@ -320,5 +321,10 @@ onUnmounted(() => {
         </p>
       </div>
     </template>
+    <Fail2banApplyPanel
+      :preview="dirty ? null : preview"
+      :disabled="busy || dirty"
+      @submitted="preview = null"
+    />
   </section>
 </template>

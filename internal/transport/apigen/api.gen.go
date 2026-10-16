@@ -1932,7 +1932,49 @@ type Fail2banJailPreview struct {
 	SourceReady   bool     `json:"source_ready"`
 	Errors        []string `json:"errors"`
 }
+type Fail2banJailsOperation struct {
+	Id          string `json:"id"`
+	State       string `json:"state"`
+	Stage       string `json:"stage"`
+	BeforeId    string `json:"before_id"`
+	AfterId     string `json:"after_id"`
+	RequestHash string `json:"request_hash"`
+	Target      string `json:"target"`
+	Error       string `json:"error"`
+}
+type Fail2banJailsRuntime struct {
+	Available  bool                     `json:"available"`
+	Target     string                   `json:"target"`
+	SelectedId string                   `json:"selected_id"`
+	Policy     Fail2banPolicy           `json:"policy"`
+	Resources  []string                 `json:"resources"`
+	Pending    []Fail2banJailsOperation `json:"pending"`
+	Reason     string                   `json:"reason"`
+}
+type Fail2banApplyInput struct {
+	Version    int64  `json:"version"`
+	PolicyHash string `json:"policy_hash"`
+	BaseId     string `json:"base_id"`
+	Target     string `json:"target"`
+}
+type Fail2banApplyTaskStatus struct {
+	Id          string `json:"id"`
+	OperationId string `json:"operation_id"`
+	State       string `json:"state"`
+	Stage       string `json:"stage"`
+	Error       string `json:"error"`
+	CreatedAt   int64  `json:"created_at"`
+}
+type Fail2banApplyTask struct {
+	TaskId      string `json:"task_id"`
+	OperationId string `json:"operation_id"`
+	Version     int64  `json:"version"`
+}
+type ApplyFail2banParams = SetFail2banPolicyParams
+type ApplyFail2banJSONRequestBody = Fail2banApplyInput
 type Fail2banPolicyPreview struct {
+	Runtime        Fail2banJailsRuntime    `json:"runtime"`
+	Removed        []string                `json:"removed"`
 	TemplateChecks []Fail2banTemplateCheck `json:"template_checks"`
 	Version        int64                   `json:"version"`
 	PolicyHash     string                  `json:"policy_hash"`
@@ -4165,6 +4207,9 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, params CheckFail2banTemplatesParams)
+	GetFail2banTasks(w http.ResponseWriter, r *http.Request)
+	GetFail2banRuntime(w http.ResponseWriter, r *http.Request)
+	ApplyFail2ban(w http.ResponseWriter, r *http.Request, params ApplyFail2banParams)
 	GetFail2banPolicy(w http.ResponseWriter, r *http.Request)
 	SetFail2banPolicy(w http.ResponseWriter, r *http.Request, params SetFail2banPolicyParams)
 	GetFail2banTemplates(w http.ResponseWriter, r *http.Request)
@@ -6896,8 +6941,37 @@ func (siw *ServerInterfaceWrapper) RollbackFirewall(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+func (siw *ServerInterfaceWrapper) GetFail2banTasks(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banTasks(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFail2banRuntime(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banRuntime(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
 func (siw *ServerInterfaceWrapper) GetFail2banPolicy(w http.ResponseWriter, r *http.Request) {
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banPolicy(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) ApplyFail2ban(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := ApplyFail2banParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.ApplyFail2ban(w, r, params) }))
 	for _, middleware := range siw.HandlerMiddlewares {
 		handler = middleware(handler)
 	}
@@ -10929,6 +11003,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/confirm", wrapper.ConfirmFirewall)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/rollback", wrapper.RollbackFirewall)
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/tasks", wrapper.GetFail2banTasks)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/runtime", wrapper.GetFail2banRuntime)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/apply", wrapper.ApplyFail2ban)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/policy", wrapper.GetFail2banPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/fail2ban/policy", wrapper.SetFail2banPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/templates", wrapper.GetFail2banTemplates)

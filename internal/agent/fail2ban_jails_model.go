@@ -17,16 +17,12 @@ import (
 const fail2banJailsKind = "nginx.fail2ban-jails"
 const fail2banJailBundleLimit = 256 << 10
 
-type Fail2banJailsRequest struct {
-	Protocol    int             `json:"protocol"`
-	OperationID string          `json:"operation_id"`
-	BaseID      string          `json:"base_id"`
-	Policy      fail2ban.Policy `json:"policy"`
-}
+type Fail2banJailsRequest = fail2ban.JailsRequest
 
 type fail2banJailIntent struct {
 	InstallationID   string                `json:"installation_id"`
 	EngineKey        string                `json:"engine_key"`
+	Target           string                `json:"target"`
 	BeforeID         string                `json:"before_id"`
 	AfterID          string                `json:"after_id"`
 	Invocation       string                `json:"invocation"`
@@ -38,17 +34,10 @@ type fail2banJailIntent struct {
 	EffectsPossible  bool                  `json:"effects_possible"`
 }
 
-type Fail2banJailsOperation struct {
-	ID       string `json:"id"`
-	State    string `json:"state"`
-	Stage    string `json:"stage"`
-	BeforeID string `json:"before_id"`
-	AfterID  string `json:"after_id"`
-	Error    string `json:"error"`
-}
+type Fail2banJailsOperation = fail2ban.JailsOperation
 
 func fail2banJailsView(r Record) Fail2banJailsOperation {
-	return Fail2banJailsOperation{ID: r.OperationID, State: r.State, Stage: r.Stage, BeforeID: r.Fail2banJails.BeforeID, AfterID: r.Fail2banJails.AfterID, Error: r.Error}
+	return Fail2banJailsOperation{ID: r.OperationID, State: r.State, Stage: r.Stage, BeforeID: r.Fail2banJails.BeforeID, AfterID: r.Fail2banJails.AfterID, RequestHash: r.RequestHash, Target: r.Fail2banJails.Target, Error: r.Error}
 }
 
 // Sources and proxy protection come only from the active root Nginx manifest.

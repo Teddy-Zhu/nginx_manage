@@ -21,7 +21,7 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 		return out, err
 	}
 	in.Policy = normalized
-	if in.Protocol != Protocol || !validID(in.OperationID) || in.OperationID == in.BaseID || in.BaseID != "" && !validID(in.BaseID) {
+	if !in.Valid() || !fail2banDigest.MatchString(in.Target) || in.OperationID == in.BaseID {
 		return out, fault.Invalid("受管 jail 应用合同无效")
 	}
 	raw, _ := json.Marshal(in)
@@ -126,6 +126,9 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 	if err != nil {
 		return out, err
 	}
+	if in.Target != fail2ban.JailTarget(bundle.EngineKey, beforeID, dir, bundle.NginxHash, registry.ID, live.invocation) {
+		return out, fault.Conflict("jail 目标实例、Nginx 修订或动作授权已变化，请重新预览")
+	}
 	afterGrants, err := fail2banJailGrants(registry, before, &bundle)
 	if err != nil {
 		return out, err
@@ -150,7 +153,7 @@ func (f *fail2banNginxExecutor) submitJails(ctx context.Context, in Fail2banJail
 	if err = saveFail2banJailBundle(r, bundle); err != nil {
 		return out, err
 	}
-	intent := &fail2banJailIntent{InstallationID: r.OperationID, EngineKey: bundle.EngineKey, BeforeID: beforeID, AfterID: bundle.ID, Invocation: live.invocation, SocketInode: live.inode, BeforeRegistry: registry, AfterRegistry: afterRegistry, RollbackRegistry: rollbackRegistry}
+	intent := &fail2banJailIntent{InstallationID: r.OperationID, EngineKey: bundle.EngineKey, Target: in.Target, BeforeID: beforeID, AfterID: bundle.ID, Invocation: live.invocation, SocketInode: live.inode, BeforeRegistry: registry, AfterRegistry: afterRegistry, RollbackRegistry: rollbackRegistry}
 	record := Record{OperationID: in.OperationID, RequestHash: hash, Kind: fail2banJailsKind, State: "running", Stage: "queued", BeforeDir: dir, AfterDir: dir, BeforeRevision: m.RevisionID, AfterRevision: m.RevisionID, Fail2banJails: intent}
 	if err = n.persist(record); err != nil {
 		return out, err

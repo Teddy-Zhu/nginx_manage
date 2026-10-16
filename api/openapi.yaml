@@ -12,6 +12,28 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/tasks:
+    get:
+      operationId: getFail2banTasks
+      x-scopes: [read]
+      description: 返回最近 16 条 Fail2banApplyTaskStatus；排队、应用、补偿、待恢复及终态明确区分，不包含冻结策略正文。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/runtime:
+    get:
+      operationId: getFail2banRuntime
+      x-scopes: [read]
+      description: 返回 Fail2banJailsRuntime，核对本机受管实例、Nginx 修订和授权基准。所选策略不是运行确认；待恢复操作保持可见。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/apply:
+    post:
+      operationId: applyFail2ban
+      x-scopes: [security.write]
+      description: 显式应用保存版本到本机独立受管实例，浏览器须近期认证。固定预览摘要及目标，创建持久任务并通过原 Agent 执行器核对；只支持 nginx-client，安装和启动独立授权。返回 Fail2banApplyTask，进度沿用 /tasks/{id}；提交不表示生效。
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banApplyInput'}}}}
+      responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/templates/check:
     post:
       operationId: checkFail2banTemplates
@@ -48,7 +70,7 @@ paths:
       x-scopes: [read]
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
-      description: 返回 Fail2banPolicyPreview，核对保存版本的运行日志来源与实例状态；当前无 jail 写入执行器，can_apply 为 false。
+      description: 返回 Fail2banPolicyPreview，核对保存版本的运行日志来源与实例状态；只有模块启用、独立受管实例及已发布客户端入口可核对时 can_apply 为 true；列出将停用的受管 jail。
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPreviewInput'}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/instance:
@@ -1807,12 +1829,22 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["base_version", "policy"], "properties": {"base_version": {"type": "integer", "format": "int64", "minimum": 0}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}}}
     Fail2banTemplate:
       {"type": "object", "additionalProperties": false, "required": ["id", "name", "description", "category", "format", "ban_time", "find_time", "max_retry", "filter_sha256", "samples_sha256", "samples"], "properties": {"id": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401"]}, "name": {"type": "string"}, "description": {"type": "string"}, "category": {"type": "string"}, "format": {"type": "string"}, "ban_time": {"type": "integer", "format": "int64"}, "find_time": {"type": "integer", "format": "int64"}, "max_retry": {"type": "integer"}, "filter_sha256": {"type": "string"}, "samples_sha256": {"type": "string"}, "samples": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banFilterSample"}}}}
+    Fail2banJailsOperation:
+      {"type": "object", "additionalProperties": false, "required": ["id", "state", "stage", "before_id", "after_id", "request_hash", "target", "error"], "properties": {"id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "before_id": {"type": "string"}, "after_id": {"type": "string"}, "request_hash": {"type": "string"}, "target": {"type": "string"}, "error": {"type": "string"}}}
+    Fail2banJailsRuntime:
+      {"type": "object", "additionalProperties": false, "required": ["available", "target", "selected_id", "policy", "resources", "pending", "reason"], "properties": {"available": {"type": "boolean"}, "target": {"type": "string"}, "selected_id": {"type": "string"}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}, "resources": {"type": "array", "items": {"type": "string"}}, "pending": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailsOperation"}}, "reason": {"type": "string"}}}
+    Fail2banApplyInput:
+      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "base_id", "target"], "properties": {"version": {"type": "integer", "format": "int64", "minimum": 1}, "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "base_id": {"type": "string"}, "target": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+    Fail2banApplyTaskStatus:
+      {"type": "object", "additionalProperties": false, "required": ["id", "operation_id", "state", "stage", "error", "created_at"], "properties": {"id": {"type": "string"}, "operation_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}}}
+    Fail2banApplyTask:
+      {"type": "object", "additionalProperties": false, "required": ["task_id", "operation_id", "version"], "properties": {"task_id": {"type": "string"}, "operation_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}}}
     Fail2banPreviewInput:
       {"type": "object", "additionalProperties": false, "required": ["version"], "properties": {"version": {"type": "integer", "format": "int64", "minimum": 1}}}
     Fail2banJailPreview:
       {"type": "object", "additionalProperties": false, "required": ["id", "jail_name", "enabled", "source_id", "source_ready", "errors", "template_ready"], "properties": {"id": {"type": "string"}, "jail_name": {"type": "string"}, "enabled": {"type": "boolean"}, "source_id": {"type": "string"}, "source_ready": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}, "template_ready": {"type": "boolean"}}}
     Fail2banPolicyPreview:
-      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "can_apply", "entries", "warnings", "template_checks"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "can_apply": {"type": "boolean"}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailPreview"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "template_checks": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banTemplateCheck"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "can_apply", "entries", "warnings", "template_checks", "runtime", "removed"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "can_apply": {"type": "boolean"}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailPreview"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "template_checks": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banTemplateCheck"}}, "runtime": {"$ref": "#/components/schemas/Fail2banJailsRuntime"}, "removed": {"type": "array", "items": {"type": "string"}}}}
     MigrationMonitoringInput:
       {"type": "object", "additionalProperties": false, "required": ["mode"], "properties": {"mode": {"type": "string", "enum": ["preserve", "replace"]}, "base_version": {"type": "integer", "format": "int64", "minimum": 1}}}
     MigrationMonitoringPlan:
