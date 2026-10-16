@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"nginxpanel/internal/fail2ban"
@@ -15,8 +14,9 @@ import (
 )
 
 type Fail2banHostRuntimeStatus struct {
-	Runtime fail2ban.HostInputRuntimeView `json:"runtime"`
-	Kernel  firewall.KernelView           `json:"kernel"`
+	Sources *fail2ban.HostInputSourcesView `json:"sources,omitempty"`
+	Runtime fail2ban.HostInputRuntimeView  `json:"runtime"`
+	Kernel  firewall.KernelView            `json:"kernel"`
 }
 
 func readFail2banHostRuntimeStatus(ctx context.Context, dataDir string) (Fail2banHostRuntimeStatus, error) {
@@ -145,6 +145,9 @@ func ManageFail2banHostRuntime(ctx context.Context, dataDir, scope, action, oper
 		}
 		return recoverFail2banHostRuntime(ctx, dataDir, root, current)
 	}
+	if err = fail2banHostSyncInactive(dataDir); err != nil {
+		return out, err
+	}
 	requestHash := fail2banHostRuntimeRequest(action, operationID, base)
 	if current != nil && current.Intent.OperationID == operationID {
 		if current.Intent.RequestHash != requestHash {
@@ -175,29 +178,29 @@ func ManageFail2banHostRuntime(ctx context.Context, dataDir, scope, action, oper
 	if current == nil && base != "" || current != nil && current.Intent.OperationID != base {
 		return out, errors.New("宿主机动作运行基础标识变化，请重新读取状态")
 	}
+	leave, err := fail2banHostSyncAdmission(dataDir, action == "apply")
+	if err != nil {
+		return out, err
+	}
+	defer leave()
+	return executeFail2banHostRuntime(ctx, dataDir, root, current, action, operationID, "")
+}
+
+// The caller holds the host, binding and maintenance admission locks. A
+// controller session may skip an identical program without a new transaction.
+func executeFail2banHostRuntime(ctx context.Context, dataDir string, root *fail2banHostRegistration, current *fail2banHostRuntime, action, operationID, controllerID string) (Fail2banHostRuntimeStatus, error) {
+	out := Fail2banHostRuntimeStatus{Runtime: fail2ban.EmptyHostInputRuntime("宿主机动作执行结果未核对")}
+	base := ""
+	if current != nil {
+		base = current.Intent.OperationID
+	}
+	requestHash := fail2banHostRuntimeRequest(action, operationID, base)
 	before, expected, err := fail2banHostRuntimeBase(dataDir, root, current)
 	if err != nil {
 		return out, err
 	}
 	if action == "clear" && before.Set == nil {
 		return out, errors.New("当前已为空表，无需创建移除规则事务")
-	}
-	leave, err := j.maintenanceLock()
-	if err != nil {
-		return out, err
-	}
-	defer leave()
-	records, err := j.List()
-	if err != nil {
-		return out, err
-	}
-	for _, r := range records {
-		if r.Kind == "maintenance.lock" && r.State != "succeeded" {
-			return out, errors.New("维护期间禁止新增宿主机动作运行事务")
-		}
-		if action == "apply" && strings.HasPrefix(r.Kind, "fail2ban") && pendingNginxRecord(r) {
-			return out, errors.New("存在未结束的 Fail2ban 实例或 jail 操作，暂不能同步宿主机封禁")
-		}
 	}
 	if action == "apply" {
 		observer := firewallObserver{scope: "host", ctx: ctx, dataDir: dataDir}
@@ -216,7 +219,7 @@ func ManageFail2banHostRuntime(ctx context.Context, dataDir, scope, action, oper
 		return out, errors.New("原确认的宿主机动作对象缺失或漂移，禁止覆盖")
 	}
 	marker, _ := nftTargetRegistrationMarker(firewall.NFTFail2banInput, root.Owner)
-	i := fail2banHostRuntimeIntent{Schema: 1, Owner: root.Owner, RegistrationID: root.OperationID, OperationID: operationID, BaseOperationID: base, Action: action, RequestHash: requestHash, Before: before, Candidate: fail2banHostProgram{Marker: marker}, Baseline: kernel}
+	i := fail2banHostRuntimeIntent{Schema: 1, Owner: root.Owner, RegistrationID: root.OperationID, OperationID: operationID, BaseOperationID: base, ControllerID: controllerID, Action: action, RequestHash: requestHash, Before: before, Candidate: fail2banHostProgram{Marker: marker}, Baseline: kernel}
 	var sample fail2banHostSample
 	if action == "apply" {
 		registration := fail2banHostRegistrationViewRecord(dataDir, kernel, root)
@@ -234,6 +237,30 @@ func ManageFail2banHostRuntime(ctx context.Context, dataDir, scope, action, oper
 		}
 		i.ProtectionID, i.Sources = protection.ID, &sample.view
 		i.Candidate = fail2banHostProgram{Set: &firewall.NFTBanSet{Addresses: sample.addresses, Protected: protected}, Marker: fail2banHostRuntimeMarker(root.Owner, operationID)}
+	}
+	if action == "apply" && controllerID != "" && before.Set != nil {
+		previous, _ := json.Marshal(before.Set)
+		candidate, _ := json.Marshal(i.Candidate.Set)
+		if bytes.Equal(previous, candidate) {
+			if err = checkFail2banHostRuntimeInputs(ctx, dataDir, i); err != nil {
+				return out, err
+			}
+			if err = sample.unchanged(ctx, dataDir); err != nil {
+				return out, err
+			}
+			age := time.Now().Unix() - sample.view.CollectedAt
+			if age < 0 || age > 5 {
+				return out, errors.New("官方封禁样本已过期，等待完整新采样")
+			}
+			observed, e := before.snapshot(ctx)
+			if e != nil {
+				return out, e
+			}
+			if !observed.TableExists || observed.NamespaceID != kernel.NamespaceID || observed.Fingerprint != kernel.Fingerprint {
+				return out, errors.New("集合核对期间宿主机动作对象变化")
+			}
+			return Fail2banHostRuntimeStatus{Runtime: fail2banHostRuntimeView(dataDir, observed, root), Kernel: observed, Sources: &sample.view}, nil
+		}
 	}
 	batch, err := i.Candidate.batch(kernel)
 	if err != nil {
@@ -255,7 +282,8 @@ func ManageFail2banHostRuntime(ctx context.Context, dataDir, scope, action, oper
 		if submitErr == nil {
 			submitErr = sample.unchanged(ctx, dataDir)
 		}
-		if submitErr == nil && time.Now().Unix()-sample.view.CollectedAt > 5 {
+		age := time.Now().Unix() - sample.view.CollectedAt
+		if submitErr == nil && (age < 0 || age > 5) {
 			submitErr = errors.New("官方封禁样本已超过提交时限，须恢复原操作后重新采集")
 		}
 	}
@@ -282,13 +310,13 @@ func ManageFail2banHostRuntime(ctx context.Context, dataDir, scope, action, oper
 		if err = saveFail2banHostRuntime(dataDir, v); err != nil {
 			return out, err
 		}
-		return Fail2banHostRuntimeStatus{Runtime: fail2banHostRuntimeView(dataDir, post, root), Kernel: post}, nil
+		return Fail2banHostRuntimeStatus{Runtime: fail2banHostRuntimeView(dataDir, post, root), Kernel: post, Sources: i.Sources}, nil
 	}
 	v.State, v.Error = "recovery_required", "宿主机动作提交结果未完整证明，须以原标识执行 fail2ban-host-runtime-recover；不会自动重发"
 	if err = saveFail2banHostRuntime(dataDir, v); err != nil {
 		return out, err
 	}
-	return Fail2banHostRuntimeStatus{Runtime: fail2banHostRuntimeView(dataDir, post, root), Kernel: post}, errors.Join(errors.New(v.Error), submitErr, postErr)
+	return Fail2banHostRuntimeStatus{Runtime: fail2banHostRuntimeView(dataDir, post, root), Kernel: post, Sources: i.Sources}, errors.Join(errors.New(v.Error), submitErr, postErr)
 }
 
 func recoverFail2banHostRuntime(ctx context.Context, dataDir string, root *fail2banHostRegistration, v *fail2banHostRuntime) (Fail2banHostRuntimeStatus, error) {

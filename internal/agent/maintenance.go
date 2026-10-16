@@ -144,6 +144,16 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		if r.Kind == fail2banHostSyncKind {
+			idle, err := fail2banHostSyncMaintenanceIdle(filepath.Dir(filepath.Dir(g.journal.Dir)), r)
+			if err != nil {
+				return out, err
+			}
+			if !idle {
+				out.Busy++
+			}
+			continue
+		}
 		if r.Kind == panelUpdateKind {
 			if err := validPanelUpdate(r); err != nil {
 				return out, err

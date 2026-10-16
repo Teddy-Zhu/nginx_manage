@@ -147,6 +147,7 @@ func (s *Server) fail2banHostInputHandlers(mux *http.ServeMux, ctx context.Conte
 	f := &fail2banHostInputReader{ctx: ctx, server: s, firewall: observer}
 	mux.HandleFunc("GET /v1/fail2ban/host-input", func(w http.ResponseWriter, r *http.Request) {
 		out, err := f.cache.read(r.Context(), f.ctx, &f.budget, "direct-nftables/v1", f.collect)
+		out.Sync = f.server.fail2banHostSyncStatus()
 		fail2banNginxReply(w, out, err)
 	})
 }

@@ -54,6 +54,9 @@ func ManageFail2banHostInputRegistration(ctx context.Context, dataDir, scope, ac
 		return out, err
 	}
 	defer unlock()
+	if err = fail2banHostSyncInactive(dataDir); err != nil {
+		return out, err
+	}
 	if err = secure.RootDirectory(filepath.Dir(fail2banHostRegistrationPath(dataDir)), 0700); err != nil {
 		return out, err
 	}

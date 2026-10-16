@@ -1894,7 +1894,23 @@ type Fail2banHostInputRuntimeView struct {
 	Reason         string `json:"reason"`
 }
 
+type Fail2banHostInputSyncView struct {
+	At                int64  `json:"at"`
+	ID                string `json:"id"`
+	SessionID         string `json:"session_id"`
+	Enabled           bool   `json:"enabled"`
+	ApprovedAt        int64  `json:"approved_at"`
+	State             string `json:"state"`
+	Queued            bool   `json:"queued"`
+	CollectedAt       int64  `json:"collected_at"`
+	ConfirmedAt       int64  `json:"confirmed_at"`
+	SourceHash        string `json:"source_hash"`
+	KernelOperationID string `json:"kernel_operation_id"`
+	Reason            string `json:"reason"`
+}
+
 type Fail2banHostInputPreview struct {
+	Sync              Fail2banHostInputSyncView       `json:"sync"`
 	Runtime           Fail2banHostInputRuntimeView    `json:"runtime"`
 	Sources           Fail2banHostInputSourcesView    `json:"sources"`
 	Protection        Fail2banHostInputProtectionView `json:"protection"`

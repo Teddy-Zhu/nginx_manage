@@ -70,6 +70,7 @@ type fail2banHostRuntimeIntent struct {
 	RegistrationID  string                         `json:"registration_id"`
 	OperationID     string                         `json:"operation_id"`
 	BaseOperationID string                         `json:"base_operation_id"`
+	ControllerID    string                         `json:"controller_id"`
 	Action          string                         `json:"action"`
 	RequestHash     string                         `json:"request_hash"`
 	ProtectionID    string                         `json:"protection_id"`
@@ -112,7 +113,7 @@ func fail2banHostProgramShape(p fail2banHostProgram, k firewall.KernelView) bool
 }
 
 func (i fail2banHostRuntimeIntent) valid() bool {
-	if i.Schema != 1 || !validID(i.Owner) || !validID(i.RegistrationID) || !validID(i.OperationID) || i.BaseOperationID != "" && !validID(i.BaseOperationID) || i.BaseOperationID == i.OperationID || i.RequestHash != fail2banHostRuntimeRequest(i.Action, i.OperationID, i.BaseOperationID) || !i.Before.valid(i.Owner) || !i.Candidate.valid(i.Owner) || !fail2banHostProgramShape(i.Before, i.Baseline) {
+	if i.ControllerID != "" && !validID(i.ControllerID) || i.Schema != 1 || !validID(i.Owner) || !validID(i.RegistrationID) || !validID(i.OperationID) || i.BaseOperationID != "" && !validID(i.BaseOperationID) || i.BaseOperationID == i.OperationID || i.RequestHash != fail2banHostRuntimeRequest(i.Action, i.OperationID, i.BaseOperationID) || !i.Before.valid(i.Owner) || !i.Candidate.valid(i.Owner) || !fail2banHostProgramShape(i.Before, i.Baseline) {
 		return false
 	}
 	switch i.Action {
@@ -194,6 +195,13 @@ func loadFail2banHostRuntime(dataDir string) (*fail2banHostRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
+	if v.Intent.ControllerID != "" {
+		event, e := loadFail2banHostSyncEvent(dataDir, v.Intent.ControllerID)
+		if e != nil || event.Action != "enable" || !v.valid() || !fail2banHostSyncOwns(event, &v) {
+			return nil, errors.Join(errors.New("持续同步检查点与本机批准不一致"), e)
+		}
+		return &v, nil
+	}
 	i, err := loadFail2banHostRuntimeIntent(dataDir, v.Intent.OperationID)
 	if err != nil || !v.valid() || i.hash() != v.Intent.hash() {
 		return nil, errors.Join(errors.New("宿主机动作运行记录与不可变意图不一致"), err)
@@ -207,6 +215,9 @@ func fail2banHostRuntimeJournal(v *fail2banHostRuntime) Record {
 }
 
 func fail2banHostRuntimeReceipt(dataDir string, v *fail2banHostRuntime) bool {
+	if v.Intent.ControllerID != "" {
+		return fail2banHostSyncRuntimeReceipt(dataDir, v)
+	}
 	r, err := (&Journal{Dir: filepath.Join(dataDir, "agent", "operations")}).Get(v.Intent.OperationID)
 	want := fail2banHostRuntimeJournal(v)
 	return err == nil && r.Kind == want.Kind && r.OperationID == want.OperationID && r.RelatedOperationID == want.RelatedOperationID && r.RequestHash == want.RequestHash && r.State == want.State && r.Stage == want.Stage && r.BeforeRevision == want.BeforeRevision && r.AfterRevision == want.AfterRevision && r.CandidateHash == want.CandidateHash && r.ObservedRevision == want.ObservedRevision && r.Error == want.Error
@@ -218,6 +229,9 @@ func saveFail2banHostRuntime(dataDir string, v *fail2banHostRuntime) error {
 	v.UpdatedAt = time.Now().Unix()
 	if !v.valid() {
 		return errors.New("拒绝保存无效宿主机动作运行记录")
+	}
+	if v.Intent.ControllerID != "" {
+		return saveFail2banHostSyncRuntime(dataDir, v)
 	}
 	j := &Journal{Dir: filepath.Join(dataDir, "agent", "operations")}
 	if err := secure.RootDirectory(j.Dir, 0700); err != nil {
@@ -267,9 +281,12 @@ func fail2banHostRuntimeMatches(v *fail2banHostRuntime, root *fail2banHostRegist
 	return root != nil && root.State == "registered" && v.Intent.Owner == root.Owner && v.Intent.RegistrationID == root.OperationID && v.Intent.Baseline.NamespaceID == root.Confirmed.NamespaceID
 }
 
-// Until continuous action reconciliation is connected, changing the selected
-// engine cannot silently strand an explicitly installed host snapshot.
+// Changing the selected engine must not strand an approved continuous session
+// or an explicitly installed host snapshot.
 func fail2banHostRuntimeIdle(dataDir string) error {
+	if err := fail2banHostSyncInactive(dataDir); err != nil {
+		return err
+	}
 	v, err := loadFail2banHostRuntime(dataDir)
 	if err != nil {
 		return err

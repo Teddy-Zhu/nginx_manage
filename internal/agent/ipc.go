@@ -61,6 +61,7 @@ type Server struct {
 	ReleaseToken     string
 	Installation     *nginxruntime.Installation
 	fail2banNginx    *fail2banNginxExecutor
+	fail2banHostSync *fail2banHostSyncExecutor
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -139,6 +140,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	defer stopFail2banNginx()
+	stopHostSync, err := s.startFail2banHostSync(ctx, rootMaintenance, cancelRun, challengeErrors)
+	if err != nil {
+		return err
+	}
+	defer stopHostSync()
 	if s.Nginx != nil {
 		var challengeListener *net.UnixListener
 		challengeServer, challengeListener, err = s.Nginx.http01Server()

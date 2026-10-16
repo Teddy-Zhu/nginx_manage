@@ -58,6 +58,17 @@ const runtimes: Record<string, string> = {
   missing: "运行对象缺失",
   drifted: "运行对象发生变化",
 };
+const syncStates: Record<string, string> = {
+  unavailable: "未确认",
+  disabled: "未启用",
+  waiting: "等待核对",
+  collecting: "正在采集",
+  current: "最近采样已同步",
+  stopping: "正在停用",
+  paused: "已暂停",
+  failed: "同步失败",
+  recovery_required: "原事务待核对",
+};
 async function load() {
   if (busy.value) return;
   busy.value = true;
@@ -83,15 +94,19 @@ onUnmounted(() => {
 <template>
   <section class="panel page-stack">
     <div class="toolbar">
-      <h3>宿主机入口动作预检</h3>
-      <NButton :loading="busy" :disabled="busy" @click="load">刷新预检</NButton>
+      <h3>宿主机入口动作</h3>
+      <NButton :loading="busy" :disabled="busy" @click="load">刷新状态</NButton>
     </div>
     <NAlert type="warning"
-      >持续封禁同步尚不可用。当前规则与官方封禁可能不同，需分别核对。宿主机入口适用于本机直连流量；代理和
-      Docker 转发须单独核对。</NAlert
+      >宿主机入口动作适用于本机直连流量。代理和 Docker 转发须单独核对。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <template v-if="view">
+      <NAlert
+        v-if="view.sync.reason"
+        :type="view.sync.state === 'waiting' ? 'info' : 'warning'"
+        >{{ view.sync.reason }}</NAlert
+      >
       <div class="toolbar">
         <NTag :type="view.can_prepare ? 'info' : 'warning'">{{
           view.can_prepare ? "候选计划已生成" : "准备条件不满足"
@@ -124,6 +139,22 @@ onUnmounted(() => {
         >{{ view.runtime.reason }}</NAlert
       >
       <NDescriptions label-placement="left" :column="2" bordered>
+        <NDescriptionsItem label="持续同步">{{
+          syncStates[view.sync.state] || "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="等待同步">{{
+          view.sync.queued ? "是" : "否"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="同步采样时间">{{
+          view.sync.collected_at
+            ? new Date(view.sync.collected_at * 1000).toLocaleString()
+            : "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="同步核对时间">{{
+          view.sync.confirmed_at
+            ? new Date(view.sync.confirmed_at * 1000).toLocaleString()
+            : "未确认"
+        }}</NDescriptionsItem>
         <NDescriptionsItem label="观测范围">{{
           view.scope === "host" ? "宿主机" : "未确认"
         }}</NDescriptionsItem>
