@@ -12,6 +12,74 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /remote/pairings:
+    get:
+      operationId: listPairings
+      x-scopes: [nodes.manage, read, auth.manage]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    post:
+      operationId: createPairing
+      x-scopes: [nodes.manage, read, auth.manage]
+      parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PairingInput"}}}}
+      responses: {"201": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /remote/pairings/{id}:
+    delete:
+      operationId: revokePairing
+      x-scopes: [nodes.manage, read, auth.manage]
+      parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /remote/pairings/{id}/exchange:
+    post:
+      operationId: exchangePairing
+      description: 独立后端通过短期配对秘密领取同一控制节点的临时凭据。拒绝 Cookie、Origin、Authorization 和递归转发。相同领取随机数仅重放原领取，确认后不再返回 Token。
+      security: []
+      parameters:
+        - {"$ref": "#/components/parameters/ID"}
+        - {"name": "X-Nginxpanel-Target-Node", "in": "header", "required": true, "schema": {"type": "string"}}
+        - {"name": "X-Nginxpanel-Remote-Protocol", "in": "header", "required": true, "schema": {"type": "string", "enum": ["1"]}}
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PairingClaim"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /remote/pairings/{id}/confirm:
+    post:
+      operationId: confirmPairing
+      description: 仅原临时机器凭据可确认；确认与延长到批准有效期同事务。确认回执丢失后原凭据可重查，不创建第二份授权。
+      security: [{bearerAuth: []}]
+      parameters:
+        - {"$ref": "#/components/parameters/ID"}
+        - {"name": "X-Nginxpanel-Target-Node", "in": "header", "required": true, "schema": {"type": "string"}}
+        - {"name": "X-Nginxpanel-Remote-Protocol", "in": "header", "required": true, "schema": {"type": "string", "enum": ["1"]}}
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PairingConfirmation"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /nodes/pairings:
+    get:
+      operationId: listPairingJobs
+      x-scopes: [nodes.manage, read]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    post:
+      operationId: startPairing
+      x-scopes: [nodes.manage, read]
+      parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PairingJobInput"}}}}
+      responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /nodes/pairings/{id}:
+    get:
+      operationId: getPairingJob
+      x-scopes: [nodes.manage, read]
+      parameters: [{"$ref": "#/components/parameters/ID"}]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /nodes/pairings/{id}/resume:
+    post:
+      operationId: resumePairing
+      x-scopes: [nodes.manage, read]
+      parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
+      responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /nodes/pairings/{id}/abandon:
+    post:
+      operationId: abandonPairing
+      x-scopes: [nodes.manage, read]
+      parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /nodes:
     {"get": {"operationId": "listNodes", "x-scopes": ["nodes.manage", "read"], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}, "post": {"operationId": "createNode", "x-scopes": ["nodes.manage", "read"], "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/NodeCreateInput"}}}}, "responses": {"201": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /nodes/{id}:
@@ -1516,6 +1584,95 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["owner", "version", "sha256", "plan_id", "asset_id", "source_url", "license", "bound_at"], "properties": {"owner": {"type": "string"}, "version": {"type": "string"}, "sha256": {"type": "string"}, "plan_id": {"type": "string"}, "asset_id": {"type": "string"}, "source_url": {"type": "string"}, "license": {"type": "string"}, "bound_at": {"type": "integer", "format": "int64"}}}
     ComponentPanelPreparation:
       {"type": "object", "additionalProperties": false, "required": ["release_id", "database_schema", "automatic_rollback"], "properties": {"release_id": {"type": "string"}, "database_schema": {"type": "integer", "format": "int64"}, "automatic_rollback": {"type": "boolean"}}}
+    PairingInput:
+      type: object
+      additionalProperties: false
+      required: [name, controller_node_id, scopes, allowed_sources, credential_expires_at]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        controller_node_id: {type: string}
+        scopes: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}
+        allowed_sources: {type: array, minItems: 1, maxItems: 32, items: {type: string}}
+        credential_expires_at: {type: integer, format: int64}
+    Pairing:
+      type: object
+      additionalProperties: false
+      required: [id, node_id, name, controller_node_id, scopes, allowed_sources, credential_expires_at, credential_id, state, created_at, expires_at, claimed_at, confirmed_at, revoked_at]
+      properties:
+        id: {type: string}
+        node_id: {type: string}
+        name: {type: string}
+        controller_node_id: {type: string}
+        scopes: {type: array, items: {type: string}}
+        allowed_sources: {type: array, items: {type: string}}
+        credential_expires_at: {type: integer, format: int64}
+        credential_id: {type: string}
+        state: {type: string, enum: [offered, claimed, confirmed, revoked, expired]}
+        created_at: {type: integer, format: int64}
+        expires_at: {type: integer, format: int64}
+        claimed_at: {type: integer, format: int64}
+        confirmed_at: {type: integer, format: int64}
+        revoked_at: {type: integer, format: int64}
+    PairingOffer:
+      type: object
+      additionalProperties: false
+      required: [pairing, secret]
+      properties:
+        pairing: {$ref: '#/components/schemas/Pairing'}
+        secret: {type: string, readOnly: true, description: 仅首次成功创建时展示；幂等重放为空。}
+    PairingClaim:
+      type: object
+      additionalProperties: false
+      required: [secret, controller_node_id, claim]
+      properties:
+        secret: {type: string, minLength: 43, maxLength: 43, writeOnly: true}
+        controller_node_id: {type: string}
+        claim: {type: string, minLength: 43, maxLength: 43, writeOnly: true}
+    PairingConfirmation:
+      type: object
+      additionalProperties: false
+      required: [controller_node_id, claim]
+      properties:
+        controller_node_id: {type: string}
+        claim: {type: string, minLength: 43, maxLength: 43, writeOnly: true}
+    PairingExchange:
+      type: object
+      additionalProperties: false
+      required: [pairing, token]
+      properties:
+        pairing: {$ref: '#/components/schemas/Pairing'}
+        token: {type: string, readOnly: true}
+    PairingJobInput:
+      type: object
+      additionalProperties: false
+      required: [name, url, fingerprint, target_node_id, pairing_id, secret]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        url: {type: string, maxLength: 2048}
+        fingerprint: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        target_node_id: {type: string}
+        pairing_id: {type: string}
+        secret: {type: string, minLength: 43, maxLength: 43, writeOnly: true}
+    PairingJob:
+      type: object
+      additionalProperties: false
+      required: [id, name, url, fingerprint, controller_node_id, target_node_id, pairing_id, credential_id, connection_id, state, stage, error, revocation, created_at, updated_at]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        url: {type: string}
+        fingerprint: {type: string}
+        controller_node_id: {type: string}
+        target_node_id: {type: string}
+        pairing_id: {type: string}
+        credential_id: {type: string}
+        connection_id: {type: string}
+        state: {type: string, enum: [pending, recovery_required, abandoning, succeeded, abandoned]}
+        stage: {type: string, enum: [exchange, confirm, register, finished]}
+        error: {type: string}
+        revocation: {type: string, enum: ['', pending, revoked]}
+        created_at: {type: integer, format: int64}
+        updated_at: {type: integer, format: int64}
     NodeCreateInput:
       {"type": "object", "additionalProperties": false, "required": ["name", "url", "api_key", "fingerprint"], "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 100}, "url": {"type": "string", "maxLength": 2048}, "api_key": {"type": "string", "minLength": 20, "maxLength": 193, "writeOnly": true}, "fingerprint": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}}}
     NodeIdentity:

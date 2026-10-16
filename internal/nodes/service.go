@@ -34,6 +34,10 @@ func (s *Service) lock(id string) (func(), error) {
 }
 
 func (s *Service) Create(ctx context.Context, p auth.Principal, trace, key string, in CreateInput) (Connection, error) {
+	return s.create(ctx, p, trace, key, in, "", "")
+}
+
+func (s *Service) create(ctx context.Context, p auth.Principal, trace, key string, in CreateInput, expected, credential string) (Connection, error) {
 	if err := p.Require("nodes.manage", "read"); err != nil {
 		return Connection{}, err
 	}
@@ -63,7 +67,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, trace, key strin
 		return Connection{}, err
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	identity, caps, err := probe(callCtx, endpoint, "", "")
+	identity, caps, err := probe(callCtx, endpoint, expected, credential)
 	cancel()
 	if err != nil {
 		state, message := probeFailure(err)

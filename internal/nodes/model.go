@@ -25,6 +25,9 @@ type Service struct {
 	active        atomic.Int32
 	forwardActive atomic.Int32
 	streamActive  atomic.Int32
+	pairMu        sync.Mutex
+	pairAttempts  map[string]pairBucket
+	pairJobActive atomic.Int32
 }
 
 type CreateInput struct {

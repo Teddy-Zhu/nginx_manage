@@ -117,6 +117,14 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 
 func (s *Server) protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if pairingExchangeRequest(r) {
+			if r.Header.Get("Cookie") != "" || r.Header.Get("Origin") != "" || r.Header.Get("Authorization") != "" || r.Header.Get(remoteapi.HopHeader) != "" {
+				s.fail(w, r, fault.New(http.StatusForbidden, "PAIRING_CHANNEL_REJECTED", "配对交换只接受独立后端请求"))
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
 		if r.Method != "GET" && r.Method != "HEAD" && r.Method != "OPTIONS" {
 			if r.Header.Get("Authorization") == "" {
 				origin := r.Header.Get("Origin")

@@ -2781,6 +2781,17 @@ type CreateNodeParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
+type CreatePairingParams = CreateNodeParams
+type StartPairingParams = CreateNodeParams
+type RevokePairingParams = ReauthenticateParams
+type ResumePairingParams = ReauthenticateParams
+type AbandonPairingParams = ReauthenticateParams
+type ExchangePairingParams struct {
+	XNginxpanelTargetNode     string `json:"X-Nginxpanel-Target-Node"`
+	XNginxpanelRemoteProtocol string `json:"X-Nginxpanel-Remote-Protocol"`
+}
+type ConfirmPairingParams = ExchangePairingParams
+
 type DeleteNodeParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
@@ -3469,6 +3480,16 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	ListPairings(w http.ResponseWriter, r *http.Request)
+	CreatePairing(w http.ResponseWriter, r *http.Request, params CreatePairingParams)
+	RevokePairing(w http.ResponseWriter, r *http.Request, id ID, params RevokePairingParams)
+	ExchangePairing(w http.ResponseWriter, r *http.Request, id ID, params ExchangePairingParams)
+	ConfirmPairing(w http.ResponseWriter, r *http.Request, id ID, params ConfirmPairingParams)
+	ListPairingJobs(w http.ResponseWriter, r *http.Request)
+	StartPairing(w http.ResponseWriter, r *http.Request, params StartPairingParams)
+	GetPairingJob(w http.ResponseWriter, r *http.Request, id ID)
+	ResumePairing(w http.ResponseWriter, r *http.Request, id ID, params ResumePairingParams)
+	AbandonPairing(w http.ResponseWriter, r *http.Request, id ID, params AbandonPairingParams)
 	ListNodes(w http.ResponseWriter, r *http.Request)
 	GetNode(w http.ResponseWriter, r *http.Request, id ID)
 	CreateNode(w http.ResponseWriter, r *http.Request, params CreateNodeParams)
@@ -9819,6 +9840,16 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance", wrapper.EnterMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance/{id}/release", wrapper.ReleaseMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes", wrapper.ListNodes)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote/pairings", wrapper.ListPairings)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote/pairings", wrapper.CreatePairing)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/remote/pairings/{id}", wrapper.RevokePairing)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote/pairings/{id}/exchange", wrapper.ExchangePairing)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote/pairings/{id}/confirm", wrapper.ConfirmPairing)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes/pairings", wrapper.ListPairingJobs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nodes/pairings", wrapper.StartPairing)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes/pairings/{id}", wrapper.GetPairingJob)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nodes/pairings/{id}/resume", wrapper.ResumePairing)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nodes/pairings/{id}/abandon", wrapper.AbandonPairing)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nodes", wrapper.CreateNode)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes/{id}", wrapper.GetNode)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nodes/{id}", wrapper.DeleteNode)
@@ -9937,4 +9968,91 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/tasks/{id}/rollback", wrapper.RollbackHostDNS)
 
 	return m
+}
+
+func (siw *ServerInterfaceWrapper) pairingHeaders(w http.ResponseWriter, r *http.Request, required ...string) bool {
+	for _, name := range append([]string{"X-CSRF-Token"}, required...) {
+		values := r.Header.Values(name)
+		if len(values) > 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: name, Count: len(values)})
+			return false
+		}
+		if name != "X-CSRF-Token" && (len(values) != 1 || values[0] == "") {
+			siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: name, Err: fmt.Errorf("required header missing")})
+			return false
+		}
+	}
+	return true
+}
+func (siw *ServerInterfaceWrapper) pairingHandler(w http.ResponseWriter, r *http.Request, callback http.HandlerFunc) {
+	var handler http.Handler = callback
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) ListPairings(w http.ResponseWriter, r *http.Request) {
+	siw.pairingHandler(w, r, siw.Handler.ListPairings)
+}
+func (siw *ServerInterfaceWrapper) ListPairingJobs(w http.ResponseWriter, r *http.Request) {
+	siw.pairingHandler(w, r, siw.Handler.ListPairingJobs)
+}
+func (siw *ServerInterfaceWrapper) GetPairingJob(w http.ResponseWriter, r *http.Request) {
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetPairingJob(w, r, r.PathValue("id")) })
+}
+func (siw *ServerInterfaceWrapper) CreatePairing(w http.ResponseWriter, r *http.Request) {
+	if !siw.pairingHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePairing(w, r, CreatePairingParams{IdempotencyKey: r.Header.Get("Idempotency-Key")})
+	})
+}
+func (siw *ServerInterfaceWrapper) StartPairing(w http.ResponseWriter, r *http.Request) {
+	if !siw.pairingHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartPairing(w, r, StartPairingParams{IdempotencyKey: r.Header.Get("Idempotency-Key")})
+	})
+}
+func (siw *ServerInterfaceWrapper) RevokePairing(w http.ResponseWriter, r *http.Request) {
+	if !siw.pairingHeaders(w, r) {
+		return
+	}
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokePairing(w, r, r.PathValue("id"), RevokePairingParams{})
+	})
+}
+func (siw *ServerInterfaceWrapper) ResumePairing(w http.ResponseWriter, r *http.Request) {
+	if !siw.pairingHeaders(w, r) {
+		return
+	}
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumePairing(w, r, r.PathValue("id"), ResumePairingParams{})
+	})
+}
+func (siw *ServerInterfaceWrapper) AbandonPairing(w http.ResponseWriter, r *http.Request) {
+	if !siw.pairingHeaders(w, r) {
+		return
+	}
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AbandonPairing(w, r, r.PathValue("id"), AbandonPairingParams{})
+	})
+}
+func (siw *ServerInterfaceWrapper) ExchangePairing(w http.ResponseWriter, r *http.Request) {
+	if !siw.pairingHeaders(w, r, "X-Nginxpanel-Target-Node", "X-Nginxpanel-Remote-Protocol") {
+		return
+	}
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExchangePairing(w, r, r.PathValue("id"), ExchangePairingParams{XNginxpanelTargetNode: r.Header.Get("X-Nginxpanel-Target-Node"), XNginxpanelRemoteProtocol: r.Header.Get("X-Nginxpanel-Remote-Protocol")})
+	})
+}
+func (siw *ServerInterfaceWrapper) ConfirmPairing(w http.ResponseWriter, r *http.Request) {
+	if !siw.pairingHeaders(w, r, "X-Nginxpanel-Target-Node", "X-Nginxpanel-Remote-Protocol") {
+		return
+	}
+	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmPairing(w, r, r.PathValue("id"), ConfirmPairingParams{XNginxpanelTargetNode: r.Header.Get("X-Nginxpanel-Target-Node"), XNginxpanelRemoteProtocol: r.Header.Get("X-Nginxpanel-Remote-Protocol")})
+	})
 }

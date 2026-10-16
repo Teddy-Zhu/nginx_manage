@@ -24,8 +24,10 @@ func (s *Server) maintenanceAdmission(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if _, ok := s.authorize(w, r, false); !ok {
-			return
+		if !pairingExchangeRequest(r) {
+			if _, ok := s.authorize(w, r, false); !ok {
+				return
+			}
 		}
 		var done func()
 		var ok bool

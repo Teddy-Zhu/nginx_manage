@@ -4,6 +4,14 @@
  */
 
 export interface paths {
+    "/remote/pairings": { get: operations["listPairings"]; post: operations["createPairing"]; };
+    "/remote/pairings/{id}": { delete: operations["revokePairing"]; };
+    "/remote/pairings/{id}/exchange": { post: operations["exchangePairing"]; };
+    "/remote/pairings/{id}/confirm": { post: operations["confirmPairing"]; };
+    "/nodes/pairings": { get: operations["listPairingJobs"]; post: operations["startPairing"]; };
+    "/nodes/pairings/{id}": { get: operations["getPairingJob"]; };
+    "/nodes/pairings/{id}/resume": { post: operations["resumePairing"]; };
+    "/nodes/pairings/{id}/abandon": { post: operations["abandonPairing"]; };
     "/nodes": {
         parameters: { query?: never; header?: never; path?: never; cookie?: never; };
         get: operations["listNodes"];
@@ -1693,6 +1701,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PairingInput: {
+            name: string;
+            controller_node_id: string;
+            scopes: string[];
+            allowed_sources: string[];
+            credential_expires_at: number;
+        };
+        Pairing: {
+            id: string;
+            node_id: string;
+            name: string;
+            controller_node_id: string;
+            scopes: string[];
+            allowed_sources: string[];
+            credential_expires_at: number;
+            credential_id: string;
+            state: "offered" | "claimed" | "confirmed" | "revoked" | "expired";
+            created_at: number;
+            expires_at: number;
+            claimed_at: number;
+            confirmed_at: number;
+            revoked_at: number;
+        };
+        PairingOffer: { pairing: components["schemas"]["Pairing"]; readonly secret: string; };
+        PairingClaim: { secret: string; controller_node_id: string; claim: string; };
+        PairingConfirmation: { controller_node_id: string; claim: string; };
+        PairingExchange: { pairing: components["schemas"]["Pairing"]; readonly token: string; };
+        PairingJobInput: {
+            name: string;
+            url: string;
+            fingerprint: string;
+            target_node_id: string;
+            pairing_id: string;
+            secret: string;
+        };
+        PairingJob: {
+            id: string;
+            name: string;
+            url: string;
+            fingerprint: string;
+            controller_node_id: string;
+            target_node_id: string;
+            pairing_id: string;
+            credential_id: string;
+            connection_id: string;
+            state: "pending" | "recovery_required" | "abandoning" | "succeeded" | "abandoned";
+            stage: "exchange" | "confirm" | "register" | "finished";
+            error: string;
+            revocation: "" | "pending" | "revoked";
+            created_at: number;
+            updated_at: number;
+        };
         SystemVersion: {
             version: string;
             /** Format: int64 */
@@ -3303,6 +3363,16 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listPairings: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    createPairing: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingInput"]; }; }; responses: { 201: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    revokePairing: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    exchangePairing: { parameters: { query?: never; header: { "X-Nginxpanel-Target-Node": string; "X-Nginxpanel-Remote-Protocol": "1"; }; path: { id: string; }; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingClaim"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    confirmPairing: { parameters: { query?: never; header: { "X-Nginxpanel-Target-Node": string; "X-Nginxpanel-Remote-Protocol": "1"; }; path: { id: string; }; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingConfirmation"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    listPairingJobs: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    startPairing: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingJobInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    getPairingJob: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    resumePairing: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    abandonPairing: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     listNodes: {
         parameters: {
             query?: never;

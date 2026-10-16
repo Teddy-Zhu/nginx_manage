@@ -16,6 +16,7 @@ import { NAlert, NButton, NCheckbox, NFormItem, NInput, NPopconfirm, NTag } from
 import { useNodeAPI, apiError, type NodeConnection } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+import NodePairing from "../components/NodePairing.vue";
 const api = useNodeAPI();
 
 const session = useSession(), { run, busy, message } = useAction();
@@ -77,6 +78,7 @@ onUnmounted(() => { closed = true; controller.abort(); form.api_key = ""; });
   <div class="page-stack">
     <NAlert v-if="!canManage" type="warning">需要节点管理与读取权限。</NAlert>
     <template v-else>
+      <NodePairing @connected="load" />
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <section class="panel page-stack">
         <div class="toolbar"><h2>添加节点连接</h2><NButton @click="load">刷新列表</NButton></div>

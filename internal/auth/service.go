@@ -25,13 +25,14 @@ var ErrRateLimited = errors.New("登录尝试过多，请稍后重试")
 var AllScopes = []string{"read", "config.write", "config.secrets", "security.write", "system.write", "host.dns.write", "monitoring.write", "components.manage", "auth.manage", "backup.export", "backup.secrets", "backup.restore", "update.execute", "nodes.manage", "notifications.write"}
 
 type Principal struct {
-	ID          string   `json:"id"`
-	Username    string   `json:"username"`
-	Scopes      []string `json:"scopes"`
-	Machine     bool     `json:"machine"`
-	Delegated   bool     `json:"-"`
-	Recent      bool     `json:"-"`
-	GrantScopes []string `json:"-"`
+	ID           string   `json:"id"`
+	Username     string   `json:"username"`
+	Scopes       []string `json:"scopes"`
+	Machine      bool     `json:"machine"`
+	Delegated    bool     `json:"-"`
+	Recent       bool     `json:"-"`
+	GrantScopes  []string `json:"-"`
+	SessionEpoch int64    `json:"-"`
 }
 
 func (p Principal) Has(scope string) bool {
@@ -250,7 +251,7 @@ func (s *Service) Authenticate(r *http.Request) (Principal, error) {
 	if u.Username != username || u.SessionEpoch != s.Sessions.GetInt64(r.Context(), "epoch") {
 		return Principal{}, ErrUnauthorized
 	}
-	return Principal{ID: "administrator", Username: username, Scopes: AllScopes}, nil
+	return Principal{ID: "administrator", Username: username, Scopes: AllScopes, SessionEpoch: u.SessionEpoch}, nil
 }
 
 func ClientIP(r *http.Request) string {
@@ -311,21 +312,57 @@ type CredentialInput struct {
 }
 
 func (s *Service) CreateCredential(ctx context.Context, p Principal, in CredentialInput) (string, string, error) {
-	if err := p.Require("auth.manage"); err != nil {
+	if err := ValidateCredential(p, in); err != nil {
 		return "", "", err
 	}
-	if in.Name == "" || len(in.Name) > 100 || len(in.Scopes) == 0 || len(in.Scopes) > len(AllScopes) || len(in.AllowedSources) > 32 || in.ExpiresAt <= time.Now().Unix() || in.ExpiresAt > time.Now().Add(366*24*time.Hour).Unix() {
-		return "", "", fault.Invalid("无效凭据名称、权限、来源或到期时间")
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return "", "", err
 	}
+	defer tx.Rollback()
+	id, token, err := CreateCredentialTx(ctx, tx, p, in)
+	if err == nil {
+		err = tx.Commit()
+	}
+	return id, token, err
+}
+
+func ValidateCredential(p Principal, in CredentialInput) error {
+	if err := p.Require("auth.manage"); err != nil {
+		return err
+	}
+	if in.Name == "" || len(in.Name) > 100 || len(in.Scopes) == 0 || len(in.Scopes) > len(AllScopes) || len(in.AllowedSources) > 32 || in.ExpiresAt <= time.Now().Unix() || in.ExpiresAt > time.Now().Add(366*24*time.Hour).Unix() {
+		return fault.Invalid("无效凭据名称、权限、来源或到期时间")
+	}
+	seen := map[string]bool{}
 	for _, scope := range in.Scopes {
 		if !p.Has(scope) {
-			return "", "", ErrForbidden
+			return ErrForbidden
 		}
+		known := false
+		for _, candidate := range AllScopes {
+			if candidate == scope {
+				known = true
+				break
+			}
+		}
+		if !known || seen[scope] {
+			return fault.Invalid("凭据权限无效或重复")
+		}
+		seen[scope] = true
 	}
 	for _, source := range in.AllowedSources {
 		if _, _, err := net.ParseCIDR(source); err != nil {
-			return "", "", fault.Invalid("允许来源须为 CIDR")
+			return fault.Invalid("允许来源须为 CIDR")
 		}
+	}
+	return nil
+}
+
+// Pairing publishes the credential and its consumed offer in one transaction.
+func CreateCredentialTx(ctx context.Context, tx *sql.Tx, p Principal, in CredentialInput) (string, string, error) {
+	if err := ValidateCredential(p, in); err != nil {
+		return "", "", err
 	}
 	id, token := secure.ID(), secure.Token()
 	scopes, err := json.Marshal(in.Scopes)
@@ -339,11 +376,6 @@ func (s *Service) CreateCredential(ctx context.Context, p Principal, in Credenti
 	if err != nil {
 		return "", "", err
 	}
-	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return "", "", err
-	}
-	defer tx.Rollback()
 	var count int
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM api_credentials WHERE revoked_at IS NULL AND expires_at>?", time.Now().Unix()).Scan(&count); err != nil {
 		return "", "", err
@@ -352,9 +384,6 @@ func (s *Service) CreateCredential(ctx context.Context, p Principal, in Credenti
 		return "", "", fault.Conflict("有效机器凭据已达上限，请先撤销旧凭据")
 	}
 	_, err = tx.ExecContext(ctx, "INSERT INTO api_credentials(id,name,token_hash,scopes,allowed_sources,created_at,expires_at) VALUES(?,?,?,?,?,?,?)", id, in.Name, secure.Hash([]byte(token)), string(scopes), string(sources), time.Now().Unix(), in.ExpiresAt)
-	if err == nil {
-		err = tx.Commit()
-	}
 	return id, token, err
 }
 
