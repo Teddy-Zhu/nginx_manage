@@ -25,6 +25,7 @@ type HostInputPreview struct {
 	Registration      firewall.RegistrationView `json:"registration"`
 	Protection        HostInputProtectionView   `json:"protection"`
 	Sources           HostInputSourcesView      `json:"sources"`
+	Runtime           HostInputRuntimeView      `json:"runtime"`
 	ProtectedSources  []string                  `json:"protected_sources"`
 	ProgramHash       string                    `json:"program_hash"`
 	TransactionHash   string                    `json:"transaction_hash"`
@@ -34,10 +35,10 @@ type HostInputPreview struct {
 }
 
 func EmptyHostInput(scope, reason string) HostInputPreview {
-	return HostInputPreview{At: time.Now().Unix(), Scope: scope, Manager: "unknown", Backend: "direct-nftables", Table: firewall.NFTFail2banTable, Hook: "input", Priority: firewall.NFTFail2banPriority, Kernel: firewall.KernelView{Reason: "尚未读取独立目标表"}, Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对独立 root 登记"}, Protection: EmptyHostInputProtection("尚未核对目标本机 root 保护来源批准"), Sources: EmptyHostInputSources("尚未核对官方封禁来源"), ProtectedSources: []string{}, Reason: reason}
+	return HostInputPreview{At: time.Now().Unix(), Scope: scope, Manager: "unknown", Backend: "direct-nftables", Table: firewall.NFTFail2banTable, Hook: "input", Priority: firewall.NFTFail2banPriority, Kernel: firewall.KernelView{Reason: "尚未读取独立目标表"}, Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对独立 root 登记"}, Protection: EmptyHostInputProtection("尚未核对目标本机 root 保护来源批准"), Sources: EmptyHostInputSources("尚未核对官方封禁来源"), Runtime: EmptyHostInputRuntime("尚未核对宿主机动作运行状态"), ProtectedSources: []string{}, Reason: reason}
 }
 func (v HostInputPreview) Valid() bool {
-	if v.At <= 0 || v.ManagerObservedAt < 0 || v.Table != firewall.NFTFail2banTable || v.Hook != "input" || v.Priority != firewall.NFTFail2banPriority || v.Backend != "direct-nftables" || v.CanApply || !v.Sources.Valid() || v.ProtectedSources == nil || len(v.ProtectedSources) > firewall.NFTBanProtectionLimit || v.TransactionBytes < 0 || v.TransactionBytes > firewall.NFTBatchBytes || v.GeneratedRules < 0 || v.GeneratedRules > firewall.NFTBanProtectionLimit+firewall.NFTBanLimit+2 || v.Available && (v.Scope != "host" || v.ManagerObservedAt == 0) {
+	if v.At <= 0 || v.ManagerObservedAt < 0 || v.Table != firewall.NFTFail2banTable || v.Hook != "input" || v.Priority != firewall.NFTFail2banPriority || v.Backend != "direct-nftables" || v.CanApply || !v.Sources.Valid() || !v.Runtime.Valid() || v.ProtectedSources == nil || len(v.ProtectedSources) > firewall.NFTBanProtectionLimit || v.TransactionBytes < 0 || v.TransactionBytes > firewall.NFTBatchBytes || v.GeneratedRules < 0 || v.GeneratedRules > firewall.NFTBanProtectionLimit+firewall.NFTBanLimit+2 || v.Available && (v.Scope != "host" || v.ManagerObservedAt == 0) {
 		return false
 	}
 	set, err := (firewall.NFTBanSet{Addresses: []string{}, Protected: v.ProtectedSources}).Normalize()
@@ -54,7 +55,8 @@ func (v HostInputPreview) Valid() bool {
 		return false
 	}
 	r := v.Registration
-	if r.ObservedAt < 0 || r.ObservedAt != k.ObservedAt || r.Verified && (r.State != "registered" || len(r.OperationID) != 36 || !k.Available || !k.TableExists || k.Chains != 0 || k.Rules != 0) || !v.Protection.Valid() || v.Protection.Verified && !r.Verified {
+	shape := k.Chains == 0 && k.Rules == 0 || v.Runtime.Verified && v.Runtime.State == "applied" && k.Chains == 1 && k.Rules == v.Runtime.BannedCount+v.Runtime.ProtectedCount+2
+	if r.ObservedAt < 0 || r.ObservedAt != k.ObservedAt || r.Verified && (r.State != "registered" || len(r.OperationID) != 36 || !k.Available || !k.TableExists || !shape) || !v.Protection.Valid() || (v.Protection.Verified || v.Runtime.Verified) && !r.Verified {
 		return false
 	}
 	switch r.State {

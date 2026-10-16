@@ -97,6 +97,9 @@ func (f *fail2banHostInputReader) collect(ctx context.Context) fail2ban.HostInpu
 		return out
 	}
 	out.Registration = fail2banHostRegistrationView(f.server.DataDir, out.Kernel)
+	if root, e := loadFail2banHostRegistration(f.server.DataDir); e == nil {
+		out.Runtime = fail2banHostRuntimeView(f.server.DataDir, out.Kernel, root)
+	}
 	out.Protection = fail2banHostProtectionView(f.server.DataDir, out.Kernel, out.Registration)
 	if !out.Registration.Verified {
 		out.Reason = out.Registration.Reason

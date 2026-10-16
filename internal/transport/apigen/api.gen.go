@@ -1881,7 +1881,21 @@ type Fail2banHostInputSourcesView struct {
 	Reason         string   `json:"reason"`
 }
 
+type Fail2banHostInputRuntimeView struct {
+	At             int64  `json:"at"`
+	State          string `json:"state"`
+	Verified       bool   `json:"verified"`
+	OperationID    string `json:"operation_id"`
+	Action         string `json:"action"`
+	OperationState string `json:"operation_state"`
+	UpdatedAt      int64  `json:"updated_at"`
+	BannedCount    int    `json:"banned_count"`
+	ProtectedCount int    `json:"protected_count"`
+	Reason         string `json:"reason"`
+}
+
 type Fail2banHostInputPreview struct {
+	Runtime           Fail2banHostInputRuntimeView    `json:"runtime"`
 	Sources           Fail2banHostInputSourcesView    `json:"sources"`
 	Protection        Fail2banHostInputProtectionView `json:"protection"`
 	Registration      FirewallRegistrationView        `json:"registration"`

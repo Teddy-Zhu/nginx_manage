@@ -61,6 +61,13 @@ func ManageFail2banHostInputRegistration(ctx context.Context, dataDir, scope, ac
 	if err != nil {
 		return out, err
 	}
+	runtime, err := loadFail2banHostRuntime(dataDir)
+	if err != nil {
+		return out, err
+	}
+	if runtime != nil && (runtime.State == "running" || runtime.State == "recovery_required" || !fail2banHostRuntimeReceipt(dataDir, runtime) || fail2banHostRuntimeMatches(runtime, v) && runtime.effective().Set != nil) {
+		return out, errors.New("须先核对运行操作并移除本应用封禁规则，再操作空表登记")
+	}
 	if action == "recover" {
 		if v == nil || v.OperationID != operationID {
 			return out, errors.New("恢复标识与当前独立登记不一致，请先读取登记状态")
@@ -130,9 +137,10 @@ func ManageFail2banHostInputRegistration(ctx context.Context, dataDir, scope, ac
 		}
 		v = &fail2banHostRegistration{Schema: 1, Owner: secure.ID(), OperationID: operationID, BaseOperationID: base, Action: action, State: "creating", OperationState: "running", RequestHash: requestHash, Baseline: kernel}
 	} else {
-		if v == nil || v.State != "registered" || !kernel.TableExists || kernel.NamespaceID != v.Confirmed.NamespaceID || kernel.Fingerprint != v.Confirmed.Fingerprint {
+		if v == nil || v.State != "registered" || !kernel.TableExists || !fail2banHostRegistrationViewRecord(dataDir, kernel, v).Verified {
 			return out, errors.New("只能移除原样存在且有独立所有权证明的空表")
 		}
+		v.Confirmed = kernel
 		v.OperationID, v.BaseOperationID, v.Action = operationID, base, action
 		v.State, v.OperationState, v.RequestHash, v.Baseline, v.Error = "removing", "running", requestHash, kernel, ""
 	}
@@ -206,7 +214,11 @@ func recoverFail2banHostRegistration(dataDir string, v *fail2banHostRegistration
 		}
 	} else if v.State == "registered" {
 		if kernel.TableExists {
-			if kernel.NamespaceID != v.Confirmed.NamespaceID || kernel.Fingerprint != v.Confirmed.Fingerprint {
+			expected, e := fail2banHostOwnedKernel(dataDir, v)
+			if e != nil {
+				return out, e
+			}
+			if kernel.NamespaceID != expected.NamespaceID || kernel.Fingerprint != expected.Fingerprint {
 				return out, errors.New("已确认登记对象发生变化，禁止更新所有权证明")
 			}
 		} else {

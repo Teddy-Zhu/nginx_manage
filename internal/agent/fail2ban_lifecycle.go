@@ -38,6 +38,9 @@ type fail2banLifecycle struct {
 }
 
 func fail2banManagedIdle(data, allowed string) error {
+	if err := fail2banHostRuntimeIdle(data); err != nil {
+		return err
+	}
 	records, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).List()
 	if err != nil {
 		return err

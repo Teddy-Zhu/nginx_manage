@@ -167,7 +167,12 @@ func fail2banHostRegistrationViewRecord(dataDir string, kernel firewall.KernelVi
 		out.State, out.Reason = "missing", "宿主机动作登记表缺失，不会自动重建"
 		return out
 	}
-	if kernel.NamespaceID != v.Confirmed.NamespaceID || kernel.Fingerprint != v.Confirmed.Fingerprint {
+	expected, err := fail2banHostOwnedKernel(dataDir, v)
+	if err != nil {
+		out.State, out.Reason = "recovery_required", "独立宿主机运行意图或回执待核对，须先恢复运行操作"
+		return out
+	}
+	if kernel.NamespaceID != expected.NamespaceID || kernel.Fingerprint != expected.Fingerprint {
 		out.State, out.Reason = "drifted", "宿主机动作登记的命名空间或对象已变化，禁止覆盖"
 		return out
 	}

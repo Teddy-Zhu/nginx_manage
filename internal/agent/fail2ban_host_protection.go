@@ -170,7 +170,7 @@ func fail2banHostProtectionView(dataDir string, kernel firewall.KernelView, regi
 		out.Reason = "独立登记无法读取，无法核对保护批准"
 		return out
 	}
-	if rootRegistration == nil || rootRegistration.State != "registered" || !registration.Verified || rootRegistration.Owner != event.Owner || rootRegistration.OperationID != event.RegistrationID || registration.OperationID != event.RegistrationID || kernel.NamespaceID != event.NamespaceID || rootRegistration.Confirmed.NamespaceID != kernel.NamespaceID || rootRegistration.Confirmed.Fingerprint != kernel.Fingerprint {
+	if rootRegistration == nil || rootRegistration.State != "registered" || !registration.Verified || rootRegistration.Owner != event.Owner || rootRegistration.OperationID != event.RegistrationID || registration.OperationID != event.RegistrationID || kernel.NamespaceID != event.NamespaceID || rootRegistration.Confirmed.NamespaceID != kernel.NamespaceID {
 		out.State, out.Reason = "stale", "保护批准对应的所有者、登记或命名空间已变化，须目标本机重新批准"
 		return out
 	}

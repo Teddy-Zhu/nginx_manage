@@ -125,7 +125,7 @@ func CompileNFTBans(set NFTBanSet) (*NFTProgram, error) {
 // Preparation only encodes. A root executor must prove this target's separate
 // ownership, save intent/recovery and recheck the baseline before submitting.
 func PrepareNFTBans(set NFTBanSet, baseline KernelView, marker string) (NFTCreateBatch, error) {
-	if len(marker) < 32 || len(marker) > 192 || !strings.HasPrefix(marker, "nginxpanel:fail2ban:") || strings.ContainsAny(marker, "\x00\r\n") {
+	if !validNFTBanMarker(marker) {
 		return NFTCreateBatch{}, fault.Invalid("宿主机封禁独立标识无效")
 	}
 	program, err := CompileNFTBans(set)
@@ -133,4 +133,17 @@ func PrepareNFTBans(set NFTBanSet, baseline KernelView, marker string) (NFTCreat
 		return NFTCreateBatch{}, err
 	}
 	return prepareNFTTransaction(NFTFail2banInput, program, baseline, marker, baseline.TableExists, false)
+}
+
+// PrepareNFTBanEmpty removes this target's hook and rules while retaining the
+// owned table. The root executor must prove the old complete program first.
+func PrepareNFTBanEmpty(baseline KernelView, marker string) (NFTCreateBatch, error) {
+	if !validNFTBanMarker(marker) || !baseline.TableExists {
+		return NFTCreateBatch{}, fault.Invalid("宿主机动作空表事务标识或基线无效")
+	}
+	return prepareNFTTransaction(NFTFail2banInput, nil, baseline, marker, true, true)
+}
+
+func validNFTBanMarker(marker string) bool {
+	return len(marker) >= 32 && len(marker) <= 192 && strings.HasPrefix(marker, "nginxpanel:fail2ban:") && !strings.ContainsAny(marker, "\x00\r\n")
 }

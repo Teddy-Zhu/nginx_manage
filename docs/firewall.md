@@ -107,4 +107,4 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 内核格式与规则代次依据：[Linux v6.1 nf_tables UAPI](https://github.com/torvalds/linux/blob/v6.1/include/uapi/linux/netfilter/nf_tables.h)、[nf_tables GET/代次实现](https://github.com/torvalds/linux/blob/v6.1/net/netfilter/nf_tables_api.c)、[nfnetlink batch 代次前置条件](https://github.com/torvalds/linux/blob/v6.1/net/netfilter/nfnetlink.c)。这些源码依据不能替代 P5 真实内核矩阵验收。
 
 
-Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。共享快照、编码和语义证明通过闭合目标枚举选择布局，不接受调用方表名；人工端口规则的所有公开写入仍固定 `nginxpanel_host`。本机 root 可独立登记、核对、恢复及移除原样空表，采用另一所有者、持久记录、主机锁与操作/CAS，绝不接管已有未登记表；空表无链/hook，不表示保护已生效。预检核对独立登记、目标本机 root 管理/代理保护批准及官方 jail 来源的完整当前采样后，才合并本地保护并排除保护地址生成封禁候选材料，实际封禁及带 hook 的运行恢复仍未接通。详情见 [Fail2ban 宿主机动作](fail2ban.md)。Agent 为 52；实际双目标隔离和内核矩阵留待 P5。
+Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。共享快照、编码和语义证明通过闭合目标枚举选择布局，不接受调用方表名；人工端口规则的所有公开写入仍固定 `nginxpanel_host`。本机 root 可独立登记、核对、恢复及移除原样空表，采用另一所有者、持久记录、主机锁与操作/CAS，绝不接管已有未登记表；空表无链/hook，不表示保护已生效。预检核对独立登记、目标本机 root 管理/代理保护批准及官方 jail 来源的完整当前采样后，才合并本地保护并排除保护地址生成封禁候选材料，本机 root 一次性同步/清除和持久意图恢复已接入，已确认运行回执接续原登记的当前对象指纹；持续官方动作同步及自动对账/补偿仍待完成。详情见 [Fail2ban 宿主机动作](fail2ban.md)。Agent 为 53；实际双目标隔离和内核矩阵留待 P5。

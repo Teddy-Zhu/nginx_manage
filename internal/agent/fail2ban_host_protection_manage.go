@@ -119,7 +119,7 @@ func ManageFail2banHostProtection(ctx context.Context, dataDir, scope, action, o
 			return out, errors.New("须先完成目标本机宿主机动作空表登记")
 		}
 		call, cancel := context.WithTimeout(ctx, 3*time.Second)
-		kernel, e = snapshotFail2banHostRegistration(call, rootRegistration.Owner)
+		kernel, e = snapshotNFTTargetInspect(call, firewall.NFTFail2banInput, nil)
 		cancel()
 		if e != nil {
 			return out, e

@@ -29,7 +29,7 @@ const managers: Record<string, string> = {
 const registrations: Record<string, string> = {
   unavailable: "未确认",
   unregistered: "未登记",
-  registered: "空表登记已核对",
+  registered: "所有权已核对",
   released: "已释放",
   missing: "登记对象缺失",
   drifted: "登记对象发生变化",
@@ -48,6 +48,15 @@ const sources: Record<string, string> = {
   stale: "原批准已失效",
   revoked: "已撤销",
   ready: "已完整采集",
+};
+const runtimes: Record<string, string> = {
+  unavailable: "未确认",
+  uninitialized: "尚无运行操作",
+  empty: "仅保留空表",
+  applied: "已安装动作规则",
+  recovery_required: "原操作待恢复",
+  missing: "运行对象缺失",
+  drifted: "运行对象发生变化",
 };
 async function load() {
   if (busy.value) return;
@@ -78,7 +87,7 @@ onUnmounted(() => {
       <NButton :loading="busy" :disabled="busy" @click="load">刷新预检</NButton>
     </div>
     <NAlert type="warning"
-      >当前仅提供封禁候选计划，自动封禁尚不可用。宿主机入口适用于本机直连流量；代理和
+      >持续封禁同步尚不可用。当前规则与官方封禁可能不同，需分别核对。宿主机入口适用于本机直连流量；代理和
       Docker 转发须单独核对。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
@@ -109,6 +118,11 @@ onUnmounted(() => {
         type="warning"
         >{{ view.sources.reason }}</NAlert
       >
+      <NAlert
+        v-if="view.runtime.reason && view.runtime.reason !== view.reason"
+        :type="view.runtime.verified ? 'info' : 'warning'"
+        >{{ view.runtime.reason }}</NAlert
+      >
       <NDescriptions label-placement="left" :column="2" bordered>
         <NDescriptionsItem label="观测范围">{{
           view.scope === "host" ? "宿主机" : "未确认"
@@ -132,7 +146,9 @@ onUnmounted(() => {
           view.kernel.available
             ? view.kernel.table_exists
               ? view.registration.verified
-                ? "已登记空表"
+                ? view.kernel.chains
+                  ? "已登记动作表"
+                  : "已登记空表"
                 : "已存在，禁止接管"
               : "未发现"
             : "未确认"
@@ -166,6 +182,17 @@ onUnmounted(() => {
           view.sources.state === "ready"
             ? view.sources.protected_count
             : "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="当前运行规则">{{
+          runtimes[view.runtime.state] || "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="已核对的规则封禁地址">{{
+          view.runtime.verified ? view.runtime.banned_count : "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="最近运行操作时间">{{
+          view.runtime.updated_at
+            ? new Date(view.runtime.updated_at * 1000).toLocaleString()
+            : "无"
         }}</NDescriptionsItem>
       </NDescriptions>
       <NDescriptions
@@ -206,7 +233,7 @@ onUnmounted(() => {
           }}
           条规则，事务
           {{ view.transaction_bytes }}
-          字节，尚未应用到宿主机。封禁以官方实例的当前集合为准。
+          字节。本次候选计划尚未提交，当前规则另见运行状态。
         </p>
         <details>
           <summary>查看保护来源</summary>

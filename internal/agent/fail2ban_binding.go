@@ -165,6 +165,9 @@ func ManageFail2banBinding(ctx context.Context, data, scope, action, service, so
 		return out, err
 	}
 	defer unlock()
+	if err = fail2banHostRuntimeIdle(data); err != nil {
+		return out, err
+	}
 	prior, err := loadFail2banBinding(data)
 	if err != nil {
 		return out, err

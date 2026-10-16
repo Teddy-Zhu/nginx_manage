@@ -39,7 +39,7 @@ func readFail2banHostSources(ctx context.Context, dataDir string, kernel firewal
 		out.view.Reason = "独立登记无法完整读取"
 		return out, err
 	}
-	if root == nil || !registration.Verified || root.State != "registered" || root.Owner != event.Owner || root.OperationID != event.RegistrationID || registration.OperationID != event.RegistrationID || kernel.NamespaceID != event.NamespaceID || root.Confirmed.Fingerprint != kernel.Fingerprint {
+	if root == nil || !registration.Verified || root.State != "registered" || root.Owner != event.Owner || root.OperationID != event.RegistrationID || registration.OperationID != event.RegistrationID || kernel.NamespaceID != event.NamespaceID || root.Confirmed.NamespaceID != kernel.NamespaceID {
 		out.view.State, out.view.Reason = "stale", "官方封禁来源对应的登记、所有者或命名空间变化，须目标本机重新批准"
 		return out, errors.New(out.view.Reason)
 	}
@@ -69,7 +69,7 @@ func loadFail2banHostSourcesBasis(ctx context.Context, dataDir string) (fail2ban
 		return out, errors.New("须先完成宿主机动作空表登记")
 	}
 	call, cancel := context.WithTimeout(ctx, 3*time.Second)
-	out.kernel, err = snapshotFail2banHostRegistration(call, out.root.Owner)
+	out.kernel, err = snapshotNFTTargetInspect(call, firewall.NFTFail2banInput, nil)
 	cancel()
 	if err != nil {
 		return out, err
