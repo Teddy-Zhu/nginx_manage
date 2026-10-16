@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -20,7 +19,6 @@ import (
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/app"
-	"nginxpanel/internal/backup"
 	"nginxpanel/internal/launcher"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxcontainer"
@@ -54,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|agent|management-listener-disable|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|agent|management-listener-disable|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -121,7 +119,9 @@ func run() error {
 	releasePrerelease := flags.Bool("release-prerelease", false, "permit authenticated prerelease assets")
 	releaseTag := flags.String("release-tag", "", "exact v-prefixed GitHub release tag; empty selects latest stable")
 	releaseToken := flags.String("release-token-file", "", "root-owned 0600 GitHub read-only token file; public releases need no token")
-	backupFile := flags.String("backup-file", "", "encrypted disaster backup to inspect offline")
+	backupFile := flags.String("backup-file", "", "encrypted disaster backup for offline inspection or preparation")
+	restoreOperation := flags.String("restore-operation", "", "offline recovery preparation UUID")
+	backupInputFD := flags.Int("backup-input-fd", -1, "fixed inherited ciphertext descriptor for the non-root helper")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
 	}
@@ -129,39 +129,45 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
-		"backup-inspect":          {"backup-file": true},
-		"launcher":                {"data-dir": true},
-		"panel-native-bind":       {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
-		"panel-native-serve":      {"data-dir": true},
-		"panel-runtime-bind":      {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-verify":    {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-status":    {"data-dir": true},
-		"panel-runtime-stage":     {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
-		"panel-runtime-staged":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
-		"panel-runtime-select":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "panel-selection": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-selection-status":  {"data-dir": true, "panel-selection": true},
-		"panel-service-status":    {"data-dir": true},
-		"panel-service-operation": {"data-dir": true, "panel-service-operation": true},
-		"panel-service-control":   {"data-dir": true, "panel-service-operation": true, "panel-service-action": true, "panel-service-stop": true, "panel-selection": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-readiness":         {"data-dir": true, "panel-service-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"update-worker":           {"data-dir": true, "panel-update": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-update-status":     {"data-dir": true, "panel-update": true},
-		"panel-update-worker":     {"data-dir": true, "panel-update": true},
-		"panel-snapshot-capture":  {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-snapshot-check":    {"data-dir": true, "recovery-operation": true},
-		"panel-snapshot-db":       {"data-dir": true, "recovery-operation": true},
-		"panel-writer-bind":       {"data-dir": true, "panel-gid": true},
-		"panel-snapshot-restore":  {"data-dir": true, "recovery-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-restore-status":    {"data-dir": true, "recovery-operation": true},
-		"panel-runtime-compose":   {"data-dir": true},
-		"launcher-status":         {"data-dir": true},
-		"launcher-operation":      {"data-dir": true, "launcher-operation": true},
-		"launcher-restart":        {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true, "launcher-instance": true},
-		"nginx-container-bind":    {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"nginx-container-verify":  {"data-dir": true, "nginx-image": true, "launcher-binary": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"nginx-container-status":  {"data-dir": true},
-		"nginx-container-launch":  {"data-dir": true},
-		"release-images":          {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
+		"backup-inspect":                  {"backup-file": true},
+		"backup-prepare":                  {"data-dir": true, "backup-file": true, "restore-operation": true},
+		"backup-prepare-data":             {"data-dir": true, "restore-operation": true, "backup-input-fd": true},
+		"backup-preparation":              {"data-dir": true, "restore-operation": true},
+		"backup-preparation-data":         {"data-dir": true, "restore-operation": true},
+		"backup-preparation-cleanup":      {"data-dir": true, "restore-operation": true},
+		"backup-preparation-cleanup-data": {"data-dir": true, "restore-operation": true},
+		"launcher":                        {"data-dir": true},
+		"panel-native-bind":               {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-native-serve":              {"data-dir": true},
+		"panel-runtime-bind":              {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-verify":            {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-status":            {"data-dir": true},
+		"panel-runtime-stage":             {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-staged":            {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-select":            {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "panel-selection": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-selection-status":          {"data-dir": true, "panel-selection": true},
+		"panel-service-status":            {"data-dir": true},
+		"panel-service-operation":         {"data-dir": true, "panel-service-operation": true},
+		"panel-service-control":           {"data-dir": true, "panel-service-operation": true, "panel-service-action": true, "panel-service-stop": true, "panel-selection": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-readiness":                 {"data-dir": true, "panel-service-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"update-worker":                   {"data-dir": true, "panel-update": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-update-status":             {"data-dir": true, "panel-update": true},
+		"panel-update-worker":             {"data-dir": true, "panel-update": true},
+		"panel-snapshot-capture":          {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-snapshot-check":            {"data-dir": true, "recovery-operation": true},
+		"panel-snapshot-db":               {"data-dir": true, "recovery-operation": true},
+		"panel-writer-bind":               {"data-dir": true, "panel-gid": true},
+		"panel-snapshot-restore":          {"data-dir": true, "recovery-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-restore-status":            {"data-dir": true, "recovery-operation": true},
+		"panel-runtime-compose":           {"data-dir": true},
+		"launcher-status":                 {"data-dir": true},
+		"launcher-operation":              {"data-dir": true, "launcher-operation": true},
+		"launcher-restart":                {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true, "launcher-instance": true},
+		"nginx-container-bind":            {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-verify":          {"data-dir": true, "nginx-image": true, "launcher-binary": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-status":          {"data-dir": true},
+		"nginx-container-launch":          {"data-dir": true},
+		"release-images":                  {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
 	}
 	var invalidFlag string
 	flags.Visit(func(f *flag.Flag) {
@@ -172,8 +178,16 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "backup-input-fd":
+			if command != "backup-prepare-data" {
+				invalidFlag = f.Name
+			}
+		case "restore-operation":
+			if !isBackupPreparationCommand(command) {
+				invalidFlag = f.Name
+			}
 		case "backup-file":
-			if command != "backup-inspect" {
+			if command != "backup-inspect" && command != "backup-prepare" {
 				invalidFlag = f.Name
 			}
 		case "panel-update":
@@ -237,31 +251,8 @@ func run() error {
 	if invalidFlag != "" {
 		return fmt.Errorf("%s does not accept --%s", command, invalidFlag)
 	}
-	if command == "backup-inspect" {
-		if os.Geteuid() == 0 || *backupFile == "" {
-			return errors.New("backup-inspect 须由非 root 账户执行并指定 --backup-file；解密材料通过标准输入提供")
-		}
-		raw, err := io.ReadAll(io.LimitReader(os.Stdin, 8193))
-		if err != nil {
-			return err
-		}
-		if len(raw) > 8192 {
-			return errors.New("备份解密输入超过限制")
-		}
-		var credentials backup.InspectCredentials
-		decoder := json.NewDecoder(strings.NewReader(string(raw)))
-		decoder.DisallowUnknownFields()
-		if err = decoder.Decode(&credentials); err != nil {
-			return errors.New("备份解密输入须为 JSON 对象")
-		}
-		if decoder.Decode(new(any)) != io.EOF {
-			return errors.New("备份解密输入包含多余数据")
-		}
-		out, err := backup.InspectFile(ctx, *backupFile, credentials)
-		if err != nil {
-			return err
-		}
-		return json.NewEncoder(os.Stdout).Encode(out)
+	if handled, err := runBackupCommand(ctx, command, backupCLIOptions{DataDir: *dataDir, File: *backupFile, OperationID: *restoreOperation, InputFD: *backupInputFD}); handled {
+		return err
 	}
 	if *nginxUninstalled && command != "component-bind" {
 		return errors.New("nginx-uninstalled is only valid for component-bind")

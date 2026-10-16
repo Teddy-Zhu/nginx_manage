@@ -17,6 +17,7 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/storage"
 	"nginxpanel/migrations"
 )
 
@@ -28,34 +29,47 @@ func InspectFile(ctx context.Context, path string, credentials InspectCredential
 	}
 	call, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	f, err := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
-	if err != nil {
-		return out, err
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return out, err
-	}
-	if !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > ArchiveMax {
-		return out, errors.New("备份须为容量限制内的普通文件")
-	}
 	dir, err := os.MkdirTemp("", "nginxpanel-backup-")
 	if err != nil {
 		return out, err
 	}
 	defer func() { err = errors.Join(err, removeWorkspace(dir)) }()
+	m, hash, err := extractArchiveFile(call, path, dir, credentials)
+	if err != nil {
+		return out, err
+	}
+	return inspectExtracted(call, dir, m, hash)
+}
+func extractArchiveFile(call context.Context, path, dir string, credentials InspectCredentials) (Manifest, string, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	defer f.Close()
+	return extractArchive(call, f, dir, credentials)
+}
+func extractArchive(call context.Context, f *os.File, dir string, credentials InspectCredentials) (Manifest, string, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	if !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > ArchiveMax {
+		return Manifest{}, "", errors.New("备份须为容量限制内的普通文件")
+	}
 	hash := sha256.New()
 	reader := &countReader{r: io.TeeReader(io.LimitReader(f, ArchiveMax+1), hash)}
 	m, err := decryptArchive(call, reader, dir, credentials)
 	if err != nil {
-		return out, err
+		return Manifest{}, "", err
 	}
 	if reader.n != info.Size() || !secure.RootFileUnchanged(f, info) {
-		return out, errors.New("备份输入未完整认证或读取期间发生变化")
+		return Manifest{}, "", errors.New("备份输入未完整认证或读取期间发生变化")
 	}
+	return m, hex.EncodeToString(hash.Sum(nil)), nil
+}
+func inspectExtracted(call context.Context, dir string, m Manifest, archiveHash string) (out Inspection, err error) {
 	out.Manifest = m
-	out.ArchiveSHA256 = hex.EncodeToString(hash.Sum(nil))
+	out.ArchiveSHA256 = archiveHash
 	out.Issues = []string{}
 	vault, err := secure.LoadKey(filepath.Join(dir, "master.key"))
 	if err != nil {
@@ -73,6 +87,9 @@ func InspectFile(ctx context.Context, path string, credentials InspectCredential
 		return out, err
 	}
 	defer db.Close()
+	if err = storage.CheckRestoreBarrier(call, db); err != nil {
+		return out, err
+	}
 	meta, err := databaseMetadata(call, db)
 	if err != nil {
 		return out, err

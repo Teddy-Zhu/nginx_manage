@@ -24,6 +24,10 @@ func Open(ctx context.Context, dataDir string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	if err := CheckRestoreBarrier(ctx, db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrations.FS)
 	if err == nil {
 		_, err = provider.Up(ctx)

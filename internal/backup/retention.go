@@ -220,6 +220,9 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, trace, id string
 	return s.get(ctx, id)
 }
 func (s *Service) cleanup(ctx context.Context) error {
+	if err := cleanupPreparations(ctx, s.DataDir); err != nil {
+		return err
+	}
 	policy, err := s.policy(ctx)
 	if err != nil {
 		return err

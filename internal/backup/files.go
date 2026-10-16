@@ -172,7 +172,7 @@ func copyMaterial(ctx context.Context, source, target string, max int64) error {
 	}
 	return errors.Join(err, out.Close())
 }
-func writeManifest(path string, m Manifest) error {
+func writeManifest(path string, m any) error {
 	raw, err := json.Marshal(m)
 	if err != nil {
 		return err
