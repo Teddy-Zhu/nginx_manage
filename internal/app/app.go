@@ -25,6 +25,7 @@ import (
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/backup"
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/hostdns"
@@ -60,7 +61,7 @@ func Init(ctx context.Context, dataDir string, development bool) (string, error)
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return "", err
 	}
-	for _, dir := range []string{"app", "bootstrap", "secrets", "staging", "run"} {
+	for _, dir := range []string{"app", "bootstrap", "secrets", "staging", "backups", "run"} {
 		if err := os.MkdirAll(filepath.Join(dataDir, dir), 0700); err != nil {
 			return "", err
 		}
@@ -262,7 +263,8 @@ func Run(ctx context.Context, o Options) error {
 	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	updateService := &panelupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	migrationService := &migration.Service{Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
-	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, Installations: installationService, Updates: updateService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
+	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
+	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Updates: updateService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -274,14 +276,14 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 13)
+	result := make(chan error, 14)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(11)
+	workers.Add(12)
 	if !o.Dev {
 		readyListener, err := panelready.Listen(o.DataDir)
 		if err != nil {
@@ -317,6 +319,7 @@ func Run(ctx context.Context, o Options) error {
 	go func() { defer workers.Done(); result <- notificationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- dnsService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- migrationService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- backupService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- componentService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- installationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- updateService.Run(runCtx) }()

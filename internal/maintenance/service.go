@@ -193,6 +193,13 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 	}
 	defer tx.Rollback()
 	var installations int
+	var backups int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM backup_records b JOIN tasks t ON t.id=b.task_id WHERE b.maintenance_id=? AND t.state NOT IN('succeeded','failed','cancelled','rolled_back') AND t.stage IN('queued','draining','capturing')", id).Scan(&backups); err != nil {
+		return out, err
+	}
+	if backups != 0 {
+		return out, fault.Conflict("原备份仍在捕获一致性快照，不能释放维护锁")
+	}
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM nginx_installations i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','cancelled')", id).Scan(&installations); err != nil {
 		return out, err
 	}

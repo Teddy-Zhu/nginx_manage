@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
@@ -24,6 +25,7 @@ var definitions = []Definition{
 	{ID: "monitoring", Name: "基础监控", Available: true, Dependencies: []string{}},
 	{ID: "fail2ban", Name: "Fail2ban", Dependencies: []string{"firewall"}, Reason: "当前版本暂不提供 Fail2ban 管理"},
 	{ID: "notifications", Name: "外部通知", Available: true, Dependencies: []string{}},
+	{ID: "automatic-backups", Name: "定期备份", Available: true, Dependencies: []string{}},
 }
 
 func Init(ctx context.Context, db *sql.DB) error {
@@ -65,6 +67,18 @@ func Set(ctx context.Context, db *sql.DB, p auth.Principal, id string, enabled b
 		return err
 	}
 	defer tx.Rollback()
+	if id == "automatic-backups" && enabled {
+		if err = p.Require("backup.export", "backup.secrets"); err != nil {
+			return err
+		}
+		var approved bool
+		if err = tx.QueryRowContext(ctx, "SELECT recipient<>'' AND key_saved_at>0 AND authorization_until>? AND principal<>'' FROM backup_policy WHERE id=1", time.Now().Unix()).Scan(&approved); err != nil {
+			return err
+		}
+		if !approved {
+			return fault.Conflict("请在备份设置中确认恢复公钥及定期备份授权")
+		}
+	}
 	if id == "nginx-config" {
 		var pending int
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE state IN ('applying','recovery_required')").Scan(&pending); err != nil {
@@ -75,7 +89,7 @@ func Set(ctx context.Context, db *sql.DB, p auth.Principal, id string, enabled b
 		}
 	}
 	// Passive sampling and notification delivery own no protection rules.
-	if !enabled && id != "monitoring" && id != "notifications" {
+	if !enabled && id != "monitoring" && id != "notifications" && id != "automatic-backups" {
 		var pending int
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running','waiting_confirmation','compensating','recovery_required')").Scan(&pending); err != nil {
 			return err

@@ -4,6 +4,10 @@
  */
 
 export interface paths {
+    "/backups": { get: operations["listBackups"]; post: operations["createBackup"]; };
+    "/backups/policy": { get: operations["getBackupPolicy"]; put: operations["setBackupPolicy"]; };
+    "/backups/{id}": { get: operations["getBackup"]; delete: operations["deleteBackup"]; };
+    "/backups/{id}/download": { get: operations["downloadBackup"]; post: operations["createBackupDownload"]; };
     "/management/listener": { get: operations["getManagementListener"]; post: operations["applyManagementListener"]; };
     "/management/listener/operations/{id}": { get: operations["getManagementListenerOperation"]; };
     "/management/listener/operations/{id}/confirm": { post: operations["confirmManagementListener"]; };
@@ -1705,6 +1709,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        BackupInput: { name: string; encryption: "recipient" | "passphrase"; recipient: string; passphrase: string; };
+        BackupPolicyInput: { base_version: number; enabled: boolean; recipient: string; key_saved: boolean; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; };
+        BackupPolicy: { version: number; enabled: boolean; recipient: string; key_saved_at: number; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; next_run_at: number; error: string; updated_at: number; };
+        BackupDatabase: { schema_version: number; node_id: string; desired_revision: string; applied_revision: string; head_version: number; };
+        BackupRecord: { id: string; name: string; state: string; stage: string; error: string; encryption: "recipient" | "passphrase"; recipient: string; scheduled: boolean; maintenance_id: string; archive_size: number; archive_sha256: string; captured_at: number; created_at: number; finished_at: number; expires_at: number; deleted_at: number; available: boolean; database: components["schemas"]["BackupDatabase"] | null; };
+        BackupOverview: { policy: components["schemas"]["BackupPolicy"]; records: components["schemas"]["BackupRecord"][]; archive_max: number; store_max: number; };
+        BackupDownloadTicket: { url: string; expires_at: number; };
         ManagementListenerInput: { version: number; enabled: boolean; listen: string; allowed_sources: string[]; certificate_pem: string; key_pem: string; rotate_certificate: boolean; };
         ManagementListenerConfig: { enabled: boolean; listen: string; allowed_sources: string[]; tls_fingerprint: string; certificate_expires_at: number; };
         ManagementListenerOperation: { id: string; version: number; state: "waiting_confirmation" | "succeeded" | "rolled_back" | "recovery_required"; stage: string; deadline: number; config: components["schemas"]["ManagementListenerConfig"]; confirmed_source: string; error: string; };
@@ -3371,6 +3382,14 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listBackups: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    createBackup: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["BackupInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    getBackup: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    deleteBackup: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    getBackupPolicy: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    setBackupPolicy: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["BackupPolicyInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    createBackupDownload: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    downloadBackup: { parameters: { query?: { ticket?: string; }; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: { headers: { "X-Backup-SHA256"?: string; [name: string]: unknown; }; content: { "application/octet-stream": string; }; }; default: components["responses"]["JSON"]; }; };
     getManagementListener: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     applyManagementListener: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["ManagementListenerInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getManagementListenerOperation: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

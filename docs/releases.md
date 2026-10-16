@@ -166,14 +166,14 @@ sudo /opt/nginxpanel/current/nginxpanel panel-readiness \
 
 `update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 21。
 
-原生安装登记 v11 为 native 和 Docker 面板统一安装 `nginxpanel-update@.service`。该 root 服务独立于 `serve` 和 Agent 的生命周期，只接受原操作 UUID，由固定 `panel-update-worker` 加载 root 记录；请求不能指定可执行程序、数据目录或信任文件。服务不自动重启，最长运行 40 分钟，收到停止信号后留出补偿时间。运行前核对安装意图、ready、root 服务文件及 systemd 实际加载的片段、账户、类型、drop-in 和 reload 状态。
+原生安装登记 v12 为 native 和 Docker 面板统一安装 `nginxpanel-update@.service`。该 root 服务独立于 `serve` 和 Agent 的生命周期，只接受原操作 UUID，由固定 `panel-update-worker` 加载 root 记录；请求不能指定可执行程序、数据目录或信任文件。服务不自动重启，最长运行 40 分钟，收到停止信号后留出补偿时间。运行前核对安装意图、ready、root 服务文件及 systemd 实际加载的片段、账户、类型、drop-in 和 reload 状态。
 
 Agent 21 提供内部 IPC `POST /v1/panel/updates` 与 `GET /v1/panel/updates/{id}`，沿用统一响应封装。新建须传递已签名暂存的 `plan_id`、原 `maintenance_id`、`prerelease`、操作 UUID、发起人 `actor`、原请求 `request_id`、当前 epoch、连续 `sequence` 和五分钟内的 `authorization_until`；首个 command 为 `update`，后续为 `resume`。Agent 先持久保存完整原意图和逐次授权，再启动固定服务。启动授权由 worker 在锁内一次性认领。相同序号与内容只查询原操作，不能重复启动；启动结果未知或服务停止后须使用下一个序号显式续办。历史授权不可修改，续办不改变原目标、快照及总执行期限。过期启动授权不能触发后续变更，已经运行的事务仍按原补偿规则处理。
 
 查询同时核对实际服务状态与 root 原记录；失去运行进程的未完成事务保留 `recovery_required`，不伪造成功。已提交或补偿完成的事务只收取原维护释放回执，查询可补齐此收尾记录，不能触发停机、切换或恢复。上述入口为 Agent 内部合同；面向用户的 Web/API 任务与更新结束后的救援材料清理已接入。
 
 
-Web“组件准备”可单独选择面板；准备过程除验证及下载签名静态面板产物外，还将同版程序与前端暂存到持久版本目录，并返回版本标识、数据库版本与自动回滚声明。面板不与 Nginx/Fail2ban 共用准备计划，暂存不切换当前版本或启动新程序。安装登记 v11 允许 Agent 仅在受管 runtime 目录完成此暂存。
+Web“组件准备”可单独选择面板；准备过程除验证及下载签名静态面板产物外，还将同版程序与前端暂存到持久版本目录，并返回版本标识、数据库版本与自动回滚声明。面板不与 Nginx/Fail2ban 共用准备计划，暂存不切换当前版本或启动新程序。安装登记 v12 允许 Agent 仅在受管 runtime 目录完成此暂存。
 
 Web“面板更新”及公共 API `GET/POST /api/v1/panel/updates`、`GET /api/v1/panel/updates/{id}`、`POST /api/v1/panel/updates/{id}/resume` 已接入同一任务服务。写操作要求 `components.manage`、`system.write`、近期认证或有效机器 Token，以及幂等键；浏览器同时校验 CSRF。新建绑定已成功暂存的准备任务和原 held 维护会话。任务输入与每次请求加密保存，历史请求追加保留；发起人和请求标识同时保存在 root 授权记录中，数据库补偿后仍可追溯。联系 Agent 前先记录提交尝试，使更新快照和数据库回滚后仍能确认原操作。
 
@@ -200,7 +200,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-update-status \
 
 恢复材料清理仅在 `release_acknowledged=true` 后开始；`cleanup.state` 为 `pending/running/blocked/done`，错误、资源数量、字节数及时间独立于更新结果返回。删除前将只属于原快照 UUID 和原恢复操作 UUID 的路径、inode、权限、大小、内容散列写入 root 父记录。每次续清理先检查整个剩余目录树，再逐项删除，允许原清单中的资源已被前次清理删除；遇到未知文件、链接、身份或内容变化则保留并报告。Agent 每 30 秒择一收尾，失败至少间隔 10 分钟重试，单次处理最多 5 分钟；重启继续使用原清单。Web 终态任务仍同步清理状态，不重开维护、不覆盖业务写入、不改变成功或补偿结果。
 
-清理保留 root 审计记录、共享 `recovery.key`、当前/前一程序及前端版本。`recovery_required` 的材料不按 TTL 删除。未获原快照批准、助手目录残留、无法归属的 `.snapshot-*` 暂存及其他未知资源不自动删除，须本机核对；清理完成仅指原批准清单，不能视为全目录垃圾回收。清理无需打开当前数据库或长时间持有配置写入准入锁。数据库迁移为 19，Agent 合同为 21，安装登记仍为 v11。
+清理保留 root 审计记录、共享 `recovery.key`、当前/前一程序及前端版本。`recovery_required` 的材料不按 TTL 删除。未获原快照批准、助手目录残留、无法归属的 `.snapshot-*` 暂存及其他未知资源不自动删除，须本机核对；清理完成仅指原批准清单，不能视为全目录垃圾回收。清理无需打开当前数据库或长时间持有配置写入准入锁。数据库迁移为 19，Agent 合同为 21，安装登记现为 v12。
 
 ## 本机面板恢复快照
 

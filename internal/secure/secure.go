@@ -3,6 +3,7 @@ package secure
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -33,7 +34,10 @@ func ID() string {
 
 func Hash(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 
-type Vault struct{ aead cipher.AEAD }
+type Vault struct {
+	aead      cipher.AEAD
+	digestKey []byte
+}
 
 func LoadKey(filename string) (*Vault, error) {
 	info, err := os.Lstat(filename)
@@ -55,7 +59,19 @@ func LoadKey(filename string) (*Vault, error) {
 		return nil, err
 	}
 	aead, err := cipher.NewGCM(block)
-	return &Vault{aead: aead}, err
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte("nginxpanel:vault:request-digest"))
+	return &Vault{aead: aead, digestKey: mac.Sum(nil)}, err
+}
+
+// Digest compares secret-bearing idempotent requests without storing a fast,
+// unkeyed password verifier. Its domain is separate from data encryption.
+func (v *Vault) Digest(data []byte, purpose string) string {
+	mac := hmac.New(sha256.New, v.digestKey)
+	mac.Write([]byte(purpose))
+	mac.Write([]byte{0})
+	mac.Write(data)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func CreateKey(filename string) error {

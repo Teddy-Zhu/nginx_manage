@@ -8,6 +8,12 @@ type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
 type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
+export type BackupInput = components["schemas"]["BackupInput"];
+export type BackupPolicyInput = components["schemas"]["BackupPolicyInput"];
+export type BackupPolicy = components["schemas"]["BackupPolicy"];
+export type BackupRecord = components["schemas"]["BackupRecord"];
+export type BackupOverview = components["schemas"]["BackupOverview"];
+export type BackupDownloadTicket = components["schemas"]["BackupDownloadTicket"];
 export type MaintenanceView = components["schemas"]["MaintenanceView"];
 export type MaintenanceSession = components["schemas"]["MaintenanceSession"];
 export type MaintenanceStartInput =
@@ -344,6 +350,13 @@ function createAPI(scope: RequestScope) {
   followLogs: (query: LogQuery, page: (value: LogPage) => void, error: (value: ApiError) => void) => followLogsFor(scope, query, page, error),
   nodes: (signal?: AbortSignal) => request<NodeConnection[]>({ url: "/nodes", signal }),
   pairings: () => request<Pairing[]>({ url: "/remote/pairings" }),
+  backups: () => request<BackupOverview>({ url: "/backups" }),
+  backup: (id: string) => request<BackupRecord>({ url: `/backups/${id}` }),
+  createBackup: (data: BackupInput, key: string) => request<BackupRecord>({ url: "/backups", method: "POST", data, headers: { "Idempotency-Key": key } }),
+  deleteBackup: (id: string) => request<BackupRecord>({ url: `/backups/${id}`, method: "DELETE" }),
+  backupPolicy: () => request<BackupPolicy>({ url: "/backups/policy" }),
+  saveBackupPolicy: (data: BackupPolicyInput) => request<BackupPolicy>({ url: "/backups/policy", method: "PUT", data }),
+  backupDownload: (id: string) => request<BackupDownloadTicket>({ url: `/backups/${id}/download`, method: "POST" }),
   managementListener: () => request<ManagementListenerView>({ url: "/management/listener" }),
   listenerOperation: (id: string) => request<ManagementListenerOperation>({ url: `/management/listener/operations/${id}` }),
   applyManagementListener: (data: ManagementListenerInput, key: string) => request<ManagementListenerOperation>({ url: "/management/listener", method: "POST", data, headers: { "Idempotency-Key": key } }),

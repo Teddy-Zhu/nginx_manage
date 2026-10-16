@@ -10,6 +10,7 @@ import (
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/backup"
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/hostdns"
@@ -43,6 +44,7 @@ type Server struct {
 	Installations *nginxinstall.Service
 	Updates       *panelupdates.Service
 	Migration     *migration.Service
+	Backups       *backup.Service
 	Nodes         *nodes.Service
 	Agent         *agent.Client
 	NodeID        string

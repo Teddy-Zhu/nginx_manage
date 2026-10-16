@@ -12,6 +12,65 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /backups:
+    get:
+      operationId: listBackups
+      x-scopes: [backup.export]
+      description: 本机完整备份概览及最近 128 条记录；包包含全部业务秘密，下载额外要求 backup.secrets 和近期认证。拒绝递归转发。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    post:
+      operationId: createBackup
+      x-scopes: [backup.export, backup.secrets, system.write]
+      description: 幂等创建完整加密备份。口令仅驻当前进程内存；一致性捕获使用共同维护边界，释放维护后流式加密，完成前不可下载。须近期认证及直接连接本节点。
+      parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
+      requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/BackupInput"}}}}
+      responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /backups/policy:
+    get:
+      operationId: getBackupPolicy
+      x-scopes: [backup.export]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    put:
+      operationId: setBackupPolicy
+      x-scopes: [backup.export, backup.secrets, system.write]
+      description: 版本比较后保存公钥、离线密钥确认、授权期限、周期及保留策略；定期任务复查原授权主体、会话代次、Token 权限及期限。须近期认证。
+      parameters: [{"$ref": "#/components/parameters/CSRF"}]
+      requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/BackupPolicyInput"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /backups/{id}:
+    get:
+      operationId: getBackup
+      x-scopes: [backup.export]
+      parameters: [{"$ref": "#/components/parameters/ID"}]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    delete:
+      operationId: deleteBackup
+      x-scopes: [backup.export, system.write]
+      description: 删除已结束的本主体备份；auth.manage 可管理其他主体。持久化删除意图，下载期间拒绝清理，保留原任务与审计。cleanup_failed 可显式续办清理。须近期认证。
+      parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /backups/{id}/download:
+    post:
+      operationId: createBackupDownload
+      x-scopes: [backup.export, backup.secrets]
+      description: 浏览器近期认证后签发绑定当前会话的 60 秒单次下载凭据；返回 BackupDownloadTicket，不返回备份或解密密钥。机器凭据直接调用 GET。
+      parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    get:
+      operationId: downloadBackup
+      x-scopes: [backup.export, backup.secrets]
+      description: 机器 Bearer 直接下载；浏览器须当前会话、近期认证及单次票据。流式返回 age 加密 tar，最多并发 2 个、5 分钟，持续复查授权，不支持 Range。错误采用统一 JSON 外壳。
+      parameters:
+        - {"$ref": "#/components/parameters/ID"}
+        - {name: ticket, in: query, required: false, schema: {type: string, maxLength: 43}}
+      responses:
+        "200":
+          description: 完整加密备份；X-Backup-SHA256 为加密文件散列。
+          headers:
+            X-Backup-SHA256: {schema: {type: string}}
+          content:
+            application/octet-stream: {schema: {type: string, format: binary}}
+        "default": {"$ref": "#/components/responses/JSON"}
   /management/listener:
     get:
       operationId: getManagementListener
@@ -1577,6 +1636,88 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    BackupInput:
+      type: object
+      additionalProperties: false
+      required: [name, encryption, recipient, passphrase]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        encryption: {type: string, enum: [recipient, passphrase]}
+        recipient: {type: string, description: 'recipient 模式为 age X25519 公钥；口令模式为空'}
+        passphrase: {type: string, maxLength: 256, writeOnly: true, description: '口令模式 16–256 字节；recipient 模式为空；不持久保存'}
+    BackupPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [base_version, enabled, recipient, key_saved, interval_hours, keep_count, retention_days, authorization_until]
+      properties:
+        base_version: {type: integer, format: int64, minimum: 1}
+        enabled: {type: boolean}
+        recipient: {type: string}
+        key_saved: {type: boolean}
+        interval_hours: {type: integer, format: int64, minimum: 1, maximum: 168}
+        keep_count: {type: integer, minimum: 1, maximum: 15}
+        retention_days: {type: integer, format: int64, minimum: 1, maximum: 90}
+        authorization_until: {type: integer, format: int64, description: 启用时须为未来 366 天内的 Unix 秒，且不超过机器凭据期限}
+    BackupPolicy:
+      type: object
+      required: [version, enabled, recipient, key_saved_at, interval_hours, keep_count, retention_days, authorization_until, next_run_at, error, updated_at]
+      properties:
+        version: {type: integer, format: int64}
+        enabled: {type: boolean}
+        recipient: {type: string}
+        key_saved_at: {type: integer, format: int64}
+        interval_hours: {type: integer, format: int64}
+        keep_count: {type: integer}
+        retention_days: {type: integer, format: int64}
+        authorization_until: {type: integer, format: int64}
+        next_run_at: {type: integer, format: int64}
+        error: {type: string}
+        updated_at: {type: integer, format: int64}
+    BackupDatabase:
+      type: object
+      required: [schema_version, node_id, desired_revision, applied_revision, head_version]
+      properties:
+        schema_version: {type: integer, format: int64}
+        node_id: {type: string}
+        desired_revision: {type: string}
+        applied_revision: {type: string}
+        head_version: {type: integer, format: int64}
+    BackupRecord:
+      type: object
+      required: [id, name, state, stage, error, encryption, recipient, scheduled, maintenance_id, archive_size, archive_sha256, captured_at, created_at, finished_at, expires_at, deleted_at, available, database]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        state: {type: string}
+        stage: {type: string}
+        error: {type: string}
+        encryption: {type: string, enum: [recipient, passphrase]}
+        recipient: {type: string}
+        scheduled: {type: boolean}
+        maintenance_id: {type: string}
+        archive_size: {type: integer, format: int64}
+        archive_sha256: {type: string}
+        captured_at: {type: integer, format: int64}
+        created_at: {type: integer, format: int64}
+        finished_at: {type: integer, format: int64}
+        expires_at: {type: integer, format: int64}
+        deleted_at: {type: integer, format: int64}
+        available: {type: boolean}
+        database: {allOf: [{"$ref": "#/components/schemas/BackupDatabase"}], nullable: true}
+    BackupOverview:
+      type: object
+      required: [policy, records, archive_max, store_max]
+      properties:
+        policy: {"$ref": "#/components/schemas/BackupPolicy"}
+        records: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/BackupRecord"}}
+        archive_max: {type: integer, format: int64}
+        store_max: {type: integer, format: int64}
+    BackupDownloadTicket:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url: {type: string}
+        expires_at: {type: integer, format: int64}
     ManagementListenerInput:
       type: object
       additionalProperties: false

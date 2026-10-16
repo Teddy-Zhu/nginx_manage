@@ -2781,6 +2781,81 @@ type CreateNodeParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
+type BackupInput struct {
+	Name       string `json:"name"`
+	Encryption string `json:"encryption"`
+	Recipient  string `json:"recipient"`
+	Passphrase string `json:"passphrase"`
+}
+type BackupPolicyInput struct {
+	BaseVersion        int64  `json:"base_version"`
+	Enabled            bool   `json:"enabled"`
+	Recipient          string `json:"recipient"`
+	KeySaved           bool   `json:"key_saved"`
+	IntervalHours      int64  `json:"interval_hours"`
+	KeepCount          int    `json:"keep_count"`
+	RetentionDays      int64  `json:"retention_days"`
+	AuthorizationUntil int64  `json:"authorization_until"`
+}
+type BackupPolicy struct {
+	Version            int64  `json:"version"`
+	Enabled            bool   `json:"enabled"`
+	Recipient          string `json:"recipient"`
+	KeySavedAt         int64  `json:"key_saved_at"`
+	IntervalHours      int64  `json:"interval_hours"`
+	KeepCount          int    `json:"keep_count"`
+	RetentionDays      int64  `json:"retention_days"`
+	AuthorizationUntil int64  `json:"authorization_until"`
+	NextRunAt          int64  `json:"next_run_at"`
+	Error              string `json:"error"`
+	UpdatedAt          int64  `json:"updated_at"`
+}
+type BackupDatabase struct {
+	SchemaVersion   int64  `json:"schema_version"`
+	NodeId          string `json:"node_id"`
+	DesiredRevision string `json:"desired_revision"`
+	AppliedRevision string `json:"applied_revision"`
+	HeadVersion     int64  `json:"head_version"`
+}
+type BackupRecord struct {
+	Id            string          `json:"id"`
+	Name          string          `json:"name"`
+	State         string          `json:"state"`
+	Stage         string          `json:"stage"`
+	Error         string          `json:"error"`
+	Encryption    string          `json:"encryption"`
+	Recipient     string          `json:"recipient"`
+	Scheduled     bool            `json:"scheduled"`
+	MaintenanceId string          `json:"maintenance_id"`
+	ArchiveSize   int64           `json:"archive_size"`
+	ArchiveSha256 string          `json:"archive_sha256"`
+	CapturedAt    int64           `json:"captured_at"`
+	CreatedAt     int64           `json:"created_at"`
+	FinishedAt    int64           `json:"finished_at"`
+	ExpiresAt     int64           `json:"expires_at"`
+	DeletedAt     int64           `json:"deleted_at"`
+	Available     bool            `json:"available"`
+	Database      *BackupDatabase `json:"database"`
+}
+type BackupOverview struct {
+	Policy     BackupPolicy   `json:"policy"`
+	Records    []BackupRecord `json:"records"`
+	ArchiveMax int64          `json:"archive_max"`
+	StoreMax   int64          `json:"store_max"`
+}
+type BackupDownloadTicket struct {
+	Url       string `json:"url"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
+type CreateBackupParams = CreateNodeParams
+type DeleteBackupParams = ReauthenticateParams
+type SetBackupPolicyParams = ReauthenticateParams
+type CreateBackupDownloadParams = ReauthenticateParams
+type DownloadBackupParams struct {
+	Ticket *string `form:"ticket,omitempty" json:"ticket,omitempty"`
+}
+
 type CreatePairingParams = CreateNodeParams
 type ApplyManagementListenerParams = CreateNodeParams
 type ConfirmManagementListenerParams = ReauthenticateParams
@@ -3483,6 +3558,14 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	ListBackups(w http.ResponseWriter, r *http.Request)
+	CreateBackup(w http.ResponseWriter, r *http.Request, params CreateBackupParams)
+	GetBackup(w http.ResponseWriter, r *http.Request, id ID)
+	DeleteBackup(w http.ResponseWriter, r *http.Request, id ID, params DeleteBackupParams)
+	GetBackupPolicy(w http.ResponseWriter, r *http.Request)
+	SetBackupPolicy(w http.ResponseWriter, r *http.Request, params SetBackupPolicyParams)
+	CreateBackupDownload(w http.ResponseWriter, r *http.Request, id ID, params CreateBackupDownloadParams)
+	DownloadBackup(w http.ResponseWriter, r *http.Request, id ID, params DownloadBackupParams)
 	GetManagementListener(w http.ResponseWriter, r *http.Request)
 	ApplyManagementListener(w http.ResponseWriter, r *http.Request, params ApplyManagementListenerParams)
 	GetManagementListenerOperation(w http.ResponseWriter, r *http.Request, id ID)
@@ -9848,6 +9931,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance", wrapper.EnterMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance/{id}/release", wrapper.ReleaseMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes", wrapper.ListNodes)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/backups", wrapper.ListBackups)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/backups", wrapper.CreateBackup)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/backups/policy", wrapper.GetBackupPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/backups/policy", wrapper.SetBackupPolicy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/backups/{id}", wrapper.GetBackup)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/backups/{id}", wrapper.DeleteBackup)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/backups/{id}/download", wrapper.CreateBackupDownload)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/backups/{id}/download", wrapper.DownloadBackup)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/management/listener", wrapper.GetManagementListener)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/management/listener", wrapper.ApplyManagementListener)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/management/listener/operations/{id}", wrapper.GetManagementListenerOperation)
@@ -10100,5 +10191,56 @@ func (siw *ServerInterfaceWrapper) RollbackManagementListener(w http.ResponseWri
 	}
 	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RollbackManagementListener(w, r, r.PathValue("id"), RollbackManagementListenerParams{})
+	})
+}
+
+func (siw *ServerInterfaceWrapper) ListBackups(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, siw.Handler.ListBackups)
+}
+func (siw *ServerInterfaceWrapper) GetBackupPolicy(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, siw.Handler.GetBackupPolicy)
+}
+func (siw *ServerInterfaceWrapper) CreateBackup(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateBackup(w, r, CreateBackupParams{IdempotencyKey: r.Header.Get("Idempotency-Key")})
+	})
+}
+func (siw *ServerInterfaceWrapper) GetBackup(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetBackup(w, r, r.PathValue("id")) })
+}
+func (siw *ServerInterfaceWrapper) DeleteBackup(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteBackup(w, r, r.PathValue("id"), DeleteBackupParams{})
+	})
+}
+func (siw *ServerInterfaceWrapper) SetBackupPolicy(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetBackupPolicy(w, r, SetBackupPolicyParams{})
+	})
+}
+func (siw *ServerInterfaceWrapper) CreateBackupDownload(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateBackupDownload(w, r, r.PathValue("id"), CreateBackupDownloadParams{})
+	})
+}
+func (siw *ServerInterfaceWrapper) DownloadBackup(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		var ticket *string
+		if values, ok := r.URL.Query()["ticket"]; ok && len(values) == 1 {
+			ticket = &values[0]
+		}
+		siw.Handler.DownloadBackup(w, r, r.PathValue("id"), DownloadBackupParams{Ticket: ticket})
 	})
 }
