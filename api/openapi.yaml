@@ -12,6 +12,20 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/instance:
+    get:
+      operationId: getFail2banInstance
+      x-scopes: [read]
+      description: 返回 Fail2banInstance。本机 root 已登记的运行实例只读状态及完整 jail 列表；接入不接管 jail。拒绝激活依赖、服务身份变化或客户端漂移，默认未接入时不连接实例。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/jails/{name}:
+    get:
+      operationId: getFail2banJail
+      x-scopes: [read]
+      description: 返回 Fail2banJail，只允许读取当前完整列表中的 jail。失败/封禁计数及地址为引擎记录，不代表动作适用于当前流量路径；未接管 jail 只读，未知和超限不返回部分成功。
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 64, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$'}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban:
     get:
       operationId: getFail2ban
@@ -1738,6 +1752,14 @@ components:
         ssh_listeners: {type: array, maxItems: 512, items: {type: string}}
         protections: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/FirewallProtection"}}
         reason: {type: string}
+    Fail2banBindingView:
+      {"type": "object", "additionalProperties": false, "required": ["state", "id", "service", "socket", "client_path", "client_version", "approved_at", "reason"], "properties": {"state": {"type": "string", "enum": ["unavailable", "unbound", "bound"]}, "id": {"type": "string"}, "service": {"type": "string"}, "socket": {"type": "string"}, "client_path": {"type": "string"}, "client_version": {"type": "string"}, "approved_at": {"type": "integer", "format": "int64"}, "reason": {"type": "string"}}}
+    Fail2banJailSummary:
+      {"type": "object", "additionalProperties": false, "required": ["name", "managed"], "properties": {"name": {"type": "string"}, "managed": {"type": "boolean"}}}
+    Fail2banInstance:
+      {"type": "object", "additionalProperties": false, "required": ["at", "source", "scope", "available", "writable", "binding", "server_version", "service", "jails", "reason"], "properties": {"at": {"type": "integer", "format": "int64"}, "source": {"type": "string"}, "scope": {"type": "string"}, "available": {"type": "boolean"}, "writable": {"type": "boolean"}, "binding": {"$ref": "#/components/schemas/Fail2banBindingView"}, "server_version": {"type": "string"}, "service": {"$ref": "#/components/schemas/Fail2banService"}, "jails": {"type": "array", "maxItems": 64, "items": {"$ref": "#/components/schemas/Fail2banJailSummary"}}, "reason": {"type": "string"}}}
+    Fail2banJail:
+      {"type": "object", "additionalProperties": false, "required": ["at", "source", "scope", "available", "writable", "binding_id", "name", "managed", "server_version", "current_failed", "total_failed", "current_banned", "total_banned", "banned", "reason"], "properties": {"at": {"type": "integer", "format": "int64"}, "source": {"type": "string"}, "scope": {"type": "string"}, "available": {"type": "boolean"}, "writable": {"type": "boolean"}, "binding_id": {"type": "string"}, "name": {"type": "string"}, "managed": {"type": "boolean"}, "server_version": {"type": "string"}, "current_failed": {"type": "integer", "format": "int64", "nullable": true}, "total_failed": {"type": "integer", "format": "int64", "nullable": true}, "current_banned": {"type": "integer", "format": "int64", "nullable": true}, "total_banned": {"type": "integer", "format": "int64", "nullable": true}, "banned": {"type": "array", "maxItems": 1024, "items": {"type": "string"}}, "reason": {"type": "string"}}}
     Fail2banTool:
       {"type": "object", "additionalProperties": false, "required": ["id", "present", "trusted", "path", "resolved", "reason"], "properties": {"id": {"type": "string"}, "present": {"type": "boolean", "nullable": true}, "trusted": {"type": "boolean"}, "path": {"type": "string"}, "resolved": {"type": "string"}, "reason": {"type": "string"}}}
     Fail2banPythonModule:
@@ -1751,7 +1773,7 @@ components:
     Fail2banSocket:
       {"type": "object", "additionalProperties": false, "required": ["path", "present", "root_protected", "reason"], "properties": {"path": {"type": "string"}, "present": {"type": "boolean", "nullable": true}, "root_protected": {"type": "boolean"}, "reason": {"type": "string"}}}
     Fail2banObservation:
-      {"type": "object", "additionalProperties": false, "required": ["at", "source", "scope", "available", "writable", "reason", "tools", "client_version", "python", "services", "socket", "missing", "warnings"], "properties": {"at": {"type": "integer", "format": "int64"}, "source": {"type": "string"}, "scope": {"type": "string"}, "available": {"type": "boolean"}, "writable": {"type": "boolean"}, "reason": {"type": "string"}, "tools": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banTool"}}, "client_version": {"type": "string"}, "python": {"$ref": "#/components/schemas/Fail2banPython"}, "services": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banService"}}, "socket": {"$ref": "#/components/schemas/Fail2banSocket"}, "missing": {"type": "array", "maxItems": 4, "items": {"type": "string"}}, "warnings": {"type": "array", "maxItems": 8, "items": {"type": "string"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["at", "source", "scope", "available", "writable", "reason", "tools", "client_version", "python", "services", "socket", "missing", "warnings", "binding"], "properties": {"at": {"type": "integer", "format": "int64"}, "source": {"type": "string"}, "scope": {"type": "string"}, "available": {"type": "boolean"}, "writable": {"type": "boolean"}, "reason": {"type": "string"}, "tools": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banTool"}}, "client_version": {"type": "string"}, "python": {"$ref": "#/components/schemas/Fail2banPython"}, "services": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banService"}}, "socket": {"$ref": "#/components/schemas/Fail2banSocket"}, "missing": {"type": "array", "maxItems": 4, "items": {"type": "string"}}, "warnings": {"type": "array", "maxItems": 8, "items": {"type": "string"}}, "binding": {"$ref": "#/components/schemas/Fail2banBindingView"}}}
     FirewallRuntime:
       {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id", "protection_observation"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}, "protection_observation": {"$ref": "#/components/schemas/FirewallProtectionObservation"}}}
     BackupInput:

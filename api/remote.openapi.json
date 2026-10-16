@@ -12,6 +12,81 @@
   ],
   "x-forward-response-limit": 33554432,
   "paths": {
+    "/nodes/{connection}/fail2ban/instance": {
+      "get": {
+        "operationId": "remoteGetFail2banInstance",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banInstance",
+        "x-forward-path": "/fail2ban/instance",
+        "x-response-kind": "json",
+        "x-body-limit": 65536,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/fail2ban/jails/{name}": {
+      "get": {
+        "operationId": "remoteGetFail2banJail",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banJail",
+        "x-forward-path": "/fail2ban/jails/{name}",
+        "x-response-kind": "json",
+        "x-body-limit": 65536,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
     "/nodes/{connection}/fail2ban": {
       "get": {
         "operationId": "remoteGetFail2ban",

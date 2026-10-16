@@ -10,7 +10,7 @@
 }
 </route>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, h, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
   NButton,
@@ -18,7 +18,13 @@ import {
   NTag,
   type DataTableColumns,
 } from "naive-ui";
-import { apiError, useNodeAPI, type Fail2banObservation } from "../api/client";
+import {
+  apiError,
+  useNodeAPI,
+  type Fail2banObservation,
+  type Fail2banInstance,
+  type Fail2banJail,
+} from "../api/client";
 
 const api = useNodeAPI(),
   controller = new AbortController();
@@ -27,6 +33,44 @@ const view = ref<Fail2banObservation | null>(null),
   reading = ref(false),
   moduleEnabled = ref<boolean | null>(null);
 let closed = false;
+let jailController: AbortController | null = null;
+const instance = ref<Fail2banInstance | null>(null),
+  instanceError = ref("");
+const jail = ref<Fail2banJail | null>(null),
+  jailError = ref(""),
+  jailReading = ref(false),
+  selectedJail = ref("");
+const jailRows: DataTableColumns<Fail2banInstance["jails"][number]> = [
+  { title: "Jail", key: "name" },
+  {
+    title: "归属",
+    key: "managed",
+    render: (row) => (row.managed ? "面板管理" : "原实例管理 · 只读"),
+  },
+  {
+    title: "状态",
+    key: "inspect",
+    render: (row) =>
+      h(
+        NButton,
+        {
+          size: "small",
+          loading: jailReading.value && selectedJail.value === row.name,
+          disabled: reading.value,
+          onClick: () => {
+            void loadJail(row.name);
+          },
+        },
+        { default: () => "查看状态" },
+      ),
+  },
+];
+const bannedRows = computed(
+  () => jail.value?.banned.map((ip) => ({ ip })) ?? [],
+);
+const bannedColumns: DataTableColumns<{ ip: string }> = [
+  { title: "引擎记录的封禁地址", key: "ip" },
+];
 const status = (value: boolean | null) =>
   value === null ? "未知" : value ? "是" : "否";
 const python = computed(() => view.value?.python);
@@ -91,9 +135,17 @@ async function load() {
   if (reading.value || closed) return;
   reading.value = true;
   error.value = "";
-  const [diagnostic, flags] = await Promise.allSettled([
+  jailController?.abort();
+  jailController = null;
+  jail.value = null;
+  jailError.value = "";
+  selectedJail.value = "";
+  jailReading.value = false;
+  instanceError.value = "";
+  const [diagnostic, flags, live] = await Promise.allSettled([
     api.fail2ban(controller.signal),
     api.modules(controller.signal),
+    api.fail2banInstance(controller.signal),
   ]);
   if (closed) return;
   if (diagnostic.status === "fulfilled") view.value = diagnostic.value;
@@ -105,7 +157,30 @@ async function load() {
     const flag = flags.value.find((item) => item.id === "fail2ban");
     moduleEnabled.value = flag?.enabled ?? null;
   } else moduleEnabled.value = null;
+  if (live.status === "fulfilled") instance.value = live.value;
+  else {
+    instance.value = null;
+    instanceError.value = apiError(live.reason).message;
+  }
   reading.value = false;
+}
+async function loadJail(name: string) {
+  jailController?.abort();
+  const active = new AbortController();
+  jailController = active;
+  selectedJail.value = name;
+  jailReading.value = true;
+  jail.value = null;
+  jailError.value = "";
+  try {
+    const value = await api.fail2banJail(name, active.signal);
+    if (!closed && jailController === active) jail.value = value;
+  } catch (cause) {
+    if (!closed && jailController === active)
+      jailError.value = apiError(cause).message;
+  } finally {
+    if (!closed && jailController === active) jailReading.value = false;
+  }
 }
 onMounted(() => {
   void load();
@@ -113,6 +188,7 @@ onMounted(() => {
 onUnmounted(() => {
   closed = true;
   controller.abort();
+  jailController?.abort();
 });
 </script>
 <template>
@@ -136,7 +212,7 @@ onUnmounted(() => {
         >
       </div>
       <p>
-        服务运行独立于面板模块开关。实例尚未接入，jail、当前封禁及保护效果尚不可核对。
+        服务运行独立于面板模块开关。已有实例接入后，未接管的 jail 保持只读。
       </p>
       <template v-if="view">
         <p>
@@ -145,6 +221,74 @@ onUnmounted(() => {
           {{ view.available ? "宿主机诊断" : "宿主机范围未就绪" }}
         </p>
         <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
+      </template>
+    </section>
+    <NAlert v-if="instanceError" type="error">{{ instanceError }}</NAlert>
+    <section v-if="instance" class="panel page-stack">
+      <div class="toolbar">
+        <h3>已有实例</h3>
+        <NTag :type="instance.available ? 'success' : 'default'">{{
+          instance.available
+            ? "已读取运行状态"
+            : instance.binding.state === "bound"
+              ? "接入状态待核对"
+              : instance.binding.state === "unavailable"
+                ? "接入状态未知"
+                : "实例未接入"
+        }}</NTag>
+      </div>
+      <p v-if="instance.binding.state === 'bound'">
+        {{ instance.binding.service }} · {{ instance.binding.socket }}
+      </p>
+      <p v-if="instance.available">
+        服务端 {{ instance.server_version }} · 主进程
+        {{ instance.service.main_pid }} · 采样
+        {{ new Date(instance.at * 1000).toLocaleString() }}
+      </p>
+      <NAlert
+        v-if="instance.reason"
+        :type="instance.available ? 'info' : 'warning'"
+        >{{ instance.reason }}</NAlert
+      >
+      <NDataTable
+        v-if="instance.available"
+        :columns="jailRows"
+        :data="instance.jails"
+        :row-key="(row: Fail2banInstance['jails'][number]) => row.name"
+        :pagination="{ pageSize: 10 }"
+      />
+    </section>
+    <section v-if="selectedJail" class="panel page-stack">
+      <div class="toolbar">
+        <h3>{{ selectedJail }}</h3>
+        <NButton
+          :loading="jailReading"
+          :disabled="reading"
+          @click="loadJail(selectedJail)"
+          >刷新 jail</NButton
+        >
+      </div>
+      <NAlert v-if="jailError" type="error">{{ jailError }}</NAlert>
+      <template v-if="jail">
+        <NAlert :type="jail.available ? 'info' : 'warning'">{{
+          jail.reason
+        }}</NAlert>
+        <template v-if="jail.available">
+          <p>
+            采样 {{ new Date(jail.at * 1000).toLocaleString() }} · 服务端
+            {{ jail.server_version }}
+          </p>
+          <p>
+            当前失败 {{ jail.current_failed }} · 累计失败
+            {{ jail.total_failed }} · 当前封禁 {{ jail.current_banned }} ·
+            累计封禁 {{ jail.total_banned }}
+          </p>
+          <NDataTable
+            :columns="bannedColumns"
+            :data="bannedRows"
+            :pagination="{ pageSize: 25 }"
+          />
+        </template>
       </template>
     </section>
     <template v-if="view?.available">

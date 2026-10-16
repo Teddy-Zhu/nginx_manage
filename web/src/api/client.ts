@@ -52,6 +52,8 @@ export type Module = components["schemas"]["Module"];
 export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
+export type Fail2banInstance = components["schemas"]["Fail2banInstance"];
+export type Fail2banJail = components["schemas"]["Fail2banJail"];
 export type Fail2banObservation = components["schemas"]["Fail2banObservation"];
 export type FirewallObservation = components["schemas"]["FirewallObservation"];
 export type FirewallRule = components["schemas"]["FirewallRule"];
@@ -554,6 +556,8 @@ function createAPI(scope: RequestScope) {
       url: `/firewall/operations/${id}/${action}`,
       method: "POST",
     }),
+  fail2banInstance: (signal?: AbortSignal) => request<Fail2banInstance>({ url: "/fail2ban/instance", signal }),
+  fail2banJail: (name: string, signal?: AbortSignal) => request<Fail2banJail>({ url: `/fail2ban/jails/${encodeURIComponent(name)}`, signal }),
   fail2ban: (signal?: AbortSignal) =>
     request<Fail2banObservation>({ url: "/fail2ban", signal }),
   firewall: (signal?: AbortSignal) =>

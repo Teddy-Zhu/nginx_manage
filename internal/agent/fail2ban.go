@@ -18,6 +18,7 @@ type fail2banObserver struct {
 	mu    sync.Mutex
 	ctx   context.Context
 	scope string
+	data  string
 	dev   bool
 	done  chan struct{}
 	last  time.Time
@@ -73,6 +74,7 @@ func (f *fail2banObserver) collect(ctx context.Context) fail2ban.Observation {
 		return out
 	}
 	out.Available = true
+	out.Binding = fail2banBindingView(f.data)
 	for _, id := range []string{"fail2ban-client", "fail2ban-server", "fail2ban-regex"} {
 		out.Tools = append(out.Tools, fail2banTool(id))
 	}
@@ -109,12 +111,19 @@ func (f *fail2banObserver) collect(ctx context.Context) fail2ban.Observation {
 	if out.ClientVersion == "" && out.Tools[0].Trusted {
 		out.Warnings = append(out.Warnings, "官方客户端版本无法完整读取")
 	}
-	out.Warnings = append(out.Warnings, "服务单元状态和默认 Socket 文件不证明引擎健康或 jail 保护；实例尚未授权接入")
+	if out.Binding.State == "bound" {
+		out.Warnings = append(out.Warnings, "程序及服务元数据不证明 jail 保护；已接入实例的读取结果须单独核对")
+	} else if out.Binding.State == "unbound" {
+		out.Warnings = append(out.Warnings, "服务单元状态和默认 Socket 文件不证明引擎健康或 jail 保护；实例尚未授权接入")
+	} else {
+		out.Warnings = append(out.Warnings, "实例接入授权未知；程序及服务元数据不证明 jail 保护")
+	}
 	return out
 }
 
 func (s *Server) fail2banHandlers(mux *http.ServeMux, ctx context.Context) {
-	f := &fail2banObserver{ctx: ctx, scope: s.MetricsScope, dev: s.Dev}
+	f := &fail2banObserver{ctx: ctx, data: s.DataDir, scope: s.MetricsScope, dev: s.Dev}
+	s.fail2banInstanceHandlers(mux, ctx)
 	mux.HandleFunc("GET /v1/fail2ban", func(w http.ResponseWriter, r *http.Request) { out, err := f.read(r.Context()); dnsReply(w, out, err) })
 }
 func (c *Client) ReadFail2ban(ctx context.Context) (fail2ban.Observation, error) {
