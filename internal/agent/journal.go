@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	ClientDeny         *clientDenyIntent            `json:"client_deny,omitempty"`
 	Firewall           *firewall.Operation          `json:"firewall,omitempty"`
 	RelatedOperationID string                       `json:"related_operation_id,omitempty"`
 	DisasterActivation *DisasterActivationOperation `json:"disaster_activation,omitempty"`

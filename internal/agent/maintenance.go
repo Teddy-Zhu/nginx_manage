@@ -83,13 +83,21 @@ func (g *maintenanceGate) records() ([]Record, error) {
 		if !validID(id) {
 			return nil, errors.New("Agent 记录名称无效")
 		}
-		raw, err := nginxmodules.ReadTrusted(filepath.Join(g.journal.Dir, e.Name()), 256<<10)
+		raw, err := nginxmodules.ReadTrusted(filepath.Join(g.journal.Dir, e.Name()), clientDenyJournalLimit)
 		if err != nil {
 			return nil, err
 		}
 		var r Record
 		if json.Unmarshal(raw, &r) != nil || r.OperationID != id || r.Kind == "" {
 			return nil, errors.New("Agent 记录身份无效")
+		}
+		if len(raw) > 256<<10 && r.Kind != clientDenyKind {
+			return nil, errors.New("Agent 记录超出维护扫描预算")
+		}
+		if r.Kind == clientDenyKind {
+			if _, err := clientDenyCheckpoint([]Record{r}); err != nil {
+				return nil, err
+			}
 		}
 		records = append(records, r)
 	}

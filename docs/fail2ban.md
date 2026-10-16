@@ -116,4 +116,23 @@ HTTP 站点元信息支持 `client_deny=true`，可在 Nginx 配置页声明该�
 
 集合只接受版本化类型数据及确定格式，根目录和文件均由 root 持有，专用 Nginx 组只读。当前格式最多 32 个站点、每站点 1024 个、合计 4096 个地址，文件最多 1 MiB；只接受规范 IP，禁止回环、未指定、组播、网段、任意指令和路径。生成状态与映射同一文件原子初始化，集合代次进入独立运行探针；运行观测必须同时核对业务修订和集合代次，不能只凭 HUP 发送成功认定生效。外部检查和恢复也核对生成内容。
 
-本阶段仅接入声明、编译、独立集合与运行核对；初始化集合为空，入口不表示已启用防护。官方实例/jail 的固定动作授权、收集与合并更新、串行校验/reload、重启对账及失败补偿执行器继续实施，`can_apply` 仍为 false。所需 real_ip、map/volatile 和 geo 能力由目标预检确认，Docker 仍使用预置模块镜像。Agent 为 41，配置策略为 nginxpanel-8，数据库仍为 25、迁移 schema 仍为 4。未运行构建、类型检查、lint、测试、浏览器或真实 Nginx，待 P5 集中验证。
+入口初始化空集合，声明本身不表示已启用防护。所需 real_ip、map/volatile 和 geo 能力由目标预检确认，Docker 使用预置模块镜像，不在运行时编译或新增模块。
+
+## 本机 root 的 Nginx 动作授权与执行
+
+宿主机 Agent 在明确 `--metrics-scope=host` 且已配置专用 Nginx 时提供独立的 root 动作桥。Socket 固定为 `agent/fail2ban/nginx/action.sock`，目录 0700、Socket 0600，并以 SO_PEERCRED 只接受 UID 0；Web Socket 不接受这些写入。所有请求和响应沿用 Agent 的 `protocol/code/message/data` 外壳。
+
+本机命令均要求 `--data-dir` 和 `--fail2ban-scope=host`：
+
+- `fail2ban-nginx-status`：读取授权登记、排队状态、采集与确认时间、已确认集合代次、保护地址数、未激活绑定数及失败原因。
+- `fail2ban-nginx-bind`：指定 `--fail2ban-operation` 新 UUID、`--fail2ban-nginx-base` 当前登记 UUID（首次为空）、`--fail2ban-jail` 和 `--nginx-resource`。仅允许实际可读取的官方 1.1.1 jail 绑定到当前已发布的客户端拒绝入口。已有实例的接入 UUID 与程序身份被冻结；受管实例冻结安装、资产、清单与 Python 身份，正常服务控制不要求重复批准。
+- `fail2ban-nginx-unbind`：指定新操作 UUID、当前登记 UUID 和 jail 撤销动作授权。撤销仅移除本应用的 Nginx 作用域，不将其报告为 Fail2ban 官方解封。
+- `fail2ban-nginx-refresh`：只排队一次完整刷新，不接受 IP、网段或任意命令。已有 jail 的 root 所有者可在动作中调用此固定桥；回包的 `queued` 表示排队，不能作为封禁已经生效的证明。
+
+每次授权/撤销保留不可变事件后原子切换指针，以当前登记 UUID 做 CAS；最多 32 个 jail、2048 个授权事件，容量耗尽须本机维护。多个 jail 可绑定同一站点，其封禁按站点取并集，解除一个 jail 的封禁不会移除其他 jail 仍持有的地址。未在当前发布中启用入口的绑定单独计数并停止作用，不从原文或日志名称推断授权。
+
+后台独立于 Web 运行，启动时收集当前官方封禁，周期对账间隔 30 秒，动作合并最短间隔 5 秒。一次收集最长 20 秒、最多 4 个并发官方客户端，单命令沿用 2 秒预算；采集前后及提交前核对客户端、服务、Socket 与授权身份，不返回部分成功。拒绝不支持的网段封禁；回环、未指定、组播地址及站点可信代理受到保护并计数，不进入集合。仅根据官方当前封禁收集，不从历史快照重建封禁或自行延长有效期。
+
+集合更新与配置发布、HTTP-01、恢复和维护互斥。更新前确认当前业务修订及集合代次，保存有界的 before/after 恢复快照，再原子替换、`nginx -t`、必要的 reload 和运行代次核对；相同集合及来源不重复写盘或 reload。高频刷新复用一个独立 root journal 槽位，双快照记录最多 512 KiB，避免耗尽普通操作记录。失败或 Agent 中断先恢复冻结的原集合，验证、reload 并确认原代次后才允许下一批官方收集；遇到外部变化不覆盖，保留 `recovery_required` 并阻止新的 Nginx 写入。状态只有在运行核对成功后才为 `confirmed`；失败不报告有效封禁。
+
+这条本机动作链不安装或修改 jail、过滤器或现有服务，网页的 jail 应用仍未接通，`can_apply=false`、jail 的 `managed/writable=false` 不变。Agent 为 42，策略为 nginxpanel-8，数据库为 25、迁移 schema 为 4。实现与源码集成审阅完成，构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收统一留待 P5。

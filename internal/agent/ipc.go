@@ -132,6 +132,11 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	var challengeServer *http.Server
 	challengeErrors := make(chan error, 1)
+	stopFail2banNginx, err := s.startFail2banNginx(ctx, cancelRun, challengeErrors)
+	if err != nil {
+		return err
+	}
+	defer stopFail2banNginx()
 	if s.Nginx != nil {
 		var challengeListener *net.UnixListener
 		challengeServer, challengeListener, err = s.Nginx.http01Server()

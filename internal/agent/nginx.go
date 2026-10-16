@@ -236,7 +236,16 @@ func (n *Nginx) Open() error {
 		n.Close()
 		return err
 	}
+	if _, err := clientDenyCheckpoint(records); err != nil {
+		n.Close()
+		return err
+	}
 	for _, record := range records {
+		if record.Kind == clientDenyKind && pendingNginxRecord(record) {
+			// A failed compensation remains durable and blocks new Nginx writes.
+			_ = n.recoverClientDeny(record)
+			continue
+		}
 		if record.DisasterRestoreID != "" {
 			i, e := panelrecovery.ReadDisasterIntent(n.DataDir, record.DisasterRestoreID)
 			if e == nil {

@@ -155,7 +155,7 @@ func (n *Nginx) inspectLocked(in InspectRequest) (ExternalSnapshot, error) {
 		return out, err
 	}
 	for _, record := range records {
-		if strings.HasPrefix(record.Kind, "nginx.") && (record.State == "running" || record.State == "compensating") {
+		if strings.HasPrefix(record.Kind, "nginx.") && (record.State == "running" || record.State == "compensating" || record.Kind == clientDenyKind && record.State == "recovery_required") {
 			return out, ErrBusy
 		}
 	}

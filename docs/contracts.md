@@ -195,4 +195,4 @@ Fail2ban 的 `binding.engine` 与模板检查 `engine` 统一携带 existing/man
 
 配置迁移新增 `selection.monitoring`、`monitoring` 导入选项和计划摘要，包含采样/保留/阈值设置，默认保留目标。目标替换须 monitoring.write，冻结基础版本并同事务导入；草稿不修改监控，应用失败按版本及完整内容补偿。迁移归档当前 schema 4，Agent 仍为 40、数据库仍为 25，JSON 外壳和页面自动扫描不变。详见 [迁移边界](migration.md)。
 
-Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝入口而不启动或应用 jail。当前 Agent 合同为 41、策略 nginxpanel-8，数据库仍为 25、迁移 schema 仍为 4。独立类型化集合、逐站点可信代理保护及集合代次探针已接入发布/回滚/外部检查；固定 Fail2ban 动作执行器尚未接入，不能据此报告有效封禁。详情见 [Fail2ban 客户端入口](fail2ban.md)。
+Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝入口而不启动或应用 jail。当前 Agent 合同为 42、策略 nginxpanel-8，数据库为 25、迁移 schema 为 4。独立类型化集合、逐站点可信代理保护及集合代次探针接入发布/回滚/外部检查；本机 root 的独立 Socket 接受固定 bind/unbind/refresh/status，使用 Agent 统一外壳，授权 CAS 与不可变事件、官方当前封禁合并、串行更新及单槽恢复快照已经接通。排队与运行确认分开，root 授权和实际封禁不迁移；没有新增公开写接口，网页 jail 应用仍不可用。详情见 [Fail2ban 客户端入口](fail2ban.md)。
