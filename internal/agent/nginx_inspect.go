@@ -189,6 +189,11 @@ func (n *Nginx) inspectLocked(in InspectRequest) (ExternalSnapshot, error) {
 // Scan metadata and hashes without requiring source plaintext. Recovery uses the
 // durable fingerprint to reject another external change before switching.
 func (n *Nginx) scanExternal(dir string, m manifest, filePath string, expected map[string]string, p *nginxconfig.Parsed, trace map[string][]renderReplacement) (ExternalSnapshot, error) {
+	if len(m.ClientDeny) > 0 {
+		if _, _, err := n.readClientDenySnapshot(); err != nil {
+			return ExternalSnapshot{}, ErrExternalChange
+		}
+	}
 	out := ExternalSnapshot{RevisionID: m.RevisionID, DeploymentID: m.DeploymentID, Files: []ExternalFile{}, Dependencies: []ExternalFile{}, ModuleDependencies: []ExternalFile{}, Complete: true, Integrity: true}
 	target := filepath.Join("revisions", dir)
 	root := filepath.Dir(n.configPath(dir))

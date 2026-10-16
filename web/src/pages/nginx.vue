@@ -951,6 +951,13 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   :disabled="busy || differsFromDesired"
               /></n-form-item>
               <template v-if="resource.kind === 'http'">
+                <n-form-item label="客户端动态拒绝入口">
+                  <n-switch
+                    :value="metadata.client_deny === true"
+                    @update:value="metadata.client_deny = $event === true"
+                    :disabled="busy || differsFromDesired"
+                  />
+                </n-form-item>
                 <div class="toolbar">
                   <n-button
                     :disabled="

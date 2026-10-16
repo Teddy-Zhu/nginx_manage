@@ -78,6 +78,7 @@ type NginxState struct {
 }
 
 type manifest struct {
+	ClientDeny   map[string][]string         `json:"client_deny"`
 	RevisionID   string                      `json:"revision_id"`
 	DeploymentID string                      `json:"deployment_id"`
 	SourceHash   string                      `json:"source_hash"`
@@ -659,7 +660,7 @@ func (n *Nginx) manifestMetadata(dir string) (manifest, error) {
 	if len(m.Files) == 0 || len(m.Files) > limits.Files || len(m.Dependencies) > limits.CertificateReferences || len(m.Modules) > limits.NginxModules {
 		return m, ErrExternalChange
 	}
-	if !moduleHeader(m.Modules) || !validHTTP01Bindings(m.HTTP01) || !validLogSources(m.Logs) {
+	if !moduleHeader(m.Modules) || !validHTTP01Bindings(m.HTTP01) || !validLogSources(m.Logs) || !validClientDenyBindings(m.ClientDeny) {
 		return m, ErrExternalChange
 	}
 	return m, nil
@@ -721,6 +722,11 @@ func (n *Nginx) readManifest(dir string) (manifest, error) {
 	}
 	if err := n.verifyModules(m.Modules); err != nil {
 		return m, ErrExternalChange
+	}
+	if len(m.ClientDeny) > 0 {
+		if _, _, err := n.readClientDenySnapshot(); err != nil {
+			return m, ErrExternalChange
+		}
 	}
 	return m, nil
 }

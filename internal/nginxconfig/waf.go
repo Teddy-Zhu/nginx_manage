@@ -65,6 +65,9 @@ func wafFileID(name string) (string, string, bool) {
 	return parts[2], strings.TrimSuffix(parts[3], ".conf"), true
 }
 func validateWAF(in WAFConfig) error {
+	if in.Metadata.ClientDeny {
+		return errors.New("客户端拒绝入口只能在 HTTP 站点配置")
+	}
 	if err := validateMetadata(in.Metadata); err != nil {
 		return err
 	}

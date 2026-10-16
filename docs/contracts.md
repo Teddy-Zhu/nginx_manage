@@ -194,3 +194,5 @@ Fail2ban 诊断新增必需的 `managed` 安装登记对象，区分 absent/unav
 Fail2ban 的 `binding.engine` 与模板检查 `engine` 统一携带 existing/managed/none/unavailable 来源及受管安装/计划/资产/清单/Python 身份。已完成的本机受管安装直接授权其固定客户端只读观察和固定样例工具；已有实例保持独立明确接入，冲突及中间状态不隐式改选。当前安装事件 ID 参与读取授权及缓存选择，实际采集前后认证程序，受管进程核对实际解释器、参数及单元。保存预览还要求检查与实例同来源、同受支持版本；jail 仍只读且不可应用。共享采集上限为 10 秒，单命令 2 秒，保留原缓存时间和并发预算。Agent 协议为 40、数据库为 25；实际验证留待 P5。
 
 配置迁移新增 `selection.monitoring`、`monitoring` 导入选项和计划摘要，包含采样/保留/阈值设置，默认保留目标。目标替换须 monitoring.write，冻结基础版本并同事务导入；草稿不修改监控，应用失败按版本及完整内容补偿。迁移归档当前 schema 4，Agent 仍为 40、数据库仍为 25，JSON 外壳和页面自动扫描不变。详见 [迁移边界](migration.md)。
+
+Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝入口而不启动或应用 jail。当前 Agent 合同为 41、策略 nginxpanel-8，数据库仍为 25、迁移 schema 仍为 4。独立类型化集合、逐站点可信代理保护及集合代次探针已接入发布/回滚/外部检查；固定 Fail2ban 动作执行器尚未接入，不能据此报告有效封禁。详情见 [Fail2ban 客户端入口](fail2ban.md)。

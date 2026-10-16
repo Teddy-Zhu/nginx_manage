@@ -3073,9 +3073,10 @@ type ResourceAction struct {
 
 // ResourceMetadata defines model for ResourceMetadata.
 type ResourceMetadata struct {
-	Enabled bool   `json:"enabled"`
-	Name    string `json:"name"`
-	Notes   string `json:"notes"`
+	ClientDeny *bool  `json:"client_deny,omitempty"`
+	Enabled    bool   `json:"enabled"`
+	Name       string `json:"name"`
+	Notes      string `json:"notes"`
 }
 
 // Response defines model for Response.

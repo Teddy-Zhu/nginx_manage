@@ -98,6 +98,11 @@ func (p *Parsed) MigrationFeatures() []string {
 	// Managed publications add HTTP log/proxy controls, an authentication-presence
 	// map and a revision probe, even when the business tree only uses Stream.
 	features := map[string]bool{"http": true, "http_proxy": true, "http_log": true, "rewrite": true, "map": true}
+	for _, resource := range p.Tree.Resources {
+		if resource.Metadata.Enabled && resource.Metadata.ClientDeny {
+			features["real_ip"], features["map_volatile"], features["http_geo"] = true, true, true
+		}
+	}
 	byPath := map[string]*Document{}
 	for _, doc := range p.Documents {
 		byPath[doc.File.Path] = doc

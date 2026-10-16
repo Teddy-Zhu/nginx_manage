@@ -36,6 +36,10 @@ func (n *Nginx) waitObserved(ctx context.Context, m manifest) error {
 	}
 }
 func (n *Nginx) observe(ctx context.Context, m manifest) error {
+	expectedProbe, err := n.revisionProbe(m)
+	if err != nil {
+		return err
+	}
 	pid, err := n.masterPID()
 	if err != nil {
 		return err
@@ -55,7 +59,7 @@ func (n *Nginx) observe(ctx context.Context, m manifest) error {
 	}
 	b, readErr := io.ReadAll(io.LimitReader(resp.Body, 256))
 	resp.Body.Close()
-	if readErr != nil || resp.StatusCode != 200 || string(b) != m.Probe {
+	if readErr != nil || resp.StatusCode != 200 || string(b) != expectedProbe {
 		return errors.New("running revision probe mismatch")
 	}
 	owned, err := processSockets(pid)

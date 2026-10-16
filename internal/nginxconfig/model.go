@@ -3,7 +3,7 @@ package nginxconfig
 import "fmt"
 
 const ParserVersion = "crossplane-0.4.89+spans-4"
-const PolicyVersion = "nginxpanel-7"
+const PolicyVersion = "nginxpanel-8"
 
 type File struct {
 	ID      string `json:"id"`
@@ -41,9 +41,10 @@ type Field struct {
 }
 
 type ResourceMetadata struct {
-	Name    string `json:"name"`
-	Notes   string `json:"notes"`
-	Enabled bool   `json:"enabled"`
+	ClientDeny bool   `json:"client_deny,omitempty"`
+	Name       string `json:"name"`
+	Notes      string `json:"notes"`
+	Enabled    bool   `json:"enabled"`
 }
 
 type Resource struct {

@@ -318,6 +318,9 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 	}
 	if len(p.Tree.Diagnostics) == 0 {
 		p.project()
+		if _, err := p.ClientDenyBindings(); err != nil {
+			p.Tree.Diagnostics = append(p.Tree.Diagnostics, Diagnostic{paths["nginx.conf"].ID, 1, "client_deny", err.Error()})
+		}
 	}
 	return p, nil
 }

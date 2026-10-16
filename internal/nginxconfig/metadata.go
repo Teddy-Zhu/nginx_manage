@@ -59,9 +59,10 @@ func (p *Parsed) editFiles(edits map[string][]Edit) ([]File, error) {
 
 func (m *ResourceMetadata) UnmarshalJSON(data []byte) error {
 	var in struct {
-		Name    string `json:"name"`
-		Notes   string `json:"notes"`
-		Enabled *bool  `json:"enabled"`
+		ClientDeny bool   `json:"client_deny,omitempty"`
+		Name       string `json:"name"`
+		Notes      string `json:"notes"`
+		Enabled    *bool  `json:"enabled"`
 	}
 	d := json.NewDecoder(strings.NewReader(string(data)))
 	d.DisallowUnknownFields()
@@ -71,6 +72,6 @@ func (m *ResourceMetadata) UnmarshalJSON(data []byte) error {
 	if in.Enabled == nil {
 		return errors.New("资源元信息缺少 enabled")
 	}
-	*m = ResourceMetadata{Name: in.Name, Notes: in.Notes, Enabled: *in.Enabled}
+	*m = ResourceMetadata{ClientDeny: in.ClientDeny, Name: in.Name, Notes: in.Notes, Enabled: *in.Enabled}
 	return validateMetadata(*m)
 }

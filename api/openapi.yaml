@@ -2849,6 +2849,7 @@ components:
       type: object
       required: [name, notes, enabled]
       properties:
+        client_deny: { type: boolean, default: false, description: 为明确配置可信代理的 HTTP 站点声明独立客户端拒绝入口；不启用 Fail2ban 或导入封禁状态。 }
         name: { type: string, maxLength: 128 }
         notes: { type: string, maxLength: 2048 }
         enabled: { type: boolean }

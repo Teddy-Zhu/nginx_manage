@@ -2642,6 +2642,7 @@ export interface components {
             diagnostics: components["schemas"]["Diagnostic"][];
         };
         ResourceMetadata: {
+            client_deny?: boolean;
             name: string;
             notes: string;
             enabled: boolean;

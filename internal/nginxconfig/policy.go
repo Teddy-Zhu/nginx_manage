@@ -92,6 +92,9 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 				if security[n.Name] {
 					scopes["security.write"] = true
 				}
+				if n.Metadata != nil && n.Metadata.ClientDeny {
+					scopes["security.write"] = true
+				}
 				if (n.Name == "set" && len(n.Args) > 0 && ownedAuthLogVariable(n.Args[0].Value)) || (n.Name == "map" || n.Name == "geo" || n.Name == "split_clients") && len(n.Args) > 0 && ownedAuthLogVariable(n.Args[len(n.Args)-1].Value) {
 					add("reserved_name", "认证头存在标记由受管执行器定义")
 				}
@@ -99,6 +102,10 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 					add("reserved_name", "HTTP-01 运行变量由执行器管理")
 				}
 				for _, arg := range n.Args {
+					value := strings.ToLower(arg.Value)
+					if strings.Contains(value, "$"+ClientDenyVariablePrefix) || strings.Contains(value, "${"+ClientDenyVariablePrefix) {
+						add("reserved_name", "客户端拒绝运行变量由执行器管理")
+					}
 					if strings.Contains(arg.Value, "nginxpanel_http01_req") || strings.Contains(arg.Value, "nginxpanel_http01_conn") {
 						add("reserved_name", "HTTP-01 限流区域由执行器管理")
 					}
