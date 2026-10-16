@@ -50,6 +50,10 @@ func readFail2banNginxJSON(path string, value any, limit int64) error {
 	if err != nil {
 		return err
 	}
+	return decodeFail2banNginxJSON(raw, value)
+}
+
+func decodeFail2banNginxJSON(raw []byte, value any) error {
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if d.Decode(value) != nil || d.Decode(new(any)) != io.EOF {
@@ -83,17 +87,30 @@ func loadFail2banNginxRegistry(data string) (fail2banNginxRegistry, error) {
 	if err := readFail2banNginxJSON(filepath.Join(dir, "grants", pointer.ID+".json"), &r, 32<<10); err != nil {
 		return empty, err
 	}
-	if r.Schema != 1 || r.ID != pointer.ID || r.PreviousID != "" && !validID(r.PreviousID) || r.PreviousID == r.ID || r.ApprovedAt <= 0 || !fail2banDigest.MatchString(r.RequestHash) || r.Grants == nil || len(r.Grants) > 32 {
-		return empty, errors.New("Nginx 动作授权内容无效")
+	if r.ID != pointer.ID {
+		return empty, errors.New("Nginx 动作授权指针不匹配")
+	}
+	if err := validFail2banNginxRegistry(r, false); err != nil {
+		return empty, err
+	}
+	return r, nil
+}
+
+func validFail2banNginxRegistry(r fail2banNginxRegistry, allowEmpty bool) error {
+	if allowEmpty && r.Schema == 1 && r.ID == "" && r.PreviousID == "" && r.RequestHash == "" && r.ApprovedAt == 0 && r.Grants != nil && len(r.Grants) == 0 {
+		return nil
+	}
+	if r.Schema != 1 || !validID(r.ID) || r.PreviousID != "" && !validID(r.PreviousID) || r.PreviousID == r.ID || r.ApprovedAt <= 0 || !fail2banDigest.MatchString(r.RequestHash) || r.Grants == nil || len(r.Grants) > 32 {
+		return errors.New("Nginx 动作授权内容无效")
 	}
 	last := ""
 	for _, grant := range r.Grants {
 		if !fail2banJailName.MatchString(grant.Jail) || grant.Jail <= last || !validID(grant.ResourceID) || !fail2banDigest.MatchString(grant.EngineKey) {
-			return empty, errors.New("Nginx 动作授权绑定无效")
+			return errors.New("Nginx 动作授权绑定无效")
 		}
 		last = grant.Jail
 	}
-	return r, nil
+	return nil
 }
 
 // Managed lifecycle event IDs change on service control; installation identity
@@ -111,6 +128,9 @@ func fail2banNginxEngineKey(b *fail2banBinding) string {
 }
 
 func saveFail2banNginxRegistry(data string, r fail2banNginxRegistry) error {
+	if err := validFail2banNginxRegistry(r, false); err != nil {
+		return err
+	}
 	dir := fail2banNginxDir(data)
 	grants := filepath.Join(dir, "grants")
 	if err := secure.RootDirectory(grants, 0700); err != nil {
@@ -184,6 +204,30 @@ func (f *fail2banNginxExecutor) manage(ctx context.Context, in Fail2banNginxRequ
 	}
 	if prior.ID != in.BaseID {
 		return prior, fault.Conflict("动作授权基准已变化，请重新读取")
+	}
+	records, err := n.Journal.List()
+	if err != nil {
+		return prior, err
+	}
+	for _, record := range records {
+		if record.Kind == fail2banJailsKind && pendingNginxRecord(record) {
+			return prior, ErrBusy
+		}
+	}
+	managed, err := loadFail2banManaged(n.DataDir)
+	if err != nil {
+		return prior, err
+	}
+	if managed != nil && managed.State == "installed" {
+		_, bundle, err := selectedFail2banJails(managed)
+		if err != nil {
+			return prior, err
+		}
+		for _, name := range fail2banJailNames(bundle) {
+			if name == in.Jail {
+				return prior, fault.Conflict("受管 jail 的动作授权须随 jail 配置应用，不能单独改绑或撤销")
+			}
+		}
 	}
 	if in.Action == "bind" {
 		records, err := n.Journal.List()

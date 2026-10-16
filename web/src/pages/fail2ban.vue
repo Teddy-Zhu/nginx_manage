@@ -56,7 +56,7 @@ const jailRows: DataTableColumns<Fail2banInstance["jails"][number]> = [
   {
     title: "归属",
     key: "managed",
-    render: (row) => (row.managed ? "面板管理" : "原实例管理 · 只读"),
+    render: (row) => (row.managed ? "本应用管理 · 只读" : "原实例管理 · 只读"),
   },
   {
     title: "状态",

@@ -37,7 +37,7 @@ type JailPreview struct {
 }
 
 func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPreview, error) {
-	out := PolicyPreview{Version: version, Entries: []JailPreview{}, TemplateChecks: []TemplateCheck{}, Warnings: []string{"保存的 jail 配置尚未安装到 Fail2ban 实例；实例授权、动作后端和执行能力须在应用前核对"}}
+	out := PolicyPreview{Version: version, Entries: []JailPreview{}, TemplateChecks: []TemplateCheck{}, Warnings: []string{"保存期望配置后需单独应用；实际保护以运行状态及动作确认结果为准"}}
 	if version < 1 {
 		return out, fault.Invalid("须先保存 jail 配置并提供版本")
 	}
@@ -118,7 +118,7 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		if !e.TemplateReady {
 			e.Errors = append(e.Errors, "过滤器检查须通过，且须与已确认实例使用相同组件及版本")
 		}
-		e.Errors = append(e.Errors, "当前尚无可应用的受管 jail 动作执行器")
+		e.Errors = append(e.Errors, "当前仅支持保存期望配置，运行配置需由本机管理员应用")
 		out.Entries = append(out.Entries, e)
 	}
 	current, err := s.Policy(ctx)

@@ -84,6 +84,7 @@ func (s *Server) startFail2banNginx(ctx context.Context, cancelRun context.Cance
 		f.value.State, f.value.Reason = "failed", registryErr.Error()
 	}
 	mux := http.NewServeMux()
+	f.jailHandlers(mux)
 	mux.HandleFunc("GET /v1/fail2ban/nginx/status", func(w http.ResponseWriter, r *http.Request) { fail2banNginxReply(w, f.status(), nil) })
 	mux.HandleFunc("POST /v1/fail2ban/nginx/{action}", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)

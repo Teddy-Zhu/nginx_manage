@@ -68,9 +68,13 @@ func (f *fail2banNginxExecutor) run(ctx context.Context) {
 		f.value.Queued, f.value.State, f.value.Reason = false, "collecting", ""
 		registryVersion := f.registryVersion
 		f.mu.Unlock()
+		jailCall, stopJails := context.WithTimeout(ctx, 90*time.Second)
+		jailErr := f.advanceJails(jailCall)
+		stopJails()
 		call, cancel := context.WithTimeout(ctx, 45*time.Second)
 		result, err := f.reconcile(call)
 		cancel()
+		err = errors.Join(jailErr, err)
 		f.mu.Lock()
 		result.Queued = f.value.Queued
 		if f.registryVersion != registryVersion {
@@ -78,8 +82,10 @@ func (f *fail2banNginxExecutor) run(ctx context.Context) {
 		}
 		if err != nil {
 			result.State, result.Reason = "failed", err.Error()
-			if errors.Is(err, errClientDenyRecovery) {
+			if errors.Is(err, errClientDenyRecovery) || errors.Is(err, errFail2banJailsRecovery) {
 				result.State = "recovery_required"
+			} else if errors.Is(err, ErrBusy) {
+				result.State, result.Queued, dirty = "waiting", true, true
 			}
 		}
 		f.value = result
@@ -90,7 +96,8 @@ func (f *fail2banNginxExecutor) run(ctx context.Context) {
 func (f *fail2banNginxExecutor) reconcile(ctx context.Context) (Fail2banNginxStatus, error) {
 	out := Fail2banNginxStatus{State: "idle", Registry: fail2banNginxRegistry{Schema: 1, Grants: []fail2banNginxGrant{}}}
 	n := f.nginx
-	leave, ok := n.maintenance.enter(false)
+	// Complete a pending compensation before maintenance can finish draining.
+	leave, ok := n.maintenance.enter(true)
 	if !ok {
 		return out, ErrBusy
 	}
@@ -124,6 +131,10 @@ func (f *fail2banNginxExecutor) reconcile(ctx context.Context) (Fail2banNginxSta
 			return out, err
 		}
 	}
+	if n.maintenance.closing() {
+		n.mu.Unlock()
+		return out, ErrBusy
+	}
 	dir, m, err := n.active()
 	if err != nil {
 		n.mu.Unlock()
@@ -152,6 +163,13 @@ func (f *fail2banNginxExecutor) reconcile(ctx context.Context) (Fail2banNginxSta
 	out.CollectedAt, out.Protected, out.Inactive = sample.snapshot.ObservedAt, sample.protected, sample.inactive
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	// Freeze explicit installation/service control through the final source
+	// check and Nginx confirmation, including a positively verified stop.
+	unlock, err := (&Journal{Dir: fail2banBindingDir(n.DataDir)}).rootLock("binding.lock")
+	if err != nil {
+		return out, err
+	}
+	defer unlock()
 	latest, err := loadFail2banNginxRegistry(n.DataDir)
 	if err != nil || latest.ID != registry.ID {
 		return out, errors.New("收集期间 Nginx 动作授权变化，等待重新收集")
@@ -166,6 +184,18 @@ func (f *fail2banNginxExecutor) reconcile(ctx context.Context) (Fail2banNginxSta
 		live, err := readFail2banLiveService(ctx, sample.binding)
 		if err != nil || !sameFail2banLive(sample.live, live) {
 			return out, errors.New("提交集合前 Fail2ban 实例身份变化")
+		}
+	}
+	if sample.stoppedEvent != "" {
+		active := []fail2banNginxGrant{}
+		for _, grant := range registry.Grants {
+			if len(m.ClientDeny[grant.ResourceID]) > 0 {
+				active = append(active, grant)
+			}
+		}
+		event, err := stoppedFail2banNginxSource(ctx, n.DataDir, active)
+		if err != nil || event != sample.stoppedEvent {
+			return out, errors.New("提交前管理员停用记录或实际服务状态变化")
 		}
 	}
 	generation, err := n.applyClientDeny(ctx, dir, manifestHash(m), sample.snapshot)

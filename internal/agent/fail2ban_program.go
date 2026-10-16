@@ -37,8 +37,11 @@ func selectFail2banBinding(data string) (*fail2banBinding, error) {
 	if r.State != "installed" {
 		return nil, errors.New("受管引擎安装尚未完成或正在撤回，请先续办或处理安装")
 	}
+	return r.binding(), nil
+}
+func (r *fail2banManagedRecord) binding() *fail2banBinding {
 	client := filepath.Join(r.PackageRoot, "bin", "fail2ban-client")
-	return &fail2banBinding{Schema: 1, ID: r.EventID, State: "bound", Service: fail2banManagedService, Socket: fail2banManagedSocket, ClientPath: client, ClientResolved: client, ClientVersion: r.Version, ApprovedAt: r.ApprovedAt, managed: r}, nil
+	return &fail2banBinding{Schema: 1, ID: r.EventID, State: "bound", Service: fail2banManagedService, Socket: fail2banManagedSocket, ClientPath: client, ClientResolved: client, ClientVersion: r.Version, ApprovedAt: r.ApprovedAt, managed: r}
 }
 func (r fail2banManagedRecord) engine() fail2ban.EngineIdentity {
 	return fail2ban.EngineIdentity{Owner: "managed", InstallationID: r.OperationID, PlanID: r.PlanID, AssetID: r.AssetID, ManifestSHA256: r.ManifestSHA256, PythonPath: r.PythonPath, PythonSHA256: r.PythonSHA256}
@@ -64,9 +67,9 @@ func (p fail2banProgram) engine() fail2ban.EngineIdentity {
 func (p fail2banProgram) key() string {
 	if p.managed != nil {
 		raw, _ := json.Marshal(struct {
-			Event, Kind string
-			Engine      fail2ban.EngineIdentity
-		}{p.managed.EventID, p.kind, p.engine()})
+			Event, Kind, Jails string
+			Engine             fail2ban.EngineIdentity
+		}{p.managed.EventID, p.kind, p.managed.jailSelection, p.engine()})
 		return "managed/" + secure.Hash(raw)
 	}
 	return "existing/" + p.kind + "/" + p.tool.Path + "\x00" + p.tool.Resolved + "\x00" + p.hash

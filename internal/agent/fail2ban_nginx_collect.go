@@ -16,11 +16,12 @@ import (
 )
 
 type fail2banNginxSample struct {
-	snapshot  clientDenySnapshot
-	binding   *fail2banBinding
-	live      fail2banLiveService
-	protected int
-	inactive  int
+	snapshot     clientDenySnapshot
+	binding      *fail2banBinding
+	live         fail2banLiveService
+	protected    int
+	inactive     int
+	stoppedEvent string
 }
 
 func sameFail2banLive(a, b fail2banLiveService) bool {
@@ -39,6 +40,16 @@ func collectFail2banNginx(ctx context.Context, data string, registry fail2banNgi
 	}
 	var program fail2banProgram
 	if len(active) > 0 {
+		stoppedEvent, err := stoppedFail2banNginxSource(ctx, data, active)
+		if err != nil {
+			return out, err
+		}
+		if stoppedEvent != "" {
+			identity, _ := json.Marshal(struct{ Registry, StoppedEvent string }{registry.ID, stoppedEvent})
+			out.stoppedEvent = stoppedEvent
+			out.snapshot.SourceKey, out.snapshot.ObservedAt = secure.Hash(identity), time.Now().Unix()
+			return out, ctx.Err()
+		}
 		b, err := selectFail2banBinding(data)
 		if err != nil || b == nil || b.State != "bound" {
 			return out, errors.New("Nginx 动作的 Fail2ban 实例授权不可用")

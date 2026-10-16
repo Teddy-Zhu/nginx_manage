@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,7 +123,11 @@ func (f *fail2banInstanceReader) readInstance(ctx context.Context) (fail2ban.Ins
 	if err != nil || b == nil || b.ID != initial.Binding.ID || b.State != "bound" {
 		return fail2ban.Instance{}, fault.Unavailable("实例接入记录变化，请刷新")
 	}
-	out, err := f.instances.read(ctx, f.ctx, &f.budget, b.ID, func(call context.Context) fail2ban.Instance {
+	cacheKey := b.ID
+	if b.managed != nil {
+		cacheKey += "/" + b.managed.jailSelection
+	}
+	out, err := f.instances.read(ctx, f.ctx, &f.budget, cacheKey, func(call context.Context) fail2ban.Instance {
 		value := initial
 		value.At = time.Now().Unix()
 		version, service, raw, readErr := readFail2banBound(call, f.data, b, true, "")
@@ -144,6 +149,14 @@ func (f *fail2banInstanceReader) readInstance(ctx context.Context) (fail2ban.Ins
 	}
 	if err = fail2banCurrentBinding(f.data, b, true); err != nil {
 		return fail2ban.Instance{}, fault.Unavailable("实例读取授权已变化，请刷新")
+	}
+	owned, err := ownedFail2banJails(b)
+	if err != nil {
+		return fail2ban.Instance{}, err
+	}
+	out.Jails = append([]fail2ban.JailSummary{}, out.Jails...)
+	for i := range out.Jails {
+		out.Jails[i].Managed = owned[out.Jails[i].Name]
 	}
 	return out, nil
 }
@@ -171,7 +184,11 @@ func (f *fail2banInstanceReader) readJail(ctx context.Context, name string) (fai
 	if err != nil || b == nil || b.ID != out.BindingID || b.State != "bound" {
 		return fail2ban.Jail{}, fault.Unavailable("实例接入记录变化，请刷新")
 	}
-	value, err := f.jails.read(ctx, f.ctx, &f.budget, b.ID+"/"+name, func(call context.Context) fail2ban.Jail {
+	cacheKey := b.ID + "/" + name
+	if b.managed != nil {
+		cacheKey += "/" + b.managed.jailSelection
+	}
+	value, err := f.jails.read(ctx, f.ctx, &f.budget, cacheKey, func(call context.Context) fail2ban.Jail {
 		value := out
 		value.At = time.Now().Unix()
 		version, _, raw, readErr := readFail2banBound(call, f.data, b, true, name)
@@ -192,6 +209,14 @@ func (f *fail2banInstanceReader) readJail(ctx context.Context, name string) (fai
 	}
 	if err = fail2banCurrentBinding(f.data, b, true); err != nil {
 		return fail2ban.Jail{}, fault.Unavailable("jail 读取授权已变化，请刷新")
+	}
+	owned, err := ownedFail2banJails(b)
+	if err != nil {
+		return fail2ban.Jail{}, err
+	}
+	value.Managed = value.Available && owned[name]
+	if value.Managed {
+		value.Reason = "本应用的受管 jail；引擎封禁记录与 Nginx 动作运行确认分别核对"
 	}
 	return value, nil
 }
@@ -214,7 +239,7 @@ func (c *Client) ReadFail2banInstance(ctx context.Context) (fail2ban.Instance, e
 	}
 	if err == nil {
 		for _, jail := range out.Jails {
-			if !fail2banJailName.MatchString(jail.Name) || jail.Managed {
+			if !fail2banJailName.MatchString(jail.Name) || jail.Managed && (out.Binding.Engine.Owner != "managed" || !strings.HasPrefix(jail.Name, "nginxpanel-") || !validID(strings.TrimPrefix(jail.Name, "nginxpanel-"))) {
 				err = errors.New("invalid Fail2ban jail ownership")
 				break
 			}
@@ -228,7 +253,7 @@ func (c *Client) ReadFail2banJail(ctx context.Context, name string) (fail2ban.Ja
 		return out, fault.Invalid("jail 名称无效")
 	}
 	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/jails/"+name, nil, &out)
-	if err == nil && (out.At <= 0 || out.Name != name || out.Writable || out.Managed || out.Source != "host-agent" && out.Source != "development-agent" || len(out.Banned) > 1024 || out.Available && (!validID(out.BindingID) || !fail2banVersion.MatchString(out.ServerVersion) || out.CurrentFailed == nil || out.TotalFailed == nil || out.CurrentBanned == nil || out.TotalBanned == nil || *out.CurrentBanned != int64(len(out.Banned)))) {
+	if err == nil && (out.At <= 0 || out.Name != name || out.Writable || out.Managed && (!strings.HasPrefix(out.Name, "nginxpanel-") || !validID(strings.TrimPrefix(out.Name, "nginxpanel-"))) || out.Source != "host-agent" && out.Source != "development-agent" || len(out.Banned) > 1024 || out.Available && (!validID(out.BindingID) || !fail2banVersion.MatchString(out.ServerVersion) || out.CurrentFailed == nil || out.TotalFailed == nil || out.CurrentBanned == nil || out.TotalBanned == nil || *out.CurrentBanned != int64(len(out.Banned)))) {
 		err = errors.New("invalid Fail2ban jail observation")
 	}
 	return out, err

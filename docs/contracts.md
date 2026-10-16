@@ -195,4 +195,6 @@ Fail2ban 的 `binding.engine` 与模板检查 `engine` 统一携带 existing/man
 
 配置迁移新增 `selection.monitoring`、`monitoring` 导入选项和计划摘要，包含采样/保留/阈值设置，默认保留目标。目标替换须 monitoring.write，冻结基础版本并同事务导入；草稿不修改监控，应用失败按版本及完整内容补偿。迁移归档当前 schema 4，Agent 仍为 40、数据库仍为 25，JSON 外壳和页面自动扫描不变。详见 [迁移边界](migration.md)。
 
-Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝入口而不启动或应用 jail。当前 Agent 合同为 42、策略 nginxpanel-8，数据库为 25、迁移 schema 为 4。独立类型化集合、逐站点可信代理保护及集合代次探针接入发布/回滚/外部检查；本机 root 的独立 Socket 接受固定 bind/unbind/refresh/status，使用 Agent 统一外壳，授权 CAS 与不可变事件、官方当前封禁合并、串行更新及单槽恢复快照已经接通。排队与运行确认分开，root 授权和实际封禁不迁移；没有新增公开写接口，网页 jail 应用仍不可用。详情见 [Fail2ban 客户端入口](fail2ban.md)。
+Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝入口而不启动或应用 jail。当前 Agent 合同为 43、策略 nginxpanel-8，数据库为 25、迁移 schema 为 4。独立类型化集合、逐站点可信代理保护及集合代次探针接入发布/回滚/外部检查；本机 root 的独立 Socket 接受固定 bind/unbind/refresh/status，使用 Agent 统一外壳，授权 CAS 与不可变事件、官方当前封禁合并、串行更新及单槽恢复快照已经接通。排队与运行确认分开，root 授权和实际封禁不迁移；没有新增公开写接口，网页 jail 应用仍不可用。详情见 [Fail2ban 客户端入口](fail2ban.md)。
+
+受管 jail 新增同一 root Socket 的 `POST /v1/fail2ban/nginx/jails/apply`、`GET /v1/fail2ban/nginx/jails/status` 与 `GET /v1/fail2ban/nginx/jails/operations/{id}`，不向 Web Socket 开放。请求固定 protocol/operation_id/base_id/policy，完整类型化策略最多 64 KiB，配置包 UUID 做 CAS、请求摘要做幂等；提交返回排队操作，状态中的 selected_id 只表示所选配置，运行及 Nginx 集合分别核对。仅明确登记且可读取的本应用 jail 返回 managed=true，所有 jail 仍 writable=false，公开预览仍 can_apply=false；代码来源与配置包选择共同使读取缓存失效。失败恢复原配置、授权及官方剩余封禁时间，无法确认时保留恢复阻塞。所有 root 配置包、身份、备份树、封禁时间证明及执行记录不迁移。数据库及归档版本不变；实际验证留待 P5。

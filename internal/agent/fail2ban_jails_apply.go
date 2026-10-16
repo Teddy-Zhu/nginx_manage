@@ -1,0 +1,398 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"nginxpanel/internal/fail2ban"
+	"nginxpanel/internal/secure"
+)
+
+var errFail2banJailsRecovery = errors.New("受管 jail 恢复尚未确认")
+
+func validFail2banJailRecord(record Record, r *fail2banManagedRecord) (*fail2banJailBundle, *fail2banJailBundle, error) {
+	i := record.Fail2banJails
+	if record.Kind != fail2banJailsKind || i == nil || !validID(record.OperationID) || i.AfterID != record.OperationID || i.InstallationID != r.OperationID || i.EngineKey != fail2banNginxEngineKey(r.binding()) || !fail2banInvocation.MatchString(i.Invocation) || i.SocketInode == "" || i.BeforeID != "" && !validID(i.BeforeID) {
+		return nil, nil, errors.New("受管 jail 恢复身份无效")
+	}
+	after, err := loadFail2banJailBundle(r, i.AfterID)
+	if err != nil {
+		return nil, nil, err
+	}
+	before, err := loadFail2banJailBundle(r, i.BeforeID)
+	if err != nil {
+		return nil, nil, err
+	}
+	raw, _ := json.Marshal(Fail2banJailsRequest{Protocol: Protocol, OperationID: record.OperationID, BaseID: i.BeforeID, Policy: after.Policy})
+	if record.RequestHash != secure.Hash(raw) || after.NginxDir != record.BeforeDir || record.BeforeDir != record.AfterDir || after.EngineKey != i.EngineKey || i.AfterRegistry.ID != record.OperationID || i.AfterRegistry.PreviousID != i.BeforeRegistry.ID || i.AfterRegistry.RequestHash != record.RequestHash || !validID(i.RollbackRegistry.ID) || i.RollbackRegistry.PreviousID != i.AfterRegistry.ID || i.BansHash != "" && !fail2banDigest.MatchString(i.BansHash) {
+		return nil, nil, errors.New("受管 jail 恢复合同无法核对")
+	}
+	if i.EffectsPossible && !fail2banDigest.MatchString(i.BansHash) {
+		return nil, nil, errors.New("受管 jail 缺少原封禁快照身份")
+	}
+	if err := validFail2banNginxRegistry(i.BeforeRegistry, true); err != nil {
+		return nil, nil, err
+	}
+	if err := validFail2banNginxRegistry(i.AfterRegistry, false); err != nil {
+		return nil, nil, err
+	}
+	if err := validFail2banNginxRegistry(i.RollbackRegistry, false); err != nil {
+		return nil, nil, err
+	}
+	if i.RollbackRegistry.RequestHash != secure.Hash([]byte("fail2ban.jails.rollback:"+record.RequestHash)) {
+		return nil, nil, errors.New("受管 jail 回滚授权摘要无效")
+	}
+	grants, err := fail2banJailGrants(i.BeforeRegistry, before, after)
+	if err != nil {
+		return nil, nil, err
+	}
+	actual, _ := json.Marshal(i.AfterRegistry.Grants)
+	expected, _ := json.Marshal(grants)
+	rollback, _ := json.Marshal(i.RollbackRegistry.Grants)
+	beforeGrants, _ := json.Marshal(i.BeforeRegistry.Grants)
+	if string(actual) != string(expected) || string(rollback) != string(beforeGrants) {
+		return nil, nil, errors.New("受管 jail 恢复动作授权不匹配")
+	}
+	return before, after, nil
+}
+
+// The same worker handles jail lifecycle and ban reconciliation. A running
+// nginx.* journal record also excludes publication, HTTP-01 and recovery writers.
+func (f *fail2banNginxExecutor) advanceJails(ctx context.Context) error {
+	n := f.nginx
+	// Already admitted operations must drain while maintenance is closing.
+	leave, ok := n.maintenance.enter(true)
+	if !ok {
+		return ErrBusy
+	}
+	defer leave()
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.closed || n.unlock == nil {
+		return ErrRuntimeUnavailable
+	}
+	records, err := n.Journal.List()
+	if err != nil {
+		return err
+	}
+	var pending *Record
+	otherPending := false
+	for _, record := range records {
+		if !pendingNginxRecord(record) {
+			continue
+		}
+		if record.Kind != fail2banJailsKind {
+			otherPending = true
+			continue
+		}
+		if pending != nil {
+			return errors.New("存在多个未完成的受管 jail 操作")
+		}
+		copy := record
+		pending = &copy
+	}
+	if pending == nil {
+		return nil
+	}
+	if otherPending {
+		return ErrBusy
+	}
+	unlock, err := (&Journal{Dir: fail2banBindingDir(n.DataDir)}).rootLock("binding.lock")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	r, err := loadFail2banManaged(n.DataDir)
+	if err != nil || r == nil || r.State != "installed" {
+		return f.jailsRecoveryRequired(*pending, errors.New("受管引擎安装身份不可用，不能覆盖或重建其他实例"))
+	}
+	before, after, err := validFail2banJailRecord(*pending, r)
+	if err != nil {
+		return f.jailsRecoveryRequired(*pending, err)
+	}
+	if pending.Stage == "queued" && pending.State == "running" {
+		return f.executeJails(ctx, *pending, r, before, after)
+	}
+	if !pending.Fail2banJails.EffectsPossible {
+		if err = verifyFail2banManaged(ctx, r, true); err != nil {
+			return f.jailsRecoveryRequired(*pending, err)
+		}
+		selected, _, err := selectedFail2banJails(r)
+		if err != nil || selected != pending.Fail2banJails.BeforeID {
+			return f.jailsRecoveryRequired(*pending, ErrExternalChange)
+		}
+		registry, err := loadFail2banNginxRegistry(n.DataDir)
+		if err != nil || registry.ID != pending.Fail2banJails.BeforeRegistry.ID {
+			return f.jailsRecoveryRequired(*pending, ErrExternalChange)
+		}
+		pending.State, pending.Stage, pending.Error = "failed", "interrupted_before_switch", "Agent 在准备期间重启，受管运行配置未切换"
+		return n.persist(*pending)
+	}
+	return f.recoverJails(*pending, r, before, after)
+}
+
+func (f *fail2banNginxExecutor) executeJails(ctx context.Context, record Record, r *fail2banManagedRecord, before, after *fail2banJailBundle) error {
+	n := f.nginx
+	i := record.Fail2banJails
+	failBefore := func(err error) error {
+		record.State, record.Stage, record.Error = "failed", "prepare_failed", err.Error()
+		return errors.Join(err, n.persist(record))
+	}
+	record.Stage = "preparing"
+	if err := n.persist(record); err != nil {
+		return err
+	}
+	if err := verifyFail2banManaged(ctx, r, true); err != nil {
+		return failBefore(err)
+	}
+	selected, _, err := selectedFail2banJails(r)
+	if err != nil || selected != i.BeforeID {
+		return failBefore(ErrExternalChange)
+	}
+	live, err := readFail2banLiveService(ctx, r.binding())
+	if err != nil || live.invocation != i.Invocation || live.inode != i.SocketInode {
+		return failBefore(errors.New("受管 jail 排队期间实例变化，请重新提交"))
+	}
+	dir, m, err := n.active()
+	if err != nil || dir != after.NginxDir || manifestHash(m) != after.NginxHash {
+		return failBefore(ErrExternalChange)
+	}
+	if err = n.observe(ctx, m); err != nil {
+		return failBefore(err)
+	}
+	registry, err := loadFail2banNginxRegistry(n.DataDir)
+	if err != nil || registry.ID != i.BeforeRegistry.ID {
+		return failBefore(ErrExternalChange)
+	}
+	if err = prepareFail2banJailConfig(r, after); err != nil {
+		return failBefore(err)
+	}
+	templateIDs := []string{}
+	for _, j := range after.Policy.Jails {
+		if !j.Enabled {
+			continue
+		}
+		seen := false
+		for _, id := range templateIDs {
+			seen = seen || id == j.Template
+		}
+		if !seen {
+			templateIDs = append(templateIDs, j.Template)
+		}
+	}
+	if len(templateIDs) > 0 {
+		program := fail2banProgram{kind: "fail2ban-regex", managed: r}
+		reader := &fail2banTemplateReader{data: n.DataDir, scope: "host"}
+		checks := reader.collect(ctx, fail2ban.TemplateCheckInput{Templates: templateIDs}, program)
+		if len(checks) != len(templateIDs) {
+			return failBefore(errors.New("官方过滤器检查结果不完整"))
+		}
+		for _, check := range checks {
+			if !check.Available || !check.Passed || check.Engine != r.engine() {
+				return failBefore(errors.New("官方过滤器样例检查未通过：" + check.Template))
+			}
+		}
+	}
+	if _, err = fail2banManagedExec(ctx, r.python(), r.args(true, "-c", r.jailCandidate(after.ID), "-s", fail2banManagedSocket, "-t"), 8*time.Second, 16384); err != nil {
+		return failBefore(errors.New("官方客户端未通过候选 jail 配置校验"))
+	}
+	proof, err := readFail2banJailRuntime(ctx, r, before)
+	if err != nil {
+		return failBefore(err)
+	}
+	i.BansHash, err = saveFail2banBanProof(r, record.OperationID, proof)
+	if err != nil {
+		return failBefore(err)
+	}
+	selected, _, err = selectedFail2banJails(r)
+	if err != nil || selected != i.BeforeID {
+		return failBefore(ErrExternalChange)
+	}
+	registry, err = loadFail2banNginxRegistry(n.DataDir)
+	if err != nil || registry.ID != i.BeforeRegistry.ID {
+		return failBefore(ErrExternalChange)
+	}
+	// All later stages can have changed both configuration and authorization.
+	record.Stage = "switch_pending"
+	i.EffectsPossible = true
+	if err = n.persist(record); err != nil {
+		return err
+	}
+	err = func() error {
+		if err := saveFail2banNginxRegistry(n.DataDir, i.AfterRegistry); err != nil {
+			return err
+		}
+		if err := selectFail2banJails(r, i.AfterID); err != nil {
+			return err
+		}
+		if err := exchangeFail2banJailConfig(r, record.OperationID, before, after); err != nil {
+			return err
+		}
+		record.Stage = "reload_pending"
+		if err := n.persist(record); err != nil {
+			return err
+		}
+		if err := reloadFail2banJails(ctx, r); err != nil {
+			return err
+		}
+		actual, err := readFail2banJailRuntime(ctx, r, after)
+		if err != nil {
+			return err
+		}
+		if err = checkFail2banBanPreservation(proof, actual); err != nil {
+			return err
+		}
+		active, verified, err := n.active()
+		if err != nil || active != after.NginxDir || manifestHash(verified) != after.NginxHash {
+			return ErrExternalChange
+		}
+		selected, _, err := selectedFail2banJails(r)
+		if err != nil || selected != i.AfterID {
+			return ErrExternalChange
+		}
+		registry, err := loadFail2banNginxRegistry(n.DataDir)
+		if err != nil || registry.ID != i.AfterRegistry.ID {
+			return ErrExternalChange
+		}
+		record.State, record.Stage, record.Error = "succeeded", "jails_confirmed", ""
+		return n.persist(record)
+	}()
+	if err != nil {
+		return errors.Join(err, f.recoverJails(record, r, before, after))
+	}
+	return nil
+}
+
+func reloadFail2banJails(ctx context.Context, r *fail2banManagedRecord) error {
+	// No --restart or --unban: official reload owns ticket/database lifecycle.
+	raw, err := fail2banManagedExec(ctx, r.python(), r.args(true, "-c", filepath.Join(r.work(), "config"), "-s", fail2banManagedSocket, "--timeout", "10", "reload", "--all"), 15*time.Second, 16384)
+	if err != nil || strings.TrimSpace(string(raw)) != "OK" {
+		return errors.New("官方受管 jail reload 未确认完成")
+	}
+	return nil
+}
+
+func (f *fail2banNginxExecutor) jailsRecoveryRequired(record Record, err error) error {
+	record.State, record.Stage, record.Error = "recovery_required", "jails_unconfirmed", err.Error()
+	return errors.Join(errFail2banJailsRecovery, err, f.nginx.persist(record))
+}
+
+func (f *fail2banNginxExecutor) recoverJails(record Record, r *fail2banManagedRecord, before, after *fail2banJailBundle) error {
+	n := f.nginx
+	i := record.Fail2banJails
+	record.State, record.Stage = "compensating", "jails_rollback_pending"
+	if err := n.persist(record); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	err := func() error {
+		if err := verifyFail2banManaged(ctx, r, false); err != nil {
+			return err
+		}
+		if err := fail2banManagedFile(fail2banManagedUnit, r.unit()); err != nil {
+			return err
+		}
+		selected, _, err := selectedFail2banJails(r)
+		if err != nil || selected != i.BeforeID && selected != i.AfterID {
+			return ErrExternalChange
+		}
+		active := filepath.Join(r.work(), "config")
+		if err = verifyFail2banJailConfig(r, active, before); err != nil {
+			if err = verifyFail2banJailConfig(r, active, after); err != nil {
+				return ErrExternalChange
+			}
+			if err = selectFail2banJails(r, i.BeforeID); err != nil {
+				return err
+			}
+			if err = exchangeFail2banJailConfig(r, record.OperationID, after, before); err != nil {
+				return err
+			}
+		} else if err = selectFail2banJails(r, i.BeforeID); err != nil {
+			return err
+		}
+		registry, err := loadFail2banNginxRegistry(n.DataDir)
+		if err != nil {
+			return err
+		}
+		if registry.ID == i.AfterRegistry.ID {
+			if err = saveFail2banNginxRegistry(n.DataDir, i.RollbackRegistry); err != nil {
+				return err
+			}
+		} else if registry.ID != i.BeforeRegistry.ID && registry.ID != i.RollbackRegistry.ID {
+			return ErrExternalChange
+		}
+		if err = verifyFail2banManaged(ctx, r, true); err != nil {
+			return err
+		}
+		if _, err = readFail2banLiveService(ctx, r.binding()); err != nil {
+			if err = fail2banManagedStopped(ctx); err != nil {
+				return err
+			}
+			if err = fail2banManagedNoOther(ctx, n.DataDir, false); err != nil {
+				return err
+			}
+			if err = fail2banManagedEffective(ctx); err != nil {
+				return err
+			}
+			if err = fail2banManagedSystemctl(ctx, "start", fail2banManagedService); err != nil {
+				return err
+			}
+		}
+		if err = reloadFail2banJails(ctx, r); err != nil {
+			return err
+		}
+		actual, err := readFail2banJailRuntime(ctx, r, before)
+		if err != nil {
+			return err
+		}
+		var proof fail2banBanProof
+		raw, err := listenerRead(fail2banJailBansPath(r, record.OperationID), fail2banBanProofLimit)
+		if err != nil || i.BansHash == "" || secure.Hash(raw) != i.BansHash {
+			return errors.New("原官方封禁时间快照无法核对，不重放缓存封禁")
+		}
+		if err = decodeFail2banNginxJSON(raw, &proof); err != nil {
+			return err
+		}
+		if err = checkFail2banBanPreservation(proof, actual); err != nil {
+			return err
+		}
+		selected, _, err = selectedFail2banJails(r)
+		if err != nil || selected != i.BeforeID {
+			return ErrExternalChange
+		}
+		registry, err = loadFail2banNginxRegistry(n.DataDir)
+		if err != nil || registry.ID != i.BeforeRegistry.ID && registry.ID != i.RollbackRegistry.ID {
+			return ErrExternalChange
+		}
+		dir, m, err := n.active()
+		if err != nil || dir != after.NginxDir || manifestHash(m) != after.NginxHash {
+			return ErrExternalChange
+		}
+		return verifyFail2banJailConfig(r, active, before)
+	}()
+	if err != nil {
+		return f.jailsRecoveryRequired(record, err)
+	}
+	record.State, record.Stage, record.Error = "failed", "jails_rolled_back", "原受管 jail 配置、动作授权及未过期封禁已经确认恢复"
+	return n.persist(record)
+}
+
+func (f *fail2banNginxExecutor) jailOperation(id string) (Fail2banJailsOperation, error) {
+	if !validID(id) {
+		return Fail2banJailsOperation{}, errors.New("受管 jail 操作 ID 无效")
+	}
+	r, err := f.nginx.Journal.Get(id)
+	if err != nil {
+		return Fail2banJailsOperation{}, err
+	}
+	if r.Kind != fail2banJailsKind || r.Fail2banJails == nil {
+		return Fail2banJailsOperation{}, os.ErrNotExist
+	}
+	return fail2banJailsView(r), nil
+}

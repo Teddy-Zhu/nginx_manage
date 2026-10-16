@@ -29,6 +29,7 @@ type Fail2banInstallOptions struct {
 }
 
 type fail2banManagedRecord struct {
+	jailSelection  string
 	Schema         int               `json:"schema"`
 	EventID        string            `json:"event_id"`
 	At             int64             `json:"at"`
@@ -116,6 +117,10 @@ func loadFail2banManaged(data string) (*fail2banManagedRecord, error) {
 	event, err := listenerRead(filepath.Join(fail2banManagedDir(data), "history", r.EventID+".json"), 16384)
 	if err != nil || !bytes.Equal(event, raw) {
 		return nil, errors.New("受管 Fail2ban 安装审计记录不一致")
+	}
+	r.jailSelection, _, err = selectedFail2banJails(&r)
+	if err != nil {
+		return nil, err
 	}
 	return &r, nil
 }

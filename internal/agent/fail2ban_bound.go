@@ -48,6 +48,9 @@ func fail2banCurrentBinding(data string, b *fail2banBinding, required bool) erro
 	if err != nil || current == nil || current.State != "bound" || current.ID != b.ID {
 		return errors.New("实例读取授权已变更，请刷新接入状态")
 	}
+	if b.managed != nil && (current.managed == nil || b.managed.jailSelection != current.managed.jailSelection) {
+		return errors.New("受管 jail 配置在读取期间变化，请刷新")
+	}
 	return nil
 }
 func fail2banReadLimited(path string, limit int64) ([]byte, error) {

@@ -104,7 +104,7 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 ## Fail2ban jail 期望配置
 
-文件导出及 API 拉取/推送可选 `selection.fail2ban=true`，固定归档项 `config/fail2ban.json` 保存类型化 jail 期望；未选择时为 null。导入 `fail2ban: {mode: preserve|merge|replace, base_version?: number}` 默认保留目标，合并/替换与 Nginx 配置同事务保存，并支持失败补偿及目标版本冲突检测。源 jail ID 重新分配，站点逻辑 ID 随同一业务配置树保留；不复制实例、Socket、客户端批准、所有权、计数或封禁状态。预检展示源/目标数量和状态；须在目标核对日志、白名单、流量路径及动作。当前 jail 应用执行器尚未接入，迁移保存不表示保护生效，详见 [Fail2ban](fail2ban.md)。
+文件导出及 API 拉取/推送可选 `selection.fail2ban=true`，固定归档项 `config/fail2ban.json` 保存类型化 jail 期望；未选择时为 null。导入 `fail2ban: {mode: preserve|merge|replace, base_version?: number}` 默认保留目标，合并/替换与 Nginx 配置同事务保存，并支持失败补偿及目标版本冲突检测。源 jail ID 重新分配，站点逻辑 ID 随同一业务配置树保留；不复制实例、Socket、客户端批准、所有权、计数或封禁状态。预检展示源/目标数量和状态；须在目标核对日志、白名单、流量路径及动作。本机受管实例已提供 root jail 配置应用命令，公开迁移流程不自动调用该命令；迁移保存不表示保护生效，详见 [Fail2ban](fail2ban.md)。
 
 ## 监控配置迁移
 
@@ -114,4 +114,4 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 `save/apply` 将监控设置与配置修订、其他依赖和任务同事务保存，提交后唤醒原监控 worker；沿用现有配置变更的采样与阈值窗口处理。`draft` 仅在计划中保留待迁入设置，显示“未导入”，不改变目标监控配置。目标监控模块开关、指标历史、告警状态与通知队列不随包复制。迁移应用中或待恢复时阻止另行修改监控设置；Nginx 应用失败先确认原运行配置，再按迁入版本与完整设置核对并以递增版本恢复原设置，冲突保留待恢复状态。未执行构建、类型检查、测试或真实迁移，待 P5 集中验证。
 
-站点的 `client_deny` 元信息只迁移客户端拒绝入口声明；目标按本机 real_ip、map/volatile 和 geo 能力预检，并重新核对站点可信代理设置。独立的 `nginx/client-deny/sets.conf`、实际封禁、root 动作授权事件及集合恢复快照不进入配置包，导入和回滚沿用目标自身的运行集合。目标 root 须重新授权本机官方 jail 与站点入口的绑定，再由目标收集自己的实际封禁；导入入口不表示防护已生效，网页 jail 应用仍未接通。
+站点的 `client_deny` 元信息只迁移客户端拒绝入口声明；目标按本机 real_ip、map/volatile 和 geo 能力预检，并重新核对站点可信代理设置。独立的 `nginx/client-deny/sets.conf`、实际封禁、root 动作授权事件及集合恢复快照不进入配置包，导入和回滚沿用目标自身的运行集合。受管实例的 `jail-current.json`、`jail-bundles/`、`jail-configs/`、`jail-identities/`、封禁时间证明及 root 执行 journal 同样不迁移。目标 root 须对目标本机受管实例应用重新核对的 jail 策略，或明确授权已有实例的 jail 绑定，再由目标收集自己的实际封禁；导入入口不表示防护已生效，网页 jail 应用仍未接通。

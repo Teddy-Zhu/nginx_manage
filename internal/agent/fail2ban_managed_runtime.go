@@ -89,7 +89,7 @@ func (r fail2banManagedRecord) unit() string {
 	check := fail2banUnitCommand([]string{r.ManagerPath, "fail2ban-managed-check", "--data-dir", r.DataDir, "--fail2ban-scope", "host"})
 	start := fail2banUnitCommand(append([]string{r.PythonPath}, r.startArgs()...))
 	stop := fail2banUnitCommand(append([]string{r.PythonPath}, r.args(true, "-c", filepath.Join(r.work(), "config"), "-s", fail2banManagedSocket, "--timeout", "5", "stop")...))
-	return "[Unit]\nDescription=NginxPanel managed Fail2ban\nAfter=network.target\nStartLimitIntervalSec=60\nStartLimitBurst=3\n\n[Service]\nType=simple\nUser=root\nGroup=root\nUMask=0077\nRuntimeDirectory=nginxpanel-fail2ban\nRuntimeDirectoryMode=0700\nExecStartPre=" + check + "\nExecStart=" + start + "\nExecStop=" + stop + "\nTimeoutStartSec=60\nTimeoutStopSec=15\nRestart=on-failure\nRestartSec=5\nNoNewPrivileges=true\nPrivateTmp=true\nProtectHome=true\nProtectSystem=strict\nReadWritePaths=" + fail2banUnitArg(filepath.Join(r.work(), "state")) + " /run/nginxpanel-fail2ban\n\n[Install]\nWantedBy=multi-user.target\n"
+	return "[Unit]\nDescription=NginxPanel managed Fail2ban\nAfter=network.target\nStartLimitIntervalSec=60\nStartLimitBurst=3\n\n[Service]\nType=simple\nUser=root\nGroup=root\nEnvironment=TZ=UTC\nUMask=0077\nRuntimeDirectory=nginxpanel-fail2ban\nRuntimeDirectoryMode=0700\nExecStartPre=" + check + "\nExecStart=" + start + "\nExecStop=" + stop + "\nTimeoutStartSec=60\nTimeoutStopSec=15\nRestart=on-failure\nRestartSec=5\nNoNewPrivileges=true\nPrivateTmp=true\nProtectHome=true\nProtectSystem=strict\nReadWritePaths=" + fail2banUnitArg(filepath.Join(r.work(), "state")) + " /run/nginxpanel-fail2ban\n\n[Install]\nWantedBy=multi-user.target\n"
 }
 func (r fail2banManagedRecord) files() map[string]string {
 	return map[string]string{
@@ -227,26 +227,12 @@ func verifyFail2banManaged(ctx context.Context, r *fail2banManagedRecord, files 
 			return err
 		}
 	}
-	config := filepath.Join(r.work(), "config")
-	entries, err := os.ReadDir(config)
-	if err != nil || len(entries) != 5 {
-		return errors.New("受管引擎配置目录出现未登记材料")
+	_, bundle, err := selectedFail2banJails(r)
+	if err != nil {
+		return err
 	}
-	for _, entry := range entries {
-		if entry.Name() == "fail2ban.conf" || entry.Name() == "jail.conf" {
-			continue
-		}
-		if entry.Name() != "jail.d" && entry.Name() != "filter.d" && entry.Name() != "action.d" {
-			return errors.New("受管引擎配置目录出现额外入口")
-		}
-		path := filepath.Join(config, entry.Name())
-		if err = existingRootDirectory(path); err != nil {
-			return err
-		}
-		children, err := os.ReadDir(path)
-		if err != nil || len(children) != 0 {
-			return errors.New("受管引擎尚未授权安装 jail、filter 或 action")
-		}
+	if err = verifyFail2banJailConfig(r, filepath.Join(r.work(), "config"), bundle); err != nil {
+		return err
 	}
 	return ctx.Err()
 }
@@ -280,8 +266,24 @@ func verifyFail2banManagedLive(ctx context.Context, r *fail2banManagedRecord) er
 		return err
 	}
 	names, err := parseFail2banJails(raw)
-	if err != nil || len(names) != 0 {
-		return errors.New("初始受管引擎包含未登记的 jail 或状态不完整")
+	if err != nil {
+		return err
+	}
+	_, bundle, err := selectedFail2banJails(r)
+	if err != nil {
+		return err
+	}
+	expected := map[string]bool{}
+	for _, name := range fail2banJailNames(bundle) {
+		expected[name] = true
+	}
+	if len(names) != len(expected) {
+		return errors.New("受管引擎实际 jail 与登记不一致")
+	}
+	for _, name := range names {
+		if !expected[name.Name] {
+			return errors.New("受管引擎包含未登记的 jail")
+		}
 	}
 	after, err := readFail2banLiveService(ctx, b)
 	if err != nil {

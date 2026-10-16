@@ -64,7 +64,7 @@ schema 4 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.js
 
 受管 Nginx 访问日志新增 `nginxpanel_auth_present`，只记录入站 Authorization 是否非空（0/1），不记录认证头内容。执行器生成 map，原生配置禁止重定义该变量；迁移/恢复预检包含 map 模块，Docker 镜像已预置此能力。日志目录声明 `auth_presence`，jail 保存预览要求来源包含该标记，同时执行固定过滤器检查；须先发布当前 Nginx 配置，再核对实际来源。旧运行日志或缺少标记的来源不据格式名推断可匹配。模块开关不控制日志中的保护状态。
 
-实现及源码集成审阅完成，尚未执行官方工具、生成器、构建、类型检查、lint、测试、浏览器或真实配置发布。P5 需集中核对 Python 正则/日期解析、IPv4/IPv6、首次挑战、转义与字段伪造、实际日志样例及轮转衔接；当前不是已通过验证的模板发布声明。固定 CLI/输出行为依据 [Fail2ban 1.1.1 fail2ban-regex](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banregex.py) 及[日期剥离实现](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)。jail 持久安装、动作桥接及封禁控制仍在实施。
+实现及源码集成审阅完成，尚未执行官方工具、生成器、构建、类型检查、lint、测试、浏览器或真实配置发布。P5 需集中核对 Python 正则/日期解析、IPv4/IPv6、首次挑战、转义与字段伪造、实际日志样例及轮转衔接；当前不是已通过验证的模板发布声明。固定 CLI/输出行为依据 [Fail2ban 1.1.1 fail2ban-regex](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banregex.py) 及[日期剥离实现](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)。本机受管 jail 安装见下文，公开应用与封禁控制仍在实施。
 
 ## 签名受管引擎的本机安装
 
@@ -86,11 +86,11 @@ nginxpanel fail2ban-install --data-dir /var/lib/nginxpanel --fail2ban-scope host
 
 - `fail2ban-managed`：读取安装登记，实际服务状态另行诊断。
 - `fail2ban-managed-check`：只读核对完整准入条件及官方配置校验；也是 systemd 的启动前入口。
-- `fail2ban-managed-start` / `fail2ban-managed-stop`：只启停独立服务；启动结果核对 root 服务主进程持有的 Socket、同一实例代次、服务端版本及初始零 jail 状态。
+- `fail2ban-managed-start` / `fail2ban-managed-stop`：只启停独立服务；启动结果核对 root 服务主进程持有的 Socket、同一实例代次、服务端版本及精确登记的 jail 集合（初始为空）。
 - `fail2ban-managed-enable` / `fail2ban-managed-disable`：只改变独立服务的开机启用。
 - `fail2ban-managed-rollback`：续办撤回独立服务；保留签名资产、私有配置、SQLite 和完整审计，不删除用户已有实例或其数据。
 
-所有程序调用固定、无 Shell，进程组与输出有界；超时或取消不伪造操作成功，安装留为 interrupted，普通服务操作记录待核对结果。撤回中断可重复执行，变更材料不匹配时保留现场供本机处理。管理程序与系统 Python 的文件身份固定，升级后需重新处理准入，不静默跟随新程序。模块开关不控制这些 root 操作，面板展示安装登记、已授权实例及过滤器检查来源；公开安装/服务变更、jail/action 等继续接入。
+所有程序调用固定、无 Shell，进程组与输出有界；超时或取消不伪造操作成功，安装留为 interrupted，普通服务操作记录待核对结果。撤回中断可重复执行，变更材料不匹配时保留现场供本机处理。管理程序与系统 Python 的文件身份固定，升级后需重新处理准入，不静默跟随新程序。模块开关不控制这些 root 操作，面板展示安装登记、已授权实例及过滤器检查来源；公开安装/服务变更、jail 应用及手动封禁继续接入。
 
 实现与源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器、实际组件安装与 systemd 操作未执行，留待 P5。届时需核对两种架构/发行版的签名资产布局、标准库与运行文件约束、前台启动/Socket 归属、无 jail 启动、配置隔离、服务中断/续办/撤回和重启恢复。官方入口与参数依据 [Fail2ban 1.1.1 server](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banserver.py)、[CLI 配置参数](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2bancmdline.py)。
 
@@ -104,7 +104,7 @@ installed 状态的 root 安装登记授权对其专用服务、Socket 和固定
 
 受管服务采集还核对 systemd 的实际单元/覆盖项/加载版本、主进程所持监听 Socket、实际解释器文件 inode 及完整前台入口参数，前后核对服务代次。签名包及解释器验证纳入最多 10 秒的共享采集任务；仍限制 2 份在途、30 秒窗口 16 份新任务与有界输出，官方工具每次最多 2 秒。30 秒缓存命中返回原采样时间的结果，不作为新的执行校验证据；登记事件变化或撤回时不返回旧选择的成功结果。
 
-保存预览仅在运行实例可确认、版本为当前支持的 1.1.1，且过滤器结果与实例的 `engine` 一致时将 `template_ready` 标为 true。来源不同、版本不同或实例读取错误会阻塞对应 jail；样例检查的原始结果仍保留供核对。当前没有 jail 应用动作执行器，`can_apply=false`，所有 jail 仍只读，不因为代码来源为 managed 就标记接管或保护。
+保存预览仅在运行实例可确认、版本为当前支持的 1.1.1，且过滤器结果与实例的 `engine` 一致时将 `template_ready` 标为 true。来源不同、版本不同或实例读取错误会阻塞对应 jail；样例检查的原始结果仍保留供核对。网页尚未提供 jail 应用入口，`can_apply=false`、所有 jail 的 `writable=false`。`managed=true` 仅用于本机受管配置包明确登记且实际可读取的 jail，不根据实例代码来源或名称单独推断所有权和保护状态。
 
 接口合同及自动扫描页面已同步；Agent 为 40、数据库为 25。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器、官方工具和真实实例操作均未执行，留待 P5。需集中核对托管与已有实例的选择/冲突/撤回、事件变化及缓存、实际进程入口与 Socket、签名/解释器漂移、官方模块入口及同源同版本预览等行为。
 
@@ -135,4 +135,27 @@ HTTP 站点元信息支持 `client_deny=true`，可在 Nginx 配置页声明该�
 
 集合更新与配置发布、HTTP-01、恢复和维护互斥。更新前确认当前业务修订及集合代次，保存有界的 before/after 恢复快照，再原子替换、`nginx -t`、必要的 reload 和运行代次核对；相同集合及来源不重复写盘或 reload。高频刷新复用一个独立 root journal 槽位，双快照记录最多 512 KiB，避免耗尽普通操作记录。失败或 Agent 中断先恢复冻结的原集合，验证、reload 并确认原代次后才允许下一批官方收集；遇到外部变化不覆盖，保留 `recovery_required` 并阻止新的 Nginx 写入。状态只有在运行核对成功后才为 `confirmed`；失败不报告有效封禁。
 
-这条本机动作链不安装或修改 jail、过滤器或现有服务，网页的 jail 应用仍未接通，`can_apply=false`、jail 的 `managed/writable=false` 不变。Agent 为 42，策略为 nginxpanel-8，数据库为 25、迁移 schema 为 4。实现与源码集成审阅完成，构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收统一留待 P5。
+独立 bind/unbind/refresh 不安装或修改 jail、过滤器或现有服务；受管 jail 的动作授权须随下述完整配置包应用，不能单独转移或撤销。管理员完成专用服务的停止或撤回后，只有不可变停用记录、安装身份及实际停止状态均确认，才允许清空该实例对应的 Nginx 集合；异常离线或查询失败保留集合并报告错误。提交集合前持有共同安装锁并重新核对来源。
+
+## 本机受管 jail 配置应用
+
+宿主机 root 可通过同一专用 Socket，向已安装且运行中的独立受管 Fail2ban 1.1.1 提交完整类型化策略。已有实例保持只读；启用项目前仅支持内置 HTTP 401 模板与 `nginx-client` 动作，须引用当前已发布、包含认证标记的唯一受管 HTTP 日志和显式客户端拒绝入口。站点可信代理及回环地址自动加入忽略集合。自定义过滤器、命令、主机日志路径、内核动作不接受。
+
+```sh
+nginxpanel fail2ban-nginx-jails-status --data-dir /var/lib/nginxpanel --fail2ban-scope host
+nginxpanel fail2ban-nginx-jails-apply --data-dir /var/lib/nginxpanel --fail2ban-scope host \
+  --fail2ban-operation <NEW_UUID> --fail2ban-nginx-base <SELECTED_ID> \
+  --fail2ban-policy-file /root/jails.json
+nginxpanel fail2ban-nginx-jails-status --data-dir /var/lib/nginxpanel --fail2ban-scope host \
+  --fail2ban-operation <NEW_UUID>
+```
+
+首次应用省略 `--fail2ban-nginx-base`，后续必须为状态返回的 `selected_id`；策略文件是未包裹的 `{"jails":[...]}`，字段与期望策略一致，不是 `PolicyView` 或迁移归档。操作 UUID 与规范化请求绑定，重复提交只返回原操作。普通 status 返回所选配置及待完成操作，不作为运行生效证明；应用提交先返回排队状态，查询操作的 `succeeded/jails_confirmed` 才表示本次 jail 参数核对完成，Nginx 拒绝集合仍有独立确认状态。
+
+执行先冻结安装、服务代次、Nginx 修订与动作授权，持久化配置包和恢复意图；固定过滤器样例及官方候选配置检查通过后，以原子目录交换安装精确的 jail/filter/action 树，使用官方 `reload --all`。固定 action 仅排队刷新，不携带 IP，也不在 Fail2ban 动作内同步查询自己。执行后读取实际 jail、日志、正则、参数、忽略集合及动作命令，并核对原未过期封禁的到期时间。服务使用 UTC；程序不重放缓存封禁、不自行延长到期时间。命令及 reload 语义依据 [官方客户端](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banclient.py)，封禁时间读取依据 [BanManager](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/banmanager.py)。
+
+失败或重启先恢复原配置与动作授权，核对官方状态库恢复出的原未过期封禁；外部文件、授权或运行状态无法核对时保留 `recovery_required`，阻止新的 Nginx/jail 写入。尚未切换的中断只结束原操作，不擅自重启服务。应用及恢复与安装/服务控制共用 root 锁；未完成操作阻止独立启停、启用/禁用和撤回，并能在维护排空期间继续完成。jail 逻辑 UUID 的站点、模板与动作永久固定，退役后不能复用为其他来源，避免状态库中的旧封禁转移。
+
+配置包及备份树位于安装 UUID 下的 `jail-bundles/`、`jail-configs/`，`jail-current.json` 指向所选包，`jail-identities/` 保留身份约束；以上均为 root 私有、禁止迁移的运行材料。单策略最多 32 项、64 KiB，配置包最多 256 KiB；原封禁时间证明独立存储，最多 4 MiB、每 jail 1024 个地址，journal 仅保存其摘要。
+
+当前 Agent 为 43，策略为 nginxpanel-8，数据库为 25、迁移 schema 为 4。实现及源码集成审阅完成；生成器、构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收均未执行，统一留待 P5。P5 还须核对目录交换/掉电恢复、官方 reload 与状态库的剩余封禁时间、动作回调无死锁、服务停止及维护衔接。公开 jail 应用、手动封禁/解封与历史尚未接通。
