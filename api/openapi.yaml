@@ -3931,11 +3931,23 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["kind", "resource", "state", "message"], "properties": {"kind": {"type": "string"}, "resource": {"type": "string"}, "state": {"type": "string"}, "message": {"type": "string"}}}
     MigrationPlan:
       {"type": "object", "additionalProperties": false, "required": ["id", "source_node", "source_version", "base_version", "expires_at", "state", "steps", "omissions", "can_save", "can_apply", "nginx_enabled", "revision_id", "task_id", "last_error", "package_sha256"], "properties": {"id": {"type": "string"}, "source_node": {"type": "string"}, "source_version": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "expires_at": {"type": "integer", "format": "int64", "minimum": 0}, "state": {"type": "string"}, "steps": {"type": "array", "items": {"$ref": "#/components/schemas/MigrationStep"}}, "omissions": {"type": "array", "items": {"type": "string"}}, "can_save": {"type": "boolean"}, "can_apply": {"type": "boolean"}, "nginx_enabled": {"type": "boolean"}, "revision_id": {"type": "string"}, "task_id": {"type": "string"}, "last_error": {"type": "string"}, "package_sha256": {"type": "string"}, "dependencies": {"$ref": "#/components/schemas/MigrationDependencyStatus"}}}
+    FirewallRegistrationView:
+      type: object
+      additionalProperties: false
+      description: 本机 root 空表登记及同代次内核快照的核对结果；不表示过滤策略已生效或获得写入授权。
+      required: [state, verified, operation_id, observed_at, reason]
+      properties:
+        state: {type: string, enum: [unavailable, unregistered, registered, released, missing, drifted, recovery_required]}
+        verified: {type: boolean}
+        operation_id: {type: string}
+        observed_at: {type: integer, format: int64}
+        reason: {type: string}
     FirewallObservation:
       type: object
       additionalProperties: false
-      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings", "interfaces", "kernel"]
+      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings", "interfaces", "kernel", "registration"]
       properties:
+        registration: {"$ref": "#/components/schemas/FirewallRegistrationView"}
         kernel: {"$ref": "#/components/schemas/FirewallKernelView"}
         at: {"type": "integer", "format": "int64"}
         source: {"type": "string"}

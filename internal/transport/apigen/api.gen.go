@@ -1602,24 +1602,34 @@ type FirewallKernelView struct {
 	Reason      string `json:"reason"`
 }
 
+// FirewallRegistrationView defines model for FirewallRegistrationView.
+type FirewallRegistrationView struct {
+	State       string `json:"state"`
+	Verified    bool   `json:"verified"`
+	OperationId string `json:"operation_id"`
+	ObservedAt  int64  `json:"observed_at"`
+	Reason      string `json:"reason"`
+}
+
 // FirewallObservation defines model for FirewallObservation.
 type FirewallObservation struct {
-	Kernel     FirewallKernelView `json:"kernel"`
-	At         int64              `json:"at"`
-	Source     string             `json:"source"`
-	Scope      string             `json:"scope"`
-	Available  bool               `json:"available"`
-	Writable   bool               `json:"writable"`
-	Manager    string             `json:"manager"`
-	Backend    string             `json:"backend"`
-	Reason     string             `json:"reason"`
-	Firewalld  FirewallFirewalld  `json:"firewalld"`
-	Ufw        FirewallUFW        `json:"ufw"`
-	Iptables   []FirewallIptables `json:"iptables"`
-	Rulesets   []FirewallRuleset  `json:"rulesets"`
-	Docker     FirewallDocker     `json:"docker"`
-	Warnings   []string           `json:"warnings"`
-	Interfaces []string           `json:"interfaces"`
+	Registration FirewallRegistrationView `json:"registration"`
+	Kernel       FirewallKernelView       `json:"kernel"`
+	At           int64                    `json:"at"`
+	Source       string                   `json:"source"`
+	Scope        string                   `json:"scope"`
+	Available    bool                     `json:"available"`
+	Writable     bool                     `json:"writable"`
+	Manager      string                   `json:"manager"`
+	Backend      string                   `json:"backend"`
+	Reason       string                   `json:"reason"`
+	Firewalld    FirewallFirewalld        `json:"firewalld"`
+	Ufw          FirewallUFW              `json:"ufw"`
+	Iptables     []FirewallIptables       `json:"iptables"`
+	Rulesets     []FirewallRuleset        `json:"rulesets"`
+	Docker       FirewallDocker           `json:"docker"`
+	Warnings     []string                 `json:"warnings"`
+	Interfaces   []string                 `json:"interfaces"`
 }
 
 // FirewallFirewalld defines model for FirewallFirewalld.

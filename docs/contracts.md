@@ -161,8 +161,8 @@ Agent 合同为 30。主回环 HTTPS 与部署/就绪绑定不变，可选远程
 迁移与完整恢复的目标能力预检沿 nginx.conf 的实际 include 关系区分 HTTP/Stream，保留共享 include 的各自上下文，只统计启用且可达的配置。map/geo/types/split_clients 的行按数据处理，map 的 volatile 参数及其 include 单独识别。HTTP 与 Stream 的 map、连接限制、访问控制和日志不能互相替代；HTTP proxy/headers/geo/split_clients/charset/gzip 与 Stream 默认子模块同时检查目标编译参数和必要版本。已选且当前本机批准的动态模块可作为待加载候选，必须继续经过 Agent 的配置、ABI 和运行确认；仅有当前运行能力不能替代本次 load_module 路径批准。Docker 缺失能力须更换预置镜像；源模块只能显式映射至批准路径或在静态能力已预置时移除，不传输模块二进制。编译参数及 Stream 模块边界依据 [Nginx 构建源码](https://github.com/nginx/nginx/blob/release-1.30.6/auto/options)、[Stream map](https://nginx.org/en/docs/stream/ngx_stream_map_module.html) 和 [Stream 连接限制](https://nginx.org/en/docs/stream/ngx_stream_limit_conn_module.html)。
 
 
-宿主机防火墙只读诊断通过 `GET /firewall` 和显式远程资源返回 FirewallObservation，区分管理器、命令后端、独立 IPv4/IPv6 规则结构和 Docker 路径标记。未知/超限不作为停用或完整读取，写入始终不可用；本机宿主机观测授权、读取预算和未交付边界见 [防火墙诊断](firewall.md)。统一 JSON 外壳及自动扫描页面沿用当前合同，Agent 协议为 30，真实系统验收留待 P5。
+宿主机防火墙只读诊断通过 `GET /firewall` 和显式远程资源返回 FirewallObservation，区分管理器、命令后端、独立 IPv4/IPv6 规则结构和 Docker 路径标记。未知/超限不作为停用或完整读取，写入始终不可用；本机宿主机观测授权、读取预算和未交付边界见 [防火墙诊断](firewall.md)。统一 JSON 外壳及自动扫描页面沿用当前合同，Agent 协议为 31，真实系统验收留待 P5。
 
-防火墙期望策略通过 `GET/PUT /firewall/policy` 读写，版本 CAS、加密载荷、幂等响应与审计同事务；写入要求 `security.write` 和浏览器近期认证。`POST /firewall/preview` 要求 `read`，固定已保存版本，生成直接 nftables 表达式与程序摘要并核对 Agent 环境和目标接口。全部使用统一 JSON 外壳与显式远程资源；页面自动扫描。保存与预览不触发内核写入，`can_apply` 恒为 false，不替代独立恢复或新连接确认。数据库迁移为 24，Agent 协议为 30；边界见 [防火墙](firewall.md)。
+防火墙期望策略通过 `GET/PUT /firewall/policy` 读写，版本 CAS、加密载荷、幂等响应与审计同事务；写入要求 `security.write` 和浏览器近期认证。`POST /firewall/preview` 要求 `read`，固定已保存版本，生成直接 nftables 表达式与程序摘要并核对 Agent 环境和目标接口。全部使用统一 JSON 外壳与显式远程资源；页面自动扫描。保存与预览不触发内核写入，`can_apply` 恒为 false，不替代独立恢复或新连接确认。数据库迁移为 24，Agent 协议为 31；边界见 [防火墙](firewall.md)。
 
-防火墙 `kernel` 子视图由 root 在宿主机范围内通过只读 NETLINK_NETFILTER 固定 GET 操作采集。前后内核代次和命名空间须一致，未知原始表达式保留参与摘要，不以宽松解码后的子集认领规则；不完整读取不产生可用快照。预览在目标表不存在时编码带 `NFNL_BATCH_GENID` 的独占新建事务并返回摘要/规模，摘要绑定命名空间和快照，不提供执行授权。当前没有发送该事务的入口；受管登记、恢复及应用继续实施。Agent 协议为 30，数据库仍为 24；详见 [防火墙](firewall.md)。
+防火墙 `kernel` 子视图由 root 在宿主机范围内通过只读 NETLINK_NETFILTER 固定 GET 操作采集。前后内核代次和命名空间须一致，未知原始表达式保留参与摘要，不以宽松解码后的子集认领规则；不完整读取不产生可用快照。预览在目标表不存在时编码带 `NFNL_BATCH_GENID` 的独占新建事务并返回摘要/规模，摘要绑定命名空间和快照，不提供执行授权。该策略预览事务仍没有发送入口；本机 root 已另行接入固定空表登记、提交回执/完整后读、中断核对及受管空表移除，公开 registration 子视图返回核对状态。过滤策略应用与独立可达性恢复继续实施。Agent 协议为 31，数据库仍为 24；详见 [防火墙](firewall.md)。

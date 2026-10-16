@@ -18,13 +18,14 @@ import (
 // endpoint from repeatedly forking privileged tools. Cancellation of one HTTP
 // request never starts a second copy while the original job is still alive.
 type firewallObserver struct {
-	mu    sync.Mutex
-	ctx   context.Context
-	scope string
-	dev   bool
-	done  chan struct{}
-	last  time.Time
-	value firewall.Observation
+	mu      sync.Mutex
+	ctx     context.Context
+	scope   string
+	dataDir string
+	dev     bool
+	done    chan struct{}
+	last    time.Time
+	value   firewall.Observation
 }
 
 func (f *firewallObserver) read(ctx context.Context) (firewall.Observation, error) {
@@ -91,7 +92,11 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	out.Iptables = make([]firewall.Iptables, 2)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go func() { defer wg.Done(); out.Kernel = readNFTKernel(ctx) }()
+	go func() {
+		defer wg.Done()
+		out.Kernel = readNFTKernel(ctx)
+		out.Registration = nftRegistrationView(f.dataDir, out.Kernel)
+	}()
 	wg.Add(1)
 	go func() { defer wg.Done(); out.Firewalld = readFirewalld(ctx) }()
 	wg.Add(1)
@@ -143,7 +148,7 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	return out
 }
 func (s *Server) firewallHandlers(mux *http.ServeMux, ctx context.Context) {
-	f := &firewallObserver{ctx: ctx, scope: s.MetricsScope, dev: s.Dev}
+	f := &firewallObserver{ctx: ctx, scope: s.MetricsScope, dev: s.Dev, dataDir: s.DataDir}
 	mux.HandleFunc("GET /v1/firewall", func(w http.ResponseWriter, r *http.Request) { out, e := f.read(r.Context()); dnsReply(w, out, e) })
 }
 func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error) {
@@ -151,6 +156,16 @@ func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error)
 	e := c.envelopeRequest(ctx, http.MethodGet, "/v1/firewall", nil, &out)
 	if e == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || out.Docker.Writable || len(out.Rulesets) > 5 || len(out.Iptables) > 2 || out.Kernel.Available && (out.Kernel.Generation == 0 || len(out.Kernel.NamespaceID) != 64 || len(out.Kernel.Fingerprint) != 64 || out.Kernel.Chains < 0 || out.Kernel.Chains > 128 || out.Kernel.Rules < 0 || out.Kernel.Rules > firewall.MaxEntries || out.Kernel.Bytes < 0 || out.Kernel.Bytes > nftReadBytes || out.Kernel.ObservedAt <= 0)) {
 		e = errors.New("invalid firewall observation")
+	}
+	if e == nil {
+		switch out.Registration.State {
+		case "unavailable", "unregistered", "registered", "released", "missing", "drifted", "recovery_required":
+		default:
+			e = errors.New("invalid firewall registration state")
+		}
+		if out.Registration.Verified && (out.Registration.State != "registered" || !out.Kernel.Available || !out.Kernel.TableExists || out.Kernel.Chains != 0 || out.Kernel.Rules != 0 || !validID(out.Registration.OperationID)) {
+			e = errors.New("invalid firewall registration proof")
+		}
 	}
 	return out, e
 }

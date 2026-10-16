@@ -25,8 +25,8 @@ const nftReadBytes = 8 << 20
 const nftDatagramBytes = 64 << 10
 const nftReadObjects = firewall.MaxEntries + 256
 
-// This connection only implements GET operations. In particular, a successful
-// read does not grant ownership of any object and cannot submit a transaction.
+// The send method only implements GET operations. In particular, a successful
+// read does not grant ownership of any object or authorize a transaction.
 // Receive processes one bounded datagram at a time instead of accumulating an
 // unbounded multipart dump in netlink.Conn.Receive.
 type nftReadSocket struct {
@@ -377,6 +377,10 @@ func readNFTKernel(ctx context.Context) firewall.KernelView {
 	return value
 }
 func snapshotNFTKernel(ctx context.Context) (firewall.KernelView, error) {
+	return snapshotNFTKernelInspect(ctx, nil)
+}
+
+func snapshotNFTKernelInspect(ctx context.Context, inspect func(map[uint16]netlink.Attribute) error) (firewall.KernelView, error) {
 	var out firewall.KernelView
 	namespace, e := nftNamespace()
 	if e != nil {
@@ -407,6 +411,11 @@ func snapshotNFTKernel(ctx context.Context) (firewall.KernelView, error) {
 		name, e := nftString(attrs[unix.NFTA_TABLE_NAME])
 		if e != nil || name != firewall.NFTHostTable {
 			return errors.New("unexpected nftables table")
+		}
+		if inspect != nil {
+			if err := inspect(attrs); err != nil {
+				return err
+			}
 		}
 		nftObjectHash(h, m, attrs)
 		return nil

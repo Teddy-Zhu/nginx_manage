@@ -2,7 +2,7 @@
 
 `GET /api/v1/firewall` 要求 `read`，返回统一 `code/message/data/request_id/node_id` 外壳，`data` 为 `FirewallObservation`。已登记远程资源 `/nodes/{connection}/firewall`，沿用目标权限和永久节点身份检查。防火墙页面由 `src/pages/firewall.vue` 自动扫描接入。
 
-仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行诊断命令。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；`writable` 及 `docker.writable` 始终为 false。模块管理仍禁止启用防火墙写入和依赖它的 Fail2ban。
+仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行诊断命令。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；`writable` 及 `docker.writable` 始终为 false。本机 root 空表登记命令使用独立范围授权，不由 API、模块开关或观测授权触发。模块管理仍禁止启用防火墙写入和依赖它的 Fail2ban。
 
 诊断分别返回：
 
@@ -37,13 +37,32 @@
 
 当前编译目标为独立 `inet nginxpanel_host` 表、`input` 过滤基础链、hook 优先级 10、自有链默认 accept。前两条返回回环及 ESTABLISHED/RELATED 流量；业务规则仅匹配 conntrack NEW，按地址族、来源、入站接口、协议和目的端口展开。allow 返回其余系统策略，deny 丢弃，reject 对 TCP 使用 RST、UDP 使用对应地址族不可达响应。未跟踪流量不在本阶段匹配范围内，不清理已有会话。含两条保护规则的总展开数最多 8192，超限失败，不返回部分成功；预览条目最多展示前 128 条，计数及程序摘要覆盖完整结果。
 
-预览复用 Agent 诊断，核对宿主机范围、管理器、legacy/混合后端、nft 视图、目标表及绑定接口，返回观测时间和错误/告警；接口清单最多 512 项。诊断缓存、采集非原子及外部变更意味着结果不是执行授权。`compiled` 只表示表达式生成成功，`can_apply` 恒为 false；存在同名目标表时必须由未来独立执行器核对受管登记，不凭表名接管。允许规则不保证其他基础链、云安全组或外部路径放行。
+预览复用 Agent 诊断，核对宿主机范围、管理器、legacy/混合后端、nft 视图、目标表及绑定接口，返回观测时间和错误/告警；接口清单最多 512 项。诊断缓存、采集非原子及外部变更意味着结果不是执行授权。`compiled` 只表示表达式生成成功，`can_apply` 恒为 false；存在同名目标表时返回独立登记核对状态，不凭表名接管；空表登记通过仍不能应用过滤策略。允许规则不保证其他基础链、云安全组或外部路径放行。
 
 当上述内核快照可用且固定目标表不存在时，预览另外序列化完整新建 batch：BEGIN 携带 `NFNL_BATCH_GENID`，表/链均使用 CREATE+EXCL，规则只追加到新建的固定链，最后 END。最多 8 MiB，返回消息数、字节数和绑定命名空间、快照与事务字节的摘要；目标表已存在时不生成接管或替换事务。格式标记本身不能证明所有权。序列化不发送事务，不证明内核接受表达式、socket 能承载整份 batch 或已建立恢复能力；执行器仍须持久化独立意图/恢复材料、重新核对、处理回执及未知结果。
 
+## 本机 root 空表登记
+
+仅在宿主机上由 root 显式指定 `--firewall-scope=host`，使用下列本地命令；未向 IPC/HTTP 注册写入入口，默认不运行。容器范围拒绝执行。数据目录及所有父目录须由 root 持有且不可被其他账户写入。
+
+```sh
+nginxpanel firewall-init --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel firewall-registration --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel firewall-recover --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel firewall-remove --data-dir /srv/nginxpanel --firewall-scope host
+```
+
+`firewall-init` 只独占创建空的 `inet nginxpanel_host` 表，不创建链、hook、规则或默认过滤策略，不承接业务期望策略。先生成随机登记身份，保存 root 私有意图和独立操作记录，再提交带非零内核代次前置条件的 CREATE+EXCL 事务。已有同名表拒绝接管；重复初始化只核对原登记，不重新提交。固定宿主机锁排除不同数据目录的并发登记，新建/移除与原独立维护准入共用锁，已有维护时拒绝新操作。
+
+事务为单个不超过 1 KiB 的数据报，回执总量不超过 64 KiB、提交期限 3 秒，不拆批或自动重发。同 socket 的 GETGEN 屏障前须消费完整回执，包含指向 BEGIN 的提交错误；随后使用独立 3 秒期限重新读取完整目标表。只有正确回执、预期下一内核代次、原命名空间、随机标记及严格空表结构同时成立才登记确认摘要。未知属性、使用者、标志、任何链/规则/集合/状态对象/flowtable 均拒绝空表核对。随机标记仅用于匹配先于提交保存的 root 意图，不单独充当所有权证明。
+
+`firewall-registration` 为只读状态；公开诊断的 `registration` 也用原登记、独立操作回执及同代次完整内核摘要核对，沿用 30 秒诊断缓存。`verified=true` 仅表示空表登记匹配，不代表策略生效、可达性或写入授权。新建/移除的回执丢失、后读失败或 Agent/命令中断留下原意图；`firewall-recover` 不发事务，只核对原对象并完成原记录。表不匹配时拒绝覆盖；表缺失不会自动重建。旧 boot/命名空间且当前目标表不存在时，须本机显式恢复才释放旧登记，不宣称删除了旧命名空间对象。释放原已确认登记使用新的关联操作记录，保留原完成记录。
+
+`firewall-remove` 只删除经完整核对、仍为空且摘要未变的已登记表，仍以代次前置条件排除读写间隙的外部变更；出现任何子对象或漂移都拒绝删除，不执行 flush 或快照覆盖。登记位于 `agent/firewall/registration.json`，操作位于原 `agent/operations`，均不进入逻辑迁移或业务备份恢复。空表无流量作用，故此步骤没有过滤策略的 Confirm/超时回滚；过滤策略仍须后续专用可达性执行器及独立恢复链。
+
 上述接口均使用统一 JSON 外壳，显式远程资源沿用节点身份与权限交集；`src/pages/firewall-rules.vue` 自动扫描接入，可新增、编辑、删除、启停、排序并保存/预览，不提供内核应用按钮。逻辑迁移保留目标防火墙策略并在遗漏清单中明确显示；完整备份随数据库保留期望草稿，恢复不应用规则。
 
-本阶段未实现可执行 Plan/Apply/Confirm/Rollback、root 受管对象登记与已确认运行状态持久化、独立超时/重启恢复、新 TCP/TLS 连接确认、Docker 转发路径、其余写入适配或 Fail2ban action。模块仍不能启用写入。未运行构建、类型检查、lint、测试、浏览器或宿主机工具；以上为实现合同，真实发行版/内核/Docker 矩阵待 P5 集中验证。
+本阶段已实现下述 root 空表登记与中断核对，未实现过滤策略的可执行 Plan/Apply/Confirm/Rollback、已确认过滤规则持久化、独立超时/重启恢复、新 TCP/TLS 连接确认、Docker 转发路径、其余写入适配或 Fail2ban action。模块仍不能启用写入。未运行构建、类型检查、lint、测试、浏览器或宿主机工具；以上为实现合同，真实发行版/内核/Docker 矩阵待 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 

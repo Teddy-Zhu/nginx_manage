@@ -39,6 +39,15 @@ const managerNames: Record<string, string> = {
   ufw: "UFW",
   "direct-candidate": "未发现启用的管理器",
 };
+const registrationNames: Record<string, string> = {
+  unavailable: "无法核对",
+  unregistered: "未登记",
+  registered: "已登记空表",
+  released: "已释放登记",
+  missing: "登记表缺失",
+  drifted: "登记对象变化",
+  recovery_required: "待本机恢复",
+};
 const backendNames: Record<string, string> = {
   unknown: "未确认",
   nftables: "nftables",
@@ -247,9 +256,19 @@ onUnmounted(() => {
             <code>{{ observation.kernel.fingerprint }}</code>
           </dd>
         </dl>
-        <p class="muted">
-          此快照只覆盖固定目标表，不能据此接管已有规则或判断外部可达性。
-        </p>
+        <dl>
+          <dt>受管登记</dt>
+          <dd>{{ registrationNames[observation.registration.state] }}</dd>
+          <dt>登记核对</dt>
+          <dd>{{ observation.registration.verified ? "通过" : "未通过" }}</dd>
+        </dl>
+        <n-alert
+          v-if="observation.registration.reason"
+          type="warning"
+          :bordered="false"
+          >{{ observation.registration.reason }}</n-alert
+        >
+        <p class="muted">空表登记不包含过滤策略；外部可达性须分别核对。</p>
       </section>
       <div class="managers">
         <section class="panel">

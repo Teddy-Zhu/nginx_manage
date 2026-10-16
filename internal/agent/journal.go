@@ -18,6 +18,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	RelatedOperationID string                       `json:"related_operation_id,omitempty"`
 	DisasterActivation *DisasterActivationOperation `json:"disaster_activation,omitempty"`
 	DisasterRestoreID  string                       `json:"disaster_restore_id,omitempty"`
 

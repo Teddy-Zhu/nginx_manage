@@ -194,7 +194,11 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 					out.Errors = append(out.Errors, "未取得同一内核代次的目标表快照，不能核对规则变化")
 				}
 				if observed.Kernel.Available && observed.Kernel.TableExists {
-					out.Errors = append(out.Errors, "目标表的内核快照已存在，须先核对独立受管登记")
+					if observed.Registration.Verified {
+						out.Errors = append(out.Errors, "空表受管登记已核对，策略应用与独立恢复尚不可用")
+					} else {
+						out.Errors = append(out.Errors, "目标表存在但独立受管登记未核对通过，禁止接管")
+					}
 				}
 				if observed.Manager != "direct-candidate" {
 					out.Errors = append(out.Errors, "未能排除现有管理器，不能直接接管 nftables")

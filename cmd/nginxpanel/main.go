@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|firewall-init|firewall-registration|firewall-recover|firewall-remove|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -105,6 +105,7 @@ func run() error {
 	componentScope := flags.String("component-scope", "unconfirmed", "native component scope: host or unconfirmed")
 	maintenanceScope := flags.String("maintenance-scope", "unconfirmed", "host configuration maintenance scope: host or unconfirmed")
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd or unconfirmed")
+	firewallScope := flags.String("firewall-scope", "unconfirmed", "local firewall registration namespace: host or unconfirmed")
 	dnsScope := flags.String("dns-scope", "unconfirmed", "DNS namespace: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
 	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
@@ -129,6 +130,10 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
+		"firewall-init":                   {"data-dir": true, "firewall-scope": true},
+		"firewall-registration":           {"data-dir": true, "firewall-scope": true},
+		"firewall-recover":                {"data-dir": true, "firewall-scope": true},
+		"firewall-remove":                 {"data-dir": true, "firewall-scope": true},
 		"backup-inspect":                  {"backup-file": true},
 		"backup-prepare":                  {"data-dir": true, "backup-file": true, "restore-operation": true},
 		"backup-prepare-data":             {"data-dir": true, "restore-operation": true, "backup-input-fd": true},
@@ -203,6 +208,10 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "firewall-scope":
+			if command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" {
+				invalidFlag = f.Name
+			}
 		case "backup-input-fd":
 			if command != "backup-prepare-data" {
 				invalidFlag = f.Name
@@ -331,6 +340,16 @@ func run() error {
 		installation = info
 	}
 	switch command {
+	case "firewall-init", "firewall-registration", "firewall-recover", "firewall-remove":
+		action := strings.TrimPrefix(command, "firewall-")
+		if action == "registration" {
+			action = "status"
+		}
+		out, err := agent.ManageFirewallRegistration(ctx, absDir, *firewallScope, action)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
 	case "management-listener-disable":
 		if err := agent.DisableRemoteListener(absDir); err != nil {
 			return err
