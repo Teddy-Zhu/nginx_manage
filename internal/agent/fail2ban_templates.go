@@ -61,21 +61,21 @@ func (f *fail2banTemplateReader) read(ctx context.Context, in fail2ban.TemplateC
 	if f.dev || os.Geteuid() != 0 || (&HostDNS{Dev: f.dev, Scope: f.scope}).hostScopeReason() != "" {
 		return f.empty(in, "模板验证须由 root Agent 确认宿主机范围"), nil
 	}
-	tool, hash, err := fail2banRegexTool()
+	program, err := selectFail2banRegex(f.data)
 	if err != nil {
 		return f.empty(in, err.Error()), nil
 	}
-	out, err := f.cache.read(ctx, f.ctx, &f.budget, tool.Path+"\x00"+tool.Resolved+"\x00"+hash+"/"+strings.Join(in.Templates, ","), func(call context.Context) []fail2ban.TemplateCheck { return f.collect(call, in, tool, hash) })
+	out, err := f.cache.read(ctx, f.ctx, &f.budget, program.key()+"/"+strings.Join(in.Templates, ","), func(call context.Context) []fail2ban.TemplateCheck { return f.collect(call, in, program) })
 	if err != nil {
 		return nil, err
 	}
-	current, currentHash, checkErr := fail2banRegexTool()
-	if checkErr != nil || currentHash != hash || current.Path != tool.Path || current.Resolved != tool.Resolved {
+	current, checkErr := selectFail2banRegex(f.data)
+	if checkErr != nil || current.key() != program.key() {
 		return f.empty(in, "验证程序发生变化，请重新验证"), nil
 	}
 	return out, nil
 }
-func (f *fail2banTemplateReader) collect(ctx context.Context, in fail2ban.TemplateCheckInput, tool fail2ban.Tool, hash string) []fail2ban.TemplateCheck {
+func (f *fail2banTemplateReader) collect(ctx context.Context, in fail2ban.TemplateCheckInput, program fail2banProgram) []fail2ban.TemplateCheck {
 	out := f.empty(in, "")
 	failAll := func(reason string) []fail2ban.TemplateCheck {
 		for i := range out {
@@ -85,9 +85,16 @@ func (f *fail2banTemplateReader) collect(ctx context.Context, in fail2ban.Templa
 		return out
 	}
 	for i := range out {
-		out[i].ToolPath, out[i].ToolSHA256 = tool.Resolved, hash
+		out[i].Engine = program.engine()
 	}
-	raw, err := fail2banRun(ctx, tool, []string{"--version"}, 1024)
+	program, err := program.authenticate(ctx)
+	if err != nil {
+		return failAll(err.Error())
+	}
+	for i := range out {
+		out[i].ToolPath, out[i].ToolSHA256 = program.tool.Resolved, program.hash
+	}
+	raw, err := program.run(ctx, []string{"--version"}, 1024)
 	if err != nil {
 		return failAll("fail2ban-regex 版本无法读取")
 	}
@@ -134,7 +141,7 @@ func (f *fail2banTemplateReader) collect(ctx context.Context, in fail2ban.Templa
 		}
 		// Only our fixed filter and fixed, bounded corpus are accepted. The empty
 		// private config directory prevents loading distribution jail includes.
-		raw, err = fail2banRun(ctx, tool, []string{"--config", work, "--usedns=no", "--encoding=UTF-8", "--maxlines=1", "--out=ip", logPath, filterPath}, 4096)
+		raw, err = program.run(ctx, []string{"--config", work, "--usedns=no", "--encoding=UTF-8", "--maxlines=1", "--out=ip", logPath, filterPath}, 4096)
 		if err != nil {
 			return failAll("官方模板匹配检查未完成或超出执行预算")
 		}
@@ -158,8 +165,7 @@ func (f *fail2banTemplateReader) collect(ctx context.Context, in fail2ban.Templa
 	if ctx.Err() != nil {
 		return failAll("模板检查超出执行预算")
 	}
-	_, currentHash, err := fail2banRegexTool()
-	if err != nil || currentHash != hash {
+	if err = program.unchanged(ctx, f.data); err != nil {
 		return failAll("验证期间程序发生变化，结果不能确认")
 	}
 	return out

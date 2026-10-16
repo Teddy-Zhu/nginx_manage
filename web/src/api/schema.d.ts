@@ -1734,7 +1734,7 @@ export interface components {
         FirewallProtectionObservation: { state: "unavailable" | "not_applicable" | "current" | "changed"; plan_id: string; observed_at: number; ssh_profile: string; ssh_listeners: string[]; protections: components["schemas"]["FirewallProtection"][]; reason: string; };
         Fail2banFilterSample: { name: string; line: string; expected_ip: string; };
         Fail2banTemplateCheckInput: { templates: ("nginx-http-401" | "nginx-authorization-401")[]; };
-        Fail2banTemplateCheck: { template: string; at: number; source: string; scope: string; available: boolean; passed: boolean; filter_sha256: string; samples_sha256: string; tool_path: string; tool_sha256: string; tool_version: string; expected_ips: string[]; matched_ips: string[]; reason: string; };
+        Fail2banTemplateCheck: { engine: components["schemas"]["Fail2banEngineIdentity"]; template: string; at: number; source: string; scope: string; available: boolean; passed: boolean; filter_sha256: string; samples_sha256: string; tool_path: string; tool_sha256: string; tool_version: string; expected_ips: string[]; matched_ips: string[]; reason: string; };
         Fail2banDesiredJail: { id: string; name: string; enabled: boolean; template: "nginx-http-401" | "nginx-authorization-401"; resource_id: string; action: "host-input" | "docker-forward" | "nginx-client"; ban_time: number; find_time: number; max_retry: number; ignore_ips: string[]; };
         Fail2banPolicy: { jails: components["schemas"]["Fail2banDesiredJail"][]; };
         Fail2banPolicyView: { version: number; policy: components["schemas"]["Fail2banPolicy"]; updated_at: number; };
@@ -1745,7 +1745,8 @@ export interface components {
         Fail2banPolicyPreview: { template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
         MigrationFail2banInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; };
         MigrationFail2banPlan: { mode: "preserve" | "merge" | "replace"; state: string; base_version: number; saved_version: number; source_jails: number; preserved_jails: number; replaced_jails: number; total_jails: number; policy_hash: string; warnings: string[]; };
-        Fail2banBindingView: { state: "unavailable" | "unbound" | "bound"; id: string; service: string; socket: string; client_path: string; client_version: string; approved_at: number; reason: string; };
+        Fail2banEngineIdentity: { owner: "existing" | "managed" | "none" | "unavailable"; installation_id: string; plan_id: string; asset_id: string; manifest_sha256: string; python_path: string; python_sha256: string; };
+        Fail2banBindingView: { engine: components["schemas"]["Fail2banEngineIdentity"]; state: "unavailable" | "unbound" | "bound"; id: string; service: string; socket: string; client_path: string; client_version: string; approved_at: number; reason: string; };
         Fail2banJailSummary: { name: string; managed: boolean; };
         Fail2banInstance: { at: number; source: string; scope: string; available: boolean; writable: boolean; binding: components["schemas"]["Fail2banBindingView"]; server_version: string; service: components["schemas"]["Fail2banService"]; jails: components["schemas"]["Fail2banJailSummary"][]; reason: string; };
         Fail2banJail: { at: number; source: string; scope: string; available: boolean; writable: boolean; binding_id: string; name: string; managed: boolean; server_version: string; current_failed: number | null; total_failed: number | null; current_banned: number | null; total_banned: number | null; banned: string[]; reason: string; };

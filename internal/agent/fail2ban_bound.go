@@ -44,7 +44,7 @@ func fail2banCurrentBinding(data string, b *fail2banBinding, required bool) erro
 	if !required {
 		return nil
 	}
-	current, err := loadFail2banBinding(data)
+	current, err := selectFail2banBinding(data)
 	if err != nil || current == nil || current.State != "bound" || current.ID != b.ID {
 		return errors.New("实例读取授权已变更，请刷新接入状态")
 	}
@@ -164,6 +164,11 @@ func readFail2banLiveService(ctx context.Context, b *fail2banBinding) (fail2banL
 	if err != nil {
 		return out, err
 	}
+	if b.managed != nil {
+		if err = fail2banManagedProcess(ctx, b.managed, pid); err != nil {
+			return out, err
+		}
+	}
 	out.invocation = values["InvocationID"]
 	out.view = fail2ban.Service{ID: b.Service, Available: true, Load: values["LoadState"], Active: values["ActiveState"], Sub: values["SubState"], UnitFile: values["UnitFileState"], MainPID: &pid}
 	return out, nil
@@ -179,8 +184,15 @@ func readFail2banBound(ctx context.Context, data string, b *fail2banBinding, cur
 	if err := fail2banCurrentBinding(data, b, current); err != nil {
 		return "", empty, nil, err
 	}
-	tool, err := fail2banBoundTool(b)
+	program, err := selectFail2banClient(b)
 	if err != nil {
+		return "", empty, nil, err
+	}
+	program, err = program.authenticate(ctx)
+	if err != nil {
+		return "", empty, nil, err
+	}
+	if err = fail2banCurrentBinding(data, b, current); err != nil {
 		return "", empty, nil, err
 	}
 	var before fail2banLiveService
@@ -189,7 +201,7 @@ func readFail2banBound(ctx context.Context, data string, b *fail2banBinding, cur
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); before, serviceErr = readFail2banLiveService(ctx, b) }()
-	go func() { defer wg.Done(); clientRaw, clientErr = fail2banRun(ctx, tool, []string{"--version"}, 4096) }()
+	go func() { defer wg.Done(); clientRaw, clientErr = program.run(ctx, []string{"--version"}, 4096) }()
 	wg.Wait()
 	if serviceErr != nil {
 		return "", empty, nil, serviceErr
@@ -213,9 +225,9 @@ func readFail2banBound(ctx context.Context, data string, b *fail2banBinding, cur
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		versionRaw, versionErr = fail2banRun(ctx, tool, fail2banReadArgs(b.Socket, "version"), 4096)
+		versionRaw, versionErr = program.run(ctx, fail2banReadArgs(b.Socket, "version"), 4096)
 	}()
-	go func() { defer wg.Done(); statusRaw, statusErr = fail2banRun(ctx, tool, status, 128<<10) }()
+	go func() { defer wg.Done(); statusRaw, statusErr = program.run(ctx, status, 128<<10) }()
 	wg.Wait()
 	version := strings.TrimSpace(string(versionRaw))
 	if versionErr != nil || statusErr != nil || !fail2banVersion.MatchString(version) || version != match[1] {
@@ -228,7 +240,7 @@ func readFail2banBound(ctx context.Context, data string, b *fail2banBinding, cur
 	if before.invocation != after.invocation || *before.view.MainPID != *after.view.MainPID || before.inode != after.inode || !os.SameFile(before.file, after.file) {
 		return "", empty, nil, errors.New("读取期间服务或 Socket 身份变化，请重新读取")
 	}
-	if _, err = fail2banBoundTool(b); err != nil {
+	if err = program.unchanged(ctx, data); err != nil {
 		return "", empty, nil, err
 	}
 	if err = fail2banCurrentBinding(data, b, current); err != nil {

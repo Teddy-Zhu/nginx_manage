@@ -103,6 +103,19 @@ onUnmounted(() => {
             · fail2ban-regex {{ latest.get(template.id)!.tool_version }}</span
           >
         </p>
+        <p
+          v-if="latest.get(template.id)!.engine.owner === 'managed'"
+          class="muted"
+        >
+          受管组件 {{ latest.get(template.id)!.engine.asset_id }} · Python
+          {{ latest.get(template.id)!.engine.python_path }}
+        </p>
+        <p
+          v-else-if="latest.get(template.id)!.engine.owner === 'existing'"
+          class="muted"
+        >
+          固定系统工具
+        </p>
         <NAlert v-if="latest.get(template.id)!.reason" type="warning">{{
           latest.get(template.id)!.reason
         }}</NAlert>

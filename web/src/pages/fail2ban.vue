@@ -267,7 +267,15 @@ onUnmounted(() => {
     <NAlert v-if="instanceError" type="error">{{ instanceError }}</NAlert>
     <section v-if="instance" class="panel page-stack">
       <div class="toolbar">
-        <h3>已有实例</h3>
+        <h3>
+          {{
+            instance.binding.engine.owner === "managed"
+              ? "受管实例"
+              : instance.binding.engine.owner === "existing"
+                ? "已接入实例"
+                : "实例状态"
+          }}
+        </h3>
         <NTag :type="instance.available ? 'success' : 'default'">{{
           instance.available
             ? "已读取运行状态"
@@ -280,6 +288,10 @@ onUnmounted(() => {
       </div>
       <p v-if="instance.binding.state === 'bound'">
         {{ instance.binding.service }} · {{ instance.binding.socket }}
+      </p>
+      <p v-if="instance.binding.engine.owner === 'managed'" class="muted">
+        签名组件 {{ instance.binding.engine.asset_id }} · Python
+        {{ instance.binding.engine.python_path }}
       </p>
       <p v-if="instance.available">
         服务端 {{ instance.server_version }} · 主进程
@@ -334,7 +346,7 @@ onUnmounted(() => {
     </section>
     <template v-if="view?.available">
       <section class="panel page-stack">
-        <h3>已有工具</h3>
+        <h3>固定系统工具</h3>
         <p>官方客户端版本 {{ view.client_version || "未能读取" }}</p>
         <NDataTable :columns="tools" :data="view.tools" :scroll-x="900" />
         <NAlert v-if="view.missing.length" type="warning"

@@ -131,7 +131,7 @@ func (s *Server) fail2banHandlers(mux *http.ServeMux, ctx context.Context) {
 func (c *Client) ReadFail2ban(ctx context.Context) (fail2ban.Observation, error) {
 	var out fail2ban.Observation
 	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban", nil, &out)
-	if err == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || len(out.Tools) > 3 || len(out.Services) > 3 || len(out.Python.Modules) > len(fail2banPythonModules) || len(out.Missing) > 4 || len(out.Warnings) > 8 || !fail2ban.ValidManaged(out.Managed)) {
+	if err == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || len(out.Tools) > 3 || len(out.Services) > 3 || len(out.Python.Modules) > len(fail2banPythonModules) || len(out.Missing) > 4 || len(out.Warnings) > 8 || !fail2ban.ValidManaged(out.Managed) || !fail2ban.ValidBindingView(out.Binding)) {
 		err = errors.New("invalid Fail2ban observation")
 	}
 	return out, err

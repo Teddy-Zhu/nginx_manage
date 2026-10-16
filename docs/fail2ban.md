@@ -1,4 +1,4 @@
-# Fail2ban jail 配置、宿主机诊断与已有实例接入
+# Fail2ban 配置、诊断与实例接入
 
 `GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记操作；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用且控制入口暂不可启用，诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
 
@@ -36,11 +36,11 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 实际连接仅由官方客户端执行固定 `version`、`status` 或 `status <已核对名称>`。显式设置全部早期配置参数，使用批准 Socket、固定 `/dev/null` PID/系统日志占位及 STDERR/ERROR 日志选项，避免客户端读取系统配置或创建日志文件。严格解析官方状态格式，不使用 eval 或 Python pickle 解码。格式依据 [官方客户端状态格式](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/beautifier.py)；超出可识别格式保持未知，不使用宽松文本子集。引擎记录封禁不代表已核对 action 或当前流量路径的实际阻断效果。
 
-实例与 jail 各缓存 30 秒，相同目标只运行一份在途采集，共用最多 2 个在途采集及每个 30 秒预算窗口最多 16 份新采集；缓存各最多 65 项。单次采集最多 6 秒，单命令最多 2 秒，进程组超时终止。版本输出最多 4 KiB、单元元数据 8 KiB、状态输出 128 KiB、错误输出 4 KiB；Unix Socket 表 2 MiB、进程描述符最多 512 项。完整 jail 列表最多 64 项，单 jail 封禁最多 1024 项，数值 IP/CIDR 解析并去重。Web 共用最多 4 个 Fail2ban 读取请求，实例/jail 请求最多 14 秒，适配 Agent 15 秒传输期限。请求取消不重复启动同一采集；页面卸载或切换 jail 取消读取。
+实例与 jail 各缓存 30 秒，相同目标只运行一份在途采集，共用最多 2 个在途采集及每个 30 秒预算窗口最多 16 份新采集；缓存各最多 65 项。单次采集最多 10 秒，单命令最多 2 秒，进程组超时终止。版本输出最多 4 KiB、单元元数据 8 KiB、状态输出 128 KiB、错误输出 4 KiB；Unix Socket 表 2 MiB、进程描述符最多 512 项。完整 jail 列表最多 64 项，单 jail 封禁最多 1024 项，数值 IP/CIDR 解析并去重。Web 共用最多 4 个 Fail2ban 读取请求，实例/jail 请求最多 14 秒，适配 Agent 15 秒传输期限。请求取消不重复启动同一采集；页面卸载或切换 jail 取消读取。
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 39、数据库为 25，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 40、数据库为 25，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
 已有实例当前只读接入。安装/启动与 Socket 激活授权、签名组件运行绑定、完整引擎自检、jail 持久配置与接管、模板/匹配测试、受控 action、ban/unban、历史日志及 CDN 来源处理仍在完整实施范围内。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
@@ -54,13 +54,13 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 schema 3 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.json` 携带期望配置。文件、API 拉取及推送均支持 preserve/merge/replace，默认保留目标；导入重新分配 jail ID，沿用同一业务配置树中的站点标识，冻结目标版本与内容，同 Nginx 配置导入事务保存。失败补偿以新版本恢复原期望，检测外部变更时保留待恢复，不覆盖。源服务、Socket、客户端批准、所有权及封禁/计数不迁移，也不自动安装、启用模块或应用 jail。须核对目标白名单、日志来源和动作路径；保留的目标 jail 可能引用本次已替换的站点。
 
-当前数据库为 25，Agent 为 39。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器及真实实例操作均留待 P5。
+当前数据库为 25，Agent 为 40。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器及真实实例操作均留待 P5。
 
 ## 固定过滤器及官方样例检查
 
 模板同时提供固定 filter 内容的 SHA-256、固定样例及其 SHA-256。过滤器按受管 JSON 字段边界读取数值客户端地址，避免 URI 中伪造地址或状态；仅单行匹配，关闭 DNS。时间戳按 ISO 8601 提取，WAF 附加字段使用同一 JSON 字符串语法。HTTP 日志字段顺序由渲染器和过滤器共同引用，不能由请求内容插入新的字段。
 
-`POST /fail2ban/templates/check` 接受 1–2 个内置 ID，返回检查时间、工具版本/散列、预期与实际地址及明确的通过/未知原因。root Agent 只运行固定系统目录的 `fail2ban-regex 1.1.1`，在 root 私有临时目录写入本程序固定 filter 和 15 条样例，使用空配置目录、数值地址模式及 UTF-8；不读取现有 jail 配置，不连接 Socket，不接收用户正则、日志路径、命令或任意文本。命令每次最多 2 秒，输出有界，整批最多 6 秒、同目标单份在途、30 秒缓存并有并发/次数预算。版本漂移、超时、未知输出、清理失败或任一检查中断均不返回部分通过；采样结果不表示动作已经适用于流量路径。
+`POST /fail2ban/templates/check` 接受 1–2 个内置 ID，返回检查时间、工具版本/散列、预期与实际地址及明确的通过/未知原因。root Agent 使用固定系统目录或已批准签名组件的官方 `fail2ban-regex 1.1.1`，在 root 私有临时目录写入本程序固定 filter 和 15 条样例，使用空配置目录、数值地址模式及 UTF-8；不读取现有 jail 配置，不连接 Socket，不接收用户正则、日志路径、命令或任意文本。命令每次最多 2 秒，输出有界，整批最多 10 秒、同目标单份在途、30 秒缓存并有并发/次数预算。版本漂移、超时、未知输出、清理失败或任一检查中断均不返回部分通过；采样结果不表示动作已经适用于流量路径。
 
 受管 Nginx 访问日志新增 `nginxpanel_auth_present`，只记录入站 Authorization 是否非空（0/1），不记录认证头内容。执行器生成 map，原生配置禁止重定义该变量；迁移/恢复预检包含 map 模块，Docker 镜像已预置此能力。日志目录声明 `auth_presence`，jail 保存预览要求来源包含该标记，同时执行固定过滤器检查；须先发布当前 Nginx 配置，再核对实际来源。旧运行日志或缺少标记的来源不据格式名推断可匹配。模块开关不控制日志中的保护状态。
 
@@ -90,6 +90,20 @@ nginxpanel fail2ban-install --data-dir /var/lib/nginxpanel --fail2ban-scope host
 - `fail2ban-managed-enable` / `fail2ban-managed-disable`：只改变独立服务的开机启用。
 - `fail2ban-managed-rollback`：续办撤回独立服务；保留签名资产、私有配置、SQLite 和完整审计，不删除用户已有实例或其数据。
 
-所有程序调用固定、无 Shell，进程组与输出有界；超时或取消不伪造操作成功，安装留为 interrupted，普通服务操作记录待核对结果。撤回中断可重复执行，变更材料不匹配时保留现场供本机处理。管理程序与系统 Python 的文件身份固定，升级后需重新处理准入，不静默跟随新程序。模块开关不控制这些 root 操作，面板仅展示安装登记与独立服务元数据；公开安装/服务变更、受管客户端读取、受管过滤器工具、jail/action 等继续接入。
+所有程序调用固定、无 Shell，进程组与输出有界；超时或取消不伪造操作成功，安装留为 interrupted，普通服务操作记录待核对结果。撤回中断可重复执行，变更材料不匹配时保留现场供本机处理。管理程序与系统 Python 的文件身份固定，升级后需重新处理准入，不静默跟随新程序。模块开关不控制这些 root 操作，面板展示安装登记、已授权实例及过滤器检查来源；公开安装/服务变更、jail/action 等继续接入。
 
 实现与源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器、实际组件安装与 systemd 操作未执行，留待 P5。届时需核对两种架构/发行版的签名资产布局、标准库与运行文件约束、前台启动/Socket 归属、无 jail 启动、配置隔离、服务中断/续办/撤回和重启恢复。官方入口与参数依据 [Fail2ban 1.1.1 server](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banserver.py)、[CLI 配置参数](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2bancmdline.py)。
+
+## 受管实例及过滤器的只读接入
+
+installed 状态的 root 安装登记授权对其专用服务、Socket 和固定官方代码执行只读观察。`GET /fail2ban/instance`、`GET /fail2ban/jails/{name}` 自动选择该登记；无受管安装或已撤回时，已有实例仍只依据 `fail2ban-bind` 的明确接入记录读取。安装未结束、撤回中、登记损坏或两类授权冲突时返回不可用，不改用其他实例。新建已有实例接入会拒绝尚未撤回的受管安装；`fail2ban-binding` / `fail2ban-unbind` 继续只查询/撤销已有实例的独立读取登记，不撤销受管安装本身。
+
+`binding.engine` 和 `Fail2banTemplateCheck.engine` 返回代码来源：`owner` 为 existing/managed/none/unavailable，受管来源同时包括安装 UUID、准备计划、资产、清单摘要及实际 Python 路径/摘要。该对象不声明 jail 所有权。受管实例的读取授权 ID 使用当前安装事件 ID，安装/服务操作产生新事件后，原在途与缓存选择失效；读取不覆盖 root 安装记录，不把它转换成已有实例的接入文件。
+
+每次实际采集前后重新认证签名代码、系统运行文件、解释器及固定配置。只读客户端与过滤器通过隔离的系统 Python 加载相应官方模块，不依赖固定系统目录中另装一套 Fail2ban。客户端仅接收现有固定的 version/status 读取参数；过滤器仍只接受内置 ID、固定 filter/样例和空私有配置目录，不连接运行实例。受管 `fail2ban-regex` 使用官方模块的无参数 `exec_command_line()` 入口，client 使用其 argv 入口。
+
+受管服务采集还核对 systemd 的实际单元/覆盖项/加载版本、主进程所持监听 Socket、实际解释器文件 inode 及完整前台入口参数，前后核对服务代次。签名包及解释器验证纳入最多 10 秒的共享采集任务；仍限制 2 份在途、30 秒窗口 16 份新任务与有界输出，官方工具每次最多 2 秒。30 秒缓存命中返回原采样时间的结果，不作为新的执行校验证据；登记事件变化或撤回时不返回旧选择的成功结果。
+
+保存预览仅在运行实例可确认、版本为当前支持的 1.1.1，且过滤器结果与实例的 `engine` 一致时将 `template_ready` 标为 true。来源不同、版本不同或实例读取错误会阻塞对应 jail；样例检查的原始结果仍保留供核对。当前没有 jail 应用动作执行器，`can_apply=false`，所有 jail 仍只读，不因为代码来源为 managed 就标记接管或保护。
+
+接口合同及自动扫描页面已同步；Agent 为 40、数据库为 25。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器、官方工具和真实实例操作均未执行，留待 P5。需集中核对托管与已有实例的选择/冲突/撤回、事件变化及缓存、实际进程入口与 Socket、签名/解释器漂移、官方模块入口及同源同版本预览等行为。

@@ -82,9 +82,12 @@ func fail2banUnitCommand(args []string) string {
 	}
 	return strings.Join(values, " ")
 }
+func (r fail2banManagedRecord) startArgs() []string {
+	return r.args(false, "-f", "-c", filepath.Join(r.work(), "config"), "-s", fail2banManagedSocket, "-p", "/run/nginxpanel-fail2ban/fail2ban.pid", "start")
+}
 func (r fail2banManagedRecord) unit() string {
 	check := fail2banUnitCommand([]string{r.ManagerPath, "fail2ban-managed-check", "--data-dir", r.DataDir, "--fail2ban-scope", "host"})
-	start := fail2banUnitCommand(append([]string{r.PythonPath}, r.args(false, "-f", "-c", filepath.Join(r.work(), "config"), "-s", fail2banManagedSocket, "-p", "/run/nginxpanel-fail2ban/fail2ban.pid", "start")...))
+	start := fail2banUnitCommand(append([]string{r.PythonPath}, r.startArgs()...))
 	stop := fail2banUnitCommand(append([]string{r.PythonPath}, r.args(true, "-c", filepath.Join(r.work(), "config"), "-s", fail2banManagedSocket, "--timeout", "5", "stop")...))
 	return "[Unit]\nDescription=NginxPanel managed Fail2ban\nAfter=network.target\nStartLimitIntervalSec=60\nStartLimitBurst=3\n\n[Service]\nType=simple\nUser=root\nGroup=root\nUMask=0077\nRuntimeDirectory=nginxpanel-fail2ban\nRuntimeDirectoryMode=0700\nExecStartPre=" + check + "\nExecStart=" + start + "\nExecStop=" + stop + "\nTimeoutStartSec=60\nTimeoutStopSec=15\nRestart=on-failure\nRestartSec=5\nNoNewPrivileges=true\nPrivateTmp=true\nProtectHome=true\nProtectSystem=strict\nReadWritePaths=" + fail2banUnitArg(filepath.Join(r.work(), "state")) + " /run/nginxpanel-fail2ban\n\n[Install]\nWantedBy=multi-user.target\n"
 }
@@ -263,7 +266,7 @@ func checkFail2banManaged(ctx context.Context, r *fail2banManagedRecord) error {
 	return nil
 }
 func verifyFail2banManagedLive(ctx context.Context, r *fail2banManagedRecord) error {
-	b := &fail2banBinding{Service: fail2banManagedService, Socket: fail2banManagedSocket}
+	b := &fail2banBinding{Service: fail2banManagedService, Socket: fail2banManagedSocket, managed: r}
 	before, err := readFail2banLiveService(ctx, b)
 	if err != nil {
 		return err

@@ -21,6 +21,7 @@ var fail2banUnit = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.@-]{0,110}\.servi
 var fail2banDigest = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 type fail2banBinding struct {
+	managed        *fail2banManagedRecord
 	Schema         int    `json:"schema"`
 	ID             string `json:"id"`
 	PreviousID     string `json:"previous_id"`
@@ -36,10 +37,15 @@ type fail2banBinding struct {
 
 func (b *fail2banBinding) view() fail2ban.BindingView {
 	if b == nil {
-		return fail2ban.BindingView{State: "unbound", Reason: "尚未由本机 root 接入已有实例"}
+		return fail2ban.BindingView{Engine: fail2ban.EngineIdentity{Owner: "none"}, State: "unbound", Reason: "尚未由本机 root 接入已有实例"}
 	}
-	out := fail2ban.BindingView{State: b.State, ID: b.ID, Service: b.Service, Socket: b.Socket, ClientPath: b.ClientResolved, ClientVersion: b.ClientVersion, ApprovedAt: b.ApprovedAt}
+	out := fail2ban.BindingView{Engine: fail2ban.EngineIdentity{Owner: "existing"}, State: b.State, ID: b.ID, Service: b.Service, Socket: b.Socket, ClientPath: b.ClientResolved, ClientVersion: b.ClientVersion, ApprovedAt: b.ApprovedAt}
+	if b.managed != nil {
+		out.Engine = b.managed.engine()
+		out.Reason = "受管安装授权只读观察；jail 配置及保护状态须分别核对"
+	}
 	if b.State == "unbound" {
+		out.Engine = fail2ban.EngineIdentity{Owner: "none"}
 		out.Reason = "实例读取授权已撤销；现有服务及 jail 继续由原所有者管理"
 	}
 	return out
@@ -92,13 +98,18 @@ func validFail2banClientPath(path string) bool {
 	return false
 }
 func fail2banBindingView(data string) fail2ban.BindingView {
-	b, err := loadFail2banBinding(data)
+	b, err := selectFail2banBinding(data)
 	if err != nil {
-		return fail2ban.BindingView{State: "unavailable", Reason: "root 接入记录无法核对，须在本机检查"}
+		out := fail2ban.UnknownBinding()
+		out.Reason = "root 接入或受管安装登记无法核对，须在本机检查"
+		return out
 	}
 	return b.view()
 }
 func saveFail2banBinding(data string, b *fail2banBinding) error {
+	if b.managed != nil {
+		return errors.New("受管读取授权不能写为已有实例接入记录")
+	}
 	dir := filepath.Join(fail2banBindingDir(data), "bindings")
 	if err := secure.RootDirectory(dir, 0700); err != nil {
 		return err
@@ -167,6 +178,15 @@ func ManageFail2banBinding(ctx context.Context, data, scope, action, service, so
 			return prior.view(), nil
 		}
 	} else {
+		if fail2banManagedData(data) {
+			r, e := loadFail2banManaged(data)
+			if e != nil {
+				return out, e
+			}
+			if r != nil && r.State != "rolled-back" {
+				return out, errors.New("已有受管安装登记，不能另行接入已有实例")
+			}
+		}
 		if !fail2banUnit.MatchString(service) || !validFail2banSocket(socket) {
 			return out, errors.New("须指定固定 service 及 /run 下规范的 Unix Socket 路径")
 		}

@@ -70,7 +70,7 @@ func (c *fail2banReadCache[T]) read(ctx, owner context.Context, budget *fail2ban
 		c.entries[key] = job
 		go func() {
 			defer budget.release()
-			call, cancel := context.WithTimeout(owner, 6*time.Second)
+			call, cancel := context.WithTimeout(owner, 10*time.Second)
 			defer cancel()
 			value := collect(call)
 			c.mu.Lock()
@@ -118,7 +118,7 @@ func (f *fail2banInstanceReader) readInstance(ctx context.Context) (fail2ban.Ins
 	if initial.Binding.State != "bound" {
 		return initial, nil
 	}
-	b, err := loadFail2banBinding(f.data)
+	b, err := selectFail2banBinding(f.data)
 	if err != nil || b == nil || b.ID != initial.Binding.ID || b.State != "bound" {
 		return fail2ban.Instance{}, fault.Unavailable("实例接入记录变化，请刷新")
 	}
@@ -136,7 +136,7 @@ func (f *fail2banInstanceReader) readInstance(ctx context.Context) (fail2ban.Ins
 			return value
 		}
 		value.Available, value.ServerVersion, value.Service, value.Jails = true, version, service, jails
-		value.Reason = "已有 jail 仅只读；引擎封禁记录不证明动作适用于当前流量路径"
+		value.Reason = "jail 当前只读；引擎封禁记录不证明动作适用于当前流量路径"
 		return value
 	})
 	if err != nil {
@@ -167,7 +167,7 @@ func (f *fail2banInstanceReader) readJail(ctx context.Context, name string) (fai
 	if !found {
 		return fail2ban.Jail{}, fault.New(404, "FAIL2BAN_JAIL_MISSING", "jail 不在当前完整列表中，请刷新实例")
 	}
-	b, err := loadFail2banBinding(f.data)
+	b, err := selectFail2banBinding(f.data)
 	if err != nil || b == nil || b.ID != out.BindingID || b.State != "bound" {
 		return fail2ban.Jail{}, fault.Unavailable("实例接入记录变化，请刷新")
 	}
@@ -209,7 +209,7 @@ func (s *Server) fail2banInstanceHandlers(mux *http.ServeMux, ctx context.Contex
 func (c *Client) ReadFail2banInstance(ctx context.Context) (fail2ban.Instance, error) {
 	var out fail2ban.Instance
 	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/instance", nil, &out)
-	if err == nil && (out.At <= 0 || out.Writable || out.Source != "host-agent" && out.Source != "development-agent" || len(out.Jails) > 64 || out.Available && (out.Binding.State != "bound" || !validID(out.Binding.ID) || !fail2banVersion.MatchString(out.ServerVersion))) {
+	if err == nil && (out.At <= 0 || out.Writable || !fail2ban.ValidBindingView(out.Binding) || out.Source != "host-agent" && out.Source != "development-agent" || len(out.Jails) > 64 || out.Available && (out.Binding.State != "bound" || !validID(out.Binding.ID) || !fail2banVersion.MatchString(out.ServerVersion))) {
 		err = errors.New("invalid Fail2ban instance observation")
 	}
 	if err == nil {

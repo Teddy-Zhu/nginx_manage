@@ -23,20 +23,21 @@ type TemplateCheckInput struct {
 	Templates []string `json:"templates"`
 }
 type TemplateCheck struct {
-	Template      string   `json:"template"`
-	At            int64    `json:"at"`
-	Source        string   `json:"source"`
-	Scope         string   `json:"scope"`
-	Available     bool     `json:"available"`
-	Passed        bool     `json:"passed"`
-	FilterSHA256  string   `json:"filter_sha256"`
-	SamplesSHA256 string   `json:"samples_sha256"`
-	ToolPath      string   `json:"tool_path"`
-	ToolSHA256    string   `json:"tool_sha256"`
-	ToolVersion   string   `json:"tool_version"`
-	ExpectedIPs   []string `json:"expected_ips"`
-	MatchedIPs    []string `json:"matched_ips"`
-	Reason        string   `json:"reason"`
+	Engine        EngineIdentity `json:"engine"`
+	Template      string         `json:"template"`
+	At            int64          `json:"at"`
+	Source        string         `json:"source"`
+	Scope         string         `json:"scope"`
+	Available     bool           `json:"available"`
+	Passed        bool           `json:"passed"`
+	FilterSHA256  string         `json:"filter_sha256"`
+	SamplesSHA256 string         `json:"samples_sha256"`
+	ToolPath      string         `json:"tool_path"`
+	ToolSHA256    string         `json:"tool_sha256"`
+	ToolVersion   string         `json:"tool_version"`
+	ExpectedIPs   []string       `json:"expected_ips"`
+	MatchedIPs    []string       `json:"matched_ips"`
+	Reason        string         `json:"reason"`
 }
 
 func (in TemplateCheckInput) Normalize() (TemplateCheckInput, error) {

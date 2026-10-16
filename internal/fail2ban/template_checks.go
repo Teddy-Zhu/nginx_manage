@@ -10,7 +10,7 @@ import (
 
 func NewTemplateCheck(id string) TemplateCheck {
 	filter, samples := FilterIdentity(id)
-	return TemplateCheck{Template: id, FilterSHA256: filter, SamplesSHA256: samples, ExpectedIPs: ExpectedSampleIPs(id), MatchedIPs: []string{}}
+	return TemplateCheck{Engine: EngineIdentity{Owner: "unavailable"}, Template: id, FilterSHA256: filter, SamplesSHA256: samples, ExpectedIPs: ExpectedSampleIPs(id), MatchedIPs: []string{}}
 }
 func ValidateTemplateChecks(in TemplateCheckInput, checks []TemplateCheck) error {
 	normalized, err := in.Normalize()
@@ -21,6 +21,9 @@ func ValidateTemplateChecks(in TemplateCheckInput, checks []TemplateCheck) error
 		return errors.New("invalid Fail2ban template result count")
 	}
 	for i, c := range checks {
+		if !ValidEngineIdentity(c.Engine) || c.Available && c.Engine.Owner != "managed" && c.Engine.Owner != "existing" {
+			return errors.New("invalid Fail2ban engine provenance")
+		}
 		want := NewTemplateCheck(normalized.Templates[i])
 		if c.Template != want.Template || c.At <= 0 || c.FilterSHA256 != want.FilterSHA256 || c.SamplesSHA256 != want.SamplesSHA256 || !slices.Equal(c.ExpectedIPs, want.ExpectedIPs) || c.ExpectedIPs == nil || c.MatchedIPs == nil || len(c.MatchedIPs) > len(FilterSamples(c.Template)) || len(c.Reason) > 1024 || len(c.ToolVersion) > 64 || len(c.Scope) > 32 || c.Scope == "" || c.Source != "host-agent" && c.Source != "development-agent" {
 			return errors.New("invalid Fail2ban template identity")

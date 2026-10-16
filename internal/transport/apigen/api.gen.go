@@ -1864,20 +1864,21 @@ type Fail2banTemplateCheckInput struct {
 	Templates []string `json:"templates"`
 }
 type Fail2banTemplateCheck struct {
-	Template      string   `json:"template"`
-	At            int64    `json:"at"`
-	Source        string   `json:"source"`
-	Scope         string   `json:"scope"`
-	Available     bool     `json:"available"`
-	Passed        bool     `json:"passed"`
-	FilterSha256  string   `json:"filter_sha256"`
-	SamplesSha256 string   `json:"samples_sha256"`
-	ToolPath      string   `json:"tool_path"`
-	ToolSha256    string   `json:"tool_sha256"`
-	ToolVersion   string   `json:"tool_version"`
-	ExpectedIps   []string `json:"expected_ips"`
-	MatchedIps    []string `json:"matched_ips"`
-	Reason        string   `json:"reason"`
+	Engine        Fail2banEngineIdentity `json:"engine"`
+	Template      string                 `json:"template"`
+	At            int64                  `json:"at"`
+	Source        string                 `json:"source"`
+	Scope         string                 `json:"scope"`
+	Available     bool                   `json:"available"`
+	Passed        bool                   `json:"passed"`
+	FilterSha256  string                 `json:"filter_sha256"`
+	SamplesSha256 string                 `json:"samples_sha256"`
+	ToolPath      string                 `json:"tool_path"`
+	ToolSha256    string                 `json:"tool_sha256"`
+	ToolVersion   string                 `json:"tool_version"`
+	ExpectedIps   []string               `json:"expected_ips"`
+	MatchedIps    []string               `json:"matched_ips"`
+	Reason        string                 `json:"reason"`
 }
 type CheckFail2banTemplatesParams = PreviewFail2banParams
 type CheckFail2banTemplatesJSONRequestBody = Fail2banTemplateCheckInput
@@ -1968,15 +1969,25 @@ type SetFail2banPolicyJSONRequestBody = SetFail2banPolicyJSONBody
 type PreviewFail2banJSONBody = Fail2banPreviewInput
 type PreviewFail2banJSONRequestBody = PreviewFail2banJSONBody
 
+type Fail2banEngineIdentity struct {
+	Owner          string `json:"owner"`
+	InstallationId string `json:"installation_id"`
+	PlanId         string `json:"plan_id"`
+	AssetId        string `json:"asset_id"`
+	ManifestSha256 string `json:"manifest_sha256"`
+	PythonPath     string `json:"python_path"`
+	PythonSha256   string `json:"python_sha256"`
+}
 type Fail2banBindingView struct {
-	State         string `json:"state"`
-	Id            string `json:"id"`
-	Service       string `json:"service"`
-	Socket        string `json:"socket"`
-	ClientPath    string `json:"client_path"`
-	ClientVersion string `json:"client_version"`
-	ApprovedAt    int64  `json:"approved_at"`
-	Reason        string `json:"reason"`
+	Engine        Fail2banEngineIdentity `json:"engine"`
+	State         string                 `json:"state"`
+	Id            string                 `json:"id"`
+	Service       string                 `json:"service"`
+	Socket        string                 `json:"socket"`
+	ClientPath    string                 `json:"client_path"`
+	ClientVersion string                 `json:"client_version"`
+	ApprovedAt    int64                  `json:"approved_at"`
+	Reason        string                 `json:"reason"`
 }
 type Fail2banJailSummary struct {
 	Name    string `json:"name"`

@@ -1,15 +1,33 @@
 package fail2ban
 
 type BindingView struct {
-	State         string `json:"state"`
-	ID            string `json:"id"`
-	Service       string `json:"service"`
-	Socket        string `json:"socket"`
-	ClientPath    string `json:"client_path"`
-	ClientVersion string `json:"client_version"`
-	ApprovedAt    int64  `json:"approved_at"`
-	Reason        string `json:"reason"`
+	Engine        EngineIdentity `json:"engine"`
+	State         string         `json:"state"`
+	ID            string         `json:"id"`
+	Service       string         `json:"service"`
+	Socket        string         `json:"socket"`
+	ClientPath    string         `json:"client_path"`
+	ClientVersion string         `json:"client_version"`
+	ApprovedAt    int64          `json:"approved_at"`
+	Reason        string         `json:"reason"`
 }
+
+func ValidBindingView(v BindingView) bool {
+	if !ValidEngineIdentity(v.Engine) {
+		return false
+	}
+	switch v.State {
+	case "bound":
+		return v.Engine.Owner == "existing" || v.Engine.Owner == "managed"
+	case "unbound":
+		return v.Engine.Owner == "none"
+	case "unavailable":
+		return v.Engine.Owner == "unavailable"
+	default:
+		return false
+	}
+}
+
 type JailSummary struct {
 	Name    string `json:"name"`
 	Managed bool   `json:"managed"`
@@ -45,7 +63,7 @@ type Jail struct {
 }
 
 func UnknownBinding() BindingView {
-	return BindingView{State: "unavailable", Reason: "实例接入登记尚未读取"}
+	return BindingView{Engine: EngineIdentity{Owner: "unavailable"}, State: "unavailable", Reason: "实例接入登记尚未读取"}
 }
 func EmptyInstance(scope, reason string) Instance {
 	return Instance{Source: "host-agent", Scope: scope, Binding: UnknownBinding(), Jails: []JailSummary{}, Reason: reason}

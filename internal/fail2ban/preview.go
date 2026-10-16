@@ -62,11 +62,11 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		}
 	}
 	sources := []logs.Source{}
+	var instance Instance
 	if s.Agent != nil {
 		call, cancel := context.WithTimeout(ctx, 12*time.Second)
 		defer cancel()
 		var logErr, instanceErr, templateErr error
-		var instance Instance
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() { defer wg.Done(); sources, logErr = s.Agent.LogSources(call) }()
@@ -79,6 +79,9 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			}()
 		}
 		wg.Wait()
+		if instanceErr != nil {
+			instance = Instance{}
+		}
 		if logErr != nil {
 			sources = []logs.Source{}
 			out.Warnings = append(out.Warnings, "目标运行日志来源暂不可核对")
@@ -109,11 +112,11 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 		}
 		for _, check := range out.TemplateChecks {
 			if check.Template == j.Template {
-				e.TemplateReady = check.Available && check.Passed
+				e.TemplateReady = check.Available && check.Passed && instance.Available && instance.ServerVersion == RegexVersion && check.Engine == instance.Binding.Engine
 			}
 		}
 		if !e.TemplateReady {
-			e.Errors = append(e.Errors, "内置过滤器尚未通过官方样例检查")
+			e.Errors = append(e.Errors, "过滤器检查须通过，且须与已确认实例使用相同组件及版本")
 		}
 		e.Errors = append(e.Errors, "当前尚无可应用的受管 jail 动作执行器")
 		out.Entries = append(out.Entries, e)
