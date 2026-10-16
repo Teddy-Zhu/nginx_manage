@@ -71,25 +71,37 @@ const families = ref([
 const networkManager = computed(
   () => observed.value?.owner === "networkmanager",
 );
+const networkd = computed(() => observed.value?.owner === "networkd");
 const connection = computed(() =>
   observed.value?.connections.find((c) => c.target === target.value),
+);
+const networkLink = computed(() =>
+  observed.value?.links.find((link) => link.target === target.value),
 );
 const sourceHash = computed(() =>
   networkManager.value
     ? connection.value?.source_hash
-    : observed.value?.source_hash,
+    : networkd.value
+      ? networkLink.value?.source_hash
+      : observed.value?.source_hash,
 );
 const writable = computed(
   () =>
     observed.value?.writable &&
-    (!networkManager.value || connection.value?.writable),
+    (!networkManager.value || connection.value?.writable) &&
+    (!networkd.value || networkLink.value?.writable),
 );
 const choices = computed(
   () =>
-    observed.value?.connections.map((c) => ({
-      label: `${c.name} · ${c.interface}${c.writable ? "" : "（只读）"}`,
-      value: c.target,
-    })) ?? [],
+    networkd.value
+      ? observed.value?.links.map((link) => ({
+          label: `${link.interface}${link.writable ? "" : "（只读）"}`,
+          value: link.target,
+        })) ?? []
+      : observed.value?.connections.map((c) => ({
+          label: `${c.name} · ${c.interface}${c.writable ? "" : "（只读）"}`,
+          value: c.target,
+        })) ?? [],
 );
 const configText = (config: HostDNSPlanInput["config"] | null | undefined) => {
   if (!config) return "无法读取";
@@ -137,6 +149,8 @@ const linkDomains = (state: HostLinkDNS | null) =>
     : "无法读取";
 const autoPolicy = (value: boolean | null) =>
   value === null ? "未显式设置" : value ? "允许获取" : "忽略";
+const dnrPolicy = (value: boolean | null) =>
+  value === null ? "继承 DNS 策略" : autoPolicy(value);
 const domainPolicyLabels: Record<string, string> = {
   yes: "搜索域",
   no: "忽略",
@@ -198,18 +212,27 @@ const remaining = computed(() =>
 );
 const drift = computed(() => {
   const desired = overview.value?.desired.find(
-    (d) => d.target === (networkManager.value ? target.value : ""),
+    (d) =>
+      d.target === (networkManager.value || networkd.value ? target.value : ""),
   );
   const actual = networkManager.value
     ? connection.value?.persistent
-    : observed.value?.persistent;
+    : networkd.value
+      ? networkLink.value?.persistent
+        ? {
+            servers: networkLink.value.persistent.servers,
+            search: networkLink.value.persistent.search,
+            ipv4: null,
+            ipv6: null,
+          }
+        : null
+      : observed.value?.persistent;
   return (
     desired &&
     !pending.value &&
-    (networkManager.value
+    (networkManager.value || networkd.value
       ? actual && configText(desired.config) !== configText(actual)
-      : observed.value?.source_hash &&
-        desired.source_hash !== observed.value.source_hash)
+      : sourceHash.value && desired.source_hash !== sourceHash.value)
   );
 });
 const labels: Record<string, string> = {
@@ -258,9 +281,21 @@ async function read() {
       api.modules(controller.signal),
     ]);
     overview.value = state;
-    if (!target.value && state.observed.connections.length)
-      target.value = (state.observed.connections.find((c) => c.writable) ??
-        state.observed.connections[0])!.target;
+    const targets =
+      state.observed.owner === "networkd"
+        ? state.observed.links
+        : state.observed.connections;
+    const needsTarget = ["networkd", "networkmanager"].includes(state.observed.owner);
+    if (
+      needsTarget
+        ? !targets.some((item) => item.target === target.value)
+        : target.value !== ""
+    ) {
+      target.value =
+        (targets.find((item) => item.writable) ?? targets[0])?.target ?? "";
+      editing.value = false;
+      invalidate();
+    }
     module.value = modules.find((m) => m.id === "host-dns") ?? null;
     error.value = "";
     if (
@@ -268,7 +303,7 @@ async function read() {
       (plan.value.expires_at * 1000 <= Date.now() ||
         plan.value.input.source_hash !==
           (plan.value.input.target
-            ? state.observed.connections.find(
+            ? targets.find(
                 (c) => c.target === plan.value!.input.target,
               )?.source_hash
             : state.observed.source_hash))
@@ -287,8 +322,11 @@ async function read() {
 }
 function edit() {
   if (!observed.value) return;
-  servers.value = observed.value.current.servers.join("\n");
-  search.value = observed.value.current.search.join("\n");
+  const staticConfig = networkd.value
+    ? networkLink.value?.persistent
+    : observed.value.current;
+  servers.value = staticConfig?.servers.join("\n") ?? "";
+  search.value = staticConfig?.search.join("\n") ?? "";
   const c = connection.value;
   for (const [i, f] of families.value.entries()) {
     const value = i === 0 ? c?.applied?.ipv4 : c?.applied?.ipv6;
@@ -313,7 +351,7 @@ async function preview() {
     return;
   }
   const input: HostDNSPlanInput = {
-    target: networkManager.value ? target.value : "",
+    target: networkManager.value || networkd.value ? target.value : "",
     source_hash: sourceHash.value ?? "",
     config: networkManager.value
       ? {
@@ -476,8 +514,11 @@ onUnmounted(() => {
       style="margin-top: 12px"
       >当前配置与最近确认的期望不同，请检查外部修改后重新规划。</n-alert
     >
-    <template v-if="networkManager">
-      <n-form-item label="目标连接" style="margin-top: 16px">
+    <template v-if="networkManager || networkd">
+      <n-form-item
+        :label="networkd ? '目标网卡' : '目标连接'"
+        style="margin-top: 16px"
+      >
         <n-select
           v-model:value="target"
           :options="choices"
@@ -485,6 +526,10 @@ onUnmounted(() => {
           @update:value="invalidate"
         />
       </n-form-item>
+      <dl v-if="networkd && networkLink?.persistent">
+        <dt>保留的路由域</dt>
+        <dd>{{ networkLink.persistent.routing_domains.join("、") || "无" }}</dd>
+      </dl>
       <template v-if="connection">
         <dl>
           <dt>接口 / IP 方法</dt>
@@ -524,7 +569,9 @@ onUnmounted(() => {
   >
     <div class="page-toolbar">
       <h3>{{ link.interface }} · networkd</h3>
-      <n-tag type="warning">只读</n-tag>
+      <n-tag :type="link.writable ? 'success' : 'warning'">{{
+        link.writable ? "可接管" : "只读"
+      }}</n-tag>
     </div>
     <dl>
       <dt>网卡状态</dt>
@@ -559,19 +606,19 @@ onUnmounted(() => {
         <dd>
           {{ autoPolicy(link.persistent.dhcp4) }}；域名：{{
             domainPolicy(link.persistent.domains4)
-          }}
+          }}；加密 DNS：{{ dnrPolicy(link.persistent.dnr4) }}
         </dd>
         <dt>DHCPv6 DNS 策略</dt>
         <dd>
           {{ autoPolicy(link.persistent.dhcp6) }}；域名：{{
             domainPolicy(link.persistent.domains6)
-          }}
+          }}；加密 DNS：{{ dnrPolicy(link.persistent.dnr6) }}
         </dd>
         <dt>IPv6 RA DNS 策略</dt>
         <dd>
           {{ autoPolicy(link.persistent.ipv6_ra) }}；域名：{{
             domainPolicy(link.persistent.domains_ra)
-          }}
+          }}；加密 DNS：{{ dnrPolicy(link.persistent.dnr_ra) }}
         </dd>
       </template>
       <template v-else
@@ -702,7 +749,9 @@ onUnmounted(() => {
       >{{
         networkManager
           ? "确认接管所选连接的 DNS 设置"
-          : "确认接管该主机的普通 DNS 配置文件"
+          : networkd
+            ? "确认接管所选网卡的静态 DNS 设置"
+            : "确认接管该主机的普通 DNS 配置文件"
       }}</n-checkbox
     >
     <div class="actions" style="margin-top: 16px">

@@ -191,7 +191,7 @@ func networkdObserveLink(b, resolved *dnsBus, ref networkdLinkRef) hostdns.Netwo
 	for _, source := range sources {
 		out.DiskSources = append(out.DiskSources, source.Path)
 	}
-	out.SourceHash = networkSourceHash(sources, b, ref.Index, ref.Name)
+	out.SourceHash = networkViewHash(sources, b, out)
 	switch filepath.Dir(sources[0].Path) {
 	case "/etc/systemd/network":
 		out.Owner = "networkd"
@@ -205,11 +205,16 @@ func networkdObserveLink(b, resolved *dnsBus, ref networkdLinkRef) hostdns.Netwo
 	if e != nil {
 		out.Persistent = nil
 		out.Reason = "磁盘源包含尚未完整识别的 DNS 语法或继承规则，配置值保持未知"
+		return out
+	}
+	if out.Owner != "generated" {
+		out.Reason = networkWriteReason(out, sources)
+		out.Writable = out.Reason == ""
 	}
 	return out
 }
 func (d *HostDNS) observeNetworkd() hostdns.Observation {
-	out := hostdns.Observation{Owner: "networkd", Source: dnsSource, Current: hostdns.Config{Servers: []string{}, Search: []string{}}, Links: []hostdns.NetworkLink{}, Reason: "未确认安全的局部应用与独立恢复能力，当前为只读"}
+	out := hostdns.Observation{Owner: "networkd", Source: dnsSource, Current: hostdns.Config{Servers: []string{}, Search: []string{}}, Links: []hostdns.NetworkLink{}, Reason: "未发现符合条件的静态 networkd 链路"}
 	path := dnsSource
 	if link, e := os.Readlink(dnsSource); e == nil {
 		out.LinkTarget = link
@@ -237,6 +242,8 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 		return d.withPending(out)
 	}
 	defer b.close()
+	supported := networkdSupported(b) == nil
+	resolverReason := networkdResolverReason()
 	resolved, _ := openDNSService(context.Background(), resolvedName)
 	if resolved != nil {
 		defer resolved.close()
@@ -254,6 +261,15 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 			return d.withPending(out)
 		}
 		link := networkdObserveLink(b, resolved, ref)
+		if !supported {
+			link.Writable = false
+			link.Reason = "networkd 缺少已确认的 DNS 局部写入接口"
+		}
+		if resolverReason != "" {
+			link.Writable = false
+			link.Reason = resolverReason
+		}
+		out.Writable = out.Writable || link.Writable
 		encoded, err := json.Marshal(link)
 		if err != nil {
 			out.Reason = "networkd DNS 观测无法编码"
@@ -271,6 +287,10 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 	if e = b.unchangedOwner(); e != nil {
 		out.Reason = "networkd 状态读取未确认，请刷新"
 		out.Links = []hostdns.NetworkLink{}
+		out.Writable = false
+	}
+	if out.Writable {
+		out.Reason = ""
 	}
 	return d.withPending(out)
 }

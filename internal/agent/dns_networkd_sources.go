@@ -245,7 +245,7 @@ func networkDNSProjection(sources []networkSource) (*hostdns.NetworkDNS, error) 
 					}
 				}
 			}
-			if key == "UseDNS" || key == "UseDomains" {
+			if key == "UseDNS" || key == "UseDNR" || key == "UseDomains" {
 				if section == "DHCP" {
 					return nil, errors.New("legacy DHCP DNS policy needs a version-specific adapter")
 				}
@@ -260,7 +260,20 @@ func networkDNSProjection(sources []networkSource) (*hostdns.NetworkDNS, error) 
 				if !slices.Contains([]string{"DHCPv4", "DHCPv6", "IPv6AcceptRA"}, section) {
 					continue
 				}
-				if key == "UseDNS" {
+				if key == "UseDNR" {
+					v, e := networkBool(value)
+					if e != nil {
+						return nil, e
+					}
+					switch section {
+					case "DHCPv4":
+						out.DNR4 = v
+					case "DHCPv6":
+						out.DNR6 = v
+					case "IPv6AcceptRA":
+						out.DNRRA = v
+					}
+				} else if key == "UseDNS" {
 					v, e := networkBool(value)
 					if e != nil {
 						return nil, e

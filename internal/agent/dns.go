@@ -21,13 +21,14 @@ import (
 )
 
 type dnsCheckpoint struct {
-	Kind        string         `json:"kind"`
-	Status      hostdns.Status `json:"status"`
-	Plan        hostdns.Plan   `json:"plan"`
-	Before      dnsFile        `json:"before"`
-	After       dnsFile        `json:"after"`
-	NM          *nmCheckpoint  `json:"networkmanager"`
-	VerifyAfter int64          `json:"verify_after"`
+	Kind        string              `json:"kind"`
+	Status      hostdns.Status      `json:"status"`
+	Plan        hostdns.Plan        `json:"plan"`
+	Before      dnsFile             `json:"before"`
+	After       dnsFile             `json:"after"`
+	NM          *nmCheckpoint       `json:"networkmanager"`
+	Networkd    *networkdCheckpoint `json:"networkd"`
+	VerifyAfter int64               `json:"verify_after"`
 }
 
 // HostDNS never accepts a file path or an executable from the Web process.
@@ -106,7 +107,7 @@ func (d *HostDNS) Open() error {
 	if err := d.lock(filepath.Join(d.Dir, "lock")); err != nil {
 		return err
 	}
-	if (d.Owner == "regular-file" || d.Owner == "networkmanager") && d.Scope == "host" {
+	if (d.Owner == "regular-file" || d.Owner == "networkmanager" || d.Owner == "networkd") && d.Scope == "host" {
 		if err := d.lockHost(); err != nil {
 			return err
 		}
@@ -140,11 +141,18 @@ func (d *HostDNS) Open() error {
 		return errors.New("unrecognized reachability recovery checkpoint")
 	}
 	if c.Plan.Owner == "networkmanager" {
+		if c.Networkd != nil {
+			return errors.New("mixed DNS recovery owners")
+		}
 		if err = c.validateNM(); err != nil {
 			return err
 		}
+	} else if c.Plan.Owner == "networkd" {
+		if err = c.validateNetworkd(); err != nil {
+			return err
+		}
 	} else {
-		if c.NM != nil || c.Plan.Owner != "regular-file" || c.Plan.Input.Target != "" || c.Before.UID != 0 || c.Before.Mode&0022 != 0 || len(c.Before.Data) > hostdns.SourceLimit || len(c.After.Data) > hostdns.SourceLimit {
+		if c.NM != nil || c.Networkd != nil || c.Plan.Owner != "regular-file" || c.Plan.Input.Target != "" || c.Before.UID != 0 || c.Before.Mode&0022 != 0 || len(c.Before.Data) > hostdns.SourceLimit || len(c.After.Data) > hostdns.SourceLimit {
 			return errors.New("invalid DNS file snapshot")
 		}
 		expected := c.Before
@@ -322,6 +330,9 @@ func (d *HostDNS) withPending(out hostdns.Observation) hostdns.Observation {
 	if out.Connections == nil {
 		out.Connections = []hostdns.Connection{}
 	}
+	if out.Owner == "networkd" && len(out.Links) == 0 {
+		out.Writable = false
+	}
 	if d.checkpoint != nil && dnsActive(d.checkpoint.Status.State) {
 		copy := d.checkpoint.Status
 		out.Pending = &copy
@@ -342,6 +353,9 @@ func (d *HostDNS) Plan(input hostdns.PlanInput) (hostdns.Plan, error) {
 		return hostdns.Plan{}, err
 	}
 	input = input.Normalize()
+	if hostdns.NetworkdTarget(input.Target) {
+		return d.networkdPlan(input)
+	}
 	if input.Target != "" {
 		return d.nmPlan(input)
 	}
@@ -381,7 +395,7 @@ func (d *HostDNS) status(id string) (hostdns.Status, error) {
 func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if !validID(id) || plan.ID != plan.Hash() || (plan.Owner != "regular-file" && plan.Owner != "networkmanager") {
+	if !validID(id) || plan.ID != plan.Hash() || (plan.Owner != "regular-file" && plan.Owner != "networkmanager" && plan.Owner != "networkd") {
 		return hostdns.Status{}, fault.Invalid("DNS 计划无效")
 	}
 	if err := plan.Input.Validate(); err != nil {
@@ -408,6 +422,9 @@ func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	}
 	if plan.Owner == "networkmanager" {
 		return d.nmApply(id, plan)
+	}
+	if plan.Owner == "networkd" {
+		return d.networkdApply(id, plan)
 	}
 	if plan.Input.Target != "" {
 		return hostdns.Status{}, fault.Invalid("普通文件计划不能包含连接目标")
@@ -459,6 +476,13 @@ func (d *HostDNS) verify(ctx context.Context) error {
 			}
 			return e
 		}
+		if d.checkpoint.Networkd != nil {
+			hash, e := d.networkdCheck(ctx, false)
+			if e == nil {
+				d.checkpoint.Status.SourceHash = hash
+			}
+			return e
+		}
 		current, e := readDNSFile(dnsSource)
 		if e != nil || !sameDNSFile(current, d.checkpoint.After) {
 			return fault.Conflict("DNS 文件已被外部修改")
@@ -494,6 +518,8 @@ func (d *HostDNS) rollback(reason string) error {
 	var err error
 	if c.NM != nil {
 		hash, err = d.nmRollback()
+	} else if c.Networkd != nil {
+		hash, err = d.networkdRollback()
 	} else {
 		var current dnsFile
 		current, err = readDNSFile(dnsSource)
@@ -519,6 +545,9 @@ func (d *HostDNS) rollback(reason string) error {
 		c.Status.State = "recovery_required"
 		c.Status.Stage = "rollback_unconfirmed"
 		c.Status.Error = "DNS 恢复未确认；保留快照，须本机处理外部修改、源权限或未决连接调用"
+		if errors.Is(err, errNetworkdCallPending) {
+			c.Status.Error = "networkd 调用结果不明；保留快照，须本机确认原 networkd 进程已退出后重试恢复"
+		}
 	} else {
 		c.Status.State = "rolled_back"
 		c.Status.Stage = "rolled_back"
@@ -565,10 +594,15 @@ func (d *HostDNS) Decide(ctx context.Context, id, action string) (hostdns.Status
 		return d.checkpoint.Status, err
 	}
 	if d.checkpoint.NM != nil {
-		if err = d.nmConfirm(ctx); err != nil {
-			err = d.rollback("连接 DNS 持久化未确认，恢复原设置")
-			return d.checkpoint.Status, err
-		}
+		err = d.nmConfirm(ctx)
+	} else if d.checkpoint.Networkd != nil {
+		err = d.networkdConfirm(ctx)
+	}
+	if err != nil {
+		err = d.rollback("DNS 持久化未确认，恢复原设置")
+		return d.checkpoint.Status, err
+	}
+	if d.checkpoint.NM != nil || d.checkpoint.Networkd != nil {
 		if d.expired() {
 			err = d.rollback("保存期间确认期限已到")
 			return d.checkpoint.Status, err

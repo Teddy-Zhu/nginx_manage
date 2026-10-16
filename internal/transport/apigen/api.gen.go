@@ -1736,6 +1736,9 @@ type HostMetric struct {
 type HostNetworkDNS struct {
 	Dhcp4          *bool    `json:"dhcp4"`
 	Dhcp6          *bool    `json:"dhcp6"`
+	Dnr4           *bool    `json:"dnr4"`
+	Dnr6           *bool    `json:"dnr6"`
+	DnrRa          *bool    `json:"dnr_ra"`
 	Domains4       *string  `json:"domains4"`
 	Domains6       *string  `json:"domains6"`
 	DomainsRa      *string  `json:"domains_ra"`
@@ -1759,6 +1762,7 @@ type HostNetworkLink struct {
 	SourceHash    string          `json:"source_hash"`
 	State         string          `json:"state"`
 	Target        string          `json:"target"`
+	Writable      bool            `json:"writable"`
 }
 
 // LogPage defines model for LogPage.

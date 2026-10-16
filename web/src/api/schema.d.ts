@@ -3188,6 +3188,9 @@ export interface components {
             dhcp4: boolean | null;
             dhcp6: boolean | null;
             ipv6_ra: boolean | null;
+            dnr4: boolean | null;
+            dnr6: boolean | null;
+            dnr_ra: boolean | null;
             domains4: string | null;
             domains6: string | null;
             domains_ra: string | null;
@@ -3205,6 +3208,7 @@ export interface components {
             persistent: components["schemas"]["HostNetworkDNS"] | null;
             loaded: components["schemas"]["HostLinkDNS"] | null;
             effective: components["schemas"]["HostLinkDNS"] | null;
+            writable: boolean;
             reason: string;
         };
         HostDNSObservation: {

@@ -69,6 +69,9 @@ type NetworkDNS struct {
 	DHCP4          *bool    `json:"dhcp4"`
 	DHCP6          *bool    `json:"dhcp6"`
 	IPv6RA         *bool    `json:"ipv6_ra"`
+	DNR4           *bool    `json:"dnr4"`
+	DNR6           *bool    `json:"dnr6"`
+	DNRRA          *bool    `json:"dnr_ra"`
 	Domains4       *string  `json:"domains4"`
 	Domains6       *string  `json:"domains6"`
 	DomainsRA      *string  `json:"domains_ra"`
@@ -85,6 +88,7 @@ type NetworkLink struct {
 	Persistent    *NetworkDNS `json:"persistent"`
 	Loaded        *LinkDNS    `json:"loaded"`
 	Effective     *LinkDNS    `json:"effective"`
+	Writable      bool        `json:"writable"`
 	Reason        string      `json:"reason"`
 }
 type Observation struct {
@@ -146,12 +150,20 @@ func (p PlanInput) Validate() error {
 	if len(p.VerifyNames) < 1 || len(p.VerifyNames) > 2 {
 		return fault.Invalid("需配置 1–2 个验证域名")
 	}
-	if p.Target == "" {
+	if p.Target == "" || NetworkdTarget(p.Target) {
 		if p.Config.IPv4 != nil || p.Config.IPv6 != nil || len(p.Config.Servers) < 1 || len(p.Config.Servers) > 3 {
-			return fault.Invalid("普通文件需配置 1–3 个 DNS 地址")
+			return fault.Invalid("静态 DNS 需配置 1–3 个地址，不能同时提供地址族设置")
 		}
 		if err := validateFamily(Family{Servers: p.Config.Servers, Search: p.Config.Search}, 0); err != nil {
 			return err
+		}
+		if p.Target != "" {
+			for _, server := range p.Config.Servers {
+				ip, _ := netip.ParseAddr(server)
+				if ip.Zone() != "" {
+					return fault.Invalid("networkd 静态 DNS 暂不接受带接口区域的地址")
+				}
+			}
 		}
 	} else {
 		if !ValidTarget(p.Target) || len(p.Config.Servers) != 0 || len(p.Config.Search) != 0 || p.Config.IPv4 == nil && p.Config.IPv6 == nil {
@@ -186,8 +198,12 @@ func (p PlanInput) Validate() error {
 }
 
 var targetPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@[a-zA-Z0-9_.:-]{1,15}$`)
+var networkdTargetPattern = regexp.MustCompile(`^networkd:[a-zA-Z0-9_.:-]{1,15}$`)
 
-func ValidTarget(target string) bool { return targetPattern.MatchString(target) }
+func NetworkdTarget(target string) bool { return networkdTargetPattern.MatchString(target) }
+func ValidTarget(target string) bool {
+	return targetPattern.MatchString(target) || NetworkdTarget(target)
+}
 
 // Normalize only after validation. Canonical addresses and non-null arrays
 // keep observed, desired and API representations consistent.
@@ -202,6 +218,11 @@ func (p PlanInput) Normalize() PlanInput {
 	}
 	p.Config.Servers = addresses(p.Config.Servers)
 	p.Config.Search = append([]string{}, p.Config.Search...)
+	if NetworkdTarget(p.Target) {
+		for i, domain := range p.Config.Search {
+			p.Config.Search[i] = strings.ToLower(strings.TrimSuffix(domain, "."))
+		}
+	}
 	family := func(f *Family) *Family {
 		if f == nil {
 			return nil
@@ -233,10 +254,11 @@ func validateFamily(f Family, family int) error {
 	}
 	seen = map[string]bool{}
 	for _, s := range f.Search {
-		if !Hostname(s) || seen[strings.ToLower(s)] {
+		canonical := strings.ToLower(strings.TrimSuffix(s, "."))
+		if !Hostname(s) || seen[canonical] {
 			return fault.Invalid("搜索域无效或重复")
 		}
-		seen[strings.ToLower(s)] = true
+		seen[canonical] = true
 	}
 	return nil
 }

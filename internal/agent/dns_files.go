@@ -142,20 +142,29 @@ func renderDNS(before []byte, config hostdns.Config) ([]byte, error) {
 	return []byte(out.String()), nil
 }
 func writeDNSFile(expected, desired dnsFile, operationID string) error {
-	if !validID(operationID) {
+	return writeHostDNSFile(dnsSource, expected, desired, operationID)
+}
+
+func dnsWritableSource(path string) bool {
+	return path == dnsSource || networkWritableSource(path)
+}
+
+func writeHostDNSFile(source string, expected, desired dnsFile, operationID string) error {
+	if !validID(operationID) || !dnsWritableSource(source) {
 		return errors.New("invalid DNS operation")
 	}
-	if err := secure.RootDirectory("/etc", 0755); err != nil {
+	parent := filepath.Dir(source)
+	if err := secure.RootDirectory(parent, 0755); err != nil {
 		return err
 	}
-	current, err := readDNSFile(dnsSource)
+	current, err := readDNSFile(source)
 	if err != nil {
 		return err
 	}
 	if current.hash() != expected.hash() {
 		return errors.New("DNS source changed before replacement")
 	}
-	tmp := filepath.Join("/etc", ".nginxpanel-dns-"+operationID)
+	tmp := filepath.Join(parent, ".nginxpanel-dns-"+operationID)
 	// A previous crash may leave only this operation's exclusive temporary file.
 	if info, e := os.Lstat(tmp); e == nil {
 		st, ok := info.Sys().(*syscall.Stat_t)
@@ -214,17 +223,17 @@ func writeDNSFile(expected, desired dnsFile, operationID string) error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	current, err = readDNSFile(dnsSource)
+	current, err = readDNSFile(source)
 	if err != nil {
 		return err
 	}
 	if current.hash() != expected.hash() {
 		return errors.New("DNS source changed before rename")
 	}
-	if err = os.Rename(tmp, dnsSource); err != nil {
+	if err = os.Rename(tmp, source); err != nil {
 		return err
 	}
-	dir, err := os.Open("/etc")
+	dir, err := os.Open(parent)
 	if err != nil {
 		return err
 	}
@@ -233,10 +242,14 @@ func writeDNSFile(expected, desired dnsFile, operationID string) error {
 }
 
 func cleanDNSTemp(operationID string) error {
-	if !validID(operationID) {
+	return cleanDNSFileTemp(dnsSource, operationID)
+}
+
+func cleanDNSFileTemp(source, operationID string) error {
+	if !validID(operationID) || !dnsWritableSource(source) {
 		return errors.New("invalid DNS operation")
 	}
-	tmp := filepath.Join("/etc", ".nginxpanel-dns-"+operationID)
+	tmp := filepath.Join(filepath.Dir(source), ".nginxpanel-dns-"+operationID)
 	info, err := os.Lstat(tmp)
 	if os.IsNotExist(err) {
 		return nil
@@ -251,7 +264,7 @@ func cleanDNSTemp(operationID string) error {
 	if err = os.Remove(tmp); err != nil {
 		return err
 	}
-	dir, err := os.Open("/etc")
+	dir, err := os.Open(filepath.Dir(source))
 	if err != nil {
 		return err
 	}

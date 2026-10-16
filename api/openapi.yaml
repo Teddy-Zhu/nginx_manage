@@ -3464,6 +3464,9 @@ components:
           "dhcp4",
           "dhcp6",
           "ipv6_ra",
+          "dnr4",
+          "dnr6",
+          "dnr_ra",
           "domains4",
           "domains6",
           "domains_ra"
@@ -3499,6 +3502,18 @@ components:
             "type": "boolean",
             "nullable": true
           },
+          "dnr4": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "dnr6": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "dnr_ra": {
+            "type": "boolean",
+            "nullable": true
+          },
           "domains4": {
             "type": "string",
             "nullable": true
@@ -3530,6 +3545,7 @@ components:
           "persistent",
           "loaded",
           "effective",
+          "writable",
           "reason"
         ],
         "properties": {
@@ -3587,6 +3603,9 @@ components:
               }
             ],
             "nullable": true
+          },
+          "writable": {
+            "type": "boolean"
           },
           "reason": {
             "type": "string"
