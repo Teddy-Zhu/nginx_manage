@@ -4,6 +4,8 @@
  */
 
 export interface paths {
+ "/fail2ban/python": { post:operations["changeFail2banPython"]; };
+ "/fail2ban/python/tasks": { get:operations["getFail2banPythonTasks"]; };
  "/fail2ban/lifecycle/preview": { post:operations["previewFail2banLifecycle"]; };
  "/fail2ban/lifecycle": { post:operations["changeFail2banLifecycle"]; };
  "/fail2ban/lifecycle/tasks": { get:operations["getFail2banLifecycleTasks"]; };
@@ -1753,6 +1755,12 @@ export interface components {
         Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
         Fail2banJailsOperation: { id:string;state:string;stage:string;before_id:string;after_id:string;request_hash:string;target:string;error:string; };
         Fail2banJailsRuntime: { available:boolean;target:string;selected_id:string;policy:components["schemas"]["Fail2banPolicy"];resources:string[];pending:components["schemas"]["Fail2banJailsOperation"][];reason:string; };
+        Fail2banPythonPackage: { name:string;version:string;architecture:string;source:string;repository:string;filename:string;sha256:string;download_bytes:number;installed_bytes:number; };
+        Fail2banPythonPlan: { id:string;at:number;expires_at:number;os:string;version:string;architecture:"amd64"|"arm64";manager:"apt"|"dnf";packages:components["schemas"]["Fail2banPythonPackage"][];download_bytes:number;installed_bytes:number;impacts:string[]; };
+        Fail2banPythonTaskInput: { action:"plan"|"install";plan_id:string;refresh:boolean; };
+        Fail2banPythonTaskOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banPythonTaskInput"];state:"running"|"recovery_required"|"succeeded"|"failed";stage:string;submission:"not_sent"|"unknown"|"acknowledged";at:number;plan:components["schemas"]["Fail2banPythonPlan"]|null;python:components["schemas"]["Fail2banPython"];error:string; };
+        Fail2banPythonTask: { task_id:string;operation_id:string; };
+        Fail2banPythonTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banPythonTaskInput"];result:components["schemas"]["Fail2banPythonTaskOperation"]|null; };
         Fail2banLifecyclePreviewInput: { action:"install"|"resume"|"rollback"|"start"|"stop"|"enable"|"disable";plan_id:string;asset_id:string;prerelease:boolean; };
         Fail2banLifecycleInput: components["schemas"]["Fail2banLifecyclePreviewInput"] & { base_id:string;target:string;start:boolean;enable:boolean; };
         Fail2banLifecyclePlan: { at:number;input:components["schemas"]["Fail2banLifecycleInput"];managed:components["schemas"]["Fail2banManaged"];service:components["schemas"]["Fail2banService"];jails:string[];impacts:string[]; };
@@ -3511,6 +3519,9 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+ changeFail2banPython: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banPythonTaskInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ getFail2banPythonTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+
  previewFail2banLifecycle: { parameters:{query?:never;header?:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecyclePreviewInput"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  changeFail2banLifecycle: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecycleInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  getFail2banLifecycleTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };

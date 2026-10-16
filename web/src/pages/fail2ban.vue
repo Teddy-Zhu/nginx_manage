@@ -10,6 +10,7 @@
 }
 </route>
 <script setup lang="ts">
+import Fail2banPythonPanel from "../components/Fail2banPythonPanel.vue";
 import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
 import Fail2banAddressPanel from "../components/Fail2banAddressPanel.vue";
 import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
@@ -210,6 +211,12 @@ onUnmounted(() => {
       <h2>Fail2ban</h2>
       <NButton :loading="reading" @click="load">刷新状态</NButton>
     </div>
+    <Fail2banPythonPanel
+      :module-enabled="moduleEnabled === true"
+      :python="view?.python ?? null"
+      :observed-at="view?.at ?? 0"
+      @changed="load"
+    />
     <Fail2banLifecyclePanel
       :module-enabled="moduleEnabled === true"
       :managed="view?.managed ?? null"

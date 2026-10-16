@@ -13,6 +13,7 @@ import (
 
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/secure"
 )
 
@@ -152,7 +153,7 @@ func readFail2banPythonOperation(data, id string) (Record, error) {
 	if err = fail2banPythonDecode(raw, &r); err != nil {
 		return r, err
 	}
-	if r.Kind != fail2banPythonKind || r.OperationID != id || r.Fail2banPython == nil || validFail2banPythonPlan(r.Fail2banPython.Plan) != nil || r.RequestHash != secure.Hash([]byte(id+":"+r.Fail2banPython.Plan.Plan.ID)) || r.UpdatedAt <= 0 {
+	if r.Kind != fail2banPythonKind || r.OperationID != id || r.Fail2banPython == nil || validFail2banPythonPlan(r.Fail2banPython.Plan) != nil || (!r.Fail2banPython.Request.Valid() || r.Fail2banPython.Request.OperationID != id || r.Fail2banPython.Request.Input.Action != "install" || r.Fail2banPython.Request.Input.PlanID != r.Fail2banPython.Plan.Plan.ID || r.RequestHash != r.Fail2banPython.Request.Hash()) || r.UpdatedAt <= 0 {
 		return r, errors.New("Python 系统包操作持久合同无效")
 	}
 	if r.State != "running" && r.State != "recovery_required" && r.State != "succeeded" && r.State != "failed" {
@@ -166,79 +167,131 @@ func readFail2banPythonOperation(data, id string) (Record, error) {
 	}
 	return r, nil
 }
+
+// The caller holds the installation lock. Admission freezes the stored plan;
+// expensive native resolution and installation belong to the durable executor.
+func admitFail2banPythonInstall(data string, request fail2ban.PythonTaskRequest) (Record, error) {
+	var out Record
+	if !request.Valid() || request.Input.Action != "install" {
+		return out, errors.New("Python 安装请求合同无效")
+	}
+	if err := fail2banManagedIdle(data, ""); err != nil {
+		return out, err
+	}
+	p, err := loadFail2banPythonPlan(data, request.Input.PlanID)
+	if err != nil {
+		return out, err
+	}
+	if p.Plan.ExpiresAt <= time.Now().Unix() || p.Plan.At > time.Now().Unix()+300 {
+		return out, errors.New("Python 系统包计划已过期，请重新规划")
+	}
+	if err = secure.RootDirectory(fail2banPythonJournal(data).Dir, 0700); err != nil {
+		return out, err
+	}
+	out = Record{OperationID: request.OperationID, RequestHash: request.Hash(), Kind: fail2banPythonKind, State: "running", Stage: "queued", Deadline: time.Now().Add(5 * time.Minute).Unix(), Fail2banPython: &fail2banPythonIntent{Request: request, Plan: p, Submission: "not_sent", Python: fail2ban.Empty("host", "尚未派发依赖安装").Python}}
+	if err = fail2banPythonPersist(data, &out); err != nil {
+		return Record{}, err
+	}
+	return out, nil
+}
+func loadFail2banPythonPlan(data, id string) (fail2banPythonPlan, error) {
+	var p fail2banPythonPlan
+	if !fail2banDigest.MatchString(id) {
+		return p, errors.New("Python 系统包计划摘要无效")
+	}
+	raw, err := listenerRead(filepath.Join(fail2banPythonDir(data), "plans", id+".json"), 128<<10)
+	if err != nil {
+		return p, err
+	}
+	if err = fail2banPythonDecode(raw, &p); err != nil {
+		return p, err
+	}
+	if err = validFail2banPythonPlan(p); err != nil {
+		return p, err
+	}
+	if p.Plan.ID != id {
+		return p, errors.New("Python 系统包计划身份不一致")
+	}
+	return p, nil
+}
 func InstallFail2banPython(ctx context.Context, in Fail2banPythonOptions) (fail2ban.PythonOperation, error) {
 	var out fail2ban.PythonOperation
 	if err := fail2banManagedRoot(in.DataDir, in.Scope); err != nil {
 		return out, err
 	}
 	if !validID(in.OperationID) || !fail2banDigest.MatchString(in.PlanID) || !in.Confirm || in.Refresh {
-		return out, errors.New("安装须明确确认原 Python 系统包计划与新的操作 UUID；不能在安装中刷新或更换来源")
+		return out, errors.New("安装须明确确认原 Python 系统包计划与操作 UUID；不能在安装中刷新或更换来源")
 	}
+	request := fail2ban.PythonTaskRequest{Protocol: protocol.Agent, OperationID: in.OperationID, Input: fail2ban.PythonTaskInput{Action: "install", PlanID: in.PlanID}}
 	unlock, err := (&Journal{Dir: fail2banBindingDir(in.DataDir)}).rootLock("binding.lock")
 	if err != nil {
 		return out, err
 	}
 	defer unlock()
-	// An existing ID is an observation request, never permission to replay an
-	// interrupted package transaction, even if the original receipt was lost.
-	if old, e := readFail2banPythonOperation(in.DataDir, in.OperationID); e == nil {
-		if old.Fail2banPython.Plan.Plan.ID != in.PlanID {
-			return out, errors.New("Python 系统包操作 ID 已用于其他计划")
+	r, err := readFail2banPythonOperation(in.DataDir, in.OperationID)
+	if err == nil {
+		if r.RequestHash != request.Hash() {
+			return out, errors.New("Python 系统包操作 ID 已用于其他请求")
 		}
-		return fail2banPythonInstallOutcome(observeFail2banPython(ctx, in.DataDir, &old))
-	} else if !os.IsNotExist(e) {
-		return out, e
+	} else if os.IsNotExist(err) {
+		r, err = admitFail2banPythonInstall(in.DataDir, request)
 	}
-	if err = fail2banManagedIdle(in.DataDir, ""); err != nil {
-		return out, err
-	}
-	raw, err := listenerRead(filepath.Join(fail2banPythonDir(in.DataDir), "plans", in.PlanID+".json"), 128<<10)
 	if err != nil {
 		return out, err
 	}
-	var p fail2banPythonPlan
-	if err = fail2banPythonDecode(raw, &p); err != nil {
-		return out, err
+	return fail2banPythonInstallOutcome(runFail2banPython(ctx, in.DataDir, &r))
+}
+
+// The sent marker precedes every native effect. An accepted, unsent request
+// may continue once; after dispatch only its package state is observed.
+func runFail2banPython(ctx context.Context, data string, r *Record) (fail2ban.PythonOperation, error) {
+	if r.State == "succeeded" || r.State == "failed" || r.Fail2banPython.Sent {
+		return observeFail2banPython(ctx, data, r)
 	}
-	if err = validFail2banPythonPlan(p); err != nil {
-		return out, err
+	fail := func(stage string, err error) (fail2ban.PythonOperation, error) {
+		r.State, r.Stage, r.Error = "failed", stage, err.Error()
+		if writeErr := fail2banPythonPersist(data, r); writeErr != nil {
+			return fail2banPythonView(*r), writeErr
+		}
+		return fail2banPythonView(*r), nil
 	}
-	if p.Plan.ID != in.PlanID || p.Plan.ExpiresAt <= time.Now().Unix() || p.Plan.At > time.Now().Unix()+300 {
-		return out, errors.New("Python 系统包计划已过期或身份无效，请重新规划")
+	if r.Deadline <= time.Now().Unix() || r.Fail2banPython.Plan.Plan.ExpiresAt <= time.Now().Unix() {
+		return fail("authorization_expired", errors.New("Python 依赖操作或计划已过期，请重新生成计划"))
 	}
-	current, err := planFail2banPython(ctx, in.DataDir, false)
+	if err := fail2banManagedIdle(data, r.OperationID); err != nil {
+		return fail2banPythonView(*r), err
+	}
+	p := r.Fail2banPython.Plan
+	current, err := planFail2banPython(ctx, data, false)
+	if ctx.Err() != nil {
+		return fail2banPythonView(*r), ctx.Err()
+	}
 	if err != nil {
-		return out, err
+		return fail("preflight_failed", err)
 	}
-	// Timestamps belong to the authorization, while every resolver, repository,
-	// installed-package and executable identity must still match.
 	current.Plan.At, current.Plan.ExpiresAt, current.Plan.ID = p.Plan.At, p.Plan.ExpiresAt, ""
 	actualRaw, _ := json.Marshal(current)
 	expected := p
 	expected.Plan.ID = ""
 	expectedRaw, _ := json.Marshal(expected)
 	if string(actualRaw) != string(expectedRaw) {
-		return out, errors.New("Python 系统包、来源、主机或程序基准已变化，请重新规划")
+		return fail("target_changed", errors.New("软件包、来源、主机或工具已变化，请重新生成计划"))
 	}
-	if err = secure.RootDirectory(fail2banPythonDir(in.DataDir), 0700); err != nil {
-		return out, err
+	if err = fail2banPythonDiskPlan(data, p); err != nil {
+		return fail("resources_unavailable", err)
 	}
-	if err = fail2banPythonDiskPlan(in.DataDir, p); err != nil {
-		return out, err
+	if p.Plan.ExpiresAt <= time.Now().Unix() {
+		return fail("authorization_expired", errors.New("Python 依赖计划已过期，请重新生成计划"))
 	}
-	if err = secure.RootDirectory(fail2banPythonJournal(in.DataDir).Dir, 0700); err != nil {
-		return out, err
-	}
-	r := Record{OperationID: in.OperationID, RequestHash: secure.Hash([]byte(in.OperationID + ":" + in.PlanID)), Kind: fail2banPythonKind, State: "running", Stage: "authorized", Fail2banPython: &fail2banPythonIntent{Plan: p, Submission: "not_sent", Python: readFail2banPython(ctx)}}
-	if err = fail2banPythonPersist(in.DataDir, &r); err != nil {
-		return out, err
+	if err = ctx.Err(); err != nil {
+		return fail2banPythonView(*r), err
 	}
 	r.Fail2banPython.Sent, r.Fail2banPython.Submission, r.Stage = true, "unknown", "installing_packages"
-	if err = fail2banPythonPersist(in.DataDir, &r); err != nil {
-		return fail2banPythonView(r), err
+	if err = fail2banPythonPersist(data, r); err != nil {
+		return fail2banPythonView(*r), err
 	}
 	if p.Plan.Manager == "apt" {
-		err = installFail2banAPT(ctx, in.DataDir, in.OperationID, p)
+		err = installFail2banAPT(ctx, data, r.OperationID, p)
 	} else {
 		err = installFail2banDNF(ctx, p)
 	}
@@ -249,15 +302,13 @@ func InstallFail2banPython(ctx context.Context, in Fail2banPythonOptions) (fail2
 		r.Fail2banPython.ExecutionError = r.Error
 	}
 	r.Stage = "observing_packages"
-	if writeErr := fail2banPythonPersist(in.DataDir, &r); writeErr != nil {
-		return fail2banPythonView(r), errors.Join(err, writeErr)
+	if writeErr := fail2banPythonPersist(data, r); writeErr != nil {
+		return fail2banPythonView(*r), errors.Join(err, writeErr)
 	}
-	// A cancelled context cannot prove the native process has stopped. A later
-	// explicit status read will reconcile the sent transaction without replay.
 	if ctx.Err() != nil {
-		return fail2banPythonView(r), ctx.Err()
+		return fail2banPythonView(*r), ctx.Err()
 	}
-	return fail2banPythonInstallOutcome(observeFail2banPython(ctx, in.DataDir, &r))
+	return observeFail2banPython(ctx, data, r)
 }
 func fail2banPythonInstallOutcome(out fail2ban.PythonOperation, err error) (fail2ban.PythonOperation, error) {
 	if err == nil && out.State != "succeeded" {
@@ -291,7 +342,7 @@ func observeFail2banPython(ctx context.Context, data string, r *Record) (fail2ba
 	}
 	i := r.Fail2banPython
 	if !i.Sent {
-		r.State, r.Stage, r.Error = "failed", "not_dispatched", "原操作尚未派发，不自动续办；须重新规划并确认"
+		return fail2banPythonView(*r), nil
 	} else if err := fail2banPythonPackageIdle(i.Plan.Plan.Manager); err != nil {
 		r.State, r.Stage, r.Error = "recovery_required", "package_manager_unconfirmed", err.Error()
 	} else {

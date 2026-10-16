@@ -36,11 +36,12 @@ type fail2banPythonPlan struct {
 	Tools         map[string]string   `json:"tools"`
 }
 type fail2banPythonIntent struct {
-	Plan           fail2banPythonPlan `json:"plan"`
-	Sent           bool               `json:"sent"`
-	Submission     string             `json:"submission"`
-	ExecutionError string             `json:"execution_error"`
-	Python         fail2ban.Python    `json:"python"`
+	Request        fail2ban.PythonTaskRequest `json:"request"`
+	Plan           fail2banPythonPlan         `json:"plan"`
+	Sent           bool                       `json:"sent"`
+	Submission     string                     `json:"submission"`
+	ExecutionError string                     `json:"execution_error"`
+	Python         fail2ban.Python            `json:"python"`
 }
 type Fail2banPythonOptions struct {
 	DataDir, Scope, OperationID, PlanID string
@@ -282,21 +283,30 @@ func PlanFail2banPython(ctx context.Context, in Fail2banPythonOptions) (fail2ban
 	if err != nil {
 		return out, err
 	}
-	dir := filepath.Join(fail2banPythonDir(in.DataDir), "plans")
-	if err = secure.RootDirectory(dir, 0700); err != nil {
-		return out, err
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return out, err
-	}
-	if len(entries) >= 256 {
-		return out, errors.New("Python 系统包计划数量已达上限，须本机维护")
-	}
-	if err = rootJSONWrite(filepath.Join(dir, p.Plan.ID+".json"), p, 128<<10); err != nil {
+	if err = storeFail2banPythonPlan(in.DataDir, p); err != nil {
 		return out, err
 	}
 	return p.Plan, nil
+}
+func storeFail2banPythonPlan(data string, p fail2banPythonPlan) error {
+	if err := validFail2banPythonPlan(p); err != nil {
+		return err
+	}
+	dir := filepath.Join(fail2banPythonDir(data), "plans")
+	if err := secure.RootDirectory(dir, 0700); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	if len(entries) >= 256 {
+		return errors.New("Python 系统包计划数量已达上限，须本机维护")
+	}
+	if err = rootJSONWrite(filepath.Join(dir, p.Plan.ID+".json"), p, 128<<10); err != nil {
+		return err
+	}
+	return nil
 }
 func planFail2banPython(ctx context.Context, data string, refresh bool) (fail2banPythonPlan, error) {
 	var out fail2banPythonPlan

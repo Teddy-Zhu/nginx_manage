@@ -21,7 +21,7 @@ type jailTaskPayload struct {
 
 func (s *PolicyService) applyIdle(ctx context.Context, q PolicyReader) error {
 	var pending int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('fail2ban.apply','fail2ban.address','fail2ban.lifecycle') AND state IN ('queued','running','compensating','recovery_required')").Scan(&pending); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('fail2ban.apply','fail2ban.address','fail2ban.lifecycle','fail2ban.python') AND state IN ('queued','running','compensating','recovery_required')").Scan(&pending); err != nil {
 		return err
 	}
 	if pending > 0 {

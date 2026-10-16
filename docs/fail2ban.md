@@ -216,8 +216,12 @@ nginxpanel fail2ban-python-status --data-dir=/var/lib/nginxpanel --fail2ban-scop
 
 APT 保留来源验证，拒绝源文件中关闭信任/有效期检查的配置；下载后再次逐项核对大小与 SHA-256。实际安装仅提供批准的本地归档及空的来源/索引集合，禁止下载、推荐包、升级和删除，防止重解依赖引入未批准包。DNF 使用系统私有 platform Python 或现有系统 Python 的固定隔离入口，禁用插件及弱依赖，只接受 `PKG_INSTALL`；下载后核对摘要与现有 RPM 信任密钥，签名不能确认则失败，不自动导入密钥。原生事务将批准的集合交给 RPM，保留事务检查与原生锁。依据见 [APT 手册](https://manpages.debian.org/testing/apt/apt-get.8.en.html)、[APT 安装实现](https://github.com/Debian/apt/blob/2.6.1/apt-private/private-install.cc)、[DNF Base API](https://dnf.readthedocs.io/en/latest/api_base.html)、[DNF 事务 API](https://dnf.readthedocs.io/en/latest/api_transaction.html) 和 [DNF RPM 事务实现](https://github.com/rpm-software-management/dnf/blob/4.20.0/dnf/db/group.py)。
 
-操作先写入 root 独立 journal，再派发原生安装；同一操作 ID 后续只查询，不重新执行。中断或超时可能留下待恢复的原生包状态，不自动执行 `dpkg --configure -a`、DNF 重装或逆向卸载。锁仍被占用或状态无法核对时保留恢复阻塞；查询确认包管理器空闲、原版本包完整安装、系统解释器归属和必要标准库/SQLite 读写后才记录成功，回执未知单独标注。稳定但未达目标的操作记录失败，新的明确计划仍须通过原生完整性检查；损坏环境由管理员通过原生包管理器恢复。新增系统包不随 Fail2ban 撤回自动卸载。
+操作先写入 root 独立 journal，再派发原生安装；尚未派发的原请求可在五分钟授权期和计划有效期内继续，派发标记保存后同一 ID 仅核对结果。网页与本机命令共用安装记录及执行器。中断或超时可能留下待恢复的原生包状态，不自动执行 `dpkg --configure -a`、DNF 重装或逆向卸载。锁仍被占用或状态无法核对时保留恢复阻塞；查询确认包管理器空闲、原版本包完整安装、系统解释器归属和必要标准库/SQLite 读写后才记录成功，回执未知单独标注。稳定但未达目标的操作记录失败，新的明确计划仍须通过原生完整性检查；损坏环境由管理员通过原生包管理器恢复。新增系统包不随 Fail2ban 撤回自动卸载。
 
-该能力目前为本机 root 入口，网页/API 依赖计划和安装任务仍待接入；不将本机能力当成公开入口已完成。现有网页/API 的 install/resume/start/enable 统一要求管理模块启用，停用、取消开机启用及撤回仍可明确处理已有保护。面板镜像继续不包含 Python/Fail2ban，Nginx Docker 模块继续由镜像预置；未加入动态编译或运行时模块安装。Agent 仍为 46、数据库为 26、迁移 schema 为 5，root 计划、下载归档及系统包事务不进入业务迁移。
+网页/API 已接入 `POST /fail2ban/python` 与 `GET /fail2ban/python/tasks` 及对应显式远程资源。提交要求 `components.manage`、管理模块启用、浏览器近期认证及幂等键。`action=plan` 生成持久任务，`plan_id` 为空，`refresh` 明确是否刷新已有索引；HTTP 202 不代表计划已完成。成功任务返回保存的计划，页面展示版本、来源、摘要、空间与影响后再单独确认 `action=install`，提交原 `plan_id` 且 `refresh=false`。任务历史保存最近 16 条加密结果快照，Agent 离线时仍可查看。安装系统依赖后仍须单独准备并安装签名 Fail2ban，不自动启动服务。
 
-实现与源码集成审阅完成；未运行项目生成器、构建、类型检查、lint、测试、浏览器、Python、APT/DNF/RPM、镜像或真实宿主机操作，统一留待 P5。集中验证需覆盖支持矩阵、索引缺失/刷新/签名/密钥、纯新增限制、包/源/工具漂移、下载与磁盘边界、原生锁、取消/重启/回执未知及原生包恢复，系统依赖与官方组件的实际兼容性随后由受管安装再核对。
+计划生成和安装均由独立 root 协调器推进，耗时原生调用不占用 HTTP 请求或 Nginx 内存锁；维护门禁、共享 root 操作记录及安装锁防止冲突。索引刷新派发前保存标记，成功结果先保存计划及操作引用，再写终态；重启只恢复已保存结果，缺失结果且原生包管理器已空闲时终止该计划，不自动重复刷新。网页未知提交只继续原幂等请求，已接受记录丢失或无法核对时保留恢复状态。任务共用加密材料、审计、容量限制及完整备份隔离，不重放恢复包中的旧任务。
+
+现有网页/API 的 install/resume/start/enable 统一要求管理模块启用，停用、取消开机启用及撤回仍可明确处理已有保护。面板镜像继续不包含 Python/Fail2ban，Nginx Docker 模块继续由镜像预置；未加入动态编译或运行时模块安装。当前 Agent 为 47、数据库为 26、迁移 schema 为 5，root 计划、下载归档及系统包事务不进入业务迁移。
+
+实现与源码集成审阅完成；未运行项目生成器、构建、类型检查、lint、测试、浏览器、Python、APT/DNF/RPM、镜像或真实宿主机操作，统一留待 P5。集中验证需覆盖支持矩阵、索引缺失/刷新/签名/密钥、纯新增限制、包/源/工具漂移、下载与磁盘边界、原生锁、取消/重启/回执未知、CLI 与 API 同一安装记录、近期认证/幂等/权限交集、模块关闭/维护/备份隔离及原生包恢复；不新增 UI 测试，界面由用户验收。系统依赖与官方组件的实际兼容性随后由受管安装再核对。

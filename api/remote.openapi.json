@@ -5453,6 +5453,86 @@
         ],
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/fail2ban/python": {
+      "post": {
+        "operationId": "remoteChangeFail2banPython",
+        "x-scopes": [
+          "components.manage"
+        ],
+        "responses": {
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "changeFail2banPython",
+        "x-forward-path": "/fail2ban/python",
+        "x-response-kind": "json",
+        "x-body-limit": 2048,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banPythonTaskInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/python/tasks": {
+      "get": {
+        "operationId": "remoteGetFail2banPythonTasks",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banPythonTasks",
+        "x-forward-path": "/fail2ban/python/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
     }
   },
   "security": [

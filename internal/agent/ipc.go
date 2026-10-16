@@ -216,6 +216,12 @@ func (s *Server) Run(ctx context.Context) error {
 	lifecycleDone := make(chan struct{})
 	go func() { defer close(lifecycleDone); lifecycle.run(lifecycleCtx) }()
 	defer func() { stopLifecycle(); <-lifecycleDone }()
+	pythonTasks := &fail2banPythonTasks{server: s, gate: rootMaintenance}
+	pythonTasks.handlers(mux)
+	pythonCtx, stopPython := context.WithCancel(ctx)
+	pythonDone := make(chan struct{})
+	go func() { defer close(pythonDone); pythonTasks.run(pythonCtx) }()
+	defer func() { stopPython(); <-pythonDone }()
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"

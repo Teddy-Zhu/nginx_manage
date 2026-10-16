@@ -12,6 +12,20 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/python:
+    post:
+      operationId: changeFail2banPython
+      x-scopes: [components.manage]
+      description: 返回 Fail2banPythonTask。action=plan 异步生成最小系统 Python 依赖计划，refresh=true 明确允许刷新现有仓库索引；不安装包。action=install 只接受原计划 plan_id 且 refresh=false，独立确认安装，不安装或启动 Fail2ban。均要求模块启用、components.manage、近期认证及幂等键；HTTP 202 仅表示持久排队。派发后不自动重复刷新索引或重放安装，来源、包或工具变化须重新规划。
+      parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPythonTaskInput'}}}}
+      responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/python/tasks:
+    get:
+      operationId: getFail2banPythonTasks
+      x-scopes: [read]
+      description: 返回最近 16 条 Fail2banPythonTaskStatus 及保存的计划、解释器和结果快照；已有快照在 Agent 离线时仍可读取，备份隔离任务不重放。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/lifecycle/preview:
     post:
       operationId: previewFail2banLifecycle
@@ -1882,6 +1896,18 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["id", "state", "stage", "before_id", "after_id", "request_hash", "target", "error"], "properties": {"id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "before_id": {"type": "string"}, "after_id": {"type": "string"}, "request_hash": {"type": "string"}, "target": {"type": "string"}, "error": {"type": "string"}}}
     Fail2banJailsRuntime:
       {"type": "object", "additionalProperties": false, "required": ["available", "target", "selected_id", "policy", "resources", "pending", "reason"], "properties": {"available": {"type": "boolean"}, "target": {"type": "string"}, "selected_id": {"type": "string"}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}, "resources": {"type": "array", "items": {"type": "string"}}, "pending": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailsOperation"}}, "reason": {"type": "string"}}}
+    Fail2banPythonPackage:
+      {"type": "object", "additionalProperties": false, "required": ["name", "version", "architecture", "source", "repository", "filename", "sha256", "download_bytes", "installed_bytes"], "properties": {"name": {"type": "string"}, "version": {"type": "string"}, "architecture": {"type": "string"}, "source": {"type": "string"}, "repository": {"type": "string"}, "filename": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "download_bytes": {"type": "integer", "format": "int64"}, "installed_bytes": {"type": "integer", "format": "int64"}}}
+    Fail2banPythonPlan:
+      {"type": "object", "additionalProperties": false, "required": ["id", "at", "expires_at", "os", "version", "architecture", "manager", "packages", "download_bytes", "installed_bytes", "impacts"], "properties": {"id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "at": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "os": {"type": "string"}, "version": {"type": "string"}, "architecture": {"type": "string", "enum": ["amd64", "arm64"]}, "manager": {"type": "string", "enum": ["apt", "dnf"]}, "packages": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"$ref": "#/components/schemas/Fail2banPythonPackage"}}, "download_bytes": {"type": "integer", "format": "int64"}, "installed_bytes": {"type": "integer", "format": "int64"}, "impacts": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string"}}}}
+    Fail2banPythonTaskInput:
+      {"type": "object", "additionalProperties": false, "required": ["action", "plan_id", "refresh"], "properties": {"action": {"type": "string", "enum": ["plan", "install"]}, "plan_id": {"type": "string", "maxLength": 64}, "refresh": {"type": "boolean"}}}
+    Fail2banPythonTaskOperation:
+      {"type": "object", "additionalProperties": false, "required": ["id", "request_hash", "input", "state", "stage", "submission", "at", "plan", "python", "error"], "properties": {"id": {"type": "string"}, "request_hash": {"type": "string"}, "input": {"$ref": "#/components/schemas/Fail2banPythonTaskInput"}, "state": {"type": "string", "enum": ["running", "recovery_required", "succeeded", "failed"]}, "stage": {"type": "string"}, "submission": {"type": "string", "enum": ["not_sent", "unknown", "acknowledged"]}, "at": {"type": "integer", "format": "int64"}, "plan": {"allOf": [{"$ref": "#/components/schemas/Fail2banPythonPlan"}], "nullable": true}, "python": {"$ref": "#/components/schemas/Fail2banPython"}, "error": {"type": "string"}}}
+    Fail2banPythonTask:
+      {"type": "object", "additionalProperties": false, "required": ["task_id", "operation_id"], "properties": {"task_id": {"type": "string", "format": "uuid"}, "operation_id": {"type": "string", "format": "uuid"}}}
+    Fail2banPythonTaskStatus:
+      {"type": "object", "additionalProperties": false, "required": ["id", "operation_id", "state", "stage", "error", "created_at", "input", "result"], "properties": {"id": {"type": "string"}, "operation_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "input": {"$ref": "#/components/schemas/Fail2banPythonTaskInput"}, "result": {"allOf": [{"$ref": "#/components/schemas/Fail2banPythonTaskOperation"}], "nullable": true}}}
     Fail2banLifecyclePreviewInput:
       {"type": "object", "additionalProperties": false, "required": ["action", "plan_id", "asset_id", "prerelease"], "properties": {"action": {"type": "string", "enum": ["install", "resume", "rollback", "start", "stop", "enable", "disable"]}, "plan_id": {"type": "string", "maxLength": 64}, "asset_id": {"type": "string", "maxLength": 128}, "prerelease": {"type": "boolean"}}}
     Fail2banLifecycleInput:

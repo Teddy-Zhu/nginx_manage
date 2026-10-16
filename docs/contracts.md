@@ -213,3 +213,6 @@ Fail2ban 独立实例新增 `POST /fail2ban/lifecycle/preview`、`POST /fail2ban
 
 
 本机 root 新增 `fail2ban-python-plan/install/status`，仅用于缺失系统 Python 的固定最小系统包计划、显式确认和原操作核对；原生 APT/DNF 4 保留签名与锁，不提供任意包、仓库、命令或自动重放。root 独立计划/journal 与下载材料不迁移，公开依赖 API 尚未接入；现有生命周期 install/resume/start/enable 均受管理模块开关约束。Agent/数据库/归档版本保持 46/26/5，运行验证待 P5，详见 [Fail2ban](fail2ban.md)。
+
+
+Python 依赖公开合同新增 `POST /fail2ban/python`、`GET /fail2ban/python/tasks` 及对应显式远程资源。plan 异步生成保存一小时的固定系统包计划，可显式刷新既有索引；install 独立确认原 plan_id 且禁止同时刷新。写入要求 components.manage、管理模块启用、近期认证及幂等，202 仅表示排队；最近 16 条任务包含保存的计划/安装结果，Agent 离线仍可读取。网页与本机 CLI 共用安装记录和原生执行器，未派发请求限授权期内继续，派发标记后不自动重放；计划生成同样保存派发标记与结果引用，重启不自动重复索引刷新。共享互斥、维护、加密任务/审计与备份恢复隔离均已接入，业务迁移不携带系统包事务。当前 Agent/数据库/归档版本为 47/26/5，首版无旧协议兼容；声明已同步，项目生成器及运行验证留待 P5。详见 [Fail2ban](fail2ban.md)。

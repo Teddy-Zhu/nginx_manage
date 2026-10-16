@@ -1951,6 +1951,60 @@ type Fail2banJailsRuntime struct {
 	Pending    []Fail2banJailsOperation `json:"pending"`
 	Reason     string                   `json:"reason"`
 }
+type Fail2banPythonPackage struct {
+	Name           string `json:"name"`
+	Version        string `json:"version"`
+	Architecture   string `json:"architecture"`
+	Source         string `json:"source"`
+	Repository     string `json:"repository"`
+	Filename       string `json:"filename"`
+	SHA256         string `json:"sha256"`
+	DownloadBytes  int64  `json:"download_bytes"`
+	InstalledBytes int64  `json:"installed_bytes"`
+}
+type Fail2banPythonPlan struct {
+	Id             string                  `json:"id"`
+	At             int64                   `json:"at"`
+	ExpiresAt      int64                   `json:"expires_at"`
+	OS             string                  `json:"os"`
+	Version        string                  `json:"version"`
+	Architecture   string                  `json:"architecture"`
+	Manager        string                  `json:"manager"`
+	Packages       []Fail2banPythonPackage `json:"packages"`
+	DownloadBytes  int64                   `json:"download_bytes"`
+	InstalledBytes int64                   `json:"installed_bytes"`
+	Impacts        []string                `json:"impacts"`
+}
+type Fail2banPythonTaskInput struct {
+	Action  string `json:"action"`
+	PlanId  string `json:"plan_id"`
+	Refresh bool   `json:"refresh"`
+}
+type Fail2banPythonTaskOperation struct {
+	Id          string                  `json:"id"`
+	RequestHash string                  `json:"request_hash"`
+	Input       Fail2banPythonTaskInput `json:"input"`
+	State       string                  `json:"state"`
+	Stage       string                  `json:"stage"`
+	Submission  string                  `json:"submission"`
+	At          int64                   `json:"at"`
+	Plan        *Fail2banPythonPlan     `json:"plan"`
+	Python      Fail2banPython          `json:"python"`
+	Error       string                  `json:"error"`
+}
+type Fail2banPythonTask = Fail2banAddressTask
+type Fail2banPythonTaskStatus struct {
+	Id          string                       `json:"id"`
+	OperationId string                       `json:"operation_id"`
+	State       string                       `json:"state"`
+	Stage       string                       `json:"stage"`
+	Error       string                       `json:"error"`
+	CreatedAt   int64                        `json:"created_at"`
+	Input       Fail2banPythonTaskInput      `json:"input"`
+	Result      *Fail2banPythonTaskOperation `json:"result"`
+}
+type ChangeFail2banPythonParams = SetFail2banPolicyParams
+type ChangeFail2banPythonJSONRequestBody = Fail2banPythonTaskInput
 type Fail2banLifecyclePreviewInput struct {
 	Action     string `json:"action"`
 	PlanId     string `json:"plan_id"`
@@ -4340,6 +4394,8 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	ChangeFail2banPython(w http.ResponseWriter, r *http.Request, params ChangeFail2banPythonParams)
+	GetFail2banPythonTasks(w http.ResponseWriter, r *http.Request)
 	CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, params CheckFail2banTemplatesParams)
 	PreviewFail2banLifecycle(w http.ResponseWriter, r *http.Request, params PreviewFail2banLifecycleParams)
 	ChangeFail2banLifecycle(w http.ResponseWriter, r *http.Request, params ChangeFail2banLifecycleParams)
@@ -7081,6 +7137,28 @@ func (siw *ServerInterfaceWrapper) RollbackFirewall(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+func (siw *ServerInterfaceWrapper) ChangeFail2banPython(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := ChangeFail2banPythonParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.ChangeFail2banPython(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFail2banPythonTasks(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banPythonTasks(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
 func (siw *ServerInterfaceWrapper) PreviewFail2banLifecycle(w http.ResponseWriter, r *http.Request) {
 	var params PreviewFail2banLifecycleParams
 	if value := r.Header.Get("X-CSRF-Token"); value != "" {
@@ -11223,6 +11301,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/confirm", wrapper.ConfirmFirewall)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/rollback", wrapper.RollbackFirewall)
 
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/python", wrapper.ChangeFail2banPython)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/python/tasks", wrapper.GetFail2banPythonTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/lifecycle/preview", wrapper.PreviewFail2banLifecycle)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/lifecycle", wrapper.ChangeFail2banLifecycle)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/lifecycle/tasks", wrapper.GetFail2banLifecycleTasks)
