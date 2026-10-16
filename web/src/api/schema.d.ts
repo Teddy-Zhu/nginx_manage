@@ -4,6 +4,7 @@
  */
 
 export interface paths {
+    "/firewall": { get: operations["getFirewall"]; };
     "/backups": { get: operations["listBackups"]; post: operations["createBackup"]; };
     "/backups/policy": { get: operations["getBackupPolicy"]; put: operations["setBackupPolicy"]; };
     "/backups/{id}": { get: operations["getBackup"]; delete: operations["deleteBackup"]; };
@@ -1709,6 +1710,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        FirewallObservation: { at: number; source: string; scope: string; available: boolean; writable: boolean; manager: string; backend: string; reason: string; firewalld: components["schemas"]["FirewallFirewalld"]; ufw: components["schemas"]["FirewallUFW"]; iptables: components["schemas"]["FirewallIptables"][]; rulesets: components["schemas"]["FirewallRuleset"][]; docker: components["schemas"]["FirewallDocker"]; warnings: string[]; };
+        FirewallFirewalld: { running: boolean | null; configured_backend: string; default_zone: string; panic: boolean | null; zones: components["schemas"]["FirewallZone"][]; reason: string; };
+        FirewallZone: { name: string; interfaces: string[]; sources: string[]; };
+        FirewallUFW: { installed: boolean; enabled: boolean | null; active: boolean | null; reason: string; };
+        FirewallIptables: { family: string; backend: string; version: string; reason: string; };
+        FirewallRuleset: { id: string; backend: string; family: string; available: boolean; tables: components["schemas"]["FirewallTable"][]; reason: string; };
+        FirewallTable: { family: string; name: string; chains: components["schemas"]["FirewallChain"][]; };
+        FirewallChain: { name: string; type: string; hook: string; priority: number | null; policy: string; rules: number; docker_user_jump: boolean; };
+        FirewallDocker: { backend_hint: string; evidence: string[]; writable: boolean; reason: string; };
         BackupInput: { name: string; encryption: "recipient" | "passphrase"; recipient: string; passphrase: string; };
         BackupPolicyInput: { base_version: number; enabled: boolean; recipient: string; key_saved: boolean; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; };
         BackupPolicy: { version: number; enabled: boolean; recipient: string; key_saved_at: number; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; next_run_at: number; error: string; updated_at: number; };
@@ -3386,6 +3396,11 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getFirewall: {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        requestBody?: never;
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
     listBackups: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     createBackup: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["BackupInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getBackup: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

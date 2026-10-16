@@ -1588,6 +1588,93 @@ type FileDifference struct {
 // FileDifferenceStatus defines model for FileDifference.Status.
 type FileDifferenceStatus string
 
+// FirewallObservation defines model for FirewallObservation.
+type FirewallObservation struct {
+	At        int64              `json:"at"`
+	Source    string             `json:"source"`
+	Scope     string             `json:"scope"`
+	Available bool               `json:"available"`
+	Writable  bool               `json:"writable"`
+	Manager   string             `json:"manager"`
+	Backend   string             `json:"backend"`
+	Reason    string             `json:"reason"`
+	Firewalld FirewallFirewalld  `json:"firewalld"`
+	Ufw       FirewallUFW        `json:"ufw"`
+	Iptables  []FirewallIptables `json:"iptables"`
+	Rulesets  []FirewallRuleset  `json:"rulesets"`
+	Docker    FirewallDocker     `json:"docker"`
+	Warnings  []string           `json:"warnings"`
+}
+
+// FirewallFirewalld defines model for FirewallFirewalld.
+type FirewallFirewalld struct {
+	Running           *bool          `json:"running"`
+	ConfiguredBackend string         `json:"configured_backend"`
+	DefaultZone       string         `json:"default_zone"`
+	Panic             *bool          `json:"panic"`
+	Zones             []FirewallZone `json:"zones"`
+	Reason            string         `json:"reason"`
+}
+
+// FirewallZone defines model for FirewallZone.
+type FirewallZone struct {
+	Name       string   `json:"name"`
+	Interfaces []string `json:"interfaces"`
+	Sources    []string `json:"sources"`
+}
+
+// FirewallUFW defines model for FirewallUFW.
+type FirewallUFW struct {
+	Installed bool   `json:"installed"`
+	Enabled   *bool  `json:"enabled"`
+	Active    *bool  `json:"active"`
+	Reason    string `json:"reason"`
+}
+
+// FirewallIptables defines model for FirewallIptables.
+type FirewallIptables struct {
+	Family  string `json:"family"`
+	Backend string `json:"backend"`
+	Version string `json:"version"`
+	Reason  string `json:"reason"`
+}
+
+// FirewallRuleset defines model for FirewallRuleset.
+type FirewallRuleset struct {
+	ID        string          `json:"id"`
+	Backend   string          `json:"backend"`
+	Family    string          `json:"family"`
+	Available bool            `json:"available"`
+	Tables    []FirewallTable `json:"tables"`
+	Reason    string          `json:"reason"`
+}
+
+// FirewallTable defines model for FirewallTable.
+type FirewallTable struct {
+	Family string          `json:"family"`
+	Name   string          `json:"name"`
+	Chains []FirewallChain `json:"chains"`
+}
+
+// FirewallChain defines model for FirewallChain.
+type FirewallChain struct {
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	Hook           string `json:"hook"`
+	Priority       *int64 `json:"priority"`
+	Policy         string `json:"policy"`
+	Rules          int    `json:"rules"`
+	DockerUserJump bool   `json:"docker_user_jump"`
+}
+
+// FirewallDocker defines model for FirewallDocker.
+type FirewallDocker struct {
+	BackendHint string   `json:"backend_hint"`
+	Evidence    []string `json:"evidence"`
+	Writable    bool     `json:"writable"`
+	Reason      string   `json:"reason"`
+}
+
 // HostDNSApplyInput defines model for HostDNSApplyInput.
 type HostDNSApplyInput struct {
 	PlanId string `json:"plan_id"`
@@ -3708,6 +3795,9 @@ type ServerInterface interface {
 
 	// (GET /dns-providers)
 	ListDNSProviders(w http.ResponseWriter, r *http.Request)
+
+	// (GET /firewall)
+	GetFirewall(w http.ResponseWriter, r *http.Request)
 
 	// (GET /host/dns)
 	GetHostDNS(w http.ResponseWriter, r *http.Request)
@@ -6178,6 +6268,17 @@ func (siw *ServerInterfaceWrapper) ListDNSProviders(w http.ResponseWriter, r *ht
 		handler = middleware(handler)
 	}
 
+	handler.ServeHTTP(w, r)
+}
+
+// GetFirewall operation middleware
+func (siw *ServerInterfaceWrapper) GetFirewall(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFirewall(w, r)
+	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
 	handler.ServeHTTP(w, r)
 }
 
@@ -10069,6 +10170,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/events", wrapper.ListNotificationEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/deliveries", wrapper.ListNotificationDeliveries)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/notifications/deliveries/{id}/retry", wrapper.RetryNotificationDelivery)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall", wrapper.GetFirewall)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/host/dns", wrapper.GetHostDNS)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/plan", wrapper.CreateHostDNSPlan)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/apply", wrapper.ApplyHostDNS)

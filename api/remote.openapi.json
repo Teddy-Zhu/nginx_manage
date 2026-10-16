@@ -12,6 +12,38 @@
   ],
   "x-forward-response-limit": 33554432,
   "paths": {
+    "/nodes/{connection}/firewall": {
+      "get": {
+        "operationId": "remoteGetFirewall",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFirewall",
+        "x-forward-path": "/firewall",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
+    },
     "/nodes/{connection}/panel/updates": {
       "get": {
         "operationId": "remoteListPanelUpdates",

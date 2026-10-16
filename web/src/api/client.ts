@@ -52,6 +52,7 @@ export type Module = components["schemas"]["Module"];
 export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
+export type FirewallObservation = components["schemas"]["FirewallObservation"];
 export type HostDNSPlan = components["schemas"]["HostDNSPlan"];
 export type HostDNSPlanInput = components["schemas"]["HostDNSPlanInput"];
 export type HostDNSChange = components["schemas"]["HostDNSChange"];
@@ -515,6 +516,8 @@ function createAPI(scope: RequestScope) {
     request<NotificationOverview>({ url: "/notifications", signal }),
   hostDNS: (signal?: AbortSignal) =>
     request<HostDNSOverview>({ url: "/host/dns", signal }),
+  firewall: (signal?: AbortSignal) =>
+    request<FirewallObservation>({ url: "/firewall", signal }),
   planHostDNS: (data: HostDNSPlanInput, key: string) =>
     request<HostDNSPlan>({
       url: "/host/dns/plan",

@@ -185,6 +185,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.logHandlers(mux)
 	sampler := &metricSampler{ctx: ctx, capability: platform.MetricsCapability(s.MetricsScope, s.Dev), collector: platform.MetricsCollector{DataDir: s.DataDir}}
 	s.monitoringHandlers(mux, sampler)
+	s.firewallHandlers(mux, ctx)
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"

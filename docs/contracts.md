@@ -47,7 +47,7 @@ Agent 仅对本机 root 登记的可信 Nginx 执行有时限、输出有界的 
 
 `POST /nginx/external/restore` 显式恢复当前已保存期望修订，要求 `config.write/config.secrets/security.write`、浏览器重新认证、期望基础版本及完整冲突快照。浏览器先展示目标与最近生效修订的原文差异，再确认重新加载；若要恢复历史内容，应先将其保存为期望修订。幂等响应、任务、快照摘要及排队审计同事务保存。Agent 独立重建已生效源树证明、核对快照，在自己的持久操作记录之后准备证书和新候选，并在切换前再次核对快照。普通应用仍拒绝外部冲突。
 
-逻辑配置修订与物理发布身份分开；每个新操作使用操作 ID 作为不可变发布目录和独立运行探针。恢复保留原外部目录，不覆盖、删除或将其作为回滚目标。切换前失败保持原发布指针；可能切换之后无法确认则进入 `recovery_required` 并阻止冲突操作。Agent 重启仅依照独立记录继续验证、切换和确认已授权候选，不重新执行外部内容。任务必须同时匹配逻辑修订和物理发布身份，确认运行后才更新已生效修订。既有证书和模块版本不覆盖；依赖损坏时须选择有效新版本并保存，或本机修复，不能声称自动恢复任意依赖或损坏清单。当前 Agent 协议为 27，不提供首版之前的协议或目录兼容分支。
+逻辑配置修订与物理发布身份分开；每个新操作使用操作 ID 作为不可变发布目录和独立运行探针。恢复保留原外部目录，不覆盖、删除或将其作为回滚目标。切换前失败保持原发布指针；可能切换之后无法确认则进入 `recovery_required` 并阻止冲突操作。Agent 重启仅依照独立记录继续验证、切换和确认已授权候选，不重新执行外部内容。任务必须同时匹配逻辑修订和物理发布身份，确认运行后才更新已生效修订。既有证书和模块版本不覆盖；依赖损坏时须选择有效新版本并保存，或本机修复，不能声称自动恢复任意依赖或损坏清单。当前 Agent 协议为 28，不提供首版之前的协议或目录兼容分支。
 
 配置树 `base_version` 指向当前有效期望状态；草稿使用独立不可变修订，不改变该版本。错误草稿没有有效投影、不会创建任务。保存不等于实际应用。`validate` 创建真实 `nginx -t` 任务，不改变运行修订；`apply` 创建应用任务，也可用 `/nginx/apply` 应用已保存修订。校验、应用和外部恢复互斥且不能用于草稿。执行保留幂等操作标识、提交意图及 Agent 接受记录；超时先查询独立执行记录，已接受记录缺失时转为恢复状态。任务终态和已观察修订同事务记录，只有确认成功或确认回滚才更新 `config_head.applied_revision`。
 
@@ -152,10 +152,13 @@ root 独立快照保存前后文件、运行 DNS、其他源散列、期限和�
 
 ## 管理入口独立恢复
 
-Agent 合同为 27。主回环 HTTPS 与部署/就绪绑定不变，可选远程入口按版本、权限、近期认证和幂等键写入。root 持久保存候选、原配置及 120 秒期限，只有候选代次的新 TCP/TLS 连接可确认，记录实际来源。Agent 持有 TCP 描述符并通过 UID 核验的 unixpacket 通道交付应用终结 TLS，使用 shutdown 撤销已交付连接；超时、Web 通道中断或 Agent 重启恢复原入口，失败保留 recovery_required。源地址不从 HTTP 头推断；回环和旧连接不能确认。停用须走主回环入口，root 本机命令可独立提交持久停用救援请求。私钥只保存在 root 私有状态及受限 IPC，不进入公开响应、业务备份或迁移包。详见 [管理入口](management-listener.md)。
+Agent 合同为 28。主回环 HTTPS 与部署/就绪绑定不变，可选远程入口按版本、权限、近期认证和幂等键写入。root 持久保存候选、原配置及 120 秒期限，只有候选代次的新 TCP/TLS 连接可确认，记录实际来源。Agent 持有 TCP 描述符并通过 UID 核验的 unixpacket 通道交付应用终结 TLS，使用 shutdown 撤销已交付连接；超时、Web 通道中断或 Agent 重启恢复原入口，失败保留 recovery_required。源地址不从 HTTP 头推断；回环和旧连接不能确认。停用须走主回环入口，root 本机命令可独立提交持久停用救援请求。私钥只保存在 root 私有状态及受限 IPC，不进入公开响应、业务备份或迁移包。详见 [管理入口](management-listener.md)。
 
 完整灾备运行合同：本机 root 的 `backup-restore-apply` 先持久批准原安装意图及计划，固定非 root 助手再调用私有 `POST /v1/nginx/disaster`。端点只接受协议、原恢复 UUID、计划摘要、当前维护 epoch 和补偿方向，返回沿用 Agent 的 `protocol/code/message/data` 封装；配置及证书材料只从计划绑定的 root 0400 固定请求读取。执行复用原 Nginx 候选/校验/切换/运行观察，子操作 UUID 为计划 UUID，并关联原完整恢复 UUID；Agent 重启只处理已接受记录。root 补偿批准不可撤销或被应用请求覆盖，先确认原 Nginx 逻辑修订与物理部署，再补偿业务文件。运行确认保持父事务 `recovery_required`、维护停机、root 写入屏障和数据库恢复屏障；本机 root 对账入口通过独立非 root 副本、固定意图及二次只读逐表/逐行比较，终止源在途流程并保存真实运行对应的已生效修订；源外部结果继续待核对。`data_reconciled` 仍保留父事务及两层恢复屏障。本机 root 的 `backup-restore-activate` 明确接受不可回退提交，生成独立完成数据库并二次只读核对；父事务先保存 `activation_committed`，再安装副本、以原程序启动和检查就绪。就绪成功后才发布原维护完成授权，Agent 锁释放及应用数据库持久释放均确认后记录成功。启动后仅续办原激活，禁止原文件/Nginx 补偿覆盖新写入；自动化仍停用，外部结果待人工核对。详见 [完整备份](backups.md)。
 
 本机就绪合同为 2，root 专用 Unix socket 沿用统一 JSON 封装与对端进程/受信程序核验。`GET /v1/maintenance-release/{restore_id}/{maintenance_id}` 只读核对当前数据库的原恢复屏障已完成、原维护会话已 released 且维护任务已 succeeded；不执行释放，不开放到公网 API。独立恢复记录保留就绪及应用释放证据，状态查询不将历史证据当作实时健康状态。
 
 迁移与完整恢复的目标能力预检沿 nginx.conf 的实际 include 关系区分 HTTP/Stream，保留共享 include 的各自上下文，只统计启用且可达的配置。map/geo/types/split_clients 的行按数据处理，map 的 volatile 参数及其 include 单独识别。HTTP 与 Stream 的 map、连接限制、访问控制和日志不能互相替代；HTTP proxy/headers/geo/split_clients/charset/gzip 与 Stream 默认子模块同时检查目标编译参数和必要版本。已选且当前本机批准的动态模块可作为待加载候选，必须继续经过 Agent 的配置、ABI 和运行确认；仅有当前运行能力不能替代本次 load_module 路径批准。Docker 缺失能力须更换预置镜像；源模块只能显式映射至批准路径或在静态能力已预置时移除，不传输模块二进制。编译参数及 Stream 模块边界依据 [Nginx 构建源码](https://github.com/nginx/nginx/blob/release-1.30.6/auto/options)、[Stream map](https://nginx.org/en/docs/stream/ngx_stream_map_module.html) 和 [Stream 连接限制](https://nginx.org/en/docs/stream/ngx_stream_limit_conn_module.html)。
+
+
+宿主机防火墙只读诊断通过 `GET /firewall` 和显式远程资源返回 FirewallObservation，区分管理器、命令后端、独立 IPv4/IPv6 规则结构和 Docker 路径标记。未知/超限不作为停用或完整读取，写入始终不可用；本机宿主机观测授权、读取预算和未交付边界见 [防火墙诊断](firewall.md)。统一 JSON 外壳及自动扫描页面沿用当前合同，Agent 协议为 28，真实系统验收留待 P5。

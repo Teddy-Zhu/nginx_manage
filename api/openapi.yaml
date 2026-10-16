@@ -12,6 +12,12 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /firewall:
+    get:
+      operationId: getFirewall
+      x-scopes: [read]
+      description: 宿主机只读防火墙诊断；返回 FirewallObservation。分别读取管理器、默认 iptables 命令、nft/legacy 规则结构和 Docker 标记；不修改规则，不将表名或链名当作所有权或外部可达性证明。Agent 缓存 30 秒，缺失或超限视图明确不可用。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /backups:
     get:
       operationId: listBackups
@@ -3904,3 +3910,99 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["kind", "resource", "state", "message"], "properties": {"kind": {"type": "string"}, "resource": {"type": "string"}, "state": {"type": "string"}, "message": {"type": "string"}}}
     MigrationPlan:
       {"type": "object", "additionalProperties": false, "required": ["id", "source_node", "source_version", "base_version", "expires_at", "state", "steps", "omissions", "can_save", "can_apply", "nginx_enabled", "revision_id", "task_id", "last_error", "package_sha256"], "properties": {"id": {"type": "string"}, "source_node": {"type": "string"}, "source_version": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "expires_at": {"type": "integer", "format": "int64", "minimum": 0}, "state": {"type": "string"}, "steps": {"type": "array", "items": {"$ref": "#/components/schemas/MigrationStep"}}, "omissions": {"type": "array", "items": {"type": "string"}}, "can_save": {"type": "boolean"}, "can_apply": {"type": "boolean"}, "nginx_enabled": {"type": "boolean"}, "revision_id": {"type": "string"}, "task_id": {"type": "string"}, "last_error": {"type": "string"}, "package_sha256": {"type": "string"}, "dependencies": {"$ref": "#/components/schemas/MigrationDependencyStatus"}}}
+    FirewallObservation:
+      type: object
+      additionalProperties: false
+      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings"]
+      properties:
+        at: {"type": "integer", "format": "int64"}
+        source: {"type": "string"}
+        scope: {"type": "string"}
+        available: {"type": "boolean"}
+        writable: {"type": "boolean"}
+        manager: {"type": "string"}
+        backend: {"type": "string"}
+        reason: {"type": "string"}
+        firewalld: {"$ref": "#/components/schemas/FirewallFirewalld"}
+        ufw: {"$ref": "#/components/schemas/FirewallUFW"}
+        iptables: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallIptables"}}
+        rulesets: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallRuleset"}}
+        docker: {"$ref": "#/components/schemas/FirewallDocker"}
+        warnings: {"type": "array", "items": {"type": "string"}}
+    FirewallFirewalld:
+      type: object
+      additionalProperties: false
+      required: ["running", "configured_backend", "default_zone", "panic", "zones", "reason"]
+      properties:
+        running: {"type": "boolean", "nullable": true}
+        configured_backend: {"type": "string"}
+        default_zone: {"type": "string"}
+        panic: {"type": "boolean", "nullable": true}
+        zones: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallZone"}}
+        reason: {"type": "string"}
+    FirewallZone:
+      type: object
+      additionalProperties: false
+      required: ["name", "interfaces", "sources"]
+      properties:
+        name: {"type": "string"}
+        interfaces: {"type": "array", "items": {"type": "string"}}
+        sources: {"type": "array", "items": {"type": "string"}}
+    FirewallUFW:
+      type: object
+      additionalProperties: false
+      required: ["installed", "enabled", "active", "reason"]
+      properties:
+        installed: {"type": "boolean"}
+        enabled: {"type": "boolean", "nullable": true}
+        active: {"type": "boolean", "nullable": true}
+        reason: {"type": "string"}
+    FirewallIptables:
+      type: object
+      additionalProperties: false
+      required: ["family", "backend", "version", "reason"]
+      properties:
+        family: {"type": "string"}
+        backend: {"type": "string"}
+        version: {"type": "string"}
+        reason: {"type": "string"}
+    FirewallRuleset:
+      type: object
+      additionalProperties: false
+      required: ["id", "backend", "family", "available", "tables", "reason"]
+      properties:
+        id: {"type": "string"}
+        backend: {"type": "string"}
+        family: {"type": "string"}
+        available: {"type": "boolean"}
+        tables: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallTable"}}
+        reason: {"type": "string"}
+    FirewallTable:
+      type: object
+      additionalProperties: false
+      required: ["family", "name", "chains"]
+      properties:
+        family: {"type": "string"}
+        name: {"type": "string"}
+        chains: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallChain"}}
+    FirewallChain:
+      type: object
+      additionalProperties: false
+      required: ["name", "type", "hook", "priority", "policy", "rules", "docker_user_jump"]
+      properties:
+        name: {"type": "string"}
+        type: {"type": "string"}
+        hook: {"type": "string"}
+        priority: {"type": "integer", "format": "int64", "nullable": true}
+        policy: {"type": "string"}
+        rules: {"type": "integer"}
+        docker_user_jump: {"type": "boolean"}
+    FirewallDocker:
+      type: object
+      additionalProperties: false
+      required: ["backend_hint", "evidence", "writable", "reason"]
+      properties:
+        backend_hint: {"type": "string"}
+        evidence: {"type": "array", "items": {"type": "string"}}
+        writable: {"type": "boolean"}
+        reason: {"type": "string"}

@@ -59,6 +59,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/backups': RouteRecordInfo<
+      '/backups',
+      '/backups',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/certificate-deployments': RouteRecordInfo<
       '/certificate-deployments',
       '/certificate-deployments',
@@ -94,6 +101,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/firewall': RouteRecordInfo<
+      '/firewall',
+      '/firewall',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/host-dns': RouteRecordInfo<
       '/host-dns',
       '/host-dns',
@@ -122,6 +136,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/management-listener': RouteRecordInfo<
+      '/management-listener',
+      '/management-listener',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/migration-push': RouteRecordInfo<
       '/migration-push',
       '/migration-push',
@@ -136,6 +157,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/modules': RouteRecordInfo<
+      '/modules',
+      '/modules',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/nginx': RouteRecordInfo<
       '/nginx',
       '/nginx',
@@ -143,9 +171,23 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/nodes': RouteRecordInfo<
+      '/nodes',
+      '/nodes',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/notifications': RouteRecordInfo<
       '/notifications',
       '/notifications',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/panel-updates': RouteRecordInfo<
+      '/panel-updates',
+      '/panel-updates',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -223,6 +265,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/backups.vue': {
+      routes:
+        | '/backups'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/certificate-deployments.vue': {
       routes:
         | '/certificate-deployments'
@@ -263,6 +313,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/firewall.vue': {
+      routes:
+        | '/firewall'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/host-dns.vue': {
       routes:
         | '/host-dns'
@@ -295,6 +353,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/management-listener.vue': {
+      routes:
+        | '/management-listener'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/migration-push.vue': {
       routes:
         | '/migration-push'
@@ -311,6 +377,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/modules.vue': {
+      routes:
+        | '/modules'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/nginx.vue': {
       routes:
         | '/nginx'
@@ -319,9 +393,25 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/nodes.vue': {
+      routes:
+        | '/nodes'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/notifications.vue': {
       routes:
         | '/notifications'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/panel-updates.vue': {
+      routes:
+        | '/panel-updates'
       views:
         | never
       pathParamNames:

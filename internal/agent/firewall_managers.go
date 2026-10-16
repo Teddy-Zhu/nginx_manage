@@ -1,0 +1,202 @@
+package agent
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+	"unicode/utf8"
+
+	"github.com/godbus/dbus/v5"
+	"nginxpanel/internal/firewall"
+)
+
+const firewalldName = "org.fedoraproject.FirewallD1"
+const firewalldRoot = dbus.ObjectPath("/org/fedoraproject/FirewallD1")
+
+func firewallBool(value bool) *bool { return &value }
+
+func readFirewalld(parent context.Context) firewall.Firewalld {
+	out := firewall.Firewalld{Zones: []firewall.Zone{}, Reason: "无法读取本机 firewalld 状态"}
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
+	defer cancel()
+	raw, e := (&net.Dialer{}).DialContext(ctx, "unix", "/run/dbus/system_bus_socket")
+	if e != nil {
+		return out
+	}
+	deadline, _ := ctx.Deadline()
+	_ = raw.SetDeadline(deadline)
+	conn, e := dbus.NewConn(&dnsBusWire{Conn: raw}, dbus.WithContext(ctx))
+	if e != nil {
+		raw.Close()
+		return out
+	}
+	defer conn.Close()
+	if conn.Auth([]dbus.Auth{dbus.AuthExternal(strconv.Itoa(os.Getuid()))}) != nil || conn.Hello() != nil {
+		return out
+	}
+	var owner string
+	if e = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", dbus.FlagNoAutoStart, firewalldName).Store(&owner); e != nil {
+		var reply dbus.Error
+		if errors.As(e, &reply) && reply.Name == "org.freedesktop.DBus.Error.NameHasNoOwner" {
+			out.Running = firewallBool(false)
+			out.Reason = "firewalld 当前未运行"
+		}
+		return out
+	}
+	peer := conn.Object(owner, firewalldRoot)
+	var panicMode bool
+	if e = peer.CallWithContext(ctx, firewalldName+".queryPanicMode", dbus.FlagNoAutoStart).Store(&panicMode); e != nil {
+		return out
+	}
+	out.Running = firewallBool(true)
+	out.Panic = &panicMode
+	var defaultZone string
+	if e = peer.CallWithContext(ctx, firewalldName+".getDefaultZone", dbus.FlagNoAutoStart).Store(&defaultZone); e != nil || !firewallName(defaultZone) {
+		out.Reason = "firewalld 正在运行，但默认 zone 无法完整读取"
+		return out
+	}
+	out.DefaultZone = defaultZone
+	var zones map[string]map[string][]string
+	if e = peer.CallWithContext(ctx, firewalldName+".zone.getActiveZones", dbus.FlagNoAutoStart).Store(&zones); e != nil || len(zones) > 128 {
+		out.Reason = "firewalld zone 清单无法在预算内完整读取"
+		return out
+	}
+	total := 0
+	entries := []firewall.Zone{}
+	for name, zone := range zones {
+		if !firewallName(name) || len(zone) > 8 || len(zone["interfaces"])+len(zone["sources"]) > 256 {
+			out.Reason = "firewalld zone 内容无效或超过预算"
+			return out
+		}
+		for _, values := range zone {
+			for _, value := range values {
+				total += len(value)
+				if !firewallName(value) || total > 32<<10 {
+					out.Reason = "firewalld zone 内容无效或超过预算"
+					return out
+				}
+			}
+		}
+		entry := firewall.Zone{Name: name, Interfaces: append([]string{}, zone["interfaces"]...), Sources: append([]string{}, zone["sources"]...)}
+		sort.Strings(entry.Interfaces)
+		sort.Strings(entry.Sources)
+		entries = append(entries, entry)
+	}
+	out.Zones = entries
+	sort.Slice(out.Zones, func(i, j int) bool { return out.Zones[i].Name < out.Zones[j].Name })
+	var configured dbus.Variant
+	e = conn.Object(owner, dbus.ObjectPath(string(firewalldRoot)+"/config")).CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", dbus.FlagNoAutoStart, firewalldName+".config", "FirewallBackend").Store(&configured)
+	if e == nil {
+		if value, ok := configured.Value().(string); ok && (value == "nftables" || value == "iptables") {
+			out.ConfiguredBackend = value
+		}
+	}
+	var after string
+	if e = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", dbus.FlagNoAutoStart, firewalldName).Store(&after); e != nil || after != owner {
+		out.Running = nil
+		out.Panic = nil
+		out.DefaultZone = ""
+		out.ConfiguredBackend = ""
+		out.Zones = []firewall.Zone{}
+		out.Reason = "firewalld 在读取期间变化，请刷新"
+		return out
+	}
+	out.Reason = ""
+	if out.ConfiguredBackend == "" {
+		out.Reason = "运行状态已读取，配置中的后端选择不可用"
+	}
+	return out
+}
+
+func ufwConfigured() (*bool, error) {
+	if e := existingRootDirectory("/etc/ufw"); e != nil {
+		return nil, e
+	}
+	f, e := os.OpenFile("/etc/ufw/ufw.conf", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if e != nil {
+		return nil, e
+	}
+	defer f.Close()
+	info, e := f.Stat()
+	if e != nil {
+		return nil, e
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.Mode().IsRegular() || st.Uid != 0 || info.Mode().Perm()&0022 != 0 || info.Size() > 16<<10 {
+		return nil, errors.New("unsafe ufw configuration")
+	}
+	raw, e := io.ReadAll(io.LimitReader(f, (16<<10)+1))
+	if e != nil || len(raw) > 16<<10 || !utf8.Valid(raw) {
+		return nil, errors.New("ufw configuration exceeds budget")
+	}
+	var enabled *bool
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != "ENABLED" {
+			continue
+		}
+		// No shell evaluation, expansion, guessed defaults or last-key wins.
+		value = strings.TrimSpace(value)
+		if enabled != nil || value != "yes" && value != "no" {
+			return nil, errors.New("ambiguous ufw enable state")
+		}
+		enabled = firewallBool(value == "yes")
+	}
+	if enabled == nil {
+		return nil, errors.New("ufw enable state is unspecified")
+	}
+	after, e := f.Stat()
+	if e != nil || after.Size() != int64(len(raw)) || after.ModTime() != info.ModTime() {
+		return nil, errors.New("ufw configuration changed while reading")
+	}
+	return enabled, nil
+}
+
+func readUFW(ctx context.Context) firewall.UFW {
+	out := firewall.UFW{Reason: "未发现可用的 UFW 程序"}
+	for _, path := range []string{"/usr/sbin/ufw", "/usr/bin/ufw", "/sbin/ufw", "/bin/ufw"} {
+		if _, e := trustedFile(path, true); e == nil {
+			out.Installed = true
+			break
+		}
+	}
+	configured, configErr := ufwConfigured()
+	out.Enabled = configured
+	if !out.Installed {
+		if configErr == nil {
+			out.Reason = "存在 UFW 启用配置，但程序不可用"
+		}
+		return out
+	}
+	raw, e := firewallRead(ctx, "ufw", "status", 256<<10)
+	if e != nil {
+		out.Reason = "UFW 状态读取失败或超时"
+		return out
+	}
+	line, _, _ := strings.Cut(string(raw), "\n")
+	switch strings.TrimSpace(line) {
+	case "Status: active":
+		out.Active = firewallBool(true)
+	case "Status: inactive":
+		out.Active = firewallBool(false)
+	default:
+		out.Reason = "UFW 返回了无法识别的状态"
+		return out
+	}
+	out.Reason = ""
+	if configErr != nil {
+		out.Reason = "UFW 当前状态已读取，持久启用配置无法确认"
+	}
+	return out
+}
