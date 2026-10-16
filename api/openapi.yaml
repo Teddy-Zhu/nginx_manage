@@ -12,6 +12,27 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /firewall/policy:
+    get:
+      operationId: getFirewallPolicy
+      x-scopes: [read]
+      description: 返回 FirewallPolicyView。未保存时 version 为 0；仅表示期望策略，不代表内核生效。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    put:
+      operationId: setFirewallPolicy
+      x-scopes: [security.write]
+      description: 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须近期认证。最多 1000 条规则及 256 KiB 规范策略，来源须匹配地址族。
+      parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
+      requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPolicyInput"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /firewall/preview:
+    post:
+      operationId: previewFirewall
+      x-scopes: [read]
+      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式及程序摘要，其他后端或 Docker 路径明确阻塞。结合 Agent 诊断核对环境；不发送 netlink 事务，不是执行授权或外部连通性证明，can_apply 为 false。
+      parameters: [{"$ref": "#/components/parameters/CSRF"}]
+      requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPreviewInput"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall:
     get:
       operationId: getFirewall
@@ -3913,7 +3934,7 @@ components:
     FirewallObservation:
       type: object
       additionalProperties: false
-      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings"]
+      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings", "interfaces"]
       properties:
         at: {"type": "integer", "format": "int64"}
         source: {"type": "string"}
@@ -3928,6 +3949,7 @@ components:
         iptables: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallIptables"}}
         rulesets: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallRuleset"}}
         docker: {"$ref": "#/components/schemas/FirewallDocker"}
+        interfaces: {"type": "array", "items": {"type": "string"}, "maxItems": 512}
         warnings: {"type": "array", "items": {"type": "string"}}
     FirewallFirewalld:
       type: object
@@ -4006,3 +4028,91 @@ components:
         evidence: {"type": "array", "items": {"type": "string"}}
         writable: {"type": "boolean"}
         reason: {"type": "string"}
+    FirewallPortRange:
+      type: object
+      additionalProperties: false
+      required: ["from", "to"]
+      properties:
+        from: {"type": "integer", "minimum": 1, "maximum": 65535}
+        to: {"type": "integer", "minimum": 1, "maximum": 65535}
+    FirewallRule:
+      type: object
+      additionalProperties: false
+      required: ["id", "name", "enabled", "scope", "family", "protocol", "ports", "sources", "action", "priority", "interface", "comment"]
+      properties:
+        id: {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+        name: {"type": "string", "minLength": 1, "maxLength": 128}
+        enabled: {"type": "boolean"}
+        scope: {"type": "string", "description": "host_input 或 docker_published；Docker 转发路径尚不能编译"}
+        family: {"type": "string", "description": "ipv4、ipv6 或 both；非空来源须覆盖所选地址族"}
+        protocol: {"type": "string", "description": "tcp 或 udp"}
+        ports: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallPortRange"}, "minItems": 1, "maxItems": 16}
+        sources: {"type": "array", "items": {"type": "string", "maxLength": 64}, "maxItems": 32, "description": "IP 或网络起点 CIDR；空数组表示任意来源；规范化后不得重复"}
+        action: {"type": "string", "description": "allow、deny 或 reject"}
+        priority: {"type": "integer", "minimum": 0, "maximum": 1000000}
+        interface: {"type": "string", "maxLength": 15, "description": "目标入站接口；空字符串表示任意接口"}
+        comment: {"type": "string", "maxLength": 512}
+    FirewallPolicy:
+      type: object
+      additionalProperties: false
+      required: ["backend", "rules"]
+      properties:
+        backend: {"type": "string", "description": "目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；当前仅编译 direct-nftables"}
+        rules: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallRule"}, "maxItems": 1000}
+    FirewallPolicyView:
+      type: object
+      additionalProperties: false
+      required: ["version", "policy", "updated_at"]
+      properties:
+        version: {"type": "integer", "format": "int64"}
+        policy: {"$ref": "#/components/schemas/FirewallPolicy"}
+        updated_at: {"type": "integer", "format": "int64"}
+    FirewallPolicyInput:
+      type: object
+      additionalProperties: false
+      required: ["base_version", "policy"]
+      properties:
+        base_version: {"type": "integer", "format": "int64"}
+        policy: {"$ref": "#/components/schemas/FirewallPolicy"}
+    FirewallPreviewInput:
+      type: object
+      additionalProperties: false
+      required: ["version"]
+      properties:
+        version: {"type": "integer", "format": "int64"}
+    FirewallPreviewEntry:
+      type: object
+      additionalProperties: false
+      required: ["rule_id", "family", "protocol", "source", "ports", "action", "interface", "priority"]
+      properties:
+        rule_id: {"type": "string"}
+        family: {"type": "string"}
+        protocol: {"type": "string"}
+        source: {"type": "string"}
+        ports: {"$ref": "#/components/schemas/FirewallPortRange"}
+        action: {"type": "string"}
+        interface: {"type": "string"}
+        priority: {"type": "integer"}
+    FirewallPreview:
+      type: object
+      additionalProperties: false
+      required: ["version", "policy_hash", "backend", "compiled", "can_apply", "table", "chain", "hook", "priority", "default_policy", "logical_rules", "generated_rules", "program_hash", "entries", "truncated", "observed_at", "errors", "warnings"]
+      properties:
+        version: {"type": "integer", "format": "int64"}
+        policy_hash: {"type": "string"}
+        backend: {"type": "string"}
+        compiled: {"type": "boolean"}
+        can_apply: {"type": "boolean"}
+        table: {"type": "string"}
+        chain: {"type": "string"}
+        hook: {"type": "string"}
+        priority: {"type": "integer"}
+        default_policy: {"type": "string"}
+        logical_rules: {"type": "integer"}
+        generated_rules: {"type": "integer"}
+        program_hash: {"type": "string"}
+        entries: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallPreviewEntry"}, "maxItems": 128}
+        truncated: {"type": "boolean"}
+        observed_at: {"type": "integer", "format": "int64"}
+        errors: {"type": "array", "items": {"type": "string"}}
+        warnings: {"type": "array", "items": {"type": "string"}}

@@ -4,6 +4,8 @@
  */
 
 export interface paths {
+    "/firewall/policy": { get: operations["getFirewallPolicy"]; put: operations["setFirewallPolicy"]; };
+    "/firewall/preview": { post: operations["previewFirewall"]; };
     "/firewall": { get: operations["getFirewall"]; };
     "/backups": { get: operations["listBackups"]; post: operations["createBackup"]; };
     "/backups/policy": { get: operations["getBackupPolicy"]; put: operations["setBackupPolicy"]; };
@@ -1710,7 +1712,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        FirewallObservation: { at: number; source: string; scope: string; available: boolean; writable: boolean; manager: string; backend: string; reason: string; firewalld: components["schemas"]["FirewallFirewalld"]; ufw: components["schemas"]["FirewallUFW"]; iptables: components["schemas"]["FirewallIptables"][]; rulesets: components["schemas"]["FirewallRuleset"][]; docker: components["schemas"]["FirewallDocker"]; warnings: string[]; };
+        FirewallPortRange: { from: number; to: number; };
+        FirewallRule: { id: string; name: string; enabled: boolean; scope: string; family: string; protocol: string; ports: components["schemas"]["FirewallPortRange"][]; sources: string[]; action: string; priority: number; interface: string; comment: string; };
+        FirewallPolicy: { backend: string; rules: components["schemas"]["FirewallRule"][]; };
+        FirewallPolicyView: { version: number; policy: components["schemas"]["FirewallPolicy"]; updated_at: number; };
+        FirewallPolicyInput: { base_version: number; policy: components["schemas"]["FirewallPolicy"]; };
+        FirewallPreviewInput: { version: number; };
+        FirewallPreviewEntry: { rule_id: string; family: string; protocol: string; source: string; ports: components["schemas"]["FirewallPortRange"]; action: string; interface: string; priority: number; };
+        FirewallPreview: { version: number; policy_hash: string; backend: string; compiled: boolean; can_apply: boolean; table: string; chain: string; hook: string; priority: number; default_policy: string; logical_rules: number; generated_rules: number; program_hash: string; entries: components["schemas"]["FirewallPreviewEntry"][]; truncated: boolean; observed_at: number; errors: string[]; warnings: string[]; };
+        FirewallObservation: { interfaces: string[]; at: number; source: string; scope: string; available: boolean; writable: boolean; manager: string; backend: string; reason: string; firewalld: components["schemas"]["FirewallFirewalld"]; ufw: components["schemas"]["FirewallUFW"]; iptables: components["schemas"]["FirewallIptables"][]; rulesets: components["schemas"]["FirewallRuleset"][]; docker: components["schemas"]["FirewallDocker"]; warnings: string[]; };
         FirewallFirewalld: { running: boolean | null; configured_backend: string; default_zone: string; panic: boolean | null; zones: components["schemas"]["FirewallZone"][]; reason: string; };
         FirewallZone: { name: string; interfaces: string[]; sources: string[]; };
         FirewallUFW: { installed: boolean; enabled: boolean | null; active: boolean | null; reason: string; };
@@ -3396,6 +3406,9 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getFirewallPolicy: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    setFirewallPolicy: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallPolicyInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    previewFirewall: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallPreviewInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getFirewall: {
         parameters: { query?: never; header?: never; path?: never; cookie?: never; };
         requestBody?: never;

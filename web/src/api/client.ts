@@ -53,6 +53,11 @@ export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
 export type FirewallObservation = components["schemas"]["FirewallObservation"];
+export type FirewallRule = components["schemas"]["FirewallRule"];
+export type FirewallPolicy = components["schemas"]["FirewallPolicy"];
+export type FirewallPolicyView = components["schemas"]["FirewallPolicyView"];
+export type FirewallPolicyInput = components["schemas"]["FirewallPolicyInput"];
+export type FirewallPreview = components["schemas"]["FirewallPreview"];
 export type HostDNSPlan = components["schemas"]["HostDNSPlan"];
 export type HostDNSPlanInput = components["schemas"]["HostDNSPlanInput"];
 export type HostDNSChange = components["schemas"]["HostDNSChange"];
@@ -518,6 +523,12 @@ function createAPI(scope: RequestScope) {
     request<HostDNSOverview>({ url: "/host/dns", signal }),
   firewall: (signal?: AbortSignal) =>
     request<FirewallObservation>({ url: "/firewall", signal }),
+  firewallPolicy: (signal?: AbortSignal) =>
+    request<FirewallPolicyView>({ url: "/firewall/policy", signal }),
+  saveFirewallPolicy: (data: FirewallPolicyInput, key: string) =>
+    request<FirewallPolicyView>({ url: "/firewall/policy", method: "PUT", data, headers: { "Idempotency-Key": key } }),
+  previewFirewall: (version: number, signal?: AbortSignal) =>
+    request<FirewallPreview>({ url: "/firewall/preview", method: "POST", data: { version }, signal }),
   planHostDNS: (data: HostDNSPlanInput, key: string) =>
     request<HostDNSPlan>({
       url: "/host/dns/plan",

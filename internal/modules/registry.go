@@ -20,7 +20,7 @@ type Definition struct {
 
 var definitions = []Definition{
 	{ID: "nginx-config", Name: "Nginx 配置", Available: true, Enabled: true, Dependencies: []string{}},
-	{ID: "firewall", Name: "防火墙", Dependencies: []string{}, Reason: "当前仅提供宿主机防火墙诊断，规则应用与独立恢复尚未接入"},
+	{ID: "firewall", Name: "防火墙", Dependencies: []string{}, Reason: "当前可诊断、保存期望策略及编译预览，规则应用与独立恢复尚未接入"},
 	{ID: "host-dns", Name: "主机 DNS", Available: true, Dependencies: []string{}},
 	{ID: "monitoring", Name: "基础监控", Available: true, Dependencies: []string{}},
 	{ID: "fail2ban", Name: "Fail2ban", Dependencies: []string{"firewall"}, Reason: "当前版本暂不提供 Fail2ban 管理"},

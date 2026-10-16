@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -77,6 +79,14 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 		return out
 	}
 	out.Available = true
+	if interfaces, e := net.Interfaces(); e == nil && len(interfaces) <= 512 {
+		for _, item := range interfaces {
+			out.Interfaces = append(out.Interfaces, item.Name)
+		}
+		sort.Strings(out.Interfaces)
+	} else {
+		out.Warnings = append(out.Warnings, "目标接口清单无法在预算内读取")
+	}
 	out.Rulesets = make([]firewall.Ruleset, 5)
 	out.Iptables = make([]firewall.Iptables, 2)
 	var wg sync.WaitGroup

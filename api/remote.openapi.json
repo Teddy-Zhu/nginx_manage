@@ -4605,6 +4605,129 @@
         "x-body-limit": 4194304,
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/firewall/policy": {
+      "get": {
+        "operationId": "remoteGetFirewallPolicy",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFirewallPolicy",
+        "x-forward-path": "/firewall/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "put": {
+        "operationId": "remoteSetFirewallPolicy",
+        "x-scopes": [
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/FirewallPolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setFirewallPolicy",
+        "x-forward-path": "/firewall/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 266240,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/firewall/preview": {
+      "post": {
+        "operationId": "remotePreviewFirewall",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "previewFirewall",
+        "x-forward-path": "/firewall/preview",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/FirewallPreviewInput"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "security": [

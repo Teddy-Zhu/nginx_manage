@@ -108,6 +108,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/firewall-rules': RouteRecordInfo<
+      '/firewall-rules',
+      '/firewall-rules',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/host-dns': RouteRecordInfo<
       '/host-dns',
       '/host-dns',
@@ -316,6 +323,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/firewall.vue': {
       routes:
         | '/firewall'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/firewall-rules.vue': {
+      routes:
+        | '/firewall-rules'
       views:
         | never
       pathParamNames:

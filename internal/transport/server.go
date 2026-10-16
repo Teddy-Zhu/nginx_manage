@@ -13,6 +13,7 @@ import (
 	"nginxpanel/internal/backup"
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/migration"
@@ -40,6 +41,7 @@ type Server struct {
 	Monitoring    *monitoring.Service
 	Notifications *notifications.Service
 	HostDNS       *hostdns.Service
+	Firewall      *firewall.Service
 	Components    *components.Service
 	Installations *nginxinstall.Service
 	Updates       *panelupdates.Service

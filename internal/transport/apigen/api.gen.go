@@ -1590,20 +1590,21 @@ type FileDifferenceStatus string
 
 // FirewallObservation defines model for FirewallObservation.
 type FirewallObservation struct {
-	At        int64              `json:"at"`
-	Source    string             `json:"source"`
-	Scope     string             `json:"scope"`
-	Available bool               `json:"available"`
-	Writable  bool               `json:"writable"`
-	Manager   string             `json:"manager"`
-	Backend   string             `json:"backend"`
-	Reason    string             `json:"reason"`
-	Firewalld FirewallFirewalld  `json:"firewalld"`
-	Ufw       FirewallUFW        `json:"ufw"`
-	Iptables  []FirewallIptables `json:"iptables"`
-	Rulesets  []FirewallRuleset  `json:"rulesets"`
-	Docker    FirewallDocker     `json:"docker"`
-	Warnings  []string           `json:"warnings"`
+	At         int64              `json:"at"`
+	Source     string             `json:"source"`
+	Scope      string             `json:"scope"`
+	Available  bool               `json:"available"`
+	Writable   bool               `json:"writable"`
+	Manager    string             `json:"manager"`
+	Backend    string             `json:"backend"`
+	Reason     string             `json:"reason"`
+	Firewalld  FirewallFirewalld  `json:"firewalld"`
+	Ufw        FirewallUFW        `json:"ufw"`
+	Iptables   []FirewallIptables `json:"iptables"`
+	Rulesets   []FirewallRuleset  `json:"rulesets"`
+	Docker     FirewallDocker     `json:"docker"`
+	Warnings   []string           `json:"warnings"`
+	Interfaces []string           `json:"interfaces"`
 }
 
 // FirewallFirewalld defines model for FirewallFirewalld.
@@ -1674,6 +1675,98 @@ type FirewallDocker struct {
 	Writable    bool     `json:"writable"`
 	Reason      string   `json:"reason"`
 }
+
+// FirewallPortRange defines model for FirewallPortRange.
+type FirewallPortRange struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
+// FirewallRule defines model for FirewallRule.
+type FirewallRule struct {
+	Id        string              `json:"id"`
+	Name      string              `json:"name"`
+	Enabled   bool                `json:"enabled"`
+	Scope     string              `json:"scope"`
+	Family    string              `json:"family"`
+	Protocol  string              `json:"protocol"`
+	Ports     []FirewallPortRange `json:"ports"`
+	Sources   []string            `json:"sources"`
+	Action    string              `json:"action"`
+	Priority  int                 `json:"priority"`
+	Interface string              `json:"interface"`
+	Comment   string              `json:"comment"`
+}
+
+// FirewallPolicy defines model for FirewallPolicy.
+type FirewallPolicy struct {
+	Backend string         `json:"backend"`
+	Rules   []FirewallRule `json:"rules"`
+}
+
+// FirewallPolicyView defines model for FirewallPolicyView.
+type FirewallPolicyView struct {
+	Version   int64          `json:"version"`
+	Policy    FirewallPolicy `json:"policy"`
+	UpdatedAt int64          `json:"updated_at"`
+}
+
+// FirewallPolicyInput defines model for FirewallPolicyInput.
+type FirewallPolicyInput struct {
+	BaseVersion int64          `json:"base_version"`
+	Policy      FirewallPolicy `json:"policy"`
+}
+
+// FirewallPreviewInput defines model for FirewallPreviewInput.
+type FirewallPreviewInput struct {
+	Version int64 `json:"version"`
+}
+
+// FirewallPreviewEntry defines model for FirewallPreviewEntry.
+type FirewallPreviewEntry struct {
+	RuleId    string            `json:"rule_id"`
+	Family    string            `json:"family"`
+	Protocol  string            `json:"protocol"`
+	Source    string            `json:"source"`
+	Ports     FirewallPortRange `json:"ports"`
+	Action    string            `json:"action"`
+	Interface string            `json:"interface"`
+	Priority  int               `json:"priority"`
+}
+
+// FirewallPreview defines model for FirewallPreview.
+type FirewallPreview struct {
+	Version        int64                  `json:"version"`
+	PolicyHash     string                 `json:"policy_hash"`
+	Backend        string                 `json:"backend"`
+	Compiled       bool                   `json:"compiled"`
+	CanApply       bool                   `json:"can_apply"`
+	Table          string                 `json:"table"`
+	Chain          string                 `json:"chain"`
+	Hook           string                 `json:"hook"`
+	Priority       int                    `json:"priority"`
+	DefaultPolicy  string                 `json:"default_policy"`
+	LogicalRules   int                    `json:"logical_rules"`
+	GeneratedRules int                    `json:"generated_rules"`
+	ProgramHash    string                 `json:"program_hash"`
+	Entries        []FirewallPreviewEntry `json:"entries"`
+	Truncated      bool                   `json:"truncated"`
+	ObservedAt     int64                  `json:"observed_at"`
+	Errors         []string               `json:"errors"`
+	Warnings       []string               `json:"warnings"`
+}
+
+type SetFirewallPolicyParams struct {
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+type PreviewFirewallParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+type SetFirewallPolicyJSONBody = FirewallPolicyInput
+type SetFirewallPolicyJSONRequestBody = FirewallPolicyInput
+type PreviewFirewallJSONBody = FirewallPreviewInput
+type PreviewFirewallJSONRequestBody = FirewallPreviewInput
 
 // HostDNSApplyInput defines model for HostDNSApplyInput.
 type HostDNSApplyInput struct {
@@ -3798,6 +3891,12 @@ type ServerInterface interface {
 
 	// (GET /firewall)
 	GetFirewall(w http.ResponseWriter, r *http.Request)
+	// (GET /firewall/policy)
+	GetFirewallPolicy(w http.ResponseWriter, r *http.Request)
+	// (PUT /firewall/policy)
+	SetFirewallPolicy(w http.ResponseWriter, r *http.Request, params SetFirewallPolicyParams)
+	// (POST /firewall/preview)
+	PreviewFirewall(w http.ResponseWriter, r *http.Request, params PreviewFirewallParams)
 
 	// (GET /host/dns)
 	GetHostDNS(w http.ResponseWriter, r *http.Request)
@@ -6276,6 +6375,44 @@ func (siw *ServerInterfaceWrapper) GetFirewall(w http.ResponseWriter, r *http.Re
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFirewall(w, r)
 	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+
+func (siw *ServerInterfaceWrapper) GetFirewallPolicy(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFirewallPolicy(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) SetFirewallPolicy(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := SetFirewallPolicyParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.SetFirewallPolicy(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) PreviewFirewall(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := PreviewFirewallParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.PreviewFirewall(w, r, params) }))
 	for _, middleware := range siw.HandlerMiddlewares {
 		handler = middleware(handler)
 	}
@@ -10171,6 +10308,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/deliveries", wrapper.ListNotificationDeliveries)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/notifications/deliveries/{id}/retry", wrapper.RetryNotificationDelivery)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall", wrapper.GetFirewall)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/policy", wrapper.GetFirewallPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/firewall/policy", wrapper.SetFirewallPolicy)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/preview", wrapper.PreviewFirewall)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/host/dns", wrapper.GetHostDNS)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/plan", wrapper.CreateHostDNSPlan)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/host/dns/apply", wrapper.ApplyHostDNS)

@@ -42,7 +42,7 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 		return Package{}, err
 	}
 	payload := Payload{Files: tree.Files, Certificates: []Certificate{}, Credentials: []Credential{}, Channels: []notifications.TransferChannel{}, Automation: acme.TransferAutomation{Accounts: []acme.TransferAccount{}, Profiles: []acme.TransferProfile{}}}
-	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS、监控设置、模块开关及日志轮转所有者保留", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
+	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS、监控设置、模块开关及日志轮转所有者保留", "目标防火墙期望策略与内核运行规则保留，本次不迁移", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
 	parsed, err := nginxconfig.Parse(tree.Files, s.Config.Policy)
 	if err != nil {
 		return Package{}, err
