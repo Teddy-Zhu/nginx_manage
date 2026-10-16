@@ -92,7 +92,10 @@ func fail2banManagedStopped(ctx context.Context) error {
 	}
 	return errors.New("独立服务停止状态缺失")
 }
-func InstallFail2ban(ctx context.Context, in Fail2banInstallOptions) (out fail2ban.Managed, resultErr error) {
+func InstallFail2ban(ctx context.Context, in Fail2banInstallOptions) (fail2ban.Managed, error) {
+	return installFail2ban(ctx, in, "")
+}
+func installFail2ban(ctx context.Context, in Fail2banInstallOptions, allowed string) (out fail2ban.Managed, resultErr error) {
 	out = fail2ban.UnknownManaged()
 	if err := fail2banManagedRoot(in.DataDir, in.Scope); err != nil {
 		return out, err
@@ -107,6 +110,9 @@ func InstallFail2ban(ctx context.Context, in Fail2banInstallOptions) (out fail2b
 		return out, err
 	}
 	defer unlock()
+	if err = fail2banManagedIdle(in.DataDir, allowed); err != nil {
+		return out, err
+	}
 	r, err := loadFail2banManaged(in.DataDir)
 	if err != nil {
 		return out, err
@@ -126,6 +132,18 @@ func InstallFail2ban(ctx context.Context, in Fail2banInstallOptions) (out fail2b
 			return out, err
 		}
 	} else {
+		if r != nil {
+			registry, e := loadFail2banNginxRegistry(in.DataDir)
+			if e != nil {
+				return out, e
+			}
+			key := fail2banNginxEngineKey(r.binding())
+			for _, grant := range registry.Grants {
+				if grant.EngineKey == key {
+					return out, errors.New("原安装仍有动作授权，须先完成撤回授权清理")
+				}
+			}
+		}
 		if in.Resume || r != nil && r.OperationID == in.OperationID {
 			return out, errors.New("原安装不存在或已经撤回，不能重建同一操作")
 		}
@@ -247,7 +265,10 @@ func CheckFail2banManaged(ctx context.Context, data, scope string) (fail2ban.Man
 
 // ManageFail2banManaged only controls the dedicated unit admitted above. It
 // cannot stop, enable, adopt or replace a system Fail2ban service.
-func ManageFail2banManaged(ctx context.Context, data, scope, action string) (out fail2ban.Managed, resultErr error) {
+func ManageFail2banManaged(ctx context.Context, data, scope, action string) (fail2ban.Managed, error) {
+	return manageFail2banManaged(ctx, data, scope, action, "")
+}
+func manageFail2banManaged(ctx context.Context, data, scope, action, allowed string) (out fail2ban.Managed, resultErr error) {
 	out = fail2ban.UnknownManaged()
 	if err := fail2banManagedRoot(data, scope); err != nil {
 		return out, err
@@ -263,16 +284,8 @@ func ManageFail2banManaged(ctx context.Context, data, scope, action string) (out
 		return out, err
 	}
 	defer unlock()
-	// Keep an interrupted jail operation's original running state until its
-	// compensation is confirmed. The worker uses this same installation lock.
-	records, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).List()
-	if err != nil {
+	if err = fail2banManagedIdle(data, allowed); err != nil {
 		return out, err
-	}
-	for _, record := range records {
-		if (record.Kind == fail2banJailsKind || record.Kind == fail2banAddressKind) && pendingNginxRecord(record) {
-			return out, errors.New("Fail2ban 操作尚未结束，暂不能控制实例服务")
-		}
 	}
 	r, err := loadFail2banManaged(data)
 	if err != nil {

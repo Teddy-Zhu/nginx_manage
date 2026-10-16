@@ -207,3 +207,6 @@ Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝
 
 
 受管地址的公开合同新增 `GET /fail2ban/addresses/status`、`POST /fail2ban/addresses`、`GET /fail2ban/addresses/tasks` 及显式远程资源。输入限定本应用 nginx-client jail、单个规范数值 IP、ban/unban 与本次 target；提交要求 security.write、近期认证、幂等和模块启用。root 固定官方客户端参数，派发前持久标记，结果不明只观察原操作，拒绝自动重发或逆向补偿；已封禁 ban 不续期，unban 同时清除所选 jail 的持久记录。本机/忽略/代理地址禁止 ban。引擎当前状态、客户端回执和 Nginx 受管集合运行代次独立返回，其他 jail 可继续拒绝同一地址。共享加密任务材料、审计、恢复隔离和容量上限；手动操作不进入业务迁移。Agent 为 45，数据库仍为 26、归档 schema 为 5；单 jail 诊断 writable=false 不充当写入授权。声明与页面已接入，未执行生成器或运行验证，待 P5；详见 [Fail2ban](fail2ban.md)。
+
+
+Fail2ban 独立实例新增 `POST /fail2ban/lifecycle/preview`、`POST /fail2ban/lifecycle` 与 `GET /fail2ban/lifecycle/tasks` 及对应显式远程资源。install 仅使用已准备的单个签名资产并注册服务，不启动或开机启用；resume/rollback/start/stop/enable/disable 固定当前实例。`x-action-scopes` 明确 install 的 components.manage、服务控制的 security.write、续办/撤回的两者；预览另需 read，写入要求近期认证及幂等。预览冻结安装/依赖/服务代次与开机设置/jail/动作授权，后台复用原本机执行器，派发后不自动重放；启动意图受管理开关约束，停用/撤回可明确处理保留保护。撤回只清理该安装授权，CAS 不覆盖外部变化，Nginx 集合独立确认。独立 root 协调器纳入维护和共享操作互斥，任务/审计/加密快照/备份隔离已接入，页面继续自动扫描。Agent 为 46、数据库为 26、归档为 5；未运行项目生成器或运行验证，待 P5。详见 [Fail2ban](fail2ban.md)。

@@ -5280,6 +5280,179 @@
         ],
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/fail2ban/lifecycle/preview": {
+      "post": {
+        "operationId": "remotePreviewFail2banLifecycle",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "previewFail2banLifecycle",
+        "x-forward-path": "/fail2ban/lifecycle/preview",
+        "x-response-kind": "json",
+        "x-body-limit": 2048,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banLifecyclePreviewInput"
+              }
+            }
+          }
+        },
+        "x-action-scopes": {
+          "install": [
+            "components.manage"
+          ],
+          "resume": [
+            "components.manage",
+            "security.write"
+          ],
+          "rollback": [
+            "components.manage",
+            "security.write"
+          ],
+          "start": [
+            "security.write"
+          ],
+          "stop": [
+            "security.write"
+          ],
+          "enable": [
+            "security.write"
+          ],
+          "disable": [
+            "security.write"
+          ]
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/lifecycle": {
+      "post": {
+        "operationId": "remoteChangeFail2banLifecycle",
+        "x-scopes": [],
+        "responses": {
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "changeFail2banLifecycle",
+        "x-forward-path": "/fail2ban/lifecycle",
+        "x-response-kind": "json",
+        "x-body-limit": 2048,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banLifecycleInput"
+              }
+            }
+          }
+        },
+        "x-action-scopes": {
+          "install": [
+            "components.manage"
+          ],
+          "resume": [
+            "components.manage",
+            "security.write"
+          ],
+          "rollback": [
+            "components.manage",
+            "security.write"
+          ],
+          "start": [
+            "security.write"
+          ],
+          "stop": [
+            "security.write"
+          ],
+          "enable": [
+            "security.write"
+          ],
+          "disable": [
+            "security.write"
+          ]
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/lifecycle/tasks": {
+      "get": {
+        "operationId": "remoteGetFail2banLifecycleTasks",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banLifecycleTasks",
+        "x-forward-path": "/fail2ban/lifecycle/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
     }
   },
   "security": [

@@ -158,7 +158,7 @@ nginxpanel fail2ban-nginx-jails-status --data-dir /var/lib/nginxpanel --fail2ban
 
 配置包及备份树位于安装 UUID 下的 `jail-bundles/`、`jail-configs/`，`jail-current.json` 指向所选包，`jail-identities/` 保留身份约束；以上均为 root 私有、禁止迁移的运行材料。单策略最多 32 项、64 KiB，配置包最多 256 KiB；原封禁时间证明独立存储，最多 4 MiB、每 jail 1024 个地址，journal 仅保存其摘要。
 
-当前 Agent 为 44，策略为 nginxpanel-8，数据库为 26、迁移 schema 为 4。实现及源码集成审阅完成；生成器、构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收均未执行，统一留待 P5。P5 还须核对目录交换/掉电恢复、官方 reload 与状态库的剩余封禁时间、动作回调无死锁、服务停止及维护衔接。手动封禁/解封、历史、公开安装/服务控制及其他动作后端仍待接通。
+当前 Agent 为 44，策略为 nginxpanel-8，数据库为 26、迁移 schema 为 4。实现及源码集成审阅完成；生成器、构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收均未执行，统一留待 P5。P5 还须核对目录交换/掉电恢复、官方 reload 与状态库的剩余封禁时间、动作回调无死锁、服务停止及维护衔接。手动封禁/解封、历史、网页/API 安装与独立服务控制已接入，其他动作后端继续实施。
 
 ## 网页与 API 的受管 jail 应用
 
@@ -184,3 +184,18 @@ root 在固定官方客户端调用前持久记录已派发；进程中断、超
 `GET /fail2ban/addresses/tasks` 返回最近 16 条手动任务及加密保存的引擎观测快照，Agent 暂离线仍可读取已有快照；不是自动封禁全历史。任务成功只表示所选 jail 的当前引擎状态已证明，Nginx 动作仍由原周期对账执行并独立查询：多个 jail 合并后，其他 jail 可使同一地址继续处于拒绝集合，集合未包含地址也不证明其他保护放行。公开接口及显式远程转发均使用统一 JSON；页面沿用自动扫描，不增加路由数组。
 
 完整备份中的隔离任务不重放，业务迁移不导出手动记录或运行封禁。当前 Agent 协议为 45，数据库仍为 26、迁移 schema 仍为 5。实现与源码接入审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、官方程序或真实服务，统一留待 P5。运行验收需覆盖派发前后中断/回执未知、已封禁不续期、未列出地址的持久解封、保护地址、目标漂移、任务审计/备份隔离、跨 jail 合并及 Nginx 集合独立确认。
+
+
+## 网页与 API 的安装及独立服务控制
+
+`POST /fail2ban/lifecycle/preview` 接收 `action/plan_id/asset_id/prerelease`，返回影响清单、受管 jail/动作授权范围、安装及服务快照和冻结后的 `input`。`action` 为 install/resume/rollback/start/stop/enable/disable；除 install 选择单个已经准备的签名 Fail2ban 资产外，其他操作的源选择字段必须为空。安装沿用组件页的检查/准备结果、固定发行信任和本机 Python 核对，不接受用户路径、服务名、Socket、命令或 pip。缺失 Python 时显示诊断与原因，不假装已安装系统依赖。
+
+权限按动作明确检查：install 要求 `components.manage`；start/stop/enable/disable 要求 `security.write`；resume/rollback 要求两者。预览另需 `read`，写操作要求近期认证和幂等键，OpenAPI 与显式远程合同用 `x-action-scopes` 逐项声明，转发不扩大调用者范围。`POST /fail2ban/lifecycle` 提交预览返回的完整 `input`，HTTP 202 返回持久任务；`GET /fail2ban/lifecycle/tasks` 返回最近 16 条任务及保存的结果快照。资料、任务、幂等响应与排队审计同事务提交，沿用模块操作共享的 256 份容量及备份隔离规则。
+
+首次安装只注册独立服务及私有配置/状态目录，不启动、不设开机启用。启动和开机启用分别预览、确认；start/enable 以及原安装意图包含启动或开机启用的 resume 要求 Fail2ban 管理模块启用。stop/disable/rollback 可在关闭管理模块后明确执行；模块开关本身仍不停止服务。续办固定原资产、解释器和原 Start/Enable 意图，后两项在预览中明确显示；不借续办替换新版本。已有系统实例仍只读接入，不由这些入口停止或接管。
+
+root 协调器在 Agent 中独立运行，可用于未配置专用 Nginx 的宿主机；宿主机、维护及组件范围按操作核对。与已有 Nginx 执行、jail 配置、手动封禁、维护和本机服务操作互斥。预览摘要固定安装事件、Python/代码/管理程序身份、服务 PID/运行代次/开机设置、所选 jail 和动作授权；提交与执行前重新核对，漂移必须重新预览。首次排队超过五分钟未派发会过期，派发前持久标记；Agent 中断后只观察原操作，不重放安装或服务控制，也不自动执行相反动作。服务仍在 activating/deactivating/reloading 或存在排队中的 systemd 作业时继续观察，状态无法读取时保留恢复阻塞；不以调用超时或稳定的 ActiveState 推定服务作业已经停止。作业字段按 [systemd v249 的 systemctl 实现](https://github.com/systemd/systemd/blob/v249/src/systemctl/systemctl-show.c#L1011) 读取：无作业为空，有作业为 uint32 编号。服务稳定且原操作仍未确认时先看实际快照，再显式预览续办、撤回或服务操作。
+
+结果核对安装收据、实际服务/开机状态以及必要的官方引擎存活证明，不把 systemctl 成功等同于 jail 或 Nginx 动作生效。API 撤回先证明专用服务已移除，再以冻结前后快照和 CAS 仅撤销该安装的 Nginx 动作授权，保留其他来源授权、签名组件、配置、状态库和审计；外部变化不覆盖，结果不明须复核。集合清理由原 Nginx 对账单独完成，不宣称任务成功即所有流量已经放行。未完成的撤回可重新明确提交，残留原授权阻止直接重建新实例。本机紧急撤回保留原动作授权，须本机逐项撤销或通过 API 完成撤回清理。
+
+页面继续自动扫描现有 `/fail2ban`，按权限选择资产和操作、展示影响并确认，未知提交仅继续原幂等请求，安装/服务快照均标注时间。当前 Agent 为 46，数据库为 26、迁移 schema 为 5。实现与源码集成审阅完成；未运行项目生成器、构建、类型检查、lint、测试、浏览器、Python/Fail2ban、systemd 或真实安装，统一留待 P5。集中验收需覆盖动作权限及远程交集、模块停用边界、签名/Python/配置/服务漂移、首次安装与原意图续办、服务启动/停止/开机状态、派发前后中断、撤回授权 CAS 及重建、维护/备份隔离、Nginx 独立对账和容量。

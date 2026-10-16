@@ -210,6 +210,12 @@ func (s *Server) Run(ctx context.Context) error {
 	s.fail2banHandlers(mux, ctx)
 	s.fail2banJailsHandlers(mux)
 	s.fail2banAddressHandlers(mux)
+	lifecycle := &fail2banLifecycle{server: s, gate: rootMaintenance}
+	lifecycle.handlers(mux)
+	lifecycleCtx, stopLifecycle := context.WithCancel(ctx)
+	lifecycleDone := make(chan struct{})
+	go func() { defer close(lifecycleDone); lifecycle.run(lifecycleCtx) }()
+	defer func() { stopLifecycle(); <-lifecycleDone }()
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		report := platform.Detect()
 		report.Source = "host-agent"

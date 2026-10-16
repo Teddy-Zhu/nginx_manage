@@ -12,6 +12,30 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/lifecycle/preview:
+    post:
+      operationId: previewFail2banLifecycle
+      x-scopes: [read]
+      x-action-scopes: {"install": ["components.manage"], "resume": ["components.manage", "security.write"], "rollback": ["components.manage", "security.write"], "start": ["security.write"], "stop": ["security.write"], "enable": ["security.write"], "disable": ["security.write"]}
+      description: 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。仅预览本应用的独立实例，冻结实际服务、安装、配置和签名资产基准并显示影响，不执行安装或服务控制。
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banLifecyclePreviewInput'}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/lifecycle:
+    post:
+      operationId: changeFail2banLifecycle
+      x-scopes: []
+      x-action-scopes: {"install": ["components.manage"], "resume": ["components.manage", "security.write"], "rollback": ["components.manage", "security.write"], "start": ["security.write"], "stop": ["security.write"], "enable": ["security.write"], "disable": ["security.write"]}
+      description: 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；start/enable 和原安装包含启动或开机启用的 resume 要求模块启用。stop/disable/rollback 可在管理停用后显式处理已有保护。派发后中断不自动重放，须核对并重新预览续办或撤回；不控制系统全局实例。
+      parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banLifecycleInput'}}}}
+      responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/lifecycle/tasks:
+    get:
+      operationId: getFail2banLifecycleTasks
+      x-scopes: [read]
+      description: 返回最近 16 条 Fail2banLifecycleTaskStatus，包含该次执行器回执和服务/安装结果快照；不是持续的服务健康保证。完整备份隔离任务不重放。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/addresses/status:
     get:
       operationId: getFail2banAddress
@@ -1858,6 +1882,18 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["id", "state", "stage", "before_id", "after_id", "request_hash", "target", "error"], "properties": {"id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "before_id": {"type": "string"}, "after_id": {"type": "string"}, "request_hash": {"type": "string"}, "target": {"type": "string"}, "error": {"type": "string"}}}
     Fail2banJailsRuntime:
       {"type": "object", "additionalProperties": false, "required": ["available", "target", "selected_id", "policy", "resources", "pending", "reason"], "properties": {"available": {"type": "boolean"}, "target": {"type": "string"}, "selected_id": {"type": "string"}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}, "resources": {"type": "array", "items": {"type": "string"}}, "pending": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailsOperation"}}, "reason": {"type": "string"}}}
+    Fail2banLifecyclePreviewInput:
+      {"type": "object", "additionalProperties": false, "required": ["action", "plan_id", "asset_id", "prerelease"], "properties": {"action": {"type": "string", "enum": ["install", "resume", "rollback", "start", "stop", "enable", "disable"]}, "plan_id": {"type": "string", "maxLength": 64}, "asset_id": {"type": "string", "maxLength": 128}, "prerelease": {"type": "boolean"}}}
+    Fail2banLifecycleInput:
+      {"type": "object", "additionalProperties": false, "required": ["action", "plan_id", "asset_id", "prerelease", "base_id", "target", "start", "enable"], "properties": {"action": {"type": "string", "enum": ["install", "resume", "rollback", "start", "stop", "enable", "disable"]}, "plan_id": {"type": "string", "maxLength": 64}, "asset_id": {"type": "string", "maxLength": 128}, "prerelease": {"type": "boolean"}, "base_id": {"type": "string"}, "target": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "start": {"type": "boolean"}, "enable": {"type": "boolean"}}}
+    Fail2banLifecyclePlan:
+      {"type": "object", "additionalProperties": false, "required": ["at", "input", "managed", "service", "jails", "impacts"], "properties": {"at": {"type": "integer", "format": "int64"}, "input": {"$ref": "#/components/schemas/Fail2banLifecycleInput"}, "managed": {"$ref": "#/components/schemas/Fail2banManaged"}, "service": {"$ref": "#/components/schemas/Fail2banService"}, "jails": {"type": "array", "maxItems": 64, "items": {"type": "string"}}, "impacts": {"type": "array", "maxItems": 8, "items": {"type": "string"}}}}
+    Fail2banLifecycleOperation:
+      {"type": "object", "additionalProperties": false, "required": ["id", "request_hash", "input", "state", "stage", "submission", "at", "managed", "service", "error"], "properties": {"id": {"type": "string"}, "request_hash": {"type": "string"}, "input": {"$ref": "#/components/schemas/Fail2banLifecycleInput"}, "state": {"type": "string", "enum": ["running", "recovery_required", "succeeded", "failed"]}, "stage": {"type": "string"}, "submission": {"type": "string", "enum": ["not_sent", "unknown", "acknowledged"]}, "at": {"type": "integer", "format": "int64"}, "managed": {"$ref": "#/components/schemas/Fail2banManaged"}, "service": {"$ref": "#/components/schemas/Fail2banService"}, "error": {"type": "string"}}}
+    Fail2banLifecycleTask:
+      {"type": "object", "additionalProperties": false, "required": ["task_id", "operation_id"], "properties": {"task_id": {"type": "string", "format": "uuid"}, "operation_id": {"type": "string", "format": "uuid"}}}
+    Fail2banLifecycleTaskStatus:
+      {"type": "object", "additionalProperties": false, "required": ["id", "operation_id", "state", "stage", "error", "created_at", "input", "result"], "properties": {"id": {"type": "string"}, "operation_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "input": {"$ref": "#/components/schemas/Fail2banLifecycleInput"}, "result": {"allOf": [{"$ref": "#/components/schemas/Fail2banLifecycleOperation"}], "nullable": true}}}
     Fail2banAddressInput:
       {"type": "object", "additionalProperties": false, "required": ["jail", "ip", "action", "target"], "properties": {"jail": {"type": "string", "maxLength": 64}, "ip": {"type": "string", "maxLength": 45}, "action": {"type": "string", "enum": ["ban", "unban"]}, "target": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
     Fail2banAddressStatus:

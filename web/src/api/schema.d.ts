@@ -4,6 +4,9 @@
  */
 
 export interface paths {
+ "/fail2ban/lifecycle/preview": { post:operations["previewFail2banLifecycle"]; };
+ "/fail2ban/lifecycle": { post:operations["changeFail2banLifecycle"]; };
+ "/fail2ban/lifecycle/tasks": { get:operations["getFail2banLifecycleTasks"]; };
  "/fail2ban/addresses/status": { get: operations["getFail2banAddress"]; };
  "/fail2ban/addresses": { post: operations["changeFail2banAddress"]; };
  "/fail2ban/addresses/tasks": { get: operations["getFail2banAddressTasks"]; };
@@ -1750,6 +1753,12 @@ export interface components {
         Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
         Fail2banJailsOperation: { id:string;state:string;stage:string;before_id:string;after_id:string;request_hash:string;target:string;error:string; };
         Fail2banJailsRuntime: { available:boolean;target:string;selected_id:string;policy:components["schemas"]["Fail2banPolicy"];resources:string[];pending:components["schemas"]["Fail2banJailsOperation"][];reason:string; };
+        Fail2banLifecyclePreviewInput: { action:"install"|"resume"|"rollback"|"start"|"stop"|"enable"|"disable";plan_id:string;asset_id:string;prerelease:boolean; };
+        Fail2banLifecycleInput: components["schemas"]["Fail2banLifecyclePreviewInput"] & { base_id:string;target:string;start:boolean;enable:boolean; };
+        Fail2banLifecyclePlan: { at:number;input:components["schemas"]["Fail2banLifecycleInput"];managed:components["schemas"]["Fail2banManaged"];service:components["schemas"]["Fail2banService"];jails:string[];impacts:string[]; };
+        Fail2banLifecycleOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banLifecycleInput"];state:"running"|"recovery_required"|"succeeded"|"failed";stage:string;submission:"not_sent"|"unknown"|"acknowledged";at:number;managed:components["schemas"]["Fail2banManaged"];service:components["schemas"]["Fail2banService"];error:string; };
+        Fail2banLifecycleTask: { task_id:string;operation_id:string; };
+        Fail2banLifecycleTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banLifecycleInput"];result:components["schemas"]["Fail2banLifecycleOperation"]|null; };
         Fail2banAddressInput: { jail:string;ip:string;action:"ban"|"unban";target:string; };
         Fail2banAddressStatus: { at:number;jail:string;ip:string;available:boolean;target:string;engine_state:"unknown"|"banned"|"clear";expires_at:number;permanent:boolean;ban_time:number;can_ban:boolean;action_state:"unknown"|"denied"|"clear";generation:string;reason:string; };
         Fail2banAddressOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banAddressInput"];state:"running"|"succeeded"|"failed";stage:string;submission:"not_sent"|"not_needed"|"unknown"|"acknowledged";engine_state:"unknown"|"banned"|"clear";observed_at:number;expires_at:number;permanent:boolean;error:string; };
@@ -3502,6 +3511,10 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+ previewFail2banLifecycle: { parameters:{query?:never;header?:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecyclePreviewInput"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ changeFail2banLifecycle: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecycleInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ getFail2banLifecycleTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+
  getFail2banAddress: { parameters:{query:{jail:string;ip:string;};header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  getFail2banAddressTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  changeFail2banAddress: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banAddressInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };

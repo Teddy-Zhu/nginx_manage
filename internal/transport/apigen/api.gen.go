@@ -1951,6 +1951,57 @@ type Fail2banJailsRuntime struct {
 	Pending    []Fail2banJailsOperation `json:"pending"`
 	Reason     string                   `json:"reason"`
 }
+type Fail2banLifecyclePreviewInput struct {
+	Action     string `json:"action"`
+	PlanId     string `json:"plan_id"`
+	AssetId    string `json:"asset_id"`
+	Prerelease bool   `json:"prerelease"`
+}
+type Fail2banLifecycleInput struct {
+	Action     string `json:"action"`
+	PlanId     string `json:"plan_id"`
+	AssetId    string `json:"asset_id"`
+	Prerelease bool   `json:"prerelease"`
+	BaseId     string `json:"base_id"`
+	Target     string `json:"target"`
+	Start      bool   `json:"start"`
+	Enable     bool   `json:"enable"`
+}
+type Fail2banLifecyclePlan struct {
+	At      int64                  `json:"at"`
+	Input   Fail2banLifecycleInput `json:"input"`
+	Managed Fail2banManaged        `json:"managed"`
+	Service Fail2banService        `json:"service"`
+	Jails   []string               `json:"jails"`
+	Impacts []string               `json:"impacts"`
+}
+type Fail2banLifecycleOperation struct {
+	Id          string                 `json:"id"`
+	RequestHash string                 `json:"request_hash"`
+	Input       Fail2banLifecycleInput `json:"input"`
+	State       string                 `json:"state"`
+	Stage       string                 `json:"stage"`
+	Submission  string                 `json:"submission"`
+	At          int64                  `json:"at"`
+	Managed     Fail2banManaged        `json:"managed"`
+	Service     Fail2banService        `json:"service"`
+	Error       string                 `json:"error"`
+}
+type Fail2banLifecycleTask = Fail2banAddressTask
+type Fail2banLifecycleTaskStatus struct {
+	Id          string                      `json:"id"`
+	OperationId string                      `json:"operation_id"`
+	State       string                      `json:"state"`
+	Stage       string                      `json:"stage"`
+	Error       string                      `json:"error"`
+	CreatedAt   int64                       `json:"created_at"`
+	Input       Fail2banLifecycleInput      `json:"input"`
+	Result      *Fail2banLifecycleOperation `json:"result"`
+}
+type PreviewFail2banLifecycleParams = PreviewFail2banParams
+type ChangeFail2banLifecycleParams = SetFail2banPolicyParams
+type PreviewFail2banLifecycleJSONRequestBody = Fail2banLifecyclePreviewInput
+type ChangeFail2banLifecycleJSONRequestBody = Fail2banLifecycleInput
 type Fail2banAddressInput struct {
 	Jail   string `json:"jail"`
 	Ip     string `json:"ip"`
@@ -4290,6 +4341,9 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, params CheckFail2banTemplatesParams)
+	PreviewFail2banLifecycle(w http.ResponseWriter, r *http.Request, params PreviewFail2banLifecycleParams)
+	ChangeFail2banLifecycle(w http.ResponseWriter, r *http.Request, params ChangeFail2banLifecycleParams)
+	GetFail2banLifecycleTasks(w http.ResponseWriter, r *http.Request)
 	GetFail2banAddress(w http.ResponseWriter, r *http.Request, params GetFail2banAddressParams)
 	ChangeFail2banAddress(w http.ResponseWriter, r *http.Request, params ChangeFail2banAddressParams)
 	GetFail2banAddressTasks(w http.ResponseWriter, r *http.Request)
@@ -7027,6 +7081,40 @@ func (siw *ServerInterfaceWrapper) RollbackFirewall(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+func (siw *ServerInterfaceWrapper) PreviewFail2banLifecycle(w http.ResponseWriter, r *http.Request) {
+	var params PreviewFail2banLifecycleParams
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.PreviewFail2banLifecycle(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) ChangeFail2banLifecycle(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := ChangeFail2banLifecycleParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.ChangeFail2banLifecycle(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFail2banLifecycleTasks(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banLifecycleTasks(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
 func (siw *ServerInterfaceWrapper) GetFail2banAddress(w http.ResponseWriter, r *http.Request) {
 	var params GetFail2banAddressParams
 	for _, parameter := range []struct {
@@ -11135,6 +11223,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/confirm", wrapper.ConfirmFirewall)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/rollback", wrapper.RollbackFirewall)
 
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/lifecycle/preview", wrapper.PreviewFail2banLifecycle)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/lifecycle", wrapper.ChangeFail2banLifecycle)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/lifecycle/tasks", wrapper.GetFail2banLifecycleTasks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/addresses/status", wrapper.GetFail2banAddress)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/addresses", wrapper.ChangeFail2banAddress)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/addresses/tasks", wrapper.GetFail2banAddressTasks)

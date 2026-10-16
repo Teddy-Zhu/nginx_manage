@@ -10,6 +10,7 @@
 }
 </route>
 <script setup lang="ts">
+import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
 import Fail2banAddressPanel from "../components/Fail2banAddressPanel.vue";
 import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
 import { computed, h, onMounted, onUnmounted, ref } from "vue";
@@ -209,6 +210,17 @@ onUnmounted(() => {
       <h2>Fail2ban</h2>
       <NButton :loading="reading" @click="load">刷新状态</NButton>
     </div>
+    <Fail2banLifecyclePanel
+      :module-enabled="moduleEnabled === true"
+      :managed="view?.managed ?? null"
+      :service="
+        view?.services.find(
+          (item) => item.id === 'nginxpanel-fail2ban.service',
+        ) ?? null
+      "
+      :observed-at="view?.at ?? 0"
+      @changed="load"
+    />
     <Fail2banPolicyEditor />
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">
