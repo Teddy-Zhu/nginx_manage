@@ -72,7 +72,8 @@ func fail2banToolDirectory(dir string) error {
 	return ErrExternalChange
 }
 
-// All callers supply fixed diagnostic verbs or validated package metadata.
+// Callers supply fixed diagnostic verbs, package metadata or internally created
+// filter/sample paths. No external regular expressions or files are accepted.
 // No caller accepts API tool paths, Python, shell text or control commands.
 func fail2banRun(ctx context.Context, tool fail2ban.Tool, args []string, limit int) ([]byte, error) {
 	if !tool.Trusted || tool.Resolved == "" {

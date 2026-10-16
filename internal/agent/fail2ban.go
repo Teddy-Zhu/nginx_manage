@@ -124,6 +124,7 @@ func (f *fail2banObserver) collect(ctx context.Context) fail2ban.Observation {
 func (s *Server) fail2banHandlers(mux *http.ServeMux, ctx context.Context) {
 	f := &fail2banObserver{ctx: ctx, data: s.DataDir, scope: s.MetricsScope, dev: s.Dev}
 	s.fail2banInstanceHandlers(mux, ctx)
+	s.fail2banTemplateHandlers(mux, ctx)
 	mux.HandleFunc("GET /v1/fail2ban", func(w http.ResponseWriter, r *http.Request) { out, err := f.read(r.Context()); dnsReply(w, out, err) })
 }
 func (c *Client) ReadFail2ban(ctx context.Context) (fail2ban.Observation, error) {

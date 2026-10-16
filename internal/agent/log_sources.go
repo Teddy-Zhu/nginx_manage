@@ -65,7 +65,7 @@ func collectLogSources(p *nginxconfig.Parsed) ([]logSource, error) {
 				if label == "" {
 					label = "Nginx 全局"
 				}
-				source := logSource{Path: name, Source: logs.Source{ID: secure.Hash([]byte(name)), ResourceID: id, Category: category, Label: label + " · " + path.Base(name), Format: format, Sensitive: format == "text", Active: true}}
+				source := logSource{Path: name, Source: logs.Source{ID: secure.Hash([]byte(name)), ResourceID: id, Category: category, Label: label + " · " + path.Base(name), Format: format, AuthPresence: format == "nginxpanel_http", Sensitive: format == "text", Active: true}}
 				if old, ok := found[name]; ok && old.Source.Format != format {
 					return errors.New("one log path uses conflicting formats")
 				}
@@ -112,7 +112,7 @@ func collectLogSources(p *nginxconfig.Parsed) ([]logSource, error) {
 						if old, exists := found[name]; exists && old.Source.Format != "nginxpanel_http" {
 							return nil, errors.New("default access log conflicts with a native log format")
 						}
-						found[name] = logSource{Path: name, Source: logs.Source{ID: secure.Hash([]byte(name)), Category: "global", Label: "Nginx 全局 · access.log", Format: "nginxpanel_http", Active: true}}
+						found[name] = logSource{Path: name, Source: logs.Source{ID: secure.Hash([]byte(name)), Category: "global", Label: "Nginx 全局 · access.log", Format: "nginxpanel_http", AuthPresence: true, Active: true}}
 					}
 				}
 			}
@@ -162,6 +162,9 @@ func validLogSources(sources []logSource) bool {
 			if value.Format != "text" {
 				return false
 			}
+		}
+		if value.AuthPresence && value.Format != "nginxpanel_http" {
+			return false
 		}
 		if value.Category != category || value.Sensitive != (value.Format == "text") || value.Format != "text" && (kind == "stream" && value.Format != "nginxpanel_stream" || kind != "stream" && value.Format != "nginxpanel_http") {
 			return false

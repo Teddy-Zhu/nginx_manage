@@ -156,3 +156,26 @@ func (s *Server) GetFail2banTemplates(w http.ResponseWriter, r *http.Request) {
 	}
 	s.ok(w, r, fail2ban.Templates())
 }
+
+func (s *Server) CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, _ apigen.CheckFail2banTemplatesParams) {
+	ctx, done, ok := s.fail2banReadContext(w, r)
+	if !ok {
+		return
+	}
+	defer done()
+	var in fail2ban.TemplateCheckInput
+	if err := decodeLimit(w, r, &in, 1024); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if s.Agent == nil {
+		s.fail(w, r, fault.Unavailable("未连接宿主机 Agent"))
+		return
+	}
+	out, err := s.Agent.CheckFail2banTemplates(ctx, in)
+	if err != nil {
+		s.fail2banReadError(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}

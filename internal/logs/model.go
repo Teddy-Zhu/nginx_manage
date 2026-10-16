@@ -45,16 +45,17 @@ type PolicyInput struct {
 	Policy      Policy `json:"policy"`
 }
 type Source struct {
-	ID         string `json:"id"`
-	ResourceID string `json:"resource_id"`
-	Category   string `json:"category"`
-	Label      string `json:"label"`
-	Format     string `json:"format"`
-	Sensitive  bool   `json:"sensitive"`
-	Active     bool   `json:"active"`
-	Bytes      int64  `json:"bytes"`
-	Archives   int    `json:"archives"`
-	Reason     string `json:"reason"`
+	AuthPresence bool   `json:"auth_presence"`
+	ID           string `json:"id"`
+	ResourceID   string `json:"resource_id"`
+	Category     string `json:"category"`
+	Label        string `json:"label"`
+	Format       string `json:"format"`
+	Sensitive    bool   `json:"sensitive"`
+	Active       bool   `json:"active"`
+	Bytes        int64  `json:"bytes"`
+	Archives     int    `json:"archives"`
+	Reason       string `json:"reason"`
 }
 type Query struct {
 	SourceID   string `json:"source_id"`

@@ -17,6 +17,7 @@ import (
 
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/limits"
+	"nginxpanel/internal/logs"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
 )
@@ -234,7 +235,7 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 					extras = append(extras, "limit_conn_status")
 				}
 			}
-			controls := "\n" + runtimeLogFormat("http", extras...) + defaults + "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
+			controls := runtimeAuthPresenceMap() + runtimeLogFormat("http", extras...) + defaults + "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
 			if n.Container != nil {
 				for _, kind := range []string{"fastcgi", "uwsgi", "scgi"} {
 					controls += "    " + kind + "_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", kind)) + ";\n"
@@ -321,10 +322,14 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 	return contents, nil
 }
 
+func runtimeAuthPresenceMap() string {
+	return "\n    map $http_authorization $" + logs.HTTPAuthPresent + " {\n        default 1;\n        " + nginxQuote("") + " 0;\n    }\n"
+}
+
 // Format names are reserved by policy. JSON values exclude query strings,
 // request bodies, credentials and Stream payloads.
 func runtimeLogFormat(kind string, extras ...string) string {
-	fields := []string{"time_iso8601", "remote_addr", "host", "request_method", "uri", "status", "body_bytes_sent", "request_time", "upstream_addr", "upstream_status", "upstream_response_time"}
+	fields := logs.HTTPFields()
 	if kind == "stream" {
 		fields = []string{"time_iso8601", "remote_addr", "protocol", "status", "session_time", "bytes_sent", "bytes_received", "upstream_addr", "upstream_connect_time", "upstream_bytes_sent", "upstream_bytes_received"}
 	}

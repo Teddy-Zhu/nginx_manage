@@ -45,18 +45,29 @@ type PolicyInput struct {
 	Policy      Policy `json:"policy"`
 }
 type Template struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Category    string `json:"category"`
-	Format      string `json:"format"`
-	BanTime     int64  `json:"ban_time"`
-	FindTime    int64  `json:"find_time"`
-	MaxRetry    int    `json:"max_retry"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description"`
+	Category      string         `json:"category"`
+	Format        string         `json:"format"`
+	BanTime       int64          `json:"ban_time"`
+	FindTime      int64          `json:"find_time"`
+	MaxRetry      int            `json:"max_retry"`
+	FilterSHA256  string         `json:"filter_sha256"`
+	SamplesSHA256 string         `json:"samples_sha256"`
+	Samples       []FilterSample `json:"samples"`
 }
 
 func Templates() []Template {
-	return []Template{{ID: "nginx-http-401", Name: "Nginx HTTP 401", Description: "统计站点结构化访问日志中的 HTTP 401 响应，包含首次认证挑战；请按实际认证流量设置阈值", Category: "http_access", Format: "nginxpanel_http", BanTime: 600, FindTime: 600, MaxRetry: 10}}
+	out := []Template{
+		{ID: Authorization401Template, Name: "HTTP 认证响应 401", Description: "统计携带 Authorization 后返回的 HTTP 401，排除无认证头的首次挑战；不覆盖仅凭 Cookie 认证的失败", Category: "http_access", Format: "nginxpanel_http", BanTime: 600, FindTime: 600, MaxRetry: 10},
+		{ID: HTTP401Template, Name: "Nginx HTTP 401", Description: "统计站点结构化访问日志中的全部 HTTP 401，包含首次认证挑战；请按实际流量设置阈值", Category: "http_access", Format: "nginxpanel_http", BanTime: 600, FindTime: 600, MaxRetry: 10},
+	}
+	for i := range out {
+		out[i].FilterSHA256, out[i].SamplesSHA256 = FilterIdentity(out[i].ID)
+		out[i].Samples = FilterSamples(out[i].ID)
+	}
+	return out
 }
 func DefaultPolicy() Policy   { return Policy{Jails: []DesiredJail{}} }
 func (p Policy) Hash() string { raw, _ := json.Marshal(p); return secure.Hash(raw) }
@@ -71,7 +82,7 @@ func (p Policy) Normalize() (Policy, error) {
 		if !policyID.MatchString(j.ID) || !policyID.MatchString(j.ResourceID) || ids[j.ID] || j.Name == "" || len(j.Name) > 120 || !utf8.ValidString(j.Name) || strings.IndexFunc(j.Name, unicode.IsControl) >= 0 {
 			return out, fault.Invalid("jail 标识、名称或站点标识无效")
 		}
-		if j.Template != "nginx-http-401" {
+		if !KnownTemplate(j.Template) {
 			return out, fault.Invalid("请选择内置 jail 模板")
 		}
 		if j.Action != "host-input" && j.Action != "docker-forward" && j.Action != "nginx-client" {

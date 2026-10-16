@@ -4,6 +4,7 @@
  */
 
 export interface paths {
+    "/fail2ban/templates/check": { post: operations["checkFail2banTemplates"]; };
     "/fail2ban/policy": { get: operations["getFail2banPolicy"]; put: operations["setFail2banPolicy"]; };
     "/fail2ban/templates": { get: operations["getFail2banTemplates"]; };
     "/fail2ban/preview": { post: operations["previewFail2ban"]; };
@@ -1731,14 +1732,17 @@ export interface components {
         FirewallPlan: { action: "apply" | "remove"; id: string; version: number; policy_hash: string; program_hash: string; baseline: components["schemas"]["FirewallKernelView"]; protections: components["schemas"]["FirewallProtection"][]; ssh_profile: string; ssh_listeners: string[]; listener_version: number; listener: string; control_source: string; confirmation_seconds: number; expires_at: number; transaction_hash: string; transaction_bytes: number; generated_rules: number; };
         FirewallOperation: { action: "apply" | "remove"; id: string; plan_id: string; version: number; policy_hash: string; program_hash: string; state: "running" | "waiting_confirmation" | "compensating" | "recovery_required" | "succeeded" | "rolled_back" | "failed"; stage: string; deadline: number; updated_at: number; confirmed_source: string; verification_scope: string; error: string; };
         FirewallProtectionObservation: { state: "unavailable" | "not_applicable" | "current" | "changed"; plan_id: string; observed_at: number; ssh_profile: string; ssh_listeners: string[]; protections: components["schemas"]["FirewallProtection"][]; reason: string; };
-        Fail2banDesiredJail: { id: string; name: string; enabled: boolean; template: "nginx-http-401"; resource_id: string; action: "host-input" | "docker-forward" | "nginx-client"; ban_time: number; find_time: number; max_retry: number; ignore_ips: string[]; };
+        Fail2banFilterSample: { name: string; line: string; expected_ip: string; };
+        Fail2banTemplateCheckInput: { templates: ("nginx-http-401" | "nginx-authorization-401")[]; };
+        Fail2banTemplateCheck: { template: string; at: number; source: string; scope: string; available: boolean; passed: boolean; filter_sha256: string; samples_sha256: string; tool_path: string; tool_sha256: string; tool_version: string; expected_ips: string[]; matched_ips: string[]; reason: string; };
+        Fail2banDesiredJail: { id: string; name: string; enabled: boolean; template: "nginx-http-401" | "nginx-authorization-401"; resource_id: string; action: "host-input" | "docker-forward" | "nginx-client"; ban_time: number; find_time: number; max_retry: number; ignore_ips: string[]; };
         Fail2banPolicy: { jails: components["schemas"]["Fail2banDesiredJail"][]; };
         Fail2banPolicyView: { version: number; policy: components["schemas"]["Fail2banPolicy"]; updated_at: number; };
         Fail2banPolicyInput: { base_version: number; policy: components["schemas"]["Fail2banPolicy"]; };
-        Fail2banTemplate: { id: string; name: string; description: string; category: string; format: string; ban_time: number; find_time: number; max_retry: number; };
+        Fail2banTemplate: { id: "nginx-http-401" | "nginx-authorization-401"; filter_sha256: string; samples_sha256: string; samples: components["schemas"]["Fail2banFilterSample"][]; name: string; description: string; category: string; format: string; ban_time: number; find_time: number; max_retry: number; };
         Fail2banPreviewInput: { version: number; };
-        Fail2banJailPreview: { id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
-        Fail2banPolicyPreview: { version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
+        Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
+        Fail2banPolicyPreview: { template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
         MigrationFail2banInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; };
         MigrationFail2banPlan: { mode: "preserve" | "merge" | "replace"; state: string; base_version: number; saved_version: number; source_jails: number; preserved_jails: number; replaced_jails: number; total_jails: number; policy_hash: string; warnings: string[]; };
         Fail2banBindingView: { state: "unavailable" | "unbound" | "bound"; id: string; service: string; socket: string; client_path: string; client_version: string; approved_at: number; reason: string; };
@@ -2519,6 +2523,7 @@ export interface components {
             warning: string;
         };
         LogSource: {
+            auth_presence: boolean;
             id: string;
             resource_id: string;
             category: string;
@@ -3462,6 +3467,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    checkFail2banTemplates: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banTemplateCheckInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     getFail2banTemplates: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     previewFail2ban: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPreviewInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     setFail2banPolicy: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPolicyInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

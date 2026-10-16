@@ -1855,6 +1855,33 @@ type FirewallProtectionObservation struct {
 	Protections  []FirewallProtection `json:"protections"`
 	Reason       string               `json:"reason"`
 }
+type Fail2banFilterSample struct {
+	Name       string `json:"name"`
+	Line       string `json:"line"`
+	ExpectedIp string `json:"expected_ip"`
+}
+type Fail2banTemplateCheckInput struct {
+	Templates []string `json:"templates"`
+}
+type Fail2banTemplateCheck struct {
+	Template      string   `json:"template"`
+	At            int64    `json:"at"`
+	Source        string   `json:"source"`
+	Scope         string   `json:"scope"`
+	Available     bool     `json:"available"`
+	Passed        bool     `json:"passed"`
+	FilterSha256  string   `json:"filter_sha256"`
+	SamplesSha256 string   `json:"samples_sha256"`
+	ToolPath      string   `json:"tool_path"`
+	ToolSha256    string   `json:"tool_sha256"`
+	ToolVersion   string   `json:"tool_version"`
+	ExpectedIps   []string `json:"expected_ips"`
+	MatchedIps    []string `json:"matched_ips"`
+	Reason        string   `json:"reason"`
+}
+type CheckFail2banTemplatesParams = PreviewFail2banParams
+type CheckFail2banTemplatesJSONRequestBody = Fail2banTemplateCheckInput
+
 type Fail2banDesiredJail struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
@@ -1880,32 +1907,37 @@ type Fail2banPolicyInput struct {
 	Policy      Fail2banPolicy `json:"policy"`
 }
 type Fail2banTemplate struct {
-	Id          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Category    string `json:"category"`
-	Format      string `json:"format"`
-	BanTime     int64  `json:"ban_time"`
-	FindTime    int64  `json:"find_time"`
-	MaxRetry    int    `json:"max_retry"`
+	FilterSha256  string                 `json:"filter_sha256"`
+	SamplesSha256 string                 `json:"samples_sha256"`
+	Samples       []Fail2banFilterSample `json:"samples"`
+	Id            string                 `json:"id"`
+	Name          string                 `json:"name"`
+	Description   string                 `json:"description"`
+	Category      string                 `json:"category"`
+	Format        string                 `json:"format"`
+	BanTime       int64                  `json:"ban_time"`
+	FindTime      int64                  `json:"find_time"`
+	MaxRetry      int                    `json:"max_retry"`
 }
 type Fail2banPreviewInput struct {
 	Version int64 `json:"version"`
 }
 type Fail2banJailPreview struct {
-	Id          string   `json:"id"`
-	JailName    string   `json:"jail_name"`
-	Enabled     bool     `json:"enabled"`
-	SourceId    string   `json:"source_id"`
-	SourceReady bool     `json:"source_ready"`
-	Errors      []string `json:"errors"`
+	TemplateReady bool     `json:"template_ready"`
+	Id            string   `json:"id"`
+	JailName      string   `json:"jail_name"`
+	Enabled       bool     `json:"enabled"`
+	SourceId      string   `json:"source_id"`
+	SourceReady   bool     `json:"source_ready"`
+	Errors        []string `json:"errors"`
 }
 type Fail2banPolicyPreview struct {
-	Version    int64                 `json:"version"`
-	PolicyHash string                `json:"policy_hash"`
-	CanApply   bool                  `json:"can_apply"`
-	Entries    []Fail2banJailPreview `json:"entries"`
-	Warnings   []string              `json:"warnings"`
+	TemplateChecks []Fail2banTemplateCheck `json:"template_checks"`
+	Version        int64                   `json:"version"`
+	PolicyHash     string                  `json:"policy_hash"`
+	CanApply       bool                    `json:"can_apply"`
+	Entries        []Fail2banJailPreview   `json:"entries"`
+	Warnings       []string                `json:"warnings"`
 }
 type MigrationFail2banInput struct {
 	Mode        string `json:"mode"`
@@ -2332,16 +2364,17 @@ type LogRow struct {
 
 // LogSource defines model for LogSource.
 type LogSource struct {
-	Active     bool   `json:"active"`
-	Archives   int    `json:"archives"`
-	Bytes      int64  `json:"bytes"`
-	Category   string `json:"category"`
-	Format     string `json:"format"`
-	Id         string `json:"id"`
-	Label      string `json:"label"`
-	Reason     string `json:"reason"`
-	ResourceId string `json:"resource_id"`
-	Sensitive  bool   `json:"sensitive"`
+	AuthPresence bool   `json:"auth_presence"`
+	Active       bool   `json:"active"`
+	Archives     int    `json:"archives"`
+	Bytes        int64  `json:"bytes"`
+	Category     string `json:"category"`
+	Format       string `json:"format"`
+	Id           string `json:"id"`
+	Label        string `json:"label"`
+	Reason       string `json:"reason"`
+	ResourceId   string `json:"resource_id"`
+	Sensitive    bool   `json:"sensitive"`
 }
 
 // MaintenanceCompletion defines model for MaintenanceCompletion.
@@ -4086,6 +4119,7 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, params CheckFail2banTemplatesParams)
 	GetFail2banPolicy(w http.ResponseWriter, r *http.Request)
 	SetFail2banPolicy(w http.ResponseWriter, r *http.Request, params SetFail2banPolicyParams)
 	GetFail2banTemplates(w http.ResponseWriter, r *http.Request)
@@ -6839,6 +6873,22 @@ func (siw *ServerInterfaceWrapper) SetFail2banPolicy(w http.ResponseWriter, r *h
 	}
 	handler.ServeHTTP(w, r)
 }
+func (siw *ServerInterfaceWrapper) CheckFail2banTemplates(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := CheckFail2banTemplatesParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.CheckFail2banTemplates(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+
 func (siw *ServerInterfaceWrapper) PreviewFail2ban(w http.ResponseWriter, r *http.Request) {
 	if !siw.controlHeaders(w, r) {
 		return
@@ -10838,6 +10888,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/fail2ban/policy", wrapper.SetFail2banPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/templates", wrapper.GetFail2banTemplates)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/preview", wrapper.PreviewFail2ban)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/templates/check", wrapper.CheckFail2banTemplates)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/instance", wrapper.GetFail2banInstance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/jails/{name}", wrapper.GetFail2banJail)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban", wrapper.GetFail2ban)

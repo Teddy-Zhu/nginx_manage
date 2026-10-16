@@ -95,9 +95,9 @@ func mapMigrationFiles(files []File, policy Policy, mappings map[string]string, 
 }
 
 func (p *Parsed) MigrationFeatures() []string {
-	// Managed publications add HTTP log/proxy controls and a revision probe
-	// using return, even when the imported business tree only uses Stream.
-	features := map[string]bool{"http": true, "http_proxy": true, "http_log": true, "rewrite": true}
+	// Managed publications add HTTP log/proxy controls, an authentication-presence
+	// map and a revision probe, even when the business tree only uses Stream.
+	features := map[string]bool{"http": true, "http_proxy": true, "http_log": true, "rewrite": true, "map": true}
 	byPath := map[string]*Document{}
 	for _, doc := range p.Documents {
 		byPath[doc.File.Path] = doc

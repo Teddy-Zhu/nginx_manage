@@ -40,7 +40,7 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 37、数据库仍为 24，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 38、数据库为 25，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
 已有实例当前只读接入。安装/启动与 Socket 激活授权、签名组件运行绑定、完整引擎自检、jail 持久配置与接管、模板/匹配测试、受控 action、ban/unban、历史日志及 CDN 来源处理仍在完整实施范围内。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
@@ -48,10 +48,20 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 ## jail 期望配置与迁移
 
-`GET/PUT /fail2ban/policy` 持久保存最多 32 个 jail，采用加密存储、基础版本比较、幂等保存及同事务审计。保存不要求模块启用，也不改变实例。仅内置 `nginx-http-401` 模板，统计结构化站点访问日志的 401（包含首次认证挑战），参数为日志资源标识、动作类型、封禁秒数、统计窗口、阈值和数值 IP/CIDR 白名单；不接收任意路径、正则或 shell。面板登录失败模板尚未接入独立日志来源。
+`GET/PUT /fail2ban/policy` 持久保存最多 32 个 jail，采用加密存储、基础版本比较、幂等保存及同事务审计。保存不要求模块启用，也不改变实例。内置 `nginx-http-401`（全部 401，包含首次认证挑战）及 `nginx-authorization-401`（仅携带 Authorization 后的 401，不覆盖仅凭 Cookie 的认证失败），参数为日志资源标识、动作类型、封禁秒数、统计窗口、阈值和数值 IP/CIDR 白名单；不接收任意路径、正则或 shell。面板登录失败模板尚未接入独立日志来源。
 
 `GET /fail2ban/templates` 返回模板；`POST /fail2ban/preview` 核对保存版本、唯一运行日志来源及已有实例，显示当前执行缺口，`can_apply=false`。日志资源按站点逻辑 ID 绑定，实例授权、动作后端及实际流量路径仍须在应用前核对。jail 持久安装、动作桥接及 ban/unban 继续实施；当前页面只保存期望配置和只读观察。
 
 schema 3 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.json` 携带期望配置。文件、API 拉取及推送均支持 preserve/merge/replace，默认保留目标；导入重新分配 jail ID，沿用同一业务配置树中的站点标识，冻结目标版本与内容，同 Nginx 配置导入事务保存。失败补偿以新版本恢复原期望，检测外部变更时保留待恢复，不覆盖。源服务、Socket、客户端批准、所有权及封禁/计数不迁移，也不自动安装、启用模块或应用 jail。须核对目标白名单、日志来源和动作路径；保留的目标 jail 可能引用本次已替换的站点。
 
-当前数据库为 25，Agent 仍为 37。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器及真实实例操作均留待 P5。
+当前数据库为 25，Agent 仍为 38。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器及真实实例操作均留待 P5。
+
+## 固定过滤器及官方样例检查
+
+模板同时提供固定 filter 内容的 SHA-256、固定样例及其 SHA-256。过滤器按受管 JSON 字段边界读取数值客户端地址，避免 URI 中伪造地址或状态；仅单行匹配，关闭 DNS。时间戳按 ISO 8601 提取，WAF 附加字段使用同一 JSON 字符串语法。HTTP 日志字段顺序由渲染器和过滤器共同引用，不能由请求内容插入新的字段。
+
+`POST /fail2ban/templates/check` 接受 1–2 个内置 ID，返回检查时间、工具版本/散列、预期与实际地址及明确的通过/未知原因。root Agent 只运行固定系统目录的 `fail2ban-regex 1.1.1`，在 root 私有临时目录写入本程序固定 filter 和 15 条样例，使用空配置目录、数值地址模式及 UTF-8；不读取现有 jail 配置，不连接 Socket，不接收用户正则、日志路径、命令或任意文本。命令每次最多 2 秒，输出有界，整批最多 6 秒、同目标单份在途、30 秒缓存并有并发/次数预算。版本漂移、超时、未知输出、清理失败或任一检查中断均不返回部分通过；采样结果不表示动作已经适用于流量路径。
+
+受管 Nginx 访问日志新增 `nginxpanel_auth_present`，只记录入站 Authorization 是否非空（0/1），不记录认证头内容。执行器生成 map，原生配置禁止重定义该变量；迁移/恢复预检包含 map 模块，Docker 镜像已预置此能力。日志目录声明 `auth_presence`，jail 保存预览要求来源包含该标记，同时执行固定过滤器检查；须先发布当前 Nginx 配置，再核对实际来源。旧运行日志或缺少标记的来源不据格式名推断可匹配。模块开关不控制日志中的保护状态。
+
+实现及源码集成审阅完成，尚未执行官方工具、生成器、构建、类型检查、lint、测试、浏览器或真实配置发布。P5 需集中核对 Python 正则/日期解析、IPv4/IPv6、首次挑战、转义与字段伪造、实际日志样例及轮转衔接；当前不是已通过验证的模板发布声明。固定 CLI/输出行为依据 [Fail2ban 1.1.1 fail2ban-regex](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banregex.py) 及[日期剥离实现](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)。jail 持久安装、动作桥接及封禁控制仍在实施。

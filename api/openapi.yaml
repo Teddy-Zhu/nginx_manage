@@ -12,6 +12,15 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/templates/check:
+    post:
+      operationId: checkFail2banTemplates
+      x-scopes: [read]
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      description: 返回 Fail2banTemplateCheck 数组。使用固定系统目录中的官方 fail2ban-regex 1.1.1 检查内置过滤器与固定样例；不接收用户正则、文件路径或命令，不连接实例或改变保护。未知、超时或输出不完整不算通过。
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banTemplateCheckInput'}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/policy:
     get:
       operationId: getFail2banPolicy
@@ -1782,8 +1791,14 @@ components:
         ssh_listeners: {type: array, maxItems: 512, items: {type: string}}
         protections: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/FirewallProtection"}}
         reason: {type: string}
+    Fail2banFilterSample:
+      {"type": "object", "additionalProperties": false, "required": ["name", "line", "expected_ip"], "properties": {"name": {"type": "string"}, "line": {"type": "string"}, "expected_ip": {"type": "string", "description": "空字符串表示不应匹配"}}}
+    Fail2banTemplateCheckInput:
+      {"type": "object", "additionalProperties": false, "required": ["templates"], "properties": {"templates": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401"]}}}}
+    Fail2banTemplateCheck:
+      {"type": "object", "additionalProperties": false, "required": ["template", "at", "source", "scope", "available", "passed", "filter_sha256", "samples_sha256", "tool_path", "tool_sha256", "tool_version", "expected_ips", "matched_ips", "reason"], "properties": {"template": {"type": "string"}, "source": {"type": "string"}, "scope": {"type": "string"}, "filter_sha256": {"type": "string"}, "samples_sha256": {"type": "string"}, "tool_path": {"type": "string"}, "tool_sha256": {"type": "string"}, "tool_version": {"type": "string"}, "reason": {"type": "string"}, "at": {"type": "integer", "format": "int64"}, "available": {"type": "boolean"}, "passed": {"type": "boolean"}, "expected_ips": {"type": "array", "items": {"type": "string"}}, "matched_ips": {"type": "array", "items": {"type": "string"}}}}
     Fail2banDesiredJail:
-      {"type": "object", "additionalProperties": false, "required": ["id", "name", "enabled", "template", "resource_id", "action", "ban_time", "find_time", "max_retry", "ignore_ips"], "properties": {"id": {"type": "string", "format": "uuid"}, "name": {"type": "string", "minLength": 1, "maxLength": 120}, "enabled": {"type": "boolean"}, "template": {"type": "string", "enum": ["nginx-http-401"]}, "resource_id": {"type": "string", "format": "uuid"}, "action": {"type": "string", "enum": ["host-input", "docker-forward", "nginx-client"]}, "ban_time": {"type": "integer", "format": "int64", "minimum": -1, "maximum": 31536000, "not": {"enum": [0]}, "description": "-1 永久封禁，否则为 1–31536000 秒"}, "find_time": {"type": "integer", "format": "int64", "minimum": 1, "maximum": 86400}, "max_retry": {"type": "integer", "minimum": 1, "maximum": 1000}, "ignore_ips": {"type": "array", "maxItems": 64, "items": {"type": "string"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "name", "enabled", "template", "resource_id", "action", "ban_time", "find_time", "max_retry", "ignore_ips"], "properties": {"id": {"type": "string", "format": "uuid"}, "name": {"type": "string", "minLength": 1, "maxLength": 120}, "enabled": {"type": "boolean"}, "template": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401"]}, "resource_id": {"type": "string", "format": "uuid"}, "action": {"type": "string", "enum": ["host-input", "docker-forward", "nginx-client"]}, "ban_time": {"type": "integer", "format": "int64", "minimum": -1, "maximum": 31536000, "not": {"enum": [0]}, "description": "-1 永久封禁，否则为 1–31536000 秒"}, "find_time": {"type": "integer", "format": "int64", "minimum": 1, "maximum": 86400}, "max_retry": {"type": "integer", "minimum": 1, "maximum": 1000}, "ignore_ips": {"type": "array", "maxItems": 64, "items": {"type": "string"}}}}
     Fail2banPolicy:
       {"type": "object", "additionalProperties": false, "required": ["jails"], "properties": {"jails": {"type": "array", "maxItems": 32, "items": {"$ref": "#/components/schemas/Fail2banDesiredJail"}}}}
     Fail2banPolicyView:
@@ -1791,13 +1806,13 @@ components:
     Fail2banPolicyInput:
       {"type": "object", "additionalProperties": false, "required": ["base_version", "policy"], "properties": {"base_version": {"type": "integer", "format": "int64", "minimum": 0}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}}}
     Fail2banTemplate:
-      {"type": "object", "additionalProperties": false, "required": ["id", "name", "description", "category", "format", "ban_time", "find_time", "max_retry"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "description": {"type": "string"}, "category": {"type": "string"}, "format": {"type": "string"}, "ban_time": {"type": "integer", "format": "int64"}, "find_time": {"type": "integer", "format": "int64"}, "max_retry": {"type": "integer"}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "name", "description", "category", "format", "ban_time", "find_time", "max_retry", "filter_sha256", "samples_sha256", "samples"], "properties": {"id": {"type": "string", "enum": ["nginx-http-401", "nginx-authorization-401"]}, "name": {"type": "string"}, "description": {"type": "string"}, "category": {"type": "string"}, "format": {"type": "string"}, "ban_time": {"type": "integer", "format": "int64"}, "find_time": {"type": "integer", "format": "int64"}, "max_retry": {"type": "integer"}, "filter_sha256": {"type": "string"}, "samples_sha256": {"type": "string"}, "samples": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banFilterSample"}}}}
     Fail2banPreviewInput:
       {"type": "object", "additionalProperties": false, "required": ["version"], "properties": {"version": {"type": "integer", "format": "int64", "minimum": 1}}}
     Fail2banJailPreview:
-      {"type": "object", "additionalProperties": false, "required": ["id", "jail_name", "enabled", "source_id", "source_ready", "errors"], "properties": {"id": {"type": "string"}, "jail_name": {"type": "string"}, "enabled": {"type": "boolean"}, "source_id": {"type": "string"}, "source_ready": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "jail_name", "enabled", "source_id", "source_ready", "errors", "template_ready"], "properties": {"id": {"type": "string"}, "jail_name": {"type": "string"}, "enabled": {"type": "boolean"}, "source_id": {"type": "string"}, "source_ready": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}, "template_ready": {"type": "boolean"}}}
     Fail2banPolicyPreview:
-      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "can_apply", "entries", "warnings"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "can_apply": {"type": "boolean"}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailPreview"}}, "warnings": {"type": "array", "items": {"type": "string"}}}}
+      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "can_apply", "entries", "warnings", "template_checks"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "can_apply": {"type": "boolean"}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailPreview"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "template_checks": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banTemplateCheck"}}}}
     MigrationFail2banInput:
       {"type": "object", "additionalProperties": false, "required": ["mode"], "properties": {"mode": {"type": "string", "enum": ["preserve", "merge", "replace"], "default": "preserve"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}}}
     MigrationFail2banPlan:
@@ -2698,8 +2713,9 @@ components:
     LogSource:
       type: object
       additionalProperties: false
-      required: [id, resource_id, category, label, format, sensitive, active, bytes, archives, reason]
+      required: [auth_presence, id, resource_id, category, label, format, sensitive, active, bytes, archives, reason]
       properties:
+        auth_presence: {type: boolean, description: 当前发布日志包含认证头存在标记}
         id: { type: string }
         resource_id: { type: string }
         category: { type: string }

@@ -6,8 +6,13 @@ import (
 	"strings"
 
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/logs"
 	"nginxpanel/internal/nginxmodules"
 )
+
+func ownedAuthLogVariable(value string) bool {
+	return strings.EqualFold(value, "$"+logs.HTTPAuthPresent) || strings.EqualFold(value, "${"+logs.HTTPAuthPresent+"}")
+}
 
 // Policy additions are supplied by local trusted setup, never by API or import.
 // Unknown directives are preserved in drafts but cannot enter desired state.
@@ -86,6 +91,9 @@ func (p *Parsed) validate(policy Policy, files map[string]File) {
 				}
 				if security[n.Name] {
 					scopes["security.write"] = true
+				}
+				if (n.Name == "set" && len(n.Args) > 0 && ownedAuthLogVariable(n.Args[0].Value)) || (n.Name == "map" || n.Name == "geo" || n.Name == "split_clients") && len(n.Args) > 0 && ownedAuthLogVariable(n.Args[len(n.Args)-1].Value) {
+					add("reserved_name", "认证头存在标记由受管执行器定义")
 				}
 				if n.Name == "set" && len(n.Args) > 0 && strings.HasPrefix(n.Args[0].Value, "$nginxpanel_http01_") {
 					add("reserved_name", "HTTP-01 运行变量由执行器管理")

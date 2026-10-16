@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Fail2banTemplateCatalog from "./Fail2banTemplateCatalog.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -36,6 +37,12 @@ let closed = false,
 const serialize = () =>
   JSON.stringify({ jails: jails.value, ignore: ignoreText.value });
 const dirty = computed(() => !!view.value && serialize() !== savedEditor);
+const templateOptions = computed(() =>
+  templates.value.map((template) => ({
+    label: template.name,
+    value: template.id,
+  })),
+);
 const actions = [
   { label: "宿主机入口", value: "host-input" },
   { label: "Docker 转发", value: "docker-forward" },
@@ -48,12 +55,16 @@ const sourceOptions = computed(() => {
       source.active &&
       source.resource_id &&
       source.category === "http_access" &&
-      source.format === "nginxpanel_http"
+      source.format === "nginxpanel_http" &&
+      source.auth_presence
     )
       known.set(source.resource_id, source.label);
   for (const jail of jails.value)
     if (jail.resource_id && !known.has(jail.resource_id))
-      known.set(jail.resource_id, `未发现运行日志 · ${jail.resource_id}`);
+      known.set(
+        jail.resource_id,
+        `未发现含认证标记的运行日志 · ${jail.resource_id}`,
+      );
   return [...known].map(([value, label]) => ({ value, label }));
 });
 function accept(value: Fail2banPolicyView) {
@@ -97,7 +108,7 @@ function add() {
     id,
     name: template.name,
     enabled: false,
-    template: "nginx-http-401",
+    template: template.id,
     resource_id: "",
     action: "host-input",
     ban_time: template.ban_time,
@@ -189,9 +200,10 @@ onUnmounted(() => {
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
-    <p v-for="template in templates" :key="template.id" class="muted">
-      {{ template.name }}：{{ template.description }}
-    </p>
+    <Fail2banTemplateCatalog
+      :templates="templates"
+      :checks="preview?.template_checks"
+    />
     <div v-for="jail in jails" :key="jail.id" class="surface page-stack">
       <div class="toolbar">
         <h4>{{ jail.name || "未命名 jail" }}</h4>
@@ -206,6 +218,13 @@ onUnmounted(() => {
       <NFormItem label="名称"
         ><NInput v-model:value="jail.name" :disabled="busy" :maxlength="120"
       /></NFormItem>
+      <NFormItem label="内置模板">
+        <NSelect
+          v-model:value="jail.template"
+          :disabled="busy"
+          :options="templateOptions"
+        />
+      </NFormItem>
       <NFormItem label="期望启用"
         ><NSwitch v-model:value="jail.enabled" :disabled="busy"
       /></NFormItem>
@@ -291,9 +310,10 @@ onUnmounted(() => {
           jails.find((jail) => jail.id === entry.id)?.name || entry.jail_name
         }}</strong>
         <span>
-          · {{ entry.enabled ? "期望启用" : "期望停用" }} · 日志{{
-            entry.source_ready ? "已核对" : "未就绪"
-          }}</span
+          · {{ entry.enabled ? "期望启用" : "期望停用" }} · 模板{{
+            entry.template_ready ? "已核对" : "未就绪"
+          }}
+          · 日志{{ entry.source_ready ? "已核对" : "未就绪" }}</span
         >
         <p v-for="issue in entry.errors" :key="issue" class="muted">
           {{ issue }}

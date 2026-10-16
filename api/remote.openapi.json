@@ -4990,6 +4990,51 @@
         ],
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/fail2ban/templates/check": {
+      "post": {
+        "operationId": "remoteCheckFail2banTemplates",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "checkFail2banTemplates",
+        "x-forward-path": "/fail2ban/templates/check",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banTemplateCheckInput"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "security": [
