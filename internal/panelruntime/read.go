@@ -214,6 +214,26 @@ func readRelease(dir, id string) (Release, error) {
 	return r, nil
 }
 
+// ReadVersion verifies an immutable, already published release without changing
+// current. The independent updater uses it to preserve the original rollback
+// program identity before selecting any new code.
+func ReadVersion(data, id string) (Snapshot, error) {
+	if !digest.MatchString(id) {
+		return Snapshot{}, errors.New("面板发布身份无效")
+	}
+	d, err := ReadDeployment(data)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	root, _ := Root(data)
+	dir := filepath.Join(root, "releases", id)
+	r, err := readRelease(dir, id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return Snapshot{Deployment: d, Release: r, Directory: dir}, nil
+}
+
 func Read(data string) (Snapshot, error) {
 	var out Snapshot
 	d, err := ReadDeployment(data)

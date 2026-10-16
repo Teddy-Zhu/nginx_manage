@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -94,6 +94,7 @@ func run() error {
 	panelServiceOperation := flags.String("panel-service-operation", "", "durable management process operation UUID")
 	panelServiceAction := flags.String("panel-service-action", "", "fixed management process action: stop or start")
 	panelServiceStop := flags.String("panel-service-stop", "", "original completed management process stop UUID")
+	panelUpdate := flags.String("panel-update", "", "independent panel update operation UUID")
 	installStart := flags.Bool("install-start", false, "start the newly installed dedicated Nginx")
 	installEnable := flags.Bool("install-enable", false, "enable the dedicated Nginx service on boot")
 	installResume := flags.Bool("resume-install", false, "resume the original installation after checking its receipt")
@@ -139,6 +140,8 @@ func run() error {
 		"panel-service-operation": {"data-dir": true, "panel-service-operation": true},
 		"panel-service-control":   {"data-dir": true, "panel-service-operation": true, "panel-service-action": true, "panel-service-stop": true, "panel-selection": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-readiness":         {"data-dir": true, "panel-service-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"update-worker":           {"data-dir": true, "panel-update": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-update-status":     {"data-dir": true, "panel-update": true},
 		"panel-snapshot-capture":  {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-snapshot-check":    {"data-dir": true, "recovery-operation": true},
 		"panel-snapshot-db":       {"data-dir": true, "recovery-operation": true},
@@ -164,6 +167,10 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "panel-update":
+			if command != "update-worker" && command != "panel-update-status" {
+				invalidFlag = f.Name
+			}
 		case "panel-service-operation":
 			if command != "panel-service-operation" && command != "panel-service-control" && command != "panel-readiness" {
 				invalidFlag = f.Name
@@ -227,7 +234,7 @@ func run() error {
 	if command == "component-install" && *moduleFile == "" {
 		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
 	}
-	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-service-control" && command != "panel-readiness" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
+	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-service-control" && command != "panel-readiness" && command != "update-worker" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
 		return errors.New("installation options require component-install; maintenance identity also permits panel snapshot, version and process operations")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
@@ -394,6 +401,20 @@ func run() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-update-status":
+		out, err := agent.PanelUpdateStatus(absDir, *panelUpdate)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "update-worker":
+		out, err := agent.UpdatePanel(ctx, agent.PanelUpdateInput{Stage: panelruntime.StageInput{DataDir: absDir, PlanID: *releasePlan, TrustPath: *releaseTrust, AllowPrerelease: *releasePrerelease}, MaintenanceID: *installMaintenance}, *panelUpdate, *installEpoch)
+		if out.OperationID != "" {
+			if encoded := json.NewEncoder(os.Stdout).Encode(out); encoded != nil {
+				return errors.Join(err, encoded)
+			}
+		}
+		return err
 	case "panel-runtime-select":
 		out, err := agent.SelectPanelVersion(ctx, panelruntime.StageInput{DataDir: absDir, PlanID: *releasePlan, TrustPath: *releaseTrust, AllowPrerelease: *releasePrerelease}, *panelSelection, *recoverySnapshot, *installMaintenance, *installEpoch)
 		if err != nil {

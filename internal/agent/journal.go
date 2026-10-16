@@ -17,6 +17,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	PanelUpdate      *PanelUpdateOperation  `json:"panel_update,omitempty"`
 	PanelService     *PanelServiceOperation `json:"panel_service,omitempty"`
 	PanelSelection   *PanelSelectionIntent  `json:"panel_selection,omitempty"`
 	PanelRestore     *PanelRestoreIntent    `json:"panel_restore,omitempty"`

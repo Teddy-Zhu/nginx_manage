@@ -155,6 +155,13 @@ func ControlPanelService(ctx context.Context, in PanelServiceInput, id, epoch st
 			}
 			continue
 		}
+		settled, e := settledPanelUpdate(r, in.MaintenanceID)
+		if e != nil {
+			return out, e
+		}
+		if settled {
+			continue
+		}
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
 		default:
@@ -273,7 +280,7 @@ func ControlPanelService(ctx context.Context, in PanelServiceInput, id, epoch st
 		}
 	}
 	if err == nil {
-		after, err = runPanelService(ctx, j, &out, s)
+		after, err = runPanelService(ctx, j.Put, &out, s)
 	}
 	if err == nil && in.Action == "stop" {
 		var releaseWriter func()
@@ -333,7 +340,7 @@ func PanelServiceOperationStatus(data, id string) (Record, error) {
 	return panelServiceRecord(data, id)
 }
 
-func runPanelService(ctx context.Context, j *Journal, r *Record, s panelruntime.Snapshot) (PanelServiceObservation, error) {
+func runPanelService(ctx context.Context, save func(Record) error, r *Record, s panelruntime.Snapshot) (PanelServiceObservation, error) {
 	i := r.PanelService.Intent
 	nativeIssued := false
 	for {
@@ -388,7 +395,7 @@ func runPanelService(ctx context.Context, j *Journal, r *Record, s panelruntime.
 					request.InstanceID = i.Before.InstanceID
 				}
 				r.PanelService.Dispatches = append(r.PanelService.Dispatches, request)
-				if err = j.Put(*r); err != nil {
+				if err = save(*r); err != nil {
 					return o, err
 				}
 				req = &r.PanelService.Dispatches[len(r.PanelService.Dispatches)-1]

@@ -123,6 +123,13 @@ func SelectPanelVersion(ctx context.Context, in panelruntime.StageInput, id, sna
 			}
 			continue
 		}
+		settled, e := settledPanelUpdate(r, maintenanceID)
+		if e != nil {
+			return out, e
+		}
+		if settled {
+			continue
+		}
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
 		default:

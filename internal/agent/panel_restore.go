@@ -117,6 +117,13 @@ func RestorePanelSnapshot(ctx context.Context, data, id, snapshot, maintenanceID
 			}
 			continue
 		}
+		settled, e := settledPanelUpdate(r, maintenanceID)
+		if e != nil {
+			return out, e
+		}
+		if settled {
+			continue
+		}
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
 		default:
@@ -177,7 +184,7 @@ func RestorePanelSnapshot(ctx context.Context, data, id, snapshot, maintenanceID
 	}
 	out.State, out.Error = "running", ""
 	if err = j.Put(out); err == nil {
-		err = runPanelRestore(ctx, j, &out)
+		err = runPanelRestore(ctx, j.Put, &out)
 	}
 	if err != nil {
 		out.State, out.Error = "recovery_required", panelRestoreError(err)
@@ -195,7 +202,7 @@ func RestorePanelSnapshot(ctx context.Context, data, id, snapshot, maintenanceID
 	return out, storage.ClearWriterFence(data, restoreFence(out))
 }
 
-func runPanelRestore(ctx context.Context, j *Journal, r *Record) error {
+func runPanelRestore(ctx context.Context, save func(Record) error, r *Record) error {
 	p, err := panelrecovery.PrepareApprovedRestore(ctx, r.PanelRestore.Receipt, r.OperationID)
 	if err != nil {
 		return err
@@ -214,7 +221,7 @@ func runPanelRestore(ctx context.Context, j *Journal, r *Record) error {
 			return err
 		}
 		r.PanelRestore.Before, r.Stage = before, "restoring"
-		if err = j.Put(*r); err != nil {
+		if err = save(*r); err != nil {
 			return err
 		}
 	}

@@ -1727,14 +1727,22 @@ type LogSource struct {
 	Sensitive  bool   `json:"sensitive"`
 }
 
+// MaintenanceCompletion defines model for MaintenanceCompletion.
+type MaintenanceCompletion struct {
+	OperationId   string `json:"operation_id"`
+	Outcome       string `json:"outcome"`
+	RequestSha256 string `json:"request_sha256"`
+}
+
 // MaintenanceRootStatus defines model for MaintenanceRootStatus.
 type MaintenanceRootStatus struct {
-	Available bool   `json:"available"`
-	Busy      int64  `json:"busy"`
-	Epoch     string `json:"epoch"`
-	Id        string `json:"id"`
-	Phase     string `json:"phase"`
-	Reason    string `json:"reason"`
+	Available  bool                   `json:"available"`
+	Busy       int64                  `json:"busy"`
+	Completion *MaintenanceCompletion `json:"completion,omitempty"`
+	Epoch      string                 `json:"epoch"`
+	Id         string                 `json:"id"`
+	Phase      string                 `json:"phase"`
+	Reason     string                 `json:"reason"`
 }
 
 // MaintenanceSession defines model for MaintenanceSession.

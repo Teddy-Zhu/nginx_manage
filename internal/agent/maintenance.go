@@ -135,6 +135,23 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		if r.Kind == panelUpdateKind {
+			if err := validPanelUpdate(r); err != nil {
+				return out, err
+			}
+			if g.id != "" && r.PanelUpdate.Intent.Input.MaintenanceID == g.id {
+				if panelUpdateFinalized(r) {
+					if out.Completion != nil {
+						return out, errors.New("同一维护会话存在多个更新完成授权")
+					}
+					out.Completion = &maintenance.Completion{OperationID: r.OperationID, RequestSHA256: r.RequestHash, Outcome: panelUpdateOutcome(r)}
+				}
+				continue
+			}
+			if panelUpdateFinalized(r) {
+				continue
+			}
+		}
 		if r.Kind == panelServiceKind {
 			if err := validPanelService(r); err != nil {
 				return out, err
@@ -307,6 +324,15 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 		return maintenance.RootStatus{}, fault.Conflict("面板仍处于持久停机状态，不能释放维护锁")
 	}
 	for _, record := range records {
+		if record.Kind == panelUpdateKind {
+			if err := validPanelUpdate(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if record.PanelUpdate.Intent.Input.MaintenanceID == in.OperationID && !panelUpdateFinalized(record) {
+				return maintenance.RootStatus{}, fault.Conflict("独立更新尚未提交或完整补偿，不能释放维护锁")
+			}
+			continue
+		}
 		if record.Kind == panelServiceKind {
 			if err := validPanelService(record); err != nil {
 				return maintenance.RootStatus{}, err

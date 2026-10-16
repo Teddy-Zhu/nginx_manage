@@ -174,6 +174,16 @@ func CheckPanelReadiness(ctx context.Context, data, startID, snapshotID, mainten
 			return out, errors.New("就绪目标的当前签名批准已变化")
 		}
 	}
+	return observePanelReadiness(ctx, j, current, started, receipt, epoch)
+}
+
+func observePanelReadiness(ctx context.Context, j *Journal, current panelruntime.Snapshot, started Record, receipt panelrecovery.Receipt, epoch string) (PanelReadiness, error) {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+	defer cancel()
+	var out PanelReadiness
+	data := current.Deployment.DataDir
+	maintenanceID := started.PanelService.Intent.Input.MaintenanceID
+	i := started.PanelService.Intent
 	expected := *started.PanelService.After
 	var status panelready.Status
 	var hostPID, parent int
@@ -245,5 +255,5 @@ func CheckPanelReadiness(ctx context.Context, data, startID, snapshotID, mainten
 	if err = panelReadinessGrant(ctx, j, data, maintenanceID, epoch, false); err != nil {
 		return out, err
 	}
-	return PanelReadiness{StartID: startID, StartSHA256: started.RequestHash, SnapshotID: snapshotID, SnapshotSHA256: selectionValueHash(receipt), BindingSHA256: i.BindingSHA256, CheckedAt: time.Now().Unix(), Process: expected, Application: status, HTTPS: https}, nil
+	return PanelReadiness{StartID: started.OperationID, StartSHA256: started.RequestHash, SnapshotID: receipt.Manifest.OperationID, SnapshotSHA256: selectionValueHash(receipt), BindingSHA256: i.BindingSHA256, CheckedAt: time.Now().Unix(), Process: expected, Application: status, HTTPS: https}, nil
 }

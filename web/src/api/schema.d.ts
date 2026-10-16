@@ -1667,6 +1667,11 @@ export interface components {
             /** Format: int64 */
             drain_seconds: number;
         };
+        MaintenanceCompletion: {
+            operation_id: string;
+            request_sha256: string;
+            outcome: string;
+        };
         MaintenanceRootStatus: {
             available: boolean;
             id: string;
@@ -1675,6 +1680,7 @@ export interface components {
             /** Format: int64 */
             busy: number;
             reason: string;
+            completion?: components["schemas"]["MaintenanceCompletion"];
         };
         MaintenanceSession: {
             task_id: string;

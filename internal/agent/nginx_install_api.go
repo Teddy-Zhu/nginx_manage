@@ -172,6 +172,15 @@ func (s *Server) queueInstallation(ctx context.Context, req nginxinstall.Request
 			return empty, e
 		}
 		for _, prior := range records {
+			if prior.Kind == panelUpdateKind {
+				settled, e := settledPanelUpdate(prior, req.Input.MaintenanceID)
+				if e != nil {
+					return empty, e
+				}
+				if !settled {
+					return empty, fault.Conflict("面板更新占用原维护会话，不能同时安装 Nginx")
+				}
+			}
 			if prior.Kind == nginxInstallKind {
 				if validInstallRecord(prior) != nil {
 					return empty, fault.Conflict("已有安装记录无效")

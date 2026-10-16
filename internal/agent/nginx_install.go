@@ -73,6 +73,17 @@ func InstallNginx(ctx context.Context, opts NginxInstallOptions) (Record, error)
 			return r, e
 		}
 		for _, prior := range records {
+			if prior.Kind == panelUpdateKind {
+				settled, e := settledPanelUpdate(prior, in.MaintenanceID)
+				if e != nil {
+					access()
+					return r, e
+				}
+				if !settled {
+					access()
+					return r, errors.New("面板更新占用原维护会话，不能同时安装 Nginx")
+				}
+			}
 			if prior.Kind == nginxInstallKind {
 				if e = validInstallRecord(prior); e != nil {
 					access()

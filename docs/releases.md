@@ -121,7 +121,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-selection-status \
 
 ## 面板进程维护
 
-本机 root 的 `panel-service-control` 仅控制已绑定的管理面板，要求同一未释放维护会话及当前 Agent epoch；本阶段合同使用 Agent 协议 17、launcher 协议 2。原生模式核对安装意图 v9、已加载且没有 drop-in 的固定 `nginxpanel.service`，检查 UID/GID、主进程、实例与启动标识、执行文件、固定参数及 systemd cgroup；Docker 模式认证 launcher 的 UID、独立容器 PID 1 和执行散列，使用 boot ID 与 serve 实例 UUID 区分进程。Docker 状态中的 PID 属于容器命名空间，原生 PID 属于宿主机。
+本机 root 的 `panel-service-control` 仅控制已绑定的管理面板，要求同一未释放维护会话及当前 Agent epoch；本阶段合同使用 Agent 协议 18、launcher 协议 2。原生模式核对安装意图 v9、已加载且没有 drop-in 的固定 `nginxpanel.service`，检查 UID/GID、主进程、实例与启动标识、执行文件、固定参数及 systemd cgroup；Docker 模式认证 launcher 的 UID、独立容器 PID 1 和执行散列，使用 boot ID 与 serve 实例 UUID 区分进程。Docker 状态中的 PID 属于容器命名空间，原生 PID 属于宿主机。
 
 停止前同步独立 `panel.service` 意图，再发布 root 只读的 `run/panel-service-hold.json`。普通 `init/serve` 在写锁内检查标记；launcher 在容器重启后保留控制入口并保持停机。停止确认同时要求受管进程已结束、面板写锁可获取；保留停机标记后才能继续快照与版本选择；一次持久停机只允许从原停机版本确认一次目标选择，其原操作仍可续行。恢复与停机标记共用原子发布，最多保留 32 份未批准的中断临时标记，超限需本机处理。管理进程的维护范围不包含正在服务流量的 Nginx 或 Fail2ban。
 
@@ -160,7 +160,30 @@ sudo /opt/nginxpanel/current/nginxpanel panel-readiness \
 
 实际 HTTPS 监听须属于同一应用进程，并固定本机管理证书、拒绝重定向和代理。检查健康与版本 API 的统一响应、节点身份、版本和协议，再核对全部已发布前端文件及入口内容的长度与散列。前后两次应用/进程/密钥材料核对不一致时明确失败。新目标继续核对原签名批准；停机或数据恢复标记未解除时不提供就绪证据。
 
-返回包含原启动/快照/绑定散列、进程实例、应用状态、HTTPS 核对数量和观察时间，仅表示该时间点的结果；独立更新执行器仍须保存证据并完成提交或补偿。本命令不释放维护、不启动进程、不恢复数据、不删除快照；完整自动更新与回滚尚未完成。尚未执行此入口、服务、构建或测试，留到 P5 集中验证。
+返回包含原启动/快照/绑定散列、进程实例、应用状态、HTTPS 核对数量和观察时间，仅表示该时间点的结果；独立更新执行器见下文。本命令不释放维护、不启动进程、不恢复数据、不删除快照。尚未执行此入口、服务、构建或测试，留到 P5 集中验证。
+
+## 独立面板更新事务
+
+`update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 18。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel update-worker \
+  --data-dir /srv/nginxpanel --panel-update <新更新UUID> \
+  --release-plan <已暂存计划ID> --release-trust /etc/nginxpanel/release-trust.json \
+  --maintenance-id <原维护UUID> --maintenance-epoch <当前Agent-epoch>
+sudo /opt/nginxpanel/current/nginxpanel panel-update-status \
+  --data-dir /srv/nginxpanel --panel-update <原更新UUID>
+```
+
+完整意图和固定子操作标识在副作用前进入独立 `panel.update` 记录。进程派发、恢复前文件清单及就绪证据作为内部子记录原子嵌入父记录，不生成与父任务相互阻塞的顶层任务；内部子标识只能由原更新续行，不用于单独执行叶操作。每个维护会话只允许一个更新事务，待恢复更新会阻止其他高风险操作和维护释放。
+
+切换前失败时确认原程序仍运行且没有停机/恢复标记后中止。进入停机后的失败使用原快照补偿：停止受管进程、选择原不可变程序、恢复匹配数据和密钥材料、启动原版本，再核对就绪。补偿不依赖新目标仍被签名信任；继续前进和启动新目标仍重新验签。未知进程、其他停机标记、恢复偏离或当前授权失效保留 `recovery_required` 与全部救援材料。
+
+前进期限二十分钟，进程控制每次三分钟，自动补偿最多十五分钟；同一操作重新执行会先核对已持久记录与实际状态。Agent 重启后须使用同一未释放会话的当前 epoch。历史终态重放仅返回原结果，不重新切换程序、恢复数据库或改变后来的运行状态。
+
+`committed`、`compensated` 或无副作用的 `aborted` 是恢复写入的持久授权点，先进入 `waiting_confirmation`。维护服务通过 Agent 的统一状态读取 `completion`，持久记录释放意图并由原会话协调释放；worker 核对独立释放回执后设置 `release_acknowledged` 和最终结果。已提交但释放超时只等待或续行原事务，不自动恢复旧快照；提交后的程序重启按正常已提交版本处理。失败与完整补偿均保留原失败原因，并以失败退出状态报告。
+
+当前实现为独立 root CLI；Web/API 更新任务、专用服务托管、成功后的快照/恢复暂存清理仍待接入，暂时保留恢复材料并继续受既有容量上限约束。尚未执行 worker、安装器、服务、构建、生成器或测试，待 P5 集中验证。
 
 ## 本机面板恢复快照
 

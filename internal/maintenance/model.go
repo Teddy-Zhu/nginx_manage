@@ -15,12 +15,21 @@ type RootRequest struct {
 	OperationID string `json:"operation_id"`
 }
 type RootStatus struct {
-	Available bool   `json:"available"`
-	ID        string `json:"id"`
-	Phase     string `json:"phase"`
-	Epoch     string `json:"epoch"`
-	Busy      int    `json:"busy"`
-	Reason    string `json:"reason"`
+	Completion *Completion `json:"completion,omitempty"`
+	Available  bool        `json:"available"`
+	ID         string      `json:"id"`
+	Phase      string      `json:"phase"`
+	Epoch      string      `json:"epoch"`
+	Busy       int         `json:"busy"`
+	Reason     string      `json:"reason"`
+}
+
+// Completion is published only from a finalized, authenticated root update
+// record. The application coordinator still durably releases its own session.
+type Completion struct {
+	OperationID   string `json:"operation_id"`
+	RequestSHA256 string `json:"request_sha256"`
+	Outcome       string `json:"outcome"`
 }
 type Host interface {
 	MaintenanceStatus(context.Context) (RootStatus, error)

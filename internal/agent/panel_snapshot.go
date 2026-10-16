@@ -40,6 +40,13 @@ func CapturePanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch st
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		settled, e := settledPanelUpdate(r, maintenanceID)
+		if e != nil {
+			return out, e
+		}
+		if settled {
+			continue
+		}
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
 		default:

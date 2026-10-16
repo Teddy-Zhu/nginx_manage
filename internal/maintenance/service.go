@@ -420,6 +420,13 @@ func (s *Service) step(ctx context.Context) error {
 	}
 	if session.Phase == "held" {
 		if root.ID == session.TaskID && root.Phase == "held" && root.Epoch == session.RootEpoch && root.Busy == 0 {
+			if root.Completion != nil {
+				session.Phase = "releasing"
+				if root.Completion.Outcome != "succeeded" {
+					session.Error = "独立面板更新未成功，已由原更新事务完成补偿或无副作用中止"
+				}
+				return s.save(ctx, session)
+			}
 			s.publish(session, "held", "")
 			return nil
 		}
@@ -487,6 +494,16 @@ func (s *Service) step(ctx context.Context) error {
 	return nil
 }
 func validRoot(root RootStatus) bool {
+	if c := root.Completion; c != nil {
+		if !validID(c.OperationID) || len(c.RequestSHA256) != 64 || (c.Outcome != "succeeded" && c.Outcome != "rolled_back" && c.Outcome != "failed") || !root.Available || root.ID == "" || root.Phase != "held" && root.Phase != "closing" || root.Busy != 0 {
+			return false
+		}
+		for _, ch := range c.RequestSHA256 {
+			if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f') {
+				return false
+			}
+		}
+	}
 	switch root.Phase {
 	case "open":
 		return root.ID == ""
