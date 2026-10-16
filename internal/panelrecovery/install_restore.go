@@ -113,7 +113,10 @@ func PreserveOriginals(ctx context.Context, p Prepared) ([]Original, error) {
 	if os.Geteuid() != 0 || p.dir == "" {
 		return nil, errors.New("恢复前保留需要已认证的 root 暂存")
 	}
-	dir := filepath.Join(p.dir, "before")
+	return preserveOriginals(ctx, p.Receipt.Manifest, filepath.Join(p.dir, "before"))
+}
+
+func preserveOriginals(ctx context.Context, m Manifest, dir string) ([]Original, error) {
 	if err := privateDir(dir); err != nil {
 		return nil, err
 	}
@@ -127,7 +130,7 @@ func PreserveOriginals(ctx context.Context, p Prepared) ([]Original, error) {
 	var out []Original
 	var total int64
 	for i, spec := range restoreFiles {
-		original, f, info, err := observe(ctx, p.Receipt.Manifest, spec.name, spec.limit)
+		original, f, info, err := observe(ctx, m, spec.name, spec.limit)
 		if err != nil {
 			return nil, err
 		}
@@ -272,8 +275,12 @@ func Install(ctx context.Context, p Prepared, before []Original) error {
 			}
 		}
 	}
-	for i := range restoreFiles {
-		if err := installOne(ctx, p, before[i], i); err != nil {
+	for i, spec := range restoreFiles {
+		source := ""
+		if spec.target >= 0 {
+			source = filepath.Join(p.dir, "after", fmt.Sprintf("%02d", spec.target))
+		}
+		if err := installOne(ctx, p.Receipt.Manifest, filepath.Base(p.dir), before[i], targetOriginal(p.Receipt, i), i, source); err != nil {
 			return err
 		}
 	}
@@ -318,8 +325,8 @@ func targetOriginal(r Receipt, index int) Original {
 	return Original{Name: spec.name, Present: true, Size: f.Size, SHA256: f.SHA256}
 }
 
-func installOne(ctx context.Context, p Prepared, before Original, index int) error {
-	spec, m := restoreFiles[index], p.Receipt.Manifest
+func installOne(ctx context.Context, m Manifest, operation string, before, target Original, index int, source string) error {
+	spec := restoreFiles[index]
 	actual, f, _, err := observe(ctx, m, spec.name, spec.limit)
 	if f != nil {
 		f.Close()
@@ -327,7 +334,6 @@ func installOne(ctx context.Context, p Prepared, before Original, index int) err
 	if err != nil {
 		return err
 	}
-	target := targetOriginal(p.Receipt, index)
 	if actual == target {
 		return nil
 	}
@@ -346,14 +352,14 @@ func installOne(ctx context.Context, p Prepared, before Original, index int) err
 		}
 		return dir.Sync()
 	}
-	src, _, err := secure.OpenRootFile(filepath.Join(p.dir, "after", fmt.Sprintf("%02d", spec.target)), target.Size)
+	src, _, err := secure.OpenRootFile(source, target.Size)
 	if err != nil {
 		return err
 	}
 	defer src.Close()
 	// One reserved scratch name per resource bounds crash leftovers. It is
 	// unapproved copy output, so a replay may unlink it without following it.
-	name := fmt.Sprintf(".panel-restore-%s-%02d", filepath.Base(p.dir), index)
+	name := fmt.Sprintf(".panel-restore-%s-%02d", operation, index)
 	if err = unix.Unlinkat(int(dir.Fd()), name, 0); err != nil && !errors.Is(err, unix.ENOENT) {
 		return err
 	}

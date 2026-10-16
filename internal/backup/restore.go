@@ -1,0 +1,84 @@
+package backup
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"time"
+
+	"nginxpanel/internal/agent"
+	"nginxpanel/internal/panelrecovery"
+)
+
+type RestoreInput struct {
+	AdoptionSHA256 string `json:"adoption_sha256"`
+	Epoch          string `json:"epoch"`
+}
+
+// RestoreAdoption installs a previously approved generation or continues its
+// explicit compensation. Source admission is serialized with adoption cleanup.
+func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, rollback bool) (out agent.Record, err error) {
+	if !validID.MatchString(id) || !validID.MatchString(in.Epoch) || !validHash.MatchString(in.AdoptionSHA256) {
+		return out, errors.New("独立恢复须指定原接入批准摘要和当前维护 epoch")
+	}
+	call, cancel := context.WithTimeout(ctx, 12*time.Minute)
+	defer cancel()
+	unlock, _, err := lockAdoptionStore(data, false)
+	if err != nil {
+		return out, err
+	}
+	defer unlock()
+	if rollback {
+		i, err := panelrecovery.ReadDisasterIntent(data, id)
+		if err != nil {
+			return out, err
+		}
+		if i.AdoptionSHA256 != in.AdoptionSHA256 {
+			return out, errors.New("补偿摘要与原独立安装批准不一致")
+		}
+		return agent.RestoreDisaster(call, data, id, in.Epoch, i, true)
+	}
+	status, err := readAdoptionStatus(call, data, id)
+	if err != nil {
+		return out, err
+	}
+	if status.State != "adopted" || status.Adoption == nil {
+		return out, errors.New("独立恢复需要已固定并核对的接入材料")
+	}
+	a := status.Adoption
+	if a.SHA256 != in.AdoptionSHA256 {
+		return out, errors.New("独立恢复须明确指定原接入批准摘要")
+	}
+	i := a.Intent
+	files := make([]panelrecovery.File, len(resources))
+	for index, file := range i.Preparation.Files {
+		files[index] = panelrecovery.File{Name: i.Rollback.Manifest.Files[index].Name, Size: file.Size, SHA256: file.SHA256}
+	}
+	input := panelrecovery.DisasterIntent{Schema: 1, DataDir: data, OperationID: id, AdoptionSHA256: a.SHA256, Stop: i.Stop, Rollback: i.Rollback, Files: files, Before: i.Before, ReleaseID: i.Preparation.Target.ReleaseID, BinarySHA256: i.BinarySHA256, ExpiresAt: i.ExpiresAt}
+	return agent.RestoreDisaster(call, data, id, in.Epoch, input, false)
+}
+
+// An interrupted install may have durable approval before its fence exists.
+// Keep its source until the original independent compensation is complete.
+func adoptionRestoreSettled(data, id string) error {
+	if _, err := panelrecovery.ReadDisasterIntent(data, id); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if _, e := os.Lstat(filepath.Join(data, "agent", "operations", id+".json")); os.IsNotExist(e) {
+			return nil
+		} else if e != nil {
+			return e
+		}
+		return errors.New("原独立恢复记录的安装意图缺失，保留材料供本机恢复")
+	}
+	r, err := agent.DisasterRestoreStatus(data, id)
+	if err != nil {
+		return errors.Join(errors.New("已有独立安装意图，须先完成原恢复补偿"), err)
+	}
+	if r.State != "rolled_back" || r.Stage != "files_compensated" {
+		return errors.New("原恢复安装尚未补偿，不能删除固定材料")
+	}
+	return nil
+}

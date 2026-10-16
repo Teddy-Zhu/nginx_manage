@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|agent|management-listener-disable|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|agent|management-listener-disable|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -140,6 +140,9 @@ func run() error {
 		"backup-adoption":                 {"data-dir": true, "restore-operation": true},
 		"backup-adoption-cleanup":         {"data-dir": true, "restore-operation": true},
 		"backup-adoption-verify-data":     {"data-dir": true, "restore-operation": true},
+		"backup-restore":                  {"data-dir": true, "restore-operation": true},
+		"backup-restore-rollback":         {"data-dir": true, "restore-operation": true},
+		"backup-restore-status":           {"data-dir": true, "restore-operation": true},
 		"launcher":                        {"data-dir": true},
 		"panel-native-bind":               {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
 		"panel-native-serve":              {"data-dir": true},

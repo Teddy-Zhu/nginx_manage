@@ -168,6 +168,15 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 				continue
 			}
 		}
+		if r.Kind == disasterRestoreKind {
+			i, err := validDisasterRestore(filepath.Dir(filepath.Dir(g.journal.Dir)), r)
+			if err != nil {
+				return out, err
+			}
+			if g.id != "" && i.Stop.MaintenanceID == g.id {
+				continue
+			}
+		}
 		if r.Kind == panelRestoreKind {
 			if err := validPanelRestoreRecord(r); err != nil {
 				return out, err
@@ -348,6 +357,16 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 			}
 			if record.State != "succeeded" && record.PanelSelection.MaintenanceID == in.OperationID {
 				return maintenance.RootStatus{}, fault.Conflict("面板版本选择仍在执行或待恢复，不能释放维护锁")
+			}
+			continue
+		}
+		if record.Kind == disasterRestoreKind {
+			i, err := validDisasterRestore(filepath.Dir(filepath.Dir(g.journal.Dir)), record)
+			if err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if record.State != "rolled_back" && i.Stop.MaintenanceID == in.OperationID {
+				return maintenance.RootStatus{}, fault.Conflict("完整恢复尚待协调或补偿，不能释放维护锁")
 			}
 			continue
 		}

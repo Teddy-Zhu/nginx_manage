@@ -1,5 +1,6 @@
 // Package panelrecovery holds encrypted, local maintenance snapshots. It is
-// separate from portable configuration exports and offline disaster recovery.
+// separate from portable archives. Its fixed resource writer also serves the
+// independently approved offline disaster-recovery coordinator.
 package panelrecovery
 
 import (

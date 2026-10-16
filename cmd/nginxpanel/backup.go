@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"nginxpanel/internal/agent"
 	"nginxpanel/internal/backup"
 )
 
@@ -19,7 +20,7 @@ type backupCLIOptions struct {
 
 func isBackupRecoveryCommand(command string) bool {
 	switch command {
-	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data":
+	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status":
 		return true
 	default:
 		return false
@@ -70,6 +71,25 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 		return true, err
 	}
 	switch command {
+	case "backup-restore", "backup-restore-rollback":
+		if os.Geteuid() != 0 {
+			return true, errors.New("独立灾备恢复须由 root 调用")
+		}
+		var input backup.RestoreInput
+		if err = readBackupInput(&input); err != nil {
+			return true, err
+		}
+		out, err := backup.RestoreAdoption(ctx, data, options.OperationID, input, command == "backup-restore-rollback")
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
+	case "backup-restore-status":
+		out, err := agent.DisasterRestoreStatus(data, options.OperationID)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
 	case "backup-adopt":
 		if os.Geteuid() != 0 {
 			return true, errors.New("恢复材料接入须由 root 调用")

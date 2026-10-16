@@ -133,6 +133,9 @@ func CleanupAdoption(ctx context.Context, data, id string) error {
 	if status.State == "absent" || status.State == "cleaned" {
 		return syncDir(root)
 	}
+	if err = adoptionRestoreSettled(data, id); err != nil {
+		return err
+	}
 	running, err := panelruntime.Read(data)
 	if err != nil {
 		return err
