@@ -18,19 +18,27 @@ import (
 )
 
 const firewallOperationKind = "firewall.change"
-const firewallRuntimeSchema = 2
+const firewallRuntimeSchema = 3
 const firewallCheckpointBytes = 1 << 20
 
+type firewallProtectionBasis struct {
+	SSHProfile     string   `json:"ssh_profile"`
+	SSHListeners   []string `json:"ssh_listeners"`
+	Listener       string   `json:"listener"`
+	AllowedSources []string `json:"allowed_sources"`
+	ControlSource  string   `json:"control_source"`
+}
 type firewallPolicyRecord struct {
-	OperationID string                `json:"operation_id"`
-	Action      string                `json:"action"`
-	PlanID      string                `json:"plan_id"`
-	Version     int64                 `json:"version"`
-	Policy      firewall.Policy       `json:"policy"`
-	PolicyHash  string                `json:"policy_hash"`
-	ProgramHash string                `json:"program_hash"`
-	Protections []firewall.Protection `json:"protections"`
-	Marker      string                `json:"marker"`
+	ProtectionBasis firewallProtectionBasis `json:"protection_basis"`
+	OperationID     string                  `json:"operation_id"`
+	Action          string                  `json:"action"`
+	PlanID          string                  `json:"plan_id"`
+	Version         int64                   `json:"version"`
+	Policy          firewall.Policy         `json:"policy"`
+	PolicyHash      string                  `json:"policy_hash"`
+	ProgramHash     string                  `json:"program_hash"`
+	Protections     []firewall.Protection   `json:"protections"`
+	Marker          string                  `json:"marker"`
 }
 type firewallCheckpoint struct {
 	Schema          int                   `json:"schema"`
@@ -51,21 +59,23 @@ type firewallPrivatePlan struct {
 	record *firewallPolicyRecord
 }
 type hostFirewall struct {
-	mu               sync.Mutex
-	dataDir, sshMode string
-	available        bool
-	recovering       bool
-	policyUncertain  bool
-	journal          *Journal
-	remote           *remoteListener
-	dns              *HostDNS
-	state            firewallCheckpoint
-	plans            map[string]firewallPrivatePlan
-	unlock           func()
-	deadline         time.Time
-	proofListener    *net.TCPListener
-	problem          string
-	retryAt          time.Time
+	mu                    sync.Mutex
+	dataDir, sshMode      string
+	available             bool
+	recovering            bool
+	policyUncertain       bool
+	journal               *Journal
+	remote                *remoteListener
+	dns                   *HostDNS
+	state                 firewallCheckpoint
+	plans                 map[string]firewallPrivatePlan
+	unlock                func()
+	deadline              time.Time
+	proofListener         *net.TCPListener
+	problem               string
+	retryAt               time.Time
+	protectionObservation firewall.ProtectionObservation
+	protectionObservedAt  time.Time
 }
 
 func firewallStatePath(dataDir string) string {
@@ -94,6 +104,9 @@ func loadFirewallState(dataDir string) (*firewallCheckpoint, error) {
 	for _, r := range []*firewallPolicyRecord{value.Confirmed, value.Candidate} {
 		if r == nil {
 			continue
+		}
+		if err := validateFirewallProtectionBasis(r.ProtectionBasis); err != nil {
+			return nil, err
 		}
 		hash, err := firewall.PolicyDigest(r.Policy)
 		if err != nil {
@@ -293,6 +306,7 @@ func (f *hostFirewall) View() firewall.RuntimeView {
 		copy := *f.state.Operation
 		out.Operation = &copy
 	}
+	out.ProtectionObservation = f.protectionObservationLocked()
 	return out
 }
 func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, connection string) (firewall.Plan, error) {
@@ -377,7 +391,7 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	if err != nil {
 		return out, err
 	}
-	record := &firewallPolicyRecord{Action: in.Action, PlanID: id, Version: in.Version, Policy: normalized, PolicyHash: policyHash, ProgramHash: programHash, Protections: protections, Marker: "nginxpanel:policy:v2:" + f.state.Owner + ":" + id + ":" + programHash}
+	record := &firewallPolicyRecord{Action: in.Action, PlanID: id, Version: in.Version, Policy: normalized, PolicyHash: policyHash, ProgramHash: programHash, Protections: protections, ProtectionBasis: firewallProtectionBasis{SSHProfile: f.sshMode, SSHListeners: append([]string{}, listeners...), Listener: f.remote.state.Confirmed.Listen, AllowedSources: append([]string{}, f.remote.state.Confirmed.AllowedSources...), ControlSource: source}, Marker: "nginxpanel:policy:v2:" + f.state.Owner + ":" + id + ":" + programHash}
 	batch, err := firewall.PrepareNFTManaged(program, current, record.Marker)
 	if err != nil {
 		return out, err

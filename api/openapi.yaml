@@ -16,7 +16,7 @@ paths:
     get:
       operationId: getFirewallRuntime
       x-scopes: [read, security.write]
-      description: 返回 FirewallRuntime。直接连接目标节点，包含 root 独立状态与原操作；模块停用不撤销已确认策略或恢复。
+      description: 返回 FirewallRuntime。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/plan:
     post:
@@ -45,7 +45,7 @@ paths:
     post:
       operationId: confirmFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallOperation。近期认证且通过生效后重建的目标管理监听新 TCP/TLS 连接确认；旧连接、回环入口、转发及请求头均不能提供连接证明。确认范围为该目标管理监听，不代表云安全组或全部业务端口。
+      description: 返回 FirewallOperation。近期认证且通过生效后重建的目标管理监听新 TCP/TLS 连接确认；旧连接、回环入口、转发及请求头均不能提供连接证明。应用确认前重新采集 SSH/保护来源并证明候选对象；依据变化返回已恢复的原操作，未知读取不确认，原期限不延长。确认范围为该目标管理监听，不代表云安全组或全部业务端口。
       parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/CSRF"}]
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/operations/{id}/rollback:
@@ -1720,8 +1720,20 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallOperation:
       {"type": "object", "additionalProperties": false, "required": ["id", "plan_id", "version", "policy_hash", "program_hash", "state", "stage", "deadline", "updated_at", "confirmed_source", "verification_scope", "error", "action"], "properties": {"id": {"type": "string"}, "plan_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "state": {"type": "string", "enum": ["running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"]}, "stage": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "confirmed_source": {"type": "string"}, "verification_scope": {"type": "string"}, "error": {"type": "string"}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
+    FirewallProtectionObservation:
+      type: object
+      additionalProperties: false
+      required: [state, plan_id, observed_at, ssh_profile, ssh_listeners, protections, reason]
+      properties:
+        state: {type: string, enum: [unavailable, not_applicable, current, changed], description: '只比较原确认计划与采样时的保护依据，不证明外部可达性'}
+        plan_id: {type: string, description: '本次核对对应的原确认计划；无适用计划时为空'}
+        observed_at: {type: integer, format: int64, description: '采样 Unix 时间；尚未采样时为 0'}
+        ssh_profile: {type: string, description: '当前本机授权的 SSH 保护方式；未核对时可为空'}
+        ssh_listeners: {type: array, maxItems: 512, items: {type: string}}
+        protections: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/FirewallProtection"}}
+        reason: {type: string}
     FirewallRuntime:
-      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id", "protection_observation"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}, "protection_observation": {"$ref": "#/components/schemas/FirewallProtectionObservation"}}}
     BackupInput:
       type: object
       additionalProperties: false

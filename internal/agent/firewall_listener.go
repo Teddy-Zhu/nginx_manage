@@ -16,11 +16,12 @@ import (
 // order until the candidate has been saved and bound. Neither the saved draft
 // nor the module switch describes what the independently maintained rules do.
 func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Config) error {
-	if !config.Enabled {
-		return nil
-	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if !config.Enabled {
+		f.protectionObservedAt = time.Time{}
+		return nil
+	}
 	if f.policyUncertain {
 		return fault.Unavailable("防火墙独立策略记录不可核对，禁止变更远程入口")
 	}
@@ -66,5 +67,11 @@ func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Co
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	return firewall.CheckTCPIngress(ctx, f.state.Confirmed.Policy, f.state.Confirmed.Protections, port, sources)
+	if err := firewall.CheckTCPIngress(ctx, f.state.Confirmed.Policy, f.state.Confirmed.Protections, port, sources); err != nil {
+		return err
+	}
+	// The caller is about to change or confirm listener context. A cached
+	// observation of the former confirmed ingress is no longer current.
+	f.protectionObservedAt = time.Time{}
+	return nil
 }

@@ -46,7 +46,7 @@ const actions = [
 const api = useNodeAPI(),
   session = useSession(),
   dialog = useDialog(),
-  { run, busy } = useAction(),
+  { run, busy, message } = useAction(),
   keyFor = useIdempotency();
 const view = ref<FirewallRuntime | null>(null),
   stored = ref<FirewallPolicyView | null>(null),
@@ -61,6 +61,13 @@ const canManage = computed(() =>
   ),
 );
 const operation = computed(() => view.value?.operation);
+const observedProtections = computed(() => view.value?.protection_observation);
+const protectionStates = {
+  unavailable: "尚不可核对",
+  not_applicable: "无适用策略",
+  current: "采样时一致",
+  changed: "保护依据已变化",
+};
 const emptyInitial = computed(
   () =>
     view.value?.available &&
@@ -239,20 +246,22 @@ function apply() {
 async function decide(action: "confirm" | "rollback") {
   const current = operation.value;
   if (!current) return;
-  await run(
-    async () => {
-      const result = await api.decideFirewall(current.id, action);
-      if (view.value) view.value = { ...view.value, operation: result };
-      await readRuntime();
-    },
-    action === "confirm" ? "防火墙变更已确认" : "恢复请求已记录",
-  );
+  await run(async () => {
+    const result = await api.decideFirewall(current.id, action);
+    if (view.value) view.value = { ...view.value, operation: result };
+    await readRuntime();
+    if (action === "confirm" && result.state === "succeeded")
+      message.success("防火墙变更已确认");
+    else if (result.state === "rolled_back")
+      message.warning(result.error || "变更已恢复，请重新生成计划");
+    else message.info(`操作状态：${states[result.state] ?? result.state}`);
+  });
 }
 onMounted(() => {
   void load();
   timer = setInterval(() => {
     updateDeadline();
-    if (++ticks % 3 === 0 && (active.value || uncertain.value))
+    if (++ticks % (active.value || uncertain.value ? 3 : 30) === 0)
       void readRuntime();
   }, 1000);
 });
@@ -349,6 +358,63 @@ onUnmounted(() => {
           : "尚无已确认的业务过滤策略。"
       }}
     </p>
+  </section>
+  <section v-if="observedProtections" class="panel">
+    <div class="page-toolbar">
+      <h3>保护依据核对</h3>
+      <n-tag
+        :type="
+          observedProtections.state === 'current'
+            ? 'success'
+            : observedProtections.state === 'not_applicable'
+              ? 'default'
+              : 'warning'
+        "
+      >
+        {{ protectionStates[observedProtections.state] }}
+      </n-tag>
+    </div>
+    <p v-if="observedProtections.observed_at">
+      采样时间
+      {{ new Date(observedProtections.observed_at * 1000).toLocaleString() }} ·
+      计划 {{ observedProtections.plan_id }}
+    </p>
+    <n-alert
+      v-if="observedProtections.reason"
+      :type="
+        observedProtections.state === 'not_applicable' ? 'info' : 'warning'
+      "
+      :bordered="false"
+      class="notice"
+    >
+      {{ observedProtections.reason }}
+    </n-alert>
+    <template
+      v-if="
+        observedProtections.state === 'current' ||
+        observedProtections.state === 'changed'
+      "
+    >
+      <p>
+        当前 SSH 保护：{{
+          observedProtections.ssh_profile === "openssh"
+            ? "OpenSSH"
+            : "本机已确认无 SSH 保护"
+        }}
+        · 实际监听
+        {{ observedProtections.ssh_listeners.join(", ") || "未观察到" }}
+      </p>
+      <n-data-table
+        v-if="observedProtections.protections.length"
+        :columns="protections"
+        :data="observedProtections.protections"
+        :pagination="{ pageSize: 10 }"
+        :scroll-x="650"
+      />
+      <p class="muted">
+        此处为采样时重新核对的保护项，上方仍为已确认规则中的保护项。差异需要重新应用并确认；采样不自动修改规则，也不证明外部可达性。
+      </p>
+    </template>
   </section>
   <section v-if="plan" class="panel">
     <div class="page-toolbar">

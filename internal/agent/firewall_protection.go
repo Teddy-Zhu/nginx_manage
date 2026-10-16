@@ -18,6 +18,8 @@ import (
 	"nginxpanel/internal/firewall"
 )
 
+var errFirewallProtectionSources = errors.New("所选地址族的 SSH 阻止规则缺少可核对的保护来源")
+
 type firewallTCPSocket struct {
 	local, remote netip.AddrPort
 	state, inode  string
@@ -229,13 +231,27 @@ func firewallProtections(ctx context.Context, policy firewall.Policy, sshMode st
 	if source.IsLoopback() || source.IsUnspecified() || source.Zone() != "" {
 		return nil, nil, "", errors.New("须从非回环的目标管理连接核对可达性")
 	}
-	_, port, err := net.SplitHostPort(m.state.Confirmed.Listen)
-	if err != nil {
-		return nil, nil, "", err
+	protections, listeners, err := firewallProtectionSet(ctx, policy, sshMode, m.state.Confirmed.Listen, m.state.Confirmed.AllowedSources, source.String())
+	return protections, listeners, source.String(), err
+}
+
+// This shared observation path needs no live Web connection. The original
+// actual control source remains part of the independent protection basis.
+func firewallProtectionSet(ctx context.Context, policy firewall.Policy, sshMode, listen string, allowedSources []string, controlSource string) ([]firewall.Protection, []string, error) {
+	source, err := netip.ParseAddr(controlSource)
+	if err != nil || source.Is4In6() || source.IsLoopback() || source.IsUnspecified() || source.Zone() != "" {
+		return nil, nil, errors.New("独立保护来源无效")
 	}
-	managementPort, err := strconv.Atoi(port)
-	if err != nil {
-		return nil, nil, "", err
+	managementPort := 0
+	if listen != "" {
+		_, port, err := net.SplitHostPort(listen)
+		if err != nil {
+			return nil, nil, err
+		}
+		managementPort, err = strconv.Atoi(port)
+		if err != nil || managementPort < 1 || managementPort > 65535 {
+			return nil, nil, errors.New("管理保护端口无效")
+		}
 	}
 	families := map[string]map[string]bool{"ipv4": {}, "ipv6": {}}
 	add := func(raw string) error {
@@ -251,32 +267,33 @@ func firewallProtections(ctx context.Context, policy firewall.Policy, sshMode st
 		return nil
 	}
 	if err = add(netip.PrefixFrom(source, source.BitLen()).String()); err != nil {
-		return nil, nil, "", err
+		return nil, nil, err
 	}
-	for _, cidr := range m.state.Confirmed.AllowedSources {
+	for _, cidr := range allowedSources {
 		if err = add(cidr); err != nil {
-			return nil, nil, "", err
+			return nil, nil, err
 		}
 	}
-	sockets, err := firewallTCPSockets(ctx)
-	if err != nil {
-		return nil, nil, "", err
-	}
+	var sockets []firewallTCPSocket
 	ssh := map[string]bool{}
 	if sshMode == "openssh" {
+		sockets, err = firewallTCPSockets(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
 		ssh, err = firewallSSHListeners(ctx, sockets)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, err
 		}
 	} else if sshMode != "none" {
-		return nil, nil, "", errors.New("须由本机确认 OpenSSH 保护或无 SSH 的范围")
+		return nil, nil, errors.New("须由本机确认 OpenSSH 保护或无 SSH 的范围")
 	}
 	ports := map[string]map[int]bool{"ipv4": {}, "ipv6": {}}
 	observed := []string{}
 	for address := range ssh {
 		ap, err := netip.ParseAddrPort(address)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, err
 		}
 		family := "ipv6"
 		if ap.Addr().Unmap().Is4() {
@@ -289,6 +306,9 @@ func firewallProtections(ctx context.Context, policy firewall.Policy, sshMode st
 		observed = append(observed, address)
 	}
 	sort.Strings(observed)
+	if len(observed) > 512 {
+		return nil, nil, errors.New("SSH 监听超过 512 项")
+	}
 	for _, s := range sockets {
 		if s.state != "01" || s.remote.Addr().IsUnspecified() {
 			continue
@@ -302,14 +322,27 @@ func firewallProtections(ctx context.Context, policy firewall.Policy, sshMode st
 		}
 		peer := s.remote.Addr().Unmap()
 		if err = add(netip.PrefixFrom(peer, peer.BitLen()).String()); err != nil {
-			return nil, nil, "", err
+			return nil, nil, err
 		}
 	}
 	protections := []firewall.Protection{}
 	for _, family := range []string{"ipv4", "ipv6"} {
 		sources := []string{}
 		for cidr := range families[family] {
-			sources = append(sources, cidr)
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+			prefix, _ := netip.ParsePrefix(cidr)
+			covered := false
+			for bits := 0; bits < prefix.Bits(); bits++ {
+				if families[family][netip.PrefixFrom(prefix.Addr(), bits).Masked().String()] {
+					covered = true
+					break
+				}
+			}
+			if !covered {
+				sources = append(sources, cidr)
+			}
 		}
 		sort.Strings(sources)
 		protectedPorts := []int{}
@@ -325,26 +358,33 @@ func firewallProtections(ctx context.Context, policy firewall.Policy, sshMode st
 				for _, r := range rule.Ports {
 					for _, p := range protectedPorts {
 						if r.From <= p && p <= r.To {
-							return nil, nil, "", errors.New("所选地址族的 SSH 阻止规则缺少可核对的保护来源")
+							return nil, observed, errFirewallProtectionSources
 						}
 					}
 				}
 			}
 			continue
 		}
-		appendGuard := func(service string, p int) {
+		appendGuard := func(service string, p int) error {
 			for start := 0; start < len(sources); start += 32 {
+				if len(protections) >= 128 {
+					return errors.New("防火墙保护项超过 128 项")
+				}
 				end := min(start+32, len(sources))
 				protections = append(protections, firewall.Protection{Service: service, Family: family, Port: p, Sources: append([]string{}, sources[start:end]...)})
 			}
+			return nil
 		}
-		appendGuard("management", managementPort)
+		if managementPort != 0 {
+			if err := appendGuard("management", managementPort); err != nil {
+				return nil, nil, err
+			}
+		}
 		for _, p := range protectedPorts {
-			appendGuard("ssh", p)
+			if err := appendGuard("ssh", p); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
-	if len(protections) > 128 {
-		return nil, nil, "", errors.New("防火墙保护项超过 128 项")
-	}
-	return protections, observed, source.String(), nil
+	return protections, observed, nil
 }

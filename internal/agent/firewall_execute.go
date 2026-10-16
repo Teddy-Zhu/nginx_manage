@@ -138,6 +138,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	candidate := *plan.record
 	candidate.OperationID = id
 	f.state.Operation, f.state.RequestHash, f.state.Candidate = op, hash, &candidate
+	f.protectionObservedAt = time.Time{}
 	f.state.BeforeKernel, f.state.CandidateKernel, f.state.Rollback = current, firewall.KernelView{}, false
 	f.deadline = time.Now().Add(firewall.ConfirmationSeconds * time.Second)
 	if err = f.save(); err != nil {
@@ -187,7 +188,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	return *op, nil
 }
 
-func (f *hostFirewall) Decide(id, action, connection string) (firewall.Operation, error) {
+func (f *hostFirewall) Decide(ctx context.Context, id, action, connection string) (firewall.Operation, error) {
 	f.remote.mu.Lock()
 	defer f.remote.mu.Unlock()
 	f.mu.Lock()
@@ -217,7 +218,25 @@ func (f *hostFirewall) Decide(id, action, connection string) (firewall.Operation
 	if peer == nil || peer.IsLoopback() || peer.IsUnspecified() {
 		return out, fault.Conflict("须从非回环的目标管理连接确认")
 	}
-	current, err := f.snapshot(f.state.Candidate)
+	deadline := time.Unix(f.state.Operation.Deadline, 0)
+	if !f.deadline.IsZero() && f.deadline.Before(deadline) {
+		deadline = f.deadline
+	}
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	observed := f.observeProtectionsLocked(ctx, f.state.Candidate)
+	if f.expiredLocked() {
+		err = f.rollbackLocked("确认核对期间期限已到，恢复最后确认策略")
+		return *f.state.Operation, err
+	}
+	if observed.State == "changed" {
+		err = f.rollbackLocked("保护依据已变化，恢复最后确认策略；请重新计划")
+		return *f.state.Operation, err
+	}
+	if observed.State == "unavailable" {
+		return out, fault.Unavailable(observed.Reason)
+	}
+	current, err := f.snapshotContext(ctx, f.state.Candidate)
 	if err != nil || !current.TableExists || current.NamespaceID != f.state.CandidateKernel.NamespaceID || current.Fingerprint != f.state.CandidateKernel.Fingerprint {
 		return out, fault.Conflict("候选内核对象变化，禁止确认")
 	}
@@ -243,6 +262,7 @@ func (f *hostFirewall) Decide(id, action, connection string) (firewall.Operation
 	}
 	f.proofListener = nil
 	f.problem = ""
+	f.protectionObservation, f.protectionObservedAt = observed, time.Now()
 	return confirmed, nil
 }
 func (f *hostFirewall) expiredLocked() bool {
@@ -442,6 +462,7 @@ func (f *hostFirewall) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	nextInspect := time.Now().Add(30 * time.Second)
+	nextProtectionInspect := time.Now()
 	for {
 		stopping := false
 		select {
@@ -466,6 +487,11 @@ func (f *hostFirewall) Run(ctx context.Context) {
 				if err := f.reconcileConfirmedLocked(); err != nil {
 					f.problem = "已确认防火墙对象无法核对或恢复"
 				}
+			}
+			if !stopping && !f.activeLocked() && f.problem == "" && !time.Now().Before(nextProtectionInspect) {
+				f.protectionObservation = f.observeProtectionsLocked(ctx, f.state.Confirmed)
+				f.protectionObservedAt = time.Now()
+				nextProtectionInspect = time.Now().Add(30 * time.Second)
 			}
 		}
 		f.mu.Unlock()

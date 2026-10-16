@@ -64,17 +64,30 @@ type Operation struct {
 	VerificationScope string `json:"verification_scope"`
 	Error             string `json:"error"`
 }
+
+// ProtectionObservation compares the current host inputs with one confirmed
+// root plan. It neither proves external reachability nor changes any rules.
+type ProtectionObservation struct {
+	State        string       `json:"state"`
+	PlanID       string       `json:"plan_id"`
+	ObservedAt   int64        `json:"observed_at"`
+	SSHProfile   string       `json:"ssh_profile"`
+	SSHListeners []string     `json:"ssh_listeners"`
+	Protections  []Protection `json:"protections"`
+	Reason       string       `json:"reason"`
+}
 type RuntimeView struct {
-	ConfirmedAction      string       `json:"confirmed_action"`
-	ConfirmedPlanID      string       `json:"confirmed_plan_id"`
-	ConfirmedOperationID string       `json:"confirmed_operation_id"`
-	Available            bool         `json:"available"`
-	Reason               string       `json:"reason"`
-	ConfirmedVersion     int64        `json:"confirmed_version"`
-	ConfirmedPolicyHash  string       `json:"confirmed_policy_hash"`
-	Kernel               KernelView   `json:"kernel"`
-	Protections          []Protection `json:"protections"`
-	Operation            *Operation   `json:"operation"`
+	ProtectionObservation ProtectionObservation `json:"protection_observation"`
+	ConfirmedAction       string                `json:"confirmed_action"`
+	ConfirmedPlanID       string                `json:"confirmed_plan_id"`
+	ConfirmedOperationID  string                `json:"confirmed_operation_id"`
+	Available             bool                  `json:"available"`
+	Reason                string                `json:"reason"`
+	ConfirmedVersion      int64                 `json:"confirmed_version"`
+	ConfirmedPolicyHash   string                `json:"confirmed_policy_hash"`
+	Kernel                KernelView            `json:"kernel"`
+	Protections           []Protection          `json:"protections"`
+	Operation             *Operation            `json:"operation"`
 }
 
 func PolicyDigest(policy Policy) (string, error) {

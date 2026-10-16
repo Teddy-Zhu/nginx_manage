@@ -80,7 +80,7 @@ func (s *Server) firewallRuntimeHandlers(mux *http.ServeMux, f *hostFirewall) {
 					firewallReply(w, nil, fault.Invalid("防火墙确认请求无效"))
 					return
 				}
-				out, err := f.Decide(in.OperationID, in.Action, in.ConnectionID)
+				out, err := f.Decide(r.Context(), in.OperationID, in.Action, in.ConnectionID)
 				firewallReply(w, out, err)
 			}
 		})

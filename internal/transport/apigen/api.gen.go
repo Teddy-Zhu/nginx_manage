@@ -1846,17 +1846,27 @@ type FirewallOperation struct {
 	VerificationScope string `json:"verification_scope"`
 	Error             string `json:"error"`
 }
+type FirewallProtectionObservation struct {
+	State        string               `json:"state"`
+	PlanId       string               `json:"plan_id"`
+	ObservedAt   int64                `json:"observed_at"`
+	SshProfile   string               `json:"ssh_profile"`
+	SshListeners []string             `json:"ssh_listeners"`
+	Protections  []FirewallProtection `json:"protections"`
+	Reason       string               `json:"reason"`
+}
 type FirewallRuntime struct {
-	ConfirmedAction      string               `json:"confirmed_action"`
-	ConfirmedPlanId      string               `json:"confirmed_plan_id"`
-	ConfirmedOperationId string               `json:"confirmed_operation_id"`
-	Available            bool                 `json:"available"`
-	Reason               string               `json:"reason"`
-	ConfirmedVersion     int64                `json:"confirmed_version"`
-	ConfirmedPolicyHash  string               `json:"confirmed_policy_hash"`
-	Kernel               FirewallKernelView   `json:"kernel"`
-	Protections          []FirewallProtection `json:"protections"`
-	Operation            *FirewallOperation   `json:"operation"`
+	ProtectionObservation FirewallProtectionObservation `json:"protection_observation"`
+	ConfirmedAction       string                        `json:"confirmed_action"`
+	ConfirmedPlanId       string                        `json:"confirmed_plan_id"`
+	ConfirmedOperationId  string                        `json:"confirmed_operation_id"`
+	Available             bool                          `json:"available"`
+	Reason                string                        `json:"reason"`
+	ConfirmedVersion      int64                         `json:"confirmed_version"`
+	ConfirmedPolicyHash   string                        `json:"confirmed_policy_hash"`
+	Kernel                FirewallKernelView            `json:"kernel"`
+	Protections           []FirewallProtection          `json:"protections"`
+	Operation             *FirewallOperation            `json:"operation"`
 }
 type PlanFirewallParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
