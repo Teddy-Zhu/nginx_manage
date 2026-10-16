@@ -1221,6 +1221,45 @@ type ComponentPanelPreparation struct {
 	AutomaticRollback bool   `json:"automatic_rollback"`
 }
 
+// NodeCreateInput defines the registered connection input. Tokens are write-only.
+type NodeCreateInput struct {
+	Name        string `json:"name"`
+	Url         string `json:"url"`
+	ApiKey      string `json:"api_key"`
+	Fingerprint string `json:"fingerprint"`
+}
+type NodeIdentity struct {
+	NodeId         string   `json:"node_id"`
+	CredentialId   string   `json:"credential_id"`
+	Scopes         []string `json:"scopes"`
+	ExpiresAt      int64    `json:"expires_at"`
+	ApiVersion     int64    `json:"api_version"`
+	DatabaseSchema int64    `json:"database_schema"`
+	AgentProtocol  int64    `json:"agent_protocol"`
+	ParserVersion  string   `json:"parser_version"`
+	PolicyVersion  string   `json:"policy_version"`
+}
+type NodeConnection struct {
+	Id           string                  `json:"id"`
+	NodeId       string                  `json:"node_id"`
+	Name         string                  `json:"name"`
+	Url          string                  `json:"url"`
+	Fingerprint  string                  `json:"fingerprint"`
+	CredentialId string                  `json:"credential_id"`
+	Scopes       []string                `json:"scopes"`
+	ExpiresAt    int64                   `json:"expires_at"`
+	ApiVersion   int64                   `json:"api_version"`
+	Capabilities *map[string]interface{} `json:"capabilities"`
+	State        string                  `json:"state"`
+	Error        string                  `json:"error"`
+	CheckedAt    int64                   `json:"checked_at"`
+	CreatedAt    int64                   `json:"created_at"`
+	UpdatedAt    int64                   `json:"updated_at"`
+	RemovedAt    int64                   `json:"removed_at"`
+	Revocation   string                  `json:"revocation"`
+	Version      int64                   `json:"version"`
+}
+
 // PanelUpdateInput defines model for PanelUpdateInput.
 type PanelUpdateInput struct {
 	MaintenanceId string `json:"maintenance_id"`
@@ -2731,6 +2770,28 @@ type ReplaceCertificateParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+type RevokeRemoteAuthorizationParams struct {
+	XNginxpanelTargetNode string `json:"X-Nginxpanel-Target-Node"`
+}
+
+type CreateNodeParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+type DeleteNodeParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+type RefreshNodeParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 type CreatePanelUpdateParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
@@ -3260,6 +3321,8 @@ type DeployCertificateJSONRequestBody = CertificateDeployInput
 // ReplaceCertificateJSONRequestBody defines body for ReplaceCertificate for application/json ContentType.
 type ReplaceCertificateJSONRequestBody = CertificateInput
 
+type CreateNodeJSONRequestBody = NodeCreateInput
+
 type CreatePanelUpdateJSONRequestBody = PanelUpdateCreateInput
 
 // CreateNginxInstallationJSONRequestBody defines body for CreateNginxInstallation for application/json ContentType.
@@ -3405,6 +3468,14 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	ListNodes(w http.ResponseWriter, r *http.Request)
+	GetNode(w http.ResponseWriter, r *http.Request, id ID)
+	CreateNode(w http.ResponseWriter, r *http.Request, params CreateNodeParams)
+	RefreshNode(w http.ResponseWriter, r *http.Request, id ID, params RefreshNodeParams)
+	DeleteNode(w http.ResponseWriter, r *http.Request, id ID, params DeleteNodeParams)
+	GetRemoteIdentity(w http.ResponseWriter, r *http.Request)
+	RevokeRemoteAuthorization(w http.ResponseWriter, r *http.Request, params RevokeRemoteAuthorizationParams)
+
 	ListPanelUpdates(w http.ResponseWriter, r *http.Request)
 	CreatePanelUpdate(w http.ResponseWriter, r *http.Request, params CreatePanelUpdateParams)
 	GetPanelUpdate(w http.ResponseWriter, r *http.Request, id ID)
@@ -4863,6 +4934,293 @@ func (siw *ServerInterfaceWrapper) ListNginxInstallations(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListNginxInstallations(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNodes operation middleware
+func (siw *ServerInterfaceWrapper) ListNodes(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNodes(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRemoteIdentity operation middleware
+func (siw *ServerInterfaceWrapper) GetRemoteIdentity(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRemoteIdentity(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeRemoteAuthorization operation middleware
+func (siw *ServerInterfaceWrapper) RevokeRemoteAuthorization(w http.ResponseWriter, r *http.Request) {
+	var params RevokeRemoteAuthorizationParams
+	values := r.Header.Values("X-Nginxpanel-Target-Node")
+	if len(values) != 1 {
+		if len(values) == 0 {
+			siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Nginxpanel-Target-Node"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Nginxpanel-Target-Node", Count: len(values)})
+		}
+		return
+	}
+	if err := runtime.BindStyledParameterWithOptions("simple", "X-Nginxpanel-Target-Node", values[0], &params.XNginxpanelTargetNode, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Nginxpanel-Target-Node", Err: err})
+		return
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.RevokeRemoteAuthorization(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNode operation middleware
+func (siw *ServerInterfaceWrapper) CreateNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateNodeParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNode(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNode operation middleware
+func (siw *ServerInterfaceWrapper) GetNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RefreshNode operation middleware
+func (siw *ServerInterfaceWrapper) RefreshNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RefreshNodeParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RefreshNode(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNode operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteNodeParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNode(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -9459,6 +9817,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/maintenance", wrapper.GetMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance", wrapper.EnterMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance/{id}/release", wrapper.ReleaseMaintenance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes", wrapper.ListNodes)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nodes", wrapper.CreateNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes/{id}", wrapper.GetNode)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nodes/{id}", wrapper.DeleteNode)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nodes/{id}/refresh", wrapper.RefreshNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote/identity", wrapper.GetRemoteIdentity)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/remote/authorization", wrapper.RevokeRemoteAuthorization)
+
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/updates", wrapper.ListPanelUpdates)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/updates", wrapper.CreatePanelUpdate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/updates/{id}", wrapper.GetPanelUpdate)

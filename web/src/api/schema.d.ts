@@ -4,6 +4,62 @@
  */
 
 export interface paths {
+    "/nodes": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get: operations["listNodes"];
+        put?: never;
+        post: operations["createNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/{id}": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get: operations["getNode"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteNode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/{id}/refresh": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get?: never;
+        put?: never;
+        post: operations["refreshNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/identity": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get: operations["getRemoteIdentity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/authorization": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeRemoteAuthorization"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
     "/panel/updates/{id}/resume": {
         parameters: {
             query?: never;
@@ -1827,6 +1883,43 @@ export interface components {
             database_schema: number;
             automatic_rollback: boolean;
         };
+        NodeCreateInput: {
+            name: string;
+            url: string;
+            api_key: string;
+            fingerprint: string;
+        };
+        NodeIdentity: {
+            node_id: string;
+            credential_id: string;
+            scopes: string[];
+            expires_at: number;
+            api_version: number;
+            database_schema: number;
+            agent_protocol: number;
+            parser_version: string;
+            policy_version: string;
+        };
+        NodeConnection: {
+            id: string;
+            node_id: string;
+            name: string;
+            url: string;
+            fingerprint: string;
+            credential_id: string;
+            scopes: string[];
+            expires_at: number;
+            api_version: number;
+            capabilities: { [key: string]: unknown } | null;
+            state: string;
+            error: string;
+            checked_at: number;
+            created_at: number;
+            updated_at: number;
+            removed_at: number;
+            revocation: string;
+            version: number;
+        };
         PanelUpdateInput: {
             maintenance_id: string;
             plan_id: string;
@@ -3209,6 +3302,77 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+    getNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { id: components["parameters"]["ID"]; };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+    createNode: {
+        parameters: {
+            query?: never;
+            header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: { content: { "application/json": components["schemas"]["NodeCreateInput"]; }; };
+        responses: { 201: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+    refreshNode: {
+        parameters: {
+            query?: never;
+            header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; };
+            path: { id: components["parameters"]["ID"]; };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+    deleteNode: {
+        parameters: {
+            query?: never;
+            header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; };
+            path: { id: components["parameters"]["ID"]; };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+    getRemoteIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+    revokeRemoteAuthorization: {
+        parameters: {
+            query?: never;
+            header: { "X-Nginxpanel-Target-Node": string; };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+
     resumePanelUpdate: {
         parameters: {
             query?: never;

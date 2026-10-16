@@ -27,6 +27,8 @@ export type Resource = components["schemas"]["Resource"];
 export type SaveResult = components["schemas"]["SaveResult"];
 export type SaveRequest = components["schemas"]["SaveRequest"];
 export type Me = components["schemas"]["Me"];
+export type NodeConnection = components["schemas"]["NodeConnection"];
+export type NodeCreateInput = components["schemas"]["NodeCreateInput"];
 export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
 export type SystemVersion = components["schemas"]["SystemVersion"];
@@ -325,6 +327,10 @@ export function followLogs(
 }
 
 export const api = {
+  nodes: (signal?: AbortSignal) => request<NodeConnection[]>({ url: "/nodes", signal }),
+  createNode: (data: NodeCreateInput, key: string) => request<NodeConnection>({ url: "/nodes", method: "POST", data, timeout: 30_000, headers: { "Idempotency-Key": key } }),
+  refreshNode: (id: string, key: string) => request<NodeConnection>({ url: `/nodes/${id}/refresh`, method: "POST", timeout: 30_000, headers: { "Idempotency-Key": key } }),
+  deleteNode: (id: string, key: string) => request<NodeConnection>({ url: `/nodes/${id}`, method: "DELETE", timeout: 30_000, headers: { "Idempotency-Key": key } }),
   systemVersion: (signal?: AbortSignal) =>
     request<SystemVersion>({ url: "/system/version", signal }),
   exportMigration: (data: MigrationExportInput) =>

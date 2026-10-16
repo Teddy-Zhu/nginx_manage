@@ -34,6 +34,7 @@ import (
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
+	"nginxpanel/internal/nodes"
 	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/panelready"
 	"nginxpanel/internal/panelruntime"
@@ -260,7 +261,7 @@ func Run(ctx context.Context, o Options) error {
 	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	updateService := &panelupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	migrationService := &migration.Service{Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
-	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, Installations: installationService, Updates: updateService, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
+	api := (&transport.Server{Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Components: componentService, Installations: installationService, Updates: updateService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {

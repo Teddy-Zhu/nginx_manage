@@ -19,6 +19,7 @@ import (
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
+	"nginxpanel/internal/nodes"
 	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/panelupdates"
 	"nginxpanel/internal/releases"
@@ -40,6 +41,7 @@ type Server struct {
 	Installations *nginxinstall.Service
 	Updates       *panelupdates.Service
 	Migration     *migration.Service
+	Nodes         *nodes.Service
 	Agent         *agent.Client
 	NodeID        string
 	Dev           bool
