@@ -260,8 +260,18 @@ func verifyAdoptionMaterial(ctx context.Context, data, id, dir string, intent Ad
 }
 
 func callAdoptionMaterialHelper(ctx context.Context, data, id, dir string, intent AdoptionIntent, command string, input, out any) (err error) {
+	return callRestorationMaterialHelper(ctx, data, id, dir, intent, command, input, out, nil, "")
+}
+
+func callRestorationMaterialHelper(ctx context.Context, data, id, dir string, intent AdoptionIntent, command string, input, out any, database *File, databasePath string) (err error) {
+	intent.Preparation.Files = append([]File(nil), intent.Preparation.Files...)
+	if database != nil {
+		intent.Preparation.Files[0] = *database
+	} else {
+		databasePath = filepath.Join(dir, "panel.db")
+	}
 	defer func() { err = errors.Join(err, cleanupAdoptionCheck(data, id, intent.GID)) }()
-	if err = prepareAdoptionCheck(ctx, data, id, filepath.Join(dir, "panel.db"), intent); err != nil {
+	if err = prepareAdoptionCheck(ctx, data, id, databasePath, intent); err != nil {
 		return err
 	}
 	var files []*os.File
@@ -271,7 +281,11 @@ func callAdoptionMaterialHelper(ctx context.Context, data, id, dir string, inten
 		}
 	}()
 	for i, r := range resources {
-		f, info, e := secure.OpenRootFile(filepath.Join(dir, r.local), r.limit)
+		path := filepath.Join(dir, r.local)
+		if i == 0 {
+			path = databasePath
+		}
+		f, info, e := secure.OpenRootFile(path, r.limit)
 		if e != nil {
 			return e
 		}

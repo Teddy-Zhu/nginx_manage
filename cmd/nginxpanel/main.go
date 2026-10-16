@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|agent|management-listener-disable|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|agent|management-listener-disable|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -178,6 +178,10 @@ func run() error {
 		"nginx-container-status":          {"data-dir": true},
 		"nginx-container-launch":          {"data-dir": true},
 		"release-images":                  {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
+
+		"backup-restore-plan-verify-data":  {"data-dir": true, "restore-operation": true},
+		"backup-restore-plan-cleanup":      {"data-dir": true, "restore-operation": true},
+		"backup-restore-plan-cleanup-data": {"data-dir": true, "restore-operation": true},
 	}
 	var invalidFlag string
 	flags.Visit(func(f *flag.Flag) {

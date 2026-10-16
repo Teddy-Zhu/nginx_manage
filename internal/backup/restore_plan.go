@@ -24,21 +24,23 @@ type RestorePlanInput struct {
 }
 
 type RestorePlan struct {
-	Schema            int               `json:"schema"`
-	ID                string            `json:"id"`
-	OperationID       string            `json:"operation_id"`
-	AdoptionSHA256    string            `json:"adoption_sha256"`
-	PreparationSHA256 string            `json:"preparation_sha256"`
-	ApprovalEpoch     string            `json:"approval_epoch"`
-	Mappings          map[string]string `json:"mappings"`
-	Preview           RestorePreview    `json:"preview"`
-	CreatedAt         int64             `json:"created_at"`
-	ExpiresAt         int64             `json:"expires_at"`
-	SHA256            string            `json:"sha256"`
+	Schema            int                   `json:"schema"`
+	ID                string                `json:"id"`
+	OperationID       string                `json:"operation_id"`
+	AdoptionSHA256    string                `json:"adoption_sha256"`
+	PreparationSHA256 string                `json:"preparation_sha256"`
+	ApprovalEpoch     string                `json:"approval_epoch"`
+	Mappings          map[string]string     `json:"mappings"`
+	Preview           RestorePreview        `json:"preview"`
+	PublicationProof  *MaterialVerification `json:"publication_proof,omitempty"`
+	CreatedAt         int64                 `json:"created_at"`
+	ExpiresAt         int64                 `json:"expires_at"`
+	SHA256            string                `json:"sha256"`
 }
 type RestorePlanStatus struct {
-	Plan    RestorePlan `json:"plan"`
-	Expired bool        `json:"expired"`
+	Plan                 RestorePlan `json:"plan"`
+	Expired              bool        `json:"expired"`
+	PublicationAvailable bool        `json:"publication_available"`
 }
 
 func (p RestorePlan) hash() (string, error) { p.SHA256 = ""; return adoptionValueHash(p) }
@@ -54,6 +56,18 @@ func (p RestorePlan) validate() error {
 		if v.CanInstall && (step.State == "blocked" || step.State == "unavailable") {
 			return errors.New("恢复目标计划准入与阻塞步骤不一致")
 		}
+	}
+	policyHash, err := adoptionValueHash(v.Policy)
+	if err != nil || policyHash != v.PolicySHA256 {
+		return errors.New("恢复计划策略摘要不一致")
+	}
+	if v.CanInstall {
+		proof, pub := p.PublicationProof, v.Publication
+		if pub == nil || pub.RevisionID != p.ID || proof == nil || proof.OperationID != p.OperationID || proof.PreparationSHA256 != p.PreparationSHA256 || proof.Database != pub.Database || proof.VerifiedAt < p.CreatedAt || proof.VerifiedAt > p.ExpiresAt || pub.CreatedAt > p.CreatedAt {
+			return errors.New("恢复计划缺少固定发布副本的只读核对")
+		}
+	} else if v.Publication != nil || p.PublicationProof != nil {
+		return errors.New("存在阻塞项的计划不能批准安装副本")
 	}
 	hash, err := p.hash()
 	if err != nil {
@@ -104,13 +118,16 @@ func QueryRestorePlan(data, id string) (RestorePlanStatus, error) {
 	if err != nil {
 		return RestorePlanStatus{}, err
 	}
-	return RestorePlanStatus{Plan: p, Expired: p.ExpiresAt <= time.Now().Unix()}, nil
+	return restorationPlanStatus(data, p)
 }
 
 func matchRestorePlan(p RestorePlan, a Adoption) error {
 	i := a.Intent
 	if p.OperationID != i.Preparation.OperationID || p.AdoptionSHA256 != a.SHA256 || p.PreparationSHA256 != i.PreparationSHA256 || p.Preview.Verification.Database != i.Preparation.Database || p.CreatedAt < i.CreatedAt || p.ExpiresAt > i.ExpiresAt {
 		return errors.New("恢复目标计划与原接入批准不一致")
+	}
+	if p.Preview.Publication != nil {
+		return p.Preview.Publication.validate(i.Preparation)
 	}
 	return nil
 }
@@ -138,7 +155,7 @@ func CreateRestorePlan(ctx context.Context, data, id string, in RestorePlanInput
 		if previous.OperationID != id || previous.AdoptionSHA256 != in.AdoptionSHA256 || !sameAdoptionValue(previous.Mappings, in.Mappings) {
 			return out, errors.New("原恢复计划标识已有不同材料或映射")
 		}
-		return RestorePlanStatus{Plan: previous, Expired: previous.ExpiresAt <= time.Now().Unix()}, nil
+		return restorationPlanStatus(data, previous)
 	} else if !os.IsNotExist(e) {
 		return out, e
 	}
@@ -156,7 +173,7 @@ func CreateRestorePlan(ctx context.Context, data, id string, in RestorePlanInput
 	if in.PlanID == i.Rollback.Manifest.OperationID || in.PlanID == i.Stop.MaintenanceID {
 		return out, errors.New("恢复计划标识不能复用快照或维护标识")
 	}
-	err = agent.WithCheckedPanelSnapshot(call, data, i.Rollback.Manifest.OperationID, i.Stop.MaintenanceID, in.Epoch, func(snapshot panelrecovery.Result) error {
+	err = agent.WithCheckedPanelSnapshot(call, data, i.Rollback.Manifest.OperationID, i.Stop.MaintenanceID, in.Epoch, func(snapshot panelrecovery.Result) (callbackErr error) {
 		running, e := panelruntime.Read(data)
 		if e != nil {
 			return e
@@ -182,11 +199,30 @@ func CreateRestorePlan(ctx context.Context, data, id string, in RestorePlanInput
 		}
 		dir, _ := adoptionDirectory(data, id, false)
 		var preview RestorePreview
-		input := RestorePreviewInput{Preparation: i.Preparation, ExpectedApplied: i.Rollback.Manifest.Database.AppliedRevision, Mappings: in.Mappings}
+		input := RestorePreviewInput{PlanID: in.PlanID, Preparation: i.Preparation, ExpectedApplied: i.Rollback.Manifest.Database.AppliedRevision, Mappings: in.Mappings}
+		defer func() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			callbackErr = errors.Join(callbackErr, cleanupRestorationHelper(cleanup, data, in.PlanID))
+		}()
 		if e = callAdoptionMaterialHelper(call, data, id, dir, i, "backup-restore-plan-data", input, &preview); e != nil {
 			return e
 		}
 		p := RestorePlan{Schema: 1, ID: in.PlanID, OperationID: id, AdoptionSHA256: a.SHA256, PreparationSHA256: i.PreparationSHA256, ApprovalEpoch: in.Epoch, Mappings: in.Mappings, Preview: preview, CreatedAt: preview.Verification.VerifiedAt, ExpiresAt: min(preview.Verification.VerifiedAt+1800, i.ExpiresAt)}
+		if preview.CanInstall {
+			if preview.Publication == nil || preview.Publication.RevisionID != in.PlanID {
+				return errors.New("恢复计划助手缺少原计划的发布副本")
+			}
+			if e = freezeRestorationPublication(call, data, *preview.Publication, i); e != nil {
+				return e
+			}
+			var proof MaterialVerification
+			verifyInput := RestorePublicationInput{Preparation: i.Preparation, Preview: preview, Mappings: in.Mappings}
+			if e = callRestorationMaterialHelper(call, data, id, dir, i, "backup-restore-plan-verify-data", verifyInput, &proof, &preview.Publication.File, restorePublicationPath(data, in.PlanID)); e != nil {
+				return e
+			}
+			p.PublicationProof = &proof
+		}
 		p.SHA256, e = p.hash()
 		if e != nil {
 			return e
@@ -255,8 +291,8 @@ func CreateRestorePlan(ctx context.Context, data, id string, in RestorePlanInput
 		if e = writeAdoptionJSON(filepath.Join(root, p.ID+".json"), p); e != nil {
 			return e
 		}
-		out = RestorePlanStatus{Plan: p, Expired: p.ExpiresAt <= time.Now().Unix()}
-		return nil
+		out, e = restorationPlanStatus(data, p)
+		return e
 	})
 	return out, err
 }

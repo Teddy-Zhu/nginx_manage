@@ -54,6 +54,12 @@ func verifyPreparedDatabase(ctx context.Context, db *sql.DB, vault *secure.Vault
 	if !matches {
 		return errors.New("恢复准备启动屏障不匹配")
 	}
+	if err = db.QueryRowContext(ctx, "SELECT COUNT(*)=1 FROM module_settings WHERE id='nginx-config' AND enabled=1").Scan(&matches); err != nil {
+		return err
+	}
+	if !matches {
+		return errors.New("恢复准备的 Nginx 配置模块未启用")
+	}
 	admin, err := readRestoreAdmin(ctx, db)
 	if err != nil {
 		return err
@@ -135,6 +141,10 @@ func VerifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 }
 
 func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparation, files []*os.File, inspect func(context.Context, *sql.DB, *secure.Vault) error) (out MaterialVerification, err error) {
+	return verifyRestorationDescriptors(ctx, data, id, p, files, nil, inspect)
+}
+
+func verifyRestorationDescriptors(ctx context.Context, data, id string, p Preparation, files []*os.File, publication *RestorePublication, inspect func(context.Context, *sql.DB, *secure.Vault) error) (out MaterialVerification, err error) {
 	if os.Geteuid() == 0 || !validID.MatchString(id) || p.OperationID != id || len(files) != len(resources) {
 		return out, errors.New("恢复接入核对助手的身份或描述符无效")
 	}
@@ -143,6 +153,14 @@ func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 	}
 	if err = p.Validate(); err != nil {
 		return out, err
+	}
+	expected := p
+	expected.Files = append([]File(nil), p.Files...)
+	if publication != nil {
+		if err = publication.validate(p); err != nil {
+			return out, err
+		}
+		expected.Files[0], expected.Database = publication.File, publication.Database
 	}
 	call, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -156,7 +174,7 @@ func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 		if e != nil {
 			return out, e
 		}
-		if !ok || st.Uid != 0 || st.Nlink != 1 || !info.Mode().IsRegular() || info.Mode().Perm() != 0400 || info.Size() != p.Files[i].Size || flags&unix.O_ACCMODE != unix.O_RDONLY {
+		if !ok || st.Uid != 0 || st.Nlink != 1 || !info.Mode().IsRegular() || info.Mode().Perm() != 0400 || info.Size() != expected.Files[i].Size || flags&unix.O_ACCMODE != unix.O_RDONLY {
 			return out, errors.New("恢复接入核对只接受 root 只读固定资源")
 		}
 		hash := sha256.New()
@@ -164,7 +182,7 @@ func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 		if e != nil {
 			return out, e
 		}
-		if n != info.Size() || hex.EncodeToString(hash.Sum(nil)) != p.Files[i].SHA256 || !secure.RootFileUnchanged(f, info) {
+		if n != info.Size() || hex.EncodeToString(hash.Sum(nil)) != expected.Files[i].SHA256 || !secure.RootFileUnchanged(f, info) {
 			return out, errors.New("恢复接入资源与原准备散列不一致")
 		}
 		if _, e = f.Seek(0, io.SeekStart); e != nil {
@@ -196,17 +214,17 @@ func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 	if _, err = tls.X509KeyPair(cert, tlsKey); err != nil {
 		return out, errors.New("恢复接入主入口 TLS 材料不匹配")
 	}
-	databaseFile, databaseInfo, err := openAdoptionCheck(data, id, os.Getegid(), p.Files[0])
+	databaseFile, databaseInfo, err := openAdoptionCheck(data, id, os.Getegid(), expected.Files[0])
 	if err != nil {
 		return out, err
 	}
 	defer databaseFile.Close()
 	databaseHash := sha256.New()
-	n, err := io.Copy(databaseHash, contextReader{call, io.LimitReader(databaseFile, p.Files[0].Size+1)})
+	n, err := io.Copy(databaseHash, contextReader{call, io.LimitReader(databaseFile, expected.Files[0].Size+1)})
 	if err != nil {
 		return out, err
 	}
-	if n != p.Files[0].Size || hex.EncodeToString(databaseHash.Sum(nil)) != p.Files[0].SHA256 || !secure.RootFileUnchanged(databaseFile, databaseInfo) {
+	if n != expected.Files[0].Size || hex.EncodeToString(databaseHash.Sum(nil)) != expected.Files[0].SHA256 || !secure.RootFileUnchanged(databaseFile, databaseInfo) {
 		return out, errors.New("恢复核对数据库投影与固定副本不一致")
 	}
 	dsn := (&url.URL{Scheme: "file", Path: databaseFile.Name()}).String() + "?mode=ro&immutable=1&_pragma=trusted_schema(OFF)&_pragma=query_only(ON)&_pragma=busy_timeout(5000)&_pragma=cache_size(-16384)"
@@ -216,7 +234,7 @@ func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
-	if err = verifyPreparedDatabase(call, db, vault, p); err != nil {
+	if err = verifyPreparedDatabase(call, db, vault, expected); err != nil {
 		return out, err
 	}
 	if inspect != nil {
@@ -231,5 +249,5 @@ func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 	if err != nil {
 		return out, err
 	}
-	return MaterialVerification{OperationID: id, PreparationSHA256: hash, Database: p.Database, VerifiedAt: time.Now().Unix()}, nil
+	return MaterialVerification{OperationID: id, PreparationSHA256: hash, Database: expected.Database, VerifiedAt: time.Now().Unix()}, nil
 }

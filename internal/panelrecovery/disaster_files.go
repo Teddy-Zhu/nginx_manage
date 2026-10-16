@@ -13,6 +13,13 @@ import (
 
 var disasterNames = []string{"panel.db", "master.key", "cert.pem", "key.pem"}
 
+func disasterMaterialPath(i DisasterIntent, index int) string {
+	if index == 0 {
+		return filepath.Join(i.DataDir, "agent", "disaster-configs", i.PlanID, "panel.db")
+	}
+	return filepath.Join(i.DataDir, "agent", "disaster-recovery", i.OperationID, disasterNames[index])
+}
+
 func checkedDisasterDirectory(i DisasterIntent) (string, error) {
 	stored, err := ReadDisasterIntent(i.DataDir, i.OperationID)
 	if err != nil {
@@ -50,7 +57,7 @@ func disasterTargets(i DisasterIntent) []Original {
 }
 
 // CheckDisasterMaterial hashes immutable root files only. SQL validation belongs
-// to the unprivileged adoption helper and is bound by AdoptionSHA256.
+// to the unprivileged helpers and is bound by AdoptionSHA256 and PlanSHA256.
 func CheckDisasterMaterial(ctx context.Context, i DisasterIntent) error {
 	if err := i.Validate(); err != nil {
 		return err
@@ -62,8 +69,11 @@ func CheckDisasterMaterial(ctx context.Context, i DisasterIntent) error {
 	if err := checkPrivateDir(dir); err != nil {
 		return err
 	}
+	if err := checkPrivateDir(filepath.Dir(disasterMaterialPath(i, 0))); err != nil {
+		return err
+	}
 	for index, file := range i.Files {
-		h, n, err := rootFileHash(ctx, filepath.Join(dir, disasterNames[index]), file.Size, 0400)
+		h, n, err := rootFileHash(ctx, disasterMaterialPath(i, index), file.Size, 0400)
 		if err != nil {
 			return err
 		}
@@ -201,7 +211,7 @@ func InstallDisaster(ctx context.Context, i DisasterIntent, rollback bool) error
 		from, to := i.Before[index], approved[index]
 		source := ""
 		if restoreFiles[index].target >= 0 {
-			source = filepath.Join(i.DataDir, "agent", "disaster-recovery", i.OperationID, disasterNames[restoreFiles[index].target])
+			source = disasterMaterialPath(i, restoreFiles[index].target)
 		}
 		if rollback {
 			from, to = to, from

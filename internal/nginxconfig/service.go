@@ -246,38 +246,8 @@ func (s *Service) savePrepared(ctx context.Context, principal auth.Principal, re
 	if in.Draft {
 		state = "draft"
 	}
-	p.Tree.RevisionID = id
-	p.Tree.Version = next
-	p.Tree.State = state
-	diagnostics, err := json.Marshal(p.Tree.Diagnostics)
-	if err != nil {
+	if err := insertRevision(ctx, tx, s.Vault, s.Policy.Version, p, id, parent, next, state, principal.ID, time.Now().Unix(), certificateUses); err != nil {
 		return SaveResult{}, err
-	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO config_revisions(id,parent_id,version,state,parser_version,policy_version,diagnostics,created_at,created_by) VALUES(?,?,?,?,?,?,?,?,?)", id, parent, next, state, ParserVersion, s.Policy.Version, string(diagnostics), time.Now().Unix(), principal.ID); err != nil {
-		return SaveResult{}, err
-	}
-	for _, f := range p.Tree.Files {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO nginx_config_files(revision_id,id,path,content,sha256) VALUES(?,?,?,?,?)", id, f.ID, f.Path, s.Vault.Seal([]byte(f.Content), "nginx:"+id+":"+f.ID), f.SHA256); err != nil {
-			return SaveResult{}, err
-		}
-	}
-	for _, use := range certificateUses {
-		certificateID, versionID, _, _ := certificates.Reference(use.Path)
-		if _, err := tx.ExecContext(ctx, "INSERT INTO nginx_certificate_references(revision_id,file_id,position,resource_id,certificate_id,version_id,purpose) VALUES(?,?,?,?,?,?,?)", id, use.FileID, use.Position, use.ResourceID, certificateID, versionID, use.Purpose); err != nil {
-			return SaveResult{}, err
-		}
-	}
-	// Invalid drafts carry no effective projection and never move config_head.
-	if len(p.Tree.Diagnostics) == 0 {
-		for _, r := range p.Tree.Resources {
-			encoded, err := json.Marshal(r)
-			if err != nil {
-				return SaveResult{}, err
-			}
-			if _, err := tx.ExecContext(ctx, "INSERT INTO nginx_resource_bindings(revision_id,resource_id,file_id,block_key,kind,projection) VALUES(?,?,?,?,?,?)", id, r.ID, r.FileID, r.BlockKey, r.Kind, s.Vault.Seal(encoded, "projection:"+id+":"+r.ID)); err != nil {
-				return SaveResult{}, err
-			}
-		}
 	}
 	if !in.Draft {
 		if _, err := tx.ExecContext(ctx, "UPDATE config_head SET desired_revision=?,version=? WHERE id=1 AND version=?", id, next, in.BaseVersion); err != nil {

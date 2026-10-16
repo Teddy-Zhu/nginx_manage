@@ -80,6 +80,9 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 	i := a.Intent
 	files := make([]panelrecovery.File, len(resources))
 	for index, file := range i.Preparation.Files {
+		if index == 0 {
+			file = plan.Preview.Publication.File
+		}
 		files[index] = panelrecovery.File{Name: i.Rollback.Manifest.Files[index].Name, Size: file.Size, SHA256: file.SHA256}
 	}
 	input := panelrecovery.DisasterIntent{Schema: 1, DataDir: data, OperationID: id, AdoptionSHA256: a.SHA256, PlanID: plan.ID, PlanSHA256: plan.SHA256, Stop: i.Stop, Rollback: i.Rollback, Files: files, Before: i.Before, ReleaseID: i.Preparation.Target.ReleaseID, BinarySHA256: i.BinarySHA256, ExpiresAt: i.ExpiresAt}

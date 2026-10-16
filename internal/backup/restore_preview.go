@@ -19,6 +19,7 @@ import (
 )
 
 type RestorePreviewInput struct {
+	PlanID          string            `json:"plan_id"`
 	Preparation     Preparation       `json:"preparation"`
 	ExpectedApplied string            `json:"expected_applied"`
 	Mappings        map[string]string `json:"mappings"`
@@ -30,6 +31,8 @@ type RestorePreview struct {
 	MaterialsSHA256    string               `json:"materials_sha256"`
 	CapabilitiesSHA256 string               `json:"capabilities_sha256"`
 	PolicySHA256       string               `json:"policy_sha256"`
+	Policy             nginxconfig.Policy   `json:"policy"`
+	Publication        *RestorePublication  `json:"publication,omitempty"`
 	Runtime            agent.NginxState     `json:"runtime"`
 	RequiredFeatures   []string             `json:"required_features"`
 	Steps              []migration.Step     `json:"steps"`
@@ -43,6 +46,9 @@ type RestorePreview struct {
 // PreviewRestorationDescriptors reads only the verified root projection. It
 // does not open live business data, launch workers, or submit an Agent operation.
 func PreviewRestorationDescriptors(ctx context.Context, data, id string, in RestorePreviewInput, files []*os.File) (out RestorePreview, err error) {
+	if !validID.MatchString(in.PlanID) || in.PlanID == id {
+		return out, errors.New("恢复计划须使用独立标识")
+	}
 	if in.ExpectedApplied != "" && !validID.MatchString(in.ExpectedApplied) {
 		return out, errors.New("目标运行修订依据无效")
 	}
@@ -77,6 +83,7 @@ func PreviewRestorationDescriptors(ctx context.Context, data, id string, in Rest
 		if ehash != nil {
 			return ehash
 		}
+		out.Policy = policy
 		source, e := restoreRevisionFiles(call, db, vault, in.Preparation.Database.DesiredRevision)
 		if e != nil {
 			return e
@@ -153,7 +160,7 @@ func PreviewRestorationDescriptors(ctx context.Context, data, id string, in Rest
 				}
 			}
 		}
-		out.PendingChecks = []string{"configuration_publish", "external_authorizations_review", "host_access_review", "automation_disabled"}
+		out.PendingChecks = []string{"configuration_apply", "external_authorizations_review", "host_access_review", "automation_disabled"}
 		if in.Preparation.Isolation.Tasks > 0 {
 			out.PendingChecks = append(out.PendingChecks, "quarantined_tasks_review")
 			add("tasks", "quarantined", "pending", fmt.Sprintf("%d 项旧任务保持隔离，须核对实际结果后再协调", in.Preparation.Isolation.Tasks))
@@ -163,7 +170,16 @@ func PreviewRestorationDescriptors(ctx context.Context, data, id string, in Rest
 		add("authorization", "remote", "pending", "源远程授权、配对和 CA/DNS 订单须核对外部结果，禁止自动重放")
 		add("host", "network", "preserved", "保留目标 DNS、网络与防火墙状态，变更须重新计划和确认")
 		add("automation", "modules", "disabled", "通知、定期备份、ACME 自动化及其他模块保持停用")
-		add("configuration", "publish", "pending", "映射后的配置须另行生成受管修订并完成运行确认")
+		if out.CanInstall {
+			publication, e := publishRestorationDatabase(call, data, in.PlanID, in.Preparation, files[0], vault, policy, mapped, out.PendingChecks)
+			if e != nil {
+				return e
+			}
+			out.Publication = &publication
+			add("configuration", "revision", "prepared", "映射配置已生成隔离修订，须固定材料并完成运行确认")
+		} else {
+			add("configuration", "revision", "pending", "阻塞项解除前不生成安装数据库")
+		}
 		if out.StepCount > len(out.Steps) {
 			out.Steps = append(out.Steps, migration.Step{Kind: "preview", Resource: "remaining", State: "review", Message: fmt.Sprintf("共 %d 项，展示前 64 项；全部项目参与准入判断", out.StepCount)})
 		}

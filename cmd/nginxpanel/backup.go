@@ -20,7 +20,7 @@ type backupCLIOptions struct {
 
 func isBackupRecoveryCommand(command string) bool {
 	switch command {
-	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status", "backup-restore-plan", "backup-restore-plan-status", "backup-restore-plan-data":
+	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status", "backup-restore-plan", "backup-restore-plan-status", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-plan-cleanup", "backup-restore-plan-cleanup-data":
 		return true
 	default:
 		return false
@@ -136,7 +136,20 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			OperationID string `json:"operation_id"`
 			Cleaned     bool   `json:"cleaned"`
 		}{options.OperationID, true})
-	case "backup-adoption-verify-data", "backup-restore-plan-data":
+	case "backup-restore-plan-cleanup", "backup-restore-plan-cleanup-data":
+		if command == "backup-restore-plan-cleanup" {
+			err = backup.CleanupRestorePlan(ctx, data, options.OperationID)
+		} else {
+			err = backup.CleanupRestorationWork(data, options.OperationID)
+		}
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(struct {
+			OperationID string `json:"operation_id"`
+			Cleaned     bool   `json:"cleaned"`
+		}{options.OperationID, true})
+	case "backup-adoption-verify-data", "backup-restore-plan-data", "backup-restore-plan-verify-data":
 		if os.Geteuid() == 0 {
 			return true, errors.New("恢复材料核对助手须使用非 root 身份")
 		}
@@ -148,6 +161,17 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			}
 			defer f.Close()
 			files = append(files, f)
+		}
+		if command == "backup-restore-plan-verify-data" {
+			var input backup.RestorePublicationInput
+			if err = readBackupJSON(&input, 256<<10); err != nil {
+				return true, err
+			}
+			out, err := backup.VerifyRestorationPublication(ctx, data, options.OperationID, input, files)
+			if err != nil {
+				return true, err
+			}
+			return true, json.NewEncoder(os.Stdout).Encode(out)
 		}
 		if command == "backup-restore-plan-data" {
 			var input backup.RestorePreviewInput
