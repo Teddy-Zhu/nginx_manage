@@ -165,6 +165,17 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := dns.Open(); err != nil {
 		return err
 	}
+	remote := &remoteListener{dir: filepath.Join(s.DataDir, "agent", "management-listener"), socket: s.Socket + ".remote", uid: s.AllowedUID, available: !s.Dev && s.MaintenanceScope == "host", journal: s.Journal, dns: dns}
+	defer remote.close()
+	if err := remote.open(); err != nil {
+		return err
+	}
+	dns.ReachabilityBlocked = remote.pending
+	s.listenerHandlers(mux, remote)
+	remoteCtx, stopRemote := context.WithCancel(ctx)
+	remoteDone := make(chan struct{})
+	go func() { defer close(remoteDone); remote.run(remoteCtx) }()
+	defer func() { stopRemote(); <-remoteDone }()
 	dnsCtx, stopDNS := context.WithCancel(ctx)
 	dnsDone := make(chan struct{})
 	go func() { defer close(dnsDone); dns.Run(dnsCtx) }()

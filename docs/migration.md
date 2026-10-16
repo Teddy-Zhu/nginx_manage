@@ -24,7 +24,7 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 ## API 一键迁入
 
-在目标调用 `POST /api/v1/migrations/pull`，提供源节点 HTTPS API 和 Key；本地还需 `nodes.manage`。源 Key 需导出权限及来源网络授权。源节点须经现有受保护网络、VPN 或管理员配置的代理可达；本实现不开放新的公网管理监听，也不建立隧道。
+在目标调用 `POST /api/v1/migrations/pull`，提供源节点 HTTPS API 和 Key；本地还需 `nodes.manage`。源 Key 需导出权限及来源网络授权。源节点可通过[受控管理监听](management-listener.md)、现有受保护网络、VPN 或管理员配置的代理提供 HTTPS API；迁移本身不改变管理入口或建立隧道。
 
 ```json
 {

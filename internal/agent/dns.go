@@ -33,16 +33,17 @@ type dnsCheckpoint struct {
 // HostDNS never accepts a file path or an executable from the Web process.
 // The root checkpoint is outside all business backup/import state.
 type HostDNS struct {
-	Dir        string
-	Owner      string
-	Scope      string
-	Dev        bool
-	Journal    *Journal
-	mu         sync.Mutex
-	checkpoint *dnsCheckpoint
-	expiry     time.Time
-	problem    string
-	locks      []*os.File
+	ReachabilityBlocked func() bool
+	Dir                 string
+	Owner               string
+	Scope               string
+	Dev                 bool
+	Journal             *Journal
+	mu                  sync.Mutex
+	checkpoint          *dnsCheckpoint
+	expiry              time.Time
+	problem             string
+	locks               []*os.File
 }
 
 func dnsActive(state string) bool {
@@ -401,6 +402,9 @@ func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	now := time.Now().Unix()
 	if now >= plan.ExpiresAt || plan.ExpiresAt-plan.CreatedAt != 300 || plan.CreatedAt > now {
 		return hostdns.Status{}, fault.Conflict("DNS 计划已过期")
+	}
+	if d.ReachabilityBlocked != nil && d.ReachabilityBlocked() {
+		return hostdns.Status{}, fault.Conflict("管理监听存在待确认或待恢复的变更")
 	}
 	if plan.Owner == "networkmanager" {
 		return d.nmApply(id, plan)

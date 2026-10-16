@@ -2782,6 +2782,9 @@ type CreateNodeParams struct {
 }
 
 type CreatePairingParams = CreateNodeParams
+type ApplyManagementListenerParams = CreateNodeParams
+type ConfirmManagementListenerParams = ReauthenticateParams
+type RollbackManagementListenerParams = ReauthenticateParams
 type StartPairingParams = CreateNodeParams
 type RevokePairingParams = ReauthenticateParams
 type ResumePairingParams = ReauthenticateParams
@@ -3480,6 +3483,11 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	GetManagementListener(w http.ResponseWriter, r *http.Request)
+	ApplyManagementListener(w http.ResponseWriter, r *http.Request, params ApplyManagementListenerParams)
+	GetManagementListenerOperation(w http.ResponseWriter, r *http.Request, id ID)
+	ConfirmManagementListener(w http.ResponseWriter, r *http.Request, id ID, params ConfirmManagementListenerParams)
+	RollbackManagementListener(w http.ResponseWriter, r *http.Request, id ID, params RollbackManagementListenerParams)
 	ListPairings(w http.ResponseWriter, r *http.Request)
 	CreatePairing(w http.ResponseWriter, r *http.Request, params CreatePairingParams)
 	RevokePairing(w http.ResponseWriter, r *http.Request, id ID, params RevokePairingParams)
@@ -9840,6 +9848,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance", wrapper.EnterMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance/{id}/release", wrapper.ReleaseMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes", wrapper.ListNodes)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/management/listener", wrapper.GetManagementListener)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/management/listener", wrapper.ApplyManagementListener)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/management/listener/operations/{id}", wrapper.GetManagementListenerOperation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/management/listener/operations/{id}/confirm", wrapper.ConfirmManagementListener)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/management/listener/operations/{id}/rollback", wrapper.RollbackManagementListener)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote/pairings", wrapper.ListPairings)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote/pairings", wrapper.CreatePairing)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/remote/pairings/{id}", wrapper.RevokePairing)
@@ -9970,7 +9983,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	return m
 }
 
-func (siw *ServerInterfaceWrapper) pairingHeaders(w http.ResponseWriter, r *http.Request, required ...string) bool {
+func (siw *ServerInterfaceWrapper) controlHeaders(w http.ResponseWriter, r *http.Request, required ...string) bool {
 	for _, name := range append([]string{"X-CSRF-Token"}, required...) {
 		values := r.Header.Values(name)
 		if len(values) > 1 {
@@ -9984,7 +9997,7 @@ func (siw *ServerInterfaceWrapper) pairingHeaders(w http.ResponseWriter, r *http
 	}
 	return true
 }
-func (siw *ServerInterfaceWrapper) pairingHandler(w http.ResponseWriter, r *http.Request, callback http.HandlerFunc) {
+func (siw *ServerInterfaceWrapper) controlHandler(w http.ResponseWriter, r *http.Request, callback http.HandlerFunc) {
 	var handler http.Handler = callback
 	for _, middleware := range siw.HandlerMiddlewares {
 		handler = middleware(handler)
@@ -9992,67 +10005,100 @@ func (siw *ServerInterfaceWrapper) pairingHandler(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 func (siw *ServerInterfaceWrapper) ListPairings(w http.ResponseWriter, r *http.Request) {
-	siw.pairingHandler(w, r, siw.Handler.ListPairings)
+	siw.controlHandler(w, r, siw.Handler.ListPairings)
 }
 func (siw *ServerInterfaceWrapper) ListPairingJobs(w http.ResponseWriter, r *http.Request) {
-	siw.pairingHandler(w, r, siw.Handler.ListPairingJobs)
+	siw.controlHandler(w, r, siw.Handler.ListPairingJobs)
 }
 func (siw *ServerInterfaceWrapper) GetPairingJob(w http.ResponseWriter, r *http.Request) {
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetPairingJob(w, r, r.PathValue("id")) })
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetPairingJob(w, r, r.PathValue("id")) })
 }
 func (siw *ServerInterfaceWrapper) CreatePairing(w http.ResponseWriter, r *http.Request) {
-	if !siw.pairingHeaders(w, r, "Idempotency-Key") {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
 		return
 	}
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreatePairing(w, r, CreatePairingParams{IdempotencyKey: r.Header.Get("Idempotency-Key")})
 	})
 }
 func (siw *ServerInterfaceWrapper) StartPairing(w http.ResponseWriter, r *http.Request) {
-	if !siw.pairingHeaders(w, r, "Idempotency-Key") {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
 		return
 	}
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartPairing(w, r, StartPairingParams{IdempotencyKey: r.Header.Get("Idempotency-Key")})
 	})
 }
 func (siw *ServerInterfaceWrapper) RevokePairing(w http.ResponseWriter, r *http.Request) {
-	if !siw.pairingHeaders(w, r) {
+	if !siw.controlHeaders(w, r) {
 		return
 	}
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RevokePairing(w, r, r.PathValue("id"), RevokePairingParams{})
 	})
 }
 func (siw *ServerInterfaceWrapper) ResumePairing(w http.ResponseWriter, r *http.Request) {
-	if !siw.pairingHeaders(w, r) {
+	if !siw.controlHeaders(w, r) {
 		return
 	}
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ResumePairing(w, r, r.PathValue("id"), ResumePairingParams{})
 	})
 }
 func (siw *ServerInterfaceWrapper) AbandonPairing(w http.ResponseWriter, r *http.Request) {
-	if !siw.pairingHeaders(w, r) {
+	if !siw.controlHeaders(w, r) {
 		return
 	}
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AbandonPairing(w, r, r.PathValue("id"), AbandonPairingParams{})
 	})
 }
 func (siw *ServerInterfaceWrapper) ExchangePairing(w http.ResponseWriter, r *http.Request) {
-	if !siw.pairingHeaders(w, r, "X-Nginxpanel-Target-Node", "X-Nginxpanel-Remote-Protocol") {
+	if !siw.controlHeaders(w, r, "X-Nginxpanel-Target-Node", "X-Nginxpanel-Remote-Protocol") {
 		return
 	}
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ExchangePairing(w, r, r.PathValue("id"), ExchangePairingParams{XNginxpanelTargetNode: r.Header.Get("X-Nginxpanel-Target-Node"), XNginxpanelRemoteProtocol: r.Header.Get("X-Nginxpanel-Remote-Protocol")})
 	})
 }
 func (siw *ServerInterfaceWrapper) ConfirmPairing(w http.ResponseWriter, r *http.Request) {
-	if !siw.pairingHeaders(w, r, "X-Nginxpanel-Target-Node", "X-Nginxpanel-Remote-Protocol") {
+	if !siw.controlHeaders(w, r, "X-Nginxpanel-Target-Node", "X-Nginxpanel-Remote-Protocol") {
 		return
 	}
-	siw.pairingHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ConfirmPairing(w, r, r.PathValue("id"), ConfirmPairingParams{XNginxpanelTargetNode: r.Header.Get("X-Nginxpanel-Target-Node"), XNginxpanelRemoteProtocol: r.Header.Get("X-Nginxpanel-Remote-Protocol")})
+	})
+}
+
+func (siw *ServerInterfaceWrapper) GetManagementListener(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, siw.Handler.GetManagementListener)
+}
+func (siw *ServerInterfaceWrapper) ApplyManagementListener(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyManagementListener(w, r, ApplyManagementListenerParams{IdempotencyKey: r.Header.Get("Idempotency-Key")})
+	})
+}
+func (siw *ServerInterfaceWrapper) GetManagementListenerOperation(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetManagementListenerOperation(w, r, r.PathValue("id"))
+	})
+}
+func (siw *ServerInterfaceWrapper) ConfirmManagementListener(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmManagementListener(w, r, r.PathValue("id"), ConfirmManagementListenerParams{})
+	})
+}
+func (siw *ServerInterfaceWrapper) RollbackManagementListener(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RollbackManagementListener(w, r, r.PathValue("id"), RollbackManagementListenerParams{})
 	})
 }

@@ -4,6 +4,10 @@
  */
 
 export interface paths {
+    "/management/listener": { get: operations["getManagementListener"]; post: operations["applyManagementListener"]; };
+    "/management/listener/operations/{id}": { get: operations["getManagementListenerOperation"]; };
+    "/management/listener/operations/{id}/confirm": { post: operations["confirmManagementListener"]; };
+    "/management/listener/operations/{id}/rollback": { post: operations["rollbackManagementListener"]; };
     "/remote/pairings": { get: operations["listPairings"]; post: operations["createPairing"]; };
     "/remote/pairings/{id}": { delete: operations["revokePairing"]; };
     "/remote/pairings/{id}/exchange": { post: operations["exchangePairing"]; };
@@ -1701,6 +1705,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ManagementListenerInput: { version: number; enabled: boolean; listen: string; allowed_sources: string[]; certificate_pem: string; key_pem: string; rotate_certificate: boolean; };
+        ManagementListenerConfig: { enabled: boolean; listen: string; allowed_sources: string[]; tls_fingerprint: string; certificate_expires_at: number; };
+        ManagementListenerOperation: { id: string; version: number; state: "waiting_confirmation" | "succeeded" | "rolled_back" | "recovery_required"; stage: string; deadline: number; config: components["schemas"]["ManagementListenerConfig"]; confirmed_source: string; error: string; };
+        ManagementListenerView: { available: boolean; version: number; confirmed: components["schemas"]["ManagementListenerConfig"]; operation: components["schemas"]["ManagementListenerOperation"] | null; serving: boolean; attached: boolean; reason: string; };
         PairingInput: {
             name: string;
             controller_node_id: string;
@@ -3363,6 +3371,11 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getManagementListener: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    applyManagementListener: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["ManagementListenerInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    getManagementListenerOperation: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    confirmManagementListener: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    rollbackManagementListener: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     listPairings: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     createPairing: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingInput"]; }; }; responses: { 201: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     revokePairing: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

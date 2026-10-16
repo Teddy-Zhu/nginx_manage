@@ -1,0 +1,59 @@
+# 受控管理监听
+
+主 `serve --listen` 始终使用部署绑定中的回环地址，默认 `127.0.0.1:9443`，其证书和独立恢复入口保持原有绑定。首次登录继续使用 SSH 转发。可选远程监听通过自动扫描的“管理入口”页面或同版 API 管理；需要直接连接本节点、`read/system.write` 与浏览器近期认证，不接受节点递归转发。
+
+## 配置与确认
+
+启用前检查已确认配置，填写规范 IP 与 1024–65535 端口、非空的允许来源 CIDR，以及可选证书 PEM 和匹配私钥。IPv6 地址使用 `[地址]:端口`；通配监听可使用 `0.0.0.0` 或 `::`。IPv4 来源使用 IPv4 CIDR，双栈来源分别授权。来源以实际 TCP 对端为准，不使用转发来源头。
+
+证书与私钥同时留空时沿用已确认材料，首次启用生成独立的 P-256 自签证书；可显式重新生成或同时上传新的证书与私钥。响应只返回叶证书 DER 的 SHA-256 指纹、到期时间、地址和来源，不返回私钥。该材料不会覆盖主回环入口证书，也不随逻辑配置迁移导入、导出。
+
+提交前使用当前 `version`，同一操作者的幂等键固定到原操作；不同内容复用同一键会被拒绝。Agent 在绑定端口前持久保存已确认配置、候选及 120 秒期限，DNS 与管理入口的待确认变更互斥。存储失败停止远程准入，不把未持久保存的配置视为成功。
+
+暂用后关闭旧远程连接，当前提交请求在返回后关闭。通过新入口打开“管理入口”页面，核对指纹并登录，执行确认。确认绑定 Agent 刚交付的真实 TCP 连接及候选代次，TLS 在应用中完成；旧 keep-alive、回环入口和伪造 HTTP 头均不能确认。API 自动化可通过新入口使用具备相应权限的专用机器 Token 确认，仍需独立核对证书信任。
+
+确认只证明记录中的来源到该入口可达，不推断其他公网地址、端口转发或防火墙来源。通过反向代理进入时，观察来源是代理地址；外部来源限制由代理另行执行。证书更换后，控制节点须显式更新指纹信任，不自动接受新证书。
+
+到期、Web 通道断开或 Agent 停止会恢复已确认配置并关闭候选连接；Agent 重启先放弃未确认候选，时钟回退不会延长跨重启期限。恢复端口被其他进程占用时，保留 `recovery_required`，关闭候选并提示使用回环入口；释放占用后重启 Agent 可重试恢复。停用操作只能从主回环入口提交，直接持久保存停用结果，无需等待无法建立的新远程连接。
+
+## 独立恢复边界
+
+root Agent 持有可选 TCP 监听及每个连接的原始描述符，经过本机 UID 核验的 `unixpacket` 通道向非 root 应用交付描述符与 TLS 材料。应用完成 HTTPS、认证、会话、API 和前端处理，保留真实 TCP 来源。Agent 使用 `shutdown(SHUT_RDWR)` 撤销已交付的描述符，恢复不依赖 Web 定时器；通道丢失时应用关闭继承连接，再重新连接 Agent。最多保留 128 个连接，应用接收队列为 16 个，帧最多 48 KiB。
+
+持久记录位于 `DATA/agent/management-listener/state.json`，包含 root 私有 TLS 材料，目录 `0700`、文件 `0600`。通道为主 Agent Socket 加 `.remote` 后缀，沿用部署中的 IPC 组与 Web UID；只有同版生产 Agent 且维护范围为 `host` 时启用。原生与持久 Docker 面板复用此机制，远程端口由宿主机 Agent 监听，无需把容器内入口改成公网监听。
+
+本机 root 可独立提交停用救援请求：
+
+```sh
+nginxpanel management-listener-disable --data-dir /srv/nginxpanel
+```
+
+命令返回 `{"state":"requested"}` 表示 root 救援标记已持久保存。运行中的 Agent 检查该标记并停用所有远程连接；Agent 未运行时，在下次启动恢复监听前处理。标记保留，不依赖 Web、业务数据库、密码或当前证书；存储损坏仍需本机修复，不能绕过可信记录检查。
+
+## API
+
+所有 JSON 沿用 `code/message/data/request_id/node_id`。读取需要 `read/system.write`，写入还需要近期认证；浏览器携带 CSRF，机器 Token 按自身权限与来源限制执行。
+
+| 路径 | 用途 |
+| --- | --- |
+| `GET /api/v1/management/listener` | 已确认配置、最近操作及实际通道/监听状态 |
+| `POST /api/v1/management/listener` | 按当前版本暂用候选，或从回环入口停用 |
+| `GET /api/v1/management/listener/operations/{id}` | 查询原操作，未知回执不自动重建 |
+| `POST /api/v1/management/listener/operations/{id}/confirm` | 通过新的候选 HTTPS 连接确认 |
+| `POST /api/v1/management/listener/operations/{id}/rollback` | 请求恢复已确认配置 |
+
+启用请求示例，须同时提供 `Idempotency-Key`：
+
+```json
+{
+  "version": 0,
+  "enabled": true,
+  "listen": "0.0.0.0:9444",
+  "allowed_sources": ["203.0.113.10/32"],
+  "certificate_pem": "",
+  "key_pem": "",
+  "rotate_certificate": false
+}
+```
+
+实现和源码集成已完成；未运行生成器、服务、浏览器、构建、类型检查、测试或真实监听变更，待 P5 集中验证。

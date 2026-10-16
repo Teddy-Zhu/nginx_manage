@@ -38,6 +38,9 @@ export type Pairing = components["schemas"]["Pairing"];
 export type PairingOffer = components["schemas"]["PairingOffer"];
 export type PairingJobInput = components["schemas"]["PairingJobInput"];
 export type PairingJob = components["schemas"]["PairingJob"];
+export type ManagementListenerInput = components["schemas"]["ManagementListenerInput"];
+export type ManagementListenerOperation = components["schemas"]["ManagementListenerOperation"];
+export type ManagementListenerView = components["schemas"]["ManagementListenerView"];
 export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
 export type SystemVersion = components["schemas"]["SystemVersion"];
@@ -341,6 +344,10 @@ function createAPI(scope: RequestScope) {
   followLogs: (query: LogQuery, page: (value: LogPage) => void, error: (value: ApiError) => void) => followLogsFor(scope, query, page, error),
   nodes: (signal?: AbortSignal) => request<NodeConnection[]>({ url: "/nodes", signal }),
   pairings: () => request<Pairing[]>({ url: "/remote/pairings" }),
+  managementListener: () => request<ManagementListenerView>({ url: "/management/listener" }),
+  listenerOperation: (id: string) => request<ManagementListenerOperation>({ url: `/management/listener/operations/${id}` }),
+  applyManagementListener: (data: ManagementListenerInput, key: string) => request<ManagementListenerOperation>({ url: "/management/listener", method: "POST", data, headers: { "Idempotency-Key": key } }),
+  decideManagementListener: (id: string, action: "confirm" | "rollback") => request<ManagementListenerOperation>({ url: `/management/listener/operations/${id}/${action}`, method: "POST" }),
   createPairing: (data: PairingInput, key: string) => request<PairingOffer>({ url: "/remote/pairings", method: "POST", data, headers: { "Idempotency-Key": key } }),
   revokePairing: (id: string) => request<Pairing>({ url: `/remote/pairings/${id}`, method: "DELETE" }),
   pairingJobs: () => request<PairingJob[]>({ url: "/nodes/pairings" }),

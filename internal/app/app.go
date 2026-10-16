@@ -39,6 +39,7 @@ import (
 	"nginxpanel/internal/panelready"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/panelupdates"
+	"nginxpanel/internal/remotelisten"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 	"nginxpanel/internal/tasks"
@@ -209,7 +210,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() {
-		return errors.New("当前仅开放回环管理入口；远程监听须先实现可达性确认与回滚")
+		return errors.New("主恢复入口必须使用回环地址；远程入口通过受控监听配置")
 	}
 	unlock, err := Lock(o.DataDir, o.Dev)
 	if err != nil {
@@ -273,7 +274,7 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 12)
+	result := make(chan error, 13)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
@@ -287,7 +288,8 @@ func Run(ctx context.Context, o Options) error {
 			return err
 		}
 		defer readyListener.Close()
-		workers.Add(1)
+		workers.Add(2)
+		go func() { defer workers.Done(); result <- remotelisten.Serve(runCtx, o.Socket+".remote", handler) }()
 		go func() {
 			defer workers.Done()
 			result <- panelready.Serve(runCtx, readyListener, nodeID, func(ctx context.Context) (panelready.Status, error) {

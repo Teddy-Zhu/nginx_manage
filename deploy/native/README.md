@@ -54,7 +54,7 @@ sudo bash deploy/native/install.sh \
 
 安装注册 `nginxpanel-nginx.service`、`nginxpanel-agent.service` 和 `nginxpanel.service`；是否安装组件、是否启用服务及实际运行状态分别核对。Agent 不依赖启动 Nginx，重启 Agent 不会顺带拉起已停止的代理实例。Nginx 独立前台运行，由 systemd 跟踪 master；退出使用 QUIT 和有限宽限期。面板、Agent 或其更新不会因服务依赖而停止正在代理流量的 Nginx。应用发布及运行确认仍由 Agent 完成。
 
-Web 无 Linux capabilities，只能写四个业务目录；root Agent 可写固定执行目录，无法读取业务主密钥目录。各服务使用只读系统挂载与独立临时目录，Web 保持回环 HTTPS，Agent 仅开放本地 Unix socket 并核对 Web UID。初始化输出 TLS 指纹和引导令牌文件位置，不输出令牌内容。
+Web 无 Linux capabilities，只能写四个业务目录；root Agent 可写固定执行目录，无法读取业务主密钥目录。各服务使用只读系统挂载与独立临时目录，Web 保持主回环 HTTPS；可选[受控远程监听](../../docs/management-listener.md)由 Agent 持有 TCP 描述符、Web 完成 TLS，独立执行确认期限与恢复。Agent 管理命令仍仅通过本地 Unix Socket 并核对 Web UID。初始化输出 TLS 指纹和引导令牌文件位置，不输出令牌内容。
 
 默认只准备文件并执行 `daemon-reload`。本机管理员可在安装命令中加 `--start`：仅面板模式只启用并启动 Web 与 Agent；选择 Nginx 时同时启用并启动其专用服务。已选择 Nginx 的部署也可在检查配置后执行：
 
@@ -66,7 +66,7 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 仅面板部署手动启用时只选择 `nginxpanel-agent.service nginxpanel.service`。Nginx unit 的 `ExecCondition` 读取同一安装记录：明确未安装时跳过，记录缺失、损坏或已装文件校验失败时报告 unit 失败；不会把损坏状态当作未安装。退出状态遵循 [systemd 官方条件启动语义](https://github.com/systemd/systemd/blob/main/man/systemd.service.xml)。
 
-服务进入 active 只说明进程受 systemd 管理，不能代替 API、权限、Nginx 应用和故障恢复验收。首次管理员配置使用 `<DATA_DIR>/bootstrap/token`。远程访问仍通过已有 SSH/VPN/受保护代理，当前入口不开放公网监听。
+服务进入 active 只说明进程受 systemd 管理，不能代替 API、权限、Nginx 应用和故障恢复验收。首次管理员配置使用 `<DATA_DIR>/bootstrap/token` 并通过 SSH 访问回环入口。之后可显式启用受控远程监听，或继续使用已有 VPN/受保护代理。
 
 主机指标来源显式为 host；DNS 接管和日志轮转所有者默认 unconfirmed。启用主机 DNS 写入还须本机确认实际所有者、宿主机范围并调整 Agent unit 的固定写入目录，不能只在业务页面绕过系统沙箱。networkd 写入及其完整恢复仍待实现；其 `RevertDNS` 会清除其他 DNS 运行时覆盖，不能将回写服务器地址视为完整回滚，见 [systemd 源码](https://github.com/systemd/systemd/blob/v257/src/network/networkd-link-bus.c)。
 
