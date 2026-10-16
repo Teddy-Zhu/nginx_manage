@@ -192,10 +192,32 @@ root 在固定官方客户端调用前持久记录已派发；进程中断、超
 
 权限按动作明确检查：install 要求 `components.manage`；start/stop/enable/disable 要求 `security.write`；resume/rollback 要求两者。预览另需 `read`，写操作要求近期认证和幂等键，OpenAPI 与显式远程合同用 `x-action-scopes` 逐项声明，转发不扩大调用者范围。`POST /fail2ban/lifecycle` 提交预览返回的完整 `input`，HTTP 202 返回持久任务；`GET /fail2ban/lifecycle/tasks` 返回最近 16 条任务及保存的结果快照。资料、任务、幂等响应与排队审计同事务提交，沿用模块操作共享的 256 份容量及备份隔离规则。
 
-首次安装只注册独立服务及私有配置/状态目录，不启动、不设开机启用。启动和开机启用分别预览、确认；start/enable 以及原安装意图包含启动或开机启用的 resume 要求 Fail2ban 管理模块启用。stop/disable/rollback 可在关闭管理模块后明确执行；模块开关本身仍不停止服务。续办固定原资产、解释器和原 Start/Enable 意图，后两项在预览中明确显示；不借续办替换新版本。已有系统实例仍只读接入，不由这些入口停止或接管。
+首次安装只注册独立服务及私有配置/状态目录，不启动、不设开机启用。启动和开机启用分别预览、确认；install/resume/start/enable 均要求 Fail2ban 管理模块启用；续办是否启动或开机启用仍沿用并显示原意图。stop/disable/rollback 可在关闭管理模块后明确执行；模块开关本身仍不停止服务。续办固定原资产、解释器和原 Start/Enable 意图，后两项在预览中明确显示；不借续办替换新版本。已有系统实例仍只读接入，不由这些入口停止或接管。
 
 root 协调器在 Agent 中独立运行，可用于未配置专用 Nginx 的宿主机；宿主机、维护及组件范围按操作核对。与已有 Nginx 执行、jail 配置、手动封禁、维护和本机服务操作互斥。预览摘要固定安装事件、Python/代码/管理程序身份、服务 PID/运行代次/开机设置、所选 jail 和动作授权；提交与执行前重新核对，漂移必须重新预览。首次排队超过五分钟未派发会过期，派发前持久标记；Agent 中断后只观察原操作，不重放安装或服务控制，也不自动执行相反动作。服务仍在 activating/deactivating/reloading 或存在排队中的 systemd 作业时继续观察，状态无法读取时保留恢复阻塞；不以调用超时或稳定的 ActiveState 推定服务作业已经停止。作业字段按 [systemd v249 的 systemctl 实现](https://github.com/systemd/systemd/blob/v249/src/systemctl/systemctl-show.c#L1011) 读取：无作业为空，有作业为 uint32 编号。服务稳定且原操作仍未确认时先看实际快照，再显式预览续办、撤回或服务操作。
 
 结果核对安装收据、实际服务/开机状态以及必要的官方引擎存活证明，不把 systemctl 成功等同于 jail 或 Nginx 动作生效。API 撤回先证明专用服务已移除，再以冻结前后快照和 CAS 仅撤销该安装的 Nginx 动作授权，保留其他来源授权、签名组件、配置、状态库和审计；外部变化不覆盖，结果不明须复核。集合清理由原 Nginx 对账单独完成，不宣称任务成功即所有流量已经放行。未完成的撤回可重新明确提交，残留原授权阻止直接重建新实例。本机紧急撤回保留原动作授权，须本机逐项撤销或通过 API 完成撤回清理。
 
 页面继续自动扫描现有 `/fail2ban`，按权限选择资产和操作、展示影响并确认，未知提交仅继续原幂等请求，安装/服务快照均标注时间。当前 Agent 为 46，数据库为 26、迁移 schema 为 5。实现与源码集成审阅完成；未运行项目生成器、构建、类型检查、lint、测试、浏览器、Python/Fail2ban、systemd 或真实安装，统一留待 P5。集中验收需覆盖动作权限及远程交集、模块停用边界、签名/Python/配置/服务漂移、首次安装与原意图续办、服务启动/停止/开机状态、派发前后中断、撤回授权 CAS 及重建、维护/备份隔离、Nginx 独立对账和容量。
+
+
+## 缺失系统 Python 的本机依赖计划与安装
+
+缺失 Python 时，本机 root 可先生成最小系统包计划，再明确安装。当前接入 Debian 12/13、Ubuntu 22.04/24.04/26.04 的 APT，以及 CentOS Stream 9/10 的 DNF 4 原生 API，目标为 amd64/arm64；这些适配尚待 P5 真实系统验证，不作为已验证支持矩阵。只请求 `python3` 及原生解析出的必要依赖，不安装推荐/弱依赖。已有或无法完整核对的 Python、已有 Fail2ban 实例、系统包损坏或需要升级/降级/替换/删除已有包时拒绝此入口，复用或修复已有系统环境分别处理。
+
+```sh
+nginxpanel fail2ban-python-plan --data-dir=/var/lib/nginxpanel --fail2ban-scope=host
+nginxpanel fail2ban-python-plan --data-dir=/var/lib/nginxpanel --fail2ban-scope=host --fail2ban-python-refresh
+nginxpanel fail2ban-python-install --data-dir=/var/lib/nginxpanel --fail2ban-scope=host --fail2ban-python-plan=<计划摘要> --fail2ban-operation=<新UUID> --fail2ban-python-confirm
+nginxpanel fail2ban-python-status --data-dir=/var/lib/nginxpanel --fail2ban-scope=host --fail2ban-operation=<原UUID>
+```
+
+默认只读取已有软件仓库索引；显式 `--fail2ban-python-refresh` 才允许访问已配置来源并刷新原生元数据缓存，不安装软件包，也不新增仓库、导入信任密钥或运行远程脚本。计划显示每个新增包的准确版本/架构、来源主机、SHA-256、下载及安装占用，并提示维护脚本/既有系统包钩子可能运行。计划保存一小时，最多 256 份；冻结主机、原生工具/解释器身份、软件仓库配置、已安装清单及完整求解结果，安装前重新解析并比较。计划不接受任意包名、程序路径、脚本、仓库或包 URL。
+
+APT 保留来源验证，拒绝源文件中关闭信任/有效期检查的配置；下载后再次逐项核对大小与 SHA-256。实际安装仅提供批准的本地归档及空的来源/索引集合，禁止下载、推荐包、升级和删除，防止重解依赖引入未批准包。DNF 使用系统私有 platform Python 或现有系统 Python 的固定隔离入口，禁用插件及弱依赖，只接受 `PKG_INSTALL`；下载后核对摘要与现有 RPM 信任密钥，签名不能确认则失败，不自动导入密钥。原生事务将批准的集合交给 RPM，保留事务检查与原生锁。依据见 [APT 手册](https://manpages.debian.org/testing/apt/apt-get.8.en.html)、[APT 安装实现](https://github.com/Debian/apt/blob/2.6.1/apt-private/private-install.cc)、[DNF Base API](https://dnf.readthedocs.io/en/latest/api_base.html)、[DNF 事务 API](https://dnf.readthedocs.io/en/latest/api_transaction.html) 和 [DNF RPM 事务实现](https://github.com/rpm-software-management/dnf/blob/4.20.0/dnf/db/group.py)。
+
+操作先写入 root 独立 journal，再派发原生安装；同一操作 ID 后续只查询，不重新执行。中断或超时可能留下待恢复的原生包状态，不自动执行 `dpkg --configure -a`、DNF 重装或逆向卸载。锁仍被占用或状态无法核对时保留恢复阻塞；查询确认包管理器空闲、原版本包完整安装、系统解释器归属和必要标准库/SQLite 读写后才记录成功，回执未知单独标注。稳定但未达目标的操作记录失败，新的明确计划仍须通过原生完整性检查；损坏环境由管理员通过原生包管理器恢复。新增系统包不随 Fail2ban 撤回自动卸载。
+
+该能力目前为本机 root 入口，网页/API 依赖计划和安装任务仍待接入；不将本机能力当成公开入口已完成。现有网页/API 的 install/resume/start/enable 统一要求管理模块启用，停用、取消开机启用及撤回仍可明确处理已有保护。面板镜像继续不包含 Python/Fail2ban，Nginx Docker 模块继续由镜像预置；未加入动态编译或运行时模块安装。Agent 仍为 46、数据库为 26、迁移 schema 为 5，root 计划、下载归档及系统包事务不进入业务迁移。
+
+实现与源码集成审阅完成；未运行项目生成器、构建、类型检查、lint、测试、浏览器、Python、APT/DNF/RPM、镜像或真实宿主机操作，统一留待 P5。集中验证需覆盖支持矩阵、索引缺失/刷新/签名/密钥、纯新增限制、包/源/工具漂移、下载与磁盘边界、原生锁、取消/重启/回执未知及原生包恢复，系统依赖与官方组件的实际兼容性随后由受管安装再核对。

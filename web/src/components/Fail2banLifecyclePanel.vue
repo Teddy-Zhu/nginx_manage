@@ -132,7 +132,9 @@ const currentAt = computed(() => latest.value?.at ?? props.observedAt);
 const needsEnabled = computed(
   () =>
     !!plan.value &&
-    (plan.value.input.action === "start" ||
+    (plan.value.input.action === "install" ||
+      plan.value.input.action === "resume" ||
+      plan.value.input.action === "start" ||
       plan.value.input.action === "enable" ||
       plan.value.input.start ||
       plan.value.input.enable),
@@ -372,7 +374,8 @@ onUnmounted(() => {
       </ul>
       <p v-if="plan.jails.length">受管 jail：{{ plan.jails.join("、") }}</p>
       <NAlert v-if="needsEnabled && !moduleEnabled" type="warning"
-        >此操作包含启动或开机启用，需要先启用 Fail2ban 管理模块。</NAlert
+        >此操作包含安装、续办、启动或开机启用，需要先启用 Fail2ban
+        管理模块。</NAlert
       >
       <NPopconfirm :disabled="!canSubmit" @positive-click="submit">
         <template #trigger

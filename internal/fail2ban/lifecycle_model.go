@@ -61,7 +61,7 @@ func (in LifecycleInput) Validate() error {
 	return nil
 }
 func (in LifecycleInput) NeedsEnabled() bool {
-	return in.Action == "start" || in.Action == "enable" || in.Start || in.Enable
+	return in.Action == "install" || in.Action == "resume" || in.Action == "start" || in.Action == "enable" || in.Start || in.Enable
 }
 
 type LifecyclePlan struct {

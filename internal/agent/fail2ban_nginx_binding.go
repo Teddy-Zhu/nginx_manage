@@ -210,7 +210,7 @@ func (f *fail2banNginxExecutor) manage(ctx context.Context, in Fail2banNginxRequ
 		return prior, err
 	}
 	for _, record := range records {
-		if (record.Kind == fail2banJailsKind || record.Kind == fail2banAddressKind || record.Kind == fail2banLifecycleKind) && pendingNginxRecord(record) {
+		if (record.Kind == fail2banJailsKind || record.Kind == fail2banAddressKind || record.Kind == fail2banLifecycleKind || record.Kind == fail2banPythonKind) && pendingNginxRecord(record) {
 			return prior, ErrBusy
 		}
 	}
