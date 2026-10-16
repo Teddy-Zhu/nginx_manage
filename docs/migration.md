@@ -113,13 +113,13 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 ## 监控配置迁移
 
-文件导出、API 拉取和推送均支持 `selection.monitoring=true`，固定归档项 `config/monitoring.json` 包含采样间隔、数据保留时间和 CPU/内存/磁盘阈值，未选择时为 null。当前仅接收 schema 5，不保留旧格式兼容分支。
+文件导出、API 拉取和推送均支持 `selection.monitoring=true`，固定归档项 `config/monitoring.json` 包含采样间隔、数据保留时间和 CPU/内存/磁盘阈值，未选择时为 null。当前仅接收 schema 6，不保留旧格式兼容分支。
 
 目标参数 `monitoring: {mode: "preserve" | "replace", base_version?: number}` 默认保留目标。替换要求目标 `monitoring.write`；准备和执行分别检查当前权限。预检展示源设置及冻结的目标基础版本，重新预检不自动改用新版本。版本或内容变化须创建新计划。推送任务在传输前检查目标 Key 权限，并核对计划的模式、设置散列及版本，断连或重启后继续核对原计划。
 
 `save/apply` 将监控设置与配置修订、其他依赖和任务同事务保存，提交后唤醒原监控 worker；沿用现有配置变更的采样与阈值窗口处理。`draft` 仅在计划中保留待迁入设置，显示“未导入”，不改变目标监控配置。目标监控模块开关、指标历史、告警状态与通知队列不随包复制。迁移应用中或待恢复时阻止另行修改监控设置；Nginx 应用失败先确认原运行配置，再按迁入版本与完整设置核对并以递增版本恢复原设置，冲突保留待恢复状态。未执行构建、类型检查、测试或真实迁移，待 P5 集中验证。
 
-站点的 `client_deny` 元信息只迁移客户端拒绝入口声明；目标按本机 real_ip、map/volatile 和 geo 能力预检，并重新核对站点可信代理设置。独立的 `nginx/client-deny/sets.conf`、实际封禁、root 动作授权事件及集合恢复快照不进入配置包，导入和回滚沿用目标自身的运行集合。受管实例的 `jail-current.json`、`jail-bundles/`、`jail-configs/`、`jail-identities/`、封禁时间证明及 root 执行 journal 同样不迁移。目标 root 须对目标本机受管实例应用重新核对的 jail 策略，或明确授权已有实例的 jail 绑定，再由目标收集自己的实际封禁；导入入口不表示防护已生效，迁移保存后须在目标另行预览并确认 jail 应用。
+站点的 `client_deny` 元信息只迁移客户端拒绝入口声明；目标按本机 real_ip、map/volatile 和 geo 能力预检，并重新核对站点可信代理设置。独立的 `nginx/client-deny/sets.conf`、实际封禁、root 动作授权事件及集合恢复快照不进入配置包，导入和回滚沿用目标自身的运行集合。受管实例的 `jail-current.json`、`jail-bundles/`、`jail-configs/`、`jail-identities/`、封禁时间证明及 root 执行 journal 同样不迁移。目标 root 须对目标本机受管实例应用重新核对的 jail 策略，或明确授权已有实例的 jail 绑定，再由目标收集自己的实际封禁；导入入口不表示防护已生效，迁移保存后须在目标另行预览并确认 jail 应用。 宿主机动作的独立空表所有权及 root 操作回执同样不迁移；可在目标本机重新登记空表，但空表登记不表示自动封禁已接通。
 
 
 ## 主机 DNS 配置迁移

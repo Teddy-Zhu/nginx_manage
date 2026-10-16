@@ -248,4 +248,24 @@ root Agent 在非开发、root 且 metrics/maintenance 范围均为 host 时准�
 
 当前预检只采样最多 512 个接口地址为单地址保护，附加固定保留网段，生成**空封禁集合**的基础计划摘要/规则数/字节数。`can_prepare` 仅表示该次基础条件和编码成立，`can_apply` 始终 false；快照与预览 marker 不授予所有权，也不能用于直接写入。页面显示条件、独立表和保护来源；启用的 host-input jail 预览附带 `host_input` 诊断，并继续明确阻塞应用。
 
-独立 root 所有权登记、批准的代理/管理来源、持久意图与补偿、官方当前封禁采集/合并及动作桥接、脱离 Nginx 的面板 jail 生命周期仍待接通；不能将基础计划当作已安装、已封禁或已验证的后端。预检同目标单份在途、30 秒缓存，后台最多 10 秒，其中独立内核快照最多 3 秒；缓存不作为未来执行前复核。Agent/数据库/迁移 schema 为 49/26/6，无旧协议兼容。未运行生成器、构建、类型检查、lint、测试、浏览器、内核操作或真实实例，统一留待 P5；P5 须覆盖两目标隔离、负优先级编码/证明、地址保护、IPv4/IPv6 和未知属性/目标拒绝，不新增 UI 测试。
+预检的 `registration` 核对目标本机 root 登记、独立回执和完整内核指纹；只有原样存在的已登记空表才允许继续生成准备材料。同名未登记表、登记/回执不一致、对象漂移及未恢复意图均阻塞，不从标记单独推断所有权。页面区分未登记、已登记空表、缺失、漂移、待恢复和已释放。预检同目标单份在途、30 秒缓存，后台最多 10 秒，其中独立内核快照最多 3 秒；缓存不作为未来执行前复核。
+
+## 本机 root 空表登记与恢复
+
+以下入口只操作独立固定表 `inet nginxpanel_fail2ban`，不依赖 Nginx、不安装链或 hook、不提交封禁，不是自动保护授权。须本机 root、规范绝对数据目录及 `--fail2ban-scope=host`，容器范围不允许；没有 IPC、网页或远程写入入口。
+
+```sh
+# 初次登记；操作标识由调用方生成，同一请求重试必须保留原标识。
+nginxpanel fail2ban-host-input-init --data-dir /srv/nginxpanel --fail2ban-scope host --fail2ban-operation <操作UUID>
+nginxpanel fail2ban-host-input-status --data-dir /srv/nginxpanel --fail2ban-scope host
+# 结果不明时仅核对原操作，不重发创建或移除事务。
+nginxpanel fail2ban-host-input-recover --data-dir /srv/nginxpanel --fail2ban-scope host --fail2ban-operation <原操作UUID>
+# 新移除操作须指定 status 返回的当前登记操作，且目标仍为原样空表。
+nginxpanel fail2ban-host-input-remove --data-dir /srv/nginxpanel --fail2ban-scope host --fail2ban-operation <新操作UUID> --fail2ban-host-input-base <当前登记操作UUID>
+```
+
+新建或移除按固定主机锁互斥，并与维护准入协调。root 在 `agent/fail2ban/host-input-registration.json` 与独立 journal 持久写入所有者、请求/事务摘要、原基线和恢复方向后，才发送一次带内核代次前提的独占创建/删除事务；提交前核对命名空间，提交后证明完整空表/缺失和预期代次。ACK 缺失、取消或结果不明均保留原意图，必须显式恢复，不自动重发。已有未登记表绝不接管，有链、规则或未知属性时拒绝修改。
+
+新请求通过 `--fail2ban-host-input-base` 对当前登记操作做 CAS；仅首次无登记时省略。已使用 UUID 不得重放，当前原请求重试只读取结果。恢复仅观察原意图：原空表仍在则确认或报告移除未完成，缺失则确认移除或报告创建未完成；不以失败返回掩盖未完成动作。已确认表在重启/命名空间变化后缺失时，生成关联旧操作的独立释放记录，保留旧审计，不自动重建或修改旧命名空间。重新初始化已释放登记须使用新操作和最新基础标识；恢复产生的新标识应重新读取 status。上述记录不进入完整备份或跨环境配置迁移，目标机必须独立建立自己的登记。
+
+批准的代理/管理来源、带 hook 的运行意图与补偿、官方当前封禁采集/合并及动作桥接、脱离 Nginx 的面板 jail 生命周期仍待接通；`can_apply` 继续为 false。Agent/数据库/迁移 schema 为 50/26/6，无旧协议兼容。实现已接入并审阅；生成器、构建、类型检查、lint、测试、浏览器、内核操作及真实实例仍统一留待 P5。P5 须集中覆盖双目标隔离、原操作幂等/CAS、持久写入中断、ACK/代次不确定、同名表拒绝、非空/未知属性拒绝、命名空间变化和审计保留；不新增 UI 测试。

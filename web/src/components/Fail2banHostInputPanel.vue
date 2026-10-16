@@ -26,6 +26,15 @@ const managers: Record<string, string> = {
   ufw: "UFW",
   mixed: "多个管理器",
 };
+const registrations: Record<string, string> = {
+  unavailable: "未确认",
+  unregistered: "未登记",
+  registered: "空表登记已核对",
+  released: "已释放",
+  missing: "登记对象缺失",
+  drifted: "登记对象发生变化",
+  recovery_required: "原操作待恢复",
+};
 async function load() {
   if (busy.value) return;
   busy.value = true;
@@ -69,6 +78,13 @@ onUnmounted(() => {
         >
       </div>
       <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
+      <NAlert
+        v-if="
+          view.registration.reason && view.registration.reason !== view.reason
+        "
+        type="warning"
+        >{{ view.registration.reason }}</NAlert
+      >
       <NDescriptions label-placement="left" :column="2" bordered>
         <NDescriptionsItem label="观测范围">{{
           view.scope === "host" ? "宿主机" : "未确认"
@@ -91,9 +107,14 @@ onUnmounted(() => {
         <NDescriptionsItem label="现有目标表">{{
           view.kernel.available
             ? view.kernel.table_exists
-              ? "已存在，禁止覆盖"
+              ? view.registration.verified
+                ? "已登记空表"
+                : "已存在，禁止接管"
               : "未发现"
             : "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="本机所有权">{{
+          registrations[view.registration.state] || "未确认"
         }}</NDescriptionsItem>
         <NDescriptionsItem label="内核代次">{{
           view.kernel.available ? view.kernel.generation : "未确认"

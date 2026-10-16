@@ -81,8 +81,12 @@ func (f *fail2banHostInputReader) collect(ctx context.Context) fail2ban.HostInpu
 		out.Reason = out.Kernel.Reason
 		return out
 	}
-	if out.Kernel.TableExists {
-		out.Reason = "独立目标表已存在，尚无独立所有权登记，拒绝接管或覆盖"
+	out.Registration = fail2banHostRegistrationView(f.server.DataDir, out.Kernel)
+	if out.Registration.State != "unregistered" && out.Registration.State != "released" && !out.Registration.Verified || out.Kernel.TableExists && !out.Registration.Verified {
+		out.Reason = out.Registration.Reason
+		if out.Reason == "" {
+			out.Reason = "独立宿主机动作所有权尚未确认"
+		}
 		return out
 	}
 	out.ProtectedSources, err = fail2banHostLocalSources(ctx)

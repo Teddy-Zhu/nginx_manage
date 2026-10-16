@@ -24,18 +24,44 @@ type nftRegistrationBatch struct {
 }
 
 func prepareNFTRegistration(baseline firewall.KernelView, owner string, remove bool) (nftRegistrationBatch, error) {
+	return prepareNFTTargetRegistration(firewall.NFTPortInput, baseline, owner, remove)
+}
+
+func nftTargetRegistrationMarker(target firewall.NFTTarget, owner string) (string, error) {
+	if !validID(owner) {
+		return "", errors.New("无效的独立登记所有者")
+	}
+	switch target {
+	case firewall.NFTPortInput:
+		return nftRegistrationPrefix + owner, nil
+	case firewall.NFTFail2banInput:
+		return "nginxpanel:fail2ban:registration:v1:" + owner, nil
+	default:
+		return "", errors.New("未知独立登记目标")
+	}
+}
+
+func prepareNFTTargetRegistration(target firewall.NFTTarget, baseline firewall.KernelView, owner string, remove bool) (nftRegistrationBatch, error) {
 	var out nftRegistrationBatch
-	if !baseline.Available || baseline.Generation == 0 || len(baseline.NamespaceID) != 64 || len(baseline.Fingerprint) != 64 || baseline.TableExists != remove || !validID(owner) {
+	layout, err := target.Layout()
+	if err != nil {
+		return out, err
+	}
+	marker, err := nftTargetRegistrationMarker(target, owner)
+	if err != nil {
+		return out, err
+	}
+	if !baseline.Available || baseline.Generation == 0 || len(baseline.NamespaceID) != 64 || len(baseline.Fingerprint) != 64 || baseline.TableExists != remove || baseline.Chains != 0 || baseline.Rules != 0 || !validID(owner) {
 		return out, errors.New("防火墙登记事务的基线无效")
 	}
 	kind := uint16(unix.NFT_MSG_NEWTABLE)
 	flags := netlink.Request | netlink.Acknowledge | netlink.Create | netlink.Excl
-	attrs := []netlink.Attribute{{Type: unix.NFTA_TABLE_NAME, Data: []byte(firewall.NFTHostTable + "\x00")}}
+	attrs := []netlink.Attribute{{Type: unix.NFTA_TABLE_NAME, Data: []byte(layout.Table + "\x00")}}
 	if remove {
 		kind = unix.NFT_MSG_DELTABLE
 		flags = netlink.Request | netlink.Acknowledge
 	} else {
-		attrs = append(attrs, netlink.Attribute{Type: unix.NFTA_TABLE_FLAGS, Data: binary.BigEndian.AppendUint32(nil, 0)}, netlink.Attribute{Type: 6, Data: []byte(nftRegistrationPrefix + owner)})
+		attrs = append(attrs, netlink.Attribute{Type: unix.NFTA_TABLE_FLAGS, Data: binary.BigEndian.AppendUint32(nil, 0)}, netlink.Attribute{Type: 6, Data: []byte(marker)})
 	}
 	messages := []struct {
 		kind     uint16
