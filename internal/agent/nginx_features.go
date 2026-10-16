@@ -25,6 +25,10 @@ type NginxFeatures struct {
 	Features  map[string]Feature `json:"features"`
 	Reason    string             `json:"reason"`
 	Modules   []NativeModule     `json:"modules"`
+
+	// These compile-time defaults become usable with a confirmed running
+	// dynamic Stream core. They are not independently loadable modules.
+	streamDefaults map[string]Feature
 }
 type boundedOutput struct {
 	value strings.Builder
@@ -169,6 +173,9 @@ func parseNginxFeatures(value string) NginxFeatures {
 		out.Features[name] = Feature{Available: available, Reason: reason}
 	}
 	set("http", http, "缺少 HTTP 核心模块")
+	for _, module := range []string{"proxy", "access", "log", "headers", "geo", "split_clients", "charset", "gzip"} {
+		set("http_"+module, http && !flags["--without-http_"+module+"_module"], "缺少 HTTP "+module+" 模块")
+	}
 	set("map", http && !flags["--without-http_map_module"], "缺少 HTTP map 模块")
 	set("map_volatile", http && !flags["--without-http_map_module"] && atLeast(1, 11, 7), "路径规则需要 Nginx 1.11.7 或更新版本的 map 模块")
 	set("rewrite", http && !flags["--without-http_rewrite_module"], "缺少 HTTP rewrite 模块")
@@ -189,6 +196,32 @@ func parseNginxFeatures(value string) NginxFeatures {
 	set("stream_tls", flags["--with-stream"] && flags["--with-stream_ssl_module"], "Stream TLS 模块尚未确认可用")
 	set("stream_real_ip", flags["--with-stream"] && flags["--with-stream_realip_module"], "Stream realip 模块尚未确认可用")
 	set("stream_ssl_preread", flags["--with-stream"] && flags["--with-stream_ssl_preread_module"], "Stream SSL preread 模块尚未确认可用")
+	out.streamDefaults = map[string]Feature{}
+	streamCompiled := flags["--with-stream"] || flags["--with-stream=dynamic"]
+	for _, module := range []struct {
+		feature, flag string
+		version       bool
+	}{
+		{"stream_map", "map", atLeast(1, 11, 2)},
+		{"stream_map_volatile", "map", atLeast(1, 11, 7)},
+		{"stream_access", "access", atLeast(1, 9, 2)},
+		{"stream_log", "log", atLeast(1, 11, 4)},
+		{"stream_geo", "geo", atLeast(1, 11, 3)},
+		{"stream_split_clients", "split_clients", atLeast(1, 11, 3)},
+		{"stream_limit_conn", "limit_conn", atLeast(1, 9, 3)},
+		{"stream_limit_conn_observe", "limit_conn", atLeast(1, 17, 6)},
+		{"stream_return", "return", atLeast(1, 11, 2)},
+		{"stream_set", "set", atLeast(1, 19, 3)},
+	} {
+		compiled := streamCompiled && !flags["--without-stream_"+module.flag+"_module"] && module.version
+		reason := "缺少匹配版本的 Stream " + module.flag + " 模块"
+		out.streamDefaults[module.feature] = Feature{Available: compiled, Reason: reason}
+		if compiled {
+			out.streamDefaults[module.feature] = Feature{Available: true}
+			reason = "Stream 核心模块尚未确认运行"
+		}
+		set(module.feature, flags["--with-stream"] && compiled, reason)
+	}
 	out.Available = true
 	return out
 }
@@ -248,7 +281,18 @@ func (n *Nginx) nativeModuleFeatures(ctx context.Context, out *NginxFeatures) {
 				status.Reason = "模块未安装、散列或权限已变化，或批准的 Nginx 二进制不匹配"
 			} else {
 				status.Available = true
-				status.Features = features
+				status.Features = append([]string{}, features...)
+				for _, feature := range features {
+					if feature == "stream" {
+						for name, capability := range out.streamDefaults {
+							if capability.Available {
+								status.Features = append(status.Features, name)
+							}
+						}
+						break
+					}
+				}
+				sort.Strings(status.Features)
 			}
 		}
 		dependency, ok := running[item.Path()]
@@ -275,6 +319,11 @@ func (n *Nginx) nativeModuleFeatures(ctx context.Context, out *NginxFeatures) {
 	for _, dependency := range running {
 		for _, name := range dependency.Features {
 			out.Features[name] = Feature{Available: true}
+		}
+	}
+	if out.Features["stream"].Available {
+		for name, feature := range out.streamDefaults {
+			out.Features[name] = feature
 		}
 	}
 }

@@ -3058,6 +3058,7 @@ components:
         modules: { type: array, maxItems: 32, items: { $ref: '#/components/schemas/NativeModule' } }
         features:
           type: object
+          description: 目标实际编译及确认运行的能力；HTTP 与 Stream 的 map、访问控制、日志、连接限制等分别报告，不能跨上下文替代。原生受信模块尚未加载时，其候选能力在 modules 中报告，须由应用执行器验证加载。
           additionalProperties: { $ref: '#/components/schemas/NginxFeature' }
     NativeModule:
       type: object
@@ -3069,7 +3070,7 @@ components:
         sha256: { type: string }
         available: { type: boolean, description: 批准内容与当前二进制绑定及文件校验通过，不代表已加载或 ABI 校验完成。 }
         running: { type: boolean, description: 相同散列副本所属发布已确认运行。 }
-        features: { type: array, items: { type: string } }
+        features: { type: array, description: 已批准内容可提供的候选能力，包括对应编译参数确认的 Stream 默认子模块；available 不表示已经加载或通过 ABI 校验。, items: { type: string } }
         reason: { type: string }
     NativeModulesRequest:
       type: object

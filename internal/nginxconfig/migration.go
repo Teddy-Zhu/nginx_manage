@@ -3,6 +3,7 @@ package nginxconfig
 import (
 	"context"
 	"database/sql"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -94,68 +95,138 @@ func mapMigrationFiles(files []File, policy Policy, mappings map[string]string, 
 }
 
 func (p *Parsed) MigrationFeatures() []string {
-	features := map[string]bool{"http": true}
+	// Managed publications add HTTP log/proxy controls and a revision probe
+	// using return, even when the imported business tree only uses Stream.
+	features := map[string]bool{"http": true, "http_proxy": true, "http_log": true, "rewrite": true}
+	byPath := map[string]*Document{}
 	for _, doc := range p.Documents {
-		var walk func([]*Node, string)
-		walk = func(nodes []*Node, parent string) {
+		byPath[doc.File.Path] = doc
+	}
+	// Resolve includes from the entry point with their actual HTTP/Stream scope.
+	// A shared file may require both families; orphan and disabled files do not
+	// grant requirements. The active path guard also bounds invalid include cycles.
+	visited, active := map[[3]string]bool{}, map[string]bool{}
+	var visit func(string, string, string)
+	visit = func(name, scope, table string) {
+		key := [3]string{name, scope, table}
+		if visited[key] || active[name] || p.runtimeExcluded[name] {
+			return
+		}
+		visited[key] = true
+		doc := byPath[name]
+		if doc == nil {
+			return
+		}
+		active[name] = true
+		defer delete(active, name)
+		var walk func([]*Node, string, string)
+		walk = func(nodes []*Node, inherited, table string) {
 			for _, n := range nodes {
 				if !n.Enabled() {
 					continue
 				}
-				kind := parent
-				if n.Name == "http" || n.Name == "stream" {
+				kind := inherited
+				if table == "" && (n.Name == "http" || n.Name == "stream") {
 					kind = n.Name
+					features[kind] = true
+					if kind == "stream" {
+						features["stream_log"] = true
+					}
+				}
+				family := func(http, stream string) {
+					if kind == "stream" {
+						features[stream] = true
+					} else if kind == "http" {
+						features[http] = true
+					}
+				}
+				if n.Name == "include" && len(n.Args) == 1 {
+					for candidate := range byPath {
+						if matched, _ := path.Match(n.Args[0].Value, candidate); matched {
+							visit(candidate, kind, table)
+						}
+					}
+				}
+				// Map/geo/type/split rows are data, including when supplied by
+				// an include. Only map's volatile parameter adds a capability.
+				if table != "" {
+					if table == "map" && n.Name == "volatile" && n.Open < 0 && len(n.Args) == 0 {
+						family("map_volatile", "stream_map_volatile")
+					}
+					continue
+				}
+				if kind == "http" && IsHTTP01(n) {
+					features["http01"] = true
+				}
+				if strings.HasPrefix(n.Name, "proxy_") {
+					family("http_proxy", "stream")
+				}
+				if n.Name == "proxy_ssl" || strings.HasPrefix(n.Name, "proxy_ssl_") || strings.HasPrefix(n.Name, "ssl_") && !strings.HasPrefix(n.Name, "ssl_preread") {
+					family("tls", "stream_tls")
+				}
+				if n.Name == "limit_conn" || strings.HasPrefix(n.Name, "limit_conn_") {
+					family("limit_conn", "stream_limit_conn")
+				}
+				if n.Name == "limit_req" || strings.HasPrefix(n.Name, "limit_req_") {
+					features["limit_req"] = true
 				}
 				switch n.Name {
-				case "server":
-					if parent == "stream" {
-						features["stream"] = true
-					}
-				case "ssl_certificate", "ssl_certificate_key":
-					if kind == "stream" {
-						features["stream_tls"] = true
-					} else {
+				case "proxy_pass":
+					if kind == "http" && len(n.Args) == 1 && strings.HasPrefix(n.Args[0].Value, "https://") {
 						features["tls"] = true
 					}
 				case "listen":
 					for _, a := range n.Args {
 						if a.Value == "ssl" {
-							if kind == "stream" {
-								features["stream_tls"] = true
-							} else {
-								features["tls"] = true
-							}
+							family("tls", "stream_tls")
 						}
 					}
 				case "set_real_ip_from", "real_ip_header", "real_ip_recursive":
-					if kind == "stream" {
-						features["stream_real_ip"] = true
-					} else {
-						features["real_ip"] = true
-					}
+					family("real_ip", "stream_real_ip")
 				case "ssl_preread":
 					features["stream_ssl_preread"] = true
 				case "map":
-					features["map"] = true
-				case "volatile":
-					features["map_volatile"] = true
-				case "limit_req", "limit_req_zone":
-					features["limit_req"] = true
-				case "limit_conn", "limit_conn_zone":
-					features["limit_conn"] = true
+					family("map", "stream_map")
+				case "geo":
+					family("http_geo", "stream_geo")
+				case "split_clients":
+					family("http_split_clients", "stream_split_clients")
+				case "allow", "deny":
+					family("http_access", "stream_access")
+				case "log_format", "access_log":
+					family("http_log", "stream_log")
+				case "add_header", "expires":
+					features["http_headers"] = true
+				case "charset":
+					features["http_charset"] = true
+				case "gzip", "gzip_types", "gzip_vary":
+					features["http_gzip"] = true
 				case "limit_req_dry_run":
 					features["limit_req_observe"] = true
 				case "limit_conn_dry_run":
-					features["limit_conn_observe"] = true
-				case "rewrite", "return", "if":
+					family("limit_conn_observe", "stream_limit_conn_observe")
+				case "return":
+					family("rewrite", "stream_return")
+				case "set":
+					family("rewrite", "stream_set")
+				case "rewrite", "if", "uninitialized_variable_warn":
 					features["rewrite"] = true
 				}
-				walk(n.Children, kind)
+				if n.Name == "map" || n.Name == "geo" || n.Name == "types" || n.Name == "split_clients" {
+					walk(n.Children, kind, n.Name)
+					continue
+				}
+				walk(n.Children, kind, "")
 			}
 		}
-		walk(doc.Nodes, "")
+		walk(doc.Nodes, scope, table)
 	}
+	visit("nginx.conf", "", "")
 	for _, w := range p.Tree.WAFPolicies {
+		doc := p.Documents[w.HTTPFileID]
+		if doc == nil || !visited[[3]string{doc.File.Path, "http", ""}] {
+			continue
+		}
 		for _, name := range w.Config.RequiredFeatures() {
 			features[name] = true
 		}
