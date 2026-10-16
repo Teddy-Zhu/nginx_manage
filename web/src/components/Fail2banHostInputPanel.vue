@@ -145,6 +145,9 @@ onUnmounted(() => {
         <NDescriptionsItem label="等待同步">{{
           view.sync.queued ? "是" : "否"
         }}</NDescriptionsItem>
+        <NDescriptionsItem v-if="view.sync.retirement_id" label="退役操作">{{
+          view.sync.retirement_id
+        }}</NDescriptionsItem>
         <NDescriptionsItem label="同步采样时间">{{
           view.sync.collected_at
             ? new Date(view.sync.collected_at * 1000).toLocaleString()

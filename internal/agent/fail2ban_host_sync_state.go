@@ -27,6 +27,7 @@ type fail2banHostSyncEvent struct {
 	ProtectionID   string `json:"protection_id"`
 	SourcesID      string `json:"sources_id"`
 	RuntimeBaseID  string `json:"runtime_base_id"`
+	RetirementID   string `json:"retirement_id"`
 	ApprovedAt     int64  `json:"approved_at"`
 	RequestHash    string `json:"request_hash"`
 }
@@ -41,7 +42,7 @@ func (e fail2banHostSyncEvent) valid() bool {
 	if e.Schema != 1 || !validID(e.ID) || e.PreviousID != "" && !validID(e.PreviousID) || e.ID == e.PreviousID || !validID(e.SessionID) || !validID(e.Owner) || !validID(e.RegistrationID) || !fail2banDigest.MatchString(e.NamespaceID) || !fail2banDigest.MatchString(e.EngineKey) || !validID(e.ProtectionID) || !validID(e.SourcesID) || e.RuntimeBaseID != "" && !validID(e.RuntimeBaseID) || e.ApprovedAt <= 0 || e.RequestHash != e.requestHash() {
 		return false
 	}
-	return e.Action == "enable" && e.SessionID == e.ID || e.Action == "disable" && e.ID != e.SessionID && e.PreviousID == e.SessionID
+	return e.Action == "enable" && e.SessionID == e.ID && e.RetirementID == "" || e.Action == "disable" && e.ID != e.SessionID && e.PreviousID == e.SessionID && (e.RetirementID == "" || validID(e.RetirementID))
 }
 
 func fail2banHostSyncDir(dataDir string) string {
@@ -200,6 +201,9 @@ func fail2banHostSyncMaintenanceIdle(dataDir string, r Record) (bool, error) {
 		return false, errors.Join(errors.New("持续同步维护回执无效"), err)
 	}
 	if r.State == "succeeded" {
+		if r.Stage == "disabled_retired" {
+			return fail2banHostRetiredParent(dataDir, r, e)
+		}
 		if r.Stage == "disabled-empty" && r.AfterRevision == "" || (r.Stage == "clear/succeeded" || r.Stage == "apply/failed" && r.Error != "") && fail2banDigest.MatchString(r.AfterRevision) && fail2banDigest.MatchString(r.ObservedRevision) {
 			return true, nil
 		}

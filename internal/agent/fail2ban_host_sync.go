@@ -36,8 +36,8 @@ func (f *fail2banHostSyncExecutor) status() fail2ban.HostInputSyncView {
 	if err != nil {
 		return fail2ban.EmptyHostInputSync("持续同步批准无法完整读取")
 	}
-	out := fail2banHostSyncMetadata(event)
-	if !out.Enabled {
+	out := fail2banHostRetirementSyncView(f.server.DataDir, fail2banHostSyncMetadata(event))
+	if !out.Enabled || out.State == "recovery_required" {
 		return out
 	}
 	if stopping, e := loadFail2banHostSyncStop(f.server.DataDir, event); e != nil {
@@ -129,9 +129,6 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 	if err != nil {
 		return fail2ban.EmptyHostInputSync("持续同步批准无法读取"), err
 	}
-	if event == nil || event.Action != "enable" {
-		return out, nil
-	}
 	leaveGate, ok := f.gate.enter(true)
 	if !ok {
 		return out, ErrBusy
@@ -142,6 +139,14 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 		return out, err
 	}
 	defer leave()
+	if changed, e := advanceFail2banHostRetirement(ctx, dataDir); e != nil || changed {
+		latest, readErr := loadFail2banHostSync(dataDir)
+		out = fail2banHostRetirementSyncView(dataDir, fail2banHostSyncMetadata(latest))
+		return out, errors.Join(e, readErr)
+	}
+	if event == nil || event.Action != "enable" {
+		return out, nil
+	}
 	latest, err := loadFail2banHostSync(dataDir)
 	if err != nil || latest == nil || latest.ID != event.ID {
 		return out, errors.Join(errors.New("持续同步批准已变化，等待新观察"), err)

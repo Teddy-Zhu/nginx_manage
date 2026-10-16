@@ -17,11 +17,14 @@ func fail2banHostSyncMetadata(e *fail2banHostSyncEvent) fail2ban.HostInputSyncVi
 	if e == nil {
 		return out
 	}
-	out.ID, out.SessionID, out.ApprovedAt = e.ID, e.SessionID, e.ApprovedAt
+	out.ID, out.SessionID, out.ApprovedAt, out.RetirementID = e.ID, e.SessionID, e.ApprovedAt, e.RetirementID
 	if e.Action == "enable" {
 		out.Enabled, out.State, out.Reason = true, "waiting", "已批准持续同步，等待独立执行器核对"
 	} else {
 		out.Reason = "持续同步已停用，动作规则已清除"
+		if e.RetirementID != "" {
+			out.Reason = "已退役失联动作范围并停用会话；原事务结果及其他命名空间规则未确认"
+		}
 	}
 	return out
 }
@@ -199,6 +202,9 @@ func ManageFail2banHostSync(ctx context.Context, dataDir, scope, action, operati
 		return out, err
 	}
 	defer leave()
+	if err = fail2banHostRetirementIdle(dataDir); err != nil {
+		return out, err
+	}
 	current, err := loadFail2banHostSync(dataDir)
 	if err != nil {
 		return out, err

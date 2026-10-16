@@ -9,6 +9,7 @@ type HostInputSyncView struct {
 	At                int64  `json:"at"`
 	ID                string `json:"id"`
 	SessionID         string `json:"session_id"`
+	RetirementID      string `json:"retirement_id"`
 	Enabled           bool   `json:"enabled"`
 	ApprovedAt        int64  `json:"approved_at"`
 	State             string `json:"state"`
@@ -25,11 +26,14 @@ func EmptyHostInputSync(reason string) HostInputSyncView {
 }
 
 func (v HostInputSyncView) Valid() bool {
-	if v.At <= 0 || v.ApprovedAt < 0 || v.CollectedAt < 0 || v.ConfirmedAt < 0 || v.KernelOperationID != "" && !policyID.MatchString(v.KernelOperationID) || v.SourceHash != "" && (len(v.SourceHash) != 64 || strings.Trim(v.SourceHash, "0123456789abcdef") != "") {
+	if v.At <= 0 || v.ApprovedAt < 0 || v.CollectedAt < 0 || v.ConfirmedAt < 0 || v.RetirementID != "" && !policyID.MatchString(v.RetirementID) || v.KernelOperationID != "" && !policyID.MatchString(v.KernelOperationID) || v.SourceHash != "" && (len(v.SourceHash) != 64 || strings.Trim(v.SourceHash, "0123456789abcdef") != "") {
 		return false
 	}
+	if v.RetirementID != "" && v.State == "recovery_required" {
+		return !v.Queued && v.Reason != "" && v.CollectedAt == 0 && v.ConfirmedAt == 0 && v.SourceHash == "" && v.KernelOperationID == "" && (v.ID == "" && !v.Enabled && v.SessionID == "" && v.ApprovedAt == 0 || policyID.MatchString(v.ID) && policyID.MatchString(v.SessionID) && v.ApprovedAt > 0 && (!v.Enabled || v.ID == v.SessionID))
+	}
 	if v.ID == "" {
-		return !v.Enabled && !v.Queued && v.SessionID == "" && v.ApprovedAt == 0 && (v.State == "unavailable" || v.State == "disabled") && v.Reason != "" && v.CollectedAt == 0 && v.ConfirmedAt == 0 && v.SourceHash == "" && v.KernelOperationID == ""
+		return !v.Enabled && !v.Queued && v.SessionID == "" && v.RetirementID == "" && v.ApprovedAt == 0 && (v.State == "unavailable" || v.State == "disabled") && v.Reason != "" && v.CollectedAt == 0 && v.ConfirmedAt == 0 && v.SourceHash == "" && v.KernelOperationID == ""
 	}
 	if !policyID.MatchString(v.ID) || !policyID.MatchString(v.SessionID) || v.ApprovedAt == 0 {
 		return false
@@ -38,6 +42,9 @@ func (v HostInputSyncView) Valid() bool {
 		return v.State == "disabled" && !v.Queued && v.Reason != "" && v.CollectedAt == 0 && v.ConfirmedAt == 0 && v.SourceHash == "" && v.KernelOperationID == ""
 	}
 	if v.ID != v.SessionID {
+		return false
+	}
+	if v.RetirementID != "" && v.State != "recovery_required" {
 		return false
 	}
 	switch v.State {

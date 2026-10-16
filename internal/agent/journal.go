@@ -30,32 +30,33 @@ type Record struct {
 	DisasterActivation     *DisasterActivationOperation `json:"disaster_activation,omitempty"`
 	DisasterRestoreID      string                       `json:"disaster_restore_id,omitempty"`
 
-	RemoteListener   *remotelisten.Operation `json:"remote_listener,omitempty"`
-	PanelUpdate      *PanelUpdateOperation   `json:"panel_update,omitempty"`
-	PanelService     *PanelServiceOperation  `json:"panel_service,omitempty"`
-	PanelSelection   *PanelSelectionIntent   `json:"panel_selection,omitempty"`
-	PanelRestore     *PanelRestoreIntent     `json:"panel_restore,omitempty"`
-	NginxInstall     *NginxInstallIntent     `json:"nginx_install,omitempty"`
-	MaintenanceEpoch string                  `json:"maintenance_epoch,omitempty"`
-	OperationID      string                  `json:"operation_id"`
-	RequestHash      string                  `json:"request_hash"`
-	Kind             string                  `json:"kind"`
-	State            string                  `json:"state"`
-	Stage            string                  `json:"stage"`
-	BeforeRevision   string                  `json:"before_revision,omitempty"`
-	AfterRevision    string                  `json:"after_revision,omitempty"`
-	Deadline         int64                   `json:"deadline,omitempty"`
-	UpdatedAt        int64                   `json:"updated_at"`
-	DiagnosticsCount int                     `json:"diagnostics_count"`
-	BeforeDir        string                  `json:"before_dir,omitempty"`
-	AfterDir         string                  `json:"after_dir,omitempty"`
-	RestoreSnapshot  string                  `json:"restore_snapshot,omitempty"`
-	CandidateHash    string                  `json:"candidate_hash,omitempty"`
-	ObservedRevision string                  `json:"observed_revision"`
-	Error            string                  `json:"error"`
-	LogPolicy        *logs.Policy            `json:"log_policy,omitempty"`
-	LogPolicyBase    int64                   `json:"log_policy_base,omitempty"`
-	LogPolicyVersion int64                   `json:"log_policy_version,omitempty"`
+	RemoteListener           *remotelisten.Operation `json:"remote_listener,omitempty"`
+	PanelUpdate              *PanelUpdateOperation   `json:"panel_update,omitempty"`
+	PanelService             *PanelServiceOperation  `json:"panel_service,omitempty"`
+	PanelSelection           *PanelSelectionIntent   `json:"panel_selection,omitempty"`
+	PanelRestore             *PanelRestoreIntent     `json:"panel_restore,omitempty"`
+	NginxInstall             *NginxInstallIntent     `json:"nginx_install,omitempty"`
+	MaintenanceEpoch         string                  `json:"maintenance_epoch,omitempty"`
+	OperationID              string                  `json:"operation_id"`
+	Fail2banHostRetirementID string                  `json:"fail2ban_host_retirement_id,omitempty"`
+	RequestHash              string                  `json:"request_hash"`
+	Kind                     string                  `json:"kind"`
+	State                    string                  `json:"state"`
+	Stage                    string                  `json:"stage"`
+	BeforeRevision           string                  `json:"before_revision,omitempty"`
+	AfterRevision            string                  `json:"after_revision,omitempty"`
+	Deadline                 int64                   `json:"deadline,omitempty"`
+	UpdatedAt                int64                   `json:"updated_at"`
+	DiagnosticsCount         int                     `json:"diagnostics_count"`
+	BeforeDir                string                  `json:"before_dir,omitempty"`
+	AfterDir                 string                  `json:"after_dir,omitempty"`
+	RestoreSnapshot          string                  `json:"restore_snapshot,omitempty"`
+	CandidateHash            string                  `json:"candidate_hash,omitempty"`
+	ObservedRevision         string                  `json:"observed_revision"`
+	Error                    string                  `json:"error"`
+	LogPolicy                *logs.Policy            `json:"log_policy,omitempty"`
+	LogPolicyBase            int64                   `json:"log_policy_base,omitempty"`
+	LogPolicyVersion         int64                   `json:"log_policy_version,omitempty"`
 }
 type Journal struct {
 	Dir string

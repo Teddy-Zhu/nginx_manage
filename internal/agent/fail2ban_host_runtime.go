@@ -187,6 +187,18 @@ func loadFail2banHostRuntimeIntent(dataDir, id string) (*fail2banHostRuntimeInte
 }
 
 func loadFail2banHostRuntime(dataDir string) (*fail2banHostRuntime, error) {
+	v, err := loadFail2banHostRuntimeRecord(dataDir)
+	if err != nil || v == nil {
+		return v, err
+	}
+	retired, err := retiredFail2banHostRuntime(dataDir, v)
+	if err != nil || retired {
+		return nil, err
+	}
+	return v, nil
+}
+
+func loadFail2banHostRuntimeRecord(dataDir string) (*fail2banHostRuntime, error) {
 	var v fail2banHostRuntime
 	err := readFail2banHostRuntimeJSON(filepath.Join(fail2banHostRuntimeDir(dataDir), "current.json"), &v)
 	if os.IsNotExist(err) {
@@ -284,6 +296,9 @@ func fail2banHostRuntimeMatches(v *fail2banHostRuntime, root *fail2banHostRegist
 // Changing the selected engine must not strand an approved continuous session
 // or an explicitly installed host snapshot.
 func fail2banHostRuntimeIdle(dataDir string) error {
+	if err := fail2banHostRetirementIdle(dataDir); err != nil {
+		return err
+	}
 	if err := fail2banHostSyncInactive(dataDir); err != nil {
 		return err
 	}

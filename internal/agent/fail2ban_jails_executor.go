@@ -75,6 +75,14 @@ func (f *fail2banJailsExecutor) lock(progress bool) (func(), error) {
 		leave()
 		return nil, err
 	}
+	if err = fail2banHostRetirementIdle(f.server.DataDir); err != nil {
+		unhost()
+		if n != nil {
+			n.mu.Unlock()
+		}
+		leave()
+		return nil, err
+	}
 	return func() {
 		unhost()
 		if n != nil {

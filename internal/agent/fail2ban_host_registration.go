@@ -28,6 +28,7 @@ type fail2banHostRegistration struct {
 	OperationState  string              `json:"operation_state"`
 	RequestHash     string              `json:"request_hash"`
 	TransactionHash string              `json:"transaction_hash"`
+	RetirementID    string              `json:"retirement_id"`
 	Baseline        firewall.KernelView `json:"baseline"`
 	Confirmed       firewall.KernelView `json:"confirmed"`
 	UpdatedAt       int64               `json:"updated_at"`
@@ -54,10 +55,14 @@ func loadFail2banHostRegistration(dataDir string) (*fail2banHostRegistration, er
 	if err != nil {
 		return nil, err
 	}
+	return decodeFail2banHostRegistration(dataDir, raw)
+}
+
+func decodeFail2banHostRegistration(dataDir string, raw []byte) (*fail2banHostRegistration, error) {
 	var v fail2banHostRegistration
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
-	if err = d.Decode(&v); err != nil {
+	if err := d.Decode(&v); err != nil {
 		return nil, err
 	}
 	validKernel := func(k firewall.KernelView) bool {
@@ -68,6 +73,9 @@ func loadFail2banHostRegistration(dataDir string) (*fail2banHostRegistration, er
 	}
 	switch v.Action {
 	case "init", "remove":
+		if v.RetirementID != "" {
+			return nil, errors.New("普通登记不接受退役材料")
+		}
 		batch, e := prepareNFTTargetRegistration(firewall.NFTFail2banInput, v.Baseline, v.Owner, v.Action == "remove")
 		if e != nil || batch.hash != v.TransactionHash {
 			return nil, errors.New("宿主机动作登记事务不匹配")
@@ -79,8 +87,20 @@ func loadFail2banHostRegistration(dataDir string) (*fail2banHostRegistration, er
 			return nil, errors.New("未确认的新建意图包含所有权回执")
 		}
 	case "detach":
-		if v.BaseOperationID == "" || v.State != "released" || v.OperationState != "succeeded" || v.Baseline.TableExists || v.TransactionHash != fail2banHostDetachHash(&v) || !validKernel(v.Confirmed) || !v.Confirmed.TableExists {
+		if v.RetirementID != "" || v.BaseOperationID == "" || v.State != "released" || v.OperationState != "succeeded" || v.Baseline.TableExists || v.TransactionHash != fail2banHostDetachHash(&v) || !validKernel(v.Confirmed) || !v.Confirmed.TableExists {
 			return nil, errors.New("宿主机动作释放登记无效")
+		}
+	case "retire":
+		r, e := loadFail2banHostRetirementEvent(dataDir, v.RetirementID)
+		if e != nil {
+			return nil, e
+		}
+		actual := v
+		actual.UpdatedAt = 0
+		a, _ := json.Marshal(actual)
+		b, _ := json.Marshal(r.released())
+		if !bytes.Equal(a, b) {
+			return nil, errors.New("退役登记与原冻结材料不一致")
 		}
 	default:
 		return nil, errors.New("未知宿主机动作登记类型")

@@ -54,6 +54,9 @@ func ManageFail2banHostInputRegistration(ctx context.Context, dataDir, scope, ac
 		return out, err
 	}
 	defer unlock()
+	if err = fail2banHostRetirementIdle(dataDir); err != nil {
+		return out, err
+	}
 	if err = fail2banHostSyncInactive(dataDir); err != nil {
 		return out, err
 	}

@@ -110,6 +110,9 @@ func ManageFail2banHostRuntime(ctx context.Context, dataDir, scope, action, oper
 		return out, err
 	}
 	defer leaveBinding()
+	if err = fail2banHostRetirementIdle(dataDir); err != nil {
+		return out, err
+	}
 	root, err := loadFail2banHostRegistration(dataDir)
 	if err != nil {
 		return out, err

@@ -149,6 +149,9 @@ func ManageFail2banHostSources(ctx context.Context, dataDir, scope, action, oper
 		return out, err
 	}
 	defer unlock()
+	if err = fail2banHostRetirementIdle(dataDir); err != nil {
+		return out, err
+	}
 	current, err := loadFail2banHostSources(dataDir)
 	if err != nil {
 		return out, err
