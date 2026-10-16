@@ -115,7 +115,13 @@ func (f *fail2banHostInputReader) collect(ctx context.Context) fail2ban.HostInpu
 		out.Reason = "本地、管理或代理地址保护来源无法完整核对"
 		return out
 	}
-	set := firewall.NFTBanSet{Addresses: []string{}, Protected: out.ProtectedSources}
+	sample, err := readFail2banHostSources(ctx, f.server.DataDir, out.Kernel, out.Registration, out.ProtectedSources)
+	out.Sources = sample.view
+	if err != nil {
+		out.Reason = out.Sources.Reason
+		return out
+	}
+	set := firewall.NFTBanSet{Addresses: sample.addresses, Protected: out.ProtectedSources}
 	program, err := firewall.CompileNFTBans(set)
 	if err != nil {
 		out.Reason = "宿主机动作基础配置无法编译"

@@ -7,7 +7,7 @@ import (
 	"nginxpanel/internal/firewall"
 )
 
-// HostInputPreview reports a read-only, empty-set preparation. It neither
+// HostInputPreview reports a read-only current engine set preparation. It neither
 // authorizes a table nor proves that an engine ban reached host traffic.
 type HostInputPreview struct {
 	At                int64                     `json:"at"`
@@ -24,6 +24,7 @@ type HostInputPreview struct {
 	Kernel            firewall.KernelView       `json:"kernel"`
 	Registration      firewall.RegistrationView `json:"registration"`
 	Protection        HostInputProtectionView   `json:"protection"`
+	Sources           HostInputSourcesView      `json:"sources"`
 	ProtectedSources  []string                  `json:"protected_sources"`
 	ProgramHash       string                    `json:"program_hash"`
 	TransactionHash   string                    `json:"transaction_hash"`
@@ -33,10 +34,10 @@ type HostInputPreview struct {
 }
 
 func EmptyHostInput(scope, reason string) HostInputPreview {
-	return HostInputPreview{At: time.Now().Unix(), Scope: scope, Manager: "unknown", Backend: "direct-nftables", Table: firewall.NFTFail2banTable, Hook: "input", Priority: firewall.NFTFail2banPriority, Kernel: firewall.KernelView{Reason: "尚未读取独立目标表"}, Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对独立 root 登记"}, Protection: EmptyHostInputProtection("尚未核对目标本机 root 保护来源批准"), ProtectedSources: []string{}, Reason: reason}
+	return HostInputPreview{At: time.Now().Unix(), Scope: scope, Manager: "unknown", Backend: "direct-nftables", Table: firewall.NFTFail2banTable, Hook: "input", Priority: firewall.NFTFail2banPriority, Kernel: firewall.KernelView{Reason: "尚未读取独立目标表"}, Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对独立 root 登记"}, Protection: EmptyHostInputProtection("尚未核对目标本机 root 保护来源批准"), Sources: EmptyHostInputSources("尚未核对官方封禁来源"), ProtectedSources: []string{}, Reason: reason}
 }
 func (v HostInputPreview) Valid() bool {
-	if v.At <= 0 || v.ManagerObservedAt < 0 || v.Table != firewall.NFTFail2banTable || v.Hook != "input" || v.Priority != firewall.NFTFail2banPriority || v.Backend != "direct-nftables" || v.CanApply || v.ProtectedSources == nil || len(v.ProtectedSources) > firewall.NFTBanProtectionLimit || v.TransactionBytes < 0 || v.TransactionBytes > firewall.NFTBatchBytes || v.GeneratedRules < 0 || v.GeneratedRules > firewall.NFTBanProtectionLimit+2 || v.Available && (v.Scope != "host" || v.ManagerObservedAt == 0) {
+	if v.At <= 0 || v.ManagerObservedAt < 0 || v.Table != firewall.NFTFail2banTable || v.Hook != "input" || v.Priority != firewall.NFTFail2banPriority || v.Backend != "direct-nftables" || v.CanApply || !v.Sources.Valid() || v.ProtectedSources == nil || len(v.ProtectedSources) > firewall.NFTBanProtectionLimit || v.TransactionBytes < 0 || v.TransactionBytes > firewall.NFTBatchBytes || v.GeneratedRules < 0 || v.GeneratedRules > firewall.NFTBanProtectionLimit+firewall.NFTBanLimit+2 || v.Available && (v.Scope != "host" || v.ManagerObservedAt == 0) {
 		return false
 	}
 	set, err := (firewall.NFTBanSet{Addresses: []string{}, Protected: v.ProtectedSources}).Normalize()
@@ -73,7 +74,7 @@ func (v HostInputPreview) Valid() bool {
 				}
 			}
 		}
-		return v.Available && v.Scope == "host" && v.Manager == "direct-candidate" && k.Available && r.Verified && v.Protection.Verified && len(v.ProgramHash) == 64 && len(v.TransactionHash) == 64 && v.TransactionBytes > 0 && v.GeneratedRules == len(v.ProtectedSources)+2 && v.Reason == ""
+		return v.Available && v.Scope == "host" && v.Manager == "direct-candidate" && k.Available && r.Verified && v.Protection.Verified && v.Sources.State == "ready" && len(v.ProgramHash) == 64 && len(v.TransactionHash) == 64 && v.TransactionBytes > 0 && v.GeneratedRules == len(v.ProtectedSources)+v.Sources.BannedCount+2 && v.Reason == ""
 	}
 	return v.Reason != "" && v.ProgramHash == "" && v.TransactionHash == "" && v.TransactionBytes == 0 && v.GeneratedRules == 0
 }

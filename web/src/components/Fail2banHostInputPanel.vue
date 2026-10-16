@@ -42,6 +42,13 @@ const protections: Record<string, string> = {
   stale: "原批准已失效",
   revoked: "已撤销",
 };
+const sources: Record<string, string> = {
+  unavailable: "未完整采集",
+  unapproved: "未批准",
+  stale: "原批准已失效",
+  revoked: "已撤销",
+  ready: "已完整采集",
+};
 async function load() {
   if (busy.value) return;
   busy.value = true;
@@ -71,14 +78,14 @@ onUnmounted(() => {
       <NButton :loading="busy" :disabled="busy" @click="load">刷新预检</NButton>
     </div>
     <NAlert type="warning"
-      >当前仅提供基础准备计划，自动封禁尚不可用。宿主机入口适用于本机直连流量；代理和
+      >当前仅提供封禁候选计划，自动封禁尚不可用。宿主机入口适用于本机直连流量；代理和
       Docker 转发须单独核对。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <template v-if="view">
       <div class="toolbar">
         <NTag :type="view.can_prepare ? 'info' : 'warning'">{{
-          view.can_prepare ? "可生成基础计划" : "准备条件不满足"
+          view.can_prepare ? "候选计划已生成" : "准备条件不满足"
         }}</NTag
         ><span class="muted"
           >采样 {{ new Date(view.at * 1000).toLocaleString() }}</span
@@ -96,6 +103,11 @@ onUnmounted(() => {
         v-if="view.protection.reason && view.protection.reason !== view.reason"
         type="warning"
         >{{ view.protection.reason }}</NAlert
+      >
+      <NAlert
+        v-if="view.sources.reason && view.sources.reason !== view.reason"
+        type="warning"
+        >{{ view.sources.reason }}</NAlert
       >
       <NDescriptions label-placement="left" :column="2" bordered>
         <NDescriptionsItem label="观测范围">{{
@@ -139,6 +151,32 @@ onUnmounted(() => {
         <NDescriptionsItem label="内核代次">{{
           view.kernel.available ? view.kernel.generation : "未确认"
         }}</NDescriptionsItem>
+        <NDescriptionsItem label="官方封禁来源">{{
+          sources[view.sources.state] || "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="封禁采样时间">{{
+          view.sources.collected_at
+            ? new Date(view.sources.collected_at * 1000).toLocaleString()
+            : "未完整采集"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="候选封禁地址">{{
+          view.sources.state === "ready" ? view.sources.banned_count : "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="保护排除地址">{{
+          view.sources.state === "ready"
+            ? view.sources.protected_count
+            : "未确认"
+        }}</NDescriptionsItem>
+      </NDescriptions>
+      <NDescriptions
+        v-if="view.sources.jails.length"
+        label-placement="left"
+        :column="1"
+        bordered
+      >
+        <NDescriptionsItem label="已批准的 jail">{{
+          view.sources.jails.join("、")
+        }}</NDescriptionsItem>
       </NDescriptions>
       <NDescriptions
         v-if="view.protection.id && view.protection.state !== 'revoked'"
@@ -162,13 +200,13 @@ onUnmounted(() => {
       </NDescriptions>
       <template v-if="view.can_prepare">
         <p class="muted">
-          基础计划包含
-          {{ view.protected_sources.length }} 项本地地址及保留网段保护、{{
+          候选计划包含 {{ view.sources.banned_count }} 个封禁地址、
+          {{ view.protected_sources.length }} 项本地、管理与代理来源保护、{{
             view.generated_rules
           }}
           条规则，事务
           {{ view.transaction_bytes }}
-          字节。当前不包含封禁地址或待批准的代理、管理来源。
+          字节，尚未应用到宿主机。封禁以官方实例的当前集合为准。
         </p>
         <details>
           <summary>查看保护来源</summary>

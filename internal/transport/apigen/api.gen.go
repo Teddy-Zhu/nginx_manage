@@ -1867,7 +1867,22 @@ type Fail2banHostInputProtectionView struct {
 	Reason       string   `json:"reason"`
 }
 
+type Fail2banHostInputSourcesView struct {
+	At             int64    `json:"at"`
+	State          string   `json:"state"`
+	ID             string   `json:"id"`
+	ApprovedAt     int64    `json:"approved_at"`
+	Jails          []string `json:"jails"`
+	CollectedAt    int64    `json:"collected_at"`
+	SourceHash     string   `json:"source_hash"`
+	TimeBasis      string   `json:"time_basis"`
+	BannedCount    int      `json:"banned_count"`
+	ProtectedCount int      `json:"protected_count"`
+	Reason         string   `json:"reason"`
+}
+
 type Fail2banHostInputPreview struct {
+	Sources           Fail2banHostInputSourcesView    `json:"sources"`
 	Protection        Fail2banHostInputProtectionView `json:"protection"`
 	Registration      FirewallRegistrationView        `json:"registration"`
 	ManagerObservedAt int64                           `json:"manager_observed_at"`
