@@ -20,6 +20,8 @@ type backupCLIOptions struct {
 
 func isBackupRecoveryCommand(command string) bool {
 	switch command {
+	case "backup-restore-reconcile", "backup-restore-reconcile-data", "backup-restore-reconcile-verify-data":
+		return true
 	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status", "backup-restore-plan", "backup-restore-plan-status", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-plan-cleanup", "backup-restore-plan-cleanup-data", "backup-restore-apply", "backup-restore-runtime-status", "backup-restore-runtime-data":
 		return true
 	default:
@@ -71,6 +73,16 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 		return true, err
 	}
 	switch command {
+	case "backup-restore-reconcile":
+		var input backup.RestoreReconcileInput
+		if err = readBackupInput(&input); err != nil {
+			return true, err
+		}
+		out, err := backup.ReconcileRestoration(ctx, data, options.OperationID, input)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
 	case "backup-restore-apply":
 		var input backup.RestoreInput
 		if err = readBackupInput(&input); err != nil {
@@ -171,7 +183,7 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			OperationID string `json:"operation_id"`
 			Cleaned     bool   `json:"cleaned"`
 		}{options.OperationID, true})
-	case "backup-adoption-verify-data", "backup-restore-plan-data", "backup-restore-plan-verify-data":
+	case "backup-adoption-verify-data", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-reconcile-data", "backup-restore-reconcile-verify-data":
 		if os.Geteuid() == 0 {
 			return true, errors.New("恢复材料核对助手须使用非 root 身份")
 		}
@@ -187,6 +199,24 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			}
 			defer f.Close()
 			files = append(files, f)
+		}
+		if command == "backup-restore-reconcile-data" || command == "backup-restore-reconcile-verify-data" {
+			var input backup.RestoreReconcileMaterialInput
+			if err = readBackupJSON(&input, 512<<10); err != nil {
+				return true, err
+			}
+			if command == "backup-restore-reconcile-data" {
+				out, err := backup.ReconcileRestorationDescriptors(ctx, data, options.OperationID, input, files)
+				if err != nil {
+					return true, err
+				}
+				return true, json.NewEncoder(os.Stdout).Encode(out)
+			}
+			out, err := backup.VerifyReconciledRestorationDescriptors(ctx, data, options.OperationID, input, files)
+			if err != nil {
+				return true, err
+			}
+			return true, json.NewEncoder(os.Stdout).Encode(out)
 		}
 		if command == "backup-restore-plan-verify-data" {
 			var input backup.RestorePublicationInput

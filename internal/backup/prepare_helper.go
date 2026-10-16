@@ -146,6 +146,10 @@ func runPreparationHelper(ctx context.Context, data, command, id string, input [
 		return errors.New("恢复准备助手须由 root 调用并使用有界固定身份")
 	}
 	switch command {
+	case "backup-restore-reconcile-data", "backup-restore-reconcile-verify-data":
+		if len(files) != len(resources) || len(input) > 512<<10 {
+			return errors.New("恢复对账助手需要固定资源描述符和有界原计划")
+		}
 	case "backup-prepare-data":
 		if len(files) != 1 || len(input) > 8192 {
 			return errors.New("恢复准备缺少加密文件描述符")

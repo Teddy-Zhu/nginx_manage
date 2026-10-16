@@ -194,12 +194,18 @@ func InstallDisaster(ctx context.Context, i DisasterIntent, rollback bool) error
 		}
 	}
 	approved := disasterTargets(i)
+	post := append([]Original(nil), approved...)
+	final, _, err := approvedDisasterDatabase(i)
+	if err != nil {
+		return err
+	}
+	post[5].Size, post[5].SHA256 = final.Size, final.SHA256
 	actual, err := ObserveTarget(ctx, i.Rollback)
 	if err != nil {
 		return err
 	}
 	for index, file := range actual {
-		if file != i.Before[index] && file != approved[index] {
+		if file != i.Before[index] && file != approved[index] && (!rollback || file != post[index]) {
 			return errors.New("目标已偏离原资源及批准材料，停止安装或补偿")
 		}
 	}
@@ -214,7 +220,7 @@ func InstallDisaster(ctx context.Context, i DisasterIntent, rollback bool) error
 			source = disasterMaterialPath(i, restoreFiles[index].target)
 		}
 		if rollback {
-			from, to = to, from
+			from, to = actual[index], from
 			source = filepath.Join(dir, "before", fmt.Sprintf("%02d", index))
 		}
 		if err = installOne(ctx, i.Rollback.Manifest, i.OperationID, from, to, index, source); err != nil {
@@ -246,6 +252,11 @@ func CheckDisasterTarget(ctx context.Context, i DisasterIntent, installed bool) 
 	expected := i.Before
 	if installed {
 		expected = disasterTargets(i)
+		file, _, e := approvedDisasterDatabase(i)
+		if e != nil {
+			return e
+		}
+		expected[5].Size, expected[5].SHA256 = file.Size, file.SHA256
 	}
 	for index, file := range actual {
 		if file != expected[index] {

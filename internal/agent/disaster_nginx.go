@@ -24,8 +24,10 @@ type DisasterRuntimeRequest struct {
 }
 
 type DisasterRuntimeStatus struct {
-	Restore Record  `json:"restore"`
-	Nginx   *Record `json:"nginx,omitempty"`
+	Restore                Record                                `json:"restore"`
+	Nginx                  *Record                               `json:"nginx,omitempty"`
+	Reconciliation         *panelrecovery.DisasterReconciliation `json:"reconciliation,omitempty"`
+	ReconciliationApproved bool                                  `json:"reconciliation_approved"`
 }
 
 func validDisasterNginxRecord(i panelrecovery.DisasterIntent, r Record) error {
@@ -74,6 +76,17 @@ func DisasterRuntime(data, id string) (out DisasterRuntimeStatus, err error) {
 	i, err := panelrecovery.ReadDisasterIntent(data, id)
 	if err != nil {
 		return out, err
+	}
+	r, e := panelrecovery.ReadDisasterReconciliation(i)
+	if e == nil {
+		out.Reconciliation = &r
+		if _, e = panelrecovery.ReadDisasterReconciliationProof(i, r); e == nil {
+			out.ReconciliationApproved = true
+		} else if !os.IsNotExist(e) {
+			return out, e
+		}
+	} else if !os.IsNotExist(e) {
+		return out, e
 	}
 	child, err := readDisasterNginx(data, i)
 	if os.IsNotExist(err) {
@@ -200,7 +213,7 @@ func (s *Server) advanceDisasterRuntime(ctx context.Context, in DisasterRuntimeR
 	}
 	p := &out.Restore
 	switch p.Stage {
-	case "files_installed", "runtime_preparing", "runtime_applying", "runtime_confirmed", "runtime_compensating", "runtime_compensated":
+	case "files_installed", "runtime_preparing", "runtime_applying", "runtime_confirmed", "data_reconciling", "data_reconciled", "runtime_compensating", "runtime_compensated":
 	default:
 		return out, errors.New("文件安装未完成或已经进入文件补偿，不能推进运行")
 	}
@@ -242,6 +255,9 @@ func (s *Server) advanceDisasterRuntime(ctx context.Context, in DisasterRuntimeR
 	}
 	if strings.HasPrefix(p.Stage, "runtime_compensat") {
 		return out, errors.New("原恢复已选择运行补偿，只能继续原补偿")
+	}
+	if strings.HasPrefix(p.Stage, "data_") {
+		return out, errors.New("原运行已进入数据对账，不能退回应用阶段")
 	}
 	if out.Nginx == nil {
 		if p.Stage == "runtime_applying" || p.Stage == "runtime_confirmed" {

@@ -47,7 +47,7 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 		if e != nil {
 			return out, e
 		}
-		if (strings.HasPrefix(status.Restore.Stage, "runtime_") || status.Restore.Stage == "files_installed" && status.Nginx != nil) && status.Restore.Stage != "runtime_compensated" {
+		if (strings.HasPrefix(status.Restore.Stage, "runtime_") || strings.HasPrefix(status.Restore.Stage, "data_") || status.Restore.Stage == "files_installed" && status.Nginx != nil) && status.Restore.Stage != "runtime_compensated" {
 			status, e = advanceRestorationRuntime(call, data, id, in, true)
 			if e != nil {
 				return status.Restore, e

@@ -94,33 +94,66 @@ func CleanupRestorationWork(data, id string) error {
 	return syncDir(filepath.Dir(dir))
 }
 
-func publishRestorationDatabase(ctx context.Context, data, planID string, p Preparation, source *os.File, vault *secure.Vault, policy nginxconfig.Policy, files []nginxconfig.File, materials []certificates.Material, beforeRevision string, pending []string) (out RestorePublication, err error) {
+func copyRestorationDatabase(ctx context.Context, data, planID string, source *os.File, expected File) (path string, err error) {
 	if err = CleanupRestorationWork(data, planID); err != nil {
-		return out, err
+		return "", err
 	}
 	root := filepath.Dir(restorePublicationWork(data, planID))
 	items, err := boundedEntries(root, AdoptionMax)
 	if err != nil {
-		return out, err
+		return "", err
 	}
 	for _, item := range items {
 		if !validID.MatchString(item.Name()) || !item.IsDir() || item.Type()&os.ModeSymlink != 0 {
-			return out, errors.New("恢复发布暂存存在未知资源")
+			return "", errors.New("恢复发布暂存存在未知资源")
 		}
 	}
 	if len(items) >= AdoptionMax {
-		return out, errors.New("恢复发布暂存达到保留上限")
+		return "", errors.New("恢复发布暂存达到保留上限")
 	}
 	var disk unix.Statfs_t
 	if err = unix.Statfs(root, &disk); err != nil {
-		return out, err
+		return "", err
 	}
-	reserve := 2*p.Files[0].Size + (128 << 20)
+	reserve := 2*expected.Size + (128 << 20)
 	if disk.Bsize <= 0 || disk.Bavail < uint64((reserve+int64(disk.Bsize)-1)/int64(disk.Bsize)) {
-		return out, errors.New("恢复发布副本及事务日志的磁盘余量不足")
+		return "", errors.New("恢复发布副本及事务日志的磁盘余量不足")
 	}
 	dir := restorePublicationWork(data, planID)
 	if err = os.Mkdir(dir, 0700); err != nil {
+		return "", err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, CleanupRestorationWork(data, planID))
+		}
+	}()
+	path = filepath.Join(dir, "panel.db")
+	if _, err = source.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	dst, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|unix.O_NOFOLLOW, 0600)
+	if err != nil {
+		return "", err
+	}
+	n, copyErr := io.Copy(dst, contextReader{ctx, io.LimitReader(source, expected.Size+1)})
+	err = errors.Join(copyErr, dst.Sync(), dst.Close())
+	if err != nil {
+		return "", err
+	}
+	if n != expected.Size {
+		return "", errors.New("恢复发布源数据库大小变化")
+	}
+	initial, err := digestFile(ctx, path, DatabaseMax)
+	if err != nil || initial.SHA256 != expected.SHA256 {
+		return "", errors.Join(err, errors.New("恢复发布源数据库散列不一致"))
+	}
+	return path, nil
+}
+
+func publishRestorationDatabase(ctx context.Context, data, planID string, p Preparation, source *os.File, vault *secure.Vault, policy nginxconfig.Policy, files []nginxconfig.File, materials []certificates.Material, beforeRevision string, pending []string) (out RestorePublication, err error) {
+	path, err := copyRestorationDatabase(ctx, data, planID, source, p.Files[0])
+	if err != nil {
 		return out, err
 	}
 	defer func() {
@@ -128,26 +161,7 @@ func publishRestorationDatabase(ctx context.Context, data, planID string, p Prep
 			err = errors.Join(err, CleanupRestorationWork(data, planID))
 		}
 	}()
-	path := filepath.Join(dir, "panel.db")
-	if _, err = source.Seek(0, io.SeekStart); err != nil {
-		return out, err
-	}
-	dst, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|unix.O_NOFOLLOW, 0600)
-	if err != nil {
-		return out, err
-	}
-	n, copyErr := io.Copy(dst, contextReader{ctx, io.LimitReader(source, p.Files[0].Size+1)})
-	err = errors.Join(copyErr, dst.Sync(), dst.Close())
-	if err != nil {
-		return out, err
-	}
-	if n != p.Files[0].Size {
-		return out, errors.New("恢复发布源数据库大小变化")
-	}
-	initial, err := digestFile(ctx, path, DatabaseMax)
-	if err != nil || initial.SHA256 != p.Files[0].SHA256 {
-		return out, errors.Join(err, errors.New("恢复发布源数据库散列不一致"))
-	}
+	dir := filepath.Dir(path)
 	db, err := writableRestoreDatabase(ctx, path)
 	if err != nil {
 		return out, err

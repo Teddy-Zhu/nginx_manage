@@ -33,9 +33,18 @@ func validDisasterRestore(data string, r Record) (panelrecovery.DisasterIntent, 
 		if r.State != "running" && r.State != "recovery_required" {
 			return i, errors.New("独立灾备恢复执行状态无效")
 		}
-	case "files_installed", "runtime_preparing", "runtime_applying", "runtime_confirmed", "runtime_compensating", "runtime_compensated":
+	case "files_installed", "runtime_preparing", "runtime_applying", "runtime_confirmed", "data_reconciling", "data_reconciled", "runtime_compensating", "runtime_compensated":
 		if r.State != "recovery_required" {
 			return i, errors.New("灾备文件安装不能宣告完整恢复成功")
+		}
+		if strings.HasPrefix(r.Stage, "data_") {
+			reconciled, e := panelrecovery.ReadDisasterReconciliation(i)
+			if e != nil {
+				return i, e
+			}
+			if _, e = panelrecovery.ReadDisasterReconciliationProof(i, reconciled); e != nil {
+				return i, e
+			}
 		}
 	case "files_compensated":
 		if r.State != "rolled_back" {
@@ -240,7 +249,7 @@ func RestoreDisaster(ctx context.Context, data, id, epoch string, input panelrec
 	if (out.Stage == "compensating" || strings.HasPrefix(out.Stage, "runtime_compensat")) && !rollback {
 		return out, errors.New("原恢复已进入补偿，只能继续原补偿")
 	}
-	if rollback && strings.HasPrefix(out.Stage, "runtime_") && out.Stage != "runtime_compensated" {
+	if rollback && (strings.HasPrefix(out.Stage, "runtime_") || strings.HasPrefix(out.Stage, "data_")) && out.Stage != "runtime_compensated" {
 		return out, errors.New("须先完成原 Nginx 运行补偿，再恢复目标原文件")
 	}
 	if rollback {
@@ -289,7 +298,7 @@ func runDisasterFiles(ctx context.Context, i panelrecovery.DisasterIntent, r *Re
 		}
 		return finishDisasterCompensation(r, save)
 	}
-	if r.Stage == "files_installed" || strings.HasPrefix(r.Stage, "runtime_") {
+	if r.Stage == "files_installed" || strings.HasPrefix(r.Stage, "runtime_") || strings.HasPrefix(r.Stage, "data_") {
 		return panelrecovery.CheckDisasterTarget(ctx, i, true)
 	}
 	if i.ExpiresAt <= time.Now().Unix() {

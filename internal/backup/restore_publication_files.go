@@ -137,31 +137,11 @@ func freezeRestorationFile(ctx context.Context, data, planID, dir, local string,
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	for _, parent := range []string{filepath.Join(data, "staging"), filepath.Dir(restorePublicationWork(data, planID)), restorePublicationWork(data, planID)} {
-		info, e := os.Lstat(parent)
-		if e != nil {
-			return e
-		}
-		st, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || int(st.Uid) != intent.UID || int(st.Gid) != intent.GID || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 {
-			return errors.New("恢复发布暂存目录归属无效")
-		}
-	}
-	path := filepath.Join(restorePublicationWork(data, planID), local)
-	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	source, info, err := openRestorationWorkFile(data, planID, local, expected, intent)
 	if err != nil {
 		return err
 	}
-	source := os.NewFile(uintptr(fd), path)
 	defer source.Close()
-	info, err := source.Stat()
-	if err != nil {
-		return err
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || int(st.Uid) != intent.UID || int(st.Gid) != intent.GID || st.Nlink != 1 || info.Size() != expected.Size {
-		return errors.New("恢复发布暂存文件身份无效")
-	}
 	scratch := filepath.Join(dir, ".copy")
 	if err = os.Remove(scratch); err != nil && !os.IsNotExist(err) {
 		return err
@@ -192,6 +172,36 @@ func freezeRestorationFile(ctx context.Context, data, planID, dir, local string,
 		return err
 	}
 	return syncDir(dir)
+}
+
+func openRestorationWorkFile(data, planID, local string, expected File, intent AdoptionIntent) (*os.File, os.FileInfo, error) {
+	for _, parent := range []string{filepath.Join(data, "staging"), filepath.Dir(restorePublicationWork(data, planID)), restorePublicationWork(data, planID)} {
+		info, e := os.Lstat(parent)
+		if e != nil {
+			return nil, nil, e
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || int(st.Uid) != intent.UID || int(st.Gid) != intent.GID || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 {
+			return nil, nil, errors.New("恢复发布暂存目录归属无效")
+		}
+	}
+	path := filepath.Join(restorePublicationWork(data, planID), local)
+	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	if err != nil {
+		return nil, nil, err
+	}
+	source := os.NewFile(uintptr(fd), path)
+	info, err := source.Stat()
+	if err != nil {
+		source.Close()
+		return nil, nil, err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || int(st.Uid) != intent.UID || int(st.Gid) != intent.GID || st.Nlink != 1 || info.Size() != expected.Size {
+		source.Close()
+		return nil, nil, errors.New("恢复发布暂存文件身份无效")
+	}
+	return source, info, nil
 }
 
 func restorationPlanStatus(data string, p RestorePlan) (out RestorePlanStatus, err error) {

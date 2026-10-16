@@ -202,4 +202,41 @@ root 在原恢复目录保存不可变 `runtime-apply.json`，绑定安装意图
 
 运行应用后仍使用 `backup-restore-rollback`，先持久保存 `runtime-rollback.json`；此后任何安装或应用重试均被拒绝。在途子操作未退出时返回待补偿状态，须以同一原操作和当前 epoch 再次调用。补偿经过 `runtime_compensating`，复用原 Nginx 回滚并观察原逻辑修订及物理部署；子操作确认 `rolled_back` 后，父阶段才能保存 `runtime_compensated` 并继续文件补偿。运行补偿失败或结果不明时不恢复业务文件、不解除屏障，允许继续原补偿。
 
-本阶段不更新数据库已生效修订、不重放源任务、不恢复外部授权或启动组件；原停机、root 写入屏障与数据库恢复屏障继续保留。任务和外部授权协调、数据库生效状态对账及最终激活仍待实施，不能据 `runtime_confirmed` 启动业务。
+运行应用阶段不更新数据库已生效修订、不重放源任务、不恢复外部授权或启动组件；原停机、root 写入屏障与数据库恢复屏障继续保留。须继续下节的数据对账，不能据 `runtime_confirmed` 启动业务。
+
+## 恢复数据对账
+
+确认原 Nginx 修订及物理部署后，使用本机 root 命令对账源任务与数据库生效状态。原维护、持久停机和写入屏障须保持有效：
+
+```sh
+/PANEL_RUNTIME/current/nginxpanel backup-restore-reconcile --data-dir /var/lib/nginxpanel --restore-operation <原接入UUID>
+```
+
+标准输入最多 8 KiB，沿用原安装依据，并明确批准源任务的处理方式：
+
+```json
+{
+  "adoption_sha256": "原接入摘要",
+  "plan_id": "原计划UUID",
+  "plan_sha256": "原计划摘要",
+  "epoch": "当前维护epoch",
+  "review": {
+    "abandon_source_tasks": true,
+    "preserve_target_access": true,
+    "keep_automation_disabled": true,
+    "external_effects_require_review": true
+  }
+}
+```
+
+源在途任务转为 `cancelled/restore_abandoned`，原任务、隔离表中的原状态/阶段/错误、源审计及执行材料继续保留。此结果只终止本地旧流程，不代表远端操作未执行或已补偿。未结束的源 ACME 注册/签发与迁移流程转为失败，并记录外部结果待核对；CA 账户、订单、证书和被阻止的 DNS 挑战记录不伪造撤销或清理。源凭据继续撤销、源节点连接与配对继续隔离，通知、续期、自动部署及定期备份继续停用；不发送远程请求、不清理第三方记录、不恢复源网络设置。
+
+固定非 root 助手从原发布数据库生成独立副本，在同一事务内完成上述处理、写入计划对应的已生效修订、保存处理报告及独立审计；数据库内部恢复屏障仅转为 `reconciling`。生成前后均核对原 Nginx 成功记录与实际逻辑修订、物理部署。root 将对账意图、数据库及二次只读核对证明固定为原恢复目录中的 `reconcile.json`、`reconciled.db`、`reconciled-proof.json`，均为 root 0400；root 不解析 SQL。
+
+二次核对通过两份 root 只读数据库投影，以内置变更规则逐表、按主键逐行核对全部记录；源历史、密钥、配置、授权隔离、审计和其他未批准字段须保持一致。表最多 128 张、每表最多 64 列，使用受限缓存和现有助手期限；单份对账数据库仍不超过 512 MiB，副本计入原件保留区的 2 GiB 配额及磁盘预留。未核对的副本不能成为业务文件。
+
+独立执行记录先保存 `data_reconciling/recovery_required`，再以固定散列原子替换数据库，全部目标文件匹配后保存 `data_reconciled/recovery_required`。新的对账意图和核对批准须在原安装期限内保存；重复调用使用原意图和固定副本，不修改处理策略或延长期限。复制中断优先续用原暂存或已固定副本；两者均缺失时停止并保留原批准，不重新猜测产物。已批准的安装可按原事务续办。
+
+`backup-restore-runtime-status` 同时返回对账摘要和 `reconciliation_approved`；该字段只表示核对证明已保存，不表示副本已安装、当前运行仍匹配或完整恢复已经成功。补偿继续使用 `backup-restore-rollback`，先恢复原 Nginx，再恢复数据库/WAL/SHM/密钥/TLS 原件；原始安装与对账后的数据库都必须匹配已批准散列，外部变化阻止覆盖。补偿不依赖源数据库、对账副本内容或原归档重新解密，意图、证明与审计仍保留。
+
+对账完成仍不能启动业务或释放维护。root 写入屏障、持久停机和数据库 `reconciling` 屏障继续保留；外部结果的人工复核及最终激活、就绪确认和维护释放仍待接入。

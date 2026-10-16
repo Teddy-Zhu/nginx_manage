@@ -168,7 +168,7 @@ func SaveDisasterIntent(i DisasterIntent) error {
 	if err = privateDir(root); err != nil {
 		return err
 	}
-	if err = disasterBudget(root, dir, i); err != nil {
+	if err = disasterBudget(root, dir, i, 0); err != nil {
 		return err
 	}
 	if err = privateDir(dir); err != nil {
@@ -212,7 +212,7 @@ func SaveDisasterIntent(i DisasterIntent) error {
 	return syncDir(dir)
 }
 
-func disasterBudget(root, current string, i DisasterIntent) error {
+func disasterBudget(root, current string, i DisasterIntent, additional int64) error {
 	entries, err := disasterEntries(root, SnapshotMax)
 	if err != nil {
 		return err
@@ -237,7 +237,7 @@ func disasterBudget(root, current string, i DisasterIntent) error {
 		if err = checkPrivateDir(dir); err != nil {
 			return err
 		}
-		items, e := disasterEntries(dir, 7)
+		items, e := disasterEntries(dir, 13)
 		if e != nil {
 			return e
 		}
@@ -275,7 +275,17 @@ func disasterBudget(root, current string, i DisasterIntent) error {
 					}
 					used += info.Size()
 				}
-			} else if item.Name() == "intent.json" || item.Name() == "intent.copy" || item.Name() == "runtime-apply.json" || item.Name() == "runtime-apply.json.copy" || item.Name() == "runtime-rollback.json" || item.Name() == "runtime-rollback.json.copy" {
+			} else if item.Name() == "reconciled.db" || item.Name() == "reconciled.db.copy" {
+				f, info, e := secure.OpenRootFile(name, DatabaseMax)
+				if e != nil {
+					return e
+				}
+				f.Close()
+				if info.Mode().Perm() != 0400 && (item.Name() != "reconciled.db.copy" || info.Mode().Perm() != 0600) {
+					return errors.New("恢复对账副本权限无效")
+				}
+				used += info.Size()
+			} else if item.Name() == "intent.json" || item.Name() == "intent.copy" || item.Name() == "runtime-apply.json" || item.Name() == "runtime-apply.json.copy" || item.Name() == "runtime-rollback.json" || item.Name() == "runtime-rollback.json.copy" || item.Name() == "reconcile.json" || item.Name() == "reconcile.json.copy" || item.Name() == "reconciled-proof.json" || item.Name() == "reconciled-proof.json.copy" {
 				f, info, e := secure.OpenRootFile(name, 32<<10)
 				if e != nil {
 					return e
@@ -295,14 +305,15 @@ func disasterBudget(root, current string, i DisasterIntent) error {
 	for _, file := range i.Files {
 		copySpace = max(copySpace, file.Size)
 	}
-	if used+need+(1<<20) > StoreMax {
+	copySpace = max(copySpace, additional)
+	if used+need+additional+(1<<20) > StoreMax {
 		return errors.New("独立恢复保留空间达到 2 GiB 上限，未删除原恢复依据")
 	}
 	var disk unix.Statfs_t
 	if err = unix.Statfs(root, &disk); err != nil {
 		return err
 	}
-	if disk.Bsize <= 0 || disk.Bavail < uint64((need+copySpace+(128<<20)+int64(disk.Bsize)-1)/int64(disk.Bsize)) {
+	if disk.Bsize <= 0 || disk.Bavail < uint64((need+additional+copySpace+(128<<20)+int64(disk.Bsize)-1)/int64(disk.Bsize)) {
 		return errors.New("独立恢复原件及安装暂存的磁盘余量不足")
 	}
 	return nil
