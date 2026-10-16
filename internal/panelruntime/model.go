@@ -16,6 +16,7 @@ import (
 )
 
 const Schema = 1
+const DeploymentLimit = 8 << 10
 const BinaryLimit = 192 << 20
 const WebFileLimit = 8 << 20
 const WebLimit = 64 << 20
@@ -40,19 +41,22 @@ type Release struct {
 	Web             map[string]File `json:"web"`
 }
 type Deployment struct {
-	Schema         int    `json:"schema"`
-	DataDir        string `json:"data_dir"`
-	Listen         string `json:"listen"`
-	UID            int    `json:"uid"`
-	GID            int    `json:"gid"`
-	IPCGID         int    `json:"ipc_gid"`
-	LauncherSHA256 string `json:"launcher_sha256"`
-	InitialRelease string `json:"initial_release"`
-	Image          string `json:"image"`
+	Schema         int                    `json:"schema"`
+	DataDir        string                 `json:"data_dir"`
+	Listen         string                 `json:"listen"`
+	UID            int                    `json:"uid"`
+	GID            int                    `json:"gid"`
+	IPCGID         int                    `json:"ipc_gid"`
+	LauncherSHA256 string                 `json:"launcher_sha256"`
+	InitialRelease string                 `json:"initial_release"`
+	Image          string                 `json:"image"`
+	ImageID        string                 `json:"image_id"`
+	SignedImage    releases.ImageApproval `json:"signed_image"`
 }
 type BindInput struct {
 	DataDir, Binary, WebDir, LauncherBinary, Listen, Image string
 	UID, GID, IPCGID                                       int
+	Signature                                              releases.ImageInput
 }
 type Snapshot struct {
 	Deployment Deployment `json:"deployment"`
@@ -80,7 +84,10 @@ func (d Deployment) validate(data string) error {
 	if err != nil || parse != nil || (host != "127.0.0.1" && host != "::1") || n < 1024 || n > 65535 || d.Schema != Schema || d.DataDir != data || d.UID <= 0 || d.GID <= 0 || d.IPCGID <= 0 || !digest.MatchString(d.LauncherSHA256) || !digest.MatchString(d.InitialRelease) || !imageValue.MatchString(d.Image) {
 		return errors.New("面板运行绑定无效")
 	}
-	return nil
+	if raw, err := json.Marshal(d); err != nil || len(raw) > DeploymentLimit {
+		return errors.New("面板运行绑定超过记录上限")
+	}
+	return d.SignedImage.Validate("panel-launcher", d.Image, d.ImageID, d.LauncherSHA256)
 }
 func (r Release) validate() error {
 	// Host Agent compatibility is checked when approving a release. A frozen

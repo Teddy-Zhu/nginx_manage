@@ -7,14 +7,14 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
 用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--start]
-面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要>。镜像中的 launcher 必须与 --binary 相同；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
+面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no
 while (($#)); do
   case "$1" in
-    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image)
+    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image)
       (($# >= 2)) || die "参数缺少值：$1"
       case "$1" in
         --binary) binary=$2 ;; --web-dir) web=$2 ;; --nginx-binary) nginx=$2 ;;
@@ -22,6 +22,7 @@ while (($#)); do
         --data-dir) data=$2 ;; --listen) listen=$2 ;;
         --panel-mode) panel_mode=$2 ;; --panel-image) panel_image=$2 ;;
         --nginx-image) nginx_image=$2 ;;
+        --release-manifest) release_manifest=$2 ;; --release-signature) release_signature=$2 ;;
       esac
       shift 2 ;;
     --release-prerelease) prerelease=yes; shift ;;
@@ -34,17 +35,20 @@ done
 [[ $EUID == 0 ]] || die '安装需要本机 root'
 [[ -n $binary && -n $web ]] || { usage; exit 1; }
 case "$panel_mode" in
-  native) [[ -z $panel_image ]] || die '原生面板模式不能指定容器镜像' ;;
-  docker) [[ $panel_image =~ ^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$ ]] || die '面板镜像须显式固定 sha256 摘要' ;;
+  native) [[ -z $panel_image && -z $release_manifest && -z $release_signature ]] || die '原生面板模式不能指定容器镜像或镜像签名文件' ;;
+  docker)
+    [[ $panel_image =~ ^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$ ]] || die '面板镜像须显式固定 sha256 摘要'
+    [[ -n $release_manifest && -n $release_signature ]] || die 'Docker 安装须提供镜像发行清单及签名信封'
+    ;;
   *) die 'panel-mode 仅允许 native 或 docker' ;;
 esac
 if [[ -n $nginx_image ]]; then
-  [[ $panel_mode == docker && $without_nginx == no && -z $nginx && -z $nginx_plan && -z $nginx_asset && $prerelease == no ]] || die 'Nginx 镜像须与 Docker 面板配套，不能混用原生程序、组件计划或未安装选择'
+  [[ $panel_mode == docker && $without_nginx == no && -z $nginx && -z $nginx_plan && -z $nginx_asset ]] || die 'Nginx 镜像须与 Docker 面板配套，不能混用原生程序、组件计划或未安装选择'
   [[ $nginx_image =~ ^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$ ]] || die 'Nginx 镜像须固定 sha256 摘要，且已由 root 准备到本地 Docker'
 elif [[ $without_nginx == yes ]]; then
-  [[ -z $nginx && -z $nginx_plan && -z $nginx_asset && $prerelease == no ]] || die '仅面板安装不能同时选择 Nginx 程序或签名组件'
+  [[ -z $nginx && -z $nginx_plan && -z $nginx_asset && ( $prerelease == no || $panel_mode == docker ) ]] || die '仅面板安装不能同时选择 Nginx 程序或签名组件'
 elif [[ -n $nginx ]]; then
-  [[ -z $nginx_plan && -z $nginx_asset && $prerelease == no ]] || die '本机程序与签名组件不能混用'
+  [[ -z $nginx_plan && -z $nginx_asset && ( $prerelease == no || $panel_mode == docker ) ]] || die '本机程序与签名组件不能混用'
 else
   [[ $nginx_plan =~ ^[0-9a-f]{64}$ && $nginx_asset =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$ ]] || die '须显式选择仅面板、本机 Nginx 或完整的签名计划与资产 ID'
 fi
@@ -145,6 +149,22 @@ root_chain "$web"
 [[ -f $web/index.html ]] || die '前端目录缺少构建后的 index.html'
 root_chain "${data%/*}"
 
+image_source=()
+image_manifest_hash=
+if [[ $panel_mode == docker ]]; then
+  canonical "$release_trust"; canonical "$release_manifest"; canonical "$release_signature"
+  [[ $release_trust == /etc/nginxpanel/* ]] || die '镜像发行信任须位于 /etc/nginxpanel'
+  trusted_file "$release_manifest" $((2 * 1024 * 1024))
+  trusted_file "$release_signature" 4096
+  image_manifest_hash=$(sha256sum "$release_manifest" | cut -d ' ' -f1)
+  image_source=(--release-trust "$release_trust" --release-manifest "$release_manifest" --release-signature "$release_signature" --release-manifest-sha256 "$image_manifest_hash")
+  if [[ $prerelease == yes ]]; then image_source+=(--release-prerelease); fi
+  "$binary" panel-runtime-verify --data-dir "$data" --panel-binary "$binary" --web-dir "$web" --launcher-binary "$binary" --panel-image "$panel_image" "${image_source[@]}" >/dev/null
+  if [[ -n $nginx_image ]]; then
+    "$binary" nginx-container-verify --data-dir "$data" --nginx-image "$nginx_image" --launcher-binary "$binary" "${image_source[@]}" >/dev/null
+  fi
+fi
+
 ensure_dir /run/nginxpanel-install 700 root root
 exec 9>/run/nginxpanel-install/lock
 flock -n 9 || die '另一个安装操作正在执行'
@@ -197,7 +217,7 @@ nginx_hash=
 if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v6\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
+printf 'native-install-v7\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -284,14 +304,14 @@ printf '{"version":1,"modules":[]}\n' >"$work/nginx-modules.json"
 write_owned "$work/nginx-modules.json" /etc/nginxpanel/nginx-modules.json
 runuser -u nginxpanel -- "$release_dir/nginxpanel" init --data-dir "$data"
 if [[ $panel_mode == docker ]]; then
-  "$release_dir/nginxpanel" panel-runtime-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --launcher-binary "$release_dir/nginxpanel" --panel-image "$panel_image" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" >"$work/panel-runtime.json"
+  "$release_dir/nginxpanel" panel-runtime-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --launcher-binary "$release_dir/nginxpanel" --panel-image "$panel_image" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" "${image_source[@]}" >"$work/panel-runtime.json"
 fi
 if [[ $native_nginx == yes ]]; then
   [[ $(sha256sum "$nginx" | cut -d ' ' -f1) == "$nginx_hash" ]] || die 'Nginx 程序已变化'
 fi
 nginx_agent_flag=--nginx-binding
 if [[ -n $nginx_image ]]; then
-  "$release_dir/nginxpanel" nginx-container-bind --data-dir "$data" --nginx-image "$nginx_image" --launcher-binary "$release_dir/nginxpanel" --nginx-user nginxpanel-nginx >"$work/nginx-binding.json"
+  "$release_dir/nginxpanel" nginx-container-bind --data-dir "$data" --nginx-image "$nginx_image" --launcher-binary "$release_dir/nginxpanel" --nginx-user nginxpanel-nginx "${image_source[@]}" >"$work/nginx-binding.json"
   nginx_agent_flag=--nginx-container
 else
   "$release_dir/nginxpanel" component-bind --data-dir "$data" "${nginx_source[@]}" >"$work/nginx-binding.json"
@@ -435,7 +455,7 @@ for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-printf 'native-install-v6\n' >"$work/ready"
+printf 'native-install-v7\n' >"$work/ready"
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
   start_units=(nginxpanel-agent.service)

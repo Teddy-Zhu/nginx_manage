@@ -1,0 +1,115 @@
+package nginxcontainer
+
+import (
+	"archive/tar"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"io"
+	"net/url"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
+	"nginxpanel/internal/secure"
+)
+
+func localImage(ctx context.Context, d *dockerClient, reference, expected string) (imageInfo, error) {
+	var image imageInfo
+	if !imageValue.MatchString(reference) || !strings.HasPrefix(expected, "sha256:") || !hashValue.MatchString(strings.TrimPrefix(expected, "sha256:")) {
+		return image, errors.New("须指定签名镜像引用和当前架构配置摘要")
+	}
+	if err := d.json(ctx, "GET", "/images/"+url.PathEscape(reference)+"/json", nil, &image); err != nil {
+		return image, err
+	}
+	matched := false
+	for _, ref := range image.RepoDigests {
+		if repositoryDigest(ref) == repositoryDigest(reference) {
+			matched = true
+		}
+	}
+	if !matched || image.ID != expected || image.Os != "linux" || image.Architecture != runtime.GOARCH || len(image.Config.Volumes) != 0 {
+		return image, errors.New("本地镜像引用、平台或配置摘要不符合签名批准，或包含额外卷声明")
+	}
+	return image, nil
+}
+
+// imageArchive only creates a stopped metadata container, with no host mounts
+// or network. No entry point is executed, including while validating binaries.
+func imageArchive(ctx context.Context, d *dockerClient, imageID, path string, maximum int64, consume func(*tar.Reader) error) (runErr error) {
+	var created struct {
+		ID string `json:"Id"`
+	}
+	input := map[string]any{"Image": imageID, "Entrypoint": []string{"/nginxpanel-metadata-never-start"}, "Cmd": []string{}, "NetworkDisabled": true,
+		"HostConfig": map[string]any{"NetworkMode": "none", "ReadonlyRootfs": true, "CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges:true"}}}
+	if err := d.json(ctx, "POST", "/containers/create?name=nginxpanel-metadata-"+secure.ID(), input, &created); err != nil {
+		return err
+	}
+	if !hashValue.MatchString(created.ID) {
+		return errors.New("Docker 未返回有效元数据容器 ID")
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := d.json(cleanup, "DELETE", "/containers/"+created.ID, nil, nil); err != nil {
+			runErr = errors.Join(runErr, errors.New("未启动的镜像元数据容器未清理，请本机检查"))
+		}
+	}()
+	resp, err := d.request(ctx, "GET", "/containers/"+created.ID+"/archive?path="+url.QueryEscape(path), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	limited := &io.LimitedReader{R: resp.Body, N: maximum + 1}
+	if err := consume(tar.NewReader(limited)); err != nil {
+		return err
+	}
+	if limited.N <= 0 {
+		return errors.New("镜像归档超过读取预算")
+	}
+	return nil
+}
+
+func imageBinary(ctx context.Context, d *dockerClient, imageID, path, expected string) error {
+	if !hashValue.MatchString(expected) || path != Bootstrap && path != "/usr/local/bin/nginxpanel-launcher" {
+		return errors.New("镜像程序不属于固定启动器入口")
+	}
+	return imageArchive(ctx, d, imageID, path, binaryLimit+(16<<10), func(t *tar.Reader) error {
+		entry, err := t.Next()
+		if err != nil {
+			return err
+		}
+		if entry.Name != filepath.Base(path) || entry.Typeflag != tar.TypeReg || entry.Uid != 0 || entry.Gid != 0 || entry.Mode != 0555 || entry.Linkname != "" || entry.Size <= 0 || entry.Size > binaryLimit {
+			return errors.New("镜像启动器须为 root 持有的固定只读普通程序")
+		}
+		h := sha256.New()
+		n, err := io.Copy(h, t)
+		if err != nil {
+			return err
+		}
+		if n != entry.Size || hex.EncodeToString(h.Sum(nil)) != expected {
+			return errors.New("镜像启动器实际内容与签名发行程序不一致")
+		}
+		if _, err = t.Next(); err != io.EOF {
+			return errors.New("镜像启动器归档包含额外内容或未完整读取")
+		}
+		return nil
+	})
+}
+
+// InspectPanelImage reuses the host-only Docker endpoint and metadata reader;
+// the panel container itself is never given Docker access.
+func InspectPanelImage(ctx context.Context, reference, configDigest, launcherSHA256 string) error {
+	d, err := newDocker()
+	if err != nil {
+		return err
+	}
+	defer d.close()
+	image, err := localImage(ctx, d, reference, configDigest)
+	if err != nil {
+		return err
+	}
+	return imageBinary(ctx, d, image.ID, "/usr/local/bin/nginxpanel-launcher", launcherSHA256)
+}

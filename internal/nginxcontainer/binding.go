@@ -7,21 +7,20 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/nginxruntime"
+	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 )
 
 type BindInput struct {
 	DataDir, Image, LauncherBinary string
 	UID, GID                       int
+	Signature                      releases.ImageInput
 }
 type imageInfo struct {
 	ID               string `json:"Id"`
@@ -86,62 +85,44 @@ func publicDir(name string) error {
 	}
 	return nil
 }
-func imageMetadata(ctx context.Context, d *dockerClient, imageID string) (files map[string][]byte, runErr error) {
-	var created struct {
-		ID string `json:"Id"`
-	}
-	input := map[string]any{"Image": imageID, "Entrypoint": []string{Binary}, "Cmd": []string{"-V"}, "NetworkDisabled": true, "HostConfig": map[string]any{"NetworkMode": "none", "ReadonlyRootfs": true, "CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges:true"}}}
-	if err := d.json(ctx, "POST", "/containers/create?name=nginxpanel-metadata-"+secure.ID(), input, &created); err != nil {
-		return nil, err
-	}
-	if !hashValue.MatchString(created.ID) {
-		return nil, errors.New("Docker 未返回有效元数据容器 ID")
-	}
-	// This temporary container is never started and is removed without force.
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := d.json(cleanup, "DELETE", "/containers/"+created.ID, nil, nil); err != nil {
-			runErr = errors.Join(runErr, errors.New("未启动的镜像元数据容器未清理，请本机检查"))
+func imageMetadata(ctx context.Context, d *dockerClient, imageID string) (map[string][]byte, error) {
+	files := map[string][]byte{}
+	err := imageArchive(ctx, d, imageID, "/usr/share/nginxpanel", 256<<10, func(t *tar.Reader) error {
+		for count := 0; ; count++ {
+			entry, err := t.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if count > 8 || entry.Size < 0 || entry.Size > 64<<10 {
+				return errors.New("镜像元数据超过预算")
+			}
+			name := strings.TrimPrefix(entry.Name, "nginxpanel/")
+			if entry.Typeflag == tar.TypeDir && strings.TrimSuffix(entry.Name, "/") == "nginxpanel" {
+				continue
+			}
+			if entry.Typeflag != tar.TypeReg || entry.Uid != 0 || entry.Mode&0022 != 0 || (name != "capabilities.json" && name != "nginx-build.txt" && name != "nginx.sha256" && name != "launcher.sha256") || files[name] != nil {
+				return errors.New("镜像元数据包含非预期文件或链接")
+			}
+			value, err := io.ReadAll(t)
+			if err != nil {
+				return err
+			}
+			files[name] = value
 		}
-	}()
-	resp, err := d.request(ctx, "GET", "/containers/"+created.ID+"/archive?path="+url.QueryEscape("/usr/share/nginxpanel"), nil)
+		if len(files) != 4 {
+			return errors.New("镜像缺少完整的预置模块/程序元数据")
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	files = map[string][]byte{}
-	limited := &io.LimitedReader{R: resp.Body, N: 256<<10 + 1}
-	t := tar.NewReader(limited)
-	for count := 0; ; count++ {
-		entry, err := t.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if count > 8 || entry.Size < 0 || entry.Size > 64<<10 {
-			return nil, errors.New("镜像元数据超过预算")
-		}
-		name := strings.TrimPrefix(entry.Name, "nginxpanel/")
-		if entry.Typeflag == tar.TypeDir && strings.TrimSuffix(entry.Name, "/") == "nginxpanel" {
-			continue
-		}
-		if entry.Typeflag != tar.TypeReg || entry.Uid != 0 || entry.Mode&0022 != 0 || (name != "capabilities.json" && name != "nginx-build.txt" && name != "nginx.sha256" && name != "launcher.sha256") || files[name] != nil {
-			return nil, errors.New("镜像元数据包含非预期文件或链接")
-		}
-		value, err := io.ReadAll(t)
-		if err != nil {
-			return nil, err
-		}
-		files[name] = value
-	}
-	if limited.N <= 0 || len(files) != 4 {
-		return nil, errors.New("镜像缺少完整的预置模块/程序元数据")
-	}
 	return files, nil
 }
+
 func checksum(raw []byte, name string) (string, error) {
 	fields := strings.Fields(string(raw))
 	if len(fields) != 2 || !hashValue.MatchString(fields[0]) || fields[1] != name {
@@ -177,12 +158,17 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 		return b, err
 	}
 	defer unlock()
+	var existing *Binding
 	if prior, err := Read(in.DataDir); err == nil {
 		if prior.Image != in.Image || prior.UID != in.UID || prior.GID != in.GID || prior.BootstrapSHA256 != launcherHash {
 			return b, errors.New("已有不同 Nginx 容器绑定，切换须进入维护流程")
 		}
-		return prior, nil
+		existing = &prior
 	} else if !errors.Is(err, os.ErrNotExist) {
+		return b, err
+	}
+	approval, err := admitSource(in, launcherHash, existing)
+	if err != nil {
 		return b, err
 	}
 	if _, err = os.Lstat(filepath.Join(in.DataDir, "bin", "components", "nginx.json")); err == nil {
@@ -195,18 +181,15 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 		return b, err
 	}
 	defer d.close()
-	var image imageInfo
-	if err = d.json(ctx, "GET", "/images/"+url.PathEscape(in.Image)+"/json", nil, &image); err != nil {
+	image, err := localImage(ctx, d, in.Image, approval.Image.Platform.ConfigDigest)
+	if err != nil {
 		return b, err
 	}
-	matched := false
-	for _, ref := range image.RepoDigests {
-		if repositoryDigest(ref) == repositoryDigest(in.Image) {
-			matched = true
-		}
+	if err = imageBinary(ctx, d, image.ID, Bootstrap, launcherHash); err != nil {
+		return b, err
 	}
-	if !matched || image.Os != "linux" || image.Architecture != runtime.GOARCH || len(image.Config.Volumes) != 0 || !strings.HasPrefix(image.ID, "sha256:") || !hashValue.MatchString(strings.TrimPrefix(image.ID, "sha256:")) {
-		return b, errors.New("本地镜像摘要、平台或卷声明不符合固定运行要求")
+	if existing != nil {
+		return *existing, nil
 	}
 	files, err := imageMetadata(ctx, d, image.ID)
 	if err != nil {
@@ -229,7 +212,7 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 	if bootstrapHash != launcherHash {
 		return b, errors.New("Nginx 镜像启动器与本机批准的面板程序不一致")
 	}
-	b = Binding{Schema: Schema, DataDir: in.DataDir, Image: in.Image, ImageID: image.ID, Architecture: image.Architecture, UID: in.UID, GID: in.GID, BinarySHA256: nginxHash, BootstrapSHA256: bootstrapHash, Build: string(files["nginx-build.txt"]), Capabilities: c, Environment: image.Config.Env, BoundAt: time.Now().Unix()}
+	b = Binding{Schema: Schema, DataDir: in.DataDir, Image: in.Image, ImageID: image.ID, Architecture: image.Architecture, UID: in.UID, GID: in.GID, BinarySHA256: nginxHash, BootstrapSHA256: bootstrapHash, Build: string(files["nginx-build.txt"]), Capabilities: c, Environment: image.Config.Env, BoundAt: approval.ApprovedAt, SignedImage: approval}
 	if err = b.validate(in.DataDir); err != nil {
 		return b, err
 	}

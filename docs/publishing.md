@@ -59,7 +59,7 @@ sudo /opt/nginxpanel/current/nginxpanel release-images \
   --release-signature /opt/nginxpanel/offline/release-manifest.sig
 ```
 
-此入口复用归档验签、有效期和接收协议规则，返回当前架构的固定引用、配置摘要及证据散列；`images_verified` 仅表示镜像清单已认证，不代表本机已有镜像、已绑定、已运行或通过部署验收。安装仍须由本机管理员按此摘要准备镜像并显式绑定；模块变化通过新镜像发行处理。
+此入口复用归档验签、有效期和接收协议规则，返回当前架构的固定引用、配置摘要及证据散列；`images_verified` 仅表示镜像清单已认证，不代表本机已有镜像、已绑定、已运行或通过部署验收。安装仍须由本机管理员按此摘要准备镜像；[Docker 安装器](../deploy/docker/README.md#安装来源与批准记录) 在写入意图前自动检查签名、本地镜像和程序/前端，并在绑定时重新检查、保存只读批准记录。模块变化通过新镜像发行处理。
 
 正式使用需要仓库已有实际 LICENSE，以及 release environment 中的 `RELEASE_ED25519_SEED` secret、`RELEASE_ED25519_PUBLIC_KEY` 和 `RELEASE_KEY_ID` variables。environment 的审批、受信标签限制和私钥保管由仓库维护者配置；代码不假定这些仓库设置已经完成。接收主机仍须由本机 root 独立批准仓库和公钥，普通配置迁移不覆盖它们。
 

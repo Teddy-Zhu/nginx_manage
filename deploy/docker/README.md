@@ -12,7 +12,7 @@ docker build -f deploy/docker/nginx.Dockerfile --build-arg TARGETARCH=amd64 -t n
 
 修改模块集合须重新构建并发布镜像；运行环境缺失模块时更换包含对应能力的受信镜像，重新生成迁移计划。镜像不携带源节点二进制、动态模块或业务秘密。
 
-Nginx 镜像尚未执行构建、启动或 ABI 验证。固定实例执行适配及镜像摘要/OCI 证据签名发布已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)；真实构建、发布与系统验证仍待 P5。安装器不自动拉取或验签镜像，须由本机管理员先使用 `release-images` 认证清单、按返回摘要准备镜像，再显式绑定。
+Nginx 镜像尚未执行构建、启动或 ABI 验证。固定实例执行适配、镜像摘要/OCI 证据签名发布及安装验签已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)；真实构建、发布与系统验证仍待 P5。本机管理员先按签名清单准备镜像，安装器自动验证来源与本地内容，不负责拉取镜像。
 
 上游构建及模块参数参见 [Nginx 官方镜像源码](https://github.com/nginx/docker-nginx) 和 [Nginx 构建选项](https://nginx.org/en/docs/configure.html)。
 
@@ -35,7 +35,10 @@ sudo deploy/native/install.sh \
   --web-dir /root/nginxpanel-release/web \
   --without-nginx \
   --panel-mode docker \
-  --panel-image 'ghcr.io/<owner>/nginxpanel-runtime:0.1.0@sha256:<image-digest>' \
+  --panel-image 'ghcr.io/<owner>/<repo>/panel@sha256:<image-digest>' \
+  --release-trust /etc/nginxpanel/release-trust.json \
+  --release-manifest /opt/nginxpanel/offline/release-manifest.json \
+  --release-signature /opt/nginxpanel/offline/release-manifest.sig \
   --start
 ```
 
@@ -45,7 +48,17 @@ sudo deploy/native/install.sh \
 sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
 ```
 
-`--without-nginx` 可替换为原生安装器支持的本机程序或签名资产选择，以管理宿主机专用 Nginx。使用配套 Nginx 容器时，替换为 `--nginx-image 'ghcr.io/<owner>/nginxpanel-nginx:1.30.6@sha256:<image-digest>'`；镜像须由本机 root 预先准备到 Docker，不在安装器或普通运行中拉取。该分支生成同时包含 panel/nginx 的完整 Compose 和容器专用 Agent 参数，不登记原生 Nginx 或原生首次安装服务。没有安装 Nginx 时，迁移按原预检及显式授权首次安装流程处理。
+`--without-nginx` 可替换为原生安装器支持的本机程序或签名资产选择，以管理宿主机专用 Nginx。使用配套 Nginx 容器时，替换为 `--nginx-image 'ghcr.io/<owner>/<repo>/nginx@sha256:<image-digest>'`；镜像须由本机 root 预先准备到 Docker，不在安装器或普通运行中拉取。该分支生成同时包含 panel/nginx 的完整 Compose 和容器专用 Agent 参数，不登记原生 Nginx 或原生首次安装服务。没有安装 Nginx 时，迁移按原预检及显式授权首次安装流程处理。
+
+## 安装来源与批准记录
+
+Docker 安装必须提供 root 持有的发行清单和签名信封，以及独立配置的本机信任根。只接受签名清单中的完整 `repository@sha256:...` 引用，不接受标签别名或另一仓库中的相同摘要。预发布另需明确 `--release-prerelease`。
+
+安装器在写入安装意图、创建账户或复制程序前调用 `panel-runtime-verify` 和按需 `nginx-container-verify`。它们与绑定入口复用验签逻辑，核对当前架构的镜像 config 摘要、实际镜像启动器内容和本机程序散列；面板还逐项核对签名发行中的前端文件，拒绝遗漏和额外文件。镜像读取通过无主机挂载、无网络且从不启动的临时元数据容器进行，清理失败不会报告验证成功。预检执行已认证程序的固定 `version` 命令，不启动服务。
+
+安装意图 v7 固定发行清单散列，并通过 `--release-manifest-sha256` 绑定后续准入，防止预检与登记使用不同清单。`panel-runtime-bind`、`nginx-container-bind` 仍会重新核对实际材料并保存 root 只读的签名批准记录，包括仓库、版本、提交、签名 Key ID、清单/初始信任散列、平台摘要、程序散列和批准时间。普通 Web/API 不能提交镜像地址、信任根或批准时间。
+
+新登记按当前时间检查清单有效期。已发布绑定的同计划续装按原批准时间重新验签，并使用当前本机公钥；增补无关公钥不改变原计划，撤销原签名公钥会阻止续装。未保存批准记录前已过期的材料不能作为新登记继续使用。续装仍需原始清单与签名，运行已有批准版本则不依赖离线输入文件或在线仓库。批准记录不替代实际启动、Nginx 生效确认和 P5 部署验收。
 
 固定 Nginx 容器要求支持 API v1.47 的本机 rootful Docker、标准 `/run/docker.sock` 和不重映射的宿主机 UID/GID；具体 Engine/API 对应关系见 [Docker 官方版本矩阵](https://docs.docker.com/reference/api/engine/)。首次登记只检查本地不可变镜像，通过一个从未启动、随后删除的临时容器读取元数据；核对平台、镜像摘要、静态能力、程序及启动器散列后发布 root 只读 `bin/components/nginx-container.json`。与原生安装共用绑定锁，不能直接转换已有实例或替换已登记镜像。
 

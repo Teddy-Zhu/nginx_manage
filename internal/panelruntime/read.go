@@ -41,7 +41,7 @@ func ReadDeployment(data string) (Deployment, error) {
 	if info.Mode().Perm() != 0444 {
 		return d, errors.New("面板运行绑定须为只读记录")
 	}
-	raw, err := secure.ReadRootFile(filepath.Join(root, "launcher.json"), 4096)
+	raw, err := secure.ReadRootFile(filepath.Join(root, "launcher.json"), DeploymentLimit)
 	if err != nil {
 		return d, err
 	}

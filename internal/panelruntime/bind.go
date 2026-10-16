@@ -165,30 +165,13 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	if err != nil {
 		return out, err
 	}
-	launcher, err := filepath.EvalSymlinks(in.LauncherBinary)
+	source, err := VerifySource(ctx, in)
 	if err != nil {
 		return out, err
 	}
-	r, err := describe(ctx, binary)
-	if err != nil {
-		return out, err
-	}
-	r.Web, err = inventory(web, false)
-	if err != nil {
-		return out, err
-	}
-	r.ID = releaseID(r)
-	if err = r.validate(); err != nil {
-		return out, err
-	}
-	launcherHash, err := secure.HashRootFile(launcher, BinaryLimit)
-	if err != nil {
-		return out, err
-	}
-	if err = executable(launcher, launcherHash); err != nil {
-		return out, err
-	}
-	d := Deployment{Schema: Schema, DataDir: in.DataDir, Listen: in.Listen, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, LauncherSHA256: launcherHash, InitialRelease: r.ID, Image: in.Image}
+	r, approval := source.Release, source.SignedImage
+	launcherHash := r.BinarySHA256
+	d := Deployment{Schema: Schema, DataDir: in.DataDir, Listen: in.Listen, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, LauncherSHA256: launcherHash, InitialRelease: r.ID, Image: in.Image, ImageID: approval.Image.Platform.ConfigDigest, SignedImage: approval}
 	if err = d.validate(in.DataDir); err != nil {
 		return out, err
 	}
@@ -215,11 +198,23 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 		return out, errors.New("面板运行初始化正在进行")
 	}
 	defer unix.Flock(fd, unix.LOCK_UN)
+	if prior, err := ReadDeployment(in.DataDir); err == nil {
+		// Another identical bootstrap may have published while source inspection
+		// was running. Reuse only its admission time and original trust identity.
+		candidate := d.SignedImage
+		candidate.ApprovedAt, candidate.TrustSHA256 = prior.SignedImage.ApprovedAt, prior.SignedImage.TrustSHA256
+		if candidate != prior.SignedImage {
+			return out, errors.New("已有不同的镜像签名批准记录")
+		}
+		d.SignedImage = prior.SignedImage
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return out, err
+	}
 	rawDeployment, err := json.Marshal(d)
 	if err != nil {
 		return out, err
 	}
-	if prior, err := secure.ReadRootFile(filepath.Join(root, "launcher.json"), 4096); err == nil {
+	if prior, err := secure.ReadRootFile(filepath.Join(root, "launcher.json"), DeploymentLimit); err == nil {
 		if !bytes.Equal(prior, rawDeployment) {
 			return out, errors.New("已有不同的面板容器运行计划")
 		}
