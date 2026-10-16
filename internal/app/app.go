@@ -35,6 +35,7 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
 	"nginxpanel/internal/notifications"
+	"nginxpanel/internal/panelready"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
@@ -213,8 +214,10 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	defer unlock()
+	var running panelruntime.Snapshot
 	if !o.Dev {
-		if err := panelruntime.CheckProcess(o.DataDir, o.PanelRuntime, o.Listen, o.WebDir, o.Version); err != nil {
+		running, err = panelruntime.CheckProcess(o.DataDir, o.PanelRuntime, o.Listen, o.WebDir, o.Version)
+		if err != nil {
 			return err
 		}
 	}
@@ -267,7 +270,7 @@ func Run(ctx context.Context, o Options) error {
 	server := &http.Server{Addr: o.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 10)
+	result := make(chan error, 11)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
@@ -275,6 +278,20 @@ func Run(ctx context.Context, o Options) error {
 	defer listener.Close()
 	var workers sync.WaitGroup
 	workers.Add(10)
+	if !o.Dev {
+		readyListener, err := panelready.Listen(o.DataDir)
+		if err != nil {
+			return err
+		}
+		defer readyListener.Close()
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			result <- panelready.Serve(runCtx, readyListener, nodeID, func(ctx context.Context) (panelready.Status, error) {
+				return readinessStatus(ctx, o, running.Release, db, maintenanceService, agentClient)
+			})
+		}()
+	}
 	go func() {
 		defer workers.Done()
 		if o.Dev {

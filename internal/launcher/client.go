@@ -79,6 +79,9 @@ func verifyPeer(c *net.UnixConn, d panelruntime.Deployment) error {
 	return nil
 }
 func (c Client) call(ctx context.Context, method, path string, in, out any) error {
+	return c.callPeer(ctx, method, path, in, out, nil)
+}
+func (c Client) callPeer(ctx context.Context, method, path string, in, out any, peerPID *int) error {
 	if os.Geteuid() != 0 {
 		return errors.New("launcher 控制仅允许宿主机 root")
 	}
@@ -102,6 +105,18 @@ func (c Client) call(ctx context.Context, method, path string, in, out any) erro
 		if err = verifyPeer(unixConn, d); err != nil {
 			conn.Close()
 			return nil, err
+		}
+		if peerPID != nil {
+			cred, err := credentials(unixConn)
+			if err != nil {
+				conn.Close()
+				return nil, err
+			}
+			if cred == nil || cred.Pid <= 1 {
+				conn.Close()
+				return nil, errors.New("launcher 对端进程身份缺失")
+			}
+			*peerPID = int(cred.Pid)
 		}
 		return conn, nil
 	}}
@@ -154,12 +169,20 @@ func (c Client) call(ctx context.Context, method, path string, in, out any) erro
 	return nil
 }
 func (c Client) Status(ctx context.Context) (Status, error) {
+	out, _, err := c.StatusPeer(ctx)
+	return out, err
+}
+
+// StatusPeer also returns the authenticated launcher's host PID. It is local
+// evidence for checking its child, never a PID supplied in the response JSON.
+func (c Client) StatusPeer(ctx context.Context) (Status, int, error) {
 	var out Status
-	err := c.call(ctx, http.MethodGet, "/v1/status", nil, &out)
+	var peer int
+	err := c.callPeer(ctx, http.MethodGet, "/v1/status", nil, &out, &peer)
 	if err == nil && (out.Protocol != Protocol || !idValue.MatchString(out.BootID) || out.ReleaseID != "" && !releaseValue.MatchString(out.ReleaseID) || out.PID < 0 || out.PID > 0 && !idValue.MatchString(out.InstanceID) || out.PID == 0 && out.InstanceID != "" || out.Operation != nil && (!validOperation(*out.Operation) || out.Operation.Request.BootID != out.BootID)) {
 		err = errors.New("launcher 状态身份无效")
 	}
-	return out, err
+	return out, peer, err
 }
 func (c Client) Control(ctx context.Context, in Request) (Operation, error) {
 	var out Operation

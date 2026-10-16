@@ -117,7 +117,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-selection-status \
 
 选择前持久保存 `panel.select` 独立记录，固定原版本、目标版本、运行绑定散列、批准散列和快照。指针仅允许从原版本原子切换至目标；中断后以原操作续行，第三种版本或授权偏离时停止覆盖。未完成记录阻止释放维护会话；已成功请求的重放仅返回原记录，不重新覆盖后续版本选择。临时指针按操作使用固定名称，与初始化和暂存共用发布锁。
 
-`version_selected` 仅表示程序指针已持久化；本入口不重启服务、打开数据库或释放维护会话，不报告应用健康。独立 worker 的启停、readiness、匹配程序与数据的自动回滚及成功清理仍待接入；不应将此命令作为已完成的升级 API。尚未运行以上入口、服务、安装器、构建或测试，统一留到 P5。
+`version_selected` 仅表示程序指针已持久化；本入口不重启服务、打开数据库或释放维护会话，不报告应用健康。独立 worker 的自动编排、匹配程序与数据的自动回滚及成功清理仍待接入；不应将此命令作为已完成的升级 API。尚未运行以上入口、服务、安装器、构建或测试，统一留到 P5。
 
 ## 面板进程维护
 
@@ -141,7 +141,26 @@ sudo /opt/nginxpanel/current/nginxpanel panel-service-operation \
 
 启动原版本时省略 `--panel-selection`；启动新版本须关联该次停机后的完整版本选择记录，并再次核对当前公钥与批准。启动意图落盘、确认数据恢复标记已解除后，才移除匹配原停机事务的标记并启动固定入口。中断后按原操作续行，先查询实际受管状态；同一 launcher boot 中只有明确不存在原回执才派发，跨 boot 的派发先持久记录并有数量上限。未知进程身份或结果保留 `recovery_required`。成功请求重放返回历史记录，后来的进程与停机标记不被历史重放改变。
 
-持久停机标记或未完成的进程记录会阻止维护释放。`started` 表示已观测到目标进程实例；readiness、当前 Nginx 状态检查、完整程序/数据回滚、升级提交及清理仍待独立更新 worker 编排。尚未执行控制入口、systemd、launcher、服务、构建或测试，统一留到 P5。
+持久停机标记或未完成的进程记录会阻止维护释放。`started` 表示已观测到目标进程实例；就绪检查见下文。完整程序/数据回滚、升级提交及清理仍待独立更新 worker 编排。尚未执行控制入口、systemd、launcher、服务、构建或测试，统一留到 P5。
+
+## 面板就绪观察
+
+本机 root 的 `panel-readiness` 关联原维护会话、已完成的启动操作及原恢复快照，返回当次观察证据。生产 `serve` 在持有写锁后提供 `DATA/app/readiness.sock`；此 Socket 仅接受 root 对端，返回统一的 `code/message/data/request_id/node_id`。开发模式不提供此入口。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel panel-readiness \
+  --data-dir /srv/nginxpanel --panel-service-operation <原启动UUID> \
+  --recovery-snapshot <原快照UUID> \
+  --maintenance-id <原维护UUID> --maintenance-epoch <当前Agent-epoch>
+```
+
+观察端以 Unix 对端凭据、实际执行文件和原进程标识认证应用；Docker 还核对经认证 launcher 的宿主机 PID、直接父子关系与 PID 命名空间。原生 systemd 实例或 launcher boot/serve 实例变化均拒绝复用旧启动回执。应用初始化最多等待 90 秒，整次观察最多四分钟。等待期间不持有维护准入锁，允许重启后的应用与 Agent 恢复同一 held 会话。
+
+数据库查询由非 root 应用执行：schema 必须等于目标程序声明，节点、期望/生效修订和配置版本须等于快照；维护双方均须 held、epoch 一致、没有在途操作。已有生效修订还须通过 Agent 核对 Nginx 运行修订、完整性及外部修改状态。root 仅核对固定密钥/TLS 文件与快照散列，继续保持业务 SQLite 不由 root 解析。
+
+实际 HTTPS 监听须属于同一应用进程，并固定本机管理证书、拒绝重定向和代理。检查健康与版本 API 的统一响应、节点身份、版本和协议，再核对全部已发布前端文件及入口内容的长度与散列。前后两次应用/进程/密钥材料核对不一致时明确失败。新目标继续核对原签名批准；停机或数据恢复标记未解除时不提供就绪证据。
+
+返回包含原启动/快照/绑定散列、进程实例、应用状态、HTTPS 核对数量和观察时间，仅表示该时间点的结果；独立更新执行器仍须保存证据并完成提交或补偿。本命令不释放维护、不启动进程、不恢复数据、不删除快照；完整自动更新与回滚尚未完成。尚未执行此入口、服务、构建或测试，留到 P5 集中验证。
 
 ## 本机面板恢复快照
 

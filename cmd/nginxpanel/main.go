@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -138,6 +138,7 @@ func run() error {
 		"panel-service-status":    {"data-dir": true},
 		"panel-service-operation": {"data-dir": true, "panel-service-operation": true},
 		"panel-service-control":   {"data-dir": true, "panel-service-operation": true, "panel-service-action": true, "panel-service-stop": true, "panel-selection": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-readiness":         {"data-dir": true, "panel-service-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-snapshot-capture":  {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-snapshot-check":    {"data-dir": true, "recovery-operation": true},
 		"panel-snapshot-db":       {"data-dir": true, "recovery-operation": true},
@@ -164,7 +165,7 @@ func run() error {
 		}
 		switch f.Name {
 		case "panel-service-operation":
-			if command != "panel-service-operation" && command != "panel-service-control" {
+			if command != "panel-service-operation" && command != "panel-service-control" && command != "panel-readiness" {
 				invalidFlag = f.Name
 			}
 		case "panel-service-action", "panel-service-stop":
@@ -176,7 +177,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "recovery-snapshot":
-			if command != "panel-snapshot-restore" && command != "panel-runtime-select" {
+			if command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-readiness" {
 				invalidFlag = f.Name
 			}
 		case "recovery-operation":
@@ -226,7 +227,7 @@ func run() error {
 	if command == "component-install" && *moduleFile == "" {
 		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
 	}
-	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-service-control" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
+	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-service-control" && command != "panel-readiness" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
 		return errors.New("installation options require component-install; maintenance identity also permits panel snapshot, version and process operations")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
@@ -383,6 +384,12 @@ func run() error {
 		return json.NewEncoder(os.Stdout).Encode(out)
 	case "panel-service-control":
 		out, err := agent.ControlPanelService(ctx, agent.PanelServiceInput{DataDir: absDir, Action: *panelServiceAction, MaintenanceID: *installMaintenance, StopID: *panelServiceStop, SelectionID: *panelSelection}, *panelServiceOperation, *installEpoch)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-readiness":
+		out, err := agent.CheckPanelReadiness(ctx, absDir, *panelServiceOperation, *recoverySnapshot, *installMaintenance, *installEpoch)
 		if err != nil {
 			return err
 		}

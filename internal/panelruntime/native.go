@@ -79,23 +79,23 @@ func ExecNative(data string) error {
 // CheckProcess must run with the writer lock held. A bootstrap wrapper or
 // launcher may have read current just before a root version selection; a stale
 // child must fail before vault access or automatic schema migration.
-func CheckProcess(data, mode, listen, web, version string) error {
+func CheckProcess(data, mode, listen, web, version string) (Snapshot, error) {
 	s, err := Read(data)
 	if err != nil {
-		return err
+		return s, err
 	}
 	d := s.Deployment
 	if d.Mode != mode || d.Listen != listen || d.UID != os.Geteuid() || d.GID != os.Getegid() || s.Release.Version != version {
-		return errors.New("当前程序与 root 面板运行绑定不一致")
+		return s, errors.New("当前程序与 root 面板运行绑定不一致")
 	}
 	resolved, err := filepath.EvalSymlinks(web)
 	if err != nil {
-		return err
+		return s, err
 	}
 	if resolved != filepath.Join(s.Directory, "web") {
-		return errors.New("面板前端不属于当前批准版本")
+		return s, errors.New("面板前端不属于当前批准版本")
 	}
-	return checkExecutable(s)
+	return s, checkExecutable(s)
 }
 
 // CheckInit prevents a repeated bootstrap command from opening newer data with
