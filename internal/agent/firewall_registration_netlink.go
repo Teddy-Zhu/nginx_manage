@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"syscall"
 
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
@@ -20,9 +19,8 @@ const nftRegistrationPrefix = "nginxpanel:registration:v1:"
 // mutations are exclusive creation and deletion of one proved-empty table.
 // Policy application must use a separate reachability/recovery executor.
 type nftRegistrationBatch struct {
-	wire    []byte
-	hash    string
-	headers [3][]byte
+	wire []byte
+	hash string
 }
 
 func prepareNFTRegistration(baseline firewall.KernelView, owner string, remove bool) (nftRegistrationBatch, error) {
@@ -60,7 +58,6 @@ func prepareNFTRegistration(baseline firewall.KernelView, owner string, remove b
 		if err != nil {
 			return out, err
 		}
-		out.headers[i] = append([]byte(nil), raw[:unix.NLMSG_HDRLEN]...)
 		out.wire = append(out.wire, raw...)
 	}
 	if len(out.wire) > 1024 {
@@ -103,7 +100,12 @@ func verifyNFTRegistrationTable(attrs map[uint16]netlink.Attribute, owner string
 }
 
 func snapshotNFTRegistration(ctx context.Context, owner string) (firewall.KernelView, error) {
-	view, err := snapshotNFTKernelInspect(ctx, func(attrs map[uint16]netlink.Attribute) error { return verifyNFTRegistrationTable(attrs, owner) })
+	view, err := snapshotNFTKernelInspect(ctx, func(kind uint16, attrs map[uint16]netlink.Attribute) error {
+		if kind != unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWTABLE {
+			return errors.New("登记表包含子对象")
+		}
+		return verifyNFTRegistrationTable(attrs, owner)
+	})
 	if err == nil && (view.Chains != 0 || view.Rules != 0) {
 		err = errors.New("登记表包含链或规则，禁止空表执行器修改")
 	}
@@ -117,114 +119,5 @@ func submitNFTRegistration(ctx context.Context, batch nftRegistrationBatch) erro
 	if len(batch.wire) == 0 || len(batch.wire) > 1024 {
 		return errors.New("防火墙登记事务大小无效")
 	}
-	s, err := openNFTRead()
-	if err != nil {
-		return err
-	}
-	defer s.close()
-	if err = ctx.Err(); err != nil {
-		return err
-	}
-	if err = unix.Sendto(s.fd, batch.wire, 0, &unix.SockaddrNetlink{Family: unix.AF_NETLINK}); err != nil {
-		return err
-	}
-	// A GETGEN on the same socket is a barrier after the complete batch. Consume
-	// every preceding ACK, including a commit failure attributed to BEGIN;
-	// one successful NEWTABLE/DELTABLE ACK alone does not certify commit.
-	barrier := netlink.Message{Header: netlink.Header{Length: unix.NLMSG_HDRLEN + 4, Type: unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETGEN, Flags: netlink.Request, Sequence: 4}, Data: []byte{unix.NFPROTO_UNSPEC, unix.NFNETLINK_V0, 0, 0}}
-	barrierWire, err := barrier.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	if err = s.send(ctx, barrier); err != nil {
-		return err
-	}
-	ack, done, received := false, false, 0
-	var rejected error
-	for !done {
-		if err = ctx.Err(); err != nil {
-			return err
-		}
-		n, _, flags, sender, e := unix.Recvmsg(s.fd, s.buffer, nil, unix.MSG_DONTWAIT)
-		if errors.Is(e, unix.EINTR) {
-			continue
-		}
-		if errors.Is(e, unix.EAGAIN) {
-			if e = s.wait(ctx, unix.POLLIN); e != nil {
-				return e
-			}
-			continue
-		}
-		if e != nil {
-			return e
-		}
-		from, ok := sender.(*unix.SockaddrNetlink)
-		received += n
-		if !ok || from.Pid != 0 || from.Groups != 0 || n == 0 || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || received > 64<<10 {
-			return errors.New("登记事务回执来源、边界或预算无效")
-		}
-		raw := s.buffer[:n]
-		for len(raw) > 0 {
-			if len(raw) < unix.NLMSG_HDRLEN {
-				return errors.New("登记事务回执头不完整")
-			}
-			length := int(binary.NativeEndian.Uint32(raw[:4]))
-			aligned := (length + 3) &^ 3
-			if length < unix.NLMSG_HDRLEN || aligned > len(raw) {
-				return errors.New("登记事务回执边界无效")
-			}
-			kind := netlink.HeaderType(binary.NativeEndian.Uint16(raw[4:6]))
-			sequence, pid := binary.NativeEndian.Uint32(raw[8:12]), binary.NativeEndian.Uint32(raw[12:16])
-			data := raw[unix.NLMSG_HDRLEN:length]
-			messageFlags := netlink.HeaderFlags(binary.NativeEndian.Uint16(raw[6:8]))
-			raw = raw[aligned:]
-			if done || pid != 0 && pid != s.pid || sequence < 1 || sequence > 4 || messageFlags&netlink.DumpInterrupted != 0 {
-				return errors.New("登记事务回执序列无效")
-			}
-			if kind == netlink.Error {
-				if len(data) < 4+unix.NLMSG_HDRLEN {
-					return errors.New("登记事务错误回执不完整")
-				}
-				code := int32(binary.NativeEndian.Uint32(data[:4]))
-				expected := barrierWire[:unix.NLMSG_HDRLEN]
-				if sequence <= 3 {
-					expected = batch.headers[sequence-1]
-				}
-				if !bytes.Equal(data[4:4+unix.NLMSG_HDRLEN], expected) || code > 0 {
-					return errors.New("登记事务原请求回执无效")
-				}
-				if code < 0 {
-					rejected = syscall.Errno(-int64(code))
-					if sequence == 4 {
-						done = true
-					}
-					continue
-				}
-				if sequence != 2 || ack {
-					return errors.New("登记事务确认重复或无效")
-				}
-				ack = true
-				continue
-			}
-			if sequence != 4 || kind != netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWGEN) || len(data) < 4 || data[0] != unix.NFPROTO_UNSPEC || data[1] != unix.NFNETLINK_V0 {
-				return errors.New("登记事务屏障无效")
-			}
-			attrs, e := nftAttributes(netlink.Message{Header: netlink.Header{Type: kind}, Data: data})
-			if e != nil {
-				return e
-			}
-			generation, ok := attrs[unix.NFTA_GEN_ID]
-			if !ok || len(generation.Data) != 4 || binary.BigEndian.Uint32(generation.Data) == 0 {
-				return errors.New("登记事务屏障缺少代次")
-			}
-			done = true
-		}
-	}
-	if rejected != nil {
-		return rejected
-	}
-	if !ack {
-		return errors.New("登记事务缺少操作回执")
-	}
-	return nil
+	return submitNFTBatch(ctx, batch.wire)
 }

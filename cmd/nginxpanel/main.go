@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|firewall-init|firewall-registration|firewall-recover|firewall-remove|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -105,7 +105,9 @@ func run() error {
 	componentScope := flags.String("component-scope", "unconfirmed", "native component scope: host or unconfirmed")
 	maintenanceScope := flags.String("maintenance-scope", "unconfirmed", "host configuration maintenance scope: host or unconfirmed")
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd or unconfirmed")
-	firewallScope := flags.String("firewall-scope", "unconfirmed", "local firewall registration namespace: host or unconfirmed")
+	firewallScope := flags.String("firewall-scope", "unconfirmed", "firewall namespace: host or unconfirmed")
+	firewallOwner := flags.String("firewall-owner", "unconfirmed", "locally confirmed firewall owner: direct-nftables or unconfirmed")
+	firewallSSH := flags.String("firewall-ssh", "unconfirmed", "locally confirmed SSH protection: openssh, none or unconfirmed")
 	dnsScope := flags.String("dns-scope", "unconfirmed", "DNS namespace: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
 	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
@@ -130,6 +132,7 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
+		"firewall-rollback":               {"data-dir": true},
 		"firewall-init":                   {"data-dir": true, "firewall-scope": true},
 		"firewall-registration":           {"data-dir": true, "firewall-scope": true},
 		"firewall-recover":                {"data-dir": true, "firewall-scope": true},
@@ -209,7 +212,11 @@ func run() error {
 		}
 		switch f.Name {
 		case "firewall-scope":
-			if command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" {
+			if command != "agent" && command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" {
+				invalidFlag = f.Name
+			}
+		case "firewall-owner", "firewall-ssh":
+			if command != "agent" {
 				invalidFlag = f.Name
 			}
 		case "backup-input-fd":
@@ -350,6 +357,8 @@ func run() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
+	case "firewall-rollback":
+		return agent.RequestFirewallRollback(absDir)
 	case "management-listener-disable":
 		if err := agent.DisableRemoteListener(absDir); err != nil {
 			return err
@@ -732,7 +741,7 @@ func run() error {
 		if *nginxBinary != "" || containerRuntime != nil {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Container: containerRuntime, Journal: journal}
 		}
-		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
+		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

@@ -383,7 +383,7 @@ onUnmounted(() => controller.abort());
     >
   </div>
   <n-alert type="info" :bordered="false" class="notice"
-    >保存仅更新期望策略。内核规则应用当前不可用；监听状态、本机规则和外部可达性需分别确认。</n-alert
+    >保存仅更新期望策略。通过“防火墙应用”生成执行计划；监听状态、本机规则和外部可达性需分别确认。</n-alert
   >
   <section v-if="stored" class="panel">
     <div class="page-toolbar">

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/logs"
 	"nginxpanel/internal/remotelisten"
 	"nginxpanel/internal/secure"
@@ -18,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	Firewall           *firewall.Operation          `json:"firewall,omitempty"`
 	RelatedOperationID string                       `json:"related_operation_id,omitempty"`
 	DisasterActivation *DisasterActivationOperation `json:"disaster_activation,omitempty"`
 	DisasterRestoreID  string                       `json:"disaster_restore_id,omitempty"`

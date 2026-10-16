@@ -57,6 +57,10 @@ export type FirewallRule = components["schemas"]["FirewallRule"];
 export type FirewallPolicy = components["schemas"]["FirewallPolicy"];
 export type FirewallPolicyView = components["schemas"]["FirewallPolicyView"];
 export type FirewallPolicyInput = components["schemas"]["FirewallPolicyInput"];
+export type FirewallPlan = components["schemas"]["FirewallPlan"];
+export type FirewallOperation = components["schemas"]["FirewallOperation"];
+export type FirewallRuntime = components["schemas"]["FirewallRuntime"];
+export type FirewallApplyInput = components["schemas"]["FirewallApplyInput"];
 export type FirewallPreview = components["schemas"]["FirewallPreview"];
 export type HostDNSPlan = components["schemas"]["HostDNSPlan"];
 export type HostDNSPlanInput = components["schemas"]["HostDNSPlanInput"];
@@ -521,6 +525,29 @@ function createAPI(scope: RequestScope) {
     request<NotificationOverview>({ url: "/notifications", signal }),
   hostDNS: (signal?: AbortSignal) =>
     request<HostDNSOverview>({ url: "/host/dns", signal }),
+  firewallRuntime: (signal?: AbortSignal) =>
+    request<FirewallRuntime>({ url: "/firewall/runtime", signal }),
+  firewallOperation: (id: string, signal?: AbortSignal) =>
+    request<FirewallOperation>({ url: `/firewall/operations/${id}`, signal }),
+  planFirewall: (version: number, signal?: AbortSignal) =>
+    request<FirewallPlan>({
+      url: "/firewall/plan",
+      method: "POST",
+      data: { version },
+      signal,
+    }),
+  applyFirewall: (data: FirewallApplyInput, key: string) =>
+    request<FirewallOperation>({
+      url: "/firewall/apply",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  decideFirewall: (id: string, action: "confirm" | "rollback") =>
+    request<FirewallOperation>({
+      url: `/firewall/operations/${id}/${action}`,
+      method: "POST",
+    }),
   firewall: (signal?: AbortSignal) =>
     request<FirewallObservation>({ url: "/firewall", signal }),
   firewallPolicy: (signal?: AbortSignal) =>

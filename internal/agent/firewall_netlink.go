@@ -380,7 +380,7 @@ func snapshotNFTKernel(ctx context.Context) (firewall.KernelView, error) {
 	return snapshotNFTKernelInspect(ctx, nil)
 }
 
-func snapshotNFTKernelInspect(ctx context.Context, inspect func(map[uint16]netlink.Attribute) error) (firewall.KernelView, error) {
+func snapshotNFTKernelInspect(ctx context.Context, inspect func(uint16, map[uint16]netlink.Attribute) error) (firewall.KernelView, error) {
 	var out firewall.KernelView
 	namespace, e := nftNamespace()
 	if e != nil {
@@ -413,7 +413,7 @@ func snapshotNFTKernelInspect(ctx context.Context, inspect func(map[uint16]netli
 			return errors.New("unexpected nftables table")
 		}
 		if inspect != nil {
-			if err := inspect(attrs); err != nil {
+			if err := inspect(uint16(m.Header.Type), attrs); err != nil {
 				return err
 			}
 		}
@@ -458,6 +458,11 @@ func snapshotNFTKernelInspect(ctx context.Context, inspect func(map[uint16]netli
 				}
 				if out.Chains > 128 || out.Rules > firewall.MaxEntries {
 					return fault.Unavailable("目标表链或规则数超过读取预算")
+				}
+				if inspect != nil {
+					if err := inspect(uint16(m.Header.Type), attrs); err != nil {
+						return err
+					}
 				}
 				nftObjectHash(h, m, attrs)
 				return nil

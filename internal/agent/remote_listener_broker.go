@@ -170,7 +170,7 @@ func (m *remoteListener) acceptTCP(l *net.TCPListener) {
 			continue
 		}
 		host, _, _ := net.SplitHostPort(c.RemoteAddr().String())
-		m.connections[id] = listenerSocket{conn: c, version: m.state.Version, source: host}
+		m.connections[id] = listenerSocket{listener: l, conn: c, version: m.state.Version, source: host}
 		m.mu.Unlock()
 	}
 }

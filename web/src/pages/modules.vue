@@ -23,7 +23,8 @@ async function load() {
   await run(async () => { modules.value = await api.modules(); });
 }
 async function toggle(module: Module, enabled: boolean) {
-  if (!window.confirm(`${enabled ? "启用" : "停用"}${module.name}的面板管理？`)) return;
+  const prompt=module.id==="firewall" && !enabled ? "停用防火墙管理并保留已确认规则？既有操作的确认与恢复仍可继续。" : `${enabled ? "启用" : "停用"}${module.name}的面板管理？`;
+ if (!window.confirm(prompt)) return;
   await run(async () => {
     await api.setModule(module.id, enabled);
     modules.value = await api.modules();

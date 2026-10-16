@@ -159,11 +159,11 @@ func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error)
 	}
 	if e == nil {
 		switch out.Registration.State {
-		case "unavailable", "unregistered", "registered", "released", "missing", "drifted", "recovery_required":
+		case "unavailable", "unregistered", "registered", "managed", "released", "missing", "drifted", "recovery_required":
 		default:
 			e = errors.New("invalid firewall registration state")
 		}
-		if out.Registration.Verified && (out.Registration.State != "registered" || !out.Kernel.Available || !out.Kernel.TableExists || out.Kernel.Chains != 0 || out.Kernel.Rules != 0 || !validID(out.Registration.OperationID)) {
+		if out.Registration.Verified && (out.Registration.State != "registered" && out.Registration.State != "managed" || !out.Kernel.Available || !out.Kernel.TableExists || out.Registration.State == "registered" && (out.Kernel.Chains != 0 || out.Kernel.Rules != 0) || out.Registration.State == "managed" && (out.Kernel.Chains != 1 || out.Kernel.Rules < 2) || !validID(out.Registration.OperationID)) {
 			e = errors.New("invalid firewall registration proof")
 		}
 	}

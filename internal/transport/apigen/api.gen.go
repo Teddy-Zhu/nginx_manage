@@ -1797,6 +1797,75 @@ type SetFirewallPolicyJSONRequestBody = FirewallPolicyInput
 type PreviewFirewallJSONBody = FirewallPreviewInput
 type PreviewFirewallJSONRequestBody = FirewallPreviewInput
 
+type FirewallProtection struct {
+	Service string   `json:"service"`
+	Family  string   `json:"family"`
+	Port    int64    `json:"port"`
+	Sources []string `json:"sources"`
+}
+type FirewallApplyInput struct {
+	PlanId  string `json:"plan_id"`
+	Version int64  `json:"version"`
+}
+type FirewallPlan struct {
+	Id                  string               `json:"id"`
+	Version             int64                `json:"version"`
+	PolicyHash          string               `json:"policy_hash"`
+	ProgramHash         string               `json:"program_hash"`
+	Baseline            FirewallKernelView   `json:"baseline"`
+	Protections         []FirewallProtection `json:"protections"`
+	SshProfile          string               `json:"ssh_profile"`
+	SshListeners        []string             `json:"ssh_listeners"`
+	ListenerVersion     int64                `json:"listener_version"`
+	Listener            string               `json:"listener"`
+	ControlSource       string               `json:"control_source"`
+	ConfirmationSeconds int64                `json:"confirmation_seconds"`
+	ExpiresAt           int64                `json:"expires_at"`
+	TransactionHash     string               `json:"transaction_hash"`
+	TransactionBytes    int64                `json:"transaction_bytes"`
+	GeneratedRules      int64                `json:"generated_rules"`
+}
+type FirewallOperation struct {
+	Id                string `json:"id"`
+	PlanId            string `json:"plan_id"`
+	Version           int64  `json:"version"`
+	PolicyHash        string `json:"policy_hash"`
+	ProgramHash       string `json:"program_hash"`
+	State             string `json:"state"`
+	Stage             string `json:"stage"`
+	Deadline          int64  `json:"deadline"`
+	UpdatedAt         int64  `json:"updated_at"`
+	ConfirmedSource   string `json:"confirmed_source"`
+	VerificationScope string `json:"verification_scope"`
+	Error             string `json:"error"`
+}
+type FirewallRuntime struct {
+	Available           bool                 `json:"available"`
+	Reason              string               `json:"reason"`
+	ConfirmedVersion    int64                `json:"confirmed_version"`
+	ConfirmedPolicyHash string               `json:"confirmed_policy_hash"`
+	Kernel              FirewallKernelView   `json:"kernel"`
+	Protections         []FirewallProtection `json:"protections"`
+	Operation           *FirewallOperation   `json:"operation"`
+}
+type PlanFirewallParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+type PlanFirewallJSONBody = FirewallPreviewInput
+type PlanFirewallJSONRequestBody = FirewallPreviewInput
+type ApplyFirewallParams struct {
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+type ApplyFirewallJSONBody = FirewallApplyInput
+type ApplyFirewallJSONRequestBody = FirewallApplyInput
+type ConfirmFirewallParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+type RollbackFirewallParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // HostDNSApplyInput defines model for HostDNSApplyInput.
 type HostDNSApplyInput struct {
 	PlanId string `json:"plan_id"`
@@ -3917,6 +3986,19 @@ type ServerInterface interface {
 
 	// (GET /dns-providers)
 	ListDNSProviders(w http.ResponseWriter, r *http.Request)
+
+	// (GET /firewall/runtime)
+	GetFirewallRuntime(w http.ResponseWriter, r *http.Request)
+	// (POST /firewall/plan)
+	PlanFirewall(w http.ResponseWriter, r *http.Request, params PlanFirewallParams)
+	// (POST /firewall/apply)
+	ApplyFirewall(w http.ResponseWriter, r *http.Request, params ApplyFirewallParams)
+	// (GET /firewall/operations/{id})
+	GetFirewallOperation(w http.ResponseWriter, r *http.Request, id ID)
+	// (POST /firewall/operations/{id}/confirm)
+	ConfirmFirewall(w http.ResponseWriter, r *http.Request, id ID, params ConfirmFirewallParams)
+	// (POST /firewall/operations/{id}/rollback)
+	RollbackFirewall(w http.ResponseWriter, r *http.Request, id ID, params RollbackFirewallParams)
 
 	// (GET /firewall)
 	GetFirewall(w http.ResponseWriter, r *http.Request)
@@ -6396,6 +6478,88 @@ func (siw *ServerInterfaceWrapper) ListDNSProviders(w http.ResponseWriter, r *ht
 		handler = middleware(handler)
 	}
 
+	handler.ServeHTTP(w, r)
+}
+
+func (siw *ServerInterfaceWrapper) GetFirewallRuntime(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFirewallRuntime(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) PlanFirewall(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := PlanFirewallParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.PlanFirewall(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) ApplyFirewall(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := ApplyFirewallParams{}
+	params.IdempotencyKey = Idempotency(r.Header.Get("Idempotency-Key"))
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.ApplyFirewall(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFirewallOperation(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFirewallOperation(w, r, r.PathValue("id"))
+	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) ConfirmFirewall(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := ConfirmFirewallParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmFirewall(w, r, r.PathValue("id"), params)
+	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) RollbackFirewall(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := RollbackFirewallParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RollbackFirewall(w, r, r.PathValue("id"), params)
+	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
 	handler.ServeHTTP(w, r)
 }
 
@@ -10336,6 +10500,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/events", wrapper.ListNotificationEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/deliveries", wrapper.ListNotificationDeliveries)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/notifications/deliveries/{id}/retry", wrapper.RetryNotificationDelivery)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/runtime", wrapper.GetFirewallRuntime)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/plan", wrapper.PlanFirewall)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/apply", wrapper.ApplyFirewall)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/operations/{id}", wrapper.GetFirewallOperation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/confirm", wrapper.ConfirmFirewall)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/rollback", wrapper.RollbackFirewall)
+
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall", wrapper.GetFirewall)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/policy", wrapper.GetFirewallPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/firewall/policy", wrapper.SetFirewallPolicy)

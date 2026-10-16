@@ -134,6 +134,10 @@ func CompileNFT(policy Policy) (*NFTProgram, error) {
 			}
 		}
 	}
+	return finishNFT(program)
+}
+
+func finishNFT(program *NFTProgram) (*NFTProgram, error) {
 	hash := sha256.New()
 	frame := func(raw []byte) { hash.Write(binary.BigEndian.AppendUint32(nil, uint32(len(raw)))); hash.Write(raw) }
 	frame([]byte("inet/" + NFTHostTable + "/" + NFTHostChain + "/input/10/accept"))

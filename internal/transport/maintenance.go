@@ -35,7 +35,8 @@ func (s *Server) maintenanceAdmission(next http.Handler) http.Handler {
 		// These callbacks can only decide an existing DNS operation and must remain
 		// reachable while it drains. The domain service verifies ownership and state.
 		listenerDecision := r.Method == http.MethodPost && len(parts) == 5 && parts[0] == "management" && parts[1] == "listener" && parts[2] == "operations" && (parts[4] == "confirm" || parts[4] == "rollback")
-		if listenerDecision || r.Method == http.MethodPost && len(parts) == 5 && parts[0] == "host" && parts[1] == "dns" && parts[2] == "tasks" && (parts[4] == "confirm" || parts[4] == "rollback") {
+		firewallDecision := r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "firewall" && parts[1] == "operations" && (parts[3] == "confirm" || parts[3] == "rollback")
+		if listenerDecision || firewallDecision || r.Method == http.MethodPost && len(parts) == 5 && parts[0] == "host" && parts[1] == "dns" && parts[2] == "tasks" && (parts[4] == "confirm" || parts[4] == "rollback") {
 			done, ok = s.Maintenance.Progress()
 		} else {
 			done, ok = s.Maintenance.Admit()

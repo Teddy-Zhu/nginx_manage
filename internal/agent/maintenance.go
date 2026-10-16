@@ -477,7 +477,7 @@ func (g *maintenanceGate) handler(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		done, ok := g.enter(r.URL.Path == "/v1/management-listener/decide")
+		done, ok := g.enter(r.URL.Path == "/v1/management-listener/decide" || r.URL.Path == "/v1/firewall/decide")
 		if !ok {
 			maintenanceReply(w, nil, fault.New(409, "MAINTENANCE_ACTIVE", "Agent 已关闭配置写入准入"))
 			return

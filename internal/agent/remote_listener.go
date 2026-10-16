@@ -36,37 +36,41 @@ type listenerCheckpoint struct {
 	LastRescue  string                  `json:"last_rescue"`
 }
 type listenerSocket struct {
-	conn    *net.TCPConn
-	version int64
-	source  string
+	listener *net.TCPListener
+	conn     *net.TCPConn
+	version  int64
+	source   string
 }
 type remoteListener struct {
-	mu            sync.Mutex
-	dir, socket   string
-	uid           uint32
-	available     bool
-	journal       *Journal
-	dns           *HostDNS
-	state         listenerCheckpoint
-	deadline      time.Time
-	problem       string
-	fileLock      *os.File
-	listener      *net.TCPListener
-	listenAddress string
-	broker        *net.UnixListener
-	web           *net.UnixConn
-	connections   map[string]listenerSocket
-	wg            sync.WaitGroup
-	closed        bool
+	mu              sync.Mutex
+	dir, socket     string
+	uid             uint32
+	available       bool
+	journal         *Journal
+	dns             *HostDNS
+	firewallPending func() bool
+	state           listenerCheckpoint
+	deadline        time.Time
+	problem         string
+	fileLock        *os.File
+	listener        *net.TCPListener
+	listenAddress   string
+	broker          *net.UnixListener
+	web             *net.UnixConn
+	connections     map[string]listenerSocket
+	wg              sync.WaitGroup
+	closed          bool
 }
 
-func listenerWrite(path string, value any) error {
+func listenerWrite(path string, value any) error { return rootJSONWrite(path, value, 64<<10) }
+
+func rootJSONWrite(path string, value any, limit int) error {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	if len(raw) > 64<<10 {
-		return errors.New("监听恢复记录超出限制")
+	if len(raw) > limit {
+		return errors.New("独立恢复记录超出限制")
 	}
 	tmp := path + "." + secure.ID() + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY|unix.O_NOFOLLOW, 0600)
@@ -351,7 +355,7 @@ func (m *remoteListener) apply(id, hash string, in remotelisten.Input, connectio
 	} else if !os.IsNotExist(err) {
 		return remotelisten.Operation{}, err
 	}
-	if m.problem != "" || m.pendingLocked() || m.dns.checkpoint != nil && dnsActive(m.dns.checkpoint.Status.State) {
+	if m.problem != "" || m.pendingLocked() || m.firewallPending != nil && m.firewallPending() || m.dns.checkpoint != nil && dnsActive(m.dns.checkpoint.Status.State) {
 		return remotelisten.Operation{}, fault.Conflict("存在待恢复或待确认的可达性变更")
 	}
 	if in.Version != m.state.Version {

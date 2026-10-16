@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"strings"
 
 	"github.com/google/nftables/expr"
 	"github.com/mdlayher/netlink"
@@ -28,11 +29,29 @@ type NFTCreateBatch struct {
 // The batch generation precondition prevents a concurrent kernel policy change
 // from being silently incorporated into a previously inspected baseline.
 func PrepareNFTCreate(program *NFTProgram, baseline KernelView) (NFTCreateBatch, error) {
-	var out NFTCreateBatch
-	if !baseline.Available || baseline.Generation == 0 || baseline.TableExists || len(baseline.NamespaceID) != 64 || len(baseline.Fingerprint) != 64 {
-		return out, fault.Unavailable("仅能为已核对且目标表不存在的内核快照生成新建事务")
+	return prepareNFTTransaction(program, baseline, "nginxpanel:direct:v1", false, false)
+}
+
+// PrepareNFTManaged only serializes a root executor's fixed-table transaction.
+// A coherent baseline, independent ownership proof, durable intent and recovery
+// must already be held by that executor; an encoded batch grants no authority.
+// A nil program creates an empty table, used to restore the original register.
+func PrepareNFTManaged(program *NFTProgram, baseline KernelView, marker string) (NFTCreateBatch, error) {
+	if len(marker) < 32 || len(marker) > 192 || !strings.HasPrefix(marker, "nginxpanel:") || strings.ContainsAny(marker, "\x00\r\n") {
+		return NFTCreateBatch{}, errors.New("invalid root nftables marker")
 	}
-	if program == nil || program.Table == nil || program.Chain == nil || program.Table.Name != NFTHostTable || byte(program.Table.Family) != unix.NFPROTO_INET || program.Chain.Table != program.Table || program.Chain.Name != NFTHostChain || program.Chain.Type != "filter" || program.Chain.Device != "" || program.Table.Flags != 0 || program.Chain.Hooknum == nil || uint32(*program.Chain.Hooknum) != unix.NF_INET_LOCAL_IN || program.Chain.Priority == nil || int(*program.Chain.Priority) != NFTHostPriority || program.Chain.Policy == nil || uint32(*program.Chain.Policy) != uint32(expr.VerdictAccept) || len(program.Rules) < 2 || len(program.Rules) > MaxEntries {
+	return prepareNFTTransaction(program, baseline, marker, baseline.TableExists, true)
+}
+
+func prepareNFTTransaction(program *NFTProgram, baseline KernelView, marker string, replace, allowEmpty bool) (NFTCreateBatch, error) {
+	var out NFTCreateBatch
+	if !baseline.Available || baseline.Generation == 0 || baseline.TableExists != replace || len(baseline.NamespaceID) != 64 || len(baseline.Fingerprint) != 64 {
+		return out, fault.Unavailable("须提供已核对且与事务动作一致的内核快照")
+	}
+	if program == nil && !allowEmpty {
+		return out, errors.New("missing nftables program")
+	}
+	if program != nil && (program.Table == nil || program.Chain == nil || program.Table.Name != NFTHostTable || byte(program.Table.Family) != unix.NFPROTO_INET || program.Chain.Table != program.Table || program.Chain.Name != NFTHostChain || program.Chain.Type != "filter" || program.Chain.Device != "" || program.Table.Flags != 0 || program.Chain.Hooknum == nil || uint32(*program.Chain.Hooknum) != unix.NF_INET_LOCAL_IN || program.Chain.Priority == nil || int(*program.Chain.Priority) != NFTHostPriority || program.Chain.Policy == nil || uint32(*program.Chain.Policy) != uint32(expr.VerdictAccept) || len(program.Rules) < 2 || len(program.Rules) > MaxEntries) {
 		return out, errors.New("invalid fixed nftables program")
 	}
 	appendMessage := func(kind uint16, flags netlink.HeaderFlags, family byte, resource uint16, attrs []netlink.Attribute) error {
@@ -58,48 +77,55 @@ func PrepareNFTCreate(program *NFTProgram, baseline KernelView) (NFTCreateBatch,
 	if e := appendMessage(unix.NFNL_MSG_BATCH_BEGIN, netlink.Request, unix.NFPROTO_UNSPEC, unix.NFNL_SUBSYS_NFTABLES, begin); e != nil {
 		return NFTCreateBatch{}, e
 	}
+	if replace {
+		if e := appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_DELTABLE, netlink.Request|netlink.Acknowledge, unix.NFPROTO_INET, 0, []netlink.Attribute{{Type: unix.NFTA_TABLE_NAME, Data: []byte(NFTHostTable + "\x00")}}); e != nil {
+			return NFTCreateBatch{}, e
+		}
+	}
 	request := netlink.Request | netlink.Acknowledge | netlink.Create | netlink.Excl
 	// NFTA_TABLE_USERDATA is attribute 6 in Linux UAPI nf_tables.h. Its marker
 	// identifies our format; only a separate root registration can prove owner.
-	table := []netlink.Attribute{{Type: unix.NFTA_TABLE_NAME, Data: []byte(NFTHostTable + "\x00")}, {Type: unix.NFTA_TABLE_FLAGS, Data: binary.BigEndian.AppendUint32(nil, 0)}, {Type: 6, Data: []byte("nginxpanel:direct:v1")}}
+	table := []netlink.Attribute{{Type: unix.NFTA_TABLE_NAME, Data: []byte(NFTHostTable + "\x00")}, {Type: unix.NFTA_TABLE_FLAGS, Data: binary.BigEndian.AppendUint32(nil, 0)}, {Type: 6, Data: []byte(marker)}}
 	if e := appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWTABLE, request, unix.NFPROTO_INET, 0, table); e != nil {
 		return NFTCreateBatch{}, e
 	}
-	hook, e := netlink.MarshalAttributes([]netlink.Attribute{{Type: unix.NFTA_HOOK_HOOKNUM, Data: binary.BigEndian.AppendUint32(nil, unix.NF_INET_LOCAL_IN)}, {Type: unix.NFTA_HOOK_PRIORITY, Data: binary.BigEndian.AppendUint32(nil, uint32(NFTHostPriority))}})
-	if e != nil {
-		return NFTCreateBatch{}, e
-	}
-	chain := []netlink.Attribute{{Type: unix.NFTA_CHAIN_TABLE, Data: []byte(NFTHostTable + "\x00")}, {Type: unix.NFTA_CHAIN_NAME, Data: []byte(NFTHostChain + "\x00")}, {Type: unix.NFTA_CHAIN_HOOK | netlink.Nested, Data: hook}, {Type: unix.NFTA_CHAIN_TYPE, Data: []byte("filter\x00")}, {Type: unix.NFTA_CHAIN_POLICY, Data: binary.BigEndian.AppendUint32(nil, uint32(expr.VerdictAccept))}}
-	if e = appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWCHAIN, request, unix.NFPROTO_INET, 0, chain); e != nil {
-		return NFTCreateBatch{}, e
-	}
-	for _, rule := range program.Rules {
-		if rule == nil || rule.Table != program.Table || rule.Chain != program.Chain || rule.Handle != 0 || rule.Position != 0 || rule.Flags != 0 {
-			return NFTCreateBatch{}, errors.New("invalid new nftables rule")
-		}
-		expressions := make([]netlink.Attribute, 0, len(rule.Exprs))
-		for _, expression := range rule.Exprs {
-			raw, e := expr.Marshal(unix.NFPROTO_INET, expression)
-			if e != nil {
-				return NFTCreateBatch{}, e
-			}
-			expressions = append(expressions, netlink.Attribute{Type: unix.NFTA_LIST_ELEM | netlink.Nested, Data: raw})
-		}
-		encoded, e := netlink.MarshalAttributes(expressions)
+	if program != nil {
+		hook, e := netlink.MarshalAttributes([]netlink.Attribute{{Type: unix.NFTA_HOOK_HOOKNUM, Data: binary.BigEndian.AppendUint32(nil, unix.NF_INET_LOCAL_IN)}, {Type: unix.NFTA_HOOK_PRIORITY, Data: binary.BigEndian.AppendUint32(nil, uint32(NFTHostPriority))}})
 		if e != nil {
 			return NFTCreateBatch{}, e
 		}
-		attrs := []netlink.Attribute{{Type: unix.NFTA_RULE_TABLE, Data: []byte(NFTHostTable + "\x00")}, {Type: unix.NFTA_RULE_CHAIN, Data: []byte(NFTHostChain + "\x00")}, {Type: unix.NFTA_RULE_EXPRESSIONS | netlink.Nested, Data: encoded}, {Type: unix.NFTA_RULE_USERDATA, Data: rule.UserData}}
-		if e = appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWRULE, netlink.Request|netlink.Acknowledge|netlink.Create|netlink.Append, unix.NFPROTO_INET, 0, attrs); e != nil {
+		chain := []netlink.Attribute{{Type: unix.NFTA_CHAIN_TABLE, Data: []byte(NFTHostTable + "\x00")}, {Type: unix.NFTA_CHAIN_NAME, Data: []byte(NFTHostChain + "\x00")}, {Type: unix.NFTA_CHAIN_HOOK | netlink.Nested, Data: hook}, {Type: unix.NFTA_CHAIN_TYPE, Data: []byte("filter\x00")}, {Type: unix.NFTA_CHAIN_POLICY, Data: binary.BigEndian.AppendUint32(nil, uint32(expr.VerdictAccept))}}
+		if e = appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWCHAIN, request, unix.NFPROTO_INET, 0, chain); e != nil {
 			return NFTCreateBatch{}, e
 		}
+		for _, rule := range program.Rules {
+			if rule == nil || rule.Table != program.Table || rule.Chain != program.Chain || rule.Handle != 0 || rule.Position != 0 || rule.Flags != 0 {
+				return NFTCreateBatch{}, errors.New("invalid new nftables rule")
+			}
+			expressions := make([]netlink.Attribute, 0, len(rule.Exprs))
+			for _, expression := range rule.Exprs {
+				raw, e := expr.Marshal(unix.NFPROTO_INET, expression)
+				if e != nil {
+					return NFTCreateBatch{}, e
+				}
+				expressions = append(expressions, netlink.Attribute{Type: unix.NFTA_LIST_ELEM | netlink.Nested, Data: raw})
+			}
+			encoded, e := netlink.MarshalAttributes(expressions)
+			if e != nil {
+				return NFTCreateBatch{}, e
+			}
+			attrs := []netlink.Attribute{{Type: unix.NFTA_RULE_TABLE, Data: []byte(NFTHostTable + "\x00")}, {Type: unix.NFTA_RULE_CHAIN, Data: []byte(NFTHostChain + "\x00")}, {Type: unix.NFTA_RULE_EXPRESSIONS | netlink.Nested, Data: encoded}, {Type: unix.NFTA_RULE_USERDATA, Data: rule.UserData}}
+			if e = appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWRULE, netlink.Request|netlink.Acknowledge|netlink.Create|netlink.Append, unix.NFPROTO_INET, 0, attrs); e != nil {
+				return NFTCreateBatch{}, e
+			}
+		}
 	}
-	if e = appendMessage(unix.NFNL_MSG_BATCH_END, netlink.Request, unix.NFPROTO_UNSPEC, unix.NFNL_SUBSYS_NFTABLES, nil); e != nil {
+	if e := appendMessage(unix.NFNL_MSG_BATCH_END, netlink.Request, unix.NFPROTO_UNSPEC, unix.NFNL_SUBSYS_NFTABLES, nil); e != nil {
 		return NFTCreateBatch{}, e
 	}
 	h := sha256.New()
 	frame := func(raw []byte) { h.Write(binary.BigEndian.AppendUint32(nil, uint32(len(raw)))); h.Write(raw) }
-	frame([]byte("nginxpanel:nft-create:v1"))
+	frame([]byte("nginxpanel:nft-transaction:v1"))
 	frame([]byte(baseline.NamespaceID))
 	frame([]byte(baseline.Fingerprint))
 	frame(out.Wire)

@@ -9,6 +9,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,7 @@ type Service struct {
 	Vault      *secure.Vault
 	Agent      Observer
 	previewing atomic.Bool
+	runtimeMu  sync.Mutex
 }
 
 func policyAAD(version int64) string { return fmt.Sprintf("firewall:policy:%d", version) }
@@ -53,6 +55,8 @@ func (s *Service) Policy(ctx context.Context) (PolicyView, error) {
 	return out, nil
 }
 func (s *Service) Save(ctx context.Context, p auth.Principal, requestID, key string, in PolicyInput) (PolicyView, error) {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
 	var out PolicyView
 	if e := p.Require("security.write"); e != nil {
 		return out, e
@@ -195,7 +199,7 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 				}
 				if observed.Kernel.Available && observed.Kernel.TableExists {
 					if observed.Registration.Verified {
-						out.Errors = append(out.Errors, "空表受管登记已核对，策略应用与独立恢复尚不可用")
+						out.Warnings = append(out.Warnings, "受管登记已核对；执行须另外生成含入口保护项的应用计划")
 					} else {
 						out.Errors = append(out.Errors, "目标表存在但独立受管登记未核对通过，禁止接管")
 					}
@@ -245,6 +249,6 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 	if current != version {
 		return out, fault.Conflict("预览期间策略已变化，请重新生成")
 	}
-	out.Warnings = append(out.Warnings, "保存策略及编译结果均不代表内核生效；当前应用入口不可用", "allow 只终止本应用链的判断，其他基础链及云安全组仍可拒绝连接", "规则仅匹配 conntrack NEW；回环及已建立/关联会话保留，未跟踪流量不在此匹配范围")
+	out.Warnings = append(out.Warnings, "保存策略及编译结果均不代表内核生效；执行需生成应用计划并通过新连接确认", "allow 只终止本应用链的判断，其他基础链及云安全组仍可拒绝连接", "规则仅匹配 conntrack NEW；回环及已建立/关联会话保留，未跟踪流量不在此匹配范围")
 	return out, nil
 }

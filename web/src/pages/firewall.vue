@@ -43,6 +43,7 @@ const registrationNames: Record<string, string> = {
   unavailable: "无法核对",
   unregistered: "未登记",
   registered: "已登记空表",
+ managed: "已确认受管策略",
   released: "已释放登记",
   missing: "登记表缺失",
   drifted: "登记对象变化",
@@ -268,7 +269,7 @@ onUnmounted(() => {
           :bordered="false"
           >{{ observation.registration.reason }}</n-alert
         >
-        <p class="muted">空表登记不包含过滤策略；外部可达性须分别核对。</p>
+        <p class="muted">登记与内核状态共同核对所有权；外部可达性须分别核对。</p>
       </section>
       <div class="managers">
         <section class="panel">

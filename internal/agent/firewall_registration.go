@@ -128,6 +128,59 @@ func nftRegistrationView(dataDir string, kernel firewall.KernelView) firewall.Re
 		}
 		return out
 	}
+	runtime, runtimeErr := loadFirewallState(dataDir)
+	if runtimeErr != nil {
+		out.State = "recovery_required"
+		out.Reason = "root 运行恢复记录无法读取"
+		return out
+	}
+	if runtime != nil {
+		if runtime.Owner != value.Owner || value.State != "registered" {
+			out.State = "drifted"
+			out.Reason = "独立登记与运行所有者不一致"
+			return out
+		}
+		out.OperationID = value.OperationID
+		if runtime.Operation != nil {
+			out.OperationID = runtime.Operation.ID
+		}
+		if runtime.Candidate != nil || runtime.RestoreIntent != nil {
+			out.State = "recovery_required"
+			out.Reason = "存在待确认或待恢复的防火墙运行操作"
+			return out
+		}
+		if !kernel.Available {
+			out.State = "unavailable"
+			out.Reason = "内核快照不可用"
+			return out
+		}
+		if !kernel.TableExists {
+			out.State = "missing"
+			out.Reason = "受管表缺失，等待独立执行器核对恢复"
+			return out
+		}
+		if kernel.NamespaceID != runtime.CurrentKernel.NamespaceID || kernel.Fingerprint != runtime.CurrentKernel.Fingerprint {
+			out.State = "drifted"
+			out.Reason = "内核对象与独立运行回执不一致"
+			return out
+		}
+		if op := runtime.Operation; op != nil {
+			record, err := (&Journal{Dir: filepath.Join(dataDir, "agent", "operations")}).Get(op.ID)
+			expected, _ := json.Marshal(op)
+			actual, _ := json.Marshal(record.Firewall)
+			if err != nil || record.Kind != firewallOperationKind || record.RequestHash != runtime.RequestHash || record.State != op.State || !bytes.Equal(expected, actual) {
+				out.State = "recovery_required"
+				out.Reason = "独立运行回执与操作日志不一致"
+				return out
+			}
+		}
+		out.State = "registered"
+		if runtime.Confirmed != nil {
+			out.State = "managed"
+		}
+		out.Verified = true
+		return out
+	}
 	out.OperationID = value.OperationID
 	out.State, out.Reason = value.State, value.Error
 	if value.State == "creating" || value.State == "removing" {
@@ -202,6 +255,13 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 	dir := filepath.Dir(nftRegistrationPath(dataDir))
 	if err = secure.RootDirectory(dir, 0700); err != nil {
 		return out, err
+	}
+	runtime, err := loadFirewallState(dataDir)
+	if err != nil {
+		return out, err
+	}
+	if runtime != nil {
+		return out, errors.New("登记已交给独立运行执行器；请使用运行状态与原策略回滚入口")
 	}
 	value, err := loadNFTRegistration(dataDir)
 	if err != nil {

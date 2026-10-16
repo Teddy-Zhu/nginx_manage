@@ -1,0 +1,370 @@
+package agent
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"nginxpanel/internal/fault"
+	"nginxpanel/internal/firewall"
+	"nginxpanel/internal/secure"
+)
+
+const firewallOperationKind = "firewall.apply"
+const firewallCheckpointBytes = 1 << 20
+
+type firewallPolicyRecord struct {
+	PlanID      string                `json:"plan_id"`
+	Version     int64                 `json:"version"`
+	Policy      firewall.Policy       `json:"policy"`
+	PolicyHash  string                `json:"policy_hash"`
+	ProgramHash string                `json:"program_hash"`
+	Protections []firewall.Protection `json:"protections"`
+	Marker      string                `json:"marker"`
+}
+type firewallCheckpoint struct {
+	Schema          int                   `json:"schema"`
+	Owner           string                `json:"owner"`
+	Confirmed       *firewallPolicyRecord `json:"confirmed"`
+	Candidate       *firewallPolicyRecord `json:"candidate"`
+	Operation       *firewall.Operation   `json:"operation"`
+	RequestHash     string                `json:"request_hash"`
+	CurrentKernel   firewall.KernelView   `json:"current_kernel"`
+	BeforeKernel    firewall.KernelView   `json:"before_kernel"`
+	CandidateKernel firewall.KernelView   `json:"candidate_kernel"`
+	Rollback        bool                  `json:"rollback"`
+	LastRescue      string                `json:"last_rescue"`
+	RestoreIntent   *firewall.KernelView  `json:"restore_intent"`
+}
+type firewallPrivatePlan struct {
+	view   firewall.Plan
+	record *firewallPolicyRecord
+}
+type hostFirewall struct {
+	mu               sync.Mutex
+	dataDir, sshMode string
+	available        bool
+	recovering       bool
+	journal          *Journal
+	remote           *remoteListener
+	dns              *HostDNS
+	state            firewallCheckpoint
+	plans            map[string]firewallPrivatePlan
+	unlock           func()
+	deadline         time.Time
+	proofListener    *net.TCPListener
+	problem          string
+	retryAt          time.Time
+}
+
+func firewallStatePath(dataDir string) string {
+	return filepath.Join(dataDir, "agent", "firewall", "runtime.json")
+}
+func loadFirewallState(dataDir string) (*firewallCheckpoint, error) {
+	raw, err := listenerRead(firewallStatePath(dataDir), firewallCheckpointBytes)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var value firewallCheckpoint
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err = d.Decode(&value); err != nil {
+		return nil, err
+	}
+	if d.Decode(new(any)) != io.EOF {
+		return nil, errors.New("防火墙恢复记录包含多余内容")
+	}
+	if value.Schema != 1 || !validID(value.Owner) {
+		return nil, errors.New("防火墙独立所有者无效")
+	}
+	for _, r := range []*firewallPolicyRecord{value.Confirmed, value.Candidate} {
+		if r == nil {
+			continue
+		}
+		hash, err := firewall.PolicyDigest(r.Policy)
+		if err != nil {
+			return nil, err
+		}
+		program, err := firewall.CompileNFTProtected(r.Policy, r.Protections)
+		if err != nil {
+			return nil, err
+		}
+		if r.Version < 1 || hash != r.PolicyHash || program.Hash != r.ProgramHash || !validID(r.PlanID) || r.Marker != "nginxpanel:policy:v1:"+value.Owner+":"+r.PlanID+":"+r.ProgramHash {
+			return nil, errors.New("防火墙独立策略摘要无效")
+		}
+	}
+	if value.Candidate != nil && value.Operation == nil {
+		return nil, errors.New("防火墙候选缺少独立操作")
+	}
+	if op := value.Operation; op != nil {
+		if !validID(op.ID) || !validID(op.PlanID) || value.RequestHash != firewallRequestHash(op.PlanID) || op.UpdatedAt <= 0 || op.Deadline <= 0 {
+			return nil, errors.New("防火墙操作身份无效")
+		}
+		switch op.State {
+		case "running", "waiting_confirmation", "compensating", "recovery_required":
+			if value.Candidate == nil {
+				return nil, errors.New("防火墙活动操作缺少候选")
+			}
+		case "succeeded", "rolled_back", "failed":
+			if value.Candidate != nil {
+				return nil, errors.New("防火墙终态残留候选")
+			}
+		default:
+			return nil, errors.New("防火墙操作状态未知")
+		}
+	}
+	if r := value.Candidate; r != nil {
+		op := value.Operation
+		if op.PlanID != r.PlanID || op.Version != r.Version || op.PolicyHash != r.PolicyHash || op.ProgramHash != r.ProgramHash {
+			return nil, errors.New("防火墙候选与操作身份不一致")
+		}
+	}
+	validKernel := func(k firewall.KernelView) bool {
+		return k.Available && k.Generation != 0 && len(k.NamespaceID) == 64 && len(k.Fingerprint) == 64 && k.ObservedAt > 0 && k.Bytes >= 0 && k.Bytes <= nftReadBytes && k.Chains >= 0 && k.Chains <= 128 && k.Rules >= 0 && k.Rules <= firewall.MaxEntries
+	}
+	if !validKernel(value.CurrentKernel) || value.Candidate != nil && (!validKernel(value.BeforeKernel) || !value.BeforeKernel.TableExists) || value.CandidateKernel.Available && !validKernel(value.CandidateKernel) {
+		return nil, errors.New("防火墙恢复快照无效")
+	}
+	if value.Operation != nil && value.Operation.State == "succeeded" && (value.Confirmed == nil || value.Confirmed.PlanID != value.Operation.PlanID) {
+		return nil, errors.New("防火墙确认策略缺失")
+	}
+	if value.RestoreIntent != nil && (value.Candidate != nil || !validKernel(*value.RestoreIntent) || value.RestoreIntent.TableExists) {
+		return nil, errors.New("防火墙恢复意图无效")
+	}
+	return &value, nil
+}
+func (f *hostFirewall) save() error { _, err := f.persist(); return err }
+func (f *hostFirewall) persist() (bool, error) {
+	if f.state.Operation != nil && f.state.Operation.UpdatedAt == 0 {
+		f.state.Operation.UpdatedAt = time.Now().Unix()
+	}
+	if err := rootJSONWrite(firewallStatePath(f.dataDir), f.state, firewallCheckpointBytes); err != nil {
+		f.problem = "防火墙独立恢复记录无法持久保存"
+		return false, err
+	}
+	if op := f.state.Operation; op != nil {
+		if err := f.journal.Put(Record{OperationID: op.ID, RequestHash: f.state.RequestHash, Kind: firewallOperationKind, State: op.State, Stage: op.Stage, Deadline: op.Deadline, Error: op.Error, Firewall: op}); err != nil {
+			f.problem = "防火墙独立操作回执无法持久保存"
+			return true, err
+		}
+	}
+	return true, nil
+}
+func (f *hostFirewall) activeLocked() bool { return f.state.Candidate != nil }
+func (f *hostFirewall) pending() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.activeLocked() || f.problem != ""
+}
+func (f *hostFirewall) emptyMarker() string { return nftRegistrationPrefix + f.state.Owner }
+func (f *hostFirewall) program(record *firewallPolicyRecord) (*firewall.NFTProgram, string, error) {
+	if record == nil {
+		return nil, f.emptyMarker(), nil
+	}
+	p, err := firewall.CompileNFTProtected(record.Policy, record.Protections)
+	if err != nil {
+		return nil, "", err
+	}
+	if p.Hash != record.ProgramHash {
+		return nil, "", errors.New("root 防火墙程序摘要变化")
+	}
+	return p, record.Marker, nil
+}
+func (f *hostFirewall) snapshot(record *firewallPolicyRecord) (firewall.KernelView, error) {
+	p, marker, err := f.program(record)
+	if err != nil {
+		return firewall.KernelView{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return snapshotNFTProgram(ctx, p, marker)
+}
+func (f *hostFirewall) Open() error {
+	f.plans = map[string]firewallPrivatePlan{}
+	value, err := loadFirewallState(f.dataDir)
+	if err != nil {
+		f.problem = "防火墙独立恢复记录无效，须本机处理"
+		return nil
+	}
+	if !f.available && value == nil {
+		return nil
+	}
+	if os.Geteuid() != 0 || (&HostDNS{Scope: "host"}).hostScopeReason() != "" {
+		f.problem = "防火墙恢复须在真实宿主机 root 范围执行"
+		return nil
+	}
+	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
+	if err != nil {
+		return err
+	}
+	f.unlock = unlock
+	if err = secure.RootDirectory(filepath.Dir(firewallStatePath(f.dataDir)), 0700); err != nil {
+		return err
+	}
+	if value == nil {
+		registered, err := loadNFTRegistration(f.dataDir)
+		if err != nil || registered == nil || registered.State != "registered" {
+			f.problem = "须先停止 Agent 并由本机 root 完成空表登记"
+			return nil
+		}
+		f.state = firewallCheckpoint{Schema: 1, Owner: registered.Owner, CurrentKernel: registered.Confirmed}
+	} else {
+		f.state = *value
+	}
+	f.recovering = true
+	// Startup never resumes an unconfirmed policy. Its recovery direction is
+	// persisted and completed before the Agent accepts any new operation.
+	if f.activeLocked() {
+		if err := f.rollbackLocked("Agent 重启，恢复最后确认策略"); err != nil {
+			f.problem = "防火墙启动恢复未完成"
+		}
+		return nil
+	}
+	if err := f.reconcileConfirmedLocked(); err != nil {
+		f.problem = "防火墙已确认状态无法核对或恢复"
+	}
+	return nil
+}
+func (f *hostFirewall) Close() {
+	if f.unlock != nil {
+		f.unlock()
+		f.unlock = nil
+	}
+}
+func (f *hostFirewall) operationLocked(id string) (firewall.Operation, error) {
+	if f.state.Operation != nil && f.state.Operation.ID == id {
+		return *f.state.Operation, nil
+	}
+	r, err := f.journal.Get(id)
+	if err != nil {
+		return firewall.Operation{}, err
+	}
+	if r.Kind != firewallOperationKind || r.Firewall == nil || r.Firewall.ID != id || r.State != r.Firewall.State || r.RequestHash != firewallRequestHash(r.Firewall.PlanID) {
+		return firewall.Operation{}, fault.Conflict("操作标识已用于其他业务")
+	}
+	return *r.Firewall, nil
+}
+func (f *hostFirewall) Operation(id string) (firewall.Operation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.operationLocked(id)
+}
+func (f *hostFirewall) View() firewall.RuntimeView {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := firewall.RuntimeView{Available: f.available && f.problem == "" && f.state.Schema == 1, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}}
+	if f.state.Candidate != nil {
+		out.Available = false
+		if out.Reason == "" {
+			out.Reason = "存在待确认或待恢复的防火墙操作"
+		}
+	}
+	if !f.available && out.Reason == "" {
+		out.Reason = "须由本机 root 确认 direct-nftables 所有者、宿主机范围及 SSH 保护配置"
+	}
+	if r := f.state.Confirmed; r != nil {
+		out.ConfirmedVersion = r.Version
+		out.ConfirmedPolicyHash = r.PolicyHash
+		out.Protections = append(out.Protections, r.Protections...)
+	}
+	if f.state.Operation != nil {
+		copy := *f.state.Operation
+		out.Operation = &copy
+	}
+	return out
+}
+func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, connection string) (firewall.Plan, error) {
+	// All mutations take DNS -> listener -> firewall locks. Recovery takes only
+	// listener -> firewall; no callback from the latter acquires an earlier lock.
+	f.dns.mu.Lock()
+	defer f.dns.mu.Unlock()
+	f.remote.mu.Lock()
+	defer f.remote.mu.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out firewall.Plan
+	if !f.available || f.problem != "" || f.state.Schema != 1 {
+		return out, fault.Unavailable("宿主机防火墙执行尚未由本机确认或需恢复")
+	}
+	if f.activeLocked() || f.dns.checkpoint != nil && dnsActive(f.dns.checkpoint.Status.State) {
+		return out, fault.Conflict("存在未完成的可达性变更")
+	}
+	if in.Version < 1 {
+		return out, fault.Invalid("须提供已保存的防火墙策略版本")
+	}
+	normalized, err := in.Policy.Normalize()
+	if err != nil {
+		return out, err
+	}
+	if normalized.Backend != "direct-nftables" {
+		return out, fault.Unavailable("当前执行器仅支持 direct-nftables")
+	}
+	protections, listeners, source, err := firewallProtections(ctx, normalized, f.sshMode, f.remote, connection)
+	if err != nil {
+		return out, fault.Unavailable(err.Error())
+	}
+	program, err := firewall.CompileNFTProtected(normalized, protections)
+	if err != nil {
+		return out, err
+	}
+	current, err := f.snapshot(f.state.Confirmed)
+	if err != nil {
+		return out, fault.Unavailable("无法完整证明当前受管对象")
+	}
+	if !current.TableExists || current.NamespaceID != f.state.CurrentKernel.NamespaceID || current.Fingerprint != f.state.CurrentKernel.Fingerprint {
+		return out, fault.Conflict("受管对象已变化，须先恢复或核对")
+	}
+	// Manager/legacy checks use a fresh bounded collection, not the HTTP cache.
+	observer := firewallObserver{scope: "host", ctx: ctx, dataDir: f.dataDir}
+	observed := observer.collect(ctx)
+	if err := checkFirewallManagers(observed); err != nil {
+		return out, err
+	}
+	for _, r := range normalized.Rules {
+		if r.Enabled && r.Interface != "" {
+			found := false
+			for _, name := range observed.Interfaces {
+				if name == r.Interface {
+					found = true
+				}
+			}
+			if !found {
+				return out, fault.Conflict("策略绑定的接口未观察到")
+			}
+		}
+	}
+	id := secure.ID()
+	policyHash, err := firewall.PolicyDigest(normalized)
+	if err != nil {
+		return out, err
+	}
+	record := &firewallPolicyRecord{PlanID: id, Version: in.Version, Policy: normalized, PolicyHash: policyHash, ProgramHash: program.Hash, Protections: protections, Marker: "nginxpanel:policy:v1:" + f.state.Owner + ":" + id + ":" + program.Hash}
+	batch, err := firewall.PrepareNFTManaged(program, current, record.Marker)
+	if err != nil {
+		return out, err
+	}
+	if current.Bytes+len(batch.Wire)+len(program.Rules)*64+4096 > nftReadBytes {
+		return out, fault.Unavailable("现有快照与候选规模超过完整后读预算")
+	}
+	for key, p := range f.plans {
+		if time.Now().Unix() >= p.view.ExpiresAt {
+			delete(f.plans, key)
+		}
+	}
+	if len(f.plans) >= 8 {
+		return out, fault.New(429, "FIREWALL_PLAN_LIMIT", "待执行计划已达 8 份，请等待过期")
+	}
+	out = firewall.Plan{ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: current, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: batch.Hash, TransactionBytes: len(batch.Wire), GeneratedRules: len(program.Rules)}
+	f.plans[id] = firewallPrivatePlan{view: out, record: record}
+	return out, nil
+}

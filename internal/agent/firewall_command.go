@@ -27,6 +27,8 @@ func (w *firewallOutput) Write(p []byte) (int, error) {
 func firewallRead(ctx context.Context, name, action string, limit int) ([]byte, error) {
 	var args []string
 	switch {
+	case name == "sshd" && action == "effective":
+		args = []string{"-T"}
 	case name == "nft" && action == "rules":
 		args = []string{"--json", "--numeric", "--terse", "list", "ruleset"}
 	case name == "ufw" && action == "status":

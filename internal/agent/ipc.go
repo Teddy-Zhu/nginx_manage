@@ -52,6 +52,9 @@ type Server struct {
 	DataDir          string
 	DNSOwner         string
 	DNSScope         string
+	FirewallScope    string
+	FirewallOwner    string
+	FirewallSSH      string
 	ComponentScope   string
 	ReleaseTrust     string
 	ReleaseToken     string
@@ -170,7 +173,14 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := remote.open(); err != nil {
 		return err
 	}
-	dns.ReachabilityBlocked = remote.pending
+	fw := &hostFirewall{dataDir: s.DataDir, sshMode: s.FirewallSSH, available: !s.Dev && s.FirewallScope == "host" && s.FirewallOwner == "direct-nftables" && (s.FirewallSSH == "openssh" || s.FirewallSSH == "none") && s.MaintenanceScope == "host", journal: s.Journal, remote: remote, dns: dns}
+	defer fw.Close()
+	if err := fw.Open(); err != nil {
+		return err
+	}
+	remote.firewallPending = fw.pending
+	dns.ReachabilityBlocked = func() bool { return remote.pending() || fw.pending() }
+	s.firewallRuntimeHandlers(mux, fw)
 	s.listenerHandlers(mux, remote)
 	remoteCtx, stopRemote := context.WithCancel(ctx)
 	remoteDone := make(chan struct{})
@@ -180,6 +190,10 @@ func (s *Server) Run(ctx context.Context) error {
 	dnsDone := make(chan struct{})
 	go func() { defer close(dnsDone); dns.Run(dnsCtx) }()
 	defer func() { stopDNS(); <-dnsDone }()
+	fwCtx, stopFirewall := context.WithCancel(ctx)
+	fwDone := make(chan struct{})
+	go func() { defer close(fwDone); fw.Run(fwCtx) }()
+	defer func() { stopFirewall(); <-fwDone }()
 	s.dnsHandlers(mux, dns, ctx)
 	s.http01Handlers(mux)
 	s.logHandlers(mux)
