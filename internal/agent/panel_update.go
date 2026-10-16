@@ -142,7 +142,7 @@ func updatePanel(ctx context.Context, in PanelUpdateInput, id, epoch string, aut
 			return w.r, err
 		}
 		if panelUpdateTerminal(w.r) {
-			return panelUpdateResult(w.r)
+			return w.finishCleanup(ctx)
 		}
 		if panelUpdateFinalized(w.r) {
 			return w.awaitRelease(ctx)
@@ -356,7 +356,7 @@ func (w *panelUpdateWorker) forward(ctx context.Context) error {
 
 func (w *panelUpdateWorker) awaitRelease(ctx context.Context) (Record, error) {
 	if panelUpdateTerminal(w.r) {
-		return panelUpdateResult(w.r)
+		return w.finishCleanup(ctx)
 	}
 	wait, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -371,7 +371,8 @@ func (w *panelUpdateWorker) awaitRelease(ctx context.Context) (Record, error) {
 			if err != nil {
 				return w.r, err
 			}
-			return panelUpdateResult(result)
+			w.r = result
+			return w.finishCleanup(ctx)
 		}
 		select {
 		case <-wait.Done():

@@ -1847,6 +1847,14 @@ export interface components {
             epoch: string;
             authorization_until: number;
         };
+        PanelUpdateCleanup: {
+            state: string;
+            error: string;
+            entries: number;
+            bytes: number;
+            attempted_at: number;
+            completed_at: number;
+        };
         PanelUpdateOperation: {
             authorization: components["schemas"]["PanelUpdateAuthorization"];
             protocol: number;
@@ -1870,6 +1878,7 @@ export interface components {
             active: boolean;
             finalized: boolean;
             release_acknowledged: boolean;
+            cleanup: components["schemas"]["PanelUpdateCleanup"];
         };
         PanelUpdateTask: {
             id: string;

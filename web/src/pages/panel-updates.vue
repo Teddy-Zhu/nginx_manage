@@ -25,6 +25,8 @@ const held = computed(() => maintenance.value?.phase === "held" && maintenance.v
 const prepared = computed(() => preparations.value.filter((t) => t.action === "prepare" && t.state === "succeeded" && t.result?.runtime_ready && t.result.panel && t.result.release));
 const chosen = computed(() => prepared.value.find((t) => t.id === selected.value));
 const active = computed(() => tasks.value.some((t) => !["succeeded", "failed", "rolled_back", "cancelled"].includes(t.state)));
+const cleanupPending = computed(() => tasks.value.some((t) => t.result?.release_acknowledged && (t.result.cleanup.state !== "done" || t.result.active)));
+const cleanupStates: Record<string, string> = { pending: "等待清理", running: "清理中", blocked: "清理待处理", done: "已清理" };
 const canCreate = computed(() => canWrite.value && held.value && !!chosen.value?.result?.panel?.automatic_rollback && !active.value && !busy.value);
 const states: Record<string, string> = { queued: "排队中", running: "更新中", compensating: "恢复原版本", waiting_confirmation: "确认维护释放", recovery_required: "待恢复", succeeded: "更新完成", failed: "更新未完成", rolled_back: "已恢复原版本", cancelled: "已取消" };
 const stages: Record<string, string> = { queued: "等待执行", capturing: "保存一致性快照", stopping: "停止原版本", selecting: "切换版本", starting: "启动新版本", checking: "确认就绪", rollback_stopping: "停止更新进程", rollback_selecting: "选择原版本", restoring: "恢复匹配数据", rollback_starting: "启动原版本", rollback_checking: "确认原版本就绪", committed: "更新已提交", compensated: "原版本已恢复", aborted: "更新已中止", agent_submit_pending: "提交更新", control_pending: "提交续办授权", maintenance_unconfirmed: "等待原维护会话", epoch_changed: "需要重新授权", authorization_expired: "启动授权已过期", agent_unconfirmed: "等待独立事务确认", control_unconfirmed: "等待续办确认", control_rejected: "续办未受理", preflight_unconfirmed: "等待执行条件确认", preflight_rejected: "未通过执行条件检查", operation_missing: "独立记录待本机恢复", operation_mismatch: "独立记录待本机核对", intent_mismatch: "原更新意图待本机核对", control_mismatch: "续办记录待本机核对" };
@@ -54,7 +56,7 @@ async function resume(t: PanelUpdateTask) {
   await run(async () => { await api.resumePanelUpdate(t.id, keyFor({ id: t.id, sequence: t.result?.sequence ?? 0, command: "resume" })); keyFor = useIdempotency(); }, "原更新续办请求已受理");
   await load();
 }
-onMounted(async () => { await load(); if (!closed) timer = setInterval(() => { if (active.value || maintenance.value?.phase !== "open") void load(); }, 3000); });
+onMounted(async () => { await load(); if (!closed) timer = setInterval(() => { if (active.value || cleanupPending.value || maintenance.value?.phase !== "open") void load(); }, 3000); });
 onUnmounted(() => { closed = true; controller?.abort(); if (timer) clearInterval(timer); });
 </script>
 <template>
@@ -79,6 +81,10 @@ onUnmounted(() => { closed = true; controller?.abort(); if (timer) clearInterval
         <p v-if="task.result">数据库版本 {{ task.result.before_schema }} → {{ task.result.target_schema }} · {{ task.result.active ? "服务执行中" : task.result.finalized ? "事务已结束" : "服务未运行" }}</p>
         <NAlert v-if="task.error" :type="task.state === 'rolled_back' ? 'info' : 'warning'">{{ task.error }}</NAlert>
         <NAlert v-if="task.result?.finalized && !task.result.release_acknowledged" type="info">更新结果已保存，正在确认维护释放。</NAlert>
+        <template v-if="task.result?.release_acknowledged">
+          <p class="muted">恢复材料：{{ cleanupStates[task.result.cleanup.state] ?? task.result.cleanup.state }}<span v-if="task.result.cleanup.completed_at"> · {{ date(task.result.cleanup.completed_at) }}</span></p>
+          <NAlert v-if="task.result.cleanup.error" type="warning">{{ task.result.cleanup.error }}</NAlert>
+        </template>
         <div v-if="canResume(task)"><NPopconfirm positive-text="续办原更新" @positive-click="resume(task)"><template #trigger><NButton :loading="busy">续办原更新</NButton></template>确认继续此更新事务？系统将按原进度完成更新或恢复原版本。</NPopconfirm></div>
       </article>
     </section>

@@ -1247,6 +1247,16 @@ type PanelUpdateAuthorization struct {
 	AuthorizationUntil int64            `json:"authorization_until"`
 }
 
+// PanelUpdateCleanup defines model for PanelUpdateCleanup.
+type PanelUpdateCleanup struct {
+	State       string `json:"state"`
+	Error       string `json:"error"`
+	Entries     int64  `json:"entries"`
+	Bytes       int64  `json:"bytes"`
+	AttemptedAt int64  `json:"attempted_at"`
+	CompletedAt int64  `json:"completed_at"`
+}
+
 // PanelUpdateOperation defines model for PanelUpdateOperation.
 type PanelUpdateOperation struct {
 	Authorization       PanelUpdateAuthorization `json:"authorization"`
@@ -1271,6 +1281,7 @@ type PanelUpdateOperation struct {
 	Active              bool                     `json:"active"`
 	Finalized           bool                     `json:"finalized"`
 	ReleaseAcknowledged bool                     `json:"release_acknowledged"`
+	Cleanup             PanelUpdateCleanup       `json:"cleanup"`
 }
 
 // PanelUpdateTask defines model for PanelUpdateTask.

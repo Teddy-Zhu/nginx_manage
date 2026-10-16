@@ -156,6 +156,10 @@ func (s *Server) Run(ctx context.Context) error {
 	s.componentHandlers(mux, componentManager)
 	s.installationHandlers(mux)
 	s.panelUpdateHandlers(mux)
+	cleanupCtx, stopCleanup := context.WithCancel(ctx)
+	cleanupDone := make(chan struct{})
+	go func() { defer close(cleanupDone); s.runPanelUpdateCleanup(cleanupCtx) }()
+	defer func() { stopCleanup(); <-cleanupDone }()
 	dns := &HostDNS{Dir: filepath.Join(s.DataDir, "agent", "reachability"), Owner: s.DNSOwner, Scope: s.DNSScope, Dev: s.Dev, Journal: s.Journal}
 	defer dns.Close()
 	if err := dns.Open(); err != nil {

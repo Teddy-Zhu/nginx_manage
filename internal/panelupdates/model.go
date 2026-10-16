@@ -83,9 +83,42 @@ type Operation struct {
 	Active              bool    `json:"active"`
 	Finalized           bool    `json:"finalized"`
 	ReleaseAcknowledged bool    `json:"release_acknowledged"`
+	Cleanup             Cleanup `json:"cleanup"`
+}
+
+// Cleanup reports recovery-material disposal independently of the update outcome.
+type Cleanup struct {
+	State       string `json:"state"`
+	Error       string `json:"error"`
+	Entries     int    `json:"entries"`
+	Bytes       int64  `json:"bytes"`
+	AttemptedAt int64  `json:"attempted_at"`
+	CompletedAt int64  `json:"completed_at"`
+}
+
+func (c Cleanup) Validate(released bool) error {
+	if len(c.Error) > 1024 || c.Entries < 0 || c.Entries > 128 || c.Bytes < 0 || c.Bytes > 8<<30 || c.AttemptedAt < 0 || c.CompletedAt < 0 {
+		return errors.New("恢复材料清理回执无效")
+	}
+	switch c.State {
+	case "pending":
+		if c != (Cleanup{State: "pending"}) {
+			return errors.New("待清理回执包含执行结果")
+		}
+	case "running", "blocked", "done":
+		if !released || c.AttemptedAt <= 0 || c.State == "blocked" && c.Error == "" || c.State != "blocked" && c.Error != "" || c.State == "done" && c.CompletedAt < c.AttemptedAt || c.State != "done" && c.CompletedAt != 0 {
+			return errors.New("清理进度与维护释放不一致")
+		}
+	default:
+		return errors.New("未知恢复材料清理状态")
+	}
+	return nil
 }
 
 func (o Operation) Validate(id string, in Input) error {
+	if err := o.Cleanup.Validate(o.ReleaseAcknowledged); err != nil {
+		return err
+	}
 	if o.Authorization.Validate() != nil || o.Authorization.OperationID != id || o.Authorization.Input != in || o.Authorization.Sequence != o.Sequence || o.Authorization.Command != o.Command {
 		return errors.New("更新回执缺少匹配的原启动授权")
 	}

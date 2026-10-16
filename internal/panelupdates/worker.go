@@ -17,6 +17,7 @@ func (s *Service) Run(ctx context.Context) error {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	reported := false
+	nextCleanup := time.Time{}
 	for {
 		if ctx.Err() != nil {
 			return nil
@@ -25,6 +26,12 @@ func (s *Service) Run(ctx context.Context) error {
 			call, cancel := context.WithTimeout(ctx, 30*time.Second)
 			err := s.next(call)
 			cancel()
+			if err == nil && time.Now().After(nextCleanup) {
+				call, cancel = context.WithTimeout(ctx, 30*time.Second)
+				err = s.refreshCleanup(call)
+				cancel()
+				nextCleanup = time.Now().Add(15 * time.Second)
+			}
 			if err != nil && ctx.Err() == nil {
 				if !reported {
 					slog.Warn("面板更新任务对账失败", "error", err)
@@ -215,12 +222,72 @@ func (s *Service) store(ctx context.Context, t Task, base dbgen.Task, state, sta
 		return nil
 	}
 	if op != nil {
-		if _, err = tx.ExecContext(ctx, "UPDATE panel_updates SET result=? WHERE task_id=?", s.Vault.Seal(raw, "panel-update:result:"+t.ID), t.ID); err != nil {
+		pending := op.Cleanup.State != "done" || op.Active
+		if _, err = tx.ExecContext(ctx, "UPDATE panel_updates SET result=?,cleanup_pending=? WHERE task_id=?", s.Vault.Seal(raw, "panel-update:result:"+t.ID), pending, t.ID); err != nil {
+			return err
+		}
+	} else if state == "failed" || state == "cancelled" {
+		if _, err = tx.ExecContext(ctx, "UPDATE panel_updates SET cleanup_pending=0 WHERE task_id=?", t.ID); err != nil {
 			return err
 		}
 	}
 	if state != base.State && (state == "succeeded" || state == "failed" || state == "rolled_back" || state == "recovery_required") {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,'panel-update-worker','system','panel.update',?,?,?)", secure.ID(), t.ID, state, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// A terminal task only refreshes its root cleanup receipt. Cleanup cannot reopen
+// maintenance or change the already persisted business outcome.
+func (s *Service) refreshCleanup(ctx context.Context) error {
+	t, _, err := s.read(s.DB.QueryRowContext(ctx, "SELECT "+taskColumns+taskJoin+"WHERE i.cleanup_pending=1 AND t.state IN ('succeeded','failed','rolled_back') ORDER BY i.cleanup_checked_at,t.id LIMIT 1"))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = s.DB.ExecContext(ctx, "UPDATE panel_updates SET cleanup_checked_at=? WHERE task_id=? AND request_id=?", time.Now().Unix(), t.ID, t.requestID); err != nil {
+		return err
+	}
+	op, err := s.Agent.PanelUpdate(ctx, t.OperationID)
+	if err != nil {
+		return err
+	}
+	if err = op.Validate(t.OperationID, t.Input); err != nil {
+		return err
+	}
+	if t.Result == nil || op.IntentSHA256 != t.Result.IntentSHA256 || !op.Finalized || !op.ReleaseAcknowledged || op.State != t.State || op.Stage != t.Stage {
+		return errors.New("终态更新的清理回执偏离原结果")
+	}
+	raw, err := json.Marshal(op)
+	if err != nil {
+		return err
+	}
+	if len(raw) > 12<<10 {
+		return errors.New("独立更新清理回执超出持久化预算")
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	changed, err := tx.ExecContext(ctx, "UPDATE tasks SET observed_revision=?,updated_at=? WHERE id=? AND state=? AND stage=? AND EXISTS(SELECT 1 FROM panel_updates WHERE task_id=? AND request_id=? AND cleanup_pending=1)", secure.Hash(raw), time.Now().Unix(), t.ID, t.State, t.Stage, t.ID, t.requestID)
+	if err != nil {
+		return err
+	}
+	n, err := changed.RowsAffected()
+	if err != nil || n == 0 {
+		return err
+	}
+	pending := op.Cleanup.State != "done" || op.Active
+	if _, err = tx.ExecContext(ctx, "UPDATE panel_updates SET result=?,cleanup_pending=? WHERE task_id=?", s.Vault.Seal(raw, "panel-update:result:"+t.ID), pending, t.ID); err != nil {
+		return err
+	}
+	if t.Result.Cleanup.State != op.Cleanup.State {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,'panel-update-worker','system','panel.update.cleanup',?,?,?)", secure.ID(), t.ID, op.Cleanup.State, time.Now().Unix()); err != nil {
 			return err
 		}
 	}

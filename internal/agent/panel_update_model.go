@@ -66,6 +66,12 @@ type PanelUpdateOperation struct {
 	AbortObservation    *PanelServiceObservation   `json:"abort_observation,omitempty"`
 	Failure             string                     `json:"failure"`
 	ReleaseAcknowledged bool                       `json:"release_acknowledged"`
+	Cleanup             *PanelUpdateCleanup        `json:"cleanup,omitempty"`
+}
+
+type PanelUpdateCleanup struct {
+	Status panelupdates.Cleanup       `json:"status"`
+	Plan   *panelrecovery.CleanupPlan `json:"plan,omitempty"`
 }
 
 func panelUpdateHash(id string, in PanelUpdateIntent) string {
@@ -251,6 +257,9 @@ func validPanelUpdate(r Record) error {
 	}
 	if p.ReleaseAcknowledged && (!panelUpdateFinalized(r) || r.State != panelUpdateOutcome(r)) || !p.ReleaseAcknowledged && panelUpdateFinalized(r) && r.State != "waiting_confirmation" {
 		return errors.New("更新结果与维护释放回执不一致")
+	}
+	if err := validPanelUpdateCleanup(r); err != nil {
+		return err
 	}
 	return nil
 }

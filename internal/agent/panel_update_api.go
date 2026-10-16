@@ -26,6 +26,7 @@ func hostedPanelUpdate(r Record, active bool) (panelupdates.Operation, error) {
 	i, a := p.Intent, p.Authorizations[len(p.Authorizations)-1].Request
 	in := panelUpdateAPIInput(i.Input)
 	o := panelupdates.Operation{Authorization: a, Protocol: Protocol, ID: r.OperationID, Input: in, RequestHash: panelupdates.Hash(r.OperationID, in), IntentSHA256: r.RequestHash, Sequence: a.Sequence, Command: a.Command, State: r.State, Stage: r.Stage, Error: r.Error, Failure: p.Failure, BeforeID: i.BeforeID, TargetID: i.TargetID, SnapshotID: i.SnapshotID, BeforeSchema: i.BeforeSchema, TargetSchema: i.TargetSchema, Deadline: r.Deadline, UpdatedAt: r.UpdatedAt, Active: active, Finalized: panelUpdateFinalized(r), ReleaseAcknowledged: p.ReleaseAcknowledged}
+	o.Cleanup = panelUpdateCleanupStatus(p)
 	return o, o.Validate(r.OperationID, in)
 }
 

@@ -117,7 +117,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-selection-status \
 
 选择前持久保存 `panel.select` 独立记录，固定原版本、目标版本、运行绑定散列、批准散列和快照。指针仅允许从原版本原子切换至目标；中断后以原操作续行，第三种版本或授权偏离时停止覆盖。未完成记录阻止释放维护会话；已成功请求的重放仅返回原记录，不重新覆盖后续版本选择。临时指针按操作使用固定名称，与初始化和暂存共用发布锁。
 
-`version_selected` 仅表示程序指针已持久化；本入口不重启服务、打开数据库或释放维护会话，不报告应用健康。独立 worker 的自动编排、匹配程序与数据的自动回滚及成功清理仍待接入；不应将此命令作为已完成的升级 API。尚未运行以上入口、服务、安装器、构建或测试，统一留到 P5。
+`version_selected` 仅表示程序指针已持久化；本入口不重启服务、打开数据库或释放维护会话，不报告应用健康。独立 worker 的自动编排、匹配程序与数据的自动回滚及清理见下文；本命令仅提供程序选择。尚未运行以上入口、服务、安装器、构建或测试，统一留到 P5。
 
 ## 面板进程维护
 
@@ -141,7 +141,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-service-operation \
 
 启动原版本时省略 `--panel-selection`；启动新版本须关联该次停机后的完整版本选择记录，并再次核对当前公钥与批准。启动意图落盘、确认数据恢复标记已解除后，才移除匹配原停机事务的标记并启动固定入口。中断后按原操作续行，先查询实际受管状态；同一 launcher boot 中只有明确不存在原回执才派发，跨 boot 的派发先持久记录并有数量上限。未知进程身份或结果保留 `recovery_required`。成功请求重放返回历史记录，后来的进程与停机标记不被历史重放改变。
 
-持久停机标记或未完成的进程记录会阻止维护释放。`started` 表示已观测到目标进程实例；就绪检查见下文。完整程序/数据回滚、升级提交及清理仍待独立更新 worker 编排。尚未执行控制入口、systemd、launcher、服务、构建或测试，统一留到 P5。
+持久停机标记或未完成的进程记录会阻止维护释放。`started` 表示已观测到目标进程实例；就绪检查见下文。完整程序/数据回滚、升级提交及清理由独立更新 worker 编排，见下文。尚未执行控制入口、systemd、launcher、服务、构建或测试，统一留到 P5。
 
 ## 面板就绪观察
 
@@ -164,13 +164,13 @@ sudo /opt/nginxpanel/current/nginxpanel panel-readiness \
 
 ## 独立面板更新事务
 
-`update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 20。
+`update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 21。
 
 原生安装登记 v11 为 native 和 Docker 面板统一安装 `nginxpanel-update@.service`。该 root 服务独立于 `serve` 和 Agent 的生命周期，只接受原操作 UUID，由固定 `panel-update-worker` 加载 root 记录；请求不能指定可执行程序、数据目录或信任文件。服务不自动重启，最长运行 40 分钟，收到停止信号后留出补偿时间。运行前核对安装意图、ready、root 服务文件及 systemd 实际加载的片段、账户、类型、drop-in 和 reload 状态。
 
-Agent 20 提供内部 IPC `POST /v1/panel/updates` 与 `GET /v1/panel/updates/{id}`，沿用统一响应封装。新建须传递已签名暂存的 `plan_id`、原 `maintenance_id`、`prerelease`、操作 UUID、发起人 `actor`、原请求 `request_id`、当前 epoch、连续 `sequence` 和五分钟内的 `authorization_until`；首个 command 为 `update`，后续为 `resume`。Agent 先持久保存完整原意图和逐次授权，再启动固定服务。启动授权由 worker 在锁内一次性认领。相同序号与内容只查询原操作，不能重复启动；启动结果未知或服务停止后须使用下一个序号显式续办。历史授权不可修改，续办不改变原目标、快照及总执行期限。过期启动授权不能触发后续变更，已经运行的事务仍按原补偿规则处理。
+Agent 21 提供内部 IPC `POST /v1/panel/updates` 与 `GET /v1/panel/updates/{id}`，沿用统一响应封装。新建须传递已签名暂存的 `plan_id`、原 `maintenance_id`、`prerelease`、操作 UUID、发起人 `actor`、原请求 `request_id`、当前 epoch、连续 `sequence` 和五分钟内的 `authorization_until`；首个 command 为 `update`，后续为 `resume`。Agent 先持久保存完整原意图和逐次授权，再启动固定服务。启动授权由 worker 在锁内一次性认领。相同序号与内容只查询原操作，不能重复启动；启动结果未知或服务停止后须使用下一个序号显式续办。历史授权不可修改，续办不改变原目标、快照及总执行期限。过期启动授权不能触发后续变更，已经运行的事务仍按原补偿规则处理。
 
-查询同时核对实际服务状态与 root 原记录；失去运行进程的未完成事务保留 `recovery_required`，不伪造成功。已提交或补偿完成的事务只收取原维护释放回执，查询可补齐此收尾记录，不能触发停机、切换或恢复。上述入口为 Agent 内部合同；面向用户的 Web/API 任务已接入，救援材料清理仍待补齐。
+查询同时核对实际服务状态与 root 原记录；失去运行进程的未完成事务保留 `recovery_required`，不伪造成功。已提交或补偿完成的事务只收取原维护释放回执，查询可补齐此收尾记录，不能触发停机、切换或恢复。上述入口为 Agent 内部合同；面向用户的 Web/API 任务与更新结束后的救援材料清理已接入。
 
 
 Web“组件准备”可单独选择面板；准备过程除验证及下载签名静态面板产物外，还将同版程序与前端暂存到持久版本目录，并返回版本标识、数据库版本与自动回滚声明。面板不与 Nginx/Fail2ban 共用准备计划，暂存不切换当前版本或启动新程序。安装登记 v11 允许 Agent 仅在受管 runtime 目录完成此暂存。
@@ -196,7 +196,11 @@ sudo /opt/nginxpanel/current/nginxpanel panel-update-status \
 
 `committed`、`compensated` 或无副作用的 `aborted` 是恢复写入的持久授权点，先进入 `waiting_confirmation`。维护服务通过 Agent 的统一状态读取 `completion`，持久记录释放意图并由原会话协调释放；worker 核对独立释放回执后设置 `release_acknowledged` 和最终结果。已提交但释放超时只等待或续行原事务，不自动恢复旧快照；提交后的程序重启按正常已提交版本处理。失败与完整补偿均保留原失败原因，并以失败退出状态报告。
 
-当前实现为独立 root CLI；Web/API 更新任务、专用服务托管、成功后的快照/恢复暂存清理仍待接入，暂时保留恢复材料并继续受既有容量上限约束。尚未执行 worker、安装器、服务、构建、生成器或测试，待 P5 集中验证。
+独立 root CLI、Web/API 更新任务及专用服务托管已接入。更新结果与原维护释放确认后清理本事务的快照及恢复暂存；未完成事务继续保留恢复材料并受既有容量上限约束。尚未执行 worker、安装器、服务、构建、生成器或测试，待 P5 集中验证。
+
+恢复材料清理仅在 `release_acknowledged=true` 后开始；`cleanup.state` 为 `pending/running/blocked/done`，错误、资源数量、字节数及时间独立于更新结果返回。删除前将只属于原快照 UUID 和原恢复操作 UUID 的路径、inode、权限、大小、内容散列写入 root 父记录。每次续清理先检查整个剩余目录树，再逐项删除，允许原清单中的资源已被前次清理删除；遇到未知文件、链接、身份或内容变化则保留并报告。Agent 每 30 秒择一收尾，失败至少间隔 10 分钟重试，单次处理最多 5 分钟；重启继续使用原清单。Web 终态任务仍同步清理状态，不重开维护、不覆盖业务写入、不改变成功或补偿结果。
+
+清理保留 root 审计记录、共享 `recovery.key`、当前/前一程序及前端版本。`recovery_required` 的材料不按 TTL 删除。未获原快照批准、助手目录残留、无法归属的 `.snapshot-*` 暂存及其他未知资源不自动删除，须本机核对；清理完成仅指原批准清单，不能视为全目录垃圾回收。清理无需打开当前数据库或长时间持有配置写入准入锁。数据库迁移为 19，Agent 合同为 21，安装登记仍为 v11。
 
 ## 本机面板恢复快照
 
@@ -237,7 +241,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-restore-status \
 
 中断后以原恢复 UUID 和快照 UUID 继续，只接受保存的原状态或已批准目标；发现其他内容时进入 `recovery_required` 并停止覆盖。失败保留独立记录、前后副本和启动标记，阻止面板启动及维护释放。完整数据安装先记为 `files_restored`，随后解除启动标记；已完成请求重放只返回原结果，不再次覆盖已启动面板的数据。已批准的完整解密源可独立于运行中的面板、业务密钥和原加密输入续行，部分解密或缺失批准不能使用。
 
-`files_restored` 只说明数据安装完成；版本切换、readiness、当前 Nginx 状态确认及成功清理仍由后续独立更新 worker 接入。恢复保留维护会话，不重启 Nginx/Fail2ban。尚未运行恢复命令、安装器、服务、构建或测试，统一留到 P5。
+`files_restored` 只说明数据安装完成；版本切换、readiness 与清理由独立更新 worker 编排，见上文。恢复保留维护会话，不重启 Nginx/Fail2ban。尚未运行恢复命令、安装器、服务、构建或测试，统一留到 P5。
 
 ## 组件页面与任务
 
