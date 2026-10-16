@@ -1855,6 +1855,87 @@ type FirewallProtectionObservation struct {
 	Protections  []FirewallProtection `json:"protections"`
 	Reason       string               `json:"reason"`
 }
+type Fail2banDesiredJail struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Enabled    bool     `json:"enabled"`
+	Template   string   `json:"template"`
+	ResourceId string   `json:"resource_id"`
+	Action     string   `json:"action"`
+	BanTime    int64    `json:"ban_time"`
+	FindTime   int64    `json:"find_time"`
+	MaxRetry   int      `json:"max_retry"`
+	IgnoreIps  []string `json:"ignore_ips"`
+}
+type Fail2banPolicy struct {
+	Jails []Fail2banDesiredJail `json:"jails"`
+}
+type Fail2banPolicyView struct {
+	Version   int64          `json:"version"`
+	Policy    Fail2banPolicy `json:"policy"`
+	UpdatedAt int64          `json:"updated_at"`
+}
+type Fail2banPolicyInput struct {
+	BaseVersion int64          `json:"base_version"`
+	Policy      Fail2banPolicy `json:"policy"`
+}
+type Fail2banTemplate struct {
+	Id          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+	Format      string `json:"format"`
+	BanTime     int64  `json:"ban_time"`
+	FindTime    int64  `json:"find_time"`
+	MaxRetry    int    `json:"max_retry"`
+}
+type Fail2banPreviewInput struct {
+	Version int64 `json:"version"`
+}
+type Fail2banJailPreview struct {
+	Id          string   `json:"id"`
+	JailName    string   `json:"jail_name"`
+	Enabled     bool     `json:"enabled"`
+	SourceId    string   `json:"source_id"`
+	SourceReady bool     `json:"source_ready"`
+	Errors      []string `json:"errors"`
+}
+type Fail2banPolicyPreview struct {
+	Version    int64                 `json:"version"`
+	PolicyHash string                `json:"policy_hash"`
+	CanApply   bool                  `json:"can_apply"`
+	Entries    []Fail2banJailPreview `json:"entries"`
+	Warnings   []string              `json:"warnings"`
+}
+type MigrationFail2banInput struct {
+	Mode        string `json:"mode"`
+	BaseVersion *int64 `json:"base_version,omitempty"`
+}
+type MigrationFail2banPlan struct {
+	Mode           string   `json:"mode"`
+	State          string   `json:"state"`
+	BaseVersion    int64    `json:"base_version"`
+	SavedVersion   int64    `json:"saved_version"`
+	SourceJails    int      `json:"source_jails"`
+	PreservedJails int      `json:"preserved_jails"`
+	ReplacedJails  int      `json:"replaced_jails"`
+	TotalJails     int      `json:"total_jails"`
+	PolicyHash     string   `json:"policy_hash"`
+	Warnings       []string `json:"warnings"`
+}
+type SetFail2banPolicyParams struct {
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+type PreviewFail2banParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+type SetFail2banPolicyJSONBody = Fail2banPolicyInput
+type SetFail2banPolicyJSONRequestBody = SetFail2banPolicyJSONBody
+type PreviewFail2banJSONBody = Fail2banPreviewInput
+type PreviewFail2banJSONRequestBody = PreviewFail2banJSONBody
+
 type Fail2banBindingView struct {
 	State         string `json:"state"`
 	Id            string `json:"id"`
@@ -2360,6 +2441,7 @@ type MigrationExportInput struct {
 
 // MigrationImportInput defines model for MigrationImportInput.
 type MigrationImportInput struct {
+	Fail2ban    *MigrationFail2banInput `json:"fail2ban,omitempty"`
 	Firewall    *MigrationFirewallInput `json:"firewall,omitempty"`
 	BaseVersion int64                   `json:"base_version"`
 	Content     []byte                  `json:"content"`
@@ -2388,6 +2470,7 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
+	Fail2ban      *MigrationFail2banPlan     `json:"fail2ban,omitempty"`
 	Firewall      *MigrationFirewallPlan     `json:"firewall,omitempty"`
 	BaseVersion   int64                      `json:"base_version"`
 	CanApply      bool                       `json:"can_apply"`
@@ -2409,6 +2492,7 @@ type MigrationPlan struct {
 
 // MigrationPullInput defines model for MigrationPullInput.
 type MigrationPullInput struct {
+	Fail2ban    *MigrationFail2banInput `json:"fail2ban,omitempty"`
 	Firewall    *MigrationFirewallInput `json:"firewall,omitempty"`
 	BaseVersion int64                   `json:"base_version"`
 	EnableNginx bool                    `json:"enable_nginx"`
@@ -2422,6 +2506,7 @@ type MigrationPullInputMode string
 
 // MigrationPushInput defines model for MigrationPushInput.
 type MigrationPushInput struct {
+	Fail2ban     *MigrationFail2banInput   `json:"fail2ban,omitempty"`
 	Firewall     *MigrationFirewallInput   `json:"firewall,omitempty"`
 	BaseVersion  *int64                    `json:"base_version,omitempty"`
 	Dependencies *MigrationDependencyInput `json:"dependencies,omitempty"`
@@ -2506,6 +2591,7 @@ type MigrationFirewallPlan struct {
 
 // MigrationSelection defines model for MigrationSelection.
 type MigrationSelection struct {
+	Fail2ban       bool `json:"fail2ban"`
 	Firewall       bool `json:"firewall"`
 	Automation     bool `json:"automation"`
 	Certificates   bool `json:"certificates"`
@@ -4000,6 +4086,10 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	GetFail2banPolicy(w http.ResponseWriter, r *http.Request)
+	SetFail2banPolicy(w http.ResponseWriter, r *http.Request, params SetFail2banPolicyParams)
+	GetFail2banTemplates(w http.ResponseWriter, r *http.Request)
+	PreviewFail2ban(w http.ResponseWriter, r *http.Request, params PreviewFail2banParams)
 	GetFail2banInstance(w http.ResponseWriter, r *http.Request)
 	GetFail2banJail(w http.ResponseWriter, r *http.Request, name string)
 	// (GET /fail2ban)
@@ -6727,6 +6817,51 @@ func (siw *ServerInterfaceWrapper) RollbackFirewall(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+func (siw *ServerInterfaceWrapper) GetFail2banPolicy(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banPolicy(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) SetFail2banPolicy(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := SetFail2banPolicyParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.SetFail2banPolicy(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) PreviewFail2ban(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := PreviewFail2banParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.PreviewFail2ban(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+
+func (siw *ServerInterfaceWrapper) GetFail2banTemplates(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banTemplates(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
 func (siw *ServerInterfaceWrapper) GetFail2banInstance(w http.ResponseWriter, r *http.Request) {
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banInstance(w, r) }))
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10699,6 +10834,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/confirm", wrapper.ConfirmFirewall)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/rollback", wrapper.RollbackFirewall)
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/policy", wrapper.GetFail2banPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/fail2ban/policy", wrapper.SetFail2banPolicy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/templates", wrapper.GetFail2banTemplates)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/preview", wrapper.PreviewFail2ban)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/instance", wrapper.GetFail2banInstance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/jails/{name}", wrapper.GetFail2banJail)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban", wrapper.GetFail2ban)

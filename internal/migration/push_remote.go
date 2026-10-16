@@ -121,6 +121,17 @@ func sanitizePushPlan(plan Plan, remote Remote, passphrase string) (Plan, error)
 		}
 		return text
 	}
+	if f := plan.Fail2ban; f != nil {
+		if err := validateFail2banPreview(f); err != nil {
+			return Plan{}, err
+		}
+		copy := *f
+		copy.Warnings = append([]string{}, f.Warnings...)
+		for i := range copy.Warnings {
+			copy.Warnings[i] = redact(copy.Warnings[i])
+		}
+		plan.Fail2ban = &copy
+	}
 	if f := plan.Firewall; f != nil {
 		if err := validateFirewallPreview(f); err != nil {
 			return Plan{}, err

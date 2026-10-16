@@ -27,10 +27,13 @@ import {
   type MigrationPushInput,
   type MigrationPushTask,
   type MigrationFirewallInput,
+  type MigrationFail2banInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
+import MigrationFail2banOptions from "../components/MigrationFail2banOptions.vue";
+import MigrationFail2banPreview from "../components/MigrationFail2banPreview.vue";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const api = useNodeAPI();
@@ -49,7 +52,9 @@ const certificates = ref(false),
   automation = ref(false),
   notifications = ref(false),
   includeFirewall = ref(false),
+  includeFail2ban = ref(false),
   enableNginx = ref(false);
+const fail2banSettings = ref<MigrationFail2banInput>({ mode: "preserve" });
 const firewallSettings = ref<MigrationFirewallInput>({
     mode: "preserve",
     backend: "",
@@ -191,9 +196,11 @@ async function submit() {
           automation: automation.value,
           notifications: notifications.value,
           firewall: includeFirewall.value,
+          fail2ban: includeFail2ban.value,
         },
       },
       mappings: mappingObject(),
+      fail2ban: { ...fail2banSettings.value },
       firewall: {
         ...firewallSettings.value,
         interfaces: { ...firewallSettings.value.interfaces },
@@ -281,6 +288,8 @@ onUnmounted(() => {
             ><NCheckbox v-model:checked="credentials">DNS 凭据</NCheckbox
             ><NCheckbox v-model:checked="automation">ACME 配置</NCheckbox
             ><NCheckbox v-model:checked="notifications">通知渠道</NCheckbox
+            ><NCheckbox v-model:checked="includeFail2ban"
+              >jail 期望配置</NCheckbox
             ><NCheckbox v-model:checked="includeFirewall"
               >防火墙期望规则</NCheckbox
             >
@@ -292,6 +301,7 @@ onUnmounted(() => {
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 8 }"
         /></NFormItem>
+        <MigrationFail2banOptions v-model="fail2banSettings" :disabled="busy" />
         <MigrationFirewallOptions
           v-model="firewallSettings"
           @update:valid="firewallValid = $event"
@@ -391,6 +401,10 @@ onUnmounted(() => {
           selected.error
         }}</NAlert>
         <template v-if="selected.plan">
+          <MigrationFail2banPreview
+            v-if="selected.plan.fail2ban"
+            :info="selected.plan.fail2ban"
+          />
           <MigrationFirewallPreview
             v-if="selected.plan.firewall"
             :info="selected.plan.firewall"

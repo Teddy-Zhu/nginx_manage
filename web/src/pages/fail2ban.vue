@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "Fail2ban",
-    "subtitle": "宿主机依赖与实例诊断",
+    "subtitle": "jail 配置与宿主机状态",
     "nav": true,
     "order": 0.75,
     "symbol": "◈"
@@ -10,6 +10,7 @@
 }
 </route>
 <script setup lang="ts">
+import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
 import { computed, h, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -194,9 +195,10 @@ onUnmounted(() => {
 <template>
   <div class="page-stack">
     <div class="page-toolbar">
-      <h2>Fail2ban 诊断</h2>
+      <h2>Fail2ban</h2>
       <NButton :loading="reading" @click="load">刷新状态</NButton>
     </div>
+    <Fail2banPolicyEditor />
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">
       <div class="toolbar">

@@ -30,10 +30,13 @@ import {
   type MigrationExecuteInput,
   type MigrationPullInput,
   type MigrationFirewallInput,
+  type MigrationFail2banInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
+import MigrationFail2banOptions from "../components/MigrationFail2banOptions.vue";
+import MigrationFail2banPreview from "../components/MigrationFail2banPreview.vue";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const api = useNodeAPI();
@@ -54,7 +57,10 @@ const includeAutomation = ref(false),
   remoteAutomation = ref(false),
   remoteNotifications = ref(false),
   includeFirewall = ref(false),
-  remoteFirewall = ref(false);
+  includeFail2ban = ref(false),
+  remoteFirewall = ref(false),
+  remoteFail2ban = ref(false);
+const fail2banSettings = ref<MigrationFail2banInput>({ mode: "preserve" });
 const firewallSettings = ref<MigrationFirewallInput>({
     mode: "preserve",
     backend: "",
@@ -202,6 +208,7 @@ async function exportPackage() {
         automation: includeAutomation.value,
         notifications: includeNotifications.value,
         firewall: includeFirewall.value,
+        fail2ban: includeFail2ban.value,
       },
     });
     const bytes = Uint8Array.from(atob(out.content), (c) => c.charCodeAt(0));
@@ -234,6 +241,7 @@ async function previewFile() {
       base_version: version,
       mappings: mappingObject(),
       firewall,
+      fail2ban: { ...fail2banSettings.value },
     });
     importPassphrase.value = "";
   });
@@ -252,11 +260,13 @@ function remoteInput(execute: boolean, version: number): MigrationPullInput {
         automation: remoteAutomation.value,
         notifications: remoteNotifications.value,
         firewall: remoteFirewall.value,
+        fail2ban: remoteFail2ban.value,
       },
     },
     base_version: version,
     mappings: mappingObject(),
     firewall: firewallOptions(),
+    fail2ban: { ...fail2banSettings.value },
     mode: execute ? mode.value : "preview",
     enable_nginx: enableNginx.value,
   };
@@ -401,6 +411,8 @@ onUnmounted(() => {
           >包含 ACME 账户与签发配置</NCheckbox
         ><NCheckbox v-model:checked="includeNotifications"
           >包含通知渠道及凭据</NCheckbox
+        ><NCheckbox v-model:checked="includeFail2ban"
+          >包含 jail 期望配置</NCheckbox
         ><NCheckbox v-model:checked="includeFirewall"
           >包含防火墙期望规则</NCheckbox
         ><NButton
@@ -463,6 +475,8 @@ onUnmounted(() => {
           v-if="has('notifications.write')"
           v-model:checked="remoteNotifications"
           >包含通知渠道及凭据</NCheckbox
+        ><NCheckbox v-model:checked="remoteFail2ban"
+          >jail 期望配置</NCheckbox
         ><NCheckbox v-model:checked="remoteFirewall"
           >包含防火墙期望规则</NCheckbox
         ><NButton
@@ -495,6 +509,7 @@ onUnmounted(() => {
           :autosize="{ minRows: 3, maxRows: 10 }"
           placeholder='{"192.168.1.10:80":"0.0.0.0:80"}'
       /></NFormItem>
+      <MigrationFail2banOptions v-model="fail2banSettings" :disabled="busy" />
       <MigrationFirewallOptions
         v-model="firewallSettings"
         @update:valid="firewallValid = $event"
@@ -522,6 +537,7 @@ onUnmounted(() => {
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
         >{{ plan.last_error }}</NAlert
       >
+      <MigrationFail2banPreview v-if="plan.fail2ban" :info="plan.fail2ban" />
       <MigrationFirewallPreview v-if="plan.firewall" :info="plan.firewall" />
       <MigrationDependencies
         v-if="plan.dependencies"

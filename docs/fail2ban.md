@@ -1,6 +1,6 @@
-# Fail2ban 宿主机诊断与已有实例只读接入
+# Fail2ban jail 配置、宿主机诊断与已有实例接入
 
-`GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记的读取；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用且控制入口暂不可启用，诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
+`GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记操作；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用且控制入口暂不可启用，诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
 
 仅 root Agent 在本机以 `--metrics-scope=host` 确认宿主机范围后执行采集。开发、容器、范围未确认或无 Agent 时返回不可用原因，不在面板容器内探测或补装程序。诊断的 `available` 仅表示宿主机读取获准；实例和 jail 的 `available` 表示该次完整采样成功，采样时间明确返回。所有 `writable` 及已有 jail 的 `managed` 均为 false。
 
@@ -45,3 +45,13 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 已有实例当前只读接入。安装/启动与 Socket 激活授权、签名组件运行绑定、完整引擎自检、jail 持久配置与接管、模板/匹配测试、受控 action、ban/unban、历史日志及 CDN 来源处理仍在完整实施范围内。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
 实现与集成源码审阅已完成，未运行生成器、构建、类型检查、lint、测试、浏览器、服务或真实宿主机探测/接入命令；发行版、Python、systemd、Fail2ban 与日志后端组合留待 P5 集中验证。
+
+## jail 期望配置与迁移
+
+`GET/PUT /fail2ban/policy` 持久保存最多 32 个 jail，采用加密存储、基础版本比较、幂等保存及同事务审计。保存不要求模块启用，也不改变实例。仅内置 `nginx-http-401` 模板，统计结构化站点访问日志的 401（包含首次认证挑战），参数为日志资源标识、动作类型、封禁秒数、统计窗口、阈值和数值 IP/CIDR 白名单；不接收任意路径、正则或 shell。面板登录失败模板尚未接入独立日志来源。
+
+`GET /fail2ban/templates` 返回模板；`POST /fail2ban/preview` 核对保存版本、唯一运行日志来源及已有实例，显示当前执行缺口，`can_apply=false`。日志资源按站点逻辑 ID 绑定，实例授权、动作后端及实际流量路径仍须在应用前核对。jail 持久安装、动作桥接及 ban/unban 继续实施；当前页面只保存期望配置和只读观察。
+
+schema 3 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.json` 携带期望配置。文件、API 拉取及推送均支持 preserve/merge/replace，默认保留目标；导入重新分配 jail ID，沿用同一业务配置树中的站点标识，冻结目标版本与内容，同 Nginx 配置导入事务保存。失败补偿以新版本恢复原期望，检测外部变更时保留待恢复，不覆盖。源服务、Socket、客户端批准、所有权及封禁/计数不迁移，也不自动安装、启用模块或应用 jail。须核对目标白名单、日志来源和动作路径；保留的目标 jail 可能引用本次已替换的站点。
+
+当前数据库为 25，Agent 仍为 37。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器及真实实例操作均留待 P5。

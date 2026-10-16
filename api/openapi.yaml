@@ -12,6 +12,36 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/policy:
+    get:
+      operationId: getFail2banPolicy
+      x-scopes: [read]
+      description: 返回 Fail2banPolicyView，读取版本化 jail 期望配置；不表示实例保护已经生效。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    put:
+      operationId: setFail2banPolicy
+      x-scopes: [security.write]
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      description: 保存类型化 jail 期望配置，要求近期认证、幂等键与基础版本；不安装、启用或修改实例。
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPolicyInput'}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/templates:
+    get:
+      operationId: getFail2banTemplates
+      x-scopes: [read]
+      description: 返回内置 Fail2banTemplate 数组；不接受自定义正则或 shell 动作。
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/preview:
+    post:
+      operationId: previewFail2ban
+      x-scopes: [read]
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      description: 返回 Fail2banPolicyPreview，核对保存版本的运行日志来源与实例状态；当前无 jail 写入执行器，can_apply 为 false。
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPreviewInput'}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/instance:
     get:
       operationId: getFail2banInstance
@@ -1752,6 +1782,26 @@ components:
         ssh_listeners: {type: array, maxItems: 512, items: {type: string}}
         protections: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/FirewallProtection"}}
         reason: {type: string}
+    Fail2banDesiredJail:
+      {"type": "object", "additionalProperties": false, "required": ["id", "name", "enabled", "template", "resource_id", "action", "ban_time", "find_time", "max_retry", "ignore_ips"], "properties": {"id": {"type": "string", "format": "uuid"}, "name": {"type": "string", "minLength": 1, "maxLength": 120}, "enabled": {"type": "boolean"}, "template": {"type": "string", "enum": ["nginx-http-401"]}, "resource_id": {"type": "string", "format": "uuid"}, "action": {"type": "string", "enum": ["host-input", "docker-forward", "nginx-client"]}, "ban_time": {"type": "integer", "format": "int64", "minimum": -1, "maximum": 31536000, "not": {"enum": [0]}, "description": "-1 永久封禁，否则为 1–31536000 秒"}, "find_time": {"type": "integer", "format": "int64", "minimum": 1, "maximum": 86400}, "max_retry": {"type": "integer", "minimum": 1, "maximum": 1000}, "ignore_ips": {"type": "array", "maxItems": 64, "items": {"type": "string"}}}}
+    Fail2banPolicy:
+      {"type": "object", "additionalProperties": false, "required": ["jails"], "properties": {"jails": {"type": "array", "maxItems": 32, "items": {"$ref": "#/components/schemas/Fail2banDesiredJail"}}}}
+    Fail2banPolicyView:
+      {"type": "object", "additionalProperties": false, "required": ["version", "policy", "updated_at"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}, "updated_at": {"type": "integer", "format": "int64"}}}
+    Fail2banPolicyInput:
+      {"type": "object", "additionalProperties": false, "required": ["base_version", "policy"], "properties": {"base_version": {"type": "integer", "format": "int64", "minimum": 0}, "policy": {"$ref": "#/components/schemas/Fail2banPolicy"}}}
+    Fail2banTemplate:
+      {"type": "object", "additionalProperties": false, "required": ["id", "name", "description", "category", "format", "ban_time", "find_time", "max_retry"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "description": {"type": "string"}, "category": {"type": "string"}, "format": {"type": "string"}, "ban_time": {"type": "integer", "format": "int64"}, "find_time": {"type": "integer", "format": "int64"}, "max_retry": {"type": "integer"}}}
+    Fail2banPreviewInput:
+      {"type": "object", "additionalProperties": false, "required": ["version"], "properties": {"version": {"type": "integer", "format": "int64", "minimum": 1}}}
+    Fail2banJailPreview:
+      {"type": "object", "additionalProperties": false, "required": ["id", "jail_name", "enabled", "source_id", "source_ready", "errors"], "properties": {"id": {"type": "string"}, "jail_name": {"type": "string"}, "enabled": {"type": "boolean"}, "source_id": {"type": "string"}, "source_ready": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}}}
+    Fail2banPolicyPreview:
+      {"type": "object", "additionalProperties": false, "required": ["version", "policy_hash", "can_apply", "entries", "warnings"], "properties": {"version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "can_apply": {"type": "boolean"}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banJailPreview"}}, "warnings": {"type": "array", "items": {"type": "string"}}}}
+    MigrationFail2banInput:
+      {"type": "object", "additionalProperties": false, "required": ["mode"], "properties": {"mode": {"type": "string", "enum": ["preserve", "merge", "replace"], "default": "preserve"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}}}
+    MigrationFail2banPlan:
+      {"type": "object", "additionalProperties": false, "required": ["mode", "state", "base_version", "saved_version", "source_jails", "preserved_jails", "replaced_jails", "total_jails", "policy_hash", "warnings"], "properties": {"mode": {"type": "string", "enum": ["preserve", "merge", "replace"]}, "state": {"type": "string"}, "base_version": {"type": "integer", "format": "int64"}, "saved_version": {"type": "integer", "format": "int64"}, "source_jails": {"type": "integer"}, "preserved_jails": {"type": "integer"}, "replaced_jails": {"type": "integer"}, "total_jails": {"type": "integer"}, "policy_hash": {"type": "string"}, "warnings": {"type": "array", "items": {"type": "string"}}}}
     Fail2banBindingView:
       {"type": "object", "additionalProperties": false, "required": ["state", "id", "service", "socket", "client_path", "client_version", "approved_at", "reason"], "properties": {"state": {"type": "string", "enum": ["unavailable", "unbound", "bound"]}, "id": {"type": "string"}, "service": {"type": "string"}, "socket": {"type": "string"}, "client_path": {"type": "string"}, "client_version": {"type": "string"}, "approved_at": {"type": "integer", "format": "int64"}, "reason": {"type": "string"}}}
     Fail2banJailSummary:
@@ -1913,7 +1963,7 @@ components:
     MigrationDependencyStatus:
       {"type": "object", "required": ["task_id", "state", "stage", "check_task_id", "prepare_task_id", "error", "deadline", "maintenance_task_id", "install_task_id"], "properties": {"task_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "check_task_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "error": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "maintenance_task_id": {"type": "string"}, "install_task_id": {"type": "string"}}, "additionalProperties": false}
     MigrationPushInput:
-      {"type": "object", "required": ["remote", "mappings", "mode", "enable_nginx"], "properties": {"remote": {"$ref": "#/components/schemas/MigrationRemote"}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "mode": {"type": "string", "enum": ["preview", "draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "dependencies": {"$ref": "#/components/schemas/MigrationDependencyInput"}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallInput"}}, "additionalProperties": false}
+      {"type": "object", "required": ["remote", "mappings", "mode", "enable_nginx"], "properties": {"remote": {"$ref": "#/components/schemas/MigrationRemote"}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "mode": {"type": "string", "enum": ["preview", "draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "dependencies": {"$ref": "#/components/schemas/MigrationDependencyInput"}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallInput"}, "fail2ban": {"$ref": "#/components/schemas/MigrationFail2banInput"}}, "additionalProperties": false}
     MigrationPushResumeInput:
       {"type": "object", "required": ["api_key"], "properties": {"api_key": {"type": "string", "minLength": 20, "maxLength": 512}}, "additionalProperties": false}
     MigrationPushTask:
@@ -4031,7 +4081,7 @@ components:
     MigrationFirewallPlan:
       {"type": "object", "additionalProperties": false, "required": ["mode", "state", "source_backend", "target_backend", "base_version", "saved_version", "source_rules", "preserved_rules", "replaced_rules", "total_rules", "policy_hash", "interfaces", "entries", "truncated", "warnings"], "properties": {"mode": {"type": "string"}, "state": {"type": "string"}, "source_backend": {"type": "string"}, "target_backend": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "saved_version": {"type": "integer", "format": "int64", "minimum": 0}, "source_rules": {"type": "integer", "format": "int64", "minimum": 0}, "preserved_rules": {"type": "integer", "format": "int64", "minimum": 0}, "replaced_rules": {"type": "integer", "format": "int64", "minimum": 0}, "total_rules": {"type": "integer", "format": "int64", "minimum": 0}, "policy_hash": {"type": "string"}, "interfaces": {"type": "array", "items": {"$ref": "#/components/schemas/MigrationFirewallInterface"}}, "entries": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallRule"}, "maxItems": 64}, "truncated": {"type": "boolean"}, "warnings": {"type": "array", "items": {"type": "string"}}}}
     MigrationSelection:
-      {"type": "object", "additionalProperties": false, "required": ["certificates", "dns_credentials", "automation", "notifications", "firewall"], "properties": {"certificates": {"type": "boolean"}, "dns_credentials": {"type": "boolean"}, "automation": {"type": "boolean"}, "notifications": {"type": "boolean"}, "firewall": {"type": "boolean"}}}
+      {"type": "object", "additionalProperties": false, "required": ["certificates", "dns_credentials", "automation", "notifications", "firewall", "fail2ban"], "properties": {"certificates": {"type": "boolean"}, "dns_credentials": {"type": "boolean"}, "automation": {"type": "boolean"}, "notifications": {"type": "boolean"}, "firewall": {"type": "boolean"}, "fail2ban": {"type": "boolean"}}}
     MigrationExportInput:
       {"type": "object", "additionalProperties": false, "required": ["passphrase", "selection"], "properties": {"passphrase": {"type": "string", "minLength": 16, "maxLength": 256}, "selection": {"$ref": "#/components/schemas/MigrationSelection"}}}
     MigrationManifest:
@@ -4039,17 +4089,17 @@ components:
     MigrationPackage:
       {"type": "object", "additionalProperties": false, "required": ["filename", "content", "sha256", "manifest"], "properties": {"filename": {"type": "string"}, "content": {"type": "string", "format": "byte"}, "sha256": {"type": "string"}, "manifest": {"$ref": "#/components/schemas/MigrationManifest"}}}
     MigrationImportInput:
-      {"type": "object", "additionalProperties": false, "required": ["content", "passphrase", "base_version", "mappings"], "properties": {"content": {"type": "string", "format": "byte"}, "passphrase": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallInput"}}}
+      {"type": "object", "additionalProperties": false, "required": ["content", "passphrase", "base_version", "mappings"], "properties": {"content": {"type": "string", "format": "byte"}, "passphrase": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallInput"}, "fail2ban": {"$ref": "#/components/schemas/MigrationFail2banInput"}}}
     MigrationExecuteInput:
       {"type": "object", "additionalProperties": false, "required": ["mode", "enable_nginx"], "properties": {"mode": {"type": "string", "enum": ["draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}}}
     MigrationRemote:
       {"type": "object", "additionalProperties": false, "required": ["url", "api_key", "fingerprint", "node_id", "selection"], "properties": {"url": {"type": "string"}, "api_key": {"type": "string"}, "fingerprint": {"type": "string"}, "node_id": {"type": "string"}, "selection": {"$ref": "#/components/schemas/MigrationSelection"}}}
     MigrationPullInput:
-      {"type": "object", "additionalProperties": false, "required": ["remote", "base_version", "mappings", "mode", "enable_nginx"], "properties": {"remote": {"$ref": "#/components/schemas/MigrationRemote"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "mode": {"type": "string", "enum": ["preview", "draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallInput"}}}
+      {"type": "object", "additionalProperties": false, "required": ["remote", "base_version", "mappings", "mode", "enable_nginx"], "properties": {"remote": {"$ref": "#/components/schemas/MigrationRemote"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "mappings": {"type": "object", "additionalProperties": {"type": "string"}}, "mode": {"type": "string", "enum": ["preview", "draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallInput"}, "fail2ban": {"$ref": "#/components/schemas/MigrationFail2banInput"}}}
     MigrationStep:
       {"type": "object", "additionalProperties": false, "required": ["kind", "resource", "state", "message"], "properties": {"kind": {"type": "string"}, "resource": {"type": "string"}, "state": {"type": "string"}, "message": {"type": "string"}}}
     MigrationPlan:
-      {"type": "object", "additionalProperties": false, "required": ["id", "source_node", "source_version", "base_version", "expires_at", "state", "steps", "omissions", "can_save", "can_apply", "nginx_enabled", "revision_id", "task_id", "last_error", "package_sha256"], "properties": {"id": {"type": "string"}, "source_node": {"type": "string"}, "source_version": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "expires_at": {"type": "integer", "format": "int64", "minimum": 0}, "state": {"type": "string"}, "steps": {"type": "array", "items": {"$ref": "#/components/schemas/MigrationStep"}}, "omissions": {"type": "array", "items": {"type": "string"}}, "can_save": {"type": "boolean"}, "can_apply": {"type": "boolean"}, "nginx_enabled": {"type": "boolean"}, "revision_id": {"type": "string"}, "task_id": {"type": "string"}, "last_error": {"type": "string"}, "package_sha256": {"type": "string"}, "dependencies": {"$ref": "#/components/schemas/MigrationDependencyStatus"}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallPlan"}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "source_node", "source_version", "base_version", "expires_at", "state", "steps", "omissions", "can_save", "can_apply", "nginx_enabled", "revision_id", "task_id", "last_error", "package_sha256"], "properties": {"id": {"type": "string"}, "source_node": {"type": "string"}, "source_version": {"type": "string"}, "base_version": {"type": "integer", "format": "int64", "minimum": 0}, "expires_at": {"type": "integer", "format": "int64", "minimum": 0}, "state": {"type": "string"}, "steps": {"type": "array", "items": {"$ref": "#/components/schemas/MigrationStep"}}, "omissions": {"type": "array", "items": {"type": "string"}}, "can_save": {"type": "boolean"}, "can_apply": {"type": "boolean"}, "nginx_enabled": {"type": "boolean"}, "revision_id": {"type": "string"}, "task_id": {"type": "string"}, "last_error": {"type": "string"}, "package_sha256": {"type": "string"}, "dependencies": {"$ref": "#/components/schemas/MigrationDependencyStatus"}, "firewall": {"$ref": "#/components/schemas/MigrationFirewallPlan"}, "fail2ban": {"$ref": "#/components/schemas/MigrationFail2banPlan"}}}
     FirewallRegistrationView:
       type: object
       additionalProperties: false

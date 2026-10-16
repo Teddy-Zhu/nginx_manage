@@ -11,12 +11,13 @@ import (
 	"unicode/utf8"
 
 	"filippo.io/age"
+	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/secure"
 )
 
-var archiveNames = map[string]bool{"config/firewall.json": true, "manifest.json": true, "config/nginx-tree.json": true, "certificates/materials.json": true, "secrets/dns-credentials.json": true, "config/acme.json": true, "secrets/notification-channels.json": true}
+var archiveNames = map[string]bool{"config/fail2ban.json": true, "config/firewall.json": true, "manifest.json": true, "config/nginx-tree.json": true, "certificates/materials.json": true, "secrets/dns-credentials.json": true, "config/acme.json": true, "secrets/notification-channels.json": true}
 
 func validPassphrase(value string) bool {
 	return len(value) >= 16 && len(value) <= 256 && utf8.ValidString(value) && !strings.ContainsAny(value, "\x00\r\n")
@@ -27,7 +28,7 @@ func encodeArchive(manifest *Manifest, payload Payload, passphrase string) ([]by
 		return nil, fault.Invalid("迁移口令须为 16–256 字节")
 	}
 	entries := map[string][]byte{}
-	for name, value := range map[string]any{"config/firewall.json": payload.Firewall, "config/nginx-tree.json": payload.Files, "certificates/materials.json": payload.Certificates, "secrets/dns-credentials.json": payload.Credentials, "config/acme.json": payload.Automation, "secrets/notification-channels.json": payload.Channels} {
+	for name, value := range map[string]any{"config/fail2ban.json": payload.Fail2ban, "config/firewall.json": payload.Firewall, "config/nginx-tree.json": payload.Files, "certificates/materials.json": payload.Certificates, "secrets/dns-credentials.json": payload.Credentials, "config/acme.json": payload.Automation, "secrets/notification-channels.json": payload.Channels} {
 		raw, err := json.Marshal(value)
 		if err != nil {
 			return nil, err
@@ -164,6 +165,9 @@ func decodeArchive(content []byte, passphrase string) (Manifest, Payload, error)
 		}
 	}
 	if decodeStrict(entries["config/nginx-tree.json"], &p.Files) != nil || decodeStrict(entries["certificates/materials.json"], &p.Certificates) != nil || decodeStrict(entries["secrets/dns-credentials.json"], &p.Credentials) != nil {
+		return m, p, invalid
+	}
+	if decodeStrict(entries["config/fail2ban.json"], &p.Fail2ban) != nil || m.Selection.Fail2ban != (p.Fail2ban != nil) || fail2ban.ValidateTransfer(p.Fail2ban) != nil {
 		return m, p, invalid
 	}
 	if decodeStrict(entries["config/firewall.json"], &p.Firewall) != nil || (m.Selection.Firewall != (p.Firewall != nil)) || firewall.ValidateTransfer(p.Firewall) != nil {

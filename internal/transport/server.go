@@ -12,6 +12,7 @@ import (
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/backup"
 	"nginxpanel/internal/components"
+	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/hostdns"
@@ -33,6 +34,7 @@ import (
 )
 
 type Server struct {
+	Fail2ban      *fail2ban.PolicyService
 	Maintenance   *maintenance.Service
 	DB            *sql.DB
 	Auth          *auth.Service

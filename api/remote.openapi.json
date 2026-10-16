@@ -4835,6 +4835,161 @@
           }
         }
       }
+    },
+    "/nodes/{connection}/fail2ban/policy": {
+      "get": {
+        "operationId": "remoteGetFail2banPolicy",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banPolicy",
+        "x-forward-path": "/fail2ban/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "put": {
+        "operationId": "remoteSetFail2banPolicy",
+        "x-scopes": [
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banPolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setFail2banPolicy",
+        "x-forward-path": "/fail2ban/policy",
+        "x-response-kind": "json",
+        "x-body-limit": 69632,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/fail2ban/preview": {
+      "post": {
+        "operationId": "remotePreviewFail2ban",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "previewFail2ban",
+        "x-forward-path": "/fail2ban/preview",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banPreviewInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/templates": {
+      "get": {
+        "operationId": "remoteGetFail2banTemplates",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banTemplates",
+        "x-forward-path": "/fail2ban/templates",
+        "x-response-kind": "json",
+        "x-body-limit": 65536,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      }
     }
   },
   "security": [

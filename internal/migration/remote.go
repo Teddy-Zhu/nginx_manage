@@ -33,6 +33,12 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 			return Plan{}, err
 		}
 	}
+	if err := in.Fail2ban.validate(); err != nil {
+		return Plan{}, err
+	}
+	if in.Fail2ban.Mode != "" && in.Fail2ban.Mode != "preserve" && !in.Remote.Selection.Fail2ban {
+		return Plan{}, fault.Invalid("合并或替换 jail 须选择导出其期望配置")
+	}
 	if err := in.Firewall.validate(); err != nil {
 		return Plan{}, err
 	}
@@ -115,7 +121,7 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		if manifest.SourceNode != envelope.NodeID {
 			return Plan{}, redactedRemoteError()
 		}
-		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, &pullReservation{p.ID, key, digest}, nil)
+		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, &pullReservation{p.ID, key, digest}, nil)
 	}()
 	if err != nil {
 		return Plan{}, err

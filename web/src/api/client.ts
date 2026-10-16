@@ -52,6 +52,13 @@ export type Module = components["schemas"]["Module"];
 export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
+export type Fail2banDesiredJail = components["schemas"]["Fail2banDesiredJail"];
+export type Fail2banPolicyView = components["schemas"]["Fail2banPolicyView"];
+export type Fail2banPolicyInput = components["schemas"]["Fail2banPolicyInput"];
+export type Fail2banTemplate = components["schemas"]["Fail2banTemplate"];
+export type Fail2banPolicyPreview = components["schemas"]["Fail2banPolicyPreview"];
+export type MigrationFail2banInput = components["schemas"]["MigrationFail2banInput"];
+export type MigrationFail2banPlan = components["schemas"]["MigrationFail2banPlan"];
 export type Fail2banInstance = components["schemas"]["Fail2banInstance"];
 export type Fail2banJail = components["schemas"]["Fail2banJail"];
 export type Fail2banObservation = components["schemas"]["Fail2banObservation"];
@@ -556,6 +563,10 @@ function createAPI(scope: RequestScope) {
       url: `/firewall/operations/${id}/${action}`,
       method: "POST",
     }),
+  fail2banPolicy: (signal?: AbortSignal) => request<Fail2banPolicyView>({url:"/fail2ban/policy",signal}),
+  fail2banTemplates: (signal?: AbortSignal) => request<Fail2banTemplate[]>({url:"/fail2ban/templates",signal}),
+  saveFail2banPolicy: (data:Fail2banPolicyInput,key:string) => request<Fail2banPolicyView>({url:"/fail2ban/policy",method:"PUT",data,headers:{"Idempotency-Key":key}}),
+  previewFail2ban: (version:number,signal?:AbortSignal) => request<Fail2banPolicyPreview>({url:"/fail2ban/preview",method:"POST",data:{version},signal}),
   fail2banInstance: (signal?: AbortSignal) => request<Fail2banInstance>({ url: "/fail2ban/instance", signal }),
   fail2banJail: (name: string, signal?: AbortSignal) => request<Fail2banJail>({ url: `/fail2ban/jails/${encodeURIComponent(name)}`, signal }),
   fail2ban: (signal?: AbortSignal) =>
@@ -664,7 +675,7 @@ function createAPI(scope: RequestScope) {
     signal?: AbortSignal,
   ) =>
     request<MonitoringHistory>({ url: "/monitoring/history", params, signal }),
-  logSources: () => request<LogSource[]>({ url: "/logs/sources" }),
+  logSources: (signal?: AbortSignal) => request<LogSource[]>({ url: "/logs/sources", signal }),
   logPolicy: () => request<LogPolicyView>({ url: "/logs/policy" }),
   setLogPolicy: (data: LogPolicyInput, key: string) =>
     request<{ operation_id: string; version: number }>({

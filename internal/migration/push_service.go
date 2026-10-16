@@ -19,6 +19,12 @@ func (s *Service) StartPush(ctx context.Context, p auth.Principal, requestID, ke
 	if !validPushKey(key) || in.BaseVersion != nil && *in.BaseVersion < 0 || in.Mode != "preview" && in.Mode != "draft" && in.Mode != "save" && in.Mode != "apply" || in.Remote.NodeID != "" && (!validTransferID(in.Remote.NodeID) || in.Remote.NodeID == s.NodeID) {
 		return PushTask{}, fault.Invalid("迁出模式、基础版本、节点或幂等键无效")
 	}
+	if err := in.Fail2ban.validate(); err != nil {
+		return PushTask{}, err
+	}
+	if in.Fail2ban.Mode != "" && in.Fail2ban.Mode != "preserve" && !in.Remote.Selection.Fail2ban {
+		return PushTask{}, fault.Invalid("合并或替换 jail 须选择导出其期望配置")
+	}
 	if err := in.Firewall.validate(); err != nil {
 		return PushTask{}, err
 	}

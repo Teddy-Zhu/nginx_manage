@@ -93,6 +93,9 @@ func (s *Service) reconcile(ctx context.Context) error {
 		if compensateErr == nil {
 			compensateErr = s.compensateFirewall(ctx, tx, &st, principal, id)
 		}
+		if compensateErr == nil {
+			compensateErr = s.compensateFail2ban(ctx, tx, &st, principal, id)
+		}
 		if compensateErr == nil && st.EnabledByMigration {
 			var n int64
 			result, e := tx.ExecContext(ctx, "UPDATE module_settings SET enabled=0,version=version+1 WHERE id='nginx-config' AND enabled=1 AND version=?", st.ModuleVersion+1)
