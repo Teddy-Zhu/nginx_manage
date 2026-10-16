@@ -367,7 +367,7 @@ func (s *Service) Materials(ctx context.Context, q reader, paths []string) ([]Ma
 		}
 		var chain, key []byte
 		var environment string
-		if err := q.QueryRowContext(ctx, "SELECT fullchain,private_key,environment FROM certificate_versions WHERE certificate_id=? AND id=?", id, version).Scan(&chain, &key, &environment); err != nil {
+		if err := q.QueryRowContext(ctx, "SELECT CASE WHEN length(fullchain)<=? THEN fullchain ELSE NULL END,CASE WHEN length(private_key)<=? THEN private_key ELSE NULL END,substr(environment,1,33) FROM certificate_versions WHERE certificate_id=? AND id=?", limits.CertificateMaterialBytes+64, limits.CertificateMaterialBytes+64, id, version).Scan(&chain, &key, &environment); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, fault.Invalid("证书版本不存在")
 			}

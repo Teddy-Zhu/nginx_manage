@@ -23,6 +23,8 @@ type DisasterIntent struct {
 	DataDir        string              `json:"data_dir"`
 	OperationID    string              `json:"operation_id"`
 	AdoptionSHA256 string              `json:"adoption_sha256"`
+	PlanID         string              `json:"plan_id"`
+	PlanSHA256     string              `json:"plan_sha256"`
 	Stop           storage.ServiceHold `json:"stop"`
 	Rollback       Receipt             `json:"rollback"`
 	Files          []File              `json:"files"`
@@ -39,6 +41,9 @@ func (i DisasterIntent) Validate() error {
 		return err
 	}
 	h := i.Stop
+	if !idValue.MatchString(i.PlanID) || i.PlanID == i.OperationID || !hashValue.MatchString(i.PlanSHA256) {
+		return errors.New("独立恢复缺少原目标计划批准摘要")
+	}
 	if i.Schema != 1 || !idValue.MatchString(i.OperationID) || !hashValue.MatchString(i.AdoptionSHA256) || !hashValue.MatchString(i.ReleaseID) || !hashValue.MatchString(i.BinarySHA256) || !idValue.MatchString(i.ApprovalEpoch) || i.CreatedAt <= 0 || i.CreatedAt > time.Now().Unix()+300 || i.ExpiresAt <= i.CreatedAt || i.ExpiresAt > i.Rollback.Manifest.ExpiresAt || i.ExpiresAt-i.CreatedAt > 24*60*60 || h.Schema != 1 || !idValue.MatchString(h.OperationID) || !idValue.MatchString(h.MaintenanceID) || !hashValue.MatchString(h.RequestSHA256) || !hashValue.MatchString(h.BindingSHA256) || h.ReleaseID != i.ReleaseID || h.OperationID == i.OperationID || h.MaintenanceID == i.OperationID {
 		return errors.New("独立恢复安装意图无效")
 	}

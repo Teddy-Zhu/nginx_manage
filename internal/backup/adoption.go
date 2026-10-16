@@ -246,10 +246,23 @@ func sameAdoptionValue(a, b any) bool {
 	return err == nil && bytes.Equal(first, second)
 }
 func verifyAdoptionMaterial(ctx context.Context, data, id, dir string, intent AdoptionIntent) (out MaterialVerification, err error) {
-	p := intent.Preparation
+	if err = callAdoptionMaterialHelper(ctx, data, id, dir, intent, "backup-adoption-verify-data", intent.Preparation, &out); err != nil {
+		return out, err
+	}
+	expected, err := preparationHash(intent.Preparation)
+	if err != nil {
+		return out, err
+	}
+	if out.OperationID != id || out.PreparationSHA256 != expected || out.Database != intent.Preparation.Database || out.VerifiedAt < intent.Preparation.PreparedAt || out.VerifiedAt > time.Now().Unix()+300 {
+		return out, errors.New("恢复接入助手核对了不同材料")
+	}
+	return out, nil
+}
+
+func callAdoptionMaterialHelper(ctx context.Context, data, id, dir string, intent AdoptionIntent, command string, input, out any) (err error) {
 	defer func() { err = errors.Join(err, cleanupAdoptionCheck(data, id, intent.GID)) }()
 	if err = prepareAdoptionCheck(ctx, data, id, filepath.Join(dir, "panel.db"), intent); err != nil {
-		return out, err
+		return err
 	}
 	var files []*os.File
 	defer func() {
@@ -260,26 +273,16 @@ func verifyAdoptionMaterial(ctx context.Context, data, id, dir string, intent Ad
 	for i, r := range resources {
 		f, info, e := secure.OpenRootFile(filepath.Join(dir, r.local), r.limit)
 		if e != nil {
-			return out, e
+			return e
 		}
 		files = append(files, f)
-		if info.Mode().Perm() != 0400 || info.Size() != p.Files[i].Size {
-			return out, errors.New("恢复接入资源尚未全部固定")
+		if info.Mode().Perm() != 0400 || info.Size() != intent.Preparation.Files[i].Size {
+			return errors.New("恢复接入资源尚未全部固定")
 		}
 	}
-	raw, err := json.Marshal(p)
+	raw, err := json.Marshal(input)
 	if err != nil {
-		return out, err
+		return err
 	}
-	if err = runPreparationHelper(ctx, data, "backup-adoption-verify-data", id, raw, files, &out); err != nil {
-		return out, err
-	}
-	expected, err := preparationHash(p)
-	if err != nil {
-		return out, err
-	}
-	if out.OperationID != id || out.PreparationSHA256 != expected || out.Database != p.Database || out.VerifiedAt < p.PreparedAt || out.VerifiedAt > time.Now().Unix()+300 {
-		return out, errors.New("恢复接入助手核对了不同材料")
-	}
-	return out, nil
+	return runPreparationHelper(ctx, data, command, id, raw, files, out)
 }

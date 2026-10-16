@@ -20,7 +20,7 @@ type backupCLIOptions struct {
 
 func isBackupRecoveryCommand(command string) bool {
 	switch command {
-	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status":
+	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status", "backup-restore-plan", "backup-restore-plan-status", "backup-restore-plan-data":
 		return true
 	default:
 		return false
@@ -71,6 +71,25 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 		return true, err
 	}
 	switch command {
+	case "backup-restore-plan":
+		if os.Geteuid() != 0 {
+			return true, errors.New("恢复目标计划须由 root 调用")
+		}
+		var input backup.RestorePlanInput
+		if err = readBackupJSON(&input, 32<<10); err != nil {
+			return true, err
+		}
+		out, err := backup.CreateRestorePlan(ctx, data, options.OperationID, input)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
+	case "backup-restore-plan-status":
+		out, err := backup.QueryRestorePlan(data, options.OperationID)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
 	case "backup-restore", "backup-restore-rollback":
 		if os.Geteuid() != 0 {
 			return true, errors.New("独立灾备恢复须由 root 调用")
@@ -117,13 +136,9 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			OperationID string `json:"operation_id"`
 			Cleaned     bool   `json:"cleaned"`
 		}{options.OperationID, true})
-	case "backup-adoption-verify-data":
+	case "backup-adoption-verify-data", "backup-restore-plan-data":
 		if os.Geteuid() == 0 {
 			return true, errors.New("恢复材料核对助手须使用非 root 身份")
-		}
-		var input backup.Preparation
-		if err = readBackupJSON(&input, 128<<10); err != nil {
-			return true, err
 		}
 		var files []*os.File
 		for fd := 3; fd <= 6; fd++ {
@@ -133,6 +148,21 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			}
 			defer f.Close()
 			files = append(files, f)
+		}
+		if command == "backup-restore-plan-data" {
+			var input backup.RestorePreviewInput
+			if err = readBackupJSON(&input, 128<<10); err != nil {
+				return true, err
+			}
+			out, err := backup.PreviewRestorationDescriptors(ctx, data, options.OperationID, input, files)
+			if err != nil {
+				return true, err
+			}
+			return true, json.NewEncoder(os.Stdout).Encode(out)
+		}
+		var input backup.Preparation
+		if err = readBackupJSON(&input, 128<<10); err != nil {
+			return true, err
 		}
 		out, err := backup.VerifyAdoptionDescriptors(ctx, data, options.OperationID, input, files)
 		if err != nil {

@@ -131,6 +131,10 @@ func verifyPreparedDatabase(ctx context.Context, db *sql.DB, vault *secure.Vault
 // VerifyAdoptionDescriptors checks inherited root read descriptors and the
 // matching root-owned SQLite projection after dropping root credentials.
 func VerifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparation, files []*os.File) (out MaterialVerification, err error) {
+	return verifyAdoptionDescriptors(ctx, data, id, p, files, nil)
+}
+
+func verifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparation, files []*os.File, inspect func(context.Context, *sql.DB, *secure.Vault) error) (out MaterialVerification, err error) {
 	if os.Geteuid() == 0 || !validID.MatchString(id) || p.OperationID != id || len(files) != len(resources) {
 		return out, errors.New("恢复接入核对助手的身份或描述符无效")
 	}
@@ -214,6 +218,11 @@ func VerifyAdoptionDescriptors(ctx context.Context, data, id string, p Preparati
 	db.SetMaxOpenConns(1)
 	if err = verifyPreparedDatabase(call, db, vault, p); err != nil {
 		return out, err
+	}
+	if inspect != nil {
+		if err = inspect(call, db, vault); err != nil {
+			return out, err
+		}
 	}
 	if !secure.RootFileUnchanged(databaseFile, databaseInfo) {
 		return out, errors.New("恢复核对数据库投影在解析期间变化")

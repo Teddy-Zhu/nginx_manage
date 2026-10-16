@@ -13,6 +13,8 @@ import (
 
 type RestoreInput struct {
 	AdoptionSHA256 string `json:"adoption_sha256"`
+	PlanID         string `json:"plan_id"`
+	PlanSHA256     string `json:"plan_sha256"`
 	Epoch          string `json:"epoch"`
 }
 
@@ -37,6 +39,9 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 		if i.AdoptionSHA256 != in.AdoptionSHA256 {
 			return out, errors.New("补偿摘要与原独立安装批准不一致")
 		}
+		if in.PlanID != "" && in.PlanID != i.PlanID || in.PlanSHA256 != "" && in.PlanSHA256 != i.PlanSHA256 {
+			return out, errors.New("补偿请求指定了不同的原目标计划")
+		}
 		return agent.RestoreDisaster(call, data, id, in.Epoch, i, true)
 	}
 	status, err := readAdoptionStatus(call, data, id)
@@ -50,12 +55,34 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 	if a.SHA256 != in.AdoptionSHA256 {
 		return out, errors.New("独立恢复须明确指定原接入批准摘要")
 	}
+	plan, err := readRestorePlan(data, in.PlanID)
+	if err != nil {
+		return out, err
+	}
+	if !validHash.MatchString(in.PlanSHA256) || plan.SHA256 != in.PlanSHA256 {
+		return out, errors.New("安装须明确指定原恢复计划摘要")
+	}
+	if err = matchRestorePlan(plan, *a); err != nil {
+		return out, err
+	}
+	if !plan.Preview.CanInstall {
+		return out, errors.New("恢复计划仍有阻塞项，不能安装文件")
+	}
+	if existing, e := panelrecovery.ReadDisasterIntent(data, id); e == nil {
+		if existing.PlanID != plan.ID || existing.PlanSHA256 != plan.SHA256 {
+			return out, errors.New("原恢复安装已绑定其他目标计划")
+		}
+	} else if !os.IsNotExist(e) {
+		return out, e
+	} else if plan.ExpiresAt <= time.Now().Unix() {
+		return out, errors.New("恢复计划已到期，须在安装前生成新的计划")
+	}
 	i := a.Intent
 	files := make([]panelrecovery.File, len(resources))
 	for index, file := range i.Preparation.Files {
 		files[index] = panelrecovery.File{Name: i.Rollback.Manifest.Files[index].Name, Size: file.Size, SHA256: file.SHA256}
 	}
-	input := panelrecovery.DisasterIntent{Schema: 1, DataDir: data, OperationID: id, AdoptionSHA256: a.SHA256, Stop: i.Stop, Rollback: i.Rollback, Files: files, Before: i.Before, ReleaseID: i.Preparation.Target.ReleaseID, BinarySHA256: i.BinarySHA256, ExpiresAt: i.ExpiresAt}
+	input := panelrecovery.DisasterIntent{Schema: 1, DataDir: data, OperationID: id, AdoptionSHA256: a.SHA256, PlanID: plan.ID, PlanSHA256: plan.SHA256, Stop: i.Stop, Rollback: i.Rollback, Files: files, Before: i.Before, ReleaseID: i.Preparation.Target.ReleaseID, BinarySHA256: i.BinarySHA256, ExpiresAt: i.ExpiresAt}
 	return agent.RestoreDisaster(call, data, id, in.Epoch, input, false)
 }
 

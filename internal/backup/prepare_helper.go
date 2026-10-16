@@ -150,7 +150,7 @@ func runPreparationHelper(ctx context.Context, data, command, id string, input [
 		if len(files) != 1 || len(input) > 8192 {
 			return errors.New("恢复准备缺少加密文件描述符")
 		}
-	case "backup-adoption-verify-data":
+	case "backup-adoption-verify-data", "backup-restore-plan-data":
 		if len(files) != len(resources) || len(input) > 128<<10 {
 			return errors.New("恢复接入助手缺少固定资源描述符或输入超过限制")
 		}

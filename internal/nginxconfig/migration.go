@@ -12,9 +12,27 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-// MigrationFiles rebinds only recognized argument spans. Mappings cannot add
-// directives, rewrite arbitrary text, or supply the target's execution policy.
+// MigrationFiles rebinds recognized argument spans or explicitly removes a
+// load_module directive. Mappings cannot add directives, rewrite arbitrary text,
+// or supply the target's execution policy.
 func MigrationFiles(files []File, policy Policy, mappings map[string]string, ids, versions map[string]string) ([]File, error) {
+	out, err := mapMigrationFiles(files, policy, mappings, ids, versions)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].ID = secure.ID()
+	}
+	return out, nil
+}
+
+// RestorationFiles maps a complete database's retained resources without
+// changing file identities that are still referenced by its revision history.
+func RestorationFiles(files []File, policy Policy, mappings map[string]string) ([]File, error) {
+	return mapMigrationFiles(files, policy, mappings, nil, nil)
+}
+
+func mapMigrationFiles(files []File, policy Policy, mappings map[string]string, ids, versions map[string]string) ([]File, error) {
 	if len(mappings) > 256 {
 		return nil, fault.Invalid("迁移映射超过 256 项")
 	}
@@ -33,6 +51,14 @@ func MigrationFiles(files []File, policy Policy, mappings map[string]string, ids
 		var walk func([]*Node)
 		walk = func(nodes []*Node) {
 			for _, node := range nodes {
+				if node.Name == "load_module" && node.Open < 0 && len(node.Args) == 1 {
+					value := node.Args[0].Value
+					if replacement, exists := mappings[value]; exists && replacement == "" {
+						edits = append(edits, Edit{node.Start, node.End, ""})
+						used[value] = true
+						continue
+					}
+				}
 				for _, arg := range node.Args {
 					value := arg.Value
 					if id, version, kind, ok := certificates.Reference(value); ok && ids[id] != "" && versions[version] != "" {
@@ -57,7 +83,6 @@ func MigrationFiles(files []File, policy Policy, mappings map[string]string, ids
 		if err != nil {
 			return nil, err
 		}
-		out[i].ID = secure.ID()
 		out[i].SHA256 = ""
 	}
 	for key := range mappings {
