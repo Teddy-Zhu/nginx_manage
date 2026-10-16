@@ -12,6 +12,7 @@ import (
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/firewall"
+	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nginxconfig"
@@ -21,12 +22,13 @@ import (
 )
 
 const (
-	Schema          = 4
+	Schema          = 5
 	MaxPackageBytes = 8 << 20
 	MaxRequestBytes = 12 << 20
 )
 
 type Selection struct {
+	HostDNS        bool `json:"host_dns"`
 	Monitoring     bool `json:"monitoring"`
 	Fail2ban       bool `json:"fail2ban"`
 	Firewall       bool `json:"firewall"`
@@ -57,6 +59,7 @@ type Manifest struct {
 type Certificate = certificates.Transfer
 type Credential = acme.TransferCredential
 type Payload struct {
+	HostDNS      *hostdns.Transfer               `json:"host_dns"`
 	Monitoring   *monitoring.Settings            `json:"monitoring"`
 	Fail2ban     *fail2ban.Transfer              `json:"fail2ban"`
 	Firewall     *firewall.Transfer              `json:"firewall"`
@@ -67,6 +70,7 @@ type Payload struct {
 	Channels     []notifications.TransferChannel `json:"channels"`
 }
 type ImportInput struct {
+	HostDNS     HostDNSInput      `json:"host_dns"`
 	Monitoring  MonitoringInput   `json:"monitoring"`
 	Fail2ban    Fail2banInput     `json:"fail2ban"`
 	Firewall    FirewallInput     `json:"firewall"`
@@ -83,6 +87,7 @@ type Remote struct {
 	Selection   Selection `json:"selection"`
 }
 type PullInput struct {
+	HostDNS     HostDNSInput      `json:"host_dns"`
 	Monitoring  MonitoringInput   `json:"monitoring"`
 	Fail2ban    Fail2banInput     `json:"fail2ban"`
 	Firewall    FirewallInput     `json:"firewall"`
@@ -103,6 +108,7 @@ type Step struct {
 	Message  string `json:"message"`
 }
 type Plan struct {
+	HostDNS       *HostDNSPlan      `json:"host_dns,omitempty"`
 	Monitoring    *MonitoringPlan   `json:"monitoring,omitempty"`
 	Fail2ban      *Fail2banPlan     `json:"fail2ban,omitempty"`
 	Firewall      *FirewallPlan     `json:"firewall,omitempty"`
@@ -124,6 +130,7 @@ type Plan struct {
 	LastError     string            `json:"last_error"`
 }
 type storedPlan struct {
+	HostDNS            HostDNSInput           `json:"host_dns"`
 	Monitoring         *monitoringImportState `json:"monitoring,omitempty"`
 	Fail2ban           *fail2banImportState   `json:"fail2ban,omitempty"`
 	Firewall           *firewallImportState   `json:"firewall,omitempty"`
@@ -142,6 +149,7 @@ type Host interface {
 	NginxState(context.Context) (agent.NginxState, error)
 }
 type Service struct {
+	HostDNS         *hostdns.Service
 	Monitoring      *monitoring.Service
 	Fail2ban        *fail2ban.PolicyService
 	Firewall        *firewall.Service

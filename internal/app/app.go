@@ -269,7 +269,7 @@ func Run(ctx context.Context, o Options) error {
 		fail2banService.Agent = agentClient
 	}
 	firewallService := &firewall.Service{DB: db, Vault: vault, Agent: agentClient}
-	migrationService := &migration.Service{Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
+	migrationService := &migration.Service{HostDNS: dnsService, Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
 	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
 	api := (&transport.Server{Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Updates: updateService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
 	static := spa(o.WebDir)

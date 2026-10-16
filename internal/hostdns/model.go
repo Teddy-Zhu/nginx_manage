@@ -150,37 +150,8 @@ func (p PlanInput) Validate() error {
 	if len(p.VerifyNames) < 1 || len(p.VerifyNames) > 2 {
 		return fault.Invalid("需配置 1–2 个验证域名")
 	}
-	if p.Target == "" || NetworkdTarget(p.Target) {
-		if p.Config.IPv4 != nil || p.Config.IPv6 != nil || len(p.Config.Servers) < 1 || len(p.Config.Servers) > 3 {
-			return fault.Invalid("静态 DNS 需配置 1–3 个地址，不能同时提供地址族设置")
-		}
-		if err := validateFamily(Family{Servers: p.Config.Servers, Search: p.Config.Search}, 0); err != nil {
-			return err
-		}
-		if p.Target != "" {
-			for _, server := range p.Config.Servers {
-				ip, _ := netip.ParseAddr(server)
-				if ip.Zone() != "" {
-					return fault.Invalid("networkd 静态 DNS 暂不接受带接口区域的地址")
-				}
-			}
-		}
-	} else {
-		if !ValidTarget(p.Target) || len(p.Config.Servers) != 0 || len(p.Config.Search) != 0 || p.Config.IPv4 == nil && p.Config.IPv6 == nil {
-			return fault.Invalid("连接 DNS 目标或配置无效")
-		}
-		hasDNS := false
-		for i, f := range []*Family{p.Config.IPv4, p.Config.IPv6} {
-			if f != nil {
-				if err := validateFamily(*f, 4+2*i); err != nil {
-					return err
-				}
-				hasDNS = hasDNS || f.Automatic || len(f.Servers) > 0
-			}
-		}
-		if !hasDNS {
-			return fault.Invalid("至少一个地址族须配置 DNS 地址或启用自动获取")
-		}
+	if err := p.Config.Validate(p.Target); err != nil {
+		return err
 	}
 	seen := map[string]bool{}
 	for _, s := range p.VerifyNames {
@@ -192,6 +163,43 @@ func (p PlanInput) Validate() error {
 	for _, name := range p.VerifyNames {
 		if _, err := netip.ParseAddr(name); err == nil || !strings.Contains(name, ".") || strings.EqualFold(strings.TrimSuffix(name, "."), "localhost") || strings.HasSuffix(strings.ToLower(strings.TrimSuffix(name, ".")), ".localhost") {
 			return fault.Invalid("验证域名须为非 IP 的完整域名")
+		}
+	}
+	return nil
+}
+
+// Validate checks only the portable DNS configuration, without granting takeover.
+func (c Config) Validate(target string) error {
+	if target == "" || NetworkdTarget(target) {
+		if c.IPv4 != nil || c.IPv6 != nil || len(c.Servers) < 1 || len(c.Servers) > 3 {
+			return fault.Invalid("静态 DNS 需配置 1–3 个地址，不能同时提供地址族设置")
+		}
+		if err := validateFamily(Family{Servers: c.Servers, Search: c.Search}, 0); err != nil {
+			return err
+		}
+		if target != "" {
+			for _, server := range c.Servers {
+				ip, _ := netip.ParseAddr(server)
+				if ip.Zone() != "" {
+					return fault.Invalid("networkd 静态 DNS 暂不接受带接口区域的地址")
+				}
+			}
+		}
+	} else {
+		if !ValidTarget(target) || len(c.Servers) != 0 || len(c.Search) != 0 || c.IPv4 == nil && c.IPv6 == nil {
+			return fault.Invalid("连接 DNS 目标或配置无效")
+		}
+		hasDNS := false
+		for i, f := range []*Family{c.IPv4, c.IPv6} {
+			if f != nil {
+				if err := validateFamily(*f, 4+2*i); err != nil {
+					return err
+				}
+				hasDNS = hasDNS || f.Automatic || len(f.Servers) > 0
+			}
+		}
+		if !hasDNS {
+			return fault.Invalid("至少一个地址族须配置 DNS 地址或启用自动获取")
 		}
 	}
 	return nil

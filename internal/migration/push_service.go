@@ -19,6 +19,9 @@ func (s *Service) StartPush(ctx context.Context, p auth.Principal, requestID, ke
 	if !validPushKey(key) || in.BaseVersion != nil && *in.BaseVersion < 0 || in.Mode != "preview" && in.Mode != "draft" && in.Mode != "save" && in.Mode != "apply" || in.Remote.NodeID != "" && (!validTransferID(in.Remote.NodeID) || in.Remote.NodeID == s.NodeID) {
 		return PushTask{}, fault.Invalid("迁出模式、基础版本、节点或幂等键无效")
 	}
+	if err := validateHostDNSSelection(in.HostDNS, in.Remote.Selection.HostDNS); err != nil {
+		return PushTask{}, err
+	}
 	if err := validateMonitoringSelection(in.Monitoring, in.Remote.Selection.Monitoring); err != nil {
 		return PushTask{}, err
 	}
@@ -80,7 +83,7 @@ func (s *Service) StartPush(ctx context.Context, p auth.Principal, requestID, ke
 func (s *Service) createPush(ctx context.Context, p auth.Principal, requestID, key, hash string, in PushInput, base string, packet Package, passphrase string) (PushTask, error) {
 	now := time.Now().Unix()
 	out := PushTask{ID: secure.ID(), State: "queued", Stage: "connecting", Mode: in.Mode, TargetURL: base, TargetNode: in.Remote.NodeID, PackageSHA256: packet.SHA256, CreatedAt: now, UpdatedAt: now, ExpiresAt: now + pushGrantSeconds}
-	payload := pushPayload{Input: in, Transfer: ImportInput{Content: packet.Content, Passphrase: passphrase}, ResumeStage: "connecting"}
+	payload := pushPayload{HostDNSHash: packet.Manifest.Files["config/host-dns.json"], Input: in, Transfer: ImportInput{Content: packet.Content, Passphrase: passphrase}, ResumeStage: "connecting"}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return out, err

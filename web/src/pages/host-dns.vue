@@ -11,6 +11,7 @@
 </route>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import {
   NAlert,
   NButton,
@@ -34,6 +35,9 @@ import {
 import { useAction } from "../composables/action";
 import { useSession } from "../stores/session";
 const api = useNodeAPI();
+const route = useRoute();
+const migrationNotice = ref("");
+const migrationError = ref("");
 
 const session = useSession(),
   { run, busy, message } = useAction();
@@ -340,6 +344,54 @@ function edit() {
   plan.value = null;
   editing.value = true;
 }
+async function loadMigrationCandidate() {
+  const id = route.query.migration,
+    source = route.query.source;
+  if (typeof id !== "string" || typeof source !== "string") return;
+  try {
+    const migration = await api.migration(id, controller.signal);
+    const item = migration.host_dns?.entries.find(
+      (entry) => entry.source === source,
+    );
+    if (
+      !["draft", "saved", "succeeded", "rolled_back"].includes(
+        migration.state,
+      ) ||
+      migration.host_dns?.mode !== "map" ||
+      migration.host_dns.state !== "staged" ||
+      !item?.config ||
+      item.target === null
+    )
+      throw new Error("迁移计划中没有已保存的目标 DNS 配置");
+    if (
+      !observed.value ||
+      (networkManager.value
+        ? !observed.value.connections.some((c) => c.target === item.target)
+        : networkd.value
+          ? !observed.value.links.some((link) => link.target === item.target)
+          : observed.value.owner !== "regular-file" || item.target !== "")
+    )
+      throw new Error("迁移映射目标与当前 DNS 所有者不匹配，须重新映射");
+    target.value = item.target;
+    edit();
+    servers.value = item.config.servers.join("\n");
+    search.value = item.config.search.join("\n");
+    for (const [index, family] of families.value.entries()) {
+      const config = index === 0 ? item.config.ipv4 : item.config.ipv6;
+      family.enabled = !!config;
+      family.servers = config?.servers.join("\n") ?? "";
+      family.search = config?.search.join("\n") ?? "";
+      family.automatic = config?.automatic ?? false;
+    }
+    verifyNames.value = "";
+    migrationNotice.value =
+      "迁移配置已载入，待核对目标和验证域名，再生成 DNS 变更计划。";
+  } catch (cause) {
+    if (!controller.signal.aborted)
+      migrationError.value =
+        cause instanceof Error ? cause.message : apiError(cause).message;
+  }
+}
 function invalidate() {
   plan.value = null;
   applyKey = "";
@@ -441,8 +493,11 @@ async function toggle(enabled: boolean) {
 function visible() {
   if (!document.hidden) void read();
 }
-onMounted(() => {
-  void read();
+onMounted(async () => {
+  await read();
+  if (controller.signal.aborted) return;
+  await loadMigrationCandidate();
+  if (controller.signal.aborted) return;
   document.addEventListener("visibilitychange", visible);
   poll = setInterval(() => {
     now.value = Date.now();
@@ -472,6 +527,8 @@ onUnmounted(() => {
       /><n-button :loading="reading" @click="read">刷新</n-button>
     </div>
   </div>
+  <NAlert v-if="migrationError" type="error">{{ migrationError }}</NAlert>
+  <NAlert v-if="migrationNotice" type="info">{{ migrationNotice }}</NAlert>
   <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
   <n-alert type="info" :bordered="false" style="margin: 16px 0"
     >主机解析器变更可能影响证书申请、更新、通知和远程连接。未在期限内确认的设置会自动恢复。</n-alert

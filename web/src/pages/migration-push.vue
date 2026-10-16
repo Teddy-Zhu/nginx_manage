@@ -29,10 +29,13 @@ import {
   type MigrationFirewallInput,
   type MigrationFail2banInput,
   type MigrationMonitoringInput,
+  type MigrationHostDNSInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
+import MigrationHostDNSOptions from "../components/MigrationHostDNSOptions.vue";
+import MigrationHostDNSPreview from "../components/MigrationHostDNSPreview.vue";
 import MigrationMonitoringOptions from "../components/MigrationMonitoringOptions.vue";
 import MigrationMonitoringPreview from "../components/MigrationMonitoringPreview.vue";
 import MigrationFail2banOptions from "../components/MigrationFail2banOptions.vue";
@@ -57,7 +60,19 @@ const certificates = ref(false),
   includeFirewall = ref(false),
   includeFail2ban = ref(false),
   includeMonitoring = ref(false),
+  includeHostDNS = ref(false),
   enableNginx = ref(false);
+const hostDNSSettings = ref<MigrationHostDNSInput>({
+  mode: "preserve",
+  mappings: {},
+});
+const hostDNSValid = ref(true);
+function hostDNSOptions(): MigrationHostDNSInput {
+  if (!hostDNSValid.value) throw new Error("请修正主机 DNS 目标映射");
+  return JSON.parse(
+    JSON.stringify(hostDNSSettings.value),
+  ) as MigrationHostDNSInput;
+}
 const monitoringSettings = ref<MigrationMonitoringInput>({ mode: "preserve" });
 const fail2banSettings = ref<MigrationFail2banInput>({ mode: "preserve" });
 const firewallSettings = ref<MigrationFirewallInput>({
@@ -203,11 +218,13 @@ async function submit() {
           firewall: includeFirewall.value,
           fail2ban: includeFail2ban.value,
           monitoring: includeMonitoring.value,
+          host_dns: includeHostDNS.value,
         },
       },
       mappings: mappingObject(),
       fail2ban: { ...fail2banSettings.value },
       monitoring: { ...monitoringSettings.value },
+      host_dns: hostDNSOptions(),
       firewall: {
         ...firewallSettings.value,
         interfaces: { ...firewallSettings.value.interfaces },
@@ -295,6 +312,8 @@ onUnmounted(() => {
             ><NCheckbox v-model:checked="credentials">DNS 凭据</NCheckbox
             ><NCheckbox v-model:checked="automation">ACME 配置</NCheckbox
             ><NCheckbox v-model:checked="notifications">通知渠道</NCheckbox
+            ><NCheckbox v-model:checked="includeHostDNS"
+              >主机 DNS 已保存配置</NCheckbox
             ><NCheckbox v-model:checked="includeMonitoring">监控配置</NCheckbox
             ><NCheckbox v-model:checked="includeFail2ban"
               >jail 期望配置</NCheckbox
@@ -309,6 +328,11 @@ onUnmounted(() => {
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 8 }"
         /></NFormItem>
+        <MigrationHostDNSOptions
+          v-model="hostDNSSettings"
+          @update:valid="hostDNSValid = $event"
+          :disabled="busy"
+        />
         <MigrationMonitoringOptions
           v-model="monitoringSettings"
           :disabled="busy"
@@ -369,7 +393,9 @@ onUnmounted(() => {
           ><template #trigger
             ><NButton
               type="primary"
-              :disabled="busy || !url || !key || !firewallValid"
+              :disabled="
+                busy || !url || !key || !firewallValid || !hostDNSValid
+              "
               >创建迁出任务</NButton
             ></template
           >{{
@@ -413,6 +439,10 @@ onUnmounted(() => {
           selected.error
         }}</NAlert>
         <template v-if="selected.plan">
+          <MigrationHostDNSPreview
+            v-if="selected.plan.host_dns"
+            :info="selected.plan.host_dns"
+          />
           <MigrationMonitoringPreview
             v-if="selected.plan.monitoring"
             :info="selected.plan.monitoring"

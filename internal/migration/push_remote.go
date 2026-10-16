@@ -121,6 +121,17 @@ func sanitizePushPlan(plan Plan, remote Remote, passphrase string) (Plan, error)
 		}
 		return text
 	}
+	if h := plan.HostDNS; h != nil {
+		if err := validateHostDNSPreview(h); err != nil {
+			return Plan{}, err
+		}
+		copy := *h
+		copy.Entries = append([]HostDNSItem{}, h.Entries...)
+		for i := range copy.Entries {
+			copy.Entries[i].Reason = redact(copy.Entries[i].Reason)
+		}
+		plan.HostDNS = &copy
+	}
 	if m := plan.Monitoring; m != nil {
 		if err := validateMonitoringPreview(m); err != nil {
 			return Plan{}, err

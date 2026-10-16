@@ -1894,6 +1894,7 @@ export interface components {
             install_task_id: string;
         };
         MigrationPushInput: {
+            host_dns?: components["schemas"]["MigrationHostDNSInput"];
             monitoring?: components["schemas"]["MigrationMonitoringInput"];
             fail2ban?: components["schemas"]["MigrationFail2banInput"];
             firewall?: components["schemas"]["MigrationFirewallInput"];
@@ -3359,7 +3360,12 @@ export interface components {
         MigrationFirewallInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; backend: string; interfaces: Record<string,string>; };
         MigrationFirewallInterface: { source: string; target: string; resolved: boolean; observed: boolean; };
         MigrationFirewallPlan: { mode: string; state: string; source_backend: string; target_backend: string; base_version: number; saved_version: number; source_rules: number; preserved_rules: number; replaced_rules: number; total_rules: number; policy_hash: string; interfaces: components["schemas"]["MigrationFirewallInterface"][]; entries: components["schemas"]["FirewallRule"][]; truncated: boolean; warnings: string[]; };
+        MigrationHostDNSMapping: { target: string; config?: components["schemas"]["HostDNSConfig"]; };
+        MigrationHostDNSInput: { mode: "preserve" | "map"; mappings?: Record<string, components["schemas"]["MigrationHostDNSMapping"]>; };
+        MigrationHostDNSItem: { source: string; source_config: components["schemas"]["HostDNSConfig"]; target: string | null; config: components["schemas"]["HostDNSConfig"] | null; readiness: "preserved" | "ready" | "blocked"; reason: string; };
+        MigrationHostDNSPlan: { mode: "preserve" | "map"; state: "preserved" | "pending_import" | "staged"; source_hash: string; mapping_hash: string; entries: components["schemas"]["MigrationHostDNSItem"][]; };
         MigrationSelection: {
+            host_dns: boolean;
             monitoring: boolean;
             fail2ban: boolean;
             firewall: boolean;
@@ -3392,6 +3398,7 @@ export interface components {
             manifest: components["schemas"]["MigrationManifest"];
         };
         MigrationImportInput: {
+            host_dns?: components["schemas"]["MigrationHostDNSInput"];
             monitoring?: components["schemas"]["MigrationMonitoringInput"];
             fail2ban?: components["schemas"]["MigrationFail2banInput"];
             firewall?: components["schemas"]["MigrationFirewallInput"];
@@ -3417,6 +3424,7 @@ export interface components {
             selection: components["schemas"]["MigrationSelection"];
         };
         MigrationPullInput: {
+            host_dns?: components["schemas"]["MigrationHostDNSInput"];
             monitoring?: components["schemas"]["MigrationMonitoringInput"];
             fail2ban?: components["schemas"]["MigrationFail2banInput"];
             firewall?: components["schemas"]["MigrationFirewallInput"];
@@ -3437,6 +3445,7 @@ export interface components {
             message: string;
         };
         MigrationPlan: {
+            host_dns?: components["schemas"]["MigrationHostDNSPlan"];
             monitoring?: components["schemas"]["MigrationMonitoringPlan"];
             fail2ban?: components["schemas"]["MigrationFail2banPlan"];
             firewall?: components["schemas"]["MigrationFirewallPlan"];

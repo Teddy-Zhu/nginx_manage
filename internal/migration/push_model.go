@@ -13,6 +13,7 @@ type Receiver struct {
 	Scopes  []string `json:"scopes"`
 }
 type PushInput struct {
+	HostDNS      HostDNSInput      `json:"host_dns"`
 	Monitoring   MonitoringInput   `json:"monitoring"`
 	Fail2ban     Fail2banInput     `json:"fail2ban"`
 	Firewall     FirewallInput     `json:"firewall"`
@@ -43,6 +44,7 @@ type PushTask struct {
 	ExpiresAt         int64  `json:"expires_at"`
 }
 type pushPayload struct {
+	HostDNSHash string      `json:"host_dns_hash"`
 	Input       PushInput   `json:"input"`
 	Transfer    ImportInput `json:"transfer"`
 	ResumeStage string      `json:"resume_stage"`

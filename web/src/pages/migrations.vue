@@ -32,10 +32,13 @@ import {
   type MigrationFirewallInput,
   type MigrationFail2banInput,
   type MigrationMonitoringInput,
+  type MigrationHostDNSInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
+import MigrationHostDNSOptions from "../components/MigrationHostDNSOptions.vue";
+import MigrationHostDNSPreview from "../components/MigrationHostDNSPreview.vue";
 import MigrationMonitoringOptions from "../components/MigrationMonitoringOptions.vue";
 import MigrationMonitoringPreview from "../components/MigrationMonitoringPreview.vue";
 import MigrationFail2banOptions from "../components/MigrationFail2banOptions.vue";
@@ -62,9 +65,22 @@ const includeAutomation = ref(false),
   includeFirewall = ref(false),
   includeFail2ban = ref(false),
   includeMonitoring = ref(false),
+  includeHostDNS = ref(false),
   remoteFirewall = ref(false),
   remoteFail2ban = ref(false),
-  remoteMonitoring = ref(false);
+  remoteMonitoring = ref(false),
+  remoteHostDNS = ref(false);
+const hostDNSSettings = ref<MigrationHostDNSInput>({
+  mode: "preserve",
+  mappings: {},
+});
+const hostDNSValid = ref(true);
+function hostDNSOptions(): MigrationHostDNSInput {
+  if (!hostDNSValid.value) throw new Error("请修正主机 DNS 目标映射");
+  return JSON.parse(
+    JSON.stringify(hostDNSSettings.value),
+  ) as MigrationHostDNSInput;
+}
 const monitoringSettings = ref<MigrationMonitoringInput>({ mode: "preserve" });
 const fail2banSettings = ref<MigrationFail2banInput>({ mode: "preserve" });
 const firewallSettings = ref<MigrationFirewallInput>({
@@ -216,6 +232,7 @@ async function exportPackage() {
         firewall: includeFirewall.value,
         fail2ban: includeFail2ban.value,
         monitoring: includeMonitoring.value,
+        host_dns: includeHostDNS.value,
       },
     });
     const bytes = Uint8Array.from(atob(out.content), (c) => c.charCodeAt(0));
@@ -250,6 +267,7 @@ async function previewFile() {
       firewall,
       fail2ban: { ...fail2banSettings.value },
       monitoring: { ...monitoringSettings.value },
+      host_dns: hostDNSOptions(),
     });
     importPassphrase.value = "";
   });
@@ -270,6 +288,7 @@ function remoteInput(execute: boolean, version: number): MigrationPullInput {
         firewall: remoteFirewall.value,
         fail2ban: remoteFail2ban.value,
         monitoring: remoteMonitoring.value,
+        host_dns: remoteHostDNS.value,
       },
     },
     base_version: version,
@@ -277,6 +296,7 @@ function remoteInput(execute: boolean, version: number): MigrationPullInput {
     firewall: firewallOptions(),
     fail2ban: { ...fail2banSettings.value },
     monitoring: { ...monitoringSettings.value },
+    host_dns: hostDNSOptions(),
     mode: execute ? mode.value : "preview",
     enable_nginx: enableNginx.value,
   };
@@ -421,6 +441,8 @@ onUnmounted(() => {
           >包含 ACME 账户与签发配置</NCheckbox
         ><NCheckbox v-model:checked="includeNotifications"
           >包含通知渠道及凭据</NCheckbox
+        ><NCheckbox v-model:checked="includeHostDNS"
+          >主机 DNS 已保存配置</NCheckbox
         ><NCheckbox v-model:checked="includeMonitoring">包含监控配置</NCheckbox
         ><NCheckbox v-model:checked="includeFail2ban"
           >包含 jail 期望配置</NCheckbox
@@ -448,7 +470,11 @@ onUnmounted(() => {
       /></NFormItem>
       <NButton
         :disabled="
-          busy || !file || importPassphrase.length < 16 || !firewallValid
+          busy ||
+          !file ||
+          importPassphrase.length < 16 ||
+          !firewallValid ||
+          !hostDNSValid
         "
         :loading="busy"
         @click="previewFile"
@@ -486,19 +512,29 @@ onUnmounted(() => {
           v-if="has('notifications.write')"
           v-model:checked="remoteNotifications"
           >包含通知渠道及凭据</NCheckbox
+        ><NCheckbox v-model:checked="remoteHostDNS"
+          >主机 DNS 已保存配置</NCheckbox
         ><NCheckbox v-model:checked="remoteMonitoring">包含监控配置</NCheckbox
         ><NCheckbox v-model:checked="remoteFail2ban">jail 期望配置</NCheckbox
         ><NCheckbox v-model:checked="remoteFirewall"
           >包含防火墙期望规则</NCheckbox
         ><NButton
-          :disabled="busy || !remoteURL || !remoteKey || !firewallValid"
+          :disabled="
+            busy || !remoteURL || !remoteKey || !firewallValid || !hostDNSValid
+          "
           @click="pull(false)"
           >拉取并预检</NButton
         ><NPopconfirm @positive-click="pull(true)"
           ><template #trigger
             ><NButton
               type="primary"
-              :disabled="busy || !remoteURL || !remoteKey || !firewallValid"
+              :disabled="
+                busy ||
+                !remoteURL ||
+                !remoteKey ||
+                !firewallValid ||
+                !hostDNSValid
+              "
               >一键迁入</NButton
             ></template
           >按所选模式迁入。保存或应用将替换目标 Nginx 配置。</NPopconfirm
@@ -520,6 +556,12 @@ onUnmounted(() => {
           :autosize="{ minRows: 3, maxRows: 10 }"
           placeholder='{"192.168.1.10:80":"0.0.0.0:80"}'
       /></NFormItem>
+      <MigrationHostDNSOptions
+        v-model="hostDNSSettings"
+        @update:valid="hostDNSValid = $event"
+        :disabled="busy"
+        :allow-map="has('host.dns.write')"
+      />
       <MigrationMonitoringOptions
         v-model="monitoringSettings"
         :allow-replace="has('monitoring.write')"
@@ -553,6 +595,15 @@ onUnmounted(() => {
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
         >{{ plan.last_error }}</NAlert
       >
+      <MigrationHostDNSPreview
+        v-if="plan.host_dns"
+        :info="plan.host_dns"
+        :plan-id="
+          ['draft', 'saved', 'succeeded', 'rolled_back'].includes(plan.state)
+            ? plan.id
+            : undefined
+        "
+      />
       <MigrationMonitoringPreview
         v-if="plan.monitoring"
         :info="plan.monitoring"

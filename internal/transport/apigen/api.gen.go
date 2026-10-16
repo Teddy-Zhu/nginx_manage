@@ -2555,6 +2555,7 @@ type MigrationExportInput struct {
 
 // MigrationImportInput defines model for MigrationImportInput.
 type MigrationImportInput struct {
+	HostDNS     *MigrationHostDNSInput    `json:"host_dns,omitempty"`
 	Monitoring  *MigrationMonitoringInput `json:"monitoring,omitempty"`
 	Fail2ban    *MigrationFail2banInput   `json:"fail2ban,omitempty"`
 	Firewall    *MigrationFirewallInput   `json:"firewall,omitempty"`
@@ -2585,6 +2586,7 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
+	HostDNS       *MigrationHostDNSPlan      `json:"host_dns,omitempty"`
 	Monitoring    *MigrationMonitoringPlan   `json:"monitoring,omitempty"`
 	Fail2ban      *MigrationFail2banPlan     `json:"fail2ban,omitempty"`
 	Firewall      *MigrationFirewallPlan     `json:"firewall,omitempty"`
@@ -2608,6 +2610,7 @@ type MigrationPlan struct {
 
 // MigrationPullInput defines model for MigrationPullInput.
 type MigrationPullInput struct {
+	HostDNS     *MigrationHostDNSInput    `json:"host_dns,omitempty"`
 	Monitoring  *MigrationMonitoringInput `json:"monitoring,omitempty"`
 	Fail2ban    *MigrationFail2banInput   `json:"fail2ban,omitempty"`
 	Firewall    *MigrationFirewallInput   `json:"firewall,omitempty"`
@@ -2623,6 +2626,7 @@ type MigrationPullInputMode string
 
 // MigrationPushInput defines model for MigrationPushInput.
 type MigrationPushInput struct {
+	HostDNS      *MigrationHostDNSInput    `json:"host_dns,omitempty"`
 	Monitoring   *MigrationMonitoringInput `json:"monitoring,omitempty"`
 	Fail2ban     *MigrationFail2banInput   `json:"fail2ban,omitempty"`
 	Firewall     *MigrationFirewallInput   `json:"firewall,omitempty"`
@@ -2707,8 +2711,33 @@ type MigrationFirewallPlan struct {
 	Warnings       []string                     `json:"warnings"`
 }
 
+type MigrationHostDNSMapping struct {
+	Target string         `json:"target"`
+	Config *HostDNSConfig `json:"config,omitempty"`
+}
+type MigrationHostDNSInput struct {
+	Mode     string                              `json:"mode"`
+	Mappings *map[string]MigrationHostDNSMapping `json:"mappings,omitempty"`
+}
+type MigrationHostDNSItem struct {
+	Source       string         `json:"source"`
+	SourceConfig HostDNSConfig  `json:"source_config"`
+	Target       *string        `json:"target"`
+	Config       *HostDNSConfig `json:"config"`
+	Readiness    string         `json:"readiness"`
+	Reason       string         `json:"reason"`
+}
+type MigrationHostDNSPlan struct {
+	Mode        string                 `json:"mode"`
+	State       string                 `json:"state"`
+	SourceHash  string                 `json:"source_hash"`
+	MappingHash string                 `json:"mapping_hash"`
+	Entries     []MigrationHostDNSItem `json:"entries"`
+}
+
 // MigrationSelection defines model for MigrationSelection.
 type MigrationSelection struct {
+	HostDNS        bool `json:"host_dns"`
 	Monitoring     bool `json:"monitoring"`
 	Fail2ban       bool `json:"fail2ban"`
 	Firewall       bool `json:"firewall"`

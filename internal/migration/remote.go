@@ -33,6 +33,14 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 			return Plan{}, err
 		}
 	}
+	if err := validateHostDNSSelection(in.HostDNS, in.Remote.Selection.HostDNS); err != nil {
+		return Plan{}, err
+	}
+	if in.HostDNS.Mode == "map" {
+		if err := p.Require("host.dns.write"); err != nil {
+			return Plan{}, err
+		}
+	}
 	if err := validateMonitoringSelection(in.Monitoring, in.Remote.Selection.Monitoring); err != nil {
 		return Plan{}, err
 	}
@@ -129,7 +137,7 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		if manifest.SourceNode != envelope.NodeID {
 			return Plan{}, redactedRemoteError()
 		}
-		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, &pullReservation{p.ID, key, digest}, nil)
+		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, in.HostDNS, &pullReservation{p.ID, key, digest}, nil)
 	}()
 	if err != nil {
 		return Plan{}, err

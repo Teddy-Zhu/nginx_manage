@@ -87,6 +87,9 @@ func (s *Service) nextPush(ctx context.Context) error {
 		if j.Payload.Input.EnableNginx || j.Payload.Input.Dependencies != nil && j.Payload.Input.Dependencies.Install != nil {
 			required = append(required, "system.write")
 		}
+		if j.Payload.Input.HostDNS.Mode == "map" {
+			required = append(required, "host.dns.write")
+		}
 		if j.Payload.Input.Monitoring.Mode == "replace" {
 			required = append(required, "monitoring.write")
 		}
@@ -118,6 +121,7 @@ func (s *Service) nextPush(ctx context.Context) error {
 			transfer.Firewall = j.Payload.Input.Firewall
 			transfer.Fail2ban = j.Payload.Input.Fail2ban
 			transfer.Monitoring = j.Payload.Input.Monitoring
+			transfer.HostDNS = j.Payload.Input.HostDNS
 			transfer.BaseVersion = j.Task.TargetBaseVersion
 			err = pushRPC(call, remote, j.Task.TargetNode, http.MethodPut, "/migrations/receive/"+j.Task.ID, "", transfer, &plan)
 		}
@@ -182,6 +186,9 @@ func (s *Service) acceptPushPlan(j *pushJob, plan Plan) error {
 	}
 	if plan.ID != j.Task.ID || plan.SourceNode != s.NodeID || plan.BaseVersion != j.Task.TargetBaseVersion || plan.PackageSHA256 != j.Task.PackageSHA256 {
 		return errors.New("target plan mismatch")
+	}
+	if err = acceptPushHostDNS(plan, j.Payload.Input, j.Task.Plan, j.Payload.HostDNSHash); err != nil {
+		return err
 	}
 	if err = acceptPushMonitoring(plan, j.Payload.Input, j.Task.Plan); err != nil {
 		return err

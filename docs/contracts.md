@@ -201,3 +201,6 @@ Nginx HTTP 站点元信息新增可选 client_deny，声明受管客户端拒绝
 
 
 受管 jail 的公开合同新增 `GET /fail2ban/runtime`、`POST /fail2ban/apply` 与 `GET /fail2ban/tasks` 及对应显式远程资源。应用固定 version/policy_hash/base_id/target，要求 security.write、幂等与近期认证，HTTP 202 返回持久任务；复用独立 root 执行器，只允许已运行受管实例的 nginx-client 动作。预览返回运行基准和将停用项，can_apply 按实际条件计算；单 jail 查询仍 writable=false。目标摘要纳入安装、服务代次、Nginx 部署/清单、所选配置与动作授权，返回操作增加 request_hash/target 供后台严格核对。模块可显式启用且不安装/启动/停止服务；应用与恢复期间阻止对应期望写入。新增加密 fail2ban_operations 表，数据库为 26，Agent 为 44，归档 schema 仍为 4；无旧协议兼容。未执行生成器与运行验证，留待 P5。
+
+
+主机 DNS 配置迁移新增 `selection.host_dns`、`host_dns.mode=preserve|map`、逐源显式目标及可选目标配置，文件导入、API 拉取与推送共用同一逻辑。只导出已确认期望配置；映射要求 host.dns.write，缺失/重复目标、跨配置类型及接口区域转换须明确处理。计划返回候选及目标就绪条件，保存只暂存加密材料，不改写运行 DNS 或伪造已确认期望；目标 DNS 页面载入后重新生成原计划并单独确认。推送严格核对源包散列、映射、配置与阶段，不重放接管或恢复授权。迁移归档当前 schema 为 5，Agent 仍为 44、数据库仍为 26；统一 JSON 与自动扫描路由不变。未运行生成器、构建、类型检查、测试或真实操作，待 P5；详见 [主机 DNS 迁移](migration.md#主机-dns-配置迁移)。

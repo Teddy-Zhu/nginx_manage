@@ -42,7 +42,7 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 		return Package{}, err
 	}
 	payload := Payload{Files: tree.Files, Certificates: []Certificate{}, Credentials: []Credential{}, Channels: []notifications.TransferChannel{}, Automation: acme.TransferAutomation{Accounts: []acme.TransferAccount{}, Profiles: []acme.TransferProfile{}}}
-	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS、模块开关及日志轮转所有者保留", "目标防火墙内核运行规则、所有权与恢复状态保留，迁入规则须单独确认应用", "Fail2ban 实例、Socket、所有权与封禁状态保留，迁入 jail 须单独核对运行接入", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
+	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS 运行配置、模块开关及日志轮转所有者保留；DNS 迁入材料须单独生成计划并确认", "目标防火墙内核运行规则、所有权与恢复状态保留，迁入规则须单独确认应用", "Fail2ban 实例、Socket、所有权与封禁状态保留，迁入 jail 须单独核对运行接入", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
 	parsed, err := nginxconfig.Parse(tree.Files, s.Config.Policy)
 	if err != nil {
 		return Package{}, err
@@ -71,6 +71,15 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 	}
 	if in.Selection.Automation {
 		payload.Automation, err = s.ACME.ExportAutomation(ctx, tx)
+		if err != nil {
+			return Package{}, err
+		}
+	}
+	if in.Selection.HostDNS {
+		if s.HostDNS == nil {
+			return Package{}, fault.Unavailable("主机 DNS 服务未配置")
+		}
+		payload.HostDNS, err = s.HostDNS.Export(ctx, tx)
 		if err != nil {
 			return Package{}, err
 		}
@@ -138,10 +147,10 @@ func (s *Service) Prepare(ctx context.Context, p auth.Principal, requestID strin
 	if err != nil {
 		return Plan{}, err
 	}
-	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, nil, nil)
+	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, in.HostDNS, nil, nil)
 }
 
-func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, firewallInput FirewallInput, fail2banInput Fail2banInput, monitoringInput MonitoringInput, pull *pullReservation, receive *receiveReservation) (Plan, error) {
+func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, firewallInput FirewallInput, fail2banInput Fail2banInput, monitoringInput MonitoringInput, hostDNSInput HostDNSInput, pull *pullReservation, receive *receiveReservation) (Plan, error) {
 	if base < 0 || m.SourceNode == s.NodeID {
 		return Plan{}, fault.Invalid("基础版本无效或来源为当前节点")
 	}
@@ -158,6 +167,14 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	if receive != nil {
 		st.Plan.ID = receive.ID
 		st.Plan.PackageSHA256 = receive.PackageSHA256
+	}
+	if hostDNSInput.Mode == "map" {
+		if err := p.Require("host.dns.write"); err != nil {
+			return Plan{}, err
+		}
+	}
+	if err := prepareHostDNS(&st, hostDNSInput); err != nil {
+		return Plan{}, err
 	}
 	if monitoringInput.Mode == "replace" {
 		if err := p.Require("monitoring.write"); err != nil {
@@ -299,6 +316,9 @@ func (s *Service) inspect(ctx context.Context, st *storedPlan) error {
 			plan.CanApply = false
 		}
 	}
+	if err := s.inspectHostDNS(ctx, st, add); err != nil {
+		return err
+	}
 	if err := s.inspectMonitoring(ctx, st, add); err != nil {
 		return err
 	}
@@ -437,6 +457,15 @@ func (s *Service) load(ctx context.Context, p auth.Principal, id string) (stored
 	if err := decodeStrict(plain, &st); err != nil {
 		return st, err
 	}
+	if err := prepareHostDNS(&st, st.HostDNS); err != nil {
+		return st, fault.Unavailable("主机 DNS 迁移材料无效，须重新准备")
+	}
+	if st.Manifest.Selection.HostDNS != (st.Payload.HostDNS != nil) {
+		return st, fault.Unavailable("主机 DNS 迁移范围与材料不一致")
+	}
+	if st.Payload.HostDNS != nil && st.Plan.HostDNS == nil {
+		return st, fault.Unavailable("主机 DNS 迁移摘要缺失")
+	}
 	if st.Manifest.Schema != Schema || st.Monitoring != nil && (st.Plan.Monitoring == nil || st.Payload.Monitoring == nil) || st.Fail2ban != nil && (st.Plan.Fail2ban == nil || st.Payload.Fail2ban == nil) || st.Firewall != nil && (st.Plan.Firewall == nil || st.Payload.Firewall == nil) {
 		return st, fault.Unavailable("迁移计划格式或配置恢复材料无效，须重新准备或由本机检查")
 	}
@@ -444,6 +473,7 @@ func (s *Service) load(ctx context.Context, p auth.Principal, id string) (stored
 	st.Plan.RevisionID = revision
 	st.Plan.TaskID = task
 	st.Plan.LastError = lastError
+	reflectHostDNSState(&st.Plan)
 	return st, nil
 }
 func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, error) {
@@ -499,6 +529,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, e
 			plan.Firewall.State = "recovery_required"
 		}
 	}
+	reflectHostDNSState(&plan)
 	plan.Dependencies, err = s.dependencyStatus(ctx, id)
 	return plan, err
 }
@@ -535,6 +566,7 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]Plan, error) {
 		plan.Firewall = nil
 		plan.Fail2ban = nil
 		plan.Monitoring = nil
+		plan.HostDNS = nil
 		out = append(out, plan)
 	}
 	return out, nil
@@ -569,6 +601,11 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 	}
 	if st.Plan.State == "failed" {
 		return Plan{}, fault.Conflict("迁移计划已过期或结束，请重新预检")
+	}
+	if st.HostDNS.Mode == "map" {
+		if err := p.Require("host.dns.write"); err != nil {
+			return Plan{}, err
+		}
 	}
 	if st.Monitoring != nil {
 		if err := p.Require("monitoring.write"); err != nil {
@@ -678,6 +715,7 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 			state = "applying"
 		}
 		st.Plan.State = state
+		reflectHostDNSState(&st.Plan)
 		st.Plan.RevisionID = result.Tree.RevisionID
 		st.Plan.TaskID = result.TaskID
 		raw, err := json.Marshal(st)
