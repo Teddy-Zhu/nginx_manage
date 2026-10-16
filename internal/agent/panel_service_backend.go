@@ -47,7 +47,7 @@ func panelNativeUnit(data string) error {
 	if err != nil {
 		return err
 	}
-	if string(ready) != "native-install-v9\n" || !strings.HasPrefix(string(intent), "native-install-v9\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\npanel_mode=native\n") {
+	if string(ready) != "native-install-v10\n" || !strings.HasPrefix(string(intent), "native-install-v10\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\npanel_mode=native\n") {
 		return errors.New("原生面板服务不属于已完成的本机安装")
 	}
 	raw, err := nginxmodules.ReadTrusted("/etc/systemd/system/nginxpanel.service", 64<<10)

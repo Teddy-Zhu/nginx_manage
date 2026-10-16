@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -142,6 +142,7 @@ func run() error {
 		"panel-readiness":         {"data-dir": true, "panel-service-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
 		"update-worker":           {"data-dir": true, "panel-update": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-update-status":     {"data-dir": true, "panel-update": true},
+		"panel-update-worker":     {"data-dir": true, "panel-update": true},
 		"panel-snapshot-capture":  {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-snapshot-check":    {"data-dir": true, "recovery-operation": true},
 		"panel-snapshot-db":       {"data-dir": true, "recovery-operation": true},
@@ -168,7 +169,7 @@ func run() error {
 		}
 		switch f.Name {
 		case "panel-update":
-			if command != "update-worker" && command != "panel-update-status" {
+			if command != "update-worker" && command != "panel-update-worker" && command != "panel-update-status" {
 				invalidFlag = f.Name
 			}
 		case "panel-service-operation":
@@ -407,6 +408,14 @@ func run() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-update-worker":
+		out, err := agent.RunPanelUpdate(ctx, absDir, *panelUpdate)
+		if out.OperationID != "" {
+			if encoded := json.NewEncoder(os.Stdout).Encode(out); encoded != nil {
+				return errors.Join(err, encoded)
+			}
+		}
+		return err
 	case "update-worker":
 		out, err := agent.UpdatePanel(ctx, agent.PanelUpdateInput{Stage: panelruntime.StageInput{DataDir: absDir, PlanID: *releasePlan, TrustPath: *releaseTrust, AllowPrerelease: *releasePrerelease}, MaintenanceID: *installMaintenance}, *panelUpdate, *installEpoch)
 		if out.OperationID != "" {

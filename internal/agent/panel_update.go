@@ -11,6 +11,7 @@ import (
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/panelruntime"
+	"nginxpanel/internal/panelupdates"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 )
@@ -109,6 +110,10 @@ func (w *panelUpdateWorker) approved(ctx context.Context) error {
 // can choose an executable, bypass the staged signature, or resume a released
 // maintenance grant to overwrite later writes.
 func UpdatePanel(ctx context.Context, in PanelUpdateInput, id, epoch string) (Record, error) {
+	return updatePanel(ctx, in, id, epoch, nil)
+}
+
+func updatePanel(ctx context.Context, in PanelUpdateInput, id, epoch string, authorization *panelupdates.Request) (Record, error) {
 	var zero Record
 	if os.Geteuid() != 0 || !validID(id) || !validID(in.MaintenanceID) || id == in.MaintenanceID || !validID(epoch) {
 		return zero, errors.New("独立更新需要 root、原操作和维护授权")
@@ -133,11 +138,21 @@ func UpdatePanel(ctx context.Context, in PanelUpdateInput, id, epoch string) (Re
 		if w.r.PanelUpdate.Intent.Input != in {
 			return w.r, errors.New("更新标识已有不同的目标或维护授权")
 		}
+		if err = authorizePanelUpdate(w.r, authorization); err != nil {
+			return w.r, err
+		}
 		if panelUpdateTerminal(w.r) {
 			return panelUpdateResult(w.r)
 		}
 		if panelUpdateFinalized(w.r) {
 			return w.awaitRelease(ctx)
+		}
+		if authorization != nil {
+			a := w.r.PanelUpdate.Authorizations
+			a[len(a)-1].ClaimedAt = time.Now().Unix()
+			if err = w.save(); err != nil {
+				return w.r, err
+			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return zero, err
@@ -151,48 +166,23 @@ func UpdatePanel(ctx context.Context, in PanelUpdateInput, id, epoch string) (Re
 				access()
 			}
 		}()
-		for _, check := range []func(string) (bool, error){storage.ServiceHeld, storage.WriterFenced} {
-			present, e := check(in.Stage.DataDir)
-			if e != nil {
-				return zero, e
-			}
-			if present {
-				return zero, errors.New("已有停机或恢复标记，须先继续原事务")
-			}
+		if authorization != nil {
+			return zero, errors.New("托管服务缺少已持久化的更新意图")
 		}
-		before, err := panelruntime.Read(in.Stage.DataDir)
+		w.r, err = preparePanelUpdate(ctx, in, id, epoch)
 		if err != nil {
 			return zero, err
 		}
-		uid, gid, err := panelSnapshotIdentity(in.Stage.DataDir)
-		if err != nil {
-			return zero, err
-		}
-		target, err := panelruntime.Staged(ctx, in.Stage)
-		if err != nil {
-			return zero, err
-		}
-		if !target.Compatibility.AutomaticRollback {
-			return zero, errors.New("此发布未声明允许自动回滚，不能进入自动更新流程")
-		}
-		if target.Release.ID == before.Release.ID || target.Compatibility.DatabaseSchema < before.Release.DatabaseSchema {
-			return zero, errors.New("目标已是当前版本或需要不受支持的数据库降级")
-		}
-		observed, err := observePanelService(ctx, before)
-		if err != nil {
-			return zero, err
-		}
-		if !validServiceObservation(observed) || observed.State != "running" {
-			return zero, errors.New("原面板进程尚未稳定运行")
-		}
-		i := PanelUpdateIntent{Input: in, BeforeID: before.Release.ID, TargetID: target.Release.ID, BeforeSchema: before.Release.DatabaseSchema, TargetSchema: target.Compatibility.DatabaseSchema, BindingSHA256: selectionValueHash(before.Deployment), ApprovalSHA256: selectionValueHash(target.Approval), UID: uid, GID: gid, SnapshotEpoch: epoch, SnapshotID: secure.ID(), StopID: secure.ID(), SelectionID: secure.ID(), StartID: secure.ID(), RollbackStopID: secure.ID(), RollbackSelectionID: secure.ID(), RestoreID: secure.ID(), RollbackStartID: secure.ID(), Before: observed}
-		w.r = Record{OperationID: id, Kind: panelUpdateKind, State: "running", Stage: "capturing", MaintenanceEpoch: epoch, Deadline: time.Now().Add(20 * time.Minute).Unix(), PanelUpdate: &PanelUpdateOperation{Intent: i}}
-		w.r.RequestHash = panelUpdateHash(id, i)
 		if err = w.save(); err != nil {
 			return w.r, err
 		}
 		access()
 		access = nil
+	}
+	if w.r.State == "queued" || w.r.State == "recovery_required" {
+		if err = w.stage(w.r.Stage); err != nil {
+			return w.r, err
+		}
 	}
 	if strings.HasPrefix(w.r.Stage, "rollback_") || w.r.Stage == "restoring" {
 		return w.compensate(ctx)
@@ -231,6 +221,47 @@ func UpdatePanel(ctx context.Context, in PanelUpdateInput, id, epoch string) (Re
 		return w.r, errors.Join(err, e)
 	}
 	return w.compensate(ctx)
+}
+
+// Caller holds the update, service and maintenance-access locks. Preparation
+// reads only trusted runtime state; app data is accessed by the hosted worker.
+func preparePanelUpdate(ctx context.Context, in PanelUpdateInput, id, epoch string) (Record, error) {
+	for _, check := range []func(string) (bool, error){storage.ServiceHeld, storage.WriterFenced} {
+		present, e := check(in.Stage.DataDir)
+		if e != nil {
+			return Record{}, e
+		}
+		if present {
+			return Record{}, errors.New("已有停机或恢复标记，须先继续原事务")
+		}
+	}
+	before, err := panelruntime.Read(in.Stage.DataDir)
+	if err != nil {
+		return Record{}, err
+	}
+	uid, gid, err := panelSnapshotIdentity(in.Stage.DataDir)
+	if err != nil {
+		return Record{}, err
+	}
+	target, err := panelruntime.Staged(ctx, in.Stage)
+	if err != nil {
+		return Record{}, err
+	}
+	if !target.Compatibility.AutomaticRollback {
+		return Record{}, errors.New("此发布未声明允许自动回滚，不能进入自动更新流程")
+	}
+	if target.Release.ID == before.Release.ID || target.Compatibility.DatabaseSchema < before.Release.DatabaseSchema {
+		return Record{}, errors.New("目标已是当前版本或需要不受支持的数据库降级")
+	}
+	observed, err := observePanelService(ctx, before)
+	if err != nil {
+		return Record{}, err
+	}
+	if !validServiceObservation(observed) || observed.State != "running" {
+		return Record{}, errors.New("原面板进程尚未稳定运行")
+	}
+	i := PanelUpdateIntent{Input: in, BeforeID: before.Release.ID, TargetID: target.Release.ID, BeforeSchema: before.Release.DatabaseSchema, TargetSchema: target.Compatibility.DatabaseSchema, BindingSHA256: selectionValueHash(before.Deployment), ApprovalSHA256: selectionValueHash(target.Approval), UID: uid, GID: gid, SnapshotEpoch: epoch, SnapshotID: secure.ID(), StopID: secure.ID(), SelectionID: secure.ID(), StartID: secure.ID(), RollbackStopID: secure.ID(), RollbackSelectionID: secure.ID(), RestoreID: secure.ID(), RollbackStartID: secure.ID(), Before: observed}
+	return Record{OperationID: id, Kind: panelUpdateKind, State: "running", Stage: "capturing", MaintenanceEpoch: epoch, Deadline: time.Now().Add(20 * time.Minute).Unix(), RequestHash: panelUpdateHash(id, i), PanelUpdate: &PanelUpdateOperation{Intent: i}}, nil
 }
 
 func (w *panelUpdateWorker) forward(ctx context.Context) error {
@@ -331,19 +362,11 @@ func (w *panelUpdateWorker) awaitRelease(ctx context.Context) (Record, error) {
 	defer cancel()
 	i := w.r.PanelUpdate.Intent
 	for {
-		r, err := w.j.Get(i.Input.MaintenanceID)
+		acknowledged, err := w.acknowledgeRelease()
 		if err != nil {
 			return w.r, err
 		}
-		if r.Kind != "maintenance.lock" || r.RequestHash != maintenanceHashForID(i.Input.MaintenanceID) {
-			return w.r, errors.New("原维护记录身份已偏离")
-		}
-		if r.State == "succeeded" && r.Stage == "released" {
-			w.r.PanelUpdate.ReleaseAcknowledged = true
-			w.r.State = panelUpdateOutcome(w.r)
-			if err = w.save(); err != nil {
-				return w.r, err
-			}
+		if acknowledged {
 			result, err := panelUpdateRecord(i.Input.Stage.DataDir, w.r.OperationID)
 			if err != nil {
 				return w.r, err
@@ -356,6 +379,31 @@ func (w *panelUpdateWorker) awaitRelease(ctx context.Context) (Record, error) {
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
+}
+
+// Caller holds the update lock. Collecting a released grant only settles the
+// original receipt; it can never re-enter service or snapshot mutation.
+func (w *panelUpdateWorker) acknowledgeRelease() (bool, error) {
+	if !panelUpdateFinalized(w.r) {
+		return false, errors.New("更新结果尚未提交")
+	}
+	if panelUpdateTerminal(w.r) {
+		return true, nil
+	}
+	id := w.r.PanelUpdate.Intent.Input.MaintenanceID
+	r, err := w.j.Get(id)
+	if err != nil {
+		return false, err
+	}
+	if r.Kind != "maintenance.lock" || r.RequestHash != maintenanceHashForID(id) {
+		return false, errors.New("原维护记录身份已偏离")
+	}
+	if r.State != "succeeded" || r.Stage != "released" {
+		return false, nil
+	}
+	w.r.PanelUpdate.ReleaseAcknowledged = true
+	w.r.State = panelUpdateOutcome(w.r)
+	return true, w.save()
 }
 
 func maintenanceHashForID(id string) string {

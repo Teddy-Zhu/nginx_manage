@@ -164,7 +164,14 @@ sudo /opt/nginxpanel/current/nginxpanel panel-readiness \
 
 ## 独立面板更新事务
 
-`update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 18。
+`update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 19。
+
+原生安装登记 v10 为 native 和 Docker 面板统一安装 `nginxpanel-update@.service`。该 root 服务独立于 `serve` 和 Agent 的生命周期，只接受原操作 UUID，由固定 `panel-update-worker` 加载 root 记录；请求不能指定可执行程序、数据目录或信任文件。服务不自动重启，最长运行 40 分钟，收到停止信号后留出补偿时间。运行前核对安装意图、ready、root 服务文件及 systemd 实际加载的片段、账户、类型、drop-in 和 reload 状态。
+
+Agent 19 提供内部 IPC `POST /v1/panel/updates` 与 `GET /v1/panel/updates/{id}`，沿用统一响应封装。新建须传递已签名暂存的 `plan_id`、原 `maintenance_id`、`prerelease`、操作 UUID、当前 epoch、连续 `sequence` 和五分钟内的 `authorization_until`；首个 command 为 `update`，后续为 `resume`。Agent 先持久保存完整原意图和逐次授权，再启动固定服务。启动授权由 worker 在锁内一次性认领。相同序号与内容只查询原操作，不能重复启动；启动结果未知或服务停止后须使用下一个序号显式续办。历史授权不可修改，续办不改变原目标、快照及总执行期限。过期启动授权不能触发后续变更，已经运行的事务仍按原补偿规则处理。
+
+查询同时核对实际服务状态与 root 原记录；失去运行进程的未完成事务保留 `recovery_required`，不伪造成功。已提交或补偿完成的事务只收取原维护释放回执，查询可补齐此收尾记录，不能触发停机、切换或恢复。上述入口为 Agent 内部合同，面向用户的 Web/API 任务与救援材料清理仍待接入。
+
 
 ```sh
 sudo /opt/nginxpanel/current/nginxpanel update-worker \

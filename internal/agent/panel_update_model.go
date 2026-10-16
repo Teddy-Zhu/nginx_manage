@@ -9,6 +9,7 @@ import (
 
 	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/panelruntime"
+	"nginxpanel/internal/panelupdates"
 	"nginxpanel/internal/secure"
 )
 
@@ -43,21 +44,28 @@ type PanelUpdateIntent struct {
 
 // Child operations are embedded so the immutable parent authorization and every
 // live-step receipt are published atomically in one independent root journal.
+type PanelUpdateAuthorization struct {
+	Request    panelupdates.Request `json:"request"`
+	AcceptedAt int64                `json:"accepted_at"`
+	ClaimedAt  int64                `json:"claimed_at"`
+}
+
 type PanelUpdateOperation struct {
-	Intent              PanelUpdateIntent        `json:"intent"`
-	Snapshot            *panelrecovery.Receipt   `json:"snapshot,omitempty"`
-	Stop                *Record                  `json:"stop,omitempty"`
-	Start               *Record                  `json:"start,omitempty"`
-	RollbackStop        *Record                  `json:"rollback_stop,omitempty"`
-	Restore             *Record                  `json:"restore,omitempty"`
-	RollbackStart       *Record                  `json:"rollback_start,omitempty"`
-	Selected            bool                     `json:"selected"`
-	RollbackSelected    bool                     `json:"rollback_selected"`
-	Ready               *PanelReadiness          `json:"ready,omitempty"`
-	RollbackReady       *PanelReadiness          `json:"rollback_ready,omitempty"`
-	AbortObservation    *PanelServiceObservation `json:"abort_observation,omitempty"`
-	Failure             string                   `json:"failure"`
-	ReleaseAcknowledged bool                     `json:"release_acknowledged"`
+	Authorizations      []PanelUpdateAuthorization `json:"authorizations,omitempty"`
+	Intent              PanelUpdateIntent          `json:"intent"`
+	Snapshot            *panelrecovery.Receipt     `json:"snapshot,omitempty"`
+	Stop                *Record                    `json:"stop,omitempty"`
+	Start               *Record                    `json:"start,omitempty"`
+	RollbackStop        *Record                    `json:"rollback_stop,omitempty"`
+	Restore             *Record                    `json:"restore,omitempty"`
+	RollbackStart       *Record                    `json:"rollback_start,omitempty"`
+	Selected            bool                       `json:"selected"`
+	RollbackSelected    bool                       `json:"rollback_selected"`
+	Ready               *PanelReadiness            `json:"ready,omitempty"`
+	RollbackReady       *PanelReadiness            `json:"rollback_ready,omitempty"`
+	AbortObservation    *PanelServiceObservation   `json:"abort_observation,omitempty"`
+	Failure             string                     `json:"failure"`
+	ReleaseAcknowledged bool                       `json:"release_acknowledged"`
 }
 
 func panelUpdateHash(id string, in PanelUpdateIntent) string {
@@ -127,6 +135,18 @@ func validPanelUpdate(r Record) error {
 	}
 	if !validID(i.Input.MaintenanceID) || !panelSelectionDigest.MatchString(s.PlanID) || !filepath.IsAbs(s.TrustPath) || filepath.Clean(s.TrustPath) != s.TrustPath || len(s.TrustPath) > 512 || !panelSelectionDigest.MatchString(i.BeforeID) || !panelSelectionDigest.MatchString(i.TargetID) || i.BeforeID == i.TargetID || i.BeforeSchema <= 0 || i.TargetSchema < i.BeforeSchema || !panelSelectionDigest.MatchString(i.BindingSHA256) || !panelSelectionDigest.MatchString(i.ApprovalSHA256) || i.UID <= 0 || i.GID <= 0 || i.SnapshotEpoch != r.MaintenanceEpoch || !validServiceObservation(i.Before) || i.Before.State != "running" || i.Before.ReleaseID != i.BeforeID || r.RequestHash != panelUpdateHash(r.OperationID, i) || r.Deadline <= 0 || len(p.Failure) > 1024 || len(r.Error) > 1024 {
 		return errors.New("面板更新记录与原批准不一致")
+	}
+	if len(p.Authorizations) > 32 {
+		return errors.New("更新授权记录过多")
+	}
+	for n, a := range p.Authorizations {
+		q := a.Request
+		if q.Validate() != nil || q.OperationID != r.OperationID || q.Input != panelUpdateAPIInput(i.Input) || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt > q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != i.SnapshotEpoch || n > 0 && a.AcceptedAt < p.Authorizations[n-1].AcceptedAt {
+			return errors.New("更新授权历史与原意图不一致")
+		}
+	}
+	if r.State == "queued" && len(p.Authorizations) == 0 {
+		return errors.New("排队更新缺少托管授权")
 	}
 	ids := []string{r.OperationID, i.Input.MaintenanceID, i.SnapshotID, i.StopID, i.SelectionID, i.StartID, i.RollbackStopID, i.RollbackSelectionID, i.RestoreID, i.RollbackStartID}
 	for n, id := range ids {
@@ -203,7 +223,7 @@ func validPanelUpdate(r Record) error {
 	}
 	switch r.Stage {
 	case "capturing":
-		if r.State != "running" && r.State != "recovery_required" {
+		if r.State != "queued" && r.State != "running" && r.State != "recovery_required" {
 			return errors.New("更新捕获阶段无效")
 		}
 	case "stopping", "selecting", "starting", "checking":
