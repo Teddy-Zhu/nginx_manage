@@ -15,8 +15,8 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-func firewallRequestHash(planID string) string {
-	return secure.Hash([]byte("firewall.apply:v1:" + planID))
+func firewallRequestHash(planID, action string) string {
+	return secure.Hash([]byte("firewall.change:v2:" + action + ":" + planID))
 }
 func (f *hostFirewall) checkManagers(ctx context.Context) error {
 	observer := firewallObserver{scope: "host", ctx: ctx, dataDir: f.dataDir}
@@ -40,7 +40,7 @@ func checkFirewallManagers(observed firewall.Observation) error {
 	}
 	return nil
 }
-func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int64, policyHash, connection string) (firewall.Operation, error) {
+func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int64, policyHash, action, connection string) (firewall.Operation, error) {
 	f.dns.mu.Lock()
 	defer f.dns.mu.Unlock()
 	f.remote.mu.Lock()
@@ -48,25 +48,25 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out firewall.Operation
-	if !validID(id) || !validID(planID) {
+	if !validID(id) || !validID(planID) || (action != "apply" && action != "remove") {
 		return out, fault.Invalid("防火墙操作或计划 ID 无效")
 	}
-	hash := firewallRequestHash(planID)
+	hash := firewallRequestHash(planID, action)
 	if old := f.state.Operation; old != nil && old.ID == id {
-		if f.state.RequestHash != hash || old.Version != version || old.PolicyHash != policyHash {
+		if f.state.RequestHash != hash || old.Version != version || old.PolicyHash != policyHash || old.Action != action {
 			return out, fault.Conflict("幂等键已用于其他请求")
 		}
 		return *old, nil
 	}
 	if old, err := f.journal.Get(id); err == nil {
-		if old.Kind != firewallOperationKind || old.RequestHash != hash || old.Firewall == nil || old.Firewall.Version != version || old.Firewall.PolicyHash != policyHash {
+		if old.Kind != firewallOperationKind || old.RequestHash != hash || old.Firewall == nil || old.Firewall.Version != version || old.Firewall.PolicyHash != policyHash || old.Firewall.Action != action {
 			return out, fault.Conflict("幂等键已用于其他请求")
 		}
 		return *old.Firewall, nil
 	} else if !os.IsNotExist(err) {
 		return out, err
 	}
-	if !f.available || f.problem != "" || f.state.Schema != 1 {
+	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("防火墙执行未就绪")
 	}
 	if f.activeLocked() || f.dns.checkpoint != nil && dnsActive(f.dns.checkpoint.Status.State) {
@@ -76,13 +76,20 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	if !ok || time.Now().Unix() >= plan.view.ExpiresAt {
 		return out, fault.Conflict("计划不存在或已过期，请重新生成")
 	}
-	if plan.view.Version != version || plan.view.PolicyHash != policyHash {
+	if plan.view.Version != version || plan.view.PolicyHash != policyHash || plan.view.Action != action {
 		return out, fault.Conflict("已保存策略与计划不一致，请重新生成")
+	}
+	if action == "remove" && (f.state.Confirmed == nil || f.state.Confirmed.Action != "apply" || f.state.Confirmed.Version != version || f.state.Confirmed.PolicyHash != policyHash) {
+		return out, fault.Conflict("待移除的已确认策略已变化，请重新生成计划")
 	}
 	if f.remote.state.Version != plan.view.ListenerVersion || f.remote.state.Confirmed.Listen != plan.view.Listener {
 		return out, fault.Conflict("管理监听已变化，请重新生成计划")
 	}
-	protections, listeners, source, err := firewallProtections(ctx, plan.record.Policy, f.sshMode, f.remote, connection)
+	effect := plan.record.Policy
+	if action == "remove" {
+		effect = firewall.DefaultPolicy()
+	}
+	protections, listeners, source, err := firewallProtections(ctx, effect, f.sshMode, f.remote, connection)
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
 	}
@@ -99,7 +106,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	if !bytes.Equal(actual, expected) {
 		return out, fault.Conflict("SSH、控制来源或保护配置变化，请重新生成计划")
 	}
-	for _, rule := range plan.record.Policy.Rules {
+	for _, rule := range effect.Rules {
 		if rule.Enabled && rule.Interface != "" {
 			if _, err := net.InterfaceByName(rule.Interface); err != nil {
 				return out, fault.Conflict("目标网络接口已变化")
@@ -127,8 +134,10 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	if batch.Hash != plan.view.TransactionHash {
 		return out, fault.Conflict("事务摘要变化，请重新生成计划")
 	}
-	op := &firewall.Operation{ID: id, PlanID: planID, Version: plan.record.Version, PolicyHash: plan.record.PolicyHash, ProgramHash: plan.record.ProgramHash, State: "running", Stage: "submitting", Deadline: time.Now().Unix() + firewall.ConfirmationSeconds, VerificationScope: "controlled-listener"}
-	f.state.Operation, f.state.RequestHash, f.state.Candidate = op, hash, plan.record
+	op := &firewall.Operation{Action: action, ID: id, PlanID: planID, Version: plan.record.Version, PolicyHash: plan.record.PolicyHash, ProgramHash: plan.record.ProgramHash, State: "running", Stage: "submitting", Deadline: time.Now().Unix() + firewall.ConfirmationSeconds, VerificationScope: "controlled-listener"}
+	candidate := *plan.record
+	candidate.OperationID = id
+	f.state.Operation, f.state.RequestHash, f.state.Candidate = op, hash, &candidate
 	f.state.BeforeKernel, f.state.CandidateKernel, f.state.Rollback = current, firewall.KernelView{}, false
 	f.deadline = time.Now().Add(firewall.ConfirmationSeconds * time.Second)
 	if err = f.save(); err != nil {
@@ -220,6 +229,9 @@ func (f *hostFirewall) Decide(id, action, connection string) (firewall.Operation
 	confirmed := out
 	confirmed.UpdatedAt = time.Now().Unix()
 	confirmed.State, confirmed.Stage, confirmed.ConfirmedSource, confirmed.Error = "succeeded", "confirmed", socket.source, ""
+	if confirmed.Action == "remove" {
+		confirmed.Stage = "rules_removed"
+	}
 	f.state.Confirmed, f.state.Candidate, f.state.Operation, f.state.CurrentKernel = f.state.Candidate, nil, &confirmed, current
 	f.state.BeforeKernel, f.state.CandidateKernel, f.state.Rollback = firewall.KernelView{}, firewall.KernelView{}, false
 	written, err := f.persist()
@@ -322,7 +334,7 @@ func (f *hostFirewall) recoveryFailedLocked(reason string) error {
 }
 
 func (f *hostFirewall) reconcileConfirmedLocked() error {
-	if f.state.Schema != 1 {
+	if f.state.Schema != firewallRuntimeSchema {
 		return nil
 	}
 	current, err := f.snapshot(f.state.Confirmed)
@@ -439,7 +451,7 @@ func (f *hostFirewall) Run(ctx context.Context) {
 		}
 		f.remote.mu.Lock()
 		f.mu.Lock()
-		if f.state.Schema == 1 {
+		if f.state.Schema == firewallRuntimeSchema {
 			if err := f.rescueLocked(); err != nil {
 				f.problem = "本机防火墙救援请求未处理完成"
 			}

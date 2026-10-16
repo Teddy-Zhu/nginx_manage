@@ -285,7 +285,9 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 		return
 	}
 	var in struct {
-		Enabled *bool `json:"enabled"`
+		Enabled             *bool  `json:"enabled"`
+		FirewallRules       string `json:"firewall_rules"`
+		FirewallOperationID string `json:"firewall_operation_id"`
 	}
 	if err := decode(w, r, &in); err != nil {
 		s.fail(w, r, err)
@@ -295,7 +297,20 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 		s.fail(w, r, fault.Invalid("缺少 enabled 字段"))
 		return
 	}
-	if err := modules.Set(r.Context(), s.DB, p, id, *in.Enabled); err != nil {
+	var err error
+	if id == "firewall" {
+		if !s.firewallReady(w, r) {
+			return
+		}
+		err = s.Firewall.SetManagement(r.Context(), p, *in.Enabled, in.FirewallRules, in.FirewallOperationID)
+	} else {
+		if in.FirewallRules != "" || in.FirewallOperationID != "" {
+			s.fail(w, r, fault.Invalid("防火墙停用选项不适用于此模块"))
+			return
+		}
+		err = modules.Set(r.Context(), s.DB, p, id, *in.Enabled)
+	}
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -309,7 +324,11 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 			s.Notifications.Pause()
 		}
 	}
-	if err := s.audit(r, p.ID, "modules.set", id, "succeeded"); err != nil {
+	outcome := "succeeded"
+	if id == "firewall" && !*in.Enabled {
+		outcome = "disabled_" + in.FirewallRules
+	}
+	if err := s.audit(r, p.ID, "modules.set", id, outcome); err != nil {
 		s.fail(w, r, err)
 		return
 	}

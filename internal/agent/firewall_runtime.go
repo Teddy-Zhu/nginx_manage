@@ -17,10 +17,13 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const firewallOperationKind = "firewall.apply"
+const firewallOperationKind = "firewall.change"
+const firewallRuntimeSchema = 2
 const firewallCheckpointBytes = 1 << 20
 
 type firewallPolicyRecord struct {
+	OperationID string                `json:"operation_id"`
+	Action      string                `json:"action"`
 	PlanID      string                `json:"plan_id"`
 	Version     int64                 `json:"version"`
 	Policy      firewall.Policy       `json:"policy"`
@@ -84,7 +87,7 @@ func loadFirewallState(dataDir string) (*firewallCheckpoint, error) {
 	if d.Decode(new(any)) != io.EOF {
 		return nil, errors.New("防火墙恢复记录包含多余内容")
 	}
-	if value.Schema != 1 || !validID(value.Owner) {
+	if value.Schema != firewallRuntimeSchema || !validID(value.Owner) {
 		return nil, errors.New("防火墙独立所有者无效")
 	}
 	for _, r := range []*firewallPolicyRecord{value.Confirmed, value.Candidate} {
@@ -95,11 +98,11 @@ func loadFirewallState(dataDir string) (*firewallCheckpoint, error) {
 		if err != nil {
 			return nil, err
 		}
-		program, err := firewall.CompileNFTProtected(r.Policy, r.Protections)
+		program, err := firewall.CompileRuntime(r.Policy, r.Protections, r.Action)
 		if err != nil {
 			return nil, err
 		}
-		if r.Version < 1 || hash != r.PolicyHash || program.Hash != r.ProgramHash || !validID(r.PlanID) || r.Marker != "nginxpanel:policy:v1:"+value.Owner+":"+r.PlanID+":"+r.ProgramHash {
+		if !validID(r.OperationID) || r.Version < 1 || hash != r.PolicyHash || firewall.RuntimeProgramHash(program) != r.ProgramHash || !validID(r.PlanID) || r.Marker != "nginxpanel:policy:v2:"+value.Owner+":"+r.PlanID+":"+r.ProgramHash {
 			return nil, errors.New("防火墙独立策略摘要无效")
 		}
 	}
@@ -107,7 +110,7 @@ func loadFirewallState(dataDir string) (*firewallCheckpoint, error) {
 		return nil, errors.New("防火墙候选缺少独立操作")
 	}
 	if op := value.Operation; op != nil {
-		if !validID(op.ID) || !validID(op.PlanID) || value.RequestHash != firewallRequestHash(op.PlanID) || op.UpdatedAt <= 0 || op.Deadline <= 0 {
+		if !validID(op.ID) || !validID(op.PlanID) || (op.Action != "apply" && op.Action != "remove") || value.RequestHash != firewallRequestHash(op.PlanID, op.Action) || op.UpdatedAt <= 0 || op.Deadline <= 0 {
 			return nil, errors.New("防火墙操作身份无效")
 		}
 		switch op.State {
@@ -125,7 +128,7 @@ func loadFirewallState(dataDir string) (*firewallCheckpoint, error) {
 	}
 	if r := value.Candidate; r != nil {
 		op := value.Operation
-		if op.PlanID != r.PlanID || op.Version != r.Version || op.PolicyHash != r.PolicyHash || op.ProgramHash != r.ProgramHash {
+		if op.ID != r.OperationID || op.PlanID != r.PlanID || op.Version != r.Version || op.PolicyHash != r.PolicyHash || op.ProgramHash != r.ProgramHash || op.Action != r.Action {
 			return nil, errors.New("防火墙候选与操作身份不一致")
 		}
 	}
@@ -135,7 +138,7 @@ func loadFirewallState(dataDir string) (*firewallCheckpoint, error) {
 	if !validKernel(value.CurrentKernel) || value.Candidate != nil && (!validKernel(value.BeforeKernel) || !value.BeforeKernel.TableExists) || value.CandidateKernel.Available && !validKernel(value.CandidateKernel) {
 		return nil, errors.New("防火墙恢复快照无效")
 	}
-	if value.Operation != nil && value.Operation.State == "succeeded" && (value.Confirmed == nil || value.Confirmed.PlanID != value.Operation.PlanID) {
+	if value.Operation != nil && value.Operation.State == "succeeded" && (value.Confirmed == nil || value.Confirmed.OperationID != value.Operation.ID || value.Confirmed.PlanID != value.Operation.PlanID || value.Confirmed.Action != value.Operation.Action || value.Confirmed.Version != value.Operation.Version || value.Confirmed.PolicyHash != value.Operation.PolicyHash || value.Confirmed.ProgramHash != value.Operation.ProgramHash) {
 		return nil, errors.New("防火墙确认策略缺失")
 	}
 	if value.RestoreIntent != nil && (value.Candidate != nil || !validKernel(*value.RestoreIntent) || value.RestoreIntent.TableExists) {
@@ -171,11 +174,11 @@ func (f *hostFirewall) program(record *firewallPolicyRecord) (*firewall.NFTProgr
 	if record == nil {
 		return nil, f.emptyMarker(), nil
 	}
-	p, err := firewall.CompileNFTProtected(record.Policy, record.Protections)
+	p, err := firewall.CompileRuntime(record.Policy, record.Protections, record.Action)
 	if err != nil {
 		return nil, "", err
 	}
-	if p.Hash != record.ProgramHash {
+	if firewall.RuntimeProgramHash(p) != record.ProgramHash {
 		return nil, "", errors.New("root 防火墙程序摘要变化")
 	}
 	return p, record.Marker, nil
@@ -217,7 +220,7 @@ func (f *hostFirewall) Open() error {
 			f.problem = "须先停止 Agent 并由本机 root 完成空表登记"
 			return nil
 		}
-		f.state = firewallCheckpoint{Schema: 1, Owner: registered.Owner, CurrentKernel: registered.Confirmed}
+		f.state = firewallCheckpoint{Schema: firewallRuntimeSchema, Owner: registered.Owner, CurrentKernel: registered.Confirmed}
 	} else {
 		f.state = *value
 	}
@@ -249,7 +252,7 @@ func (f *hostFirewall) operationLocked(id string) (firewall.Operation, error) {
 	if err != nil {
 		return firewall.Operation{}, err
 	}
-	if r.Kind != firewallOperationKind || r.Firewall == nil || r.Firewall.ID != id || r.State != r.Firewall.State || r.RequestHash != firewallRequestHash(r.Firewall.PlanID) {
+	if r.Kind != firewallOperationKind || r.Firewall == nil || r.Firewall.ID != id || r.State != r.Firewall.State || r.RequestHash != firewallRequestHash(r.Firewall.PlanID, r.Firewall.Action) {
 		return firewall.Operation{}, fault.Conflict("操作标识已用于其他业务")
 	}
 	return *r.Firewall, nil
@@ -262,7 +265,7 @@ func (f *hostFirewall) Operation(id string) (firewall.Operation, error) {
 func (f *hostFirewall) View() firewall.RuntimeView {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := firewall.RuntimeView{Available: f.available && f.problem == "" && f.state.Schema == 1, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}}
+	out := firewall.RuntimeView{Available: f.available && f.problem == "" && f.state.Schema == firewallRuntimeSchema, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}, ConfirmedAction: "none"}
 	if f.state.Candidate != nil {
 		out.Available = false
 		if out.Reason == "" {
@@ -273,9 +276,12 @@ func (f *hostFirewall) View() firewall.RuntimeView {
 		out.Reason = "须由本机 root 确认 direct-nftables 所有者、宿主机范围及 SSH 保护配置"
 	}
 	if r := f.state.Confirmed; r != nil {
+		out.ConfirmedAction, out.ConfirmedPlanID, out.ConfirmedOperationID = r.Action, r.PlanID, r.OperationID
 		out.ConfirmedVersion = r.Version
 		out.ConfirmedPolicyHash = r.PolicyHash
-		out.Protections = append(out.Protections, r.Protections...)
+		if r.Action == "apply" {
+			out.Protections = append(out.Protections, r.Protections...)
+		}
 	}
 	if f.state.Operation != nil {
 		copy := *f.state.Operation
@@ -293,15 +299,16 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out firewall.Plan
-	if !f.available || f.problem != "" || f.state.Schema != 1 {
+	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("宿主机防火墙执行尚未由本机确认或需恢复")
 	}
 	if f.activeLocked() || f.dns.checkpoint != nil && dnsActive(f.dns.checkpoint.Status.State) {
 		return out, fault.Conflict("存在未完成的可达性变更")
 	}
-	if in.Version < 1 {
-		return out, fault.Invalid("须提供已保存的防火墙策略版本")
+	if in.Version < 1 || (in.Action != "apply" && in.Action != "remove") {
+		return out, fault.Invalid("须明确提供防火墙动作和有效版本")
 	}
+
 	normalized, err := in.Policy.Normalize()
 	if err != nil {
 		return out, err
@@ -309,13 +316,29 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	if normalized.Backend != "direct-nftables" {
 		return out, fault.Unavailable("当前执行器仅支持 direct-nftables")
 	}
-	protections, listeners, source, err := firewallProtections(ctx, normalized, f.sshMode, f.remote, connection)
+	effect := normalized
+	if in.Action == "remove" {
+		if normalized.Hash() != firewall.DefaultPolicy().Hash() {
+			return out, fault.Invalid("移除计划不能附带新的期望策略")
+		}
+		if f.state.Confirmed == nil || f.state.Confirmed.Action != "apply" || f.state.Confirmed.Version != in.Version {
+			return out, fault.Conflict("待移除的已确认策略已变化或不存在")
+		}
+		normalized = f.state.Confirmed.Policy
+		effect = firewall.DefaultPolicy()
+	}
+	protections, listeners, source, err := firewallProtections(ctx, effect, f.sshMode, f.remote, connection)
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
 	}
-	program, err := firewall.CompileNFTProtected(normalized, protections)
+	program, err := firewall.CompileRuntime(normalized, protections, in.Action)
 	if err != nil {
 		return out, err
+	}
+	programHash := firewall.RuntimeProgramHash(program)
+	generatedRules := 0
+	if program != nil {
+		generatedRules = len(program.Rules)
 	}
 	current, err := f.snapshot(f.state.Confirmed)
 	if err != nil {
@@ -330,7 +353,7 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	if err := checkFirewallManagers(observed); err != nil {
 		return out, err
 	}
-	for _, r := range normalized.Rules {
+	for _, r := range effect.Rules {
 		if r.Enabled && r.Interface != "" {
 			found := false
 			for _, name := range observed.Interfaces {
@@ -348,12 +371,12 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	if err != nil {
 		return out, err
 	}
-	record := &firewallPolicyRecord{PlanID: id, Version: in.Version, Policy: normalized, PolicyHash: policyHash, ProgramHash: program.Hash, Protections: protections, Marker: "nginxpanel:policy:v1:" + f.state.Owner + ":" + id + ":" + program.Hash}
+	record := &firewallPolicyRecord{Action: in.Action, PlanID: id, Version: in.Version, Policy: normalized, PolicyHash: policyHash, ProgramHash: programHash, Protections: protections, Marker: "nginxpanel:policy:v2:" + f.state.Owner + ":" + id + ":" + programHash}
 	batch, err := firewall.PrepareNFTManaged(program, current, record.Marker)
 	if err != nil {
 		return out, err
 	}
-	if current.Bytes+len(batch.Wire)+len(program.Rules)*64+4096 > nftReadBytes {
+	if current.Bytes+len(batch.Wire)+generatedRules*64+4096 > nftReadBytes {
 		return out, fault.Unavailable("现有快照与候选规模超过完整后读预算")
 	}
 	for key, p := range f.plans {
@@ -364,7 +387,7 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	if len(f.plans) >= 8 {
 		return out, fault.New(429, "FIREWALL_PLAN_LIMIT", "待执行计划已达 8 份，请等待过期")
 	}
-	out = firewall.Plan{ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: current, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: batch.Hash, TransactionBytes: len(batch.Wire), GeneratedRules: len(program.Rules)}
+	out = firewall.Plan{Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: programHash, Baseline: current, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: batch.Hash, TransactionBytes: len(batch.Wire), GeneratedRules: generatedRules}
 	f.plans[id] = firewallPrivatePlan{view: out, record: record}
 	return out, nil
 }

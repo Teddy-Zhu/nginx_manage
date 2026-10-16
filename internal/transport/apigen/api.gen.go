@@ -1803,11 +1803,17 @@ type FirewallProtection struct {
 	Port    int64    `json:"port"`
 	Sources []string `json:"sources"`
 }
+type FirewallPlanInput struct {
+	Action  string `json:"action"`
+	Version int64  `json:"version"`
+}
 type FirewallApplyInput struct {
+	Action  string `json:"action"`
 	PlanId  string `json:"plan_id"`
 	Version int64  `json:"version"`
 }
 type FirewallPlan struct {
+	Action              string               `json:"action"`
 	Id                  string               `json:"id"`
 	Version             int64                `json:"version"`
 	PolicyHash          string               `json:"policy_hash"`
@@ -1826,6 +1832,7 @@ type FirewallPlan struct {
 	GeneratedRules      int64                `json:"generated_rules"`
 }
 type FirewallOperation struct {
+	Action            string `json:"action"`
 	Id                string `json:"id"`
 	PlanId            string `json:"plan_id"`
 	Version           int64  `json:"version"`
@@ -1840,19 +1847,22 @@ type FirewallOperation struct {
 	Error             string `json:"error"`
 }
 type FirewallRuntime struct {
-	Available           bool                 `json:"available"`
-	Reason              string               `json:"reason"`
-	ConfirmedVersion    int64                `json:"confirmed_version"`
-	ConfirmedPolicyHash string               `json:"confirmed_policy_hash"`
-	Kernel              FirewallKernelView   `json:"kernel"`
-	Protections         []FirewallProtection `json:"protections"`
-	Operation           *FirewallOperation   `json:"operation"`
+	ConfirmedAction      string               `json:"confirmed_action"`
+	ConfirmedPlanId      string               `json:"confirmed_plan_id"`
+	ConfirmedOperationId string               `json:"confirmed_operation_id"`
+	Available            bool                 `json:"available"`
+	Reason               string               `json:"reason"`
+	ConfirmedVersion     int64                `json:"confirmed_version"`
+	ConfirmedPolicyHash  string               `json:"confirmed_policy_hash"`
+	Kernel               FirewallKernelView   `json:"kernel"`
+	Protections          []FirewallProtection `json:"protections"`
+	Operation            *FirewallOperation   `json:"operation"`
 }
 type PlanFirewallParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
-type PlanFirewallJSONBody = FirewallPreviewInput
-type PlanFirewallJSONRequestBody = FirewallPreviewInput
+type PlanFirewallJSONBody = FirewallPlanInput
+type PlanFirewallJSONRequestBody = FirewallPlanInput
 type ApplyFirewallParams struct {
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
@@ -3674,7 +3684,9 @@ type RevokeSessionsParams struct {
 
 // SetModuleJSONBody defines parameters for SetModule.
 type SetModuleJSONBody struct {
-	Enabled bool `json:"enabled"`
+	FirewallRules       *string `json:"firewall_rules,omitempty"`
+	FirewallOperationId *string `json:"firewall_operation_id,omitempty"`
+	Enabled             bool    `json:"enabled"`
 }
 
 // SetModuleParams defines parameters for SetModule.

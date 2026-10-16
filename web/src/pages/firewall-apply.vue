@@ -16,6 +16,7 @@ import {
   NAlert,
   NButton,
   NDataTable,
+  NSelect,
   NSpace,
   NTag,
   useDialog,
@@ -25,12 +26,23 @@ import {
   apiError,
   useNodeAPI,
   type FirewallPlan,
+  type FirewallPlanInput,
   type FirewallRuntime,
   type FirewallPolicyView,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+import { useRoute } from "vue-router";
 import { useSession } from "../stores/session";
 
+const route = useRoute();
+const action = ref<FirewallPlanInput["action"]>(
+    route.query.action === "remove" ? "remove" : "apply",
+  ),
+  managementDisabled = ref<boolean | null>(null);
+const actions = [
+  { label: "应用期望策略", value: "apply" },
+  { label: "移除本应用规则", value: "remove" },
+];
 const api = useNodeAPI(),
   session = useSession(),
   dialog = useDialog(),
@@ -49,6 +61,24 @@ const canManage = computed(() =>
   ),
 );
 const operation = computed(() => view.value?.operation);
+const emptyInitial = computed(
+  () =>
+    view.value?.available &&
+    view.value.confirmed_action === "none" &&
+    view.value.kernel.available &&
+    view.value.kernel.table_exists &&
+    view.value.kernel.chains === 0 &&
+    view.value.kernel.rules === 0,
+);
+const canDisable = computed(
+  () =>
+    canManage.value &&
+    !!session.localMe?.scopes.includes("system.write") &&
+    view.value?.available &&
+    (view.value.confirmed_action === "remove" ||
+      (action.value === "remove" && emptyInitial.value)) &&
+    managementDisabled.value === false,
+);
 const active = computed(
   () =>
     !!operation.value &&
@@ -117,27 +147,65 @@ async function readRuntime() {
 }
 async function load() {
   await run(async () => {
-    const result = await api.firewallPolicy(controller.signal);
+    const [desired, modules] = await Promise.allSettled([
+      api.firewallPolicy(controller.signal),
+      api.modules(controller.signal),
+    ]);
     if (closed) return;
-    stored.value = result;
-    if (plan.value && plan.value.version !== result.version) plan.value = null;
+    if (desired.status === "fulfilled") {
+      stored.value = desired.value;
+      if (
+        plan.value?.action === "apply" &&
+        plan.value.version !== desired.value.version
+      )
+        plan.value = null;
+    } else stored.value = null;
+    if (modules.status === "fulfilled") {
+      const module = modules.value.find((item) => item.id === "firewall");
+      managementDisabled.value = module ? !module.enabled : null;
+    } else managementDisabled.value = null;
     await readRuntime();
+    if (desired.status === "rejected") throw desired.reason;
+    if (modules.status === "rejected") throw modules.reason;
   });
 }
+function setAction(value: FirewallPlanInput["action"]) {
+  action.value = value;
+  plan.value = null;
+}
 async function generate() {
-  if (!stored.value?.version) return;
+  const version =
+    action.value === "remove"
+      ? view.value?.confirmed_version
+      : stored.value?.version;
+  if (!version) return;
   await run(async () => {
     plan.value = await api.planFirewall(
-      stored.value!.version,
+      { action: action.value, version },
       controller.signal,
     );
     uncertain.value = false;
   });
 }
+async function disableManagement() {
+  if (!canDisable.value) return;
+  const operationID = view.value?.confirmed_operation_id;
+  await run(async () => {
+    await api.setModule("firewall", false, {
+      firewall_rules: "remove",
+      ...(operationID ? { firewall_operation_id: operationID } : {}),
+    });
+    managementDisabled.value = true;
+  }, "防火墙管理已停用，期望草稿保留");
+}
 async function submit() {
   const current = plan.value;
   if (!current) return;
-  const input = { plan_id: current.id, version: current.version };
+  const input = {
+    action: current.action,
+    plan_id: current.id,
+    version: current.version,
+  };
   await run(async () => {
     uncertain.value = true;
     const result = await api.applyFirewall(input, keyFor(input));
@@ -155,10 +223,15 @@ function apply() {
     return;
   }
   dialog.warning({
-    title: "应用防火墙策略",
+    title:
+      plan.value?.action === "remove"
+        ? "移除本应用防火墙规则"
+        : "应用防火墙策略",
     content:
-      "将应用所列入口保护和已保存策略。120 秒内需通过新的管理 HTTPS 连接确认；连接中断或超时会恢复最后确认策略。",
-    positiveText: "应用",
+      plan.value?.action === "remove"
+        ? "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
+        : "将应用所列入口保护和已保存策略。120 秒内需通过新的管理 HTTPS 连接确认；连接中断或超时会恢复最后确认策略。",
+    positiveText: "执行",
     negativeText: "取消",
     onPositiveClick: submit,
   });
@@ -172,7 +245,7 @@ async function decide(action: "confirm" | "rollback") {
       if (view.value) view.value = { ...view.value, operation: result };
       await readRuntime();
     },
-    action === "confirm" ? "防火墙策略已确认" : "恢复请求已记录",
+    action === "confirm" ? "防火墙变更已确认" : "恢复请求已记录",
   );
 }
 onMounted(() => {
@@ -199,15 +272,24 @@ onUnmounted(() => {
           busy ||
           !canManage ||
           !view?.available ||
-          !stored?.version ||
+          (action === 'apply'
+            ? !stored?.version || managementDisabled !== false
+            : view?.confirmed_action !== 'apply') ||
           active ||
           uncertain
         "
         @click="generate"
-        >生成应用计划</n-button
+        >生成{{ action === "remove" ? "移除" : "应用" }}计划</n-button
       ></n-space
     >
   </div>
+  <n-select
+    :value="action"
+    :options="actions"
+    :disabled="busy || active || uncertain"
+    aria-label="防火墙动作"
+    @update:value="setAction"
+  />
   <n-alert v-if="!canManage" type="warning" :bordered="false"
     >需要读取和安全写入权限。</n-alert
   >
@@ -222,15 +304,25 @@ onUnmounted(() => {
     >{{ view.reason }}</n-alert
   >
   <n-alert type="info" :bordered="false" class="notice"
-    >应用前须启用防火墙模块，并从目标节点已确认的管理 HTTPS
-    入口访问。保护覆盖列出的管理来源及已观察到的 SSH
-    来源；确认仅证明本次管理连接可达，业务端口和云安全组需另行核对。</n-alert
+    >应用期望策略前须启用防火墙模块，移除已确认规则可在模块停用后执行。两种操作均须直接访问目标已确认的管理
+    HTTPS
+    入口并通过新连接确认。确认仅证明本次管理连接可达，业务端口和云安全组需另行核对。</n-alert
   >
   <section v-if="view" class="panel">
     <h3>已确认状态</h3>
     <p>
-      已保存期望版本 {{ stored?.version ?? 0 }} · 已确认运行版本
-      {{ view.confirmed_version }}
+      已保存期望版本 {{ stored?.version ?? 0 }} ·
+      {{
+        view.confirmed_action === "remove" ? "移除前规则版本" : "已确认运行版本"
+      }}
+      {{ view.confirmed_version }} ·
+      {{
+        view.confirmed_action === "apply"
+          ? "规则已确认"
+          : view.confirmed_action === "remove"
+            ? "规则已移除"
+            : "尚无确认策略"
+      }}
     </p>
     <n-data-table
       v-if="view.protections.length"
@@ -239,12 +331,36 @@ onUnmounted(() => {
       :pagination="{ pageSize: 10 }"
       :scroll-x="650"
     />
-    <p v-else class="muted">尚无已确认的业务过滤策略。</p>
+    <n-alert
+      v-if="action === 'remove' && emptyInitial"
+      type="info"
+      :bordered="false"
+      class="notice"
+      >当前只有已核对的初始空表，无已确认规则需要移除。</n-alert
+    >
+    <n-button v-if="canDisable" :disabled="busy" @click="disableManagement"
+      >停用防火墙管理</n-button
+    >
+    <p v-if="managementDisabled" class="muted">防火墙管理已停用。</p>
+    <p v-if="view.confirmed_action !== 'apply'" class="muted">
+      {{
+        view.confirmed_action === "remove"
+          ? "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
+          : "尚无已确认的业务过滤策略。"
+      }}
+    </p>
   </section>
   <section v-if="plan" class="panel">
     <div class="page-toolbar">
-      <h3>版本 {{ plan.version }} 应用计划</h3>
-      <n-tag type="info">{{ plan.generated_rules }} 条内核规则</n-tag>
+      <h3>
+        版本 {{ plan.version }}
+        {{ plan.action === "remove" ? "移除" : "应用" }}计划
+      </h3>
+      <n-tag type="info">{{
+        plan.action === "remove"
+          ? `移除 ${plan.baseline.rules} 条规则`
+          : `${plan.generated_rules} 条内核规则`
+      }}</n-tag>
     </div>
     <dl>
       <dt>管理监听</dt>
@@ -269,7 +385,11 @@ onUnmounted(() => {
       :scroll-x="650"
     />
     <p class="muted">
-      入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。
+      {{
+        plan.action === "remove"
+          ? "所列入口仅用于本次连接核对，移除后不再保留本应用保护条目；删除不等同于允许端口，其余系统策略仍可能阻止连接。"
+          : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
+      }}
     </p>
     <n-button
       type="warning"
@@ -281,11 +401,11 @@ onUnmounted(() => {
         (!uncertain && Date.now() / 1000 >= plan.expires_at)
       "
       @click="apply"
-      >{{ uncertain ? "查询或重送原应用请求" : "应用此计划" }}</n-button
+      >{{ uncertain ? "查询或重送原请求" : "执行此计划" }}</n-button
     >
   </section>
   <n-alert v-if="uncertain" type="warning" :bordered="false" class="notice"
-    >应用结果尚未取得。请保留本页，通过原请求查询或重送；未确认的策略会自动恢复。</n-alert
+    >执行结果尚未取得。请保留本页，通过原请求查询或重送；未确认的变更会自动恢复。</n-alert
   >
   <section v-if="operation" class="panel">
     <div class="page-toolbar">
@@ -294,7 +414,10 @@ onUnmounted(() => {
         states[operation.state] ?? operation.state
       }}</n-tag>
     </div>
-    <p>策略版本 {{ operation.version }} · 操作 {{ operation.id }}</p>
+    <p>
+      {{ operation.action === "remove" ? "移除" : "应用" }} · 策略版本
+      {{ operation.version }} · 操作 {{ operation.id }}
+    </p>
     <n-alert
       v-if="operation.error"
       type="warning"
@@ -305,7 +428,7 @@ onUnmounted(() => {
     <template v-if="operation.state === 'waiting_confirmation'">
       <p>
         剩余
-        {{ remaining }} 秒。应用已关闭原管理连接，确认请求必须使用生效后新建的
+        {{ remaining }} 秒。变更已关闭原管理连接，确认请求必须使用生效后新建的
         TCP/TLS 连接。
       </p>
       <n-button
@@ -321,6 +444,13 @@ onUnmounted(() => {
       class="rollback"
       @click="decide('rollback')"
       >恢复最后确认策略</n-button
+    >
+    <n-alert
+      v-if="operation.action === 'remove' && operation.state === 'succeeded'"
+      type="info"
+      :bordered="false"
+      class="notice"
+      >本应用规则已确认移除。期望草稿保留，重新应用需生成新计划。</n-alert
     >
     <p v-if="operation.state === 'succeeded'" class="muted">
       确认来源：{{ operation.confirmed_source }} · 确认范围：目标管理监听

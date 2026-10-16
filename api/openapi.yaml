@@ -22,15 +22,15 @@ paths:
     post:
       operationId: planFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallPlan。须启用模块、近期认证及目标实际管理连接；root 核对空表登记/原程序、管理器、SSH 监听、来源与代次。计划 300 秒有效，不写内核。
+      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对空表登记/原程序、管理器、SSH 监听、来源与代次。计划 300 秒有效，不写内核。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
-      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPreviewInput"}}}}
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPlanInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/apply:
     post:
       operationId: applyFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallOperation，202。须启用模块与近期认证；绑定原计划、保存版本及幂等键，先保存独立意图，再以单批原子替换受管表。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
+      description: 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须近期认证；绑定原动作、计划、版本及幂等键，先保存独立意图，再以单批原子替换受管表。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallApplyInput"}}}}
       responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -449,6 +449,7 @@ paths:
     put:
       operationId: setModule
       x-scopes: [system.write]
+      description: 停用 firewall 须明确提供 firewall_rules=keep 或 remove；remove 另需 read/security.write，并引用当前已独立确认移除的 firewall_operation_id；初始确认空表且从未确认规则时可省略。启用或其他模块不接受这些选项。
       parameters: [{ $ref: '#/components/parameters/CSRF' }]
       requestBody:
         required: true
@@ -456,9 +457,12 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [enabled]
               properties:
                 enabled: { type: boolean }
+                firewall_rules: {type: string, enum: [keep, remove]}
+                firewall_operation_id: {type: string, format: uuid}
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
@@ -1708,14 +1712,16 @@ components:
   schemas:
     FirewallProtection:
       {"type": "object", "additionalProperties": false, "required": ["service", "family", "port", "sources"], "properties": {"service": {"type": "string", "enum": ["ssh", "management"]}, "family": {"type": "string", "enum": ["ipv4", "ipv6"]}, "port": {"type": "integer", "minimum": 1, "maximum": 65535}, "sources": {"type": "array", "items": {"type": "string"}}}}
+    FirewallPlanInput:
+      {"type": "object", "additionalProperties": false, "required": ["action", "version"], "properties": {"action": {"type": "string", "enum": ["apply", "remove"]}, "version": {"type": "integer", "format": "int64", "minimum": 1, "description": "apply 使用已保存期望版本；remove 使用当前已确认运行版本。"}}}
     FirewallApplyInput:
-      {"type": "object", "additionalProperties": false, "required": ["plan_id", "version"], "properties": {"plan_id": {"type": "string", "format": "uuid"}, "version": {"type": "integer", "format": "int64", "minimum": 1}}}
+      {"type": "object", "additionalProperties": false, "required": ["plan_id", "version", "action"], "properties": {"plan_id": {"type": "string", "format": "uuid"}, "version": {"type": "integer", "format": "int64", "minimum": 1}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallPlan:
-      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallOperation:
-      {"type": "object", "additionalProperties": false, "required": ["id", "plan_id", "version", "policy_hash", "program_hash", "state", "stage", "deadline", "updated_at", "confirmed_source", "verification_scope", "error"], "properties": {"id": {"type": "string"}, "plan_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "state": {"type": "string", "enum": ["running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"]}, "stage": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "confirmed_source": {"type": "string"}, "verification_scope": {"type": "string"}, "error": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "plan_id", "version", "policy_hash", "program_hash", "state", "stage", "deadline", "updated_at", "confirmed_source", "verification_scope", "error", "action"], "properties": {"id": {"type": "string"}, "plan_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "state": {"type": "string", "enum": ["running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"]}, "stage": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "confirmed_source": {"type": "string"}, "verification_scope": {"type": "string"}, "error": {"type": "string"}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallRuntime:
-      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}}}
+      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}}}
     BackupInput:
       type: object
       additionalProperties: false

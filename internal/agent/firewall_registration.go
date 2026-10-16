@@ -175,7 +175,7 @@ func nftRegistrationView(dataDir string, kernel firewall.KernelView) firewall.Re
 			}
 		}
 		out.State = "registered"
-		if runtime.Confirmed != nil {
+		if runtime.Confirmed != nil && runtime.Confirmed.Action == "apply" {
 			out.State = "managed"
 		}
 		out.Verified = true

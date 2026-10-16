@@ -67,13 +67,13 @@ func (s *Server) firewallRuntimeHandlers(mux *http.ServeMux, f *hostFirewall) {
 				out, err := f.Plan(call, *in.Input, in.ConnectionID)
 				firewallReply(w, out, err)
 			case "apply":
-				if in.Input != nil || in.Action != "" || in.Version < 1 || len(in.PolicyHash) != 64 {
+				if in.Input != nil || (in.Action != "apply" && in.Action != "remove") || in.Version < 1 || len(in.PolicyHash) != 64 {
 					firewallReply(w, nil, fault.Invalid("防火墙应用请求无效"))
 					return
 				}
 				call, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 				defer cancel()
-				out, err := f.Apply(call, in.OperationID, in.PlanID, in.Version, in.PolicyHash, in.ConnectionID)
+				out, err := f.Apply(call, in.OperationID, in.PlanID, in.Version, in.PolicyHash, in.Action, in.ConnectionID)
 				firewallReply(w, out, err)
 			case "decide":
 				if in.Input != nil || in.PlanID != "" || in.Version != 0 || in.PolicyHash != "" || !validID(in.OperationID) {
@@ -98,7 +98,7 @@ func (c *Client) PlanFirewall(ctx context.Context, input firewall.RuntimeInput, 
 }
 func (c *Client) ApplyFirewall(ctx context.Context, id string, in firewall.ApplyInput, hash, connection string) (firewall.Operation, error) {
 	var out firewall.Operation
-	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/firewall/apply", firewallRequest{Protocol: Protocol, OperationID: id, PlanID: in.PlanID, Version: in.Version, PolicyHash: hash, ConnectionID: connection}, &out)
+	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/firewall/apply", firewallRequest{Protocol: Protocol, OperationID: id, PlanID: in.PlanID, Version: in.Version, PolicyHash: hash, Action: in.Action, ConnectionID: connection}, &out)
 	return out, err
 }
 func (c *Client) FirewallOperation(ctx context.Context, id string) (firewall.Operation, error) {

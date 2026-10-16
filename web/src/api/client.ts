@@ -57,6 +57,7 @@ export type FirewallRule = components["schemas"]["FirewallRule"];
 export type FirewallPolicy = components["schemas"]["FirewallPolicy"];
 export type FirewallPolicyView = components["schemas"]["FirewallPolicyView"];
 export type FirewallPolicyInput = components["schemas"]["FirewallPolicyInput"];
+export type FirewallPlanInput = components["schemas"]["FirewallPlanInput"];
 export type FirewallPlan = components["schemas"]["FirewallPlan"];
 export type FirewallOperation = components["schemas"]["FirewallOperation"];
 export type FirewallRuntime = components["schemas"]["FirewallRuntime"];
@@ -533,11 +534,11 @@ function createAPI(scope: RequestScope) {
     request<FirewallRuntime>({ url: "/firewall/runtime", signal }),
   firewallOperation: (id: string, signal?: AbortSignal) =>
     request<FirewallOperation>({ url: `/firewall/operations/${id}`, signal }),
-  planFirewall: (version: number, signal?: AbortSignal) =>
+  planFirewall: (data: FirewallPlanInput, signal?: AbortSignal) =>
     request<FirewallPlan>({
       url: "/firewall/plan",
       method: "POST",
-      data: { version },
+      data,
       signal,
     }),
   applyFirewall: (data: FirewallApplyInput, key: string) =>
@@ -930,11 +931,18 @@ function createAPI(scope: RequestScope) {
   tasks: () => request<Task[]>({ url: "/tasks" }),
   modules: (signal?: AbortSignal) =>
     request<Module[]>({ url: "/system/modules", signal }),
-  setModule: (id: string, enabled: boolean) =>
+  setModule: (
+    id: string,
+    enabled: boolean,
+    options: {
+      firewall_rules?: "keep" | "remove";
+      firewall_operation_id?: string;
+    } = {},
+  ) =>
     request<null>({
       method: "PUT",
       url: `/system/modules/${encodeURIComponent(id)}`,
-      data: { enabled },
+      data: { enabled, ...options },
     }),
   };
 }

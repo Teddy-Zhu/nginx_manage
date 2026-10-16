@@ -16,15 +16,22 @@ type Protection struct {
 	Port    int      `json:"port"`
 	Sources []string `json:"sources"`
 }
+type PlanInput struct {
+	Action  string `json:"action"`
+	Version int64  `json:"version"`
+}
 type ApplyInput struct {
+	Action  string `json:"action"`
 	PlanID  string `json:"plan_id"`
 	Version int64  `json:"version"`
 }
 type RuntimeInput struct {
+	Action  string `json:"action"`
 	Version int64  `json:"version"`
 	Policy  Policy `json:"policy"`
 }
 type Plan struct {
+	Action              string       `json:"action"`
 	ID                  string       `json:"id"`
 	Version             int64        `json:"version"`
 	PolicyHash          string       `json:"policy_hash"`
@@ -43,6 +50,7 @@ type Plan struct {
 	GeneratedRules      int          `json:"generated_rules"`
 }
 type Operation struct {
+	Action            string `json:"action"`
 	ID                string `json:"id"`
 	PlanID            string `json:"plan_id"`
 	Version           int64  `json:"version"`
@@ -57,13 +65,16 @@ type Operation struct {
 	Error             string `json:"error"`
 }
 type RuntimeView struct {
-	Available           bool         `json:"available"`
-	Reason              string       `json:"reason"`
-	ConfirmedVersion    int64        `json:"confirmed_version"`
-	ConfirmedPolicyHash string       `json:"confirmed_policy_hash"`
-	Kernel              KernelView   `json:"kernel"`
-	Protections         []Protection `json:"protections"`
-	Operation           *Operation   `json:"operation"`
+	ConfirmedAction      string       `json:"confirmed_action"`
+	ConfirmedPlanID      string       `json:"confirmed_plan_id"`
+	ConfirmedOperationID string       `json:"confirmed_operation_id"`
+	Available            bool         `json:"available"`
+	Reason               string       `json:"reason"`
+	ConfirmedVersion     int64        `json:"confirmed_version"`
+	ConfirmedPolicyHash  string       `json:"confirmed_policy_hash"`
+	Kernel               KernelView   `json:"kernel"`
+	Protections          []Protection `json:"protections"`
+	Operation            *Operation   `json:"operation"`
 }
 
 func PolicyDigest(policy Policy) (string, error) {
@@ -115,4 +126,32 @@ func CompileNFTProtected(policy Policy, protections []Protection) (*NFTProgram, 
 	}
 	base.Rules = rules
 	return finishNFT(base)
+}
+
+// Removal leaves an owned empty table with no chain, hook or filtering rules.
+// The previous confirmed record remains the rollback target until confirmation.
+func CompileRuntime(policy Policy, protections []Protection, action string) (*NFTProgram, error) {
+	if action == "apply" {
+		return CompileNFTProtected(policy, protections)
+	}
+	if action != "remove" {
+		return nil, fault.Invalid("防火墙动作须为 apply 或 remove")
+	}
+	normalized, err := policy.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	if normalized.Backend != "direct-nftables" {
+		return nil, fault.Unavailable("当前移除执行器仅支持 direct-nftables")
+	}
+	if _, err = CompileNFTProtected(DefaultPolicy(), protections); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+func RuntimeProgramHash(program *NFTProgram) string {
+	if program == nil {
+		return secure.Hash([]byte("nginxpanel:firewall:empty:v2"))
+	}
+	return program.Hash
 }

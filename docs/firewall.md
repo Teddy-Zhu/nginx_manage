@@ -64,7 +64,7 @@ nginxpanel firewall-remove --data-dir /srv/nginxpanel --firewall-scope host
 
 先停止 Agent，由本机 root 完成空表登记，再在现有 Agent 启动参数中明确设置 `--firewall-scope host --firewall-owner direct-nftables --firewall-ssh openssh`，保留原 `--maintenance-scope host`。默认均为 unconfirmed；开发/容器不允许执行。仅在本机确认没有 SSH 保护需求时才选择 `--firewall-ssh none`，不从命令缺失推断无 SSH。诊断仍用独立 `--metrics-scope host`。执行器持有跨数据目录的宿主机登记锁，已接受的恢复意图不因后续关闭模块或去掉新应用授权而撤销。
 
-直接访问目标节点已确认的受控管理 HTTPS 监听，启用防火墙模块并先保存期望策略。`POST /firewall/plan` 接收保存版本，返回 300 秒有效的 root 私有计划摘要及保护项；`POST /firewall/apply` 接收原 `plan_id/version` 和幂等键，返回 202 与独立操作。`GET /firewall/runtime`、`GET /firewall/operations/{id}` 查询 root 状态；`POST /firewall/operations/{id}/confirm` 或 `/rollback` 决定原操作。接口要求 `read/security.write`，变更要求近期认证及浏览器 CSRF；全部拒绝递归转发。期望策略保存和编译预览仍可通过显式远程资源使用。全部 JSON 沿用统一外壳；Agent 协议为 32、数据库为 24。
+直接访问目标节点已确认的受控管理 HTTPS 监听，启用防火墙模块并先保存期望策略。`POST /firewall/plan` 接收 `action=apply` 及保存版本，返回 300 秒有效的 root 私有计划摘要及保护项；`POST /firewall/apply` 接收原 `action/plan_id/version` 和幂等键，返回 202 与独立操作。`GET /firewall/runtime`、`GET /firewall/operations/{id}` 查询 root 状态；`POST /firewall/operations/{id}/confirm` 或 `/rollback` 决定原操作。接口要求 `read/security.write`，变更要求近期认证及浏览器 CSRF；全部拒绝递归转发。期望策略保存和编译预览仍可通过显式远程资源使用。全部 JSON 沿用统一外壳；Agent 协议为 33、数据库为 24。
 
 计划与应用都重新核对实际管理 TCP 对端、已确认监听/来源 ACL、OpenSSH 有效端口、root 监听描述符和现有 SSH 对端，不固定猜测端口 22，不信任代理头。来源与管理端口保护、SSH 端口保护插入业务规则之前；IPv6 通配 SSH 监听保守保护同端口 IPv4。没有可核对保护来源的地址族，若策略可能阻止该地址族 SSH 端口则拒绝执行。保护限于列出的端口及来源，所有接口共享；没有本地目标地址选择语义。SSH 或监听、来源、接口、保存版本、内核代次变化均要求重新计划。存在其他管理器、legacy/混合后端或任一后端规则视图不完整时拒绝新应用。
 
@@ -74,9 +74,19 @@ root 保存完整原确认策略、候选策略、保护项、随机所有者/�
 
 Agent 独立循环在超时、Web 通道中断、监听故障或停止时恢复最后确认策略（首次应用前为原空表）；重启永不继续等待未确认候选。提交方向先持久保存，回执丢失后只用原意图和完整目标语义核对；中断恢复不会把刚完成但尚未保存回执的恢复当作新的漂移。已确认对象每 30 秒核对，缺失时只恢复最后确认版本；陌生同名对象不覆盖，失败保留 `recovery_required`。本机 root 可用 `nginxpanel firewall-rollback --data-dir /srv/nginxpanel` 提交持久救援请求，由运行中的 Agent 处理；离线候选在下一次启动时恢复。
 
-运行恢复材料位于 root 私有 `agent/firewall/runtime.json` 与原 `agent/operations`，不进入业务备份或迁移。模块停用目前采用明确保留已确认规则的行为，不停止系统管理器，不撤销既有确认/恢复；删除已确认受管策略的独立流程继续实施。`src/pages/firewall-apply.vue` 自动扫描接入计划、入口保护、限时确认和回滚，`firewall-rules.vue` 管理期望及编译预览。[逻辑迁移](migration.md)可显式导出中立期望规则，默认保留目标；合并/替换须重新绑定目标后端和接口，以版本及内容约束同事务保存，Nginx 失败时一并补偿期望。迁移不自动启用模块或应用内核规则，仍须本流程独立确认。完整备份只保留期望草稿，恢复不直接应用规则。
+运行恢复材料位于 root 私有 `agent/firewall/runtime.json` 与原 `agent/operations`，不进入业务备份或迁移。模块停用须明确选择保留或移除本应用规则，不停止系统管理器，不撤销既有确认/恢复。保留时提交 `firewall_rules=keep`；移除按下节完成确认后引用原操作停用。`src/pages/firewall-apply.vue` 自动扫描接入计划、入口保护、限时确认和回滚，`firewall-rules.vue` 管理期望及编译预览。[逻辑迁移](migration.md)可显式导出中立期望规则，默认保留目标；合并/替换须重新绑定目标后端和接口，以版本及内容约束同事务保存，Nginx 失败时一并补偿期望。迁移不自动启用模块或应用内核规则，仍须本流程独立确认。完整备份只保留期望草稿，恢复不直接应用规则。
 
-当前仅开放 direct-nftables 主机入站执行。Docker 转发路径、其余管理器/iptables 写入适配、已确认规则移除、保护来源变更协调及 Fail2ban action 仍待实施。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
+## 移除本应用规则与停用管理
+
+`POST /firewall/plan` 使用 `{"action":"remove","version":已确认运行版本}`，版本取自 `GET /firewall/runtime`，不使用可能尚未应用的期望版本。移除可在模块停用后执行，仍需 root 原宿主机/所有者授权、完整已确认对象证明及目标实际管理连接；不接受附带新策略或原始命令。计划核对来源、SSH、监听及同代次基线，展示将移除的规则数量。提交仍使用 `/firewall/apply`，原动作参与计划和幂等绑定。
+
+移除只以单批事务将本应用拥有的表替换为带独立标记的空表，不保留链、hook、conntrack 例外或入口保护规则。第三方表不在事务范围，任何未知对象或漂移均阻止覆盖。空表登记保留用于以后重新应用；删除本应用规则不等于明确允许端口，其余系统策略和云防火墙仍然生效。期望规则草稿不改写。
+
+移除仍有 120 秒新 TCP/TLS 确认窗口。确认前原运行策略是唯一恢复目标，未知提交、失联、超时、停止或重启均沿原操作恢复；确认后 root 保存“规则已移除”的独立记录，重启或空表缺失只恢复空表，不重新应用旧规则。`Runtime.confirmed_action=none|apply|remove` 区分初始、已确认规则及已确认移除，`confirmed_plan_id/confirmed_operation_id` 固定对应计划与操作；操作响应也包含 `action`。root 运行记录格式为 2，旧格式不兼容。
+
+`PUT /system/modules/firewall` 停用时必须指定 `firewall_rules`。`keep` 明确保留已确认规则；`remove` 另需 `read/security.write` 及已确认的 `firewall_operation_id`，只有原操作仍为当前确认的移除结果且无活动变更才停用；后续应用失败并恢复该空表时仍可引用原确认操作，后续成功应用会使其失效。初始空表经核对且尚无已确认规则时无需生成空的移除操作，可省略操作 ID 直接停用。公共执行提交与最终停用共用锁，防止停用核对期间插入新应用；失败不伪造停用成功，可继续引用同一操作重试。启用或其他模块拒绝携带停用选项。自动扫描的功能模块页面提供保留/先移除选择，防火墙应用页完成移除和新连接确认后提供最终停用；远程转发不执行移除流程。
+
+当前仅开放 direct-nftables 主机入站执行。Docker 转发路径、其余管理器/iptables 写入适配、保护来源变更协调及 Fail2ban action 仍待实施。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 

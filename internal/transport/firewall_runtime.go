@@ -56,17 +56,17 @@ func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.P
 	if !ok {
 		return
 	}
-	var in firewall.PreviewInput
+	var in firewall.PlanInput
 	if err := decodeLimit(w, r, &in, 1024); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	out, err := s.Firewall.Plan(r.Context(), in.Version, remotelisten.ConnectionID(r.Context()))
+	out, err := s.Firewall.Plan(r.Context(), in, remotelisten.ConnectionID(r.Context()))
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	if err = s.audit(r, p.ID, "firewall.plan", out.ID, "planned"); err != nil {
+	if err = s.audit(r, p.ID, "firewall.plan", out.ID, out.Action+"_planned"); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -88,14 +88,14 @@ func (s *Server) ApplyFirewall(w http.ResponseWriter, r *http.Request, params ap
 		s.fail(w, r, err)
 		return
 	}
-	if in.Version < 1 || len(in.PlanID) != 36 {
+	if in.Version < 1 || len(in.PlanID) != 36 || in.Action != "apply" && in.Action != "remove" {
 		s.fail(w, r, fault.Invalid("策略版本或计划 ID 无效"))
 		return
 	}
 	hash := sha256.Sum256([]byte(s.NodeID + "\x00" + p.ID + "\x00" + key))
 	value := hex.EncodeToString(hash[:16])
 	id := value[:8] + "-" + value[8:12] + "-" + value[12:16] + "-" + value[16:20] + "-" + value[20:]
-	if err := s.audit(r, p.ID, "firewall.apply", id, "sending"); err != nil {
+	if err := s.audit(r, p.ID, "firewall."+in.Action, id, "sending"); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -104,7 +104,7 @@ func (s *Server) ApplyFirewall(w http.ResponseWriter, r *http.Request, params ap
 	if err == nil {
 		outcome = out.State
 	}
-	if auditErr := s.audit(r, p.ID, "firewall.apply", id, outcome); auditErr != nil {
+	if auditErr := s.audit(r, p.ID, "firewall."+in.Action, id, outcome); auditErr != nil {
 		s.fail(w, r, fault.Unavailable("防火墙请求已发送，审计回执未保存；请查询原操作 "+id))
 		return
 	}
