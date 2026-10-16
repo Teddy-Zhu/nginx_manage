@@ -1588,8 +1588,23 @@ type FileDifference struct {
 // FileDifferenceStatus defines model for FileDifference.Status.
 type FileDifferenceStatus string
 
+// FirewallKernelView defines model for FirewallKernelView.
+type FirewallKernelView struct {
+	Available   bool   `json:"available"`
+	TableExists bool   `json:"table_exists"`
+	Generation  int64  `json:"generation"`
+	NamespaceId string `json:"namespace_id"`
+	Fingerprint string `json:"fingerprint"`
+	Chains      int    `json:"chains"`
+	Rules       int    `json:"rules"`
+	Bytes       int    `json:"bytes"`
+	ObservedAt  int64  `json:"observed_at"`
+	Reason      string `json:"reason"`
+}
+
 // FirewallObservation defines model for FirewallObservation.
 type FirewallObservation struct {
+	Kernel     FirewallKernelView `json:"kernel"`
 	At         int64              `json:"at"`
 	Source     string             `json:"source"`
 	Scope      string             `json:"scope"`
@@ -1736,24 +1751,28 @@ type FirewallPreviewEntry struct {
 
 // FirewallPreview defines model for FirewallPreview.
 type FirewallPreview struct {
-	Version        int64                  `json:"version"`
-	PolicyHash     string                 `json:"policy_hash"`
-	Backend        string                 `json:"backend"`
-	Compiled       bool                   `json:"compiled"`
-	CanApply       bool                   `json:"can_apply"`
-	Table          string                 `json:"table"`
-	Chain          string                 `json:"chain"`
-	Hook           string                 `json:"hook"`
-	Priority       int                    `json:"priority"`
-	DefaultPolicy  string                 `json:"default_policy"`
-	LogicalRules   int                    `json:"logical_rules"`
-	GeneratedRules int                    `json:"generated_rules"`
-	ProgramHash    string                 `json:"program_hash"`
-	Entries        []FirewallPreviewEntry `json:"entries"`
-	Truncated      bool                   `json:"truncated"`
-	ObservedAt     int64                  `json:"observed_at"`
-	Errors         []string               `json:"errors"`
-	Warnings       []string               `json:"warnings"`
+	Kernel              FirewallKernelView     `json:"kernel"`
+	TransactionHash     string                 `json:"transaction_hash"`
+	TransactionBytes    int                    `json:"transaction_bytes"`
+	TransactionMessages int                    `json:"transaction_messages"`
+	Version             int64                  `json:"version"`
+	PolicyHash          string                 `json:"policy_hash"`
+	Backend             string                 `json:"backend"`
+	Compiled            bool                   `json:"compiled"`
+	CanApply            bool                   `json:"can_apply"`
+	Table               string                 `json:"table"`
+	Chain               string                 `json:"chain"`
+	Hook                string                 `json:"hook"`
+	Priority            int                    `json:"priority"`
+	DefaultPolicy       string                 `json:"default_policy"`
+	LogicalRules        int                    `json:"logical_rules"`
+	GeneratedRules      int                    `json:"generated_rules"`
+	ProgramHash         string                 `json:"program_hash"`
+	Entries             []FirewallPreviewEntry `json:"entries"`
+	Truncated           bool                   `json:"truncated"`
+	ObservedAt          int64                  `json:"observed_at"`
+	Errors              []string               `json:"errors"`
+	Warnings            []string               `json:"warnings"`
 }
 
 type SetFirewallPolicyParams struct {

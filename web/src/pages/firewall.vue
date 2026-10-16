@@ -219,6 +219,38 @@ onUnmounted(() => {
       >
     </section>
     <template v-if="observation.available">
+      <section class="panel">
+        <h3>目标表内核快照</h3>
+        <n-alert
+          v-if="!observation.kernel.available"
+          type="warning"
+          :bordered="false"
+          >{{ observation.kernel.reason }}</n-alert
+        >
+        <dl v-else>
+          <dt>规则代次</dt>
+          <dd>{{ observation.kernel.generation }}</dd>
+          <dt>目标表</dt>
+          <dd>
+            {{
+              observation.kernel.table_exists
+                ? "inet nginxpanel_host 已存在"
+                : "inet nginxpanel_host 未存在"
+            }}
+          </dd>
+          <dt>链 / 规则数</dt>
+          <dd>
+            {{ observation.kernel.chains }} / {{ observation.kernel.rules }}
+          </dd>
+          <dt>快照摘要</dt>
+          <dd>
+            <code>{{ observation.kernel.fingerprint }}</code>
+          </dd>
+        </dl>
+        <p class="muted">
+          此快照只覆盖固定目标表，不能据此接管已有规则或判断外部可达性。
+        </p>
+      </section>
       <div class="managers">
         <section class="panel">
           <h3>firewalld</h3>

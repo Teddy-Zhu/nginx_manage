@@ -68,24 +68,28 @@ type PreviewEntry struct {
 	Priority  int       `json:"priority"`
 }
 type Preview struct {
-	Version        int64          `json:"version"`
-	PolicyHash     string         `json:"policy_hash"`
-	Backend        string         `json:"backend"`
-	Compiled       bool           `json:"compiled"`
-	CanApply       bool           `json:"can_apply"`
-	Table          string         `json:"table"`
-	Chain          string         `json:"chain"`
-	Hook           string         `json:"hook"`
-	Priority       int            `json:"priority"`
-	DefaultPolicy  string         `json:"default_policy"`
-	LogicalRules   int            `json:"logical_rules"`
-	GeneratedRules int            `json:"generated_rules"`
-	ProgramHash    string         `json:"program_hash"`
-	Entries        []PreviewEntry `json:"entries"`
-	Truncated      bool           `json:"truncated"`
-	ObservedAt     int64          `json:"observed_at"`
-	Errors         []string       `json:"errors"`
-	Warnings       []string       `json:"warnings"`
+	TransactionHash     string         `json:"transaction_hash"`
+	TransactionBytes    int            `json:"transaction_bytes"`
+	TransactionMessages int            `json:"transaction_messages"`
+	Kernel              KernelView     `json:"kernel"`
+	Version             int64          `json:"version"`
+	PolicyHash          string         `json:"policy_hash"`
+	Backend             string         `json:"backend"`
+	Compiled            bool           `json:"compiled"`
+	CanApply            bool           `json:"can_apply"`
+	Table               string         `json:"table"`
+	Chain               string         `json:"chain"`
+	Hook                string         `json:"hook"`
+	Priority            int            `json:"priority"`
+	DefaultPolicy       string         `json:"default_policy"`
+	LogicalRules        int            `json:"logical_rules"`
+	GeneratedRules      int            `json:"generated_rules"`
+	ProgramHash         string         `json:"program_hash"`
+	Entries             []PreviewEntry `json:"entries"`
+	Truncated           bool           `json:"truncated"`
+	ObservedAt          int64          `json:"observed_at"`
+	Errors              []string       `json:"errors"`
+	Warnings            []string       `json:"warnings"`
 }
 
 var ruleIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

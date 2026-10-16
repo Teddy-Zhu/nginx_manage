@@ -465,6 +465,27 @@ onUnmounted(() => controller.abort());
         <dd>
           <code>{{ preview.program_hash }}</code>
         </dd>
+        <dt>内核代次</dt>
+        <dd>
+          {{ preview.kernel.available ? preview.kernel.generation : "未知" }}
+        </dd>
+        <dt>目标表快照</dt>
+        <dd>
+          <code>{{
+            preview.kernel.fingerprint || preview.kernel.reason || "未取得"
+          }}</code>
+        </dd>
+        <template v-if="preview.transaction_hash">
+          <dt>新建事务摘要</dt>
+          <dd>
+            <code>{{ preview.transaction_hash }}</code>
+          </dd>
+          <dt>事务规模</dt>
+          <dd>
+            {{ preview.transaction_messages }} 条消息 /
+            {{ preview.transaction_bytes }} 字节，已编码、未提交
+          </dd>
+        </template>
         <dt>环境观测时间</dt>
         <dd>
           {{

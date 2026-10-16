@@ -1,8 +1,24 @@
 package firewall
 
+// KernelView identifies one coherent read of the fixed inet target table.
+// Its fingerprint is a change detector, not proof of ownership or permission.
+type KernelView struct {
+	Available   bool   `json:"available"`
+	TableExists bool   `json:"table_exists"`
+	Generation  uint32 `json:"generation"`
+	NamespaceID string `json:"namespace_id"`
+	Fingerprint string `json:"fingerprint"`
+	Chains      int    `json:"chains"`
+	Rules       int    `json:"rules"`
+	Bytes       int    `json:"bytes"`
+	ObservedAt  int64  `json:"observed_at"`
+	Reason      string `json:"reason"`
+}
+
 // Observation describes independent, bounded reads. It does not certify rule
 // ownership or reachability and must never be used as authorization to write.
 type Observation struct {
+	Kernel     KernelView `json:"kernel"`
 	At         int64      `json:"at"`
 	Source     string     `json:"source"`
 	Scope      string     `json:"scope"`
@@ -74,7 +90,7 @@ type Docker struct {
 }
 
 func Empty(scope, reason string) Observation {
-	return Observation{Source: "host-agent", Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
+	return Observation{Source: "host-agent", Kernel: KernelView{Reason: "尚未读取受管目标表的内核快照"}, Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
 		Firewalld: Firewalld{Zones: []Zone{}, Reason: "尚未读取"}, UFW: UFW{Reason: "尚未读取"},
 		Iptables: []Iptables{}, Rulesets: []Ruleset{}, Docker: Docker{BackendHint: "unknown", Evidence: []string{}, Reason: "尚未核对 Docker 转发路径"}, Warnings: []string{}}
 }

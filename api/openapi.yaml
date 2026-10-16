@@ -3934,8 +3934,9 @@ components:
     FirewallObservation:
       type: object
       additionalProperties: false
-      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings", "interfaces"]
+      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings", "interfaces", "kernel"]
       properties:
+        kernel: {"$ref": "#/components/schemas/FirewallKernelView"}
         at: {"type": "integer", "format": "int64"}
         source: {"type": "string"}
         scope: {"type": "string"}
@@ -4096,8 +4097,12 @@ components:
     FirewallPreview:
       type: object
       additionalProperties: false
-      required: ["version", "policy_hash", "backend", "compiled", "can_apply", "table", "chain", "hook", "priority", "default_policy", "logical_rules", "generated_rules", "program_hash", "entries", "truncated", "observed_at", "errors", "warnings"]
+      required: ["kernel", "transaction_hash", "transaction_bytes", "transaction_messages", "version", "policy_hash", "backend", "compiled", "can_apply", "table", "chain", "hook", "priority", "default_policy", "logical_rules", "generated_rules", "program_hash", "entries", "truncated", "observed_at", "errors", "warnings"]
       properties:
+        kernel: {"$ref": "#/components/schemas/FirewallKernelView"}
+        transaction_hash: {"type": "string", "description": "绑定命名空间、目标表快照和含规则代次前置条件的完整新建事务摘要；不构成执行授权"}
+        transaction_bytes: {"type": "integer", "minimum": 0, "maximum": 8388608}
+        transaction_messages: {"type": "integer", "minimum": 0, "maximum": 8196}
         version: {"type": "integer", "format": "int64"}
         policy_hash: {"type": "string"}
         backend: {"type": "string"}
@@ -4116,3 +4121,19 @@ components:
         observed_at: {"type": "integer", "format": "int64"}
         errors: {"type": "array", "items": {"type": "string"}}
         warnings: {"type": "array", "items": {"type": "string"}}
+    FirewallKernelView:
+      type: object
+      additionalProperties: false
+      description: 固定 inet 目标表在同一内核代次的有界快照；完整原始表达式仅参与摘要，不返回规则正文，不证明所有权。
+      required: [available, table_exists, generation, namespace_id, fingerprint, chains, rules, bytes, observed_at, reason]
+      properties:
+        available: {type: boolean}
+        table_exists: {type: boolean}
+        generation: {type: integer, format: int64, minimum: 0, maximum: 4294967295}
+        namespace_id: {type: string}
+        fingerprint: {type: string}
+        chains: {type: integer, minimum: 0, maximum: 128}
+        rules: {type: integer, minimum: 0, maximum: 8192}
+        bytes: {type: integer, minimum: 0, maximum: 8388608}
+        observed_at: {type: integer, format: int64}
+        reason: {type: string}

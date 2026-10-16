@@ -184,13 +184,35 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 			out.Errors = append(out.Errors, "宿主机防火墙状态无法读取")
 		} else {
 			out.ObservedAt = observed.At
+			out.Kernel = observed.Kernel
 			out.Warnings = append(out.Warnings, observed.Warnings...)
 			if !observed.Available || observed.Scope != "host" {
 				out.Errors = append(out.Errors, "宿主机观测范围未确认")
 			}
 			if view.Policy.Backend == "direct-nftables" {
+				if !observed.Kernel.Available {
+					out.Errors = append(out.Errors, "未取得同一内核代次的目标表快照，不能核对规则变化")
+				}
+				if observed.Kernel.Available && observed.Kernel.TableExists {
+					out.Errors = append(out.Errors, "目标表的内核快照已存在，须先核对独立受管登记")
+				}
 				if observed.Manager != "direct-candidate" {
 					out.Errors = append(out.Errors, "未能排除现有管理器，不能直接接管 nftables")
+				}
+				if program != nil && observed.Kernel.Available && !observed.Kernel.TableExists {
+					batch, batchErr := PrepareNFTCreate(program, observed.Kernel)
+					if batchErr != nil {
+						var known *fault.Error
+						if errors.As(batchErr, &known) {
+							out.Errors = append(out.Errors, known.Message)
+						} else {
+							return out, batchErr
+						}
+					} else {
+						out.TransactionHash = batch.Hash
+						out.TransactionBytes = len(batch.Wire)
+						out.TransactionMessages = batch.Messages
+					}
 				}
 				if observed.Backend == "legacy" || observed.Backend == "mixed" {
 					out.Errors = append(out.Errors, "观察到 legacy 或混合后端，须先核对规则所有权")
@@ -199,11 +221,6 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 				for _, set := range observed.Rulesets {
 					if set.ID == "nftables" && set.Available {
 						available = true
-						for _, table := range set.Tables {
-							if table.Family == "inet" && table.Name == NFTHostTable {
-								out.Errors = append(out.Errors, "目标表已存在，须由独立执行器核对受管登记后处理")
-							}
-						}
 					}
 				}
 				if !available {

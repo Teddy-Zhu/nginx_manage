@@ -91,6 +91,8 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	out.Iptables = make([]firewall.Iptables, 2)
 	var wg sync.WaitGroup
 	wg.Add(1)
+	go func() { defer wg.Done(); out.Kernel = readNFTKernel(ctx) }()
+	wg.Add(1)
 	go func() { defer wg.Done(); out.Firewalld = readFirewalld(ctx) }()
 	wg.Add(1)
 	go func() { defer wg.Done(); out.UFW = readUFW(ctx) }()
@@ -147,7 +149,7 @@ func (s *Server) firewallHandlers(mux *http.ServeMux, ctx context.Context) {
 func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error) {
 	var out firewall.Observation
 	e := c.envelopeRequest(ctx, http.MethodGet, "/v1/firewall", nil, &out)
-	if e == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || out.Docker.Writable || len(out.Rulesets) > 5 || len(out.Iptables) > 2) {
+	if e == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || out.Docker.Writable || len(out.Rulesets) > 5 || len(out.Iptables) > 2 || out.Kernel.Available && (out.Kernel.Generation == 0 || len(out.Kernel.NamespaceID) != 64 || len(out.Kernel.Fingerprint) != 64 || out.Kernel.Chains < 0 || out.Kernel.Chains > 128 || out.Kernel.Rules < 0 || out.Kernel.Rules > firewall.MaxEntries || out.Kernel.Bytes < 0 || out.Kernel.Bytes > nftReadBytes || out.Kernel.ObservedAt <= 0)) {
 		e = errors.New("invalid firewall observation")
 	}
 	return out, e
