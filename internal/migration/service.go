@@ -19,14 +19,16 @@ import (
 )
 
 func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string, in ExportInput) (Package, error) {
-	if err := p.Require("backup.export", "backup.secrets", "config.secrets"); err != nil {
+	if err := p.Require("backup.export"); err != nil {
 		return Package{}, err
 	}
-	if !validPassphrase(in.Passphrase) {
-		return Package{}, fault.Invalid("迁移口令须为 16–256 字节")
+	if err := validateExport(in); err != nil {
+		return Package{}, err
 	}
-	if in.Selection.Automation && (!in.Selection.Certificates || !in.Selection.DNSCredentials) {
-		return Package{}, fault.Invalid("导出 ACME 配置须同时选择证书与 DNS 凭据")
+	if in.Mode == "encrypted" {
+		if err := p.Require("backup.secrets", "config.secrets"); err != nil {
+			return Package{}, err
+		}
 	}
 	if !s.mu.TryLock() {
 		return Package{}, fault.Conflict("已有迁移包正在处理")
@@ -42,10 +44,18 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 		return Package{}, err
 	}
 	payload := Payload{Files: tree.Files, Certificates: []Certificate{}, Credentials: []Credential{}, Channels: []notifications.TransferChannel{}, Automation: acme.TransferAutomation{Accounts: []acme.TransferAccount{}, Profiles: []acme.TransferProfile{}}}
-	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS 运行配置、模块开关及日志轮转所有者保留；DNS 迁入材料须单独生成计划并确认", "目标防火墙内核运行规则、所有权与恢复状态保留，迁入规则须单独确认应用", "Fail2ban 实例、Socket、所有权与封禁状态保留，迁入 jail 须单独核对运行接入", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
+	m := Manifest{Mode: in.Mode, Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS 运行配置、模块开关及日志轮转所有者保留；DNS 迁入材料须单独生成计划并确认", "目标防火墙内核运行规则、所有权与恢复状态保留，迁入规则须单独确认应用", "Fail2ban 实例、Socket、所有权与封禁状态保留，迁入 jail 须单独核对运行接入", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
 	parsed, err := nginxconfig.Parse(tree.Files, s.Config.Policy)
 	if err != nil {
 		return Package{}, err
+	}
+	if in.Mode == "portable" {
+		if len(parsed.Tree.Diagnostics) != 0 {
+			return Package{}, fault.Invalid("源配置存在解析或安全冲突，请先检查原生配置")
+		}
+		var omitted []string
+		payload.Files, omitted = parsed.PortableFiles()
+		m.Omissions = append(m.Omissions, omitted...)
 	}
 	if in.Selection.Certificates {
 		uses, err := parsed.CertificateUses()
@@ -129,10 +139,14 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 	if err != nil {
 		return Package{}, err
 	}
-	if _, err := s.DB.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,'succeeded',?)", secure.ID(), requestID, p.ID, "migration.export", s.NodeID, time.Now().Unix()); err != nil {
+	if _, err := s.DB.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,'succeeded',?)", secure.ID(), requestID, p.ID, "migration.export."+in.Mode, s.NodeID, time.Now().Unix()); err != nil {
 		return Package{}, err
 	}
-	return Package{Filename: "nginxpanel-config-" + time.Now().UTC().Format("20060102T150405Z") + ".tar.age", Content: content, SHA256: secure.Hash(content), Manifest: m}, nil
+	extension := ".tar.age"
+	if in.Mode == "portable" {
+		extension = ".tar"
+	}
+	return Package{Filename: "nginxpanel-config-" + time.Now().UTC().Format("20060102T150405Z") + extension, Content: content, SHA256: secure.Hash(content), Manifest: m}, nil
 }
 
 func (s *Service) Prepare(ctx context.Context, p auth.Principal, requestID string, in ImportInput) (Plan, error) {
@@ -163,7 +177,7 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	if m.Omissions == nil {
 		m.Omissions = []string{}
 	}
-	st := storedPlan{Plan: Plan{ID: secure.ID(), SourceNode: m.SourceNode, SourceVersion: m.SourceVersion, BaseVersion: base, ExpiresAt: time.Now().Add(30 * time.Minute).Unix(), State: "planned", Steps: []Step{}, Omissions: m.Omissions}, Payload: payload, Manifest: m, Mappings: mappings, CertificateIDs: map[string]string{}, VersionIDs: map[string]string{}, CredentialIDs: map[string]string{}}
+	st := storedPlan{Plan: Plan{Mode: m.Mode, ID: secure.ID(), SourceNode: m.SourceNode, SourceVersion: m.SourceVersion, BaseVersion: base, ExpiresAt: time.Now().Add(30 * time.Minute).Unix(), State: "planned", Steps: []Step{}, Omissions: m.Omissions}, Payload: payload, Manifest: m, Mappings: mappings, CertificateIDs: map[string]string{}, VersionIDs: map[string]string{}, CredentialIDs: map[string]string{}}
 	if receive != nil {
 		st.Plan.ID = receive.ID
 		st.Plan.PackageSHA256 = receive.PackageSHA256
@@ -466,7 +480,7 @@ func (s *Service) load(ctx context.Context, p auth.Principal, id string) (stored
 	if st.Payload.HostDNS != nil && st.Plan.HostDNS == nil {
 		return st, fault.Unavailable("主机 DNS 迁移摘要缺失")
 	}
-	if st.Manifest.Schema != Schema || st.Monitoring != nil && (st.Plan.Monitoring == nil || st.Payload.Monitoring == nil) || st.Fail2ban != nil && (st.Plan.Fail2ban == nil || st.Payload.Fail2ban == nil) || st.Firewall != nil && (st.Plan.Firewall == nil || st.Payload.Firewall == nil) {
+	if st.Manifest.Schema != Schema || st.Manifest.Mode != st.Plan.Mode || (st.Manifest.Mode != "portable" && st.Manifest.Mode != "encrypted") || st.Monitoring != nil && (st.Plan.Monitoring == nil || st.Payload.Monitoring == nil) || st.Fail2ban != nil && (st.Plan.Fail2ban == nil || st.Payload.Fail2ban == nil) || st.Firewall != nil && (st.Plan.Firewall == nil || st.Payload.Firewall == nil) {
 		return st, fault.Unavailable("迁移计划格式或配置恢复材料无效，须重新准备或由本机检查")
 	}
 	st.Plan.State = state

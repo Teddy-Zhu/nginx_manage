@@ -216,3 +216,6 @@ Fail2ban 独立实例新增 `POST /fail2ban/lifecycle/preview`、`POST /fail2ban
 
 
 Python 依赖公开合同新增 `POST /fail2ban/python`、`GET /fail2ban/python/tasks` 及对应显式远程资源。plan 异步生成保存一小时的固定系统包计划，可显式刷新既有索引；install 独立确认原 plan_id 且禁止同时刷新。写入要求 components.manage、管理模块启用、近期认证及幂等，202 仅表示排队；最近 16 条任务包含保存的计划/安装结果，Agent 离线仍可读取。网页与本机 CLI 共用安装记录和原生执行器，未派发请求限授权期内继续，派发标记后不自动重放；计划生成同样保存派发标记与结果引用，重启不自动重复索引刷新。共享互斥、维护、加密任务/审计与备份恢复隔离均已接入，业务迁移不携带系统包事务。当前 Agent/数据库/归档版本为 47/26/5，首版无旧协议兼容；声明已同步，项目生成器及运行验证留待 P5。详见 [Fail2ban](fail2ban.md)。
+
+
+配置迁移当前为 schema 6，ExportInput/Manifest/Plan 明确 `mode=portable|encrypted`。portable 普通归档口令为空、selection 全 false，仅从受管字段重建 HTTP/Stream、ACL 与基础 WAF，站点停用并列出省略；不转移原文、自由字符串或其他可选材料。encrypted 继续强制口令和秘密权限，按选择实际写入文件。导出基础权限为 backup.export，完整原文额外检查 backup.secrets/config.secrets，均要求浏览器近期认证；目标替换权限不降低。普通导入强制模式/封装一致及规范化重建核对，加密包先认证完整 age 流；共用映射、依赖、执行和恢复。API 拉取/推送显式使用加密模式。Agent/数据库仍为 47/26，接口声明已同步，生成器及运行验收留待 P5；无首版旧包兼容。详见 [配置迁移](migration.md)。

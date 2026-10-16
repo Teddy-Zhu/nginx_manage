@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	Schema          = 5
+	Schema          = 6
 	MaxPackageBytes = 8 << 20
 	MaxRequestBytes = 12 << 20
 )
@@ -38,6 +38,7 @@ type Selection struct {
 	Notifications  bool `json:"notifications"`
 }
 type ExportInput struct {
+	Mode       string    `json:"mode"`
 	Passphrase string    `json:"passphrase"`
 	Selection  Selection `json:"selection"`
 }
@@ -48,6 +49,7 @@ type Package struct {
 	Manifest Manifest `json:"manifest"`
 }
 type Manifest struct {
+	Mode          string            `json:"mode"`
 	Schema        int               `json:"schema"`
 	SourceNode    string            `json:"source_node"`
 	SourceVersion string            `json:"source_version"`
@@ -108,6 +110,7 @@ type Step struct {
 	Message  string `json:"message"`
 }
 type Plan struct {
+	Mode          string            `json:"mode"`
 	HostDNS       *HostDNSPlan      `json:"host_dns,omitempty"`
 	Monitoring    *MonitoringPlan   `json:"monitoring,omitempty"`
 	Fail2ban      *Fail2banPlan     `json:"fail2ban,omitempty"`

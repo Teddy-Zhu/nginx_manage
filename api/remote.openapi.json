@@ -975,7 +975,10 @@
         "x-forward-path": "/migrations/export",
         "x-response-kind": "json",
         "x-body-limit": 12582912,
-        "x-query-keys": []
+        "x-query-keys": [],
+        "x-scopes": [
+          "backup.export"
+        ]
       }
     },
     "/nodes/{connection}/migrations/plan": {

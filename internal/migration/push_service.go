@@ -72,7 +72,7 @@ func (s *Service) StartPush(ctx context.Context, p auth.Principal, requestID, ke
 		return prior, e
 	}
 	passphrase := secure.Token()
-	packet, err := s.Export(ctx, p, requestID, ExportInput{Passphrase: passphrase, Selection: in.Remote.Selection})
+	packet, err := s.Export(ctx, p, requestID, ExportInput{Mode: "encrypted", Passphrase: passphrase, Selection: in.Remote.Selection})
 	// Keep the randomly generated passphrase in the same protected job as its
 	// frozen package; neither is returned by the task API.
 	if err != nil {

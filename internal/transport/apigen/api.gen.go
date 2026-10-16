@@ -2708,6 +2708,7 @@ type MigrationExecuteInputMode string
 
 // MigrationExportInput defines model for MigrationExportInput.
 type MigrationExportInput struct {
+	Mode       string             `json:"mode"`
 	Passphrase string             `json:"passphrase"`
 	Selection  MigrationSelection `json:"selection"`
 }
@@ -2726,6 +2727,7 @@ type MigrationImportInput struct {
 
 // MigrationManifest defines model for MigrationManifest.
 type MigrationManifest struct {
+	Mode          string             `json:"mode"`
 	CreatedAt     int64              `json:"created_at"`
 	Files         map[string]string  `json:"files"`
 	Omissions     []string           `json:"omissions"`
@@ -2745,6 +2747,7 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
+	Mode          string                     `json:"mode"`
 	HostDNS       *MigrationHostDNSPlan      `json:"host_dns,omitempty"`
 	Monitoring    *MigrationMonitoringPlan   `json:"monitoring,omitempty"`
 	Fail2ban      *MigrationFail2banPlan     `json:"fail2ban,omitempty"`

@@ -3400,11 +3400,13 @@ export interface components {
             notifications: boolean;
         };
         MigrationExportInput: {
+            mode: "portable" | "encrypted";
             passphrase: string;
             selection: components["schemas"]["MigrationSelection"];
         };
         MigrationManifest: {
-            schema: number;
+            mode: "portable" | "encrypted";
+            schema: 6;
             source_node: string;
             source_version: string;
             /** Format: int64 */
@@ -3470,6 +3472,7 @@ export interface components {
             message: string;
         };
         MigrationPlan: {
+            mode: "portable" | "encrypted";
             host_dns?: components["schemas"]["MigrationHostDNSPlan"];
             monitoring?: components["schemas"]["MigrationMonitoringPlan"];
             fail2ban?: components["schemas"]["MigrationFail2banPlan"];

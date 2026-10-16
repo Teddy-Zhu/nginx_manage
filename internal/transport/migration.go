@@ -16,7 +16,7 @@ func (s *Server) migrationReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) ExportMigration(w http.ResponseWriter, r *http.Request, _ apigen.ExportMigrationParams) {
-	p, ok := s.authorize(w, r, true, "backup.export", "backup.secrets", "config.secrets")
+	p, ok := s.authorize(w, r, true, "backup.export")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}

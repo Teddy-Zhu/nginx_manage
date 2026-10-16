@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "配置迁移",
-    "subtitle": "加密导出、导入与节点迁入",
+    "subtitle": "配置导出、导入与节点迁入",
     "nav": true,
     "order": 7,
     "symbol": "⇄"
@@ -27,6 +27,8 @@ import {
   apiError,
   ApiError,
   type MigrationPlan,
+  type MigrationExportInput,
+  type MigrationPackage,
   type MigrationExecuteInput,
   type MigrationPullInput,
   type MigrationFirewallInput,
@@ -54,6 +56,13 @@ const passphrase = ref(""),
   importPassphrase = ref(""),
   file = ref<File | null>(null),
   mappings = ref("{}");
+const exportMode = ref<MigrationExportInput["mode"]>("portable");
+const exported = ref<MigrationPackage | null>(null);
+const fileEncrypted = ref<boolean | null>(null);
+watch(exportMode, () => {
+  passphrase.value = "";
+  exported.value = null;
+});
 const includeCertificates = ref(false),
   includeCredentials = ref(false),
   remoteCertificates = ref(false),
@@ -140,8 +149,24 @@ const controller = new AbortController();
 let timer: ReturnType<typeof setInterval> | undefined;
 let loading = false;
 const has = (scope: string) => session.me?.scopes.includes(scope) ?? false;
-const canExport = computed(
-  () => has("backup.export") && has("backup.secrets") && has("config.secrets"),
+const canExport = computed(() => has("backup.export"));
+const canEncryptedExport = computed(
+  () => canExport.value && has("backup.secrets") && has("config.secrets"),
+);
+const exportOptions = computed(() => [
+  { label: "可移植配置（普通归档）", value: "portable" },
+  {
+    label: "完整原文与所选材料（加密包）",
+    value: "encrypted",
+    disabled: !canEncryptedExport.value,
+  },
+]);
+const exportReady = computed(
+  () =>
+    exportMode.value === "portable" ||
+    (canEncryptedExport.value &&
+      new TextEncoder().encode(passphrase.value).length >= 16 &&
+      new TextEncoder().encode(passphrase.value).length <= 256),
 );
 const canImport = computed(() =>
   [
@@ -216,23 +241,39 @@ async function selectPlan(id: string) {
     plan.value = await api.migration(id, controller.signal);
   });
 }
-function selectFile(event: Event) {
-  file.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+async function selectFile(event: Event) {
+  const selected = (event.target as HTMLInputElement).files?.[0] ?? null;
+  file.value = selected;
+  fileEncrypted.value = null;
+  importPassphrase.value = "";
   plan.value = null;
+  if (!selected) return;
+  try {
+    const header = await selected.slice(0, 24).text();
+    if (file.value === selected)
+      fileEncrypted.value = header.startsWith("age-encryption.org/v1\n");
+  } catch {
+    if (file.value === selected) error.value = "无法读取配置包";
+  }
 }
 async function exportPackage() {
+  exported.value = null;
   await run(async () => {
     const out = await api.exportMigration({
-      passphrase: passphrase.value,
+      mode: exportMode.value,
+      passphrase: exportMode.value === "encrypted" ? passphrase.value : "",
       selection: {
-        certificates: includeCertificates.value,
-        dns_credentials: includeCredentials.value,
-        automation: includeAutomation.value,
-        notifications: includeNotifications.value,
-        firewall: includeFirewall.value,
-        fail2ban: includeFail2ban.value,
-        monitoring: includeMonitoring.value,
-        host_dns: includeHostDNS.value,
+        certificates:
+          exportMode.value === "encrypted" && includeCertificates.value,
+        dns_credentials:
+          exportMode.value === "encrypted" && includeCredentials.value,
+        automation: exportMode.value === "encrypted" && includeAutomation.value,
+        notifications:
+          exportMode.value === "encrypted" && includeNotifications.value,
+        firewall: exportMode.value === "encrypted" && includeFirewall.value,
+        fail2ban: exportMode.value === "encrypted" && includeFail2ban.value,
+        monitoring: exportMode.value === "encrypted" && includeMonitoring.value,
+        host_dns: exportMode.value === "encrypted" && includeHostDNS.value,
       },
     });
     const bytes = Uint8Array.from(atob(out.content), (c) => c.charCodeAt(0));
@@ -245,7 +286,12 @@ async function exportPackage() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     passphrase.value = "";
-    message.success("加密配置包已导出，请单独保管口令");
+    exported.value = out;
+    message.success(
+      out.manifest.mode === "portable"
+        ? "可移植配置已导出"
+        : "加密配置包已导出，请单独保管口令",
+    );
   });
 }
 async function previewFile() {
@@ -261,7 +307,7 @@ async function previewFile() {
     const version = await currentVersion();
     plan.value = await api.prepareMigration({
       content: btoa(binary),
-      passphrase: importPassphrase.value,
+      passphrase: fileEncrypted.value ? importPassphrase.value : "",
       base_version: version,
       mappings: mappingObject(),
       firewall,
@@ -424,7 +470,17 @@ onUnmounted(() => {
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section v-if="canExport" class="panel">
       <h2>导出配置</h2>
-      <NFormItem label="加密口令"
+      <NFormItem label="配置包类型"
+        ><NSelect
+          v-model:value="exportMode"
+          :options="exportOptions"
+          :disabled="busy"
+      /></NFormItem>
+      <NAlert v-if="exportMode === 'portable'" type="warning">
+        仅导出可识别的受管字段、IP 访问列表和基础
+        WAF，不包含完整原文、凭据或可选材料。原生认证、自定义路径、头常量及备注等内容会省略；迁入站点保持停用，须检查并补齐保护后再启用。
+      </NAlert>
+      <NFormItem v-if="exportMode === 'encrypted'" label="加密口令"
         ><NInput
           v-model:value="passphrase"
           type="password"
@@ -432,7 +488,7 @@ onUnmounted(() => {
           placeholder="16–256 字节，单独保管"
           autocomplete="new-password"
       /></NFormItem>
-      <div class="actions">
+      <div v-if="exportMode === 'encrypted'" class="actions">
         <NCheckbox v-model:checked="includeCertificates"
           >包含证书与私钥</NCheckbox
         ><NCheckbox v-model:checked="includeCredentials"
@@ -448,20 +504,35 @@ onUnmounted(() => {
           >包含 jail 期望配置</NCheckbox
         ><NCheckbox v-model:checked="includeFirewall"
           >包含防火墙期望规则</NCheckbox
-        ><NButton
-          :disabled="busy || passphrase.length < 16"
-          :loading="busy"
-          @click="exportPackage"
-          >导出加密包</NButton
         >
       </div>
+      <NButton
+        :disabled="busy || !exportReady"
+        :loading="busy"
+        @click="exportPackage"
+        >{{
+          exportMode === "portable" ? "导出普通归档" : "导出加密包"
+        }}</NButton
+      >
+      <template v-if="exported">
+        <h3>导出范围与省略内容</h3>
+        <ul>
+          <li v-for="item in exported.manifest.omissions" :key="item">
+            {{ item }}
+          </li>
+        </ul>
+      </template>
     </section>
     <section v-if="canImport" class="panel">
       <h2>导入配置包</h2>
       <NFormItem label="配置包"
-        ><input type="file" accept=".age" :disabled="busy" @change="selectFile"
+        ><input
+          type="file"
+          accept=".age,.tar"
+          :disabled="busy"
+          @change="selectFile"
       /></NFormItem>
-      <NFormItem label="解密口令"
+      <NFormItem v-if="fileEncrypted === true" label="解密口令"
         ><NInput
           v-model:value="importPassphrase"
           type="password"
@@ -472,7 +543,8 @@ onUnmounted(() => {
         :disabled="
           busy ||
           !file ||
-          importPassphrase.length < 16 ||
+          fileEncrypted === null ||
+          (fileEncrypted && importPassphrase.length < 16) ||
           !firewallValid ||
           !hostDNSValid
         "
@@ -579,6 +651,9 @@ onUnmounted(() => {
       </p>
     </section>
     <section v-if="plan" class="panel">
+      <NAlert v-if="plan.mode === 'portable'" type="warning"
+        >此计划来自可移植配置。迁入站点均已停用，须检查省略项并补齐保护后再启用。</NAlert
+      >
       <div class="actions">
         <h2>迁移计划</h2>
         <NTag>{{ states[plan.state] ?? plan.state }}</NTag>

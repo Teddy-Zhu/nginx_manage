@@ -98,7 +98,7 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		}
 		defer client.CloseIdleConnections()
 		passphrase := secure.Token()
-		body, err := json.Marshal(ExportInput{passphrase, in.Remote.Selection})
+		body, err := json.Marshal(ExportInput{Mode: "encrypted", Passphrase: passphrase, Selection: in.Remote.Selection})
 		if err != nil {
 			return Plan{}, err
 		}
