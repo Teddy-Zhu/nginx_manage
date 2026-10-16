@@ -175,29 +175,11 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	if err = d.validate(in.DataDir); err != nil {
 		return out, err
 	}
-	if err = runtimeDir(root); err != nil {
-		return out, err
-	}
-	if err = runtimeDir(filepath.Join(root, "releases")); err != nil {
-		return out, err
-	}
-	fd, err := unix.Open(filepath.Join(root, ".bind.lock"), unix.O_RDWR|unix.O_CREAT|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0600)
+	unlock, err := publicationLock(root)
 	if err != nil {
 		return out, err
 	}
-	lock := os.NewFile(uintptr(fd), ".bind.lock")
-	defer lock.Close()
-	checked, _, err := secure.OpenRootFile(filepath.Join(root, ".bind.lock"), 0)
-	if err != nil {
-		return out, err
-	}
-	if err = checked.Close(); err != nil {
-		return out, err
-	}
-	if err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		return out, errors.New("面板运行初始化正在进行")
-	}
-	defer unix.Flock(fd, unix.LOCK_UN)
+	defer unlock()
 	if prior, err := ReadDeployment(in.DataDir); err == nil {
 		// Another identical bootstrap may have published while source inspection
 		// was running. Reuse only its admission time and original trust identity.
@@ -221,71 +203,7 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err
 	}
-	dir := filepath.Join(root, "releases", r.ID)
-	if _, err = os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
-		retained, err := os.ReadDir(filepath.Join(root, "releases"))
-		if err != nil {
-			return out, err
-		}
-		if len(retained) >= 32 {
-			return out, errors.New("面板发布目录达到保留上限，须本机维护")
-		}
-		tmp, err := os.MkdirTemp(filepath.Join(root, "releases"), ".bind-")
-		if err != nil {
-			return out, err
-		}
-		defer os.RemoveAll(tmp)
-		if err = os.Chmod(tmp, 0755); err != nil {
-			return out, err
-		}
-		if err = os.Mkdir(filepath.Join(tmp, "web"), 0755); err != nil {
-			return out, err
-		}
-		if err = copyArtifact(binary, filepath.Join(tmp, "nginxpanel"), r.BinarySHA256, BinaryLimit, 0555); err != nil {
-			return out, err
-		}
-		for name, f := range r.Web {
-			if err = os.MkdirAll(filepath.Dir(filepath.Join(tmp, "web", name)), 0755); err != nil {
-				return out, err
-			}
-			if err = copyArtifact(filepath.Join(web, name), filepath.Join(tmp, "web", name), f.SHA256, WebFileLimit, 0444); err != nil {
-				return out, err
-			}
-		}
-		raw, err := json.Marshal(r)
-		if err != nil {
-			return out, err
-		}
-		if err = publishFile(filepath.Join(tmp, "release.json"), raw); err != nil {
-			return out, err
-		}
-		if err = filepath.WalkDir(tmp, func(name string, entry os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() {
-				if err = os.Chmod(name, 0755); err != nil {
-					return err
-				}
-				return syncDir(name)
-			}
-			return nil
-		}); err != nil {
-			return out, err
-		}
-		if err = ctx.Err(); err != nil {
-			return out, err
-		}
-		if err = unix.Renameat2(unix.AT_FDCWD, tmp, unix.AT_FDCWD, dir, unix.RENAME_NOREPLACE); err != nil {
-			return out, err
-		}
-		if err = syncDir(filepath.Dir(dir)); err != nil {
-			return out, err
-		}
-	} else if err != nil {
-		return out, err
-	}
-	if _, err = readRelease(dir, r.ID); err != nil {
+	if err = publishRelease(ctx, root, binary, web, r); err != nil {
 		return out, err
 	}
 	if err = publishFile(filepath.Join(root, "launcher.json"), rawDeployment); err != nil {

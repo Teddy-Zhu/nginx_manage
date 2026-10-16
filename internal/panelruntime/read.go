@@ -78,12 +78,12 @@ func executable(name, expected string) error {
 	}
 	for _, p := range e.Progs {
 		if p.Type == elf.PT_INTERP {
-			return errors.New("容器面板须使用无动态解释器的静态程序")
+			return errors.New("面板须使用无动态解释器的静态程序")
 		}
 	}
 	needed, err := e.ImportedLibraries()
 	if err != nil || len(needed) != 0 {
-		return errors.New("容器面板不能依赖动态共享库")
+		return errors.New("面板不能依赖动态共享库")
 	}
 	b, err := buildinfo.Read(f)
 	if err != nil {
@@ -96,7 +96,7 @@ func executable(name, expected string) error {
 		}
 	}
 	if !static || !secure.RootFileUnchanged(f, info) {
-		return errors.New("容器面板须来自 CGO_ENABLED=0 的稳定产物")
+		return errors.New("面板须来自 CGO_ENABLED=0 的稳定产物")
 	}
 	actual, err := secure.HashRootFile(name, BinaryLimit)
 	if err != nil {

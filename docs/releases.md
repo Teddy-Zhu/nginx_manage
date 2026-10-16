@@ -82,6 +82,22 @@ manifest 最多 2 MiB/16 个资产/合计 4096 个文件，准备计划最多 4 
 
 [发布工具与 CI 流程](publishing.md) 已接入面板/web 的打包、签名、源码/构建依赖 SBOM 和草稿发布，尚未运行或发布；项目许可和仓库签名配置仍需提供。Nginx/Fail2ban 组件构建、Web 上传/组件 API、安装/切换任务、维护准入、独立更新 worker 及回滚、迁移自动准备和完整 Docker 激活仍在 P4 后续范围内。
 
+## 面板版本暂存
+
+本机 root 可将已准备的 `panel-linux-<当前架构>` 计划复制到 `DATA/runtime/releases/<内容散列>`，供后续独立更新执行器使用。沿用准备时的目标主机和接收协议身份，检查当前公钥、签名有效期、静态 ELF、程序版本与 Agent/launcher 协议，并核对同版前端文件。只在程序已通过签名散列核对后执行固定 `version` 命令。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel panel-runtime-stage \
+  --data-dir /srv/nginxpanel --release-plan <已准备的面板计划散列>
+
+sudo /opt/nginxpanel/current/nginxpanel panel-runtime-staged \
+  --data-dir /srv/nginxpanel --release-plan <同一计划散列>
+```
+
+自定义本机信任文件须与准备一致；预发布须显式传入 `--release-prerelease`。完整目录同步并不覆盖发布后，才写入 root 只读的 `runtime/approvals/<计划散列>.json`。首次绑定和暂存共用发布锁，最多保留 32 个版本和 64 个批准记录；中断前已复制但未批准的目录不能作为更新授权。相同计划重复暂存使用原批准时间、主机/协议身份和初始信任散列重新认证当前公钥，增加无关公钥不改变计划，撤销签名公钥则拒绝续用。续用仍需保留原准备计划及签名材料；只读查询不下载或执行程序。
+
+`state=staged` 仅表示持久副本及其批准记录就绪，返回数据库 schema、协议门槛和签名回滚声明供后续准入使用。不切换当前版本、不迁移数据库、不重启面板或 Nginx/Fail2ban；独立 worker、维护快照、健康检查与失败回滚仍待接入。本入口尚未运行，统一留到 P5 集中验证。
+
 ## 组件页面与任务
 
 原生 Agent 由本机 root 设置 `--component-scope host`，沿用 `--release-trust` 与可选 `--release-token-file`；默认未确认范围及开发 Agent 不准备组件。Web/API 不接收仓库 URL、公钥、Token 或文件路径，`components.manage` 权限及写操作重新认证约束此入口。页面 `/components` 自动扫描接入，使用统一 JSON 外壳；`GET /api/v1/components` 读来源，`GET/POST /api/v1/components/tasks` 读本人任务或提交带幂等键的检查/准备。

@@ -49,7 +49,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-compose|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -119,6 +119,8 @@ func run() error {
 		"panel-runtime-bind":     {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-verify":   {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-status":   {"data-dir": true},
+		"panel-runtime-stage":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-staged":   {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
 		"panel-runtime-compose":  {"data-dir": true},
 		"launcher-status":        {"data-dir": true},
 		"launcher-operation":     {"data-dir": true, "launcher-operation": true},
@@ -270,6 +272,19 @@ func run() error {
 			return json.NewEncoder(os.Stdout).Encode(out)
 		}
 		out, err := panelruntime.Bind(ctx, input)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-runtime-stage", "panel-runtime-staged":
+		input := panelruntime.StageInput{DataDir: absDir, PlanID: *releasePlan, TrustPath: *releaseTrust, AllowPrerelease: *releasePrerelease}
+		var out panelruntime.StagedRelease
+		var err error
+		if command == "panel-runtime-stage" {
+			out, err = panelruntime.Stage(ctx, input)
+		} else {
+			out, err = panelruntime.Staged(ctx, input)
+		}
 		if err != nil {
 			return err
 		}

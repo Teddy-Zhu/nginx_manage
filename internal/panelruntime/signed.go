@@ -21,7 +21,7 @@ func signedWeb(files map[string]File, asset releases.Asset) error {
 		count++
 		actual, ok := files[strings.TrimPrefix(file.Path, "web/")]
 		if !ok || file.Mode != 0644 || actual.SHA256 != file.SHA256 || actual.Size != file.Size {
-			return errors.New("前端文件不属于镜像对应的签名面板发行")
+			return errors.New("前端文件不属于签名面板发行")
 		}
 	}
 	if count == 0 || count != len(files) {
