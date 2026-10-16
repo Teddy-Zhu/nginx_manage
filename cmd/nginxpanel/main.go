@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-install|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -101,7 +101,11 @@ func run() error {
 	installAbort := flags.Bool("abort-install", false, "cancel the original installation only before binding publication")
 	nginxRuntimeCheck := flags.Bool("nginx-runtime-check", false, "only validate the bound native Nginx configuration")
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
-	fail2banScope := flags.String("fail2ban-scope", "unconfirmed", "local Fail2ban read binding scope: host or unconfirmed")
+	fail2banOperation := flags.String("fail2ban-operation", "", "immutable managed Fail2ban installation UUID")
+	fail2banStart := flags.Bool("fail2ban-start", false, "start the newly installed dedicated Fail2ban service")
+	fail2banEnable := flags.Bool("fail2ban-enable", false, "enable the dedicated Fail2ban service on boot")
+	fail2banResume := flags.Bool("fail2ban-resume", false, "resume the exact recorded Fail2ban installation intent")
+	fail2banScope := flags.String("fail2ban-scope", "unconfirmed", "local Fail2ban host authorization: host or unconfirmed")
 	fail2banService := flags.String("fail2ban-service", "", "exact already-running systemd Fail2ban service for read-only binding")
 	fail2banSocket := flags.String("fail2ban-socket", "", "fixed root-protected Fail2ban Socket below /run")
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
@@ -135,6 +139,14 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
+		"fail2ban-install":                {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-start": true, "fail2ban-enable": true, "fail2ban-resume": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
+		"fail2ban-managed":                {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-check":          {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-start":          {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-stop":           {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-enable":         {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-disable":        {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-rollback":       {"data-dir": true, "fail2ban-scope": true},
 		"fail2ban-bind":                   {"data-dir": true, "fail2ban-scope": true, "fail2ban-service": true, "fail2ban-socket": true},
 		"fail2ban-binding":                {"data-dir": true, "fail2ban-scope": true},
 		"fail2ban-unbind":                 {"data-dir": true, "fail2ban-scope": true},
@@ -217,7 +229,15 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
-		case "fail2ban-scope", "fail2ban-service", "fail2ban-socket":
+		case "fail2ban-operation", "fail2ban-start", "fail2ban-enable", "fail2ban-resume":
+			if command != "fail2ban-install" {
+				invalidFlag = f.Name
+			}
+		case "fail2ban-scope":
+			if command != "fail2ban-bind" && command != "fail2ban-binding" && command != "fail2ban-unbind" && command != "fail2ban-install" && !strings.HasPrefix(command, "fail2ban-managed") {
+				invalidFlag = f.Name
+			}
+		case "fail2ban-service", "fail2ban-socket":
 			if command != "fail2ban-bind" && command != "fail2ban-binding" && command != "fail2ban-unbind" {
 				invalidFlag = f.Name
 			}
@@ -357,6 +377,28 @@ func run() error {
 		installation = info
 	}
 	switch command {
+	case "fail2ban-install":
+		out, err := agent.InstallFail2ban(ctx, agent.Fail2banInstallOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, PlanID: *releasePlan, AssetID: *releaseSelect, TrustPath: *releaseTrust, Prerelease: *releasePrerelease, Start: *fail2banStart, Enable: *fail2banEnable, Resume: *fail2banResume})
+		if e := json.NewEncoder(os.Stdout).Encode(out); e != nil {
+			return errors.Join(err, e)
+		}
+		return err
+	case "fail2ban-managed-check":
+		out, err := agent.CheckFail2banManaged(ctx, absDir, *fail2banScope)
+		if e := json.NewEncoder(os.Stdout).Encode(out); e != nil {
+			return errors.Join(err, e)
+		}
+		return err
+	case "fail2ban-managed", "fail2ban-managed-start", "fail2ban-managed-stop", "fail2ban-managed-enable", "fail2ban-managed-disable", "fail2ban-managed-rollback":
+		action := strings.TrimPrefix(command, "fail2ban-managed-")
+		if command == "fail2ban-managed" {
+			action = "status"
+		}
+		out, err := agent.ManageFail2banManaged(ctx, absDir, *fail2banScope, action)
+		if e := json.NewEncoder(os.Stdout).Encode(out); e != nil {
+			return errors.Join(err, e)
+		}
+		return err
 	case "fail2ban-bind", "fail2ban-binding", "fail2ban-unbind":
 		out, err := agent.ManageFail2banBinding(ctx, absDir, *fail2banScope, strings.TrimPrefix(command, "fail2ban-"), *fail2banService, *fail2banSocket)
 		if err != nil {

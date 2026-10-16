@@ -74,6 +74,7 @@ func (f *fail2banObserver) collect(ctx context.Context) fail2ban.Observation {
 		return out
 	}
 	out.Available = true
+	out.Managed = readFail2banManaged(f.data)
 	out.Binding = fail2banBindingView(f.data)
 	for _, id := range []string{"fail2ban-client", "fail2ban-server", "fail2ban-regex"} {
 		out.Tools = append(out.Tools, fail2banTool(id))
@@ -130,7 +131,7 @@ func (s *Server) fail2banHandlers(mux *http.ServeMux, ctx context.Context) {
 func (c *Client) ReadFail2ban(ctx context.Context) (fail2ban.Observation, error) {
 	var out fail2ban.Observation
 	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban", nil, &out)
-	if err == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || len(out.Tools) > 3 || len(out.Services) > 3 || len(out.Python.Modules) > len(fail2banPythonModules) || len(out.Missing) > 4 || len(out.Warnings) > 8) {
+	if err == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || len(out.Tools) > 3 || len(out.Services) > 3 || len(out.Python.Modules) > len(fail2banPythonModules) || len(out.Missing) > 4 || len(out.Warnings) > 8 || !fail2ban.ValidManaged(out.Managed)) {
 		err = errors.New("invalid Fail2ban observation")
 	}
 	return out, err

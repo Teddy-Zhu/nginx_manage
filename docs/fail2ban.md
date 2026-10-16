@@ -40,7 +40,7 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 38、数据库为 25，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 39、数据库为 25，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
 已有实例当前只读接入。安装/启动与 Socket 激活授权、签名组件运行绑定、完整引擎自检、jail 持久配置与接管、模板/匹配测试、受控 action、ban/unban、历史日志及 CDN 来源处理仍在完整实施范围内。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
@@ -54,7 +54,7 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 schema 3 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.json` 携带期望配置。文件、API 拉取及推送均支持 preserve/merge/replace，默认保留目标；导入重新分配 jail ID，沿用同一业务配置树中的站点标识，冻结目标版本与内容，同 Nginx 配置导入事务保存。失败补偿以新版本恢复原期望，检测外部变更时保留待恢复，不覆盖。源服务、Socket、客户端批准、所有权及封禁/计数不迁移，也不自动安装、启用模块或应用 jail。须核对目标白名单、日志来源和动作路径；保留的目标 jail 可能引用本次已替换的站点。
 
-当前数据库为 25，Agent 仍为 38。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器及真实实例操作均留待 P5。
+当前数据库为 25，Agent 为 39。实现及源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器及真实实例操作均留待 P5。
 
 ## 固定过滤器及官方样例检查
 
@@ -65,3 +65,31 @@ schema 3 迁移包可选择 `selection.fail2ban`，以固定 `config/fail2ban.js
 受管 Nginx 访问日志新增 `nginxpanel_auth_present`，只记录入站 Authorization 是否非空（0/1），不记录认证头内容。执行器生成 map，原生配置禁止重定义该变量；迁移/恢复预检包含 map 模块，Docker 镜像已预置此能力。日志目录声明 `auth_presence`，jail 保存预览要求来源包含该标记，同时执行固定过滤器检查；须先发布当前 Nginx 配置，再核对实际来源。旧运行日志或缺少标记的来源不据格式名推断可匹配。模块开关不控制日志中的保护状态。
 
 实现及源码集成审阅完成，尚未执行官方工具、生成器、构建、类型检查、lint、测试、浏览器或真实配置发布。P5 需集中核对 Python 正则/日期解析、IPv4/IPv6、首次挑战、转义与字段伪造、实际日志样例及轮转衔接；当前不是已通过验证的模板发布声明。固定 CLI/输出行为依据 [Fail2ban 1.1.1 fail2ban-regex](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banregex.py) 及[日期剥离实现](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)。jail 持久安装、动作桥接及封禁控制仍在实施。
+
+## 签名受管引擎的本机安装
+
+无已有 Fail2ban 时，本机 root 可选择准备好的单个 `fail2ban` 签名代码资产（当前固定 1.1.1）。资产须包含 `bin/fail2ban-{server,client,regex}` 及对应官方模块，根目录直接包含 `fail2ban/`；签名运行文件须覆盖实际系统 Python。安装器不执行 pip、不带入独立 Python、不安装软件包，也不改写全局 site-packages。固定解释器以 `-I -S -B` 运行，只添加已认证资产目录；先核对标准库/SQLite，再检查完整官方 server/client 入口、版本及独立配置。
+
+示例中的 UUID、准备计划和资产标识须来自本机实际操作与组件准备结果：
+
+```sh
+nginxpanel fail2ban-install --data-dir /var/lib/nginxpanel --fail2ban-scope host \
+  --fail2ban-operation <UUID> --release-plan <PLAN_SHA256> --release-select <ASSET_ID> \
+  --release-trust /etc/nginxpanel/release-trust.json
+```
+
+默认仅安装，不启动、不设置开机启用。首次安装可显式添加 `--fail2ban-start`、`--fail2ban-enable`；发生中断后，使用同一 UUID、源选择及启动/启用选择添加 `--fail2ban-resume`。目标已有固定系统工具、已登记实例、服务、默认 Socket 或无法排除已有实例时，拒绝另建。拒绝覆盖未登记目标、变化的文件、systemd drop-in 或未知实际单元。操作由共同 root 锁串行化，安装意图先持久化再创建文件；文件通过无覆盖原子发布。
+
+安装事件位于 `DATA/agent/fail2ban/managed/history/`，`current.json` 只指向已持久事件。配置及 SQLite 分别位于该目录的操作 UUID 子目录内 `config/`、`state/`；专用服务为 `nginxpanel-fail2ban.service`，Socket/PID 位于 root 私有 `/run/nginxpanel-fail2ban/`。初始无启用 jail，不加载发行版的 jail/filter/action，配置目录出现额外入口会阻塞启动。专用服务的启动前检查重新认证签名代码、系统运行文件、固定解释器与管理程序、精确配置和服务单元；不能用安装时的标准库探测替代每次启动校验。
+
+本机 root 后续可使用以下命令，均需相同 `--data-dir` 和 `--fail2ban-scope host`：
+
+- `fail2ban-managed`：读取安装登记，实际服务状态另行诊断。
+- `fail2ban-managed-check`：只读核对完整准入条件及官方配置校验；也是 systemd 的启动前入口。
+- `fail2ban-managed-start` / `fail2ban-managed-stop`：只启停独立服务；启动结果核对 root 服务主进程持有的 Socket、同一实例代次、服务端版本及初始零 jail 状态。
+- `fail2ban-managed-enable` / `fail2ban-managed-disable`：只改变独立服务的开机启用。
+- `fail2ban-managed-rollback`：续办撤回独立服务；保留签名资产、私有配置、SQLite 和完整审计，不删除用户已有实例或其数据。
+
+所有程序调用固定、无 Shell，进程组与输出有界；超时或取消不伪造操作成功，安装留为 interrupted，普通服务操作记录待核对结果。撤回中断可重复执行，变更材料不匹配时保留现场供本机处理。管理程序与系统 Python 的文件身份固定，升级后需重新处理准入，不静默跟随新程序。模块开关不控制这些 root 操作，面板仅展示安装登记与独立服务元数据；公开安装/服务变更、受管客户端读取、受管过滤器工具、jail/action 等继续接入。
+
+实现与源码集成审阅完成，生成器、构建、类型检查、lint、测试、浏览器、实际组件安装与 systemd 操作未执行，留待 P5。届时需核对两种架构/发行版的签名资产布局、标准库与运行文件约束、前台启动/Socket 归属、无 jail 启动、配置隔离、服务中断/续办/撤回和重启恢复。官方入口与参数依据 [Fail2ban 1.1.1 server](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banserver.py)、[CLI 配置参数](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2bancmdline.py)。

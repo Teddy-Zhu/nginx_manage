@@ -2055,7 +2055,22 @@ type Fail2banSocket struct {
 	RootProtected bool   `json:"root_protected"`
 	Reason        string `json:"reason"`
 }
+type Fail2banManaged struct {
+	Available     bool   `json:"available"`
+	State         string `json:"state"`
+	OperationId   string `json:"operation_id"`
+	Version       string `json:"version"`
+	PlanId        string `json:"plan_id"`
+	AssetId       string `json:"asset_id"`
+	Service       string `json:"service"`
+	Socket        string `json:"socket"`
+	PythonPath    string `json:"python_path"`
+	PythonVersion string `json:"python_version"`
+	ApprovedAt    int64  `json:"approved_at"`
+	Reason        string `json:"reason"`
+}
 type Fail2banObservation struct {
+	Managed       Fail2banManaged     `json:"managed"`
 	Binding       Fail2banBindingView `json:"binding"`
 	At            int64               `json:"at"`
 	Source        string              `json:"source"`

@@ -29,6 +29,16 @@ import {
 
 const api = useNodeAPI(),
   controller = new AbortController();
+const managedStates: Record<string, string> = {
+  absent: "未登记",
+  unavailable: "状态未知",
+  reserved: "待安装",
+  ready: "已准备",
+  installed: "已登记",
+  interrupted: "安装未完成",
+  "rolling-back": "撤回中",
+  "rolled-back": "已撤回",
+};
 const view = ref<Fail2banObservation | null>(null),
   error = ref(""),
   reading = ref(false),
@@ -224,6 +234,35 @@ onUnmounted(() => {
         </p>
         <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
       </template>
+    </section>
+    <section v-if="view" class="panel page-stack">
+      <div class="toolbar">
+        <h3>受管引擎</h3>
+        <NTag
+          :type="
+            view.managed.state === 'installed'
+              ? 'info'
+              : view.managed.state === 'interrupted'
+                ? 'warning'
+                : 'default'
+          "
+        >
+          {{ managedStates[view.managed.state] || "状态未知" }}
+        </NTag>
+      </div>
+      <template v-if="view.managed.operation_id">
+        <p>
+          Fail2ban {{ view.managed.version }} · Python
+          {{ view.managed.python_version }}
+        </p>
+        <p>{{ view.managed.service }} · {{ view.managed.python_path }}</p>
+        <p class="muted">
+          批准时间
+          {{ new Date(view.managed.approved_at * 1000).toLocaleString() }}
+        </p>
+      </template>
+      <p v-if="view.managed.reason">{{ view.managed.reason }}</p>
+      <p class="muted">安装登记、实际服务运行和 jail 保护状态分别核对。</p>
     </section>
     <NAlert v-if="instanceError" type="error">{{ instanceError }}</NAlert>
     <section v-if="instance" class="panel page-stack">
