@@ -48,6 +48,21 @@ func fail2banHostLocalSources(ctx context.Context) ([]string, error) {
 	return set.Protected, ctx.Err()
 }
 
+func fail2banHostProtectedSources(ctx context.Context, policy fail2ban.HostInputProtectionPolicy) ([]string, error) {
+	approved, err := policy.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	sources, err := fail2banHostLocalSources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sources = append(sources, approved.AdminSources...)
+	sources = append(sources, approved.ProxySources...)
+	set, err := (firewall.NFTBanSet{Addresses: []string{}, Protected: sources}).Normalize()
+	return set.Protected, err
+}
+
 func (f *fail2banHostInputReader) collect(ctx context.Context) fail2ban.HostInputPreview {
 	out := fail2ban.EmptyHostInput(f.server.MetricsScope, "")
 	if f.server.Dev {
@@ -82,17 +97,22 @@ func (f *fail2banHostInputReader) collect(ctx context.Context) fail2ban.HostInpu
 		return out
 	}
 	out.Registration = fail2banHostRegistrationView(f.server.DataDir, out.Kernel)
-	if out.Registration.State != "unregistered" && out.Registration.State != "released" && !out.Registration.Verified || out.Kernel.TableExists && !out.Registration.Verified {
+	out.Protection = fail2banHostProtectionView(f.server.DataDir, out.Kernel, out.Registration)
+	if !out.Registration.Verified {
 		out.Reason = out.Registration.Reason
 		if out.Reason == "" {
-			out.Reason = "独立宿主机动作所有权尚未确认"
+			out.Reason = "须先在目标本机完成独立宿主机动作空表登记"
 		}
 		return out
 	}
-	out.ProtectedSources, err = fail2banHostLocalSources(ctx)
+	if !out.Protection.Verified {
+		out.Reason = out.Protection.Reason
+		return out
+	}
+	out.ProtectedSources, err = fail2banHostProtectedSources(ctx, fail2ban.HostInputProtectionPolicy{AdminSources: out.Protection.AdminSources, ProxySources: out.Protection.ProxySources})
 	if err != nil {
 		out.ProtectedSources = []string{}
-		out.Reason = "本地地址保护来源无法完整核对"
+		out.Reason = "本地、管理或代理地址保护来源无法完整核对"
 		return out
 	}
 	set := firewall.NFTBanSet{Addresses: []string{}, Protected: out.ProtectedSources}

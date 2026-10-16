@@ -35,6 +35,13 @@ const registrations: Record<string, string> = {
   drifted: "登记对象发生变化",
   recovery_required: "原操作待恢复",
 };
+const protections: Record<string, string> = {
+  unavailable: "未确认",
+  unapproved: "未批准",
+  approved: "已核对",
+  stale: "原批准已失效",
+  revoked: "已撤销",
+};
 async function load() {
   if (busy.value) return;
   busy.value = true;
@@ -85,6 +92,11 @@ onUnmounted(() => {
         type="warning"
         >{{ view.registration.reason }}</NAlert
       >
+      <NAlert
+        v-if="view.protection.reason && view.protection.reason !== view.reason"
+        type="warning"
+        >{{ view.protection.reason }}</NAlert
+      >
       <NDescriptions label-placement="left" :column="2" bordered>
         <NDescriptionsItem label="观测范围">{{
           view.scope === "host" ? "宿主机" : "未确认"
@@ -116,9 +128,37 @@ onUnmounted(() => {
         <NDescriptionsItem label="本机所有权">{{
           registrations[view.registration.state] || "未确认"
         }}</NDescriptionsItem>
+        <NDescriptionsItem label="管理与代理来源">{{
+          protections[view.protection.state] || "未确认"
+        }}</NDescriptionsItem>
+        <NDescriptionsItem label="来源批准时间">{{
+          view.protection.approved_at
+            ? new Date(view.protection.approved_at * 1000).toLocaleString()
+            : "未批准"
+        }}</NDescriptionsItem>
         <NDescriptionsItem label="内核代次">{{
           view.kernel.available ? view.kernel.generation : "未确认"
         }}</NDescriptionsItem>
+      </NDescriptions>
+      <NDescriptions
+        v-if="view.protection.id && view.protection.state !== 'revoked'"
+        label-placement="left"
+        :column="1"
+        bordered
+      >
+        <NDescriptionsItem label="管理来源">
+          <code v-for="source in view.protection.admin_sources" :key="source"
+            >{{ source }}
+          </code>
+        </NDescriptionsItem>
+        <NDescriptionsItem label="前置代理来源">
+          <template v-if="view.protection.proxy_sources.length">
+            <code v-for="source in view.protection.proxy_sources" :key="source"
+              >{{ source }}
+            </code>
+          </template>
+          <span v-else>无</span>
+        </NDescriptionsItem>
       </NDescriptions>
       <template v-if="view.can_prepare">
         <p class="muted">

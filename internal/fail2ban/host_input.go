@@ -23,6 +23,7 @@ type HostInputPreview struct {
 	CanApply          bool                      `json:"can_apply"`
 	Kernel            firewall.KernelView       `json:"kernel"`
 	Registration      firewall.RegistrationView `json:"registration"`
+	Protection        HostInputProtectionView   `json:"protection"`
 	ProtectedSources  []string                  `json:"protected_sources"`
 	ProgramHash       string                    `json:"program_hash"`
 	TransactionHash   string                    `json:"transaction_hash"`
@@ -32,7 +33,7 @@ type HostInputPreview struct {
 }
 
 func EmptyHostInput(scope, reason string) HostInputPreview {
-	return HostInputPreview{At: time.Now().Unix(), Scope: scope, Manager: "unknown", Backend: "direct-nftables", Table: firewall.NFTFail2banTable, Hook: "input", Priority: firewall.NFTFail2banPriority, Kernel: firewall.KernelView{Reason: "尚未读取独立目标表"}, Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对独立 root 登记"}, ProtectedSources: []string{}, Reason: reason}
+	return HostInputPreview{At: time.Now().Unix(), Scope: scope, Manager: "unknown", Backend: "direct-nftables", Table: firewall.NFTFail2banTable, Hook: "input", Priority: firewall.NFTFail2banPriority, Kernel: firewall.KernelView{Reason: "尚未读取独立目标表"}, Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对独立 root 登记"}, Protection: EmptyHostInputProtection("尚未核对目标本机 root 保护来源批准"), ProtectedSources: []string{}, Reason: reason}
 }
 func (v HostInputPreview) Valid() bool {
 	if v.At <= 0 || v.ManagerObservedAt < 0 || v.Table != firewall.NFTFail2banTable || v.Hook != "input" || v.Priority != firewall.NFTFail2banPriority || v.Backend != "direct-nftables" || v.CanApply || v.ProtectedSources == nil || len(v.ProtectedSources) > firewall.NFTBanProtectionLimit || v.TransactionBytes < 0 || v.TransactionBytes > firewall.NFTBatchBytes || v.GeneratedRules < 0 || v.GeneratedRules > firewall.NFTBanProtectionLimit+2 || v.Available && (v.Scope != "host" || v.ManagerObservedAt == 0) {
@@ -52,7 +53,7 @@ func (v HostInputPreview) Valid() bool {
 		return false
 	}
 	r := v.Registration
-	if r.ObservedAt < 0 || r.ObservedAt != k.ObservedAt || r.Verified && (r.State != "registered" || len(r.OperationID) != 36 || !k.Available || !k.TableExists || k.Chains != 0 || k.Rules != 0) {
+	if r.ObservedAt < 0 || r.ObservedAt != k.ObservedAt || r.Verified && (r.State != "registered" || len(r.OperationID) != 36 || !k.Available || !k.TableExists || k.Chains != 0 || k.Rules != 0) || !v.Protection.Valid() || v.Protection.Verified && !r.Verified {
 		return false
 	}
 	switch r.State {
@@ -60,9 +61,19 @@ func (v HostInputPreview) Valid() bool {
 	default:
 		return false
 	}
-	registrationReady := r.State == "unregistered" && !k.TableExists || r.State == "released" && !k.TableExists || r.State == "registered" && r.Verified
 	if v.CanPrepare {
-		return v.Available && v.Scope == "host" && v.Manager == "direct-candidate" && k.Available && registrationReady && len(v.ProgramHash) == 64 && len(v.TransactionHash) == 64 && v.TransactionBytes > 0 && v.GeneratedRules == len(v.ProtectedSources)+2 && v.Reason == ""
+		protected := map[string]bool{}
+		for _, source := range v.ProtectedSources {
+			protected[source] = true
+		}
+		for _, sources := range [][]string{v.Protection.AdminSources, v.Protection.ProxySources} {
+			for _, source := range sources {
+				if !protected[source] {
+					return false
+				}
+			}
+		}
+		return v.Available && v.Scope == "host" && v.Manager == "direct-candidate" && k.Available && r.Verified && v.Protection.Verified && len(v.ProgramHash) == 64 && len(v.TransactionHash) == 64 && v.TransactionBytes > 0 && v.GeneratedRules == len(v.ProtectedSources)+2 && v.Reason == ""
 	}
 	return v.Reason != "" && v.ProgramHash == "" && v.TransactionHash == "" && v.TransactionBytes == 0 && v.GeneratedRules == 0
 }

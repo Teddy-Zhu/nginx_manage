@@ -1855,26 +1855,39 @@ type FirewallProtectionObservation struct {
 	Protections  []FirewallProtection `json:"protections"`
 	Reason       string               `json:"reason"`
 }
+type Fail2banHostInputProtectionView struct {
+	At           int64    `json:"at"`
+	State        string   `json:"state"`
+	Verified     bool     `json:"verified"`
+	ID           string   `json:"id"`
+	ApprovedAt   int64    `json:"approved_at"`
+	PolicyHash   string   `json:"policy_hash"`
+	AdminSources []string `json:"admin_sources"`
+	ProxySources []string `json:"proxy_sources"`
+	Reason       string   `json:"reason"`
+}
+
 type Fail2banHostInputPreview struct {
-	Registration      FirewallRegistrationView `json:"registration"`
-	ManagerObservedAt int64                    `json:"manager_observed_at"`
-	At                int64                    `json:"at"`
-	Scope             string                   `json:"scope"`
-	Available         bool                     `json:"available"`
-	Manager           string                   `json:"manager"`
-	Backend           string                   `json:"backend"`
-	Table             string                   `json:"table"`
-	Hook              string                   `json:"hook"`
-	Priority          int                      `json:"priority"`
-	CanPrepare        bool                     `json:"can_prepare"`
-	CanApply          bool                     `json:"can_apply"`
-	Kernel            FirewallKernelView       `json:"kernel"`
-	ProtectedSources  []string                 `json:"protected_sources"`
-	ProgramHash       string                   `json:"program_hash"`
-	TransactionHash   string                   `json:"transaction_hash"`
-	TransactionBytes  int                      `json:"transaction_bytes"`
-	GeneratedRules    int                      `json:"generated_rules"`
-	Reason            string                   `json:"reason"`
+	Protection        Fail2banHostInputProtectionView `json:"protection"`
+	Registration      FirewallRegistrationView        `json:"registration"`
+	ManagerObservedAt int64                           `json:"manager_observed_at"`
+	At                int64                           `json:"at"`
+	Scope             string                          `json:"scope"`
+	Available         bool                            `json:"available"`
+	Manager           string                          `json:"manager"`
+	Backend           string                          `json:"backend"`
+	Table             string                          `json:"table"`
+	Hook              string                          `json:"hook"`
+	Priority          int                             `json:"priority"`
+	CanPrepare        bool                            `json:"can_prepare"`
+	CanApply          bool                            `json:"can_apply"`
+	Kernel            FirewallKernelView              `json:"kernel"`
+	ProtectedSources  []string                        `json:"protected_sources"`
+	ProgramHash       string                          `json:"program_hash"`
+	TransactionHash   string                          `json:"transaction_hash"`
+	TransactionBytes  int                             `json:"transaction_bytes"`
+	GeneratedRules    int                             `json:"generated_rules"`
+	Reason            string                          `json:"reason"`
 }
 type Fail2banPanelLoginEvent struct {
 	TimeIso8601 string `json:"time_iso8601"`
