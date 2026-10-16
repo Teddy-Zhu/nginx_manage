@@ -121,6 +121,13 @@ func sanitizePushPlan(plan Plan, remote Remote, passphrase string) (Plan, error)
 		}
 		return text
 	}
+	if m := plan.Monitoring; m != nil {
+		if err := validateMonitoringPreview(m); err != nil {
+			return Plan{}, err
+		}
+		copy := *m
+		plan.Monitoring = &copy
+	}
 	if f := plan.Fail2ban; f != nil {
 		if err := validateFail2banPreview(f); err != nil {
 			return Plan{}, err

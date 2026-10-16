@@ -87,6 +87,12 @@ func (s *Service) nextPush(ctx context.Context) error {
 		if j.Payload.Input.EnableNginx || j.Payload.Input.Dependencies != nil && j.Payload.Input.Dependencies.Install != nil {
 			required = append(required, "system.write")
 		}
+		if j.Payload.Input.Monitoring.Mode == "replace" {
+			required = append(required, "monitoring.write")
+		}
+		if j.Payload.Input.Remote.Selection.Notifications {
+			required = append(required, "notifications.write")
+		}
 		if target.Require(required...) != nil {
 			return s.pausePush(ctx, &j, "waiting_confirmation", "target_permissions", "目标 Key 缺少本次迁入所需权限，请补齐授权")
 		}
@@ -111,6 +117,7 @@ func (s *Service) nextPush(ctx context.Context) error {
 			transfer.Mappings = j.Payload.Input.Mappings
 			transfer.Firewall = j.Payload.Input.Firewall
 			transfer.Fail2ban = j.Payload.Input.Fail2ban
+			transfer.Monitoring = j.Payload.Input.Monitoring
 			transfer.BaseVersion = j.Task.TargetBaseVersion
 			err = pushRPC(call, remote, j.Task.TargetNode, http.MethodPut, "/migrations/receive/"+j.Task.ID, "", transfer, &plan)
 		}
@@ -175,6 +182,9 @@ func (s *Service) acceptPushPlan(j *pushJob, plan Plan) error {
 	}
 	if plan.ID != j.Task.ID || plan.SourceNode != s.NodeID || plan.BaseVersion != j.Task.TargetBaseVersion || plan.PackageSHA256 != j.Task.PackageSHA256 {
 		return errors.New("target plan mismatch")
+	}
+	if err = acceptPushMonitoring(plan, j.Payload.Input, j.Task.Plan); err != nil {
+		return err
 	}
 	if err = acceptPushFail2ban(plan, j.Payload.Input, j.Task.Plan); err != nil {
 		return err

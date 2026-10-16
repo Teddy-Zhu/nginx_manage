@@ -1743,6 +1743,8 @@ export interface components {
         Fail2banPreviewInput: { version: number; };
         Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
         Fail2banPolicyPreview: { template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
+        MigrationMonitoringInput: { mode: "preserve" | "replace"; base_version?: number; };
+        MigrationMonitoringPlan: { mode: "preserve" | "replace"; state: "preserved" | "pending_import" | "not_imported" | "saved" | "restored" | "recovery_required"; base_version: number; saved_version: number; settings: components["schemas"]["MonitoringSettings"]; settings_hash: string; };
         MigrationFail2banInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; };
         MigrationFail2banPlan: { mode: "preserve" | "merge" | "replace"; state: string; base_version: number; saved_version: number; source_jails: number; preserved_jails: number; replaced_jails: number; total_jails: number; policy_hash: string; warnings: string[]; };
         Fail2banEngineIdentity: { owner: "existing" | "managed" | "none" | "unavailable"; installation_id: string; plan_id: string; asset_id: string; manifest_sha256: string; python_path: string; python_sha256: string; };
@@ -1884,6 +1886,7 @@ export interface components {
             install_task_id: string;
         };
         MigrationPushInput: {
+            monitoring?: components["schemas"]["MigrationMonitoringInput"];
             fail2ban?: components["schemas"]["MigrationFail2banInput"];
             firewall?: components["schemas"]["MigrationFirewallInput"];
             remote: components["schemas"]["MigrationRemote"];
@@ -3348,6 +3351,7 @@ export interface components {
         MigrationFirewallInterface: { source: string; target: string; resolved: boolean; observed: boolean; };
         MigrationFirewallPlan: { mode: string; state: string; source_backend: string; target_backend: string; base_version: number; saved_version: number; source_rules: number; preserved_rules: number; replaced_rules: number; total_rules: number; policy_hash: string; interfaces: components["schemas"]["MigrationFirewallInterface"][]; entries: components["schemas"]["FirewallRule"][]; truncated: boolean; warnings: string[]; };
         MigrationSelection: {
+            monitoring: boolean;
             fail2ban: boolean;
             firewall: boolean;
             certificates: boolean;
@@ -3379,6 +3383,7 @@ export interface components {
             manifest: components["schemas"]["MigrationManifest"];
         };
         MigrationImportInput: {
+            monitoring?: components["schemas"]["MigrationMonitoringInput"];
             fail2ban?: components["schemas"]["MigrationFail2banInput"];
             firewall?: components["schemas"]["MigrationFirewallInput"];
             /** Format: byte */
@@ -3403,6 +3408,7 @@ export interface components {
             selection: components["schemas"]["MigrationSelection"];
         };
         MigrationPullInput: {
+            monitoring?: components["schemas"]["MigrationMonitoringInput"];
             fail2ban?: components["schemas"]["MigrationFail2banInput"];
             firewall?: components["schemas"]["MigrationFirewallInput"];
             remote: components["schemas"]["MigrationRemote"];
@@ -3422,6 +3428,7 @@ export interface components {
             message: string;
         };
         MigrationPlan: {
+            monitoring?: components["schemas"]["MigrationMonitoringPlan"];
             fail2ban?: components["schemas"]["MigrationFail2banPlan"];
             firewall?: components["schemas"]["MigrationFirewallPlan"];
             id: string;

@@ -42,7 +42,7 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 		return Package{}, err
 	}
 	payload := Payload{Files: tree.Files, Certificates: []Certificate{}, Credentials: []Credential{}, Channels: []notifications.TransferChannel{}, Automation: acme.TransferAutomation{Accounts: []acme.TransferAccount{}, Profiles: []acme.TransferProfile{}}}
-	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS、监控设置、模块开关及日志轮转所有者保留", "目标防火墙内核运行规则、所有权与恢复状态保留，迁入规则须单独确认应用", "Fail2ban 实例、Socket、所有权与封禁状态保留，迁入 jail 须单独核对运行接入", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
+	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS、模块开关及日志轮转所有者保留", "目标防火墙内核运行规则、所有权与恢复状态保留，迁入规则须单独确认应用", "Fail2ban 实例、Socket、所有权与封禁状态保留，迁入 jail 须单独核对运行接入", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
 	parsed, err := nginxconfig.Parse(tree.Files, s.Config.Policy)
 	if err != nil {
 		return Package{}, err
@@ -74,6 +74,18 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 		if err != nil {
 			return Package{}, err
 		}
+	}
+	if in.Selection.Monitoring {
+		if s.Monitoring == nil {
+			return Package{}, fault.Unavailable("监控配置服务未配置")
+		}
+		view, err := s.Monitoring.ReadSettings(ctx, tx)
+		if err != nil {
+			return Package{}, err
+		}
+		payload.Monitoring = &view.Settings
+	} else {
+		m.Omissions = append(m.Omissions, "未选择监控配置，目标设置保留")
 	}
 	if in.Selection.Fail2ban {
 		if s.Fail2ban == nil {
@@ -126,10 +138,10 @@ func (s *Service) Prepare(ctx context.Context, p auth.Principal, requestID strin
 	if err != nil {
 		return Plan{}, err
 	}
-	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, nil, nil)
+	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, nil, nil)
 }
 
-func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, firewallInput FirewallInput, fail2banInput Fail2banInput, pull *pullReservation, receive *receiveReservation) (Plan, error) {
+func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, firewallInput FirewallInput, fail2banInput Fail2banInput, monitoringInput MonitoringInput, pull *pullReservation, receive *receiveReservation) (Plan, error) {
 	if base < 0 || m.SourceNode == s.NodeID {
 		return Plan{}, fault.Invalid("基础版本无效或来源为当前节点")
 	}
@@ -146,6 +158,14 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	if receive != nil {
 		st.Plan.ID = receive.ID
 		st.Plan.PackageSHA256 = receive.PackageSHA256
+	}
+	if monitoringInput.Mode == "replace" {
+		if err := p.Require("monitoring.write"); err != nil {
+			return Plan{}, err
+		}
+	}
+	if err := s.prepareMonitoring(ctx, &st, monitoringInput); err != nil {
+		return Plan{}, err
 	}
 	if err := s.prepareFail2ban(ctx, &st, fail2banInput); err != nil {
 		return Plan{}, err
@@ -184,6 +204,9 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	var version int64
 	var basis, applied sql.NullString
 	if err := tx.QueryRowContext(ctx, "SELECT version,desired_revision,applied_revision FROM config_head WHERE id=1").Scan(&version, &basis, &applied); err != nil {
+		return Plan{}, err
+	}
+	if err := s.checkMonitoringBase(ctx, tx, &st); err != nil {
 		return Plan{}, err
 	}
 	if err := s.checkFail2banBase(ctx, tx, &st); err != nil {
@@ -275,6 +298,9 @@ func (s *Service) inspect(ctx context.Context, st *storedPlan) error {
 			plan.CanSave = false
 			plan.CanApply = false
 		}
+	}
+	if err := s.inspectMonitoring(ctx, st, add); err != nil {
+		return err
 	}
 	if err := s.inspectFail2ban(ctx, st, add); err != nil {
 		return err
@@ -411,8 +437,8 @@ func (s *Service) load(ctx context.Context, p auth.Principal, id string) (stored
 	if err := decodeStrict(plain, &st); err != nil {
 		return st, err
 	}
-	if st.Manifest.Schema != Schema || st.Fail2ban != nil && (st.Plan.Fail2ban == nil || st.Payload.Fail2ban == nil) || st.Firewall != nil && (st.Plan.Firewall == nil || st.Payload.Firewall == nil) {
-		return st, fault.Unavailable("迁移计划格式或安全策略恢复材料无效，须重新准备或由本机检查")
+	if st.Manifest.Schema != Schema || st.Monitoring != nil && (st.Plan.Monitoring == nil || st.Payload.Monitoring == nil) || st.Fail2ban != nil && (st.Plan.Fail2ban == nil || st.Payload.Fail2ban == nil) || st.Firewall != nil && (st.Plan.Firewall == nil || st.Payload.Firewall == nil) {
+		return st, fault.Unavailable("迁移计划格式或配置恢复材料无效，须重新准备或由本机检查")
 	}
 	st.Plan.State = state
 	st.Plan.RevisionID = revision
@@ -449,6 +475,14 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, e
 	plan.RevisionID = revision
 	plan.TaskID = task
 	plan.LastError = lastError
+	if plan.Monitoring != nil && plan.Monitoring.Mode != "preserve" {
+		if state == "rolled_back" {
+			plan.Monitoring.State = "restored"
+		}
+		if state == "recovery_required" {
+			plan.Monitoring.State = "recovery_required"
+		}
+	}
 	if plan.Fail2ban != nil && plan.Fail2ban.Mode != "preserve" {
 		if state == "rolled_back" {
 			plan.Fail2ban.State = "restored"
@@ -500,6 +534,7 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]Plan, error) {
 		plan.Omissions = []string{}
 		plan.Firewall = nil
 		plan.Fail2ban = nil
+		plan.Monitoring = nil
 		out = append(out, plan)
 	}
 	return out, nil
@@ -534,6 +569,11 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 	}
 	if st.Plan.State == "failed" {
 		return Plan{}, fault.Conflict("迁移计划已过期或结束，请重新预检")
+	}
+	if st.Monitoring != nil {
+		if err := p.Require("monitoring.write"); err != nil {
+			return Plan{}, err
+		}
 	}
 	if len(st.Payload.Channels) > 0 {
 		if err := p.Require("notifications.write"); err != nil {
@@ -622,6 +662,9 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 		if err := s.Notifications.ImportChannels(ctx, tx, st.Payload.Channels); err != nil {
 			return err
 		}
+		if err := s.importMonitoring(ctx, tx, &st, p.ID, requestID, in.Mode == "draft"); err != nil {
+			return err
+		}
 		if err := s.importFail2ban(ctx, tx, &st, p.ID, requestID); err != nil {
 			return err
 		}
@@ -657,6 +700,9 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 	})
 	if err != nil {
 		return Plan{}, err
+	}
+	if st.Monitoring != nil && in.Mode != "draft" {
+		s.Monitoring.Wake()
 	}
 	return s.Get(ctx, p, id)
 }

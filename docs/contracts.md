@@ -169,7 +169,7 @@ Agent 合同为 35。主回环 HTTPS 与部署/就绪绑定不变，可选远程
 
 防火墙运行合同：`/firewall/runtime`、`/firewall/plan`、`/firewall/apply` 与 `/firewall/operations/{id}`（含 confirm/rollback）使用统一外壳并拒绝递归转发。计划绑定保存版本、完整内核基线、实际管理连接与 SSH 保护；应用先保存 root 意图，独立操作不依赖业务库恢复。确认须使用规则生效后重建监听的新非回环 TCP/TLS 连接，范围限于该管理入口；未确认、Web 失联、Agent 停止/重启均恢复原确认策略。root 运行记录及恢复意图不进入业务备份/迁移；已确认对象缺失按原版本恢复，漂移拒绝覆盖。模块停用须明确选择保留规则或引用已确认的移除操作；既有确认与恢复继续可用。Agent 为 35，数据库为 25；其他后端、Docker 及 P5 真实系统验收仍未完成。
 
-防火墙逻辑迁移使用 schema 3 的固定归档项和 `selection.firewall`，文件及 API 拉取/推送共用导入事务。目标默认 preserve，显式 merge/replace 必须指定后端并完成绑定接口映射，冻结目标期望版本及内容并重分配规则 ID；应用 Nginx 失败时以新版本补偿原期望，冲突保留待恢复。任何迁入模式都不启用模块或写内核，生效沿用目标独立计划和新连接确认。规则预览有界且远端摘要脱敏，列表不携带完整规则；公开响应及 Agent 合同不变，详见 [迁移](migration.md)。
+防火墙逻辑迁移使用 schema 4 的固定归档项和 `selection.firewall`，文件及 API 拉取/推送共用导入事务。目标默认 preserve，显式 merge/replace 必须指定后端并完成绑定接口映射，冻结目标期望版本及内容并重分配规则 ID；应用 Nginx 失败时以新版本补偿原期望，冲突保留待恢复。任何迁入模式都不启用模块或写内核，生效沿用目标独立计划和新连接确认。规则预览有界且远端摘要脱敏，列表不携带完整规则；公开响应及 Agent 合同不变，详见 [迁移](migration.md)。
 
 防火墙执行合同明确 `action=apply|remove`，计划/提交/操作均固定动作。移除绑定已确认运行版本，保留期望草稿，将经完整证明的受管表原子替换为空表；新连接确认前恢复旧规则，确认后只维护已移除的空表状态。停用 `firewall_rules=remove` 须引用当前已成功确认的移除操作；已核对的初始空表可直接停用。核对与最终开关写入同公共执行锁；keep 明确保留规则，未完成移除不报告模块停用。Agent 为 35、root 运行记录为 3，数据库为 25；无旧格式兼容，详见 [防火墙](firewall.md)。
 
@@ -184,11 +184,13 @@ Agent 合同为 35。主回环 HTTPS 与部署/就绪绑定不变，可选远程
 已有 Fail2ban 实例由本机 root 的 `fail2ban-bind/binding/unbind` 固定服务、Socket 和客户端批准，独立历史先于当前指针持久化，撤销不停止保护。`GET /fail2ban/instance` 与 `/fail2ban/jails/{name}` 及其显式远程资源只读已有 jail；采集前后核对运行身份、主进程 Socket 归属、客户端散列/版本与当前批准，拒绝激活依赖及漂移。完整有界解析状态，失败不伪造零值或返回部分记录，封禁仅代表引擎记录，动作适用性单独核对。缓存和预算覆盖实例及 jail，页面取消旧读取并显示真实采样时间。Agent 协议为 40，已有实例接入记录为 1，数据库为 25；不开放任意客户端命令或路径输入，详见 [Fail2ban](fail2ban.md)。
 
 
-Fail2ban 期望配置使用 `GET/PUT /fail2ban/policy`、内置模板清单与版本化预览，沿用统一 JSON 及显式远程资源。最多 32 个类型化 jail，加密保存、CAS、幂等与审计同事务；保存不修改运行实例，当前 `can_apply=false`。schema 3 配置包的 `selection.fail2ban` 与固定归档项仅携带期望，文件/API 拉取/推送的 preserve/merge/replace 同 Nginx 导入事务及失败补偿集成，冻结版本与内容，不覆盖后续修改。数据库为 25，Agent 为 40，无旧包兼容。边界见 [Fail2ban](fail2ban.md)。
+Fail2ban 期望配置使用 `GET/PUT /fail2ban/policy`、内置模板清单与版本化预览，沿用统一 JSON 及显式远程资源。最多 32 个类型化 jail，加密保存、CAS、幂等与审计同事务；保存不修改运行实例，当前 `can_apply=false`。schema 4 配置包的 `selection.fail2ban` 与固定归档项仅携带期望，文件/API 拉取/推送的 preserve/merge/replace 同 Nginx 导入事务及失败补偿集成，冻结版本与内容，不覆盖后续修改。数据库为 25，Agent 为 40，无旧包兼容。边界见 [Fail2ban](fail2ban.md)。
 
 
-Fail2ban 固定过滤器/固定样例及 `POST /fail2ban/templates/check` 已接入官方工具检查，要求 read，固定内置 ID、程序目录/版本、独立临时材料和执行预算。结果区分可读取与样例通过，附带工具/内容散列及采样时间；失败不返回部分通过。保存预览要求日志的 `auth_presence` 标记与过滤器检查同时就绪，仍不表示 jail 已安装或动作生效。Agent 为 40，数据库仍为 25、迁移 schema 仍为 3；[详细边界与待验收项](fail2ban.md)。
+Fail2ban 固定过滤器/固定样例及 `POST /fail2ban/templates/check` 已接入官方工具检查，要求 read，固定内置 ID、程序目录/版本、独立临时材料和执行预算。结果区分可读取与样例通过，附带工具/内容散列及采样时间；失败不返回部分通过。保存预览要求日志的 `auth_presence` 标记与过滤器检查同时就绪，仍不表示 jail 已安装或动作生效。Agent 为 40，数据库仍为 25、迁移 schema 为 4；[详细边界与待验收项](fail2ban.md)。
 
 Fail2ban 诊断新增必需的 `managed` 安装登记对象，区分 absent/unavailable、reserved/ready/installed、interrupted 和 rolling-back/rolled-back，不作为实际引擎健康或 jail 保护证明。本机 root 的 `fail2ban-install` 接受操作 UUID、固定已准备计划与资产、信任文件及显式启动/开机启用选择；`fail2ban-managed*` 只操作专用服务。没有公开安装/服务控制 HTTP 接口；模块开关不发起这些操作。安装事件及指针位于 root 私有目录，接入详见 [Fail2ban](fail2ban.md)。Agent 协议为 40，数据库为 25；尚未执行实际系统验收。
 
 Fail2ban 的 `binding.engine` 与模板检查 `engine` 统一携带 existing/managed/none/unavailable 来源及受管安装/计划/资产/清单/Python 身份。已完成的本机受管安装直接授权其固定客户端只读观察和固定样例工具；已有实例保持独立明确接入，冲突及中间状态不隐式改选。当前安装事件 ID 参与读取授权及缓存选择，实际采集前后认证程序，受管进程核对实际解释器、参数及单元。保存预览还要求检查与实例同来源、同受支持版本；jail 仍只读且不可应用。共享采集上限为 10 秒，单命令 2 秒，保留原缓存时间和并发预算。Agent 协议为 40、数据库为 25；实际验证留待 P5。
+
+配置迁移新增 `selection.monitoring`、`monitoring` 导入选项和计划摘要，包含采样/保留/阈值设置，默认保留目标。目标替换须 monitoring.write，冻结基础版本并同事务导入；草稿不修改监控，应用失败按版本及完整内容补偿。迁移归档当前 schema 4，Agent 仍为 40、数据库仍为 25，JSON 外壳和页面自动扫描不变。详见 [迁移边界](migration.md)。

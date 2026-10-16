@@ -60,15 +60,7 @@ func (s *Service) Wake() {
 	}
 }
 func (s *Service) Settings(ctx context.Context) (SettingsView, error) {
-	var out SettingsView
-	var raw string
-	if err := s.DB.QueryRowContext(ctx, "SELECT version,settings FROM monitoring_settings WHERE id=1").Scan(&out.Version, &raw); err != nil {
-		return out, err
-	}
-	if err := json.Unmarshal([]byte(raw), &out.Settings); err != nil {
-		return out, err
-	}
-	return out, out.Settings.Validate()
+	return s.ReadSettings(ctx, s.DB)
 }
 func (s *Service) SetSettings(ctx context.Context, p auth.Principal, requestID, key string, in SettingsInput) (SettingsView, error) {
 	var out SettingsView
@@ -111,22 +103,17 @@ func (s *Service) SetSettings(ctx context.Context, p auth.Principal, requestID, 
 	if !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
-	settings, err := json.Marshal(in.Settings)
+	var pending int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE state IN ('applying','recovery_required')").Scan(&pending); err != nil {
+		return out, err
+	}
+	if pending > 0 {
+		return out, fault.Conflict("迁移尚未结束或需要恢复，暂不能修改监控配置")
+	}
+	out, err = s.StoreSettings(ctx, tx, in.BaseVersion, in.Settings)
 	if err != nil {
 		return out, err
 	}
-	result, err := tx.ExecContext(ctx, "UPDATE monitoring_settings SET settings=?,version=version+1 WHERE id=1 AND version=?", string(settings), in.BaseVersion)
-	if err != nil {
-		return out, err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return out, err
-	}
-	if affected != 1 {
-		return out, fault.Conflict("监控配置已更新，请刷新后重试")
-	}
-	out = SettingsView{Version: in.BaseVersion + 1, Settings: in.Settings}
 	response, err := json.Marshal(out)
 	if err != nil {
 		return out, err

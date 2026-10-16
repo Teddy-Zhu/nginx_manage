@@ -13,6 +13,7 @@ type Receiver struct {
 	Scopes  []string `json:"scopes"`
 }
 type PushInput struct {
+	Monitoring   MonitoringInput   `json:"monitoring"`
 	Fail2ban     Fail2banInput     `json:"fail2ban"`
 	Firewall     FirewallInput     `json:"firewall"`
 	Dependencies *DependencyInput  `json:"dependencies,omitempty"`

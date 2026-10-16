@@ -31,10 +31,13 @@ import {
   type MigrationPullInput,
   type MigrationFirewallInput,
   type MigrationFail2banInput,
+  type MigrationMonitoringInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
+import MigrationMonitoringOptions from "../components/MigrationMonitoringOptions.vue";
+import MigrationMonitoringPreview from "../components/MigrationMonitoringPreview.vue";
 import MigrationFail2banOptions from "../components/MigrationFail2banOptions.vue";
 import MigrationFail2banPreview from "../components/MigrationFail2banPreview.vue";
 import { useAction, useIdempotency } from "../composables/action";
@@ -58,8 +61,11 @@ const includeAutomation = ref(false),
   remoteNotifications = ref(false),
   includeFirewall = ref(false),
   includeFail2ban = ref(false),
+  includeMonitoring = ref(false),
   remoteFirewall = ref(false),
-  remoteFail2ban = ref(false);
+  remoteFail2ban = ref(false),
+  remoteMonitoring = ref(false);
+const monitoringSettings = ref<MigrationMonitoringInput>({ mode: "preserve" });
 const fail2banSettings = ref<MigrationFail2banInput>({ mode: "preserve" });
 const firewallSettings = ref<MigrationFirewallInput>({
     mode: "preserve",
@@ -209,6 +215,7 @@ async function exportPackage() {
         notifications: includeNotifications.value,
         firewall: includeFirewall.value,
         fail2ban: includeFail2ban.value,
+        monitoring: includeMonitoring.value,
       },
     });
     const bytes = Uint8Array.from(atob(out.content), (c) => c.charCodeAt(0));
@@ -242,6 +249,7 @@ async function previewFile() {
       mappings: mappingObject(),
       firewall,
       fail2ban: { ...fail2banSettings.value },
+      monitoring: { ...monitoringSettings.value },
     });
     importPassphrase.value = "";
   });
@@ -261,12 +269,14 @@ function remoteInput(execute: boolean, version: number): MigrationPullInput {
         notifications: remoteNotifications.value,
         firewall: remoteFirewall.value,
         fail2ban: remoteFail2ban.value,
+        monitoring: remoteMonitoring.value,
       },
     },
     base_version: version,
     mappings: mappingObject(),
     firewall: firewallOptions(),
     fail2ban: { ...fail2banSettings.value },
+    monitoring: { ...monitoringSettings.value },
     mode: execute ? mode.value : "preview",
     enable_nginx: enableNginx.value,
   };
@@ -411,6 +421,7 @@ onUnmounted(() => {
           >包含 ACME 账户与签发配置</NCheckbox
         ><NCheckbox v-model:checked="includeNotifications"
           >包含通知渠道及凭据</NCheckbox
+        ><NCheckbox v-model:checked="includeMonitoring">包含监控配置</NCheckbox
         ><NCheckbox v-model:checked="includeFail2ban"
           >包含 jail 期望配置</NCheckbox
         ><NCheckbox v-model:checked="includeFirewall"
@@ -475,8 +486,8 @@ onUnmounted(() => {
           v-if="has('notifications.write')"
           v-model:checked="remoteNotifications"
           >包含通知渠道及凭据</NCheckbox
-        ><NCheckbox v-model:checked="remoteFail2ban"
-          >jail 期望配置</NCheckbox
+        ><NCheckbox v-model:checked="remoteMonitoring">包含监控配置</NCheckbox
+        ><NCheckbox v-model:checked="remoteFail2ban">jail 期望配置</NCheckbox
         ><NCheckbox v-model:checked="remoteFirewall"
           >包含防火墙期望规则</NCheckbox
         ><NButton
@@ -509,6 +520,11 @@ onUnmounted(() => {
           :autosize="{ minRows: 3, maxRows: 10 }"
           placeholder='{"192.168.1.10:80":"0.0.0.0:80"}'
       /></NFormItem>
+      <MigrationMonitoringOptions
+        v-model="monitoringSettings"
+        :allow-replace="has('monitoring.write')"
+        :disabled="busy"
+      />
       <MigrationFail2banOptions v-model="fail2banSettings" :disabled="busy" />
       <MigrationFirewallOptions
         v-model="firewallSettings"
@@ -537,6 +553,10 @@ onUnmounted(() => {
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
         >{{ plan.last_error }}</NAlert
       >
+      <MigrationMonitoringPreview
+        v-if="plan.monitoring"
+        :info="plan.monitoring"
+      />
       <MigrationFail2banPreview v-if="plan.fail2ban" :info="plan.fail2ban" />
       <MigrationFirewallPreview v-if="plan.firewall" :info="plan.firewall" />
       <MigrationDependencies

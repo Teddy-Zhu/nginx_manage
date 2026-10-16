@@ -33,6 +33,14 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 			return Plan{}, err
 		}
 	}
+	if err := validateMonitoringSelection(in.Monitoring, in.Remote.Selection.Monitoring); err != nil {
+		return Plan{}, err
+	}
+	if in.Monitoring.Mode == "replace" {
+		if err := p.Require("monitoring.write"); err != nil {
+			return Plan{}, err
+		}
+	}
 	if err := in.Fail2ban.validate(); err != nil {
 		return Plan{}, err
 	}
@@ -121,7 +129,7 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		if manifest.SourceNode != envelope.NodeID {
 			return Plan{}, redactedRemoteError()
 		}
-		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, &pullReservation{p.ID, key, digest}, nil)
+		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, &pullReservation{p.ID, key, digest}, nil)
 	}()
 	if err != nil {
 		return Plan{}, err

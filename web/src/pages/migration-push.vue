@@ -28,10 +28,13 @@ import {
   type MigrationPushTask,
   type MigrationFirewallInput,
   type MigrationFail2banInput,
+  type MigrationMonitoringInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
+import MigrationMonitoringOptions from "../components/MigrationMonitoringOptions.vue";
+import MigrationMonitoringPreview from "../components/MigrationMonitoringPreview.vue";
 import MigrationFail2banOptions from "../components/MigrationFail2banOptions.vue";
 import MigrationFail2banPreview from "../components/MigrationFail2banPreview.vue";
 import { useAction, useIdempotency } from "../composables/action";
@@ -53,7 +56,9 @@ const certificates = ref(false),
   notifications = ref(false),
   includeFirewall = ref(false),
   includeFail2ban = ref(false),
+  includeMonitoring = ref(false),
   enableNginx = ref(false);
+const monitoringSettings = ref<MigrationMonitoringInput>({ mode: "preserve" });
 const fail2banSettings = ref<MigrationFail2banInput>({ mode: "preserve" });
 const firewallSettings = ref<MigrationFirewallInput>({
     mode: "preserve",
@@ -197,10 +202,12 @@ async function submit() {
           notifications: notifications.value,
           firewall: includeFirewall.value,
           fail2ban: includeFail2ban.value,
+          monitoring: includeMonitoring.value,
         },
       },
       mappings: mappingObject(),
       fail2ban: { ...fail2banSettings.value },
+      monitoring: { ...monitoringSettings.value },
       firewall: {
         ...firewallSettings.value,
         interfaces: { ...firewallSettings.value.interfaces },
@@ -288,6 +295,7 @@ onUnmounted(() => {
             ><NCheckbox v-model:checked="credentials">DNS 凭据</NCheckbox
             ><NCheckbox v-model:checked="automation">ACME 配置</NCheckbox
             ><NCheckbox v-model:checked="notifications">通知渠道</NCheckbox
+            ><NCheckbox v-model:checked="includeMonitoring">监控配置</NCheckbox
             ><NCheckbox v-model:checked="includeFail2ban"
               >jail 期望配置</NCheckbox
             ><NCheckbox v-model:checked="includeFirewall"
@@ -301,6 +309,10 @@ onUnmounted(() => {
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 8 }"
         /></NFormItem>
+        <MigrationMonitoringOptions
+          v-model="monitoringSettings"
+          :disabled="busy"
+        />
         <MigrationFail2banOptions v-model="fail2banSettings" :disabled="busy" />
         <MigrationFirewallOptions
           v-model="firewallSettings"
@@ -401,6 +413,10 @@ onUnmounted(() => {
           selected.error
         }}</NAlert>
         <template v-if="selected.plan">
+          <MigrationMonitoringPreview
+            v-if="selected.plan.monitoring"
+            :info="selected.plan.monitoring"
+          />
           <MigrationFail2banPreview
             v-if="selected.plan.fail2ban"
             :info="selected.plan.fail2ban"

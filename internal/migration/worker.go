@@ -96,6 +96,9 @@ func (s *Service) reconcile(ctx context.Context) error {
 		if compensateErr == nil {
 			compensateErr = s.compensateFail2ban(ctx, tx, &st, principal, id)
 		}
+		if compensateErr == nil {
+			compensateErr = s.compensateMonitoring(ctx, tx, &st, principal, id)
+		}
 		if compensateErr == nil && st.EnabledByMigration {
 			var n int64
 			result, e := tx.ExecContext(ctx, "UPDATE module_settings SET enabled=0,version=version+1 WHERE id='nginx-config' AND enabled=1 AND version=?", st.ModuleVersion+1)
@@ -115,16 +118,22 @@ func (s *Service) reconcile(ctx context.Context) error {
 				return err
 			}
 			outcome = "recovery_required"
-			message = "运行恢复后无法恢复期望修订、防火墙期望策略或模块状态，保留迁移记录和依赖供本机恢复"
+			message = "运行恢复后无法恢复期望修订、安全策略、监控配置或模块状态，保留迁移记录和依赖供本机恢复"
 		} else {
 			outcome = "rolled_back"
-			message = "运行配置、期望配置及本次迁入的防火墙期望策略已恢复；导入的不可变修订、证书和凭据保留供审计与重试"
+			message = "运行配置、期望配置及本次迁入的安全策略和监控配置已恢复；导入的不可变修订、证书和凭据保留供审计与重试"
 		}
 	}
 	if err := recordOutcome(ctx, tx, id, outcome, message); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if st.Monitoring != nil && outcome == "rolled_back" {
+		s.Monitoring.Wake()
+	}
+	return nil
 }
 
 func (s *Service) requireRecovery(ctx context.Context, id, message string) error {

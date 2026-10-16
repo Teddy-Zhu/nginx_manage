@@ -1940,6 +1940,19 @@ type Fail2banPolicyPreview struct {
 	Entries        []Fail2banJailPreview   `json:"entries"`
 	Warnings       []string                `json:"warnings"`
 }
+type MigrationMonitoringInput struct {
+	Mode        string `json:"mode"`
+	BaseVersion *int64 `json:"base_version,omitempty"`
+}
+type MigrationMonitoringPlan struct {
+	Mode         string             `json:"mode"`
+	State        string             `json:"state"`
+	BaseVersion  int64              `json:"base_version"`
+	SavedVersion int64              `json:"saved_version"`
+	Settings     MonitoringSettings `json:"settings"`
+	SettingsHash string             `json:"settings_hash"`
+}
+
 type MigrationFail2banInput struct {
 	Mode        string `json:"mode"`
 	BaseVersion *int64 `json:"base_version,omitempty"`
@@ -2500,12 +2513,13 @@ type MigrationExportInput struct {
 
 // MigrationImportInput defines model for MigrationImportInput.
 type MigrationImportInput struct {
-	Fail2ban    *MigrationFail2banInput `json:"fail2ban,omitempty"`
-	Firewall    *MigrationFirewallInput `json:"firewall,omitempty"`
-	BaseVersion int64                   `json:"base_version"`
-	Content     []byte                  `json:"content"`
-	Mappings    map[string]string       `json:"mappings"`
-	Passphrase  string                  `json:"passphrase"`
+	Monitoring  *MigrationMonitoringInput `json:"monitoring,omitempty"`
+	Fail2ban    *MigrationFail2banInput   `json:"fail2ban,omitempty"`
+	Firewall    *MigrationFirewallInput   `json:"firewall,omitempty"`
+	BaseVersion int64                     `json:"base_version"`
+	Content     []byte                    `json:"content"`
+	Mappings    map[string]string         `json:"mappings"`
+	Passphrase  string                    `json:"passphrase"`
 }
 
 // MigrationManifest defines model for MigrationManifest.
@@ -2529,6 +2543,7 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
+	Monitoring    *MigrationMonitoringPlan   `json:"monitoring,omitempty"`
 	Fail2ban      *MigrationFail2banPlan     `json:"fail2ban,omitempty"`
 	Firewall      *MigrationFirewallPlan     `json:"firewall,omitempty"`
 	BaseVersion   int64                      `json:"base_version"`
@@ -2551,13 +2566,14 @@ type MigrationPlan struct {
 
 // MigrationPullInput defines model for MigrationPullInput.
 type MigrationPullInput struct {
-	Fail2ban    *MigrationFail2banInput `json:"fail2ban,omitempty"`
-	Firewall    *MigrationFirewallInput `json:"firewall,omitempty"`
-	BaseVersion int64                   `json:"base_version"`
-	EnableNginx bool                    `json:"enable_nginx"`
-	Mappings    map[string]string       `json:"mappings"`
-	Mode        MigrationPullInputMode  `json:"mode"`
-	Remote      MigrationRemote         `json:"remote"`
+	Monitoring  *MigrationMonitoringInput `json:"monitoring,omitempty"`
+	Fail2ban    *MigrationFail2banInput   `json:"fail2ban,omitempty"`
+	Firewall    *MigrationFirewallInput   `json:"firewall,omitempty"`
+	BaseVersion int64                     `json:"base_version"`
+	EnableNginx bool                      `json:"enable_nginx"`
+	Mappings    map[string]string         `json:"mappings"`
+	Mode        MigrationPullInputMode    `json:"mode"`
+	Remote      MigrationRemote           `json:"remote"`
 }
 
 // MigrationPullInputMode defines model for MigrationPullInput.Mode.
@@ -2565,6 +2581,7 @@ type MigrationPullInputMode string
 
 // MigrationPushInput defines model for MigrationPushInput.
 type MigrationPushInput struct {
+	Monitoring   *MigrationMonitoringInput `json:"monitoring,omitempty"`
 	Fail2ban     *MigrationFail2banInput   `json:"fail2ban,omitempty"`
 	Firewall     *MigrationFirewallInput   `json:"firewall,omitempty"`
 	BaseVersion  *int64                    `json:"base_version,omitempty"`
@@ -2650,6 +2667,7 @@ type MigrationFirewallPlan struct {
 
 // MigrationSelection defines model for MigrationSelection.
 type MigrationSelection struct {
+	Monitoring     bool `json:"monitoring"`
 	Fail2ban       bool `json:"fail2ban"`
 	Firewall       bool `json:"firewall"`
 	Automation     bool `json:"automation"`

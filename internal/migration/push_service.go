@@ -19,6 +19,9 @@ func (s *Service) StartPush(ctx context.Context, p auth.Principal, requestID, ke
 	if !validPushKey(key) || in.BaseVersion != nil && *in.BaseVersion < 0 || in.Mode != "preview" && in.Mode != "draft" && in.Mode != "save" && in.Mode != "apply" || in.Remote.NodeID != "" && (!validTransferID(in.Remote.NodeID) || in.Remote.NodeID == s.NodeID) {
 		return PushTask{}, fault.Invalid("迁出模式、基础版本、节点或幂等键无效")
 	}
+	if err := validateMonitoringSelection(in.Monitoring, in.Remote.Selection.Monitoring); err != nil {
+		return PushTask{}, err
+	}
 	if err := in.Fail2ban.validate(); err != nil {
 		return PushTask{}, err
 	}
