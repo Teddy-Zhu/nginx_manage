@@ -13,6 +13,9 @@ import (
 )
 
 func checkLayout(d panelruntime.Deployment) error {
+	if d.Mode != "docker" {
+		return errors.New("launcher 需要容器面板绑定")
+	}
 	if os.Geteuid() != d.UID || os.Getegid() != d.GID {
 		return errors.New("launcher 身份与宿主机登记不一致")
 	}

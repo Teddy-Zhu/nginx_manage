@@ -84,6 +84,9 @@ func (c Client) call(ctx context.Context, method, path string, in, out any) erro
 	if err != nil {
 		return err
 	}
+	if d.Mode != "docker" {
+		return errors.New("launcher 控制需要容器面板绑定")
+	}
 	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		conn, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", Socket(c.DataDir))
 		if err != nil {

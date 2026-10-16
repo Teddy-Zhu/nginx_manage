@@ -35,6 +35,7 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
 	"nginxpanel/internal/notifications"
+	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 	"nginxpanel/internal/tasks"
@@ -65,6 +66,11 @@ func Init(ctx context.Context, dataDir string, development bool) (string, error)
 		return "", err
 	}
 	defer unlock()
+	if !development {
+		if err := panelruntime.CheckInit(dataDir); err != nil {
+			return "", err
+		}
+	}
 	keyPath := filepath.Join(dataDir, "secrets", "master.key")
 	if _, err := os.Lstat(keyPath); os.IsNotExist(err) {
 		if _, err := os.Stat(filepath.Join(dataDir, "app", "panel.db")); !os.IsNotExist(err) {
@@ -207,6 +213,11 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	defer unlock()
+	if !o.Dev {
+		if err := panelruntime.CheckProcess(o.DataDir, o.PanelRuntime, o.Listen, o.WebDir, o.Version); err != nil {
+			return err
+		}
+	}
 	vault, err := secure.LoadKey(filepath.Join(o.DataDir, "secrets", "master.key"))
 	if err != nil {
 		return err

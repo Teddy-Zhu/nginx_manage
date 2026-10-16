@@ -47,6 +47,7 @@ func describe(ctx context.Context, binary string) (Release, error) {
 	}
 	var info struct {
 		Version         string `json:"version"`
+		DatabaseSchema  int64  `json:"database_schema"`
 		AgentProtocol   int    `json:"agent_protocol"`
 		LauncherVersion int    `json:"launcher_version"`
 		ParserVersion   string `json:"parser_version"`
@@ -57,7 +58,7 @@ func describe(ctx context.Context, binary string) (Release, error) {
 	if after, err := secure.HashRootFile(binary, BinaryLimit); err != nil || after != hash {
 		return r, errors.New("面板程序在版本核对期间变化")
 	}
-	r = Release{Schema: Schema, Version: info.Version, AgentProtocol: info.AgentProtocol, LauncherVersion: info.LauncherVersion, Architecture: runtime.GOARCH, BinarySHA256: hash}
+	r = Release{Schema: Schema, Version: info.Version, DatabaseSchema: info.DatabaseSchema, AgentProtocol: info.AgentProtocol, LauncherVersion: info.LauncherVersion, Architecture: runtime.GOARCH, BinarySHA256: hash}
 	return r, nil
 }
 func syncDir(name string) error {
@@ -171,7 +172,7 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	}
 	r, approval := source.Release, source.SignedImage
 	launcherHash := r.BinarySHA256
-	d := Deployment{Schema: Schema, DataDir: in.DataDir, Listen: in.Listen, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, LauncherSHA256: launcherHash, InitialRelease: r.ID, Image: in.Image, ImageID: approval.Image.Platform.ConfigDigest, SignedImage: approval}
+	d := Deployment{Schema: Schema, Mode: "docker", DataDir: in.DataDir, Listen: in.Listen, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, LauncherSHA256: launcherHash, InitialRelease: r.ID, Image: in.Image, ImageID: approval.Image.Platform.ConfigDigest, SignedImage: approval}
 	if err = d.validate(in.DataDir); err != nil {
 		return out, err
 	}
@@ -192,13 +193,30 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err
 	}
+	return bindRelease(ctx, root, binary, web, r, d)
+}
+
+// bindRelease requires publicationLock and never resets an existing current
+// pointer. Repeating bootstrap after an update cannot select the initial code.
+func bindRelease(ctx context.Context, root, binary, web string, r Release, d Deployment) (Snapshot, error) {
+	var out Snapshot
+	ready := filepath.Join(root, "binding.ready")
+	bound := false
+	if prior, err := secure.ReadRootFile(ready, 64); err == nil {
+		if string(prior) != d.InitialRelease {
+			return out, errors.New("已有不同的面板初始化完成记录")
+		}
+		bound = true
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return out, err
+	}
 	rawDeployment, err := json.Marshal(d)
 	if err != nil {
 		return out, err
 	}
 	if prior, err := secure.ReadRootFile(filepath.Join(root, "launcher.json"), DeploymentLimit); err == nil {
 		if !bytes.Equal(prior, rawDeployment) {
-			return out, errors.New("已有不同的面板容器运行计划")
+			return out, errors.New("已有不同的面板运行计划")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err
@@ -211,6 +229,9 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	}
 	current := filepath.Join(root, "current")
 	if _, err = os.Lstat(current); errors.Is(err, os.ErrNotExist) {
+		if bound {
+			return out, errors.New("已完成初始化但版本指针缺失，不能重置为初始程序")
+		}
 		if err = os.Symlink("releases/"+r.ID, current); err != nil {
 			return out, err
 		}
@@ -220,5 +241,15 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	} else if err != nil {
 		return out, err
 	}
-	return Read(in.DataDir)
+	if err = syncDir(root); err != nil {
+		return out, err
+	}
+	out, err = Read(d.DataDir)
+	if err != nil {
+		return out, err
+	}
+	if err = publishFile(ready, []byte(d.InitialRelease)); err != nil {
+		return out, err
+	}
+	return out, nil
 }

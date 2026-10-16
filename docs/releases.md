@@ -98,6 +98,27 @@ sudo /opt/nginxpanel/current/nginxpanel panel-runtime-staged \
 
 `state=staged` 仅表示持久副本及其批准记录就绪，返回数据库 schema、协议门槛和签名回滚声明供后续准入使用。不切换当前版本、不迁移数据库、不重启面板或 Nginx/Fail2ban；独立 worker、版本切换、健康检查与失败回滚编排仍待接入。本入口尚未运行，统一留到 P5 集中验证。
 
+## 面板程序版本选择
+
+原生和 Docker 面板均使用 root 持有的 `runtime/launcher.json` 运行绑定与 `runtime/current` 内容版本指针。绑定明确 `native/docker` 模式、专用身份、监听和初始版本，禁止直接转换部署方式。原生安装通过 `panel-native-bind` 复制本机批准的程序及前端；systemd 的固定 `panel-native-serve` 入口再执行所选持久版本。`/opt/nginxpanel/current` 继续提供宿主机 Agent 和安装工具，普通面板选择不改动它。初始化完成记录 `runtime/binding.ready` 防止指针丢失后重装工具擅自退回初始版本。
+
+正式 `init/serve` 在取得 root 写锁后核对实际执行文件 inode，`serve` 还检查运行模式、监听、版本和所选前端；旧启动入口与新选择发生竞争时，旧程序在读取主密钥、数据库或运行迁移前退出。安装器从已选择的持久程序执行初始化，重复首次安装不会用初始程序打开新版数据。开发入口仍独立运行。
+
+本机 root 的 `panel-runtime-select` 要求原维护会话未释放、当前 Agent epoch、已经完整认证且未过期的本机快照，以及已签名批准的暂存计划；执行前必须停止 `serve`。它复核当前专用账户、运行绑定、当前公钥、原批准与完整产物。程序的 `version` 输出从内嵌迁移取得 `database_schema`，并与签名清单核对；目标 schema 不得低于当前程序或快照，不能以旧快照绕过程序降级检查。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel panel-runtime-select \
+  --data-dir /srv/nginxpanel --release-plan <已暂存计划散列> \
+  --panel-selection <新的版本选择UUID> --recovery-snapshot <本机快照UUID> \
+  --maintenance-id <原维护UUID> --maintenance-epoch <当前Agent-epoch>
+sudo /opt/nginxpanel/current/nginxpanel panel-selection-status \
+  --data-dir /srv/nginxpanel --panel-selection <原版本选择UUID>
+```
+
+选择前持久保存 `panel.select` 独立记录，固定原版本、目标版本、运行绑定散列、批准散列和快照。指针仅允许从原版本原子切换至目标；中断后以原操作续行，第三种版本或授权偏离时停止覆盖。未完成记录阻止释放维护会话；已成功请求的重放仅返回原记录，不重新覆盖后续版本选择。临时指针按操作使用固定名称，与初始化和暂存共用发布锁。
+
+`version_selected` 仅表示程序指针已持久化；本入口不重启服务、打开数据库或释放维护会话，不报告应用健康。独立 worker 的启停、readiness、匹配程序与数据的自动回滚及成功清理仍待接入；不应将此命令作为已完成的升级 API。尚未运行以上入口、服务、安装器、构建或测试，统一留到 P5。
+
 ## 本机面板恢复快照
 
 本机 root 的 `panel-snapshot-capture` 须提供已经 held 的维护会话及当前 Agent epoch。捕获期间持有维护释放所用的 root 锁，拒绝尚有独立副作用任务执行中或待恢复的节点。SQLite 助手降为 `nginxpanel` 专用账户，使用 [VACUUM INTO](https://www.sqlite.org/lang_vacuum.html) 生成包含 WAL 中已提交内容的一致性副本，不直接复制活动数据库，也不以 root 解析业务数据库。助手有两分钟期限、512 MiB 单文件限制，整次捕获期限五分钟，输出仅在 root 分配的私有暂存目录中生成。
@@ -131,7 +152,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-restore-status \
   --data-dir /srv/nginxpanel --recovery-operation <原恢复UUID>
 ```
 
-正式部署通过安装意图 v8 在初始化前登记 `run/panel-writer.lock`：root 持有文件及上层目录，专用面板组仅可打开并获取锁。应用初始化和启动先取得该锁，再读取主密钥和数据库；开发模式单独使用开发写锁。恢复执行器使用同一个 inode 取得独占权，面板仍在运行时拒绝执行。
+正式部署通过安装意图 v9 在初始化前登记 `run/panel-writer.lock`：root 持有文件及上层目录，专用面板组仅可打开并获取锁。应用初始化和启动先取得该锁，再读取主密钥和数据库；开发模式单独使用开发写锁。恢复执行器使用同一个 inode 取得独占权，面板仍在运行时拒绝执行。
 
 在改变业务文件前持久保存独立 `panel.restore` 意图和 root 只读启动标记，完整认证并暂存解密资源，保留当前数据库、WAL/SHM 和密钥的原始字节及散列。每次恢复的现场保留预算最多 2 GiB，解密源沿用快照容量边界；每份快照最多保留八次恢复目录，中断暂存也有数量上限，超限需本机处理。业务目录中的复制临时文件按操作和资源使用固定名称，重试仅移除同次操作的未批准临时输出。恢复前副本用于保留现场，不将失败进程留下的数据库字节宣称为一致性备份。按固定名称移除旧 WAL/SHM，安装主密钥和 TLS 材料，最后原子替换数据库；恢复后逐项确认内容、归属并同步相关目录。
 

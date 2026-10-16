@@ -18,8 +18,10 @@ import (
 )
 
 type StageInput struct {
-	DataDir, PlanID, TrustPath string
-	AllowPrerelease            bool
+	DataDir         string `json:"data_dir"`
+	PlanID          string `json:"plan_id"`
+	TrustPath       string `json:"trust_path"`
+	AllowPrerelease bool   `json:"allow_prerelease"`
 }
 
 // StageApproval is written only after the immutable release is complete. Its
@@ -122,7 +124,7 @@ func stageSource(ctx context.Context, in StageInput, prior *StageApproval) (rele
 func stageMatches(r Release, source releases.Result) error {
 	a := source.Plan.Assets[0]
 	m := source.Plan.Manifest
-	if r.Version != a.Version || r.AgentProtocol != protocol.Agent || r.LauncherVersion != releases.LauncherVersion || m.APIMajor != 1 || m.MinimumAgentProtocol > protocol.Agent || m.MinimumLauncher > releases.LauncherVersion {
+	if r.Version != a.Version || r.DatabaseSchema != m.DatabaseSchema || r.AgentProtocol != protocol.Agent || r.LauncherVersion != releases.LauncherVersion || m.APIMajor != 1 || m.MinimumAgentProtocol > protocol.Agent || m.MinimumLauncher > releases.LauncherVersion {
 		return errors.New("面板版本或协议与当前 Agent/launcher 不匹配，须先升级基础组件")
 	}
 	found := false

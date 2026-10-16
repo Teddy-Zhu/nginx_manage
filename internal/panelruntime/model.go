@@ -34,6 +34,7 @@ type Release struct {
 	Schema          int             `json:"schema"`
 	ID              string          `json:"id"`
 	Version         string          `json:"version"`
+	DatabaseSchema  int64           `json:"database_schema"`
 	AgentProtocol   int             `json:"agent_protocol"`
 	LauncherVersion int             `json:"launcher_version"`
 	Architecture    string          `json:"architecture"`
@@ -42,6 +43,7 @@ type Release struct {
 }
 type Deployment struct {
 	Schema         int                    `json:"schema"`
+	Mode           string                 `json:"mode"`
 	DataDir        string                 `json:"data_dir"`
 	Listen         string                 `json:"listen"`
 	UID            int                    `json:"uid"`
@@ -81,18 +83,31 @@ func releaseID(r Release) string {
 func (d Deployment) validate(data string) error {
 	host, port, err := net.SplitHostPort(d.Listen)
 	n, parse := strconv.Atoi(port)
-	if err != nil || parse != nil || (host != "127.0.0.1" && host != "::1") || n < 1024 || n > 65535 || d.Schema != Schema || d.DataDir != data || d.UID <= 0 || d.GID <= 0 || d.IPCGID <= 0 || !digest.MatchString(d.LauncherSHA256) || !digest.MatchString(d.InitialRelease) || !imageValue.MatchString(d.Image) {
+	if err != nil || parse != nil || (host != "127.0.0.1" && host != "::1") || n < 1024 || n > 65535 || d.Schema != Schema || d.DataDir != data || d.UID <= 0 || d.GID <= 0 || d.IPCGID <= 0 || !digest.MatchString(d.InitialRelease) {
 		return errors.New("面板运行绑定无效")
 	}
 	if raw, err := json.Marshal(d); err != nil || len(raw) > DeploymentLimit {
 		return errors.New("面板运行绑定超过记录上限")
 	}
-	return d.SignedImage.Validate("panel-launcher", d.Image, d.ImageID, d.LauncherSHA256)
+	switch d.Mode {
+	case "native":
+		if d.LauncherSHA256 != "" || d.Image != "" || d.ImageID != "" || d.SignedImage != (releases.ImageApproval{}) {
+			return errors.New("原生面板绑定不能包含容器来源")
+		}
+		return nil
+	case "docker":
+		if !digest.MatchString(d.LauncherSHA256) || !imageValue.MatchString(d.Image) {
+			return errors.New("容器面板的固定镜像或 launcher 无效")
+		}
+		return d.SignedImage.Validate("panel-launcher", d.Image, d.ImageID, d.LauncherSHA256)
+	default:
+		return errors.New("面板运行绑定模式无效")
+	}
 }
 func (r Release) validate() error {
 	// Host Agent compatibility is checked when approving a release. A frozen
 	// launcher does not speak the application's Agent wire protocol.
-	if r.Schema != Schema || !digest.MatchString(r.ID) || r.ID != releaseID(r) || r.Version == "" || len(r.Version) > 128 || r.AgentProtocol <= 0 || r.LauncherVersion != releases.LauncherVersion || !digest.MatchString(r.BinarySHA256) || len(r.Web) < 1 || len(r.Web) > FileCountLimit {
+	if r.Schema != Schema || !digest.MatchString(r.ID) || r.ID != releaseID(r) || r.Version == "" || len(r.Version) > 128 || r.DatabaseSchema <= 0 || r.AgentProtocol <= 0 || r.LauncherVersion != releases.LauncherVersion || !digest.MatchString(r.BinarySHA256) || len(r.Web) < 1 || len(r.Web) > FileCountLimit {
 		return errors.New("面板发布清单身份或协议不匹配")
 	}
 	if _, ok := r.Web["index.html"]; !ok {

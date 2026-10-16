@@ -61,6 +61,9 @@ func VerifySource(ctx context.Context, in BindInput) (SourceVerification, error)
 	}
 	var previous *releases.ImageApproval
 	if prior, err := ReadDeployment(in.DataDir); err == nil {
+		if prior.Mode != "docker" {
+			return out, errors.New("已有原生面板绑定，不能直接改为容器部署")
+		}
 		previous = &prior.SignedImage
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err

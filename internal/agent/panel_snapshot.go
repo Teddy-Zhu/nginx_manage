@@ -66,12 +66,12 @@ func panelSnapshotIdentity(data string) (int, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	if binding, err := panelruntime.ReadDeployment(data); err == nil {
-		if binding.UID != uid || binding.GID != gid {
-			return 0, 0, errors.New("面板运行绑定与本机专用账户不匹配")
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+	binding, err := panelruntime.ReadDeployment(data)
+	if err != nil {
 		return 0, 0, err
+	}
+	if binding.UID != uid || binding.GID != gid {
+		return 0, 0, errors.New("面板运行绑定与本机专用账户不匹配")
 	}
 	return uid, gid, nil
 }

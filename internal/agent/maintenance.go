@@ -135,6 +135,14 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		if r.Kind == panelSelectKind {
+			if err := validPanelSelection(r); err != nil {
+				return out, err
+			}
+			if g.id != "" && r.PanelSelection.MaintenanceID == g.id {
+				continue
+			}
+		}
 		if r.Kind == panelRestoreKind {
 			if err := validPanelRestoreRecord(r); err != nil {
 				return out, err
@@ -284,6 +292,15 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 		return maintenance.RootStatus{}, fault.Conflict("本机恢复标记尚未解除，不能释放维护锁")
 	}
 	for _, record := range records {
+		if record.Kind == panelSelectKind {
+			if err := validPanelSelection(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if record.State != "succeeded" && record.PanelSelection.MaintenanceID == in.OperationID {
+				return maintenance.RootStatus{}, fault.Conflict("面板版本选择仍在执行或待恢复，不能释放维护锁")
+			}
+			continue
+		}
 		if record.Kind == panelRestoreKind {
 			if err := validPanelRestoreRecord(record); err != nil {
 				return maintenance.RootStatus{}, err

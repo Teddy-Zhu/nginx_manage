@@ -15,6 +15,9 @@ func WriteCompose(w io.Writer, data string) error {
 	if err != nil {
 		return err
 	}
+	if d.Mode != "docker" {
+		return errors.New("Compose 仅用于已绑定的容器面板")
+	}
 	t, err := template.New("panel").Option("missingkey=error").Parse(docker.PanelCompose)
 	if err != nil {
 		return err

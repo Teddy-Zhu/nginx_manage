@@ -29,6 +29,7 @@ import (
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/storage"
+	"nginxpanel/migrations"
 )
 
 var version = "0.1.0-dev"
@@ -51,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|agent|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -88,6 +89,7 @@ func run() error {
 	installEpoch := flags.String("maintenance-epoch", "", "confirmed root maintenance epoch")
 	recoveryOperation := flags.String("recovery-operation", "", "local panel recovery snapshot UUID")
 	recoverySnapshot := flags.String("recovery-snapshot", "", "exact root-approved local panel snapshot UUID")
+	panelSelection := flags.String("panel-selection", "", "durable panel version selection UUID")
 	installStart := flags.Bool("install-start", false, "start the newly installed dedicated Nginx")
 	installEnable := flags.Bool("install-enable", false, "enable the dedicated Nginx service on boot")
 	installResume := flags.Bool("resume-install", false, "resume the original installation after checking its receipt")
@@ -120,11 +122,15 @@ func run() error {
 	}
 	runtimeFlags := map[string]map[string]bool{
 		"launcher":               {"data-dir": true},
+		"panel-native-bind":      {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-native-serve":     {"data-dir": true},
 		"panel-runtime-bind":     {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-verify":   {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-status":   {"data-dir": true},
 		"panel-runtime-stage":    {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
 		"panel-runtime-staged":   {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-select":   {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "panel-selection": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-selection-status": {"data-dir": true, "panel-selection": true},
 		"panel-snapshot-capture": {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-snapshot-check":   {"data-dir": true, "recovery-operation": true},
 		"panel-snapshot-db":      {"data-dir": true, "recovery-operation": true},
@@ -150,8 +156,12 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "panel-selection":
+			if command != "panel-runtime-select" && command != "panel-selection-status" {
+				invalidFlag = f.Name
+			}
 		case "recovery-snapshot":
-			if command != "panel-snapshot-restore" {
+			if command != "panel-snapshot-restore" && command != "panel-runtime-select" {
 				invalidFlag = f.Name
 			}
 		case "recovery-operation":
@@ -171,11 +181,11 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "panel-gid":
-			if command != "panel-runtime-bind" && command != "panel-runtime-verify" && command != "panel-writer-bind" {
+			if command != "panel-runtime-bind" && command != "panel-runtime-verify" && command != "panel-writer-bind" && command != "panel-native-bind" {
 				invalidFlag = f.Name
 			}
 		case "panel-binary", "panel-image", "ipc-gid":
-			if command != "panel-runtime-bind" && command != "panel-runtime-verify" {
+			if command != "panel-runtime-bind" && command != "panel-runtime-verify" && command != "panel-native-bind" {
 				invalidFlag = f.Name
 			}
 		case "launcher-boot", "launcher-release":
@@ -201,8 +211,8 @@ func run() error {
 	if command == "component-install" && *moduleFile == "" {
 		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
 	}
-	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
-		return errors.New("installation options require component-install; maintenance identity also permits panel snapshot capture/restore")
+	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
+		return errors.New("installation options require component-install; maintenance identity also permits panel snapshot capture/restore and version selection")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
 	if err != nil {
@@ -283,6 +293,14 @@ func run() error {
 		return nginxcontainer.Launch(absDir)
 	case "launcher":
 		return launcher.Run(ctx, absDir)
+	case "panel-native-serve":
+		return panelruntime.ExecNative(absDir)
+	case "panel-native-bind":
+		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
 	case "panel-runtime-bind", "panel-runtime-verify":
 		input := panelruntime.BindInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, LauncherBinary: *launcherBinary, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID, Image: *panelImage,
 			Signature: releases.ImageInput{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}}
@@ -326,6 +344,18 @@ func run() error {
 		return json.NewEncoder(os.Stdout).Encode(out)
 	case "panel-snapshot-db":
 		out, err := panelrecovery.CaptureDatabase(ctx, absDir, *recoveryOperation)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-selection-status":
+		out, err := agent.PanelSelectionStatus(absDir, *panelSelection)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "panel-runtime-select":
+		out, err := agent.SelectPanelVersion(ctx, panelruntime.StageInput{DataDir: absDir, PlanID: *releasePlan, TrustPath: *releaseTrust, AllowPrerelease: *releasePrerelease}, *panelSelection, *recoverySnapshot, *installMaintenance, *installEpoch)
 		if err != nil {
 			return err
 		}
@@ -466,7 +496,11 @@ func run() error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(prepared)
 	case "version":
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"version": version, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "launcher_version": releases.LauncherVersion})
+		schema, err := migrations.LatestVersion()
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"version": version, "database_schema": schema, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "launcher_version": releases.LauncherVersion})
 	case "doctor":
 		return json.NewEncoder(os.Stdout).Encode(platform.Detect())
 	case "init", "dev":
