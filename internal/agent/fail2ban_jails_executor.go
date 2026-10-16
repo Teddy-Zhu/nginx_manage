@@ -101,8 +101,11 @@ func (f *fail2banJailsExecutor) run(ctx context.Context) {
 			continue
 		}
 		dirty = false
+		addressCall, stopAddress := context.WithTimeout(ctx, 40*time.Second)
+		addressErr := f.advanceAddress(addressCall)
+		stopAddress()
 		call, cancel := context.WithTimeout(ctx, 90*time.Second)
-		err := f.advanceJails(call)
+		err := errors.Join(addressErr, f.advanceJails(call))
 		cancel()
 		last = time.Now()
 		if errors.Is(err, ErrBusy) || errors.Is(err, unix.EWOULDBLOCK) {
@@ -140,6 +143,14 @@ func (f *fail2banJailsExecutor) hostScope(ctx context.Context, r *fail2banManage
 	}
 	if sources.EngineKey != fail2banNginxEngineKey(r.binding()) || sync.EngineKey != sources.EngineKey || sync.SourcesID != sources.ID || sync.ProtectionID != protection.ID || sync.RegistrationID != root.OperationID || sync.Owner != root.Owner || sync.NamespaceID != root.Confirmed.NamespaceID {
 		out.reason = "宿主机会话所属实例或批准变化，须本机重新批准"
+		return out
+	}
+	observer := firewallObserver{scope: "host", ctx: ctx, dataDir: f.server.DataDir}
+	call, stop := context.WithTimeout(ctx, 6*time.Second)
+	err := checkFirewallManagers(observer.collect(call))
+	stop()
+	if err != nil {
+		out.reason = err.Error()
 		return out
 	}
 	basis, err := loadFail2banHostSourcesBasis(ctx, f.server.DataDir)

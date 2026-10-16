@@ -60,6 +60,10 @@ const stateNames: Record<string, string> = {
   cancelled: "已取消",
 };
 const engineNames = { unknown: "未知", banned: "已封禁", clear: "未封禁" };
+const backendNames: Record<string, string> = {
+  "nginx-client": "Nginx 受管拒绝集合",
+  "host-input": "宿主机入口规则",
+};
 const submissionNames = {
   not_sent: "尚未派发",
   not_needed: "已封禁，无需重复操作",
@@ -237,7 +241,7 @@ onUnmounted(() => {
           }}
         </p>
         <p>
-          Nginx 受管拒绝集合：{{
+          {{ backendNames[status.backend] || "动作后端" }}：{{
             status.action_state === "denied"
               ? "已包含此地址"
               : status.action_state === "clear"
@@ -245,7 +249,7 @@ onUnmounted(() => {
                 : "未知"
           }}
         </p>
-        <p v-if="status.generation">集合代次：{{ status.generation }}</p>
+        <p v-if="status.generation">动作代次：{{ status.generation }}</p>
         <p>
           封禁沿用当前 jail 时长（{{
             status.ban_time === -1 ? "永久" : `${status.ban_time} 秒`
@@ -307,8 +311,8 @@ onUnmounted(() => {
       </template>
     </article>
     <p>
-      记录保留最近 16 次手动操作中的当前 jail 项。引擎观测是任务快照；Nginx
-      集合的当前状态需单独查询。
+      记录保留最近 16 次手动操作中的当前 jail
+      项。引擎观测是任务快照，动作后端的当前状态需单独查询。
     </p>
   </section>
 </template>

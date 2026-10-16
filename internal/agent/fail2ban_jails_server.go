@@ -55,6 +55,7 @@ func (s *Server) startFail2banJails(ctx context.Context, gate *maintenanceGate, 
 	s.fail2banJails = f
 	mux := http.NewServeMux()
 	f.jailHandlers(mux)
+	f.addressHandlers(mux)
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 4096}
 	runContext, stop := context.WithCancel(ctx)
 	workerDone, serverDone := make(chan struct{}), make(chan struct{})

@@ -54,6 +54,7 @@ type AddressStatus struct {
 	Jail        string `json:"jail"`
 	IP          string `json:"ip"`
 	Available   bool   `json:"available"`
+	Backend     string `json:"backend"`
 	Target      string `json:"target"`
 	EngineState string `json:"engine_state"`
 	ExpiresAt   int64  `json:"expires_at"`

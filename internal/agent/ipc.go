@@ -141,16 +141,16 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	defer stopFail2banNginx()
-	stopJails, err := s.startFail2banJails(ctx, rootMaintenance, cancelRun, challengeErrors)
-	if err != nil {
-		return err
-	}
-	defer stopJails()
 	stopHostSync, err := s.startFail2banHostSync(ctx, rootMaintenance, cancelRun, challengeErrors)
 	if err != nil {
 		return err
 	}
 	defer stopHostSync()
+	stopJails, err := s.startFail2banJails(ctx, rootMaintenance, cancelRun, challengeErrors)
+	if err != nil {
+		return err
+	}
+	defer stopJails()
 	if s.Nginx != nil {
 		var challengeListener *net.UnixListener
 		challengeServer, challengeListener, err = s.Nginx.http01Server()

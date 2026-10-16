@@ -14,8 +14,8 @@ import (
 )
 
 func (s *Server) fail2banAddressHandlers(mux *http.ServeMux) {
-	if s.fail2banNginx != nil {
-		s.fail2banNginx.addressHandlers(mux)
+	if s.fail2banJails != nil {
+		s.fail2banJails.addressHandlers(mux)
 		return
 	}
 	for _, route := range []string{"GET /v1/fail2ban/addresses/status", "POST /v1/fail2ban/addresses", "GET /v1/fail2ban/addresses/operations/{id}"} {
@@ -24,7 +24,7 @@ func (s *Server) fail2banAddressHandlers(mux *http.ServeMux) {
 		})
 	}
 }
-func (f *fail2banNginxExecutor) addressHandlers(mux *http.ServeMux) {
+func (f *fail2banJailsExecutor) addressHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/fail2ban/addresses/status", func(w http.ResponseWriter, r *http.Request) {
 		call, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
@@ -62,8 +62,12 @@ func (c *Client) ReadFail2banAddress(ctx context.Context, jail, ip string) (fail
 		return out, fault.Invalid("jail 或地址格式无效")
 	}
 	err = c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/addresses/status?"+url.Values{"jail": {jail}, "ip": {address}}.Encode(), nil, &out)
-	if err == nil && (out.At <= 0 || out.Jail != jail || out.IP != address || !validFail2banAddressState(out.EngineState) || out.ExpiresAt < 0 || out.Available && (!fail2banDigest.MatchString(out.Target) || !fail2banDigest.MatchString(out.Generation) || out.EngineState == "unknown" || out.ActionState != "clear" && out.ActionState != "denied" || out.BanTime != -1 && out.BanTime <= 0) || !out.Available && (out.EngineState != "unknown" || out.ActionState != "unknown" || out.CanBan)) {
-		err = errors.New("手动地址状态合同无效")
+	if err == nil {
+		actionKnown := (out.ActionState == "clear" || out.ActionState == "denied") && fail2banDigest.MatchString(out.Generation)
+		actionUnknown := out.Backend == "host-input" && out.ActionState == "unknown" && out.Generation == "" && !out.CanBan && out.Reason != ""
+		if out.At <= 0 || out.Jail != jail || out.IP != address || !validFail2banAddressState(out.EngineState) || out.ExpiresAt < 0 || out.Available && (out.Backend != "nginx-client" && out.Backend != "host-input" || !fail2banDigest.MatchString(out.Target) || out.EngineState == "unknown" || !actionKnown && !actionUnknown || out.BanTime != -1 && out.BanTime <= 0) || !out.Available && (out.Backend != "" || out.EngineState != "unknown" || out.ActionState != "unknown" || out.CanBan) {
+			err = errors.New("手动地址状态合同无效")
+		}
 	}
 	return out, err
 }

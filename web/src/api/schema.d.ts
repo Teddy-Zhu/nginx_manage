@@ -1777,7 +1777,7 @@ export interface components {
         Fail2banLifecycleTask: { task_id:string;operation_id:string; };
         Fail2banLifecycleTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banLifecycleInput"];result:components["schemas"]["Fail2banLifecycleOperation"]|null; };
         Fail2banAddressInput: { jail:string;ip:string;action:"ban"|"unban";target:string; };
-        Fail2banAddressStatus: { at:number;jail:string;ip:string;available:boolean;target:string;engine_state:"unknown"|"banned"|"clear";expires_at:number;permanent:boolean;ban_time:number;can_ban:boolean;action_state:"unknown"|"denied"|"clear";generation:string;reason:string; };
+        Fail2banAddressStatus: { backend: "" | "nginx-client" | "host-input"; at:number;jail:string;ip:string;available:boolean;target:string;engine_state:"unknown"|"banned"|"clear";expires_at:number;permanent:boolean;ban_time:number;can_ban:boolean;action_state:"unknown"|"denied"|"clear";generation:string;reason:string; };
         Fail2banAddressOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banAddressInput"];state:"running"|"succeeded"|"failed";stage:string;submission:"not_sent"|"not_needed"|"unknown"|"acknowledged";engine_state:"unknown"|"banned"|"clear";observed_at:number;expires_at:number;permanent:boolean;error:string; };
         Fail2banAddressTask: { task_id:string;operation_id:string; };
         Fail2banAddressTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banAddressInput"];result:components["schemas"]["Fail2banAddressOperation"]|null; };

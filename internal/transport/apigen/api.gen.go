@@ -2165,6 +2165,7 @@ type Fail2banAddressInput struct {
 	Target string `json:"target"`
 }
 type Fail2banAddressStatus struct {
+	Backend     string `json:"backend"`
 	At          int64  `json:"at"`
 	Jail        string `json:"jail"`
 	Ip          string `json:"ip"`

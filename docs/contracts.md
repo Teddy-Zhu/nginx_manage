@@ -231,3 +231,6 @@ protection 返回目标本机 root 管理/代理来源批准的状态、ID、时
 
 
 受管 jail 的 root 执行器独立于 Nginx，jail 事务冻结官方实例、所选配置及可选 Nginx/宿主机授权摘要。面板登录宿主机动作仅使用固定 root 日志和不带 IP/jail 参数的同步通知；须目标本机明确批准 managed 来源及持续会话。官方完整来源动态派生自当前受管配置并核对真实名单，最多 32 项；配置切换使旧同步观察等待新采样。公开 runtime 增加 host_ready/host_reason、nginx_ready/nginx_reason，sources 增加 managed；配置成功、官方记录及动作执行状态保持独立，Agent 为 55、数据库/迁移为 26/6，不兼容旧合同。仅 Nginx 相关事务包含其运行/登记及恢复材料，宿主机事务无需 Nginx。所有 root 授权、配置包和运行检查点仍不进入配置迁移。实际验收留待 P5。
+
+
+手动地址入口复用独立 jail 执行器及统一任务，支持 nginx-client 与受管面板登录 host-input。AddressStatus 必填 backend，未知宿主机规则返回 action_state=unknown、空 generation、can_ban=false 及原因；已核对官方引擎仍可明确解封，不能据此宣称内核已经清除。新宿主机封禁须当前批准/持续会话和所属对象完整可证明，目标摘要纳入宿主机批准；内核代次观察与任务的引擎结果独立。新任务准入与维护串行，执行持 Nginx（若存在）→宿主机→实例锁，派发后只观察原操作，终态唤醒对应原动作对账。Agent 为 56、数据库/归档仍为 26/6，声明已同步，实际验证留待 P5。

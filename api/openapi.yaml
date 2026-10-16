@@ -54,7 +54,7 @@ paths:
     get:
       operationId: getFail2banAddress
       x-scopes: [read]
-      description: 返回 Fail2banAddressStatus。仅检查本应用独立受管的 nginx-client jail，核对官方引擎当前状态、保护地址及 Nginx 受管集合的运行代次。集合未包含地址不表示其他保护允许访问；须使用本次 target 提交操作。
+      description: 返回 Fail2banAddressStatus。核对本应用独立受管的 Nginx 或面板登录 jail、官方引擎状态、保护地址及对应动作代次。宿主机规则无法证明或动作批准失效时禁止新增封禁，仍可明确解封；动作集合未包含地址不表示其他保护允许访问。须使用本次 target 提交操作。
       parameters:
         - {name: jail, in: query, required: true, schema: {type: string, maxLength: 64}}
         - {name: ip, in: query, required: true, schema: {type: string, maxLength: 45}}
@@ -63,7 +63,7 @@ paths:
     post:
       operationId: changeFail2banAddress
       x-scopes: [security.write]
-      description: 返回 Fail2banAddressTask，浏览器要求近期认证。通过官方客户端执行单 jail 的 ban/unban，不接受全局解封、命令或时长覆盖；ban 使用当前 jail 时长，已封禁地址不续期。已记录派发后不重复客户端调用，回执不明仅核对当前引擎状态；任务成功不等于 Nginx 集合已经生效。
+      description: 返回 Fail2banAddressTask，浏览器要求近期认证。通过官方客户端执行单 jail 的 ban/unban，不接受全局解封、命令或时长覆盖；ban 使用当前 jail 时长，已封禁地址不续期。已记录派发后不重复客户端调用，回执不明仅核对当前引擎状态；任务成功仅证明官方引擎状态，Nginx 集合或宿主机规则仍需分别核对。
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
         - {$ref: '#/components/parameters/Idempotency'}
@@ -1949,7 +1949,7 @@ components:
     Fail2banAddressInput:
       {"type": "object", "additionalProperties": false, "required": ["jail", "ip", "action", "target"], "properties": {"jail": {"type": "string", "maxLength": 64}, "ip": {"type": "string", "maxLength": 45}, "action": {"type": "string", "enum": ["ban", "unban"]}, "target": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
     Fail2banAddressStatus:
-      {"type": "object", "additionalProperties": false, "required": ["at", "jail", "ip", "available", "target", "engine_state", "expires_at", "permanent", "ban_time", "can_ban", "action_state", "generation", "reason"], "properties": {"at": {"type": "integer", "format": "int64"}, "jail": {"type": "string"}, "ip": {"type": "string"}, "available": {"type": "boolean"}, "target": {"type": "string"}, "engine_state": {"type": "string", "enum": ["unknown", "banned", "clear"]}, "expires_at": {"type": "integer", "format": "int64"}, "permanent": {"type": "boolean"}, "ban_time": {"type": "integer", "format": "int64"}, "can_ban": {"type": "boolean"}, "action_state": {"type": "string", "enum": ["unknown", "denied", "clear"]}, "generation": {"type": "string"}, "reason": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["at", "jail", "ip", "available", "target", "engine_state", "expires_at", "permanent", "ban_time", "can_ban", "action_state", "generation", "reason", "backend"], "properties": {"at": {"type": "integer", "format": "int64"}, "jail": {"type": "string"}, "ip": {"type": "string"}, "available": {"type": "boolean"}, "target": {"type": "string"}, "engine_state": {"type": "string", "enum": ["unknown", "banned", "clear"]}, "expires_at": {"type": "integer", "format": "int64"}, "permanent": {"type": "boolean"}, "ban_time": {"type": "integer", "format": "int64"}, "can_ban": {"type": "boolean"}, "action_state": {"type": "string", "enum": ["unknown", "denied", "clear"]}, "generation": {"type": "string"}, "reason": {"type": "string"}, "backend": {"type": "string", "enum": ["", "nginx-client", "host-input"], "description": "当前 jail 的固定动作后端；不可查询时为空。引擎可查询但宿主机规则无法证明时 action_state 为 unknown，禁止新封禁。"}}}
     Fail2banAddressOperation:
       {"type": "object", "additionalProperties": false, "required": ["id", "request_hash", "input", "state", "stage", "submission", "engine_state", "observed_at", "expires_at", "permanent", "error"], "properties": {"id": {"type": "string"}, "request_hash": {"type": "string"}, "input": {"$ref": "#/components/schemas/Fail2banAddressInput"}, "state": {"type": "string", "enum": ["running", "succeeded", "failed"]}, "stage": {"type": "string"}, "submission": {"type": "string", "enum": ["not_sent", "not_needed", "unknown", "acknowledged"]}, "engine_state": {"type": "string", "enum": ["unknown", "banned", "clear"]}, "observed_at": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "permanent": {"type": "boolean"}, "error": {"type": "string"}}}
     Fail2banAddressTask:

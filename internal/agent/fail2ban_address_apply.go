@@ -9,19 +9,13 @@ import (
 
 // A sent marker is durable before invoking the official client. Recovery only
 // observes this operation; neither a lost reply nor an expired ban resends it.
-func (f *fail2banNginxExecutor) advanceAddress(ctx context.Context) error {
-	n := f.nginx
-	leave, ok := n.maintenance.enter(true)
-	if !ok {
-		return ErrBusy
+func (f *fail2banJailsExecutor) advanceAddress(ctx context.Context) error {
+	leave, err := f.lock(true)
+	if err != nil {
+		return err
 	}
 	defer leave()
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.closed || n.unlock == nil {
-		return ErrRuntimeUnavailable
-	}
-	records, err := n.Journal.List()
+	records, err := f.journal().List()
 	if err != nil {
 		return err
 	}
@@ -51,7 +45,7 @@ func (f *fail2banNginxExecutor) advanceAddress(ctx context.Context) error {
 	i := record.Fail2banAddress
 	finish := func(stage, message string) error {
 		record.State, record.Stage, record.Error = "failed", stage, message
-		return n.persist(record)
+		return f.persist(record)
 	}
 	if i == nil || !i.Request.Valid() || i.Request.OperationID != record.OperationID || i.Request.Hash() != record.RequestHash || !validID(i.Installation) || !validID(i.Selection) || !fail2banDigest.MatchString(i.Engine) || !fail2banInvocation.MatchString(i.Invocation) || i.SocketInode == "" {
 		return finish("invalid_intent", "持久手动操作合同损坏，未重新派发")
@@ -59,11 +53,6 @@ func (f *fail2banNginxExecutor) advanceAddress(ctx context.Context) error {
 	if !i.Sent && record.Deadline <= time.Now().Unix() {
 		return finish("authorization_expired", "手动操作排队超过五分钟，未派发")
 	}
-	unlock, err := (&Journal{Dir: fail2banBindingDir(n.DataDir)}).rootLock("binding.lock")
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	current, err := f.addressContext(ctx, i.Request.Input.Jail, i.Request.Input.IP)
 	if err != nil {
 		return finish("runtime_unconfirmed", "无法核对原受管引擎与动作来源；未重新派发")
@@ -73,18 +62,19 @@ func (f *fail2banNginxExecutor) advanceAddress(ctx context.Context) error {
 	}
 	input := i.Request.Input
 	if !i.Sent {
-		if input.Action == "ban" && current.protected {
-			return finish("protected_address", "该地址属于本机、可信代理或忽略列表，未派发封禁")
+		if input.Action == "ban" && !current.canBan {
+			return finish("action_unavailable", "该地址受保护或动作依据不可用，未派发封禁")
 		}
 		state, expires, permanent := fail2banAddressState(current.bans, input.IP)
 		if input.Action == "ban" && state == "banned" {
 			i.Submission, i.EngineState, i.ObservedAt, i.ExpiresAt, i.Permanent = "not_needed", state, time.Now().Unix(), expires, permanent
 			record.State, record.Stage = "succeeded", "engine_confirmed"
-			return n.persist(record)
+			f.refreshAddressAction(current.jail.Action)
+			return f.persist(record)
 		}
 		i.Sent, i.Submission = true, "unknown"
 		record.Stage = "command_pending"
-		if err = n.persist(record); err != nil {
+		if err = f.persist(record); err != nil {
 			return err
 		}
 		verb := "banip"
@@ -108,10 +98,11 @@ func (f *fail2banNginxExecutor) advanceAddress(ctx context.Context) error {
 			}
 		}
 		record.Stage = "observing"
-		if err = n.persist(record); err != nil {
+		if err = f.persist(record); err != nil {
 			return err
 		}
 	}
+	f.refreshAddressAction(current.jail.Action)
 	// An interrupted invocation may have changed the engine, but its intent is
 	// never inverted or replayed. Confirm current state independently of receipt.
 	proof, err := readFail2banJailDetails(ctx, current.r, current.bundle, current.jail)
@@ -140,9 +131,17 @@ func (f *fail2banNginxExecutor) advanceAddress(ctx context.Context) error {
 	if i.Submission == "unknown" {
 		record.Stage = "state_confirmed_receipt_unknown"
 	}
-	if err = n.persist(record); err != nil {
+	if err = f.persist(record); err != nil {
 		return err
 	}
-	f.enqueue()
 	return nil
+}
+
+func (f *fail2banJailsExecutor) refreshAddressAction(action string) {
+	if action == "nginx-client" && f.server.fail2banNginx != nil {
+		f.server.fail2banNginx.enqueue()
+	}
+	if action == "host-input" && f.server.fail2banHostSync != nil {
+		f.server.fail2banHostSync.enqueue()
+	}
 }
