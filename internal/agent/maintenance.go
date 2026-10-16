@@ -195,6 +195,15 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 				return out, err
 			}
 			if g.id != "" && i.Stop.MaintenanceID == g.id {
+				if disasterActivationFinalized(r) {
+					if out.Completion != nil {
+						return out, errors.New("同一维护会话存在多个完成授权")
+					}
+					out.Completion = &maintenance.Completion{OperationID: r.OperationID, RequestSHA256: r.RequestHash, Outcome: "succeeded"}
+				}
+				continue
+			}
+			if disasterActivationFinalized(r) {
 				continue
 			}
 		}
@@ -386,7 +395,7 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 			if err != nil {
 				return maintenance.RootStatus{}, err
 			}
-			if record.State != "rolled_back" && i.Stop.MaintenanceID == in.OperationID {
+			if record.State != "rolled_back" && !disasterActivationFinalized(record) && i.Stop.MaintenanceID == in.OperationID {
 				return maintenance.RootStatus{}, fault.Conflict("完整恢复尚待协调或补偿，不能释放维护锁")
 			}
 			continue

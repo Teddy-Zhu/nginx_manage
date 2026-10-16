@@ -47,6 +47,9 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 		if e != nil {
 			return out, e
 		}
+		if status.Restore.DisasterActivation != nil {
+			return status.Restore, errors.New("恢复已提交激活，须续办 backup-restore-activate，不能覆盖新数据库")
+		}
 		if (strings.HasPrefix(status.Restore.Stage, "runtime_") || strings.HasPrefix(status.Restore.Stage, "data_") || status.Restore.Stage == "files_installed" && status.Nginx != nil) && status.Restore.Stage != "runtime_compensated" {
 			status, e = advanceRestorationRuntime(call, data, id, in, true)
 			if e != nil {
@@ -124,6 +127,9 @@ func adoptionRestoreSettled(data, id string) error {
 	r, err := agent.DisasterRestoreStatus(data, id)
 	if err != nil {
 		return errors.Join(errors.New("已有独立安装意图，须先完成原恢复补偿"), err)
+	}
+	if r.State == "succeeded" && r.Stage == "committed" && r.DisasterActivation != nil && r.DisasterActivation.ReleaseAcknowledged {
+		return nil
 	}
 	if r.State != "rolled_back" || r.Stage != "files_compensated" {
 		return errors.New("原恢复安装尚未补偿，不能删除固定材料")

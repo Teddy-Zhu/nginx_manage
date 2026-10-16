@@ -28,6 +28,9 @@ func validDisasterRestore(data string, r Record) (panelrecovery.DisasterIntent, 
 	if r.DisasterRestoreID != "" || r.Kind != disasterRestoreKind || !validID(r.MaintenanceEpoch) || r.RequestHash != i.SHA256() || r.CandidateHash != i.AdoptionSHA256 || r.RestoreSnapshot != i.Rollback.Manifest.OperationID || r.Deadline != i.ExpiresAt || r.PanelRestore != nil || r.PanelUpdate != nil || r.PanelSelection != nil || r.PanelService != nil || r.NginxInstall != nil || r.RemoteListener != nil || r.LogPolicy != nil {
 		return i, errors.New("独立灾备恢复记录与原批准不一致")
 	}
+	if r.DisasterActivation != nil || strings.HasPrefix(r.Stage, "activation_") || r.Stage == "committed" {
+		return i, validDisasterActivation(i, r)
+	}
 	switch r.Stage {
 	case "preparing", "installing", "compensating":
 		if r.State != "running" && r.State != "recovery_required" {
@@ -79,8 +82,8 @@ func readDisasterRestore(data, id string) (Record, error) {
 	return r, err
 }
 
-// DisasterRestoreStatus reports the independent transaction, never application
-// readiness. The source business database is deliberately not opened here.
+// DisasterRestoreStatus reports durable transaction evidence, not a fresh
+// observation of the application. The business database is not opened here.
 func DisasterRestoreStatus(data, id string) (Record, error) { return readDisasterRestore(data, id) }
 
 func sameDisasterApproval(a, b panelrecovery.DisasterIntent) bool {
@@ -90,6 +93,20 @@ func sameDisasterApproval(a, b panelrecovery.DisasterIntent) bool {
 }
 
 func checkDisasterRuntime(data string, i panelrecovery.DisasterIntent) error {
+	if err := checkDisasterProgram(data, i); err != nil {
+		return err
+	}
+	hold, err := storage.ReadServiceHold(data)
+	if err != nil {
+		return err
+	}
+	if hold != i.Stop {
+		return errors.New("原恢复停机标记已变化")
+	}
+	return nil
+}
+
+func checkDisasterProgram(data string, i panelrecovery.DisasterIntent) error {
 	running, err := panelruntime.Read(data)
 	if err != nil {
 		return err
@@ -105,15 +122,11 @@ func checkDisasterRuntime(data string, i panelrecovery.DisasterIntent) error {
 	if !os.SameFile(live, expected) {
 		return errors.New("独立灾备恢复须使用当前批准的面板执行文件")
 	}
-	hold, err := storage.ReadServiceHold(data)
-	if err != nil {
-		return err
-	}
 	binding, err := json.Marshal(running.Deployment)
 	if err != nil {
 		return err
 	}
-	if hold != i.Stop || hold.BindingSHA256 != secure.Hash(binding) || running.Release.ID != i.ReleaseID || running.Release.BinarySHA256 != i.BinarySHA256 || running.Deployment.UID != i.Rollback.Manifest.UID || running.Deployment.GID != i.Rollback.Manifest.GID {
+	if i.Stop.BindingSHA256 != secure.Hash(binding) || running.Release.ID != i.ReleaseID || running.Release.BinarySHA256 != i.BinarySHA256 || running.Deployment.UID != i.Rollback.Manifest.UID || running.Deployment.GID != i.Rollback.Manifest.GID {
 		return errors.New("独立灾备恢复与原停机、批准程序或目标账户不一致")
 	}
 	uid, gid, err := panelSnapshotIdentity(data)
@@ -181,6 +194,9 @@ func RestoreDisaster(ctx context.Context, data, id, epoch string, input panelrec
 		}
 	} else if !os.IsNotExist(e) {
 		return out, e
+	}
+	if disasterActivationCommitted(out) {
+		return out, errors.New("恢复已提交激活，只能续办原激活，不能重新安装或补偿")
 	}
 	if err = checkDisasterRuntime(data, i); err != nil {
 		return out, err

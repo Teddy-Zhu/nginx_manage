@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/agent"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/storage"
 )
@@ -140,18 +142,33 @@ func CleanupAdoption(ctx context.Context, data, id string) error {
 	if err != nil {
 		return err
 	}
-	hold, err := storage.ReadServiceHold(data)
-	if err != nil {
-		return err
-	}
-	unlockWriter, err := storage.LockWriterForMaintenance(data, running.Deployment.GID)
-	if err != nil {
-		return err
-	}
-	defer unlockWriter()
 	intent := status.Intent
 	if status.Adoption != nil {
 		intent = &status.Adoption.Intent
+	}
+	var hold storage.ServiceHold
+	completed := false
+	if restored, e := agent.DisasterRestoreStatus(data, id); e == nil {
+		completed = restored.State == "succeeded" && restored.Stage == "committed" && restored.DisasterActivation != nil && restored.DisasterActivation.ReleaseAcknowledged
+	} else if !os.IsNotExist(e) {
+		return e
+	}
+	if completed {
+		original, e := panelrecovery.ReadDisasterIntent(data, id)
+		if e != nil {
+			return e
+		}
+		hold = original.Stop
+	} else {
+		hold, err = storage.ReadServiceHold(data)
+		if err != nil {
+			return err
+		}
+		unlockWriter, e := storage.LockWriterForMaintenance(data, running.Deployment.GID)
+		if e != nil {
+			return e
+		}
+		defer unlockWriter()
 	}
 	if intent != nil && intent.Stop != hold || status.Cleanup != nil && status.Cleanup.Stop != hold {
 		return errors.New("恢复接入清理须保持原停机事务，不能清理其他恢复依据")

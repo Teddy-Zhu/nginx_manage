@@ -37,6 +37,9 @@ func AuthorizeDisasterRuntime(ctx context.Context, data, id, epoch string, rollb
 	if err != nil {
 		return err
 	}
+	if disasterActivationCommitted(r) {
+		return errors.New("原恢复已提交激活，禁止运行补偿或重新应用")
+	}
 	if r.Stage == "files_compensated" || r.Stage == "compensating" && !rollback {
 		return errors.New("原恢复已进入文件补偿")
 	}

@@ -22,11 +22,15 @@ func CheckMaterial(ctx context.Context, receipt Receipt) error {
 	if err := receipt.Validate(m.DataDir, m.OperationID); err != nil {
 		return err
 	}
-	for i, expected := range m.Files {
+	return checkMaterialFiles(ctx, m.DataDir, m.UID, m.GID, m.Files)
+}
+
+func checkMaterialFiles(ctx context.Context, data string, uid, gid int, files []File) error {
+	for i, expected := range files {
 		if i == 0 {
 			continue
 		} // The database is allowed to migrate with the new program.
-		f, info, err := openOwned(filepath.Join(m.DataDir, expected.Name), m.UID, m.GID, resources[i].limit)
+		f, info, err := openOwned(filepath.Join(data, expected.Name), uid, gid, resources[i].limit)
 		if err != nil {
 			return err
 		}

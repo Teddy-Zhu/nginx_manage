@@ -98,11 +98,11 @@ func panelReadinessListener(pid int, address string) error {
 	return errors.New("实际管理 HTTPS 监听不属于原面板进程")
 }
 
-func panelReadyBaseline(status panelready.Status, s panelruntime.Snapshot, receipt panelrecovery.Receipt, maintenanceID, epoch string) error {
+func panelReadyDatabase(status panelready.Status, s panelruntime.Snapshot, db panelrecovery.Database, maintenanceID, epoch string) error {
 	if err := status.Validate(); err != nil {
 		return err
 	}
-	c, db, m := status.Configuration, receipt.Manifest.Database, status.Maintenance
+	c, m := status.Configuration, status.Maintenance
 	if status.DatabaseSchema != s.Release.DatabaseSchema || status.NodeID != db.NodeID || c.DesiredRevision != db.DesiredRevision || c.AppliedRevision != db.AppliedRevision || c.HeadVersion != db.HeadVersion || m.ID != maintenanceID || m.Epoch != epoch {
 		return errors.New("就绪数据库或维护身份与原快照、目标程序不一致")
 	}
@@ -178,9 +178,17 @@ func CheckPanelReadiness(ctx context.Context, data, startID, snapshotID, mainten
 }
 
 func observePanelReadiness(ctx context.Context, j *Journal, current panelruntime.Snapshot, started Record, receipt panelrecovery.Receipt, epoch string) (PanelReadiness, error) {
+	out, err := observePanelReadinessDatabase(ctx, j, current, started, receipt.Manifest.Database, func(ctx context.Context) error { return panelrecovery.CheckMaterial(ctx, receipt) }, epoch)
+	if err == nil {
+		out.SnapshotID = receipt.Manifest.OperationID
+		out.SnapshotSHA256 = selectionValueHash(receipt)
+	}
+	return out, err
+}
+
+func observePanelReadinessDatabase(ctx context.Context, j *Journal, current panelruntime.Snapshot, started Record, database panelrecovery.Database, material func(context.Context) error, epoch string) (out PanelReadiness, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
-	var out PanelReadiness
 	data := current.Deployment.DataDir
 	maintenanceID := started.PanelService.Intent.Input.MaintenanceID
 	i := started.PanelService.Intent
@@ -219,10 +227,10 @@ func observePanelReadiness(ctx context.Context, j *Journal, current panelruntime
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	if err = panelReadyBaseline(status, current, receipt, maintenanceID, epoch); err != nil {
+	if err = panelReadyDatabase(status, current, database, maintenanceID, epoch); err != nil {
 		return out, err
 	}
-	if err = panelrecovery.CheckMaterial(ctx, receipt); err != nil {
+	if err = material(ctx); err != nil {
 		return out, err
 	}
 	if err = panelReadinessListener(hostPID, current.Deployment.Listen); err != nil {
@@ -249,11 +257,11 @@ func observePanelReadiness(ctx context.Context, j *Journal, current panelruntime
 	if observed != expected {
 		return out, errors.New("就绪检查后原面板进程实例已变化")
 	}
-	if err = panelrecovery.CheckMaterial(ctx, receipt); err != nil {
+	if err = material(ctx); err != nil {
 		return out, err
 	}
 	if err = panelReadinessGrant(ctx, j, data, maintenanceID, epoch, false); err != nil {
 		return out, err
 	}
-	return PanelReadiness{StartID: started.OperationID, StartSHA256: started.RequestHash, SnapshotID: receipt.Manifest.OperationID, SnapshotSHA256: selectionValueHash(receipt), BindingSHA256: i.BindingSHA256, CheckedAt: time.Now().Unix(), Process: expected, Application: status, HTTPS: https}, nil
+	return PanelReadiness{StartID: started.OperationID, StartSHA256: started.RequestHash, BindingSHA256: i.BindingSHA256, CheckedAt: time.Now().Unix(), Process: expected, Application: status, HTTPS: https}, nil
 }

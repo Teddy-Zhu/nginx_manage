@@ -25,7 +25,7 @@ type RootStatus struct {
 }
 
 // Completion is published only from a finalized, authenticated root update
-// record. The application coordinator still durably releases its own session.
+// or restore record. The application coordinator still durably releases its own session.
 type Completion struct {
 	OperationID   string `json:"operation_id"`
 	RequestSHA256 string `json:"request_sha256"`

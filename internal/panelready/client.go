@@ -115,9 +115,23 @@ func decode(raw []byte, out any) error {
 // substitute another socket and claim the original service instance.
 func Read(ctx context.Context, s panelruntime.Snapshot, pid, parentPID int) (Status, int, error) {
 	var out Status
+	node, peer, err := readLocal(ctx, s, pid, parentPID, "/v1/readiness", &out)
+	if err != nil {
+		return out, peer, err
+	}
+	if err = out.Validate(); err != nil {
+		return out, peer, err
+	}
+	if out.PID != pid || out.NodeID != node || out.ReleaseID != s.Release.ID || out.Mode != s.Deployment.Mode || out.Version != s.Release.Version {
+		return out, peer, errors.New("readiness 不属于原受信发布和进程")
+	}
+	return out, peer, nil
+}
+
+func readLocal(ctx context.Context, s panelruntime.Snapshot, pid, parentPID int, path string, out any) (string, int, error) {
 	peer := 0
 	if os.Geteuid() != 0 || pid <= 1 || s.Deployment.Mode == "native" && parentPID != 0 || s.Deployment.Mode == "docker" && parentPID <= 1 {
-		return out, peer, errors.New("readiness 检查需要 root 和原进程身份")
+		return "", peer, errors.New("readiness 检查需要 root 和原进程身份")
 	}
 	t := &http.Transport{Proxy: nil, DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		c, err := (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "unix", Socket(s.Deployment.DataDir))
@@ -138,45 +152,47 @@ func Read(ctx context.Context, s panelruntime.Snapshot, pid, parentPID int) (Sta
 	}}
 	defer t.CloseIdleConnections()
 	c := &http.Client{Transport: t, Timeout: 6 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("readiness 不接受重定向") }}
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://readiness/v1/readiness", nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://readiness"+path, nil)
 	if err != nil {
-		return out, peer, err
+		return "", peer, err
 	}
 	response, err := c.Do(r)
 	if err != nil {
-		return out, peer, err
+		return "", peer, err
 	}
 	defer response.Body.Close()
 	media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" {
-		return out, peer, errors.New("readiness 响应类型无效")
+		return "", peer, errors.New("readiness 响应类型无效")
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, ResponseLimit+1))
 	if err != nil {
-		return out, peer, err
+		return "", peer, err
 	}
 	if len(raw) > ResponseLimit {
-		return out, peer, errors.New("readiness 响应超过上限")
+		return "", peer, errors.New("readiness 响应超过上限")
 	}
-	var envelope Envelope
+	var envelope struct {
+		Code      string          `json:"code"`
+		Message   string          `json:"message"`
+		Data      json.RawMessage `json:"data"`
+		RequestID string          `json:"request_id"`
+		NodeID    string          `json:"node_id"`
+	}
 	if err = decode(raw, &envelope); err != nil {
-		return out, peer, err
+		return "", peer, err
 	}
 	if !idValue.MatchString(envelope.RequestID) || response.Header.Get("X-Request-ID") != envelope.RequestID || !idValue.MatchString(envelope.NodeID) {
-		return out, peer, errors.New("readiness 响应身份无效")
+		return "", peer, errors.New("readiness 响应身份无效")
 	}
-	if response.StatusCode == http.StatusServiceUnavailable && envelope.Code == "NOT_READY" && envelope.Data == nil {
-		return out, peer, fmt.Errorf("%w: %s", ErrNotReady, envelope.Message)
+	if response.StatusCode == http.StatusServiceUnavailable && envelope.Code == "NOT_READY" && (len(envelope.Data) == 0 || string(envelope.Data) == "null") {
+		return "", peer, fmt.Errorf("%w: %s", ErrNotReady, envelope.Message)
 	}
-	if response.StatusCode != http.StatusOK || envelope.Code != "OK" || envelope.Data == nil {
-		return out, peer, errors.New("readiness 响应未确认成功")
+	if response.StatusCode != http.StatusOK || envelope.Code != "OK" || (len(envelope.Data) == 0 || string(envelope.Data) == "null") {
+		return "", peer, errors.New("readiness 响应未确认成功")
 	}
-	out = *envelope.Data
-	if err = out.Validate(); err != nil {
-		return out, peer, err
+	if err = decode(envelope.Data, out); err != nil {
+		return "", peer, err
 	}
-	if out.PID != pid || out.NodeID != envelope.NodeID || out.ReleaseID != s.Release.ID || out.Mode != s.Deployment.Mode || out.Version != s.Release.Version {
-		return out, peer, errors.New("readiness 不属于原受信发布和进程")
-	}
-	return out, peer, nil
+	return envelope.NodeID, peer, nil
 }

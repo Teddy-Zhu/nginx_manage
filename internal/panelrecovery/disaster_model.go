@@ -237,7 +237,7 @@ func disasterBudget(root, current string, i DisasterIntent, additional int64) er
 		if err = checkPrivateDir(dir); err != nil {
 			return err
 		}
-		items, e := disasterEntries(dir, 13)
+		items, e := disasterEntries(dir, 19)
 		if e != nil {
 			return e
 		}
@@ -275,17 +275,17 @@ func disasterBudget(root, current string, i DisasterIntent, additional int64) er
 					}
 					used += info.Size()
 				}
-			} else if item.Name() == "reconciled.db" || item.Name() == "reconciled.db.copy" {
+			} else if item.Name() == "reconciled.db" || item.Name() == "reconciled.db.copy" || item.Name() == "activated.db" || item.Name() == "activated.db.copy" {
 				f, info, e := secure.OpenRootFile(name, DatabaseMax)
 				if e != nil {
 					return e
 				}
 				f.Close()
-				if info.Mode().Perm() != 0400 && (item.Name() != "reconciled.db.copy" || info.Mode().Perm() != 0600) {
+				if info.Mode().Perm() != 0400 && (item.Name() != "reconciled.db.copy" && item.Name() != "activated.db.copy" || info.Mode().Perm() != 0600) {
 					return errors.New("恢复对账副本权限无效")
 				}
 				used += info.Size()
-			} else if item.Name() == "intent.json" || item.Name() == "intent.copy" || item.Name() == "runtime-apply.json" || item.Name() == "runtime-apply.json.copy" || item.Name() == "runtime-rollback.json" || item.Name() == "runtime-rollback.json.copy" || item.Name() == "reconcile.json" || item.Name() == "reconcile.json.copy" || item.Name() == "reconciled-proof.json" || item.Name() == "reconciled-proof.json.copy" {
+			} else if item.Name() == "intent.json" || item.Name() == "intent.copy" || item.Name() == "runtime-apply.json" || item.Name() == "runtime-apply.json.copy" || item.Name() == "runtime-rollback.json" || item.Name() == "runtime-rollback.json.copy" || item.Name() == "reconcile.json" || item.Name() == "reconcile.json.copy" || item.Name() == "reconciled-proof.json" || item.Name() == "reconciled-proof.json.copy" || item.Name() == "activate.json" || item.Name() == "activate.json.copy" || item.Name() == "activated-proof.json" || item.Name() == "activated-proof.json.copy" {
 				f, info, e := secure.OpenRootFile(name, 32<<10)
 				if e != nil {
 					return e

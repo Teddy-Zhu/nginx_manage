@@ -183,9 +183,13 @@ func FreezeDisasterReconciliation(ctx context.Context, i DisasterIntent, r Disas
 			return err
 		}
 	}
-	target := filepath.Join(dir, "reconciled.db")
-	if h, n, e := rootFileHash(ctx, target, r.File.Size, 0400); e == nil {
-		if h != r.File.SHA256 || n != r.File.Size {
+	return freezeDisasterDatabase(ctx, i, dir, "reconciled.db", r.File, source)
+}
+
+func freezeDisasterDatabase(ctx context.Context, i DisasterIntent, dir, name string, file File, source *os.File) error {
+	target := filepath.Join(dir, name)
+	if h, n, e := rootFileHash(ctx, target, file.Size, 0400); e == nil {
+		if h != file.SHA256 || n != file.Size {
 			return errors.New("固定对账数据库偏离原批准")
 		}
 		return syncDir(dir)
@@ -200,13 +204,13 @@ func FreezeDisasterReconciliation(ctx context.Context, i DisasterIntent, r Disas
 		return err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || st.Nlink != 1 || int(st.Uid) != i.Rollback.Manifest.UID || int(st.Gid) != i.Rollback.Manifest.GID || info.Size() != r.File.Size {
+	if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || st.Nlink != 1 || int(st.Uid) != i.Rollback.Manifest.UID || int(st.Gid) != i.Rollback.Manifest.GID || info.Size() != file.Size {
 		return errors.New("对账助手暂存身份无效")
 	}
 	if _, err = source.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	scratch := filepath.Join(dir, "reconciled.db.copy")
+	scratch := filepath.Join(dir, name+".copy")
 	if f, info, e := secure.OpenRootFile(scratch, DatabaseMax); e == nil {
 		f.Close()
 		if info.Mode().Perm() != 0400 && info.Mode().Perm() != 0600 {
@@ -222,22 +226,22 @@ func FreezeDisasterReconciliation(ctx context.Context, i DisasterIntent, r Disas
 	if err != nil {
 		return err
 	}
-	_, copyErr := io.Copy(dst, contextReader{ctx, io.LimitReader(source, r.File.Size+1)})
+	_, copyErr := io.Copy(dst, contextReader{ctx, io.LimitReader(source, file.Size+1)})
 	err = errors.Join(copyErr, dst.Sync(), dst.Close())
 	if err != nil {
 		return err
 	}
-	h, n, err := rootFileHash(ctx, scratch, r.File.Size, 0600)
+	h, n, err := rootFileHash(ctx, scratch, file.Size, 0600)
 	if err != nil {
 		return err
 	}
-	if h != r.File.SHA256 || n != r.File.Size || !secure.RootFileUnchanged(source, info) {
+	if h != file.SHA256 || n != file.Size || !secure.RootFileUnchanged(source, info) {
 		return errors.New("对账复制与原助手摘要不一致")
 	}
 	if err = os.Chmod(scratch, 0400); err != nil {
 		return err
 	}
-	f, _, err := secure.OpenRootFile(scratch, r.File.Size)
+	f, _, err := secure.OpenRootFile(scratch, file.Size)
 	if err != nil {
 		return err
 	}

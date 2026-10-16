@@ -91,8 +91,12 @@ func Listen(data string) (net.Listener, error) {
 	return &rootListener{l}, nil
 }
 
-func Serve(ctx context.Context, l net.Listener, nodeID string, status func(context.Context) (Status, error)) error {
+func Serve(ctx context.Context, l net.Listener, nodeID string, status func(context.Context) (Status, error), released func(context.Context, string, string) (ReleaseStatus, error)) error {
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/maintenance-release/") {
+			serveRelease(w, r, nodeID, released)
+			return
+		}
 		id := secure.ID()
 		out := Envelope{Code: "NOT_FOUND", Message: "接口不存在", RequestID: id, NodeID: nodeID}
 		code := http.StatusNotFound

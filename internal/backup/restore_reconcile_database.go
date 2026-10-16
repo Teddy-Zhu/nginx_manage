@@ -293,6 +293,14 @@ func compareReconciledTables(ctx context.Context, baseline, db *sql.DB, in Resto
 	if secure.Hash(report) != in.Reconciliation.ReportSHA256 {
 		return errors.New("对账报告摘要不一致")
 	}
+	return compareRestorationTables(ctx, baseline, db, reconciliationDelta(), map[string][]map[string]string{"audit_logs": {reconciliationAudit()}}, func(query string) []any { return reconciliationArgs(query, in, report) })
+}
+
+func reconciliationAudit() map[string]string {
+	return map[string]string{"id": ":audit_id", "request_id": ":restore_id", "principal": "'restore:'||:restore_id", "action": "'backup.restore.reconcile'", "resource_id": ":revision", "outcome": "'isolated'", "created_at": ":at"}
+}
+
+func compareRestorationTables(ctx context.Context, baseline, db *sql.DB, delta map[string]map[string]string, additions map[string][]map[string]string, args func(string) []any) error {
 	rows, err := db.QueryContext(ctx, "SELECT name FROM main.sqlite_schema WHERE type='table' ORDER BY name LIMIT 129")
 	if err != nil {
 		return err
@@ -317,7 +325,6 @@ func compareReconciledTables(ctx context.Context, baseline, db *sql.DB, in Resto
 	if len(tables) > 128 {
 		return errors.New("恢复核对表数量超过限制")
 	}
-	delta := reconciliationDelta()
 	for _, table := range tables {
 		rows, err = db.QueryContext(ctx, `SELECT name,pk FROM pragma_table_xinfo(?) ORDER BY cid LIMIT 65`, table)
 		if err != nil {
@@ -369,20 +376,19 @@ func compareReconciledTables(ctx context.Context, baseline, db *sql.DB, in Resto
 			return fmt.Errorf("恢复核对表缺少确定主键：%s", table)
 		}
 		projection := `SELECT ` + strings.Join(expected, ",") + ` FROM main."` + table + `"`
-		if table == "audit_logs" {
-			values := map[string]string{"id": ":audit_id", "request_id": ":restore_id", "principal": "'restore:'||:restore_id", "action": "'backup.restore.reconcile'", "resource_id": ":revision", "outcome": "'isolated'", "created_at": ":at"}
+		for _, values := range additions[table] {
 			var audit []string
 			for _, column := range columns {
 				value, ok := values[strings.Trim(column, `"`)]
 				if !ok {
-					return errors.New("恢复核对审计字段未定义")
+					return errors.New("恢复核对新增记录字段未定义")
 				}
 				audit = append(audit, value)
 			}
 			projection += " UNION ALL SELECT " + strings.Join(audit, ",")
 		}
 		query := `WITH expected(` + strings.Join(columns, ",") + `) AS (` + projection + `) SELECT * FROM expected ORDER BY ` + strings.Join(order, ",")
-		expectedRows, e := baseline.QueryContext(ctx, query, reconciliationArgs(query, in, report)...)
+		expectedRows, e := baseline.QueryContext(ctx, query, args(query)...)
 		if e != nil {
 			return e
 		}

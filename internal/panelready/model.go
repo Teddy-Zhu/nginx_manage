@@ -8,7 +8,7 @@ import (
 	"regexp"
 )
 
-const Protocol = 1
+const Protocol = 2
 const ResponseLimit = 16 << 10
 
 var idValue = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

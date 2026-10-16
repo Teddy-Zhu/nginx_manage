@@ -24,6 +24,9 @@ type DisasterRuntimeRequest struct {
 }
 
 type DisasterRuntimeStatus struct {
+	ReconciliationSHA256   string                                `json:"reconciliation_sha256,omitempty"`
+	Activation             *panelrecovery.DisasterActivation     `json:"activation,omitempty"`
+	ActivationApproved     bool                                  `json:"activation_approved"`
 	Restore                Record                                `json:"restore"`
 	Nginx                  *Record                               `json:"nginx,omitempty"`
 	Reconciliation         *panelrecovery.DisasterReconciliation `json:"reconciliation,omitempty"`
@@ -80,8 +83,20 @@ func DisasterRuntime(data, id string) (out DisasterRuntimeStatus, err error) {
 	r, e := panelrecovery.ReadDisasterReconciliation(i)
 	if e == nil {
 		out.Reconciliation = &r
+		out.ReconciliationSHA256 = r.SHA256()
 		if _, e = panelrecovery.ReadDisasterReconciliationProof(i, r); e == nil {
 			out.ReconciliationApproved = true
+		} else if !os.IsNotExist(e) {
+			return out, e
+		}
+	} else if !os.IsNotExist(e) {
+		return out, e
+	}
+	activation, e := panelrecovery.ReadDisasterActivation(i)
+	if e == nil {
+		out.Activation = &activation
+		if _, e = panelrecovery.ReadDisasterActivationProof(i, activation); e == nil {
+			out.ActivationApproved = true
 		} else if !os.IsNotExist(e) {
 			return out, e
 		}

@@ -437,7 +437,7 @@ func (s *Service) step(ctx context.Context) error {
 			if root.Completion != nil {
 				session.Phase = "releasing"
 				if root.Completion.Outcome != "succeeded" {
-					session.Error = "独立面板更新未成功，已由原更新事务完成补偿或无副作用中止"
+					session.Error = "独立维护操作未成功，已由原事务完成补偿或无副作用中止"
 				}
 				return s.save(ctx, session)
 			}
