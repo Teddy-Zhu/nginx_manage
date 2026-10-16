@@ -16,6 +16,8 @@ export type ComponentAsset = components["schemas"]["ComponentAsset"];
 export type ComponentRelease = components["schemas"]["ComponentRelease"];
 export type ComponentOperation = components["schemas"]["ComponentOperation"];
 export type ComponentTask = components["schemas"]["ComponentTask"];
+export type PanelUpdateTask = components["schemas"]["PanelUpdateTask"];
+export type PanelUpdateCreateInput = components["schemas"]["PanelUpdateCreateInput"];
 export type NginxInstallTask = components["schemas"]["NginxInstallTask"];
 export type NginxInstallCreateInput =
   components["schemas"]["NginxInstallCreateInput"];
@@ -415,6 +417,21 @@ export const api = {
     request<ComponentOverview>({ url: "/components", signal }),
   componentTasks: (signal?: AbortSignal) =>
     request<ComponentTask[]>({ url: "/components/tasks", signal }),
+  panelUpdates: (signal?: AbortSignal) =>
+    request<PanelUpdateTask[]>({ url: "/panel/updates", signal }),
+  createPanelUpdate: (data: PanelUpdateCreateInput, key: string) =>
+    request<PanelUpdateTask>({
+      url: "/panel/updates",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  resumePanelUpdate: (id: string, key: string) =>
+    request<PanelUpdateTask>({
+      url: `/panel/updates/${encodeURIComponent(id)}/resume`,
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+    }),
   nginxInstallations: (signal?: AbortSignal) =>
     request<NginxInstallTask[]>({ url: "/components/installations", signal }),
   createNginxInstallation: (data: NginxInstallCreateInput, key: string) =>

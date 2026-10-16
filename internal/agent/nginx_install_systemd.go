@@ -61,7 +61,7 @@ func installationUnit(ctx context.Context, unit, data, worker string) error {
 	if err != nil {
 		return err
 	}
-	if !strings.HasPrefix(string(intent), "native-install-v10\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
+	if !strings.HasPrefix(string(intent), "native-install-v11\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
 		return errors.New("本机首次安装意图与未安装目标不一致")
 	}
 	raw, err := nginxmodules.ReadTrusted("/etc/systemd/system/"+unit, 64<<10)

@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "组件准备",
-    "subtitle": "受信任的原生组件与准备任务",
+    "subtitle": "面板与受信任组件的准备任务",
     "nav": true,
     "order": 7.2,
     "symbol": "◇"
@@ -38,7 +38,7 @@ const overview = ref<ComponentOverview | null>(null),
   error = ref("");
 const tag = ref(""),
   prerelease = ref(false),
-  components = ref<Array<"nginx" | "fail2ban">>(["nginx"]),
+  components = ref<Array<"nginx" | "fail2ban" | "panel">>(["nginx"]),
   assets = ref(""),
   selection = ref("components");
 const checkID = ref(""),
@@ -76,6 +76,9 @@ const stateLabels: Record<string, string> = {
   failed: "失败",
   recovery_required: "待本机恢复",
 };
+function chooseComponents(value: Array<"nginx" | "fail2ban" | "panel">) {
+  components.value = value.includes("panel") && !components.value.includes("panel") ? ["panel"] : value.filter((item) => item !== "panel");
+}
 function taskLabel(t: ComponentTask) {
   if (t.state === "succeeded")
     return t.action === "prepare" ? "准备完成" : "检查完成";
@@ -232,7 +235,7 @@ onUnmounted(() => {
       </p>
       <NAlert type="info"
         >准备操作校验并下载组件产物。安装与启用需另行执行。Docker 的 Nginx
-        模块由镜像提供。</NAlert
+        模块由镜像提供。面板须单独选择。</NAlert
       >
       <div v-if="permitted" class="grid-2">
         <NFormItem label="选择方式"
@@ -245,11 +248,13 @@ onUnmounted(() => {
         /></NFormItem>
         <NFormItem v-if="selection === 'components'" label="组件"
           ><NSelect
-            v-model:value="components"
+            :value="components"
+            @update:value="chooseComponents"
             multiple
             :options="[
               { label: 'Nginx', value: 'nginx' },
               { label: 'Fail2ban', value: 'fail2ban' },
+              { label: '面板', value: 'panel' },
             ]"
         /></NFormItem>
         <NFormItem v-else label="资产 ID"

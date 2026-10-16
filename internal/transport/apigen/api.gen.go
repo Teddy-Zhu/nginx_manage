@@ -414,12 +414,15 @@ func (e ComponentInputAction) Valid() bool {
 const (
 	Fail2ban ComponentInputComponents = "fail2ban"
 	Nginx    ComponentInputComponents = "nginx"
+	Panel    ComponentInputComponents = "panel"
 )
 
 // Valid indicates whether the value is a known member of the ComponentInputComponents enum.
 func (e ComponentInputComponents) Valid() bool {
 	switch e {
 	case Fail2ban:
+		return true
+	case Panel:
 		return true
 	case Nginx:
 		return true
@@ -1211,6 +1214,82 @@ type ComponentCreateInput struct {
 	Input       ComponentInput `json:"input"`
 }
 
+// ComponentPanelPreparation defines model for ComponentPanelPreparation.
+type ComponentPanelPreparation struct {
+	ReleaseId         string `json:"release_id"`
+	DatabaseSchema    int64  `json:"database_schema"`
+	AutomaticRollback bool   `json:"automatic_rollback"`
+}
+
+// PanelUpdateInput defines model for PanelUpdateInput.
+type PanelUpdateInput struct {
+	MaintenanceId string `json:"maintenance_id"`
+	PlanId        string `json:"plan_id"`
+	Prerelease    bool   `json:"prerelease"`
+}
+
+// PanelUpdateCreateInput defines model for PanelUpdateCreateInput.
+type PanelUpdateCreateInput struct {
+	MaintenanceId string `json:"maintenance_id"`
+	PrepareTaskId string `json:"prepare_task_id"`
+}
+
+// PanelUpdateAuthorization defines model for PanelUpdateAuthorization.
+type PanelUpdateAuthorization struct {
+	Actor              string           `json:"actor"`
+	RequestId          string           `json:"request_id"`
+	Protocol           int64            `json:"protocol"`
+	OperationId        string           `json:"operation_id"`
+	Input              PanelUpdateInput `json:"input"`
+	Sequence           int64            `json:"sequence"`
+	Command            string           `json:"command"`
+	Epoch              string           `json:"epoch"`
+	AuthorizationUntil int64            `json:"authorization_until"`
+}
+
+// PanelUpdateOperation defines model for PanelUpdateOperation.
+type PanelUpdateOperation struct {
+	Authorization       PanelUpdateAuthorization `json:"authorization"`
+	Protocol            int64                    `json:"protocol"`
+	Id                  string                   `json:"id"`
+	Input               PanelUpdateInput         `json:"input"`
+	RequestHash         string                   `json:"request_hash"`
+	IntentSha256        string                   `json:"intent_sha256"`
+	Sequence            int64                    `json:"sequence"`
+	Command             string                   `json:"command"`
+	State               string                   `json:"state"`
+	Stage               string                   `json:"stage"`
+	Error               string                   `json:"error"`
+	Failure             string                   `json:"failure"`
+	BeforeId            string                   `json:"before_id"`
+	TargetId            string                   `json:"target_id"`
+	SnapshotId          string                   `json:"snapshot_id"`
+	BeforeSchema        int64                    `json:"before_schema"`
+	TargetSchema        int64                    `json:"target_schema"`
+	Deadline            int64                    `json:"deadline"`
+	UpdatedAt           int64                    `json:"updated_at"`
+	Active              bool                     `json:"active"`
+	Finalized           bool                     `json:"finalized"`
+	ReleaseAcknowledged bool                     `json:"release_acknowledged"`
+}
+
+// PanelUpdateTask defines model for PanelUpdateTask.
+type PanelUpdateTask struct {
+	Id                 string                `json:"id"`
+	OperationId        string                `json:"operation_id"`
+	PrepareTaskId      string                `json:"prepare_task_id"`
+	Input              PanelUpdateInput      `json:"input"`
+	Sequence           int64                 `json:"sequence"`
+	Command            string                `json:"command"`
+	AuthorizationUntil int64                 `json:"authorization_until"`
+	State              string                `json:"state"`
+	Stage              string                `json:"stage"`
+	Error              string                `json:"error"`
+	CreatedAt          int64                 `json:"created_at"`
+	UpdatedAt          int64                 `json:"updated_at"`
+	Result             *PanelUpdateOperation `json:"result,omitempty"`
+}
+
 // ComponentInput defines model for ComponentInput.
 type ComponentInput struct {
 	Action         ComponentInputAction        `json:"action"`
@@ -1231,20 +1310,21 @@ type ComponentInputComponents string
 
 // ComponentOperation defines model for ComponentOperation.
 type ComponentOperation struct {
-	CreatedAt     int64             `json:"created_at"`
-	Deadline      int64             `json:"deadline"`
-	Error         string            `json:"error"`
-	ErrorCode     string            `json:"error_code"`
-	Id            string            `json:"id"`
-	Input         ComponentInput    `json:"input"`
-	Protocol      int64             `json:"protocol"`
-	Release       *ComponentRelease `json:"release,omitempty"`
-	RequestHash   string            `json:"request_hash"`
-	RuntimeReady  bool              `json:"runtime_ready"`
-	RuntimeReason string            `json:"runtime_reason"`
-	Stage         string            `json:"stage"`
-	State         string            `json:"state"`
-	UpdatedAt     int64             `json:"updated_at"`
+	Panel         *ComponentPanelPreparation `json:"panel,omitempty"`
+	CreatedAt     int64                      `json:"created_at"`
+	Deadline      int64                      `json:"deadline"`
+	Error         string                     `json:"error"`
+	ErrorCode     string                     `json:"error_code"`
+	Id            string                     `json:"id"`
+	Input         ComponentInput             `json:"input"`
+	Protocol      int64                      `json:"protocol"`
+	Release       *ComponentRelease          `json:"release,omitempty"`
+	RequestHash   string                     `json:"request_hash"`
+	RuntimeReady  bool                       `json:"runtime_ready"`
+	RuntimeReason string                     `json:"runtime_reason"`
+	Stage         string                     `json:"stage"`
+	State         string                     `json:"state"`
+	UpdatedAt     int64                      `json:"updated_at"`
 }
 
 // ComponentOverview defines model for ComponentOverview.
@@ -2640,6 +2720,18 @@ type ReplaceCertificateParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+type CreatePanelUpdateParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+type ResumePanelUpdateParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // CreateNginxInstallationParams defines parameters for CreateNginxInstallation.
 type CreateNginxInstallationParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -3157,6 +3249,8 @@ type DeployCertificateJSONRequestBody = CertificateDeployInput
 // ReplaceCertificateJSONRequestBody defines body for ReplaceCertificate for application/json ContentType.
 type ReplaceCertificateJSONRequestBody = CertificateInput
 
+type CreatePanelUpdateJSONRequestBody = PanelUpdateCreateInput
+
 // CreateNginxInstallationJSONRequestBody defines body for CreateNginxInstallation for application/json ContentType.
 type CreateNginxInstallationJSONRequestBody = NginxInstallCreateInput
 
@@ -3300,6 +3394,10 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	ListPanelUpdates(w http.ResponseWriter, r *http.Request)
+	CreatePanelUpdate(w http.ResponseWriter, r *http.Request, params CreatePanelUpdateParams)
+	GetPanelUpdate(w http.ResponseWriter, r *http.Request, id ID)
+	ResumePanelUpdate(w http.ResponseWriter, r *http.Request, id ID, params ResumePanelUpdateParams)
 
 	// (PUT /account/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams)
@@ -4754,6 +4852,183 @@ func (siw *ServerInterfaceWrapper) ListNginxInstallations(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListNginxInstallations(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPanelUpdates operation middleware
+func (siw *ServerInterfaceWrapper) ListPanelUpdates(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPanelUpdates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePanelUpdate operation middleware
+func (siw *ServerInterfaceWrapper) CreatePanelUpdate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreatePanelUpdateParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePanelUpdate(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPanelUpdate operation middleware
+func (siw *ServerInterfaceWrapper) GetPanelUpdate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPanelUpdate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumePanelUpdate operation middleware
+func (siw *ServerInterfaceWrapper) ResumePanelUpdate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResumePanelUpdateParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumePanelUpdate(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -9173,6 +9448,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/maintenance", wrapper.GetMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance", wrapper.EnterMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance/{id}/release", wrapper.ReleaseMaintenance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/updates", wrapper.ListPanelUpdates)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/updates", wrapper.CreatePanelUpdate)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/updates/{id}", wrapper.GetPanelUpdate)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/updates/{id}/resume", wrapper.ResumePanelUpdate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/installations", wrapper.ListNginxInstallations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations", wrapper.CreateNginxInstallation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/installations/{id}", wrapper.GetNginxInstallation)

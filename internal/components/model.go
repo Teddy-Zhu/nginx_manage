@@ -36,11 +36,11 @@ func (in Input) Validate() error {
 		return fault.Invalid("未知组件操作")
 	}
 	if len(in.Components)+len(in.Assets) > 2 {
-		return fault.Invalid("每次最多选择两个原生组件")
+		return fault.Invalid("每次最多选择两个组件")
 	}
 	for _, id := range in.Components {
-		if id != "nginx" && id != "fail2ban" {
-			return fault.Invalid("组件入口只接受 Nginx 与 Fail2ban")
+		if id != "nginx" && id != "fail2ban" && id != "panel" {
+			return fault.Invalid("组件入口只接受 Nginx、Fail2ban 与面板")
 		}
 	}
 	if in.Action == "check" && (in.PlanID != "" || in.ManifestSHA256 != "" || in.TrustSHA256 != "") {
@@ -55,7 +55,13 @@ func (in Input) Validate() error {
 	return nil
 }
 func (in Input) online() releases.OnlineInput {
-	return releases.OnlineInput{Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
+	return releases.OnlineInput{Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban", "panel"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
+}
+
+type PanelPreparation struct {
+	ReleaseID         string `json:"release_id"`
+	DatabaseSchema    int64  `json:"database_schema"`
+	AutomaticRollback bool   `json:"automatic_rollback"`
 }
 
 type Request struct {
@@ -105,20 +111,21 @@ func release(plan releases.Plan) Release {
 }
 
 type Operation struct {
-	Protocol      int      `json:"protocol"`
-	ID            string   `json:"id"`
-	RequestHash   string   `json:"request_hash"`
-	Input         Input    `json:"input"`
-	State         string   `json:"state"`
-	Stage         string   `json:"stage"`
-	ErrorCode     string   `json:"error_code"`
-	Error         string   `json:"error"`
-	CreatedAt     int64    `json:"created_at"`
-	UpdatedAt     int64    `json:"updated_at"`
-	Deadline      int64    `json:"deadline"`
-	RuntimeReady  bool     `json:"runtime_ready"`
-	RuntimeReason string   `json:"runtime_reason"`
-	Release       *Release `json:"release,omitempty"`
+	Protocol      int               `json:"protocol"`
+	ID            string            `json:"id"`
+	RequestHash   string            `json:"request_hash"`
+	Input         Input             `json:"input"`
+	State         string            `json:"state"`
+	Stage         string            `json:"stage"`
+	ErrorCode     string            `json:"error_code"`
+	Error         string            `json:"error"`
+	CreatedAt     int64             `json:"created_at"`
+	UpdatedAt     int64             `json:"updated_at"`
+	Deadline      int64             `json:"deadline"`
+	RuntimeReady  bool              `json:"runtime_ready"`
+	RuntimeReason string            `json:"runtime_reason"`
+	Release       *Release          `json:"release,omitempty"`
+	Panel         *PanelPreparation `json:"panel,omitempty"`
 }
 type Overview struct {
 	InstallAvailable bool                       `json:"install_available"`

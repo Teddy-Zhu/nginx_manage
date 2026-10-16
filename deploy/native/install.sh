@@ -217,7 +217,7 @@ nginx_hash=
 if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v10\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
+printf 'native-install-v11\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -383,7 +383,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads
+ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging
 RestrictSUIDSGID=yes
 LockPersonality=yes
@@ -482,7 +482,7 @@ for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-printf 'native-install-v10\n' >"$work/ready"
+printf 'native-install-v11\n' >"$work/ready"
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
   start_units=(nginxpanel-agent.service)

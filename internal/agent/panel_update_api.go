@@ -25,7 +25,7 @@ func hostedPanelUpdate(r Record, active bool) (panelupdates.Operation, error) {
 	}
 	i, a := p.Intent, p.Authorizations[len(p.Authorizations)-1].Request
 	in := panelUpdateAPIInput(i.Input)
-	o := panelupdates.Operation{Protocol: Protocol, ID: r.OperationID, Input: in, RequestHash: panelupdates.Hash(r.OperationID, in), IntentSHA256: r.RequestHash, Sequence: a.Sequence, Command: a.Command, State: r.State, Stage: r.Stage, Error: r.Error, Failure: p.Failure, BeforeID: i.BeforeID, TargetID: i.TargetID, SnapshotID: i.SnapshotID, BeforeSchema: i.BeforeSchema, TargetSchema: i.TargetSchema, Deadline: r.Deadline, UpdatedAt: r.UpdatedAt, Active: active, Finalized: panelUpdateFinalized(r), ReleaseAcknowledged: p.ReleaseAcknowledged}
+	o := panelupdates.Operation{Authorization: a, Protocol: Protocol, ID: r.OperationID, Input: in, RequestHash: panelupdates.Hash(r.OperationID, in), IntentSHA256: r.RequestHash, Sequence: a.Sequence, Command: a.Command, State: r.State, Stage: r.Stage, Error: r.Error, Failure: p.Failure, BeforeID: i.BeforeID, TargetID: i.TargetID, SnapshotID: i.SnapshotID, BeforeSchema: i.BeforeSchema, TargetSchema: i.TargetSchema, Deadline: r.Deadline, UpdatedAt: r.UpdatedAt, Active: active, Finalized: panelUpdateFinalized(r), ReleaseAcknowledged: p.ReleaseAcknowledged}
 	return o, o.Validate(r.OperationID, in)
 }
 
@@ -190,10 +190,16 @@ func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request)
 	}
 	now := time.Now().Unix()
 	if req.AuthorizationUntil <= now || req.AuthorizationUntil > now+305 {
+		if fresh {
+			return zero, fault.New(http.StatusConflict, "PANEL_UPDATE_REJECTED", "更新启动授权已过期或超过五分钟，尚未创建独立事务")
+		}
 		return zero, fault.Conflict("更新启动授权已过期或超过五分钟")
 	}
 	access, err := panelUpdateAccess(ctx, s.Journal, req.OperationID, req.Input.MaintenanceID, req.Epoch, false)
 	if err != nil {
+		if fresh {
+			return zero, fault.New(http.StatusConflict, "PANEL_UPDATE_REJECTED", panelRestoreError(err))
+		}
 		return zero, err
 	}
 	defer func() {
@@ -205,7 +211,9 @@ func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request)
 		in := PanelUpdateInput{MaintenanceID: req.Input.MaintenanceID, Stage: panelruntime.StageInput{DataDir: s.DataDir, PlanID: req.Input.PlanID, TrustPath: s.ReleaseTrust, AllowPrerelease: req.Input.Prerelease}}
 		r, err = preparePanelUpdate(ctx, in, req.OperationID, req.Epoch)
 		if err != nil {
-			return zero, err
+			// The worker locks still prove the original parent did not exist; no
+			// snapshot, service action or journal publication has occurred yet.
+			return zero, fault.New(http.StatusConflict, "PANEL_UPDATE_REJECTED", panelRestoreError(err))
 		}
 		r.State = "queued"
 	} else if r.PanelUpdate.Intent.Input.Stage.TrustPath != s.ReleaseTrust {
@@ -213,6 +221,9 @@ func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request)
 	}
 	now = time.Now().Unix()
 	if req.AuthorizationUntil <= now {
+		if fresh {
+			return zero, fault.New(http.StatusConflict, "PANEL_UPDATE_REJECTED", "更新准备期间启动授权已过期，尚未创建独立事务")
+		}
 		return zero, fault.Conflict("更新准备期间启动授权已过期，须重新授权")
 	}
 	r.PanelUpdate.Authorizations = append(r.PanelUpdate.Authorizations, PanelUpdateAuthorization{Request: req, AcceptedAt: now})

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strings"
 
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
@@ -29,6 +30,8 @@ func (in Input) Validate() error {
 }
 
 type Request struct {
+	Actor              string `json:"actor"`
+	RequestID          string `json:"request_id"`
 	Protocol           int    `json:"protocol"`
 	OperationID        string `json:"operation_id"`
 	Input              Input  `json:"input"`
@@ -39,6 +42,9 @@ type Request struct {
 }
 
 func (r Request) Validate() error {
+	if r.Actor == "" || len(r.Actor) > 128 || strings.TrimSpace(r.Actor) != r.Actor || strings.ContainsAny(r.Actor, "\x00\r\n") || !components.ValidID(r.RequestID) {
+		return fault.Invalid("更新授权缺少有效的发起人或请求标识")
+	}
 	if r.Protocol != protocol.Agent || !components.ValidID(r.OperationID) || r.OperationID == r.Input.MaintenanceID || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || (r.Command != "update" && r.Command != "resume") || (r.Command == "update") != (r.Sequence == 1) {
 		return fault.Invalid("更新操作、授权序号或协议无效")
 	}
@@ -55,30 +61,34 @@ func Hash(id string, in Input) string {
 }
 
 type Operation struct {
-	Protocol            int    `json:"protocol"`
-	ID                  string `json:"id"`
-	Input               Input  `json:"input"`
-	RequestHash         string `json:"request_hash"`
-	IntentSHA256        string `json:"intent_sha256"`
-	Sequence            int    `json:"sequence"`
-	Command             string `json:"command"`
-	State               string `json:"state"`
-	Stage               string `json:"stage"`
-	Error               string `json:"error"`
-	Failure             string `json:"failure"`
-	BeforeID            string `json:"before_id"`
-	TargetID            string `json:"target_id"`
-	SnapshotID          string `json:"snapshot_id"`
-	BeforeSchema        int64  `json:"before_schema"`
-	TargetSchema        int64  `json:"target_schema"`
-	Deadline            int64  `json:"deadline"`
-	UpdatedAt           int64  `json:"updated_at"`
-	Active              bool   `json:"active"`
-	Finalized           bool   `json:"finalized"`
-	ReleaseAcknowledged bool   `json:"release_acknowledged"`
+	Authorization       Request `json:"authorization"`
+	Protocol            int     `json:"protocol"`
+	ID                  string  `json:"id"`
+	Input               Input   `json:"input"`
+	RequestHash         string  `json:"request_hash"`
+	IntentSHA256        string  `json:"intent_sha256"`
+	Sequence            int     `json:"sequence"`
+	Command             string  `json:"command"`
+	State               string  `json:"state"`
+	Stage               string  `json:"stage"`
+	Error               string  `json:"error"`
+	Failure             string  `json:"failure"`
+	BeforeID            string  `json:"before_id"`
+	TargetID            string  `json:"target_id"`
+	SnapshotID          string  `json:"snapshot_id"`
+	BeforeSchema        int64   `json:"before_schema"`
+	TargetSchema        int64   `json:"target_schema"`
+	Deadline            int64   `json:"deadline"`
+	UpdatedAt           int64   `json:"updated_at"`
+	Active              bool    `json:"active"`
+	Finalized           bool    `json:"finalized"`
+	ReleaseAcknowledged bool    `json:"release_acknowledged"`
 }
 
 func (o Operation) Validate(id string, in Input) error {
+	if o.Authorization.Validate() != nil || o.Authorization.OperationID != id || o.Authorization.Input != in || o.Authorization.Sequence != o.Sequence || o.Authorization.Command != o.Command {
+		return errors.New("更新回执缺少匹配的原启动授权")
+	}
 	if in.Validate() != nil || o.Protocol != protocol.Agent || !components.ValidID(id) || o.ID != id || o.Input != in || o.RequestHash != Hash(id, in) || !digest.MatchString(o.IntentSHA256) || o.Sequence < 1 || o.Sequence > 32 || (o.Command != "update" && o.Command != "resume") || (o.Command == "update") != (o.Sequence == 1) || !digest.MatchString(o.BeforeID) || !digest.MatchString(o.TargetID) || o.BeforeID == o.TargetID || !components.ValidID(o.SnapshotID) || o.BeforeSchema <= 0 || o.TargetSchema < o.BeforeSchema || o.Deadline <= 0 || o.UpdatedAt <= 0 || len(o.Error) > 1024 || len(o.Failure) > 1024 {
 		return errors.New("独立更新回执与原任务不一致")
 	}
@@ -118,4 +128,28 @@ func (o Operation) Validate(id string, in Input) error {
 type Agent interface {
 	SubmitPanelUpdate(context.Context, Request) (Operation, error)
 	PanelUpdate(context.Context, string) (Operation, error)
+}
+
+type CreateInput struct {
+	MaintenanceID string `json:"maintenance_id"`
+	PrepareTaskID string `json:"prepare_task_id"`
+}
+
+type Task struct {
+	ID                 string     `json:"id"`
+	OperationID        string     `json:"operation_id"`
+	PrepareTaskID      string     `json:"prepare_task_id"`
+	Input              Input      `json:"input"`
+	Sequence           int        `json:"sequence"`
+	Command            string     `json:"command"`
+	AuthorizationUntil int64      `json:"authorization_until"`
+	State              string     `json:"state"`
+	Stage              string     `json:"stage"`
+	Error              string     `json:"error"`
+	CreatedAt          int64      `json:"created_at"`
+	UpdatedAt          int64      `json:"updated_at"`
+	Result             *Operation `json:"result,omitempty"`
+	Request            Request    `json:"-"`
+	requestID          string
+	dispatched         bool
 }

@@ -19,7 +19,8 @@ func (s *Server) maintenanceAdmission(next http.Handler) http.Handler {
 		parts := strings.Split(path, "/")
 		release := len(parts) == 3 && parts[0] == "maintenance" && parts[2] == "release"
 		installation := r.Method == http.MethodPost && len(parts) >= 2 && parts[0] == "components" && parts[1] == "installations" && (len(parts) == 2 || len(parts) == 4 && (parts[3] == "resume" || parts[3] == "cancel"))
-		if path == "session" || path == "session/reauthenticate" || path == "bootstrap" || path == "maintenance" || release || installation {
+		update := r.Method == http.MethodPost && parts[0] == "panel" && len(parts) >= 2 && parts[1] == "updates" && (len(parts) == 2 || len(parts) == 4 && parts[3] == "resume")
+		if path == "session" || path == "session/reauthenticate" || path == "bootstrap" || path == "maintenance" || release || installation || update {
 			next.ServeHTTP(w, r)
 			return
 		}

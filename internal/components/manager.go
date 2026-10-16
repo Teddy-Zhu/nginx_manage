@@ -22,14 +22,14 @@ import (
 )
 
 type Manager struct {
-	Dir, TrustPath, TokenPath, Scope string
-	Dev                              bool
-	mu                               sync.Mutex
-	ctx                              context.Context
-	cancel                           context.CancelFunc
-	workers                          sync.WaitGroup
-	lock                             *os.File
-	active, closed, poisoned         bool
+	Dir, DataDir, TrustPath, TokenPath, Scope string
+	Dev                                       bool
+	mu                                        sync.Mutex
+	ctx                                       context.Context
+	cancel                                    context.CancelFunc
+	workers                                   sync.WaitGroup
+	lock                                      *os.File
+	active, closed, poisoned                  bool
 }
 
 func (m *Manager) Overview() Overview {
@@ -194,11 +194,11 @@ func (m *Manager) interrupted(ctx context.Context, out *Operation) {
 	if out.Input.Action != "prepare" {
 		return
 	}
-	result, err := releases.Prepared(ctx, releases.Input{TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
+	result, err := releases.Prepared(ctx, releases.Input{TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban", "panel"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
 	if err == nil {
 		if result.Plan.ManifestSHA256 != out.Input.ManifestSHA256 || result.Plan.TrustSHA256 != out.Input.TrustSHA256 {
 			err = releases.ErrReleaseChanged
-		} else {
+		} else if err = m.prepareRuntime(ctx, out, result.Plan); err == nil {
 			info := release(result.Plan)
 			out.Release, out.State, out.Stage, out.ErrorCode, out.Error, out.RuntimeReady = &info, "succeeded", "prepared", "", "", true
 			return
@@ -221,6 +221,12 @@ func (m *Manager) run(out Operation) {
 		in.TrustPath, in.TokenPath, in.Host, in.Receiver = m.TrustPath, m.TokenPath, m.host(), receiver()
 		var result releases.OnlineResult
 		result, err = releases.Online(ctx, in)
+		if err == nil {
+			_, err = panelSelection(result.Plan)
+		}
+		if err == nil && out.Input.Action == "prepare" {
+			err = m.prepareRuntime(ctx, &out, result.Plan)
+		}
 		if err == nil {
 			info := release(result.Plan)
 			out.Release, out.State, out.Stage = &info, "succeeded", "checked"

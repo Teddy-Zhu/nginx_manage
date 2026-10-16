@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/panel/updates/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumePanelUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/panel/updates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPanelUpdate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/panel/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPanelUpdates"];
+        put?: never;
+        post: operations["createPanelUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
     "/migrations/receiver": {
         parameters: {
             query?: never;
@@ -1771,12 +1822,76 @@ export interface components {
             /** Format: int64 */
             bound_at: number;
         };
+        ComponentPanelPreparation: {
+            release_id: string;
+            database_schema: number;
+            automatic_rollback: boolean;
+        };
+        PanelUpdateInput: {
+            maintenance_id: string;
+            plan_id: string;
+            prerelease: boolean;
+        };
+        PanelUpdateCreateInput: {
+            maintenance_id: string;
+            prepare_task_id: string;
+        };
+        PanelUpdateAuthorization: {
+            actor: string;
+            request_id: string;
+            protocol: number;
+            operation_id: string;
+            input: components["schemas"]["PanelUpdateInput"];
+            sequence: number;
+            command: string;
+            epoch: string;
+            authorization_until: number;
+        };
+        PanelUpdateOperation: {
+            authorization: components["schemas"]["PanelUpdateAuthorization"];
+            protocol: number;
+            id: string;
+            input: components["schemas"]["PanelUpdateInput"];
+            request_hash: string;
+            intent_sha256: string;
+            sequence: number;
+            command: string;
+            state: string;
+            stage: string;
+            error: string;
+            failure: string;
+            before_id: string;
+            target_id: string;
+            snapshot_id: string;
+            before_schema: number;
+            target_schema: number;
+            deadline: number;
+            updated_at: number;
+            active: boolean;
+            finalized: boolean;
+            release_acknowledged: boolean;
+        };
+        PanelUpdateTask: {
+            id: string;
+            operation_id: string;
+            prepare_task_id: string;
+            input: components["schemas"]["PanelUpdateInput"];
+            sequence: number;
+            command: string;
+            authorization_until: number;
+            state: string;
+            stage: string;
+            error: string;
+            created_at: number;
+            updated_at: number;
+            result?: components["schemas"]["PanelUpdateOperation"];
+        };
         ComponentInput: {
             /** @enum {string} */
             action: "check" | "prepare";
             tag: string;
             prerelease: boolean;
-            components?: ("nginx" | "fail2ban")[];
+            components?: ("nginx" | "fail2ban" | "panel")[];
             assets?: string[];
             plan_id: string;
             manifest_sha256: string;
@@ -1838,6 +1953,7 @@ export interface components {
             unpacked_bytes: number;
         };
         ComponentOperation: {
+            panel?: components["schemas"]["ComponentPanelPreparation"];
             /** Format: int64 */
             protocol: number;
             id: string;
@@ -3084,6 +3200,78 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    resumePanelUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    getPanelUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    createPanelUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PanelUpdateCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    listPanelUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
     getMigrationReceiver: {
         parameters: {
             query?: never;

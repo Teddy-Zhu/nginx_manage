@@ -164,14 +164,20 @@ sudo /opt/nginxpanel/current/nginxpanel panel-readiness \
 
 ## 独立面板更新事务
 
-`update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 19。
+`update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 20。
 
-原生安装登记 v10 为 native 和 Docker 面板统一安装 `nginxpanel-update@.service`。该 root 服务独立于 `serve` 和 Agent 的生命周期，只接受原操作 UUID，由固定 `panel-update-worker` 加载 root 记录；请求不能指定可执行程序、数据目录或信任文件。服务不自动重启，最长运行 40 分钟，收到停止信号后留出补偿时间。运行前核对安装意图、ready、root 服务文件及 systemd 实际加载的片段、账户、类型、drop-in 和 reload 状态。
+原生安装登记 v11 为 native 和 Docker 面板统一安装 `nginxpanel-update@.service`。该 root 服务独立于 `serve` 和 Agent 的生命周期，只接受原操作 UUID，由固定 `panel-update-worker` 加载 root 记录；请求不能指定可执行程序、数据目录或信任文件。服务不自动重启，最长运行 40 分钟，收到停止信号后留出补偿时间。运行前核对安装意图、ready、root 服务文件及 systemd 实际加载的片段、账户、类型、drop-in 和 reload 状态。
 
-Agent 19 提供内部 IPC `POST /v1/panel/updates` 与 `GET /v1/panel/updates/{id}`，沿用统一响应封装。新建须传递已签名暂存的 `plan_id`、原 `maintenance_id`、`prerelease`、操作 UUID、当前 epoch、连续 `sequence` 和五分钟内的 `authorization_until`；首个 command 为 `update`，后续为 `resume`。Agent 先持久保存完整原意图和逐次授权，再启动固定服务。启动授权由 worker 在锁内一次性认领。相同序号与内容只查询原操作，不能重复启动；启动结果未知或服务停止后须使用下一个序号显式续办。历史授权不可修改，续办不改变原目标、快照及总执行期限。过期启动授权不能触发后续变更，已经运行的事务仍按原补偿规则处理。
+Agent 20 提供内部 IPC `POST /v1/panel/updates` 与 `GET /v1/panel/updates/{id}`，沿用统一响应封装。新建须传递已签名暂存的 `plan_id`、原 `maintenance_id`、`prerelease`、操作 UUID、发起人 `actor`、原请求 `request_id`、当前 epoch、连续 `sequence` 和五分钟内的 `authorization_until`；首个 command 为 `update`，后续为 `resume`。Agent 先持久保存完整原意图和逐次授权，再启动固定服务。启动授权由 worker 在锁内一次性认领。相同序号与内容只查询原操作，不能重复启动；启动结果未知或服务停止后须使用下一个序号显式续办。历史授权不可修改，续办不改变原目标、快照及总执行期限。过期启动授权不能触发后续变更，已经运行的事务仍按原补偿规则处理。
 
-查询同时核对实际服务状态与 root 原记录；失去运行进程的未完成事务保留 `recovery_required`，不伪造成功。已提交或补偿完成的事务只收取原维护释放回执，查询可补齐此收尾记录，不能触发停机、切换或恢复。上述入口为 Agent 内部合同，面向用户的 Web/API 任务与救援材料清理仍待接入。
+查询同时核对实际服务状态与 root 原记录；失去运行进程的未完成事务保留 `recovery_required`，不伪造成功。已提交或补偿完成的事务只收取原维护释放回执，查询可补齐此收尾记录，不能触发停机、切换或恢复。上述入口为 Agent 内部合同；面向用户的 Web/API 任务已接入，救援材料清理仍待补齐。
 
+
+Web“组件准备”可单独选择面板；准备过程除验证及下载签名静态面板产物外，还将同版程序与前端暂存到持久版本目录，并返回版本标识、数据库版本与自动回滚声明。面板不与 Nginx/Fail2ban 共用准备计划，暂存不切换当前版本或启动新程序。安装登记 v11 允许 Agent 仅在受管 runtime 目录完成此暂存。
+
+Web“面板更新”及公共 API `GET/POST /api/v1/panel/updates`、`GET /api/v1/panel/updates/{id}`、`POST /api/v1/panel/updates/{id}/resume` 已接入同一任务服务。写操作要求 `components.manage`、`system.write`、近期认证或有效机器 Token，以及幂等键；浏览器同时校验 CSRF。新建绑定已成功暂存的准备任务和原 held 维护会话。任务输入与每次请求加密保存，历史请求追加保留；发起人和请求标识同时保存在 root 授权记录中，数据库补偿后仍可追溯。联系 Agent 前先记录提交尝试，使更新快照和数据库回滚后仍能确认原操作。
+
+后台先读取 root 原记录，只为未提交的当前授权发起一次提交；仅 root 在持有原 worker 锁且尚未发布父事务时返回的 `PANEL_UPDATE_REJECTED` 可终结为执行条件拒绝；提交结果未知或已提交记录缺失时持续查询并保留待恢复状态，不重建 root 事务。数据库补偿后可以观察 root 中更晚的授权或已完成结果，观察不会重新派发这些授权。显式续办在核实原服务停止、事务未结束与当前维护 epoch 后追加请求；从未提交过的原任务可以重新授权首次启动。已提交而缺失的原记录须本机恢复。单任务最多保留 64 条本地请求，root 最多接受 32 次连续授权；手动释放维护锁会拒绝尚未结束的更新任务。
 
 ```sh
 sudo /opt/nginxpanel/current/nginxpanel update-worker \

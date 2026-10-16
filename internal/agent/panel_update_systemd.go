@@ -26,7 +26,7 @@ func panelUpdateHost(ctx context.Context, data, id string) (active, failed bool,
 		return false, false, err
 	}
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != "native-install-v10\n" || !strings.HasPrefix(string(intent), "native-install-v10\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") {
+	if err != nil || string(ready) != "native-install-v11\n" || !strings.HasPrefix(string(intent), "native-install-v11\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") {
 		return false, false, errors.New("更新服务缺少匹配的本机安装登记")
 	}
 	raw, err := nginxmodules.ReadTrusted("/etc/systemd/system/"+panelUpdateTemplate, 64<<10)

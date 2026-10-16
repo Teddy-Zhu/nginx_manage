@@ -44,10 +44,20 @@ func (out Operation) Validate(req Request) error {
 	}
 	found := map[string]string{}
 	for _, a := range r.Assets {
-		if (a.Component != "nginx" && a.Component != "fail2ban") || found[a.Component] != "" || a.ID == "" || a.Version == "" {
+		if (a.Component != "nginx" && a.Component != "fail2ban" && a.Component != "panel") || found[a.Component] != "" || a.ID == "" || a.Version == "" {
 			return errors.New("组件发行内容无效")
 		}
 		found[a.Component] = a.ID
+	}
+	if found["panel"] != "" && len(found) != 1 {
+		return errors.New("面板须使用独立准备计划")
+	}
+	if req.Input.Action == "prepare" && found["panel"] != "" {
+		if out.Panel == nil || !digest(out.Panel.ReleaseID) || out.Panel.DatabaseSchema <= 0 {
+			return errors.New("面板准备缺少持久版本暂存回执")
+		}
+	} else if out.Panel != nil {
+		return errors.New("此组件操作不应包含面板暂存回执")
 	}
 	for _, id := range r.Selected {
 		matched := false

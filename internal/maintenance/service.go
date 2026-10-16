@@ -199,6 +199,13 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 	if installations != 0 {
 		return out, fault.Conflict("原 Nginx 安装任务仍在执行或待恢复，不能释放维护锁")
 	}
+	var updates int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM panel_updates i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back','cancelled')", id).Scan(&updates); err != nil {
+		return out, err
+	}
+	if updates != 0 {
+		return out, fault.Conflict("原面板更新仍在执行或待恢复，不能手工释放维护锁")
+	}
 	session, err := readSession(tx.QueryRowContext(ctx, "SELECT "+columns+" FROM maintenance_sessions WHERE task_id=?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		if err = p.Require("auth.manage"); err != nil {

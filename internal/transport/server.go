@@ -20,6 +20,7 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
 	"nginxpanel/internal/notifications"
+	"nginxpanel/internal/panelupdates"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage/dbgen"
@@ -37,6 +38,7 @@ type Server struct {
 	HostDNS       *hostdns.Service
 	Components    *components.Service
 	Installations *nginxinstall.Service
+	Updates       *panelupdates.Service
 	Migration     *migration.Service
 	Agent         *agent.Client
 	NodeID        string
