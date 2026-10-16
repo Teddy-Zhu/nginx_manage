@@ -13,6 +13,7 @@ type Receiver struct {
 	Scopes  []string `json:"scopes"`
 }
 type PushInput struct {
+	Firewall     FirewallInput     `json:"firewall"`
 	Dependencies *DependencyInput  `json:"dependencies,omitempty"`
 	Remote       Remote            `json:"remote"`
 	BaseVersion  *int64            `json:"base_version,omitempty"`

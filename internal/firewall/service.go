@@ -31,10 +31,15 @@ type Service struct {
 
 func policyAAD(version int64) string { return fmt.Sprintf("firewall:policy:%d", version) }
 
-func (s *Service) Policy(ctx context.Context) (PolicyView, error) {
+type PolicyReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (s *Service) Policy(ctx context.Context) (PolicyView, error) { return s.ReadPolicy(ctx, s.DB) }
+func (s *Service) ReadPolicy(ctx context.Context, q PolicyReader) (PolicyView, error) {
 	out := PolicyView{Policy: DefaultPolicy()}
 	var sealed []byte
-	e := s.DB.QueryRowContext(ctx, "SELECT version,payload,updated_at FROM firewall_policy WHERE id=1").Scan(&out.Version, &sealed, &out.UpdatedAt)
+	e := q.QueryRowContext(ctx, "SELECT version,payload,updated_at FROM firewall_policy WHERE id=1").Scan(&out.Version, &sealed, &out.UpdatedAt)
 	if errors.Is(e, sql.ErrNoRows) {
 		return out, nil
 	}
@@ -99,29 +104,14 @@ func (s *Service) Save(ctx context.Context, p auth.Principal, requestID, key str
 	if !errors.Is(e, sql.ErrNoRows) {
 		return out, e
 	}
-	policy, e := json.Marshal(in.Policy)
+	if e = s.migrationIdle(ctx, tx); e != nil {
+		return out, e
+	}
+	out, e = s.StorePolicy(ctx, tx, in.BaseVersion, in.Policy)
 	if e != nil {
 		return out, e
 	}
 	now := time.Now().Unix()
-	version := in.BaseVersion + 1
-	var result sql.Result
-	if in.BaseVersion == 0 {
-		result, e = tx.ExecContext(ctx, "INSERT INTO firewall_policy(id,version,payload,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO NOTHING", version, s.Vault.Seal(policy, policyAAD(version)), now)
-	} else {
-		result, e = tx.ExecContext(ctx, "UPDATE firewall_policy SET version=?,payload=?,updated_at=? WHERE id=1 AND version=?", version, s.Vault.Seal(policy, policyAAD(version)), now, in.BaseVersion)
-	}
-	if e != nil {
-		return out, e
-	}
-	count, e := result.RowsAffected()
-	if e != nil {
-		return out, e
-	}
-	if count != 1 {
-		return out, fault.Conflict("防火墙策略已更新，请重新读取后保存")
-	}
-	out = PolicyView{Version: version, Policy: in.Policy, UpdatedAt: now}
 	response, e := json.Marshal(out)
 	if e != nil {
 		return out, e

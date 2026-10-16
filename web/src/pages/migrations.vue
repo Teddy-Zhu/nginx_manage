@@ -29,8 +29,11 @@ import {
   type MigrationPlan,
   type MigrationExecuteInput,
   type MigrationPullInput,
+  type MigrationFirewallInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
+import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
+import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const api = useNodeAPI();
@@ -49,7 +52,22 @@ const includeCertificates = ref(false),
 const includeAutomation = ref(false),
   includeNotifications = ref(false),
   remoteAutomation = ref(false),
-  remoteNotifications = ref(false);
+  remoteNotifications = ref(false),
+  includeFirewall = ref(false),
+  remoteFirewall = ref(false);
+const firewallSettings = ref<MigrationFirewallInput>({
+    mode: "preserve",
+    backend: "",
+    interfaces: {},
+  }),
+  firewallValid = ref(true);
+function firewallOptions(): MigrationFirewallInput {
+  if (!firewallValid.value) throw new Error("请修正防火墙网卡映射");
+  return {
+    ...firewallSettings.value,
+    interfaces: { ...firewallSettings.value.interfaces },
+  };
+}
 watch(includeAutomation, (v) => {
   if (v) {
     includeCertificates.value = true;
@@ -110,7 +128,7 @@ const canPull = computed(() => canImport.value && has("nodes.manage"));
 const options = [
   { label: "仅保存草稿", value: "draft" },
   { label: "保存期望配置", value: "save" },
-  { label: "保存并应用", value: "apply" },
+  { label: "保存并应用 Nginx", value: "apply" },
 ];
 const states: Record<string, string> = {
   planned: "待执行",
@@ -183,6 +201,7 @@ async function exportPackage() {
         dns_credentials: includeCredentials.value,
         automation: includeAutomation.value,
         notifications: includeNotifications.value,
+        firewall: includeFirewall.value,
       },
     });
     const bytes = Uint8Array.from(atob(out.content), (c) => c.charCodeAt(0));
@@ -201,6 +220,7 @@ async function exportPackage() {
 async function previewFile() {
   await run(async () => {
     if (!file.value) throw new Error("请选择配置包");
+    const firewall = firewallOptions();
     if (file.value.size > 8 * 1024 * 1024)
       throw new Error("配置包不能超过 8 MiB");
     const buffer = new Uint8Array(await file.value.arrayBuffer());
@@ -213,6 +233,7 @@ async function previewFile() {
       passphrase: importPassphrase.value,
       base_version: version,
       mappings: mappingObject(),
+      firewall,
     });
     importPassphrase.value = "";
   });
@@ -230,10 +251,12 @@ function remoteInput(execute: boolean, version: number): MigrationPullInput {
         dns_credentials: remoteCredentials.value,
         automation: remoteAutomation.value,
         notifications: remoteNotifications.value,
+        firewall: remoteFirewall.value,
       },
     },
     base_version: version,
     mappings: mappingObject(),
+    firewall: firewallOptions(),
     mode: execute ? mode.value : "preview",
     enable_nginx: enableNginx.value,
   };
@@ -378,6 +401,8 @@ onUnmounted(() => {
           >包含 ACME 账户与签发配置</NCheckbox
         ><NCheckbox v-model:checked="includeNotifications"
           >包含通知渠道及凭据</NCheckbox
+        ><NCheckbox v-model:checked="includeFirewall"
+          >包含防火墙期望规则</NCheckbox
         ><NButton
           :disabled="busy || passphrase.length < 16"
           :loading="busy"
@@ -399,7 +424,9 @@ onUnmounted(() => {
           autocomplete="off"
       /></NFormItem>
       <NButton
-        :disabled="busy || !file || importPassphrase.length < 16"
+        :disabled="
+          busy || !file || importPassphrase.length < 16 || !firewallValid
+        "
         :loading="busy"
         @click="previewFile"
         >预检配置包</NButton
@@ -436,15 +463,17 @@ onUnmounted(() => {
           v-if="has('notifications.write')"
           v-model:checked="remoteNotifications"
           >包含通知渠道及凭据</NCheckbox
+        ><NCheckbox v-model:checked="remoteFirewall"
+          >包含防火墙期望规则</NCheckbox
         ><NButton
-          :disabled="busy || !remoteURL || !remoteKey"
+          :disabled="busy || !remoteURL || !remoteKey || !firewallValid"
           @click="pull(false)"
           >拉取并预检</NButton
         ><NPopconfirm @positive-click="pull(true)"
           ><template #trigger
             ><NButton
               type="primary"
-              :disabled="busy || !remoteURL || !remoteKey"
+              :disabled="busy || !remoteURL || !remoteKey || !firewallValid"
               >一键迁入</NButton
             ></template
           >按所选模式迁入。保存或应用将替换目标 Nginx 配置。</NPopconfirm
@@ -466,6 +495,11 @@ onUnmounted(() => {
           :autosize="{ minRows: 3, maxRows: 10 }"
           placeholder='{"192.168.1.10:80":"0.0.0.0:80"}'
       /></NFormItem>
+      <MigrationFirewallOptions
+        v-model="firewallSettings"
+        @update:valid="firewallValid = $event"
+        :disabled="busy"
+      />
       <p class="muted">
         映射在预检时生效；修改后需重新预检。源 Key 需要
         backup.export、backup.secrets 和 config.secrets 权限。
@@ -488,6 +522,7 @@ onUnmounted(() => {
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
         >{{ plan.last_error }}</NAlert
       >
+      <MigrationFirewallPreview v-if="plan.firewall" :info="plan.firewall" />
       <MigrationDependencies
         v-if="plan.dependencies"
         :status="plan.dependencies"

@@ -14,6 +14,9 @@ type Executor interface {
 }
 
 func (s *Service) executor(ctx context.Context) (Executor, error) {
+	if err := s.migrationIdle(ctx, s.DB); err != nil {
+		return nil, err
+	}
 	var enabled bool
 	if err := s.DB.QueryRowContext(ctx, "SELECT enabled FROM module_settings WHERE id='firewall'").Scan(&enabled); err != nil {
 		return nil, err

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"nginxpanel/internal/firewall"
 	"strconv"
 	"strings"
 	"time"
@@ -119,6 +120,28 @@ func sanitizePushPlan(plan Plan, remote Remote, passphrase string) (Plan, error)
 			}
 		}
 		return text
+	}
+	if f := plan.Firewall; f != nil {
+		if err := validateFirewallPreview(f); err != nil {
+			return Plan{}, err
+		}
+		copy := *f
+		copy.Entries = append([]firewall.Rule{}, f.Entries...)
+		copy.Interfaces = append([]FirewallInterface{}, f.Interfaces...)
+		copy.Warnings = append([]string{}, f.Warnings...)
+		for i := range copy.Entries {
+			copy.Entries[i].Name = redact(copy.Entries[i].Name)
+			copy.Entries[i].Comment = redact(copy.Entries[i].Comment)
+			copy.Entries[i].Interface = redact(copy.Entries[i].Interface)
+		}
+		for i := range copy.Interfaces {
+			copy.Interfaces[i].Source = redact(copy.Interfaces[i].Source)
+			copy.Interfaces[i].Target = redact(copy.Interfaces[i].Target)
+		}
+		for i := range copy.Warnings {
+			copy.Warnings[i] = redact(copy.Warnings[i])
+		}
+		plan.Firewall = &copy
 	}
 	if d := plan.Dependencies; d != nil {
 		copy := *d

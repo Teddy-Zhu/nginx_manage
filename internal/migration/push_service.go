@@ -19,6 +19,12 @@ func (s *Service) StartPush(ctx context.Context, p auth.Principal, requestID, ke
 	if !validPushKey(key) || in.BaseVersion != nil && *in.BaseVersion < 0 || in.Mode != "preview" && in.Mode != "draft" && in.Mode != "save" && in.Mode != "apply" || in.Remote.NodeID != "" && (!validTransferID(in.Remote.NodeID) || in.Remote.NodeID == s.NodeID) {
 		return PushTask{}, fault.Invalid("迁出模式、基础版本、节点或幂等键无效")
 	}
+	if err := in.Firewall.validate(); err != nil {
+		return PushTask{}, err
+	}
+	if in.Firewall.Mode != "" && in.Firewall.Mode != "preserve" && !in.Remote.Selection.Firewall {
+		return PushTask{}, fault.Invalid("合并或替换防火墙须选择导出其期望规则")
+	}
 	if in.Dependencies != nil {
 		if in.Mode == "preview" {
 			return PushTask{}, fault.Invalid("仅预检不执行依赖准备")

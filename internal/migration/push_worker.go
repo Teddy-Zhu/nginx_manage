@@ -109,6 +109,7 @@ func (s *Service) nextPush(ctx context.Context) error {
 			}
 			transfer := j.Payload.Transfer
 			transfer.Mappings = j.Payload.Input.Mappings
+			transfer.Firewall = j.Payload.Input.Firewall
 			transfer.BaseVersion = j.Task.TargetBaseVersion
 			err = pushRPC(call, remote, j.Task.TargetNode, http.MethodPut, "/migrations/receive/"+j.Task.ID, "", transfer, &plan)
 		}
@@ -173,6 +174,9 @@ func (s *Service) acceptPushPlan(j *pushJob, plan Plan) error {
 	}
 	if plan.ID != j.Task.ID || plan.SourceNode != s.NodeID || plan.BaseVersion != j.Task.TargetBaseVersion || plan.PackageSHA256 != j.Task.PackageSHA256 {
 		return errors.New("target plan mismatch")
+	}
+	if err = acceptPushFirewall(plan, j.Payload.Input, j.Task.Plan); err != nil {
+		return err
 	}
 	switch plan.State {
 	case "planned":

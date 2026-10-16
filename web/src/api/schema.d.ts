@@ -1849,6 +1849,7 @@ export interface components {
             install_task_id: string;
         };
         MigrationPushInput: {
+            firewall?: components["schemas"]["MigrationFirewallInput"];
             remote: components["schemas"]["MigrationRemote"];
             mappings: {
                 [key: string]: string;
@@ -3306,7 +3307,11 @@ export interface components {
         HostDNSChange: {
             task_id: string;
         };
+        MigrationFirewallInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; backend: string; interfaces: Record<string,string>; };
+        MigrationFirewallInterface: { source: string; target: string; resolved: boolean; observed: boolean; };
+        MigrationFirewallPlan: { mode: string; state: string; source_backend: string; target_backend: string; base_version: number; saved_version: number; source_rules: number; preserved_rules: number; replaced_rules: number; total_rules: number; policy_hash: string; interfaces: components["schemas"]["MigrationFirewallInterface"][]; entries: components["schemas"]["FirewallRule"][]; truncated: boolean; warnings: string[]; };
         MigrationSelection: {
+            firewall: boolean;
             certificates: boolean;
             dns_credentials: boolean;
             automation: boolean;
@@ -3336,6 +3341,7 @@ export interface components {
             manifest: components["schemas"]["MigrationManifest"];
         };
         MigrationImportInput: {
+            firewall?: components["schemas"]["MigrationFirewallInput"];
             /** Format: byte */
             content: string;
             passphrase: string;
@@ -3358,6 +3364,7 @@ export interface components {
             selection: components["schemas"]["MigrationSelection"];
         };
         MigrationPullInput: {
+            firewall?: components["schemas"]["MigrationFirewallInput"];
             remote: components["schemas"]["MigrationRemote"];
             /** Format: int64 */
             base_version: number;
@@ -3375,6 +3382,7 @@ export interface components {
             message: string;
         };
         MigrationPlan: {
+            firewall?: components["schemas"]["MigrationFirewallPlan"];
             id: string;
             source_node: string;
             source_version: string;

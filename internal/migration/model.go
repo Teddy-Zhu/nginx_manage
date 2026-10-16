@@ -10,6 +10,7 @@ import (
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/components"
+	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
@@ -18,12 +19,13 @@ import (
 )
 
 const (
-	Schema          = 1
+	Schema          = 2
 	MaxPackageBytes = 8 << 20
 	MaxRequestBytes = 12 << 20
 )
 
 type Selection struct {
+	Firewall       bool `json:"firewall"`
 	Certificates   bool `json:"certificates"`
 	DNSCredentials bool `json:"dns_credentials"`
 	Automation     bool `json:"automation"`
@@ -51,6 +53,7 @@ type Manifest struct {
 type Certificate = certificates.Transfer
 type Credential = acme.TransferCredential
 type Payload struct {
+	Firewall     *firewall.Transfer              `json:"firewall"`
 	Files        []nginxconfig.File              `json:"files"`
 	Certificates []Certificate                   `json:"certificates"`
 	Credentials  []Credential                    `json:"credentials"`
@@ -58,6 +61,7 @@ type Payload struct {
 	Channels     []notifications.TransferChannel `json:"channels"`
 }
 type ImportInput struct {
+	Firewall    FirewallInput     `json:"firewall"`
 	Content     []byte            `json:"content"`
 	Passphrase  string            `json:"passphrase"`
 	BaseVersion int64             `json:"base_version"`
@@ -71,6 +75,7 @@ type Remote struct {
 	Selection   Selection `json:"selection"`
 }
 type PullInput struct {
+	Firewall    FirewallInput     `json:"firewall"`
 	Remote      Remote            `json:"remote"`
 	BaseVersion int64             `json:"base_version"`
 	Mappings    map[string]string `json:"mappings"`
@@ -88,6 +93,7 @@ type Step struct {
 	Message  string `json:"message"`
 }
 type Plan struct {
+	Firewall      *FirewallPlan     `json:"firewall,omitempty"`
 	Dependencies  *DependencyStatus `json:"dependencies,omitempty"`
 	PackageSHA256 string            `json:"package_sha256"`
 	ID            string            `json:"id"`
@@ -106,21 +112,23 @@ type Plan struct {
 	LastError     string            `json:"last_error"`
 }
 type storedPlan struct {
-	Plan               Plan              `json:"plan"`
-	Payload            Payload           `json:"payload"`
-	Manifest           Manifest          `json:"manifest"`
-	Mappings           map[string]string `json:"mappings"`
-	CertificateIDs     map[string]string `json:"certificate_ids"`
-	VersionIDs         map[string]string `json:"version_ids"`
-	CredentialIDs      map[string]string `json:"credential_ids"`
-	ModuleVersion      int64             `json:"module_version"`
-	EnabledByMigration bool              `json:"enabled_by_migration"`
+	Firewall           *firewallImportState `json:"firewall,omitempty"`
+	Plan               Plan                 `json:"plan"`
+	Payload            Payload              `json:"payload"`
+	Manifest           Manifest             `json:"manifest"`
+	Mappings           map[string]string    `json:"mappings"`
+	CertificateIDs     map[string]string    `json:"certificate_ids"`
+	VersionIDs         map[string]string    `json:"version_ids"`
+	CredentialIDs      map[string]string    `json:"credential_ids"`
+	ModuleVersion      int64                `json:"module_version"`
+	EnabledByMigration bool                 `json:"enabled_by_migration"`
 }
 type Host interface {
 	NginxFeatures(context.Context) (agent.NginxFeatures, error)
 	NginxState(context.Context) (agent.NginxState, error)
 }
 type Service struct {
+	Firewall        *firewall.Service
 	Components      *components.Service
 	Installations   *nginxinstall.Service
 	Maintenance     *maintenance.Service

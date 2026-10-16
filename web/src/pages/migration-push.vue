@@ -26,8 +26,11 @@ import {
   apiError,
   type MigrationPushInput,
   type MigrationPushTask,
+  type MigrationFirewallInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
+import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
+import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const api = useNodeAPI();
@@ -45,7 +48,14 @@ const certificates = ref(false),
   credentials = ref(false),
   automation = ref(false),
   notifications = ref(false),
+  includeFirewall = ref(false),
   enableNginx = ref(false);
+const firewallSettings = ref<MigrationFirewallInput>({
+    mode: "preserve",
+    backend: "",
+    interfaces: {},
+  }),
+  firewallValid = ref(true);
 const prepareDependencies = ref(false),
   dependencyTag = ref(""),
   dependencyPrerelease = ref(false),
@@ -81,7 +91,7 @@ const modes = [
   { label: "仅预检", value: "preview" },
   { label: "迁入为草稿", value: "draft" },
   { label: "迁入并保存期望配置", value: "save" },
-  { label: "迁入并应用", value: "apply" },
+  { label: "迁入并应用 Nginx", value: "apply" },
 ];
 const labels: Record<string, string> = {
   connecting: "连接目标",
@@ -168,6 +178,7 @@ function mappingObject(): Record<string, string> {
 }
 async function submit() {
   await run(async () => {
+    if (!firewallValid.value) throw new Error("请修正防火墙网卡映射");
     const input: MigrationPushInput = {
       remote: {
         url: url.value.trim(),
@@ -179,9 +190,14 @@ async function submit() {
           dns_credentials: credentials.value,
           automation: automation.value,
           notifications: notifications.value,
+          firewall: includeFirewall.value,
         },
       },
       mappings: mappingObject(),
+      firewall: {
+        ...firewallSettings.value,
+        interfaces: { ...firewallSettings.value.interfaces },
+      },
       mode: mode.value,
       enable_nginx: enableNginx.value,
       ...(prepareDependencies.value && mode.value !== "preview"
@@ -264,7 +280,10 @@ onUnmounted(() => {
             <NCheckbox v-model:checked="certificates">证书与私钥</NCheckbox
             ><NCheckbox v-model:checked="credentials">DNS 凭据</NCheckbox
             ><NCheckbox v-model:checked="automation">ACME 配置</NCheckbox
-            ><NCheckbox v-model:checked="notifications">通知渠道</NCheckbox>
+            ><NCheckbox v-model:checked="notifications">通知渠道</NCheckbox
+            ><NCheckbox v-model:checked="includeFirewall"
+              >防火墙期望规则</NCheckbox
+            >
           </div></NFormItem
         >
         <NFormItem label="目标参数映射"
@@ -273,6 +292,11 @@ onUnmounted(() => {
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 8 }"
         /></NFormItem>
+        <MigrationFirewallOptions
+          v-model="firewallSettings"
+          @update:valid="firewallValid = $event"
+          :disabled="busy"
+        />
         <NFormItem label="执行方式"
           ><NSelect v-model:value="mode" :options="modes"
         /></NFormItem>
@@ -321,7 +345,9 @@ onUnmounted(() => {
         </p>
         <NPopconfirm @positive-click="submit"
           ><template #trigger
-            ><NButton type="primary" :disabled="busy || !url || !key"
+            ><NButton
+              type="primary"
+              :disabled="busy || !url || !key || !firewallValid"
               >创建迁出任务</NButton
             ></template
           >{{
@@ -365,6 +391,10 @@ onUnmounted(() => {
           selected.error
         }}</NAlert>
         <template v-if="selected.plan">
+          <MigrationFirewallPreview
+            v-if="selected.plan.firewall"
+            :info="selected.plan.firewall"
+          />
           <MigrationDependencies
             v-if="selected.plan.dependencies"
             :status="selected.plan.dependencies"

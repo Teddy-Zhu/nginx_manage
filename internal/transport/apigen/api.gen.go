@@ -2237,10 +2237,11 @@ type MigrationExportInput struct {
 
 // MigrationImportInput defines model for MigrationImportInput.
 type MigrationImportInput struct {
-	BaseVersion int64             `json:"base_version"`
-	Content     []byte            `json:"content"`
-	Mappings    map[string]string `json:"mappings"`
-	Passphrase  string            `json:"passphrase"`
+	Firewall    *MigrationFirewallInput `json:"firewall,omitempty"`
+	BaseVersion int64                   `json:"base_version"`
+	Content     []byte                  `json:"content"`
+	Mappings    map[string]string       `json:"mappings"`
+	Passphrase  string                  `json:"passphrase"`
 }
 
 // MigrationManifest defines model for MigrationManifest.
@@ -2264,6 +2265,7 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
+	Firewall      *MigrationFirewallPlan     `json:"firewall,omitempty"`
 	BaseVersion   int64                      `json:"base_version"`
 	CanApply      bool                       `json:"can_apply"`
 	CanSave       bool                       `json:"can_save"`
@@ -2284,11 +2286,12 @@ type MigrationPlan struct {
 
 // MigrationPullInput defines model for MigrationPullInput.
 type MigrationPullInput struct {
-	BaseVersion int64                  `json:"base_version"`
-	EnableNginx bool                   `json:"enable_nginx"`
-	Mappings    map[string]string      `json:"mappings"`
-	Mode        MigrationPullInputMode `json:"mode"`
-	Remote      MigrationRemote        `json:"remote"`
+	Firewall    *MigrationFirewallInput `json:"firewall,omitempty"`
+	BaseVersion int64                   `json:"base_version"`
+	EnableNginx bool                    `json:"enable_nginx"`
+	Mappings    map[string]string       `json:"mappings"`
+	Mode        MigrationPullInputMode  `json:"mode"`
+	Remote      MigrationRemote         `json:"remote"`
 }
 
 // MigrationPullInputMode defines model for MigrationPullInput.Mode.
@@ -2296,6 +2299,7 @@ type MigrationPullInputMode string
 
 // MigrationPushInput defines model for MigrationPushInput.
 type MigrationPushInput struct {
+	Firewall     *MigrationFirewallInput   `json:"firewall,omitempty"`
 	BaseVersion  *int64                    `json:"base_version,omitempty"`
 	Dependencies *MigrationDependencyInput `json:"dependencies,omitempty"`
 	EnableNginx  bool                      `json:"enable_nginx"`
@@ -2347,8 +2351,39 @@ type MigrationRemote struct {
 	Url         string             `json:"url"`
 }
 
+type MigrationFirewallInput struct {
+	Mode        string            `json:"mode"`
+	BaseVersion *int64            `json:"base_version,omitempty"`
+	Backend     string            `json:"backend"`
+	Interfaces  map[string]string `json:"interfaces"`
+}
+type MigrationFirewallInterface struct {
+	Source   string `json:"source"`
+	Target   string `json:"target"`
+	Resolved bool   `json:"resolved"`
+	Observed bool   `json:"observed"`
+}
+type MigrationFirewallPlan struct {
+	Mode           string                       `json:"mode"`
+	State          string                       `json:"state"`
+	SourceBackend  string                       `json:"source_backend"`
+	TargetBackend  string                       `json:"target_backend"`
+	BaseVersion    int64                        `json:"base_version"`
+	SavedVersion   int64                        `json:"saved_version"`
+	SourceRules    int64                        `json:"source_rules"`
+	PreservedRules int64                        `json:"preserved_rules"`
+	ReplacedRules  int64                        `json:"replaced_rules"`
+	TotalRules     int64                        `json:"total_rules"`
+	PolicyHash     string                       `json:"policy_hash"`
+	Interfaces     []MigrationFirewallInterface `json:"interfaces"`
+	Entries        []FirewallRule               `json:"entries"`
+	Truncated      bool                         `json:"truncated"`
+	Warnings       []string                     `json:"warnings"`
+}
+
 // MigrationSelection defines model for MigrationSelection.
 type MigrationSelection struct {
+	Firewall       bool `json:"firewall"`
 	Automation     bool `json:"automation"`
 	Certificates   bool `json:"certificates"`
 	DnsCredentials bool `json:"dns_credentials"`

@@ -42,7 +42,7 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 		return Package{}, err
 	}
 	payload := Payload{Files: tree.Files, Certificates: []Certificate{}, Credentials: []Credential{}, Channels: []notifications.TransferChannel{}, Automation: acme.TransferAutomation{Accounts: []acme.TransferAccount{}, Profiles: []acme.TransferProfile{}}}
-	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS、监控设置、模块开关及日志轮转所有者保留", "目标防火墙期望策略与内核运行规则保留，本次不迁移", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
+	m := Manifest{Schema: Schema, SourceNode: s.NodeID, SourceVersion: s.Version, CreatedAt: time.Now().Unix(), Selection: in.Selection, Omissions: []string{"目标节点身份、管理员、机器授权、管理监听与 TLS 信任保留", "目标主机 DNS、监控设置、模块开关及日志轮转所有者保留", "目标防火墙内核运行规则、所有权与恢复状态保留，迁入规则须单独确认应用", "会话、任务、日志、指标历史、执行器信任及救援记录不迁移", "导入的通知渠道、自动续期与自动部署均停用，HTTP-01 公网确认须在目标重新完成"}}
 	parsed, err := nginxconfig.Parse(tree.Files, s.Config.Policy)
 	if err != nil {
 		return Package{}, err
@@ -75,6 +75,17 @@ func (s *Service) Export(ctx context.Context, p auth.Principal, requestID string
 			return Package{}, err
 		}
 	}
+	if in.Selection.Firewall {
+		if s.Firewall == nil {
+			return Package{}, fault.Unavailable("防火墙策略服务未配置")
+		}
+		payload.Firewall, err = s.Firewall.Export(ctx, tx)
+		if err != nil {
+			return Package{}, err
+		}
+	} else {
+		m.Omissions = append(m.Omissions, "未选择防火墙期望规则，目标策略保留")
+	}
 	if in.Selection.Notifications {
 		payload.Channels, err = s.Notifications.ExportChannels(ctx, tx)
 		if err != nil {
@@ -106,10 +117,10 @@ func (s *Service) Prepare(ctx context.Context, p auth.Principal, requestID strin
 	if err != nil {
 		return Plan{}, err
 	}
-	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, nil, nil)
+	return s.prepare(ctx, p, requestID, m, payload, in.BaseVersion, in.Mappings, in.Firewall, nil, nil)
 }
 
-func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, pull *pullReservation, receive *receiveReservation) (Plan, error) {
+func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID string, m Manifest, payload Payload, base int64, mappings map[string]string, firewallInput FirewallInput, pull *pullReservation, receive *receiveReservation) (Plan, error) {
 	if base < 0 || m.SourceNode == s.NodeID {
 		return Plan{}, fault.Invalid("基础版本无效或来源为当前节点")
 	}
@@ -126,6 +137,9 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	if receive != nil {
 		st.Plan.ID = receive.ID
 		st.Plan.PackageSHA256 = receive.PackageSHA256
+	}
+	if err := s.prepareFirewall(ctx, &st, firewallInput); err != nil {
+		return Plan{}, err
 	}
 	for _, c := range payload.Certificates {
 		if st.CertificateIDs[c.Material.CertificateID] == "" {
@@ -158,6 +172,9 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	var version int64
 	var basis, applied sql.NullString
 	if err := tx.QueryRowContext(ctx, "SELECT version,desired_revision,applied_revision FROM config_head WHERE id=1").Scan(&version, &basis, &applied); err != nil {
+		return Plan{}, err
+	}
+	if err := s.checkFirewallBase(ctx, tx, &st); err != nil {
 		return Plan{}, err
 	}
 	if version != base {
@@ -243,6 +260,9 @@ func (s *Service) inspect(ctx context.Context, st *storedPlan) error {
 			plan.CanSave = false
 			plan.CanApply = false
 		}
+	}
+	if err := s.inspectFirewall(ctx, st, add); err != nil {
+		return err
 	}
 	parsed, err := nginxconfig.Parse(st.Payload.Files, s.Config.Policy)
 	if err != nil {
@@ -373,6 +393,9 @@ func (s *Service) load(ctx context.Context, p auth.Principal, id string) (stored
 	if err := decodeStrict(plain, &st); err != nil {
 		return st, err
 	}
+	if st.Manifest.Schema != Schema || st.Firewall != nil && (st.Plan.Firewall == nil || st.Payload.Firewall == nil) {
+		return st, fault.Unavailable("迁移计划格式或防火墙恢复材料无效，须重新准备或由本机检查")
+	}
 	st.Plan.State = state
 	st.Plan.RevisionID = revision
 	st.Plan.TaskID = task
@@ -408,6 +431,14 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, e
 	plan.RevisionID = revision
 	plan.TaskID = task
 	plan.LastError = lastError
+	if plan.Firewall != nil && plan.Firewall.Mode != "preserve" {
+		if state == "rolled_back" {
+			plan.Firewall.State = "restored"
+		}
+		if state == "recovery_required" {
+			plan.Firewall.State = "recovery_required"
+		}
+	}
 	plan.Dependencies, err = s.dependencyStatus(ctx, id)
 	return plan, err
 }
@@ -441,6 +472,7 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]Plan, error) {
 		}
 		plan.Steps = []Step{}
 		plan.Omissions = []string{}
+		plan.Firewall = nil
 		out = append(out, plan)
 	}
 	return out, nil
@@ -494,6 +526,9 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 		if in.Mode == "apply" && !st.Plan.CanApply {
 			return Plan{}, s.migrationBlocked(ctx, "目标依赖、镜像能力或运行条件不满足，不能应用", st.Plan)
 		}
+	}
+	if st.Firewall != nil && !st.Firewall.Resolved {
+		return Plan{}, s.migrationBlocked(ctx, "防火墙网卡映射未完成，请重新准备迁移计划", st.Plan)
 	}
 	request := nginxconfig.SaveRequest{BaseVersion: st.Plan.BaseVersion, Files: st.Payload.Files, Draft: in.Mode == "draft", Apply: in.Mode == "apply"}
 	_, err = s.Config.SaveImported(ctx, p, requestID, key, id+":"+in.Mode+":"+fmt.Sprint(in.EnableNginx), request, func(tx *sql.Tx) error {
@@ -557,7 +592,10 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 		if err := s.ACME.ImportAutomation(ctx, tx, st.Payload.Automation, st.Payload.Credentials, st.CertificateIDs, st.CredentialIDs); err != nil {
 			return err
 		}
-		return s.Notifications.ImportChannels(ctx, tx, st.Payload.Channels)
+		if err := s.Notifications.ImportChannels(ctx, tx, st.Payload.Channels); err != nil {
+			return err
+		}
+		return s.importFirewall(ctx, tx, &st, p.ID, requestID)
 	}, func(tx *sql.Tx, result nginxconfig.SaveResult) error {
 		state := "saved"
 		if in.Mode == "draft" {

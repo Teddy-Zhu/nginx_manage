@@ -63,5 +63,5 @@ func (s *Service) Receive(ctx context.Context, p auth.Principal, requestID, id s
 	if err != nil {
 		return Plan{}, err
 	}
-	return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, nil, &receiveReservation{ID: id, Digest: hash, PackageSHA256: secure.Hash(in.Content)})
+	return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, nil, &receiveReservation{ID: id, Digest: hash, PackageSHA256: secure.Hash(in.Content)})
 }

@@ -33,6 +33,12 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 			return Plan{}, err
 		}
 	}
+	if err := in.Firewall.validate(); err != nil {
+		return Plan{}, err
+	}
+	if in.Firewall.Mode != "" && in.Firewall.Mode != "preserve" && !in.Remote.Selection.Firewall {
+		return Plan{}, fault.Invalid("合并或替换防火墙须选择源期望规则")
+	}
 	raw, err := json.Marshal(in)
 	if err != nil {
 		return Plan{}, err
@@ -109,7 +115,7 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		if manifest.SourceNode != envelope.NodeID {
 			return Plan{}, redactedRemoteError()
 		}
-		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, &pullReservation{p.ID, key, digest}, nil)
+		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, &pullReservation{p.ID, key, digest}, nil)
 	}()
 	if err != nil {
 		return Plan{}, err

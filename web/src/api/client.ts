@@ -181,6 +181,10 @@ export type MigrationImportInput =
 export type MigrationPullInput = components["schemas"]["MigrationPullInput"];
 export type MigrationExecuteInput =
   components["schemas"]["MigrationExecuteInput"];
+export type MigrationFirewallInput =
+  components["schemas"]["MigrationFirewallInput"];
+export type MigrationFirewallPlan =
+  components["schemas"]["MigrationFirewallPlan"];
 export type MigrationPlan = components["schemas"]["MigrationPlan"];
 export type MigrationPackage = components["schemas"]["MigrationPackage"];
 
