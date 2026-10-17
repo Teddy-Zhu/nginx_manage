@@ -2163,6 +2163,86 @@ type PreviewFail2banLifecycleParams = PreviewFail2banParams
 type ChangeFail2banLifecycleParams = SetFail2banPolicyParams
 type PreviewFail2banLifecycleJSONRequestBody = Fail2banLifecyclePreviewInput
 type ChangeFail2banLifecycleJSONRequestBody = Fail2banLifecycleInput
+type Fail2banExistingResource struct {
+	Name       string `json:"name"`
+	AdoptionID string `json:"adoption_id"`
+	BindingID  string `json:"binding_id"`
+}
+type Fail2banExistingPolicy struct {
+	Enabled   bool     `json:"enabled"`
+	BanTime   int64    `json:"ban_time"`
+	FindTime  int64    `json:"find_time"`
+	MaxRetry  int      `json:"max_retry"`
+	IgnoreIPs []string `json:"ignore_ips"`
+}
+type Fail2banExistingProfile struct {
+	Name      string `json:"name"`
+	Profile   string `json:"profile"`
+	LogSource string `json:"log_source"`
+	Ports     []int  `json:"ports"`
+}
+type Fail2banExistingResourcePolicy struct {
+	Name       string                  `json:"name"`
+	AdoptionID string                  `json:"adoption_id"`
+	BindingID  string                  `json:"binding_id"`
+	SelectedID string                  `json:"selected_id"`
+	Profile    Fail2banExistingProfile `json:"profile"`
+	Policy     Fail2banExistingPolicy  `json:"policy"`
+}
+type Fail2banExistingPolicyInput struct {
+	Action      string                 `json:"action"`
+	AdoptionID  string                 `json:"adoption_id"`
+	Policy      Fail2banExistingPolicy `json:"policy"`
+	PreviewID   string                 `json:"preview_id"`
+	Target      string                 `json:"target"`
+	ConfirmStop bool                   `json:"confirm_stop"`
+}
+type Fail2banExistingPlan struct {
+	At               int64                  `json:"at"`
+	AdoptionID       string                 `json:"adoption_id"`
+	BindingID        string                 `json:"binding_id"`
+	BaseID           string                 `json:"base_id"`
+	Name             string                 `json:"name"`
+	Target           string                 `json:"target"`
+	Before           Fail2banExistingPolicy `json:"before"`
+	After            Fail2banExistingPolicy `json:"after"`
+	BanCount         int                    `json:"ban_count"`
+	StopConfirmation bool                   `json:"stop_confirmation"`
+	Impacts          []string               `json:"impacts"`
+}
+type Fail2banExistingOperation struct {
+	ID              string                `json:"id"`
+	RequestHash     string                `json:"request_hash"`
+	Action          string                `json:"action"`
+	State           string                `json:"state"`
+	Stage           string                `json:"stage"`
+	AdoptionID      string                `json:"adoption_id"`
+	Target          string                `json:"target"`
+	Sent            bool                  `json:"sent"`
+	Submission      string                `json:"submission"`
+	CancelRequested bool                  `json:"cancel_requested"`
+	CancelError     string                `json:"cancel_error"`
+	Error           string                `json:"error"`
+	Plan            *Fail2banExistingPlan `json:"plan,omitempty"`
+}
+type Fail2banExistingPolicyTask = Fail2banAddressTask
+type Fail2banExistingTaskStatus struct {
+	ID              string                      `json:"id"`
+	OperationID     string                      `json:"operation_id"`
+	State           string                      `json:"state"`
+	Stage           string                      `json:"stage"`
+	Error           string                      `json:"error"`
+	CreatedAt       int64                       `json:"created_at"`
+	Input           Fail2banExistingPolicyInput `json:"input"`
+	Result          *Fail2banExistingOperation  `json:"result"`
+	CancelRequested bool                        `json:"cancel_requested"`
+	CancelPending   bool                        `json:"cancel_pending"`
+	CancelError     string                      `json:"cancel_error"`
+}
+type ChangeFail2banExistingPolicyParams = SetFail2banPolicyParams
+type CancelFail2banExistingPolicyParams = SetFail2banPolicyParams
+type ChangeFail2banExistingPolicyJSONRequestBody = Fail2banExistingPolicyInput
+
 type Fail2banAddressInput struct {
 	Jail   string `json:"jail"`
 	Ip     string `json:"ip"`
@@ -4516,6 +4596,12 @@ type ServerInterface interface {
 	GetFail2banAddress(w http.ResponseWriter, r *http.Request, params GetFail2banAddressParams)
 	ChangeFail2banAddress(w http.ResponseWriter, r *http.Request, params ChangeFail2banAddressParams)
 	GetFail2banAddressTasks(w http.ResponseWriter, r *http.Request)
+	GetFail2banExistingResources(w http.ResponseWriter, r *http.Request)
+	GetFail2banExistingResource(w http.ResponseWriter, r *http.Request, name string)
+	ChangeFail2banExistingPolicy(w http.ResponseWriter, r *http.Request, params ChangeFail2banExistingPolicyParams)
+	GetFail2banExistingTasks(w http.ResponseWriter, r *http.Request)
+	GetFail2banExistingTask(w http.ResponseWriter, r *http.Request, id ID)
+	CancelFail2banExistingPolicy(w http.ResponseWriter, r *http.Request, id ID, params CancelFail2banExistingPolicyParams)
 	GetFail2banTasks(w http.ResponseWriter, r *http.Request)
 	GetFail2banRuntime(w http.ResponseWriter, r *http.Request)
 	ApplyFail2ban(w http.ResponseWriter, r *http.Request, params ApplyFail2banParams)
@@ -7331,6 +7417,71 @@ func (siw *ServerInterfaceWrapper) GetFail2banAddress(w http.ResponseWriter, r *
 	}
 	handler.ServeHTTP(w, r)
 }
+func (siw *ServerInterfaceWrapper) GetFail2banExistingResources(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banExistingResources(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFail2banExistingResource(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFail2banExistingResource(w, r, r.PathValue("name"))
+	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFail2banExistingTasks(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banExistingTasks(w, r) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFail2banExistingTask(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFail2banExistingTask(w, r, ID(r.PathValue("id")))
+	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) ChangeFail2banExistingPolicy(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := ChangeFail2banExistingPolicyParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.ChangeFail2banExistingPolicy(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) CancelFail2banExistingPolicy(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := CancelFail2banExistingPolicyParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelFail2banExistingPolicy(w, r, ID(r.PathValue("id")), params)
+	}))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+
 func (siw *ServerInterfaceWrapper) GetFail2banAddressTasks(w http.ResponseWriter, r *http.Request) {
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banAddressTasks(w, r) }))
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11438,6 +11589,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/addresses/status", wrapper.GetFail2banAddress)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/addresses", wrapper.ChangeFail2banAddress)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/addresses/tasks", wrapper.GetFail2banAddressTasks)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/existing/resources", wrapper.GetFail2banExistingResources)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/existing/resources/{name}", wrapper.GetFail2banExistingResource)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/existing/operations", wrapper.ChangeFail2banExistingPolicy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/existing/tasks", wrapper.GetFail2banExistingTasks)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/existing/tasks/{id}", wrapper.GetFail2banExistingTask)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/existing/tasks/{id}/cancel", wrapper.CancelFail2banExistingPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/tasks", wrapper.GetFail2banTasks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/runtime", wrapper.GetFail2banRuntime)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/apply", wrapper.ApplyFail2ban)

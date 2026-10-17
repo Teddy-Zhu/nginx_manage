@@ -79,6 +79,20 @@ export type Fail2banLifecycleTask = components["schemas"]["Fail2banLifecycleTask
 export type Fail2banLifecycleTaskStatus = components["schemas"]["Fail2banLifecycleTaskStatus"];
 export type Fail2banAddressInput =
   components["schemas"]["Fail2banAddressInput"];
+export type Fail2banExistingResource =
+  components["schemas"]["Fail2banExistingResource"];
+export type Fail2banExistingResourcePolicy =
+  components["schemas"]["Fail2banExistingResourcePolicy"];
+export type Fail2banExistingPolicy =
+  components["schemas"]["Fail2banExistingPolicy"];
+export type Fail2banExistingPolicyInput =
+  components["schemas"]["Fail2banExistingPolicyInput"];
+export type Fail2banExistingPlan =
+  components["schemas"]["Fail2banExistingPlan"];
+export type Fail2banExistingTaskStatus =
+  components["schemas"]["Fail2banExistingTaskStatus"];
+export type Fail2banExistingPolicyTask =
+  components["schemas"]["Fail2banExistingPolicyTask"];
 export type Fail2banAddressStatus =
   components["schemas"]["Fail2banAddressStatus"];
 export type Fail2banAddressOperation =
@@ -636,7 +650,43 @@ function createAPI(scope: RequestScope) {
       data,
       headers: { "Idempotency-Key": key },
     }),
-  fail2banRuntime: (signal?:AbortSignal) => request<Fail2banJailsRuntime>({url:"/fail2ban/runtime",signal}),
+  fail2banExistingResources: (signal?: AbortSignal) =>
+      request<Fail2banExistingResource[]>({
+        url: "/fail2ban/existing/resources",
+        signal,
+      }),
+    fail2banExistingResource: (name: string, signal?: AbortSignal) =>
+      request<Fail2banExistingResourcePolicy>({
+        url: `/fail2ban/existing/resources/${encodeURIComponent(name)}`,
+        signal,
+      }),
+    changeFail2banExistingPolicy: (
+      data: Fail2banExistingPolicyInput,
+      key: string,
+    ) =>
+      request<Fail2banExistingPolicyTask>({
+        url: "/fail2ban/existing/operations",
+        method: "POST",
+        data,
+        headers: { "Idempotency-Key": key },
+      }),
+    fail2banExistingTasks: (signal?: AbortSignal) =>
+      request<Fail2banExistingTaskStatus[]>({
+        url: "/fail2ban/existing/tasks",
+        signal,
+      }),
+    fail2banExistingTask: (id: string, signal?: AbortSignal) =>
+      request<Fail2banExistingTaskStatus>({
+        url: `/fail2ban/existing/tasks/${encodeURIComponent(id)}`,
+        signal,
+      }),
+    cancelFail2banExistingPolicy: (id: string, key: string) =>
+      request<Fail2banExistingPolicyTask>({
+        url: `/fail2ban/existing/tasks/${encodeURIComponent(id)}/cancel`,
+        method: "POST",
+        headers: { "Idempotency-Key": key },
+      }),
+    fail2banRuntime: (signal?:AbortSignal) => request<Fail2banJailsRuntime>({url:"/fail2ban/runtime",signal}),
   fail2banTasks: (signal?:AbortSignal) => request<Fail2banApplyTaskStatus[]>({url:"/fail2ban/tasks",signal}),
   applyFail2ban: (data:Fail2banApplyInput,key:string) => request<Fail2banApplyTask>({url:"/fail2ban/apply",method:"POST",data,headers:{"Idempotency-Key":key}}),
   fail2banInstance: (signal?: AbortSignal) => request<Fail2banInstance>({ url: "/fail2ban/instance", signal }),

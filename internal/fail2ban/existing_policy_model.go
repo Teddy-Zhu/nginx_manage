@@ -121,9 +121,25 @@ func (o ExistingPolicyOperation) Valid() bool {
 }
 
 type ExistingPolicyExecutor interface {
+	ReadFail2banExistingResources(context.Context) ([]ExistingResource, error)
+	ReadFail2banExistingResource(context.Context, string) (ExistingResourcePolicy, error)
 	SubmitFail2banExistingPolicy(context.Context, ExistingPolicyRequest) (ExistingPolicyOperation, error)
 	Fail2banExistingPolicyOperation(context.Context, string) (ExistingPolicyOperation, error)
 	CancelFail2banExistingPolicy(context.Context, string) (ExistingPolicyOperation, error)
+}
+
+// Inventory is saved local ownership metadata, never proof of live protection.
+type ExistingResource struct {
+	Name       string `json:"name"`
+	AdoptionID string `json:"adoption_id"`
+	BindingID  string `json:"binding_id"`
+}
+
+type ExistingResourcePolicy struct {
+	ExistingResource
+	SelectedID string              `json:"selected_id"`
+	Profile    ExistingJailProfile `json:"profile"`
+	Policy     ExistingJailPolicy  `json:"policy"`
 }
 
 func sameExistingPolicy(a, b ExistingJailPolicy) bool {

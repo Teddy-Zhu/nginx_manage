@@ -5602,6 +5602,235 @@
         ],
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/fail2ban/existing/resources": {
+      "get": {
+        "operationId": "remoteGetFail2banExistingResources",
+        "x-local-operation": "getFail2banExistingResources",
+        "x-forward-path": "/fail2ban/existing/resources",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "x-scopes": [
+          "read"
+        ],
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/existing/resources/{name}": {
+      "get": {
+        "operationId": "remoteGetFail2banExistingResource",
+        "x-local-operation": "getFail2banExistingResource",
+        "x-forward-path": "/fail2ban/existing/resources/{name}",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "x-scopes": [
+          "read"
+        ],
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/existing/operations": {
+      "post": {
+        "operationId": "remoteChangeFail2banExistingPolicy",
+        "x-local-operation": "changeFail2banExistingPolicy",
+        "x-forward-path": "/fail2ban/existing/operations",
+        "x-response-kind": "json",
+        "x-body-limit": 16384,
+        "x-scopes": [
+          "security.write"
+        ],
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banExistingPolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/existing/tasks": {
+      "get": {
+        "operationId": "remoteGetFail2banExistingTasks",
+        "x-local-operation": "getFail2banExistingTasks",
+        "x-forward-path": "/fail2ban/existing/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "x-scopes": [
+          "read"
+        ],
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/existing/tasks/{id}": {
+      "get": {
+        "operationId": "remoteGetFail2banExistingTask",
+        "x-local-operation": "getFail2banExistingTask",
+        "x-forward-path": "/fail2ban/existing/tasks/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "x-scopes": [
+          "read"
+        ],
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        }
+      }
+    },
+    "/nodes/{connection}/fail2ban/existing/tasks/{id}/cancel": {
+      "post": {
+        "operationId": "remoteCancelFail2banExistingPolicy",
+        "x-local-operation": "cancelFail2banExistingPolicy",
+        "x-forward-path": "/fail2ban/existing/tasks/{id}/cancel",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "x-scopes": [
+          "security.write"
+        ],
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        }
+      }
     }
   },
   "security": [

@@ -28,7 +28,7 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 ## 已有 SSH jail 接管预检
 
-本机 root 可预览一个正在原实例中运行的 SSH jail，明确期望参数及固定来源。此命令只完成预检，不发布接管授权、不写入系统配置、不 reload；首次接管、释放、参数应用及操作取消见下文，网页/API 修改入口继续实施。
+本机 root 可预览一个正在原实例中运行的 SSH jail，明确期望参数及固定来源。此命令只完成预检，不发布接管授权、不写入系统配置、不 reload；首次接管、释放、参数应用及操作取消见下文；网页/API 参数修改沿用同一本机接管授权。
 
 将以下 JSON 保存为 root 所有且不可被组或其他用户写入的 `/root/sshd-takeover.json`；端口须按升序明确列出，日志来源可选 `auth-log`、`secure-log` 或 `systemd`：
 
@@ -83,7 +83,7 @@ nginxpanel fail2ban-existing-jail-cancel --data-dir /srv/nginxpanel --fail2ban-s
 
 释放只移除本应用生成且内容一致的覆盖文件，核对原配置等价后发布独立释放事件；不会改写其他 jail。期间其他 jail 的配置变化可通过当前配置流与移除候选重新证明，不要求按接管的逆序释放。服务离线时，若全部配置仍与冻结快照一致，可仅凭已证明的等价配置交还所有权。仍存在接管的 jail 时，禁止变更/撤销实例接入；原样重复接入保留原身份。
 
-快照、事件和指针位于 `DATA/agent/fail2ban/existing-jails/{captures,events,current}`，均为 root 私有运行材料，不进入配置迁移或业务恢复。单快照最多 16 MiB，接管快照及事件各最多 2048 项，名称指针最多 64 项，历史保留用于审计。当前公开读取及写入入口仍沿用既有边界，已有 jail 的网页/API 参数、启停和手动地址操作尚待接入；该本机交接不会自动赋予这些入口写权限。
+快照、事件和指针位于 `DATA/agent/fail2ban/existing-jails/{captures,events,current}`，均为 root 私有运行材料，不进入配置迁移或业务恢复。单快照最多 16 MiB，接管快照及事件各最多 2048 项，名称指针最多 64 项，历史保留用于审计。网页/API 可读取接管登记和保存参数，按下述独立任务预览、应用及停用；运行证明仍由 root 执行器核对，手动地址操作尚未接入。登记本身不表示实时保护生效。
 
 ## 已接管 SSH jail 的运行证明
 
@@ -124,11 +124,11 @@ nginxpanel fail2ban-existing-jail-policy-cancel --data-dir /srv/nginxpanel --fai
 
 收到完成回包后重新核对候选、实际参数、过滤器/动作及完整名单；继续启用时，原未到期封禁必须保留相同的时长及绝对到期时间。只在这些证明完整后发布不可变参数事件和当前选择。回包丢失或提交后中断不重发，也不抢先回写原文件；原服务进程尚可能执行时保留 `recovery_required`。原 boot/PID/启动身份已证明结束后，可以观察新实例是否满足原候选；不能核对则保留现场，不自动重放封禁。
 
-未发送操作可取消，仅恢复本应用的覆盖文件。已发送请求只有原进程退出、原运行参数/名单和未到期封禁均重新证明后，才允许取消并撤回候选；已发布或已生效的候选须查询续办结果，再通过新计划恢复参数。解除接管前必须先以独立参数操作恢复首次接管的参数及启用状态。私有材料位于 `existing-jails/policy-{captures,events,current,configs}`；单配置树最多 8 MiB、单捕获最多 16 MiB，历史受 2048 项上限及共享 journal 配额约束，均不迁移。网页/API 修改入口继续实施，尚未运行官方工具或真实应用，待 P5 集中验收。
+未发送操作可取消，仅恢复本应用的覆盖文件。已发送请求只有原进程退出、原运行参数/名单和未到期封禁均重新证明后，才允许取消并撤回候选；已发布或已生效的候选须查询续办结果，再通过新计划恢复参数。解除接管前必须先以独立参数操作恢复首次接管的参数及启用状态。私有材料位于 `existing-jails/policy-{captures,events,current,configs}`；单配置树最多 8 MiB、单捕获最多 16 MiB，历史受 2048 项上限及共享 journal 配额约束，均不迁移。网页/API 参数修改已沿用此执行链，尚未运行官方工具或真实应用，待 P5 集中验收。
 
 ## 已接管 jail 的异步 Agent 请求
 
-Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2ban/existing/operations/{id}` 和 `POST /v1/fail2ban/existing/operations/{id}/cancel`，复用原受管 jail 的独立宿主机执行器及统一 `protocol/code/message/data` 响应。公开业务 API、数据库任务和网页编辑仍待接入，本段不表示新增公开 HTTP 路由。
+Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2ban/existing/operations/{id}` 和 `POST /v1/fail2ban/existing/operations/{id}/cancel`，复用原受管 jail 的独立宿主机执行器及统一 `protocol/code/message/data` 响应。公开业务 API、持久任务和网页编辑见下节，均复用此执行链。
 
 提交使用 `ExistingPolicyRequest`：当前 `protocol`、新的 `operation_id`、`action=preview|apply`、本机 root 已确认的 `adoption_id` 和类型化 `policy`。预览的 `preview_id/target` 为空、`confirm_stop=false`；应用必须引用独立成功预览的 UUID、原 target 和相同参数，停用确认须与预览完全一致。接口不接收 profile、日志路径、端口、过滤器、动作、服务或文件路径，不能通过请求授予或变更接管权。
 
@@ -136,7 +136,19 @@ Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2
 
 取消未转入执行的排队请求直接保存取消终态，不修改运行配置。转入执行后的取消仅保存请求，由原 worker 按上述原进程退出及原状态证明规则判断；不能取消时返回独立 `cancel_error`，清除待判断请求并继续观察原 reload，不把取消失败写成原操作完成或阻止原结果确认。本机 root 直接发起的操作仍由本机 CLI 取消，Agent 请求不能越过这一边界。
 
-队列、取消及执行共用 Nginx/宿主机/接入锁、维护排空和全局 journal 的 2048 项上限，不进入业务迁移或完整备份。Agent 协议为 60，数据库与归档仍为 26/6；无旧协议兼容。原生运行、超时、中断、取消及维护组合的验收统一留待 P5。
+队列、取消及执行共用 Nginx/宿主机/接入锁、维护排空和全局 journal 的 2048 项上限，不进入业务迁移或完整备份。Agent 协议为 61，数据库与归档仍为 26/6；无旧协议兼容。原生运行、超时、中断、取消及维护组合的验收统一留待 P5。
+
+## 已接管 jail 的网页与业务 API
+
+`GET /fail2ban/existing/resources` 返回本机接管登记，`GET /fail2ban/existing/resources/{name}` 返回已保存的参数及固定日志来源、端口。清单只读取有界 root 元数据；选中资源完整核对保存材料，二者均不表示已采集当前运行状态。网页区分保存参数与预览/应用回执，不开放接管、释放或任意配置入口。
+
+`POST /fail2ban/existing/operations` 接收 `action=preview|apply`、`adoption_id`、类型化 `policy`、`preview_id`、`target` 和 `confirm_stop`，返回 `task_id/operation_id`。预览的 `preview_id/target` 为空、`confirm_stop=false`；应用引用成功预览的 operation_id，保持相同参数及目标，并在停用时独立确认。新任务要求模块启用、`security.write`、浏览器近期认证和幂等键，冻结材料、排队审计及幂等响应同事务保存。模块停用后已有任务继续核对，不把 HTTP 202 当作运行生效。
+
+`GET /fail2ban/existing/tasks` 返回最近 16 条任务，`GET /fail2ban/existing/tasks/{id}` 读取指定任务，均要求 `read`。预览、应用及取消结果加密保存在目标数据库，Agent 离线仍能读取既有回执；离线不会生成新的运行证明。网页显示参数比较、采样封禁数量、五分钟预览期限、独立停用确认和最近操作；表单或接管身份变化后须重新预览。
+
+`POST /fail2ban/existing/tasks/{id}/cancel` 持久保存取消申请，要求 `security.write`、近期认证和独立幂等键；模块停用或维护排空时仍可申请，维护冻结后不再写入。取消在首次派发标记前到达则不提交 Agent；已开始提交但原记录缺失时保留待核对，不以重建操作完成取消。已接受的 Agent 记录缺失同样停止重建。取消受理、拒绝及原操作结果分别保存，拒绝后可用新幂等键再次申请；已完成及恢复隔离任务不能取消。完整备份恢复隔离未结束任务，不重放源端操作或授予目标接管权。
+
+六个业务接口均使用 `code/message/data/request_id/node_id` 返回，并具有显式远程资源。页面继续由原 `fail2ban.vue` 自动扫描接入。以上为实现及源码集成状态，生成器、构建、类型检查、测试、浏览器和真实主机组合验收统一留待 P5。
 
 ## 实例与 jail 读取
 
@@ -152,9 +164,9 @@ Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 60、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 61、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
-已有实例默认只读，可由本机 root 另行授予全局服务控制，或接管固定 SSH jail 并执行上述参数应用/停用。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 jail 网页/API 修改接入、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
+已有实例默认只读，可由本机 root 另行授予全局服务控制，或接管固定 SSH jail 并执行上述参数应用/停用。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 SSH jail 的参数、启用及停用已接入网页/API；该类 jail 的手动地址操作、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
 实现与集成源码审阅已完成，未运行生成器、构建、类型检查、lint、测试、浏览器、服务或真实宿主机探测/接入命令；发行版、Python、systemd、Fail2ban 与日志后端组合留待 P5 集中验证。
 

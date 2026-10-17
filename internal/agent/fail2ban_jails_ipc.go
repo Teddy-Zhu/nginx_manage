@@ -100,7 +100,7 @@ func (s *Server) fail2banJailsHandlers(mux *http.ServeMux) {
 		s.fail2banJails.jailHandlers(mux)
 		return
 	}
-	for _, route := range []string{"GET /v1/fail2ban/jails/status", "GET /v1/fail2ban/jails/operations/{id}", "POST /v1/fail2ban/jails/apply", "POST /v1/fail2ban/existing/submit", "GET /v1/fail2ban/existing/operations/{id}", "POST /v1/fail2ban/existing/operations/{id}/cancel"} {
+	for _, route := range []string{"GET /v1/fail2ban/jails/status", "GET /v1/fail2ban/jails/operations/{id}", "POST /v1/fail2ban/jails/apply", "GET /v1/fail2ban/existing/resources", "GET /v1/fail2ban/existing/resources/{name}", "POST /v1/fail2ban/existing/submit", "GET /v1/fail2ban/existing/operations/{id}", "POST /v1/fail2ban/existing/operations/{id}/cancel"} {
 		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
 			fail2banNginxReply(w, nil, fault.Unavailable("本机受管 jail 执行器不可用"))
 		})

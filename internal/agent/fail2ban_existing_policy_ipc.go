@@ -15,6 +15,14 @@ import (
 var _ fail2ban.ExistingPolicyExecutor = (*Client)(nil)
 
 func (f *fail2banJailsExecutor) existingPolicyHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/fail2ban/existing/resources", func(w http.ResponseWriter, r *http.Request) {
+		out, err := f.existingResources(r.Context())
+		fail2banNginxReply(w, out, err)
+	})
+	mux.HandleFunc("GET /v1/fail2ban/existing/resources/{name}", func(w http.ResponseWriter, r *http.Request) {
+		out, err := f.existingResource(r.Context(), r.PathValue("name"))
+		fail2banNginxReply(w, out, err)
+	})
 	mux.HandleFunc("POST /v1/fail2ban/existing/submit", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 16384)
 		defer r.Body.Close()
@@ -44,6 +52,39 @@ func (f *fail2banJailsExecutor) existingPolicyHandlers(mux *http.ServeMux) {
 		out, err := f.cancelExistingPolicy(call, r.PathValue("id"))
 		fail2banNginxReply(w, out, err)
 	})
+}
+
+func (c *Client) ReadFail2banExistingResources(ctx context.Context) ([]fail2ban.ExistingResource, error) {
+	var out []fail2ban.ExistingResource
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/existing/resources", nil, &out)
+	if err == nil {
+		if out == nil || len(out) > 64 {
+			return nil, errors.New("已有 jail 清单格式无效")
+		}
+		seen := map[string]bool{}
+		for _, item := range out {
+			if !fail2banJailName.MatchString(item.Name) || !validID(item.AdoptionID) || !validID(item.BindingID) || seen[item.Name] {
+				return nil, errors.New("已有 jail 清单身份无效")
+			}
+			seen[item.Name] = true
+		}
+	}
+	return out, err
+}
+
+func (c *Client) ReadFail2banExistingResource(ctx context.Context, name string) (fail2ban.ExistingResourcePolicy, error) {
+	var out fail2ban.ExistingResourcePolicy
+	if !fail2banJailName.MatchString(name) {
+		return out, fault.Invalid("已有 jail 名称无效")
+	}
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/existing/resources/"+name, nil, &out)
+	if err == nil {
+		p, policyErr := out.Policy.Normalize()
+		if out.Name != name || out.Profile.Name != name || out.Profile.Validate() != nil || !validID(out.AdoptionID) || !validID(out.BindingID) || !validID(out.SelectedID) || policyErr != nil || !equalFail2banExistingPolicy(p, out.Policy) {
+			err = errors.New("已有 jail 保存参数格式无效")
+		}
+	}
+	return out, err
 }
 
 func (c *Client) SubmitFail2banExistingPolicy(ctx context.Context, input fail2ban.ExistingPolicyRequest) (fail2ban.ExistingPolicyOperation, error) {

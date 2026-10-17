@@ -12,6 +12,47 @@ security:
   - cookieAuth: []
   - bearerAuth: []
 paths:
+  /fail2ban/existing/resources:
+    get:
+      operationId: getFail2banExistingResources
+      x-scopes: [read]
+      description: 返回最多 64 条 Fail2banExistingResource 本机接管登记。仅元数据，不证明实时运行保护，也不授予接管权。
+      responses: {"200": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
+  /fail2ban/existing/resources/{name}:
+    get:
+      operationId: getFail2banExistingResource
+      x-scopes: [read]
+      description: 返回 Fail2banExistingResourcePolicy 已保存参数及固定来源；完整原生运行核对由异步预览执行。
+      parameters: [{name: name, in: path, required: true, schema: {type: string, maxLength: 64}}]
+      responses: {"200": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
+  /fail2ban/existing/operations:
+    post:
+      operationId: changeFail2banExistingPolicy
+      x-scopes: [security.write]
+      description: 返回 Fail2banExistingPolicyTask。preview/apply 均持久排队并要求模块启用、近期认证及幂等键。apply 的 preview_id 是五分钟内成功预览的 operation_id，参数、target 与独立停用确认必须一致。不能授予接管权、改变来源或执行任意命令；HTTP 202 不表示运行生效。
+      parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banExistingPolicyInput'}}}}
+      responses: {"202": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
+  /fail2ban/existing/tasks:
+    get:
+      operationId: getFail2banExistingTasks
+      x-scopes: [read]
+      description: 返回最近 16 条 Fail2banExistingTaskStatus，包含保存的预览、执行和取消结果。Agent 离线不伪造当前运行状态。
+      responses: {"200": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
+  /fail2ban/existing/tasks/{id}:
+    get:
+      operationId: getFail2banExistingTask
+      x-scopes: [read]
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      description: 返回指定 Fail2banExistingTaskStatus；仅读取保存结果。
+      responses: {"200": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
+  /fail2ban/existing/tasks/{id}/cancel:
+    post:
+      operationId: cancelFail2banExistingPolicy
+      x-scopes: [security.write]
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
+      description: 返回原 Fail2banExistingPolicyTask，持久保存取消申请；模块停用后仍可申请。已开始提交且原记录缺失时不重建、不伪造取消成功。运行取消由 root 核对，拒绝原因单独保留；已完成或恢复隔离任务不可取消。
+      responses: {"202": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
   /fail2ban/python:
     post:
       operationId: changeFail2banPython
@@ -1866,6 +1907,103 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    Fail2banExistingResource:
+      type: object
+      additionalProperties: false
+      required: [name, adoption_id, binding_id]
+      properties: {name: {type: string}, adoption_id: {type: string}, binding_id: {type: string}}
+    Fail2banExistingPolicy:
+      type: object
+      additionalProperties: false
+      required: [enabled, ban_time, find_time, max_retry, ignore_ips]
+      properties:
+        enabled: {type: boolean}
+        ban_time: {type: integer, format: int64, minimum: -1, maximum: 31536000, description: '-1 表示永久；其他值须为正秒数'}
+        find_time: {type: integer, format: int64, minimum: 1, maximum: 86400}
+        max_retry: {type: integer, minimum: 1, maximum: 1000}
+        ignore_ips: {type: array, maxItems: 64, items: {type: string}}
+    Fail2banExistingProfile:
+      type: object
+      additionalProperties: false
+      required: [name, profile, log_source, ports]
+      properties: {name: {type: string}, profile: {type: string}, log_source: {type: string}, ports: {type: array, items: {type: integer}}}
+    Fail2banExistingResourcePolicy:
+      type: object
+      additionalProperties: false
+      required: [name, adoption_id, binding_id, selected_id, profile, policy]
+      properties:
+        name: {type: string}
+        adoption_id: {type: string}
+        binding_id: {type: string}
+        selected_id: {type: string}
+        profile: {$ref: '#/components/schemas/Fail2banExistingProfile'}
+        policy: {$ref: '#/components/schemas/Fail2banExistingPolicy'}
+    Fail2banExistingPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [action, adoption_id, policy, preview_id, target, confirm_stop]
+      properties:
+        action: {type: string, enum: [preview, apply]}
+        adoption_id: {type: string}
+        policy: {$ref: '#/components/schemas/Fail2banExistingPolicy'}
+        preview_id: {type: string}
+        target: {type: string}
+        confirm_stop: {type: boolean}
+    Fail2banExistingPlan:
+      type: object
+      additionalProperties: false
+      required: [at, adoption_id, binding_id, base_id, name, target, before, after, ban_count, stop_confirmation, impacts]
+      properties:
+        at: {type: integer, format: int64}
+        adoption_id: {type: string}
+        binding_id: {type: string}
+        base_id: {type: string}
+        name: {type: string}
+        target: {type: string}
+        before: {$ref: '#/components/schemas/Fail2banExistingPolicy'}
+        after: {$ref: '#/components/schemas/Fail2banExistingPolicy'}
+        ban_count: {type: integer}
+        stop_confirmation: {type: boolean}
+        impacts: {type: array, items: {type: string}}
+    Fail2banExistingOperation:
+      type: object
+      additionalProperties: false
+      required: [id, request_hash, action, state, stage, adoption_id, target, sent, submission, cancel_requested, cancel_error, error]
+      properties:
+        id: {type: string}
+        request_hash: {type: string}
+        action: {type: string, enum: [preview, apply]}
+        state: {type: string, enum: [running, recovery_required, succeeded, failed]}
+        stage: {type: string}
+        adoption_id: {type: string}
+        target: {type: string}
+        sent: {type: boolean}
+        submission: {type: string, enum: ['', pending, confirmed, unknown]}
+        cancel_requested: {type: boolean}
+        cancel_error: {type: string}
+        error: {type: string}
+        plan: {$ref: '#/components/schemas/Fail2banExistingPlan'}
+    Fail2banExistingPolicyTask:
+      type: object
+      additionalProperties: false
+      required: [task_id, operation_id]
+      properties: {task_id: {type: string}, operation_id: {type: string}}
+    Fail2banExistingTaskStatus:
+      type: object
+      additionalProperties: false
+      required: [id, operation_id, state, stage, error, created_at, input, result, cancel_requested, cancel_pending, cancel_error]
+      properties:
+        id: {type: string}
+        operation_id: {type: string}
+        state: {type: string}
+        stage: {type: string}
+        error: {type: string}
+        created_at: {type: integer, format: int64}
+        input: {$ref: '#/components/schemas/Fail2banExistingPolicyInput'}
+        result: {nullable: true, allOf: [{$ref: '#/components/schemas/Fail2banExistingOperation'}]}
+        cancel_requested: {type: boolean}
+        cancel_pending: {type: boolean}
+        cancel_error: {type: string}
     FirewallProtection:
       {"type": "object", "additionalProperties": false, "required": ["service", "family", "port", "sources"], "properties": {"service": {"type": "string", "enum": ["ssh", "management"]}, "family": {"type": "string", "enum": ["ipv4", "ipv6"]}, "port": {"type": "integer", "minimum": 1, "maximum": 65535}, "sources": {"type": "array", "items": {"type": "string"}}}}
     FirewallPlanInput:

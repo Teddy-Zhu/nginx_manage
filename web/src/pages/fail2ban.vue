@@ -13,6 +13,7 @@
 import Fail2banPythonPanel from "../components/Fail2banPythonPanel.vue";
 import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
 import Fail2banAddressPanel from "../components/Fail2banAddressPanel.vue";
+import Fail2banExistingPanel from "../components/Fail2banExistingPanel.vue";
 import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
 import Fail2banLoginLogPanel from "../components/Fail2banLoginLogPanel.vue";
 import Fail2banHostInputPanel from "../components/Fail2banHostInputPanel.vue";
@@ -56,12 +57,21 @@ const jail = ref<Fail2banJail | null>(null),
   jailError = ref(""),
   jailReading = ref(false),
   selectedJail = ref("");
+const adoptedJails = ref(new Set<string>());
+function setAdoptedJails(names: string[]) {
+  adoptedJails.value = new Set(names);
+}
 const jailRows: DataTableColumns<Fail2banInstance["jails"][number]> = [
   { title: "Jail", key: "name" },
   {
     title: "归属",
     key: "managed",
-    render: (row) => (row.managed ? "本应用管理" : "原实例管理 · 只读"),
+    render: (row) =>
+      row.managed
+        ? "本应用管理"
+        : adoptedJails.value.has(row.name)
+          ? "本机接管登记"
+          : "原实例管理 · 只读",
   },
   {
     title: "状态",
@@ -230,6 +240,11 @@ onUnmounted(() => {
         ) ?? null
       "
       :observed-at="view?.at ?? 0"
+      @changed="load"
+    />
+    <Fail2banExistingPanel
+      :module-enabled="moduleEnabled === true"
+      @resources="setAdoptedJails"
       @changed="load"
     />
     <Fail2banLoginLogPanel />
