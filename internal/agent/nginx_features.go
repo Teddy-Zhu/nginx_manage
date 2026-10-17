@@ -176,6 +176,20 @@ func parseNginxFeatures(value string) NginxFeatures {
 	for _, module := range []string{"proxy", "access", "log", "headers", "geo", "split_clients", "charset", "gzip"} {
 		set("http_"+module, http && !flags["--without-http_"+module+"_module"], "缺少 HTTP "+module+" 模块")
 	}
+	set("http_cache", http && !flags["--without-http_proxy_module"] && !flags["--without-http-cache"], "缺少 HTTP 代理缓存支持")
+	set("http2", http && flags["--with-http_v2_module"] && atLeast(1, 9, 5), "缺少 HTTP/2 模块")
+	for _, module := range []struct {
+		name    string
+		version bool
+	}{
+		{"hash", atLeast(1, 7, 2)},
+		{"ip_hash", true},
+		{"least_conn", atLeast(1, 2, 2)},
+		{"keepalive", atLeast(1, 1, 4)},
+		{"zone", atLeast(1, 9, 0)},
+	} {
+		set("http_upstream_"+module.name, http && !flags["--without-http_upstream_"+module.name+"_module"] && module.version, "缺少匹配版本的 HTTP upstream "+module.name+" 模块")
+	}
 	set("map", http && !flags["--without-http_map_module"], "缺少 HTTP map 模块")
 	set("map_volatile", http && !flags["--without-http_map_module"] && atLeast(1, 11, 7), "路径规则需要 Nginx 1.11.7 或更新版本的 map 模块")
 	set("rewrite", http && !flags["--without-http_rewrite_module"], "缺少 HTTP rewrite 模块")
@@ -212,6 +226,9 @@ func parseNginxFeatures(value string) NginxFeatures {
 		{"stream_limit_conn_observe", "limit_conn", atLeast(1, 17, 6)},
 		{"stream_return", "return", atLeast(1, 11, 2)},
 		{"stream_set", "set", atLeast(1, 19, 3)},
+		{"stream_upstream_hash", "upstream_hash", atLeast(1, 9, 0)},
+		{"stream_upstream_least_conn", "upstream_least_conn", atLeast(1, 9, 0)},
+		{"stream_upstream_zone", "upstream_zone", atLeast(1, 9, 0)},
 	} {
 		compiled := streamCompiled && !flags["--without-stream_"+module.flag+"_module"] && module.version
 		reason := "缺少匹配版本的 Stream " + module.flag + " 模块"

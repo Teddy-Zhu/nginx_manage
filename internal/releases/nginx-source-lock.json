@@ -91,6 +91,13 @@
     "https_redirect",
     "hsts",
     "http_proxy",
+    "http_cache",
+    "http2",
+    "http_upstream_hash",
+    "http_upstream_ip_hash",
+    "http_upstream_least_conn",
+    "http_upstream_keepalive",
+    "http_upstream_zone",
     "http_access",
     "http_log",
     "http_headers",
@@ -107,7 +114,10 @@
     "stream_limit_conn",
     "stream_limit_conn_observe",
     "stream_return",
-    "stream_set"
+    "stream_set",
+    "stream_upstream_hash",
+    "stream_upstream_least_conn",
+    "stream_upstream_zone"
   ],
   "required_module_symbols": [
     "ngx_http_module",
@@ -115,6 +125,11 @@
     "ngx_http_realip_module",
     "ngx_http_v2_module",
     "ngx_http_proxy_module",
+    "ngx_http_upstream_hash_module",
+    "ngx_http_upstream_ip_hash_module",
+    "ngx_http_upstream_least_conn_module",
+    "ngx_http_upstream_keepalive_module",
+    "ngx_http_upstream_zone_module",
     "ngx_http_access_module",
     "ngx_http_log_module",
     "ngx_http_headers_filter_module",
@@ -137,6 +152,9 @@
     "ngx_stream_split_clients_module",
     "ngx_stream_limit_conn_module",
     "ngx_stream_return_module",
-    "ngx_stream_set_module"
+    "ngx_stream_set_module",
+    "ngx_stream_upstream_hash_module",
+    "ngx_stream_upstream_least_conn_module",
+    "ngx_stream_upstream_zone_module"
   ]
 }

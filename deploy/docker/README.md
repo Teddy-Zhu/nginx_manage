@@ -6,7 +6,7 @@
 docker build -f deploy/docker/nginx.Dockerfile --build-arg TARGETARCH=amd64 -t nginxpanel-nginx:1.30.6 .
 ```
 
-基础镜像固定为官方 `nginx:1.30.6-alpine-slim` 的多架构摘要；构建时检查静态 HTTP/TLS/realip、Stream/TLS/realip/SSL preread，以及 ACL、基础 WAF、JSON 日志和 HTTP-01 依赖的默认模块。能力清单分别声明 HTTP proxy/access/log/headers/geo/split_clients/charset/gzip，以及 Stream map/access/log/geo/split_clients/连接限制/return/set；构建检查同步拒绝关闭对应默认模块的参数。校验脚本发现版本、必需参数或默认模块不满足时中止镜像构建。
+基础镜像固定为官方 `nginx:1.30.6-alpine-slim` 的多架构摘要；构建时检查静态 HTTP/TLS/HTTP2/realip、Stream/TLS/realip/SSL preread，以及 ACL、基础 WAF、JSON 日志和 HTTP-01 依赖的默认模块。能力清单分别声明 HTTP proxy/cache/access/log/headers/geo/split_clients/charset/gzip、upstream hash/ip_hash/least_conn/keepalive/zone，以及 Stream map/access/log/geo/split_clients/连接限制/return/set、upstream hash/least_conn/zone；构建检查同步拒绝关闭对应默认模块的参数。校验脚本发现版本、必需参数或默认模块不满足时中止镜像构建。
 
 镜像构建前由发行流程准备 `.release/binaries/nginxpanel-amd64`、`nginxpanel-arm64` 静态程序，以及对应的 `licenses-amd64/`、`licenses-arm64/` 项目和第三方许可文本；`TARGETARCH` 应与目标平台一致。镜像提供 `/usr/share/nginxpanel/capabilities.json`、完整 `nginx -V` 输出，以及 Nginx 和固定启动器的 SHA-256。清除官方配置模板入口；固定启动器核对宿主机登记后降权并 exec Nginx，启动时不下载、安装或编译模块。迁移执行仍以目标 Agent 的实际能力与 `nginx -t` 为准，不能把静态清单当作运行确认。
 

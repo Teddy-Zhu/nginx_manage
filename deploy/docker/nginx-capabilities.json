@@ -7,11 +7,14 @@
     "stream_ssl_preread", "map", "map_volatile", "rewrite", "http01",
     "limit_req", "limit_conn", "limit_req_status", "limit_conn_status",
     "limit_req_observe", "limit_conn_observe", "https_redirect", "hsts",
-    "http_proxy", "http_access", "http_log", "http_headers", "http_geo",
+    "http_proxy", "http_cache", "http2", "http_access", "http_log", "http_headers", "http_geo",
+    "http_upstream_hash", "http_upstream_ip_hash", "http_upstream_least_conn",
+    "http_upstream_keepalive", "http_upstream_zone",
     "http_split_clients", "http_charset", "http_gzip", "stream_map",
     "stream_map_volatile", "stream_access", "stream_log", "stream_geo",
     "stream_split_clients", "stream_limit_conn", "stream_limit_conn_observe",
-    "stream_return", "stream_set"
+    "stream_return", "stream_set", "stream_upstream_hash",
+    "stream_upstream_least_conn", "stream_upstream_zone"
   ],
   "runtime_module_installation": false,
   "runtime_module_compilation": false,

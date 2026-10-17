@@ -103,7 +103,7 @@ func (p *Parsed) MigrationFeatures() []string {
 			features["real_ip"], features["map_volatile"], features["http_geo"] = true, true, true
 		}
 	}
-	visited := p.walkMigrationRuntime(func(n *Node, kind, table string) {
+	visited := p.walkMigrationRuntime(func(n *Node, kind, table, parent string) {
 		if table == "" && (n.Name == "http" || n.Name == "stream") {
 			features[kind] = true
 			if kind == "stream" {
@@ -131,6 +131,26 @@ func (p *Parsed) MigrationFeatures() []string {
 		if strings.HasPrefix(n.Name, "proxy_") {
 			family("http_proxy", "stream")
 		}
+		if kind == "http" && (strings.HasPrefix(n.Name, "proxy_cache") || n.Name == "proxy_no_cache") {
+			features["http_cache"] = true
+		}
+		if kind == "http" && (n.Name == "http2" || strings.HasPrefix(n.Name, "http2_")) {
+			features["http2"] = true
+		}
+		if parent == "upstream" {
+			switch n.Name {
+			case "hash", "least_conn", "zone":
+				family("http_upstream_"+n.Name, "stream_upstream_"+n.Name)
+			case "ip_hash":
+				if kind == "http" {
+					features["http_upstream_ip_hash"] = true
+				}
+			case "keepalive", "keepalive_requests", "keepalive_timeout", "keepalive_time":
+				if kind == "http" {
+					features["http_upstream_keepalive"] = true
+				}
+			}
+		}
 		if n.Name == "proxy_ssl" || strings.HasPrefix(n.Name, "proxy_ssl_") || strings.HasPrefix(n.Name, "ssl_") && !strings.HasPrefix(n.Name, "ssl_preread") {
 			family("tls", "stream_tls")
 		}
@@ -149,6 +169,9 @@ func (p *Parsed) MigrationFeatures() []string {
 			for _, a := range n.Args {
 				if a.Value == "ssl" {
 					family("tls", "stream_tls")
+				}
+				if kind == "http" && a.Value == "http2" {
+					features["http2"] = true
 				}
 			}
 		case "set_real_ip_from", "real_ip_header", "real_ip_recursive":
@@ -201,28 +224,29 @@ func (p *Parsed) MigrationFeatures() []string {
 }
 
 // walkMigrationRuntime resolves only the active include graph, preserving HTTP,
-// Stream and table-data contexts across shared files. Dependency checks use this
-// same graph so orphan files and literal table rows cannot add prerequisites.
-func (p *Parsed) walkMigrationRuntime(inspect func(*Node, string, string)) map[[3]string]bool {
+// Stream, enclosing block and table-data contexts across shared files. The same
+// include can require upstream keepalive support without adding that requirement
+// when used for an HTTP server's core keepalive settings.
+func (p *Parsed) walkMigrationRuntime(inspect func(*Node, string, string, string)) map[[3]string]bool {
 	byPath := map[string]*Document{}
 	for _, doc := range p.Documents {
 		byPath[doc.File.Path] = doc
 	}
-	visited, active := map[[3]string]bool{}, map[string]bool{}
-	var visit func(string, string, string)
-	visit = func(name, scope, table string) {
-		key := [3]string{name, scope, table}
-		if visited[key] || active[name] || p.runtimeExcluded[name] {
+	visited, traversed, active := map[[3]string]bool{}, map[[4]string]bool{}, map[string]bool{}
+	var visit func(string, string, string, string)
+	visit = func(name, scope, table, parent string) {
+		key := [4]string{name, scope, table, parent}
+		if traversed[key] || active[name] || p.runtimeExcluded[name] {
 			return
 		}
 		doc := byPath[name]
 		if doc == nil {
 			return
 		}
-		visited[key], active[name] = true, true
+		traversed[key], visited[[3]string{name, scope, table}], active[name] = true, true, true
 		defer delete(active, name)
-		var walk func([]*Node, string, string)
-		walk = func(nodes []*Node, scope, table string) {
+		var walk func([]*Node, string, string, string)
+		walk = func(nodes []*Node, scope, table, parent string) {
 			for _, node := range nodes {
 				if !node.Enabled() {
 					continue
@@ -231,11 +255,11 @@ func (p *Parsed) walkMigrationRuntime(inspect func(*Node, string, string)) map[[
 				if table == "" && (node.Name == "http" || node.Name == "stream") {
 					kind = node.Name
 				}
-				inspect(node, kind, table)
+				inspect(node, kind, table, parent)
 				if node.Name == "include" && len(node.Args) == 1 {
 					for candidate := range byPath {
 						if matched, _ := path.Match(node.Args[0].Value, candidate); matched {
-							visit(candidate, kind, table)
+							visit(candidate, kind, table, parent)
 						}
 					}
 				}
@@ -246,18 +270,18 @@ func (p *Parsed) walkMigrationRuntime(inspect func(*Node, string, string)) map[[
 				if node.Name == "map" || node.Name == "geo" || node.Name == "types" || node.Name == "split_clients" {
 					nextTable = node.Name
 				}
-				walk(node.Children, kind, nextTable)
+				walk(node.Children, kind, nextTable, node.Name)
 			}
 		}
-		walk(doc.Nodes, scope, table)
+		walk(doc.Nodes, scope, table, parent)
 	}
-	visit("nginx.conf", "", "")
+	visit("nginx.conf", "", "", "")
 	return visited
 }
 
 func (p *Parsed) MigrationLocalDependencies() []string {
 	seen := map[string]bool{}
-	p.walkMigrationRuntime(func(node *Node, scope, table string) {
+	p.walkMigrationRuntime(func(node *Node, scope, table, _ string) {
 		if table != "" || (scope != "http" && scope != "stream") || node.Open >= 0 || len(node.Args) != 1 {
 			return
 		}
