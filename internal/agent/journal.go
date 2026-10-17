@@ -20,6 +20,7 @@ import (
 // recovery snapshot before applying any side effect.
 type Record struct {
 	IPTablesRestore           *iptablesRestoreReceipt          `json:"iptables_restore,omitempty"`
+	IPTablesRepair            *iptablesRepairStatus            `json:"iptables_repair,omitempty"`
 	IPTablesRegistration      *iptablesRegistrationCheckpoint  `json:"iptables_registration,omitempty"`
 	UFWRegistration           *ufwRegistrationCheckpoint       `json:"ufw_registration,omitempty"`
 	FirewalldRegistration     *firewalldRegistrationCheckpoint `json:"firewalld_registration,omitempty"`

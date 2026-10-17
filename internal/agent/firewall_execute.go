@@ -78,7 +78,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 		return f.applyUFWLocked(ctx, id, planID, version, policyHash, action, connection)
 	}
 	if f.iptablesPlannerLocked() {
-		return out, fault.Unavailable("iptables 正常确认及已确认策略恢复尚未接入，不能应用")
+		return f.applyIPTablesLocked(ctx, id, planID, version, policyHash, action, connection)
 	}
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("防火墙执行未就绪")
@@ -218,7 +218,7 @@ func (f *hostFirewall) Decide(ctx context.Context, id, action, connection string
 		return out, fault.Invalid("防火墙决定无效")
 	}
 	if f.iptablesState != nil {
-		return f.decideIPTablesLocked(ctx, id, action)
+		return f.decideIPTablesLocked(ctx, id, action, connection)
 	}
 	if f.firewalldState != nil {
 		return f.decideFirewalldLocked(ctx, id, action, connection)
@@ -500,7 +500,7 @@ func (f *hostFirewall) Run(ctx context.Context) {
 		f.remote.mu.Lock()
 		f.mu.Lock()
 		if f.iptablesPlannerLocked() {
-			f.runIPTablesLocked(stopping, &nextInspect)
+			f.runIPTablesLocked(ctx, stopping, &nextInspect, &nextProtectionInspect)
 		}
 		if f.owner == "ufw" && f.firewalldState == nil && f.state.Schema == 0 {
 			f.runUFWLocked(ctx, stopping, &nextInspect, &nextProtectionInspect)

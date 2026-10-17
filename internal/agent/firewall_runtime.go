@@ -68,6 +68,7 @@ type hostFirewall struct {
 	firewalldState        *firewalldCheckpoint
 	ufwState              *ufwChangeCheckpoint
 	iptablesState         *iptablesChangeCheckpoint
+	iptablesLastRescue    string
 	available             bool
 	ufwPlanning           bool
 	iptablesPlanning      bool
@@ -214,7 +215,7 @@ func (f *hostFirewall) currentOperation() *firewall.Operation {
 }
 func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
 	if f.iptablesState != nil {
-		return nil
+		return f.iptablesState.Confirmed
 	}
 	if f.ufwState != nil {
 		return f.ufwState.Confirmed
@@ -274,7 +275,8 @@ func (f *hostFirewall) Open() error {
 		return nil
 	}
 	iptablesPending := iptablesBusinessPending(f.dataDir)
-	if iptablesPending && (managed != nil || value != nil) {
+	iptablesManaged := iptables != nil && iptables.Confirmed != nil
+	if (iptablesPending || iptablesManaged) && (managed != nil || value != nil) {
 		f.policyUncertain, f.problem = true, "iptables 与其他防火墙恢复材料冲突，请本机核对"
 		return nil
 	}
@@ -289,11 +291,11 @@ func (f *hostFirewall) Open() error {
 			f.policyUncertain, f.problem = true, ufwProcessProblem+"业务快照无法读取"
 			return nil
 		}
-		if iptablesPending && (ufwRestorePending(f.dataDir) || ufw != nil && (ufw.Confirmed != nil && ufw.Confirmed.Action == "apply" || !ufwChangeTerminal(ufw))) {
+		if (iptablesPending || iptablesManaged) && (ufwRestorePending(f.dataDir) || ufw != nil && (ufw.Confirmed != nil && ufw.Confirmed.Action == "apply" || !ufwChangeTerminal(ufw))) {
 			f.policyUncertain, f.problem = true, "iptables 与 UFW 原恢复材料冲突，请本机核对"
 			return nil
 		}
-		if iptablesPending {
+		if iptablesPending || iptablesManaged {
 			return f.openIPTablesPlanner(iptables)
 		}
 		if f.owner == "ufw" || ufwRestorePending(f.dataDir) || ufw != nil && (ufw.Confirmed != nil && ufw.Confirmed.Action == "apply" || !ufwChangeTerminal(ufw)) {

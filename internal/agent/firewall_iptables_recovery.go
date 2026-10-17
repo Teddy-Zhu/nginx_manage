@@ -6,9 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"nginxpanel/internal/fault"
-	"nginxpanel/internal/firewall"
 )
 
 // A restart never resumes an unconfirmed candidate. Only the original parent's
@@ -35,7 +32,12 @@ func recoverIPTablesChange(ctx context.Context, dataDir string) error {
 	if iptablesChangeTerminal(v) {
 		if iptablesRestorePending(dataDir) {
 			child, err := loadIPTablesRestore(dataDir)
-			if err != nil || child == nil || child.Phase != "ended" || !iptablesRestoreMatchesChange(child, v) {
+			matched := err == nil && child != nil && child.Phase == "ended" && iptablesRestoreMatchesChange(child, v)
+			if err == nil && child != nil && child.Target == "repair" {
+				repair, repairErr := loadIPTablesRepair(dataDir)
+				matched = repairErr == nil && repair != nil && iptablesRepairSourceMatches(repair, v) && iptablesRestoreMatchesRepair(child, repair)
+			}
+			if !matched {
 				return errors.New("iptables 终态仍有未核对原子进程")
 			}
 			if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
@@ -60,6 +62,9 @@ func recoverIPTablesChange(ctx context.Context, dataDir string) error {
 	}
 	if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
 		return fail("iptables 原执行进程尚未完整结束或回执冲突")
+	}
+	if iptablesRepairPending(dataDir) {
+		return fail("iptables 已确认规则修复与未确认业务冲突，请本机核对")
 	}
 	if err = iptablesChangeAuthority(dataDir, v); err != nil {
 		return fail("iptables 原本机授权或机器身份无法核对")
@@ -152,7 +157,10 @@ func boundedIPTablesError(err error) string {
 
 func (f *hostFirewall) refreshIPTablesStateLocked() error {
 	v, err := loadIPTablesChange(f.dataDir)
-	if err != nil {
+	if err != nil || v == nil && f.iptablesState != nil {
+		if err == nil {
+			err = errors.New("iptables 原业务快照丢失，请本机核对")
+		}
 		return err
 	}
 	f.iptablesState = v
@@ -161,6 +169,9 @@ func (f *hostFirewall) refreshIPTablesStateLocked() error {
 
 func (f *hostFirewall) recoverIPTablesLocked(ctx context.Context) error {
 	err := recoverIPTablesChange(ctx, f.dataDir)
+	if err == nil {
+		err = reconcileIPTablesConfirmed(ctx, f.dataDir)
+	}
 	refreshErr := f.refreshIPTablesStateLocked()
 	if err != nil || refreshErr != nil {
 		f.problem = "iptables 原业务或子进程尚未完成恢复核对"
@@ -171,30 +182,75 @@ func (f *hostFirewall) recoverIPTablesLocked(ctx context.Context) error {
 	return nil
 }
 
-func (f *hostFirewall) runIPTablesLocked(stopping bool, nextInspect *time.Time) {
+func (f *hostFirewall) runIPTablesLocked(ctx context.Context, stopping bool, nextInspect, nextProtectionInspect *time.Time) {
 	if !f.recovering {
 		return
 	}
-	active := f.iptablesState != nil && !iptablesChangeTerminal(f.iptablesState) || f.problem != ""
-	if !stopping && (time.Now().Before(f.retryAt) || !active && time.Now().Before(*nextInspect)) {
+	if err := f.rescueIPTablesLocked(ctx); err != nil {
+		f.problem = "iptables 本机救援请求尚未完成核对"
+	}
+	if f.activeLocked() {
+		if stopping || f.expiredLocked() || f.iptablesState.Rollback || f.problem != "" || f.remote.web == nil || f.remote.problem != "" || f.remote.listener == nil {
+			if stopping || !time.Now().Before(f.retryAt) {
+				_ = f.rollbackIPTablesLocked()
+			}
+		}
 		return
 	}
-	*nextInspect = time.Now().Add(30 * time.Second)
-	call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	_ = f.recoverIPTablesLocked(call)
+	if stopping || !time.Now().Before(*nextInspect) {
+		*nextInspect = time.Now().Add(30 * time.Second)
+		call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_ = f.recoverIPTablesLocked(call)
+		cancel()
+	}
+	if !stopping && f.problem == "" && !time.Now().Before(*nextProtectionInspect) {
+		f.protectionObservation = f.observeProtectionsLocked(ctx, f.confirmedRecord())
+		f.protectionObservedAt = time.Now()
+		*nextProtectionInspect = time.Now().Add(30 * time.Second)
+	}
 }
 
-func (f *hostFirewall) decideIPTablesLocked(ctx context.Context, id, action string) (firewall.Operation, error) {
-	if f.iptablesState == nil || f.iptablesState.Operation.ID != id {
-		return f.operationLocked(id)
+func (f *hostFirewall) rescueIPTablesLocked(ctx context.Context) error {
+	raw, err := listenerRead(filepath.Join(filepath.Dir(iptablesChangePath(f.dataDir)), "rescue.json"), 1024)
+	if os.IsNotExist(err) {
+		return nil
 	}
-	if iptablesChangeTerminal(f.iptablesState) {
-		return f.iptablesState.Operation, nil
+	if err != nil {
+		return err
 	}
-	if action != "rollback" {
-		return f.iptablesState.Operation, fault.Conflict("iptables 原操作当前仅允许继续恢复")
+	var request struct {
+		ID string `json:"id"`
 	}
-	err := f.recoverIPTablesLocked(ctx)
-	return f.iptablesState.Operation, err
+	if ufwToolJSON(raw, &request) != nil || !validID(request.ID) {
+		return errors.New("iptables 本机救援请求无效")
+	}
+	if request.ID == f.iptablesLastRescue {
+		return nil
+	}
+	if f.activeLocked() {
+		if err = f.rollbackIPTablesLocked(); err != nil {
+			return err
+		}
+	} else if err = f.recoverIPTablesLocked(ctx); err != nil {
+		return err
+	}
+	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("iptables-business.lock")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err = f.refreshIPTablesStateLocked(); err != nil {
+		return err
+	}
+	if v := f.iptablesState; v != nil {
+		if !iptablesChangeTerminal(v) {
+			return errors.New("iptables 救援期间原操作变化")
+		}
+		v.LastRescue = request.ID
+		if err = saveIPTablesChange(f.dataDir, v); err != nil {
+			return err
+		}
+	}
+	f.iptablesLastRescue = request.ID
+	return nil
 }

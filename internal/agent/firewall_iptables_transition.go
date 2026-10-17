@@ -29,6 +29,8 @@ type iptablesChangeCheckpoint struct {
 	Transition  iptablesInitialTransition `json:"transition"`
 	Steps       []iptablesChangeStep      `json:"steps"`
 	Rollback    bool                      `json:"rollback"`
+	Confirmed   *firewallPolicyRecord     `json:"confirmed"`
+	LastRescue  string                    `json:"last_rescue"`
 }
 
 func iptablesChangePath(dataDir string) string {
@@ -37,13 +39,20 @@ func iptablesChangePath(dataDir string) string {
 
 func iptablesChangeHash(v *iptablesChangeCheckpoint) string {
 	raw, _ := json.Marshal(v)
-	return secure.Hash(append([]byte("iptables:change:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("iptables:change:v2:\x00"), raw...))
 }
 
 func iptablesChangeIntentHash(v *iptablesChangeCheckpoint) string {
 	copy := *v
 	copy.Operation.State, copy.Operation.Stage, copy.Operation.Error, copy.Operation.ConfirmedSource = "", "", "", ""
 	copy.Operation.UpdatedAt, copy.Rollback = 0, false
+	copy.Confirmed, copy.LastRescue = nil, ""
+	return iptablesChangeHash(&copy)
+}
+
+func iptablesChangeResultHash(v *iptablesChangeCheckpoint) string {
+	copy := *v
+	copy.LastRescue = ""
 	return iptablesChangeHash(&copy)
 }
 
@@ -90,18 +99,21 @@ func validateIPTablesTransition(v *iptablesInitialTransition, policy firewallPol
 }
 
 func iptablesChangeTerminal(v *iptablesChangeCheckpoint) bool {
-	return v != nil && slices.Contains([]string{"rolled_back", "failed"}, v.Operation.State)
+	return v != nil && slices.Contains([]string{"succeeded", "rolled_back", "failed"}, v.Operation.State)
 }
 
 func validateIPTablesChange(v *iptablesChangeCheckpoint) error {
 	invalid := errors.New("iptables 原业务恢复快照无效")
-	if v == nil || v.Schema != 1 || !validID(v.Operation.ID) || v.Policy.OperationID != v.Operation.ID || v.RequestHash != firewallRequestHash(v.Policy.PlanID, v.Policy.Action) || v.Operation.PlanID != v.Policy.PlanID || v.Operation.Action != v.Policy.Action || v.Operation.Version != v.Policy.Version || v.Operation.PolicyHash != v.Policy.PolicyHash || v.Operation.ProgramHash != v.Policy.ProgramHash || v.Operation.Deadline <= 0 || v.Operation.UpdatedAt <= 0 || len(v.Operation.Error) > 512 || v.Operation.ConfirmedSource != "" || !slices.Contains([]string{"running", "waiting_confirmation", "compensating", "recovery_required", "rolled_back", "failed"}, v.Operation.State) {
+	if v == nil || v.Schema != 2 || !validID(v.Operation.ID) || v.Policy.OperationID != v.Operation.ID || v.RequestHash != firewallRequestHash(v.Policy.PlanID, v.Policy.Action) || v.Operation.PlanID != v.Policy.PlanID || v.Operation.Action != v.Policy.Action || v.Operation.Version != v.Policy.Version || v.Operation.PolicyHash != v.Policy.PolicyHash || v.Operation.ProgramHash != v.Policy.ProgramHash || v.Operation.Deadline <= 0 || v.Operation.UpdatedAt <= 0 || len(v.Operation.Error) > 512 || v.LastRescue != "" && !validID(v.LastRescue) || !slices.Contains([]string{"running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"}, v.Operation.State) {
 		return invalid
 	}
 	if err := validateIPTablesTransition(&v.Transition, v.Policy); err != nil {
 		return err
 	}
 	if v.Operation.ID == v.Policy.PlanID || v.Operation.ID == v.Transition.Owner || v.Operation.ID == v.Transition.RegistrationOperationID || len(v.Operation.Stage) == 0 || len(v.Operation.Stage) > 128 || v.Operation.VerificationScope != "controlled-listener" || v.Rollback != slices.Contains([]string{"compensating", "recovery_required", "rolled_back"}, v.Operation.State) {
+		return invalid
+	}
+	if v.Operation.ConfirmedSource != "" && !validUFWConfirmationSource(v.Operation.ConfirmedSource) || v.Operation.State == "succeeded" && (v.Operation.ConfirmedSource == "" || !sameIPTablesValue(v.Confirmed, v.Policy)) || v.Operation.State != "succeeded" && v.Confirmed != nil {
 		return invalid
 	}
 	if len(v.Steps) != len(v.Transition.Materials)*(1+iptablesRestoreAttempts) {
@@ -157,15 +169,17 @@ func saveIPTablesChange(dataDir string, v *iptablesChangeCheckpoint) error {
 	}
 	if old != nil {
 		if old.Operation.ID == v.Operation.ID {
-			if iptablesChangeIntentHash(old) != iptablesChangeIntentHash(v) || old.Rollback && !v.Rollback || iptablesChangeTerminal(old) && !sameIPTablesValue(old, v) {
+			if iptablesChangeIntentHash(old) != iptablesChangeIntentHash(v) || old.Rollback && !v.Rollback || iptablesChangeTerminal(old) && iptablesChangeResultHash(old) != iptablesChangeResultHash(v) || old.Operation.ConfirmedSource != "" && old.Operation.ConfirmedSource != v.Operation.ConfirmedSource {
 				return errors.New("iptables 原意图或终态已变化，禁止覆盖")
 			}
 		} else if !iptablesChangeTerminal(old) {
 			return errors.New("iptables 原业务尚未结束")
+		} else if old.Confirmed != nil {
+			return errors.New("iptables 已确认策略的更新或移除尚未接入")
 		}
 	}
 	if r, err := loadIPTablesReceipt(dataDir, v.Operation.ID); err == nil {
-		if r.Kind != firewallOperationKind || r.OperationID != v.Operation.ID || r.RequestHash != v.RequestHash || r.Firewall == nil || r.Firewall.ID != v.Operation.ID || r.Firewall.PlanID != v.Policy.PlanID || r.Firewall.Action != v.Policy.Action || r.Firewall.Version != v.Policy.Version || r.Firewall.PolicyHash != v.Policy.PolicyHash || r.Firewall.ProgramHash != v.Policy.ProgramHash || r.State != r.Firewall.State || r.Stage != r.Firewall.Stage || r.Deadline != r.Firewall.Deadline || r.Error != r.Firewall.Error || r.Firewall.Deadline != v.Operation.Deadline || !firewalldDigest(r.CandidateHash) || slices.Contains([]string{"succeeded", "rolled_back", "failed"}, r.State) && !iptablesChangeReceiptMatches(r, v) {
+		if r.Kind != firewallOperationKind || r.OperationID != v.Operation.ID || r.RequestHash != v.RequestHash || r.Firewall == nil || r.Firewall.ID != v.Operation.ID || r.Firewall.PlanID != v.Policy.PlanID || r.Firewall.Action != v.Policy.Action || r.Firewall.Version != v.Policy.Version || r.Firewall.PolicyHash != v.Policy.PolicyHash || r.Firewall.ProgramHash != v.Policy.ProgramHash || r.State != r.Firewall.State || r.Stage != r.Firewall.Stage || r.Deadline != r.Firewall.Deadline || r.Error != r.Firewall.Error || r.Firewall.Deadline != v.Operation.Deadline || !firewalldDigest(r.CandidateHash) || slices.Contains([]string{"succeeded", "rolled_back", "failed"}, r.State) && (!sameIPTablesValue(r.Firewall, v.Operation) || old == nil || old.Operation.ID != v.Operation.ID || iptablesChangeResultHash(old) != iptablesChangeResultHash(v)) {
 			return errors.New("iptables 原业务独立回执冲突")
 		}
 		if old != nil && old.Operation.ID == v.Operation.ID && (r.Firewall.UpdatedAt > old.Operation.UpdatedAt || slices.Contains([]string{"compensating", "recovery_required"}, r.State) && !old.Rollback) {
@@ -190,11 +204,19 @@ func saveIPTablesChange(dataDir string, v *iptablesChangeCheckpoint) error {
 
 func iptablesBusinessPending(dataDir string) bool {
 	v, err := loadIPTablesChange(dataDir)
-	if err != nil || iptablesRestorePending(dataDir) {
+	if err != nil || iptablesRestorePending(dataDir) || iptablesRepairPending(dataDir) {
 		return true
 	}
 	if v == nil {
-		return false
+		child, err := loadIPTablesRestore(dataDir)
+		if err != nil {
+			return true
+		}
+		if child == nil {
+			return false
+		}
+		parent, err := loadIPTablesReceipt(dataDir, child.OperationID)
+		return err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != child.OperationID || parent.State != parent.Firewall.State || !slices.Contains([]string{"rolled_back", "failed"}, parent.State)
 	}
 	r, err := loadIPTablesReceipt(dataDir, v.Operation.ID)
 	return err != nil || !iptablesChangeReceiptMatches(r, v) || !iptablesChangeTerminal(v)
@@ -211,8 +233,8 @@ func iptablesChangeAuthority(dataDir string, v *iptablesChangeCheckpoint) error 
 	return nil
 }
 
-// Caller owns iptables-business.lock. Public admission remains disabled until
-// normal confirmation and confirmed-policy repair are fully connected.
+// Caller owns iptables-business.lock. Public admission requires a completely
+// prepared plan; a diagnostic-only plan can never grant a native write.
 func acceptIPTablesChangeLocked(ctx context.Context, dataDir, id string, plan firewallPrivatePlan) (*iptablesChangeCheckpoint, error) {
 	if os.Geteuid() != 0 || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir || (&HostDNS{Scope: "host"}).hostScopeReason() != "" || !validID(id) || !plan.view.CanApply || plan.record == nil || plan.iptables == nil || plan.view.IPTables == nil || plan.view.ID != plan.record.PlanID || plan.view.Action != plan.record.Action || plan.view.Version != plan.record.Version || plan.view.PolicyHash != plan.record.PolicyHash || plan.view.ProgramHash != plan.record.ProgramHash || plan.view.Backend != plan.record.Policy.Backend || time.Now().Unix() >= plan.view.ExpiresAt {
 		return nil, errors.New("iptables 业务操作尚不具备完整受理条件")
@@ -238,7 +260,7 @@ func acceptIPTablesChangeLocked(ctx context.Context, dataDir, id string, plan fi
 	policy := *plan.record
 	policy.OperationID = id
 	now := time.Now().Unix()
-	v := &iptablesChangeCheckpoint{Schema: 1, RequestHash: firewallRequestHash(policy.PlanID, policy.Action), Policy: policy, Transition: *plan.iptables, Operation: firewall.Operation{ID: id, PlanID: policy.PlanID, Action: policy.Action, Version: policy.Version, PolicyHash: policy.PolicyHash, ProgramHash: policy.ProgramHash, State: "running", Stage: "submitting_runtime", Deadline: now + firewall.ConfirmationSeconds, UpdatedAt: now, VerificationScope: "controlled-listener"}}
+	v := &iptablesChangeCheckpoint{Schema: 2, RequestHash: firewallRequestHash(policy.PlanID, policy.Action), Policy: policy, Transition: *plan.iptables, Operation: firewall.Operation{ID: id, PlanID: policy.PlanID, Action: policy.Action, Version: policy.Version, PolicyHash: policy.PolicyHash, ProgramHash: policy.ProgramHash, State: "running", Stage: "submitting_runtime", Deadline: now + firewall.ConfirmationSeconds, UpdatedAt: now, VerificationScope: "controlled-listener"}}
 	for _, material := range v.Transition.Materials {
 		v.Steps = append(v.Steps, iptablesChangeStep{ID: secure.ID(), Family: material.Family, Target: "candidate"})
 		for range iptablesRestoreAttempts {
@@ -254,6 +276,9 @@ func acceptIPTablesChangeLocked(ctx context.Context, dataDir, id string, plan fi
 	baseline, err := inspectIPTablesRegistration(ctx, dataDir, policy.Policy.Backend, true)
 	if err != nil || baseline.Hash != v.Transition.ConfigurationHash {
 		return nil, errors.New("iptables 原完整环境或规则已变化")
+	}
+	if err = checkIPTablesInterfaces(policy.Policy, baseline.Observed); err != nil {
+		return nil, err
 	}
 	if err = ctx.Err(); err != nil {
 		return nil, err

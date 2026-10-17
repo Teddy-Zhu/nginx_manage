@@ -26,6 +26,7 @@ type iptablesRestoreReceipt struct {
 	Schema                  int              `json:"schema"`
 	ID                      string           `json:"id"`
 	OperationID             string           `json:"operation_id"`
+	RepairID                string           `json:"repair_id"`
 	Owner                   string           `json:"owner"`
 	MachineHash             string           `json:"machine_hash"`
 	RegistrationOperationID string           `json:"registration_operation_id"`
@@ -59,18 +60,25 @@ func iptablesRestorePath(dataDir string) string {
 
 func iptablesRestoreHash(r iptablesRestoreReceipt) string {
 	raw, _ := json.Marshal(r)
-	return secure.Hash(append([]byte("iptables:restore-receipt:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("iptables:restore-receipt:v2:\x00"), raw...))
 }
 
 func iptablesRestoreRequestHash(r iptablesRestoreReceipt) string {
 	r.RequestHash, r.Phase, r.Process, r.Outcome = "", "", nil, ""
 	r.ExitCode, r.OutputHash, r.DiagnosticHash, r.OutputBytes, r.DiagnosticBytes, r.Error, r.UpdatedAt = 0, "", "", 0, 0, "", 0
 	raw, _ := json.Marshal(r)
-	return secure.Hash(append([]byte("iptables:restore-request:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("iptables:restore-request:v2:\x00"), raw...))
 }
 
 func validIPTablesRestore(r *iptablesRestoreReceipt) bool {
-	if r == nil || r.Schema != 1 || r.GuardVersion != 1 || !validID(r.ID) || !validID(r.OperationID) || !validID(r.Owner) || !validID(r.RegistrationOperationID) || !firewalldDigest(r.MachineHash) || !firewalldDigest(r.ParentIntentHash) || !firewalldDigest(r.ProgramHash) || !firewalldDigest(r.ToolchainHash) || !firewalldDigest(r.InputHash) || r.InputBytes < 1 || r.InputBytes > 4<<20 || r.RequestHash != iptablesRestoreRequestHash(*r) || r.UpdatedAt <= 0 || len(r.Error) > 512 || !slices.Contains([]string{"candidate", "previous"}, r.Target) || !slices.Contains([]string{"ipv4", "ipv6"}, r.Family) || !validIPTablesBoundFile(r.Helper, iptablesHelperBytes) || r.Helper.Role != "nginxpanel" || !validIPTablesBoundFile(r.Restore, 16<<20) || !validIPTablesBoundFile(r.Blocker, 16<<20) || r.Blocker.Role != "false" || filepath.Base(r.Blocker.Invoked) != "false" {
+	if r == nil || r.Schema != 2 || r.GuardVersion != 1 || !validID(r.ID) || !validID(r.OperationID) || !validID(r.Owner) || !validID(r.RegistrationOperationID) || !firewalldDigest(r.MachineHash) || !firewalldDigest(r.ParentIntentHash) || !firewalldDigest(r.ProgramHash) || !firewalldDigest(r.ToolchainHash) || !firewalldDigest(r.InputHash) || r.InputBytes < 1 || r.InputBytes > 4<<20 || r.RequestHash != iptablesRestoreRequestHash(*r) || r.UpdatedAt <= 0 || len(r.Error) > 512 || !slices.Contains([]string{"candidate", "previous", "repair"}, r.Target) || !slices.Contains([]string{"ipv4", "ipv6"}, r.Family) || !validIPTablesBoundFile(r.Helper, iptablesHelperBytes) || r.Helper.Role != "nginxpanel" || !validIPTablesBoundFile(r.Restore, 16<<20) || !validIPTablesBoundFile(r.Blocker, 16<<20) || r.Blocker.Role != "false" || filepath.Base(r.Blocker.Invoked) != "false" {
+		return false
+	}
+	if r.Target == "repair" {
+		if !validID(r.RepairID) || r.RepairID == r.ID || r.RepairID == r.OperationID {
+			return false
+		}
+	} else if r.RepairID != "" {
 		return false
 	}
 	roles := []string{"iptables-nft-restore", "iptables-legacy-restore"}
@@ -279,6 +287,9 @@ func iptablesCandidateReceipt(dataDir string, v *iptablesChangeCheckpoint, famil
 
 // Caller holds iptables-business.lock through invocation and parent publication.
 func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRestoreRequest) (*iptablesRestoreReceipt, error) {
+	if request.Target == "repair" {
+		return runIPTablesRepairRestore(ctx, dataDir, request)
+	}
 	if os.Geteuid() != 0 || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir || !slices.Contains([]string{"candidate", "previous"}, request.Target) {
 		return nil, errors.New("iptables 执行范围或方向无效")
 	}
@@ -334,6 +345,9 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 	}
 	input := material.Previous
 	if request.Target == "candidate" {
+		if err = checkIPTablesInterfaces(v.Policy.Policy, current.Observed); err != nil {
+			return nil, err
+		}
 		if v.Rollback || v.Operation.State != "running" || time.Now().Unix() >= v.Operation.Deadline || current.Hash != v.Transition.ConfigurationHash || current.States[material.Family] != "empty" {
 			return nil, errors.New("iptables 原候选基线或执行窗口已变化")
 		}
@@ -361,7 +375,7 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 	if err != nil {
 		return nil, err
 	}
-	r := &iptablesRestoreReceipt{Schema: 1, ID: request.ID, OperationID: request.OperationID, Owner: v.Transition.Owner, MachineHash: v.Transition.MachineHash, RegistrationOperationID: v.Transition.RegistrationOperationID, ParentIntentHash: iptablesChangeIntentHash(v), ProgramHash: v.Policy.ProgramHash, ToolchainHash: v.Transition.Tools.Hash, Target: request.Target, Family: material.Family, InputHash: secure.Hash(input), InputBytes: len(input), Helper: v.Transition.Tools.Helper, Restore: restore, Blocker: blocker, GuardVersion: 1, Phase: "prepared"}
+	r := &iptablesRestoreReceipt{Schema: 2, ID: request.ID, OperationID: request.OperationID, Owner: v.Transition.Owner, MachineHash: v.Transition.MachineHash, RegistrationOperationID: v.Transition.RegistrationOperationID, ParentIntentHash: iptablesChangeIntentHash(v), ProgramHash: v.Policy.ProgramHash, ToolchainHash: v.Transition.Tools.Hash, Target: request.Target, Family: material.Family, InputHash: secure.Hash(input), InputBytes: len(input), Helper: v.Transition.Tools.Helper, Restore: restore, Blocker: blocker, GuardVersion: 1, Phase: "prepared"}
 	r.RequestHash = iptablesRestoreRequestHash(*r)
 	if err = saveIPTablesRestore(dataDir, r); err != nil {
 		return nil, err
@@ -501,7 +515,12 @@ func recoverIPTablesRestore(ctx context.Context, dataDir string) error {
 		return saveIPTablesRestore(dataDir, r)
 	}
 	v, err := loadIPTablesChange(dataDir)
-	if err != nil || !iptablesRestoreMatchesChange(r, v) {
+	matched := err == nil && iptablesRestoreMatchesChange(r, v)
+	if err == nil && r.Target == "repair" {
+		repair, repairErr := loadIPTablesRepair(dataDir)
+		matched = repairErr == nil && repair != nil && iptablesRepairSourceMatches(repair, v) && iptablesRestoreMatchesRepair(r, repair)
+	}
+	if !matched {
 		return errors.New("iptables 原进程缺少对应的原 root 业务意图")
 	}
 	if r.Process != nil && !networkdCallEnded(*r.Process) {

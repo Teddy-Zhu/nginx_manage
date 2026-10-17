@@ -30,7 +30,11 @@ func (f *hostFirewall) iptablesPlannerLocked() bool {
 func (f *hostFirewall) openIPTablesPlanner(v *iptablesChangeCheckpoint) error {
 	f.available = false
 	f.iptablesState = v
-	if v != nil && (iptablesBusinessPending(f.dataDir) || !validIPTablesBackend(f.owner)) {
+	if v != nil {
+		f.iptablesLastRescue = v.LastRescue
+	}
+	if v != nil && (iptablesBusinessPending(f.dataDir) || v.Confirmed != nil || !validIPTablesBackend(f.owner)) {
+		f.iptablesPlanning = f.iptablesPlanning && f.owner == v.Policy.Policy.Backend
 		f.owner = v.Policy.Policy.Backend
 	}
 	if os.Geteuid() != 0 || (&HostDNS{Scope: "host"}).hostScopeReason() != "" {
@@ -45,6 +49,9 @@ func (f *hostFirewall) openIPTablesPlanner(v *iptablesChangeCheckpoint) error {
 	call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = f.recoverIPTablesLocked(call)
+	if err = f.rescueIPTablesLocked(call); err != nil {
+		f.problem = "iptables 本机救援请求尚未完成核对"
+	}
 	return nil
 }
 
@@ -55,7 +62,17 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 	if f.iptablesState != nil {
 		op := f.iptablesState.Operation
 		out.Operation = &op
+		if record := f.iptablesState.Confirmed; record != nil {
+			out.ConfirmedAction, out.ConfirmedPlanID, out.ConfirmedOperationID = record.Action, record.PlanID, record.OperationID
+			out.ConfirmedVersion, out.ConfirmedPolicyHash = record.Version, record.PolicyHash
+			out.Protections = append(out.Protections, record.Protections...)
+			out.CanPlan = false
+			if out.Reason == "" {
+				out.Reason = "已确认策略由 Agent 独立维护；更新及移除计划尚未接入"
+			}
+		}
 	}
+	out.ProtectionObservation = f.protectionObservationLocked()
 	if out.Reason == "" {
 		switch {
 		case !f.iptablesPlanning:
@@ -67,7 +84,7 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 		case registration.NextClaim.Backend != f.owner:
 			out.CanPlan, out.Reason = false, "本机授权后端与 Agent 显式选择不一致，不能切换系统 alternatives"
 		default:
-			out.Reason = "可准备代际计划；正常确认及已确认策略恢复尚未接入，保持只读"
+			out.Reason = "可准备首次代际计划；更新、移除及完整执行准入尚未完成，保持只读"
 		}
 	}
 	return out
@@ -77,6 +94,9 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	var empty firewall.Plan
 	if !f.iptablesPlanning || f.policyUncertain || f.problem != "" || !f.iptablesPlannerLocked() || iptablesRegistrationPending(f.dataDir) {
 		return empty, fault.Unavailable("iptables 计划须由本机确认宿主机范围、显式后端及 SSH 保护配置")
+	}
+	if f.iptablesState != nil && f.iptablesState.Confirmed != nil {
+		return empty, fault.Unavailable("iptables 已确认策略的更新及移除计划尚未接入")
 	}
 	if in.PreparationID != "" || in.CancelPreparation || in.Version < 1 || in.Action != "apply" {
 		return empty, fault.Invalid("当前 iptables 计划要求明确的应用动作及期望版本；尚无可移除的已确认业务策略")
@@ -121,13 +141,11 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	if len(problems) != 0 {
 		return empty, fault.Unavailable(strings.Join(problems, "；"))
 	}
-	for _, rule := range policy.Rules {
-		if rule.Enabled && rule.Interface != "" && !slices.Contains(before.Observed.Interfaces, rule.Interface) {
-			return empty, fault.Unavailable("iptables 规则绑定接口未在目标观察到")
-		}
+	if err = checkIPTablesInterfaces(policy, before.Observed); err != nil {
+		return empty, fault.Unavailable(err.Error())
 	}
 	transition := &iptablesInitialTransition{Owner: registered.NextClaim.Owner, MachineHash: registered.NextClaim.MachineHash, RegistrationOperationID: registered.NextClaim.OperationID, RegistrationRequestHash: registered.RequestHash, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Materials: []iptablesInitialMaterial{}}
-	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "候选及正反向批次已通过官方 --test；正常确认及已确认策略恢复尚未接入，不可应用"}
+	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "候选及正反向批次已通过官方 --test；更新、移除及完整执行准入尚未完成，不可应用"}
 	generated, transactionBytes := 0, 0
 	for _, generation := range program.Families {
 		var image *iptablesImage

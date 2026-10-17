@@ -46,6 +46,9 @@ func ManageIPTablesRegistration(parent context.Context, dataDir, scope, backend,
 		if err = recoverIPTablesChange(ctx, dataDir); err != nil {
 			return iptablesRegistrationStatus(ctx, dataDir), err
 		}
+		if err = reconcileIPTablesConfirmed(ctx, dataDir); err != nil {
+			return iptablesRegistrationStatus(ctx, dataDir), err
+		}
 	} else if iptablesBusinessPending(dataDir) {
 		return out, errors.New("iptables 原业务或子进程尚未完成，请先执行 iptables-recover")
 	}
@@ -56,6 +59,12 @@ func ManageIPTablesRegistration(parent context.Context, dataDir, scope, backend,
 	defer unlock()
 	if action != "recover" && iptablesBusinessPending(dataDir) {
 		return out, errors.New("iptables 原业务在登记前发生变化，请先恢复原操作")
+	}
+	if action != "recover" {
+		business, err := loadIPTablesChange(dataDir)
+		if err != nil || business != nil && business.Confirmed != nil {
+			return out, errors.New("iptables 已确认业务规则须先通过业务流程移除，不能释放原授权")
+		}
 	}
 	for _, dir := range []string{filepath.Dir(iptablesRegistrationPath(dataDir)), filepath.Dir(iptablesHostClaimPath)} {
 		if err = secure.RootDirectory(dir, 0700); err != nil {
@@ -158,7 +167,7 @@ func ManageIPTablesRegistration(parent context.Context, dataDir, scope, backend,
 
 func checkedIPTablesRegistrationStatus(ctx context.Context, dataDir, state string) (IPTablesRegistrationStatus, error) {
 	out := iptablesRegistrationStatus(ctx, dataDir)
-	if out.Registration.State != state || state == "registered" && !out.Registration.Verified {
+	if (out.Registration.State != state && !(state == "registered" && out.Registration.State == "managed")) || state == "registered" && !out.Registration.Verified {
 		return out, errors.New("iptables 授权状态变化或核对尚未完成：" + out.Registration.Reason)
 	}
 	return out, nil

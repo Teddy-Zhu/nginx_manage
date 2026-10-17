@@ -127,6 +127,10 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 }
 
 func snapshotIPTablesTransition(ctx context.Context, backend string, observed firewall.Observation, program *firewall.IPTablesRuntimeProgram) (iptablesRegistrationSnapshot, error) {
+	return snapshotIPTablesProgram(ctx, backend, observed, program, false)
+}
+
+func snapshotIPTablesProgram(ctx context.Context, backend string, observed firewall.Observation, program *firewall.IPTablesRuntimeProgram, allowMissing bool) (iptablesRegistrationSnapshot, error) {
 	var out iptablesRegistrationSnapshot
 	if !observed.Kernel.Available || observed.Kernel.TableExists {
 		return out, errors.New("直接 nftables 目标表不存在的状态无法确认")
@@ -162,7 +166,18 @@ func snapshotIPTablesTransition(ctx context.Context, backend string, observed fi
 						}
 					}
 					var foreign iptablesImage
-					foreign, states[index], err = iptablesForeignImage(images[index], generation)
+					if allowMissing && generation != nil {
+						var material iptablesRepairMaterial
+						material, err = repairIPTablesMaterial(images[index], *generation)
+						if err == nil {
+							foreign, states[index], err = iptablesForeignImage(material.After, generation)
+							if material.Missing != 0 {
+								states[index] = "missing"
+							}
+						}
+					} else {
+						foreign, states[index], err = iptablesForeignImage(images[index], generation)
+					}
 					if err == nil {
 						hashes[index] = foreign.hash()
 					}
@@ -242,6 +257,10 @@ func iptablesForeignImage(image iptablesImage, generation *firewall.IPTablesGene
 }
 
 func inspectIPTablesChange(ctx context.Context, dataDir string, v *iptablesChangeCheckpoint) (iptablesRegistrationSnapshot, error) {
+	return inspectIPTablesChangeScope(ctx, dataDir, v, false)
+}
+
+func inspectIPTablesChangeScope(ctx context.Context, dataDir string, v *iptablesChangeCheckpoint, allowMissing bool) (iptablesRegistrationSnapshot, error) {
 	var out iptablesRegistrationSnapshot
 	if err := iptablesChangeAuthority(dataDir, v); err != nil {
 		return out, err
@@ -252,7 +271,7 @@ func inspectIPTablesChange(ctx context.Context, dataDir string, v *iptablesChang
 	call, cancel := context.WithTimeout(ctx, 6*time.Second)
 	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true}).collect(call)
 	cancel()
-	out, err := snapshotIPTablesTransition(ctx, v.Policy.Policy.Backend, observed, v.Transition.Program)
+	out, err := snapshotIPTablesProgram(ctx, v.Policy.Policy.Backend, observed, v.Transition.Program, allowMissing)
 	if err != nil {
 		return out, err
 	}

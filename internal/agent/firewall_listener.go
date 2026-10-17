@@ -37,6 +37,14 @@ func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Co
 			return fault.Unavailable("firewalld 已确认配置无法完整核对，禁止变更远程入口")
 		}
 		record = f.firewalldState.Confirmed
+	} else if f.iptablesState != nil {
+		if f.problem != "" || f.activeLocked() {
+			return fault.Conflict("iptables 存在待确认、待恢复或不可核对状态")
+		}
+		if err := reconcileIPTablesConfirmed(ctx, f.dataDir); err != nil {
+			return fault.Unavailable("iptables 已确认规则无法完整核对，禁止变更远程入口")
+		}
+		record = f.confirmedRecord()
 	} else if f.ufwState != nil {
 		if f.problem != "" || f.activeLocked() {
 			return fault.Conflict("UFW 存在待确认、待恢复或不可核对状态")

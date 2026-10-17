@@ -282,6 +282,29 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 		out.Registration.Reason = "iptables 本机授权登记无法读取"
 		return out
 	}
+	if business, err := loadIPTablesChange(dataDir); err != nil {
+		out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 原业务快照无法读取"
+		return out
+	} else if business != nil && business.Confirmed != nil {
+		receipt, err := loadIPTablesReceipt(dataDir, business.Operation.ID)
+		if err != nil || !iptablesChangeReceiptMatches(receipt, business) || business.Transition.Owner != v.NextClaim.Owner || business.Transition.MachineHash != v.NextClaim.MachineHash || business.Transition.RegistrationOperationID != v.NextClaim.OperationID || business.Transition.RegistrationRequestHash != v.RequestHash || business.Policy.Policy.Backend != v.NextClaim.Backend || business.Transition.Tools.verify(ctx) != nil {
+			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认策略、原授权或固定工具无法核对"
+			return out
+		}
+		snapshot, err := snapshotIPTablesTransition(ctx, v.NextClaim.Backend, observed, business.Transition.Program)
+		if err != nil || snapshot.ToolHash != business.Transition.ToolHash {
+			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认代际或当前环境无法完整核对，请本机恢复"
+			return out
+		}
+		for _, generation := range business.Transition.Program.Families {
+			if snapshot.States[generation.Family] != "candidate" || iptablesCandidateReceipt(dataDir, business, generation.Family) != nil {
+				out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 已确认地址族规则缺失或原调用回执无法核对"
+				return out
+			}
+		}
+		out.Registration.State, out.Registration.Verified, out.Registration.Reason = "managed", true, "iptables 已确认代际及原独立回执已核对"
+		return out
+	}
 	claim, err := loadIPTablesHostClaim()
 	if err != nil {
 		out.Registration.Reason = "iptables 宿主机占用无法读取"
@@ -339,12 +362,12 @@ func validIPTablesRegistrationView(v firewall.IPTablesRegistrationView) bool {
 	}
 	switch r.State {
 	case "unavailable", "unregistered":
-	case "registered", "released", "drifted", "recovery_required":
+	case "registered", "managed", "released", "drifted", "recovery_required":
 		if !validIPTablesBackend(v.Backend) || !validID(r.OperationID) || r.ObservedAt <= 0 {
 			return false
 		}
 	default:
 		return false
 	}
-	return !r.Verified || r.State == "registered" && validIPTablesBackend(v.Backend) && validID(r.OperationID) && r.ObservedAt > 0
+	return !r.Verified || (r.State == "registered" || r.State == "managed") && validIPTablesBackend(v.Backend) && validID(r.OperationID) && r.ObservedAt > 0
 }
