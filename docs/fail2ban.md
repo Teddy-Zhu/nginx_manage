@@ -26,6 +26,43 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 记录位于 `DATA/agent/fail2ban/current.json` 和 `bindings/<UUID>.json`，目录 0700、文件 0600。每次批准或撤销先保存独立记录，再原子发布当前指针，保留前序 ID 和历史文件；中断不允许凭未发布记录连接。撤销不要求服务健康，不停止服务、解除封禁或删除旧记录。每个读取请求与采集收尾重查当前批准，旧缓存不能绕过撤销。此机器专属授权不进入可移植配置，不随导入自动接管目标实例。
 
+## 已有 SSH jail 接管预检
+
+本机 root 可预览一个正在原实例中运行的 SSH jail，明确期望参数及固定来源。此命令只完成预检，不发布接管授权、不写入系统配置、不 reload；实际接管、持久恢复和网页/API 修改入口尚未接入。
+
+将以下 JSON 保存为 root 所有且不可被组或其他用户写入的 `/root/sshd-takeover.json`；端口须按升序明确列出，日志来源可选 `auth-log`、`secure-log` 或 `systemd`：
+
+```json
+{
+  "profile": {
+    "name": "sshd",
+    "profile": "sshd-nftables-input",
+    "log_source": "auth-log",
+    "ports": [22]
+  },
+  "policy": {
+    "enabled": true,
+    "ban_time": 600,
+    "find_time": 600,
+    "max_retry": 5,
+    "ignore_ips": ["127.0.0.0/8", "::1"]
+  }
+}
+```
+
+```sh
+nginxpanel fail2ban-existing-jail-plan --data-dir /srv/nginxpanel --fail2ban-scope host \
+  --fail2ban-existing-jail-file /root/sshd-takeover.json
+```
+
+当前只接纳已显式接入的官方 1.1.1 系统实例、固定 `/etc/fail2ban`、原版 `sshd/common` 过滤器与 `nftables/nftables-multiport` 动作数据，逐文件核对内置 SHA-256，不下载组件。SSH 使用 normal 模式、TCP 指定端口和 `usedns=no`；文件来源固定 `/var/log/auth.log` 或 `/var/log/secure`，后端限 auto/polling；journal 来源要求 systemd 后端。其他动作、自定义 Python action、可执行 ignorecommand、递增/随机时长及无法识别的参数明确拒绝，不自动改写为固定配置。
+
+预检读取完整受 root 保护的配置树（最多 1024 项、总计 8 MiB、单文件 256 KiB，拒绝链接及特殊文件），在私有临时目录生成参考和候选配置。通过官方客户端 `-d` 获取配置流，使用有界字面量解析器读取，不执行 Python 表达式。比较原 jail 与固定 profile 的关键配置，再比较原配置与候选的全部非调整参数，并核对目标参数没有被其他配置覆盖。候选覆盖路径为 `jail.d/zzzz-nginxpanel-existing-<name>.local`，同名文件存在时拒绝覆盖。
+
+成功结果包含原参数、期望参数、完整 jail 名单、影响说明及目标摘要；摘要固定接入、单元、配置、服务代次和读取到的原封禁证明。采集收尾复核配置、参数、完整名单、程序及实例身份。临时材料清理失败也报告失败。此结果只证明本次配置预检，不证明内核实际阻断或授权接管；原封禁到期时间不推测时区，也不重放。已有 jail 仍只读，迁移不能授予本机所有权。
+
+配置流与单 jail reload 合同依据 [官方客户端](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banclient.py)、[参数与 dump 输出](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2bancmdline.py)及 [action 配置转换](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/actionreader.py)。官方实例和发行版组合验收留待 P5。
+
 ## 实例与 jail 读取
 
 `GET /fail2ban/instance` 返回 `Fail2banInstance`；`GET /fail2ban/jails/{name}` 返回 `Fail2banJail`。二者要求 `read`，各有同路径的显式远程资源。未登记时仅返回未接入状态，不连接。jail 只允许读取当前完整列表中的名称；页面提供列表、归属、失败/封禁计数及引擎记录的封禁地址，不提供未接管 jail 的控制按钮。

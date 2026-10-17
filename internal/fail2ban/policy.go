@@ -2,7 +2,6 @@ package fail2ban
 
 import (
 	"encoding/json"
-	"net/netip"
 	"regexp"
 	"sort"
 	"strings"
@@ -92,32 +91,16 @@ func (p Policy) Normalize() (Policy, error) {
 		if j.Template == PanelLoginTemplate && j.Action != "host-input" {
 			return out, fault.Invalid("面板登录模板仅用于宿主机入口，不关联 Nginx 站点或 Docker 转发")
 		}
-		if (j.BanTime != -1 && (j.BanTime < 1 || j.BanTime > 31536000)) || j.FindTime < 1 || j.FindTime > 86400 || j.MaxRetry < 1 || j.MaxRetry > 1000 || j.IgnoreIPs == nil || len(j.IgnoreIPs) > 64 {
-			return out, fault.Invalid("封禁时间、统计窗口、重试阈值或白名单超出限制")
+		values, err := normalizeJailTuning(j.BanTime, j.FindTime, j.MaxRetry, j.IgnoreIPs)
+		if err != nil {
+			return out, err
 		}
 		key := j.Template + ":" + j.ResourceID
 		if sources[key] {
 			return out, fault.Invalid("同一日志来源不能重复配置相同 jail 模板")
 		}
 		ids[j.ID], sources[key] = true, true
-		j.IgnoreIPs = append([]string{}, j.IgnoreIPs...)
-		seen := map[string]bool{}
-		for i, value := range j.IgnoreIPs {
-			value = strings.TrimSpace(value)
-			if addr, err := netip.ParseAddr(value); err == nil && addr.Zone() == "" {
-				value = addr.Unmap().String()
-			} else if prefix, err := netip.ParsePrefix(value); err == nil && !prefix.Addr().Is4In6() {
-				value = prefix.Masked().String()
-			} else {
-				return out, fault.Invalid("白名单只支持数值 IP 或 CIDR")
-			}
-			if seen[value] {
-				return out, fault.Invalid("白名单地址重复")
-			}
-			seen[value] = true
-			j.IgnoreIPs[i] = value
-		}
-		sort.Strings(j.IgnoreIPs)
+		j.IgnoreIPs = values
 		out.Jails = append(out.Jails, j)
 	}
 	sort.Slice(out.Jails, func(i, j int) bool { return out.Jails[i].ID < out.Jails[j].ID })
