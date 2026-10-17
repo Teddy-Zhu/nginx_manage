@@ -2244,12 +2244,16 @@ type CancelFail2banExistingPolicyParams = SetFail2banPolicyParams
 type ChangeFail2banExistingPolicyJSONRequestBody = Fail2banExistingPolicyInput
 
 type Fail2banAddressInput struct {
-	Jail   string `json:"jail"`
-	Ip     string `json:"ip"`
-	Action string `json:"action"`
-	Target string `json:"target"`
+	EngineOwner string `json:"engine_owner"`
+	AdoptionId  string `json:"adoption_id"`
+	Jail        string `json:"jail"`
+	Ip          string `json:"ip"`
+	Action      string `json:"action"`
+	Target      string `json:"target"`
 }
 type Fail2banAddressStatus struct {
+	EngineOwner string `json:"engine_owner"`
+	AdoptionId  string `json:"adoption_id"`
 	Backend     string `json:"backend"`
 	At          int64  `json:"at"`
 	Jail        string `json:"jail"`
@@ -2293,8 +2297,10 @@ type Fail2banAddressTaskStatus struct {
 	Result      *Fail2banAddressOperation `json:"result"`
 }
 type GetFail2banAddressParams struct {
-	Jail string `form:"jail" json:"jail"`
-	Ip   string `form:"ip" json:"ip"`
+	EngineOwner string  `form:"engine_owner" json:"engine_owner"`
+	AdoptionId  *string `form:"adoption_id,omitempty" json:"adoption_id,omitempty"`
+	Jail        string  `form:"jail" json:"jail"`
+	Ip          string  `form:"ip" json:"ip"`
 }
 type ChangeFail2banAddressParams = SetFail2banPolicyParams
 type ChangeFail2banAddressJSONRequestBody = Fail2banAddressInput
@@ -7434,7 +7440,7 @@ func (siw *ServerInterfaceWrapper) GetFail2banAddress(w http.ResponseWriter, r *
 	for _, parameter := range []struct {
 		name  string
 		value *string
-	}{{"jail", &params.Jail}, {"ip", &params.Ip}} {
+	}{{"jail", &params.Jail}, {"ip", &params.Ip}, {"engine_owner", &params.EngineOwner}} {
 		err := runtime.BindQueryParameterWithOptions("form", true, true, parameter.name, r.URL.Query(), parameter.value, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 		if err != nil {
 			var missing *runtime.RequiredParameterError
@@ -7445,6 +7451,10 @@ func (siw *ServerInterfaceWrapper) GetFail2banAddress(w http.ResponseWriter, r *
 			}
 			return
 		}
+	}
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "adoption_id", r.URL.Query(), &params.AdoptionId, runtime.BindQueryParameterOptions{Type: "string", Format: ""}); err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "adoption_id", Err: err})
+		return
 	}
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banAddress(w, r, params) }))
 	for _, middleware := range siw.HandlerMiddlewares {

@@ -17,11 +17,20 @@ func (s *Server) GetFail2banAddress(w http.ResponseWriter, r *http.Request, para
 	if !s.fail2banReady(w, r) {
 		return
 	}
-	if len(params.Jail) > 64 || len(params.Ip) > 45 {
+	adoption := ""
+	if params.AdoptionId != nil {
+		adoption = *params.AdoptionId
+	}
+	if len(params.Jail) > 64 || len(params.Ip) > 45 || len(adoption) > 36 || len(params.EngineOwner) > 8 {
 		s.fail(w, r, fault.Invalid("jail 或地址格式无效"))
 		return
 	}
-	out, err := s.Fail2ban.AddressRuntime(ctx, params.Jail, params.Ip)
+	ip, err := fail2ban.Address(params.Ip)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Fail2ban.AddressRuntime(ctx, fail2ban.AddressQuery{EngineOwner: params.EngineOwner, AdoptionID: adoption, Jail: params.Jail, IP: ip})
 	if err != nil {
 		s.fail2banReadError(w, r, err)
 		return

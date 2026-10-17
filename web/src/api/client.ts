@@ -633,10 +633,16 @@ function createAPI(scope: RequestScope) {
     request<Fail2banLifecycleTaskStatus[]>({ url: "/fail2ban/lifecycle/tasks", signal }),
   changeFail2banLifecycle: (data: Fail2banLifecycleInput, key: string) =>
     request<Fail2banLifecycleTask>({ url: "/fail2ban/lifecycle", method: "POST", data, headers: { "Idempotency-Key": key } }),
-  fail2banAddress: (jail: string, ip: string, signal?: AbortSignal) =>
+  fail2banAddress: (
+    query: Pick<
+      Fail2banAddressInput,
+      "engine_owner" | "adoption_id" | "jail" | "ip"
+    >,
+    signal?: AbortSignal,
+  ) =>
     request<Fail2banAddressStatus>({
       url: "/fail2ban/addresses/status",
-      params: { jail, ip },
+      params: query,
       signal,
     }),
   fail2banAddressTasks: (signal?: AbortSignal) =>

@@ -47,6 +47,10 @@ type fail2banReadCache[T any] struct {
 }
 
 func (c *fail2banReadCache[T]) read(ctx, owner context.Context, budget *fail2banReadBudget, key string, collect func(context.Context) T) (T, error) {
+	return c.readWithTimeout(ctx, owner, budget, key, 10*time.Second, collect)
+}
+
+func (c *fail2banReadCache[T]) readWithTimeout(ctx, owner context.Context, budget *fail2banReadBudget, key string, timeout time.Duration, collect func(context.Context) T) (T, error) {
 	var zero T
 	if ctx.Err() != nil {
 		return zero, fault.Unavailable("实例读取请求已取消")
@@ -71,10 +75,15 @@ func (c *fail2banReadCache[T]) read(ctx, owner context.Context, budget *fail2ban
 		c.entries[key] = job
 		go func() {
 			defer budget.release()
-			call, cancel := context.WithTimeout(owner, 10*time.Second)
+			call, cancel := context.WithTimeout(owner, timeout)
 			defer cancel()
 			value := collect(call)
 			c.mu.Lock()
+			// A long proof must remain retrievable after the first HTTP wait
+			// expires; its public observation keeps the original sample time.
+			if timeout > 10*time.Second {
+				job.at = time.Now()
+			}
 			job.value, job.ready = value, true
 			close(job.done)
 			c.mu.Unlock()

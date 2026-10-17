@@ -22,6 +22,7 @@ import {
   type Fail2banExistingTaskStatus,
 } from "../api/client";
 import { useSession } from "../stores/session";
+import Fail2banAddressPanel from "./Fail2banAddressPanel.vue";
 
 const props = defineProps<{ moduleEnabled: boolean }>();
 const emit = defineEmits<{ changed: []; resources: [names: string[]] }>();
@@ -471,9 +472,7 @@ onUnmounted(() => {
       <template v-if="resource">
         <p class="muted">
           SSH ·
-          {{
-            logs[resource.profile.log_source] ?? resource.profile.log_source
-          }}
+          {{ logs[resource.profile.log_source] ?? resource.profile.log_source }}
           · 端口 {{ resource.profile.ports.join("、") }}
         </p>
         <NAlert type="info"
@@ -621,7 +620,15 @@ onUnmounted(() => {
         >
       </template>
     </template>
-    <h4>最近操作</h4>
+    <Fail2banAddressPanel
+      v-if="resource"
+      :key="resource.adoption_id"
+      engine-owner="existing"
+      :adoption-id="resource.adoption_id"
+      :jail="resource.name"
+      :module-enabled="moduleEnabled"
+    />
+    <h4>最近参数操作</h4>
     <div v-for="task in tasks" :key="task.id" class="page-stack">
       <div class="actions">
         <strong>{{

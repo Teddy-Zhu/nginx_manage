@@ -36,17 +36,23 @@ type fail2banAddressIntent struct {
 }
 
 type fail2banAddressContext struct {
-	r          *fail2banManagedRecord
-	bundle     *fail2banJailBundle
-	jail       fail2ban.DesiredJail
-	live       fail2banLiveService
-	target     string
-	bans       map[string]fail2banBanTime
-	protected  bool
-	canBan     bool
-	reason     string
-	action     string
-	generation string
+	existing     *fail2banExistingRuntimeEvidence
+	installation string
+	selection    string
+	engine       string
+	backend      string
+	banTime      int64
+	r            *fail2banManagedRecord
+	bundle       *fail2banJailBundle
+	jail         fail2ban.DesiredJail
+	live         fail2banLiveService
+	target       string
+	bans         map[string]fail2banBanTime
+	protected    bool
+	canBan       bool
+	reason       string
+	action       string
+	generation   string
 }
 
 func fail2banAddressView(record Record) fail2ban.AddressOperation {
@@ -56,7 +62,14 @@ func fail2banAddressView(record Record) fail2ban.AddressOperation {
 
 // The caller holds Nginx (when present), host and installation locks in order.
 // Jail ownership and its live fixed action never come from executable API input.
-func (f *fail2banJailsExecutor) addressContext(ctx context.Context, name, address string) (fail2banAddressContext, error) {
+func (f *fail2banJailsExecutor) addressContext(ctx context.Context, in fail2ban.AddressQuery) (fail2banAddressContext, error) {
+	if in.EngineOwner == "existing" {
+		return f.existingAddressContext(ctx, in)
+	}
+	return f.managedAddressContext(ctx, in.Jail, in.IP)
+}
+
+func (f *fail2banJailsExecutor) managedAddressContext(ctx context.Context, name, address string) (fail2banAddressContext, error) {
 	var out fail2banAddressContext
 	dataDir := f.server.DataDir
 	binding, err := selectFail2banBinding(dataDir)
@@ -217,6 +230,8 @@ func (f *fail2banJailsExecutor) addressContext(ctx context.Context, name, addres
 		nginxHash = manifestHash(m)
 	}
 	out.target = fail2ban.JailTarget(bundle.EngineKey, selected, dir, nginxHash, registryID, out.live.invocation, hostHash)
+	out.installation, out.selection, out.engine = out.r.OperationID, out.bundle.ID, out.bundle.EngineKey
+	out.backend, out.banTime = out.jail.Action, out.jail.BanTime
 	return out, ctx.Err()
 }
 
@@ -261,11 +276,10 @@ func fail2banHostAddressState(ctx context.Context, dataDir, address string) (str
 	return state, generation, nil
 }
 
-func (f *fail2banJailsExecutor) addressStatus(ctx context.Context, name, address string) (fail2ban.AddressStatus, error) {
-	ip, err := fail2ban.Address(address)
-	out := fail2ban.AddressStatus{At: time.Now().Unix(), Jail: name, IP: ip, EngineState: "unknown", ActionState: "unknown"}
-	if err != nil || !fail2ban.ManagedJailName(name) {
-		return out, fault.Invalid("手动操作须选择本应用的 jail 和单个数值地址")
+func (f *fail2banJailsExecutor) addressStatus(ctx context.Context, in fail2ban.AddressQuery) (fail2ban.AddressStatus, error) {
+	out := fail2ban.AddressStatus{At: time.Now().Unix(), EngineOwner: in.EngineOwner, AdoptionID: in.AdoptionID, Jail: in.Jail, IP: in.IP, EngineState: "unknown", ActionState: "unknown"}
+	if err := in.Validate(); err != nil {
+		return out, err
 	}
 	leave, err := f.lock(false)
 	if errors.Is(err, ErrBusy) {
@@ -283,14 +297,14 @@ func (f *fail2banJailsExecutor) addressStatus(ctx context.Context, name, address
 		out.Reason = "共享实例或 jail 操作尚未完成"
 		return out, nil
 	}
-	current, err := f.addressContext(ctx, name, ip)
+	current, err := f.addressContext(ctx, in)
 	if err != nil {
 		return out, err
 	}
 	out.At, out.Available, out.Target, out.CanBan = time.Now().Unix(), true, current.target, current.canBan
-	out.Backend, out.Reason = current.jail.Action, current.reason
-	out.EngineState, out.ExpiresAt, out.Permanent = fail2banAddressState(current.bans, ip)
-	out.ActionState, out.Generation, out.BanTime = current.action, current.generation, current.jail.BanTime
+	out.Backend, out.Reason = current.backend, current.reason
+	out.EngineState, out.ExpiresAt, out.Permanent = fail2banAddressState(current.bans, in.IP)
+	out.ActionState, out.Generation, out.BanTime = current.action, current.generation, current.banTime
 	if current.protected {
 		out.Reason = strings.TrimSpace(out.Reason + " 该地址属于保护或忽略来源，仅允许解封")
 	}
@@ -329,7 +343,7 @@ func (f *fail2banJailsExecutor) submitAddress(ctx context.Context, in fail2ban.A
 	}
 	defer leave()
 	if old, err := f.journal().Get(in.OperationID); err == nil {
-		if old.Kind != fail2banAddressKind || old.Fail2banAddress == nil || old.RequestHash != in.Hash() {
+		if old.Kind != fail2banAddressKind || !validFail2banAddressIntent(old) || old.RequestHash != in.Hash() {
 			return out, fault.Conflict("手动封禁操作 ID 冲突")
 		}
 		return fail2banAddressView(old), nil
@@ -353,17 +367,25 @@ func (f *fail2banJailsExecutor) submitAddress(ctx context.Context, in fail2ban.A
 			return out, ErrBusy
 		}
 	}
-	current, err := f.addressContext(ctx, in.Input.Jail, in.Input.IP)
-	if err != nil {
-		return out, err
+	var intent *fail2banAddressIntent
+	if in.Input.EngineOwner == "existing" {
+		intent, err = f.existingAddressIntent(in)
+		if err != nil {
+			return out, err
+		}
+	} else {
+		current, err := f.addressContext(ctx, in.Input.Query())
+		if err != nil {
+			return out, err
+		}
+		if current.target != in.Input.Target {
+			return out, fault.Conflict("目标服务、配置或 jail 动作授权已变化，请重新核对地址状态")
+		}
+		if in.Input.Action == "ban" && !current.canBan {
+			return out, fault.Conflict("该地址受保护或动作执行依据不可用，禁止新增封禁")
+		}
+		intent = &fail2banAddressIntent{Request: in, Installation: current.installation, Selection: current.selection, Engine: current.engine, Invocation: current.live.invocation, SocketInode: current.live.inode, Submission: "not_sent", EngineState: "unknown"}
 	}
-	if current.target != in.Input.Target {
-		return out, fault.Conflict("目标服务、配置或 jail 动作授权已变化，请重新核对地址状态")
-	}
-	if in.Input.Action == "ban" && !current.canBan {
-		return out, fault.Conflict("该地址受保护或动作执行依据不可用，禁止新增封禁")
-	}
-	intent := &fail2banAddressIntent{Request: in, Installation: current.r.OperationID, Selection: current.bundle.ID, Engine: current.bundle.EngineKey, Invocation: current.live.invocation, SocketInode: current.live.inode, Submission: "not_sent", EngineState: "unknown"}
 	record := Record{OperationID: in.OperationID, RequestHash: in.Hash(), Kind: fail2banAddressKind, State: "running", Stage: "queued", Deadline: time.Now().Add(5 * time.Minute).Unix(), Fail2banAddress: intent}
 	if err = ctx.Err(); err != nil {
 		return out, err
@@ -389,7 +411,7 @@ func (f *fail2banJailsExecutor) addressOperation(id string) (fail2ban.AddressOpe
 	if record.Kind != fail2banAddressKind || record.Fail2banAddress == nil {
 		return fail2ban.AddressOperation{}, fault.Conflict("该 UUID 不属于手动封禁操作")
 	}
-	if !record.Fail2banAddress.Request.Valid() || record.Fail2banAddress.Request.OperationID != id || record.RequestHash != record.Fail2banAddress.Request.Hash() {
+	if !validFail2banAddressIntent(record) {
 		return fail2ban.AddressOperation{}, errors.New("手动封禁持久合同损坏")
 	}
 	return fail2banAddressView(record), nil

@@ -5262,11 +5262,31 @@
               "type": "string",
               "maxLength": 45
             }
+          },
+          {
+            "name": "engine_owner",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(managed|existing)$"
+            }
+          },
+          {
+            "name": "adoption_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 36
+            }
           }
         ],
         "x-query-keys": [
           "jail",
-          "ip"
+          "ip",
+          "engine_owner",
+          "adoption_id"
         ]
       }
     },

@@ -10,7 +10,12 @@ import {
 } from "../api/client";
 import { useSession } from "../stores/session";
 
-const props = defineProps<{ jail: string; moduleEnabled: boolean }>();
+const props = defineProps<{
+  engineOwner: "managed" | "existing";
+  adoptionId: string;
+  jail: string;
+  moduleEnabled: boolean;
+}>();
 const api = useNodeAPI(),
   session = useSession(),
   controller = new AbortController();
@@ -35,8 +40,15 @@ const active = computed(() =>
   tasks.value.some((task) => activeStates.has(task.state)),
 );
 const history = computed(() =>
-  tasks.value.filter((task) => task.input.jail === props.jail),
+  tasks.value.filter((task) => sameJail(task.input)),
 );
+function sameJail(input: Fail2banAddressInput) {
+  return (
+    input.jail === props.jail &&
+    input.engine_owner === props.engineOwner &&
+    input.adoption_id === props.adoptionId
+  );
+}
 const writable = computed(
   () => !!session.me?.scopes.includes("security.write") && props.moduleEnabled,
 );
@@ -63,6 +75,7 @@ const engineNames = { unknown: "未知", banned: "已封禁", clear: "未封禁"
 const backendNames: Record<string, string> = {
   "nginx-client": "Nginx 受管拒绝集合",
   "host-input": "宿主机入口规则",
+  "existing-ssh": "已有 SSH jail 官方动作",
 };
 const submissionNames = {
   not_sent: "尚未派发",
@@ -93,8 +106,12 @@ async function inspect() {
   status.value = null;
   try {
     const result = await api.fail2banAddress(
-      props.jail,
-      value,
+      {
+        engine_owner: props.engineOwner,
+        adoption_id: props.adoptionId,
+        jail: props.jail,
+        ip: value,
+      },
       controller.signal,
     );
     if (!closed && version === queryVersion) status.value = result;
@@ -124,7 +141,7 @@ async function refresh() {
         (task) =>
           previouslyActive.has(task.id) &&
           !activeStates.has(task.state) &&
-          task.input.jail === props.jail,
+          sameJail(task.input),
       )
     )
       await inspect();
@@ -154,6 +171,8 @@ async function change(action: "ban" | "unban") {
       return;
     pending.value = {
       input: {
+        engine_owner: props.engineOwner,
+        adoption_id: props.adoptionId,
         jail: props.jail,
         ip: status.value.ip,
         action,

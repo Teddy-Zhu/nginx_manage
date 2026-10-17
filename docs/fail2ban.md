@@ -59,7 +59,7 @@ nginxpanel fail2ban-existing-jail-plan --data-dir /srv/nginxpanel --fail2ban-sco
 
 预检读取完整受 root 保护的配置树（最多 1024 项、总计 8 MiB、单文件 256 KiB，拒绝链接及特殊文件），同时核对所有文件和目录在宿主机与实际服务进程根目录中的身份，拒绝不同挂载或 chroot 视图。在私有临时目录生成参考和候选配置，通过官方客户端 `-d` 获取配置流，使用有界字面量解析器读取，不执行 Python 表达式。比较原 jail 与固定 profile 的关键配置，再比较原配置与候选的全部非调整参数，并核对目标参数没有被其他配置覆盖。候选覆盖路径为 `jail.d/zzzz-nginxpanel-existing-<name>.local`，同名文件存在时拒绝覆盖。
 
-成功结果包含原参数、期望参数、完整 jail 名单、影响说明、目标摘要、实际过滤器/动作的 `native_proof` 及独立的 `ban_proof` 观察摘要。原生观察涵盖展开后的匹配表达式、实际日志来源及固定 CommandAction 属性，首次交接时重新核对。目标固定接入、单元、配置和服务代次；正常新增/到期的封禁不使配置接管基准失效。采集收尾复核配置、参数、完整名单、程序及实例身份。临时材料清理失败也报告失败。预检不证明内核实际阻断或授权接管；封禁日历时间的绝对换算使用下述独立运行证明，不重放历史封禁。网页/API 的已有 jail 修改仍未开放，迁移不能授予本机所有权。
+成功结果包含原参数、期望参数、完整 jail 名单、影响说明、目标摘要、实际过滤器/动作的 `native_proof` 及独立的 `ban_proof` 观察摘要。原生观察涵盖展开后的匹配表达式、实际日志来源及固定 CommandAction 属性，首次交接时重新核对。目标固定接入、单元、配置和服务代次；正常新增/到期的封禁不使配置接管基准失效。采集收尾复核配置、参数、完整名单、程序及实例身份。临时材料清理失败也报告失败。预检不证明内核实际阻断或授权接管；封禁日历时间的绝对换算使用下述独立运行证明，不重放历史封禁。网页/API 参数及手动地址操作沿用本机已接管登记，迁移不能授予本机所有权。
 
 配置流与单 jail reload 合同依据 [官方客户端](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banclient.py)、[参数与 dump 输出](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2bancmdline.py)及 [action 配置转换](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/actionreader.py)。官方实例和发行版组合验收留待 P5。
 
@@ -83,7 +83,7 @@ nginxpanel fail2ban-existing-jail-cancel --data-dir /srv/nginxpanel --fail2ban-s
 
 释放只移除本应用生成且内容一致的覆盖文件，核对原配置等价后发布独立释放事件；不会改写其他 jail。期间其他 jail 的配置变化可通过当前配置流与移除候选重新证明，不要求按接管的逆序释放。服务离线时，若全部配置仍与冻结快照一致，可仅凭已证明的等价配置交还所有权。仍存在接管的 jail 时，禁止变更/撤销实例接入；原样重复接入保留原身份。
 
-快照、事件和指针位于 `DATA/agent/fail2ban/existing-jails/{captures,events,current}`，均为 root 私有运行材料，不进入配置迁移或业务恢复。单快照最多 16 MiB，接管快照及事件各最多 2048 项，名称指针最多 64 项，历史保留用于审计。网页/API 可读取接管登记和保存参数，按下述独立任务预览、应用及停用；运行证明仍由 root 执行器核对，手动地址操作尚未接入。登记本身不表示实时保护生效。
+快照、事件和指针位于 `DATA/agent/fail2ban/existing-jails/{captures,events,current}`，均为 root 私有运行材料，不进入配置迁移或业务恢复。单快照最多 16 MiB，接管快照及事件各最多 2048 项，名称指针最多 64 项，历史保留用于审计。网页/API 可读取接管登记和保存参数，按下述独立任务预览、应用及停用；运行证明及手动地址操作仍由 root 执行器核对。登记本身不表示实时保护生效。
 
 ## 已接管 SSH jail 的运行证明
 
@@ -136,7 +136,7 @@ Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2
 
 取消未转入执行的排队请求直接保存取消终态，不修改运行配置。转入执行后的取消仅保存请求，由原 worker 按上述原进程退出及原状态证明规则判断；不能取消时返回独立 `cancel_error`，清除待判断请求并继续观察原 reload，不把取消失败写成原操作完成或阻止原结果确认。本机 root 直接发起的操作仍由本机 CLI 取消，Agent 请求不能越过这一边界。
 
-队列、取消及执行共用 Nginx/宿主机/接入锁、维护排空和全局 journal 的 2048 项上限，不进入业务迁移或完整备份。Agent 协议为 64，数据库与归档仍为 26/6；无旧协议兼容。原生运行、超时、中断、取消及维护组合的验收统一留待 P5。
+队列、取消及执行共用 Nginx/宿主机/接入锁、维护排空和全局 journal 的 2048 项上限，不进入业务迁移或完整备份。Agent 协议为 65，数据库与归档为 27/6；无旧协议兼容。原生运行、超时、中断、取消及维护组合的验收统一留待 P5。
 
 ## 已接管 jail 的网页与业务 API
 
@@ -297,17 +297,21 @@ nginxpanel fail2ban-jails-status --data-dir /var/lib/nginxpanel --fail2ban-scope
 本机 root Socket 继续保留独立动作授权和刷新；Web Agent Socket 仅开放同一类型化 jail 应用/查询及下述手动地址入口，不开放 bind/unbind/refresh 或任意命令。所有公开接口与显式远程资源沿用统一 JSON 外壳及权限，页面路由继续自动扫描。API/Go/TypeScript 声明已同步；尚未运行生成器、构建、类型检查、lint、测试、浏览器或真实实例，统一留待 P5。验收需覆盖模块边界、版本/目标漂移、任务幂等和断连恢复、拒绝/记录缺失、迁移/备份隔离及空策略停用。
 
 
-## 受管 jail 的手动封禁与解封
+## 受管及已接管 jail 的手动封禁与解封
 
-在受管 jail 详情中输入单个数值 IPv4/IPv6 地址，先查询实时状态。`GET /fail2ban/addresses/status?jail=…&ip=…` 要求 `read`，核对独立受管引擎、当前配置包、官方 jail 参数与固定动作。Nginx jail 另核对当前站点日志/代理、动作授权、运行探针和集合代次；面板登录 jail 无需 Nginx，核对本机宿主机来源/保护/持续会话及所属内核对象。返回规范地址、`target`、引擎当前封禁/到期时间、当前 jail 时长、`can_ban`、`backend` 和对应动作集合状态，不使用旧诊断缓存作为写入依据。本机接口、回环/未指定/组播地址、忽略列表及当前可信代理拒绝手动 ban；宿主机动作同时保护本地链路及本机 root 批准来源。动作依据失效或内核无法证明时禁止新增宿主机封禁，仍允许在官方引擎明确 unban，未知内核状态不会伪装成已解封。
+在受管 jail 详情中输入单个数值 IPv4/IPv6 地址，先查询实时状态。`GET /fail2ban/addresses/status?engine_owner=managed&jail=…&ip=…` 要求 `read`，核对独立受管引擎、当前配置包、官方 jail 参数与固定动作。Nginx jail 另核对当前站点日志/代理、动作授权、运行探针和集合代次；面板登录 jail 无需 Nginx，核对本机宿主机来源/保护/持续会话及所属内核对象。返回规范地址、`target`、引擎当前封禁/到期时间、当前 jail 时长、`can_ban`、`backend` 和对应动作集合状态，不使用旧诊断缓存作为写入依据。本机接口、回环/未指定/组播地址、忽略列表及当前可信代理拒绝手动 ban；宿主机动作同时保护本地链路及本机 root 批准来源。动作依据失效或内核无法证明时禁止新增宿主机封禁，仍允许在官方引擎明确 unban，未知内核状态不会伪装成已解封。
 
-`POST /fail2ban/addresses` 接收 `jail/ip/action/target`，其中 `action=ban|unban`。要求启用管理模块、`security.write`、幂等键及浏览器近期认证；HTTP 202 返回 `task_id/operation_id`。请求材料、幂等响应及排队审计同事务保存，复用持久后台任务与独立 root jail 执行器，按 Nginx、宿主机、实例锁顺序互斥，并与维护准入串行；未接管 jail、全局解封、CIDR、任意命令及封禁时长覆盖均不支持。目标服务、配置或授权变化须重新查询，不自动切换到新目标。首次排队超过五分钟未提交会过期；应用、手动操作、配置变更及服务控制之间互相阻止冲突。
+`POST /fail2ban/addresses` 接收 `engine_owner/adoption_id/jail/ip/action/target`，其中 `action=ban|unban`。要求启用管理模块、`security.write`、幂等键及浏览器近期认证；HTTP 202 返回 `task_id/operation_id`。请求材料、幂等响应及排队审计同事务保存，复用持久后台任务与独立 root jail 执行器，按 Nginx、宿主机、实例锁顺序互斥，并与维护准入串行；未接管 jail、全局解封、CIDR、任意命令及封禁时长覆盖均不支持。目标服务、配置或授权变化须重新查询，不自动切换到新目标。首次排队超过五分钟未提交会过期；应用、手动操作、配置变更及服务控制之间互相阻止冲突。
+
+已接管 SSH jail 使用 `engine_owner=existing`，查询和提交均须指定当前 root 接管的 `adoption_id` 与同名 jail；受管实例使用 `managed`，提交的 adoption_id 为空。未接管、已释放、停用或名称不一致的 jail 不获写入授权。页面在已接管 jail 参数详情提供同一地址面板，历史按所有者、接管 ID 及 jail 筛选，旧接管的审计不改写。
+
+SSH 状态沿用完整运行证明：检查接管事件、参数选择、服务单元/实例/Socket、完整配置流、实际过滤器与固定官方 nftables 动作、完整 jail 名单及封禁绝对到期时间。完整 SSH 读取复用有界异步缓存：同一输入等待同一次最长 90 秒的后台读取，HTTP 等待结束后可刷新取得原结果；完成后最多保留 30 秒，返回原采样时间。最多 2 个并行读取、每 30 秒最多启动 16 次、最多 65 项；这些观察不是写入授权。提交仅冻结本机接管/参数选择并入 root 队列，发送前重新完成全部核对并比较原 target；本机接口、非全局单播及忽略地址禁止 ban。只构造固定官方客户端的 `set <jail> banip|unbanip <IP>`，不直接改写系统防火墙、不调用全局解封、不改动其他 jail。返回 `backend=existing-ssh`、`action_state=unknown`，任务成功只确认官方引擎状态，不代表已证明内核阻断或放行。解封清除当前 jail 的持久记录；其他 jail 及外部规则仍可能阻断此地址。
 
 root 在固定官方客户端调用前持久记录已派发；进程中断、超时或丢失回执只观察原操作，不再次调用 ban/unban，也不自动执行相反动作补偿。已封禁地址的 ban 跳过调用，避免续期；unban 即使当前列表没有地址仍调用官方单 jail 入口，以清除该 jail 的持久封禁记录。官方引擎仍决定自动封禁、过期与并发行为，查询与派发之间出现新封禁时以引擎实际结果为准，不承诺独占引擎或精确条件交换。客户端数字回执与当前引擎状态分别保存；回执未知但目标当前状态可证明时明确标注，不把超时或客户端返回成功直接视为动作生效。依据见官方 [BanManager](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/banmanager.py)、[Actions](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/actions.py) 及 [Transmitter](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/transmitter.py)。
 
 `GET /fail2ban/addresses/tasks` 返回最近 16 条手动任务及加密保存的引擎观测快照，Agent 暂离线仍可读取已有快照；不是自动封禁全历史。任务成功只表示所选 jail 的当前引擎状态已证明，对应 Nginx 或宿主机动作唤醒原对账链路，仍需独立查询：多个 jail 合并后，其他 jail 可使同一地址继续处于拒绝集合，集合未包含地址也不证明其他保护放行。公开接口及显式远程转发均使用统一 JSON；页面沿用自动扫描，不增加路由数组。
 
-完整备份中的隔离任务不重放，业务迁移不导出手动记录或运行封禁。当前 Agent 协议为 56，数据库仍为 26、迁移 schema 仍为 6。实现与源码接入审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、官方程序或真实服务，统一留待 P5。运行验收需覆盖派发前后中断/回执未知、已封禁不续期、未列出地址的持久解封、保护地址、目标漂移、任务审计/备份隔离、跨 jail 合并及动作集合独立确认。
+完整备份中的隔离任务不重放，业务迁移不导出手动记录或运行封禁。当前 Agent 协议为 65，数据库为 27、迁移 schema 为 6。实现与源码接入审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、官方程序或真实服务，统一留待 P5。运行验收需覆盖派发前后中断/回执未知、已封禁不续期、未列出地址的持久解封、保护地址、目标漂移、任务审计/备份隔离、跨 jail 合并及动作集合独立确认。
 
 
 ## 网页与 API 的安装及服务控制

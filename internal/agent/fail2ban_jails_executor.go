@@ -16,9 +16,12 @@ import (
 // Jail execution belongs to the host engine. Nginx is an optional log/action
 // dependency, never a substitute host runtime when no Nginx is installed.
 type fail2banJailsExecutor struct {
-	server *Server
-	gate   *maintenanceGate
-	wake   chan struct{}
+	ctx           context.Context
+	addressReads  fail2banReadCache[fail2banAddressSample]
+	addressBudget fail2banReadBudget
+	server        *Server
+	gate          *maintenanceGate
+	wake          chan struct{}
 }
 
 type fail2banJailBasis struct {
@@ -109,7 +112,7 @@ func (f *fail2banJailsExecutor) run(ctx context.Context) {
 			continue
 		}
 		dirty = false
-		addressCall, stopAddress := context.WithTimeout(ctx, 40*time.Second)
+		addressCall, stopAddress := context.WithTimeout(ctx, 90*time.Second)
 		addressErr := f.advanceAddress(addressCall)
 		stopAddress()
 		call, cancel := context.WithTimeout(ctx, 90*time.Second)

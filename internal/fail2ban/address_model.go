@@ -24,15 +24,37 @@ func ManagedJailName(name string) bool {
 }
 
 type AddressInput struct {
-	Jail   string `json:"jail"`
-	IP     string `json:"ip"`
-	Action string `json:"action"`
-	Target string `json:"target"`
+	EngineOwner string `json:"engine_owner"`
+	AdoptionID  string `json:"adoption_id"`
+	Jail        string `json:"jail"`
+	IP          string `json:"ip"`
+	Action      string `json:"action"`
+	Target      string `json:"target"`
+}
+
+type AddressQuery struct {
+	EngineOwner string `json:"engine_owner"`
+	AdoptionID  string `json:"adoption_id"`
+	Jail        string `json:"jail"`
+	IP          string `json:"ip"`
+}
+
+func (in AddressQuery) Validate() error {
+	ip, err := Address(in.IP)
+	managed := in.EngineOwner == "managed" && in.AdoptionID == "" && ManagedJailName(in.Jail)
+	existing := in.EngineOwner == "existing" && policyID.MatchString(in.AdoptionID) && existingJailName.MatchString(in.Jail) && !strings.HasPrefix(in.Jail, "nginxpanel-")
+	if err != nil || ip != in.IP || !managed && !existing {
+		return fault.Invalid("手动操作须明确实例所有者、有效接管标识、jail 和单个数值地址")
+	}
+	return nil
+}
+
+func (in AddressInput) Query() AddressQuery {
+	return AddressQuery{EngineOwner: in.EngineOwner, AdoptionID: in.AdoptionID, Jail: in.Jail, IP: in.IP}
 }
 
 func (in AddressInput) Validate() error {
-	ip, err := Address(in.IP)
-	if err != nil || ip != in.IP || !ManagedJailName(in.Jail) || in.Action != "ban" && in.Action != "unban" || len(in.Target) != 64 || strings.Trim(in.Target, "0123456789abcdef") != "" {
+	if in.Query().Validate() != nil || in.Action != "ban" && in.Action != "unban" || len(in.Target) != 64 || strings.Trim(in.Target, "0123456789abcdef") != "" {
 		return fault.Invalid("手动封禁操作的 jail、地址、动作或目标基准无效")
 	}
 	return nil
@@ -50,6 +72,8 @@ func (in AddressRequest) Valid() bool {
 func (in AddressRequest) Hash() string { raw, _ := json.Marshal(in); return secure.Hash(raw) }
 
 type AddressStatus struct {
+	EngineOwner string `json:"engine_owner"`
+	AdoptionID  string `json:"adoption_id"`
 	At          int64  `json:"at"`
 	Jail        string `json:"jail"`
 	IP          string `json:"ip"`
@@ -96,7 +120,7 @@ type AddressTaskStatus struct {
 }
 
 type AddressExecutor interface {
-	ReadFail2banAddress(context.Context, string, string) (AddressStatus, error)
+	ReadFail2banAddress(context.Context, AddressQuery) (AddressStatus, error)
 	ChangeFail2banAddress(context.Context, AddressRequest) (AddressOperation, error)
 	Fail2banAddressOperation(context.Context, string) (AddressOperation, error)
 }

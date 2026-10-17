@@ -28,7 +28,8 @@ func (f *fail2banJailsExecutor) addressHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/fail2ban/addresses/status", func(w http.ResponseWriter, r *http.Request) {
 		call, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
-		out, err := f.addressStatus(call, r.URL.Query().Get("jail"), r.URL.Query().Get("ip"))
+		in := fail2ban.AddressQuery{EngineOwner: r.URL.Query().Get("engine_owner"), AdoptionID: r.URL.Query().Get("adoption_id"), Jail: r.URL.Query().Get("jail"), IP: r.URL.Query().Get("ip")}
+		out, err := f.readAddressStatus(call, in)
 		fail2banNginxReply(w, out, err)
 	})
 	mux.HandleFunc("GET /v1/fail2ban/addresses/operations/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -55,17 +56,18 @@ func (f *fail2banJailsExecutor) addressHandlers(mux *http.ServeMux) {
 		fail2banNginxReply(w, out, err)
 	})
 }
-func (c *Client) ReadFail2banAddress(ctx context.Context, jail, ip string) (fail2ban.AddressStatus, error) {
+func (c *Client) ReadFail2banAddress(ctx context.Context, in fail2ban.AddressQuery) (fail2ban.AddressStatus, error) {
 	var out fail2ban.AddressStatus
-	address, err := fail2ban.Address(ip)
-	if err != nil || !fail2ban.ManagedJailName(jail) {
-		return out, fault.Invalid("jail 或地址格式无效")
+	if err := in.Validate(); err != nil {
+		return out, err
 	}
-	err = c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/addresses/status?"+url.Values{"jail": {jail}, "ip": {address}}.Encode(), nil, &out)
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/addresses/status?"+url.Values{"engine_owner": {in.EngineOwner}, "adoption_id": {in.AdoptionID}, "jail": {in.Jail}, "ip": {in.IP}}.Encode(), nil, &out)
 	if err == nil {
 		actionKnown := (out.ActionState == "clear" || out.ActionState == "denied") && fail2banDigest.MatchString(out.Generation)
 		actionUnknown := out.Backend == "host-input" && out.ActionState == "unknown" && out.Generation == "" && !out.CanBan && out.Reason != ""
-		if out.At <= 0 || out.Jail != jail || out.IP != address || !validFail2banAddressState(out.EngineState) || out.ExpiresAt < 0 || out.Available && (out.Backend != "nginx-client" && out.Backend != "host-input" || !fail2banDigest.MatchString(out.Target) || out.EngineState == "unknown" || !actionKnown && !actionUnknown || out.BanTime != -1 && out.BanTime <= 0) || !out.Available && (out.Backend != "" || out.EngineState != "unknown" || out.ActionState != "unknown" || out.CanBan) {
+		existingAction := in.EngineOwner == "existing" && out.Backend == "existing-ssh" && out.ActionState == "unknown" && out.Generation == "" && out.Reason != ""
+		managedAction := in.EngineOwner == "managed" && (out.Backend == "nginx-client" || out.Backend == "host-input") && (actionKnown || actionUnknown)
+		if out.At <= 0 || out.EngineOwner != in.EngineOwner || out.AdoptionID != in.AdoptionID || out.Jail != in.Jail || out.IP != in.IP || !validFail2banAddressState(out.EngineState) || out.ExpiresAt < 0 || out.Available && (!existingAction && !managedAction || !fail2banDigest.MatchString(out.Target) || out.EngineState == "unknown" || out.BanTime != -1 && out.BanTime <= 0) || !out.Available && (out.Backend != "" || out.EngineState != "unknown" || out.ActionState != "unknown" || out.CanBan) {
 			err = errors.New("手动地址状态合同无效")
 		}
 	}

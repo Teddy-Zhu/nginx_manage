@@ -20,12 +20,15 @@ type addressTaskPayload struct {
 	Result  *AddressOperation `json:"result"`
 }
 
-func (s *PolicyService) AddressRuntime(ctx context.Context, jail, ip string) (AddressStatus, error) {
+func (s *PolicyService) AddressRuntime(ctx context.Context, in AddressQuery) (AddressStatus, error) {
 	executor, ok := s.Agent.(AddressExecutor)
 	if !ok {
 		return AddressStatus{}, fault.Unavailable("未连接手动封禁执行器")
 	}
-	return executor.ReadFail2banAddress(ctx, jail, ip)
+	if err := in.Validate(); err != nil {
+		return AddressStatus{}, err
+	}
+	return executor.ReadFail2banAddress(ctx, in)
 }
 
 func (s *PolicyService) AddressTasks(ctx context.Context) ([]AddressTaskStatus, error) {

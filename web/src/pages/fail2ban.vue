@@ -386,6 +386,8 @@ onUnmounted(() => {
         <Fail2banAddressPanel
           v-if="jail.managed"
           :key="jail.name"
+          engine-owner="managed"
+          adoption-id=""
           :jail="jail.name"
           :module-enabled="moduleEnabled === true"
         />

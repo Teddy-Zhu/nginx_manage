@@ -251,3 +251,8 @@ protection 返回目标本机 root 管理/代理来源批准的状态、ID、时
 
 
 目标端 `POST /migrations/pull` 新增可选 `dependencies`，复用既有组件准备/原生首次安装授权与任务；`MigrationPlan.pull` 返回自动迁入的 state、stage、mode、error 和 deadline。预检模式禁止此授权；需要 components.manage，首次安装另需 system.write。授权只保留本地最小权限与冻结输入，期限不超过原计划 30 分钟，不保存源 API Key 或包口令；原任务缺失停止重新创建，过期不取消已提交操作。数据库新增迁入协调字段（schema 27），Agent 仍为 64，归档仍为 6；完整恢复清除源授权。MigrationReceiver 声明同步当前归档 schema 6。统一返回及自动扫描页面不变；尚未运行生成器、构建、类型检查、测试或真实迁移，留待 P5。
+
+
+手动地址合同新增必填 engine_owner=managed|existing，以及提交时的 adoption_id（managed 为空，existing 必须为本机有效接管 ID）；地址状态查询增加同名参数，existing 必须提供 adoption_id。同一地址 API、任务、加密回执及显式远程资源覆盖已接管 SSH jail，页面复用同一地址面板并按所有者/接管 ID 筛选历史。发送前与发送后沿用完整原生运行证明，固定官方单 jail banip/unbanip；existing-ssh 动作状态返回 unknown，仅确认引擎，不能推断内核阻断。原接管/参数/服务/配置变化、保护地址或任务缺失停止提交；派发标记持久后不重放及不逆向补偿。Agent 为 65、数据库为 27、归档为 6；没有旧协议分支。未运行生成器、构建、类型检查、测试或真实 Fail2ban，待 P5。
+
+完整 SSH 地址状态读取复用原有读取预算和缓存，后台上限 90 秒，HTTP 仅等待本次 12 秒；后续相同查询跟随同一读取，完成后保留 30 秒且不刷新采样时间。最多 2 个并行读取、每 30 秒 16 次启动及 65 项；管理写入始终重新核对完整实际运行证明。
