@@ -226,7 +226,16 @@ func readDockerFirewallSnapshot(ctx context.Context, client *dockerapi.Client) (
 }
 
 func readDockerFirewallRuntime(ctx context.Context) firewall.DockerRuntime {
-	fail := func(reason string) firewall.DockerRuntime { return firewall.EmptyDockerRuntime(reason) }
+	out, _ := readDockerFirewallState(ctx)
+	return out
+}
+
+// The selected private topology is retained only for this fresh plan. Public
+// observations and migration archives never carry it as an execution binding.
+func readDockerFirewallState(ctx context.Context) (firewall.DockerRuntime, *dockerFirewallSnapshot) {
+	fail := func(reason string) (firewall.DockerRuntime, *dockerFirewallSnapshot) {
+		return firewall.EmptyDockerRuntime(reason), nil
+	}
 	client, err := dockerapi.New()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -280,5 +289,5 @@ func readDockerFirewallRuntime(ctx context.Context) firewall.DockerRuntime {
 		}
 	}
 	out.Truncated = out.PublishedPorts > len(out.Ports)
-	return out
+	return out, &before
 }

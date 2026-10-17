@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -47,7 +48,11 @@ func (s *Server) firewallRuntimeHandlers(mux *http.ServeMux, f *hostFirewall) {
 	})
 	for _, action := range []string{"plan", "apply", "decide"} {
 		mux.HandleFunc("POST /v1/firewall/"+action, func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, firewall.PolicyBytes+4096)
+			budget := int64(firewall.PolicyBytes + 4096)
+			if action == "plan" {
+				budget += firewall.DockerTargetBytes
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, budget)
 			defer r.Body.Close()
 			var in firewallRequest
 			d := json.NewDecoder(r.Body)
@@ -94,6 +99,9 @@ func (c *Client) FirewallRuntime(ctx context.Context) (firewall.RuntimeView, err
 func (c *Client) PlanFirewall(ctx context.Context, input firewall.RuntimeInput, connection string) (firewall.Plan, error) {
 	var out firewall.Plan
 	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/firewall/plan", firewallRequest{Protocol: Protocol, Input: &input, ConnectionID: connection}, &out)
+	if err == nil && !validDockerPlan(out, input) {
+		err = errors.New("invalid Docker firewall target plan")
+	}
 	return out, err
 }
 func (c *Client) ApplyFirewall(ctx context.Context, id string, in firewall.ApplyInput, hash, connection string) (firewall.Operation, error) {

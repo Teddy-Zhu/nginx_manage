@@ -57,7 +57,7 @@ func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.P
 		return
 	}
 	var in firewall.PlanInput
-	if err := decodeLimit(w, r, &in, 1024); err != nil {
+	if err := decodeLimit(w, r, &in, firewall.DockerTargetBytes+4096); err != nil {
 		s.fail(w, r, err)
 		return
 	}

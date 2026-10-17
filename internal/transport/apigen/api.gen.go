@@ -2079,10 +2079,11 @@ type FirewallProtection struct {
 	Sources []string `json:"sources"`
 }
 type FirewallPlanInput struct {
-	PreparationId     *string `json:"preparation_id,omitempty"`
-	CancelPreparation *bool   `json:"cancel_preparation,omitempty"`
-	Action            string  `json:"action"`
-	Version           int64   `json:"version"`
+	DockerTargets     *FirewallDockerTargets `json:"docker_targets,omitempty"`
+	PreparationId     *string                `json:"preparation_id,omitempty"`
+	CancelPreparation *bool                  `json:"cancel_preparation,omitempty"`
+	Action            string                 `json:"action"`
+	Version           int64                  `json:"version"`
 }
 type FirewallApplyInput struct {
 	Action  string `json:"action"`
@@ -2102,6 +2103,7 @@ type FirewallPlanPreparation struct {
 	Error             string `json:"error"`
 }
 type FirewallPlan struct {
+	Docker              *FirewallDockerPlan      `json:"docker"`
 	Iptables            *FirewallIPTablesPlan    `json:"iptables"`
 	Preparation         *FirewallPlanPreparation `json:"preparation"`
 	Backend             string                   `json:"backend"`
@@ -2125,6 +2127,54 @@ type FirewallPlan struct {
 	TransactionHash     string                   `json:"transaction_hash"`
 	TransactionBytes    int64                    `json:"transaction_bytes"`
 	GeneratedRules      int64                    `json:"generated_rules"`
+}
+type FirewallDockerTargets struct {
+	EngineHash   string                      `json:"engine_hash"`
+	SnapshotHash string                      `json:"snapshot_hash"`
+	Bindings     []FirewallDockerRuleBinding `json:"bindings"`
+}
+type FirewallDockerRuleBinding struct {
+	RuleId         string `json:"rule_id"`
+	ContainerId    string `json:"container_id"`
+	NetworkId      string `json:"network_id"`
+	Family         string `json:"family"`
+	Protocol       string `json:"protocol"`
+	HostIp         string `json:"host_ip"`
+	HostPort       int    `json:"host_port"`
+	ContainerPort  int    `json:"container_port"`
+	Destination    string `json:"destination"`
+	InputInterface string `json:"input_interface"`
+}
+type FirewallDockerResolvedBinding struct {
+	Binding          FirewallDockerRuleBinding `json:"binding"`
+	ContainerAddress string                    `json:"container_address"`
+	OutputInterface  string                    `json:"output_interface"`
+}
+type FirewallDockerLocalAddress struct {
+	Interface string `json:"interface"`
+	Family    string `json:"family"`
+	Address   string `json:"address"`
+}
+type FirewallDockerPlan struct {
+	EngineHash         string                          `json:"engine_hash"`
+	SnapshotHash       string                          `json:"snapshot_hash"`
+	ConfigurationHash  string                          `json:"configuration_hash"`
+	BindingsHash       string                          `json:"bindings_hash"`
+	ObservedAt         int64                           `json:"observed_at"`
+	Ports              []FirewallDockerPublishedPort   `json:"ports"`
+	Truncated          bool                            `json:"truncated"`
+	Addresses          []FirewallDockerLocalAddress    `json:"addresses"`
+	Bindings           []FirewallDockerResolvedBinding `json:"bindings"`
+	Compiled           bool                            `json:"compiled"`
+	ProgramHash        string                          `json:"program_hash"`
+	ProgramBytes       int                             `json:"program_bytes"`
+	GeneratedRules     int                             `json:"generated_rules"`
+	HostProgramHash    string                          `json:"host_program_hash"`
+	HostGeneratedRules int                             `json:"host_generated_rules"`
+	Entries            []FirewallPreviewEntry          `json:"entries"`
+	EntriesTruncated   bool                            `json:"entries_truncated"`
+	Warnings           []string                        `json:"warnings"`
+	Reason             string                          `json:"reason"`
 }
 type FirewallFirewalldPlan struct {
 	RuntimeHash             string                   `json:"runtime_hash"`

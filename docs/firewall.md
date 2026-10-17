@@ -25,9 +25,23 @@
 
 每项分别展示主机地址/端口和容器端口，不用 DNAT 后容器端口替代外部发布端口。`0.0.0.0`、`::` 只是通配绑定，不自动选择原始目的地址；缺失主机端口保留为 0。仅将唯一 local bridge、nat 网关模式、运行容器和同地址族端点列为 `bridge_nat_candidate`；rootless、Swarm、非 nat、其他驱动、多个网络、回环路径、SCTP 及 IPv6 发布到仅 IPv4 端点等明确未确认，不将用户态代理视为同族转发。候选仍须核对实际 DNAT、入站及转发出口，不证明已受保护或外部可达。
 
-`docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。当前所有 `supported` 及 `docker.writable` 均为 false，独立原始目的绑定、受管代际执行、新连接确认与持久恢复仍待接入。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
+`docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。当前所有 `supported` 及 `docker.writable` 均为 false，目标绑定与独立编译见下节；DNAT/路由核对、受管代际执行、新连接确认与持久恢复仍待接入。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
 
 依据：[Docker Engine API 1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)、[官方 API 模型](https://github.com/moby/moby/blob/v27.5.1/api/swagger.yaml)、[Docker iptables 与原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[端口发布与网关模式](https://docs.docker.com/engine/network/port-publishing/)。本阶段完成源码实现和集成审阅，实际 Docker/API/内核组合仍待 P5 集中验证。
+
+## Docker 发布端口目标计划
+
+`POST /firewall/plan` 对含启用 Docker 规则的已保存策略接入独立目标绑定预览，限显式 iptables-nft/legacy、本机宿主机授权及已确认受控管理连接。此路径读取实际完整规则和两次一致的 Docker 报告，核对所需地址族的 DOCKER-USER 挂接；它不进入主机 INPUT 代际执行器、不创建独立执行记录，也不写入规则。首次省略 `docker_targets` 返回 `plan.docker` 中的映射候选及可选入口地址；不根据源环境推断目标配置。
+
+再次提交可携带 `docker_targets.engine_hash/snapshot_hash/bindings`，每项明确规则、容器、网络、地址族、协议、Docker 主机地址/端口、容器端口、实际原始目的地址及入口接口。最多 128 项、96 KiB；每条启用 Docker 规则的每个地址族、每个主机端口必须完整覆盖，不能把端口区间静默缩成现有映射子集。同一规则、入口及原始目的端口不能绑定冲突容器；映射、协议或来源仍使用目标已保存规则。通配绑定必须选择实际本机入口地址，固定绑定则必须相等；回环、链路本地、映射地址、接口通配及未知接口均不接受。选定目标只定义这些明确映射的覆盖范围，不代表覆盖所有容器或所有通配地址。
+
+Agent 重新读取当前实例、网络和容器，报告摘要不一致时拒绝沿用旧绑定。解析要求运行容器、唯一 local bridge/NAT、同族容器端点及当前实际 bridge 接口；显式 bridge 名直接核对，未命名自建 bridge 按官方生成名称定位后仍核对宿主机接口和 sysfs 类型，不以名称证明链路。入口地址与接口必须实际对应，接口、标识、状态、MTU 及地址在计划期间须一致，最多 512 个接口、合计 2048 个接口地址、512 个可绑定地址和 256 KiB 私有接口报告。它仍不是 DNAT、路由或数据包路径证明，跨接口报告不是原子快照。
+
+主机入站及其 SSH/管理入口保护使用原编译器，Docker 使用独立程序类型，不能传给 INPUT 执行器。Docker 规则同时匹配入口、bridge 出口、同族容器地址/端口、来源，以及 conntrack ORIGINAL 的原始目的地址/主机端口和 NEW 状态。允许使用 RETURN，拒绝或丢弃分别使用相应目标；不使用全面 ACCEPT 绕过 Docker 后续隔离。规则仍仅作用于新连接，不清理 conntrack。完整绑定和两类程序分别参与摘要；包含保护项的两类规则合计最多 8192 条，Docker 程序最多 2 MiB、计划回包最多 512 KiB，页面展示前 128 条并注明截断。IPC 边界使用类型化输入重新编译核对摘要、数量和展示内容，不把展示命令作为执行输入。
+
+目标绑定只存在于本次请求、易失计划及页面内存，不改写期望规则、数据库或迁移归档；导出、导入和 API 迁移继续只携带中立期望。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 仅表示完成目标编译，`can_apply` 保持 false，提交执行会被拒绝；发布端口的 DNAT/路由核对、独立本机写入授权、代际转换、官方预演、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
+
+实现依据：[Moby bridge 名称及端点](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/bridge_linux.go)、[Docker 转发及原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)。本阶段仅完成源码实现和集成审阅，未执行 Docker/API/系统能力验证，待 P5 集中验证。
 
 ## 内核目标表快照
 
@@ -112,7 +126,7 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 
 `PUT /system/modules/firewall` 停用时必须指定 `firewall_rules`。`keep` 明确保留已确认规则；`remove` 另需 `read/security.write` 及已确认的 `firewall_operation_id`，只有原操作仍为当前确认的移除结果且无活动变更才停用；后续应用失败并恢复该空表时仍可引用原确认操作，后续成功应用会使其失效。初始空表经核对且尚无已确认规则时无需生成空的移除操作，可省略操作 ID 直接停用。公共执行提交与最终停用共用锁，防止停用核对期间插入新应用；失败不伪造停用成功，可继续引用同一操作重试。启用或其他模块拒绝携带停用选项。自动扫描的功能模块页面提供保留/先移除选择，防火墙应用页完成移除和新连接确认后提供最终停用；远程转发不执行移除流程。
 
-当前已接入 direct-nftables、firewalld、UFW 与显式 iptables-nft/legacy 的主机入站计划、应用、确认和独立恢复。Docker 实例及端口映射只读报告已接入，发布端口的原始目的绑定、代际执行及恢复仍待实施；Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
+当前已接入 direct-nftables、firewalld、UFW 与显式 iptables-nft/legacy 的主机入站计划、应用、确认和独立恢复。Docker 实例及端口映射只读报告已接入，发布端口目标绑定和独立编译已接入，DNAT/路由核对、代际执行及恢复仍待实施；Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 

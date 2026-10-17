@@ -221,7 +221,7 @@ paths:
     post:
       operationId: planFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 支持 apply/remove 保护计划：核对宿主机占用、原本机登记与独立回执，注释绑定随机所有者和计划，再核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW 准备完成后才可应用，确认后持久化。iptables-nft/legacy 支持首次应用、已确认策略更新及移除计划，固定原确认来源、本机授权、完整受管范围与入口保护，返回正反受管批次的摘要及计数；候选与正反向批次须通过固定官方 restore 的 --test，前后完整规则保持一致；初始执行、子进程回执、新连接确认及已确认规则修复已接入，完整 nft JSON 候选及恢复容量已准入；官方 go-iptables 链读取与原生完整导出交叉核对通过后，主机入站计划可应用；Docker 转发仍不支持。计划 300 秒有效，不写运行规则或管理器源配置。
+      description: 返回 FirewallPlan。含启用 Docker 规则时，显式 iptables 后端可先读取目标候选，再提交 docker_targets 生成独立绑定编译预览；绑定只属于本次目标计划，can_apply=false，不进入 INPUT 执行器。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 支持 apply/remove 保护计划：核对宿主机占用、原本机登记与独立回执，注释绑定随机所有者和计划，再核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW 准备完成后才可应用，确认后持久化。iptables-nft/legacy 支持首次应用、已确认策略更新及移除计划，固定原确认来源、本机授权、完整受管范围与入口保护，返回正反受管批次的摘要及计数；候选与正反向批次须通过固定官方 restore 的 --test，前后完整规则保持一致；初始执行、子进程回执、新连接确认及已确认规则修复已接入，完整 nft JSON 候选及恢复容量已准入；官方 go-iptables 链读取与原生完整导出交叉核对通过后，主机入站计划可应用；Docker 目标绑定预览仍不可应用。计划 300 秒有效，不写运行规则或管理器源配置。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPlanInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -2044,13 +2044,78 @@ components:
     FirewallProtection:
       {"type": "object", "additionalProperties": false, "required": ["service", "family", "port", "sources"], "properties": {"service": {"type": "string", "enum": ["ssh", "management"]}, "family": {"type": "string", "enum": ["ipv4", "ipv6"]}, "port": {"type": "integer", "minimum": 1, "maximum": 65535}, "sources": {"type": "array", "items": {"type": "string"}}}}
     FirewallPlanInput:
-      {"type": "object", "additionalProperties": false, "required": ["action", "version"], "properties": {"action": {"type": "string", "enum": ["apply", "remove"]}, "version": {"type": "integer", "format": "int64", "minimum": 1, "description": "apply 使用已保存期望版本；remove 使用当前已确认运行版本。"}, "preparation_id": {"type": "string", "format": "uuid", "description": "查询原 UFW 后台准备；不传时创建新准备。查询固定原动作及版本，不重新执行预演。"}, "cancel_preparation": {"type": "boolean", "description": "取消 preparation_id 对应的在途准备，不改变运行规则。"}}}
+      {"type": "object", "additionalProperties": false, "required": ["action", "version"], "properties": {"docker_targets": {"$ref": "#/components/schemas/FirewallDockerTargets"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "version": {"type": "integer", "format": "int64", "minimum": 1, "description": "apply 使用已保存期望版本；remove 使用当前已确认运行版本。"}, "preparation_id": {"type": "string", "format": "uuid", "description": "查询原 UFW 后台准备；不传时创建新准备。查询固定原动作及版本，不重新执行预演。"}, "cancel_preparation": {"type": "boolean", "description": "取消 preparation_id 对应的在途准备，不改变运行规则。"}}}
     FirewallApplyInput:
       {"type": "object", "additionalProperties": false, "required": ["plan_id", "version", "action"], "properties": {"plan_id": {"type": "string", "format": "uuid"}, "version": {"type": "integer", "format": "int64", "minimum": 1}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallPlanPreparation:
       {"type": "object", "additionalProperties": false, "required": ["id", "action", "version", "state", "completed_commands", "total_commands", "started_at", "updated_at", "deadline", "error"], "properties": {"id": {"type": "string", "format": "uuid"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "version": {"type": "integer", "format": "int64", "minimum": 1}, "state": {"type": "string", "enum": ["running", "cancelling", "ready", "failed", "cancelled"]}, "completed_commands": {"type": "integer", "minimum": 0, "maximum": 16384}, "total_commands": {"type": "integer", "minimum": 0, "maximum": 16384}, "started_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "deadline": {"type": "integer", "format": "int64", "description": "原后台准备期限，重复查询不延长。"}, "error": {"type": "string", "maxLength": 2048}}}
     FirewallPlan:
-      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action", "backend", "can_apply", "firewalld", "ufw", "preparation", "iptables"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "backend": {"type": "string", "enum": ["direct-nftables", "firewalld", "ufw", "iptables-nft", "iptables-legacy"]}, "can_apply": {"type": "boolean", "description": "后端已完成该计划的执行准备；仍须重新核对基线、版本及保护依据。UFW 准备中、失败、取消或失效时为 false；iptables 主机入站计划须通过官方 go-iptables 链读取、原生完整规则及 nft JSON 候选与恢复容量准入；Docker 转发仍不支持。"}, "firewalld": {"allOf": [{"$ref": "#/components/schemas/FirewallFirewalldPlan"}], "nullable": true}, "ufw": {"allOf": [{"$ref": "#/components/schemas/FirewallUFWPlan"}], "nullable": true}, "preparation": {"allOf": [{"$ref": "#/components/schemas/FirewallPlanPreparation"}], "nullable": true}, "iptables": {"allOf": [{"$ref": "#/components/schemas/FirewallIPTablesPlan"}], "nullable": true}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action", "backend", "can_apply", "firewalld", "ufw", "preparation", "iptables", "docker"], "properties": {"docker": {"allOf": [{"$ref": "#/components/schemas/FirewallDockerPlan"}], "nullable": true}, "id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "backend": {"type": "string", "enum": ["direct-nftables", "firewalld", "ufw", "iptables-nft", "iptables-legacy"]}, "can_apply": {"type": "boolean", "description": "后端已完成该计划的执行准备；仍须重新核对基线、版本及保护依据。UFW 准备中、失败、取消或失效时为 false；iptables 主机入站计划须通过官方 go-iptables 链读取、原生完整规则及 nft JSON 候选与恢复容量准入；Docker 转发仍不支持。"}, "firewalld": {"allOf": [{"$ref": "#/components/schemas/FirewallFirewalldPlan"}], "nullable": true}, "ufw": {"allOf": [{"$ref": "#/components/schemas/FirewallUFWPlan"}], "nullable": true}, "preparation": {"allOf": [{"$ref": "#/components/schemas/FirewallPlanPreparation"}], "nullable": true}, "iptables": {"allOf": [{"$ref": "#/components/schemas/FirewallIPTablesPlan"}], "nullable": true}}}
+    FirewallDockerTargets:
+      type: object
+      additionalProperties: false
+      required: [engine_hash, snapshot_hash, bindings]
+      description: 仅属于本次目标机器应用计划的映射选择，不属于期望规则、数据库或可移植归档。每条启用的 Docker 规则、地址族和主机端口必须完整覆盖；最多 128 个绑定、96 KiB。
+      properties:
+        engine_hash: {type: string, minLength: 64, maxLength: 64}
+        snapshot_hash: {type: string, minLength: 64, maxLength: 64}
+        bindings: {type: array, minItems: 1, maxItems: 128, items: {$ref: '#/components/schemas/FirewallDockerRuleBinding'}}
+    FirewallDockerRuleBinding:
+      type: object
+      additionalProperties: false
+      required: [rule_id, container_id, network_id, family, protocol, host_ip, host_port, container_port, destination, input_interface]
+      properties:
+        rule_id: {type: string, format: uuid}
+        container_id: {type: string, minLength: 64, maxLength: 64}
+        network_id: {type: string, minLength: 64, maxLength: 64}
+        family: {type: string, enum: [ipv4, ipv6]}
+        protocol: {type: string, enum: [tcp, udp]}
+        host_ip: {type: string, description: Docker 报告的主机绑定地址；通配地址必须另选实际原始目的地址。}
+        host_port: {type: integer, minimum: 1, maximum: 65535}
+        container_port: {type: integer, minimum: 1, maximum: 65535}
+        destination: {type: string, description: 与入口接口当前地址严格对应的同族规范单播地址，不能使用通配、回环或链路本地地址。}
+        input_interface: {type: string, minLength: 1, maxLength: 15}
+    FirewallDockerResolvedBinding:
+      type: object
+      additionalProperties: false
+      required: [binding, container_address, output_interface]
+      properties:
+        binding: {$ref: '#/components/schemas/FirewallDockerRuleBinding'}
+        container_address: {type: string}
+        output_interface: {type: string, minLength: 1, maxLength: 15}
+    FirewallDockerLocalAddress:
+      type: object
+      additionalProperties: false
+      required: [interface, family, address]
+      properties:
+        interface: {type: string, minLength: 1, maxLength: 15}
+        family: {type: string, enum: [ipv4, ipv6]}
+        address: {type: string}
+    FirewallDockerPlan:
+      type: object
+      additionalProperties: false
+      required: [engine_hash, snapshot_hash, configuration_hash, bindings_hash, observed_at, ports, truncated, addresses, bindings, compiled, program_hash, program_bytes, generated_rules, host_program_hash, host_generated_rules, entries, entries_truncated, warnings, reason]
+      description: 目标实例、映射和本机地址的即时读取及独立编译预览。主机 INPUT 与 Docker 转发分别编译；Docker 允许使用 RETURN。当前尚无执行转换和独立恢复记录，父计划 can_apply 始终为 false；不是 DNAT、路由、原子快照或外部可达性证明。
+      properties:
+        engine_hash: {type: string, minLength: 64, maxLength: 64}
+        snapshot_hash: {type: string, minLength: 64, maxLength: 64}
+        configuration_hash: {type: string, minLength: 64, maxLength: 64}
+        bindings_hash: {type: string}
+        observed_at: {type: integer, format: int64}
+        ports: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/FirewallDockerPublishedPort'}}
+        truncated: {type: boolean}
+        addresses: {type: array, maxItems: 512, items: {$ref: '#/components/schemas/FirewallDockerLocalAddress'}}
+        bindings: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/FirewallDockerResolvedBinding'}}
+        compiled: {type: boolean}
+        program_hash: {type: string}
+        program_bytes: {type: integer, minimum: 0, maximum: 2097152}
+        generated_rules: {type: integer, minimum: 0, maximum: 8192}
+        host_program_hash: {type: string, minLength: 64, maxLength: 64}
+        host_generated_rules: {type: integer, minimum: 0, maximum: 8192}
+        entries: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/FirewallPreviewEntry'}}
+        entries_truncated: {type: boolean}
+        warnings: {type: array, maxItems: 64, items: {type: string}}
+        reason: {type: string}
     FirewallFirewalldPlan:
       type: object
       additionalProperties: false
@@ -4834,7 +4899,7 @@ components:
         id: {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
         name: {"type": "string", "minLength": 1, "maxLength": 128}
         enabled: {"type": "boolean"}
-        scope: {"type": "string", "description": "host_input 或 docker_published；Docker 转发路径尚不能编译"}
+        scope: {"type": "string", "description": "host_input 或 docker_published；Docker 原始目的与实际映射由独立应用计划绑定，不属于可迁移期望规则；普通逻辑预览不编译 Docker 转发"}
         family: {"type": "string", "description": "ipv4、ipv6 或 both；非空来源须覆盖所选地址族"}
         protocol: {"type": "string", "description": "tcp 或 udp"}
         ports: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallPortRange"}, "minItems": 1, "maxItems": 16}
@@ -4848,7 +4913,7 @@ components:
       additionalProperties: false
       required: ["backend", "rules"]
       properties:
-        backend: {"type": "string", "description": "目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；当前可编译 direct-nftables 和不含接口选择的 firewalld 主机入站策略。"}
+        backend: {"type": "string", "description": "目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；五种后端均提供主机入站编译；Docker 目标编译仅支持显式 iptables 后端，执行尚未开放。"}
         rules: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallRule"}, "maxItems": 1000}
     FirewallPolicyView:
       type: object

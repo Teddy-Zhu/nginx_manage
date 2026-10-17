@@ -17,10 +17,11 @@ type Protection struct {
 	Sources []string `json:"sources"`
 }
 type PlanInput struct {
-	Action            string `json:"action"`
-	Version           int64  `json:"version"`
-	PreparationID     string `json:"preparation_id,omitempty"`
-	CancelPreparation bool   `json:"cancel_preparation,omitempty"`
+	DockerTargets     *DockerTargets `json:"docker_targets,omitempty"`
+	Action            string         `json:"action"`
+	Version           int64          `json:"version"`
+	PreparationID     string         `json:"preparation_id,omitempty"`
+	CancelPreparation bool           `json:"cancel_preparation,omitempty"`
 }
 type ApplyInput struct {
 	Action  string `json:"action"`
@@ -28,11 +29,12 @@ type ApplyInput struct {
 	Version int64  `json:"version"`
 }
 type RuntimeInput struct {
-	Action            string `json:"action"`
-	Version           int64  `json:"version"`
-	Policy            Policy `json:"policy"`
-	PreparationID     string `json:"preparation_id,omitempty"`
-	CancelPreparation bool   `json:"cancel_preparation,omitempty"`
+	DockerTargets     *DockerTargets `json:"docker_targets,omitempty"`
+	Action            string         `json:"action"`
+	Version           int64          `json:"version"`
+	Policy            Policy         `json:"policy"`
+	PreparationID     string         `json:"preparation_id,omitempty"`
+	CancelPreparation bool           `json:"cancel_preparation,omitempty"`
 }
 
 // Preparation has no host-rule side effects. Ready still requires a fresh
@@ -50,6 +52,7 @@ type PlanPreparation struct {
 	Error             string `json:"error"`
 }
 type Plan struct {
+	Docker              *DockerPlan      `json:"docker"`
 	IPTables            *IPTablesPlan    `json:"iptables"`
 	Preparation         *PlanPreparation `json:"preparation"`
 	Backend             string           `json:"backend"`

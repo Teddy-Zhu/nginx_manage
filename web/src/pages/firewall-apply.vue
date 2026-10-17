@@ -36,6 +36,7 @@ import { useSession } from "../stores/session";
 import FirewalldPlanDetails from "../components/FirewalldPlanDetails.vue";
 import UFWPlanDetails from "../components/UFWPlanDetails.vue";
 import IPTablesPlanDetails from "../components/IPTablesPlanDetails.vue";
+import DockerPlanDetails from "../components/DockerPlanDetails.vue";
 
 const route = useRoute();
 const action = ref<FirewallPlanInput["action"]>(
@@ -58,6 +59,9 @@ const view = ref<FirewallRuntime | null>(null),
   uncertain = ref(false),
   remaining = ref(0);
 const controller = new AbortController();
+const dockerTargets = ref<NonNullable<FirewallPlanInput["docker_targets"]> | null>(
+  null,
+);
 const canManage = computed(() =>
   ["read", "security.write"].every((scope) =>
     session.localMe?.scopes.includes(scope),
@@ -200,6 +204,8 @@ async function load() {
     ]);
     if (closed) return;
     if (desired.status === "fulfilled") {
+      if (stored.value?.version !== desired.value.version)
+        dockerTargets.value = null;
       stored.value = desired.value;
       if (
         plan.value?.action === "apply" &&
@@ -219,6 +225,38 @@ async function load() {
 function setAction(value: FirewallPlanInput["action"]) {
   action.value = value;
   plan.value = null;
+  dockerTargets.value = null;
+}
+function bindDocker(
+  targets: NonNullable<FirewallPlanInput["docker_targets"]> | null,
+) {
+  dockerTargets.value = targets;
+  const current = plan.value;
+  if (current?.docker) {
+    plan.value = {
+      ...current,
+      can_apply: false,
+      program_hash: "",
+      generated_rules: current.docker.host_generated_rules,
+      docker: {
+        ...current.docker,
+        compiled: false,
+        bindings: [],
+        bindings_hash: "",
+        program_hash: "",
+        program_bytes: 0,
+        generated_rules: 0,
+        entries: [],
+        entries_truncated: false,
+        reason: "目标绑定已修改，请重新生成计划",
+      },
+    };
+  }
+}
+async function reloadDocker() {
+  dockerTargets.value = null;
+  plan.value = null;
+  await generate();
 }
 async function generate() {
   const version =
@@ -228,7 +266,13 @@ async function generate() {
   if (!version) return;
   await run(async () => {
     plan.value = await api.planFirewall(
-      { action: action.value, version },
+      {
+        action: action.value,
+        version,
+        ...(action.value === "apply" && dockerTargets.value
+          ? { docker_targets: dockerTargets.value }
+          : {}),
+      },
       controller.signal,
     );
     uncertain.value = false;
@@ -529,7 +573,9 @@ onUnmounted(() => {
               : plan.iptables
                 ? "移除本应用 iptables 链及跳转"
                 : `移除 ${plan.baseline.rules} 条规则`
-          : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : plan.iptables ? "生成规则" : "内核规则"}`
+          : plan.docker
+            ? "Docker 目标绑定预览"
+            : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : plan.iptables ? "生成规则" : "内核规则"}`
       }}</n-tag>
     </div>
     <dl>
@@ -548,6 +594,15 @@ onUnmounted(() => {
       <dt>计划有效期</dt>
       <dd>{{ new Date(plan.expires_at * 1000).toLocaleString() }}</dd>
     </dl>
+    <DockerPlanDetails
+      v-if="plan.docker && stored"
+      :plan="plan.docker"
+      :targets="dockerTargets"
+      :policy="stored.policy"
+      :disabled="busy || !canManage || active"
+      @change="bindDocker"
+      @reload="reloadDocker"
+    />
     <FirewalldPlanDetails
       v-if="plan.firewalld"
       :plan="plan.firewalld"
@@ -573,7 +628,9 @@ onUnmounted(() => {
       {{
         plan.action === "remove"
           ? "所列入口仅用于本次连接核对，移除后不再保留本应用保护条目；删除不等同于允许端口，其余系统策略仍可能阻止连接。"
-          : plan.backend === "firewalld"
+          : plan.docker
+            ? "主机入站与 Docker 转发分别核对。此目标计划尚不能执行，也不表示端口已经受保护。"
+            : plan.backend === "firewalld"
             ? "入口保护先于业务规则匹配。accept 可能结束后续 firewalld 过滤，其他内核规则或云安全组仍可阻止连接。"
             : plan.backend === "ufw"
               ? "计划优先保留入口保护；与保护条件完全相同的业务项已由保护项覆盖。逐条预演通过不代表规则已经应用或端口可达。"

@@ -114,8 +114,30 @@ func validDockerFirewall(out firewall.Observation) bool {
 	} else if !out.Available || out.Scope != "host" || !firewalldDigest(runtime.EngineHash) || !firewalldDigest(runtime.SnapshotHash) || !dockerFirewallText(runtime.Version, 64) || runtime.APIVersion != dockerapi.Version || runtime.ObservedAt <= 0 || !slices.Contains([]string{"inactive", "pending", "active", "error", "locked"}, runtime.Swarm) || runtime.Networks < 0 || runtime.Networks > 128 || runtime.Containers < 0 || runtime.Containers > 128 || runtime.PublishedPorts < 0 || runtime.PublishedPorts > 1024 || len(runtime.Ports) != min(128, runtime.PublishedPorts) || runtime.Truncated != (runtime.PublishedPorts > len(runtime.Ports)) {
 		return false
 	}
+	if !validDockerPublishedPorts(runtime.Ports, runtime.Rootless, runtime.Swarm) {
+		return false
+	}
+	if value.Capabilities == nil || len(value.Capabilities) != 0 && len(value.Capabilities) != 10 || runtime.Available && len(value.Capabilities) != 10 {
+		return false
+	}
 	seen := map[string]bool{}
-	for _, port := range runtime.Ports {
+	for _, capability := range value.Capabilities {
+		key := capability.Backend + ":" + capability.Family
+		if seen[key] || !slices.Contains([]string{"direct-nftables", "iptables-nft", "iptables-legacy", "firewalld", "ufw"}, capability.Backend) || !slices.Contains([]string{"ipv4", "ipv6"}, capability.Family) || !slices.Contains([]string{"", "DOCKER-USER", "forward"}, capability.Hook) || capability.Supported || !dockerFirewallText(capability.Reason, 2048) || capability.Observed && (!runtime.Available || runtime.Rootless || runtime.Swarm != "inactive" || !validIPTablesBackend(capability.Backend) || capability.Hook != "DOCKER-USER" || value.BackendHint != "iptables") {
+			return false
+		}
+		seen[key] = true
+	}
+	raw, err := json.Marshal(value)
+	return err == nil && len(raw) <= 320<<10
+}
+
+func validDockerPublishedPorts(ports []firewall.DockerPublishedPort, rootless bool, swarm string) bool {
+	if ports == nil || len(ports) > 128 {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, port := range ports {
 		if !firewalldDigest(port.ContainerID) || !slices.Contains([]string{"unknown", "ipv4", "ipv6"}, port.Family) || !slices.Contains([]string{"tcp", "udp", "sctp"}, port.Protocol) || port.HostPort < 0 || port.HostPort > 65535 || port.ContainerPort < 1 || port.ContainerPort > 65535 || port.HostPort == 0 && port.HostIP == "" || port.NetworkIDs == nil || len(port.NetworkIDs) > 16 || !slices.Contains([]string{"bridge_nat_candidate", "unconfirmed"}, port.Path) || !dockerFirewallText(port.Reason, 2048) {
 			return false
 		}
@@ -133,22 +155,10 @@ func validDockerFirewall(out firewall.Observation) bool {
 			}
 		}
 		key := port.ContainerID + ":" + dockerFirewallPortKey(dockerFirewallPort{IP: port.HostIP, PublicPort: port.HostPort, PrivatePort: port.ContainerPort, Type: port.Protocol})
-		if seen[key] || port.Path == "bridge_nat_candidate" && (runtime.Rootless || runtime.Swarm != "inactive" || port.Protocol == "sctp" || port.HostPort == 0 || port.HostIP == "" || len(port.NetworkIDs) != 1) {
+		if seen[key] || port.Path == "bridge_nat_candidate" && (rootless || swarm != "inactive" || port.Protocol == "sctp" || port.HostPort == 0 || port.HostIP == "" || len(port.NetworkIDs) != 1) {
 			return false
 		}
 		seen[key] = true
 	}
-	if value.Capabilities == nil || len(value.Capabilities) != 0 && len(value.Capabilities) != 10 || runtime.Available && len(value.Capabilities) != 10 {
-		return false
-	}
-	seen = map[string]bool{}
-	for _, capability := range value.Capabilities {
-		key := capability.Backend + ":" + capability.Family
-		if seen[key] || !slices.Contains([]string{"direct-nftables", "iptables-nft", "iptables-legacy", "firewalld", "ufw"}, capability.Backend) || !slices.Contains([]string{"ipv4", "ipv6"}, capability.Family) || !slices.Contains([]string{"", "DOCKER-USER", "forward"}, capability.Hook) || capability.Supported || !dockerFirewallText(capability.Reason, 2048) || capability.Observed && (!runtime.Available || runtime.Rootless || runtime.Swarm != "inactive" || !validIPTablesBackend(capability.Backend) || capability.Hook != "DOCKER-USER" || value.BackendHint != "iptables") {
-			return false
-		}
-		seen[key] = true
-	}
-	raw, err := json.Marshal(value)
-	return err == nil && len(raw) <= 320<<10
+	return true
 }

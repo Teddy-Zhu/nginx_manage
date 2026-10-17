@@ -481,6 +481,12 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	defer f.remote.mu.Unlock()
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if in.Action == "apply" && firewall.HasDockerRules(in.Policy) && in.PreparationID == "" && !in.CancelPreparation {
+		return f.planDockerLocked(ctx, in, connection)
+	}
+	if in.DockerTargets != nil {
+		return firewall.Plan{}, fault.Invalid("当前计划不接受 Docker 目标绑定")
+	}
 	if f.iptablesPlannerLocked() {
 		return f.planIPTablesLocked(ctx, in, connection)
 	}

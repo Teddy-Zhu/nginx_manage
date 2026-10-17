@@ -46,7 +46,10 @@ func (s *Service) Plan(ctx context.Context, in PlanInput, connection string) (Pl
 	if err != nil {
 		return out, err
 	}
-	input := RuntimeInput{Action: in.Action, Version: in.Version, Policy: DefaultPolicy(), PreparationID: in.PreparationID, CancelPreparation: in.CancelPreparation}
+	if in.DockerTargets != nil && (in.Action != "apply" || in.PreparationID != "" || in.CancelPreparation) {
+		return out, fault.Invalid("Docker 目标绑定仅用于新的应用计划")
+	}
+	input := RuntimeInput{Action: in.Action, Version: in.Version, Policy: DefaultPolicy(), PreparationID: in.PreparationID, CancelPreparation: in.CancelPreparation, DockerTargets: in.DockerTargets}
 	if in.PreparationID != "" || in.CancelPreparation {
 		// Poll/cancel the frozen original preparation, even if the desired
 		// policy changed. A new Apply still compares the current DB version.
@@ -61,6 +64,13 @@ func (s *Service) Plan(ctx context.Context, in PlanInput, connection string) (Pl
 			return out, fault.Conflict("期望策略版本变化，请重新读取并生成计划")
 		}
 		input.Policy = view.Policy
+		if in.DockerTargets != nil {
+			normalized, err := in.DockerTargets.Normalize(view.Policy)
+			if err != nil {
+				return out, err
+			}
+			input.DockerTargets = &normalized
+		}
 	} else {
 		view, err := executor.FirewallRuntime(ctx)
 		if err != nil {
