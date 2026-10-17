@@ -215,13 +215,13 @@ paths:
     get:
       operationId: getFirewallRuntime
       x-scopes: [read, security.write]
-      description: 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；firewalld 采用运行/永久 policy 独立核对、新连接确认和持久恢复意图。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
+      description: 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；UFW 仅允许显式本机授权后的保护计划与 dry-run，available=false；firewalld 采用运行/永久 policy 独立核对、新连接确认和持久恢复意图。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/plan:
     post:
       operationId: planFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。计划 300 秒有效，不写内核或 firewalld 配置。
+      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 仅支持 apply 保护计划：核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW can_apply=false，尚无所有权登记、实际应用及独立恢复。计划 300 秒有效，不写运行规则或管理器源配置。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPlanInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -271,7 +271,7 @@ paths:
     post:
       operationId: previewFirewall
       x-scopes: [read]
-      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式，firewalld 生成独立 ANY 到 HOST policy 的 rich rules，UFW 生成明确地址族、接口、端口及稳定注释的类型化命令预览，拒绝重复匹配条件。结合 Agent 诊断核对环境；此入口不写内核或管理器，can_apply 为 false，执行须另走独立计划。UFW 当前仅支持读取与编译预览，未确定与既有规则的插入关系，应用、dry-run、所有权登记和独立恢复尚未接入；Docker 路径及未适配条件明确阻塞。
+      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式，firewalld 生成独立 ANY 到 HOST policy 的 rich rules，UFW 生成明确地址族、接口、端口及稳定注释的类型化命令预览，拒绝重复匹配条件。结合 Agent 诊断核对环境；此入口不写内核或管理器，can_apply 为 false，执行须另走独立计划。UFW 逻辑预览不执行 dry-run，需在目标管理入口另行准备保护计划；当前不支持实际应用、所有权登记和独立恢复；Docker 路径及未适配条件明确阻塞。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPreviewInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -2048,7 +2048,7 @@ components:
     FirewallApplyInput:
       {"type": "object", "additionalProperties": false, "required": ["plan_id", "version", "action"], "properties": {"plan_id": {"type": "string", "format": "uuid"}, "version": {"type": "integer", "format": "int64", "minimum": 1}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallPlan:
-      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action", "backend", "can_apply", "firewalld"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "backend": {"type": "string", "enum": ["direct-nftables", "firewalld"]}, "can_apply": {"type": "boolean", "description": "表示此后端支持执行该计划；仍须重新核对基线、版本和保护依据。firewalld 还须核对运行/永久写入接口与原登记配置。"}, "firewalld": {"allOf": [{"$ref": "#/components/schemas/FirewallFirewalldPlan"}], "nullable": true}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action", "backend", "can_apply", "firewalld", "ufw"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "backend": {"type": "string", "enum": ["direct-nftables", "firewalld", "ufw"]}, "can_apply": {"type": "boolean", "description": "表示此后端支持执行该计划；仍须重新核对基线、版本和保护依据。firewalld 还须核对运行/永久写入接口与原登记配置。 UFW 仅准备保护计划与逐条 dry-run，始终为 false。"}, "firewalld": {"allOf": [{"$ref": "#/components/schemas/FirewallFirewalldPlan"}], "nullable": true}, "ufw": {"allOf": [{"$ref": "#/components/schemas/FirewallUFWPlan"}], "nullable": true}}}
     FirewallFirewalldPlan:
       type: object
       additionalProperties: false
@@ -2060,6 +2060,22 @@ components:
         registration_operation_id: {type: string, format: uuid}
         settings: {$ref: '#/components/schemas/FirewallFirewalldPreview'}
         protection_rules: {type: integer, minimum: 0, maximum: 8192}
+        entries: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/FirewallPreviewEntry'}}
+        truncated: {type: boolean}
+        warnings: {type: array, maxItems: 64, items: {type: string}}
+        reason: {type: string}
+    FirewallUFWPlan:
+      type: object
+      additionalProperties: false
+      required: [configuration_hash, tool_hash, dry_run_hash, dry_run_commands, protection_rules, protection_overrides, entries, truncated, warnings, reason]
+      description: root 基于实际管理连接及 SSH 监听准备的 UFW 保护计划。每条生成命令独立执行官方 dry-run prepend，并核对源文件前后摘要与首条候选 tuple；不证明批次顺序、内核状态或所有权，不授权实际应用。
+      properties:
+        configuration_hash: {type: string, minLength: 64, maxLength: 64}
+        tool_hash: {type: string, minLength: 64, maxLength: 64, description: '受信 UFW 可执行文件摘要，不代表所有 Python 依赖'}
+        dry_run_hash: {type: string, minLength: 64, maxLength: 64}
+        dry_run_commands: {type: integer, minimum: 0, maximum: 64}
+        protection_rules: {type: integer, minimum: 0, maximum: 64}
+        protection_overrides: {type: integer, minimum: 0, maximum: 8192}
         entries: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/FirewallPreviewEntry'}}
         truncated: {type: boolean}
         warnings: {type: array, maxItems: 64, items: {type: string}}
@@ -2193,7 +2209,7 @@ components:
     Fail2banObservation:
       {"type": "object", "additionalProperties": false, "required": ["at", "source", "scope", "available", "writable", "reason", "tools", "client_version", "python", "services", "socket", "missing", "warnings", "binding", "managed"], "properties": {"at": {"type": "integer", "format": "int64"}, "source": {"type": "string"}, "scope": {"type": "string"}, "available": {"type": "boolean"}, "writable": {"type": "boolean"}, "reason": {"type": "string"}, "tools": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banTool"}}, "client_version": {"type": "string"}, "python": {"$ref": "#/components/schemas/Fail2banPython"}, "services": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banService"}}, "socket": {"$ref": "#/components/schemas/Fail2banSocket"}, "missing": {"type": "array", "maxItems": 4, "items": {"type": "string"}}, "warnings": {"type": "array", "maxItems": 8, "items": {"type": "string"}}, "binding": {"$ref": "#/components/schemas/Fail2banBindingView"}, "managed": {"$ref": "#/components/schemas/Fail2banManaged"}}}
     FirewallRuntime:
-      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id", "protection_observation", "backend", "can_plan"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}, "protection_observation": {"$ref": "#/components/schemas/FirewallProtectionObservation"}, "backend": {"type": "string", "enum": ["unconfirmed", "direct-nftables", "firewalld"]}, "can_plan": {"type": "boolean", "description": "可尝试生成计划；available 表示策略执行就绪，二者须分别显示。"}}}
+      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id", "protection_observation", "backend", "can_plan"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}, "protection_observation": {"$ref": "#/components/schemas/FirewallProtectionObservation"}, "backend": {"type": "string", "enum": ["unconfirmed", "direct-nftables", "firewalld", "ufw"]}, "can_plan": {"type": "boolean", "description": "可尝试生成计划；available 表示策略执行就绪，二者须分别显示。"}}}
     BackupInput:
       type: object
       additionalProperties: false

@@ -65,6 +65,7 @@ type hostFirewall struct {
 	firewalldRegistration *firewalldRegistrationCheckpoint
 	firewalldState        *firewalldCheckpoint
 	available             bool
+	ufwPlanning           bool
 	recovering            bool
 	policyUncertain       bool
 	journal               *Journal
@@ -329,6 +330,16 @@ func (f *hostFirewall) View() firewall.RuntimeView {
 	if f.firewalldState != nil {
 		return f.firewalldViewLocked()
 	}
+	if f.owner == "ufw" && f.state.Schema == 0 {
+		reason := f.problem
+		if reason == "" {
+			reason = "UFW 可准备保护计划及官方 dry-run；所有权登记、应用和独立恢复尚未接入"
+			if !f.ufwPlanning {
+				reason = "须由本机 root 确认 UFW、宿主机范围及 SSH 保护配置后准备计划"
+			}
+		}
+		return firewall.RuntimeView{Backend: "ufw", CanPlan: f.ufwPlanning && f.problem == "", Reason: reason, Protections: []firewall.Protection{}, ConfirmedAction: "none", ProtectionObservation: f.protectionObservationLocked(), Kernel: firewall.KernelView{Reason: "UFW 计划不提供直接 nftables 事务证明"}}
+	}
 	out := firewall.RuntimeView{Backend: f.owner, Available: f.available && f.problem == "" && f.state.Schema == firewallRuntimeSchema, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}, ConfirmedAction: "none"}
 	if f.state.Schema == firewallRuntimeSchema {
 		out.Backend = "direct-nftables"
@@ -372,6 +383,9 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	defer f.mu.Unlock()
 	if f.owner == "firewalld" {
 		return f.planFirewalldLocked(ctx, in, connection)
+	}
+	if f.owner == "ufw" && f.state.Schema == 0 {
+		return f.planUFWLocked(ctx, in, connection)
 	}
 	var out firewall.Plan
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {

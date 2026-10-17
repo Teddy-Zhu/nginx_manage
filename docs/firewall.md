@@ -100,7 +100,7 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 
 `PUT /system/modules/firewall` 停用时必须指定 `firewall_rules`。`keep` 明确保留已确认规则；`remove` 另需 `read/security.write` 及已确认的 `firewall_operation_id`，只有原操作仍为当前确认的移除结果且无活动变更才停用；后续应用失败并恢复该空表时仍可引用原确认操作，后续成功应用会使其失效。初始空表经核对且尚无已确认规则时无需生成空的移除操作，可省略操作 ID 直接停用。公共执行提交与最终停用共用锁，防止停用核对期间插入新应用；失败不伪造停用成功，可继续引用同一操作重试。启用或其他模块拒绝携带停用选项。自动扫描的功能模块页面提供保留/先移除选择，防火墙应用页完成移除和新连接确认后提供最终停用；远程转发不执行移除流程。
 
-当前已接入 direct-nftables 与 firewalld 主机入站执行，UFW 支持下述只读报告及编译预览。Docker 转发路径、UFW/iptables 写入适配仍待实施；Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
+当前已接入 direct-nftables 与 firewalld 主机入站执行，UFW 支持下述只读报告、编译预览及保护计划/dry-run。Docker 转发路径、UFW/iptables 写入适配仍待实施；Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 
@@ -177,7 +177,7 @@ nginxpanel firewalld-remove --data-dir /srv/nginxpanel --firewall-scope host
 `accept` 可能结束后续 firewalld 过滤，其他内核链和云安全组仍可能阻止连接；会话、回环和 DNAT 先行处理由 firewalld 决定，不声称只匹配 NEW。原空登记命令不负责业务材料退役，有业务恢复材料时禁止重新登记或移除原登记。root 材料不进入跨环境配置迁移，目标节点仍须独立登记及应用。Agent 为 73，数据库/迁移归档仍为 32/6。实现及源码审阅完成后集中整理格式，未执行生成器、构建、类型检查、lint、测试、浏览器或真实宿主机操作，待 P5 集中验证。
 
 
-## UFW 用户规则与主机入站编译
+## UFW 用户规则、编译与保护计划
 
 诊断增加 `ufw.ipv6` 和 `ufw.rule_inventory`。Agent 只运行固定的 `ufw show added`，使用受信绝对路径、固定 C 语言环境、两秒命令期限及 512 KiB 输出上限。用户规则报告须完整符合已知格式，最多 8192 条、每条最多 4096 字节；未知内容、控制字符、无效 UTF-8、失败或超限均返回不可用，不返回成功前缀。公开报告仅展示前 128 条且最多 64 KiB，保留完整报告计数与 SHA-256。启用及 IPv6 配置分别从 root 持有的固定文件读取，未知或歧义保留 null；不求值 shell 内容。
 
@@ -189,6 +189,12 @@ UFW 添加相同匹配条件可能更新原动作或注释，不能用不同注�
 
 逻辑预览核对单一已启用 UFW、完整用户报告、混合/缺失内核视图、绑定接口及 IPv6 配置。`generated_rules` 表示生成命令数，后端优先级为 null，不增加未生成的会话或回环规则。UFW 自身的默认策略、会话与回环处理保持不变；allow 可能提前结束后续 UFW 规则，其他内核链及云安全组仍可拒绝连接。
 
-当前 `can_apply=false`；dry-run、独立所有权登记、与既有规则的冲突/顺序证明、实际应用、新连接确认及持久恢复仍待实施。迁移预检复用该编译器，迁入只保存中立期望，不执行 UFW。Agent 为 74，数据库/迁移归档仍为 32/6。实现与源码审阅完成，未运行构建、类型检查、lint、测试、浏览器、真实 UFW 命令或宿主机变更，待 P5 集中验证。
+本机 root 明确设置 `--firewall-owner ufw --firewall-scope host --firewall-ssh openssh --maintenance-scope host` 后，运行状态可返回 `backend=ufw, can_plan=true, available=false`。确无 SSH 保护需求时才选择 `--firewall-ssh none`。`POST /api/v1/firewall/plan` 仅准备已保存策略的 apply 计划，须启用模块、近期认证并直接使用目标已确认的管理 HTTPS 连接；采集实际连接、受控来源及 OpenSSH 监听，保护项先于业务项。重复保护合并；业务条目与保护匹配条件完全相同时由保护项覆盖，单独报告计数。既有 nftables/firewalld 恢复材料仍由原执行器处理，不因选择 UFW 撤销原恢复职责。
 
-依据：[Ubuntu UFW 手册](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html)、[Ubuntu 官方 UFW 0.36.2 源码归档](https://archive.ubuntu.com/ubuntu/pool/main/u/ufw/ufw_0.36.2.orig.tar.gz) 中的 `frontend.get_show_added`、`UFWCommandRule.get_command`、`UFWRule.match` 与后端规则更新流程。
+计划期间独占跨数据目录的宿主机登记锁，不创建 UFW 所有权登记。读取受信 UFW 可执行文件及固定 `/etc/ufw/{ufw.conf,user.rules,before.rules,after.rules,user6.rules,before6.rules,after6.rules,sysctl.conf,before.init,after.init}`、`/etc/default/ufw`，必需文件缺失或不受信则拒绝；IPv6 规则文件在 IPv6 启用时必需。每份最多 512 KiB、合计最多 4 MiB，摘要包括内容、存在性及文件身份/时间，工具摘要只覆盖可执行文件，不代表全部 Python 依赖。
+
+对包含保护项的最多 64 条生成参数逐条调用官方 `ufw --dry-run prepend ...`，每条最多两秒、标准输出 1 MiB、标准错误 8 KiB，完整输出合计最多 8 MiB，并受 Agent 原请求期限约束。使用固定 C 环境、禁写 Python 字节码及 `/run/nginxpanel-host` 私有临时目录，遗留目录达到 16 份时拒绝新增，清理失败不返回成功。任意命令失败、超时、警告或超限均拒绝整份计划；退出码零仍须核对完整已知候选格式、首条 tuple、生成注释及对应地址族的更新结果。`prepend` 对已有匹配项会跳过，缺少新候选时判为冲突，避免普通添加命令改写第三方动作或注释。预演后重新核对固定源文件及工具路径/摘要，变化则拒绝。
+
+每条 dry-run 都从同一宿主机源配置开始，不能证明批次累积效果、最终插入顺序、内核或第三方规则完整性。UFW dry-run 本身跳过普通 UFW 写入锁，前后摘要仅检测漂移，不提供原子锁定。计划 `ufw` 字段展示配置、工具、完整预演输出摘要及命令/保护计数；`can_apply=false`，Web 和 root 拒绝应用，不创建业务操作或确认窗口。独立所有权登记、可执行批次的冲突/顺序证明、实际应用、新连接确认及持久恢复继续实施。迁移只保存中立期望，在目标另行准备保护计划。Agent 为 75，数据库/迁移归档仍为 32/6。实现与源码审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、真实 UFW 命令或宿主机变更，待 P5 集中验证。
+
+依据：[Ubuntu UFW 手册](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html)、[Ubuntu 官方 UFW 0.36.2 源码归档](https://archive.ubuntu.com/ubuntu/pool/main/u/ufw/ufw_0.36.2.orig.tar.gz) 中的 `frontend.get_show_added`、`UFWCommandRule.get_command`、`UFWRule.match`、`_write_rules`、`util.create_lock/open_files` 与后端规则更新流程。

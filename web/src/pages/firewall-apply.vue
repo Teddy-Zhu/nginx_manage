@@ -34,6 +34,7 @@ import { useAction, useIdempotency } from "../composables/action";
 import { useRoute } from "vue-router";
 import { useSession } from "../stores/session";
 import FirewalldPlanDetails from "../components/FirewalldPlanDetails.vue";
+import UFWPlanDetails from "../components/UFWPlanDetails.vue";
 
 const route = useRoute();
 const action = ref<FirewallPlanInput["action"]>(
@@ -317,7 +318,11 @@ onUnmounted(() => {
     class="notice"
     >{{ view.reason }}</n-alert
   >
-  <n-alert type="info" :bordered="false" class="notice"
+  <n-alert
+    v-if="view?.backend !== 'ufw'"
+    type="info"
+    :bordered="false"
+    class="notice"
     >应用期望策略前须启用防火墙模块，移除已确认规则可在模块停用后执行。两种操作均须直接访问目标已确认的管理
     HTTPS
     入口并通过新连接确认。确认仅证明本次管理连接可达，业务端口和云安全组需另行核对。</n-alert
@@ -434,7 +439,7 @@ onUnmounted(() => {
           ? plan.backend === "firewalld"
             ? "清空本应用 policy 规则"
             : `移除 ${plan.baseline.rules} 条规则`
-          : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : "内核规则"}`
+          : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : "内核规则"}`
       }}</n-tag>
     </div>
     <dl>
@@ -458,6 +463,11 @@ onUnmounted(() => {
       :plan="plan.firewalld"
       :program-hash="plan.program_hash"
     />
+    <UFWPlanDetails
+      v-if="plan.ufw"
+      :plan="plan.ufw"
+      :program-hash="plan.program_hash"
+    />
     <n-data-table
       :columns="protections"
       :data="plan.protections"
@@ -470,7 +480,9 @@ onUnmounted(() => {
           ? "所列入口仅用于本次连接核对，移除后不再保留本应用保护条目；删除不等同于允许端口，其余系统策略仍可能阻止连接。"
           : plan.backend === "firewalld"
             ? "入口保护先于业务规则匹配。accept 可能结束后续 firewalld 过滤，其他内核规则或云安全组仍可阻止连接。"
-            : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
+            : plan.backend === "ufw"
+              ? "计划优先保留入口保护；与保护条件完全相同的业务项已由保护项覆盖。逐条预演通过不代表规则已经应用或端口可达。"
+              : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
       }}
     </p>
     <n-button

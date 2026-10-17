@@ -34,6 +34,7 @@ type Plan struct {
 	Backend             string         `json:"backend"`
 	CanApply            bool           `json:"can_apply"`
 	Firewalld           *FirewalldPlan `json:"firewalld"`
+	UFW                 *UFWPlan       `json:"ufw"`
 	Action              string         `json:"action"`
 	ID                  string         `json:"id"`
 	Version             int64          `json:"version"`
@@ -64,6 +65,19 @@ type FirewalldPlan struct {
 	Warnings                []string         `json:"warnings"`
 	Reason                  string           `json:"reason"`
 }
+type UFWPlan struct {
+	ConfigurationHash   string         `json:"configuration_hash"`
+	ToolHash            string         `json:"tool_hash"`
+	DryRunHash          string         `json:"dry_run_hash"`
+	DryRunCommands      int            `json:"dry_run_commands"`
+	ProtectionRules     int            `json:"protection_rules"`
+	ProtectionOverrides int            `json:"protection_overrides"`
+	Entries             []PreviewEntry `json:"entries"`
+	Truncated           bool           `json:"truncated"`
+	Warnings            []string       `json:"warnings"`
+	Reason              string         `json:"reason"`
+}
+
 type Operation struct {
 	Action            string `json:"action"`
 	ID                string `json:"id"`

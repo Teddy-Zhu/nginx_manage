@@ -20,10 +20,12 @@ type UFWRule struct {
 	Arguments []string `json:"arguments"`
 }
 type UFWProgram struct {
-	Rules   []UFWRule
-	Entries []PreviewEntry
-	Hash    string
-	Bytes   int
+	Rules               []UFWRule
+	Entries             []PreviewEntry
+	Hash                string
+	Bytes               int
+	ProtectionRules     int
+	ProtectionOverrides int
 }
 
 func CompileUFW(policy Policy) (*UFWProgram, error) {
@@ -98,6 +100,13 @@ func CompileUFW(policy Policy) (*UFWProgram, error) {
 			}
 		}
 	}
+	return finishUFW(program)
+}
+
+func finishUFW(program *UFWProgram) (*UFWProgram, error) {
+	if len(program.Rules) > MaxEntries {
+		return nil, fault.Invalid("包含保护项的 UFW 命令超过 8192 条")
+	}
 	raw, err := json.Marshal(program.Rules)
 	if err != nil {
 		return nil, err
@@ -108,4 +117,47 @@ func CompileUFW(policy Policy) (*UFWProgram, error) {
 	program.Bytes = len(raw)
 	program.Hash = secure.Hash(append([]byte("ufw:host:v1:\x00"), raw...))
 	return program, nil
+}
+
+func CompileUFWProtected(policy Policy, protections []Protection) (*UFWProgram, error) {
+	base, err := CompileUFW(policy)
+	if err != nil {
+		return nil, err
+	}
+	guards, err := protectionPolicy(protections, "ufw")
+	if err != nil {
+		return nil, err
+	}
+	out := &UFWProgram{Rules: []UFWRule{}, Entries: []PreviewEntry{}}
+	seen := map[string]bool{}
+	selector := func(rule UFWRule) string {
+		// Action and the final comment pair are not UFW match selectors.
+		return strings.Join(rule.Arguments[1:len(rule.Arguments)-2], "\x00")
+	}
+	for _, guard := range guards.Rules {
+		compiled, err := CompileUFW(Policy{Backend: "ufw", Rules: []Rule{guard}})
+		if err != nil {
+			return nil, err
+		}
+		for i, rule := range compiled.Rules {
+			key := selector(rule)
+			if !seen[key] {
+				seen[key] = true
+				out.Rules = append(out.Rules, rule)
+				out.Entries = append(out.Entries, compiled.Entries[i])
+			}
+		}
+	}
+	out.ProtectionRules = len(out.Rules)
+	for i, rule := range base.Rules {
+		if seen[selector(rule)] {
+			// The guard must win; sending the same selector twice would update
+			// it in UFW, including when the business action is deny/reject.
+			out.ProtectionOverrides++
+			continue
+		}
+		out.Rules = append(out.Rules, rule)
+		out.Entries = append(out.Entries, base.Entries[i])
+	}
+	return finishUFW(out)
 }

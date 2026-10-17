@@ -2027,6 +2027,7 @@ type FirewallPlan struct {
 	Backend             string                 `json:"backend"`
 	CanApply            bool                   `json:"can_apply"`
 	Firewalld           *FirewallFirewalldPlan `json:"firewalld"`
+	Ufw                 *FirewallUFWPlan       `json:"ufw"`
 	Action              string                 `json:"action"`
 	Id                  string                 `json:"id"`
 	Version             int64                  `json:"version"`
@@ -2055,6 +2056,18 @@ type FirewallFirewalldPlan struct {
 	Truncated               bool                     `json:"truncated"`
 	Warnings                []string                 `json:"warnings"`
 	Reason                  string                   `json:"reason"`
+}
+type FirewallUFWPlan struct {
+	ConfigurationHash   string                 `json:"configuration_hash"`
+	ToolHash            string                 `json:"tool_hash"`
+	DryRunHash          string                 `json:"dry_run_hash"`
+	DryRunCommands      int                    `json:"dry_run_commands"`
+	ProtectionRules     int                    `json:"protection_rules"`
+	ProtectionOverrides int                    `json:"protection_overrides"`
+	Entries             []FirewallPreviewEntry `json:"entries"`
+	Truncated           bool                   `json:"truncated"`
+	Warnings            []string               `json:"warnings"`
+	Reason              string                 `json:"reason"`
 }
 type FirewallOperation struct {
 	Action            string `json:"action"`
