@@ -20,7 +20,7 @@ type backupCLIOptions struct {
 
 func isBackupRecoveryCommand(command string) bool {
 	switch command {
-	case "backup-restore-reconcile", "backup-restore-reconcile-data", "backup-restore-reconcile-verify-data", "backup-restore-activate", "backup-restore-activate-data", "backup-restore-activate-verify-data":
+	case "backup-restore-reconcile", "backup-restore-reconcile-data", "backup-restore-reconcile-verify-data", "backup-restore-activate", "backup-restore-activate-data", "backup-restore-activate-verify-data", "backup-restore-external", "backup-restore-external-data":
 		return true
 	case "backup-prepare", "backup-prepare-data", "backup-preparation", "backup-preparation-data", "backup-preparation-cleanup", "backup-preparation-cleanup-data", "backup-adopt", "backup-adoption", "backup-adoption-cleanup", "backup-adoption-verify-data", "backup-restore", "backup-restore-rollback", "backup-restore-status", "backup-restore-plan", "backup-restore-plan-status", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-plan-cleanup", "backup-restore-plan-cleanup-data", "backup-restore-apply", "backup-restore-runtime-status", "backup-restore-runtime-data":
 		return true
@@ -73,9 +73,19 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 		return true, err
 	}
 	switch command {
+	case "backup-restore-external":
+		var input backup.RestoreExternalInput
+		if err = readBackupInput(&input); err != nil {
+			return true, err
+		}
+		out, err := backup.QueryRestorationExternal(ctx, data, options.OperationID, input)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(os.Stdout).Encode(out)
 	case "backup-restore-activate":
 		var input backup.RestoreActivateInput
-		if err = readBackupInput(&input); err != nil {
+		if err = readBackupJSON(&input, 32<<10); err != nil {
 			return true, err
 		}
 		out, err := backup.ActivateRestoration(ctx, data, options.OperationID, input)
@@ -193,7 +203,7 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			OperationID string `json:"operation_id"`
 			Cleaned     bool   `json:"cleaned"`
 		}{options.OperationID, true})
-	case "backup-adoption-verify-data", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-reconcile-data", "backup-restore-reconcile-verify-data", "backup-restore-activate-data", "backup-restore-activate-verify-data":
+	case "backup-adoption-verify-data", "backup-restore-plan-data", "backup-restore-plan-verify-data", "backup-restore-reconcile-data", "backup-restore-reconcile-verify-data", "backup-restore-activate-data", "backup-restore-activate-verify-data", "backup-restore-external-data":
 		if os.Geteuid() == 0 {
 			return true, errors.New("恢复材料核对助手须使用非 root 身份")
 		}
@@ -209,6 +219,17 @@ func runBackupCommand(ctx context.Context, command string, options backupCLIOpti
 			}
 			defer f.Close()
 			files = append(files, f)
+		}
+		if command == "backup-restore-external-data" {
+			var input backup.RestoreExternalMaterialInput
+			if err = readBackupJSON(&input, 512<<10); err != nil {
+				return true, err
+			}
+			out, err := backup.ReadRestorationExternalDescriptors(ctx, data, options.OperationID, input, files)
+			if err != nil {
+				return true, err
+			}
+			return true, json.NewEncoder(os.Stdout).Encode(out)
 		}
 		if command == "backup-restore-activate-data" || command == "backup-restore-activate-verify-data" {
 			var input backup.RestoreActivateMaterialInput

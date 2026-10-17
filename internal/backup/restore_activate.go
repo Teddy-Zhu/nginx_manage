@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,8 +15,9 @@ import (
 
 type RestoreActivateInput struct {
 	RestoreInput
-	ReconciliationSHA256   string `json:"reconciliation_sha256"`
-	AcceptActivationCommit bool   `json:"accept_activation_commit"`
+	ReconciliationSHA256   string                               `json:"reconciliation_sha256"`
+	ExternalReview         panelrecovery.DisasterExternalReview `json:"external_review"`
+	AcceptActivationCommit bool                                 `json:"accept_activation_commit"`
 }
 
 func ActivateRestoration(ctx context.Context, data, id string, in RestoreActivateInput) (out agent.DisasterRuntimeStatus, err error) {
@@ -41,8 +43,20 @@ func ActivateRestoration(ctx context.Context, data, id string, in RestoreActivat
 	if r.SHA256() != in.ReconciliationSHA256 {
 		return out, errors.New("激活须明确指定原对账摘要")
 	}
+	if err = in.ExternalReview.Validate(id, r.SHA256()); err != nil {
+		return out, err
+	}
 	if _, err = panelrecovery.ReadDisasterReconciliationProof(i, r); err != nil {
 		return out, err
+	}
+	if prior, e := panelrecovery.ReadDisasterActivation(i); e == nil {
+		stored, _ := json.Marshal(prior.ExternalReview)
+		requested, _ := json.Marshal(in.ExternalReview)
+		if string(stored) != string(requested) {
+			return out, errors.New("原激活已冻结不同的外部结果复核，禁止替换处理结论")
+		}
+	} else if !os.IsNotExist(e) {
+		return out, e
 	}
 	_, err = agent.ActivateDisaster(ctx, data, id, in.Epoch, func(ctx context.Context, original panelrecovery.DisasterIntent) (retErr error) {
 		if original.SHA256() != i.SHA256() {
@@ -75,7 +89,13 @@ func ActivateRestoration(ctx context.Context, data, id string, in RestoreActivat
 			if time.Now().Unix() >= i.ExpiresAt {
 				return errors.New("原恢复授权已到期，不能新增激活准备")
 			}
-			a = panelrecovery.DisasterActivation{Schema: 1, OperationID: id, IntentSHA256: i.SHA256(), ReconciliationSHA256: r.SHA256(), Epoch: in.Epoch, PreparedAt: time.Now().Unix(), StartID: secure.ID(), File: panelrecovery.File{Name: i.Files[0].Name}}
+			a = panelrecovery.DisasterActivation{Schema: 2, OperationID: id, IntentSHA256: i.SHA256(), ReconciliationSHA256: r.SHA256(), ExternalReview: in.ExternalReview, Epoch: in.Epoch, PreparedAt: time.Now().Unix(), StartID: secure.ID(), File: panelrecovery.File{Name: i.Files[0].Name}}
+		} else {
+			stored, _ := json.Marshal(a.ExternalReview)
+			requested, _ := json.Marshal(in.ExternalReview)
+			if string(stored) != string(requested) {
+				return errors.New("原激活已冻结不同的外部结果复核，禁止替换处理结论")
+			}
 		}
 		input := RestoreActivateMaterialInput{RestoreReconcileMaterialInput: RestoreReconcileMaterialInput{Preparation: adoption.Intent.Preparation, Plan: p, Reconciliation: r}, Activation: a, MaintenanceID: i.Stop.MaintenanceID}
 		pub := p.Preview.Publication

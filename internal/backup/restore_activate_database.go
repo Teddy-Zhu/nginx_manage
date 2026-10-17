@@ -25,11 +25,12 @@ type RestoreActivateMaterialInput struct {
 
 func activationReport(in RestoreActivateMaterialInput) ([]byte, error) {
 	return json.Marshal(struct {
-		ReconciliationSHA256       string   `json:"reconciliation_sha256"`
-		ReconciliationReportSHA256 string   `json:"reconciliation_report_sha256"`
-		PreparedAt                 int64    `json:"prepared_at"`
-		Pending                    []string `json:"pending_checks"`
-	}{in.Reconciliation.SHA256(), in.Reconciliation.ReportSHA256, in.Activation.PreparedAt, []string{"external_effects_require_review", "automation_disabled", "readiness_required"}})
+		ReconciliationSHA256       string                               `json:"reconciliation_sha256"`
+		ReconciliationReportSHA256 string                               `json:"reconciliation_report_sha256"`
+		ExternalReview             panelrecovery.DisasterExternalReview `json:"external_review"`
+		PreparedAt                 int64                                `json:"prepared_at"`
+		Pending                    []string                             `json:"pending_checks"`
+	}{in.Reconciliation.SHA256(), in.Reconciliation.ReportSHA256, in.Activation.ExternalReview, in.Activation.PreparedAt, []string{"automation_disabled", "readiness_required"}})
 }
 
 func validateActivateMaterial(id string, in RestoreActivateMaterialInput) error {
@@ -37,7 +38,10 @@ func validateActivateMaterial(id string, in RestoreActivateMaterialInput) error 
 		return err
 	}
 	a, r := in.Activation, in.Reconciliation
-	if a.Schema != 1 || a.OperationID != id || a.IntentSHA256 != r.IntentSHA256 || a.ReconciliationSHA256 != r.SHA256() || !validID.MatchString(a.Epoch) || !validID.MatchString(a.StartID) || !validID.MatchString(in.MaintenanceID) || a.PreparedAt < r.PreparedAt || a.PreparedAt > time.Now().Unix()+300 || a.File.Name != r.File.Name {
+	if err := a.ExternalReview.Validate(id, r.SHA256()); err != nil {
+		return err
+	}
+	if a.Schema != 2 || a.OperationID != id || a.IntentSHA256 != r.IntentSHA256 || a.ReconciliationSHA256 != r.SHA256() || !validID.MatchString(a.Epoch) || !validID.MatchString(a.StartID) || !validID.MatchString(in.MaintenanceID) || a.PreparedAt < r.PreparedAt || a.PreparedAt > time.Now().Unix()+300 || a.File.Name != r.File.Name {
 		return errors.New("激活助手输入与原对账不一致")
 	}
 	return nil
@@ -139,6 +143,9 @@ func PrepareActivatedRestorationDescriptors(ctx context.Context, data, id string
 		if e := verifyReconciliationBasis(call, baseline, vault, in.RestoreReconcileMaterialInput); e != nil {
 			return e
 		}
+		if e := verifyRestorationExternalReview(call, baseline, in); e != nil {
+			return e
+		}
 		path, e := copyRestorationDatabase(call, data, in.Plan.ID, files[0], pub.File)
 		if e != nil {
 			return e
@@ -191,6 +198,9 @@ func VerifyActivatedRestorationDescriptors(ctx context.Context, data, id string,
 	a := in.Activation
 	_, err = verifyRestorationDescriptors(ctx, data, id, in.Preparation, files, in.Plan.Preview.Publication, func(call context.Context, baseline *sql.DB, vault *secure.Vault) error {
 		if e := verifyReconciliationBasis(call, baseline, vault, in.RestoreReconcileMaterialInput); e != nil {
+			return e
+		}
+		if e := verifyRestorationExternalReview(call, baseline, in); e != nil {
 			return e
 		}
 		f, info, e := openAdoptionCheck(data, in.Plan.ID, os.Getegid(), File{Name: a.File.Name, Size: a.File.Size, SHA256: a.File.SHA256})

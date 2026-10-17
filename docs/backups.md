@@ -239,7 +239,36 @@ root 在原恢复目录保存不可变 `runtime-apply.json`，绑定安装意图
 
 `backup-restore-runtime-status` 同时返回对账摘要和 `reconciliation_approved`；该字段只表示核对证明已保存，不表示副本已安装、当前运行仍匹配或完整恢复已经成功。补偿继续使用 `backup-restore-rollback`，先恢复原 Nginx，再恢复数据库/WAL/SHM/密钥/TLS 原件；原始安装与对账后的数据库都必须匹配已批准散列，外部变化阻止覆盖。补偿不依赖源数据库、对账副本内容或原归档重新解密，意图、证明与审计仍保留。
 
-对账完成仍不能直接启动业务或释放维护。root 写入屏障、持久停机和数据库 `reconciling` 屏障继续保留，须显式执行下节激活；外部结果的人工复核继续保留。
+对账完成仍不能直接启动业务或释放维护。root 写入屏障、持久停机和数据库 `reconciling` 屏障继续保留，须先完成外部结果复核，再显式激活。
+
+## 外部结果复核
+
+对账完成、激活提交之前，由本机 root 读取原恢复对应的完整清单：
+
+```sh
+/PANEL_RUNTIME/current/nginxpanel backup-restore-external --data-dir /var/lib/nginxpanel --restore-operation <原接入UUID>
+```
+
+标准输入最多 8 KiB。首次省略 `kind/after`，取得完整类别、记录数和摘要；再指定类别查看每页最多 64 条记录，并用返回的 `next_after` 继续：
+
+```json
+{
+  "adoption_sha256": "原接入摘要",
+  "plan_id": "原计划UUID",
+  "plan_sha256": "原计划摘要",
+  "reconciliation_sha256": "原对账摘要",
+  "kind": "",
+  "after": ""
+}
+```
+
+清单包括本次隔离的源任务、未结束的 ACME 账户/签发配置/订单、未清理 DNS 挑战、未结束的迁入及结果未明确的迁出、源节点和配对的远端撤权、已尝试投递后被隔离的通知。类别名分别为 `source_tasks`、`acme_accounts`、`acme_profiles`、`acme_orders`、`dns_records`、`migration_plans`、`migration_pushes`、`node_grants`、`pairing_grants`、`notification_deliveries`；只返回非空类别，按类别名排序。清单中的状态来自对账前已隔离的固定发布数据库，不能表示当前远端结果。
+
+每条只输出标识、关联标识、原状态/阶段和摘要，不输出凭据、订单私钥、DNS 值或执行密文。类别摘要覆盖全部选中行和执行材料，完整清单摘要绑定原恢复及对账；分页不缩小复核范围。每类最多 100 万条，单字段最多 16 MiB，全次扫描材料最多 2 GiB；沿用固定非 root 助手和原只读数据库投影的期限及内存限制。root 不解析备份 SQL，不请求外部服务。
+
+管理员按原执行记录核对原主机、CA/DNS 服务商、迁移目标和远端凭据，处理本次需要处理的结果；不能删除其他来源的 DNS 值或假定失联操作没有发生。每个非空类别提交一项覆盖该类全部条目的复核记录，复制其 `kind/count/sha256`，填写 `resolution=verified|remediated|no_effect`（已核对、已处置、确认无副作用）及 1–512 字节的 `evidence` 依据，例如处置单或只读核对记录的引用。依据中不放秘密或可执行命令。存在待处理项时先保留恢复屏障，不提交激活。
+
+这些是管理员的人工复核声明，程序只核对其覆盖范围与原固定记录，不声称自动验证第三方结果。复核不会重放任务、撤销证书、清理 DNS 或恢复授权；后续确需启用自动化或重新配对时仍走独立流程。
 
 
 ## 最终激活
@@ -250,7 +279,7 @@ root 在原恢复目录保存不可变 `runtime-apply.json`，绑定安装意图
 /PANEL_RUNTIME/current/nginxpanel backup-restore-activate --data-dir /var/lib/nginxpanel --restore-operation <原接入UUID>
 ```
 
-标准输入最多 8 KiB，必须指定对账摘要并接受不可回退提交：
+标准输入最多 32 KiB，必须指定对账及完整外部复核摘要，并接受不可回退提交：
 
 ```json
 {
@@ -259,15 +288,29 @@ root 在原恢复目录保存不可变 `runtime-apply.json`，绑定安装意图
   "plan_sha256": "原计划摘要",
   "epoch": "原维护当前epoch",
   "reconciliation_sha256": "原对账规范JSON的SHA256",
+  "external_review": {
+    "inventory_sha256": "外部清单的完整摘要",
+    "decisions": [
+      {
+        "kind": "dns_records",
+        "count": 1,
+        "sha256": "该类别完整摘要",
+        "resolution": "remediated",
+        "evidence": "处置记录引用，覆盖该类全部条目"
+      }
+    ]
+  },
   "accept_activation_commit": true
 }
 ```
 
-`backup-restore-runtime-status` 增加 `reconciliation_sha256`、`activation`、`activation_approved`；查询沿用持久材料，不启动执行。激活前须核对目标地址、映射、证书及对账报告；高风险网络变更、第三方结果和源授权仍须独立复核。
+示例中的 decisions 仅适用于清单恰好只有一个 DNS 类别；实际必须按原排序包含全部非空类别，不允许遗漏、重复或新增类别。空清单也须携带其摘要及 `decisions: []`。准备助手和第二次只读核对助手分别重新扫描原数据库并比较完整清单；摘要或覆盖不符时不批准激活材料。
+
+`backup-restore-runtime-status` 返回 `reconciliation_sha256`、`activation`、`activation_approved`，其中 activation 保存原人工复核结论；查询沿用持久材料，不启动执行。激活前仍须核对目标地址、映射、证书及对账报告，高风险网络变更继续单独确认。
 
 固定非 root 助手从原发布副本重建已批准对账，再仅将原恢复屏障标记为 completed、加入目标原维护会话及维护任务、保存激活报告和审计。第二次非 root 只读核对复用逐表主键比较，源历史及其他字段须完全匹配。目标维护 UUID 若与源记录冲突则失败，不覆盖源历史。源自动化、授权、任务及外部流程仍保持对账后的隔离状态。
 
-root 先固定 `activate.json`、`activated.db` 和 `activated-proof.json`，存入原 `DATA/agent/disaster-restores/<恢复UUID>`；文件 root 0400、目录 root 0700，数据库最多 512 MiB，计入原 2 GiB 配额及磁盘预留。新增意图和证明不得越过原安装期限；重试沿用原启动 UUID、摘要和副本，不能修改策略或延长期限。已批准的副本在提交前仍重新只读核对运行状态。
+root 先固定 `activate.json`、`activated.db` 和 `activated-proof.json`，存入原 `DATA/agent/disaster-restores/<恢复UUID>`；文件 root 0400、目录 root 0700，数据库最多 512 MiB，计入原 2 GiB 配额及磁盘预留。激活记录为 schema 2，人工复核同时进入激活报告及数据库恢复报告；首版不保留旧激活格式。新增意图和证明不得越过原安装期限；重试沿用原启动 UUID、复核内容、摘要和副本，不能修改策略或延长期限。已批准的副本在提交前仍重新只读核对运行状态。
 
 父事务持久保存 `activation_committed/recovery_required` 后，才能原子安装完成数据库。**这是允许恢复数据进入写入阶段的不可回退边界**：此后所有重试只续办原激活，`backup-restore`、运行重新应用及 `backup-restore-rollback` 均拒绝；不得用旧快照覆盖可能出现的新数据。激活提交之前仍可沿原补偿路径恢复目标。提交后安装、启动或就绪失败保留 `recovery_required` 和原维护授权，修复真实故障后续办原命令，不伪造整体成功。
 

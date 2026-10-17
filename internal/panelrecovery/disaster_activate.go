@@ -15,15 +15,16 @@ import (
 // The completed database is a separate approved postimage. The parent must
 // durably commit activation before installing it or allowing serve to open it.
 type DisasterActivation struct {
-	Schema               int    `json:"schema"`
-	OperationID          string `json:"operation_id"`
-	IntentSHA256         string `json:"intent_sha256"`
-	ReconciliationSHA256 string `json:"reconciliation_sha256"`
-	Epoch                string `json:"epoch"`
-	PreparedAt           int64  `json:"prepared_at"`
-	StartID              string `json:"start_id"`
-	File                 File   `json:"file"`
-	ReportSHA256         string `json:"report_sha256"`
+	Schema               int                    `json:"schema"`
+	OperationID          string                 `json:"operation_id"`
+	IntentSHA256         string                 `json:"intent_sha256"`
+	ReconciliationSHA256 string                 `json:"reconciliation_sha256"`
+	ExternalReview       DisasterExternalReview `json:"external_review"`
+	Epoch                string                 `json:"epoch"`
+	PreparedAt           int64                  `json:"prepared_at"`
+	StartID              string                 `json:"start_id"`
+	File                 File                   `json:"file"`
+	ReportSHA256         string                 `json:"report_sha256"`
 }
 
 func (a DisasterActivation) SHA256() string { raw, _ := json.Marshal(a); return secure.Hash(raw) }
@@ -32,7 +33,10 @@ func (a DisasterActivation) Validate(i DisasterIntent, r DisasterReconciliation)
 	if err := r.Validate(i); err != nil {
 		return err
 	}
-	if a.Schema != 1 || a.OperationID != i.OperationID || a.IntentSHA256 != i.SHA256() || a.ReconciliationSHA256 != r.SHA256() || !idValue.MatchString(a.Epoch) || !idValue.MatchString(a.StartID) || a.StartID == i.OperationID || a.StartID == i.PlanID || a.StartID == i.Stop.OperationID || a.StartID == i.Stop.MaintenanceID || a.PreparedAt < r.PreparedAt || a.PreparedAt >= i.ExpiresAt || a.PreparedAt > time.Now().Unix()+300 || a.File.Name != i.Files[0].Name || a.File.Size < 1 || a.File.Size > DatabaseMax || !hashValue.MatchString(a.File.SHA256) || !hashValue.MatchString(a.ReportSHA256) {
+	if err := a.ExternalReview.Validate(i.OperationID, r.SHA256()); err != nil {
+		return err
+	}
+	if a.Schema != 2 || a.OperationID != i.OperationID || a.IntentSHA256 != i.SHA256() || a.ReconciliationSHA256 != r.SHA256() || !idValue.MatchString(a.Epoch) || !idValue.MatchString(a.StartID) || a.StartID == i.OperationID || a.StartID == i.PlanID || a.StartID == i.Stop.OperationID || a.StartID == i.Stop.MaintenanceID || a.PreparedAt < r.PreparedAt || a.PreparedAt >= i.ExpiresAt || a.PreparedAt > time.Now().Unix()+300 || a.File.Name != i.Files[0].Name || a.File.Size < 1 || a.File.Size > DatabaseMax || !hashValue.MatchString(a.File.SHA256) || !hashValue.MatchString(a.ReportSHA256) {
 		return errors.New("恢复激活材料与原安装、对账批准不一致")
 	}
 	return nil
