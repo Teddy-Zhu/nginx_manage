@@ -20,6 +20,7 @@ import (
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/limits"
+	"nginxpanel/internal/logs"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxruntime"
 	"nginxpanel/internal/platform"
@@ -60,6 +61,8 @@ type Server struct {
 	ReleaseTrust     string
 	ReleaseToken     string
 	Installation     *nginxruntime.Installation
+	eventLogs        *eventLogStore
+	logReader        *logs.Reader
 	fail2banJails    *fail2banJailsExecutor
 	fail2banNginx    *fail2banNginxExecutor
 	fail2banHostSync *fail2banHostSyncExecutor
@@ -217,6 +220,18 @@ func (s *Server) Run(ctx context.Context) error {
 	defer func() { stopFirewall(); <-fwDone }()
 	s.dnsHandlers(mux, dns, ctx)
 	s.http01Handlers(mux)
+	if !s.Dev {
+		s.eventLogs, err = openEventLogs(s)
+		if err != nil {
+			slog.Warn("Managed event log initialization failed", "error", err)
+		}
+	}
+	s.logReader = logs.NewReader(s.logSnapshot, s.openCatalogLog)
+	defer s.logReader.Close()
+	eventCtx, stopEventLogs := context.WithCancel(ctx)
+	eventDone := make(chan struct{})
+	go func() { defer close(eventDone); s.runEventLogs(eventCtx) }()
+	defer func() { stopEventLogs(); <-eventDone }()
 	s.logHandlers(mux)
 	sampler := &metricSampler{ctx: ctx, capability: platform.MetricsCapability(s.MetricsScope, s.Dev), collector: platform.MetricsCollector{DataDir: s.DataDir}}
 	s.monitoringHandlers(mux, sampler)

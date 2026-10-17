@@ -60,6 +60,7 @@ type Record struct {
 	ObservedRevision         string                  `json:"observed_revision"`
 	Error                    string                  `json:"error"`
 	LogPolicy                *logs.Policy            `json:"log_policy,omitempty"`
+	LogPolicyScope           string                  `json:"log_policy_scope,omitempty"`
 	LogPolicyBase            int64                   `json:"log_policy_base,omitempty"`
 	LogPolicyVersion         int64                   `json:"log_policy_version,omitempty"`
 }

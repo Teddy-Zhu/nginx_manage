@@ -2766,11 +2766,13 @@ export interface components {
             compress: boolean;
         };
         LogPolicyInput: {
+            scope: "system" | "nginx";
             /** Format: int64 */
             base_version: number;
             policy: components["schemas"]["LogPolicy"];
         };
         LogPolicyView: {
+            scope: "system" | "nginx";
             /** Format: int64 */
             version: number;
             policy: components["schemas"]["LogPolicy"];

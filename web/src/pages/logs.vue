@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "日志",
-    "subtitle": "受管 Nginx 日志、会话与防护事件",
+    "subtitle": "应用、安全、任务与 Nginx 日志",
     "nav": true,
     "order": 4.5,
     "symbol": "▤"
@@ -45,7 +45,8 @@ const route = useRoute(),
   { run, busy, message } = useAction(),
   policyKey = useIdempotency();
 const sources = ref<LogSource[]>([]),
-  policy = ref<LogPolicyView>(),
+  policies = ref<LogPolicyView[]>([]),
+  policyScope = ref<"system" | "nginx">("system"),
   selected = ref(""),
   category = ref("all");
 const rows = ref<LogRow[]>([]),
@@ -73,6 +74,9 @@ const filter = reactive({
   reason: "",
   events: route.query.events === "1",
 });
+const policy = computed(() =>
+  policies.value.find((item) => item.scope === policyScope.value),
+);
 const source = computed(() =>
   sources.value.find((item) => item.id === selected.value),
 );
@@ -87,12 +91,7 @@ const sourceOptions = computed(() =>
   sources.value
     .filter(
       (item) =>
-        category.value === "all" ||
-        (category.value === "global"
-          ? item.category.startsWith("global")
-          : category.value === "stream"
-            ? item.category.startsWith("stream")
-            : item.category.startsWith("http")),
+        category.value === "all" || item.category.startsWith(category.value),
     )
     .map((item) => ({
       label: `${item.label}${item.active ? "" : "（已停用）"}`,
@@ -157,9 +156,11 @@ function accept(page: LogPage, append = false) {
   if (current) current.cursor = page.cursor;
 }
 async function load() {
-  const values = await Promise.all([api.logSources(), api.logPolicy()]);
+  const values = await Promise.all([api.logSources(), api.logPolicies()]);
   sources.value = values[0];
-  policy.value = values[1];
+  policies.value = values[1];
+  if (!policy.value && policies.value.length)
+    policyScope.value = policies.value[0]!.scope;
   if (!sources.value.some((item) => item.id === selected.value)) {
     selected.value =
       sources.value.find(
@@ -226,7 +227,7 @@ async function download() {
     const url = URL.createObjectURL(value.blob),
       link = document.createElement("a");
     link.href = url;
-    link.download = "nginx-logs.jsonl";
+    link.download = "managed-logs.jsonl";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     if (value.gap || value.truncated)
@@ -236,6 +237,7 @@ async function download() {
 function editPolicy() {
   if (!policy.value) return;
   policyInput.value = {
+    scope: policy.value.scope,
     base_version: policy.value.version,
     policy: { ...policy.value.policy },
   };
@@ -245,7 +247,7 @@ async function savePolicy() {
   await run(async () => {
     if (!policyInput.value) return;
     await api.setLogPolicy(policyInput.value, policyKey(policyInput.value));
-    policy.value = await api.logPolicy();
+    policies.value = await api.logPolicies();
     policyOpen.value = false;
     message.success("日志策略已保存，Agent 将独立执行");
   });
@@ -258,8 +260,13 @@ const policyFields: {
 }[] = [
   { key: "size_mib", label: "轮转大小（MiB）", min: 1, max: 1024 },
   { key: "interval_hours", label: "轮转间隔（小时）", min: 1, max: 168 },
-  { key: "access_days", label: "访问 / 会话保留（天）", min: 1, max: 90 },
-  { key: "error_days", label: "错误日志保留（天）", min: 1, max: 90 },
+  {
+    key: "access_days",
+    label: "访问 / 安全 / 任务保留（天）",
+    min: 1,
+    max: 90,
+  },
+  { key: "error_days", label: "错误 / 应用日志保留（天）", min: 1, max: 90 },
   { key: "resource_mib", label: "单资源配额（MiB）", min: 1, max: 16384 },
   { key: "total_mib", label: "总配额（MiB）", min: 1, max: 65536 },
 ];
@@ -315,7 +322,10 @@ const columns = computed<DataTableColumns<LogRow>>(() => {
     out.push(
       { title: "级别", key: "level", width: 100 },
       {
-        title: "脱敏消息",
+        title:
+          source.value?.format === "nginxpanel_event"
+            ? "事件元数据"
+            : "脱敏消息",
         key: "message",
         width: 650,
         ellipsis: { tooltip: true },
@@ -335,7 +345,16 @@ onUnmounted(reset);
 <template>
   <div class="toolbar">
     <n-button :loading="busy" @click="run(load)">刷新来源</n-button
-    ><n-button :disabled="!policy" @click="editPolicy">轮转与保留</n-button
+    ><n-select
+      v-model:value="policyScope"
+      style="width: 180px"
+      :options="
+        policies.map((item) => ({
+          label: item.scope === 'system' ? '系统日志策略' : 'Nginx 日志策略',
+          value: item.scope,
+        }))
+      "
+    /><n-button :disabled="!policy" @click="editPolicy">轮转与保留</n-button
     ><span class="muted"
       >{{ sources.length }} 个来源 ·
       {{ Math.round((policy?.bytes ?? 0) / 1048576) }} MiB</span
@@ -346,7 +365,7 @@ onUnmounted(reset);
   }}</n-alert>
   <n-empty
     v-if="!sources.length"
-    description="暂无已确认生效的日志来源，请检查专用 Nginx 与 Agent 状态"
+    description="暂无可用日志来源，请检查 Agent 状态"
   />
   <template v-else>
     <n-form
@@ -362,6 +381,9 @@ onUnmounted(reset);
             { label: 'HTTP', value: 'http' },
             { label: 'Stream', value: 'stream' },
             { label: '全局', value: 'global' },
+            { label: '应用', value: 'application' },
+            { label: '安全', value: 'security' },
+            { label: '任务', value: 'task' },
           ]"
       /></n-form-item>
       <n-form-item label="日志来源"
@@ -483,10 +505,11 @@ onUnmounted(reset);
         reopen 失败时可能超过配额。配额须满足：轮转大小 ≤ 单来源 ≤
         总计。</n-alert
       >
-      <n-alert v-if="!policy.editable" type="warning" :bordered="false"
-        >需在本机确认唯一轮转所有者，排除外部规则竞争后才能启用 Agent
-        管理。</n-alert
-      >
+      <n-alert v-if="!policy.editable" type="warning" :bordered="false">{{
+        policy.scope === "system"
+          ? "系统日志存储尚未就绪，请在本机核对 Agent 状态。"
+          : "需在本机确认唯一轮转所有者，排除外部规则竞争后才能启用 Agent 管理。"
+      }}</n-alert>
       <n-form
         label-placement="top"
         class="log-filters"

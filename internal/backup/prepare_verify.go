@@ -76,6 +76,8 @@ func verifyPreparedDatabase(ctx context.Context, db *sql.DB, vault *secure.Vault
 	var unsafe bool
 	err = db.QueryRowContext(ctx, `SELECT EXISTS(
  SELECT 1 FROM sessions
+ UNION ALL SELECT 1 FROM event_log_queue
+ UNION ALL SELECT 1 FROM event_log_status WHERE dropped<>0 OR paused<>0
  UNION ALL SELECT 1 FROM settings WHERE key='bootstrap_hash'
  UNION ALL SELECT 1 FROM api_credentials WHERE revoked_at IS NULL
  UNION ALL SELECT 1 FROM tasks t WHERE state NOT IN('succeeded','failed','rolled_back','cancelled') AND (state<>'recovery_required' OR stage<>'restore_isolated' OR lease_until IS NOT NULL OR NOT EXISTS(SELECT 1 FROM restore_quarantined_tasks q WHERE q.task_id=t.id))

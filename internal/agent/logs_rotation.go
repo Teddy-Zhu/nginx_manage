@@ -122,49 +122,8 @@ func (n *Nginx) sweepLogs(ctx context.Context) {
 		if err := m.retainLocked(); err != nil {
 			return err
 		}
-		ids := make([]string, 0, len(m.state.Sources))
-		for id := range m.state.Sources {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids)
-		rotated := 0
-		base := m.nextSource
-		for count := 0; count < len(ids) && rotated < 4; count++ {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			index := (base + count) % len(ids)
-			source := m.state.Sources[ids[index]]
-			file, err := m.liveFile(source)
-			if err != nil || file.Size == 0 || source.Warning != "" {
-				continue
-			}
-			if file.Size < m.state.Policy.SizeMiB<<20 && time.Now().Unix()-source.OpenedAt < m.state.Policy.IntervalHours*3600 {
-				continue
-			}
-			pending, total := false, 0
-			for _, a := range m.state.Archives {
-				if a.SourceID == source.Definition.Source.ID {
-					total++
-					pending = pending || a.State == "planned" || a.State == "reopening"
-				}
-			}
-			if pending {
-				continue
-			}
-			if total >= limits.LogSourceArchives || len(m.state.Archives) >= limits.LogArchives {
-				return errors.New("历史日志数量已达上限，保留策略无法释放足够已关闭文件")
-			}
-			a := &logArchive{ID: secure.ID(), SourceID: source.Definition.Source.ID, Generation: source.Generation, Device: file.Device, Inode: file.Inode, Size: file.Size, StoredBytes: file.Size, Format: file.Format, CreatedAt: max(source.OpenedAt, 1), State: "planned"}
-			m.state.Archives[a.ID] = a
-			if err := m.saveLocked(); err != nil {
-				return err
-			}
-			if err := m.renameLocked(a); err != nil {
-				return err
-			}
-			rotated++
-			m.nextSource = (index + 1) % len(ids)
+		if err := m.rotateDueLocked(ctx); err != nil {
+			return err
 		}
 		return m.reopenLocked()
 	}()
@@ -199,6 +158,58 @@ func (n *Nginx) sweepLogs(ctx context.Context) {
 		}
 	}
 	m.mu.Unlock()
+}
+
+func (m *managedLogs) rotateDueLocked(ctx context.Context) error {
+	ids := make([]string, 0, len(m.state.Sources))
+	for id := range m.state.Sources {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	rotated := 0
+	rotationLimit := 4
+	if m.system {
+		rotationLimit = 32
+	}
+	base := m.nextSource
+	for count := 0; count < len(ids) && rotated < rotationLimit; count++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		index := (base + count) % len(ids)
+		source := m.state.Sources[ids[index]]
+		file, err := m.liveFile(source)
+		if err != nil || file.Size == 0 || source.Warning != "" {
+			continue
+		}
+		if file.Size < m.state.Policy.SizeMiB<<20 && time.Now().Unix()-source.OpenedAt < m.state.Policy.IntervalHours*3600 && !(m.system && !source.Active) {
+			continue
+		}
+		pending, total := false, 0
+		for _, a := range m.state.Archives {
+			if a.SourceID == source.Definition.Source.ID {
+				total++
+				pending = pending || a.State == "planned" || a.State == "reopening"
+			}
+		}
+		if pending {
+			continue
+		}
+		if total >= limits.LogSourceArchives || len(m.state.Archives) >= limits.LogArchives {
+			return errors.New("历史日志数量已达上限，保留策略无法释放足够已关闭文件")
+		}
+		a := &logArchive{ID: secure.ID(), SourceID: source.Definition.Source.ID, Generation: source.Generation, Device: file.Device, Inode: file.Inode, Size: file.Size, StoredBytes: file.Size, Format: file.Format, CreatedAt: max(source.OpenedAt, 1), State: "planned"}
+		m.state.Archives[a.ID] = a
+		if err := m.saveLocked(); err != nil {
+			return err
+		}
+		if err := m.renameLocked(a); err != nil {
+			return err
+		}
+		rotated++
+		m.nextSource = (index + 1) % len(ids)
+	}
+	return nil
 }
 
 func safeLogMaintenanceError(err error) string {
@@ -304,6 +315,9 @@ func (m *managedLogs) reopenLocked() error {
 	}
 	if len(pending) == 0 {
 		return nil
+	}
+	if m.system {
+		return m.closeEventArchivesLocked(pending)
 	}
 	if err := m.nginx.prepareLogFiles(definitions); err != nil {
 		return err
@@ -544,7 +558,7 @@ func (m *managedLogs) retainLocked() error {
 	for _, a := range archives {
 		resource := logResourceKey(m.state.Sources[a.SourceID])
 		days := m.state.Policy.AccessDays
-		if strings.Contains(m.state.Sources[a.SourceID].Definition.Source.Category, "error") {
+		if strings.Contains(m.state.Sources[a.SourceID].Definition.Source.Category, "error") || m.system && m.state.Sources[a.SourceID].Definition.Source.Category == "application" {
 			days = m.state.Policy.ErrorDays
 		}
 		if time.Now().Unix()-a.ClosedAt < days*86400 && totals[resource] <= m.state.Policy.ResourceMiB<<20 && total <= m.state.Policy.TotalMiB<<20 && counts[a.SourceID] < limits.LogSourceArchives && len(m.state.Archives) < limits.LogArchives {

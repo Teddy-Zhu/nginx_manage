@@ -42,6 +42,9 @@ func RedactText(value string) string {
 }
 
 func Parse(line []byte, format string) (Row, bool) {
+	if format == EventFormat {
+		return parseEvent(line)
+	}
 	if format != "nginxpanel_http" && format != "nginxpanel_stream" {
 		if len(line) < 19 {
 			return Row{}, false

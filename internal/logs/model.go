@@ -32,6 +32,7 @@ func (p Policy) Validate() error {
 }
 
 type PolicyView struct {
+	Scope       string `json:"scope"`
 	Version     int64  `json:"version"`
 	Policy      Policy `json:"policy"`
 	Owner       string `json:"owner"`
@@ -41,6 +42,7 @@ type PolicyView struct {
 	Warning     string `json:"warning"`
 }
 type PolicyInput struct {
+	Scope       string `json:"scope"`
 	BaseVersion int64  `json:"base_version"`
 	Policy      Policy `json:"policy"`
 }

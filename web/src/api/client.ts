@@ -850,7 +850,7 @@ function createAPI(scope: RequestScope) {
   ) =>
     request<MonitoringHistory>({ url: "/monitoring/history", params, signal }),
   logSources: (signal?: AbortSignal) => request<LogSource[]>({ url: "/logs/sources", signal }),
-  logPolicy: () => request<LogPolicyView>({ url: "/logs/policy" }),
+  logPolicies: () => request<LogPolicyView[]>({ url: "/logs/policy" }),
   setLogPolicy: (data: LogPolicyInput, key: string) =>
     request<{ operation_id: string; version: number }>({
       method: "PUT",

@@ -1315,6 +1315,7 @@ paths:
   /logs/policy:
     get:
       operationId: getLogPolicy
+      description: data 返回可用的 LogPolicyView 数组，system 与 nginx 分别保留独立策略。
       x-scopes: [read]
       responses:
         '200': { $ref: '#/components/responses/JSON' }
@@ -3021,15 +3022,17 @@ components:
     LogPolicyInput:
       type: object
       additionalProperties: false
-      required: [base_version, policy]
+      required: [scope, base_version, policy]
       properties:
+        scope: { type: string, enum: [system, nginx] }
         base_version: { type: integer, format: int64, minimum: 1 }
         policy: { $ref: '#/components/schemas/LogPolicy' }
     LogPolicyView:
       type: object
       additionalProperties: false
-      required: [version, policy, owner, editable, last_sweep_at, bytes, warning]
+      required: [scope, version, policy, owner, editable, last_sweep_at, bytes, warning]
       properties:
+        scope: { type: string, enum: [system, nginx] }
         version: { type: integer, format: int64 }
         policy: { $ref: '#/components/schemas/LogPolicy' }
         owner: { type: string, enum: [agent, external, unconfirmed] }

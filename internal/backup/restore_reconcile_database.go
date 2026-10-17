@@ -204,6 +204,12 @@ func writeReconciledDatabase(ctx context.Context, db *sql.DB, in RestoreReconcil
 		return err
 	}
 	defer tx.Rollback()
+	// Reconciliation changes the isolated task record, never emits source stage
+	// deliveries into the restored database. The verifier still compares both
+	// log tables and their SQLite sequence without exceptions.
+	if _, err = tx.ExecContext(ctx, "UPDATE event_log_status SET paused=1 WHERE id=1"); err != nil {
+		return err
+	}
 	for table, columns := range reconciliationDelta() {
 		var assignments []string
 		for name, expression := range columns {
@@ -217,6 +223,9 @@ func writeReconciledDatabase(ctx context.Context, db *sql.DB, in RestoreReconcil
 	}
 	query := `INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(:audit_id,:restore_id,'restore:'||:restore_id,'backup.restore.reconcile',:revision,'isolated',:at)`
 	if _, err = tx.ExecContext(ctx, query, reconciliationArgs(query, in, report)...); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE event_log_status SET paused=0 WHERE id=1"); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -2812,12 +2812,14 @@ type LogPolicy struct {
 
 // LogPolicyInput defines model for LogPolicyInput.
 type LogPolicyInput struct {
+	Scope       string    `json:"scope"`
 	BaseVersion int64     `json:"base_version"`
 	Policy      LogPolicy `json:"policy"`
 }
 
 // LogPolicyView defines model for LogPolicyView.
 type LogPolicyView struct {
+	Scope       string             `json:"scope"`
 	Bytes       int64              `json:"bytes"`
 	Editable    bool               `json:"editable"`
 	LastSweepAt int64              `json:"last_sweep_at"`

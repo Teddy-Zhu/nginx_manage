@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"nginxpanel/internal/backup"
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/components"
+	"nginxpanel/internal/eventlog"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/hostdns"
@@ -245,6 +247,13 @@ func Run(ctx context.Context, o Options) error {
 	certificateStore := &certificates.Service{DB: db, Vault: vault}
 	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: o.Policy, Certificates: certificateStore}
 	agentClient := agent.NewClient(o.Socket)
+	var eventLogs *eventlog.Service
+	if !o.Dev {
+		eventLogs = eventlog.New(db, agentClient)
+		previous := slog.Default()
+		slog.SetDefault(slog.New(eventLogs.Mirror(previous.Handler())))
+		defer slog.SetDefault(previous)
+	}
 	maintenanceService := &maintenance.Service{DB: db, Vault: vault, Agent: agentClient}
 	if err := maintenanceService.Init(ctx); err != nil {
 		return err
@@ -294,6 +303,12 @@ func Run(ctx context.Context, o Options) error {
 	defer listener.Close()
 	var workers sync.WaitGroup
 	workers.Add(14)
+	if eventLogs != nil {
+		eventCtx, stopEvents := context.WithCancel(context.WithoutCancel(runCtx))
+		eventDone := make(chan struct{})
+		go func() { defer close(eventDone); _ = eventLogs.Run(eventCtx) }()
+		defer func() { stopEvents(); <-eventDone }()
+	}
 	if !o.Dev {
 		readyListener, err := panelready.Listen(o.DataDir)
 		if err != nil {

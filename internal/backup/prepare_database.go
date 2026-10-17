@@ -105,6 +105,7 @@ func sanitizeRestore(ctx context.Context, path string, target *sql.DB, admin res
 		sql  string
 		args []any
 	}{
+		{"UPDATE event_log_status SET paused=1 WHERE id=1", nil},
 		{"DELETE FROM sessions", nil},
 		{"DELETE FROM settings WHERE key='bootstrap_hash'", nil},
 		{"UPDATE users SET username=?,password_hash=?,session_epoch=?,created_at=? WHERE id=1", []any{admin.Username, admin.PasswordHash, p.SessionEpoch, admin.CreatedAt}},
@@ -150,6 +151,16 @@ func sanitizeRestore(ctx context.Context, path string, target *sql.DB, admin res
 		return err
 	}
 	if err = audit(ctx, tx, "restore-preparation", p.OperationID, p.OperationID, "backup.restore.prepare", "isolated"); err != nil {
+		return err
+	}
+	// Old event deliveries belong to the source writer, never the restore target.
+	if _, err = tx.ExecContext(ctx, "DELETE FROM event_log_queue"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE event_log_status SET dropped=0,paused=0 WHERE id=1"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE settings SET value=lower(hex(randomblob(16))) WHERE key='event_log_epoch'"); err != nil {
 		return err
 	}
 	summary, err := json.Marshal(struct {

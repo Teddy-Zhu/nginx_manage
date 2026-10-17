@@ -20,13 +20,16 @@ import (
 )
 
 type logRecord struct {
-	Definition   logSource `json:"definition"`
-	Active       bool      `json:"active"`
-	LiveIdentity string    `json:"live_identity"`
-	Generation   string    `json:"generation"`
-	OpenedAt     int64     `json:"opened_at"`
-	Bytes        int64     `json:"bytes"`
-	Warning      string    `json:"warning"`
+	Definition     logSource `json:"definition"`
+	Active         bool      `json:"active"`
+	LiveIdentity   string    `json:"live_identity"`
+	Generation     string    `json:"generation"`
+	OpenedAt       int64     `json:"opened_at"`
+	Bytes          int64     `json:"bytes"`
+	Warning        string    `json:"warning"`
+	Retiring       bool      `json:"retiring"`
+	RetiringDevice uint64    `json:"retiring_device"`
+	RetiringInode  uint64    `json:"retiring_inode"`
 }
 type logArchive struct {
 	ID           string `json:"id"`
@@ -50,11 +53,17 @@ type logState struct {
 	LastOperation string                 `json:"last_operation"`
 	LastSweepAt   int64                  `json:"last_sweep_at"`
 	Warning       string                 `json:"warning"`
+	DeliveryGaps  int64                  `json:"delivery_gaps"`
 	Sources       map[string]*logRecord  `json:"sources"`
 	Archives      map[string]*logArchive `json:"archives"`
 }
 type managedLogs struct {
 	nginx           *Nginx
+	dataDir         string
+	uid             int
+	owner           string
+	journal         *Journal
+	system          bool
 	dir             string
 	mu              sync.Mutex
 	state           logState
@@ -71,11 +80,21 @@ func openManagedLogs(n *Nginx) (*managedLogs, error) {
 	if n.LogOwner != "agent" && n.LogOwner != "external" && n.LogOwner != "unconfirmed" {
 		return nil, errors.New("invalid Nginx log rotation owner")
 	}
-	dir := filepath.Join(n.DataDir, "agent", "logs")
+	return openLogStore(n, n.DataDir, n.uid, n.LogOwner, n.Journal, false)
+}
+
+func openLogStore(n *Nginx, dataDir string, uid int, owner string, journal *Journal, system bool) (*managedLogs, error) {
+	dir := filepath.Join(dataDir, "agent", "logs")
+	if system {
+		dir = filepath.Join(dataDir, "agent", "event-logs")
+	}
 	if err := secure.RootDirectory(dir, 0700); err != nil {
 		return nil, err
 	}
-	m := &managedLogs{nginx: n, dir: dir, state: logState{Version: 1, Policy: logs.DefaultPolicy(), Sources: map[string]*logRecord{}, Archives: map[string]*logArchive{}}}
+	if err := syncDir(filepath.Dir(dir)); err != nil {
+		return nil, err
+	}
+	m := &managedLogs{nginx: n, dataDir: dataDir, uid: uid, owner: owner, journal: journal, system: system, dir: dir, state: logState{Version: 1, Policy: logs.DefaultPolicy(), Sources: map[string]*logRecord{}, Archives: map[string]*logArchive{}}}
 	name := filepath.Join(dir, "state.json")
 	if info, err := os.Lstat(name); err == nil {
 		stat, ok := info.Sys().(*syscall.Stat_t)
@@ -86,25 +105,27 @@ func openManagedLogs(n *Nginx) (*managedLogs, error) {
 		if err != nil {
 			return nil, err
 		}
-		if json.Unmarshal(data, &m.state) != nil || !validLogState(m.state) {
+		if json.Unmarshal(data, &m.state) != nil || !validLogState(m.state, system) {
 			return nil, errors.New("invalid log state")
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
-	m.reader = logs.NewReader(m.snapshot, m.openLog)
+	if !system {
+		m.reader = logs.NewReader(m.snapshot, m.openLog)
+	}
 	if err := m.recoverPolicy(); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
-func validLogState(state logState) bool {
-	if state.Version < 1 || state.Policy.Validate() != nil || state.Sources == nil || state.Archives == nil || len(state.Sources) > limits.LogSources || len(state.Archives) > limits.LogArchives || state.LastOperation != "" && !validID(state.LastOperation) {
+func validLogState(state logState, system bool) bool {
+	if state.DeliveryGaps < 0 || state.DeliveryGaps > 1 || system && len(state.Sources) > 1024 || state.Version < 1 || state.Policy.Validate() != nil || state.Sources == nil || state.Archives == nil || len(state.Sources) > limits.LogSources || len(state.Archives) > limits.LogArchives || state.LastOperation != "" && !validID(state.LastOperation) {
 		return false
 	}
 	counts := map[string]int{}
 	for id, source := range state.Sources {
-		if source == nil || id != source.Definition.Source.ID || !validID(source.Generation) || !validLogSources([]logSource{source.Definition}) {
+		if source == nil || id != source.Definition.Source.ID || !validID(source.Generation) || !validStoredLogSource(source.Definition, system) || source.Retiring && (!system || source.Active || source.Definition.Source.Category != "task" || source.RetiringInode == 0) {
 			return false
 		}
 	}
@@ -120,7 +141,7 @@ func validLogState(state logState) bool {
 		default:
 			return false
 		}
-		if archive.Format != "text" && archive.Format != "nginxpanel_http" && archive.Format != "nginxpanel_stream" {
+		if system && archive.Format != logs.EventFormat || !system && archive.Format != "text" && archive.Format != "nginxpanel_http" && archive.Format != "nginxpanel_stream" {
 			return false
 		}
 		counts[archive.SourceID]++
@@ -150,7 +171,7 @@ func (m *managedLogs) saveLocked() error {
 func fileIdentity(stat *syscall.Stat_t) string { return fmt.Sprintf("%d:%d", stat.Dev, stat.Ino) }
 
 func (m *managedLogs) openLog(file logs.File) (*os.File, error) {
-	if !filepath.IsAbs(file.Name) || !strings.HasPrefix(file.Name, filepath.Join(m.nginx.DataDir, "logs")+string(os.PathSeparator)) || filepath.Clean(file.Name) != file.Name {
+	if !filepath.IsAbs(file.Name) || !strings.HasPrefix(file.Name, filepath.Join(m.dataDir, "logs")+string(os.PathSeparator)) || filepath.Clean(file.Name) != file.Name {
 		return nil, errors.New("invalid managed log path")
 	}
 	if err := existingRootDirectory(filepath.Dir(file.Name)); err != nil {
@@ -167,14 +188,14 @@ func (m *managedLogs) openLog(file logs.File) (*os.File, error) {
 		return nil, err
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || stat.Nlink != 1 || (stat.Uid != 0 && stat.Uid != uint32(m.nginx.uid)) || info.Mode().Perm()&0007 != 0 || info.Mode().Perm()&0020 != 0 || file.Inode != 0 && (stat.Ino != file.Inode || uint64(stat.Dev) != file.Device) {
+	if !ok || !info.Mode().IsRegular() || stat.Nlink != 1 || (stat.Uid != 0 && stat.Uid != uint32(m.uid)) || info.Mode().Perm()&0007 != 0 || info.Mode().Perm()&0020 != 0 || file.Inode != 0 && (stat.Ino != file.Inode || uint64(stat.Dev) != file.Device) {
 		f.Close()
 		return nil, errors.New("untrusted managed log identity or permissions")
 	}
 	return f, nil
 }
 func (m *managedLogs) liveFile(source *logRecord) (logs.File, error) {
-	name := filepath.Join(m.nginx.DataDir, source.Definition.Path)
+	name := filepath.Join(m.dataDir, source.Definition.Path)
 	f, err := m.openLog(logs.File{Name: name})
 	if err != nil {
 		return logs.File{}, err
@@ -188,7 +209,7 @@ func (m *managedLogs) liveFile(source *logRecord) (logs.File, error) {
 	return logs.File{Name: name, Identity: source.Definition.Source.ID + ":" + source.Generation, Device: uint64(stat.Dev), Inode: stat.Ino, Current: true, Writing: true, Format: source.Definition.Source.Format, Size: info.Size(), CreatedAt: source.OpenedAt}, nil
 }
 func (m *managedLogs) archiveName(archive *logArchive, compressed bool) string {
-	name := filepath.Join(m.nginx.DataDir, m.state.Sources[archive.SourceID].Definition.Path) + "." + archive.ID
+	name := filepath.Join(m.dataDir, m.state.Sources[archive.SourceID].Definition.Path) + "." + archive.ID
 	if compressed {
 		name += ".gz"
 	}
@@ -202,7 +223,7 @@ func (m *managedLogs) snapshot(id string) (logs.Snapshot, error) {
 	if source == nil {
 		return logs.Snapshot{}, fault.NotFound("受管日志来源不存在")
 	}
-	out := logs.Snapshot{Source: source.Definition.Source, Files: []logs.File{}}
+	out := logs.Snapshot{Source: source.Definition.Source, Files: []logs.File{}, Gap: m.system && m.state.DeliveryGaps > 0}
 	archives := []*logArchive{}
 	for _, archive := range m.state.Archives {
 		if archive.SourceID == id && archive.State != "deleting" {
@@ -300,7 +321,7 @@ func (m *managedLogs) sources() []logs.Source {
 func (m *managedLogs) policy() logs.PolicyView {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := logs.PolicyView{Version: m.state.Version, Policy: m.state.Policy, Owner: m.nginx.LogOwner, Editable: m.nginx.LogOwner == "agent" && !m.policyUncertain, LastSweepAt: m.state.LastSweepAt, Warning: m.state.Warning}
+	out := logs.PolicyView{Version: m.state.Version, Scope: m.scope(), Policy: m.state.Policy, Owner: m.owner, Editable: m.owner == "agent" && !m.policyUncertain, LastSweepAt: m.state.LastSweepAt, Warning: m.state.Warning}
 	resources := map[string]int64{}
 	for _, source := range m.state.Sources {
 		out.Bytes += source.Bytes
@@ -319,7 +340,7 @@ func (m *managedLogs) policy() logs.PolicyView {
 			break
 		}
 	}
-	if m.nginx.LogOwner != "agent" {
+	if m.owner != "agent" {
 		out.Warning = "日志轮转所有者尚未确认为 Agent，保留外部管理；需本机明确唯一所有者后才能启用受管轮转。 " + out.Warning
 	} else if m.policyUncertain {
 		out.Warning = "日志状态保存结果不确定，已暂停策略修改与破坏性维护；需本机恢复并重启 Agent"
@@ -330,6 +351,9 @@ func (m *managedLogs) policy() logs.PolicyView {
 func logResourceKey(source *logRecord) string {
 	if source.Definition.Source.ResourceID != "" {
 		return source.Definition.Source.ResourceID
+	}
+	if source.Definition.Source.Category == "application" || source.Definition.Source.Category == "security" {
+		return source.Definition.Source.Category + "-global"
 	}
 	return "nginx-global"
 }

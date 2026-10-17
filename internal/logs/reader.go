@@ -141,7 +141,7 @@ func (r *Reader) Read(ctx context.Context, subject string, q Query, allowSensiti
 	if snapshot.Source.Format != "nginxpanel_http" && (q.PolicyID != "" || q.Reason != "" || q.EventsOnly || q.Path != "") {
 		return Page{}, fault.Invalid("当前日志格式不支持 HTTP 路径和 WAF 字段筛选")
 	}
-	if snapshot.Source.Format == "text" && (q.Status != 0 || q.IP != "") {
+	if (snapshot.Source.Format == "text" || snapshot.Source.Format == EventFormat) && (q.Status != 0 || q.IP != "") {
 		return Page{}, fault.Invalid("原生日志仅支持时间与脱敏消息关键字筛选")
 	}
 	var s *scanSession

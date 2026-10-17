@@ -6,6 +6,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/logs"
@@ -52,7 +56,7 @@ func decodeLogRequest(w http.ResponseWriter, r *http.Request, value any) bool {
 }
 func (s *Server) logHandlers(mux *http.ServeMux) {
 	ready := func(w http.ResponseWriter) bool {
-		if s.Nginx == nil || s.Nginx.logs == nil {
+		if s.logReader == nil {
 			logReply(w, nil, fault.Unavailable("受管日志尚未配置"))
 			return false
 		}
@@ -71,17 +75,16 @@ func (s *Server) logHandlers(mux *http.ServeMux) {
 				logReply(w, nil, fault.Invalid("日志协议版本无效"))
 				return
 			}
-			m := s.Nginx.logs
 			switch action {
 			case "sources":
-				logReply(w, m.sources(), nil)
+				logReply(w, s.logSources(), nil)
 			case "policy":
-				logReply(w, m.policy(), nil)
+				logReply(w, s.logPolicies(), nil)
 			case "query":
-				page, err := m.reader.Read(r.Context(), in.Subject, in.Query, in.AllowSensitive, in.Budget)
+				page, err := s.logReader.Read(r.Context(), in.Subject, in.Query, in.AllowSensitive, in.Budget)
 				logReply(w, page, err)
 			case "release":
-				m.reader.Release(in.Subject, in.Query.Cursor)
+				s.logReader.Release(in.Subject, in.Query.Cursor)
 				logReply(w, nil, nil)
 			}
 		})
@@ -94,8 +97,26 @@ func (s *Server) logHandlers(mux *http.ServeMux) {
 		if !decodeLogRequest(w, r, &in) {
 			return
 		}
-		out, err := s.Nginx.SetLogPolicy(in)
-		logReply(w, out, err)
+		if in.Scope == "system" && s.eventLogs != nil {
+			out, err := s.eventLogs.setPolicy(in)
+			logReply(w, out, err)
+		} else if in.Scope == "nginx" && s.Nginx != nil {
+			out, err := s.Nginx.SetLogPolicy(in)
+			logReply(w, out, err)
+		} else {
+			logReply(w, nil, fault.Invalid("日志策略范围不可用"))
+		}
+	})
+	mux.HandleFunc("POST /v1/logs/append-events", func(w http.ResponseWriter, r *http.Request) {
+		var in EventLogRequest
+		if !decodeLogRequest(w, r, &in) {
+			return
+		}
+		if s.eventLogs == nil {
+			logReply(w, nil, fault.Unavailable("系统日志写入尚未就绪"))
+			return
+		}
+		logReply(w, nil, s.eventLogs.append(in))
 	})
 }
 func logRPC[T any](ctx context.Context, c *Client, action string, in any) (T, error) {
@@ -109,8 +130,8 @@ func logRPC[T any](ctx context.Context, c *Client, action string, in any) (T, er
 func (c *Client) LogSources(ctx context.Context) ([]logs.Source, error) {
 	return logRPC[[]logs.Source](ctx, c, "sources", LogReadRequest{Protocol: Protocol})
 }
-func (c *Client) LogPolicy(ctx context.Context) (logs.PolicyView, error) {
-	return logRPC[logs.PolicyView](ctx, c, "policy", LogReadRequest{Protocol: Protocol})
+func (c *Client) LogPolicies(ctx context.Context) ([]logs.PolicyView, error) {
+	return logRPC[[]logs.PolicyView](ctx, c, "policy", LogReadRequest{Protocol: Protocol})
 }
 func (c *Client) SetLogPolicy(ctx context.Context, in LogPolicyRequest) (Record, error) {
 	return logRPC[Record](ctx, c, "set-policy", in)
@@ -122,4 +143,90 @@ func (c *Client) QueryLogs(ctx context.Context, in LogReadRequest) (logs.Page, e
 func (c *Client) ReleaseLogs(ctx context.Context, subject, cursor string) error {
 	_, err := logRPC[any](ctx, c, "release", LogReadRequest{Protocol: Protocol, Subject: subject, Query: logs.Query{Cursor: cursor}})
 	return err
+}
+
+func (s *Server) logSources() []logs.Source {
+	out := []logs.Source{}
+	if s.eventLogs != nil {
+		out = append(out, s.eventLogs.sources()...)
+	} else if !s.Dev {
+		for _, category := range []string{"application", "security"} {
+			source := eventSource(category, "").Source
+			source.Active = false
+			source.Reason = "系统日志存储未就绪，待投递事件保留在有界队列；请本机核对 Agent"
+			out = append(out, source)
+		}
+	}
+	if s.Nginx != nil && s.Nginx.logs != nil {
+		out = append(out, s.Nginx.logs.sources()...)
+	}
+	return out
+}
+func (s *Server) logPolicies() []logs.PolicyView {
+	out := []logs.PolicyView{}
+	if s.eventLogs != nil {
+		out = append(out, s.eventLogs.policy())
+	} else if !s.Dev {
+		out = append(out, logs.PolicyView{Scope: "system", Policy: logs.DefaultPolicy(), Owner: "agent", Warning: "系统日志存储未就绪；请本机核对 Agent"})
+	}
+	if s.Nginx != nil && s.Nginx.logs != nil {
+		out = append(out, s.Nginx.logs.policy())
+	}
+	return out
+}
+func (s *Server) logSnapshot(id string) (logs.Snapshot, error) {
+	if s.eventLogs == nil && (id == eventSource("application", "").Source.ID || id == eventSource("security", "").Source.ID) {
+		return logs.Snapshot{}, fault.Unavailable("系统日志存储未就绪")
+	}
+	if s.eventLogs != nil {
+		s.eventLogs.mu.Lock()
+		_, ok := s.eventLogs.state.Sources[id]
+		s.eventLogs.mu.Unlock()
+		if ok {
+			return s.eventLogs.snapshot(id)
+		}
+	}
+	if s.Nginx != nil && s.Nginx.logs != nil {
+		return s.Nginx.logs.snapshot(id)
+	}
+	return logs.Snapshot{}, fault.NotFound("日志来源不存在")
+}
+func (s *Server) openCatalogLog(file logs.File) (*os.File, error) {
+	for _, category := range []string{"application", "security", "tasks"} {
+		if strings.HasPrefix(file.Name, filepath.Join(s.DataDir, "logs", category)+string(os.PathSeparator)) && s.eventLogs != nil {
+			return s.eventLogs.openLog(file)
+		}
+	}
+	if s.Nginx != nil && s.Nginx.logs != nil {
+		return s.Nginx.logs.openLog(file)
+	}
+	return nil, fault.Unavailable("日志文件读取不可用")
+}
+func (s *Server) runEventLogs(ctx context.Context) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	defer func() {
+		if s.eventLogs != nil {
+			s.eventLogs.mu.Lock()
+			defer s.eventLogs.mu.Unlock()
+			if s.eventLogs.compression != nil {
+				s.eventLogs.compression.close()
+				s.eventLogs.compression = nil
+			}
+		}
+	}()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		s.logReader.Expire()
+		if s.eventLogs != nil {
+			s.eventLogs.sweep(ctx)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }

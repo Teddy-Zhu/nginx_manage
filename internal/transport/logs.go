@@ -54,7 +54,7 @@ func (s *Server) GetLogPolicy(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, fault.Unavailable("日志 Agent 未配置"))
 		return
 	}
-	out, err := s.Agent.LogPolicy(r.Context())
+	out, err := s.Agent.LogPolicies(r.Context())
 	if err != nil {
 		s.fail(w, r, logAgentError(err))
 		return
@@ -90,7 +90,7 @@ func (s *Server) SetLogPolicy(w http.ResponseWriter, r *http.Request, params api
 		s.fail(w, r, err)
 		return
 	}
-	out, err := s.Agent.SetLogPolicy(r.Context(), agent.LogPolicyRequest{Protocol: agent.Protocol, OperationID: id, BaseVersion: in.BaseVersion, Policy: in.Policy})
+	out, err := s.Agent.SetLogPolicy(r.Context(), agent.LogPolicyRequest{Protocol: agent.Protocol, OperationID: id, BaseVersion: in.BaseVersion, Policy: in.Policy, Scope: in.Scope})
 	outcome := "succeeded"
 	if err != nil || out.State != "succeeded" {
 		outcome = "failed"
