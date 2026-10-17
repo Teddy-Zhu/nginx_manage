@@ -248,3 +248,6 @@ protection 返回目标本机 root 管理/代理来源批准的状态、ID、时
 
 
 手动地址入口复用独立 jail 执行器及统一任务，支持 nginx-client 与受管面板登录 host-input。AddressStatus 必填 backend，未知宿主机规则返回 action_state=unknown、空 generation、can_ban=false 及原因；已核对官方引擎仍可明确解封，不能据此宣称内核已经清除。新宿主机封禁须当前批准/持续会话和所属对象完整可证明，目标摘要纳入宿主机批准；内核代次观察与任务的引擎结果独立。新任务准入与维护串行，执行持 Nginx（若存在）→宿主机→实例锁，派发后只观察原操作，终态唤醒对应原动作对账。Agent 为 56、数据库/归档仍为 26/6，声明已同步，实际验证留待 P5。
+
+
+目标端 `POST /migrations/pull` 新增可选 `dependencies`，复用既有组件准备/原生首次安装授权与任务；`MigrationPlan.pull` 返回自动迁入的 state、stage、mode、error 和 deadline。预检模式禁止此授权；需要 components.manage，首次安装另需 system.write。授权只保留本地最小权限与冻结输入，期限不超过原计划 30 分钟，不保存源 API Key 或包口令；原任务缺失停止重新创建，过期不取消已提交操作。数据库新增迁入协调字段（schema 27），Agent 仍为 64，归档仍为 6；完整恢复清除源授权。MigrationReceiver 声明同步当前归档 schema 6。统一返回及自动扫描页面不变；尚未运行生成器、构建、类型检查、测试或真实迁移，留待 P5。

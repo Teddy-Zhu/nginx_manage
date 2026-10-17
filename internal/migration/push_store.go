@@ -177,7 +177,7 @@ func (s *Service) savePushWith(ctx context.Context, j *pushJob, after func(*sql.
 	}
 	defer tx.Rollback()
 	var retained int64
-	if err = tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes WHERE task_id!=?)", j.Task.ID).Scan(&retained); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes WHERE task_id!=?)+(SELECT COALESCE(SUM(length(continuation)),0) FROM migration_pulls)", j.Task.ID).Scan(&retained); err != nil {
 		return err
 	}
 	margin := int64(0)

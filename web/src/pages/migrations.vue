@@ -134,6 +134,7 @@ const mode = ref<MigrationExecuteInput["mode"]>("draft"),
   history = ref<MigrationPlan[]>([]),
   error = ref("");
 const dependencyTag = ref(""),
+  remoteDependencies = ref(false),
   dependencyPrerelease = ref(false),
   dependencyInstall = ref(false),
   dependencyStart = ref(true),
@@ -144,6 +145,11 @@ const preparingDependencies = computed(
     ["queued", "running", "recovery_required"].includes(
       plan.value.dependencies.state,
     ),
+);
+const continuingPull = computed(
+  () =>
+    !!plan.value?.pull &&
+    ["queued", "running", "recovery_required"].includes(plan.value.pull.state),
 );
 const controller = new AbortController();
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -184,6 +190,8 @@ const options = [
   { label: "保存并应用 Nginx", value: "apply" },
 ];
 const states: Record<string, string> = {
+  queued: "排队中",
+  running: "执行中",
   planned: "待执行",
   draft: "已保存草稿",
   saved: "已保存配置",
@@ -192,6 +200,26 @@ const states: Record<string, string> = {
   failed: "失败",
   rolled_back: "已恢复",
   recovery_required: "需要恢复",
+};
+const pullStages: Record<string, string> = {
+  preparing_dependencies: "等待依赖准备",
+  dependencies: "准备目标依赖",
+  executing: "提交迁移配置",
+  observing: "核对应用结果",
+  draft: "已保存草稿",
+  saved: "已保存配置",
+  succeeded: "迁入完成",
+  rolled_back: "已恢复原配置",
+  grant_expired: "迁入授权已过期",
+  grant_invalid: "迁入授权无效",
+  dependency_missing: "依赖任务缺失",
+  dependency_invalid: "依赖任务不匹配",
+  dependencies_failed: "依赖准备失败",
+  dependencies_blocked: "依赖准备未获准",
+  execution_blocked: "迁入条件未满足",
+  target_changed: "目标配置已变化",
+  plan_failed: "迁移计划已结束",
+  unavailable: "依赖服务不可用",
 };
 const stepStates: Record<string, string> = {
   ready: "就绪",
@@ -221,7 +249,13 @@ async function load() {
     const selected = plan.value;
     if (selected) {
       const updated = await api.migration(selected.id, controller.signal);
-      if (selected.state !== "planned" || updated.state !== "planned")
+      if (
+        selected.pull ||
+        updated.pull ||
+        selected.dependencies ||
+        selected.state !== "planned" ||
+        updated.state !== "planned"
+      )
         plan.value = updated;
     }
     error.value = "";
@@ -345,6 +379,9 @@ function remoteInput(execute: boolean, version: number): MigrationPullInput {
     host_dns: hostDNSOptions(),
     mode: execute ? mode.value : "preview",
     enable_nginx: enableNginx.value,
+    ...(execute && remoteDependencies.value && has("components.manage")
+      ? { dependencies: dependencyInput() }
+      : {}),
   };
 }
 let pendingPull: {
@@ -397,18 +434,7 @@ async function prepareDependencies() {
   const id = plan.value?.id;
   if (!id) return;
   await run(async () => {
-    const input = {
-      tag: dependencyTag.value.trim(),
-      prerelease: dependencyPrerelease.value,
-      ...(dependencyInstall.value
-        ? {
-            install: {
-              start: dependencyStart.value,
-              enable: dependencyEnable.value,
-            },
-          }
-        : {}),
-    };
+    const input = dependencyInput();
     plan.value = await api.prepareMigrationDependencies(
       id,
       input,
@@ -416,6 +442,20 @@ async function prepareDependencies() {
     );
   }, "依赖准备任务已受理");
   await load();
+}
+function dependencyInput() {
+  return {
+    tag: dependencyTag.value.trim(),
+    prerelease: dependencyPrerelease.value,
+    ...(dependencyInstall.value && has("system.write")
+      ? {
+          install: {
+            start: dependencyStart.value,
+            enable: dependencyEnable.value,
+          },
+        }
+      : {}),
+  };
 }
 async function preflight() {
   const id = plan.value?.id;
@@ -574,6 +614,38 @@ onUnmounted(() => {
       <NFormItem label="预期源节点 ID（可选）"
         ><NInput v-model:value="sourceNode"
       /></NFormItem>
+      <div v-if="has('components.manage')">
+        <NCheckbox v-model:checked="remoteDependencies"
+          >迁入前自动准备缺失依赖</NCheckbox
+        >
+        <template v-if="remoteDependencies">
+          <NFormItem label="可信组件发行标签（可选）">
+            <NInput
+              v-model:value="dependencyTag"
+              placeholder="留空使用稳定版"
+            />
+          </NFormItem>
+          <NCheckbox v-model:checked="dependencyPrerelease"
+            >允许指定的预发布版本</NCheckbox
+          >
+          <div v-if="has('system.write')">
+            <NCheckbox v-model:checked="dependencyInstall"
+              >授权缺失时首次安装 Nginx</NCheckbox
+            >
+            <template v-if="dependencyInstall">
+              <NCheckbox v-model:checked="dependencyStart"
+                >安装后启动</NCheckbox
+              >
+              <NCheckbox v-model:checked="dependencyEnable"
+                >开机自动启动</NCheckbox
+              >
+            </template>
+          </div>
+          <p class="muted">
+            首次安装仅适用于尚未安装 Nginx 的原生部署。Docker 使用预置模块镜像。
+          </p>
+        </template>
+      </div>
       <div class="actions">
         <NCheckbox v-model:checked="remoteCertificates"
           >包含证书与私钥</NCheckbox
@@ -609,7 +681,8 @@ onUnmounted(() => {
               "
               >一键迁入</NButton
             ></template
-          >按所选模式迁入。保存或应用将替换目标 Nginx 配置。</NPopconfirm
+          >按所选模式迁入，并执行已授权的依赖准备与首次安装。保存或应用将替换目标
+          Nginx 配置。</NPopconfirm
         >
       </div>
     </section>
@@ -670,6 +743,23 @@ onUnmounted(() => {
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
         >{{ plan.last_error }}</NAlert
       >
+      <NAlert
+        v-if="plan.pull"
+        :type="
+          ['failed', 'recovery_required'].includes(plan.pull.state)
+            ? 'error'
+            : plan.pull.state === 'succeeded'
+              ? 'success'
+              : 'info'
+        "
+        title="自动迁入"
+      >
+        {{ states[plan.pull.state] ?? plan.pull.state }} ·
+        {{ pullStages[plan.pull.stage] ?? plan.pull.stage }} ·
+        {{ options.find((item) => item.value === plan.pull?.mode)?.label }}
+        <p>迁入授权有效期至 {{ time(plan.pull.deadline) }}</p>
+        <p v-if="plan.pull.error">{{ plan.pull.error }}</p>
+      </NAlert>
       <MigrationHostDNSPreview
         v-if="plan.host_dns"
         :info="plan.host_dns"
@@ -696,6 +786,7 @@ onUnmounted(() => {
         v-if="
           plan.state === 'planned' &&
           has('components.manage') &&
+          !continuingPull &&
           !plan.dependencies
         "
       >
@@ -752,6 +843,7 @@ onUnmounted(() => {
             :disabled="
               busy ||
               preparingDependencies ||
+              continuingPull ||
               (mode === 'save' && !plan.can_save) ||
               (mode === 'apply' && !plan.can_apply)
             "

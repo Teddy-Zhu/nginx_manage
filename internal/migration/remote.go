@@ -15,7 +15,10 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-type pullReservation struct{ Principal, Key, Digest string }
+type pullReservation struct {
+	Principal, Key, Digest string
+	Grant                  *pullGrant
+}
 
 func remoteClient(remote Remote) (*http.Client, string, error) {
 	return remoteapi.Client(remoteapi.Endpoint{URL: remote.URL, APIKey: remote.APIKey, Fingerprint: remote.Fingerprint})
@@ -61,6 +64,10 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 	if in.Firewall.Mode != "" && in.Firewall.Mode != "preserve" && !in.Remote.Selection.Firewall {
 		return Plan{}, fault.Invalid("合并或替换防火墙须选择源期望规则")
 	}
+	grant, err := s.authorizePull(in, p)
+	if err != nil {
+		return Plan{}, err
+	}
 	raw, err := json.Marshal(in)
 	if err != nil {
 		return Plan{}, err
@@ -79,10 +86,10 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		if plan.State == "failed" && plan.RevisionID == "" {
 			return plan, nil
 		}
-		if in.Mode == "preview" {
+		if in.Mode == "preview" || in.Dependencies != nil {
 			return plan, nil
 		}
-		return s.Execute(ctx, p, requestID, "migration-pull-"+secure.Hash([]byte(p.ID+":"+key)), id, ExecuteInput{in.Mode, in.EnableNginx})
+		return s.Execute(ctx, p, requestID, pullExecuteKey(p.ID, key), id, ExecuteInput{in.Mode, in.EnableNginx})
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Plan{}, err
@@ -137,13 +144,13 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 		if manifest.SourceNode != envelope.NodeID {
 			return Plan{}, redactedRemoteError()
 		}
-		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, in.HostDNS, &pullReservation{p.ID, key, digest}, nil)
+		return s.prepare(ctx, p, requestID, manifest, payload, in.BaseVersion, in.Mappings, in.Firewall, in.Fail2ban, in.Monitoring, in.HostDNS, &pullReservation{Principal: p.ID, Key: key, Digest: digest, Grant: grant}, nil)
 	}()
 	if err != nil {
 		return Plan{}, err
 	}
-	if in.Mode == "preview" {
+	if in.Mode == "preview" || in.Dependencies != nil {
 		return plan, nil
 	}
-	return s.Execute(ctx, p, requestID, "migration-pull-"+secure.Hash([]byte(p.ID+":"+key)), plan.ID, ExecuteInput{in.Mode, in.EnableNginx})
+	return s.Execute(ctx, p, requestID, pullExecuteKey(p.ID, key), plan.ID, ExecuteInput{in.Mode, in.EnableNginx})
 }

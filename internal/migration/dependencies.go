@@ -59,18 +59,22 @@ func (s *Service) PrepareDependencies(ctx context.Context, p auth.Principal, req
 		return Plan{}, fault.Conflict("已有迁移正在处理")
 	}
 	defer s.mu.Unlock()
+	return s.prepareDependencies(ctx, p, requestID, key, id, in)
+}
+
+// The caller holds the migration coordinator lock and has checked the grant.
+func (s *Service) prepareDependencies(ctx context.Context, p auth.Principal, requestID, key, id string, in DependencyInput) (Plan, error) {
+	if err := s.admitPullDependencies(ctx, p, id, in); err != nil {
+		return Plan{}, err
+	}
 	plan, err := s.Get(ctx, p, id)
 	if err != nil {
 		return Plan{}, err
 	}
-	raw, err := json.Marshal(struct {
-		Action, ID string
-		Input      DependencyInput
-	}{"migration.dependencies", id, in})
+	hash, err := dependencyDigest(id, in)
 	if err != nil {
 		return Plan{}, err
 	}
-	hash := secure.Hash(raw)
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Plan{}, err
@@ -138,4 +142,15 @@ func (s *Service) PrepareDependencies(ctx context.Context, p auth.Principal, req
 		return Plan{}, err
 	}
 	return s.Get(ctx, p, id)
+}
+
+func dependencyDigest(id string, in DependencyInput) (string, error) {
+	raw, err := json.Marshal(struct {
+		Action, ID string
+		Input      DependencyInput
+	}{"migration.dependencies", id, in})
+	if err != nil {
+		return "", err
+	}
+	return secure.Hash(raw), nil
 }

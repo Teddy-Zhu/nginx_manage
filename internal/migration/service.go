@@ -277,7 +277,7 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 		return Plan{}, fault.Invalid("迁移计划内容超过暂存上限")
 	}
 	var retained int64
-	if err := tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes)").Scan(&retained); err != nil {
+	if err := tx.QueryRowContext(ctx, migrationRetainedSQL).Scan(&retained); err != nil {
 		return Plan{}, err
 	}
 	if retained+int64(len(raw))+256 > 128<<20 {
@@ -293,6 +293,11 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	if pull != nil {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO migration_pulls(principal,key,request_hash,plan_id,created_at) VALUES(?,?,?,?,?)", pull.Principal, pull.Key, pull.Digest, st.Plan.ID, now); err != nil {
 			return Plan{}, err
+		}
+		if pull.Grant != nil {
+			if err := s.createPullContinuation(ctx, tx, &st.Plan, pull.Grant, pull.Principal, requestID); err != nil {
+				return Plan{}, err
+			}
 		}
 	}
 	if receive != nil {
@@ -554,6 +559,9 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, e
 	}
 	reflectHostDNSState(&plan)
 	plan.Dependencies, err = s.dependencyStatus(ctx, id)
+	if err == nil {
+		plan.Pull, err = s.pullStatus(ctx, id)
+	}
 	return plan, err
 }
 func (s *Service) List(ctx context.Context, p auth.Principal) ([]Plan, error) {
@@ -596,6 +604,15 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]Plan, error) {
 }
 
 func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key, id string, in ExecuteInput) (Plan, error) {
+	if !s.mu.TryLock() {
+		return Plan{}, fault.Conflict("已有迁移正在处理")
+	}
+	defer s.mu.Unlock()
+	return s.execute(ctx, p, requestID, key, id, in)
+}
+
+// The caller holds the migration coordinator lock.
+func (s *Service) execute(ctx context.Context, p auth.Principal, requestID, key, id string, in ExecuteInput) (Plan, error) {
 	if err := p.Require("backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write"); err != nil {
 		return Plan{}, err
 	}
@@ -607,10 +624,9 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 			return Plan{}, err
 		}
 	}
-	if !s.mu.TryLock() {
-		return Plan{}, fault.Conflict("已有迁移正在处理")
+	if err := s.admitPullExecution(ctx, p, key, id, in); err != nil {
+		return Plan{}, err
 	}
-	defer s.mu.Unlock()
 	st, err := s.load(ctx, p, id)
 	if err != nil {
 		return Plan{}, err
@@ -746,7 +762,7 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key,
 			return err
 		}
 		var retained int64
-		if err := tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans WHERE id!=?)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes)", id).Scan(&retained); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans WHERE id!=?)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes)+(SELECT COALESCE(SUM(length(continuation)),0) FROM migration_pulls)", id).Scan(&retained); err != nil {
 			return err
 		}
 		if len(raw) > MaxRequestBytes-256 || retained+int64(len(raw))+256 > 128<<20 {

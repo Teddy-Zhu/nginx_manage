@@ -3496,7 +3496,16 @@ export interface components {
             node_id: string;
             selection: components["schemas"]["MigrationSelection"];
         };
+        MigrationPullStatus: {
+            state: string;
+            stage: string;
+            mode: "draft" | "save" | "apply";
+            error: string;
+            /** Format: int64 */
+            deadline: number;
+        };
         MigrationPullInput: {
+            dependencies?: components["schemas"]["MigrationDependencyInput"];
             host_dns?: components["schemas"]["MigrationHostDNSInput"];
             monitoring?: components["schemas"]["MigrationMonitoringInput"];
             fail2ban?: components["schemas"]["MigrationFail2banInput"];
@@ -3518,6 +3527,7 @@ export interface components {
             message: string;
         };
         MigrationPlan: {
+            pull?: components["schemas"]["MigrationPullStatus"];
             mode: "portable" | "encrypted";
             host_dns?: components["schemas"]["MigrationHostDNSPlan"];
             monitoring?: components["schemas"]["MigrationMonitoringPlan"];

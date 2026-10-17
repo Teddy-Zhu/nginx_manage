@@ -109,7 +109,7 @@ func (s *Service) createPush(ctx context.Context, p auth.Principal, requestID, k
 	if count >= maxPushes {
 		return out, fault.Conflict("迁出记录达到 64 项保留上限，须本机维护")
 	}
-	if err = tx.QueryRowContext(ctx, "SELECT (SELECT COALESCE(SUM(length(payload)),0) FROM migration_plans)+(SELECT COALESCE(SUM(length(payload)),0) FROM migration_pushes)").Scan(&retained); err != nil {
+	if err = tx.QueryRowContext(ctx, migrationRetainedSQL).Scan(&retained); err != nil {
 		return out, err
 	}
 	if retained+int64(len(sealed))+256 > 128<<20 {

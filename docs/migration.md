@@ -79,6 +79,20 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 默认使用系统 CA；自签名证书须填写独立核对的叶证书 SHA-256。可用 `node_id` 固定预期源身份。连接禁止重定向和环境代理，目标解析及响应有界；不接受 link-local、组播、未指定地址或常见元数据地址。API Key 仅用于本次固定导出接口，不持久保存或写日志；源节点校验通过后，计划以源稳定 ID 绑定。此入口是专用一次性迁移，不提供任意 API 转发。
 
+目标端拉取可额外提供 `dependencies`，沿用推送的按次授权组件准备与首次安装选项，例如：
+
+```json
+"dependencies": {
+  "tag": "",
+  "prerelease": false,
+  "install": {"start": true, "enable": false}
+}
+```
+
+该选项只用于 `draft/save/apply`，要求 `components.manage`；首次安装另需 `system.write`。请求受理后，`data.state` 可仍为 `planned`，通过同一 `GET /migrations/{id}` 的 `pull.state/stage/error/deadline` 跟随自动迁入，`dependencies` 返回原子任务关联。依赖准备、原生首次安装、维护释放及重新预检完成后，按原模式提交同一配置快照。选择 `start=false` 不保证满足应用条件；资产仅准备好也不代表已安装。目标已具备所需组件时直接继续原预检；Docker 缺少模块只能更换预置镜像。
+
+迁入授权与原计划同事务保存，最多 30 分钟；源 API Key 和包口令不保存。包、映射、基础版本、执行模式及首次安装选项均固定，重试同一幂等键只读取原进度，不重新导出或续期。授权过期或目标版本变化停止新的配置提交，已接受的安装或应用继续核对原记录；任务缺失不自动重建。运行结果不明时保留恢复状态；终结后清除自动提交授权。完整备份恢复会清除源迁入授权，不在新环境续办旧操作。
+
 其他入口：`POST /migrations/export`、`POST /migrations/plan`、`POST /migrations/{id}/execute`、`GET /migrations`。执行请求幂等；拉取请求在计划提交时持久关联幂等键，响应丢失后使用原请求和原键核对，避免重复迁入。
 
 ## 资源边界

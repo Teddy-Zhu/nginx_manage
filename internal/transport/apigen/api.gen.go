@@ -2961,6 +2961,7 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
+	Pull          *MigrationPullStatus       `json:"pull,omitempty"`
 	Mode          string                     `json:"mode"`
 	HostDNS       *MigrationHostDNSPlan      `json:"host_dns,omitempty"`
 	Monitoring    *MigrationMonitoringPlan   `json:"monitoring,omitempty"`
@@ -2984,17 +2985,27 @@ type MigrationPlan struct {
 	TaskId        string                     `json:"task_id"`
 }
 
+// MigrationPullStatus defines model for MigrationPullStatus.
+type MigrationPullStatus struct {
+	State    string `json:"state"`
+	Stage    string `json:"stage"`
+	Mode     string `json:"mode"`
+	Error    string `json:"error"`
+	Deadline int64  `json:"deadline"`
+}
+
 // MigrationPullInput defines model for MigrationPullInput.
 type MigrationPullInput struct {
-	HostDNS     *MigrationHostDNSInput    `json:"host_dns,omitempty"`
-	Monitoring  *MigrationMonitoringInput `json:"monitoring,omitempty"`
-	Fail2ban    *MigrationFail2banInput   `json:"fail2ban,omitempty"`
-	Firewall    *MigrationFirewallInput   `json:"firewall,omitempty"`
-	BaseVersion int64                     `json:"base_version"`
-	EnableNginx bool                      `json:"enable_nginx"`
-	Mappings    map[string]string         `json:"mappings"`
-	Mode        MigrationPullInputMode    `json:"mode"`
-	Remote      MigrationRemote           `json:"remote"`
+	Dependencies *MigrationDependencyInput `json:"dependencies,omitempty"`
+	HostDNS      *MigrationHostDNSInput    `json:"host_dns,omitempty"`
+	Monitoring   *MigrationMonitoringInput `json:"monitoring,omitempty"`
+	Fail2ban     *MigrationFail2banInput   `json:"fail2ban,omitempty"`
+	Firewall     *MigrationFirewallInput   `json:"firewall,omitempty"`
+	BaseVersion  int64                     `json:"base_version"`
+	EnableNginx  bool                      `json:"enable_nginx"`
+	Mappings     map[string]string         `json:"mappings"`
+	Mode         MigrationPullInputMode    `json:"mode"`
+	Remote       MigrationRemote           `json:"remote"`
 }
 
 // MigrationPullInputMode defines model for MigrationPullInput.Mode.

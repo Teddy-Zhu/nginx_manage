@@ -89,15 +89,16 @@ type Remote struct {
 	Selection   Selection `json:"selection"`
 }
 type PullInput struct {
-	HostDNS     HostDNSInput      `json:"host_dns"`
-	Monitoring  MonitoringInput   `json:"monitoring"`
-	Fail2ban    Fail2banInput     `json:"fail2ban"`
-	Firewall    FirewallInput     `json:"firewall"`
-	Remote      Remote            `json:"remote"`
-	BaseVersion int64             `json:"base_version"`
-	Mappings    map[string]string `json:"mappings"`
-	Mode        string            `json:"mode"`
-	EnableNginx bool              `json:"enable_nginx"`
+	Dependencies *DependencyInput  `json:"dependencies,omitempty"`
+	HostDNS      HostDNSInput      `json:"host_dns"`
+	Monitoring   MonitoringInput   `json:"monitoring"`
+	Fail2ban     Fail2banInput     `json:"fail2ban"`
+	Firewall     FirewallInput     `json:"firewall"`
+	Remote       Remote            `json:"remote"`
+	BaseVersion  int64             `json:"base_version"`
+	Mappings     map[string]string `json:"mappings"`
+	Mode         string            `json:"mode"`
+	EnableNginx  bool              `json:"enable_nginx"`
 }
 type ExecuteInput struct {
 	Mode        string `json:"mode"`
@@ -110,6 +111,7 @@ type Step struct {
 	Message  string `json:"message"`
 }
 type Plan struct {
+	Pull          *PullStatus       `json:"pull,omitempty"`
 	Mode          string            `json:"mode"`
 	HostDNS       *HostDNSPlan      `json:"host_dns,omitempty"`
 	Monitoring    *MonitoringPlan   `json:"monitoring,omitempty"`

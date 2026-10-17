@@ -20,6 +20,9 @@ func (s *Service) Run(ctx context.Context) error {
 		if err := s.nextDependencies(ctx); err != nil && ctx.Err() == nil {
 			return err
 		}
+		if err := s.nextPull(ctx); err != nil && ctx.Err() == nil {
+			return err
+		}
 		if err := s.nextPush(ctx); err != nil && !errors.Is(err, errPushChanged) && ctx.Err() == nil {
 			return err
 		}
