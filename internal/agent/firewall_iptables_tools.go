@@ -27,6 +27,7 @@ type iptablesToolVersion struct {
 // No source, script, default applet or PATH-selected backend is executable here.
 type iptablesToolBinding struct {
 	Backend  string
+	Helper   ufwBoundFile
 	Files    []ufwBoundFile
 	Versions []iptablesToolVersion
 	Hash     string
@@ -46,9 +47,10 @@ func iptablesToolRoles(backend string) []string {
 func iptablesToolsHash(binding *iptablesToolBinding) string {
 	raw, _ := json.Marshal(struct {
 		Backend  string
+		Helper   ufwBoundFile
 		Files    []ufwBoundFile
 		Versions []iptablesToolVersion
-	}{binding.Backend, binding.Files, binding.Versions})
+	}{binding.Backend, binding.Helper, binding.Files, binding.Versions})
 	return secure.Hash(append([]byte("iptables:tools:v1:\x00"), raw...))
 }
 
@@ -58,6 +60,20 @@ func bindIPTablesTools(ctx context.Context, backend string) (*iptablesToolBindin
 		return nil, errors.New("iptables 工具必须绑定显式 nft 或 legacy 后端")
 	}
 	binding := &iptablesToolBinding{Backend: backend, Files: []ufwBoundFile{}, Versions: []iptablesToolVersion{}}
+	self, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	binding.Helper, err = readUFWBoundFile("nginxpanel", self, true, iptablesHelperBytes)
+	if err != nil {
+		return nil, errors.New("iptables 固定子进程入口无法核对")
+	}
+	binding.Helper.Raw = nil
+	file, err := openFirewallELF(binding.Helper, iptablesHelperBytes)
+	if err != nil {
+		return nil, err
+	}
+	file.Close()
 	var total int64
 	for _, role := range roles {
 		if err := ctx.Err(); err != nil {
@@ -126,23 +142,59 @@ func (binding *iptablesToolBinding) tool(role string) (ufwBoundFile, error) {
 	return ufwBoundFile{}, errors.New("iptables 固定工具缺失")
 }
 
-func (binding *iptablesToolBinding) verify(ctx context.Context) error {
+func (binding *iptablesToolBinding) valid() bool {
 	if binding == nil || !validIPTablesBackend(binding.Backend) || len(binding.Files) != 7 || len(binding.Versions) != 6 || binding.Hash != iptablesToolsHash(binding) {
-		return errors.New("iptables 完整工具绑定无效")
+		return false
+	}
+	if binding.Helper.Role != "nginxpanel" || !validIPTablesBoundFile(binding.Helper, iptablesHelperBytes) {
+		return false
+	}
+	var total int64
+	wanted, release := "nftables", ""
+	if binding.Backend == "iptables-legacy" {
+		wanted = "legacy"
 	}
 	for index, role := range iptablesToolRoles(binding.Backend) {
+		before := binding.Files[index]
+		if before.Role != role || !validIPTablesBoundFile(before, 16<<20) || filepath.Base(before.Invoked) != role {
+			return false
+		}
+		total += before.File.Bytes
+		if index < 6 {
+			version := binding.Versions[index]
+			kind, text, err := firewallVersion([]byte(version.Version))
+			_, current, found := strings.Cut(text, " ")
+			if version.Role != role || err != nil || kind != wanted || !found || release != "" && current != release {
+				return false
+			}
+			release = current
+		}
+	}
+	return total <= 64<<20
+}
+
+func validIPTablesBoundFile(tool ufwBoundFile, limit int64) bool {
+	return tool.Executable && len(tool.Raw) == 0 && filepath.IsAbs(tool.Invoked) && filepath.Clean(tool.Invoked) == tool.Invoked && len(tool.Invoked) <= 4096 && !strings.ContainsAny(tool.Invoked, "\x00\r\n") && tool.File.Present && validUFWFileSnapshot(tool.File, true, limit)
+}
+
+func (binding *iptablesToolBinding) verify(ctx context.Context) error {
+	if !binding.valid() {
+		return errors.New("iptables 完整工具绑定无效")
+	}
+	for _, before := range append([]ufwBoundFile{binding.Helper}, binding.Files...) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		before := binding.Files[index]
-		if before.Role != role || index < 6 && binding.Versions[index].Role != role || !before.Executable || len(before.Raw) != 0 || !validUFWFileSnapshot(before.File, true, 16<<20) {
-			return errors.New("iptables 工具身份或角色无效")
+		limit := int64(16 << 20)
+		if before.Role == "nginxpanel" {
+			limit = iptablesHelperBytes
+		} else {
+			path, err := ufwSystemCommand(before.Role)
+			if err != nil || path != before.Invoked {
+				return errors.New("iptables 系统工具选择已变化")
+			}
 		}
-		path, err := ufwSystemCommand(role)
-		if err != nil || path != before.Invoked {
-			return errors.New("iptables 系统工具选择已变化")
-		}
-		after, err := readUFWBoundFile(role, before.Invoked, true, 16<<20)
+		after, err := readUFWBoundFile(before.Role, before.Invoked, true, limit)
 		if err != nil || after.File != before.File {
 			return errors.New("iptables 固定工具文件已变化，请重新生成计划")
 		}

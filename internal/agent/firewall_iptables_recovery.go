@@ -1,0 +1,200 @@
+package agent
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"time"
+
+	"nginxpanel/internal/fault"
+	"nginxpanel/internal/firewall"
+)
+
+// A restart never resumes an unconfirmed candidate. Only the original parent's
+// inverse batches may run, after its original child is proven to have ended.
+func recoverIPTablesChange(ctx context.Context, dataDir string) error {
+	if os.Geteuid() != 0 || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir || (&HostDNS{Scope: "host"}).hostScopeReason() != "" {
+		return errors.New("iptables 业务恢复须在真实宿主机 root 范围执行")
+	}
+	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("iptables-business.lock")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	v, err := loadIPTablesChange(dataDir)
+	if err != nil {
+		return err
+	}
+	if v == nil {
+		if iptablesRestorePending(dataDir) {
+			return errors.New("iptables 子进程缺少原业务快照，请本机核对")
+		}
+		return nil
+	}
+	if iptablesChangeTerminal(v) {
+		if iptablesRestorePending(dataDir) {
+			child, err := loadIPTablesRestore(dataDir)
+			if err != nil || child == nil || child.Phase != "ended" || !iptablesRestoreMatchesChange(child, v) {
+				return errors.New("iptables 终态仍有未核对原子进程")
+			}
+			if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
+				return err
+			}
+		}
+		if receipt, err := loadIPTablesReceipt(dataDir, v.Operation.ID); err == nil && iptablesChangeReceiptMatches(receipt, v) {
+			return nil
+		}
+		return saveIPTablesChange(dataDir, v)
+	}
+	fail := func(reason string) error {
+		v.Rollback = true
+		v.Operation.State, v.Operation.Stage, v.Operation.Error = "recovery_required", "restore_unproven", reason
+		v.Operation.UpdatedAt = time.Now().Unix()
+		return errors.Join(errors.New(reason), saveIPTablesChange(dataDir, v))
+	}
+	// Repair a checkpoint-first publication gap before any write. Contradictory
+	// terminal audit records are rejected by save, never reopened for recovery.
+	if err = saveIPTablesChange(dataDir, v); err != nil {
+		return err
+	}
+	if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
+		return fail("iptables 原执行进程尚未完整结束或回执冲突")
+	}
+	if err = iptablesChangeAuthority(dataDir, v); err != nil {
+		return fail("iptables 原本机授权或机器身份无法核对")
+	}
+	v.Rollback = true
+	v.Operation.State, v.Operation.Stage, v.Operation.Error = "compensating", "restoring_previous", "未确认操作恢复原空受管范围"
+	v.Operation.UpdatedAt = time.Now().Unix()
+	if err = saveIPTablesChange(dataDir, v); err != nil {
+		return err
+	}
+	for _, material := range v.Transition.Materials {
+		current, err := inspectIPTablesChange(ctx, dataDir, v)
+		if err != nil {
+			return fail("iptables 当前工具、管理器或完整规则无法核对：" + boundedIPTablesError(err))
+		}
+		if current.States[material.Family] == "empty" {
+			continue
+		}
+		if current.States[material.Family] != "candidate" || iptablesCandidateReceipt(dataDir, v, material.Family) != nil {
+			return fail("iptables 当前代际规则无法关联原候选调用")
+		}
+		var next *iptablesChangeStep
+		for index := range v.Steps {
+			step := &v.Steps[index]
+			if step.Family != material.Family || step.Target != "previous" {
+				continue
+			}
+			old, err := loadIPTablesReceipt(dataDir, step.ID)
+			if os.IsNotExist(err) {
+				next = step
+				break
+			}
+			if err != nil || !iptablesRestoreRecordMatches(old, old.IPTablesRestore) || !iptablesRestoreMatchesChange(old.IPTablesRestore, v) || old.IPTablesRestore.Phase != "ended" {
+				return fail("iptables 原补偿调用回执无法核对")
+			}
+			if iptablesRestoreResult(old.IPTablesRestore) == nil {
+				return fail("iptables 成功补偿后原代际规则再次出现，禁止自动覆盖")
+			}
+		}
+		if next == nil {
+			return fail("iptables 原操作补偿许可已耗尽，请本机核对")
+		}
+		_, submitErr := runIPTablesRestore(ctx, dataDir, iptablesRestoreRequest{ID: next.ID, OperationID: v.Operation.ID, Target: "previous"})
+		// A lost/failed native ACK is not a rollback proof. Inspect only after
+		// ending the original process; a later retry uses another frozen ID.
+		if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
+			return fail("iptables 补偿原进程尚未结束或回执未核对")
+		}
+		after, err := inspectIPTablesChange(ctx, dataDir, v)
+		if err != nil || after.States[material.Family] != "empty" {
+			if submitErr != nil {
+				return fail("iptables 原补偿调用未完成，保留原操作待核对")
+			}
+			return fail("iptables 补偿后完整空受管范围无法核对")
+		}
+	}
+	// Hold both registry and execution guard through the final observation and
+	// terminal publication. No delayed restore may run after rolled_back.
+	registrationUnlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
+	if err != nil {
+		return fail("iptables 最终授权锁暂不可用")
+	}
+	defer registrationUnlock()
+	guard, err := openIPTablesExecutionLock()
+	if err != nil {
+		return fail("iptables 原执行锁尚未释放")
+	}
+	defer guard.Close()
+	final, err := inspectIPTablesChange(ctx, dataDir, v)
+	if err != nil || iptablesRestorePending(dataDir) {
+		return fail("iptables 最终环境或执行回执无法核对")
+	}
+	for _, state := range final.States {
+		if state != "empty" {
+			return fail("iptables 最终受管范围仍有规则")
+		}
+	}
+	v.Operation.State, v.Operation.Stage, v.Operation.Error = "rolled_back", "confirmed_restored", "原空受管范围已恢复；保留当前第三方规则"
+	v.Operation.UpdatedAt = time.Now().Unix()
+	return saveIPTablesChange(dataDir, v)
+}
+
+func boundedIPTablesError(err error) string {
+	text := err.Error()
+	if len(text) > 256 {
+		return "原工具、环境或规则核对失败"
+	}
+	return text
+}
+
+func (f *hostFirewall) refreshIPTablesStateLocked() error {
+	v, err := loadIPTablesChange(f.dataDir)
+	if err != nil {
+		return err
+	}
+	f.iptablesState = v
+	return nil
+}
+
+func (f *hostFirewall) recoverIPTablesLocked(ctx context.Context) error {
+	err := recoverIPTablesChange(ctx, f.dataDir)
+	refreshErr := f.refreshIPTablesStateLocked()
+	if err != nil || refreshErr != nil {
+		f.problem = "iptables 原业务或子进程尚未完成恢复核对"
+		f.retryAt = time.Now().Add(10 * time.Second)
+		return errors.Join(err, refreshErr)
+	}
+	f.problem, f.policyUncertain = "", false
+	return nil
+}
+
+func (f *hostFirewall) runIPTablesLocked(stopping bool, nextInspect *time.Time) {
+	if !f.recovering {
+		return
+	}
+	active := f.iptablesState != nil && !iptablesChangeTerminal(f.iptablesState) || f.problem != ""
+	if !stopping && (time.Now().Before(f.retryAt) || !active && time.Now().Before(*nextInspect)) {
+		return
+	}
+	*nextInspect = time.Now().Add(30 * time.Second)
+	call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_ = f.recoverIPTablesLocked(call)
+}
+
+func (f *hostFirewall) decideIPTablesLocked(ctx context.Context, id, action string) (firewall.Operation, error) {
+	if f.iptablesState == nil || f.iptablesState.Operation.ID != id {
+		return f.operationLocked(id)
+	}
+	if iptablesChangeTerminal(f.iptablesState) {
+		return f.iptablesState.Operation, nil
+	}
+	if action != "rollback" {
+		return f.iptablesState.Operation, fault.Conflict("iptables 原操作当前仅允许继续恢复")
+	}
+	err := f.recoverIPTablesLocked(ctx)
+	return f.iptablesState.Operation, err
+}

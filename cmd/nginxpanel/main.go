@@ -35,6 +35,12 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "_iptables-restore" {
+		if agent.RunIPTablesRestoreGate(os.Args[2]) != nil {
+			os.Exit(125)
+		}
+		return
+	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	if err := run(); err != nil {
 		if len(os.Args) > 1 && os.Args[1] == "nginx-runtime-status" {

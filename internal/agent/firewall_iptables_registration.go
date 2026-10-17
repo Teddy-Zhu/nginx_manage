@@ -256,6 +256,9 @@ func iptablesRegistrationAuthority(dataDir string) (*iptablesRegistrationCheckpo
 }
 
 func iptablesRegistrationPending(dataDir string) bool {
+	if iptablesBusinessPending(dataDir) {
+		return true
+	}
 	v, err := loadIPTablesRegistration(dataDir)
 	if err != nil || v != nil && (v.State == "preparing" || iptablesRegistrationReceipt(dataDir, v) != nil) {
 		return true
@@ -315,6 +318,10 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 	}
 	if _, err = iptablesRegistrationAuthority(dataDir); err != nil {
 		out.Registration.State, out.Registration.Reason = "drifted", "iptables 宿主机占用与原授权登记不一致"
+		return out
+	}
+	if iptablesBusinessPending(dataDir) {
+		out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 原业务或子进程尚未完成核对，请本机执行 iptables-recover"
 		return out
 	}
 	if _, err = snapshotIPTablesRegistration(ctx, v.NextClaim.Backend, observed); err != nil {

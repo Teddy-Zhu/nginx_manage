@@ -226,9 +226,13 @@ func ufwRestoreParentPending(dataDir string, r *ufwRestoreReceipt) bool {
 // Pin the already hashed inode. Set-id executables and file capabilities can
 // clear the parent-death signal across exec, so this transport rejects them.
 func openUFWRestoreELF(tool ufwBoundFile) (*os.File, error) {
-	current, err := readUFWBoundFile(tool.Role, tool.Invoked, true, 16<<20)
+	return openFirewallELF(tool, 16<<20)
+}
+
+func openFirewallELF(tool ufwBoundFile, limit int64) (*os.File, error) {
+	current, err := readUFWBoundFile(tool.Role, tool.Invoked, true, limit)
 	if err != nil || current.File != tool.File || len(current.Raw) < 4 || !bytes.Equal(current.Raw[:4], []byte{0x7f, 'E', 'L', 'F'}) || os.FileMode(current.File.Mode)&(os.ModeSetuid|os.ModeSetgid) != 0 {
-		return nil, errors.New("UFW 子进程工具必须是未漂移的普通受信 ELF")
+		return nil, errors.New("防火墙子进程工具必须是未漂移的普通受信 ELF")
 	}
 	fd, err := unix.Open(tool.File.Path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -243,11 +247,11 @@ func openUFWRestoreELF(tool ufwBoundFile) (*os.File, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || uint64(stat.Dev) != tool.File.Device || stat.Ino != tool.File.Inode || info.Size() != tool.File.Bytes || uint32(info.Mode()) != tool.File.Mode || info.ModTime().UnixNano() != tool.File.Modified || stat.Ctim.Sec*1e9+stat.Ctim.Nsec != tool.File.Changed {
 		f.Close()
-		return nil, errors.New("UFW 子进程工具在固定描述符时变化")
+		return nil, errors.New("防火墙子进程工具在固定描述符时变化")
 	}
 	if _, err = unix.Fgetxattr(fd, "security.capability", nil); !errors.Is(err, unix.ENODATA) && !errors.Is(err, unix.ENOTSUP) {
 		f.Close()
-		return nil, errors.New("UFW 子进程工具存在文件能力或能力属性无法核对")
+		return nil, errors.New("防火墙子进程工具存在文件能力或能力属性无法核对")
 	}
 	return f, nil
 }

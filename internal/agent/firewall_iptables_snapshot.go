@@ -24,6 +24,7 @@ type iptablesRegistrationSnapshot struct {
 	ToolHash string
 	Observed firewall.Observation
 	Images   []iptablesImage
+	States   map[string]string
 }
 
 // Registration binds diagnostics, not an executable write capability. A future
@@ -122,6 +123,10 @@ func inspectIPTablesRegistration(ctx context.Context, dataDir, backend string, a
 }
 
 func snapshotIPTablesRegistration(ctx context.Context, backend string, observed firewall.Observation) (iptablesRegistrationSnapshot, error) {
+	return snapshotIPTablesTransition(ctx, backend, observed, nil)
+}
+
+func snapshotIPTablesTransition(ctx context.Context, backend string, observed firewall.Observation, program *firewall.IPTablesRuntimeProgram) (iptablesRegistrationSnapshot, error) {
 	var out iptablesRegistrationSnapshot
 	if !observed.Kernel.Available || observed.Kernel.TableExists {
 		return out, errors.New("直接 nftables 目标表不存在的状态无法确认")
@@ -134,6 +139,7 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 	names := []string{"iptables-nft-save", "ip6tables-nft-save", "iptables-legacy-save", "ip6tables-legacy-save"}
 	hashes, errs := make([]string, len(names)), make([]error, len(names))
 	images := make([]iptablesImage, len(names))
+	states := make([]string, len(names))
 	var wg sync.WaitGroup
 	for index, name := range names {
 		wg.Add(1)
@@ -147,8 +153,19 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 				}
 				images[index], err = parseIPTablesImage(raw, family)
 				if err == nil {
-					err = proveIPTablesGeneration(images[index], nil)
-					hashes[index] = images[index].hash()
+					var generation *firewall.IPTablesGeneration
+					if program != nil && strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
+						for position := range program.Families {
+							if program.Families[position].Family == family {
+								generation = &program.Families[position]
+							}
+						}
+					}
+					var foreign iptablesImage
+					foreign, states[index], err = iptablesForeignImage(images[index], generation)
+					if err == nil {
+						hashes[index] = foreign.hash()
+					}
 				}
 			}
 			errs[index] = err
@@ -172,10 +189,85 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 	}
 	out.Hash = secure.Hash(raw)
 	out.Observed = observed
+	out.States = map[string]string{}
 	for index, name := range names {
 		if strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
 			out.Images = append(out.Images, images[index])
+			out.States[images[index].Family] = states[index]
 		}
+	}
+	return out, ctx.Err()
+}
+
+// Only a complete accepted topology can be stripped for the foreign baseline.
+// The projected AfterHash is never mistaken for a native-save token ordering.
+func iptablesForeignImage(image iptablesImage, generation *firewall.IPTablesGeneration) (iptablesImage, string, error) {
+	if proveIPTablesGeneration(image, nil) == nil {
+		return image, "empty", nil
+	}
+	if generation == nil {
+		return iptablesImage{}, "", errors.New("iptables 出现未授权的受管规则")
+	}
+	if err := proveIPTablesGeneration(image, generation); err != nil {
+		return iptablesImage{}, "", err
+	}
+	raw, err := json.Marshal(image)
+	if err != nil {
+		return iptablesImage{}, "", err
+	}
+	var foreign iptablesImage
+	if err = json.Unmarshal(raw, &foreign); err != nil {
+		return foreign, "", err
+	}
+	for index := range foreign.Tables {
+		if foreign.Tables[index].Name != "filter" {
+			continue
+		}
+		chains := []iptablesImageChain{}
+		for _, chain := range foreign.Tables[index].Chains {
+			if chain.Name == firewall.IPTablesHostChain || chain.Name == generation.Chain {
+				continue
+			}
+			if chain.Name == "INPUT" {
+				chain.Rules = chain.Rules[1:]
+			}
+			chains = append(chains, chain)
+		}
+		foreign.Tables[index].Chains = chains
+	}
+	if err = proveIPTablesGeneration(foreign, nil); err != nil {
+		return foreign, "", err
+	}
+	return foreign, "candidate", nil
+}
+
+func inspectIPTablesChange(ctx context.Context, dataDir string, v *iptablesChangeCheckpoint) (iptablesRegistrationSnapshot, error) {
+	var out iptablesRegistrationSnapshot
+	if err := iptablesChangeAuthority(dataDir, v); err != nil {
+		return out, err
+	}
+	if err := v.Transition.Tools.verify(ctx); err != nil {
+		return out, err
+	}
+	call, cancel := context.WithTimeout(ctx, 6*time.Second)
+	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true}).collect(call)
+	cancel()
+	out, err := snapshotIPTablesTransition(ctx, v.Policy.Policy.Backend, observed, v.Transition.Program)
+	if err != nil {
+		return out, err
+	}
+	if out.ToolHash != v.Transition.ToolHash {
+		return out, errors.New("iptables 原诊断工具绑定已变化")
+	}
+	// Native write/read must use the same pinned tools as the prepared plan.
+	for _, image := range out.Images {
+		bound, err := v.Transition.Tools.image(ctx, image.Family)
+		if err != nil || bound.hash() != image.hash() {
+			return out, errors.New("iptables 规则在完整核对期间变化")
+		}
+	}
+	if err := v.Transition.Tools.verify(ctx); err != nil {
+		return out, err
 	}
 	return out, ctx.Err()
 }

@@ -40,11 +40,23 @@ func ManageIPTablesRegistration(parent context.Context, dataDir, scope, backend,
 	if action == "status" {
 		return iptablesRegistrationStatus(ctx, dataDir), nil
 	}
+	// Business recovery owns business -> registry -> process locks. Do this
+	// before taking the metadata-registration lock, including after owner edits.
+	if action == "recover" {
+		if err = recoverIPTablesChange(ctx, dataDir); err != nil {
+			return iptablesRegistrationStatus(ctx, dataDir), err
+		}
+	} else if iptablesBusinessPending(dataDir) {
+		return out, errors.New("iptables 原业务或子进程尚未完成，请先执行 iptables-recover")
+	}
 	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
 	if err != nil {
 		return out, err
 	}
 	defer unlock()
+	if action != "recover" && iptablesBusinessPending(dataDir) {
+		return out, errors.New("iptables 原业务在登记前发生变化，请先恢复原操作")
+	}
 	for _, dir := range []string{filepath.Dir(iptablesRegistrationPath(dataDir)), filepath.Dir(iptablesHostClaimPath)} {
 		if err = secure.RootDirectory(dir, 0700); err != nil {
 			return out, err

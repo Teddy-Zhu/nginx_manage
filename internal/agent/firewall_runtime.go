@@ -67,6 +67,7 @@ type hostFirewall struct {
 	firewalldRegistration *firewalldRegistrationCheckpoint
 	firewalldState        *firewalldCheckpoint
 	ufwState              *ufwChangeCheckpoint
+	iptablesState         *iptablesChangeCheckpoint
 	available             bool
 	ufwPlanning           bool
 	iptablesPlanning      bool
@@ -188,6 +189,9 @@ func (f *hostFirewall) persist() (bool, error) {
 	return true, nil
 }
 func (f *hostFirewall) activeLocked() bool {
+	if f.iptablesState != nil {
+		return !iptablesChangeTerminal(f.iptablesState)
+	}
 	if f.ufwState != nil {
 		return !ufwChangeTerminal(f.ufwState)
 	}
@@ -197,6 +201,9 @@ func (f *hostFirewall) activeLocked() bool {
 	return f.state.Candidate != nil
 }
 func (f *hostFirewall) currentOperation() *firewall.Operation {
+	if f.iptablesState != nil {
+		return &f.iptablesState.Operation
+	}
 	if f.ufwState != nil {
 		return &f.ufwState.Operation
 	}
@@ -206,6 +213,9 @@ func (f *hostFirewall) currentOperation() *firewall.Operation {
 	return f.state.Operation
 }
 func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
+	if f.iptablesState != nil {
+		return nil
+	}
 	if f.ufwState != nil {
 		return f.ufwState.Confirmed
 	}
@@ -258,6 +268,16 @@ func (f *hostFirewall) Open() error {
 		f.policyUncertain, f.problem = true, "firewalld 恢复记录无效或与 nftables 恢复材料冲突，须本机处理"
 		return nil
 	}
+	iptables, err := loadIPTablesChange(f.dataDir)
+	if err != nil {
+		f.policyUncertain, f.problem = true, "iptables 原业务快照无法读取，请本机核对"
+		return nil
+	}
+	iptablesPending := iptablesBusinessPending(f.dataDir)
+	if iptablesPending && (managed != nil || value != nil) {
+		f.policyUncertain, f.problem = true, "iptables 与其他防火墙恢复材料冲突，请本机核对"
+		return nil
+	}
 	if managed != nil {
 		f.available = f.available && f.owner == "firewalld"
 		f.owner = "firewalld"
@@ -269,11 +289,18 @@ func (f *hostFirewall) Open() error {
 			f.policyUncertain, f.problem = true, ufwProcessProblem+"业务快照无法读取"
 			return nil
 		}
+		if iptablesPending && (ufwRestorePending(f.dataDir) || ufw != nil && (ufw.Confirmed != nil && ufw.Confirmed.Action == "apply" || !ufwChangeTerminal(ufw))) {
+			f.policyUncertain, f.problem = true, "iptables 与 UFW 原恢复材料冲突，请本机核对"
+			return nil
+		}
+		if iptablesPending {
+			return f.openIPTablesPlanner(iptables)
+		}
 		if f.owner == "ufw" || ufwRestorePending(f.dataDir) || ufw != nil && (ufw.Confirmed != nil && ufw.Confirmed.Action == "apply" || !ufwChangeTerminal(ufw)) {
 			return f.openUFWExecutor(ufw)
 		}
 		if validIPTablesBackend(f.owner) {
-			return f.openIPTablesPlanner()
+			return f.openIPTablesPlanner(iptables)
 		}
 	}
 	if f.owner == "firewalld" {
@@ -358,6 +385,18 @@ func (f *hostFirewall) Close() {
 	}
 }
 func (f *hostFirewall) operationLocked(id string) (firewall.Operation, error) {
+	if f.iptablesState != nil || f.iptablesPlannerLocked() {
+		if err := f.refreshIPTablesStateLocked(); err != nil {
+			return firewall.Operation{}, fault.Unavailable("iptables 独立操作记录无法读取")
+		}
+		if v := f.iptablesState; v != nil && v.Operation.ID == id {
+			r, err := loadIPTablesReceipt(f.dataDir, id)
+			if err != nil || !iptablesChangeReceiptMatches(r, v) {
+				return v.Operation, fault.Unavailable("iptables 原业务回执尚未完成核对，请恢复原操作")
+			}
+			return v.Operation, nil
+		}
+	}
 	if f.ufwState != nil || f.owner == "ufw" && f.state.Schema == 0 {
 		if err := f.refreshUFWStateLocked(); err != nil {
 			return firewall.Operation{}, fault.Unavailable("UFW 独立操作记录无法读取")

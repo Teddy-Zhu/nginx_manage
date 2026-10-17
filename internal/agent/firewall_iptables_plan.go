@@ -15,6 +15,7 @@ import (
 )
 
 type iptablesInitialTransition struct {
+	Owner, MachineHash                                                            string
 	RegistrationOperationID, RegistrationRequestHash, ConfigurationHash, ToolHash string
 	Program                                                                       *firewall.IPTablesRuntimeProgram
 	Materials                                                                     []iptablesInitialMaterial
@@ -26,13 +27,24 @@ func (f *hostFirewall) iptablesPlannerLocked() bool {
 	return validIPTablesBackend(f.owner) && f.state.Schema == 0 && f.ufwState == nil && f.firewalldState == nil
 }
 
-func (f *hostFirewall) openIPTablesPlanner() error {
+func (f *hostFirewall) openIPTablesPlanner(v *iptablesChangeCheckpoint) error {
 	f.available = false
+	f.iptablesState = v
+	if v != nil && (iptablesBusinessPending(f.dataDir) || !validIPTablesBackend(f.owner)) {
+		f.owner = v.Policy.Policy.Backend
+	}
 	if os.Geteuid() != 0 || (&HostDNS{Scope: "host"}).hostScopeReason() != "" {
 		f.problem, f.policyUncertain = "iptables 计划须在真实宿主机 root 范围准备", true
 		return nil
 	}
-	f.policyUncertain = false
+	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("iptables-agent.lock")
+	if err != nil {
+		return errors.Join(errors.New("其他 iptables Agent 正在维护原操作"), err)
+	}
+	f.unlock, f.recovering, f.policyUncertain = unlock, true, false
+	call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_ = f.recoverIPTablesLocked(call)
 	return nil
 }
 
@@ -40,6 +52,10 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 	registration, err := iptablesRegistrationAuthority(f.dataDir)
 	pending := iptablesRegistrationPending(f.dataDir)
 	out := firewall.RuntimeView{Backend: f.owner, CanPlan: f.iptablesPlanning && !f.policyUncertain && f.problem == "" && err == nil && !pending, Reason: f.problem, ConfirmedAction: "none", Protections: []firewall.Protection{}, ProtectionObservation: protectionObservation("not_applicable", "", "尚无已确认的 iptables 业务策略"), Kernel: firewall.KernelView{Reason: "iptables 使用独立的原生规则与代际链核对"}}
+	if f.iptablesState != nil {
+		op := f.iptablesState.Operation
+		out.Operation = &op
+	}
 	if out.Reason == "" {
 		switch {
 		case !f.iptablesPlanning:
@@ -47,11 +63,11 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 		case err != nil:
 			out.Reason = "iptables 本机授权尚未完成或无法核对，请检查 iptables-registration"
 		case pending:
-			out.Reason = "iptables 本机授权仍有未完成意图，请先核对原操作"
+			out.Reason = "iptables 本机授权、原业务或子进程仍待恢复核对"
 		case registration.NextClaim.Backend != f.owner:
 			out.CanPlan, out.Reason = false, "本机授权后端与 Agent 显式选择不一致，不能切换系统 alternatives"
 		default:
-			out.Reason = "可准备代际计划；业务应用与独立恢复尚未接入，保持只读"
+			out.Reason = "可准备代际计划；正常确认及已确认策略恢复尚未接入，保持只读"
 		}
 	}
 	return out
@@ -59,7 +75,7 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 
 func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.RuntimeInput, connection string) (firewall.Plan, error) {
 	var empty firewall.Plan
-	if !f.iptablesPlanning || f.policyUncertain || f.problem != "" || !f.iptablesPlannerLocked() {
+	if !f.iptablesPlanning || f.policyUncertain || f.problem != "" || !f.iptablesPlannerLocked() || iptablesRegistrationPending(f.dataDir) {
 		return empty, fault.Unavailable("iptables 计划须由本机确认宿主机范围、显式后端及 SSH 保护配置")
 	}
 	if in.PreparationID != "" || in.CancelPreparation || in.Version < 1 || in.Action != "apply" {
@@ -110,8 +126,8 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 			return empty, fault.Unavailable("iptables 规则绑定接口未在目标观察到")
 		}
 	}
-	transition := &iptablesInitialTransition{RegistrationOperationID: registered.NextClaim.OperationID, RegistrationRequestHash: registered.RequestHash, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Materials: []iptablesInitialMaterial{}}
-	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "候选及正反向批次已通过官方 --test；业务写入与独立恢复尚未接入，不可应用"}
+	transition := &iptablesInitialTransition{Owner: registered.NextClaim.Owner, MachineHash: registered.NextClaim.MachineHash, RegistrationOperationID: registered.NextClaim.OperationID, RegistrationRequestHash: registered.RequestHash, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Materials: []iptablesInitialMaterial{}}
+	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "候选及正反向批次已通过官方 --test；正常确认及已确认策略恢复尚未接入，不可应用"}
 	generated, transactionBytes := 0, 0
 	for _, generation := range program.Families {
 		var image *iptablesImage
