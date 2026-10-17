@@ -31,10 +31,11 @@ func ManageFail2banExistingPolicy(ctx context.Context, data, scope, action, oper
 		if err != nil {
 			return out, err
 		}
-		if _, err = validFail2banExistingPolicyRecord(data, r); err != nil {
+		c, err := validFail2banExistingPolicyRecord(data, r)
+		if err != nil {
 			return out, err
 		}
-		return fail2banExistingPolicyOperation(r), nil
+		return fail2banExistingPolicyOperation(r, c), nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -85,30 +86,14 @@ func ManageFail2banExistingPolicy(ctx context.Context, data, scope, action, oper
 			if action == "cancel" && old.State == "succeeded" {
 				return out, errors.New("参数操作已完成，恢复参数须新建独立计划")
 			}
-			return fail2banExistingPolicyOperation(old), nil
+			return fail2banExistingPolicyOperation(old, c), nil
 		}
 		if err = fail2banManagedIdle(data, operation); err != nil {
 			return out, err
 		}
 		if action == "cancel" {
-			original, err := existingPolicyAdoption(data, c.Plan.AdoptionID)
+			old, err = requestFail2banExistingPolicyCancel(ctx, data, j, old, c)
 			if err != nil {
-				return out, err
-			}
-			selected, err := loadFail2banExistingPolicy(data, original, c.Plan.AdoptionID)
-			if err != nil {
-				return out, err
-			}
-			if selected.ID == operation {
-				return out, errors.New("参数选择已经发布，须查询原结果并新建恢复计划")
-			}
-			if old.Fail2banExistingPolicy.Sent {
-				if _, _, err = observeFail2banExistingPolicy(ctx, data, old, c, false); err != nil {
-					return out, errors.Join(errors.New("已提交的请求须原进程退出且原运行状态完整核对后才能取消"), err)
-				}
-			}
-			old.Fail2banExistingPolicy.CancelRequested = true
-			if err = j.Put(old); err != nil {
 				return out, err
 			}
 		}
@@ -117,7 +102,7 @@ func ManageFail2banExistingPolicy(ctx context.Context, data, scope, action, oper
 		if readErr != nil {
 			return out, errors.Join(err, readErr)
 		}
-		return fail2banExistingPolicyOperation(current), err
+		return fail2banExistingPolicyOperation(current, c), err
 	} else if !os.IsNotExist(readErr) {
 		return out, readErr
 	}
@@ -137,41 +122,8 @@ func ManageFail2banExistingPolicy(ctx context.Context, data, scope, action, oper
 	if confirmStop != c.Plan.StopConfirmation {
 		return out, errors.New("只有明确停止 SSH jail 时须提供独立停用确认")
 	}
-	c.After.ID = operation
-	if err = c.valid(); err != nil {
-		return out, err
-	}
-	path := fail2banExistingPolicyPath(data, "policy-captures", operation)
-	if raw, readErr := listenerRead(path, fail2banExistingCaptureLimit); readErr == nil {
-		var saved fail2banExistingPolicyCapture
-		if json.Unmarshal(raw, &saved) != nil || saved.valid() != nil || saved.Plan.Target != c.Plan.Target || saved.After.ID != operation {
-			return out, errors.New("操作 UUID 已保存其他参数准备材料")
-		}
-		c = &saved
-	} else if !os.IsNotExist(readErr) {
-		return out, readErr
-	}
-	for _, kind := range []string{"policy-captures", "policy-events"} {
-		entries, err := os.ReadDir(filepath.Join(fail2banExistingDir(data), kind))
-		if err != nil {
-			return out, err
-		}
-		if len(entries) >= 2048 {
-			if _, err = os.Lstat(fail2banExistingPolicyPath(data, kind, operation)); err != nil {
-				return out, errors.New("已有 jail 参数历史容量已满")
-			}
-		}
-	}
-	raw, _ := json.Marshal(c)
-	if err = writeFail2banJailImmutable(path, raw, fail2banExistingCaptureLimit); err != nil {
-		return out, err
-	}
-	if err = syncDir(filepath.Dir(path)); err != nil {
-		return out, err
-	}
-	i := &fail2banExistingPolicyIntent{AdoptionID: adoption, CaptureHash: secure.Hash(raw), Target: target, Bans: map[string]fail2banBanTime{}}
-	r := Record{OperationID: operation, Kind: fail2banExistingPolicyKind, RequestHash: fail2banExistingPolicyRequestHash(*i), State: "running", Stage: "prepared", Fail2banExistingPolicy: i}
-	if err = j.Put(r); err != nil {
+	r, c, err := prepareFail2banExistingPolicyRecord(data, j, operation, c, nil)
+	if err != nil {
 		return out, err
 	}
 	err = advanceFail2banExistingPolicy(ctx, data, j, r, c)
@@ -179,7 +131,80 @@ func ManageFail2banExistingPolicy(ctx context.Context, data, scope, action, oper
 	if readErr != nil {
 		return out, errors.Join(err, readErr)
 	}
-	return fail2banExistingPolicyOperation(current), err
+	return fail2banExistingPolicyOperation(current, c), err
+}
+
+// The root CLI and accepted IPC jobs enter the same captured execution intent.
+// No live configuration changes until this journal transition is durable.
+func prepareFail2banExistingPolicyRecord(data string, j *Journal, operation string, c *fail2banExistingPolicyCapture, job *fail2banExistingPolicyJob) (Record, *fail2banExistingPolicyCapture, error) {
+	if err := prepareFail2banExistingPolicy(data); err != nil {
+		return Record{}, nil, err
+	}
+	c.After.ID = operation
+	if err := c.valid(); err != nil {
+		return Record{}, nil, err
+	}
+	path := fail2banExistingPolicyPath(data, "policy-captures", operation)
+	if raw, readErr := listenerRead(path, fail2banExistingCaptureLimit); readErr == nil {
+		var saved fail2banExistingPolicyCapture
+		if json.Unmarshal(raw, &saved) != nil || saved.valid() != nil || saved.Plan.Target != c.Plan.Target || saved.After.ID != operation {
+			return Record{}, nil, errors.New("操作 UUID 已保存其他参数准备材料")
+		}
+		c = &saved
+	} else if !os.IsNotExist(readErr) {
+		return Record{}, nil, readErr
+	}
+	for _, kind := range []string{"policy-captures", "policy-events"} {
+		entries, err := os.ReadDir(filepath.Join(fail2banExistingDir(data), kind))
+		if err != nil {
+			return Record{}, nil, err
+		}
+		if len(entries) >= 2048 {
+			if _, err = os.Lstat(fail2banExistingPolicyPath(data, kind, operation)); err != nil {
+				return Record{}, nil, errors.New("已有 jail 参数历史容量已满")
+			}
+		}
+	}
+	raw, _ := json.Marshal(c)
+	if err := writeFail2banJailImmutable(path, raw, fail2banExistingCaptureLimit); err != nil {
+		return Record{}, nil, err
+	}
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		return Record{}, nil, err
+	}
+	i := &fail2banExistingPolicyIntent{AdoptionID: c.Plan.AdoptionID, CaptureHash: secure.Hash(raw), Target: c.Plan.Target, Bans: map[string]fail2banBanTime{}}
+	r := Record{OperationID: operation, Kind: fail2banExistingPolicyKind, RequestHash: fail2banExistingPolicyRequestHash(*i), State: "running", Stage: "prepared", Fail2banExistingPolicy: i, Fail2banExistingPolicyJob: job}
+	if job != nil {
+		r.RequestHash = job.Request.Hash()
+	}
+	if _, err := validFail2banExistingPolicyRecord(data, r); err != nil {
+		return Record{}, nil, err
+	}
+	return r, c, j.Put(r)
+}
+
+func requestFail2banExistingPolicyCancel(ctx context.Context, data string, j *Journal, r Record, c *fail2banExistingPolicyCapture) (Record, error) {
+	original, err := existingPolicyAdoption(data, c.Plan.AdoptionID)
+	if err != nil {
+		return r, err
+	}
+	selected, err := loadFail2banExistingPolicy(data, original, c.Plan.AdoptionID)
+	if err != nil {
+		return r, err
+	}
+	if selected.ID == r.OperationID {
+		return r, errors.New("参数选择已经发布，须查询原结果并新建恢复计划")
+	}
+	if r.Fail2banExistingPolicy.Sent {
+		if _, _, err = observeFail2banExistingPolicy(ctx, data, r, c, false); err != nil {
+			return r, errors.Join(errors.New("已提交的请求须原进程退出且原运行状态完整核对后才能取消"), err)
+		}
+	}
+	r.Fail2banExistingPolicy.CancelRequested = true
+	if job := r.Fail2banExistingPolicyJob; job != nil {
+		job.CancelRequested, job.CancelError = true, ""
+	}
+	return r, j.Put(r)
 }
 
 func existingPolicyAdoption(data, adoption string) (*fail2banExistingCapture, error) {
@@ -244,7 +269,7 @@ func replaceFail2banExistingPolicyOverlay(c *fail2banExistingPolicyCapture, forw
 }
 
 func existingPolicyRecovery(j *Journal, r Record, err error) error {
-	r.State, r.Stage, r.Error = "recovery_required", "policy_unconfirmed", err.Error()
+	r.State, r.Stage, r.Error = "recovery_required", "policy_unconfirmed", fail2banExistingPolicyError(err)
 	return errors.Join(err, j.Put(r))
 }
 
@@ -318,6 +343,11 @@ func checkFail2banExistingPolicyBans(before, after map[string]fail2banBanTime) e
 
 func advanceFail2banExistingPolicy(ctx context.Context, data string, j *Journal, r Record, c *fail2banExistingPolicyCapture) error {
 	fail := func(err error) error { return existingPolicyRecovery(j, r, err) }
+	// A prior journal rename may be visible after its directory sync failed.
+	// Establish durability again before touching the live overlay or runtime.
+	if err := syncDir(j.Dir); err != nil {
+		return err
+	}
 	i := r.Fail2banExistingPolicy
 	original, err := existingPolicyAdoption(data, c.Plan.AdoptionID)
 	if err != nil {
@@ -355,6 +385,11 @@ func advanceFail2banExistingPolicy(ctx context.Context, data string, j *Journal,
 	if !i.Sent {
 		if time.Now().Unix()-c.Plan.At > 300 || time.Now().Unix() < c.Plan.At {
 			return fail(errors.New("参数操作尚未发送且计划已过期，须取消后重新预检"))
+		}
+		if job := r.Fail2banExistingPolicyJob; job != nil {
+			if err = checkFail2banExistingPolicyPreview(j, job.Request); err != nil {
+				return fail(err)
+			}
 		}
 		view, evidence, err := observeFail2banExistingPolicy(ctx, data, r, c, false)
 		if err != nil {
@@ -406,6 +441,11 @@ func advanceFail2banExistingPolicy(ctx context.Context, data string, j *Journal,
 		config, err := readFail2banExistingConfig()
 		if err != nil || config.hash() != c.afterSnapshot().hash() {
 			return fail(errors.New("发送前系统候选变化"))
+		}
+		if job := r.Fail2banExistingPolicyJob; job != nil {
+			if err = checkFail2banExistingPolicyPreview(j, job.Request); err != nil {
+				return fail(err)
+			}
 		}
 		i.Bans, i.Pending, i.Sent, i.Submission = view.Bans, &process, true, "pending"
 		r.Stage, r.Error = "reload_pending", ""
@@ -468,7 +508,7 @@ func (f *fail2banJailsExecutor) advanceExistingPolicy(ctx context.Context) error
 		if !pendingNginxRecord(r) {
 			continue
 		}
-		if r.Kind != fail2banExistingPolicyKind {
+		if r.Kind != fail2banExistingPolicyKind && r.Kind != fail2banExistingPolicyJobKind {
 			other = true
 			continue
 		}
@@ -484,9 +524,25 @@ func (f *fail2banJailsExecutor) advanceExistingPolicy(ctx context.Context) error
 	if other {
 		return ErrBusy
 	}
+	if pending.Kind == fail2banExistingPolicyJobKind {
+		return f.advanceExistingPolicyJob(ctx, *pending)
+	}
 	c, err := validFail2banExistingPolicyRecord(f.server.DataDir, *pending)
 	if err != nil {
 		return existingPolicyRecovery(f.journal(), *pending, err)
+	}
+	if job := pending.Fail2banExistingPolicyJob; job != nil && job.CancelRequested && !pending.Fail2banExistingPolicy.CancelRequested {
+		updated, err := requestFail2banExistingPolicyCancel(ctx, f.server.DataDir, f.journal(), *pending, c)
+		if err != nil {
+			if ctx.Err() != nil || updated.Fail2banExistingPolicy.CancelRequested {
+				return err
+			}
+			// A request is not cancellation authority. Rejection must leave
+			// observation of the original reload free to finish normally.
+			job.CancelRequested, job.CancelError = false, fail2banExistingPolicyError(err)
+			return errors.Join(err, f.persist(*pending))
+		}
+		pending = &updated
 	}
 	return advanceFail2banExistingPolicy(ctx, f.server.DataDir, f.journal(), *pending, c)
 }

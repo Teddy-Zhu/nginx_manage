@@ -27,19 +27,7 @@ type fail2banExistingPolicySelection struct {
 	NativeProof     string                      `json:"native_proof"`
 }
 
-type Fail2banExistingPolicyPlan struct {
-	At               int64                       `json:"at"`
-	AdoptionID       string                      `json:"adoption_id"`
-	BindingID        string                      `json:"binding_id"`
-	BaseID           string                      `json:"base_id"`
-	Name             string                      `json:"name"`
-	Target           string                      `json:"target"`
-	Before           fail2ban.ExistingJailPolicy `json:"before"`
-	After            fail2ban.ExistingJailPolicy `json:"after"`
-	BanCount         int                         `json:"ban_count"`
-	StopConfirmation bool                        `json:"stop_confirmation"`
-	Impacts          []string                    `json:"impacts"`
-}
+type Fail2banExistingPolicyPlan = fail2ban.ExistingPolicyPlan
 
 type fail2banExistingPolicyCapture struct {
 	Schema       int                             `json:"schema"`
@@ -71,16 +59,7 @@ type fail2banExistingPolicyIntent struct {
 	Bans    map[string]fail2banBanTime `json:"bans"`
 }
 
-type Fail2banExistingPolicyOperation struct {
-	ID         string `json:"id"`
-	State      string `json:"state"`
-	Stage      string `json:"stage"`
-	AdoptionID string `json:"adoption_id"`
-	Target     string `json:"target"`
-	Sent       bool   `json:"sent"`
-	Submission string `json:"submission"`
-	Error      string `json:"error"`
-}
+type Fail2banExistingPolicyOperation = fail2ban.ExistingPolicyOperation
 
 func fail2banExistingPolicyPath(data, kind, id string) string {
 	return filepath.Join(fail2banExistingDir(data), kind, id+".json")
@@ -140,7 +119,7 @@ func (c *fail2banExistingPolicyCapture) afterSnapshot() fail2banExistingConfigSn
 
 func (c *fail2banExistingPolicyCapture) valid() error {
 	p := c.Plan
-	if c.Schema != 1 || !validID(p.AdoptionID) || !validID(p.BindingID) || !validID(p.BaseID) || !fail2banJailName.MatchString(p.Name) || p.At <= 0 || !fail2banDigest.MatchString(p.Target) || !fail2banDigest.MatchString(c.BaseTarget) || !fail2banDigest.MatchString(c.Unit) || !fail2banDigest.MatchString(c.Server) || !fail2banInvocation.MatchString(c.Invocation) || c.Socket == "" || p.BanCount < 0 || p.BanCount > 1024 || p.StopConfirmation != (p.Before.Enabled && !p.After.Enabled) || !c.Before.valid() || !c.After.valid() || c.Before.ID != p.BaseID || c.Before.AdoptionID != p.AdoptionID || c.After.AdoptionID != p.AdoptionID || c.After.PreviousID != c.Before.ID || c.After.ID == c.Before.ID || c.After.NativeProof != c.Before.NativeProof || !equalFail2banExistingPolicy(c.Before.Policy, p.Before) || !equalFail2banExistingPolicy(c.After.Policy, p.After) || equalFail2banExistingPolicy(p.Before, p.After) || p.Before.Enabled && !fail2banDigest.MatchString(c.ClockProof) {
+	if c.Schema != 1 || !p.Valid() || !fail2banDigest.MatchString(c.BaseTarget) || !fail2banDigest.MatchString(c.Unit) || !fail2banDigest.MatchString(c.Server) || !fail2banInvocation.MatchString(c.Invocation) || c.Socket == "" || !c.Before.valid() || !c.After.valid() || c.Before.ID != p.BaseID || c.Before.AdoptionID != p.AdoptionID || c.After.AdoptionID != p.AdoptionID || c.After.PreviousID != c.Before.ID || c.After.ID == c.Before.ID || c.After.NativeProof != c.Before.NativeProof || !equalFail2banExistingPolicy(c.Before.Policy, p.Before) || !equalFail2banExistingPolicy(c.After.Policy, p.After) || p.Before.Enabled && !fail2banDigest.MatchString(c.ClockProof) {
 		return errors.New("已有 jail 参数快照身份或状态无效")
 	}
 	if len(c.Snapshot.Files) == 0 || len(c.Snapshot.Files) > 1024 {
@@ -187,8 +166,15 @@ func fail2banExistingPolicyRequestHash(i fail2banExistingPolicyIntent) string {
 
 func validFail2banExistingPolicyRecord(data string, r Record) (*fail2banExistingPolicyCapture, error) {
 	i := r.Fail2banExistingPolicy
-	if r.Kind != fail2banExistingPolicyKind || !validID(r.OperationID) || i == nil || !validID(i.AdoptionID) || !fail2banDigest.MatchString(i.CaptureHash) || !fail2banDigest.MatchString(i.Target) || r.RequestHash != fail2banExistingPolicyRequestHash(*i) {
+	if r.Kind != fail2banExistingPolicyKind || !validID(r.OperationID) || i == nil || !validID(i.AdoptionID) || !fail2banDigest.MatchString(i.CaptureHash) || !fail2banDigest.MatchString(i.Target) {
 		return nil, errors.New("已有 jail 参数操作合同无效")
+	}
+	if r.Fail2banExistingPolicyJob == nil {
+		if r.RequestHash != fail2banExistingPolicyRequestHash(*i) {
+			return nil, errors.New("已有 jail 参数请求摘要无效")
+		}
+	} else if err := validFail2banExistingPolicyJobRequest(r); err != nil {
+		return nil, err
 	}
 	switch r.State {
 	case "running", "recovery_required", "succeeded", "failed":
@@ -233,12 +219,25 @@ func validFail2banExistingPolicyRecord(data string, r Record) (*fail2banExisting
 	if c.Plan.AdoptionID != i.AdoptionID || c.Plan.Target != i.Target || c.After.ID != r.OperationID {
 		return nil, errors.New("已有 jail 参数操作与快照不一致")
 	}
+	if job := r.Fail2banExistingPolicyJob; job != nil {
+		in := job.Request
+		if in.Action != "apply" || in.AdoptionID != c.Plan.AdoptionID || in.Target != c.Plan.Target || !equalFail2banExistingPolicy(in.Policy, c.Plan.After) || in.ConfirmStop != c.Plan.StopConfirmation || job.Plan != nil {
+			return nil, errors.New("排队参数请求与执行快照不一致")
+		}
+	}
 	return &c, nil
 }
 
-func fail2banExistingPolicyOperation(r Record) Fail2banExistingPolicyOperation {
+func fail2banExistingPolicyOperation(r Record, c *fail2banExistingPolicyCapture) Fail2banExistingPolicyOperation {
 	i := r.Fail2banExistingPolicy
-	return Fail2banExistingPolicyOperation{ID: r.OperationID, State: r.State, Stage: r.Stage, AdoptionID: i.AdoptionID, Target: i.Target, Sent: i.Sent, Submission: i.Submission, Error: r.Error}
+	out := Fail2banExistingPolicyOperation{ID: r.OperationID, RequestHash: r.RequestHash, Action: "apply", State: r.State, Stage: r.Stage, AdoptionID: i.AdoptionID, Target: i.Target, Sent: i.Sent, Submission: i.Submission, CancelRequested: i.CancelRequested, Error: r.Error}
+	plan := c.Plan
+	out.Plan = &plan
+	if job := r.Fail2banExistingPolicyJob; job != nil {
+		out.CancelRequested = out.CancelRequested || job.CancelRequested
+		out.CancelError = job.CancelError
+	}
+	return out
 }
 
 func prepareFail2banExistingPolicy(data string) error {

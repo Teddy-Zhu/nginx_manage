@@ -126,6 +126,18 @@ nginxpanel fail2ban-existing-jail-policy-cancel --data-dir /srv/nginxpanel --fai
 
 未发送操作可取消，仅恢复本应用的覆盖文件。已发送请求只有原进程退出、原运行参数/名单和未到期封禁均重新证明后，才允许取消并撤回候选；已发布或已生效的候选须查询续办结果，再通过新计划恢复参数。解除接管前必须先以独立参数操作恢复首次接管的参数及启用状态。私有材料位于 `existing-jails/policy-{captures,events,current,configs}`；单配置树最多 8 MiB、单捕获最多 16 MiB，历史受 2048 项上限及共享 journal 配额约束，均不迁移。网页/API 修改入口继续实施，尚未运行官方工具或真实应用，待 P5 集中验收。
 
+## 已接管 jail 的异步 Agent 请求
+
+Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2ban/existing/operations/{id}` 和 `POST /v1/fail2ban/existing/operations/{id}/cancel`，复用原受管 jail 的独立宿主机执行器及统一 `protocol/code/message/data` 响应。公开业务 API、数据库任务和网页编辑仍待接入，本段不表示新增公开 HTTP 路由。
+
+提交使用 `ExistingPolicyRequest`：当前 `protocol`、新的 `operation_id`、`action=preview|apply`、本机 root 已确认的 `adoption_id` 和类型化 `policy`。预览的 `preview_id/target` 为空、`confirm_stop=false`；应用必须引用独立成功预览的 UUID、原 target 和相同参数，停用确认须与预览完全一致。接口不接收 profile、日志路径、端口、过滤器、动作、服务或文件路径，不能通过请求授予或变更接管权。
+
+请求先保存 root 私有排队记录再返回，耗时的完整原生证明在原独立 worker 中执行，不延长 15 秒 IPC 期限。排队请求五分钟后过期；应用在接收、执行准备及实际发送前核对成功预览仍在五分钟有效期内。排队应用重新采集当前完整证明，目标或停用影响变化即拒绝。准备快照后，以同一 UUID 和原请求摘要原子转入既有参数执行记录，不创建另一个可能重复提交的子操作；响应或同步落盘结果未知时查询同一 UUID。预览成功仅表示预览确认，应用成功仍须 `policy_confirmed`。
+
+取消未转入执行的排队请求直接保存取消终态，不修改运行配置。转入执行后的取消仅保存请求，由原 worker 按上述原进程退出及原状态证明规则判断；不能取消时返回独立 `cancel_error`，清除待判断请求并继续观察原 reload，不把取消失败写成原操作完成或阻止原结果确认。本机 root 直接发起的操作仍由本机 CLI 取消，Agent 请求不能越过这一边界。
+
+队列、取消及执行共用 Nginx/宿主机/接入锁、维护排空和全局 journal 的 2048 项上限，不进入业务迁移或完整备份。Agent 协议为 60，数据库与归档仍为 26/6；无旧协议兼容。原生运行、超时、中断、取消及维护组合的验收统一留待 P5。
+
 ## 实例与 jail 读取
 
 `GET /fail2ban/instance` 返回 `Fail2banInstance`；`GET /fail2ban/jails/{name}` 返回 `Fail2banJail`。二者要求 `read`，各有同路径的显式远程资源。未登记时仅返回未接入状态，不连接。jail 只允许读取当前完整列表中的名称；页面提供列表、归属、失败/封禁计数及引擎记录的封禁地址，不提供未接管 jail 的控制按钮。
@@ -140,7 +152,7 @@ nginxpanel fail2ban-existing-jail-policy-cancel --data-dir /srv/nginxpanel --fai
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 59、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 60、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
 已有实例默认只读，可由本机 root 另行授予全局服务控制，或接管固定 SSH jail 并执行上述参数应用/停用。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 jail 网页/API 修改接入、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
