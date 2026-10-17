@@ -9,6 +9,7 @@ import (
 
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
+	"nginxpanel/internal/auditlog"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/backup"
 	"nginxpanel/internal/components"
@@ -35,6 +36,7 @@ import (
 )
 
 type Server struct {
+	Audit         *auditlog.Service
 	Fail2ban      *fail2ban.PolicyService
 	Maintenance   *maintenance.Service
 	DB            *sql.DB
@@ -505,22 +507,6 @@ func (s *Server) GetTask(w http.ResponseWriter, r *http.Request, id apigen.ID) {
 }
 func taskView(t dbgen.Task) apigen.Task {
 	return apigen.Task{Id: t.ID, Kind: t.Kind, State: t.State, Stage: t.Stage, LastError: t.LastError, CreatedAt: t.CreatedAt, RevisionId: t.RevisionID.String, ObservedRevision: t.ObservedRevision}
-}
-func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request, params apigen.ListAuditParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
-		return
-	}
-	l, o, err := pagination(params.Limit, params.Offset)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	data, err := dbgen.New(s.DB).ListAudit(r.Context(), dbgen.ListAuditParams{Limit: l, Offset: o})
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	s.ok(w, r, data)
 }
 func (s *Server) audit(r *http.Request, principal, action, resource, outcome string) error {
 	_, err := s.DB.ExecContext(r.Context(), "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,?,?)", secure.ID(), r.Context().Value(requestIDKey).(string), principal, action, resource, outcome, time.Now().Unix())

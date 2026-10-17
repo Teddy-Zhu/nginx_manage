@@ -27,6 +27,3 @@ SELECT * FROM tasks WHERE id=?;
 
 -- name: ListTasks :many
 SELECT * FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?;
-
--- name: ListAudit :many
-SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ? OFFSET ?;

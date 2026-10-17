@@ -11,32 +11,73 @@
 </route>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import {
   NButton,
   NDataTable,
   NTabs,
+  NFormItem,
+  NInput,
   NTabPane,
   NAlert,
   type DataTableColumns,
 } from "naive-ui";
-import { useNodeAPI, type Task } from "../api/client";
+import {
+  useNodeAPI,
+  type Task,
+  type AuditRow,
+  type AuditPage,
+  type AuditFilter,
+} from "../api/client";
 import { useAction } from "../composables/action";
 const api = useNodeAPI();
 const { request } = api;
 
 const { run, busy } = useAction(),
   tasks = ref<Task[]>([]);
-interface Audit {
-  id: string;
-  action: string;
-  principal: string;
-  resource_id: string;
-  outcome: string;
-  created_at: number;
+const audits = ref<AuditPage | null>(null),
+  offset = ref(0),
+  tab = ref("tasks");
+function localTime(value: number) {
+  const date = new Date(value);
+  return new Date(value - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
 }
-const audits = ref<Audit[]>([]),
-  offset = ref(0);
+const filter = reactive({
+  from: localTime(Date.now() - 24 * 3600_000),
+  until: localTime(Date.now()),
+  principal: "",
+  action: "",
+  resource_id: "",
+  outcome: "",
+  request_id: "",
+});
+const applied = ref<AuditFilter | null>(null),
+  cursors = ref<string[]>([""]),
+  auditPage = ref(0);
+function queryFilter(): AuditFilter {
+  const from = new Date(filter.from).getTime() / 1000;
+  const until = new Date(filter.until).getTime() / 1000 + 59;
+  if (
+    !Number.isFinite(from) ||
+    !Number.isFinite(until) ||
+    from <= 0 ||
+    until < from ||
+    until - from > 90 * 24 * 3600 ||
+    until > Date.now() / 1000 + 60
+  )
+    throw new Error("请选择有效起止时间，范围最多九十天");
+  return {
+    from: Math.floor(from),
+    until: Math.floor(until),
+    principal: filter.principal,
+    action: filter.action,
+    resource_id: filter.resource_id,
+    outcome: filter.outcome,
+    request_id: filter.request_id,
+  };
+}
 const taskKinds: Record<string, string> = {
   "component.install": "Nginx 首次安装",
   "component.switch": "Nginx 组件切换",
@@ -159,8 +200,9 @@ const taskColumns: DataTableColumns<Task> = [
     render: (r) => new Date(r.created_at * 1000).toLocaleString(),
   },
 ];
-const auditColumns: DataTableColumns<Audit> = [
+const auditColumns: DataTableColumns<AuditRow> = [
   { title: "操作", key: "action" },
+  { title: "请求标识", key: "request_id" },
   { title: "操作者", key: "principal" },
   { title: "资源", key: "resource_id" },
   { title: "结果", key: "outcome" },
@@ -170,21 +212,63 @@ const auditColumns: DataTableColumns<Audit> = [
     render: (r) => new Date(r.created_at * 1000).toLocaleString(),
   },
 ];
-async function load() {
+async function loadTasks() {
   await run(async () => {
-    const result = await Promise.all([
-      request<Task[]>({ url: "/tasks", params: { offset: offset.value } }),
-      request<Audit[]>({ url: "/audit", params: { offset: offset.value } }),
-    ]);
-    tasks.value = result[0];
-    audits.value = result[1];
+    tasks.value = await request<Task[]>({
+      url: "/tasks",
+      params: { offset: offset.value },
+    });
   });
 }
-async function page(delta: number) {
-  offset.value = Math.max(0, offset.value + delta);
-  await load();
+async function searchAudit() {
+  await run(async () => {
+    const input = queryFilter();
+    const result = await api.audit({ ...input, limit: 30 });
+    applied.value = input;
+    audits.value = result;
+    cursors.value = [result.start_cursor];
+    auditPage.value = 0;
+  });
 }
-onMounted(load);
+async function load() {
+  if (tab.value === "audit") await searchAudit();
+  else await loadTasks();
+}
+async function changeTab(value: string) {
+  if (busy.value) return;
+  tab.value = value;
+  if (value === "audit" && !audits.value) await searchAudit();
+}
+async function page(delta: number) {
+  if (tab.value === "tasks") {
+    offset.value = Math.max(0, offset.value + delta * 30);
+    await loadTasks();
+    return;
+  }
+  if (!applied.value || !audits.value) return;
+  await run(async () => {
+    const next = auditPage.value + delta;
+    if (next < 0 || (delta > 0 && !audits.value?.more)) return;
+    const cursor = delta > 0 ? audits.value!.cursor : cursors.value[next];
+    const result = await api.audit({ ...applied.value!, limit: 30, cursor });
+    if (delta > 0) cursors.value[next] = cursor;
+    audits.value = result;
+    auditPage.value = next;
+  });
+}
+async function exportAudit() {
+  await run(async () => {
+    const input = queryFilter();
+    const blob = await api.exportAudit(input);
+    const url = URL.createObjectURL(blob),
+      link = document.createElement("a");
+    link.href = url;
+    link.download = `audit-${new Date().toISOString().slice(0, 10)}.jsonl`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+}
+onMounted(loadTasks);
 </script>
 <template>
   <div class="toolbar">
@@ -195,28 +279,103 @@ onMounted(load);
     >配置校验不改变运行修订。配置应用通过运行确认后才标记完成，失败时显示回滚或恢复状态。</n-alert
   >
   <section class="surface">
-    <n-tabs type="line"
+    <n-tabs type="line" :value="tab" @update:value="changeTab"
       ><n-tab-pane name="tasks" tab="执行任务"
         ><n-data-table
           :columns="taskColumns"
           :data="tasks"
           :bordered="false"
           :scroll-x="900" /></n-tab-pane
-      ><n-tab-pane name="audit" tab="操作审计"
-        ><n-data-table
-          :columns="auditColumns"
-          :data="audits"
-          :bordered="false"
-          :scroll-x="800" /></n-tab-pane
+      ><n-tab-pane name="audit" tab="操作审计">
+        <div class="page-stack">
+          <div class="grid-2">
+            <NFormItem label="开始时间"
+              ><input v-model="filter.from" type="datetime-local"
+            /></NFormItem>
+            <NFormItem label="结束时间"
+              ><input v-model="filter.until" type="datetime-local"
+            /></NFormItem>
+            <NFormItem label="操作者"
+              ><NInput
+                v-model:value="filter.principal"
+                placeholder="精确匹配，留空为全部"
+                :maxlength="128"
+            /></NFormItem>
+            <NFormItem label="操作"
+              ><NInput
+                v-model:value="filter.action"
+                placeholder="如 nginx.apply"
+                :maxlength="128"
+            /></NFormItem>
+            <NFormItem label="资源标识"
+              ><NInput
+                v-model:value="filter.resource_id"
+                placeholder="精确匹配，留空为全部"
+                :maxlength="128"
+            /></NFormItem>
+            <NFormItem label="执行结果"
+              ><NInput
+                v-model:value="filter.outcome"
+                placeholder="如 succeeded"
+                :maxlength="128"
+            /></NFormItem>
+            <NFormItem label="请求标识"
+              ><NInput
+                v-model:value="filter.request_id"
+                placeholder="精确匹配，留空为全部"
+                :maxlength="128"
+            /></NFormItem>
+          </div>
+          <div class="toolbar">
+            <NButton type="primary" :disabled="busy" @click="searchAudit"
+              >查询</NButton
+            >
+            <NButton :disabled="busy" @click="exportAudit"
+              >下载审计归档</NButton
+            >
+          </div>
+          <p class="muted">
+            归档包含节点、查询范围、记录总数与完整记录摘要，源记录保留。单次最多扫描一万条、输出
+            8 MiB，超出时请缩小时间范围。
+          </p>
+          <NAlert v-if="audits?.notice" type="info">{{ audits.notice }}</NAlert>
+          <n-data-table
+            :columns="auditColumns"
+            :data="audits?.rows ?? []"
+            :bordered="false"
+            :scroll-x="1000"
+          /></div></n-tab-pane
     ></n-tabs>
     <div class="pagination">
-      <n-button :disabled="!offset || busy" @click="page(-30)">上一页</n-button
-      ><span class="muted">第 {{ offset / 30 + 1 }} 页</span
-      ><n-button
-        :disabled="busy || (tasks.length < 30 && audits.length < 30)"
-        @click="page(30)"
-        >下一页</n-button
+      <NButton
+        :disabled="busy || (tab === 'tasks' ? !offset : !auditPage)"
+        @click="page(-1)"
+        >上一页</NButton
+      >
+      <span class="muted"
+        >第 {{ tab === "tasks" ? offset / 30 + 1 : auditPage + 1 }} 页</span
+      >
+      <NButton
+        :disabled="
+          busy || (tab === 'tasks' ? tasks.length < 30 : !audits?.more)
+        "
+        @click="page(1)"
+        >下一页</NButton
       >
     </div>
   </section>
 </template>
+
+<style scoped>
+input[type="datetime-local"] {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #d8dee8;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  box-sizing: border-box;
+}
+</style>

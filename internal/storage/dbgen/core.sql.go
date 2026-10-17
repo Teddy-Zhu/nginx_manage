@@ -171,46 +171,6 @@ func (q *Queries) GetUser(ctx context.Context) (User, error) {
 	return i, err
 }
 
-const listAudit = `-- name: ListAudit :many
-SELECT id, request_id, principal, "action", resource_id, outcome, created_at FROM audit_logs ORDER BY created_at DESC LIMIT ? OFFSET ?
-`
-
-type ListAuditParams struct {
-	Limit  int64 `json:"limit"`
-	Offset int64 `json:"offset"`
-}
-
-func (q *Queries) ListAudit(ctx context.Context, arg ListAuditParams) ([]AuditLog, error) {
-	rows, err := q.db.QueryContext(ctx, listAudit, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AuditLog{}
-	for rows.Next() {
-		var i AuditLog
-		if err := rows.Scan(
-			&i.ID,
-			&i.RequestID,
-			&i.Principal,
-			&i.Action,
-			&i.ResourceID,
-			&i.Outcome,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRevisions = `-- name: ListRevisions :many
 SELECT id,parent_id,version,state,created_at,created_by FROM config_revisions ORDER BY version DESC LIMIT ? OFFSET ?
 `

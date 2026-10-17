@@ -1378,6 +1378,53 @@ type ComponentOperation struct {
 	UpdatedAt     int64                      `json:"updated_at"`
 }
 
+// AuditFilter defines model for AuditFilter.
+type AuditFilter struct {
+	From       int64   `json:"from"`
+	Until      int64   `json:"until"`
+	Principal  *string `json:"principal,omitempty"`
+	Action     *string `json:"action,omitempty"`
+	ResourceId *string `json:"resource_id,omitempty"`
+	Outcome    *string `json:"outcome,omitempty"`
+	RequestId  *string `json:"request_id,omitempty"`
+}
+
+// AuditRow defines model for AuditRow.
+type AuditRow struct {
+	Id         string `json:"id"`
+	RequestId  string `json:"request_id"`
+	Principal  string `json:"principal"`
+	Action     string `json:"action"`
+	ResourceId string `json:"resource_id"`
+	Outcome    string `json:"outcome"`
+	CreatedAt  int64  `json:"created_at"`
+}
+
+// AuditPage defines model for AuditPage.
+type AuditPage struct {
+	StartCursor string     `json:"start_cursor"`
+	Rows        []AuditRow `json:"rows"`
+	Cursor      string     `json:"cursor"`
+	More        bool       `json:"more"`
+	Scanned     int        `json:"scanned"`
+	Notice      string     `json:"notice"`
+}
+
+// AuditArchiveManifest defines model for AuditArchiveManifest.
+type AuditArchiveManifest struct {
+	Type       string      `json:"type"`
+	Schema     int         `json:"schema"`
+	Id         string      `json:"id"`
+	NodeId     string      `json:"node_id"`
+	CreatedAt  int64       `json:"created_at"`
+	Filter     AuditFilter `json:"filter"`
+	Count      int         `json:"count"`
+	RowsSha256 string      `json:"rows_sha256"`
+}
+
+// ExportAuditJSONRequestBody defines body for ExportAudit.
+type ExportAuditJSONRequestBody = AuditFilter
+
 // ComponentOverview defines model for ComponentOverview.
 type ComponentOverview struct {
 	SwitchAvailable  bool               `json:"switch_available"`
@@ -3885,8 +3932,20 @@ type UpdateACMEPolicyParams struct {
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+	From       int64   `form:"from" json:"from"`
+	Until      int64   `form:"until" json:"until"`
+	Limit      *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor     *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Principal  *string `form:"principal,omitempty" json:"principal,omitempty"`
+	Action     *string `form:"action,omitempty" json:"action,omitempty"`
+	ResourceId *string `form:"resource_id,omitempty" json:"resource_id,omitempty"`
+	Outcome    *string `form:"outcome,omitempty" json:"outcome,omitempty"`
+	RequestId  *string `form:"request_id,omitempty" json:"request_id,omitempty"`
+}
+
+// ExportAuditParams defines parameters for ExportAudit.
+type ExportAuditParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
 // BootstrapJSONBody defines parameters for Bootstrap.
@@ -4846,6 +4905,9 @@ type ServerInterface interface {
 
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
+
+	// (POST /audit/export)
+	ExportAudit(w http.ResponseWriter, r *http.Request, params ExportAuditParams)
 
 	// (POST /bootstrap)
 	Bootstrap(w http.ResponseWriter, r *http.Request, params BootstrapParams)
@@ -5822,47 +5884,92 @@ func (siw *ServerInterfaceWrapper) UpdateACMEPolicy(w http.ResponseWriter, r *ht
 
 // ListAudit operation middleware
 func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
 	var params ListAuditParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
+	if err := runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+	if err := runtime.BindQueryParameterWithOptions("form", true, true, "until", r.URL.Query(), &params.Until, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
+		}
+		return
+	}
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
 		}
 		return
 	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
 		return
 	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAudit(w, r, params)
-	}))
-
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "principal", r.URL.Query(), &params.Principal, runtime.BindQueryParameterOptions{Type: "string", Format: ""}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "principal"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "principal", Err: err})
+		}
+		return
+	}
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "resource_id", r.URL.Query(), &params.ResourceId, runtime.BindQueryParameterOptions{Type: "string", Format: ""}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "resource_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resource_id", Err: err})
+		}
+		return
+	}
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "outcome", r.URL.Query(), &params.Outcome, runtime.BindQueryParameterOptions{Type: "string", Format: ""}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "outcome"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "outcome", Err: err})
+		}
+		return
+	}
+	if err := runtime.BindQueryParameterWithOptions("form", true, false, "request_id", r.URL.Query(), &params.RequestId, runtime.BindQueryParameterOptions{Type: "string", Format: ""}); err != nil {
+		var required *runtime.RequiredParameterError
+		if errors.As(err, &required) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "request_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "request_id", Err: err})
+		}
+		return
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.ListAudit(w, r, params) }))
 	for _, middleware := range siw.HandlerMiddlewares {
 		handler = middleware(handler)
 	}
-
 	handler.ServeHTTP(w, r)
 }
 
@@ -8476,6 +8583,47 @@ func (siw *ServerInterfaceWrapper) DownloadLogs(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DownloadLogs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportAudit operation middleware
+func (siw *ServerInterfaceWrapper) ExportAudit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportAuditParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportAudit(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11988,6 +12136,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks", wrapper.ListTasks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks/{id}", wrapper.GetTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/audit/export", wrapper.ExportAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/logs/sources", wrapper.ListLogSources)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/logs/policy", wrapper.GetLogPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/logs/policy", wrapper.SetLogPolicy)

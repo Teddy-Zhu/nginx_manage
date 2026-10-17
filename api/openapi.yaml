@@ -1302,15 +1302,9 @@ paths:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
   /audit:
-    get:
-      operationId: listAudit
-      x-scopes: [read]
-      parameters:
-        - { $ref: '#/components/parameters/Limit' }
-        - { $ref: '#/components/parameters/Offset' }
-      responses:
-        '200': { $ref: '#/components/responses/JSON' }
-        default: { $ref: '#/components/responses/JSON' }
+    {"get": {"operationId": "listAudit", "x-scopes": ["read"], "parameters": [{"name": "from", "in": "query", "required": true, "schema": {"type": "integer", "format": "int64"}}, {"name": "until", "in": "query", "required": true, "schema": {"type": "integer", "format": "int64"}}, {"$ref": "#/components/parameters/Limit"}, {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 1024}}, {"name": "principal", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "action", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "resource_id", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "outcome", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "request_id", "in": "query", "schema": {"type": "string", "maxLength": 128}}], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
+  /audit/export:
+    {"post": {"operationId": "exportAudit", "x-scopes": ["read"], "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AuditFilter"}}}}, "responses": {"200": {"description": "完整有界审计归档，首行清单及后续记录行；不删除源记录", "headers": {"X-Archive-SHA256": {"schema": {"type": "string"}}}, "content": {"application/x-ndjson": {"schema": {"type": "string", "format": "binary"}}}}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /logs/sources:
     get:
       operationId: listLogSources
@@ -2304,6 +2298,14 @@ components:
       {"type": "object", "required": ["task_id", "phase", "deadline", "root_requested", "root_epoch", "error", "created_at", "updated_at", "owner_task_id"], "properties": {"task_id": {"type": "string"}, "phase": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "root_requested": {"type": "boolean"}, "root_epoch": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "owner_task_id": {"type": "string"}}}
     MaintenanceView:
       {"type": "object", "required": ["phase", "active", "agent", "reason"], "properties": {"phase": {"type": "string"}, "active": {"type": "integer", "format": "int64"}, "agent": {"$ref": "#/components/schemas/MaintenanceRootStatus"}, "reason": {"type": "string"}, "session": {"$ref": "#/components/schemas/MaintenanceSession"}}}
+    AuditFilter:
+      {"type": "object", "additionalProperties": false, "required": ["from", "until"], "properties": {"from": {"type": "integer", "format": "int64"}, "until": {"type": "integer", "format": "int64"}, "principal": {"type": "string", "maxLength": 128}, "action": {"type": "string", "maxLength": 128}, "resource_id": {"type": "string", "maxLength": 128}, "outcome": {"type": "string", "maxLength": 128}, "request_id": {"type": "string", "maxLength": 128}}}
+    AuditRow:
+      {"type": "object", "additionalProperties": false, "required": ["id", "request_id", "principal", "action", "resource_id", "outcome", "created_at"], "properties": {"id": {"type": "string"}, "request_id": {"type": "string"}, "principal": {"type": "string"}, "action": {"type": "string"}, "resource_id": {"type": "string"}, "outcome": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}}}
+    AuditPage:
+      {"type": "object", "additionalProperties": false, "required": ["rows", "cursor", "more", "scanned", "notice", "start_cursor"], "properties": {"rows": {"type": "array", "items": {"$ref": "#/components/schemas/AuditRow"}}, "cursor": {"type": "string"}, "more": {"type": "boolean"}, "scanned": {"type": "integer"}, "notice": {"type": "string"}, "start_cursor": {"type": "string"}}}
+    AuditArchiveManifest:
+      {"type": "object", "additionalProperties": false, "required": ["type", "schema", "id", "node_id", "created_at", "filter", "count", "rows_sha256"], "properties": {"type": {"type": "string"}, "schema": {"type": "integer"}, "id": {"type": "string"}, "node_id": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "filter": {"$ref": "#/components/schemas/AuditFilter"}, "count": {"type": "integer"}, "rows_sha256": {"type": "string"}}}
     NginxSwitchPlan:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "plan_id", "asset_id", "manifest_sha256", "trust_sha256", "expected_sha256", "expected_revision", "expected_deployment", "prerelease", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "plan_id": {"type": "string"}, "asset_id": {"type": "string"}, "manifest_sha256": {"type": "string"}, "trust_sha256": {"type": "string"}, "expected_sha256": {"type": "string"}, "expected_revision": {"type": "string"}, "expected_deployment": {"type": "string"}, "prerelease": {"type": "boolean"}, "allow_downtime": {"type": "boolean"}}}
     NginxSwitchCreateInput:

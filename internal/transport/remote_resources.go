@@ -147,7 +147,7 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 		s.fail(w, r, fault.New(http.StatusBadGateway, "REMOTE_INVALID_RESPONSE", "目标响应不符合资源合同"))
 		return
 	}
-	for _, key := range []string{"Content-Type", "Content-Disposition", "X-Log-Gap", "X-Log-Truncated", "Retry-After"} {
+	for _, key := range []string{"Content-Type", "Content-Disposition", "X-Log-Gap", "X-Log-Truncated", "X-Archive-SHA256", "Retry-After"} {
 		if value := response.Header.Get(key); value != "" {
 			w.Header().Set(key, value)
 		}

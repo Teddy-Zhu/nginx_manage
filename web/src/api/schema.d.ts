@@ -1532,6 +1532,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 完整有界审计归档，首行清单及后续记录行；不删除源记录。 */
+        post: operations["exportAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/logs/download": {
         parameters: {
             query?: never;
@@ -2085,6 +2102,42 @@ export interface components {
             agent: components["schemas"]["MaintenanceRootStatus"];
             reason: string;
             session?: components["schemas"]["MaintenanceSession"];
+        };
+        AuditFilter: {
+            from: number;
+            until: number;
+            principal?: string;
+            action?: string;
+            resource_id?: string;
+            outcome?: string;
+            request_id?: string;
+        };
+        AuditRow: {
+            id: string;
+            request_id: string;
+            principal: string;
+            action: string;
+            resource_id: string;
+            outcome: string;
+            created_at: number;
+        };
+        AuditPage: {
+            start_cursor: string;
+            rows: components["schemas"]["AuditRow"][];
+            cursor: string;
+            more: boolean;
+            scanned: number;
+            notice: string;
+        };
+        AuditArchiveManifest: {
+            type: string;
+            schema: number;
+            id: string;
+            node_id: string;
+            created_at: number;
+            filter: components["schemas"]["AuditFilter"];
+            count: number;
+            rows_sha256: string;
         };
         NginxSwitchPlan: {
             maintenance_id: string;
@@ -5669,9 +5722,16 @@ export interface operations {
     };
     listAudit: {
         parameters: {
-            query?: {
+            query: {
+                from: number;
+                until: number;
                 limit?: components["parameters"]["Limit"];
-                offset?: components["parameters"]["Offset"];
+                cursor?: string;
+                principal?: string;
+                action?: string;
+                resource_id?: string;
+                outcome?: string;
+                request_id?: string;
             };
             header?: never;
             path?: never;
@@ -5790,6 +5850,35 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": string;
+                };
+            };
+            default: components["responses"]["JSON"];
+        };
+    };
+    exportAudit: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditFilter"];
+            };
+        };
+        responses: {
+            /** @description 完整有界审计归档，源记录保留。 */
+            200: {
+                headers: {
+                    "X-Archive-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
                 };
             };
             default: components["responses"]["JSON"];

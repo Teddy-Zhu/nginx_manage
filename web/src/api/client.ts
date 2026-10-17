@@ -1,5 +1,5 @@
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
-import type { components } from "./schema";
+import type { components, operations } from "./schema";
 import { onScopeDispose } from "vue";
 import { useRoute } from "vue-router";
 import { invalidateNodeScope, nodeGeneration, nodeRequestError, pageScope, scopeSignal, selectedTarget, sourceNodeId, type RequestScope } from "./context";
@@ -8,6 +8,10 @@ type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
 type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
+export type AuditFilter = components["schemas"]["AuditFilter"];
+export type AuditRow = components["schemas"]["AuditRow"];
+export type AuditPage = components["schemas"]["AuditPage"];
+export type AuditQuery = operations["listAudit"]["parameters"]["query"];
 export type BackupInput = components["schemas"]["BackupInput"];
 export type BackupPolicyInput = components["schemas"]["BackupPolicyInput"];
 export type BackupPolicy = components["schemas"]["BackupPolicy"];
@@ -332,11 +336,11 @@ export function apiError(error: unknown): ApiError {
   return normalized;
 }
 
-async function downloadLogFileFor(data: LogQuery, scope: RequestScope) {
+async function downloadJSONLinesFor(path: string, data: unknown, scope: RequestScope) {
   scope = { ...scope, signal: scopeSignal(scope) };
   assertScope(scope);
   try {
-    const result = await http.post<Blob>(endpoint("/logs/download", scope), data, {
+    const result = await http.post<Blob>(endpoint(path, scope), data, {
       responseType: "blob",
       timeout: 25_000,
       headers: { "X-CSRF-Token": csrf },
@@ -347,11 +351,7 @@ async function downloadLogFileFor(data: LogQuery, scope: RequestScope) {
       !String(result.headers["content-type"]).startsWith("application/x-ndjson")
     )
       throw new ApiError("INVALID_RESPONSE", "下载返回格式无效", result.status);
-    return {
-      blob: result.data,
-      gap: result.headers["x-log-gap"] === "true",
-      truncated: result.headers["x-log-truncated"] === "true",
-    };
+    return result;
   } catch (error) {
     assertScope(scope);
     if (
@@ -370,6 +370,28 @@ async function downloadLogFileFor(data: LogQuery, scope: RequestScope) {
     }
     throw apiError(error);
   }
+}
+
+async function downloadLogFileFor(data: LogQuery, scope: RequestScope) {
+  const result = await downloadJSONLinesFor("/logs/download", data, scope);
+  return {
+    blob: result.data,
+    gap: result.headers["x-log-gap"] === "true",
+    truncated: result.headers["x-log-truncated"] === "true",
+  };
+}
+
+async function exportAuditFor(data: AuditFilter, scope: RequestScope) {
+  const result = await downloadJSONLinesFor("/audit/export", data, scope);
+  const expected = String(result.headers["x-archive-sha256"] ?? "");
+  if (result.data.size > 8 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(expected))
+    throw new ApiError("INVALID_RESPONSE", "审计归档大小或摘要无效", result.status);
+  const digest = await crypto.subtle.digest("SHA-256", await result.data.arrayBuffer());
+  const actual = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  assertScope(scope);
+  if (actual !== expected)
+    throw new ApiError("INVALID_RESPONSE", "审计归档摘要不匹配，请重新下载", result.status);
+  return result.data;
 }
 
 function followLogsFor(
@@ -427,6 +449,8 @@ function createAPI(scope: RequestScope) {
   return {
   request,
   downloadLogFile: (data: LogQuery) => downloadLogFileFor(data, scope),
+  audit: (params: AuditQuery) => request<AuditPage>({ url: "/audit", params }),
+  exportAudit: (data: AuditFilter) => exportAuditFor(data, scope),
   followLogs: (query: LogQuery, page: (value: LogPage) => void, error: (value: ApiError) => void) => followLogsFor(scope, query, page, error),
   nodes: (signal?: AbortSignal) => request<NodeConnection[]>({ url: "/nodes", signal }),
   pairings: () => request<Pairing[]>({ url: "/remote/pairings" }),

@@ -3731,10 +3731,73 @@
             }
           },
           {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
             "$ref": "./openapi.yaml#/components/parameters/Limit"
           },
           {
-            "$ref": "./openapi.yaml#/components/parameters/Offset"
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "principal",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "resource_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
           }
         ],
         "responses": {
@@ -3748,10 +3811,17 @@
         "x-local-operation": "listAudit",
         "x-forward-path": "/audit",
         "x-response-kind": "json",
-        "x-body-limit": 4194304,
+        "x-body-limit": 4096,
         "x-query-keys": [
+          "from",
+          "until",
           "limit",
-          "offset"
+          "cursor",
+          "principal",
+          "action",
+          "resource_id",
+          "outcome",
+          "request_id"
         ]
       }
     },
@@ -6030,6 +6100,66 @@
             "$ref": "./openapi.yaml#/components/responses/JSON"
           }
         }
+      }
+    },
+    "/nodes/{connection}/audit/export": {
+      "post": {
+        "operationId": "remoteExportAudit",
+        "x-scopes": [
+          "read"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/AuditFilter"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "完整有界审计归档，首行清单及后续记录行；不删除源记录",
+            "headers": {
+              "X-Archive-SHA256": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "exportAudit",
+        "x-forward-path": "/audit/export",
+        "x-response-kind": "ndjson",
+        "x-body-limit": 4096,
+        "x-query-keys": []
       }
     }
   },
