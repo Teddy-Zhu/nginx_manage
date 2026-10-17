@@ -329,10 +329,10 @@ const firewalldPreviewColumns: DataTableColumns<
     ellipsis: { tooltip: true },
   },
 ];
-const ufwPreviewColumns: DataTableColumns<FirewallPreview["entries"][number]> = [
+const commandPreviewColumns: DataTableColumns<FirewallPreview["entries"][number]> = [
   ...previewColumns,
   {
-    title: "UFW 命令预览",
+    title: "生成命令预览",
     key: "expression",
     minWidth: 440,
     ellipsis: { tooltip: true },
@@ -427,7 +427,7 @@ onUnmounted(() => controller.abort());
     /></n-form-item>
     <p class="muted">
       按顺序升序匹配；顺序相同按规则 ID
-      排序。允许策略仅在本应用范围内生效；未匹配流量交回其余系统策略。选择后端不会切换系统
+      排序。允许结果受目标后端和其他系统策略影响；未匹配流量交回其余系统策略。选择后端不会切换系统
       alternatives 或停止现有管理器。
     </p>
     <p v-if="policy.backend === 'firewalld'" class="muted">
@@ -438,6 +438,10 @@ onUnmounted(() => controller.abort());
     <p v-if="policy.backend === 'ufw'" class="muted">
       UFW 仅承接主机入站，重复匹配条件须先合并；允许动作可能提前结束后续 UFW
       规则。命令预览尚未确定与既有规则的插入关系。
+    </p>
+    <p v-if="['iptables-nft', 'iptables-legacy'].includes(policy.backend)" class="muted">
+      主机入站规则按地址族独立编译。允许采用 ACCEPT，可能结束后续 INPUT 判断；
+      未匹配流量返回调用链，保留系统默认策略。Docker 发布端口须单独核对转发路径。
     </p>
     <div class="page-toolbar">
       <span>{{ policy.rules.length }} / 1000 条规则</span
@@ -503,6 +507,22 @@ onUnmounted(() => controller.abort());
           <dt>规则顺序</dt>
           <dd>按期望策略顺序编译，尚未确定与既有规则的插入关系</dd>
         </template>
+        <template v-else-if="preview.iptables">
+          <dt>目标表 / 自有链</dt>
+          <dd>{{ preview.table }} / {{ preview.chain }}</dd>
+          <dt>挂接范围</dt>
+          <dd>INPUT；实际跳转位置须在执行计划中核对</dd>
+          <dt>默认目标</dt>
+          <dd>RETURN；交回其余系统规则，不修改全局默认策略</dd>
+          <dt>地址族与显式工具</dt>
+          <dd v-for="family in preview.iptables.families" :key="family.family">
+            {{ familyName(family.family) }} · {{ family.binary }} ·
+            {{ family.generated_rules }} 条生成规则
+          </dd>
+          <dd v-if="!preview.iptables.families.length">无启用规则，未生成地址族规则</dd>
+          <dt>完整参数规模</dt>
+          <dd>{{ preview.iptables.program_bytes }} 字节，未执行命令</dd>
+        </template>
         <template v-else>
           <dt>目标表 / 链</dt>
           <dd>{{ preview.table }} / {{ preview.chain }}</dd>
@@ -520,6 +540,10 @@ onUnmounted(() => controller.abort());
           >
           <template v-else-if="preview.backend === 'ufw'"
             >{{ preview.generated_rules }} 条 UFW 命令</template
+          >
+          <template v-else-if="preview.iptables"
+            >{{ preview.generated_rules }} 条生成规则，包含
+            {{ preview.iptables.base_rules }} 条会话/回环返回规则</template
           >
           <template v-else
             >{{ preview.generated_rules }} 条内核规则，包含 2
@@ -569,8 +593,8 @@ onUnmounted(() => controller.abort());
         :columns="
           preview.firewalld
             ? firewalldPreviewColumns
-            : preview.backend === 'ufw'
-              ? ufwPreviewColumns
+            : preview.backend === 'ufw' || preview.iptables
+              ? commandPreviewColumns
               : previewColumns
         "
         :data="preview.entries"

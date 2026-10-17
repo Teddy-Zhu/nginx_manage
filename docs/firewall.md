@@ -265,3 +265,14 @@ root 业务快照 schema 为 3，绑定原已确认选择、原文件内容/属�
 Python 隔离及源包定位依据：[命令行选项](https://docs.python.org/3/using/cmdline.html)、[site 模块](https://docs.python.org/3/library/site.html)、[importlib](https://docs.python.org/3/library/importlib.html)。
 
 进程许可与恢复依据：[Python execve 描述符及进程替换语义](https://docs.python.org/3/library/os.html#os.execve)、[父进程死亡信号](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)、[pidfd_open](https://man7.org/linux/man-pages/man2/pidfd_open.2.html)、[pidfd_send_signal](https://man7.org/linux/man-pages/man2/pidfd_send_signal.2.html) 与 [Linux OFD/POSIX 文件锁互斥和继承语义](https://man7.org/linux/man-pages/man2/F_OFD_SETLK.2const.html)。
+
+
+## iptables 主机入站编译
+
+`iptables-nft` 与 `iptables-legacy` 使用独立的类型化参数编译器，按规范业务顺序展开 TCP/UDP、单端口/范围、来源、入站接口及 IPv4/IPv6；仅为实际使用的地址族生成规则。每族先返回回环和 ESTABLISHED/RELATED 流量，保护项先于业务项；业务规则仅匹配 conntrack NEW。allow 使用 ACCEPT，可能提前结束调用链后续过滤；deny 使用 DROP，TCP reject 返回 RST，UDP reject 使用对应地址族的端口不可达。未匹配流量返回调用链，不修改全局 INPUT 默认策略。逻辑目标为 `filter/NGINXPANEL-HOST`，名称和注释不构成所有权证明，不生成链创建、跳转或宿主机写入。
+
+全部生成规则含基础返回与入口保护合计最多 8192 条，完整参数及目标身份 JSON 最多 2 MiB，摘要覆盖所选后端、完整顺序和两个地址族；页面显示每族显式工具名、数量、总字节及前 128 条业务表达式，不依赖默认 alternatives 推断显式工具。逻辑预览复用完整五份内核视图，核对单一管理器、目标后端、显式 command/save 观测和 filter/INPUT 默认策略；混合后端、读取不完整或同名链存在时给出明确原因，已有 INPUT 规则及默认 DROP 单独提示。编译不探测/加载内核扩展，也不证明规则能被执行工具接受。
+
+跨环境迁移复用同一编译及环境检查，只保存中立期望；接口仍须显式映射，源配置不授予目标规则所有权。`can_apply=false`；iptables 独立登记、代际切换、限时执行与补偿恢复仍须接入，不能从编译结果调用现有 nftables/UFW 执行器。Docker 发布端口不转换为 INPUT，转发挂接与原始目的连接跟踪另行适配。管理入口的中立策略判定已接入各后端保护编译，包括 UFW；这只核对本应用对新连接的处理，不证明其他系统规则或外部路径可达。
+
+语义依据：[iptables 官方手册](https://man7.org/linux/man-pages/man8/iptables.8.html)、[conntrack 与 REJECT 扩展手册](https://man7.org/linux/man-pages/man8/iptables-extensions.8.html)；Docker 转发边界见 [Docker iptables 文档](https://docs.docker.com/engine/network/firewall-iptables/)。本阶段未运行生成器、构建、类型检查、lint、测试或真实 iptables 命令，行为与容量待 P5 集中验证。

@@ -184,6 +184,7 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 		return nil
 	}
 	info := &FirewallPlan{Mode: "preserve", State: "preserved", SourceBackend: source.SourceBackend, SourceRules: len(source.Rules), Interfaces: []FirewallInterface{}, Entries: []firewall.Rule{}, Warnings: []string{}}
+	var iptables *firewall.IPTablesProgram
 	st.Plan.Firewall = info
 	mapped := []firewall.Rule{}
 	names := map[string]bool{}
@@ -255,7 +256,17 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 				}
 				info.Warnings = append(info.Warnings, "UFW 编译受阻："+known.Message)
 			}
-			info.Warnings = append(info.Warnings, "目标 UFW 须独立完成本机空命名空间授权和入口保护预演；迁入期望不写入 UFW，应用与独立恢复尚未接入")
+			info.Warnings = append(info.Warnings, "目标 UFW 须独立完成本机空命名空间授权和入口保护预演；迁入期望不写入 UFW，仍须显式应用并用新连接确认")
+		} else if state.Candidate.Backend == "iptables-nft" || state.Candidate.Backend == "iptables-legacy" {
+			iptables, err = firewall.CompileIPTables(state.Candidate)
+			if err != nil {
+				var known *fault.Error
+				if !errors.As(err, &known) {
+					return err
+				}
+				info.Warnings = append(info.Warnings, state.Candidate.Backend+" 编译受阻："+known.Message)
+			}
+			info.Warnings = append(info.Warnings, "目标 iptables 自有链登记、限时应用与独立恢复尚未接入；迁移只保存期望，不切换系统后端或写入内核")
 		} else if _, err = firewall.CompileNFT(state.Candidate); err != nil {
 			info.Warnings = append(info.Warnings, "目标所选后端或规则路径尚不能由当前执行器应用；可保存期望，生效须完成目标适配")
 		}
@@ -270,7 +281,7 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 		add("firewall", "policy", "review", "配置包含防火墙中立规则；当前选择保留目标期望及运行策略")
 	}
 	observed := map[string]bool{}
-	if st.Firewall != nil && len(ordered) > 0 {
+	if st.Firewall != nil && (len(ordered) > 0 || iptables != nil) {
 		reader, ok := s.Agent.(interface {
 			ReadFirewall(context.Context) (firewall.Observation, error)
 		})
@@ -284,10 +295,20 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 				for _, name := range view.Interfaces {
 					observed[name] = true
 				}
+				if iptables != nil {
+					errors, warnings := firewall.IPTablesEnvironment(view, iptables)
+					info.Warnings = append(info.Warnings, errors...)
+					info.Warnings = append(info.Warnings, warnings...)
+				}
 			}
 		}
 		if !available {
-			info.Warnings = append(info.Warnings, "目标宿主机接口清单无法核对；保存不代表绑定可用，实际应用前仍须重新检测")
+			if len(ordered) > 0 {
+				info.Warnings = append(info.Warnings, "目标宿主机接口清单无法核对；保存不代表绑定可用，实际应用前仍须重新检测")
+			}
+			if iptables != nil {
+				info.Warnings = append(info.Warnings, "目标 iptables 管理器、显式工具及内核规则视图无法核对；迁入策略未应用")
+			}
 		}
 	}
 	for _, name := range ordered {

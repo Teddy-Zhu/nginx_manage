@@ -70,6 +70,7 @@ type PreviewEntry struct {
 	Priority        int       `json:"priority"`
 }
 type Preview struct {
+	IPTables            *IPTablesPreview  `json:"iptables"`
 	Firewalld           *FirewalldPreview `json:"firewalld"`
 	TransactionHash     string            `json:"transaction_hash"`
 	TransactionBytes    int               `json:"transaction_bytes"`

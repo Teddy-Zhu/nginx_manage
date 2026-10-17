@@ -20,13 +20,22 @@ func CheckTCPIngress(ctx context.Context, policy Policy, protections []Protectio
 	if err != nil {
 		return err
 	}
-	if normalized.Backend != "direct-nftables" && normalized.Backend != "firewalld" {
-		return fault.Unavailable("当前管理入口核对不支持此防火墙后端")
-	}
-	if normalized.Backend == "firewalld" {
+	switch normalized.Backend {
+	case "direct-nftables":
+	case "ufw":
+		if _, err := CompileUFWProtected(normalized, protections); err != nil {
+			return err
+		}
+	case "iptables-nft", "iptables-legacy":
+		if _, err := CompileIPTablesProtected(normalized, protections); err != nil {
+			return err
+		}
+	case "firewalld":
 		if _, err := CompileFirewalldProtected(normalized, protections); err != nil {
 			return err
 		}
+	default:
+		return fault.Unavailable("当前管理入口核对不支持此防火墙后端")
 	}
 	requested := make([]netip.Prefix, 0, len(sources))
 	for _, source := range sources {

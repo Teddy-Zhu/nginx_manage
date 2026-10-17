@@ -4787,7 +4787,7 @@ components:
       required: ["rule_id", "family", "protocol", "source", "ports", "action", "interface", "priority", "backend_priority", "expression"]
       properties:
         backend_priority: {type: integer, nullable: true, minimum: -32768, maximum: -24577, description: firewalld 展开后的唯一负优先级；其他后端为 null。}
-        expression: {type: string, maxLength: 512, description: firewalld 生成的完整 rich rule，或 UFW 生成参数的命令预览；其他后端为空，不接受用户提供表达式或报告命令作为执行输入。}
+        expression: {type: string, maxLength: 512, description: firewalld 生成的完整 rich rule，或 UFW/iptables 生成参数的命令预览；直接 nftables 为空，不接受用户提供表达式或报告命令作为执行输入。}
         rule_id: {"type": "string"}
         family: {"type": "string"}
         protocol: {"type": "string"}
@@ -4808,11 +4808,30 @@ components:
         ingress_zones: {type: array, maxItems: 1, items: {type: string}}
         egress_zones: {type: array, maxItems: 1, items: {type: string}}
         settings_bytes: {type: integer, minimum: 0, maximum: 491520, description: 全部编译 policy 设置的规范 JSON 字节数，包含未展示的规则；为观测字典的类型标记、缺省字段及独立身份元数据保留空间。}
+    FirewallIPTablesFamilyPreview:
+      type: object
+      additionalProperties: false
+      required: [family, binary, generated_rules]
+      properties:
+        family: {type: string, enum: [ipv4, ipv6]}
+        binary: {type: string, enum: [iptables-nft, ip6tables-nft, iptables-legacy, ip6tables-legacy], description: 显式命令名，仅用于预览，不通过 PATH 或 API 请求执行。}
+        generated_rules: {type: integer, minimum: 0, maximum: 8192}
+    FirewallIPTablesPreview:
+      type: object
+      additionalProperties: false
+      required: [program_bytes, base_rules, protection_rules, families]
+      description: 主机入站的封闭参数编译，按地址族独立处理；不创建链、跳转或规则，不构成所有权与执行证明。
+      properties:
+        program_bytes: {type: integer, minimum: 0, maximum: 2097152}
+        base_rules: {type: integer, minimum: 0, maximum: 4, description: 每个使用地址族的回环及已建立/关联连接返回规则。}
+        protection_rules: {type: integer, minimum: 0, maximum: 8192}
+        families: {type: array, maxItems: 2, items: {$ref: '#/components/schemas/FirewallIPTablesFamilyPreview'}}
     FirewallPreview:
       type: object
       additionalProperties: false
-      required: ["firewalld", "kernel", "transaction_hash", "transaction_bytes", "transaction_messages", "version", "policy_hash", "backend", "compiled", "can_apply", "table", "chain", "hook", "priority", "default_policy", "logical_rules", "generated_rules", "program_hash", "entries", "truncated", "observed_at", "errors", "warnings"]
+      required: ["iptables", "firewalld", "kernel", "transaction_hash", "transaction_bytes", "transaction_messages", "version", "policy_hash", "backend", "compiled", "can_apply", "table", "chain", "hook", "priority", "default_policy", "logical_rules", "generated_rules", "program_hash", "entries", "truncated", "observed_at", "errors", "warnings"]
       properties:
+        iptables: {allOf: [{$ref: '#/components/schemas/FirewallIPTablesPreview'}], nullable: true}
         firewalld: {allOf: [{$ref: '#/components/schemas/FirewallFirewalldPreview'}], nullable: true}
         kernel: {"$ref": "#/components/schemas/FirewallKernelView"}
         transaction_hash: {"type": "string", "description": "绑定命名空间、目标表快照和含规则代次前置条件的完整新建事务摘要；不构成执行授权"}
@@ -4829,7 +4848,7 @@ components:
         priority: {"type": "integer"}
         default_policy: {"type": "string"}
         logical_rules: {"type": "integer"}
-        generated_rules: {"type": "integer", "description": "直接 nftables 为含回环/会话保护的内核规则数量；firewalld 为 rich rule 数量；UFW 为生成命令数，不计入管理器原有规则。"}
+        generated_rules: {"type": "integer", "description": "直接 nftables 为含回环/会话保护的内核规则数量；firewalld 为 rich rule 数量；UFW 为生成命令数；iptables 为各使用地址族的业务及基础返回规则合计，不计入管理器原有规则。"}
         program_hash: {"type": "string"}
         entries: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallPreviewEntry"}, "maxItems": 128}
         truncated: {"type": "boolean"}

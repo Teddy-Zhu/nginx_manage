@@ -1962,6 +1962,7 @@ type FirewallPreviewEntry struct {
 
 // FirewallPreview defines model for FirewallPreview.
 type FirewallPreview struct {
+	Iptables            *FirewallIPTablesPreview  `json:"iptables"`
 	Firewalld           *FirewallFirewalldPreview `json:"firewalld"`
 	Kernel              FirewallKernelView        `json:"kernel"`
 	TransactionHash     string                    `json:"transaction_hash"`
@@ -1985,6 +1986,18 @@ type FirewallPreview struct {
 	ObservedAt          int64                     `json:"observed_at"`
 	Errors              []string                  `json:"errors"`
 	Warnings            []string                  `json:"warnings"`
+}
+
+type FirewallIPTablesFamilyPreview struct {
+	Family         string `json:"family"`
+	Binary         string `json:"binary"`
+	GeneratedRules int    `json:"generated_rules"`
+}
+type FirewallIPTablesPreview struct {
+	ProgramBytes    int                             `json:"program_bytes"`
+	BaseRules       int                             `json:"base_rules"`
+	ProtectionRules int                             `json:"protection_rules"`
+	Families        []FirewallIPTablesFamilyPreview `json:"families"`
 }
 
 // FirewallFirewalldPreview defines model for FirewallFirewalldPreview.

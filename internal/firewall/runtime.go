@@ -189,7 +189,7 @@ func CompileNFTProtected(policy Policy, protections []Protection) (*NFTProgram, 
 	return finishNFT(base)
 }
 
-// Both backends consume the same typed entry protections. Each compiler still
+// All backends consume the same typed entry protections. Each compiler still
 // defines its own verdict semantics and placement relative to business rules.
 func protectionPolicy(protections []Protection, backend string) (Policy, error) {
 	if len(protections) > 128 {
