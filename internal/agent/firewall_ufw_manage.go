@@ -14,10 +14,24 @@ import (
 
 type UFWRegistrationStatus struct {
 	Registration firewall.RegistrationView `json:"registration"`
+	Repair       *ufwRepairStatus          `json:"repair,omitempty"`
+	RepairReason string                    `json:"repair_reason,omitempty"`
 }
 
 func ufwRegistrationStatus(ctx context.Context, dataDir string) UFWRegistrationStatus {
-	return UFWRegistrationStatus{Registration: ufwRegistrationView(ctx, dataDir, readUFW(ctx))}
+	out := UFWRegistrationStatus{Registration: ufwRegistrationView(ctx, dataDir, readUFW(ctx))}
+	v, err := loadUFWRepair(dataDir)
+	if err != nil {
+		out.RepairReason = "确认规则修复检查点无法读取"
+	} else if v != nil {
+		status := v.Status
+		out.Repair = &status
+		r, err := loadUFWReceipt(dataDir, status.ID)
+		if err != nil || !ufwRepairReceiptMatches(r, &status) || r.CandidateHash != ufwRepairHash(v) {
+			out.RepairReason = "确认规则修复独立回执尚未完成核对"
+		}
+	}
+	return out
 }
 
 func inspectUFWRegistration(ctx context.Context, dataDir string, active bool) (ufwConfigurationSnapshot, error) {
@@ -98,6 +112,16 @@ func ManageUFWRegistration(parent context.Context, dataDir, scope, action string
 	}
 	if action == "recover" && ufwChangePending(dataDir) {
 		if err = recoverUFWChange(ctx, dataDir); err != nil {
+			return ufwRegistrationStatus(ctx, dataDir), err
+		}
+	}
+	if action == "recover" {
+		// Confirmed repair acquires the registration lock itself. It must not
+		// run underneath the registration-maintenance critical section.
+		if err = recoverUFWRestore(ctx, dataDir); err != nil {
+			return ufwRegistrationStatus(ctx, dataDir), err
+		}
+		if err = reconcileUFWConfirmed(ctx, dataDir); err != nil {
 			return ufwRegistrationStatus(ctx, dataDir), err
 		}
 	}

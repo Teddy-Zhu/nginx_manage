@@ -264,7 +264,7 @@ func ufwRegistrationView(ctx context.Context, dataDir string, observed firewall.
 	}
 	out.OperationID = v.NextClaim.OperationID
 	if ufwRestorePending(dataDir) {
-		out.State, out.Reason = "recovery_required", "UFW 原重载进程或业务操作尚未完成；须由原数据目录恢复原操作，外部配置或内核冲突保留现场"
+		out.State, out.Reason = "recovery_required", "UFW 原业务、确认规则修复或子进程尚未完成；须由原数据目录恢复原操作，外部配置或内核冲突保留现场"
 		return out
 	}
 	if err = ufwRegistrationReceipt(dataDir, v); err != nil || v.State == "preparing" {
@@ -312,6 +312,15 @@ func ufwRegistrationView(ctx context.Context, dataDir string, observed firewall.
 		out.Reason = "UFW 固定配置无法完整读取"
 		return out
 	}
+	managed, err := verifyUFWConfirmedRegistration(ctx, dataDir, v.NextClaim.Owner, snapshot, observed)
+	if err != nil {
+		out.State, out.Reason = "drifted", "UFW 已确认规则与本机授权、当前配置或运行状态不一致，须由原操作核对"
+		return out
+	}
+	if managed {
+		out.State, out.Verified, out.Reason = "managed", true, "UFW 已确认规则已核对，入口连通性须独立确认"
+		return out
+	}
 	if snapshot.HasManagedMarkers {
 		out.State, out.Reason = "drifted", "存在本应用标记但尚无规则写入回执，禁止接管或删除"
 		return out
@@ -341,9 +350,9 @@ func validUFWRegistrationView(v firewall.RegistrationView) bool {
 		return false
 	}
 	switch v.State {
-	case "unavailable", "unregistered", "registered", "released", "drifted", "recovery_required":
+	case "unavailable", "unregistered", "registered", "managed", "released", "drifted", "recovery_required":
 	default:
 		return false
 	}
-	return !v.Verified || v.State == "registered" && validID(v.OperationID) && v.ObservedAt > 0
+	return !v.Verified || (v.State == "registered" || v.State == "managed") && validID(v.OperationID) && v.ObservedAt > 0
 }

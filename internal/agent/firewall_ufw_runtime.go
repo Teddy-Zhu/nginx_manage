@@ -73,98 +73,13 @@ func (f *hostFirewall) rollbackUFWLocked() error {
 	return errors.Join(err, f.remote.reconcile())
 }
 
-// Confirmed ownership is recompiled against fresh native files. Legitimate
-// foreign changes are checked against their current file/kernel pair; an old
-// complete foreign snapshot is never replayed after confirmation.
+// Confirmed ownership is recompiled against fresh native files; repair uses
+// its own intent, never the original operation's foreign-rule snapshot.
 func (f *hostFirewall) reconcileUFWConfirmedLocked(ctx context.Context) error {
-	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("ufw-business.lock")
-	if err != nil {
+	if err := reconcileUFWConfirmed(ctx, f.dataDir); err != nil {
 		return err
 	}
-	defer unlock()
-	if err = f.refreshUFWStateLocked(); err != nil {
-		return err
-	}
-	v := f.ufwState
-	if v == nil {
-		return nil
-	}
-	parent, err := loadUFWReceipt(f.dataDir, v.Operation.ID)
-	if err != nil || !ufwChangeReceiptMatches(parent, v) || !ufwChangeTerminal(v) || ufwRestoreProcessPending(f.dataDir) {
-		return errors.New("原业务或子进程尚未完成核对")
-	}
-	if v.Confirmed == nil || v.Confirmed.Action == "remove" {
-		f.policyUncertain = false
-		if strings.HasPrefix(f.problem, ufwRuntimeProblem) {
-			f.problem = ""
-		}
-		return nil
-	}
-	registrationUnlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
-	if err != nil {
-		return err
-	}
-	defer registrationUnlock()
-	authority, err := ufwRegistrationAuthority(f.dataDir)
-	if err != nil || authority.NextClaim.Owner != v.Transition.Owner || authority.NextClaim.MachineHash != v.Transition.MachineHash || authority.NextClaim.OperationID != v.Transition.RegistrationOperationID {
-		return errors.New("原确认策略不属于当前本机授权")
-	}
-	// Official status/report reads take the POSIX UFW lock themselves. Collect
-	// them before our conflicting OFD lock, then re-read flags and native state.
-	if _, err = f.checkUFWEnvironment(ctx, v.Transition.IPv6, v.Transition.Reload.Backend); err != nil {
-		return err
-	}
-	manager, err := lockUFWManager()
-	if err != nil {
-		return err
-	}
-	defer manager.Close()
-	enabled, enabledErr := ufwConfigured()
-	ipv6, ipv6Err := ufwConfigurationFlag("/etc/default/ufw", "IPV6")
-	if enabledErr != nil || ipv6Err != nil || enabled == nil || !*enabled || ipv6 == nil || *ipv6 != v.Transition.IPv6 {
-		return errors.New("UFW 持久启用状态或地址族在核对期间变化")
-	}
-	if err = v.Transition.Tools.verify(ctx); err != nil {
-		return err
-	}
-	binary, err := ufwTool()
-	if err != nil || binary != v.Transition.Tools.Files[0].File.Path {
-		return errors.New("已确认 UFW 的 CLI 选择发生变化")
-	}
-	configuration, err := readUFWConfiguration(ctx, binary, v.Transition.IPv6)
-	if err != nil {
-		return err
-	}
-	program, err := ufwPolicyProgram(v.Confirmed, v.Transition.Owner)
-	if err != nil {
-		return err
-	}
-	owned, err := ufwNativeProgram(program)
-	if err != nil {
-		return err
-	}
-	if err = verifyUFWOwnedConfiguration(configuration, v.Transition.IPv6, owned); err != nil {
-		return err
-	}
-	baseline, err := readUFWReloadBaseline(ctx, configuration, v.Transition.IPv6, &v.Transition.Tools, filepath.Dir(ufwChangePath(f.dataDir)))
-	if err != nil || baseline.Backend != v.Transition.Reload.Backend {
-		return errors.Join(err, errors.New("当前持久文件与内核运行状态不一致，须恢复确认规则"))
-	}
-	after, err := readUFWConfiguration(ctx, binary, v.Transition.IPv6)
-	if err != nil || after.Hash != configuration.Hash {
-		return errors.New("已确认规则核对期间固定配置变化")
-	}
-	if err = v.Transition.Tools.verify(ctx); err != nil {
-		return err
-	}
-	current, err := ufwTool()
-	if err != nil || current != binary {
-		return errors.New("UFW CLI 选择在确认规则核对期间变化")
-	}
-	if err = verifyUFWManagerLock(manager); err != nil {
-		return err
-	}
-	if err = ctx.Err(); err != nil {
+	if err := f.refreshUFWStateLocked(); err != nil {
 		return err
 	}
 	f.policyUncertain = false

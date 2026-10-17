@@ -14,7 +14,11 @@ import (
 var errUFWProtectionChanged = fault.Conflict("UFW 保护依据已变化，请恢复原操作")
 
 func (f *hostFirewall) checkUFWEnvironment(ctx context.Context, ipv6 bool, backend string) (firewall.Observation, error) {
-	observed := (&firewallObserver{ctx: ctx, scope: "host", dataDir: f.dataDir}).collect(ctx)
+	return checkUFWEnvironment(ctx, f.dataDir, ipv6, backend)
+}
+
+func checkUFWEnvironment(ctx context.Context, dataDir string, ipv6 bool, backend string) (firewall.Observation, error) {
+	observed := (&firewallObserver{ctx: ctx, scope: "host", dataDir: dataDir}).collect(ctx)
 	if !observed.Available || observed.Scope != "host" || observed.Manager != "ufw" || observed.Backend != backend || observed.UFW.Active == nil || !*observed.UFW.Active || observed.UFW.Enabled == nil || !*observed.UFW.Enabled || observed.UFW.IPv6 == nil || *observed.UFW.IPv6 != ipv6 || !observed.UFW.RuleInventory.Available || len(observed.Rulesets) != 5 {
 		return observed, fault.Unavailable("UFW 管理器、启用状态、地址族或内核后端已变化，保持只读")
 	}

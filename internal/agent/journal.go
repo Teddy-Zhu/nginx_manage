@@ -33,6 +33,7 @@ type Record struct {
 	ClientDeny                *clientDenyIntent                `json:"client_deny,omitempty"`
 	Firewall                  *firewall.Operation              `json:"firewall,omitempty"`
 	UFWRestore                *ufwRestoreReceipt               `json:"ufw_restore,omitempty"`
+	UFWRepair                 *ufwRepairStatus                 `json:"ufw_repair,omitempty"`
 	RelatedOperationID        string                           `json:"related_operation_id,omitempty"`
 	DisasterActivation        *DisasterActivationOperation     `json:"disaster_activation,omitempty"`
 	DisasterRestoreID         string                           `json:"disaster_restore_id,omitempty"`

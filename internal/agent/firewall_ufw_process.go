@@ -97,12 +97,12 @@ func ufwRestoreRequestHash(r ufwRestoreReceipt) string {
 	r.RequestHash, r.Phase, r.Process, r.Outcome = "", "", nil, ""
 	r.ExitCode, r.OutputHash, r.DiagnosticHash, r.OutputBytes, r.DiagnosticBytes, r.Error, r.UpdatedAt = 0, "", "", 0, 0, "", 0
 	raw, _ := json.Marshal(r)
-	return secure.Hash(append([]byte("ufw:restore-request:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("ufw:restore-request:v2:\x00"), raw...))
 }
 
 func ufwRestoreReceiptHash(r ufwRestoreReceipt) string {
 	raw, _ := json.Marshal(r)
-	return secure.Hash(append([]byte("ufw:restore-receipt:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("ufw:restore-receipt:v2:\x00"), raw...))
 }
 
 func ufwRestoreRecordMatches(record Record, r *ufwRestoreReceipt) bool {
@@ -120,7 +120,7 @@ func ufwRestoreRecordMatches(record Record, r *ufwRestoreReceipt) bool {
 }
 
 func validUFWRestoreReceipt(r *ufwRestoreReceipt) bool {
-	if r == nil || r.Schema != 1 || !validID(r.ID) || !validID(r.OperationID) || r.ID == r.OperationID || !validID(r.Owner) || !validID(r.RegistrationOperationID) || !firewalldDigest(r.MachineHash) || !firewalldDigest(r.BatchHash) || !firewalldDigest(r.ProgramHash) || !firewalldDigest(r.ToolchainHash) || !firewalldDigest(r.InputHash) || r.InputBytes < 1 || r.InputBytes > firewall.UFWReadBytes || !slices.Contains([]string{"candidate", "previous"}, r.Target) || !slices.Contains([]string{"ipv4", "ipv6"}, r.Family) || r.GuardHash != secure.Hash([]byte(ufwRestoreGate)) || r.RequestHash != ufwRestoreRequestHash(*r) || r.UpdatedAt <= 0 || len(r.Error) > 512 {
+	if r == nil || r.Schema != 2 || !validID(r.ID) || !validID(r.OperationID) || r.ID == r.OperationID || !validID(r.Owner) || !validID(r.RegistrationOperationID) || !firewalldDigest(r.MachineHash) || !firewalldDigest(r.BatchHash) || !firewalldDigest(r.ProgramHash) || !firewalldDigest(r.ToolchainHash) || !firewalldDigest(r.InputHash) || r.InputBytes < 1 || r.InputBytes > firewall.UFWReadBytes || !slices.Contains([]string{"candidate", "previous", "repair"}, r.Target) || !slices.Contains([]string{"ipv4", "ipv6"}, r.Family) || r.GuardHash != secure.Hash([]byte(ufwRestoreGate)) || r.RequestHash != ufwRestoreRequestHash(*r) || r.UpdatedAt <= 0 || len(r.Error) > 512 {
 		return false
 	}
 	role := "iptables-restore"
@@ -205,7 +205,7 @@ func ufwRestoreProcessPending(dataDir string) bool {
 }
 
 func ufwRestorePending(dataDir string) bool {
-	if ufwChangePending(dataDir) || ufwRestoreProcessPending(dataDir) {
+	if ufwChangePending(dataDir) || ufwRepairPending(dataDir) || ufwRestoreProcessPending(dataDir) {
 		return true
 	}
 	r, err := loadUFWRestore(dataDir)
@@ -217,6 +217,9 @@ func ufwRestorePending(dataDir string) bool {
 
 func ufwRestoreParentPending(dataDir string, r *ufwRestoreReceipt) bool {
 	parent, err := loadUFWReceipt(dataDir, r.OperationID)
+	if r.Target == "repair" {
+		return err != nil || !ufwRepairReceiptMatches(parent, parent.UFWRepair) || parent.UFWRepair.ProgramHash != r.ProgramHash || parent.RequestHash != r.BatchHash || !slices.Contains([]string{"succeeded", "superseded"}, parent.UFWRepair.State)
+	}
 	return err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != r.OperationID || parent.Firewall.ProgramHash != r.ProgramHash || parent.RequestHash != firewallRequestHash(parent.Firewall.PlanID, parent.Firewall.Action) || parent.Firewall.State != parent.State || !slices.Contains([]string{"succeeded", "rolled_back", "failed"}, parent.State)
 }
 
@@ -286,7 +289,7 @@ func runUFWRestore(ctx context.Context, dataDir string, request ufwRestoreReques
 	if err != nil {
 		return nil, err
 	}
-	r := &ufwRestoreReceipt{Schema: 1, ID: request.ID, OperationID: request.OperationID, Owner: authority.NextClaim.Owner, MachineHash: authority.NextClaim.MachineHash, RegistrationOperationID: authority.NextClaim.OperationID, BatchHash: change.Transition.BatchHash, ProgramHash: change.Policy.ProgramHash, ToolchainHash: change.Transition.Tools.Hash, Target: request.Target, Family: material.Family, InputHash: secure.Hash(raw), InputBytes: len(raw), Python: material.Python, Restore: material.Restore, Blocker: material.Blocker, GuardHash: secure.Hash([]byte(ufwRestoreGate)), Phase: "prepared", ExitCode: -1, UpdatedAt: time.Now().Unix()}
+	r := &ufwRestoreReceipt{Schema: 2, ID: request.ID, OperationID: request.OperationID, Owner: authority.NextClaim.Owner, MachineHash: authority.NextClaim.MachineHash, RegistrationOperationID: authority.NextClaim.OperationID, BatchHash: change.Transition.BatchHash, ProgramHash: change.Policy.ProgramHash, ToolchainHash: change.Transition.Tools.Hash, Target: request.Target, Family: material.Family, InputHash: secure.Hash(raw), InputBytes: len(raw), Python: material.Python, Restore: material.Restore, Blocker: material.Blocker, GuardHash: secure.Hash([]byte(ufwRestoreGate)), Phase: "prepared", ExitCode: -1, UpdatedAt: time.Now().Unix()}
 	r.RequestHash = ufwRestoreRequestHash(*r)
 	if !validUFWRestoreReceipt(r) {
 		return nil, errors.New("UFW 原生执行意图无效")
@@ -359,6 +362,9 @@ func ufwRestoreResult(r *ufwRestoreReceipt) error {
 }
 
 func executeUFWRestore(ctx context.Context, dataDir string, r *ufwRestoreReceipt, input []byte, managerLock *os.File) (_ *ufwRestoreReceipt, resultErr error) {
+	if !validUFWRestoreReceipt(r) || r.Phase != "prepared" || len(input) != r.InputBytes || secure.Hash(input) != r.InputHash {
+		return r, errors.New("UFW 固定执行材料与原子进程许可不一致")
+	}
 	// This thread remains alive for Pdeathsig throughout the child lifetime.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -528,6 +534,10 @@ func recoverUFWRestore(ctx context.Context, dataDir string) error {
 
 func (f *hostFirewall) recoverUFWProcess(ctx context.Context) error {
 	if err := recoverUFWChange(ctx, f.dataDir); err != nil {
+		f.problem = ufwProcessProblem + err.Error()
+		return err
+	}
+	if err := recoverUFWRepair(ctx, f.dataDir); err != nil {
 		f.problem = ufwProcessProblem + err.Error()
 		return err
 	}

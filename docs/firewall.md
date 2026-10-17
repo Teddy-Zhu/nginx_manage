@@ -246,13 +246,17 @@ root 业务快照 schema 为 3，绑定原已确认选择、原文件内容/属�
 
 原业务恢复先持久化补偿方向，并在官方管理锁下先恢复已由本操作替换的持久文件，再逐地址族恢复内核。当前文件只能是原文件或本次已记录 inode 的候选/恢复文件；外部修改不覆盖。未安装的部分临时文件按原 ID 清理，恢复文件准备中断可续办；保留原内容、属主、模式、ACL 及安全标签。内核完整镜像须等于原状态或原候选：已恢复的不写入，仍为候选的只执行原预分配恢复调用，其他状态拒绝覆盖。执行前重新核对固定配置、工具和全部地址族；结束后核对本地址族，最终在官方管理锁下重新核对全部原内核及恢复后的持久文件，才发布父操作 `rolled_back`。原进程未结束、配置/工具漂移、额外规则或回执冲突均保留 `recovery_required`，不以成功退出或缺失回复代替内核结果。发布中断从原快照修复同一回执，进程/父操作未结束时继续阻止计划、授权释放及维护。
 
-确认后的启动及周期核对会重新编译原确认记录，对当前持久用户文件证明所有权，并核对其全部运行镜像；允许其他来源规则合法变化，不重放历史第三方快照。官方状态/报告读取在 OFD 锁前完成，锁内重新核对启用/地址族配置、绑定工具、固定源文件及内核。缺失受管规则、未知漂移或工具变化保持只读；受管规则缺失后的幂等修复仍待实施。管理监听变更已接入该独立确认记录和当前运行核对，保护来源周期观察沿用原确认依据。
+确认后的启动及周期核对会重新编译原确认记录，对当前持久用户文件证明所有权，并核对其全部运行镜像；允许其他来源规则合法变化，不重放历史第三方快照。官方状态/报告读取在 OFD 锁前完成，锁内重新核对启用/地址族配置、绑定工具、固定源文件及内核。只有运行镜像能证明仅缺失原确认入站规则时才修复；额外、重排、缺失第三方规则、重复选择器造成的身份歧义、原生受管块变化、缺失入站链、管理器停用或绑定工具变化均保持只读。修复载荷只含原确认程序派生的带位置 `-I`，不声明或清空链、不重建管理器钩子、不改写持久文件；位置由当前完整配置与内核投影计算。管理监听变更继续使用该独立确认记录和当前运行核对。
 
-`can_apply=false`，Web 和 root 应用入口仍拒绝创建业务操作或确认窗口。官方非 dry-run 能力探测会创建和清除临时内核链，当前底层传输不调用该路径，也不据工具绑定自动授权它。正常应用与新连接确认链路已接入，确认后运行规则缺失的恢复/修复仍须完成后再开放；不将未完成操作的补偿或确认后只读核对当成已完成全部重启恢复。当前每份程序 64 条及原请求期限预算不代表已完成千条规则容量验收。迁移只保存中立期望，不复制本机登记、宿主机占用或 root 回执，在目标另行授权并准备保护计划。Agent 为 84，数据库/迁移归档仍为 32/6，无旧合同兼容；Nginx Docker 模块仍在镜像中预置。实现与源码审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、真实 UFW/iptables 命令或宿主机变更，API 生成产物及行为统一待 P5 集中验证。
+修复使用独立 `agent/firewall/ufw-repair.json`（schema 1）与 `firewall.ufw.repair` 元数据回执，绑定原 root 确认检查点、当前配置文件身份、工具摘要、各地址族原镜像和预分配调用 ID。原成功业务回执保持终态。子进程回执 schema 为 2，增加封闭的 `repair` 目标，仍通过固定描述符、持久 PID 许可和官方管理锁执行；API 不能提交修复报文。中断先结束原进程并修复回执，再核对完整原/修复后镜像；已完成部分不重复插入。未知或未开始结果仅在原镜像重新证明后使用另一预分配 ID，每地址族最多三次；已返回但没有修复结果的调用不自动重试。未知漂移保留 `recovery_required` 并阻止新计划、授权释放和维护。当前配置或运行基线变化时，只有重新证明当前全部第三方规则及受管原生块后，才能将旧修复记为 `superseded`（操作回执为 `cancelled`），由当前基线另建意图；不把旧意图改报成功或绕过未变化基线的失败限制。最终全地址族、固定源和工具核对后才发布修复成功，发布中断从原检查点续办。
+
+本机 `ufw-recover` 接入未确认补偿和确认规则修复；`ufw-registration` 返回独立 `repair` 摘要及回执核对原因。只读登记视图支持 `managed`，须核对原确认记录、当前原生配置及全部运行镜像，不以标记接管；该状态不授权新写入。修复材料和回执不进入备份或迁移。
+
+`can_apply=false`，Web 和 root 应用入口仍拒绝创建新业务操作或确认窗口。正常应用、新连接确认、持久化及确认规则缺失修复的源码链路已接入，新写入准入及完整容量约束仍待完成。官方非 dry-run 能力探测会创建和清除临时内核链，底层传输不调用该路径，也不据工具绑定自动授权它。当前每份程序 64 条及原请求期限预算不代表已完成千条规则容量验收；工具升级不自动更换原绑定。迁移只保存中立期望，不复制本机登记、宿主机占用或 root 回执，在目标另行授权并准备保护计划。Agent 为 85，数据库/迁移归档仍为 32/6，无旧合同兼容；Nginx Docker 模块仍在镜像中预置。实现与源码审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、真实 UFW/iptables 命令或宿主机变更，API 生成产物及行为统一待 P5 集中验证。
 
 依据：[Ubuntu UFW 手册](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html)、[Ubuntu 官方 UFW 0.36.2 源码归档](https://archive.ubuntu.com/ubuntu/pool/main/u/ufw/ufw_0.36.2.orig.tar.gz) 中的 CLI `--datadir`、`util._findpath/create_lock/open_files/close_files`、`applications.get_profiles`、`frontend.get_show_added`、`UFWCommandRule.get_command`、`UFWRule.match/format_rule`、`_read_rules/_write_rules`、`initcaps`、`conf/user.rules` 与 `conf/user6.rules` 及后端规则更新流程。
 
-重载和格式核对依据另含该 UFW 源码的 `set_rule/_reload_user_rules/_get_logging_rules`、[上游 iptables-restore 手册](https://man7.org/linux/man-pages/man8/iptables-restore.8.html) 对 noflush 下仍重建已声明用户链的说明、[iptables-save 手册](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[扩展手册](https://man7.org/linux/man-pages/man8/iptables-extensions.8.html) 及 [Netfilter 官方 iptables 1.8.11 源码](https://www.netfilter.org/projects/iptables/files/iptables-1.8.11.tar.xz) 的 TCP/UDP、multiport、conntrack、recent、limit、LOG 和 IPv4/IPv6 REJECT 扩展保存/默认值实现。
+重载和格式核对依据另含该 UFW 源码的 `set_rule/_reload_user_rules/_get_logging_rules`、[上游 iptables-restore 手册](https://man7.org/linux/man-pages/man8/iptables-restore.8.html) 对 noflush 下仍重建已声明用户链的说明、[iptables-save 手册](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[扩展手册](https://man7.org/linux/man-pages/man8/iptables-extensions.8.html) 及 [Netfilter 官方 iptables 1.8.11 源码](https://www.netfilter.org/projects/iptables/files/iptables-1.8.11.tar.xz) 的 `iptables-restore.c` / `xtables-restore.c` 无链声明命令派发、`xshared.c` 插入位置解析，以及 TCP/UDP、multiport、conntrack、recent、limit、LOG 和 IPv4/IPv6 REJECT 扩展保存/默认值实现。
 
 Python 隔离及源包定位依据：[命令行选项](https://docs.python.org/3/using/cmdline.html)、[site 模块](https://docs.python.org/3/library/site.html)、[importlib](https://docs.python.org/3/library/importlib.html)。
 

@@ -20,13 +20,13 @@ func (f *hostFirewall) ufwViewLocked() firewall.RuntimeView {
 	pending := ufwRestorePending(f.dataDir)
 	out := firewall.RuntimeView{Backend: "ufw", CanPlan: f.ufwPlanning && f.problem == "" && registrationErr == nil && !pending, Reason: f.problem, Protections: []firewall.Protection{}, ConfirmedAction: "none", ProtectionObservation: f.protectionObservationLocked(), Kernel: firewall.KernelView{Reason: "UFW 计划不提供直接 nftables 事务证明"}}
 	if out.Reason == "" {
-		out.Reason = "UFW 本机授权已核对，可准备保护计划；正常应用、确认及持久化尚未开放"
+		out.Reason = "UFW 本机授权已核对，可准备保护计划；应用准入及容量约束尚未完成"
 		if !f.ufwPlanning {
 			out.Reason = "须由本机 root 确认 UFW、宿主机范围及 SSH 保护配置后准备计划"
 		} else if registrationErr != nil {
 			out.Reason = "UFW 本机授权登记尚未完成或无法核对，请本机检查 ufw-registration 并恢复原操作"
 		} else if pending {
-			out.Reason = "UFW 原重载进程或业务操作尚未完成，保持只读"
+			out.Reason = "UFW 原业务、确认规则修复或子进程尚未完成，保持只读"
 		}
 	}
 	if registrationErr != nil {
@@ -200,7 +200,7 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 		ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: len(program.Rules),
 		UFW: &firewall.UFWPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, ToolchainHash: dryRun.ToolchainHash, PythonVersion: dryRun.PythonVersion, DryRunHash: dryRun.Hash, NativeProgramHash: dryRun.NativeHash, BatchHash: dryRun.BatchHash, ReloadBackend: reload.Backend, ReloadHash: reload.Hash, ReloadChains: reload.Chains, ReloadRules: reload.Rules, PreservedRules: dryRun.PreservedRules, DryRunCommands: dryRun.Commands, ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
 			Warnings: warnings,
-			Reason:   "本机授权、受信工具、原重载范围及批次候选已核对；正常应用、新连接确认及确认后持久化尚未开放"},
+			Reason:   "本机授权、受信工具、原重载范围及批次候选已核对；应用准入及容量约束尚未完成"},
 	}
 	record := &firewallPolicyRecord{Action: in.Action, PlanID: id, Version: in.Version, Policy: policy, PolicyHash: hash, ProgramHash: program.Hash, Protections: protections, Marker: firewall.UFWCommentPrefix + registered.NextClaim.Owner + ":" + id + ":",
 		ProtectionBasis: firewallProtectionBasis{SSHProfile: f.sshMode, SSHListeners: listeners, Listener: out.Listener, AllowedSources: append([]string{}, f.remote.state.Confirmed.AllowedSources...), ControlSource: source}}
