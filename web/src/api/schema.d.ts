@@ -3270,7 +3270,28 @@ export interface components {
             search: string[];
             automatic: boolean;
         };
+        HostNetplanDNS: {
+            servers: string[];
+            search: string[];
+            routing_domains: string[];
+            dhcp4: boolean | null;
+            dhcp6: boolean | null;
+            accept_ra: boolean | null;
+            use_dns4: boolean | null;
+            use_dns6: boolean | null;
+        };
+        HostNetplanSource: {
+            state: "associated" | "unresolved";
+            definition: string;
+            device_type: string;
+            renderer: string;
+            sources: string[];
+            source_hash: string;
+            settings: components["schemas"]["HostNetplanDNS"] | null;
+            reason: string;
+        };
         HostDNSConnection: {
+            netplan: components["schemas"]["HostNetplanSource"] | null;
             target: string;
             name: string;
             interface: string;
@@ -3330,6 +3351,7 @@ export interface components {
             domains_ra: string | null;
         };
         HostNetworkLink: {
+            netplan: components["schemas"]["HostNetplanSource"] | null;
             target: string;
             interface: string;
             /** Format: int32 */

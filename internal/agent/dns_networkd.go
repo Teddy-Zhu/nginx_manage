@@ -254,6 +254,7 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 		return d.withPending(out)
 	}
 	observationBytes := 0
+	var netplan *netplanSnapshot
 	for _, ref := range refs {
 		if ref.Index <= 0 || len(ref.Name) == 0 || len(ref.Name) > 15 || strings.Trim(ref.Name, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-") != "" || !strings.HasPrefix(string(ref.Path), "/org/freedesktop/network1/link/") {
 			out.Reason = "networkd 网卡身份无效"
@@ -261,6 +262,17 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 			return d.withPending(out)
 		}
 		link := networkdObserveLink(b, resolved, ref)
+		if len(link.LoadedSources) > 0 {
+			if _, candidate := netplanGeneratedID("networkd", link.LoadedSources[0]); candidate {
+				if netplan == nil {
+					netplan = readNetplanSources()
+				}
+				link.Netplan = netplan.source("networkd", link.LoadedSources[0])
+			}
+			if link.Netplan != nil {
+				link.Writable = false
+			}
+		}
 		if !supported {
 			link.Writable = false
 			link.Reason = "networkd 缺少已确认的 DNS 局部写入接口"
@@ -283,6 +295,11 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 			return d.withPending(out)
 		}
 		out.Links = append(out.Links, link)
+	}
+	if netplan != nil && netplan.problem == "" && !netplan.stable() {
+		for i := range out.Links {
+			invalidateNetplanSource(out.Links[i].Netplan)
+		}
 	}
 	if e = b.unchangedOwner(); e != nil {
 		out.Reason = "networkd 状态读取未确认，请刷新"

@@ -25,18 +25,43 @@ type Family struct {
 	Automatic bool     `json:"automatic"`
 }
 type Connection struct {
-	Target         string   `json:"target"`
-	Name           string   `json:"name"`
-	Interface      string   `json:"interface"`
-	Method4        string   `json:"method4"`
-	Method6        string   `json:"method6"`
-	Applied        *Config  `json:"applied"`
-	Persistent     *Config  `json:"persistent"`
-	Effective      *Config  `json:"effective"`
+	Target         string         `json:"target"`
+	Name           string         `json:"name"`
+	Interface      string         `json:"interface"`
+	Method4        string         `json:"method4"`
+	Method6        string         `json:"method6"`
+	Applied        *Config        `json:"applied"`
+	Persistent     *Config        `json:"persistent"`
+	Effective      *Config        `json:"effective"`
+	RoutingDomains []string       `json:"routing_domains"`
+	SourceHash     string         `json:"source_hash"`
+	Writable       bool           `json:"writable"`
+	Reason         string         `json:"reason"`
+	Netplan        *NetplanSource `json:"netplan"`
+}
+
+// NetplanSource describes source association, not a native generation proof or
+// permission to edit generated backend files.
+type NetplanSource struct {
+	State      string      `json:"state"`
+	Definition string      `json:"definition"`
+	DeviceType string      `json:"device_type"`
+	Renderer   string      `json:"renderer"`
+	Sources    []string    `json:"sources"`
+	SourceHash string      `json:"source_hash"`
+	Settings   *NetplanDNS `json:"settings"`
+	Reason     string      `json:"reason"`
+}
+
+type NetplanDNS struct {
+	Servers        []string `json:"servers"`
+	Search         []string `json:"search"`
 	RoutingDomains []string `json:"routing_domains"`
-	SourceHash     string   `json:"source_hash"`
-	Writable       bool     `json:"writable"`
-	Reason         string   `json:"reason"`
+	DHCP4          *bool    `json:"dhcp4"`
+	DHCP6          *bool    `json:"dhcp6"`
+	AcceptRA       *bool    `json:"accept_ra"`
+	UseDNS4        *bool    `json:"use_dns4"`
+	UseDNS6        *bool    `json:"use_dns6"`
 }
 type Status struct {
 	OperationID string `json:"operation_id"`
@@ -77,19 +102,20 @@ type NetworkDNS struct {
 	DomainsRA      *string  `json:"domains_ra"`
 }
 type NetworkLink struct {
-	Target        string      `json:"target"`
-	Interface     string      `json:"interface"`
-	Index         int32       `json:"index"`
-	State         string      `json:"state"`
-	Owner         string      `json:"owner"`
-	LoadedSources []string    `json:"loaded_sources"`
-	DiskSources   []string    `json:"disk_sources"`
-	SourceHash    string      `json:"source_hash"`
-	Persistent    *NetworkDNS `json:"persistent"`
-	Loaded        *LinkDNS    `json:"loaded"`
-	Effective     *LinkDNS    `json:"effective"`
-	Writable      bool        `json:"writable"`
-	Reason        string      `json:"reason"`
+	Target        string         `json:"target"`
+	Interface     string         `json:"interface"`
+	Index         int32          `json:"index"`
+	State         string         `json:"state"`
+	Owner         string         `json:"owner"`
+	LoadedSources []string       `json:"loaded_sources"`
+	DiskSources   []string       `json:"disk_sources"`
+	SourceHash    string         `json:"source_hash"`
+	Persistent    *NetworkDNS    `json:"persistent"`
+	Loaded        *LinkDNS       `json:"loaded"`
+	Effective     *LinkDNS       `json:"effective"`
+	Writable      bool           `json:"writable"`
+	Reason        string         `json:"reason"`
+	Netplan       *NetplanSource `json:"netplan"`
 }
 type Observation struct {
 	Links       []NetworkLink `json:"links"`

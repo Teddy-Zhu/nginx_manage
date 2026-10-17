@@ -3730,6 +3730,33 @@ components:
         }
       }
 
+    HostNetplanDNS:
+      type: object
+      additionalProperties: false
+      required: [servers, search, routing_domains, dhcp4, dhcp6, accept_ra, use_dns4, use_dns6]
+      properties:
+        servers: {type: array, maxItems: 32, items: {type: string}}
+        search: {type: array, maxItems: 32, items: {type: string}}
+        routing_domains: {type: array, maxItems: 32, items: {type: string}}
+        dhcp4: {type: boolean, nullable: true}
+        dhcp6: {type: boolean, nullable: true}
+        accept_ra: {type: boolean, nullable: true}
+        use_dns4: {type: boolean, nullable: true}
+        use_dns6: {type: boolean, nullable: true}
+    HostNetplanSource:
+      type: object
+      additionalProperties: false
+      description: 从固定生成文件名称关联的 netplan 合并源。不是原生生成一致性或写入授权证明；不返回原文和 Wi-Fi 等凭据。未识别或变化的材料保持未知。
+      required: [state, definition, device_type, renderer, sources, source_hash, settings, reason]
+      properties:
+        state: {type: string, enum: [associated, unresolved]}
+        definition: {type: string}
+        device_type: {type: string}
+        renderer: {type: string}
+        sources: {type: array, maxItems: 64, items: {type: string}}
+        source_hash: {type: string}
+        settings: {nullable: true, allOf: [{$ref: '#/components/schemas/HostNetplanDNS'}]}
+        reason: {type: string}
     HostDNSConnection:
       {
         "type": "object",
@@ -3746,9 +3773,14 @@ components:
           "routing_domains",
           "source_hash",
           "writable",
-          "reason"
+          "reason",
+          "netplan"
         ],
         "properties": {
+          "netplan": {
+            "nullable": true,
+            "allOf": [{"$ref": "#/components/schemas/HostNetplanSource"}]
+          },
           "target": {
             "type": "string"
           },
@@ -4054,9 +4086,14 @@ components:
           "loaded",
           "effective",
           "writable",
-          "reason"
+          "reason",
+          "netplan"
         ],
         "properties": {
+          "netplan": {
+            "nullable": true,
+            "allOf": [{"$ref": "#/components/schemas/HostNetplanSource"}]
+          },
           "target": {
             "type": "string"
           },

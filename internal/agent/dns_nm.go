@@ -293,10 +293,26 @@ func (d *HostDNS) observeNM() hostdns.Observation {
 	if e != nil {
 		return d.withPending(out)
 	}
+	var netplan *netplanSnapshot
+	netplanAllowed := d.hostScopeReason() == ""
 	for _, path := range paths {
 		t, e := nmReadDevice(b, path)
 		if t == nil {
 			continue
+		}
+		if netplanAllowed && t.Profile != "" && t.Profile != "/" {
+			file := t.Filename
+			var fileErr error
+			if file == "" {
+				file, fileErr = dnsProperty[string](b, t.Profile, nmName+".Settings.Connection", "Filename")
+			}
+			if _, candidate := netplanGeneratedID("NetworkManager", file); fileErr == nil && candidate {
+				if netplan == nil {
+					netplan = readNetplanSources()
+				}
+				t.View.Netplan = netplan.source("NetworkManager", file)
+				t.View.Writable = false
+			}
 		}
 		if supported != nil {
 			t.View.Writable = false
@@ -305,6 +321,11 @@ func (d *HostDNS) observeNM() hostdns.Observation {
 			t.View.Writable = false
 		}
 		out.Connections = append(out.Connections, t.View)
+	}
+	if netplan != nil && netplan.problem == "" && !netplan.stable() {
+		for i := range out.Connections {
+			invalidateNetplanSource(out.Connections[i].Netplan)
+		}
 	}
 	if b.unchangedOwner() != nil {
 		out.Reason = "NetworkManager 在读取期间发生变化，请刷新"

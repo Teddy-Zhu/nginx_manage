@@ -2552,18 +2552,19 @@ type HostDNSConfig struct {
 
 // HostDNSConnection defines model for HostDNSConnection.
 type HostDNSConnection struct {
-	Applied        *HostDNSConfig `json:"applied"`
-	Effective      *HostDNSConfig `json:"effective"`
-	Interface      string         `json:"interface"`
-	Method4        string         `json:"method4"`
-	Method6        string         `json:"method6"`
-	Name           string         `json:"name"`
-	Persistent     *HostDNSConfig `json:"persistent"`
-	Reason         string         `json:"reason"`
-	RoutingDomains []string       `json:"routing_domains"`
-	SourceHash     string         `json:"source_hash"`
-	Target         string         `json:"target"`
-	Writable       bool           `json:"writable"`
+	Netplan        *HostNetplanSource `json:"netplan"`
+	Applied        *HostDNSConfig     `json:"applied"`
+	Effective      *HostDNSConfig     `json:"effective"`
+	Interface      string             `json:"interface"`
+	Method4        string             `json:"method4"`
+	Method6        string             `json:"method6"`
+	Name           string             `json:"name"`
+	Persistent     *HostDNSConfig     `json:"persistent"`
+	Reason         string             `json:"reason"`
+	RoutingDomains []string           `json:"routing_domains"`
+	SourceHash     string             `json:"source_hash"`
+	Target         string             `json:"target"`
+	Writable       bool               `json:"writable"`
 }
 
 // HostDNSDesired defines model for HostDNSDesired.
@@ -2694,19 +2695,42 @@ type HostNetworkDNS struct {
 
 // HostNetworkLink defines model for HostNetworkLink.
 type HostNetworkLink struct {
-	DiskSources   []string        `json:"disk_sources"`
-	Effective     *HostLinkDNS    `json:"effective"`
-	Index         int32           `json:"index"`
-	Interface     string          `json:"interface"`
-	Loaded        *HostLinkDNS    `json:"loaded"`
-	LoadedSources []string        `json:"loaded_sources"`
-	Owner         string          `json:"owner"`
-	Persistent    *HostNetworkDNS `json:"persistent"`
-	Reason        string          `json:"reason"`
-	SourceHash    string          `json:"source_hash"`
-	State         string          `json:"state"`
-	Target        string          `json:"target"`
-	Writable      bool            `json:"writable"`
+	Netplan       *HostNetplanSource `json:"netplan"`
+	DiskSources   []string           `json:"disk_sources"`
+	Effective     *HostLinkDNS       `json:"effective"`
+	Index         int32              `json:"index"`
+	Interface     string             `json:"interface"`
+	Loaded        *HostLinkDNS       `json:"loaded"`
+	LoadedSources []string           `json:"loaded_sources"`
+	Owner         string             `json:"owner"`
+	Persistent    *HostNetworkDNS    `json:"persistent"`
+	Reason        string             `json:"reason"`
+	SourceHash    string             `json:"source_hash"`
+	State         string             `json:"state"`
+	Target        string             `json:"target"`
+	Writable      bool               `json:"writable"`
+}
+
+type HostNetplanDNS struct {
+	Servers        []string `json:"servers"`
+	Search         []string `json:"search"`
+	RoutingDomains []string `json:"routing_domains"`
+	Dhcp4          *bool    `json:"dhcp4"`
+	Dhcp6          *bool    `json:"dhcp6"`
+	AcceptRa       *bool    `json:"accept_ra"`
+	UseDns4        *bool    `json:"use_dns4"`
+	UseDns6        *bool    `json:"use_dns6"`
+}
+
+type HostNetplanSource struct {
+	State      string          `json:"state"`
+	Definition string          `json:"definition"`
+	DeviceType string          `json:"device_type"`
+	Renderer   string          `json:"renderer"`
+	Sources    []string        `json:"sources"`
+	SourceHash string          `json:"source_hash"`
+	Settings   *HostNetplanDNS `json:"settings"`
+	Reason     string          `json:"reason"`
 }
 
 // LogPage defines model for LogPage.

@@ -34,6 +34,7 @@ import {
 } from "../api/client";
 import { useAction } from "../composables/action";
 import { useSession } from "../stores/session";
+import HostDNSNetplanSource from "../components/HostDNSNetplanSource.vue";
 const api = useNodeAPI();
 const route = useRoute();
 const migrationNotice = ref("");
@@ -603,6 +604,10 @@ onUnmounted(() => {
           <dt>保留的路由域</dt>
           <dd>{{ connection.routing_domains.join("、") || "无" }}</dd>
         </dl>
+        <HostDNSNetplanSource
+          v-if="connection.netplan"
+          :source="connection.netplan"
+        />
         <n-alert v-if="connection.reason" type="warning" :bordered="false">{{
           connection.reason
         }}</n-alert>
@@ -683,6 +688,7 @@ onUnmounted(() => {
         <dd>无法完整确认</dd></template
       >
     </dl>
+    <HostDNSNetplanSource v-if="link.netplan" :source="link.netplan" />
     <n-alert v-if="link.reason" type="warning" :bordered="false">{{
       link.reason
     }}</n-alert>

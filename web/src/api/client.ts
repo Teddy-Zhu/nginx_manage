@@ -51,6 +51,7 @@ export type Task = components["schemas"]["Task"];
 export type Module = components["schemas"]["Module"];
 export type SystemVersion = components["schemas"]["SystemVersion"];
 export type HostLinkDNS = components["schemas"]["HostLinkDNS"];
+export type HostNetplanSource = components["schemas"]["HostNetplanSource"];
 export type HostDNSOverview = components["schemas"]["HostDNSOverview"];
 export type Fail2banTemplateCheck = components["schemas"]["Fail2banTemplateCheck"];
 export type Fail2banPanelLoginEvent = components["schemas"]["Fail2banPanelLoginEvent"];
