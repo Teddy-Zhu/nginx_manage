@@ -290,11 +290,15 @@ func acceptIPTablesChangeLocked(ctx context.Context, dataDir, id string, plan fi
 	if os.Geteuid() != 0 || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir || (&HostDNS{Scope: "host"}).hostScopeReason() != "" || !validID(id) || !plan.view.CanApply || plan.record == nil || plan.iptables == nil || plan.view.IPTables == nil || plan.view.ID != plan.record.PlanID || plan.view.Action != plan.record.Action || plan.view.Version != plan.record.Version || plan.view.PolicyHash != plan.record.PolicyHash || plan.view.ProgramHash != plan.record.ProgramHash || plan.view.Backend != plan.record.Policy.Backend || time.Now().Unix() >= plan.view.ExpiresAt {
 		return nil, errors.New("iptables 业务操作尚不具备完整受理条件")
 	}
-	if plan.iptables.Docker != nil || iptablesPreviousDocker(plan.iptables) != nil || plan.view.Docker != nil {
-		return nil, errors.New("Docker 联合计划的实时授权、确认及恢复尚未接通，不能受理执行")
-	}
 	if err := validateIPTablesTransition(plan.iptables, *plan.record); err != nil {
 		return nil, err
+	}
+	if docker := plan.iptables.Docker; docker != nil {
+		if !validDockerPlan(plan.view, firewall.RuntimeInput{Action: plan.record.Action, Version: plan.record.Version, Policy: plan.record.Policy, DockerTargets: &docker.Targets}) {
+			return nil, errors.New("Docker 联合计划的公开摘要与目标绑定无法核对")
+		}
+	} else if plan.view.Docker != nil {
+		return nil, errors.New("Docker 计划缺少本机完整业务意图")
 	}
 	raw, _ := json.Marshal(plan.iptables)
 	if len(raw) > 16<<20 || plan.view.TransactionHash != secure.Hash(append([]byte("iptables:plan:v2:\x00"), raw...)) || plan.view.IPTables.ToolchainHash != plan.iptables.Tools.Hash || plan.view.IPTables.DryRunHash != plan.iptables.DryRun.Hash {
@@ -351,6 +355,9 @@ func acceptIPTablesChangeLocked(ctx context.Context, dataDir, id string, plan fi
 	baseline, err := inspectIPTablesChange(ctx, dataDir, v)
 	if err != nil || baseline.Hash != v.Transition.ConfigurationHash {
 		return nil, errors.New("iptables 原完整环境或规则已变化")
+	}
+	if err = verifyIPTablesPreviousDockerRuntime(ctx, dataDir, &v.Transition, baseline); err != nil {
+		return nil, errors.New("Docker 原确认恢复目标不再有效：" + boundedIPTablesError(err))
 	}
 	if err = baseline.admitTransitionReadback(&v.Transition); err != nil {
 		return nil, err

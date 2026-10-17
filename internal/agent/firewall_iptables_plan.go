@@ -285,6 +285,12 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	if err = after.admitTransitionReadback(transition); err != nil {
 		return empty, fault.Unavailable(err.Error())
 	}
+	canApply := true
+	if err = verifyIPTablesPreviousDockerRuntime(ctx, f.dataDir, transition, after); err != nil {
+		canApply = false
+		summary.Reason = "原 Docker 恢复目标无法核对，此计划仅可预览"
+		summary.Warnings = append(summary.Warnings, boundedIPTablesError(err))
+	}
 	for _, image := range before.Images {
 		for _, actual := range after.Images {
 			if image.Family == actual.Family && image.hash() != actual.hash() {
@@ -308,7 +314,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		return empty, errors.New("iptables 完整私有计划超过 16 MiB 或无法编码")
 	}
 	summary.Warnings = append(summary.Warnings, "INPUT 受管跳转位于首位；本应用 ACCEPT 可能结束后续 INPUT 判断，云安全组及其他过滤路径仍可拒绝", "只操作本应用链及精确规则，不恢复第三方历史快照", "官方 --test 不安装规则，也不证明端口可达；系统共享库及扩展仍由宿主机提供")
-	view := firewall.Plan{Backend: f.owner, CanApply: iptablesPreviousDocker(transition) == nil, IPTables: summary, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: firewall.KernelView{Reason: "完整 iptables 规则摘要见地址族代际计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: secure.Hash(append([]byte("iptables:plan:v2:\x00"), raw...)), TransactionBytes: transactionBytes, GeneratedRules: generated}
+	view := firewall.Plan{Backend: f.owner, CanApply: canApply, IPTables: summary, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: firewall.KernelView{Reason: "完整 iptables 规则摘要见地址族代际计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: secure.Hash(append([]byte("iptables:plan:v2:\x00"), raw...)), TransactionBytes: transactionBytes, GeneratedRules: generated}
 	if err = f.storePlanLocked(view, record); err != nil {
 		return empty, err
 	}

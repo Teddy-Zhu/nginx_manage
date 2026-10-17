@@ -578,7 +578,9 @@ onUnmounted(() => {
                 ? "移除本应用 iptables 链及跳转"
                 : `移除 ${plan.baseline.rules} 条规则`
           : plan.docker
-            ? "Docker 目标绑定预览"
+            ? plan.can_apply
+              ? "Docker 联合应用计划"
+              : "Docker 目标绑定预览"
             : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : plan.iptables ? "生成规则" : "内核规则"}`
       }}</n-tag>
     </div>
@@ -633,7 +635,7 @@ onUnmounted(() => {
         plan.action === "remove"
           ? "所列入口仅用于本次连接核对，移除后不再保留本应用保护条目；删除不等同于允许端口，其余系统策略仍可能阻止连接。"
           : plan.docker
-            ? "主机入站与 Docker 转发分别核对。此目标计划尚不能执行，也不表示端口已经受保护。"
+            ? "主机入站与 Docker 转发联合应用，须通过新连接确认；计划通过不表示规则已安装或端口可达。"
             : plan.backend === "firewalld"
             ? "入口保护先于业务规则匹配。accept 可能结束后续 firewalld 过滤，其他内核规则或云安全组仍可阻止连接。"
             : plan.backend === "ufw"

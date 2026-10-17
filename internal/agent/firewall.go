@@ -178,6 +178,7 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	}
 	if f.dockerInventory {
 		out.Docker.Registration = dockerRegistrationView(f.dataDir, out)
+		dockerFirewallWriteReadiness(f.dataDir, &out)
 	}
 	if out.Iptables[0].Backend != "unknown" && out.Iptables[1].Backend != "unknown" && out.Iptables[0].Backend != out.Iptables[1].Backend {
 		out.Warnings = append(out.Warnings, "默认 IPv4 与 IPv6 iptables 命令指向不同后端")

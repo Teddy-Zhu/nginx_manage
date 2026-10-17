@@ -308,9 +308,6 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 	if err != nil || v == nil || iptablesChangeTerminal(v) {
 		return nil, errors.New("iptables 原业务快照不可执行")
 	}
-	if v.Transition.Docker != nil || iptablesPreviousDocker(&v.Transition) != nil {
-		return nil, errors.New("Docker 联合业务的受理、更新及补偿写入尚未开放")
-	}
 	parent, err := loadIPTablesReceipt(dataDir, v.Operation.ID)
 	if err != nil || !iptablesChangeReceiptMatches(parent, v) {
 		return nil, errors.New("iptables 原业务独立回执尚未发布")
@@ -349,14 +346,14 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 	}
 	next := iptablesProgramPair{Host: v.Transition.Program, Docker: v.Transition.Docker}
 	prior := iptablesProgramPair{Host: iptablesPreviousProgram(&v.Transition), Docker: iptablesPreviousDocker(&v.Transition)}
+	// Keep the old binding restorable before each forward stage as well as
+	// before inverse installation. An unavailable target grants no write.
+	if err = verifyIPTablesPreviousDockerRuntime(ctx, dataDir, &v.Transition, current); err != nil {
+		return nil, err
+	}
 	targets := []iptablesProgramPair{next, prior}
 	if request.Target == "previous" {
 		targets = []iptablesProgramPair{prior}
-		if prior.Docker != nil {
-			if err = verifyDockerPolicyRuntime(ctx, dataDir, v.Transition.Previous.Policy.Policy, prior.Docker, current, v.Transition.Tools); err != nil {
-				return nil, err
-			}
-		}
 	}
 	if err = current.admitCombinedReadback(next, prior, targets...); err != nil {
 		return nil, err

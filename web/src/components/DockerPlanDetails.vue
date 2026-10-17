@@ -191,7 +191,7 @@ const resolved: DataTableColumns<Plan["bindings"][number]> = [
       <dt>Docker 程序摘要</dt><dd class="digest">{{ plan.program_hash }}</dd>
     </dl>
     <template v-if="plan.transition">
-      <h4>初始代际切换预览</h4>
+      <h4>代际切换计划</h4>
       <dl>
         <dt>挂接路径</dt><dd>{{ plan.transition.hook_chain }} 首位 → {{ plan.transition.entry_chain }} → 代际链</dd>
         <dt>独立授权</dt><dd class="digest">{{ plan.transition.registration_operation_id }}</dd>

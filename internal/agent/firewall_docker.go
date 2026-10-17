@@ -88,7 +88,8 @@ func dockerFirewallCapabilities(out *firewall.Observation, hooks []dockerFirewal
 				case !hooks[index].Observed:
 					capability.Reason = hooks[index].Reason
 				default:
-					capability.Observed = true
+					capability.Observed, capability.Supported = true, true
+					capability.Reason = "支持显式 bridge/NAT 目标联合计划；应用须通过本机授权、路径核对和新连接确认"
 				}
 			}
 			out.Docker.Capabilities = append(out.Docker.Capabilities, capability)
@@ -97,7 +98,27 @@ func dockerFirewallCapabilities(out *firewall.Observation, hooks []dockerFirewal
 	if !out.Docker.Runtime.Available {
 		out.Docker.Reason = out.Docker.Runtime.Reason
 	} else if out.Docker.BackendHint != "nftables" && out.Docker.BackendHint != "mixed" {
-		out.Docker.Reason = "Docker 端口映射与挂接仅供只读核对，当前不允许发布端口规则写入"
+		out.Docker.Reason = "Docker 发布端口须使用已授权的显式 iptables 路径和完整目标绑定"
+	}
+}
+
+func dockerFirewallWriteReadiness(dataDir string, out *firewall.Observation) {
+	grant := out.Docker.Registration
+	if !grant.Registration.Verified {
+		if slices.ContainsFunc(out.Docker.Capabilities, func(capability firewall.DockerCapability) bool { return capability.Supported }) {
+			out.Docker.Reason = grant.Registration.Reason
+		}
+		return
+	}
+	if iptablesRegistrationPending(dataDir) {
+		out.Docker.Reason = "原防火墙操作或修复尚未完成核对"
+		return
+	}
+	out.Docker.Writable = slices.ContainsFunc(out.Docker.Capabilities, func(capability firewall.DockerCapability) bool {
+		return capability.Backend == grant.Backend && capability.Supported
+	})
+	if out.Docker.Writable {
+		out.Docker.Reason = "可为已授权的 Docker 发布端口生成联合计划；实际应用仍须核对目标及恢复条件"
 	}
 }
 
@@ -112,7 +133,7 @@ func validDockerFirewall(out firewall.Observation) bool {
 		return false
 	}
 	runtime := value.Runtime
-	if value.Writable || !slices.Contains([]string{"unknown", "nftables", "iptables", "mixed"}, value.BackendHint) || value.Evidence == nil || len(value.Evidence) > firewallObjectLimit || !dockerFirewallText(value.Reason, 2048) || runtime.Ports == nil || !dockerFirewallText(runtime.Reason, 2048) {
+	if !slices.Contains([]string{"unknown", "nftables", "iptables", "mixed"}, value.BackendHint) || value.Evidence == nil || len(value.Evidence) > firewallObjectLimit || !dockerFirewallText(value.Reason, 2048) || runtime.Ports == nil || !dockerFirewallText(runtime.Reason, 2048) {
 		return false
 	}
 	if !runtime.Available {
@@ -131,10 +152,15 @@ func validDockerFirewall(out firewall.Observation) bool {
 	seen := map[string]bool{}
 	for _, capability := range value.Capabilities {
 		key := capability.Backend + ":" + capability.Family
-		if seen[key] || !slices.Contains([]string{"direct-nftables", "iptables-nft", "iptables-legacy", "firewalld", "ufw"}, capability.Backend) || !slices.Contains([]string{"ipv4", "ipv6"}, capability.Family) || !slices.Contains([]string{"", "DOCKER-USER", "forward"}, capability.Hook) || capability.Supported || !dockerFirewallText(capability.Reason, 2048) || capability.Observed && (!runtime.Available || runtime.Rootless || runtime.Swarm != "inactive" || !validIPTablesBackend(capability.Backend) || capability.Hook != "DOCKER-USER" || value.BackendHint != "iptables") {
+		if seen[key] || !slices.Contains([]string{"direct-nftables", "iptables-nft", "iptables-legacy", "firewalld", "ufw"}, capability.Backend) || !slices.Contains([]string{"ipv4", "ipv6"}, capability.Family) || !slices.Contains([]string{"", "DOCKER-USER", "forward"}, capability.Hook) || capability.Supported != capability.Observed || !dockerFirewallText(capability.Reason, 2048) || capability.Observed && (!runtime.Available || runtime.Rootless || runtime.Swarm != "inactive" || !validIPTablesBackend(capability.Backend) || capability.Hook != "DOCKER-USER" || value.BackendHint != "iptables") {
 			return false
 		}
 		seen[key] = true
+	}
+	if value.Writable && (!value.Registration.Registration.Verified || !slices.ContainsFunc(value.Capabilities, func(capability firewall.DockerCapability) bool {
+		return capability.Backend == value.Registration.Backend && capability.Supported
+	})) {
+		return false
 	}
 	raw, err := json.Marshal(value)
 	return err == nil && len(raw) <= 320<<10

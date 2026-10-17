@@ -2,7 +2,7 @@
 
 `GET /api/v1/firewall` 要求 `read`，返回统一 `code/message/data/request_id/node_id` 外壳，`data` 为 `FirewallObservation`。已登记远程资源 `/nodes/{connection}/firewall`，沿用目标权限和永久节点身份检查。防火墙页面由 `src/pages/firewall.vue` 自动扫描接入。
 
-仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行宿主机诊断或 Docker API 读取。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；`writable` 及 `docker.writable` 始终为 false。本机 root 空表登记命令使用独立范围授权，不由 API、模块开关或观测授权触发。防火墙模块默认停用，可显式启用；执行还须满足下述独立授权。Fail2ban 的实例接入、受管 jail 与宿主机动作采用独立授权及恢复链路，见 [Fail2ban](fail2ban.md)。
+仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行宿主机诊断或 Docker API 读取。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；顶层 `writable` 保持 false；`docker.writable` 单独报告已授权组合的计划配置能力，读取本身不授予写规则权限。本机 root 空表登记命令使用独立范围授权，不由 API、模块开关或观测授权触发。防火墙模块默认停用，可显式启用；执行还须满足下述独立授权。Fail2ban 的实例接入、受管 jail 与宿主机动作采用独立授权及恢复链路，见 [Fail2ban](fail2ban.md)。
 
 诊断分别返回：
 
@@ -25,13 +25,13 @@
 
 每项分别展示主机地址/端口和容器端口，不用 DNAT 后容器端口替代外部发布端口。`0.0.0.0`、`::` 只是通配绑定，不自动选择原始目的地址；缺失主机端口保留为 0。仅将唯一 local bridge、nat 网关模式、运行容器和同地址族端点列为 `bridge_nat_candidate`；rootless、Swarm、非 nat、其他驱动、多个网络、回环路径、SCTP 及 IPv6 发布到仅 IPv4 端点等明确未确认，不将用户态代理视为同族转发。候选仍须核对实际 DNAT、入站及转发出口，不证明已受保护或外部可达。
 
-`docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。当前所有 `supported` 及 `docker.writable` 均为 false，目标绑定、DNAT/路由核对与独立编译见下节；受管代际执行、新连接确认与持久恢复仍待接入。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
+`docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。观察到受支持的显式 iptables 路径时 `supported=true`，独立父子授权有效且没有未完成操作或修复时才可报告 `docker.writable=true`；完整绑定、DNAT/路由核对及联合持久执行见下节。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
 
 依据：[Docker Engine API 1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)、[官方 API 模型](https://github.com/moby/moby/blob/v27.5.1/api/swagger.yaml)、[Docker iptables 与原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[端口发布与网关模式](https://docs.docker.com/engine/network/port-publishing/)。本阶段完成源码实现和集成审阅，实际 Docker/API/内核组合仍待 P5 集中验证。
 
 ## Docker 发布端口目标计划
 
-`POST /firewall/plan` 对含启用 Docker 规则的已保存策略接入独立目标绑定预览，限显式 iptables-nft/legacy、本机宿主机授权及已确认受控管理连接。此路径读取实际完整规则和两次一致的 Docker 报告，核对所需地址族的 DOCKER-USER 挂接；它不进入主机 INPUT 代际执行器、不创建独立执行记录，也不写入规则。首次省略 `docker_targets` 返回 `plan.docker` 中的映射候选及可选入口地址；不根据源环境推断目标配置。
+`POST /firewall/plan` 对含启用 Docker 规则的已保存策略接入目标绑定计划，限显式 iptables-nft/legacy、本机宿主机授权及已确认受控管理连接。此路径读取实际完整规则和两次一致的 Docker 报告，核对所需地址族的 DOCKER-USER 挂接；生成计划不写入规则，实际提交另走联合持久操作。首次省略 `docker_targets` 返回 `plan.docker` 中的映射候选及可选入口地址；不根据源环境推断目标配置。
 
 再次提交可携带 `docker_targets.engine_hash/snapshot_hash/bindings`，每项明确规则、容器、网络、地址族、协议、Docker 主机地址/端口、容器端口、实际原始目的地址及入口接口。最多 128 项、96 KiB；每条启用 Docker 规则的每个地址族、每个主机端口必须完整覆盖，不能把端口区间静默缩成现有映射子集。同一规则、入口及原始目的端口不能绑定冲突容器；映射、协议或来源仍使用目标已保存规则。通配绑定必须选择实际本机入口地址，固定绑定则必须相等；回环、链路本地、映射地址、接口通配及未知接口均不接受。选定目标只定义这些明确映射的覆盖范围，不代表覆盖所有容器或所有通配地址。
 
@@ -43,7 +43,7 @@ Agent 重新读取当前实例、网络和容器，报告摘要不一致时拒�
 
 每个解析绑定的 `path` 返回 DNAT 摘要/读取条数、完整路由摘要、本地路由摘要、实际出口路由摘要/前缀/表号及 bridge 索引。路径证据计入绑定与程序摘要；环境摘要同时固定完整原生规则、工具、接口和路由。核对后再次读取完整原生规则及 Docker 报告，并核对接口身份和地址，变化、超限或原计划十秒期限内未完成则整体失败，不返回部分成功。前后相等不构成原子快照，也不证明转发设置、其他过滤规则及云安全组允许外部新连接。
 
-主机入站及其 SSH/管理入口保护使用原编译器，Docker 使用独立程序类型，不能传给 INPUT 执行器。Docker 规则同时匹配入口、bridge 出口、同族容器地址/端口、来源，以及 conntrack ORIGINAL 的原始目的地址/主机端口和 NEW 状态。允许使用 RETURN，拒绝或丢弃分别使用相应目标；不使用全面 ACCEPT 绕过 Docker 后续隔离。规则仍仅作用于新连接，不清理 conntrack。完整绑定和两类程序分别参与摘要；包含保护项的两类规则合计最多 8192 条，Docker 程序最多 2 MiB、计划回包最多 512 KiB，页面展示前 128 条并注明截断。IPC 边界使用类型化输入重新编译核对摘要、数量和展示内容，不把展示命令作为执行输入。
+主机入站及其 SSH/管理入口保护使用原编译器，Docker 使用独立程序类型，不能作为 INPUT 程序使用；两类完整代际由联合执行器同族提交。Docker 规则同时匹配入口、bridge 出口、同族容器地址/端口、来源，以及 conntrack ORIGINAL 的原始目的地址/主机端口和 NEW 状态。允许使用 RETURN，拒绝或丢弃分别使用相应目标；不使用全面 ACCEPT 绕过 Docker 后续隔离。规则仍仅作用于新连接，不清理 conntrack。完整绑定和两类程序分别参与摘要；包含保护项的两类规则合计最多 8192 条，Docker 程序最多 2 MiB、计划回包最多 512 KiB，页面展示前 128 条并注明截断。IPC 边界使用类型化输入重新编译核对摘要、数量和展示内容，不把展示命令作为执行输入。
 
 完整绑定计划还须核对下节的独立 Docker 本机授权、原回执、当前父登记与 Engine；仅枚举映射不要求子授权。编译器使用独立所有者及本次计划标识生成最多 28 字节的代际链，完整身份写入入口、指针及每条业务规则的标记。`docker.transition` 返回 `DOCKER-USER` 首位 → `NGINXPANEL-DOCKER` 单指针 → 本次代际链的拓扑、授权/运行程序/批次摘要，以及分地址族的保留规则数量和候选/撤回规模。
 
@@ -51,19 +51,19 @@ Agent 重新读取当前实例、网络和容器，报告摘要不一致时拒�
 
 代际范围核对要求 DOCKER-USER 首位精确入口、普通稳定链的唯一指针及完整代际规则；逐条核对顺序、完整身份、来源/入口/bridge、传输协议/端口、原始 conntrack 元组和 verdict，其他表、位置、链或标记引用均拒绝。只规范化已知导出差异：协议数字、地址及掩码、单值原始端口及同一 conntrack 模块内的选项顺序；模块顺序保留，重复选项、额外条件及未知扩展失败。该证明仅表示与预期代际一致，执行授权仍须来自本机原意图和独立回执，不能由标记或导入包提供。导出依据见 [iptables 1.8.11 官方源码](https://www.netfilter.org/projects/iptables/files/iptables-1.8.11.tar.xz) 的 `libxt_conntrack.c` 中 `conntrack_dump`/`conntrack_dump_ports`。
 
-INPUT 与 Docker 的两个固定范围共用批次渲染器，各自保留完整范围证明。首代、更新及移除预览共用同一计划入口，按新旧两类范围的地址族并集生成批次、计算保留规则及预留完整读取容量；同族一次 filter 提交。移除全部已确认规则，或应用不再包含 Docker 的策略时，同时生成原 Docker 范围的精确清理批次；仅有 Docker 的地址族也纳入计划，不要求存在对应 INPUT 代际。Docker 正向生成及反向撤回均经过代际证明，再剥离已证明的应用对象，要求候选与恢复投影的其余完整规则都等于原基线。删除参数来自原编译程序，内核导出中的外来文本不作为执行输入；指针切换使用原入口及独立新链，完整原代际不一致时拒绝编码。涉及新旧任一 Docker 范围的计划均为预览，`can_apply=false`；更新/移除执行尚未开放。
+INPUT 与 Docker 的两个固定范围共用批次渲染器，各自保留完整范围证明。首代、更新及移除预览共用同一计划入口，按新旧两类范围的地址族并集生成批次、计算保留规则及预留完整读取容量；同族一次 filter 提交。移除全部已确认规则，或应用不再包含 Docker 的策略时，同时生成原 Docker 范围的精确清理批次；仅有 Docker 的地址族也纳入计划，不要求存在对应 INPUT 代际。Docker 正向生成及反向撤回均经过代际证明，再剥离已证明的应用对象，要求候选与恢复投影的其余完整规则都等于原基线。删除参数来自原编译程序，内核导出中的外来文本不作为执行输入；指针切换使用原入口及独立新链，完整原代际不一致时拒绝编码。完整目标绑定且原 Docker 恢复目标仍有效时，首代、更新及移除计划可返回 `can_apply=true`；原目标失效时保留只读预览及明确原因。
 
 原确认来源的归属核对与实时目标核对分开：原终态回执、当前父子授权、固定工具及完整旧规则均可证明时，旧容器、映射或路由变化不阻塞重新绑定或移除预览。离线预览不要求 Docker 的 FORWARD 挂接仍有效，但不会接管损坏的应用链或重建 Docker 自身链。反向批次只证明可重建原规则文本及拓扑，不证明当前可安全重装；实际安装、确认、撤回重装及缺失修复继续要求所选方向的实时实例、端点、DNAT、路由和 Docker 挂接。已确认范围完整时，对账不会因旧目标失效而伪装成恢复任务；运行可用性仍通过实时核对单独报告。未完成业务、子进程、修复或独立回执异常仍阻止新计划。
 
 联合完整读取容量现按同一地址族的 INPUT/Docker 原代际或候选整对核算，逐族保留最大字节、对象数及结构摘要；只扣除经过原生完整规则或原确认有序子集证明的自有链。INPUT、DOCKER-USER 的原跳转和第三方计数增长保留保守余量，不把全部旧代际与新代际叠加计费。计划前后、受理、执行前及确认规则修复共用此计算；补偿只预留原恢复目标，原生与 nft JSON 的链和入口数量不一致时拒绝准入。
 
-原确认来源的底层修复器已扩展到联合范围。剩余规则必须是原完整身份和顺序的子集，稳定指针及首位入口只允许准确或缺失；重复、重排、附加条件、其他引用及未知代际仍拒绝。仅补回原受管对象，同族 INPUT/Docker 缺失合并为一次 filter/COMMIT，最多 4 MiB；不创建 Docker 自身的 DOCKER-USER 或 FORWARD 挂接。完整父子授权、原确认回执、当前实例/映射、DNAT、路由及固定库读取通过后，才沿原独立修复意图、官方预演与调用回执执行。该实现不开放新的 Docker 业务受理；API 的 can_apply 继续为 false，更新、撤回与新连接确认仍须补齐。
+原确认来源的底层修复器已扩展到联合范围。剩余规则必须是原完整身份和顺序的子集，稳定指针及首位入口只允许准确或缺失；重复、重排、附加条件、其他引用及未知代际仍拒绝。仅补回原受管对象，同族 INPUT/Docker 缺失合并为一次 filter/COMMIT，最多 4 MiB；不创建 Docker 自身的 DOCKER-USER 或 FORWARD 挂接。完整父子授权、原确认回执、当前实例/映射、DNAT、路由及固定库读取通过后，才沿原独立修复意图、官方预演与调用回执执行。该修复链路用于已确认的联合策略及未确认操作的原目标恢复；新业务仍须先通过独立计划和实时准入。
 
 完整绑定还固定显式后端双地址族 command/save/restore、禁止模块加载的 `false` 工具及私有读取入口的 ELF 身份和版本；已有已确认 INPUT 范围沿用原工具绑定，空范围重新绑定。官方 go-iptables 的隔离只读桥接核对完整 filter 链清单及 INPUT/原主机代际，并对所需 Docker 地址族增加 FORWARD/DOCKER-USER 的声明、数量、顺序及完整参数序列核对；两类导出不一致时拒绝，不解释或回放第三方扩展。
 
 每个所需地址族使用固定 restore 分别执行候选批次的 `--test`，以及把候选和撤回合成一个 filter/COMMIT 的正反向 `--test`，避免在原空命名空间单独预演删除。完整输入、基线、代际程序、工具摘要及逐次成功结果参与 `dry_run_hash`；`dry_run_commands` 为 2 或 4，进入转换及父程序摘要。非零结果、警告、任何输出、超时、工具变化或预演前后完整规则变化均不生成成功计划。预演后再次核对 Docker/原生规则/路由、固定工具的原生与库读取及候选读取容量，仍使用原十秒期限。`--test` 不安装规则，也不证明外部可达。
 
-目标绑定及路径证据只存在于本次请求、易失计划和页面内存，完整规则、工具、预演证明及正反向批次仅存 root 易失计划；不改写期望规则、数据库或迁移归档，导出、导入和 API 迁移继续只携带中立期望。公开规则预览使用实际代际链及完整身份标记，IPC 边界重新编译核对代际并检查预演摘要及批次数量。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 表示完成目标路径、独立授权、转换编译和官方预演，`can_apply` 保持 false，提交执行会被拒绝。代际执行/更新、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
+目标绑定、路径证据、完整规则、工具、预演证明及正反向批次在准备阶段保留于 root 易失计划，受理后先保存为 root 持久业务意图，再发布独立操作回执和逐族调用许可；不改写期望规则、数据库或迁移归档，导出、导入和 API 迁移继续只携带中立期望。公开规则预览使用实际代际链及完整身份标记，IPC 边界重新编译核对代际并检查预演摘要及批次数量。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 表示完成目标路径、独立授权、转换编译和官方预演；`can_apply` 另要求原恢复目标有效。受理及每次正向提交前复核原目标，新代际确认只核对候选目标。实际提交使用固定子进程和不可重放调用回执，同族 INPUT/Docker 一次 filter 提交；生效后须通过新 TCP/TLS 连接确认，超时、停止或重启沿原持久意图恢复。补偿重装及缺失修复必须重新核对原目标；原实例、端点、路径、规则或工具已变化时保留 `recovery_required`，不擅自重绑或重放第三方规则。原生 Docker nftables 仍保持实验适配只读。
 
 实现依据：[Moby bridge 名称及端点](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/bridge_linux.go)、[端口 DNAT 规则](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/port_mapping_linux.go)、[Docker 转发及原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[Linux 路由 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/rtnetlink.h)、[策略规则 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/fib_rules.h)、[IPv6 FIB 查询及导出](https://github.com/torvalds/linux/blob/v6.12/net/ipv6/route.c)。本阶段仅完成源码实现和集成审阅，未执行 Docker/API/系统能力验证，待 P5 集中验证。
 
@@ -88,7 +88,7 @@ sudo nginxpanel docker-firewall-remove --data-dir /var/lib/nginxpanel --firewall
 
 这些操作复用业务锁、全局登记锁及维护锁，未完成的意图或缺失回执阻塞独立维护。每次本机命令总期限最多 60 秒，原生完整导出与 Docker API 继续使用原有有界只读入口。登记记录及回执属于 root 材料，不进入业务数据库、文件/API 迁移或完整备份；目标机须重新授权。
 
-公共诊断 `docker.registration` 和防火墙页面分别显示授权状态、登记实例及父登记标识。`registered/verified` 仅表示当前空命名空间授权已核对；`supported`、`writable` 及 Docker 计划的 `can_apply` 仍为 false，不能将授权等同于规则安装或外部可达。已确认 INPUT 诊断补齐后端和原登记标识，供父授权交叉核对。实现与集成源码审阅完成，CLI、Docker/API、构建、类型检查和业务验证仍待 P5，不新增 UI 测试。
+公共诊断 `docker.registration` 和防火墙页面分别显示授权状态、登记实例及父登记标识。`registered/verified` 表示独立本机授权、原父登记及当前实例已核对；`supported` 表示所选地址族的显式 iptables/DOCKER-USER 路径有执行适配，`writable` 另要求授权有效且无未完成业务或修复。两者只允许配置和生成计划，不能将授权等同于规则安装或外部可达；实际执行以完整计划的 `can_apply` 及实时准入为准。已确认 INPUT 诊断补齐后端和原登记标识，供父授权交叉核对。实现与集成源码审阅完成，CLI、Docker/API、构建、类型检查和业务验证仍待 P5，不新增 UI 测试。
 
 ## 内核目标表快照
 
@@ -173,7 +173,7 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 
 `PUT /system/modules/firewall` 停用时必须指定 `firewall_rules`。`keep` 明确保留已确认规则；`remove` 另需 `read/security.write` 及已确认的 `firewall_operation_id`，只有原操作仍为当前确认的移除结果且无活动变更才停用；后续应用失败并恢复该空表时仍可引用原确认操作，后续成功应用会使其失效。初始空表经核对且尚无已确认规则时无需生成空的移除操作，可省略操作 ID 直接停用。公共执行提交与最终停用共用锁，防止停用核对期间插入新应用；失败不伪造停用成功，可继续引用同一操作重试。启用或其他模块拒绝携带停用选项。自动扫描的功能模块页面提供保留/先移除选择，防火墙应用页完成移除和新连接确认后提供最终停用；远程转发不执行移除流程。
 
-当前已接入 direct-nftables、firewalld、UFW 与显式 iptables-nft/legacy 的主机入站计划、应用、确认和独立恢复。Docker 实例及端口映射只读报告、显式目标绑定、DNAT/路由核对、独立本机空命名空间授权，以及首代、更新、移除的联合预览和固定工具官方预演路径已接入；代际执行、新连接确认及持久恢复仍待实施。Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
+当前已接入 direct-nftables、firewalld、UFW 与显式 iptables-nft/legacy 的主机入站计划、应用、确认和独立恢复。Docker 实例及端口映射只读报告、显式目标绑定、DNAT/路由核对、独立本机空命名空间授权，以及首代、更新、移除的联合计划、固定工具官方预演路径、持久执行、新连接确认及独立恢复已接入；原目标失效的操作保留待恢复状态。Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 
@@ -366,7 +366,7 @@ nginxpanel iptables-remove --data-dir /srv/nginxpanel --firewall-scope host
 
 独立 root 意图及回执保存在数据目录的 `agent/firewall/iptables-registration.json` 和 `agent/operations`；`/var/lib/nginxpanel-host/iptables-owner.json` 持久绑定宿主机、数据目录、后端及原操作，防止其他数据目录重复授权。释放先发布中间占用、再保存终态回执、最后发布释放墓碑；崩溃后只核对原意图，不重放任何规则命令。未完成登记/释放阻止新的维护及可达性操作；其他防火墙新授权/执行拒绝尚未释放的占用，已受理操作仍按原恢复路径处理。
 
-宿主机诊断 API 的 `iptables_registration` 及防火墙页面显示后端、授权和本次核对；`registered/verified` 证明当前空命名空间授权，`managed/verified` 证明已确认策略的完整代际、固定工具及原独立回执一致，二者均不证明外部入口可达。迁移预检核对目标自己的授权，源机占用、root 授权与回执不迁移。主机入站应用、更新、移除、新连接确认、持久保存及缺失规则修复已接入，通过独立完整准入的计划返回 `can_apply=true`；Docker 转发仍未适配。实现及源码审阅完成，生成器、构建、类型检查、lint、测试、浏览器与真实主机操作均待 P5。
+宿主机诊断 API 的 `iptables_registration` 及防火墙页面显示后端、授权和本次核对；`registered/verified` 证明当前空命名空间授权，`managed/verified` 证明已确认策略的完整代际、固定工具及原独立回执一致，二者均不证明外部入口可达。迁移预检核对目标自己的授权，源机占用、root 授权与回执不迁移。主机入站应用、更新、移除、新连接确认、持久保存及缺失规则修复已接入，通过独立完整准入的计划返回 `can_apply=true`；Docker 转发按前述独立授权、完整绑定及联合计划执行。实现及源码审阅完成，生成器、构建、类型检查、lint、测试、浏览器与真实主机操作均待 P5。
 
 
 ## iptables 代际计划
@@ -377,7 +377,7 @@ nginxpanel iptables-remove --data-dir /srv/nginxpanel --firewall-scope host
 
 原生完整导出保留各链规则顺序及所有参数，第三方扩展只参与不透明读取与漂移核对；跨链声明顺序、计数器和导出时间不参与摘要。初始候选仅生成失败即停止的 `-N` 建链、受管追加和首位跳转，不声明或刷新已有用户链；反向材料仅精确删除本次跳转、指针及生成规则，再删除空受管链，不重放第三方历史规则或全局策略。完整原始/投影镜像和双向批次保留在 root 私有计划，正反批次合计最多 4 MiB，整个私有计划最多 16 MiB；Web/API 只返回摘要、计数与目标链。
 
-初始代际计划已接入下述固定工具、官方预演及完整 nft JSON 候选容量准入，`can_plan` 与 `available` 分别表示可尝试准备和执行就绪。持久执行意图、子进程回执、确认及独立恢复见下节；官方 go-iptables 链读取、原生完整导出及容量准入均通过后，计划返回 `can_apply=true`，root 应用入口仍重新核对原计划。运行就绪状态须重新读取当前受管范围和固定工具，空授权及移除确认均不能仅凭旧回执允许停用模块。两个地址族不承诺共同原子性，Docker 转发仍未适配。迁移保留中立期望，在目标重新授权并准备，不迁入上述 root 材料。生成器、构建、类型检查、lint、测试、浏览器及真实主机命令仍待 P5 集中验证。
+初始代际计划已接入下述固定工具、官方预演及完整 nft JSON 候选容量准入，`can_plan` 与 `available` 分别表示可尝试准备和执行就绪。持久执行意图、子进程回执、确认及独立恢复见下节；官方 go-iptables 链读取、原生完整导出及容量准入均通过后，计划返回 `can_apply=true`，root 应用入口仍重新核对原计划。运行就绪状态须重新读取当前受管范围和固定工具，空授权及移除确认均不能仅凭旧回执允许停用模块。两个地址族不承诺共同原子性，Docker 转发按前述独立授权、完整绑定及联合计划执行。迁移保留中立期望，在目标重新授权并准备，不迁入上述 root 材料。生成器、构建、类型检查、lint、测试、浏览器及真实主机命令仍待 P5 集中验证。
 
 
 ### 固定工具与官方预演
@@ -410,7 +410,7 @@ nginxpanel iptables-remove --data-dir /srv/nginxpanel --firewall-scope host
 
 Agent 启动、循环、停止、显式回滚及本机 `iptables-recover` 已接入原操作恢复；变更 owner 选择不撤销原操作。先按原机器和 PID 实例通过 pidfd 确认结束，不以超时推定执行失败；再核对完整当前代际、首位跳转、指针及候选原调用回执。补偿恢复原确认代际；首次应用则精确删除本次规则及空链，不提交原第三方快照，当前第三方规则可保留变化。调用结果未知时只在原进程结束并重新完整观察后使用下一个预分配补偿 ID，不重放原 ID；补偿已成功却重新出现同一代际时停止自动覆盖。最终在授权及执行锁内确认两后端/双地址族均恢复原确认范围且回执完整，才发布 `rolled_back`。
 
-工具、原授权、规则拓扑或回执冲突保留 `recovery_required`，并阻止新授权、释放、维护及其他可达性写入；不替换原工具绑定。主机 INPUT 的 go-iptables 业务读取及完整执行准入已接入，Docker 转发仍待适配。完整 nft JSON 候选容量准入已接入上述计划与写入路径。当前只完成源码实现与集成审阅，生成器、构建、类型检查、lint、测试、浏览器和真实宿主机操作均留待 P5，不新增 UI 测试。
+工具、原授权、规则拓扑或回执冲突保留 `recovery_required`，并阻止新授权、释放、维护及其他可达性写入；不替换原工具绑定。主机 INPUT 与 Docker 的 go-iptables 范围读取及联合执行准入已接入。完整 nft JSON 候选容量准入已接入上述计划与写入路径。当前只完成源码实现与集成审阅，生成器、构建、类型检查、lint、测试、浏览器和真实宿主机操作均留待 P5，不新增 UI 测试。
 
 ### 新连接确认与确认规则修复
 
@@ -427,4 +427,4 @@ Agent 启动、循环、停止、显式回滚及本机 `iptables-recover` 已接
 
 每地址族在同一个 filter 批次内先创建并填充新代际，再向固定入口插入新指针并按完整参数删除旧指针，最后精确撤销旧代际规则并删除空链；不按不稳定编号覆盖既有规则，不提交第三方历史配置。新增地址族建立入口及首位跳转；移除地址族只撤销本应用精确跳转、指针及空链。移除计划的 `hook_position=0` 表示候选不保留该族跳转；第三方保留数量排除本应用旧规则。正向和同表正反向材料均须通过固定官方预演。
 
-恢复先撤销可证明的完整候选；原确认链或部分规则因主机重启而缺失时，沿原独立成功来源另建受限修复意图，全部地址族恢复完整后才完成当前回滚。移除后的空范围同样须由新连接确认，确认后不再重建已删除规则；本机授权可另行释放，期望草稿及历史回执保留。主机入站计划完成完整执行准入后可应用，Docker 转发仍未适配。
+恢复先撤销可证明的完整候选；原确认链或部分规则因主机重启而缺失时，沿原独立成功来源另建受限修复意图，全部地址族恢复完整后才完成当前回滚。移除后的空范围同样须由新连接确认，确认后不再重建已删除规则；本机授权可另行释放，期望草稿及历史回执保留。主机入站与 Docker 联合计划须完成完整执行准入；原 Docker 恢复目标失效时只允许预览。

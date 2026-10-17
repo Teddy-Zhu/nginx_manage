@@ -8,15 +8,15 @@ import (
 	"nginxpanel/internal/firewall"
 )
 
-// Recompile the typed preview at the IPC boundary. No public command text is
-// trusted or later executed, and no view can upgrade this plan to writable.
+// Recompile the typed plan at the IPC boundary. The public summary never
+// supplies commands or substitutes for the root executor's live admission.
 func validDockerPlan(out firewall.Plan, input firewall.RuntimeInput) bool {
 	value := out.Docker
 	if value == nil {
 		return input.DockerTargets == nil && !(input.Action == "apply" && input.PreparationID == "" && !input.CancelPreparation && firewall.HasDockerRules(input.Policy))
 	}
 	policy, err := input.Policy.Normalize()
-	if err != nil || !firewall.HasDockerRules(policy) || input.Action != "apply" || input.PreparationID != "" || input.CancelPreparation || !validIPTablesBackend(policy.Backend) || out.Backend != policy.Backend || out.Action != "apply" || out.CanApply || out.Preparation != nil || out.UFW != nil || out.Firewalld != nil || !validID(out.ID) || out.Version != input.Version || out.PolicyHash != policy.Hash() || out.ConfirmationSeconds != firewall.ConfirmationSeconds || out.ExpiresAt <= 0 || !firewalldDigest(value.EngineHash) || !firewalldDigest(value.SnapshotHash) || !firewalldDigest(value.ConfigurationHash) || value.ObservedAt <= 0 || !validDockerPublishedPorts(value.Ports, false, "inactive") || value.Truncated && len(value.Ports) != 128 || value.Addresses == nil || len(value.Addresses) > 512 || value.Bindings == nil || len(value.Bindings) > 128 || value.Entries == nil || value.Warnings == nil || len(value.Warnings) > 64 || !dockerFirewallText(value.Reason, 2048) {
+	if err != nil || !firewall.HasDockerRules(policy) || input.Action != "apply" || input.PreparationID != "" || input.CancelPreparation || !validIPTablesBackend(policy.Backend) || out.Backend != policy.Backend || out.Action != "apply" || out.Preparation != nil || out.UFW != nil || out.Firewalld != nil || !validID(out.ID) || out.Version != input.Version || out.PolicyHash != policy.Hash() || out.ConfirmationSeconds != firewall.ConfirmationSeconds || out.ExpiresAt <= 0 || !firewalldDigest(value.EngineHash) || !firewalldDigest(value.SnapshotHash) || !firewalldDigest(value.ConfigurationHash) || value.ObservedAt <= 0 || !validDockerPublishedPorts(value.Ports, false, "inactive") || value.Truncated && len(value.Ports) != 128 || value.Addresses == nil || len(value.Addresses) > 512 || value.Bindings == nil || len(value.Bindings) > 128 || value.Entries == nil || value.Warnings == nil || len(value.Warnings) > 64 || !dockerFirewallText(value.Reason, 2048) {
 		return false
 	}
 	seen := map[string]bool{}
@@ -37,7 +37,7 @@ func validDockerPlan(out firewall.Plan, input firewall.RuntimeInput) bool {
 		return false
 	}
 	if !value.Compiled {
-		if input.DockerTargets != nil || out.IPTables != nil || out.TransactionHash != "" || out.TransactionBytes != 0 || out.GeneratedRules != value.HostGeneratedRules || value.Transition != nil || len(value.Bindings) != 0 || value.BindingsHash != "" || value.ProgramHash != "" || value.ProgramBytes != 0 || value.GeneratedRules != 0 || len(value.Entries) != 0 || value.EntriesTruncated || out.ProgramHash != "" {
+		if out.CanApply || input.DockerTargets != nil || out.IPTables != nil || out.TransactionHash != "" || out.TransactionBytes != 0 || out.GeneratedRules != value.HostGeneratedRules || value.Transition != nil || len(value.Bindings) != 0 || value.BindingsHash != "" || value.ProgramHash != "" || value.ProgramBytes != 0 || value.GeneratedRules != 0 || len(value.Entries) != 0 || value.EntriesTruncated || out.ProgramHash != "" {
 			return false
 		}
 	} else {

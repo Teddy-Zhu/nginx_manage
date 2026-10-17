@@ -39,6 +39,16 @@ func dockerTargetFamilies(targets firewall.DockerTargets) []string {
 	return out
 }
 
+// A replacement must leave its frozen rollback target usable before any
+// candidate write. This proves the original binding, never a new default.
+func verifyIPTablesPreviousDockerRuntime(ctx context.Context, dataDir string, transition *iptablesTransition, current iptablesRegistrationSnapshot) error {
+	previous := iptablesPreviousDocker(transition)
+	if previous == nil {
+		return nil
+	}
+	return verifyDockerPolicyRuntime(ctx, dataDir, transition.Previous.Policy.Policy, previous, current, transition.Tools)
+}
+
 // Planning and live verification use exactly the same mapping, route and
 // ordered DNAT proof. These reads cannot adopt new endpoints into an old intent.
 func resolveDockerPolicyBindings(ctx context.Context, reader *dockerRouteReader, routing dockerRoutingSnapshot, snapshot *dockerFirewallSnapshot, host dockerTargetHost, images []iptablesImage, policy firewall.Policy, targets firewall.DockerTargets) ([]firewall.DockerResolvedBinding, error) {

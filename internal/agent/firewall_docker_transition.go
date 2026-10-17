@@ -24,9 +24,9 @@ func prepareIPTablesTransition(ctx context.Context, before iptablesRegistrationS
 	host := &firewall.IPTablesPlan{RegistrationOperationID: v.RegistrationOperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: v.Program.LogicalHash, ProtectionRules: v.Program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: []string{"IPv4/IPv6 分别处理，不保证跨地址族原子性"}, Reason: "主机入站计划已准备，应用后须通过新连接确认"}
 	if v.Docker != nil || iptablesPreviousDocker(v) != nil {
 		host.Warnings = append(host.Warnings, "INPUT 的 ACCEPT 可能结束后续判断；Docker 允许规则使用 RETURN 交还后续过滤")
-		host.Reason = "主机入站与 Docker 转发的联合预览，尚不支持执行"
+		host.Reason = "主机入站与 Docker 转发计划已准备，应用后须通过新连接确认"
 		if iptablesPreviousDocker(v) != nil {
-			host.Warnings = append(host.Warnings, "撤回或修复原 Docker 规则仍须核对原目标及路径；本次预览不证明原目标仍可恢复")
+			host.Warnings = append(host.Warnings, "原 Docker 目标及路径须保持可核对；变更后若原恢复目标失效，操作会保留待恢复状态")
 		}
 		if v.Docker == nil {
 			host.Warnings = append(host.Warnings, "此计划同时移除原已确认的 Docker 转发规则；不移除 Docker 本机授权")

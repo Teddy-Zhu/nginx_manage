@@ -137,7 +137,8 @@ func resolveDockerTarget(snapshot *dockerFirewallSnapshot, host dockerTargetHost
 }
 
 // Docker and INPUT share typed transaction material, while independently
-// retaining their grants and grammars. Live execution remains unavailable.
+// retaining their grants and grammars. Only a complete, recoverable plan can
+// enter the root executor; enumerating targets never grants a native write.
 func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.RuntimeInput, connection string) (firewall.Plan, error) {
 	var out firewall.Plan
 	policy, err := in.Policy.Normalize()
@@ -145,7 +146,7 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		return out, err
 	}
 	if in.Version < 1 || in.Action != "apply" || !validIPTablesBackend(policy.Backend) {
-		return out, fault.Invalid("Docker 目标计划仅支持显式 iptables 后端的应用预览")
+		return out, fault.Invalid("Docker 目标计划仅支持显式 iptables 后端的应用操作")
 	}
 	if !f.iptablesPlannerLocked() || !f.iptablesPlanning || !f.recovering || f.policyUncertain || f.problem != "" || f.owner != policy.Backend || iptablesRegistrationPending(f.dataDir) {
 		return out, fault.Unavailable("Docker 目标计划要求已登记的本机 iptables 宿主机范围，且原恢复已完成")
@@ -262,7 +263,8 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 	var transition *iptablesTransition
 	var hostSummary *firewall.IPTablesPlan
 	var record *firewallPolicyRecord
-	detail := &firewall.DockerPlan{EngineHash: runtime.EngineHash, SnapshotHash: runtime.SnapshotHash, ObservedAt: runtime.ObservedAt, Ports: runtime.Ports, Truncated: runtime.Truncated, Addresses: host.Addresses, Bindings: []firewall.DockerResolvedBinding{}, Entries: []firewall.PreviewEntry{}, HostProgramHash: hostProgram.Hash, HostGeneratedRules: hostProgram.BaseRules + len(hostProgram.Entries), Warnings: []string{"绑定只覆盖明确选择的主机映射、原始目的地址和入口接口；不代表所有容器或通配地址均受保护", "完整绑定计划使用固定工具预演候选与同表正反向批次；不安装规则或探测数据包", "允许采用 RETURN 交还 DOCKER-USER 和 Docker 后续判断；路径证据不保证其他过滤规则、转发设置或云安全组放行", "当前仅支持规则预览，无法应用规则"}, Reason: "请选择目标映射、实际原始目的地址及入口接口；当前计划仅供核对，不能应用"}
+	canApply := false
+	detail := &firewall.DockerPlan{EngineHash: runtime.EngineHash, SnapshotHash: runtime.SnapshotHash, ObservedAt: runtime.ObservedAt, Ports: runtime.Ports, Truncated: runtime.Truncated, Addresses: host.Addresses, Bindings: []firewall.DockerResolvedBinding{}, Entries: []firewall.PreviewEntry{}, HostProgramHash: hostProgram.Hash, HostGeneratedRules: hostProgram.BaseRules + len(hostProgram.Entries), Warnings: []string{"绑定只覆盖明确选择的主机映射、原始目的地址和入口接口；不代表所有容器或通配地址均受保护", "完整绑定计划使用固定工具预演候选与同表正反向批次；不安装规则或探测数据包", "允许采用 RETURN 交还 DOCKER-USER 和 Docker 后续判断；路径证据不保证其他过滤规则、转发设置或云安全组放行"}, Reason: "请选择目标映射、实际原始目的地址及入口接口；当前计划仅供核对，不能应用"}
 	if in.DockerTargets != nil {
 		targets, err := in.DockerTargets.Normalize(policy)
 		if err != nil {
@@ -326,7 +328,7 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		if err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
 		}
-		detail.Reason = "目标路径及主机入站/Docker 转发的联合规则预演已核对；当前仅可预览"
+		detail.Reason = "目标路径及联合规则预演已核对，应用后须通过新连接确认"
 		// Bracket the proof with fresh native, routing and Docker observations.
 		// Keep the existing plan deadline: timeout rejects rather than returning
 		// a partial proof. These reads do not make the snapshots atomic.
@@ -356,6 +358,13 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		}
 		if err = after.admitTransitionReadback(transition); err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
+		}
+		canApply = true
+		if err = verifyIPTablesPreviousDockerRuntime(ctx, f.dataDir, transition, after); err != nil {
+			canApply = false
+			detail.Reason = "原 Docker 恢复目标无法核对，此计划仅可预览"
+			hostSummary.Reason = detail.Reason
+			detail.Warnings = append(detail.Warnings, boundedIPTablesError(err))
 		}
 	}
 	afterHost, err := readDockerTargetHost(ctx)
@@ -389,7 +398,7 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 	if detail.GeneratedRules+detail.HostGeneratedRules > firewall.MaxEntries {
 		return out, fault.Invalid("包含主机入口保护及 Docker 目标的规则展开后超过 8192 条")
 	}
-	out = firewall.Plan{Docker: detail, IPTables: hostSummary, Backend: f.owner, CanApply: false, Action: "apply", ID: id, Version: in.Version, PolicyHash: policy.Hash(), Baseline: firewall.KernelView{Reason: "Docker 目标与路径核对摘要见 Docker 子计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: detail.GeneratedRules + detail.HostGeneratedRules}
+	out = firewall.Plan{Docker: detail, IPTables: hostSummary, Backend: f.owner, CanApply: canApply, Action: "apply", ID: id, Version: in.Version, PolicyHash: policy.Hash(), Baseline: firewall.KernelView{Reason: "Docker 目标与路径核对摘要见 Docker 子计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: detail.GeneratedRules + detail.HostGeneratedRules}
 	if transition != nil {
 		if err = validateIPTablesTransition(transition, *record); err != nil {
 			return firewall.Plan{}, err
