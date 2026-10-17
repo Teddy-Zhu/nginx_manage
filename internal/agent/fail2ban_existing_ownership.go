@@ -115,8 +115,8 @@ func (c fail2banExistingCapture) valid() error {
 		}
 		seen[name], found = true, found || name == c.Plan.Profile.Name
 	}
-	if !found || !fail2banDigest.MatchString(c.Plan.BanProof) {
-		return errors.New("接管目标名单或封禁观察摘要无效")
+	if !found || !fail2banDigest.MatchString(c.Plan.BanProof) || !fail2banDigest.MatchString(c.Plan.NativeProof) {
+		return errors.New("接管目标名单、过滤器或封禁观察摘要无效")
 	}
 	for name, raw := range c.Snapshot.Files {
 		if filepath.Clean(name) != name || filepath.IsAbs(name) || name == "." || strings.HasPrefix(name, "../") || strings.ContainsAny(name, "\x00\r\n\\") || len(raw) > 256<<10 {

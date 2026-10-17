@@ -346,8 +346,9 @@ func advanceFail2banExistingOwnership(ctx context.Context, data string, j *Journ
 		if err != nil || !equalFail2banExistingPolicy(policy, c.Plan.Before) {
 			return fail(errors.New("接管期间原 jail 的实际参数变化"))
 		}
-		if err = verifyFail2banExistingAction(ctx, program, &c.Binding, i.Name, commands); err != nil {
-			return fail(err)
+		native, err := readFail2banExistingNativeProfile(ctx, program, &c.Binding, c.Plan.Profile, c.Plan.Before, commands)
+		if err != nil || native != c.Plan.NativeProof {
+			return fail(errors.New("接管期间实际过滤器或动作属性变化"))
 		}
 		if _, err = readFail2banHostJail(ctx, program, c.Binding.Socket, i.Name); err != nil {
 			return fail(err)
@@ -371,6 +372,13 @@ func advanceFail2banExistingOwnership(ctx context.Context, data string, j *Journ
 		current, err = readFail2banExistingConfig()
 		if err != nil || current.hash() != c.CandidateHash {
 			return fail(errors.New("接管期间系统配置变化"))
+		}
+		live, err := readFail2banLiveService(ctx, &c.Binding)
+		if err != nil {
+			return fail(err)
+		}
+		if err = verifyFail2banExistingConfigSource(live, current); err != nil {
+			return fail(err)
 		}
 		if err = program.unchanged(ctx, data); err != nil {
 			return fail(err)

@@ -100,7 +100,7 @@ func fail2banExistingServerConfig(live fail2banLiveService) (string, error) {
 	return secure.Hash(raw), nil
 }
 
-func verifyFail2banExistingAction(ctx context.Context, program fail2banProgram, b *fail2banBinding, name string, commands [][]any) error {
+func fail2banExistingActionProperties(commands [][]any) (map[string]any, error) {
 	const action = "nftables-multiport"
 	properties := map[string]any{}
 	for _, command := range commands {
@@ -109,63 +109,49 @@ func verifyFail2banExistingAction(ctx context.Context, program fail2banProgram, 
 		}
 		if command[0] == "set" && command[2] == "addaction" {
 			if len(command) != 4 || command[3] != action {
-				return errors.New("已有 jail 不允许其他动作或 Python action")
+				return nil, errors.New("已有 jail 不允许其他动作或 Python action")
 			}
 		}
 		if command[0] == "set" && command[2] == "action" {
 			if len(command) != 6 || command[3] != action {
-				return errors.New("官方 action 属性格式未知")
+				return nil, errors.New("官方 action 属性格式未知")
 			}
 			key, k := command[4].(string)
 			value := command[5]
 			if !k {
-				return errors.New("官方 action 属性类型未知")
+				return nil, errors.New("官方 action 属性类型未知")
 			}
 			if _, exists := properties[key]; exists {
-				return errors.New("官方 action 属性重复")
+				return nil, errors.New("官方 action 属性重复")
 			}
 			properties[key] = value
 		}
 		if command[0] == "multi-set" && command[2] == "action" {
 			if len(command) != 5 || command[3] != action {
-				return errors.New("官方 action 批量属性格式未知")
+				return nil, errors.New("官方 action 批量属性格式未知")
 			}
 			pairs, ok := command[4].([]any)
 			if !ok {
-				return errors.New("官方 action 属性列表未知")
+				return nil, errors.New("官方 action 属性列表未知")
 			}
 			for _, item := range pairs {
 				pair, ok := item.([]any)
 				if !ok || len(pair) != 2 {
-					return errors.New("官方 action 属性不完整")
+					return nil, errors.New("官方 action 属性不完整")
 				}
 				key, k := pair[0].(string)
 				value := pair[1]
 				if !k {
-					return errors.New("官方 action 属性类型未知")
+					return nil, errors.New("官方 action 属性类型未知")
 				}
 				if _, exists := properties[key]; exists {
-					return errors.New("官方 action 属性重复")
+					return nil, errors.New("官方 action 属性重复")
 				}
 				properties[key] = value
 			}
 		}
 	}
-	raw, err := program.run(ctx, append(fail2banReadArgs(b.Socket, "get"), name, "actions"), 4096)
-	if err != nil || strings.TrimSpace(string(raw)) != "The jail "+name+" has the following actions:\n"+action {
-		return errors.New("实际 jail 的完整动作列表与官方配置不一致")
-	}
-	for _, key := range []string{"actionstart", "actionstop", "actioncheck", "actionban", "actionunban"} {
-		expected, ok := properties[key].(string)
-		if !ok {
-			return errors.New("官方 action 缺少必要命令属性")
-		}
-		raw, err := program.run(ctx, append(fail2banReadArgs(b.Socket, "get"), name, "action", action, key), 64<<10)
-		if err != nil || strings.TrimSpace(string(raw)) != strings.TrimSpace(expected) {
-			return errors.New("实际 jail 的 action 命令与官方固定配置不一致")
-		}
-	}
-	return nil
+	return properties, nil
 }
 
 // Preview is local root admission only. It neither publishes ownership nor
@@ -253,6 +239,9 @@ func previewFail2banExistingJailLocked(ctx context.Context, data string, input F
 	}
 	snapshot, err := readFail2banExistingConfig()
 	if err != nil {
+		return out, err
+	}
+	if err = verifyFail2banExistingConfigSource(live, snapshot); err != nil {
 		return out, err
 	}
 	commands, err := dumpFail2banExisting(ctx, program, b, fail2banExistingConfig, input.Profile.Name)
@@ -344,7 +333,8 @@ func previewFail2banExistingJailLocked(ctx context.Context, data string, input F
 	} else if len(afterCommands) != 0 || len(afterReference) != 0 {
 		return out, errors.New("候选 jail 停用期望被其他配置覆盖；未接管")
 	}
-	if err = verifyFail2banExistingAction(ctx, program, b, input.Profile.Name, commands); err != nil {
+	out.NativeProof, err = readFail2banExistingNativeProfile(ctx, program, b, input.Profile, before, commands)
+	if err != nil {
 		return out, err
 	}
 	bans, err := readFail2banHostJail(ctx, program, b.Socket, input.Profile.Name)
@@ -354,6 +344,9 @@ func previewFail2banExistingJailLocked(ctx context.Context, data string, input F
 	current, err := readFail2banExistingConfig()
 	if err != nil || current.hash() != snapshot.hash() {
 		return out, errors.New("已有 Fail2ban 配置在预检期间变化")
+	}
+	if err = verifyFail2banExistingConfigSource(live, current); err != nil {
+		return out, err
 	}
 	currentUnit, err := fail2banExistingUnitHash(ctx, b.Service)
 	if err != nil || currentUnit != unit {
@@ -399,12 +392,12 @@ func previewFail2banExistingJailLocked(ctx context.Context, data string, input F
 	banRaw, _ := json.Marshal(bans)
 	out.BanProof = secure.Hash(banRaw)
 	raw, _ = json.Marshal(struct {
-		Binding                                                         *fail2banBinding
-		Unit, Server, Config, Program, AfterProgram, Invocation, Socket string
-		Input                                                           Fail2banExistingJailInput
-		Before                                                          fail2ban.ExistingJailPolicy
-		Jails                                                           []string
-	}{b, unit, server, snapshot.hash(), fail2banDumpHash(commands), fail2banDumpHash(afterCommands), live.invocation, live.inode, Fail2banExistingJailInput{input.Profile, after}, before, out.Jails})
+		Binding                                                                 *fail2banBinding
+		Unit, Server, Config, Program, AfterProgram, Invocation, Socket, Native string
+		Input                                                                   Fail2banExistingJailInput
+		Before                                                                  fail2ban.ExistingJailPolicy
+		Jails                                                                   []string
+	}{b, unit, server, snapshot.hash(), fail2banDumpHash(commands), fail2banDumpHash(afterCommands), live.invocation, live.inode, out.NativeProof, Fail2banExistingJailInput{input.Profile, after}, before, out.Jails})
 	out.Target = secure.Hash(raw)
 	if capture != nil {
 		*capture = fail2banExistingCapture{Plan: out, Binding: *b, Unit: unit, Server: server, Invocation: live.invocation, Socket: live.inode, Snapshot: snapshot, CandidateHash: (fail2banExistingConfigSnapshot{Files: candidate}).hash(), DumpHash: fail2banDumpHash(afterCommands)}

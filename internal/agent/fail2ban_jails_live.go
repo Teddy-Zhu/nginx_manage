@@ -164,6 +164,17 @@ func readFail2banJailDetails(ctx context.Context, r *fail2banManagedRecord, b *f
 	filter, _ := fail2ban.FilterConfig(j.Template)
 	_, regex, _ := strings.Cut(filter, "failregex = ")
 	regex, _, _ = strings.Cut(regex, "\n")
+	if regex == "" || len(regex) > 16384 {
+		return nil, errors.New("受管固定过滤器表达式不完整")
+	}
+	compiled, err := fail2banManagedExec(ctx, r.python(), []string{"-I", "-S", "-B", "-c", fail2banManagedRegexValue, r.PackageRoot, regex}, 2*time.Second, 128<<10)
+	if err != nil {
+		return nil, err
+	}
+	regex = strings.TrimSpace(string(compiled))
+	if regex == "" || strings.ContainsAny(regex, "\x00\r\n") {
+		return nil, errors.New("官方固定过滤器展开结果不完整")
+	}
 	action, command, err := fail2banJailAction(r, j)
 	if err != nil {
 		return nil, err

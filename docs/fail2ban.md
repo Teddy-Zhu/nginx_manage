@@ -57,9 +57,9 @@ nginxpanel fail2ban-existing-jail-plan --data-dir /srv/nginxpanel --fail2ban-sco
 
 当前只接纳已显式接入的官方 1.1.1 系统实例、固定 `/etc/fail2ban`、原版 `sshd/common` 过滤器与 `nftables/nftables-multiport` 动作数据，逐文件核对内置 SHA-256，不下载组件。SSH 使用 normal 模式、TCP 指定端口和 `usedns=no`；文件来源固定 `/var/log/auth.log` 或 `/var/log/secure`，后端限 auto/polling；journal 来源要求 systemd 后端。其他动作、自定义 Python action、可执行 ignorecommand、递增/随机时长及无法识别的参数明确拒绝，不自动改写为固定配置。
 
-预检读取完整受 root 保护的配置树（最多 1024 项、总计 8 MiB、单文件 256 KiB，拒绝链接及特殊文件），在私有临时目录生成参考和候选配置。通过官方客户端 `-d` 获取配置流，使用有界字面量解析器读取，不执行 Python 表达式。比较原 jail 与固定 profile 的关键配置，再比较原配置与候选的全部非调整参数，并核对目标参数没有被其他配置覆盖。候选覆盖路径为 `jail.d/zzzz-nginxpanel-existing-<name>.local`，同名文件存在时拒绝覆盖。
+预检读取完整受 root 保护的配置树（最多 1024 项、总计 8 MiB、单文件 256 KiB，拒绝链接及特殊文件），同时核对所有文件和目录在宿主机与实际服务进程根目录中的身份，拒绝不同挂载或 chroot 视图。在私有临时目录生成参考和候选配置，通过官方客户端 `-d` 获取配置流，使用有界字面量解析器读取，不执行 Python 表达式。比较原 jail 与固定 profile 的关键配置，再比较原配置与候选的全部非调整参数，并核对目标参数没有被其他配置覆盖。候选覆盖路径为 `jail.d/zzzz-nginxpanel-existing-<name>.local`，同名文件存在时拒绝覆盖。
 
-成功结果包含原参数、期望参数、完整 jail 名单、影响说明、目标摘要及独立的 `ban_proof` 观察摘要。目标固定接入、单元、配置和服务代次；正常新增/到期的封禁不使配置接管基准失效。采集收尾复核配置、参数、完整名单、程序及实例身份。临时材料清理失败也报告失败。预检不证明内核实际阻断或授权接管；原封禁到期时间不推测时区，也不重放。网页/API 的已有 jail 修改仍未开放，迁移不能授予本机所有权。
+成功结果包含原参数、期望参数、完整 jail 名单、影响说明、目标摘要、实际过滤器/动作的 `native_proof` 及独立的 `ban_proof` 观察摘要。原生观察涵盖展开后的匹配表达式、实际日志来源及固定 CommandAction 属性，首次交接时重新核对。目标固定接入、单元、配置和服务代次；正常新增/到期的封禁不使配置接管基准失效。采集收尾复核配置、参数、完整名单、程序及实例身份。临时材料清理失败也报告失败。预检不证明内核实际阻断或授权接管；封禁日历时间的绝对换算使用下述独立运行证明，不重放历史封禁。网页/API 的已有 jail 修改仍未开放，迁移不能授予本机所有权。
 
 配置流与单 jail reload 合同依据 [官方客户端](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banclient.py)、[参数与 dump 输出](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2bancmdline.py)及 [action 配置转换](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/actionreader.py)。官方实例和发行版组合验收留待 P5。
 
@@ -84,6 +84,21 @@ nginxpanel fail2ban-existing-jail-cancel --data-dir /srv/nginxpanel --fail2ban-s
 释放只移除本应用生成且内容一致的覆盖文件，核对原配置等价后发布独立释放事件；不会改写其他 jail。期间其他 jail 的配置变化可通过当前配置流与移除候选重新证明，不要求按接管的逆序释放。服务离线时，若全部配置仍与冻结快照一致，可仅凭已证明的等价配置交还所有权。仍存在接管的 jail 时，禁止变更/撤销实例接入；原样重复接入保留原身份。
 
 快照、事件和指针位于 `DATA/agent/fail2ban/existing-jails/{captures,events,current}`，均为 root 私有运行材料，不进入配置迁移或业务恢复。单快照最多 16 MiB，接管快照及事件各最多 2048 项，名称指针最多 64 项，历史保留用于审计。当前公开读取及写入入口仍沿用既有边界，已有 jail 的网页/API 参数、启停和手动地址操作尚待接入；该本机交接不会自动赋予这些入口写权限。
+
+## 已接管 SSH jail 的运行证明
+
+本机 root 可读取当前有效接管的参数、实际过滤器/动作摘要、完整 jail 名单及封禁的绝对到期时间：
+
+```sh
+nginxpanel fail2ban-existing-jail-runtime --data-dir /srv/nginxpanel --fail2ban-scope host \
+  --fail2ban-existing-jail-base <ADOPTION_UUID>
+```
+
+此入口只读，整体预算 90 秒，复用宿主机/实例锁及维护准入。目标必须仍由原接管授权管理，固定单元、配置流、原参数及实际过滤器/动作须一致；允许服务正常重启后核对当前实例。采集前后复核配置及进程根目录视图、服务身份、程序、实际参数、完整名单和时区材料。运行 `target` 绑定本次配置与时钟依据，不包含会正常变化的封禁集合；返回的 `bans` 是采样时的引擎记录，不证明内核阻断。
+
+通过实际服务进程的初始 `TZ/TZDIR`、精确 UTC 启动时间及 root 保护的 TZif 文件识别时区，只支持固定 `/etc/localtime` 或 `/usr/share/zoneinfo` 数据；材料或系统程序/库在启动后变化、非标准目录、POSIX 时区表达式、夏令时重复/不存在的日历时间均拒绝换算。有限封禁须起止时间与时长一致，永久封禁保留 `duration=-1`。再使用实际固定系统 Python 的隔离进程按相同环境回算日历标签，核对可执行程序与库的映射设备、inode、进程根目录视图及启动前文件时间；结果不一致或读取不完整时返回失败，不默认按 UTC 处理。时钟证明、时区文件或原封禁不会进入迁移授权。
+
+受管 jail 的实际表达式核对同样使用已认证官方库展开固定 `<HOST>` 模板，再与引擎返回值比较。依据 [官方过滤器 getter](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)、[官方表达式展开](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/failregex.py)及 [systemd 时间格式](https://github.com/systemd/systemd/blob/v252/man/systemctl.xml)。本入口尚不应用参数或停用 jail；官方工具、时区及发行版运行验收仍待 P5。
 
 ## 实例与 jail 读取
 

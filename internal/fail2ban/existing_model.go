@@ -75,13 +75,14 @@ func (p ExistingJailProfile) Validate() error {
 }
 
 type ExistingJailPlan struct {
-	At        int64               `json:"at"`
-	BindingID string              `json:"binding_id"`
-	Target    string              `json:"target"`
-	BanProof  string              `json:"ban_proof"`
-	Profile   ExistingJailProfile `json:"profile"`
-	Before    ExistingJailPolicy  `json:"before"`
-	After     ExistingJailPolicy  `json:"after"`
-	Jails     []string            `json:"jails"`
-	Impacts   []string            `json:"impacts"`
+	At          int64               `json:"at"`
+	BindingID   string              `json:"binding_id"`
+	Target      string              `json:"target"`
+	BanProof    string              `json:"ban_proof"`
+	NativeProof string              `json:"native_proof"`
+	Profile     ExistingJailProfile `json:"profile"`
+	Before      ExistingJailPolicy  `json:"before"`
+	After       ExistingJailPolicy  `json:"after"`
+	Jails       []string            `json:"jails"`
+	Impacts     []string            `json:"impacts"`
 }

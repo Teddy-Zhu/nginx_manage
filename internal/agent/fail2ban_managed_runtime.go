@@ -24,6 +24,10 @@ import (
 const fail2banManagedServer = "import sys;sys.path.insert(0,sys.argv.pop(1));from fail2ban.client.fail2banserver import exec_command_line;sys.argv[0]='fail2ban-server';exec_command_line(sys.argv)"
 const fail2banManagedClient = "import sys;sys.path.insert(0,sys.argv.pop(1));from fail2ban.client.fail2banclient import exec_command_line;sys.argv[0]='fail2ban-client';exec_command_line(sys.argv)"
 
+// Use the same authenticated official compiler as the running engine. Host
+// tags are expanded by Fail2ban itself, never by a second Go regex dialect.
+const fail2banManagedRegexValue = "import sys;sys.path.insert(0,sys.argv[1]);from fail2ban.server.failregex import FailRegex;print(FailRegex(sys.argv[2],useDns='no').getRegex())"
+
 func (r fail2banManagedRecord) args(client bool, args ...string) []string {
 	bootstrap := fail2banManagedServer
 	if client {
