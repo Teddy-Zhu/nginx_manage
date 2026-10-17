@@ -92,26 +92,11 @@ func loadFail2banManaged(data string) (*fail2banManagedRecord, error) {
 	var r fail2banManagedRecord
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
-	// The pointer is checked against the immutable event before it is used.
-	if d.Decode(&r) != nil || d.Decode(new(any)) != io.EOF || r.Schema != 1 || !validID(r.EventID) || r.PreviousEvent != "" && !validID(r.PreviousEvent) || !validID(r.OperationID) || r.DataDir != data || r.ApprovedAt <= 0 || r.ApprovedAt > time.Now().Unix()+300 || !fail2banDigest.MatchString(r.PlanID) || !fail2banDigest.MatchString(r.TrustSHA256) || !fail2banDigest.MatchString(r.ManifestSHA256) || !fail2banDigest.MatchString(r.PythonSHA256) || !fail2banDigest.MatchString(r.ManagerSHA256) || r.Version != fail2ban.RegexVersion || !fail2banPythonPath.MatchString(r.PythonPath) || !fail2banVersion.MatchString(r.PythonVersion) || !filepath.IsAbs(r.ManagerPath) || filepath.Clean(r.ManagerPath) != r.ManagerPath || len(r.ManagerPath) > 512 || len(r.Reason) > 1024 {
+	if d.Decode(&r) != nil || d.Decode(new(any)) != io.EOF {
 		return nil, errors.New("受管 Fail2ban 安装记录无效")
 	}
-	if r.At <= 0 || r.At > time.Now().Unix()+300 {
-		return nil, errors.New("受管引擎事件时间无效")
-	}
-	if r.Action != "install" && r.Action != "start" && r.Action != "stop" && r.Action != "enable" && r.Action != "disable" && r.Action != "rollback" {
-		return nil, errors.New("受管引擎操作登记无效")
-	}
-	if r.ActionState != "pending" && r.ActionState != "completed" && r.ActionState != "unknown" {
-		return nil, errors.New("受管引擎操作结果登记无效")
-	}
-	switch r.State {
-	case "reserved", "ready", "installed", "interrupted", "rolling-back", "rolled-back":
-	default:
-		return nil, errors.New("受管 Fail2ban 安装状态无效")
-	}
-	if r.PackageRoot != filepath.Join(releases.Store, r.PlanID, r.AssetID) || r.AssetID == "" || len(r.AssetID) > 128 || strings.ContainsAny(r.AssetID, "/\\\x00") || !filepath.IsAbs(r.TrustPath) || filepath.Clean(r.TrustPath) != r.TrustPath || len(r.TrustPath) > 512 {
-		return nil, errors.New("受管 Fail2ban 组件身份无效")
+	if err := validateFail2banManagedRecord(r, data); err != nil {
+		return nil, err
 	}
 	// A current pointer may only refer to an already durable immutable event.
 	event, err := listenerRead(filepath.Join(fail2banManagedDir(data), "history", r.EventID+".json"), 16384)
@@ -123,6 +108,32 @@ func loadFail2banManaged(data string) (*fail2banManagedRecord, error) {
 		return nil, err
 	}
 	return &r, nil
+}
+
+// Historical state snapshots validate the same record contract without
+// selecting that old engine or changing the current jail pointer.
+func validateFail2banManagedRecord(r fail2banManagedRecord, data string) error {
+	if r.Schema != 1 || !validID(r.EventID) || r.PreviousEvent != "" && !validID(r.PreviousEvent) || !validID(r.OperationID) || r.DataDir != data || r.ApprovedAt <= 0 || r.ApprovedAt > time.Now().Unix()+300 || !fail2banDigest.MatchString(r.PlanID) || !fail2banDigest.MatchString(r.TrustSHA256) || !fail2banDigest.MatchString(r.ManifestSHA256) || !fail2banDigest.MatchString(r.PythonSHA256) || !fail2banDigest.MatchString(r.ManagerSHA256) || r.Version != fail2ban.RegexVersion || !fail2banPythonPath.MatchString(r.PythonPath) || !fail2banVersion.MatchString(r.PythonVersion) || !filepath.IsAbs(r.ManagerPath) || filepath.Clean(r.ManagerPath) != r.ManagerPath || len(r.ManagerPath) > 512 || len(r.Reason) > 1024 {
+		return errors.New("受管 Fail2ban 安装记录无效")
+	}
+	if r.At <= 0 || r.At > time.Now().Unix()+300 {
+		return errors.New("受管引擎事件时间无效")
+	}
+	if r.Action != "install" && r.Action != "start" && r.Action != "stop" && r.Action != "enable" && r.Action != "disable" && r.Action != "rollback" {
+		return errors.New("受管引擎操作登记无效")
+	}
+	if r.ActionState != "pending" && r.ActionState != "completed" && r.ActionState != "unknown" {
+		return errors.New("受管引擎操作结果登记无效")
+	}
+	switch r.State {
+	case "reserved", "ready", "installed", "interrupted", "rolling-back", "rolled-back":
+	default:
+		return errors.New("受管 Fail2ban 安装状态无效")
+	}
+	if r.PackageRoot != filepath.Join(releases.Store, r.PlanID, r.AssetID) || r.AssetID == "" || len(r.AssetID) > 128 || strings.ContainsAny(r.AssetID, "/\\\x00") || !filepath.IsAbs(r.TrustPath) || filepath.Clean(r.TrustPath) != r.TrustPath || len(r.TrustPath) > 512 {
+		return errors.New("受管 Fail2ban 组件身份无效")
+	}
+	return nil
 }
 func saveFail2banManaged(r *fail2banManagedRecord, state, reason string) error {
 	next := *r
