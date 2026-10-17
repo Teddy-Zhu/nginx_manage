@@ -8,6 +8,12 @@ type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
 type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
+export type HistoryFilter = components["schemas"]["HistoryFilter"];
+export type HistoryItem = components["schemas"]["HistoryItem"];
+export type HistoryScope = components["schemas"]["HistoryScope"];
+export type HistoryPreview = components["schemas"]["HistoryPreview"];
+export type HistoryExecuteInput = components["schemas"]["HistoryExecuteInput"];
+export type HistoryResult = components["schemas"]["HistoryResult"];
 export type AuditFilter = components["schemas"]["AuditFilter"];
 export type AuditRow = components["schemas"]["AuditRow"];
 export type AuditPage = components["schemas"]["AuditPage"];
@@ -220,6 +226,7 @@ export interface Revision {
   version: number;
   state: string;
   created_at: number;
+  pruned_at: number;
 }
 
 export class ApiError extends Error {
@@ -449,6 +456,8 @@ function createAPI(scope: RequestScope) {
   return {
   request,
   downloadLogFile: (data: LogQuery) => downloadLogFileFor(data, scope),
+  previewHistory: (data: HistoryFilter) => request<HistoryPreview>({ url: "/history/preview", method: "POST", data }),
+  executeHistory: (data: HistoryExecuteInput, key: string) => request<HistoryResult>({ url: "/history/execute", method: "POST", data, headers: { "Idempotency-Key": key } }),
   audit: (params: AuditQuery) => request<AuditPage>({ url: "/audit", params }),
   exportAudit: (data: AuditFilter) => exportAuditFor(data, scope),
   followLogs: (query: LogQuery, page: (value: LogPage) => void, error: (value: ApiError) => void) => followLogsFor(scope, query, page, error),

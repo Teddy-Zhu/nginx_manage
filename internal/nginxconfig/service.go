@@ -77,6 +77,9 @@ func (s *Service) get(ctx context.Context, id string, q *dbgen.Queries) (Tree, e
 	if err != nil {
 		return Tree{}, err
 	}
+	if r.PrunedAt > 0 {
+		return Tree{}, fault.New(410, "HISTORY_PRUNED", "历史配置材料已清理，修订记录仍保留")
+	}
 	tree := Tree{RevisionID: r.ID, Version: r.Version, State: r.State, Files: []File{}, Resources: []Resource{}, Diagnostics: []Diagnostic{}}
 	if err := json.Unmarshal([]byte(r.Diagnostics), &tree.Diagnostics); err != nil {
 		return tree, err

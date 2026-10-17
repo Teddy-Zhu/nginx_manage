@@ -33,6 +33,7 @@ import {
   useNodeAPI,
   ApiError,
   type Tree,
+  type Revision,
   type ConfigFile,
   type Resource,
   type SaveResult,
@@ -403,19 +404,14 @@ const pathExample = computed(() => {
   return `${incoming} → ${uri ? uri + incoming.slice(prefix.length) : incoming}`;
 });
 
-interface Revision {
-  id: string;
-  version: number;
-  state: string;
-  created_at: number;
-}
 const revisions = ref<Revision[]>([]);
 const revisionColumns: DataTableColumns<Revision> = [
   { title: "修订", key: "version", render: (r) => `#${r.version}` },
   {
     title: "类型",
     key: "state",
-    render: (r) => (r.state === "draft" ? "草稿" : "有效配置"),
+    render: (r) =>
+      r.pruned_at ? "材料已清理" : r.state === "draft" ? "草稿" : "有效配置",
   },
   {
     title: "保存时间",
@@ -679,6 +675,7 @@ async function showHistory() {
   });
 }
 async function loadRevision(row: Revision) {
+  if (row.pruned_at) return;
   if (dirty.value && !window.confirm("有未保存修改，确认加载历史原文？"))
     return;
   await run(async () => {
@@ -1197,14 +1194,16 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     preset="card"
     title="修订历史"
     style="width: 720px; max-width: 94vw"
-    ><p class="muted">选择一行加载历史原文，保存时会创建新修订。</p>
+    ><p class="muted">选择保留材料的修订加载原文，保存时会创建新修订。</p>
     <n-data-table
       :columns="revisionColumns"
       :data="revisions"
       :row-props="
         (row: Revision) => ({
           onClick: () => loadRevision(row),
-          style: 'cursor: pointer',
+          style: row.pruned_at
+            ? 'cursor: default; opacity: .6'
+            : 'cursor: pointer',
         })
       "
       :bordered="false"

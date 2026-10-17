@@ -4,6 +4,14 @@
  */
 
 export interface paths {
+    "/history/execute": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get?: never; put?: never; post: operations["executeHistory"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
+    };
+    "/history/preview": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get?: never; put?: never; post: operations["previewHistory"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
+    };
  "/fail2ban/python": { post:operations["changeFail2banPython"]; };
  "/fail2ban/python/tasks": { get:operations["getFail2banPythonTasks"]; };
  "/fail2ban/lifecycle/preview": { post:operations["previewFail2banLifecycle"]; };
@@ -1826,6 +1834,47 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        HistoryFilter: {
+            before: number;
+            revision_keep: number;
+            certificate_keep: number;
+            order_keep: number;
+        };
+        HistoryItem: {
+            kind: string;
+            id: string;
+            resource_id: string;
+            version: number;
+            created_at: number;
+            bytes: number;
+        };
+        HistoryScope: {
+            kind: string;
+            retained: number;
+            selected: number;
+            bytes: number;
+            more: boolean;
+        };
+        HistoryPreview: {
+            node_id: string;
+            filter: components["schemas"]["HistoryFilter"];
+            base_version: number;
+            scopes: components["schemas"]["HistoryScope"][];
+            items: components["schemas"]["HistoryItem"][];
+            sha256: string;
+            token: string;
+            expires_at: number;
+        };
+        HistoryExecuteInput: {
+            token: string;
+        };
+        HistoryResult: {
+            id: string;
+            node_id: string;
+            sha256: string;
+            completed_at: number;
+            scopes: components["schemas"]["HistoryScope"][];
+        };
         FirewallProtection: { service: "ssh" | "management"; family: "ipv4" | "ipv6"; port: number; sources: string[]; };
         FirewallPlanInput: { action: "apply" | "remove"; version: number; };
         FirewallApplyInput: { action: "apply" | "remove"; plan_id: string; version: number; };
@@ -3778,6 +3827,16 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    executeHistory: {
+        parameters: { query?: never; header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; }; path?: never; cookie?: never; };
+        requestBody: { content: { "application/json": components["schemas"]["HistoryExecuteInput"]; }; };
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+    previewHistory: {
+        parameters: { query?: never; header?: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; }; path?: never; cookie?: never; };
+        requestBody: { content: { "application/json": components["schemas"]["HistoryFilter"]; }; };
+        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
  changeFail2banPython: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banPythonTaskInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  getFail2banPythonTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
 

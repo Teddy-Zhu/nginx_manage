@@ -33,6 +33,7 @@ import (
 	"nginxpanel/internal/eventlog"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/firewall"
+	"nginxpanel/internal/history"
 	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/migration"
@@ -244,6 +245,10 @@ func Run(ctx context.Context, o Options) error {
 	if err := db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key='node_id'").Scan(&nodeID); err != nil {
 		return errors.New("data directory is not initialized; run init first")
 	}
+	historyService, err := history.New(db, vault, nodeID)
+	if err != nil {
+		return err
+	}
 	certificateStore := &certificates.Service{DB: db, Vault: vault}
 	config := &nginxconfig.Service{DB: db, Vault: vault, Policy: o.Policy, Certificates: certificateStore}
 	agentClient := agent.NewClient(o.Socket)
@@ -283,7 +288,7 @@ func Run(ctx context.Context, o Options) error {
 	firewallService := &firewall.Service{DB: db, Vault: vault, Agent: agentClient}
 	migrationService := &migration.Service{HostDNS: dnsService, Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
 	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
-	api := (&transport.Server{Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
+	api := (&transport.Server{History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
 	static := spa(o.WebDir)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {

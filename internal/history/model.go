@@ -1,0 +1,61 @@
+package history
+
+import (
+	"time"
+
+	"nginxpanel/internal/fault"
+)
+
+type Filter struct {
+	Before          int64 `json:"before"`
+	RevisionKeep    int   `json:"revision_keep"`
+	CertificateKeep int   `json:"certificate_keep"`
+	OrderKeep       int   `json:"order_keep"`
+}
+
+func (f Filter) Validate() error {
+	if f.Before < 1 || f.Before > time.Now().Unix() || f.RevisionKeep < 2 || f.RevisionKeep > 100 || f.CertificateKeep < 2 || f.CertificateKeep > 16 || f.OrderKeep < 2 || f.OrderKeep > 100 {
+		return fault.Invalid("历史维护须指定过去的截止时间，并至少保留 2 个配置、每证书 2 个版本及每签发配置 2 个订单；上限分别为 100、16、100")
+	}
+	return nil
+}
+
+type Item struct {
+	Kind       string `json:"kind"`
+	ID         string `json:"id"`
+	ResourceID string `json:"resource_id"`
+	Version    int64  `json:"version"`
+	CreatedAt  int64  `json:"created_at"`
+	Bytes      int64  `json:"bytes"`
+}
+
+type Scope struct {
+	Kind     string `json:"kind"`
+	Retained int64  `json:"retained"`
+	Selected int    `json:"selected"`
+	Bytes    int64  `json:"bytes"`
+	More     bool   `json:"more"`
+}
+
+type Preview struct {
+	NodeID      string  `json:"node_id"`
+	Filter      Filter  `json:"filter"`
+	BaseVersion int64   `json:"base_version"`
+	Scopes      []Scope `json:"scopes"`
+	Items       []Item  `json:"items"`
+	SHA256      string  `json:"sha256"`
+	Token       string  `json:"token"`
+	ExpiresAt   int64   `json:"expires_at"`
+}
+
+type ExecuteInput struct {
+	Token string `json:"token"`
+}
+
+type Result struct {
+	ID          string  `json:"id"`
+	NodeID      string  `json:"node_id"`
+	SHA256      string  `json:"sha256"`
+	CompletedAt int64   `json:"completed_at"`
+	Scopes      []Scope `json:"scopes"`
+}

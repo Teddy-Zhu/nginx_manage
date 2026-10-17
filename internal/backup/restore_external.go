@@ -147,7 +147,7 @@ func ReadRestorationExternalDescriptors(ctx context.Context, data, id string, in
 func restorationExternalQueries() []struct{ kind, query string } {
 	return []struct{ kind, query string }{
 		{"acme_accounts", `SELECT id,'',state,'',a.* FROM acme_accounts a WHERE state IN ('pending','registering') ORDER BY id`},
-		{"acme_orders", `SELECT id,profile_id,'pending',http01_state,a.* FROM acme_orders a WHERE terminal=0 OR http01_state IN ('unknown','active') OR EXISTS(SELECT 1 FROM acme_dns_records d WHERE d.order_id=a.id AND d.state<>'cleaned') ORDER BY id`},
+		{"acme_orders", `SELECT id,profile_id,'pending',http01_state,a.* FROM acme_orders a WHERE pruned_at=0 AND (terminal=0 OR http01_state IN ('unknown','active') OR EXISTS(SELECT 1 FROM acme_dns_records d WHERE d.order_id=a.id AND d.state<>'cleaned')) ORDER BY id`},
 		{"acme_profiles", `SELECT id,current_order_id,state,'',a.* FROM acme_profiles a WHERE state IN ('issuing','recovery_required') ORDER BY id`},
 		{"dns_records", `SELECT id,order_id,state,'',a.* FROM acme_dns_records a WHERE state<>'cleaned' ORDER BY id`},
 		{"migration_plans", `SELECT id,'',state,'',a.* FROM migration_plans a WHERE state IN ('applying','recovery_required') ORDER BY id`},

@@ -27,7 +27,7 @@ func (q *Queries) GetConfigHead(ctx context.Context) (ConfigHead, error) {
 }
 
 const getRevision = `-- name: GetRevision :one
-SELECT id, parent_id, version, state, parser_version, policy_version, diagnostics, created_at, created_by FROM config_revisions WHERE id=?
+SELECT id, parent_id, version, state, parser_version, policy_version, diagnostics, created_at, created_by, pruned_at FROM config_revisions WHERE id=?
 `
 
 func (q *Queries) GetRevision(ctx context.Context, id string) (ConfigRevision, error) {
@@ -43,6 +43,7 @@ func (q *Queries) GetRevision(ctx context.Context, id string) (ConfigRevision, e
 		&i.Diagnostics,
 		&i.CreatedAt,
 		&i.CreatedBy,
+		&i.PrunedAt,
 	)
 	return i, err
 }
@@ -172,7 +173,7 @@ func (q *Queries) GetUser(ctx context.Context) (User, error) {
 }
 
 const listRevisions = `-- name: ListRevisions :many
-SELECT id,parent_id,version,state,created_at,created_by FROM config_revisions ORDER BY version DESC LIMIT ? OFFSET ?
+SELECT id,parent_id,version,state,created_at,created_by,pruned_at FROM config_revisions ORDER BY version DESC LIMIT ? OFFSET ?
 `
 
 type ListRevisionsParams struct {
@@ -187,6 +188,7 @@ type ListRevisionsRow struct {
 	State     string         `json:"state"`
 	CreatedAt int64          `json:"created_at"`
 	CreatedBy string         `json:"created_by"`
+	PrunedAt  int64          `json:"pruned_at"`
 }
 
 func (q *Queries) ListRevisions(ctx context.Context, arg ListRevisionsParams) ([]ListRevisionsRow, error) {
@@ -205,6 +207,7 @@ func (q *Queries) ListRevisions(ctx context.Context, arg ListRevisionsParams) ([
 			&i.State,
 			&i.CreatedAt,
 			&i.CreatedBy,
+			&i.PrunedAt,
 		); err != nil {
 			return nil, err
 		}

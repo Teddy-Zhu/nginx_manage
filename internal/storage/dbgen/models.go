@@ -66,6 +66,7 @@ type AcmeOrder struct {
 	Http01Revision       string         `json:"http01_revision"`
 	Http01ExpiresAt      int64          `json:"http01_expires_at"`
 	Http01Epoch          int64          `json:"http01_epoch"`
+	PrunedAt             int64          `json:"pruned_at"`
 }
 
 type AcmeProfile struct {
@@ -161,6 +162,7 @@ type CertificateVersion struct {
 	Summary       string `json:"summary"`
 	CreatedAt     int64  `json:"created_at"`
 	Environment   string `json:"environment"`
+	PrunedAt      int64  `json:"pruned_at"`
 }
 
 type ComponentOperation struct {
@@ -187,6 +189,7 @@ type ConfigRevision struct {
 	Diagnostics   string         `json:"diagnostics"`
 	CreatedAt     int64          `json:"created_at"`
 	CreatedBy     string         `json:"created_by"`
+	PrunedAt      int64          `json:"pruned_at"`
 }
 
 type DnsCredential struct {

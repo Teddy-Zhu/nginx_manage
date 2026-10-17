@@ -14,6 +14,69 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// HistoryFilter defines model for HistoryFilter.
+type HistoryFilter struct {
+	Before          int64 `json:"before"`
+	RevisionKeep    int   `json:"revision_keep"`
+	CertificateKeep int   `json:"certificate_keep"`
+	OrderKeep       int   `json:"order_keep"`
+}
+
+// HistoryItem defines model for HistoryItem.
+type HistoryItem struct {
+	Kind       string `json:"kind"`
+	Id         string `json:"id"`
+	ResourceId string `json:"resource_id"`
+	Version    int64  `json:"version"`
+	CreatedAt  int64  `json:"created_at"`
+	Bytes      int64  `json:"bytes"`
+}
+
+// HistoryScope defines model for HistoryScope.
+type HistoryScope struct {
+	Kind     string `json:"kind"`
+	Retained int64  `json:"retained"`
+	Selected int    `json:"selected"`
+	Bytes    int64  `json:"bytes"`
+	More     bool   `json:"more"`
+}
+
+// HistoryPreview defines model for HistoryPreview.
+type HistoryPreview struct {
+	NodeId      string         `json:"node_id"`
+	Filter      HistoryFilter  `json:"filter"`
+	BaseVersion int64          `json:"base_version"`
+	Scopes      []HistoryScope `json:"scopes"`
+	Items       []HistoryItem  `json:"items"`
+	Sha256      string         `json:"sha256"`
+	Token       string         `json:"token"`
+	ExpiresAt   int64          `json:"expires_at"`
+}
+
+// HistoryExecuteInput defines model for HistoryExecuteInput.
+type HistoryExecuteInput struct {
+	Token string `json:"token"`
+}
+
+// HistoryResult defines model for HistoryResult.
+type HistoryResult struct {
+	Id          string         `json:"id"`
+	NodeId      string         `json:"node_id"`
+	Sha256      string         `json:"sha256"`
+	CompletedAt int64          `json:"completed_at"`
+	Scopes      []HistoryScope `json:"scopes"`
+}
+
+type PreviewHistoryParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+type ExecuteHistoryParams struct {
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+}
+type PreviewHistoryJSONRequestBody = HistoryFilter
+type ExecuteHistoryJSONRequestBody = HistoryExecuteInput
+
 // Defines values for ACMEAccountEnvironment.
 const (
 	ACMEAccountEnvironmentProduction ACMEAccountEnvironment = "production"
@@ -4808,6 +4871,8 @@ type SetModuleJSONRequestBody SetModuleJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	PreviewHistory(w http.ResponseWriter, r *http.Request, params PreviewHistoryParams)
+	ExecuteHistory(w http.ResponseWriter, r *http.Request, params ExecuteHistoryParams)
 	ChangeFail2banPython(w http.ResponseWriter, r *http.Request, params ChangeFail2banPythonParams)
 	GetFail2banPythonTasks(w http.ResponseWriter, r *http.Request)
 	CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, params CheckFail2banTemplatesParams)
@@ -8594,6 +8659,111 @@ func (siw *ServerInterfaceWrapper) DownloadLogs(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// PreviewHistory operation middleware
+func (siw *ServerInterfaceWrapper) PreviewHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PreviewHistoryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewHistory(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExecuteHistory operation middleware
+func (siw *ServerInterfaceWrapper) ExecuteHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExecuteHistoryParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExecuteHistory(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ExportAudit operation middleware
 func (siw *ServerInterfaceWrapper) ExportAudit(w http.ResponseWriter, r *http.Request) {
 
@@ -12137,6 +12307,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/revisions/{id}", wrapper.GetRevision)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks", wrapper.ListTasks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tasks/{id}", wrapper.GetTask)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/history/preview", wrapper.PreviewHistory)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/history/execute", wrapper.ExecuteHistory)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/audit/export", wrapper.ExportAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/logs/sources", wrapper.ListLogSources)

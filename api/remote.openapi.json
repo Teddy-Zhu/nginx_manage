@@ -6161,6 +6161,105 @@
         "x-body-limit": 4096,
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/history/preview": {
+      "post": {
+        "operationId": "remotePreviewHistory",
+        "x-scopes": [
+          "system.write",
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/HistoryFilter"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。",
+        "x-local-operation": "previewHistory",
+        "x-forward-path": "/history/preview",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/history/execute": {
+      "post": {
+        "operationId": "remoteExecuteHistory",
+        "x-scopes": [
+          "system.write",
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/HistoryExecuteInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "返回 HistoryResult。同事务重查预览摘要并清理无引用的历史材料，保留修订、任务、订单及审计元数据；不清理 root 文件，不保证物理磁盘收缩。幂等键须在结果不确定时原样重试。",
+        "x-local-operation": "executeHistory",
+        "x-forward-path": "/history/execute",
+        "x-response-kind": "json",
+        "x-body-limit": 8192,
+        "x-query-keys": []
+      }
     }
   },
   "security": [

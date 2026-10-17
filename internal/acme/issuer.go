@@ -123,7 +123,7 @@ func (s *Service) nextIssue(ctx context.Context) error {
 		return errors.New("ACME issuance task found with disabled Nginx module")
 	}
 	var job orderJob
-	err = tx.QueryRowContext(ctx, "SELECT id,profile_id,task_id,COALESCE(account_id,''),provider,credentials,private_key,csr,submit_started,order_url,next_poll_at,COALESCE(certificate_version_id,''),automatic,replaces_id,challenge_type,http01_state,http01_revision,http01_expires_at,terminal,http01_epoch FROM acme_orders WHERE id=?", p.CurrentOrderID).Scan(&job.ID, &job.ProfileID, &job.TaskID, &job.AccountID, &job.Provider, &job.Credentials, &job.Key, &job.CSR, &job.Started, &job.OrderURL, &job.NextPollAt, &job.CertificateVersionID, &job.Automatic, &job.ReplacesID, &job.ChallengeType, &job.HTTP01State, &job.HTTP01Revision, &job.HTTP01ExpiresAt, &job.Terminal, &job.HTTP01Epoch)
+	err = tx.QueryRowContext(ctx, "SELECT id,profile_id,task_id,COALESCE(account_id,''),provider,credentials,private_key,csr,submit_started,order_url,next_poll_at,COALESCE(certificate_version_id,''),automatic,replaces_id,challenge_type,http01_state,http01_revision,http01_expires_at,terminal,http01_epoch FROM acme_orders WHERE id=? AND pruned_at=0", p.CurrentOrderID).Scan(&job.ID, &job.ProfileID, &job.TaskID, &job.AccountID, &job.Provider, &job.Credentials, &job.Key, &job.CSR, &job.Started, &job.OrderURL, &job.NextPollAt, &job.CertificateVersionID, &job.Automatic, &job.ReplacesID, &job.ChallengeType, &job.HTTP01State, &job.HTTP01Revision, &job.HTTP01ExpiresAt, &job.Terminal, &job.HTTP01Epoch)
 	if err != nil {
 		return err
 	}

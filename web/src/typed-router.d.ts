@@ -115,6 +115,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/history': RouteRecordInfo<
+      '/history',
+      '/history',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/host-dns': RouteRecordInfo<
       '/host-dns',
       '/host-dns',
@@ -331,6 +338,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/firewall-rules.vue': {
       routes:
         | '/firewall-rules'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/history.vue': {
+      routes:
+        | '/history'
       views:
         | never
       pathParamNames:

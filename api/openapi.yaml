@@ -1268,6 +1268,7 @@ paths:
   /nginx/revisions:
     get:
       operationId: listRevisions
+      description: 返回分页修订元数据；pruned_at 大于零表示历史材料已清理，仍保留修订与父级记录。
       x-scopes: [read]
       parameters:
         - { $ref: '#/components/parameters/Limit' }
@@ -1279,6 +1280,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     get:
       operationId: getRevision
+      description: 返回修订原文；已清理的历史材料返回 HTTP 410 HISTORY_PRUNED。
       x-scopes: [config.secrets]
       responses:
         '200': { $ref: '#/components/responses/JSON' }
@@ -1301,6 +1303,10 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /history/preview:
+    {"post": {"operationId": "previewHistory", "x-scopes": ["system.write", "config.write", "config.secrets"], "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HistoryFilter"}}}}, "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。"}}
+  /history/execute:
+    {"post": {"operationId": "executeHistory", "x-scopes": ["system.write", "config.write", "config.secrets"], "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HistoryExecuteInput"}}}}, "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "返回 HistoryResult。同事务重查预览摘要并清理无引用的历史材料，保留修订、任务、订单及审计元数据；不清理 root 文件，不保证物理磁盘收缩。幂等键须在结果不确定时原样重试。"}}
   /audit:
     {"get": {"operationId": "listAudit", "x-scopes": ["read"], "parameters": [{"name": "from", "in": "query", "required": true, "schema": {"type": "integer", "format": "int64"}}, {"name": "until", "in": "query", "required": true, "schema": {"type": "integer", "format": "int64"}}, {"$ref": "#/components/parameters/Limit"}, {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 1024}}, {"name": "principal", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "action", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "resource_id", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "outcome", "in": "query", "schema": {"type": "string", "maxLength": 128}}, {"name": "request_id", "in": "query", "schema": {"type": "string", "maxLength": 128}}], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /audit/export:
@@ -1912,6 +1918,18 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    HistoryFilter:
+      {"type": "object", "additionalProperties": false, "required": ["before", "revision_keep", "certificate_keep", "order_keep"], "properties": {"before": {"type": "integer", "format": "int64", "minimum": 1}, "revision_keep": {"type": "integer", "minimum": 2, "maximum": 100}, "certificate_keep": {"type": "integer", "minimum": 2, "maximum": 16}, "order_keep": {"type": "integer", "minimum": 2, "maximum": 100}}}
+    HistoryItem:
+      {"type": "object", "additionalProperties": false, "required": ["kind", "id", "resource_id", "version", "created_at", "bytes"], "properties": {"kind": {"type": "string"}, "id": {"type": "string"}, "resource_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "created_at": {"type": "integer", "format": "int64"}, "bytes": {"type": "integer", "format": "int64"}}}
+    HistoryScope:
+      {"type": "object", "additionalProperties": false, "required": ["kind", "retained", "selected", "bytes", "more"], "properties": {"kind": {"type": "string"}, "retained": {"type": "integer", "format": "int64"}, "selected": {"type": "integer"}, "bytes": {"type": "integer", "format": "int64"}, "more": {"type": "boolean"}}}
+    HistoryPreview:
+      {"type": "object", "additionalProperties": false, "required": ["node_id", "filter", "base_version", "scopes", "items", "sha256", "token", "expires_at"], "properties": {"node_id": {"type": "string"}, "filter": {"$ref": "#/components/schemas/HistoryFilter"}, "base_version": {"type": "integer", "format": "int64"}, "scopes": {"type": "array", "items": {"$ref": "#/components/schemas/HistoryScope"}}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/HistoryItem"}}, "sha256": {"type": "string"}, "token": {"type": "string"}, "expires_at": {"type": "integer", "format": "int64"}}}
+    HistoryExecuteInput:
+      {"type": "object", "additionalProperties": false, "required": ["token"], "properties": {"token": {"type": "string", "minLength": 1, "maxLength": 4096}}}
+    HistoryResult:
+      {"type": "object", "additionalProperties": false, "required": ["id", "node_id", "sha256", "completed_at", "scopes"], "properties": {"id": {"type": "string"}, "node_id": {"type": "string"}, "sha256": {"type": "string"}, "completed_at": {"type": "integer", "format": "int64"}, "scopes": {"type": "array", "items": {"$ref": "#/components/schemas/HistoryScope"}}}}
     Fail2banExistingResource:
       type: object
       additionalProperties: false

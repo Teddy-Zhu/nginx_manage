@@ -333,13 +333,13 @@ func (s *Service) queueIssue(ctx context.Context, tx *sql.Tx, id string, in Issu
 			return ChangeResult{}, fault.Conflict("须确认原订单可能已在 CA 创建，才可建立新订单")
 		}
 		var retained, total int
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders WHERE profile_id=?", id).Scan(&retained); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders WHERE profile_id=? AND pruned_at=0", id).Scan(&retained); err != nil {
 			return ChangeResult{}, err
 		}
 		if retained >= limits.CertificateVersions {
 			return ChangeResult{}, fault.Conflict("签发订单已达保留上限，须先处理历史保留")
 		}
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders").Scan(&total); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM acme_orders WHERE pruned_at=0").Scan(&total); err != nil {
 			return ChangeResult{}, err
 		}
 		if total >= limits.ACMEOrders {
@@ -372,7 +372,7 @@ func (s *Service) queueIssue(ctx context.Context, tx *sql.Tx, id string, in Issu
 				return ChangeResult{}, fault.Conflict("证书数量已达上限")
 			}
 		} else {
-			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_versions WHERE certificate_id=?", item.CertificateID).Scan(&count); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_versions WHERE certificate_id=? AND pruned_at=0", item.CertificateID).Scan(&count); err != nil {
 				return ChangeResult{}, err
 			}
 			if count >= limits.CertificateVersions {
@@ -472,7 +472,7 @@ func (s *Service) Orders(ctx context.Context, id string) ([]OrderView, error) {
 	if _, err := profile(ctx, s.DB, id); err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT o.id,o.task_id,o.order_url,o.certificate_url,COALESCE(o.certificate_version_id,''),t.state,t.stage,t.last_error,o.created_at,o.automatic,o.terminal,o.challenge_type,o.http01_state,o.http01_revision,o.http01_expires_at FROM acme_orders o JOIN tasks t ON t.id=o.task_id WHERE o.profile_id=? ORDER BY o.created_at DESC,o.id", id)
+	rows, err := s.DB.QueryContext(ctx, "SELECT o.id,o.task_id,o.order_url,o.certificate_url,COALESCE(o.certificate_version_id,''),t.state,t.stage,t.last_error,o.created_at,o.automatic,o.terminal,o.challenge_type,o.http01_state,o.http01_revision,o.http01_expires_at FROM acme_orders o JOIN tasks t ON t.id=o.task_id WHERE o.profile_id=? AND o.pruned_at=0 ORDER BY o.created_at DESC,o.id", id)
 	if err != nil {
 		return nil, err
 	}

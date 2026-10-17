@@ -32,10 +32,12 @@ const revisions = ref<Revision[]>([]),
   difference = ref<Difference | null>(null),
   selected = ref("");
 const options = computed(() => {
-  const rows = revisions.value.map((row) => ({
-    label: `修订 #${row.version}${row.state === "draft" ? "（草稿）" : ""}`,
-    value: row.id,
-  }));
+  const rows = revisions.value
+    .filter((row) => !row.pruned_at)
+    .map((row) => ({
+      label: `修订 #${row.version}${row.state === "draft" ? "（草稿）" : ""}`,
+      value: row.id,
+    }));
   if (
     props.tree?.revision_id &&
     !rows.some((row) => row.value === props.tree!.revision_id)
@@ -145,9 +147,7 @@ function resourceName(id: string) {
         :bordered="false"
         style="margin-bottom: 16px"
         >目标原文存在
-        {{
-          difference.diagnostics.length
-        }}
+        {{ difference.diagnostics.length }}
         项解析或映射诊断。差异查看不会保存或应用配置。</n-alert
       >
       <n-select

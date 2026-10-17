@@ -16,6 +16,7 @@ import (
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/firewall"
+	"nginxpanel/internal/history"
 	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/migration"
@@ -36,6 +37,7 @@ import (
 )
 
 type Server struct {
+	History       *history.Service
 	Audit         *auditlog.Service
 	Fail2ban      *fail2ban.PolicyService
 	Maintenance   *maintenance.Service

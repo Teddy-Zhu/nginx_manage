@@ -41,7 +41,7 @@ func (s *Service) StoreIssued(ctx context.Context, tx *sql.Tx, id, versionID, na
 		return err
 	} else {
 		var count int
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_versions WHERE certificate_id=?", id).Scan(&count); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_versions WHERE certificate_id=? AND pruned_at=0", id).Scan(&count); err != nil {
 			return err
 		}
 		if count >= limits.CertificateVersions {

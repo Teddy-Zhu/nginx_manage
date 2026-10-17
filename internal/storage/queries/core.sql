@@ -20,7 +20,7 @@ SELECT * FROM nginx_config_files WHERE revision_id=? ORDER BY path;
 SELECT * FROM nginx_resource_bindings WHERE revision_id=? ORDER BY resource_id;
 
 -- name: ListRevisions :many
-SELECT id,parent_id,version,state,created_at,created_by FROM config_revisions ORDER BY version DESC LIMIT ? OFFSET ?;
+SELECT id,parent_id,version,state,created_at,created_by,pruned_at FROM config_revisions ORDER BY version DESC LIMIT ? OFFSET ?;
 
 -- name: GetTask :one
 SELECT * FROM tasks WHERE id=?;

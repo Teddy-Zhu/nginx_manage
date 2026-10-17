@@ -99,7 +99,7 @@ func (s *Service) list(ctx context.Context, q reader, id string, detail bool) ([
 	}
 	for i := range out {
 		c := &out[i]
-		versions, err := q.QueryContext(ctx, "SELECT id,ordinal,summary,created_at,environment FROM certificate_versions WHERE certificate_id=? AND (id=? OR ?) ORDER BY ordinal DESC", c.ID, c.LatestVersionID, detail)
+		versions, err := q.QueryContext(ctx, "SELECT id,ordinal,summary,created_at,environment FROM certificate_versions WHERE certificate_id=? AND pruned_at=0 AND (id=? OR ?) ORDER BY ordinal DESC", c.ID, c.LatestVersionID, detail)
 		if err != nil {
 			return nil, err
 		}
@@ -274,6 +274,12 @@ func (s *Service) Write(ctx context.Context, p auth.Principal, requestID, key, i
 		if refs > 0 {
 			return Result{}, fault.Conflict("当前或历史修订仍引用此证书，须保留以便应用与回滚")
 		}
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_deployments WHERE certificate_id=?", id).Scan(&refs); err != nil {
+			return Result{}, err
+		}
+		if refs > 0 {
+			return Result{}, fault.Conflict("历史部署记录仍引用此证书，无法删除证书资源；可在历史维护中清理未使用的旧版本材料")
+		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM certificate_versions WHERE certificate_id=?", id); err != nil {
 			return Result{}, err
 		}
@@ -286,7 +292,7 @@ func (s *Service) Write(ctx context.Context, p auth.Principal, requestID, key, i
 			return Result{}, fault.Invalid("证书名称或备注无效")
 		}
 		var count int
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_versions WHERE certificate_id=?", id).Scan(&count); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_versions WHERE certificate_id=? AND pruned_at=0", id).Scan(&count); err != nil {
 			return Result{}, err
 		}
 		if count >= limits.CertificateVersions {
@@ -367,9 +373,9 @@ func (s *Service) Materials(ctx context.Context, q reader, paths []string) ([]Ma
 		}
 		var chain, key []byte
 		var environment string
-		if err := q.QueryRowContext(ctx, "SELECT CASE WHEN length(fullchain)<=? THEN fullchain ELSE NULL END,CASE WHEN length(private_key)<=? THEN private_key ELSE NULL END,substr(environment,1,33) FROM certificate_versions WHERE certificate_id=? AND id=?", limits.CertificateMaterialBytes+64, limits.CertificateMaterialBytes+64, id, version).Scan(&chain, &key, &environment); err != nil {
+		if err := q.QueryRowContext(ctx, "SELECT CASE WHEN length(fullchain)<=? THEN fullchain ELSE NULL END,CASE WHEN length(private_key)<=? THEN private_key ELSE NULL END,substr(environment,1,33) FROM certificate_versions WHERE certificate_id=? AND id=? AND pruned_at=0", limits.CertificateMaterialBytes+64, limits.CertificateMaterialBytes+64, id, version).Scan(&chain, &key, &environment); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, fault.Invalid("证书版本不存在")
+				return nil, fault.Invalid("证书版本不存在或材料已清理")
 			}
 			return nil, err
 		}
