@@ -122,6 +122,14 @@ func ManageUFWRegistration(parent context.Context, dataDir, scope, action string
 	if v != nil && v.NextClaim.MachineHash != machine {
 		return out, errors.New("UFW root 登记属于其他宿主机，禁止迁移或接管")
 	}
+	if ufwRestorePending(dataDir) {
+		if action != "recover" {
+			return out, errors.New("UFW 原重载进程或业务操作尚未完成，禁止初始化或释放授权")
+		}
+		if err = recoverUFWRestore(ctx, dataDir); err != nil {
+			return out, err
+		}
+	}
 	if action == "recover" {
 		if v == nil {
 			return out, errors.New("没有可恢复的 UFW 授权登记")

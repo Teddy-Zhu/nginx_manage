@@ -26,6 +26,9 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	if f.activeLocked() || f.dns.checkpoint != nil && dnsActive(f.dns.checkpoint.Status.State) {
 		return out, fault.Conflict("存在未完成的可达性变更")
 	}
+	if ufwRestorePending(f.dataDir) {
+		return out, fault.Conflict("UFW 原重载进程或业务操作尚未完成，请先恢复原操作")
+	}
 	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
 	if err != nil {
 		if errors.Is(err, unix.EWOULDBLOCK) {
@@ -120,5 +123,13 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 			Warnings: warnings,
 			Reason:   "本机授权、受信源码与后端工具、原重载范围及隔离批次候选已核对；实际应用、新连接确认和独立恢复尚未接入"},
 	}
-	return out, f.storePlanLocked(out, nil)
+	record := &firewallPolicyRecord{Action: in.Action, PlanID: id, Version: in.Version, Policy: policy, PolicyHash: hash, ProgramHash: program.Hash, Protections: protections, Marker: firewall.UFWCommentPrefix + registered.NextClaim.Owner + ":" + id + ":",
+		ProtectionBasis: firewallProtectionBasis{SSHProfile: f.sshMode, SSHListeners: listeners, Listener: out.Listener, AllowedSources: append([]string{}, f.remote.state.Confirmed.AllowedSources...), ControlSource: source}}
+	if err = f.storePlanLocked(out, record); err != nil {
+		return out, err
+	}
+	private := f.plans[id]
+	private.ufw = dryRun.Materials
+	f.plans[id] = private
+	return out, nil
 }

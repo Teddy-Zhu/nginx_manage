@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -39,6 +40,7 @@ type ufwDryRunProof struct {
 	Reload                                     ufwReloadBaseline
 	PreservedRules                             int
 	Warnings                                   []string
+	Materials                                  []ufwReloadMaterial
 }
 
 func ufwTool() (string, error) {
@@ -273,6 +275,25 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 	proof.BatchHash, err = workspace.digest(baseline.Hash, proof.NativeHash, proof.Hash, binding.Hash)
 	if err != nil {
 		return proof, err
+	}
+	python, err := binding.tool("python")
+	if err != nil {
+		return proof, err
+	}
+	blocker, err := binding.tool("false")
+	if err != nil {
+		return proof, err
+	}
+	for _, item := range []struct{ family, path, tool string }{{"ipv4", "/etc/ufw/user.rules", "iptables-restore"}, {"ipv6", "/etc/ufw/user6.rules", "ip6tables-restore"}} {
+		if item.family == "ipv6" && !ipv6 {
+			continue
+		}
+		restore, err := binding.tool(item.tool)
+		if err != nil {
+			return proof, err
+		}
+		original, candidate := baseline.Contents[item.path], workspace.contents[item.path]
+		proof.Materials = append(proof.Materials, ufwReloadMaterial{Family: item.family, BeforeHash: secure.Hash(original), AfterHash: secure.Hash(candidate), Before: bytes.Clone(original), After: bytes.Clone(candidate), Python: python, Restore: restore, Blocker: blocker})
 	}
 	return proof, nil
 }

@@ -263,6 +263,10 @@ func ufwRegistrationView(ctx context.Context, dataDir string, observed firewall.
 		return out
 	}
 	out.OperationID = v.NextClaim.OperationID
+	if ufwRestorePending(dataDir) {
+		out.State, out.Reason = "recovery_required", "UFW 原重载进程或业务操作尚未完成；本机 ufw-recover 只核对子进程，规则仍须由原业务操作恢复"
+		return out
+	}
 	if err = ufwRegistrationReceipt(dataDir, v); err != nil || v.State == "preparing" {
 		out.State, out.Reason = "recovery_required", "UFW 原授权操作尚未核对完成，请本机执行 ufw-recover"
 		return out
@@ -317,6 +321,9 @@ func ufwRegistrationView(ctx context.Context, dataDir string, observed firewall.
 }
 
 func ufwRegistrationPending(dataDir string) bool {
+	if ufwRestorePending(dataDir) {
+		return true
+	}
 	v, err := loadUFWRegistration(dataDir)
 	if err != nil || v != nil && (v.State == "preparing" || ufwRegistrationReceipt(dataDir, v) != nil) {
 		return true

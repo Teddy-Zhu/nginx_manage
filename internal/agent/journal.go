@@ -32,6 +32,7 @@ type Record struct {
 	Fail2banExistingPolicyJob *fail2banExistingPolicyJob       `json:"fail2ban_existing_policy_job,omitempty"`
 	ClientDeny                *clientDenyIntent                `json:"client_deny,omitempty"`
 	Firewall                  *firewall.Operation              `json:"firewall,omitempty"`
+	UFWRestore                *ufwRestoreReceipt               `json:"ufw_restore,omitempty"`
 	RelatedOperationID        string                           `json:"related_operation_id,omitempty"`
 	DisasterActivation        *DisasterActivationOperation     `json:"disaster_activation,omitempty"`
 	DisasterRestoreID         string                           `json:"disaster_restore_id,omitempty"`

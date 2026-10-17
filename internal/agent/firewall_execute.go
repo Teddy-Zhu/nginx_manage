@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"nginxpanel/internal/fault"
@@ -476,6 +477,7 @@ func (f *hostFirewall) Run(ctx context.Context) {
 	defer ticker.Stop()
 	nextInspect := time.Now().Add(30 * time.Second)
 	nextProtectionInspect := time.Now()
+	nextUFWProcessInspect := time.Now()
 	for {
 		stopping := false
 		select {
@@ -485,6 +487,14 @@ func (f *hostFirewall) Run(ctx context.Context) {
 		}
 		f.remote.mu.Lock()
 		f.mu.Lock()
+		if f.firewalldState == nil && f.state.Schema == 0 && (stopping || !time.Now().Before(nextUFWProcessInspect)) {
+			nextUFWProcessInspect = time.Now().Add(10 * time.Second)
+			if ufwRestoreProcessPending(f.dataDir) || strings.HasPrefix(f.problem, ufwProcessProblem) {
+				call, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				_ = f.recoverUFWProcess(call)
+				cancel()
+			}
+		}
 		if f.firewalldState != nil {
 			f.runFirewalldLocked(ctx, stopping, &nextInspect, &nextProtectionInspect)
 		}
