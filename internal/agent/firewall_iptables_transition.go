@@ -266,8 +266,8 @@ func iptablesBusinessPending(dataDir string) bool {
 }
 
 func iptablesChangeAuthority(dataDir string, v *iptablesChangeCheckpoint) error {
-	if v.Transition.Docker != nil || iptablesPreviousDocker(&v.Transition) != nil {
-		return errors.New("Docker 联合业务的实时授权和独立恢复尚未接通")
+	if v == nil {
+		return errors.New("iptables 原业务记录不存在")
 	}
 	registered, err := iptablesRegistrationAuthority(dataDir)
 	if err != nil {
@@ -275,6 +275,11 @@ func iptablesChangeAuthority(dataDir string, v *iptablesChangeCheckpoint) error 
 	}
 	if registered.NextClaim.Owner != v.Transition.Owner || registered.NextClaim.MachineHash != v.Transition.MachineHash || registered.NextClaim.OperationID != v.Transition.RegistrationOperationID || registered.RequestHash != v.Transition.RegistrationRequestHash || registered.NextClaim.Backend != v.Policy.Policy.Backend {
 		return errors.New("iptables 原业务与本机原授权不一致")
+	}
+	for _, docker := range []*dockerIPTablesPolicyRecord{v.Transition.Docker, iptablesPreviousDocker(&v.Transition)} {
+		if err = verifyDockerPolicyAuthority(dataDir, registered, docker); err != nil {
+			return err
+		}
 	}
 	return nil
 }

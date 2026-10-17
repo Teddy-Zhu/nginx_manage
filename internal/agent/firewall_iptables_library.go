@@ -30,7 +30,7 @@ const iptablesLibraryInputBytes = 4 << 20
 
 type iptablesLibraryRequest struct {
 	Version                  int
-	Docker                   bool
+	Docker                   *iptablesLibraryDockerScope
 	Parent                   networkdProcess
 	Deadline                 int64
 	Workspace                string
@@ -50,28 +50,24 @@ type iptablesLibraryBridge struct {
 }
 
 func validIPTablesLibraryChain(name string) bool {
-	if name == "INPUT" || name == "FORWARD" || name == "DOCKER-USER" || name == firewall.IPTablesHostChain {
+	if name == "INPUT" || name == "FORWARD" || name == "DOCKER-USER" || name == firewall.IPTablesHostChain || name == firewall.IPTablesDockerChain {
 		return true
 	}
-	prefix := firewall.IPTablesHostChain + "-"
-	if !strings.HasPrefix(name, prefix) || len(name) != len(prefix)+12 {
-		return false
-	}
-	for _, r := range name[len(prefix):] {
-		if !strings.ContainsRune("0123456789abcdef", r) {
-			return false
+	for prefix, size := range map[string]int{firewall.IPTablesHostChain + "-": 12, firewall.IPTablesDockerChain + "-": 10} {
+		if strings.HasPrefix(name, prefix) && len(name) == len(prefix)+size && strings.Trim(name[len(prefix):], "0123456789abcdef") == "" {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // The upstream library has no injectable executor. It runs only in this
 // bounded helper, with an explicit private applet path and a read-only bridge.
 // No module replacement, shell, PATH backend selection or library write API is
 // used. The original save image remains the complete foreign-rule authority.
-func (binding *iptablesToolBinding) verifyLibrary(ctx context.Context, image iptablesImage, docker bool) (resultErr error) {
+func (binding *iptablesToolBinding) verifyLibrary(ctx context.Context, image iptablesImage, docker *iptablesLibraryDockerScope) (resultErr error) {
 	if image.chain("filter", "INPUT") == nil {
-		if docker {
+		if docker != nil && (docker.Generation != nil || docker.RequireHook) {
 			return errors.New("Docker 固定读取缺少 filter/INPUT 环境")
 		}
 		return nil // An unused family must not create or load a filter table.
@@ -130,7 +126,7 @@ func (binding *iptablesToolBinding) verifyLibrary(ctx context.Context, image ipt
 	call, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	deadline, _ := call.Deadline()
-	request := iptablesLibraryRequest{Version: 2, Docker: docker, Parent: process, Deadline: deadline.UnixMilli(), Workspace: workspace, Helper: binding.Helper, Command: command, Blocker: blocker, Image: image}
+	request := iptablesLibraryRequest{Version: 3, Docker: docker, Parent: process, Deadline: deadline.UnixMilli(), Workspace: workspace, Helper: binding.Helper, Command: command, Blocker: blocker, Image: image}
 	for _, version := range binding.Versions {
 		if version.Role == role {
 			request.ExpectedVersion = version.Version
@@ -189,7 +185,7 @@ func RunIPTablesLibrary() error {
 	raw, err := io.ReadAll(io.LimitReader(os.Stdin, iptablesLibraryInputBytes+1))
 	invalid := errors.New("go-iptables 私有读取请求无效")
 	var request iptablesLibraryRequest
-	if err != nil || len(raw) > iptablesLibraryInputBytes || ufwToolJSON(raw, &request) != nil || request.Version != 2 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || filepath.Dir(request.Workspace) != "/run/nginxpanel-host" || !strings.HasPrefix(filepath.Base(request.Workspace), "iptables-library-") || !validIPTablesBoundFile(request.Helper, iptablesHelperBytes) || request.Helper.Role != "nginxpanel" {
+	if err != nil || len(raw) > iptablesLibraryInputBytes || ufwToolJSON(raw, &request) != nil || request.Version != 3 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || filepath.Dir(request.Workspace) != "/run/nginxpanel-host" || !strings.HasPrefix(filepath.Base(request.Workspace), "iptables-library-") || !validIPTablesBoundFile(request.Helper, iptablesHelperBytes) || request.Helper.Role != "nginxpanel" {
 		return invalid
 	}
 	if err = iptablesLibraryParent(request.Parent); err != nil {
@@ -217,13 +213,22 @@ func RunIPTablesLibrary() error {
 		return invalid
 	}
 	chains, inspect := []string{}, []string{"INPUT"}
-	if request.Docker {
-		if err = proveEmptyDockerNamespace(request.Image); err != nil || !observeDockerFirewallHook(request.Image).Observed {
-			return errors.New("Docker 固定读取要求已核对的初始空命名空间及原始挂接")
+	if request.Docker != nil {
+		if err = proveDockerIPTablesGeneration(request.Image, request.Docker.Generation); err != nil {
+			return err
 		}
-		inspect = append(inspect, "FORWARD", "DOCKER-USER")
+		if request.Docker.RequireHook && !observeDockerFirewallHook(request.Image).Observed {
+			return errors.New("Docker 固定读取的原始转发挂接无法核对")
+		}
+		for _, name := range []string{"FORWARD", "DOCKER-USER"} {
+			if request.Image.chain("filter", name) != nil {
+				inspect = append(inspect, name)
+			}
+		}
+	} else if err = proveEmptyDockerNamespace(request.Image); err != nil {
+		return err
 	}
-	managed := 0
+	managed, dockerManaged := 0, 0
 	for _, table := range request.Image.Tables {
 		if table.Name != "filter" {
 			continue
@@ -237,13 +242,20 @@ func RunIPTablesLibrary() error {
 				}
 				inspect = append(inspect, chain.Name)
 			}
+			if strings.HasPrefix(chain.Name, firewall.IPTablesDockerChain) {
+				dockerManaged++
+				if request.Docker == nil || !validIPTablesLibraryChain(chain.Name) || dockerManaged > 2 {
+					return invalid
+				}
+				inspect = append(inspect, chain.Name)
+			}
 		}
 	}
 	process, err := networkProcess(uint32(os.Getpid()))
 	if err != nil {
 		return err
 	}
-	bridge := iptablesLibraryBridge{Version: 2, Docker: request.Docker, Parent: process, Deadline: request.Deadline, Command: request.Command, Blocker: request.Blocker, ExpectedVersion: request.ExpectedVersion, Chains: inspect}
+	bridge := iptablesLibraryBridge{Version: 3, Docker: request.Docker != nil, Parent: process, Deadline: request.Deadline, Command: request.Command, Blocker: request.Blocker, ExpectedVersion: request.ExpectedVersion, Chains: inspect}
 	environment, err := json.Marshal(bridge)
 	if err != nil || len(environment) > 16<<10 {
 		return invalid
@@ -315,8 +327,8 @@ func compareIPTablesLibraryChain(image iptablesImage, name string, rows []string
 			args = args[:len(args)-3]
 		}
 		prior := chain.Rules[index]
-		// The initial Docker scope admits only identical native token arrays;
-		// unknown foreign extensions are never normalized into executable text.
+		// Foreign forwarding rules retain their exact native tokens; only
+		// authenticated owned generations use the closed semantic grammar.
 		if name == "FORWARD" || name == "DOCKER-USER" {
 			if !slices.Equal(prior, args) {
 				return invalid
@@ -326,6 +338,14 @@ func compareIPTablesLibraryChain(image iptablesImage, name string, rows []string
 		// Foreign INPUT expressions stay opaque. The full native-save image
 		// owns their drift proof; library reads verify positions and ownership.
 		if name == "INPUT" && !iptablesReservedArgument(prior) && !iptablesReservedArgument(args) {
+			continue
+		}
+		if strings.HasPrefix(name, firewall.IPTablesDockerChain) {
+			before, err := dockerIPTablesRuleKey(name, image.Family, prior)
+			after, actualErr := dockerIPTablesRuleKey(name, image.Family, args)
+			if err != nil || actualErr != nil || before != after {
+				return invalid
+			}
 			continue
 		}
 		before, err := iptablesOwnedRuleKey(name, image.Family, prior)
@@ -348,17 +368,17 @@ func RunIPTablesLibraryBridge() error {
 	raw := os.Getenv(iptablesLibraryEnvironment)
 	var request iptablesLibraryBridge
 	invalid := errors.New("go-iptables 只读桥接请求无效")
-	if len(raw) > 16<<10 || ufwToolJSON([]byte(raw), &request) != nil || request.Version != 2 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || len(request.Chains) < 1 || len(request.Chains) > 5 || !request.Docker && len(request.Chains) > 3 {
+	if len(raw) > 16<<10 || ufwToolJSON([]byte(raw), &request) != nil || request.Version != 3 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || len(request.Chains) < 1 || len(request.Chains) > 7 || !request.Docker && len(request.Chains) > 3 {
 		return invalid
 	}
 	seen := map[string]bool{}
 	for _, chain := range request.Chains {
-		if seen[chain] || !validIPTablesLibraryChain(chain) || !request.Docker && (chain == "FORWARD" || chain == "DOCKER-USER") {
+		if seen[chain] || !validIPTablesLibraryChain(chain) || !request.Docker && (chain == "FORWARD" || chain == "DOCKER-USER" || strings.HasPrefix(chain, firewall.IPTablesDockerChain)) {
 			return invalid
 		}
 		seen[chain] = true
 	}
-	if !seen["INPUT"] || request.Docker && (!seen["FORWARD"] || !seen["DOCKER-USER"]) {
+	if !seen["INPUT"] {
 		return invalid
 	}
 	if err := iptablesLibraryParent(request.Parent); err != nil {

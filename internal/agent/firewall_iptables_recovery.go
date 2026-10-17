@@ -89,7 +89,7 @@ func recoverIPTablesChange(ctx context.Context, dataDir string) error {
 		}
 		// Missing old rules after a removal/reboot are restored from the
 		// independent original confirmation, not attributed to an unproven call.
-		if state == "candidate" && iptablesGeneration(v.Transition.Program, material.Family) == nil {
+		if state == "candidate" && iptablesGeneration(v.Transition.Program, material.Family) == nil && dockerIPTablesGeneration(v.Transition.Docker, material.Family) == nil {
 			continue
 		}
 		if current.States[material.Family] != "candidate" || iptablesCandidateReceipt(dataDir, v, material.Family) != nil {

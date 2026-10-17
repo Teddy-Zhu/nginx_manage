@@ -298,7 +298,8 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 		if v == nil {
 			out.Backend, out.Registration.OperationID = source.Policy.Policy.Backend, source.RegistrationOperationID
 		}
-		if v == nil || verifyIPTablesSource(dataDir, source) != nil || source.Owner != v.NextClaim.Owner || source.MachineHash != v.NextClaim.MachineHash || source.RegistrationOperationID != v.NextClaim.OperationID || source.RegistrationRequestHash != v.RequestHash || source.Policy.Policy.Backend != v.NextClaim.Backend || source.Tools.verify(ctx) != nil {
+		current, authorityErr := iptablesRegistrationAuthority(dataDir)
+		if authorityErr != nil || verifyIPTablesSource(dataDir, source) != nil || source.Owner != current.NextClaim.Owner || source.MachineHash != current.NextClaim.MachineHash || source.RegistrationOperationID != current.NextClaim.OperationID || source.RegistrationRequestHash != current.RequestHash || source.Policy.Policy.Backend != current.NextClaim.Backend || verifyDockerPolicyAuthority(dataDir, current, source.Docker) != nil || source.Tools.verify(ctx) != nil {
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认策略、原授权或固定工具无法核对"
 			return out
 		}
@@ -307,7 +308,7 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认程序无法核对"
 			return out
 		}
-		snapshot, err := snapshotIPTablesTransition(ctx, v.NextClaim.Backend, observed, program)
+		snapshot, err := snapshotIPTablesScope(ctx, current.NextClaim.Backend, observed, iptablesInspectionScope{Program: program, Docker: source.Docker, RequireDockerHook: source.Docker != nil})
 		if err != nil || snapshot.ToolHash != source.ToolHash {
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认代际或当前环境无法完整核对，请本机恢复"
 			return out
@@ -317,6 +318,10 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 				out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 已确认地址族规则缺失"
 				return out
 			}
+		}
+		if err = verifyDockerPolicyRuntime(ctx, dataDir, source.Policy.Policy, source.Docker, snapshot, &source.Tools); err != nil {
+			out.Registration.State, out.Registration.Reason = "drifted", "Docker 已确认映射或转发路径不再匹配原代际"
+			return out
 		}
 		out.Registration.State, out.Registration.Verified, out.Registration.Reason = "managed", true, "iptables 已确认代际及原独立回执已核对"
 		return out

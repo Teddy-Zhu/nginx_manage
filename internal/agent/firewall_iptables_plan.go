@@ -310,7 +310,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		return empty, fault.Unavailable(err.Error())
 	}
 	summary.ToolchainHash, summary.DryRunHash, summary.DryRunCommands = tools.Hash, transition.DryRun.Hash, len(transition.DryRun.Calls)
-	after, err := inspectIPTablesBound(ctx, f.dataDir, f.owner, transition.ToolHash, tools, prior, nil, false, false, false)
+	after, err := inspectIPTablesBound(ctx, f.dataDir, f.owner, transition.ToolHash, tools, iptablesInspectionScope{Program: prior})
 	if err != nil || after.Hash != before.Hash {
 		return empty, fault.Conflict("iptables 工具、后端或完整规则在计划期间变化，请重新生成")
 	}

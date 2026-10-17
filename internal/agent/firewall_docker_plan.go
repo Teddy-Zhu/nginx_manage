@@ -280,13 +280,7 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 			return out, fault.Unavailable("无法建立只读路由查询：" + boundedIPTablesError(err))
 		}
 		defer reader.close()
-		families := []string{}
-		for _, binding := range targets.Bindings {
-			if !slices.Contains(families, binding.Family) {
-				families = append(families, binding.Family)
-			}
-		}
-		slices.Sort(families)
+		families := dockerTargetFamilies(targets)
 		var tools *iptablesToolBinding
 		if previous != nil {
 			tools = &previous.Tools
@@ -304,26 +298,9 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 			return out, fault.Unavailable(boundedIPTablesError(err))
 		}
 		routingHash = routing.Hash
-		natBudget := 65536
-		for _, binding := range targets.Bindings {
-			resolved, err := resolveDockerTarget(snapshot, host, binding)
-			if err != nil {
-				return out, fault.Conflict(err.Error())
-			}
-			resolved.Path, err = reader.prove(ctx, routing, resolved, host.Interfaces[binding.InputInterface].Index, host.Interfaces[resolved.OutputInterface].Index)
-			if err != nil {
-				return out, fault.Unavailable(boundedIPTablesError(err))
-			}
-			for _, image := range before.Images {
-				if image.Family != binding.Family {
-					continue
-				}
-				resolved.Path.DNATHash, resolved.Path.DNATRules, err = proveDockerDNAT(ctx, image, resolved, dockerRuleSources(policy, binding), &natBudget)
-				if err != nil {
-					return out, fault.Unavailable(boundedIPTablesError(err))
-				}
-			}
-			detail.Bindings = append(detail.Bindings, resolved)
+		detail.Bindings, err = resolveDockerPolicyBindings(ctx, reader, routing, snapshot, host, before.Images, policy, targets)
+		if err != nil {
+			return out, err
 		}
 		program, err := firewall.CompileDockerIPTables(policy, targets, detail.Bindings)
 		if err != nil {

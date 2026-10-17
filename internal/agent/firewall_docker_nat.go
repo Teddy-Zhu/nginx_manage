@@ -301,14 +301,22 @@ func proveDockerDNAT(ctx context.Context, image iptablesImage, resolved firewall
 	if !translated {
 		return "", 0, invalid
 	}
+	// Filter generations change during this operation. Bind the complete NAT
+	// image and ordered traversal instead; full filter drift has its own proof.
+	nat := iptablesImage{Family: image.Family, Tables: []iptablesImageTable{}}
+	for _, table := range image.Tables {
+		if table.Name == "nat" {
+			nat.Tables = append(nat.Tables, table)
+		}
+	}
 	raw, err := json.Marshal(struct {
-		Image   string
+		NAT     string
 		Binding firewall.DockerRuleBinding
 		Sources []netip.Prefix
 		Trace   []step
-	}{image.hash(), resolved.Binding, sources, trace})
+	}{nat.hash(), resolved.Binding, sources, trace})
 	if err != nil {
 		return "", 0, err
 	}
-	return secure.Hash(append([]byte("docker:dnat-path:v1:\x00"), raw...)), len(trace), nil
+	return secure.Hash(append([]byte("docker:dnat-path:v2:\x00"), raw...)), len(trace), nil
 }

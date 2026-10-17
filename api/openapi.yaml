@@ -2090,7 +2090,7 @@ components:
       required: [dnat_hash, dnat_rules, routing_hash, original_route_hash, route_hash, route_prefix, route_table, output_index]
       description: 只读核对原始目的的本地路由、PREROUTING 有序 DNAT 和容器永久直连 bridge 路由。仅支持默认策略路由及可完整解释的 NAT 条件；所有来源须得到相同路径结论。前后报告一致仍不是原子快照、执行授权或外部可达性证明。
       properties:
-        dnat_hash: {type: string, minLength: 64, maxLength: 64}
+        dnat_hash: {type: string, minLength: 64, maxLength: 64, description: 完整 NAT 表及有序 PREROUTING/DOCKER 路径摘要，不包含 filter 代际。}
         dnat_rules: {type: integer, minimum: 1, maximum: 16384}
         routing_hash: {type: string, minLength: 64, maxLength: 64}
         original_route_hash: {type: string, minLength: 64, maxLength: 64}

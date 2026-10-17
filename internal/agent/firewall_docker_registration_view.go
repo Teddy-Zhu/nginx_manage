@@ -41,10 +41,10 @@ func dockerRegistrationView(dataDir string, observed firewall.Observation) firew
 	if !observed.IPTablesRegistration.Registration.Verified || observed.IPTablesRegistration.Backend != v.Backend || observed.IPTablesRegistration.Registration.OperationID != v.ParentOperationID || !runtime.Available || runtime.Rootless || runtime.Swarm != "inactive" || runtime.EngineHash != v.EngineHash || observed.Docker.BackendHint != "iptables" || !slices.ContainsFunc(observed.Docker.Capabilities, func(capability firewall.DockerCapability) bool {
 		return capability.Backend == v.Backend && capability.Observed
 	}) {
-		out.Registration.State, out.Registration.Reason = "drifted", "当前 Docker 实例、挂接或完整空命名空间无法核对"
+		out.Registration.State, out.Registration.Reason = "drifted", "当前 Docker 实例、挂接或父授权范围无法核对"
 		return out
 	}
-	out.Registration.State, out.Registration.Verified, out.Registration.Reason = "registered", true, "Docker 本机空命名空间授权已核对；业务规则执行尚未开放"
+	out.Registration.State, out.Registration.Verified, out.Registration.Reason = "registered", true, "Docker 本机授权、实例与父登记已核对"
 	return out
 }
 

@@ -21,12 +21,13 @@ func validIPTablesBackend(backend string) bool {
 }
 
 type iptablesRegistrationSnapshot struct {
-	Hash     string
-	ToolHash string
-	Observed firewall.Observation
-	Images   []iptablesImage
-	States   map[string]string
-	NFT      nftReadbackBudget
+	Hash         string
+	ToolHash     string
+	Observed     firewall.Observation
+	Images       []iptablesImage
+	States       map[string]string
+	NFT          nftReadbackBudget
+	DockerScopes map[string]*iptablesLibraryDockerScope
 }
 
 // Registration binds diagnostics, not an executable write capability. A future
@@ -136,7 +137,7 @@ func snapshotIPTablesTransition(ctx context.Context, backend string, observed fi
 }
 
 func snapshotIPTablesProgram(ctx context.Context, backend string, observed firewall.Observation, program *firewall.IPTablesRuntimeProgram, allowMissing bool) (iptablesRegistrationSnapshot, error) {
-	return snapshotIPTablesScope(ctx, backend, observed, program, nil, false, allowMissing, false)
+	return snapshotIPTablesScope(ctx, backend, observed, iptablesInspectionScope{Program: program, AllowMissing: allowMissing})
 }
 
 func classifyIPTablesImage(image iptablesImage, next, previous *firewall.IPTablesGeneration, transition, allowMissing, allowPreviousMissing bool) (iptablesImage, string, error) {
@@ -175,7 +176,7 @@ func classifyIPTablesImage(image iptablesImage, next, previous *firewall.IPTable
 	return iptablesImage{}, "", errors.New("iptables 当前规则不属于原确认或完整候选代际")
 }
 
-func snapshotIPTablesScope(ctx context.Context, backend string, observed firewall.Observation, program, previous *firewall.IPTablesRuntimeProgram, transition, allowMissing, allowPreviousMissing bool) (iptablesRegistrationSnapshot, error) {
+func snapshotIPTablesScope(ctx context.Context, backend string, observed firewall.Observation, scope iptablesInspectionScope) (iptablesRegistrationSnapshot, error) {
 	var out iptablesRegistrationSnapshot
 	if !observed.Kernel.Available || observed.Kernel.TableExists {
 		return out, errors.New("直接 nftables 目标表不存在的状态无法确认")
@@ -189,6 +190,7 @@ func snapshotIPTablesScope(ctx context.Context, backend string, observed firewal
 	hashes, errs := make([]string, len(names)), make([]error, len(names))
 	images := make([]iptablesImage, len(names))
 	states := make([]string, len(names))
+	dockerScopes := make([]*iptablesLibraryDockerScope, len(names))
 	var wg sync.WaitGroup
 	for index, name := range names {
 		wg.Add(1)
@@ -202,17 +204,12 @@ func snapshotIPTablesScope(ctx context.Context, backend string, observed firewal
 				}
 				images[index], err = parseIPTablesImage(raw, family)
 				if err == nil {
-					err = proveEmptyDockerNamespace(images[index])
-				}
-				if err == nil {
-					var generation, prior *firewall.IPTablesGeneration
+					selectedScope := iptablesInspectionScope{}
 					if strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
-						generation = iptablesGeneration(program, family)
-						prior = iptablesGeneration(previous, family)
+						selectedScope = scope
 					}
 					var foreign iptablesImage
-					selected := strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save")
-					foreign, states[index], err = classifyIPTablesImage(images[index], generation, prior, transition && selected, allowMissing && selected, allowPreviousMissing && selected)
+					foreign, states[index], dockerScopes[index], err = classifyIPTablesScope(images[index], selectedScope)
 					if err == nil {
 						hashes[index] = foreign.hash()
 					}
@@ -240,10 +237,12 @@ func snapshotIPTablesScope(ctx context.Context, backend string, observed firewal
 	out.Hash = secure.Hash(raw)
 	out.Observed = observed
 	out.States = map[string]string{}
+	out.DockerScopes = map[string]*iptablesLibraryDockerScope{}
 	for index, name := range names {
 		if strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
 			out.Images = append(out.Images, images[index])
 			out.States[images[index].Family] = states[index]
+			out.DockerScopes[images[index].Family] = dockerScopes[index]
 		}
 	}
 	return out, ctx.Err()
@@ -304,13 +303,22 @@ func inspectIPTablesChangeScope(ctx context.Context, dataDir string, v *iptables
 			return iptablesRegistrationSnapshot{}, err
 		}
 	}
-	return inspectIPTablesBound(ctx, dataDir, v.Policy.Policy.Backend, v.Transition.ToolHash, v.Transition.Tools, v.Transition.Program, iptablesPreviousProgram(&v.Transition), true, false, allowPreviousMissing)
+	wanted, policy := v.Transition.Docker, v.Policy.Policy
+	if v.Rollback {
+		wanted = iptablesPreviousDocker(&v.Transition)
+		if v.Transition.Previous != nil {
+			policy = v.Transition.Previous.Policy.Policy
+		}
+	}
+	scope := iptablesInspectionScope{Program: v.Transition.Program, Previous: iptablesPreviousProgram(&v.Transition), Docker: v.Transition.Docker, PreviousDocker: iptablesPreviousDocker(&v.Transition), Transition: true, AllowPreviousMissing: allowPreviousMissing, RequireDockerHook: wanted != nil && !allowPreviousMissing}
+	current, err := inspectIPTablesBound(ctx, dataDir, v.Policy.Policy.Backend, v.Transition.ToolHash, v.Transition.Tools, scope)
+	if err == nil && !allowPreviousMissing {
+		err = verifyDockerPolicyRuntime(ctx, dataDir, policy, wanted, current, v.Transition.Tools)
+	}
+	return current, err
 }
 
 func inspectIPTablesSource(ctx context.Context, dataDir string, source *iptablesPolicySource, allowMissing bool) (iptablesRegistrationSnapshot, error) {
-	if source != nil && source.Docker != nil {
-		return iptablesRegistrationSnapshot{}, errors.New("Docker 已确认范围的实时核对和修复尚未接通")
-	}
 	if err := verifyIPTablesSource(dataDir, source); err != nil {
 		return iptablesRegistrationSnapshot{}, err
 	}
@@ -318,15 +326,23 @@ func inspectIPTablesSource(ctx context.Context, dataDir string, source *iptables
 	if err != nil || registered.NextClaim.Owner != source.Owner || registered.NextClaim.MachineHash != source.MachineHash || registered.NextClaim.OperationID != source.RegistrationOperationID || registered.RequestHash != source.RegistrationRequestHash || registered.NextClaim.Backend != source.Policy.Policy.Backend {
 		return iptablesRegistrationSnapshot{}, errors.New("iptables 原确认来源与本机授权不一致")
 	}
+	if err = verifyDockerPolicyAuthority(dataDir, registered, source.Docker); err != nil {
+		return iptablesRegistrationSnapshot{}, err
+	}
 	record := source.Policy
 	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(record.Policy), record.Protections, source.Owner, record.PlanID, record.Action)
 	if err != nil {
 		return iptablesRegistrationSnapshot{}, err
 	}
-	return inspectIPTablesBound(ctx, dataDir, record.Policy.Backend, source.ToolHash, &source.Tools, program, nil, false, allowMissing, false)
+	scope := iptablesInspectionScope{Program: program, Docker: source.Docker, AllowMissing: allowMissing, RequireDockerHook: source.Docker != nil}
+	current, err := inspectIPTablesBound(ctx, dataDir, record.Policy.Backend, source.ToolHash, &source.Tools, scope)
+	if err == nil {
+		err = verifyDockerPolicyRuntime(ctx, dataDir, record.Policy, source.Docker, current, &source.Tools)
+	}
+	return current, err
 }
 
-func inspectIPTablesBound(ctx context.Context, dataDir, backend, toolHash string, tools *iptablesToolBinding, program, previous *firewall.IPTablesRuntimeProgram, transition, allowMissing, allowPreviousMissing bool) (iptablesRegistrationSnapshot, error) {
+func inspectIPTablesBound(ctx context.Context, dataDir, backend, toolHash string, tools *iptablesToolBinding, scope iptablesInspectionScope) (iptablesRegistrationSnapshot, error) {
 	var out iptablesRegistrationSnapshot
 	if err := tools.verify(ctx); err != nil {
 		return out, err
@@ -335,7 +351,7 @@ func inspectIPTablesBound(ctx context.Context, dataDir, backend, toolHash string
 	var capacity nftReadbackBudget
 	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true, nftReadback: &capacity}).collect(call)
 	cancel()
-	out, err := snapshotIPTablesScope(ctx, backend, observed, program, previous, transition, allowMissing, allowPreviousMissing)
+	out, err := snapshotIPTablesScope(ctx, backend, observed, scope)
 	out.NFT = capacity
 	if err != nil {
 		return out, err
@@ -356,7 +372,15 @@ func (snapshot iptablesRegistrationSnapshot) verifyBoundDocker(ctx context.Conte
 		if err != nil || bound.hash() != image.hash() {
 			return errors.New("iptables 规则在完整核对期间变化")
 		}
-		if err = tools.verifyLibrary(ctx, bound, slices.Contains(families, image.Family)); err != nil {
+		docker := snapshot.DockerScopes[image.Family]
+		if slices.Contains(families, image.Family) {
+			value := iptablesLibraryDockerScope{RequireHook: true}
+			if docker != nil {
+				value.Generation = docker.Generation
+			}
+			docker = &value
+		}
+		if err = tools.verifyLibrary(ctx, bound, docker); err != nil {
 			return err
 		}
 	}

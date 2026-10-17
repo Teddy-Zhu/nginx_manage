@@ -345,6 +345,9 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 		}
 		return nil
 	}
+	if source.Docker != nil {
+		return errors.New("Docker 已确认范围存在缺失，联合修复尚未接通，保留原确认来源")
+	}
 	if err = current.admitReadback(program, nil); err != nil {
 		return err
 	}

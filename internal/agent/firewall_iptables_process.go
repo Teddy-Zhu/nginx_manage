@@ -308,6 +308,9 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 	if err != nil || v == nil || iptablesChangeTerminal(v) {
 		return nil, errors.New("iptables 原业务快照不可执行")
 	}
+	if v.Transition.Docker != nil || iptablesPreviousDocker(&v.Transition) != nil {
+		return nil, errors.New("Docker 联合业务的写入容量、补偿和确认修复尚未接通")
+	}
 	parent, err := loadIPTablesReceipt(dataDir, v.Operation.ID)
 	if err != nil || !iptablesChangeReceiptMatches(parent, v) {
 		return nil, errors.New("iptables 原业务独立回执尚未发布")
