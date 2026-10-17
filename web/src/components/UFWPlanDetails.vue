@@ -64,6 +64,12 @@ const columns: DataTableColumns<Entry> = [
     <dd class="digest">{{ plan.native_program_hash }}</dd>
     <dt>完整候选批次摘要</dt>
     <dd class="digest">{{ plan.batch_hash }}</dd>
+    <dt>原运行后端</dt>
+    <dd>{{ plan.reload_backend }}</dd>
+    <dt>重载范围</dt>
+    <dd>{{ plan.reload_chains }} 个用户链 / {{ plan.reload_rules }} 条报文规则</dd>
+    <dt>原运行规则摘要</dt>
+    <dd class="digest">{{ plan.reload_hash }}</dd>
     <dt>完整程序摘要</dt>
     <dd class="digest">{{ programHash }}</dd>
   </dl>

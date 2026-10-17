@@ -234,9 +234,16 @@ func xtablesInventory(raw []byte, family string) ([]firewall.Table, error) {
 }
 
 func xtablesWords(line string) ([]string, error) {
+	return xtablesQuotedWords(line, false)
+}
+
+// UFW's native application comments use single quotes; save output uses double
+// quotes. This is only a rule tokenizer, never shell evaluation or an argv API.
+func xtablesQuotedWords(line string, singleQuotes bool) ([]string, error) {
 	args := []string{}
 	var word strings.Builder
-	quote, escape := false, false
+	var quote rune
+	escape := false
 	started := false
 	for _, r := range line {
 		if escape {
@@ -250,12 +257,18 @@ func xtablesWords(line string) ([]string, error) {
 			started = true
 			continue
 		}
-		if r == '"' {
-			quote = !quote
+		if r == '"' || singleQuotes && r == '\'' {
+			if quote == 0 {
+				quote = r
+			} else if quote == r {
+				quote = 0
+			} else {
+				word.WriteRune(r)
+			}
 			started = true
 			continue
 		}
-		if !quote && (r == ' ' || r == '\t') {
+		if quote == 0 && (r == ' ' || r == '\t') {
 			if started {
 				args = append(args, word.String())
 				word.Reset()
@@ -269,7 +282,7 @@ func xtablesWords(line string) ([]string, error) {
 		word.WriteRune(r)
 		started = true
 	}
-	if quote || escape {
+	if quote != 0 || escape {
 		return nil, errors.New("incomplete xtables quoting")
 	}
 	if started {

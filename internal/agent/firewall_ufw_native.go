@@ -38,6 +38,20 @@ func ufwNativeIdentity(family string) (prefix, anywhere string, ok bool) {
 	return "", "", false
 }
 
+// The final two declarations depend on UFW's observed limit capability. The
+// reload inventory covers both even when a dry-run projects another capability.
+func ufwNativeChainNames(family string) []string {
+	prefix, _, ok := ufwNativeIdentity(family)
+	if !ok {
+		return nil
+	}
+	out := []string{}
+	for _, suffix := range []string{"user-input", "user-output", "user-forward", "before-logging-input", "before-logging-output", "before-logging-forward", "user-logging-input", "user-logging-output", "user-logging-forward", "after-logging-input", "after-logging-output", "after-logging-forward", "logging-deny", "logging-allow", "user-limit", "user-limit-accept"} {
+		out = append(out, prefix+"-"+suffix)
+	}
+	return out
+}
+
 // Only the compiler's explicit TCP/UDP, single-family input subset is modeled.
 // The entire generated packet expression must match, including reject behavior.
 func expectedUFWNative(rule firewall.UFWRule, entry firewall.PreviewEntry) (ufwNativeRule, error) {
@@ -150,14 +164,15 @@ func parseUFWNative(raw []byte, family string, bootstrap bool) (*ufwNativeFile, 
 		return out, nil
 	}
 	header := "*filter\n"
-	for _, suffix := range []string{"user-input", "user-output", "user-forward", "before-logging-input", "before-logging-output", "before-logging-forward", "user-logging-input", "user-logging-output", "user-logging-forward", "after-logging-input", "after-logging-output", "after-logging-forward", "logging-deny", "logging-allow"} {
-		header += ":" + prefix + "-" + suffix + " - [0:0]\n"
+	chains := ufwNativeChainNames(family)
+	for _, chain := range chains[:len(chains)-2] {
+		header += ":" + chain + " - [0:0]\n"
 	}
 	rest, ok := strings.CutPrefix(text, header)
 	if !ok {
 		return nil, errors.New("UFW 原生用户规则的链定义无法完整核对")
 	}
-	limitHeader := ":" + prefix + "-user-limit - [0:0]\n:" + prefix + "-user-limit-accept - [0:0]\n"
+	limitHeader := ":" + chains[len(chains)-2] + " - [0:0]\n:" + chains[len(chains)-1] + " - [0:0]\n"
 	rest, out.Limiting = strings.CutPrefix(rest, limitHeader)
 	rest, ok = strings.CutPrefix(rest, "### RULES ###\n")
 	if !ok {

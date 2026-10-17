@@ -72,6 +72,10 @@ type UFWPlan struct {
 	DryRunHash              string         `json:"dry_run_hash"`
 	NativeProgramHash       string         `json:"native_program_hash"`
 	BatchHash               string         `json:"batch_hash"`
+	ReloadBackend           string         `json:"reload_backend"`
+	ReloadHash              string         `json:"reload_hash"`
+	ReloadChains            int            `json:"reload_chains"`
+	ReloadRules             int            `json:"reload_rules"`
 	PreservedRules          int            `json:"preserved_rules"`
 	DryRunCommands          int            `json:"dry_run_commands"`
 	ProtectionRules         int            `json:"protection_rules"`
