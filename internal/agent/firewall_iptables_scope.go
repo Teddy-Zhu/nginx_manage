@@ -17,8 +17,9 @@ type iptablesInspectionScope struct {
 }
 
 type iptablesLibraryDockerScope struct {
-	Generation  *firewall.IPTablesGeneration
-	RequireHook bool
+	Generation   *firewall.IPTablesGeneration
+	RequireHook  bool
+	AllowMissing bool
 }
 
 func classifyIPTablesScope(image iptablesImage, scope iptablesInspectionScope) (iptablesImage, string, *iptablesLibraryDockerScope, error) {
@@ -32,7 +33,7 @@ func classifyIPTablesScope(image iptablesImage, scope iptablesInspectionScope) (
 		return foreign, state, nil, err
 	}
 	result := func(foreign iptablesImage, state string, actual *firewall.IPTablesGeneration) (iptablesImage, string, *iptablesLibraryDockerScope, error) {
-		return foreign, state, &iptablesLibraryDockerScope{Generation: actual, RequireHook: scope.RequireDockerHook}, nil
+		return foreign, state, &iptablesLibraryDockerScope{Generation: actual, RequireHook: scope.RequireDockerHook, AllowMissing: state == "missing" || state == "previous_missing"}, nil
 	}
 	if !scope.Transition {
 		foreign, state, actual, err := classifyIPTablesConfirmedScope(image, next, docker, scope.AllowMissing)
@@ -71,10 +72,15 @@ func classifyIPTablesConfirmedScope(image iptablesImage, host, docker *firewall.
 	}
 	actual, dockerMissing := docker, false
 	stripped, err := dockerIPTablesForeignImage(foreign, docker)
-	if err != nil && allowMissing && docker != nil && proveEmptyDockerNamespace(foreign) == nil {
-		// A completely absent scope is observable without claiming ownership
-		// of partial or changed objects. Reinstallation needs its own intent.
-		stripped, actual, dockerMissing, err = foreign, nil, true, nil
+	if err != nil && allowMissing && docker != nil {
+		if proveEmptyDockerNamespace(foreign) == nil {
+			stripped, actual, dockerMissing, err = foreign, nil, true, nil
+		} else if repair, repairErr := repairDockerIPTablesMaterial(foreign, *docker); repairErr == nil {
+			// Only the original ordered subset can be completed in projection.
+			// Native installation still needs a separate durable repair intent.
+			stripped, err = dockerIPTablesForeignImage(repair.After, docker)
+			dockerMissing = repair.Missing != 0
+		}
 	}
 	if err != nil {
 		return iptablesImage{}, "", nil, err

@@ -352,7 +352,7 @@ func acceptIPTablesChangeLocked(ctx context.Context, dataDir, id string, plan fi
 	if err != nil || baseline.Hash != v.Transition.ConfigurationHash {
 		return nil, errors.New("iptables 原完整环境或规则已变化")
 	}
-	if err = baseline.admitReadback(v.Transition.Program, iptablesPreviousProgram(&v.Transition)); err != nil {
+	if err = baseline.admitTransitionReadback(&v.Transition); err != nil {
 		return nil, err
 	}
 	for _, material := range v.Transition.Materials {

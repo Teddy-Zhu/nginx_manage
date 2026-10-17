@@ -50,22 +50,28 @@ func iptablesRepairTerminal(v *iptablesRepairCheckpoint) bool {
 }
 
 func validateIPTablesRepair(v *iptablesRepairCheckpoint) error {
-	if v != nil && v.Source.Docker != nil {
-		return errors.New("Docker 已确认范围不能由仅支持 INPUT 的修复器接管")
-	}
 	invalid := errors.New("iptables 已确认策略修复检查点无效")
 	if v == nil || v.Schema != 2 || !validID(v.Status.ID) || v.Status.OperationID != v.Source.Policy.OperationID || v.Status.PlanID != v.Source.Policy.PlanID || !validID(v.Status.OperationID) || !validID(v.Status.PlanID) || v.Status.ID == v.Status.OperationID || v.Status.ID == v.Status.PlanID || v.Status.IntentHash != iptablesRepairIntentHash(v) || len(v.Status.Error) > 512 || v.Status.UpdatedAt <= 0 || !slices.Contains([]string{"running", "recovery_required", "succeeded", "superseded"}, v.Status.State) || validateIPTablesSource(&v.Source) != nil || !firewalldDigest(v.ConfigurationHash) || !v.Source.Tools.valid() || v.Source.Tools.Backend != v.Source.Policy.Policy.Backend || v.Source.Policy.Action != "apply" || v.Source.Policy.Version < 1 || validateFirewallProtectionBasis(v.Source.Policy.ProtectionBasis) != nil {
 		return invalid
 	}
 	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(v.Source.Policy.Policy), v.Source.Policy.Protections, v.Source.Owner, v.Source.Policy.PlanID, v.Source.Policy.Action)
 	hash, hashErr := firewall.PolicyDigest(v.Source.Policy.Policy)
-	if err != nil || hashErr != nil || hash != v.Source.Policy.PolicyHash || program.Hash != v.Source.Policy.ProgramHash || program.Marker != v.Source.Policy.Marker || len(v.Materials) != len(program.Families) || len(v.Materials) == 0 || len(v.Materials) > 2 || len(v.Steps) != 3*len(v.Materials) {
+	if err != nil || hashErr != nil || hash != v.Source.Policy.PolicyHash || iptablesTransitionProgramHash(&iptablesTransition{Program: program, Docker: v.Source.Docker}) != v.Source.Policy.ProgramHash || program.Marker != v.Source.Policy.Marker || len(v.Materials) != len((iptablesProgramPair{Host: program, Docker: v.Source.Docker}).families()) || len(v.Materials) == 0 || len(v.Materials) > 2 || len(v.Steps) != 3*len(v.Materials) {
 		return invalid
 	}
 	ids := map[string]bool{v.Status.ID: true, v.Status.OperationID: true, v.Status.PlanID: true, v.Source.Owner: true, v.Source.RegistrationOperationID: true}
+	if docker := v.Source.Docker; docker != nil {
+		for _, id := range []string{docker.Registration.Owner, docker.Registration.OperationID} {
+			if v.Status.ID == id {
+				return invalid
+			}
+			ids[id] = true
+		}
+	}
+	families := (iptablesProgramPair{Host: program, Docker: v.Source.Docker}).families()
 	for index, material := range v.Materials {
-		expected, err := repairIPTablesMaterial(material.Before, program.Families[index])
-		if err != nil || !sameIPTablesValue(expected, material) {
+		expected, err := repairIPTablesCombinedMaterial(material.Before, iptablesGeneration(program, families[index]), dockerIPTablesGeneration(v.Source.Docker, families[index]))
+		if err != nil || material.Family != families[index] || !sameIPTablesValue(expected, material) {
 			return invalid
 		}
 	}
@@ -257,7 +263,7 @@ func runIPTablesRepairRestore(ctx context.Context, dataDir string, request iptab
 	if err != nil {
 		return nil, err
 	}
-	if err = current.admitReadback(program, nil); err != nil {
+	if err = current.admitCombinedReadback(iptablesProgramPair{Host: program, Docker: repair.Source.Docker}, iptablesProgramPair{}); err != nil {
 		return nil, err
 	}
 	if !v.Rollback {
@@ -345,10 +351,7 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 		}
 		return nil
 	}
-	if source.Docker != nil {
-		return errors.New("Docker 已确认范围存在缺失，联合修复尚未接通，保留原确认来源")
-	}
-	if err = current.admitReadback(program, nil); err != nil {
+	if err = current.admitCombinedReadback(iptablesProgramPair{Host: program, Docker: source.Docker}, iptablesProgramPair{}); err != nil {
 		return err
 	}
 	// A changed complete foreign baseline is never replayed. End all original
@@ -371,12 +374,12 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 	}
 	if repair == nil || iptablesRepairTerminal(repair) {
 		repair = &iptablesRepairCheckpoint{Schema: 2, Status: iptablesRepairStatus{ID: secure.ID(), OperationID: source.Policy.OperationID, PlanID: source.Policy.PlanID, State: "running", UpdatedAt: time.Now().Unix()}, Source: *source, ConfigurationHash: current.Hash, Materials: []iptablesRepairMaterial{}, Steps: []iptablesChangeStep{}}
-		for _, generation := range program.Families {
+		for _, family := range (iptablesProgramPair{Host: program, Docker: source.Docker}).families() {
 			for _, image := range current.Images {
-				if image.Family != generation.Family {
+				if image.Family != family {
 					continue
 				}
-				material, err := repairIPTablesMaterial(image, generation)
+				material, err := repairIPTablesCombinedMaterial(image, iptablesGeneration(program, family), dockerIPTablesGeneration(source.Docker, family))
 				if err != nil {
 					return err
 				}

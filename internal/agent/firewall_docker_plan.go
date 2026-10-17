@@ -354,7 +354,7 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		if err = after.verifyBoundDocker(ctx, tools, families); err != nil {
 			return out, fault.Unavailable("Docker 官方预演后的固定读取失败：" + boundedIPTablesError(err))
 		}
-		if err = admitDockerInitialReadback(after, runtimeProgram, hostRuntime, iptablesPreviousProgram(transition)); err != nil {
+		if err = after.admitTransitionReadback(transition); err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
 		}
 	}

@@ -136,7 +136,11 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 			}
 		}
 		if readyErr == nil {
-			readyErr = current.admitReadback(program, nil)
+			pair := iptablesProgramPair{Host: program}
+			if previous != nil {
+				pair.Docker = previous.Docker
+			}
+			readyErr = current.admitCombinedReadback(pair, iptablesProgramPair{})
 		}
 		if readyErr == nil {
 			readyErr = call.Err()
@@ -302,7 +306,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		generated += count
 		transactionBytes += len(material.Candidate)
 	}
-	if err = before.admitReadback(program, prior); err != nil {
+	if err = before.admitTransitionReadback(transition); err != nil {
 		return empty, fault.Unavailable(err.Error())
 	}
 	transition.DryRun, err = preflightIPTables(ctx, transition)
@@ -314,7 +318,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	if err != nil || after.Hash != before.Hash {
 		return empty, fault.Conflict("iptables 工具、后端或完整规则在计划期间变化，请重新生成")
 	}
-	if err = after.admitReadback(program, prior); err != nil {
+	if err = after.admitTransitionReadback(transition); err != nil {
 		return empty, fault.Unavailable(err.Error())
 	}
 	for _, image := range before.Images {

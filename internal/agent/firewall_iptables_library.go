@@ -126,7 +126,7 @@ func (binding *iptablesToolBinding) verifyLibrary(ctx context.Context, image ipt
 	call, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	deadline, _ := call.Deadline()
-	request := iptablesLibraryRequest{Version: 3, Docker: docker, Parent: process, Deadline: deadline.UnixMilli(), Workspace: workspace, Helper: binding.Helper, Command: command, Blocker: blocker, Image: image}
+	request := iptablesLibraryRequest{Version: 4, Docker: docker, Parent: process, Deadline: deadline.UnixMilli(), Workspace: workspace, Helper: binding.Helper, Command: command, Blocker: blocker, Image: image}
 	for _, version := range binding.Versions {
 		if version.Role == role {
 			request.ExpectedVersion = version.Version
@@ -185,7 +185,7 @@ func RunIPTablesLibrary() error {
 	raw, err := io.ReadAll(io.LimitReader(os.Stdin, iptablesLibraryInputBytes+1))
 	invalid := errors.New("go-iptables 私有读取请求无效")
 	var request iptablesLibraryRequest
-	if err != nil || len(raw) > iptablesLibraryInputBytes || ufwToolJSON(raw, &request) != nil || request.Version != 3 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || filepath.Dir(request.Workspace) != "/run/nginxpanel-host" || !strings.HasPrefix(filepath.Base(request.Workspace), "iptables-library-") || !validIPTablesBoundFile(request.Helper, iptablesHelperBytes) || request.Helper.Role != "nginxpanel" {
+	if err != nil || len(raw) > iptablesLibraryInputBytes || ufwToolJSON(raw, &request) != nil || request.Version != 4 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || filepath.Dir(request.Workspace) != "/run/nginxpanel-host" || !strings.HasPrefix(filepath.Base(request.Workspace), "iptables-library-") || !validIPTablesBoundFile(request.Helper, iptablesHelperBytes) || request.Helper.Role != "nginxpanel" {
 		return invalid
 	}
 	if err = iptablesLibraryParent(request.Parent); err != nil {
@@ -214,7 +214,12 @@ func RunIPTablesLibrary() error {
 	}
 	chains, inspect := []string{}, []string{"INPUT"}
 	if request.Docker != nil {
-		if err = proveDockerIPTablesGeneration(request.Image, request.Docker.Generation); err != nil {
+		if request.Docker.AllowMissing && request.Docker.Generation != nil {
+			_, err = repairDockerIPTablesMaterial(request.Image, *request.Docker.Generation)
+		} else {
+			err = proveDockerIPTablesGeneration(request.Image, request.Docker.Generation)
+		}
+		if err != nil {
 			return err
 		}
 		if request.Docker.RequireHook && !observeDockerFirewallHook(request.Image).Observed {
@@ -255,7 +260,7 @@ func RunIPTablesLibrary() error {
 	if err != nil {
 		return err
 	}
-	bridge := iptablesLibraryBridge{Version: 3, Docker: request.Docker != nil, Parent: process, Deadline: request.Deadline, Command: request.Command, Blocker: request.Blocker, ExpectedVersion: request.ExpectedVersion, Chains: inspect}
+	bridge := iptablesLibraryBridge{Version: 4, Docker: request.Docker != nil, Parent: process, Deadline: request.Deadline, Command: request.Command, Blocker: request.Blocker, ExpectedVersion: request.ExpectedVersion, Chains: inspect}
 	environment, err := json.Marshal(bridge)
 	if err != nil || len(environment) > 16<<10 {
 		return invalid
@@ -368,7 +373,7 @@ func RunIPTablesLibraryBridge() error {
 	raw := os.Getenv(iptablesLibraryEnvironment)
 	var request iptablesLibraryBridge
 	invalid := errors.New("go-iptables 只读桥接请求无效")
-	if len(raw) > 16<<10 || ufwToolJSON([]byte(raw), &request) != nil || request.Version != 3 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || len(request.Chains) < 1 || len(request.Chains) > 7 || !request.Docker && len(request.Chains) > 3 {
+	if len(raw) > 16<<10 || ufwToolJSON([]byte(raw), &request) != nil || request.Version != 4 || !validIPTablesLibraryCommand(request.Command, request.Blocker, request.ExpectedVersion) || request.Deadline <= time.Now().UnixMilli() || request.Deadline > time.Now().Add(8*time.Second).UnixMilli() || len(request.Chains) < 1 || len(request.Chains) > 7 || !request.Docker && len(request.Chains) > 3 {
 		return invalid
 	}
 	seen := map[string]bool{}

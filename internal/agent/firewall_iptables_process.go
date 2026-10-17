@@ -309,7 +309,7 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 		return nil, errors.New("iptables 原业务快照不可执行")
 	}
 	if v.Transition.Docker != nil || iptablesPreviousDocker(&v.Transition) != nil {
-		return nil, errors.New("Docker 联合业务的写入容量、补偿和确认修复尚未接通")
+		return nil, errors.New("Docker 联合业务的受理、更新及补偿写入尚未开放")
 	}
 	parent, err := loadIPTablesReceipt(dataDir, v.Operation.ID)
 	if err != nil || !iptablesChangeReceiptMatches(parent, v) {
@@ -347,12 +347,18 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 	if err != nil {
 		return nil, err
 	}
-	prior := iptablesPreviousProgram(&v.Transition)
-	targets := []*firewall.IPTablesRuntimeProgram{v.Transition.Program, prior}
+	next := iptablesProgramPair{Host: v.Transition.Program, Docker: v.Transition.Docker}
+	prior := iptablesProgramPair{Host: iptablesPreviousProgram(&v.Transition), Docker: iptablesPreviousDocker(&v.Transition)}
+	targets := []iptablesProgramPair{next, prior}
 	if request.Target == "previous" {
-		targets = []*firewall.IPTablesRuntimeProgram{prior}
+		targets = []iptablesProgramPair{prior}
+		if prior.Docker != nil {
+			if err = verifyDockerPolicyRuntime(ctx, dataDir, v.Transition.Previous.Policy.Policy, prior.Docker, current, v.Transition.Tools); err != nil {
+				return nil, err
+			}
+		}
 	}
-	if err = current.admitReadback(v.Transition.Program, prior, targets...); err != nil {
+	if err = current.admitCombinedReadback(next, prior, targets...); err != nil {
 		return nil, err
 	}
 	input := material.Previous

@@ -17,6 +17,21 @@ type dockerIPTablesPolicyRecord struct {
 	Program      *firewall.DockerIPTablesRuntimeProgram
 }
 
+type iptablesProgramPair struct {
+	Host   *firewall.IPTablesRuntimeProgram
+	Docker *dockerIPTablesPolicyRecord
+}
+
+func (pair iptablesProgramPair) families() []string {
+	out := []string{}
+	for _, family := range []string{"ipv4", "ipv6"} {
+		if iptablesGeneration(pair.Host, family) != nil || dockerIPTablesGeneration(pair.Docker, family) != nil {
+			out = append(out, family)
+		}
+	}
+	return out
+}
+
 func validateDockerIPTablesPolicy(v *dockerIPTablesPolicyRecord, policy firewallPolicyRecord, owner, machineHash, registrationID, registrationHash string) error {
 	if v == nil {
 		if policy.Action == "apply" && firewall.HasDockerRules(policy.Policy) {
@@ -111,11 +126,11 @@ func makeIPTablesCombinedChangeMaterial(before iptablesImage, oldHost, nextHost,
 		forward = append(forward, material.Candidate)
 		reverse = append(reverse, materials[len(materials)-1-index].Previous)
 	}
-	candidate, err := joinIPTablesFilterBatches(forward)
+	candidate, err := joinIPTablesFilterBatches(forward, firewall.IPTablesProgramBytes)
 	if err != nil {
 		return iptablesChangeMaterial{}, err
 	}
-	previous, err := joinIPTablesFilterBatches(reverse)
+	previous, err := joinIPTablesFilterBatches(reverse, firewall.IPTablesProgramBytes)
 	if err != nil {
 		return iptablesChangeMaterial{}, err
 	}
@@ -126,7 +141,7 @@ func makeIPTablesCombinedChangeMaterial(before iptablesImage, oldHost, nextHost,
 	return iptablesChangeMaterial{Family: before.Family, Binary: docker.Binary, BeforeHash: before.hash(), AfterHash: current.hash(), CandidateHash: secure.Hash(candidate), PreviousHash: secure.Hash(previous), Before: before, After: current, Candidate: candidate, Previous: previous}, nil
 }
 
-func joinIPTablesFilterBatches(batches [][]byte) ([]byte, error) {
+func joinIPTablesFilterBatches(batches [][]byte, limit int) ([]byte, error) {
 	header, commit := []byte("*filter\n"), []byte("COMMIT\n")
 	out := append([]byte{}, header...)
 	for _, batch := range batches {
@@ -136,8 +151,8 @@ func joinIPTablesFilterBatches(batches [][]byte) ([]byte, error) {
 		out = append(out, batch[len(header):len(batch)-len(commit)]...)
 	}
 	out = append(out, commit...)
-	if len(batches) == 0 || len(out) > firewall.IPTablesProgramBytes {
-		return nil, errors.New("iptables 联合批次为空或超过 2 MiB")
+	if len(batches) == 0 || limit != firewall.IPTablesProgramBytes && limit != 2*firewall.IPTablesProgramBytes || len(out) > limit {
+		return nil, errors.New("iptables 联合批次为空或超过事务容量")
 	}
 	return out, nil
 }

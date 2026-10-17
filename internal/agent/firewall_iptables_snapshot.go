@@ -376,7 +376,8 @@ func (snapshot iptablesRegistrationSnapshot) verifyBoundDocker(ctx context.Conte
 		if slices.Contains(families, image.Family) {
 			value := iptablesLibraryDockerScope{RequireHook: true}
 			if docker != nil {
-				value.Generation = docker.Generation
+				value = *docker
+				value.RequireHook = true
 			}
 			docker = &value
 		}

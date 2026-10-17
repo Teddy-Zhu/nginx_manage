@@ -61,7 +61,7 @@ func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistra
 		v.Materials = append(v.Materials, material)
 		summary.TransactionBytes += len(material.Candidate)
 	}
-	if err := admitDockerInitialReadback(before, program, v.Program, prior); err != nil {
+	if err := before.admitTransitionReadback(v); err != nil {
 		return nil, nil, err
 	}
 	proof, err := preflightIPTables(ctx, v)
