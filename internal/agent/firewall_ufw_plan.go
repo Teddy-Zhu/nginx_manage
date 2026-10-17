@@ -79,7 +79,7 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	if before.HasManagedMarkers {
 		return out, fault.Conflict("UFW 存在本应用标记但无规则写入回执，禁止接管")
 	}
-	dryRunHash, err := checkUFWDryRun(ctx, binary, program)
+	dryRun, err := checkUFWDryRun(ctx, binary, program, before)
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
 	}
@@ -106,13 +106,15 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	for index := range entries {
 		entries[index].Expression = "ufw --dry-run prepend " + strings.Join(program.Rules[index].Arguments, " ")
 	}
+	warnings := []string{"每条 prepend 命令单独基于同一源配置预演，不构成批次累积效果、内核或第三方规则所有权证明", "入口保护优先；与保护条件完全相同的业务条目由保护项覆盖，其余生成条目保持期望顺序", "注释已绑定原本机授权和计划，但尚无规则写入回执；不能据此接管或删除任何既有规则"}
+	warnings = append(warnings, dryRun.Warnings...)
 	out = firewall.Plan{Backend: "ufw", CanApply: false, Action: "apply", ID: id, Version: in.Version, PolicyHash: hash, ProgramHash: program.Hash,
 		Baseline:    firewall.KernelView{Reason: "UFW 计划核对固定配置及 dry-run，不提供直接 nftables 事务证明"},
 		Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source,
 		ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: len(program.Rules),
-		UFW: &firewall.UFWPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, DryRunHash: dryRunHash, DryRunCommands: len(program.Rules), ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
-			Warnings: []string{"每条 prepend 命令单独基于同一源配置预演，不构成批次执行、内核或第三方规则完整性证明", "入口保护优先；与保护条件完全相同的业务条目由保护项覆盖，其余生成条目保持期望顺序", "注释已绑定原本机授权和计划，但尚无规则写入回执；不能据此接管或删除任何既有规则"},
-			Reason:   "本机授权、保护计划及逐条 dry-run 已核对；实际应用、新连接确认和独立恢复尚未接入"},
+		UFW: &firewall.UFWPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, DryRunHash: dryRun.Hash, NativeProgramHash: dryRun.NativeHash, PreservedRules: dryRun.PreservedRules, DryRunCommands: len(program.Rules), ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
+			Warnings: warnings,
+			Reason:   "本机授权、保护计划及逐条候选的新增原生表达式和既有用户规则保留已核对；实际应用、新连接确认和独立恢复尚未接入"},
 	}
 	return out, f.storePlanLocked(out, nil)
 }

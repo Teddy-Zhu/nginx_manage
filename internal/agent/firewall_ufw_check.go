@@ -5,15 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/nginxmodules"
@@ -33,8 +30,15 @@ type ufwFileSnapshot struct {
 }
 type ufwConfigurationSnapshot struct {
 	Files             []ufwFileSnapshot
+	UserRules         map[string][]byte
 	Hash, ToolHash    string
 	HasManagedMarkers bool
+}
+
+type ufwDryRunProof struct {
+	Hash, NativeHash string
+	PreservedRules   int
+	Warnings         []string
 }
 
 func ufwTool() (string, error) {
@@ -49,7 +53,7 @@ func ufwTool() (string, error) {
 // Capture a fixed set of source files without interpreting shell settings or
 // copying them into the policy. Repeated reads detect drift, not an atomic lock.
 func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwConfigurationSnapshot, error) {
-	out := ufwConfigurationSnapshot{Files: []ufwFileSnapshot{}}
+	out := ufwConfigurationSnapshot{Files: []ufwFileSnapshot{}, UserRules: map[string][]byte{}}
 	sources := []struct {
 		path     string
 		required bool
@@ -93,6 +97,9 @@ func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwCon
 			return out, errors.New("UFW 固定配置超过 4 MiB")
 		}
 		file.Present, file.Hash, file.Bytes = true, secure.Hash(raw), int64(len(raw))
+		if source.path == "/etc/ufw/user.rules" || source.path == "/etc/ufw/user6.rules" && ipv6 {
+			out.UserRules[source.path] = raw
+		}
 		if source.path != binary && (strings.Contains(string(raw), "nginxpanel:host:") || strings.Contains(strings.ToLower(string(raw)), hex.EncodeToString([]byte("nginxpanel:host:")))) {
 			out.HasManagedMarkers = true
 		}
@@ -112,19 +119,62 @@ func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwCon
 }
 
 // prepend refuses a matching existing selector instead of updating its action
-// or comment. Every invocation still starts from the same live source files;
-// this is individual syntax/conflict preparation, not a batch application proof.
-func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWProgram) (digest string, resultErr error) {
+// or comment. Each candidate must contain exactly the new generated native
+// block followed by every original block, with auxiliary differences bounded
+// to known official projections. This is not a batch or kernel proof.
+func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWProgram, baseline ufwConfigurationSnapshot) (proof ufwDryRunProof, resultErr error) {
+	defer func() {
+		if resultErr != nil {
+			proof = ufwDryRunProof{}
+		}
+	}()
 	if len(program.Rules) > ufwDryRunCommands || len(program.Rules) != len(program.Entries) {
-		return "", errors.New("UFW dry-run 计划最多 64 条包含入口保护的命令")
+		return proof, errors.New("UFW dry-run 计划最多 64 条包含入口保护的命令")
 	}
+	before := map[string]*ufwNativeFile{}
+	for _, item := range []struct{ family, path string }{{"ipv4", "/etc/ufw/user.rules"}, {"ipv6", "/etc/ufw/user6.rules"}} {
+		raw, present := baseline.UserRules[item.path]
+		if !present && item.family == "ipv6" {
+			continue
+		}
+		file, err := parseUFWNative(raw, item.family, true)
+		if err != nil {
+			return proof, err
+		}
+		before[item.family] = file
+		proof.PreservedRules += len(file.Rules)
+	}
+	if proof.PreservedRules+len(program.Rules) > firewall.MaxEntries {
+		return proof, errors.New("UFW 既有及生成原生用户规则合计超过 8192 条")
+	}
+	expected := []ufwNativeRule{}
+	for index, rule := range program.Rules {
+		entry, err := expectedUFWNative(rule, program.Entries[index])
+		if err != nil {
+			return proof, err
+		}
+		if before[entry.Family] == nil {
+			return proof, errors.New("UFW 生成规则缺少对应地址族的原生配置基线")
+		}
+		expected = append(expected, entry)
+	}
+	native, err := json.Marshal(expected)
+	if err != nil {
+		return proof, err
+	}
+	if len(native) > firewall.UFWProgramBytes {
+		return proof, errors.New("UFW 生成原生规则超过 480 KiB")
+	}
+	proof.NativeHash = secure.Hash(append([]byte("ufw:native-host:v1:\x00"), native...))
+	proof.Warnings = []string{}
+	warned := map[string]bool{}
 	const parent = "/run/nginxpanel-host"
 	if err := secure.RootDirectory(parent, 0700); err != nil {
-		return "", err
+		return proof, err
 	}
 	items, err := os.ReadDir(parent)
 	if err != nil {
-		return "", err
+		return proof, err
 	}
 	stale := 0
 	for _, item := range items {
@@ -133,15 +183,14 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 		}
 	}
 	if stale >= 16 {
-		return "", errors.New("UFW 私有预演目录达到上限，须本机核对遗留进程与目录")
+		return proof, errors.New("UFW 私有预演目录达到上限，须本机核对遗留进程与目录")
 	}
 	temp, err := os.MkdirTemp(parent, "ufw-check-")
 	if err != nil {
-		return "", err
+		return proof, err
 	}
 	defer func() {
 		if err := os.RemoveAll(temp); err != nil {
-			digest = ""
 			resultErr = errors.Join(resultErr, errors.New("UFW 私有预演目录清理失败，须本机核对"))
 		}
 	}()
@@ -161,128 +210,43 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 		err := command.Run()
 		cancel()
 		if err != nil || stdout.exceeded || stderr.exceeded || stderr.data.Len() != 0 {
-			return "", errors.New("UFW dry-run 失败、超时或返回警告；未执行规则变更")
+			return proof, errors.New("UFW dry-run 失败、超时或返回警告；未执行规则变更")
 		}
 		raw := stdout.data.Bytes()
 		total += len(raw)
-		if total > 8<<20 || !ufwDryRunMatches(raw, rule, program.Entries[index]) {
-			return "", errors.New("UFW dry-run 存在既有规则冲突、未知候选结果或超过预算")
+		if total > 8<<20 {
+			return proof, errors.New("UFW dry-run 完整输出合计超过 8 MiB")
+		}
+		warning, err := ufwDryRunMatches(raw, expected[index], before[expected[index].Family])
+		if err != nil {
+			return proof, err
+		}
+		if warning != "" && !warned[warning] {
+			proof.Warnings = append(proof.Warnings, warning)
+			warned[warning] = true
 		}
 		hashes = append(hashes, secure.Hash(raw))
 	}
 	raw, err := json.Marshal(hashes)
 	if err != nil {
+		return proof, err
+	}
+	proof.Hash = secure.Hash(append([]byte("ufw:dry-run:v1:\x00"), raw...))
+	return proof, nil
+}
+
+func ufwDryRunMatches(raw []byte, expected ufwNativeRule, before *ufwNativeFile) (string, error) {
+	status := "Rules updated\n"
+	if expected.Family == "ipv6" {
+		status = "Rules updated (v6)\n"
+	}
+	text, ok := strings.CutSuffix(string(raw), status)
+	if !ok {
+		return "", errors.New("UFW dry-run 缺少对应地址族的更新结果，或已有匹配条件冲突")
+	}
+	candidate, err := parseUFWNative([]byte(text), expected.Family, false)
+	if err != nil {
 		return "", err
 	}
-	return secure.Hash(append([]byte("ufw:dry-run:v1:\x00"), raw...)), nil
-}
-
-func ufwDryRunMatches(raw []byte, rule firewall.UFWRule, entry firewall.PreviewEntry) bool {
-	if len(raw) == 0 || !utf8.Valid(raw) || len(rule.Arguments) < 3 {
-		return false
-	}
-	prefix, status, anywhere := "ufw", "Rules updated", "0.0.0.0/0"
-	if entry.Family == "ipv6" {
-		prefix, status, anywhere = "ufw6", "Rules updated (v6)", "::/0"
-	}
-	source, err := netip.ParsePrefix(entry.Source)
-	if err != nil {
-		return false
-	}
-	sourceText := source.String()
-	if source.Bits() == source.Addr().BitLen() {
-		sourceText = source.Addr().String() // UFW removes /32 and /128 host masks.
-	}
-	ports := strconv.Itoa(entry.Ports.From)
-	if entry.Ports.From != entry.Ports.To {
-		ports += ":" + strconv.Itoa(entry.Ports.To)
-	}
-	direction := "in"
-	if entry.Interface != "" {
-		direction += "_" + entry.Interface
-	}
-	comment := hex.EncodeToString([]byte(rule.Arguments[len(rule.Arguments)-1]))
-	tuple := "### tuple ### " + strings.Join([]string{entry.Action, entry.Protocol, ports, anywhere, "any", sourceText, direction, "comment=" + comment}, " ")
-	text := string(raw)
-	if !strings.HasPrefix(text, "*filter\n:"+prefix+"-user-input ") || !strings.HasSuffix(text, "COMMIT\n"+status+"\n") {
-		return false
-	}
-	if strings.Count(text, "comment="+comment) != 1 {
-		return false
-	}
-	rules, ok := ufwDryRunSections(strings.TrimSuffix(text, status+"\n"), prefix)
-	if !ok {
-		return false
-	}
-	for _, line := range strings.Split(rules, "\n") {
-		if line != "" {
-			return line == tuple
-		}
-	}
-	return false
-}
-
-// This recognizes the official candidate file layout, not the semantics of
-// arbitrary iptables expressions or the completeness of existing UFW rules.
-func ufwDryRunSections(candidate, prefix string) (string, bool) {
-	for _, char := range candidate {
-		if char < 0x20 && char != '\n' || char == 0x7f {
-			return "", false
-		}
-	}
-	header := "*filter\n"
-	for _, suffix := range []string{"user-input", "user-output", "user-forward", "before-logging-input", "before-logging-output", "before-logging-forward", "user-logging-input", "user-logging-output", "user-logging-forward", "after-logging-input", "after-logging-output", "after-logging-forward", "logging-deny", "logging-allow"} {
-		header += ":" + prefix + "-" + suffix + " - [0:0]\n"
-	}
-	rest, ok := strings.CutPrefix(candidate, header)
-	if !ok {
-		return "", false
-	}
-	limitHeader := ":" + prefix + "-user-limit - [0:0]\n:" + prefix + "-user-limit-accept - [0:0]\n"
-	rest, limiting := strings.CutPrefix(rest, limitHeader)
-	rest, ok = strings.CutPrefix(rest, "### RULES ###\n")
-	if !ok {
-		return "", false
-	}
-	rules, rest, ok := strings.Cut(rest, "\n### END RULES ###\n")
-	if !ok || !ufwCandidateLines(rules, prefix, true) {
-		return "", false
-	}
-	rest, ok = strings.CutPrefix(rest, "\n### LOGGING ###\n")
-	if !ok {
-		return "", false
-	}
-	logging, rest, ok := strings.Cut(rest, "### END LOGGING ###\n")
-	if !ok || !ufwCandidateLines(logging, prefix, false) {
-		return "", false
-	}
-	if limiting {
-		rest, ok = strings.CutPrefix(rest, "\n### RATE LIMITING ###\n")
-		if !ok {
-			return "", false
-		}
-		rate, tail, found := strings.Cut(rest, "### END RATE LIMITING ###\n")
-		if !found || !ufwCandidateLines(rate, prefix, false) {
-			return "", false
-		}
-		rest = tail
-	}
-	return rules, rest == "COMMIT\n"
-}
-
-func ufwCandidateLines(section, prefix string, tuples bool) bool {
-	packetRules := 0
-	for _, line := range strings.Split(section, "\n") {
-		switch {
-		case line == "":
-		case tuples && strings.HasPrefix(line, "### tuple ### "):
-		case strings.HasPrefix(line, "-A "+prefix+"-"):
-			packetRules++
-		case !tuples && strings.HasPrefix(line, "-I "+prefix+"-"):
-			packetRules++
-		default:
-			return false
-		}
-	}
-	return !tuples || packetRules > 0
+	return ufwNativePreserved(before, candidate, expected)
 }

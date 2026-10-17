@@ -50,6 +50,8 @@ const columns: DataTableColumns<Entry> = [
     <dd>{{ plan.registration_operation_id }}</dd>
     <dt>逐条 dry-run</dt>
     <dd>{{ plan.dry_run_commands }} 条</dd>
+    <dt>核对保留的既有用户规则</dt>
+    <dd>{{ plan.preserved_rules }} 条（按原生 tuple 计）</dd>
     <dt>入口保护 / 覆盖相同条件的业务项</dt>
     <dd>{{ plan.protection_rules }} 条 / {{ plan.protection_overrides }} 条</dd>
     <dt>固定配置基线</dt>
@@ -58,6 +60,8 @@ const columns: DataTableColumns<Entry> = [
     <dd class="digest">{{ plan.tool_hash }}</dd>
     <dt>完整预演输出摘要</dt>
     <dd class="digest">{{ plan.dry_run_hash }}</dd>
+    <dt>生成原生规则摘要</dt>
+    <dd class="digest">{{ plan.native_program_hash }}</dd>
     <dt>完整程序摘要</dt>
     <dd class="digest">{{ programHash }}</dd>
   </dl>
