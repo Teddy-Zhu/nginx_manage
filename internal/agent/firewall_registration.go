@@ -252,6 +252,9 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 		return out, err
 	}
 	defer unlock()
+	if err := forbidFirewalldRegistration(dataDir); err != nil {
+		return out, err
+	}
 	dir := filepath.Dir(nftRegistrationPath(dataDir))
 	if err = secure.RootDirectory(dir, 0700); err != nil {
 		return out, err

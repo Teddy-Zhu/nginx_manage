@@ -300,7 +300,10 @@ onUnmounted(() => {
             <p>接口：{{ zone.interfaces.join("、") || "无" }}</p>
             <p>来源：{{ zone.sources.join("、") || "无" }}</p>
           </div>
-          <FirewalldPolicies :inventory="observation.firewalld.policy_inventory" />
+          <FirewalldPolicies
+            :inventory="observation.firewalld.policy_inventory"
+            :registration="observation.firewalld.registration"
+          />
         </section>
         <section class="panel">
           <h3>UFW</h3>

@@ -229,6 +229,10 @@ func (f *hostFirewall) Open() error {
 		return err
 	}
 	f.unlock = unlock
+	if err := forbidFirewalldRegistration(f.dataDir); err != nil {
+		f.problem = err.Error()
+		return nil
+	}
 	if err = secure.RootDirectory(filepath.Dir(firewallStatePath(f.dataDir)), 0700); err != nil {
 		return err
 	}

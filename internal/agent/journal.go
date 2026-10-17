@@ -19,20 +19,21 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
-	RuntimeHistory            *runtimeHistoryIntent         `json:"runtime_history,omitempty"`
-	Fail2banPythonPlanning    *fail2banPythonPlanning       `json:"fail2ban_python_planning,omitempty"`
-	Fail2banPython            *fail2banPythonIntent         `json:"fail2ban_python,omitempty"`
-	Fail2banLifecycle         *fail2banLifecycleIntent      `json:"fail2ban_lifecycle,omitempty"`
-	Fail2banAddress           *fail2banAddressIntent        `json:"fail2ban_address,omitempty"`
-	Fail2banJails             *fail2banJailIntent           `json:"fail2ban_jails,omitempty"`
-	Fail2banExisting          *fail2banExistingIntent       `json:"fail2ban_existing,omitempty"`
-	Fail2banExistingPolicy    *fail2banExistingPolicyIntent `json:"fail2ban_existing_policy,omitempty"`
-	Fail2banExistingPolicyJob *fail2banExistingPolicyJob    `json:"fail2ban_existing_policy_job,omitempty"`
-	ClientDeny                *clientDenyIntent             `json:"client_deny,omitempty"`
-	Firewall                  *firewall.Operation           `json:"firewall,omitempty"`
-	RelatedOperationID        string                        `json:"related_operation_id,omitempty"`
-	DisasterActivation        *DisasterActivationOperation  `json:"disaster_activation,omitempty"`
-	DisasterRestoreID         string                        `json:"disaster_restore_id,omitempty"`
+	FirewalldRegistration     *firewalldRegistrationCheckpoint `json:"firewalld_registration,omitempty"`
+	RuntimeHistory            *runtimeHistoryIntent            `json:"runtime_history,omitempty"`
+	Fail2banPythonPlanning    *fail2banPythonPlanning          `json:"fail2ban_python_planning,omitempty"`
+	Fail2banPython            *fail2banPythonIntent            `json:"fail2ban_python,omitempty"`
+	Fail2banLifecycle         *fail2banLifecycleIntent         `json:"fail2ban_lifecycle,omitempty"`
+	Fail2banAddress           *fail2banAddressIntent           `json:"fail2ban_address,omitempty"`
+	Fail2banJails             *fail2banJailIntent              `json:"fail2ban_jails,omitempty"`
+	Fail2banExisting          *fail2banExistingIntent          `json:"fail2ban_existing,omitempty"`
+	Fail2banExistingPolicy    *fail2banExistingPolicyIntent    `json:"fail2ban_existing_policy,omitempty"`
+	Fail2banExistingPolicyJob *fail2banExistingPolicyJob       `json:"fail2ban_existing_policy_job,omitempty"`
+	ClientDeny                *clientDenyIntent                `json:"client_deny,omitempty"`
+	Firewall                  *firewall.Operation              `json:"firewall,omitempty"`
+	RelatedOperationID        string                           `json:"related_operation_id,omitempty"`
+	DisasterActivation        *DisasterActivationOperation     `json:"disaster_activation,omitempty"`
+	DisasterRestoreID         string                           `json:"disaster_restore_id,omitempty"`
 
 	RemoteListener           *remotelisten.Operation `json:"remote_listener,omitempty"`
 	PanelUpdate              *PanelUpdateOperation   `json:"panel_update,omitempty"`

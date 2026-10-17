@@ -4529,7 +4529,7 @@ components:
     FirewallRegistrationView:
       type: object
       additionalProperties: false
-      description: 本机 root 空表登记及同代次内核快照的核对结果；不表示过滤策略已生效或获得写入授权。
+      description: 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对空 policy 的完整 runtime/permanent 设置与活动绑定；不表示获得业务策略写入授权或外部可达。
       required: [state, verified, operation_id, observed_at, reason]
       properties:
         state: {type: string, enum: [unavailable, unregistered, registered, managed, released, missing, drifted, recovery_required]}
@@ -4562,8 +4562,9 @@ components:
     FirewallFirewalld:
       type: object
       additionalProperties: false
-      required: ["running", "configured_backend", "default_zone", "panic", "zones", "policy_inventory", "reason"]
+      required: ["registration", "running", "configured_backend", "default_zone", "panic", "zones", "policy_inventory", "reason"]
       properties:
+        registration: {$ref: '#/components/schemas/FirewallRegistrationView', description: 独立 root 意图及回执核对；等待本机 reload 或中断恢复时为 recovery_required，不凭同名或标记接管。}
         running: {"type": "boolean", "nullable": true}
         configured_backend: {"type": "string"}
         default_zone: {"type": "string"}

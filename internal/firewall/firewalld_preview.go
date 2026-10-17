@@ -27,9 +27,15 @@ func inspectFirewalldPreview(out *Preview, observed Observation) {
 		out.Errors = append(out.Errors, "firewalld runtime/permanent policy 清单无法完整核对")
 		return
 	}
+	registration := observed.Firewalld.Registration
+	if registration.State == "recovery_required" || registration.State == "missing" || registration.State == "drifted" {
+		out.Errors = append(out.Errors, "firewalld root 登记尚未核对完成："+registration.Reason)
+	}
 	for _, policy := range inventory.Policies {
 		if policy.Name == FirewalldHostPolicy {
-			out.Errors = append(out.Errors, "固定目标 policy 已存在；尚无可核对的独立登记，禁止接管")
+			if !registration.Verified || registration.State != "registered" {
+				out.Errors = append(out.Errors, "固定目标 policy 已存在；独立登记未核对通过，禁止接管")
+			}
 			continue
 		}
 		// ANY excludes HOST. Forwarding/output policies cannot contend with

@@ -13,6 +13,10 @@ import (
 // This identity restricts a local persistent grant; it is not a remote node
 // credential. Root recovery material is never included in a migration.
 func fail2banHostBootIdentity() (machine, boot string, err error) {
+	return hostBootIdentity("nginxpanel:fail2ban-host-machine:v1:")
+}
+
+func hostBootIdentity(machineDomain string) (machine, boot string, err error) {
 	if (&HostDNS{Scope: "host"}).hostScopeReason() != "" {
 		return "", "", errors.New("无法核对启动恢复的宿主机范围")
 	}
@@ -34,7 +38,7 @@ func fail2banHostBootIdentity() (machine, boot string, err error) {
 	if len(id) != 32 || strings.Trim(id, "0123456789abcdef") != "" || id == strings.Repeat("0", 32) {
 		return "", "", errors.New("本机 machine-id 无效")
 	}
-	machine = secure.Hash([]byte("nginxpanel:fail2ban-host-machine:v1:" + id))
+	machine = secure.Hash([]byte(machineDomain + id))
 	raw, err = os.ReadFile("/proc/sys/kernel/random/boot_id")
 	if err != nil {
 		return

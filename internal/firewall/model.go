@@ -47,6 +47,7 @@ type Observation struct {
 	Interfaces   []string         `json:"interfaces"`
 }
 type Firewalld struct {
+	Registration      RegistrationView         `json:"registration"`
 	Running           *bool                    `json:"running"`
 	ConfiguredBackend string                   `json:"configured_backend"`
 	DefaultZone       string                   `json:"default_zone"`
@@ -134,6 +135,6 @@ type Docker struct {
 
 func Empty(scope, reason string) Observation {
 	return Observation{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 root 独立登记"}, Source: "host-agent", Kernel: KernelView{Reason: "尚未读取受管目标表的内核快照"}, Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
-		Firewalld: Firewalld{Zones: []Zone{}, PolicyInventory: EmptyFirewalldPolicies("尚未读取"), Reason: "尚未读取"}, UFW: UFW{Reason: "尚未读取"},
+		Firewalld: Firewalld{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 firewalld root 登记"}, Zones: []Zone{}, PolicyInventory: EmptyFirewalldPolicies("尚未读取"), Reason: "尚未读取"}, UFW: UFW{Reason: "尚未读取"},
 		Iptables: []Iptables{}, Rulesets: []Ruleset{}, Docker: Docker{BackendHint: "unknown", Evidence: []string{}, Reason: "尚未核对 Docker 转发路径"}, Warnings: []string{}}
 }

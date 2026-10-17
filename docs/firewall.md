@@ -117,7 +117,7 @@ Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。�
 
 运行与永久 policy 合并后最多 64 项，单份返回字典最多 512 KiB、合计 2 MiB；rich rules 最多 8192 项、其他列表字段最多 1024 项、每对象最多 8192 个规则条目、各方向最多 128 个 zone。采集 policy 最多 1.5 秒，仍受原 firewalld 3 秒与全局 6 秒诊断期限约束；D-Bus 单帧最多 1 MiB、整次 firewalld 接收最多 8 MiB。末尾再次比较清单和活动绑定，再核对服务唯一所有者；同一服务内的读取仍非原子快照，不能代替执行前复核、内核对象证明或新连接确认。
 
-自动扫描的防火墙页面展示仅运行、仅永久、配置摘要一致或不同及活动状态。该诊断不创建 policy、不写规则、不 reload firewalld、不修改运行或永久配置；firewalld 写入适配及其独立恢复仍未交付。Agent 为 70，数据库/迁移归档仍为 32/6；实现待 P5 集中验证。
+自动扫描的防火墙页面展示仅运行、仅永久、配置摘要一致或不同及活动状态。该诊断不创建 policy、不写规则、不 reload firewalld、不修改运行或永久配置；本机 root 空 policy 登记见下节，业务策略写入及独立补偿仍未交付。Agent 为 71，数据库/迁移归档仍为 32/6；实现待 P5 集中验证。
 
 ## firewalld 主机 policy 编译预览
 
@@ -131,4 +131,28 @@ Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。�
 
 预览结合已有宿主机诊断核对单一 firewalld、panic、混合/缺失后端视图、完整 runtime/permanent policy 清单及已有活动 policy 的优先级。同名对象尚无独立登记时拒绝接管，同优先级明确阻塞，先行的其他 policy 保留范围核对提示；诊断缓存不构成执行授权。统一响应的 `firewalld` 只在该后端编译成功时非 null，直接 nftables 的内核表信息保持独立；后端表达式和优先级在其他后端分别为空字符串和 null。
 
-`compiled=true` 仅代表完整生成，`can_apply` 仍为 false。firewalld 所有权登记、runtime 写入、永久配置确认及独立补偿尚待接入，原 direct nftables 执行器不会处理这些 rich rules。跨环境迁移可保存中立期望并查看独立编译限制，仍不自动启用、创建、reload 或应用 firewalld。实现待 P5 集中验证，未执行真实 D-Bus 操作或宿主机变更。
+`compiled=true` 仅代表完整生成，`can_apply` 仍为 false。firewalld 空 policy 所有权登记已接入；runtime 业务规则写入、永久业务配置确认及独立补偿尚待接入，原 direct nftables 执行器不会处理这些 rich rules。跨环境迁移可保存中立期望并查看独立编译限制，仍不自动启用、创建、reload 或应用 firewalld。实现待 P5 集中验证，未执行真实 D-Bus 操作或宿主机变更。
+
+
+## firewalld 本机 root 空 policy 登记
+
+下列命令须在停止 Agent 后，由真实宿主机 root 明确指定范围。沿用固定宿主机登记锁（跨数据目录）及独立维护准入锁，不提供 HTTP/IPC 写入入口。
+
+```sh
+nginxpanel firewalld-init --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel firewalld-registration --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel firewalld-recover --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel firewalld-remove --data-dir /srv/nginxpanel --firewall-scope host
+```
+
+`init` 要求完整观察到单一、非 panic 的 firewalld、已知后端和完整内核视图，且没有直接 nftables 登记、运行恢复材料或同名目标表。固定 `nginxpanel-host` 在 runtime 和 permanent 中都必须不存在；不凭同名对象或 description 标记接管。先保存绑定本机身份、随机所有者、原操作、D-Bus 服务及进程身份和固定设置的 root 意图及独立回执，再通过[官方 config.addPolicy](https://firewalld.org/documentation/man-pages/firewalld.dbus.html) 一次性创建永久空 policy。固定 ANY 到 HOST、priority -100、CONTINUE，无 rich rules、端口、服务、转发或 masquerade；其余每个返回字段都必须为文档允许的空值或 false。
+
+永久对象准备完后，root 状态为 `prepared`，独立操作仍待确认；网页/API 的 `firewalld.registration` 显示 `recovery_required`。系统不调用全局 reload，因为它还会激活其他待提交的永久配置。操作者须另行审核本机全部永久配置并自行执行 firewalld reload，再调用 `recover`；仅当完整 runtime/permanent 设置摘要、原随机标记、独立回执和 ANY/HOST 活动绑定均一致时登记为 `registered`。这仅证明空 policy 登记，不证明内核原子性、业务规则生效或外部可达，预览仍不开放应用。
+
+`remove` 仅接受原登记且完整一致的空 policy，记录关联原操作的新意图后调用原配置对象的官方 `remove`，只移除永久对象。运行空对象尚在时为 `releasing`，待操作者审核并自行 reload 后再 `recover`，运行和永久均消失才为 `released`。重复初始化或移除只核对已完成状态；未完成时必须恢复原意图，不能重复写入。直接 nftables 登记与执行也拒绝未释放的 firewalld 登记。
+
+`recover` 只读取 firewalld 并更新原 root 回执，绝不重新提交创建或删除。已持久化但尚未提交的方法可结束为未执行；提交结果未知时，原对象的完整随机标记可证明创建已经发生。对于原服务进程仍在的未知请求，对象暂时缺失不能证明它不会迟到；firewalld 自身的明确异常回执只证明处理已结束，仍须核对对象：新建未留下对象记失败，移除后原完整空对象仍在则保留登记并记失败，异常名称留在原回执。通用超时、NoReply 或断开不算此证明。没有明确回执时，须在本机核对原服务进程已结束（启动身份、PID 和进程启动时间）后，才能结束相应的缺失结果。对象漂移、接口不完整、超限、服务变化或回执冲突保持待恢复，不吞错或自动接管。
+
+未知请求是否还可能迟到，复用 DNS 独立恢复的有界 `/proc` 启动/PID/启动时间核对；仅变更总线名称不构成原处理进程已退出的证明。登记保存在 `agent/firewall/firewalld-registration.json` 及 root 独立操作日志，绑定宿主机 machine-id 摘要；业务备份和跨环境配置迁移不包含这些材料，也不复制源机所有权。D-Bus 使用固定本机系统总线、唯一服务所有者和 NoAutoStart，沿用单帧 1 MiB、总接收 8 MiB、每次连接 3 秒预算，提交前再次核对固定对象和服务身份。firewalld 没有条件写入接口，因此操作期间应避免其他管理员并发修改目标 policy；该登记入口不宣称提供 CAS 或全局原子快照。
+
+本阶段未运行生成器、构建、类型检查、lint、测试、浏览器或真实 D-Bus/宿主机命令，待 P5 集中验证。

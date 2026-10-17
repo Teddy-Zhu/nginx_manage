@@ -1789,6 +1789,7 @@ type FirewallObservation struct {
 
 // FirewallFirewalld defines model for FirewallFirewalld.
 type FirewallFirewalld struct {
+	Registration      FirewallRegistrationView         `json:"registration"`
 	Running           *bool                            `json:"running"`
 	ConfiguredBackend string                           `json:"configured_backend"`
 	DefaultZone       string                           `json:"default_zone"`

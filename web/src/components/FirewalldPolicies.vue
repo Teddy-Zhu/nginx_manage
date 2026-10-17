@@ -4,7 +4,19 @@ import type { FirewallObservation } from "../api/client";
 
 type Inventory = FirewallObservation["firewalld"]["policy_inventory"];
 type Policy = Inventory["policies"][number];
-defineProps<{ inventory: Inventory }>();
+defineProps<{
+  inventory: Inventory;
+  registration: FirewallObservation["firewalld"]["registration"];
+}>();
+const registrationNames: Record<string, string> = {
+  unavailable: "无法核对",
+  unregistered: "未登记",
+  registered: "已登记空策略",
+  released: "已释放登记",
+  missing: "登记策略缺失",
+  drifted: "登记对象变化",
+  recovery_required: "待本机恢复",
+};
 
 function comparison(policy: Policy) {
   if (!policy.runtime) return "仅永久配置";
@@ -24,6 +36,19 @@ const flag = (value: boolean | null) =>
 </script>
 
 <template>
+  <h4>独立登记</h4>
+  <dl>
+    <dt>状态 / 完整设置核对</dt>
+    <dd>
+      {{ registrationNames[registration.state] }} /
+      {{ registration.verified ? "通过" : "未通过" }}
+    </dd>
+    <dt v-if="registration.operation_id">操作编号</dt>
+    <dd v-if="registration.operation_id">{{ registration.operation_id }}</dd>
+  </dl>
+  <n-alert v-if="registration.reason" type="warning" :bordered="false">
+    {{ registration.reason }}
+  </n-alert>
   <h4>Policy 配置</h4>
   <n-alert v-if="!inventory.available" type="warning" :bordered="false">
     {{ inventory.reason }}

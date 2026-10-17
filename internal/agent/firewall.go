@@ -98,7 +98,11 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 		out.Registration = nftRegistrationView(f.dataDir, out.Kernel)
 	}()
 	wg.Add(1)
-	go func() { defer wg.Done(); out.Firewalld = readFirewalld(ctx) }()
+	go func() {
+		defer wg.Done()
+		out.Firewalld = readFirewalld(ctx)
+		out.Firewalld.Registration = firewalldRegistrationView(f.dataDir, out.Firewalld.PolicyInventory)
+	}()
 	wg.Add(1)
 	go func() { defer wg.Done(); out.UFW = readUFW(ctx) }()
 	wg.Add(1)
@@ -159,7 +163,7 @@ func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error)
 		e = errors.New("invalid firewall observation")
 	}
 	if e == nil {
-		if !validFirewalldPolicies(out.Firewalld.PolicyInventory) || out.Firewalld.PolicyInventory.Available && (out.Firewalld.Running == nil || !*out.Firewalld.Running) {
+		if !validFirewalldPolicies(out.Firewalld.PolicyInventory) || !validFirewalldRegistrationView(out.Firewalld.Registration, out.Firewalld.PolicyInventory) || out.Firewalld.PolicyInventory.Available && (out.Firewalld.Running == nil || !*out.Firewalld.Running) {
 			e = errors.New("invalid firewalld policy inventory")
 		}
 	}

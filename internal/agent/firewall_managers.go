@@ -43,7 +43,7 @@ func (w *firewalldBusWire) Read(p []byte) (int, error) {
 }
 
 func readFirewalld(parent context.Context) firewall.Firewalld {
-	out := firewall.Firewalld{Zones: []firewall.Zone{}, PolicyInventory: firewall.EmptyFirewalldPolicies("firewalld policy 尚未读取"), Reason: "无法读取本机 firewalld 状态"}
+	out := firewall.Firewalld{Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对 firewalld root 登记"}, Zones: []firewall.Zone{}, PolicyInventory: firewall.EmptyFirewalldPolicies("firewalld policy 尚未读取"), Reason: "无法读取本机 firewalld 状态"}
 	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
 	defer cancel()
 	raw, e := (&net.Dialer{}).DialContext(ctx, "unix", "/run/dbus/system_bus_socket")
