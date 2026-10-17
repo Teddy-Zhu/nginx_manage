@@ -82,7 +82,7 @@ manifest 最多 2 MiB/16 个资产/合计 4096 个文件，准备计划最多 4 
 
 仅接收单一 gzip 流包裹的 root USTAR，物理头逐块检查，拒绝 PAX/GNU 扩展、链接、设备、未知/重复文件、非零填充及额外压缩流。归档首先校验完整签名散列，再解包；复制期间再次散列并检查文件身份，gzip CRC 和完整文件清单通过后才发布。
 
-[发布工具与 CI 流程](publishing.md) 已接入面板/web 及 amd64/arm64 静态 Nginx 的打包、签名、源码/依赖 SBOM 和草稿发布，尚未运行或发布；项目许可和仓库签名配置仍需提供。Nginx 默认资产按固定源码配方预置模块，可复用现有准备、首次安装及迁移依赖准备入口。Fail2ban 官方代码组装、许可/兼容文件、来源和默认签名发行也已接入，复用现有组件准备与受管安装；运行中组件切换和完整系统验收仍待补齐。
+[发布工具与 CI 流程](publishing.md) 已接入面板/web 及 amd64/arm64 静态 Nginx 的打包、签名、源码/依赖 SBOM 和草稿发布，尚未运行或发布；项目许可和仓库签名配置仍需提供。Nginx 默认资产按固定源码配方预置模块，可复用现有准备、首次安装及迁移依赖准备入口。Fail2ban 官方代码组装、许可/兼容文件、来源和默认签名发行也已接入，复用现有组件准备与受管安装；原生 Nginx 维护切换本机命令见后文；Web/API、其他组件切换和完整系统验收仍待补齐。
 
 ## 面板版本暂存
 
@@ -260,3 +260,28 @@ Web 将任务输入及精简结果分别加密，保留最多 64 项，单条 64
 已准备的单一 Nginx 资产可由原生安装器通过 `--nginx-plan/--nginx-asset` 直接接入，见 [原生安装](../deploy/native/README.md)。固定 `component-path/component-bind/nginx-runtime` 命令分别负责准入解析、不可变本机安装批准和执行；Web 不能创建或覆盖绑定。Agent 和 systemd 使用同一绑定，实际版本须匹配签名资产，启动不依赖 GitHub 或下载缓存。
 
 `Prepared` 现在为纯只读回执核验，恢复不会创建锁或补发归档。已安装运行使用 root 本机批准时间验证原清单的准入有效期，并以当前受信公钥及仓库重新验签、复核完整原计划/文件和系统依赖。原批准信任散列只用于重建不可变回执身份，不替代当前验签；添加无关公钥不触发无关版本失效，撤销签名公钥仍拒绝启动。此规则不用于新检查/准备，业务请求也不能提交批准时间或旧信任材料。
+
+
+## 原生 Nginx 运行组件维护切换
+
+本机 root 可使用 `component-switch` 将已运行的专用原生 Nginx 换成已准备的签名资产。入口要求原生安装 v12 已完成、Nginx 与 Agent 正常运行、独立维护会话已持有，以及明确允许重启停机。Docker 继续使用固定镜像及构建时预置模块，本入口不编译或增装模块。Web/API 切换和其他组件切换尚未接入。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel component-switch \
+  --data-dir /var/lib/nginxpanel \
+  --nginx-switch-operation <新的操作UUID> \
+  --maintenance-id <已持有的维护会话UUID> \
+  --maintenance-epoch <当前维护epoch> \
+  --release-plan <已准备的Nginx计划SHA256> \
+  --release-select <计划中的Nginx资产ID> \
+  --release-trust /etc/nginxpanel/release-trust.json \
+  --confirm-nginx-downtime
+```
+
+受管签名和本机批准的原程序均可作为原组件；候选只接受签名准备资产。当前发布、证书和依赖须完整，候选须通过当前完整运行配置和编译版本校验；活动配置包含动态模块时拒绝直接切换。原不可变组件、原绑定和发布目录保留，不改变期望配置、数据库或服务开机启用状态。
+
+独立记录固定原选择、候选、当前发布摘要及两个原生服务文件摘要。执行器核对 systemd 的实际加载、无 drop-in、无待重载，以及进程归属与固定入口，再停止 Agent、取得配置执行锁、停止专用 Nginx、原子选择候选并启动。实际 executable、编译版本、发布探针、监听归属、TLS 和重启后的 Agent 来源及逻辑/物理发布均确认后才记录成功。
+
+前进期限十分钟；失败后在八分钟独立期限内补偿原组件，并重新确认运行。新候选的签名失效不阻止补偿；原组件自身的文件和已安装来源仍须可信。遇到第三种组件选择、发布或服务偏离、未知进程和无法确认的服务状态时保留 `recovery_required` 与维护会话，不覆盖外部状态。
+
+`component-switch-status --data-dir <目录> --nginx-switch-operation <原UUID>` 只读持久记录，返回的是历史确认，不保证查询时仍在运行。中断后使用 `component-switch-resume`，或使用 `component-switch-rollback` 明确补偿；二者只接受原操作 UUID、数据目录与当前 `--maintenance-epoch`，不得替换来源或会话。Agent 已重启时须使用同一会话的新 epoch；服务未就绪时可由本机 root 从原维护记录读取。续办先核对实际选择与服务；目标已经正常运行时仅补齐确认。终态重放只返回原记录，另一次切换须使用新操作和新的准入。未完成记录阻止释放维护锁；终态后由原维护流程收尾。本入口尚未运行，留待 P5 集中验证。

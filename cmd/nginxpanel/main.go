@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -99,6 +99,8 @@ func run() error {
 	installEnable := flags.Bool("install-enable", false, "enable the dedicated Nginx service on boot")
 	installResume := flags.Bool("resume-install", false, "resume the original installation after checking its receipt")
 	installAbort := flags.Bool("abort-install", false, "cancel the original installation only before binding publication")
+	nginxSwitchOperation := flags.String("nginx-switch-operation", "", "durable native Nginx runtime switch UUID")
+	nginxSwitchDowntime := flags.Bool("confirm-nginx-downtime", false, "allow a dedicated Nginx restart while switching components")
 	nginxRuntimeCheck := flags.Bool("nginx-runtime-check", false, "only validate the bound native Nginx configuration")
 	logOwner := flags.String("nginx-log-owner", "unconfirmed", "unique managed log rotation owner: agent, external, or unconfirmed")
 	fail2banOperation := flags.String("fail2ban-operation", "", "immutable Fail2ban installation, action authorization or host input registration UUID")
@@ -160,6 +162,10 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
+		"component-switch":                     {"data-dir": true, "nginx-switch-operation": true, "confirm-nginx-downtime": true, "maintenance-id": true, "maintenance-epoch": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
+		"component-switch-resume":              {"data-dir": true, "nginx-switch-operation": true, "maintenance-epoch": true},
+		"component-switch-rollback":            {"data-dir": true, "nginx-switch-operation": true, "maintenance-epoch": true},
+		"component-switch-status":              {"data-dir": true, "nginx-switch-operation": true},
 		"fail2ban-existing-jail-policy-plan":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-existing-jail-base": true, "fail2ban-existing-jail-file": true},
 		"fail2ban-existing-jail-policy-apply":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-existing-jail-base": true, "fail2ban-existing-jail-file": true, "fail2ban-existing-jail-target": true, "fail2ban-confirm-jail-stop": true},
 		"fail2ban-existing-jail-policy-status": {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
@@ -403,6 +409,14 @@ func run() error {
 			if command != "update-worker" && command != "panel-update-worker" && command != "panel-update-status" {
 				invalidFlag = f.Name
 			}
+		case "nginx-switch-operation":
+			if command != "component-switch" && command != "component-switch-resume" && command != "component-switch-rollback" && command != "component-switch-status" {
+				invalidFlag = f.Name
+			}
+		case "confirm-nginx-downtime":
+			if command != "component-switch" {
+				invalidFlag = f.Name
+			}
 		case "panel-service-operation":
 			if command != "panel-service-operation" && command != "panel-service-control" && command != "panel-readiness" {
 				invalidFlag = f.Name
@@ -469,7 +483,7 @@ func run() error {
 	if command == "component-install" && *moduleFile == "" {
 		*moduleFile = "/etc/nginxpanel/nginx-modules.json"
 	}
-	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-service-control" && command != "panel-readiness" && command != "update-worker" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
+	if command != "component-install" && ((command != "nginx-install-worker" && *installOperation != "") || command != "panel-snapshot-capture" && command != "panel-snapshot-restore" && command != "panel-runtime-select" && command != "panel-service-control" && command != "panel-readiness" && command != "update-worker" && command != "component-switch" && command != "component-switch-resume" && command != "component-switch-rollback" && (*installMaintenance != "" || *installEpoch != "") || *installStart || *installEnable || *installResume || *installAbort) {
 		return errors.New("installation options require component-install; maintenance identity also permits panel snapshot, version and process operations")
 	}
 	catalog, err := nginxmodules.ReadCatalog(*moduleFile)
@@ -866,6 +880,25 @@ func run() error {
 		return json.NewEncoder(os.Stdout).Encode(out)
 	case "nginx-install-worker":
 		_, err := agent.RunNginxInstallation(ctx, absDir, *installOperation)
+		return err
+	case "component-switch-status":
+		out, err := agent.ReadNginxSwitch(absDir, *nginxSwitchOperation)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "component-switch", "component-switch-resume", "component-switch-rollback":
+		opts := agent.NginxSwitchOptions{DataDir: absDir, OperationID: *nginxSwitchOperation, Epoch: *installEpoch, Resume: command == "component-switch-resume", Rollback: command == "component-switch-rollback"}
+		if command == "component-switch" {
+			opts.Input = agent.NginxSwitchInput{MaintenanceID: *installMaintenance, AllowDowntime: *nginxSwitchDowntime,
+				Source: nginxruntime.Input{DataDir: absDir, PlanID: *releasePlan, AssetID: *releaseSelect, TrustPath: *releaseTrust, Prerelease: *releasePrerelease}}
+		}
+		out, err := agent.SwitchNginx(ctx, opts)
+		if out.OperationID != "" {
+			if e := json.NewEncoder(os.Stdout).Encode(out); e != nil {
+				return e
+			}
+		}
 		return err
 	case "component-install":
 		if *nginxBinary != "" || *nginxBinding || *devAgent || *moduleFile != "/etc/nginxpanel/nginx-modules.json" {

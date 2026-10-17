@@ -34,7 +34,7 @@ type DisasterRuntimeStatus struct {
 }
 
 func validDisasterNginxRecord(i panelrecovery.DisasterIntent, r Record) error {
-	if r.DisasterRestoreID != i.OperationID || r.Kind != "nginx.apply" || r.OperationID != i.PlanID || r.RequestHash != i.NginxRequest.SHA256 || r.BeforeRevision != i.NginxBeforeRevision || r.AfterRevision != i.PlanID || r.BeforeDir != revisionDir(i.NginxBeforeDeployment) || r.AfterDir != i.PlanID || !validID(r.MaintenanceEpoch) || r.RestoreSnapshot != "" || r.PanelRestore != nil || r.PanelUpdate != nil || r.PanelService != nil || r.PanelSelection != nil || r.NginxInstall != nil || r.RemoteListener != nil || r.LogPolicy != nil {
+	if r.DisasterRestoreID != i.OperationID || r.Kind != "nginx.apply" || r.OperationID != i.PlanID || r.RequestHash != i.NginxRequest.SHA256 || r.BeforeRevision != i.NginxBeforeRevision || r.AfterRevision != i.PlanID || r.BeforeDir != revisionDir(i.NginxBeforeDeployment) || r.AfterDir != i.PlanID || !validID(r.MaintenanceEpoch) || r.RestoreSnapshot != "" || r.PanelRestore != nil || r.PanelUpdate != nil || r.PanelService != nil || r.PanelSelection != nil || r.NginxInstall != nil || r.NginxSwitch != nil || r.RemoteListener != nil || r.LogPolicy != nil {
 		return errors.New("Nginx 子操作与原完整恢复批准不一致")
 	}
 	switch r.State {

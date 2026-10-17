@@ -39,6 +39,7 @@ type Record struct {
 	PanelSelection           *PanelSelectionIntent   `json:"panel_selection,omitempty"`
 	PanelRestore             *PanelRestoreIntent     `json:"panel_restore,omitempty"`
 	NginxInstall             *NginxInstallIntent     `json:"nginx_install,omitempty"`
+	NginxSwitch              *NginxSwitchIntent      `json:"nginx_switch,omitempty"`
 	MaintenanceEpoch         string                  `json:"maintenance_epoch,omitempty"`
 	OperationID              string                  `json:"operation_id"`
 	Fail2banHostRetirementID string                  `json:"fail2ban_host_retirement_id,omitempty"`

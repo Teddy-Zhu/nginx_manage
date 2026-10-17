@@ -255,6 +255,14 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 				continue
 			}
 		}
+		if r.Kind == nginxSwitchKind {
+			if err := validNginxSwitch(r); err != nil {
+				return out, err
+			}
+			if g.id != "" && r.NginxSwitch.Input.MaintenanceID == g.id {
+				continue
+			}
+		}
 
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
@@ -436,6 +444,15 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 			}
 			if record.State != "succeeded" && record.PanelRestore.Receipt.Manifest.MaintenanceID == in.OperationID {
 				return maintenance.RootStatus{}, fault.Conflict("面板恢复仍在执行或待恢复，不能释放维护锁")
+			}
+			continue
+		}
+		if record.Kind == nginxSwitchKind {
+			if err := validNginxSwitch(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if !nginxSwitchTerminal(record.State) && record.NginxSwitch.Input.MaintenanceID == in.OperationID {
+				return maintenance.RootStatus{}, fault.Conflict("Nginx 组件切换仍在执行或待补偿，不能释放维护锁")
 			}
 			continue
 		}

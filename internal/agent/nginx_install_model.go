@@ -47,7 +47,7 @@ func installHash(id string, in NginxInstallInput) string {
 	return secure.Hash(raw)
 }
 func validInstallRecord(r Record) error {
-	if r.Kind != nginxInstallKind || r.NginxInstall == nil || !validID(r.OperationID) || !validID(r.NginxInstall.Input.MaintenanceID) || r.RequestHash != installHash(r.OperationID, r.NginxInstall.Input) || r.Deadline <= 0 {
+	if r.Kind != nginxInstallKind || r.NginxInstall == nil || r.NginxSwitch != nil || !validID(r.OperationID) || !validID(r.NginxInstall.Input.MaintenanceID) || r.RequestHash != installHash(r.OperationID, r.NginxInstall.Input) || r.Deadline <= 0 {
 		return errors.New("Nginx 安装记录无效")
 	}
 	in := r.NginxInstall.Input

@@ -54,6 +54,10 @@ func installationExecutable() (string, error) {
 	return actual, nil
 }
 func installationUnit(ctx context.Context, unit, data, worker string) error {
+	return nativeNginxUnit(ctx, unit, data, worker, true)
+}
+
+func nativeNginxUnit(ctx context.Context, unit, data, worker string, firstInstall bool) error {
 	if worker != "nginxpanel-nginx" {
 		return errors.New("在线原生安装须使用已登记的专用 Nginx 账户")
 	}
@@ -61,8 +65,8 @@ func installationUnit(ctx context.Context, unit, data, worker string) error {
 	if err != nil {
 		return err
 	}
-	if !strings.HasPrefix(string(intent), "native-install-v12\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
-		return errors.New("本机首次安装意图与未安装目标不一致")
+	if !strings.HasPrefix(string(intent), "native-install-v12\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || firstInstall && !strings.Contains(string(intent), "\nwithout_nginx=yes\n") {
+		return errors.New("本机原生安装意图与目标不一致")
 	}
 	raw, err := nginxmodules.ReadTrusted("/etc/systemd/system/"+unit, 64<<10)
 	if err != nil {
@@ -115,10 +119,14 @@ func installationSystemctl(ctx context.Context, args ...string) (string, error) 
 	return out.String(), nil
 }
 func waitInstallationProbe(ctx context.Context, data string, b nginxruntime.Binding, running bool) (NginxInstallationProbe, error) {
-	var result NginxInstallationProbe
 	if b.Owner != "managed" || b.Signed == nil {
-		return result, errors.New("安装确认缺少签名来源绑定")
+		return NginxInstallationProbe{}, errors.New("安装确认缺少签名来源绑定")
 	}
+	return waitNativeNginxProbe(ctx, data, b, running, "", "")
+}
+
+func waitNativeNginxProbe(ctx context.Context, data string, b nginxruntime.Binding, running bool, revision, deployment string) (NginxInstallationProbe, error) {
+	var result NginxInstallationProbe
 	executable, err := installationExecutable()
 	if err != nil {
 		return result, err
@@ -159,13 +167,17 @@ func waitInstallationProbe(ctx context.Context, data string, b nginxruntime.Bind
 		stop()
 		if err == nil && json.Unmarshal([]byte(output.String()), &result) == nil {
 			info := result.Components.Installation
-			if info != nil && info.Owner == "managed" && info.PlanID == b.Signed.PlanID && info.AssetID == b.Signed.AssetID && info.SHA256 == b.SHA256 && info.Version == b.Version && result.Runtime.Available && result.Runtime.Integrity && !result.Runtime.ExternalChange && result.Runtime.RevisionID == "" && (!running || result.Runtime.Running) {
+			sourceMatches := info != nil && info.Owner == b.Owner && info.SHA256 == b.SHA256 && info.Version == b.Version
+			if sourceMatches && b.Signed != nil {
+				sourceMatches = info.PlanID == b.Signed.PlanID && info.AssetID == b.Signed.AssetID
+			}
+			if sourceMatches && result.Runtime.Available && result.Runtime.Integrity && !result.Runtime.ExternalChange && result.Runtime.RevisionID == revision && result.Runtime.DeploymentID == deployment && (!running || result.Runtime.Running) {
 				return result, nil
 			}
 		}
 		select {
 		case <-call.Done():
-			return result, errors.New("Agent 安装来源或专用 Nginx 实际状态未确认，保留原安装记录")
+			return result, errors.New("Agent 组件来源或专用 Nginx 实际发布未确认，保留原操作记录")
 		case <-ticker.C:
 		}
 	}

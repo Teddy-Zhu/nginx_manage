@@ -80,7 +80,7 @@ func Inspect(ctx context.Context, in Input) (Binding, error) {
 }
 
 // Admit verifies a candidate without changing the current selection. Activation
-// must separately prove ownership of an explicitly uninstalled selection.
+// separately compares the prior selection under a durable maintenance operation.
 func Admit(ctx context.Context, in Input) (Binding, error) {
 	var b Binding
 	if err := in.Validate(); err != nil {

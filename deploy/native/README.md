@@ -146,3 +146,5 @@ Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安
 首次安装可增加 `--panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <清单绝对路径> --release-signature <签名绝对路径>`，由相同宿主机安装器初始化持久应用版本、UID/GID 和 Agent Socket 权限，生成固定 Compose，且不登记原生 Web unit。信任根由 root 独立配置在 `/etc/nginxpanel`。写入安装意图前核对签名、当前架构、实际镜像启动器、本机程序及全部前端文件，绑定时再次检查并保存只读批准记录；镜像须事先准备到本机，不自动拉取。`--start` 只启动宿主机服务，面板容器另行使用生成的 Compose 启动。已登记的模式、镜像或版本不能通过重跑首次安装器改换。运行、固定控制接口及真实遗留范围见 [Docker 部署](../docker/README.md)。
 
 配合 `--nginx-image <已在本机准备的镜像@sha256:摘要>` 可同时接入预置模块 Nginx 容器，使用同一镜像发行清单验签；与原生程序、签名组件和 `--without-nginx` 选择互斥。此分支只登记宿主机 Agent，生成双服务 Compose；不登记原生 Nginx 或原生首次安装 unit。Docker Socket 仅由宿主机 root Agent 访问，不挂入容器。首次安装意图为 v7，首版发布前不保留旧意图兼容路径。
+
+运行中的原生 Nginx 可通过独立 root 命令在已持有维护会话中切换至签名准备组件，支持原记录续办、补偿和只读查询；要求明确允许停机，保留当前发布及原组件。详见 [组件维护切换](../../docs/releases.md#原生-nginx-运行组件维护切换)。此入口尚未执行验证；Web/API 切换仍待接入。

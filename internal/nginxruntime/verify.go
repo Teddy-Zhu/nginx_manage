@@ -96,36 +96,41 @@ func Selection(ctx context.Context, data string) (Binding, *Installation, error)
 	if err != nil {
 		return b, nil, err
 	}
-	if err = ctx.Err(); err != nil {
-		return b, nil, err
+	info, err := verifySelection(ctx, b)
+	return b, info, err
+}
+
+func verifySelection(ctx context.Context, b Binding) (*Installation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if b.Owner == "uninstalled" {
-		return b, nil, nil
+		return nil, nil
 	}
 	info := Installation{Owner: b.Owner, Version: b.Version, SHA256: b.SHA256, BoundAt: b.BoundAt}
 	if b.Signed != nil {
 		s := *b.Signed
 		current := receiver()
 		if s.Host != host() || s.Receiver.APIMajor != current.APIMajor || s.Receiver.AgentProtocol > current.AgentProtocol || s.Receiver.Launcher > current.Launcher {
-			return b, nil, errors.New("本机平台或接收端不满足已安装组件")
+			return nil, errors.New("本机平台或接收端不满足已安装组件")
 		}
 		p, e := releases.Installed(ctx, inputFor(s), s.PlanID, b.BoundAt, s.TrustSHA256)
 		if e != nil {
-			return b, nil, e
+			return nil, e
 		}
 		asset, binary, e := fromPlan(p, s.AssetID)
 		if e != nil {
-			return b, nil, e
+			return nil, e
 		}
 		if binary != b.Binary || p.Plan.ManifestSHA256 != s.ManifestSHA256 || asset.Version != b.Version {
-			return b, nil, errors.New("已安装 Nginx 与签名资产不一致")
+			return nil, errors.New("已安装 Nginx 与签名资产不一致")
 		}
 		info.PlanID, info.AssetID, info.SourceURL, info.License = s.PlanID, s.AssetID, asset.SourceURL, asset.License
 	}
-	if err = verifyExecutable(b.Binary, b.SHA256); err != nil {
-		return b, nil, err
+	if err := verifyExecutable(b.Binary, b.SHA256); err != nil {
+		return nil, err
 	}
-	return b, &info, nil
+	return &info, nil
 }
 func verifyExecutable(binary, expected string) error {
 	raw, err := nginxmodules.ReadTrusted(binary, limits.NginxBinaryBytes)
