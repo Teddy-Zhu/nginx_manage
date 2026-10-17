@@ -322,7 +322,7 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		if err = validateDockerIPTablesPolicy(transition.Docker, *record, transition.Owner, transition.MachineHash, transition.RegistrationOperationID, transition.RegistrationRequestHash); err != nil {
 			return out, err
 		}
-		detail.Transition, hostSummary, err = prepareDockerInitialTransition(ctx, before, transition)
+		detail.Transition, hostSummary, err = prepareIPTablesTransition(ctx, before, transition)
 		if err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
 		}

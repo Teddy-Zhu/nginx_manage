@@ -7,19 +7,31 @@ import (
 	"nginxpanel/internal/firewall"
 )
 
-// Both scopes use the same bounded business-intent representation. The plan
-// remains volatile and non-writable until live authority and recovery support
-// the combined scope; projected After images are never kernel receipts.
-func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistrationSnapshot, v *iptablesTransition) (*firewall.DockerTransitionPlan, *firewall.IPTablesPlan, error) {
-	if v == nil || v.Docker == nil || v.Program == nil || len(v.Materials) != 0 || !v.Tools.valid() || v.Tools.Backend != v.Program.Backend || v.ConfigurationHash != before.Hash || v.ToolHash != before.ToolHash || !firewalldDigest(before.Hash) || !firewalldDigest(before.ToolHash) || iptablesPreviousDocker(v) != nil {
-		return nil, nil, errors.New("Docker 联合初始计划缺少父子授权、完整基线或固定工具")
+// Initial, update and removal plans share the same material and readback
+// admission. Projected After images never supply kernel execution receipts.
+func prepareIPTablesTransition(ctx context.Context, before iptablesRegistrationSnapshot, v *iptablesTransition) (*firewall.DockerTransitionPlan, *firewall.IPTablesPlan, error) {
+	if v == nil || v.Program == nil || len(v.Materials) != 0 || !v.Tools.valid() || v.Tools.Backend != v.Program.Backend || v.ConfigurationHash != before.Hash || v.ToolHash != before.ToolHash || !firewalldDigest(before.Hash) || !firewalldDigest(before.ToolHash) {
+		return nil, nil, errors.New("iptables 计划缺少完整代际、基线或固定工具")
 	}
-	grant, program := &v.Docker.Registration, v.Docker.Program
-	if !validDockerRegistration(grant) || grant.State != "registered" || program == nil || program.Owner != grant.Owner || program.Backend != v.Program.Backend || program.PlanID != v.Program.PlanID {
-		return nil, nil, errors.New("Docker 联合初始计划的独立代际身份无效")
+	var summary *firewall.DockerTransitionPlan
+	if v.Docker != nil {
+		grant, program := &v.Docker.Registration, v.Docker.Program
+		if !validDockerRegistration(grant) || grant.State != "registered" || program == nil || program.Owner != grant.Owner || program.Backend != v.Program.Backend || program.PlanID != v.Program.PlanID {
+			return nil, nil, errors.New("Docker 联合计划的独立代际身份无效")
+		}
+		summary = &firewall.DockerTransitionPlan{Owner: grant.Owner, HostOwner: v.Owner, HostRuntimeHash: v.Program.Hash, HostRuntimeBytes: v.Program.Bytes, RegistrationOperationID: grant.OperationID, ParentOperationID: grant.ParentOperationID, RegistrationHash: grant.RequestHash, ToolHash: before.ToolHash, HookChain: "DOCKER-USER", EntryChain: firewall.IPTablesDockerChain, RuntimeHash: program.Hash, RuntimeBytes: program.Bytes, GeneratedRules: program.GeneratedRules, Families: []firewall.IPTablesFamilyPlan{}}
 	}
-	summary := &firewall.DockerTransitionPlan{Owner: grant.Owner, HostOwner: v.Owner, HostRuntimeHash: v.Program.Hash, HostRuntimeBytes: v.Program.Bytes, RegistrationOperationID: grant.OperationID, ParentOperationID: grant.ParentOperationID, RegistrationHash: grant.RequestHash, ToolHash: before.ToolHash, HookChain: "DOCKER-USER", EntryChain: firewall.IPTablesDockerChain, RuntimeHash: program.Hash, RuntimeBytes: program.Bytes, GeneratedRules: program.GeneratedRules, Families: []firewall.IPTablesFamilyPlan{}}
-	host := &firewall.IPTablesPlan{RegistrationOperationID: v.RegistrationOperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: v.Program.LogicalHash, ProtectionRules: v.Program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: []string{"IPv4/IPv6 分别处理，不保证跨地址族原子性", "INPUT 的 ACCEPT 可能结束后续判断；Docker 允许规则使用 RETURN 交还后续过滤"}, Reason: "主机入站与 Docker 转发的联合预览"}
+	host := &firewall.IPTablesPlan{RegistrationOperationID: v.RegistrationOperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: v.Program.LogicalHash, ProtectionRules: v.Program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: []string{"IPv4/IPv6 分别处理，不保证跨地址族原子性"}, Reason: "主机入站计划已准备，应用后须通过新连接确认"}
+	if v.Docker != nil || iptablesPreviousDocker(v) != nil {
+		host.Warnings = append(host.Warnings, "INPUT 的 ACCEPT 可能结束后续判断；Docker 允许规则使用 RETURN 交还后续过滤")
+		host.Reason = "主机入站与 Docker 转发的联合预览，尚不支持执行"
+		if iptablesPreviousDocker(v) != nil {
+			host.Warnings = append(host.Warnings, "撤回或修复原 Docker 规则仍须核对原目标及路径；本次预览不证明原目标仍可恢复")
+		}
+		if v.Docker == nil {
+			host.Warnings = append(host.Warnings, "此计划同时移除原已确认的 Docker 转发规则；不移除 Docker 本机授权")
+		}
+	}
 	prior := iptablesPreviousProgram(v)
 	for _, family := range iptablesTransitionFamilies(v) {
 		var image *iptablesImage
@@ -29,13 +41,13 @@ func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistra
 			}
 		}
 		if image == nil {
-			return nil, nil, errors.New("Docker 联合计划缺少完整地址族规则")
+			return nil, nil, errors.New("iptables 计划缺少完整地址族规则")
 		}
 		material, err := makeIPTablesTransitionMaterial(*image, v)
 		if err != nil {
 			return nil, nil, err
 		}
-		foreign, err := iptablesCombinedForeignImage(*image, iptablesGeneration(prior, family), nil)
+		foreign, err := iptablesCombinedForeignImage(*image, iptablesGeneration(prior, family), dockerIPTablesGeneration(iptablesPreviousDocker(v), family))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -59,7 +71,9 @@ func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistra
 			summary.Families = append(summary.Families, dockerFamily)
 		}
 		v.Materials = append(v.Materials, material)
-		summary.TransactionBytes += len(material.Candidate)
+		if summary != nil {
+			summary.TransactionBytes += len(material.Candidate)
+		}
 	}
 	if err := before.admitTransitionReadback(v); err != nil {
 		return nil, nil, err
@@ -69,7 +83,9 @@ func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistra
 		return nil, nil, err
 	}
 	v.DryRun = proof
-	summary.ToolchainHash, summary.DryRunHash, summary.DryRunCommands = v.Tools.Hash, proof.Hash, len(proof.Calls)
+	if summary != nil {
+		summary.ToolchainHash, summary.DryRunHash, summary.DryRunCommands = v.Tools.Hash, proof.Hash, len(proof.Calls)
+	}
 	host.ToolchainHash, host.DryRunHash, host.DryRunCommands = v.Tools.Hash, proof.Hash, len(proof.Calls)
 	return summary, host, nil
 }

@@ -255,7 +255,7 @@ func runIPTablesRepairRestore(ctx context.Context, dataDir string, request iptab
 		return nil, err
 	}
 	defer guard.Close()
-	current, err := inspectIPTablesSource(ctx, dataDir, &repair.Source, true)
+	current, err := inspectIPTablesLiveSource(ctx, dataDir, &repair.Source, true)
 	if err != nil || current.Hash != repair.ConfigurationHash {
 		return nil, errors.New("iptables 原修复基线已变化")
 	}
@@ -350,6 +350,11 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 			return finishIPTablesRepair(ctx, dataDir, v, repair)
 		}
 		return nil
+	}
+	// A complete owned scope can be replanned or removed even if Docker has
+	// changed. Reinstalling missing rules must still prove the original path.
+	if err = verifyDockerPolicyRuntime(ctx, dataDir, source.Policy.Policy, source.Docker, current, &source.Tools); err != nil {
+		return err
 	}
 	if err = current.admitCombinedReadback(iptablesProgramPair{Host: program, Docker: source.Docker}, iptablesProgramPair{}); err != nil {
 		return err
@@ -476,7 +481,7 @@ func finishIPTablesRepair(ctx context.Context, dataDir string, v *iptablesChange
 	if source == nil || !sameIPTablesValue(source, repair.Source) {
 		return errors.New("iptables 最终修复来源变化")
 	}
-	current, err := inspectIPTablesSource(ctx, dataDir, source, false)
+	current, err := inspectIPTablesLiveSource(ctx, dataDir, source, false)
 	if err != nil || iptablesRestorePending(dataDir) {
 		return errors.New("iptables 最终修复规则或回执无法核对")
 	}

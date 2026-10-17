@@ -319,6 +319,17 @@ func inspectIPTablesChangeScope(ctx context.Context, dataDir string, v *iptables
 }
 
 func inspectIPTablesSource(ctx context.Context, dataDir string, source *iptablesPolicySource, allowMissing bool) (iptablesRegistrationSnapshot, error) {
+	return inspectIPTablesPolicySource(ctx, dataDir, source, allowMissing, false)
+}
+
+func inspectIPTablesLiveSource(ctx context.Context, dataDir string, source *iptablesPolicySource, allowMissing bool) (iptablesRegistrationSnapshot, error) {
+	return inspectIPTablesPolicySource(ctx, dataDir, source, allowMissing, true)
+}
+
+// Ownership remains provable when a confirmed Docker endpoint is no longer
+// running. Reinstalling or confirming this source requires its original path
+// to remain live; a new plan must prove its explicit replacement endpoints.
+func inspectIPTablesPolicySource(ctx context.Context, dataDir string, source *iptablesPolicySource, allowMissing, live bool) (iptablesRegistrationSnapshot, error) {
 	if err := verifyIPTablesSource(dataDir, source); err != nil {
 		return iptablesRegistrationSnapshot{}, err
 	}
@@ -334,9 +345,9 @@ func inspectIPTablesSource(ctx context.Context, dataDir string, source *iptables
 	if err != nil {
 		return iptablesRegistrationSnapshot{}, err
 	}
-	scope := iptablesInspectionScope{Program: program, Docker: source.Docker, AllowMissing: allowMissing, RequireDockerHook: source.Docker != nil}
+	scope := iptablesInspectionScope{Program: program, Docker: source.Docker, AllowMissing: allowMissing, RequireDockerHook: live && source.Docker != nil}
 	current, err := inspectIPTablesBound(ctx, dataDir, record.Policy.Backend, source.ToolHash, &source.Tools, scope)
-	if err == nil {
+	if err == nil && live {
 		err = verifyDockerPolicyRuntime(ctx, dataDir, record.Policy, source.Docker, current, &source.Tools)
 	}
 	return current, err

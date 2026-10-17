@@ -116,7 +116,7 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 			record := previous.Policy
 			program, readyErr = firewall.CompileIPTablesRuntime(firewall.HostPolicy(record.Policy), record.Protections, previous.Owner, record.PlanID, record.Action)
 			if readyErr == nil {
-				current, readyErr = inspectIPTablesSource(call, f.dataDir, previous, false)
+				current, readyErr = inspectIPTablesLiveSource(call, f.dataDir, previous, false)
 			}
 			if readyErr == nil {
 				for _, generation := range program.Families {
@@ -267,54 +267,18 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		}
 	}
 	transition := &iptablesTransition{Previous: previous, Owner: registered.NextClaim.Owner, MachineHash: registered.NextClaim.MachineHash, RegistrationOperationID: registered.NextClaim.OperationID, RegistrationRequestHash: registered.RequestHash, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Tools: tools, Materials: []iptablesChangeMaterial{}}
-	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "主机入站计划已准备，应用后须通过新连接确认"}
-	generated, transactionBytes := 0, 0
-	prior := iptablesPreviousProgram(transition)
-	for _, family := range iptablesTransitionFamilies(transition) {
-		var image *iptablesImage
-		for i := range before.Images {
-			if before.Images[i].Family == family {
-				image = &before.Images[i]
-			}
-		}
-		if image == nil {
-			return empty, fault.Unavailable("iptables 当前地址族的完整导出缺失")
-		}
-		old, next := iptablesGeneration(prior, family), iptablesGeneration(program, family)
-		material, err := makeIPTablesChangeMaterial(*image, old, next)
-		if err != nil {
-			return empty, fault.Unavailable(err.Error())
-		}
-		foreign, _, err := iptablesForeignImage(*image, old)
-		if err != nil {
-			return empty, err
-		}
-		preserved := 0
-		for _, table := range foreign.Tables {
-			for _, chain := range table.Chains {
-				preserved += len(chain.Rules)
-			}
-		}
-		chain, count, position := "", 0, 0
-		if next != nil {
-			chain, count, position = next.Chain, len(next.Rules)+2, 1
-		} else {
-			chain = old.Chain
-		}
-		transition.Materials = append(transition.Materials, material)
-		summary.Families = append(summary.Families, firewall.IPTablesFamilyPlan{Family: family, Binary: material.Binary, Chain: chain, HookPosition: position, GeneratedRules: count, PreservedRules: preserved, BeforeHash: material.BeforeHash, AfterHash: material.AfterHash, CandidateHash: material.CandidateHash, PreviousHash: material.PreviousHash, CandidateBytes: len(material.Candidate), PreviousBytes: len(material.Previous)})
-		generated += count
-		transactionBytes += len(material.Candidate)
-	}
-	if err = before.admitTransitionReadback(transition); err != nil {
-		return empty, fault.Unavailable(err.Error())
-	}
-	transition.DryRun, err = preflightIPTables(ctx, transition)
+	_, summary, err := prepareIPTablesTransition(ctx, before, transition)
 	if err != nil {
 		return empty, fault.Unavailable(err.Error())
 	}
-	summary.ToolchainHash, summary.DryRunHash, summary.DryRunCommands = tools.Hash, transition.DryRun.Hash, len(transition.DryRun.Calls)
-	after, err := inspectIPTablesBound(ctx, f.dataDir, f.owner, transition.ToolHash, tools, iptablesInspectionScope{Program: prior})
+	summary.Warnings = append(summary.Warnings, warnings...)
+	generated, transactionBytes := 0, 0
+	for _, family := range summary.Families {
+		generated += family.GeneratedRules
+		transactionBytes += family.CandidateBytes
+	}
+	prior := iptablesPreviousProgram(transition)
+	after, err := inspectIPTablesBound(ctx, f.dataDir, f.owner, transition.ToolHash, tools, iptablesInspectionScope{Program: prior, Docker: iptablesPreviousDocker(transition)})
 	if err != nil || after.Hash != before.Hash {
 		return empty, fault.Conflict("iptables 工具、后端或完整规则在计划期间变化，请重新生成")
 	}
@@ -343,8 +307,8 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	if err != nil || len(raw) > 16<<20 {
 		return empty, errors.New("iptables 完整私有计划超过 16 MiB 或无法编码")
 	}
-	summary.Warnings = append(summary.Warnings, "INPUT 受管跳转位于首位；本应用 ACCEPT 可能结束后续 INPUT 判断，云安全组及其他过滤路径仍可拒绝", "IPv4/IPv6 分别处理，不保证跨地址族原子性；只操作本应用链及精确规则，不恢复第三方历史快照", "官方 --test 不安装规则，也不证明端口可达；系统共享库及扩展仍由宿主机提供")
-	view := firewall.Plan{Backend: f.owner, CanApply: true, IPTables: summary, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: firewall.KernelView{Reason: "完整 iptables 规则摘要见地址族代际计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: secure.Hash(append([]byte("iptables:plan:v2:\x00"), raw...)), TransactionBytes: transactionBytes, GeneratedRules: generated}
+	summary.Warnings = append(summary.Warnings, "INPUT 受管跳转位于首位；本应用 ACCEPT 可能结束后续 INPUT 判断，云安全组及其他过滤路径仍可拒绝", "只操作本应用链及精确规则，不恢复第三方历史快照", "官方 --test 不安装规则，也不证明端口可达；系统共享库及扩展仍由宿主机提供")
+	view := firewall.Plan{Backend: f.owner, CanApply: iptablesPreviousDocker(transition) == nil, IPTables: summary, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: firewall.KernelView{Reason: "完整 iptables 规则摘要见地址族代际计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: secure.Hash(append([]byte("iptables:plan:v2:\x00"), raw...)), TransactionBytes: transactionBytes, GeneratedRules: generated}
 	if err = f.storePlanLocked(view, record); err != nil {
 		return empty, err
 	}

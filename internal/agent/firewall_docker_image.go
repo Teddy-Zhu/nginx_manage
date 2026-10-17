@@ -110,11 +110,9 @@ func dockerIPTablesForeignImage(image iptablesImage, generation *firewall.IPTabl
 }
 
 func renderDockerIPTablesChange(before iptablesImage, old, next *firewall.IPTablesGeneration) (iptablesImage, []byte, error) {
-	if next != nil {
-		if hook := observeDockerFirewallHook(before); !hook.Observed {
-			return iptablesImage{}, nil, errors.New("Docker 候选代际的原始挂接无法核对：" + hook.Reason)
-		}
-	}
+	// Rendering proves only the owned topology, including a frozen inverse for
+	// removal while Docker is offline. Installing a generation still requires
+	// the live FORWARD hook and original endpoint proof at the execution gate.
 	return renderIPTablesScopedChange(before, old, next, iptablesGenerationScope{Entry: "DOCKER-USER", Anchor: firewall.IPTablesDockerChain, UserEntry: true, Prove: proveDockerIPTablesGeneration})
 }
 
