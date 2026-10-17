@@ -1901,12 +1901,20 @@ type FirewallChain struct {
 
 // FirewallDocker defines model for FirewallDocker.
 type FirewallDocker struct {
-	BackendHint  string                     `json:"backend_hint"`
-	Evidence     []string                   `json:"evidence"`
-	Writable     bool                       `json:"writable"`
-	Reason       string                     `json:"reason"`
-	Runtime      FirewallDockerRuntime      `json:"runtime"`
-	Capabilities []FirewallDockerCapability `json:"capabilities"`
+	Registration FirewallDockerRegistrationView `json:"registration"`
+	BackendHint  string                         `json:"backend_hint"`
+	Evidence     []string                       `json:"evidence"`
+	Writable     bool                           `json:"writable"`
+	Reason       string                         `json:"reason"`
+	Runtime      FirewallDockerRuntime          `json:"runtime"`
+	Capabilities []FirewallDockerCapability     `json:"capabilities"`
+}
+
+type FirewallDockerRegistrationView struct {
+	Backend           string                   `json:"backend"`
+	EngineHash        string                   `json:"engine_hash"`
+	ParentOperationId string                   `json:"parent_operation_id"`
+	Registration      FirewallRegistrationView `json:"registration"`
 }
 
 // FirewallDockerRuntime defines model for FirewallDockerRuntime.

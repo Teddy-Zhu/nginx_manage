@@ -201,6 +201,9 @@ func snapshotIPTablesScope(ctx context.Context, backend string, observed firewal
 				}
 				images[index], err = parseIPTablesImage(raw, family)
 				if err == nil {
+					err = proveEmptyDockerNamespace(images[index])
+				}
+				if err == nil {
 					var generation, prior *firewall.IPTablesGeneration
 					if strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
 						generation = iptablesGeneration(program, family)

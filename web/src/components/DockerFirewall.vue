@@ -7,6 +7,15 @@ type Port = FirewallObservation["docker"]["runtime"]["ports"][number];
 type Capability = FirewallObservation["docker"]["capabilities"][number];
 const familyName = (value: string) =>
   value === "ipv4" ? "IPv4" : value === "ipv6" ? "IPv6" : "未报告";
+const registrationNames: Record<string, string> = {
+  unavailable: "未核对",
+  unregistered: "未授权",
+  registered: "已授权",
+  released: "已释放",
+  drifted: "待重新核对",
+  recovery_required: "待恢复",
+};
+const registrationName = (state: string) => registrationNames[state] ?? state;
 const ports: DataTableColumns<Port> = [
   { title: "容器", key: "container_id", width: 150, ellipsis: { tooltip: true } },
   { title: "地址族", key: "family", width: 100, render: (r) => familyName(r.family) },
@@ -60,6 +69,18 @@ const capabilities: DataTableColumns<Capability> = [
 
 <template>
   <div>
+    <h4>Docker 转发本机授权</h4>
+    <dl>
+      <dt>授权状态</dt><dd>{{ registrationName(value.registration.registration.state) }}</dd>
+      <template v-if="value.registration.backend">
+        <dt>授权后端</dt><dd>{{ value.registration.backend }}</dd>
+        <dt>授权实例摘要</dt><dd class="digest">{{ value.registration.engine_hash }}</dd>
+        <dt>原宿主机登记</dt><dd>{{ value.registration.parent_operation_id }}</dd>
+      </template>
+    </dl>
+    <n-alert :type="value.registration.registration.verified ? 'info' : 'warning'" :bordered="false">
+      {{ value.registration.registration.reason }}
+    </n-alert>
     <n-alert :type="value.runtime.available ? 'info' : 'warning'" :bordered="false">
       {{ value.runtime.reason }}
     </n-alert>
@@ -103,3 +124,7 @@ const capabilities: DataTableColumns<Capability> = [
     </template>
   </div>
 </template>
+
+<style scoped>
+.digest { overflow-wrap: anywhere; }
+</style>

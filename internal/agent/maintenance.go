@@ -301,6 +301,9 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 	if g.firewall != nil && g.firewall.pending() {
 		out.Busy++
 	}
+	if g.firewall == nil && dockerRegistrationPending(filepath.Dir(filepath.Dir(g.journal.Dir))) {
+		out.Busy++
+	}
 	if g.nginx != nil {
 		if g.nginx.http01 != nil && g.nginx.http01.busy() {
 			out.Busy++

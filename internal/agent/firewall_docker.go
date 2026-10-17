@@ -103,6 +103,14 @@ func dockerFirewallCapabilities(out *firewall.Observation, hooks []dockerFirewal
 
 func validDockerFirewall(out firewall.Observation) bool {
 	value := out.Docker
+	if !validDockerRegistrationView(value.Registration) {
+		return false
+	}
+	if value.Registration.Registration.Verified && (!out.IPTablesRegistration.Registration.Verified || out.IPTablesRegistration.Backend != value.Registration.Backend || out.IPTablesRegistration.Registration.OperationID != value.Registration.ParentOperationID || value.Runtime.EngineHash != value.Registration.EngineHash || !value.Runtime.Available || value.Runtime.Rootless || value.Runtime.Swarm != "inactive" || value.BackendHint != "iptables" || !slices.ContainsFunc(value.Capabilities, func(capability firewall.DockerCapability) bool {
+		return capability.Backend == value.Registration.Backend && capability.Observed
+	})) {
+		return false
+	}
 	runtime := value.Runtime
 	if value.Writable || !slices.Contains([]string{"unknown", "nftables", "iptables", "mixed"}, value.BackendHint) || value.Evidence == nil || len(value.Evidence) > firewallObjectLimit || !dockerFirewallText(value.Reason, 2048) || runtime.Ports == nil || !dockerFirewallText(runtime.Reason, 2048) {
 		return false

@@ -1,5 +1,12 @@
 package firewall
 
+type DockerRegistrationView struct {
+	Backend           string           `json:"backend"`
+	EngineHash        string           `json:"engine_hash"`
+	ParentOperationID string           `json:"parent_operation_id"`
+	Registration      RegistrationView `json:"registration"`
+}
+
 // DockerRuntime describes bounded, read-only daemon reports. Equal reports
 // before and after collection are not an atomic snapshot or a write grant.
 type DockerRuntime struct {

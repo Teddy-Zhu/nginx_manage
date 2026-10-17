@@ -45,9 +45,32 @@ Agent 重新读取当前实例、网络和容器，报告摘要不一致时拒�
 
 主机入站及其 SSH/管理入口保护使用原编译器，Docker 使用独立程序类型，不能传给 INPUT 执行器。Docker 规则同时匹配入口、bridge 出口、同族容器地址/端口、来源，以及 conntrack ORIGINAL 的原始目的地址/主机端口和 NEW 状态。允许使用 RETURN，拒绝或丢弃分别使用相应目标；不使用全面 ACCEPT 绕过 Docker 后续隔离。规则仍仅作用于新连接，不清理 conntrack。完整绑定和两类程序分别参与摘要；包含保护项的两类规则合计最多 8192 条，Docker 程序最多 2 MiB、计划回包最多 512 KiB，页面展示前 128 条并注明截断。IPC 边界使用类型化输入重新编译核对摘要、数量和展示内容，不把展示命令作为执行输入。
 
-目标绑定及路径证据只存在于本次请求、易失计划及页面内存，不改写期望规则、数据库或迁移归档；导出、导入和 API 迁移继续只携带中立期望。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 表示完成目标路径核对及编译，`can_apply` 保持 false，提交执行会被拒绝；独立本机写入授权、代际转换、官方预演、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
+目标绑定及路径证据只存在于本次请求、易失计划及页面内存，不改写期望规则、数据库或迁移归档；导出、导入和 API 迁移继续只携带中立期望。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 表示完成目标路径核对及编译，`can_apply` 保持 false，提交执行会被拒绝。本机空命名空间授权见下节；代际转换、官方预演、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
 
 实现依据：[Moby bridge 名称及端点](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/bridge_linux.go)、[端口 DNAT 规则](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/port_mapping_linux.go)、[Docker 转发及原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[Linux 路由 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/rtnetlink.h)、[策略规则 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/fib_rules.h)、[IPv6 FIB 查询及导出](https://github.com/torvalds/linux/blob/v6.12/net/ipv6/route.c)。本阶段仅完成源码实现和集成审阅，未执行 Docker/API/系统能力验证，待 P5 集中验证。
+
+## Docker 转发独立本机授权
+
+Docker 转发授权与 INPUT 规则授权分别登记，当前只批准空的应用命名空间，不安装内核规则。须在真实宿主机由 root 操作，沿用本数据目录已经登记的显式 iptables 后端；可接续空的或已确认主机 INPUT 范围，不能由导入配置、原始标记或其他数据目录取得授权。
+
+先执行 `docker-firewall-registration` 读取当前实例摘要，将返回的 `runtime.engine_hash` 设置为 `DOCKER_ENGINE_HASH`，再明确选择该实例：
+
+```sh
+sudo nginxpanel docker-firewall-registration --data-dir /var/lib/nginxpanel --firewall-scope host
+sudo nginxpanel docker-firewall-init --data-dir /var/lib/nginxpanel --firewall-scope host --firewall-docker-engine "$DOCKER_ENGINE_HASH"
+sudo nginxpanel docker-firewall-recover --data-dir /var/lib/nginxpanel --firewall-scope host
+sudo nginxpanel docker-firewall-remove --data-dir /var/lib/nginxpanel --firewall-scope host
+```
+
+初始化核对 rootful、Swarm inactive、所选实例与实际 iptables/DOCKER-USER 挂接，绑定本机身份、数据目录、独立所有者、原宿主机占用/登记操作与请求摘要、显式后端及 Docker 实例摘要。两个显式后端、两个地址族的全部原生表都必须不存在 `NGINXPANEL-DOCKER` 前缀链，以及保留链引用或 `nginxpanel:docker:` 标记；不因名称、注释或已有规则而取得所有权。此空命名空间边界也进入主机 INPUT 的完整读取，出现未知 Docker 保留对象时停止准入，保留现场。
+
+`agent/firewall/docker-registration.json` 与独立操作回执分开发布。意图先保存，随后重新核对原父授权、实例及当前完整空命名空间，最后保存终态和回执；回执缺失、冲突或未完成时不授予权限。恢复只推进原元数据操作，不重放规则或 Docker 写入，不自动改绑新实例；第三方规则变化须重新通过完整读取，核对摘要独立记录。终态回执及原请求保持不变，新登记与释放使用新操作并固定上一终态摘要。
+
+初始化尚未完成时，`docker-firewall-remove` 可在重新核对原宿主机授权和空命名空间后撤回原意图，即使 Docker 已离线；原初始化记为失败终态并保留回执。已登记授权的释放同样不要求 Docker 在线，但必须确认没有遗留保留对象。重复初始化、释放及恢复沿用已有状态核对，不覆盖其他实例或宿主机登记。Docker 授权未释放或回执未核对前，不允许释放父 iptables 占用或切换管理器。
+
+这些操作复用业务锁、全局登记锁及维护锁，未完成的意图或缺失回执阻塞独立维护。每次本机命令总期限最多 60 秒，原生完整导出与 Docker API 继续使用原有有界只读入口。登记记录及回执属于 root 材料，不进入业务数据库、文件/API 迁移或完整备份；目标机须重新授权。
+
+公共诊断 `docker.registration` 和防火墙页面分别显示授权状态、登记实例及父登记标识。`registered/verified` 仅表示当前空命名空间授权已核对；`supported`、`writable` 及 Docker 计划的 `can_apply` 仍为 false，不能将授权等同于规则安装或外部可达。已确认 INPUT 诊断补齐后端和原登记标识，供父授权交叉核对。实现与集成源码审阅完成，CLI、Docker/API、构建、类型检查和业务验证仍待 P5，不新增 UI 测试。
 
 ## 内核目标表快照
 

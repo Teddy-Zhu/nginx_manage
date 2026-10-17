@@ -4846,14 +4846,25 @@ components:
     FirewallDocker:
       type: object
       additionalProperties: false
-      required: ["backend_hint", "evidence", "writable", "reason", "runtime", "capabilities"]
+      required: ["registration", "backend_hint", "evidence", "writable", "reason", "runtime", "capabilities"]
       properties:
+        registration: {$ref: '#/components/schemas/FirewallDockerRegistrationView'}
         backend_hint: {"type": "string", "enum": [unknown, nftables, iptables, mixed]}
         evidence: {"type": "array", "items": {"type": "string"}}
         writable: {"type": "boolean", "description": "当前 Docker 发布端口执行尚未开放，始终为 false；路径观察不授予写入。"}
         reason: {"type": "string"}
         runtime: {"$ref": "#/components/schemas/FirewallDockerRuntime"}
         capabilities: {"type": "array", "maxItems": 10, "items": {"$ref": "#/components/schemas/FirewallDockerCapability"}}
+    FirewallDockerRegistrationView:
+      type: object
+      additionalProperties: false
+      required: [backend, engine_hash, parent_operation_id, registration]
+      description: Docker 转发独立本机 root 授权，绑定原 iptables 宿主机占用与 Docker 实例。registered/verified 只表示空命名空间授权及当前观察已核对，不表示规则安装、执行开放或外部可达。原意图及回执不随文件/API 迁移或备份授予目标权限。
+      properties:
+        backend: {type: string, enum: ['', iptables-nft, iptables-legacy]}
+        engine_hash: {type: string}
+        parent_operation_id: {type: string}
+        registration: {$ref: '#/components/schemas/FirewallRegistrationView'}
     FirewallDockerRuntime:
       type: object
       additionalProperties: false

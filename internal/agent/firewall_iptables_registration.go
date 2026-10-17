@@ -217,6 +217,9 @@ func iptablesPublishingClaim(v *iptablesRegistrationCheckpoint) iptablesHostClai
 	return out
 }
 func forbidIPTablesRegistration(dataDir string) error {
+	if err := forbidDockerRegistration(dataDir); err != nil {
+		return err
+	}
 	v, err := loadIPTablesHostClaim()
 	if err != nil {
 		return err
@@ -282,10 +285,19 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 		out.Registration.Reason = "iptables 本机授权登记无法读取"
 		return out
 	}
+	if v != nil {
+		out.Backend, out.Registration.OperationID = v.NextClaim.Backend, v.NextClaim.OperationID
+	}
 	if business, err := loadIPTablesChange(dataDir); err != nil {
-		out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 原业务快照无法读取"
+		if v != nil {
+			out.Registration.State = "recovery_required"
+		}
+		out.Registration.Reason = "iptables 原业务快照无法读取"
 		return out
 	} else if source := iptablesPolicySourceFor(business); source != nil && source.Policy.Action == "apply" {
+		if v == nil {
+			out.Backend, out.Registration.OperationID = source.Policy.Policy.Backend, source.RegistrationOperationID
+		}
 		if v == nil || verifyIPTablesSource(dataDir, source) != nil || source.Owner != v.NextClaim.Owner || source.MachineHash != v.NextClaim.MachineHash || source.RegistrationOperationID != v.NextClaim.OperationID || source.RegistrationRequestHash != v.RequestHash || source.Policy.Policy.Backend != v.NextClaim.Backend || source.Tools.verify(ctx) != nil {
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认策略、原授权或固定工具无法核对"
 			return out
@@ -322,7 +334,6 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 		}
 		return out
 	}
-	out.Backend, out.Registration.OperationID = v.NextClaim.Backend, v.NextClaim.OperationID
 	if v.State == "preparing" || iptablesRegistrationReceipt(dataDir, v) != nil {
 		out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 原授权操作尚未核对完成，请本机执行 iptables-recover"
 		return out

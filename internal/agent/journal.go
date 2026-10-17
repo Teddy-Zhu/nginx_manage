@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	DockerRegistration        *dockerRegistrationCheckpoint    `json:"docker_registration,omitempty"`
 	IPTablesRestore           *iptablesRestoreReceipt          `json:"iptables_restore,omitempty"`
 	IPTablesRepair            *iptablesRepairStatus            `json:"iptables_repair,omitempty"`
 	IPTablesRegistration      *iptablesRegistrationCheckpoint  `json:"iptables_registration,omitempty"`

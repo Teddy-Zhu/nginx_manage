@@ -111,6 +111,11 @@ func ManageIPTablesRegistration(parent context.Context, dataDir, scope, backend,
 	if v != nil && (v.State == "preparing" || iptablesRegistrationReceipt(dataDir, v) != nil) {
 		return out, errors.New("iptables 原授权操作未完成，请先执行 iptables-recover")
 	}
+	if action == "remove" || action == "init" && (v == nil || v.State == "released") {
+		if err = forbidDockerRegistration(dataDir); err != nil {
+			return out, err
+		}
+	}
 	records, err := (&maintenanceGate{journal: j}).records()
 	if err != nil {
 		return out, err
