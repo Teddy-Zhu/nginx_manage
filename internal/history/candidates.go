@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"nginxpanel/internal/auth"
 	"nginxpanel/internal/secure"
 )
 
@@ -48,7 +49,27 @@ const orderCandidates = `SELECT o.id,o.profile_id,0,o.created_at,length(o.creden
  AND NOT EXISTS(SELECT 1 FROM acme_dns_records d WHERE d.order_id=o.id AND d.state<>'cleaned')
  ORDER BY o.created_at,o.id LIMIT 101`
 
-func collect(ctx context.Context, tx *sql.Tx, node string, f Filter) (Preview, error) {
+// A retired plan remains a receipt for remote senders. Its payload may go only
+// after every local coordinator, child operation and maintenance has settled.
+const migrationCandidates = `SELECT m.id,'',0,m.created_at,length(m.payload)+
+ COALESCE((SELECT SUM(length(payload)) FROM migration_dependencies WHERE plan_id=m.id),0)
+ FROM migration_plans m
+ WHERE m.pruned_at=0 AND m.updated_at<?
+ AND (m.state IN('draft','saved','succeeded','failed','rolled_back') OR (m.state='planned' AND m.expires_at<?))
+ AND m.id NOT IN(SELECT id FROM migration_plans WHERE principal=m.principal AND pruned_at=0 ORDER BY created_at DESC,id DESC LIMIT ?)
+ AND (m.principal=? OR ?)
+ AND (m.task_id='' OR EXISTS(SELECT 1 FROM tasks t WHERE t.id=m.task_id AND t.state IN ` + terminalTasks + `))
+ AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.resource_id=m.id AND t.state NOT IN ` + terminalTasks + `)
+ AND NOT EXISTS(SELECT 1 FROM migration_pulls p WHERE p.plan_id=m.id AND (p.continuation IS NOT NULL OR p.state NOT IN('','succeeded','failed','rolled_back','cancelled')))
+ AND NOT EXISTS(SELECT 1 FROM migration_dependencies d WHERE d.plan_id=m.id AND (
+ NOT EXISTS(SELECT 1 FROM tasks t WHERE t.id=d.task_id AND t.state IN ` + terminalTasks + `)
+ OR (d.check_task_id<>'' AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.id=d.check_task_id AND t.state IN ` + terminalTasks + `))
+ OR (d.prepare_task_id<>'' AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.id=d.prepare_task_id AND t.state IN ` + terminalTasks + `))
+ OR (d.install_task_id<>'' AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.id=d.install_task_id AND t.state IN ` + terminalTasks + `))
+ OR (d.maintenance_task_id<>'' AND NOT EXISTS(SELECT 1 FROM maintenance_sessions s JOIN tasks t ON t.id=s.task_id WHERE s.task_id=d.maintenance_task_id AND s.phase IN('released','failed') AND t.state IN ` + terminalTasks + `))))
+ ORDER BY m.updated_at,m.id LIMIT 101`
+
+func collect(ctx context.Context, tx *sql.Tx, node string, f Filter, owner auth.Principal) (Preview, error) {
 	p := Preview{NodeID: node, Filter: f, Items: []Item{}, Scopes: []Scope{}}
 	if err := tx.QueryRowContext(ctx, "SELECT version FROM config_head WHERE id=1").Scan(&p.BaseVersion); err != nil {
 		return p, err
@@ -56,19 +77,23 @@ func collect(ctx context.Context, tx *sql.Tx, node string, f Filter) (Preview, e
 	revisions := []string{}
 	for _, q := range []struct {
 		kind, sql, count string
-		args             []any
+		args, countArgs  []any
 	}{
-		{"revision", revisionCandidates, "SELECT COUNT(*) FROM config_revisions WHERE pruned_at=0", []any{f.Before, f.RevisionKeep}},
-		{"certificate", certificateCandidates, "SELECT COUNT(*) FROM certificate_versions WHERE pruned_at=0", nil},
-		{"order", orderCandidates, "SELECT COUNT(*) FROM acme_orders WHERE pruned_at=0", []any{f.Before, f.OrderKeep}},
+		{"revision", revisionCandidates, "SELECT COUNT(*) FROM config_revisions WHERE pruned_at=0", []any{f.Before, f.RevisionKeep}, nil},
+		{"certificate", certificateCandidates, "SELECT COUNT(*) FROM certificate_versions WHERE pruned_at=0", nil, nil},
+		{"order", orderCandidates, "SELECT COUNT(*) FROM acme_orders WHERE pruned_at=0", []any{f.Before, f.OrderKeep}, nil},
+		{"migration", migrationCandidates, "SELECT COUNT(*) FROM migration_plans WHERE pruned_at=0 AND (principal=? OR ?)", []any{f.Before, f.Before, f.MigrationKeep, owner.ID, owner.Has("auth.manage")}, []any{owner.ID, owner.Has("auth.manage")}},
 	} {
+		if q.kind == "migration" && f.MigrationKeep == 0 {
+			continue
+		}
 		args := q.args
 		if q.kind == "certificate" {
 			raw, _ := json.Marshal(revisions)
 			args = []any{f.Before, f.CertificateKeep, string(raw)}
 		}
 		scope := Scope{Kind: q.kind}
-		if err := tx.QueryRowContext(ctx, q.count).Scan(&scope.Retained); err != nil {
+		if err := tx.QueryRowContext(ctx, q.count, q.countArgs...).Scan(&scope.Retained); err != nil {
 			return p, err
 		}
 		rows, err := tx.QueryContext(ctx, q.sql, args...)

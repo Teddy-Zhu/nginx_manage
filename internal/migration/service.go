@@ -249,17 +249,17 @@ func (s *Service) prepare(ctx context.Context, p auth.Principal, requestID strin
 	if version != base {
 		return Plan{}, nginxconfig.ErrConflict
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE migration_plans SET state='failed',last_error='计划已过期，未执行迁入',updated_at=? WHERE state='planned' AND expires_at<?", time.Now().Unix(), time.Now().Unix()); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE migration_plans SET state='failed',last_error='计划已过期，未执行迁入',updated_at=? WHERE state='planned' AND pruned_at=0 AND expires_at<?", time.Now().Unix(), time.Now().Unix()); err != nil {
 		return Plan{}, err
 	}
 	var count int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE state='planned'").Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE state='planned' AND pruned_at=0").Scan(&count); err != nil {
 		return Plan{}, err
 	}
 	if count >= 8 {
 		return Plan{}, fault.Conflict("待执行迁移计划已达 8 个")
 	}
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans").Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM migration_plans WHERE pruned_at=0").Scan(&count); err != nil {
 		return Plan{}, err
 	}
 	if count >= 128 {
@@ -468,7 +468,8 @@ func (s *Service) load(ctx context.Context, p auth.Principal, id string) (stored
 	var owner string
 	var st storedPlan
 	var state, revision, task, lastError string
-	err := s.DB.QueryRowContext(ctx, "SELECT principal,payload,state,revision_id,task_id,last_error FROM migration_plans WHERE id=?", id).Scan(&owner, &raw, &state, &revision, &task, &lastError)
+	var prunedAt int64
+	err := s.DB.QueryRowContext(ctx, "SELECT principal,CASE WHEN pruned_at=0 THEN payload ELSE NULL END,state,revision_id,task_id,last_error,pruned_at FROM migration_plans WHERE id=?", id).Scan(&owner, &raw, &state, &revision, &task, &lastError, &prunedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return st, fault.NotFound("迁移计划不存在")
 	}
@@ -477,6 +478,9 @@ func (s *Service) load(ctx context.Context, p auth.Principal, id string) (stored
 	}
 	if owner != p.ID && !p.Has("auth.manage") {
 		return st, auth.ErrForbidden
+	}
+	if prunedAt > 0 {
+		return st, fault.New(410, "HISTORY_PRUNED", "迁移计划载荷已清理，仅可查询原计划摘要与执行结果")
 	}
 	plain, err := s.Vault.Open(raw, "migration:"+id)
 	if err != nil {
@@ -512,7 +516,8 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, e
 	var raw []byte
 	var plan Plan
 	var state, revision, task, lastError string
-	err := s.DB.QueryRowContext(ctx, "SELECT principal,summary,state,revision_id,task_id,last_error FROM migration_plans WHERE id=?", id).Scan(&owner, &raw, &state, &revision, &task, &lastError)
+	var prunedAt int64
+	err := s.DB.QueryRowContext(ctx, "SELECT principal,summary,state,revision_id,task_id,last_error,pruned_at FROM migration_plans WHERE id=?", id).Scan(&owner, &raw, &state, &revision, &task, &lastError, &prunedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return plan, fault.NotFound("迁移计划不存在")
 	}
@@ -533,6 +538,10 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Plan, e
 	plan.RevisionID = revision
 	plan.TaskID = task
 	plan.LastError = lastError
+	plan.PrunedAt = prunedAt
+	if prunedAt > 0 {
+		plan.CanSave, plan.CanApply = false, false
+	}
 	if plan.Monitoring != nil && plan.Monitoring.Mode != "preserve" {
 		if state == "rolled_back" {
 			plan.Monitoring.State = "restored"
@@ -568,7 +577,13 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]Plan, error) {
 	if err := p.Require("backup.restore", "backup.secrets"); err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT id FROM migration_plans WHERE principal=? OR ? ORDER BY created_at DESC,id LIMIT 30", p.ID, p.Has("auth.manage"))
+	query := "SELECT id FROM migration_plans WHERE principal=? ORDER BY created_at DESC,id LIMIT 30"
+	args := []any{p.ID}
+	if p.Has("auth.manage") {
+		query = "SELECT id FROM migration_plans ORDER BY created_at DESC,id LIMIT 30"
+		args = nil
+	}
+	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -623,6 +638,15 @@ func (s *Service) execute(ctx context.Context, p auth.Principal, requestID, key,
 		if err := p.Require("system.write"); err != nil {
 			return Plan{}, err
 		}
+	}
+	if !validTransferID(id) || !validPushKey(key) {
+		return Plan{}, fault.Invalid("迁移标识或幂等键无效")
+	}
+	if found, err := s.executionPrior(ctx, p, key, id, in); found || err != nil {
+		if err != nil {
+			return Plan{}, err
+		}
+		return s.Get(ctx, p, id)
 	}
 	if err := s.admitPullExecution(ctx, p, key, id, in); err != nil {
 		return Plan{}, err
@@ -772,8 +796,18 @@ func (s *Service) execute(ctx context.Context, p auth.Principal, requestID, key,
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, "UPDATE migration_plans SET state=?,revision_id=?,task_id=?,payload=?,summary=?,updated_at=? WHERE id=? AND state='planned'", state, result.Tree.RevisionID, result.TaskID, s.Vault.Seal(raw, "migration:"+id), s.Vault.Seal(summary, "migration-summary:"+id), time.Now().Unix(), id)
-		return err
+		updated, err := tx.ExecContext(ctx, "UPDATE migration_plans SET state=?,revision_id=?,task_id=?,payload=?,summary=?,updated_at=?,execution_principal=?,execution_key=?,execution_hash=? WHERE id=? AND state='planned' AND pruned_at=0 AND execution_hash=''", state, result.Tree.RevisionID, result.TaskID, s.Vault.Seal(raw, "migration:"+id), s.Vault.Seal(summary, "migration-summary:"+id), time.Now().Unix(), p.ID, key, executionDigest(id, in), id)
+		if err != nil {
+			return err
+		}
+		n, err := updated.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return fault.Conflict("迁移执行记录已变化，停止提交")
+		}
+		return nil
 	})
 	if err != nil {
 		return Plan{}, err

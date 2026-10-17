@@ -730,11 +730,19 @@ onUnmounted(() => {
       <div class="actions">
         <h2>迁移计划</h2>
         <NTag>{{ states[plan.state] ?? plan.state }}</NTag>
+        <NTag v-if="plan.pruned_at" type="warning">材料已清理</NTag>
       </div>
       <p>
         源节点 {{ plan.source_node }} · {{ plan.source_version }} · 目标基础版本
         {{ plan.base_version }}
       </p>
+      <NAlert v-if="plan.pruned_at" type="info">
+        迁移材料已于
+        {{
+          time(plan.pruned_at)
+        }}
+        清理，无法重新预检或执行。原计划摘要与执行结果仍可查询。
+      </NAlert>
       <p v-if="plan.state === 'planned'" class="muted">
         有效期至 {{ time(plan.expires_at) }}
       </p>
@@ -764,6 +772,7 @@ onUnmounted(() => {
         v-if="plan.host_dns"
         :info="plan.host_dns"
         :plan-id="
+          !plan.pruned_at &&
           ['draft', 'saved', 'succeeded', 'rolled_back'].includes(plan.state)
             ? plan.id
             : undefined
@@ -863,6 +872,7 @@ onUnmounted(() => {
           item.id
         }}</NButton
         ><NTag>{{ states[item.state] ?? item.state }}</NTag
+        ><NTag v-if="item.pruned_at" type="warning">材料已清理</NTag
         ><span>{{ item.source_node }}</span>
       </div>
     </section>

@@ -125,7 +125,7 @@ func sanitizeRestore(ctx context.Context, path string, target *sql.DB, admin res
 		{"UPDATE acme_dns_records SET state='blocked',last_error='源 DNS 挑战值需核对所有权与远端状态，禁止自动清理或重放' WHERE state<>'cleaned'", nil},
 		{"DELETE FROM host_dns_plans", nil},
 		{"DELETE FROM host_dns_desired", nil},
-		{"UPDATE migration_plans SET expires_at=0", nil},
+		{"UPDATE migration_plans SET expires_at=0,execution_principal='',execution_key='',execution_hash=''", nil},
 		{"UPDATE migration_pushes SET expires_at=0,next_attempt_at=0", nil},
 		{"UPDATE panel_updates SET cleanup_pending=0", nil},
 		{"INSERT INTO restore_quarantined_tasks(task_id,restore_id,original_state,original_stage,original_error,isolated_at) SELECT id,?,state,stage,last_error,? FROM tasks WHERE state NOT IN('succeeded','failed','rolled_back','cancelled') ON CONFLICT(task_id) DO NOTHING", []any{p.OperationID, now}},

@@ -1866,6 +1866,7 @@ export interface components {
             preview: components["schemas"]["RuntimeHistoryPreview"];
         };
         HistoryFilter: {
+            migration_keep: number;
             before: number;
             revision_keep: number;
             certificate_keep: number;
@@ -3807,6 +3808,8 @@ export interface components {
             message: string;
         };
         MigrationPlan: {
+            /** Format: int64; 载荷清理时间，摘要与回执保留。 */
+            pruned_at: number;
             pull?: components["schemas"]["MigrationPullStatus"];
             mode: "portable" | "encrypted";
             host_dns?: components["schemas"]["MigrationHostDNSPlan"];

@@ -55,6 +55,11 @@ func (s *Service) Preview(ctx context.Context, p auth.Principal, f Filter) (Prev
 	if err := f.Validate(); err != nil {
 		return Preview{}, err
 	}
+	if f.MigrationKeep != 0 {
+		if err := p.Require("backup.restore", "backup.secrets"); err != nil {
+			return Preview{}, err
+		}
+	}
 	done, err := s.enter()
 	if err != nil {
 		return Preview{}, err
@@ -67,7 +72,7 @@ func (s *Service) Preview(ctx context.Context, p auth.Principal, f Filter) (Prev
 		return Preview{}, err
 	}
 	defer tx.Rollback()
-	out, err := collect(ctx, tx, s.NodeID, f)
+	out, err := collect(ctx, tx, s.NodeID, f, p)
 	if err != nil {
 		return out, err
 	}
@@ -141,6 +146,14 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key 
 		}
 		var out Result
 		e = json.Unmarshal(plain, &out)
+		if e == nil {
+			for _, scope := range out.Scopes {
+				if scope.Kind == "migration" {
+					e = p.Require("backup.restore", "backup.secrets")
+					break
+				}
+			}
+		}
 		return out, e
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -153,7 +166,12 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key 
 	if g.ExpiresAt <= time.Now().Unix() {
 		return Result{}, fault.Conflict("历史维护预览已过期，请重新预览")
 	}
-	current, err := collect(ctx, tx, s.NodeID, g.Filter)
+	if g.Filter.MigrationKeep != 0 {
+		if err := p.Require("backup.restore", "backup.secrets"); err != nil {
+			return Result{}, err
+		}
+	}
+	current, err := collect(ctx, tx, s.NodeID, g.Filter, p)
 	if err != nil {
 		return Result{}, err
 	}
@@ -200,6 +218,11 @@ func prune(ctx context.Context, tx *sql.Tx, item Item, now int64) error {
 			return err
 		}
 		query = "UPDATE acme_orders SET pruned_at=?,credentials=zeroblob(0),private_key=zeroblob(0),csr=zeroblob(0) WHERE id=? AND pruned_at=0"
+	case "migration":
+		if _, err := tx.ExecContext(ctx, "UPDATE migration_dependencies SET payload=zeroblob(0) WHERE plan_id=?", item.ID); err != nil {
+			return err
+		}
+		query = "UPDATE migration_plans SET pruned_at=?,payload=zeroblob(0),state=CASE WHEN state='planned' THEN 'failed' ELSE state END,last_error=CASE WHEN state='planned' THEN '计划已过期，历史材料已清理' ELSE last_error END WHERE id=? AND pruned_at=0"
 	default:
 		return errors.New("invalid history material kind")
 	}

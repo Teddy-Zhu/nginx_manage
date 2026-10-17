@@ -91,6 +91,9 @@ func (s *Service) prepareDependencies(ctx context.Context, p auth.Principal, req
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Plan{}, err
 	}
+	if plan.PrunedAt > 0 {
+		return Plan{}, fault.New(410, "HISTORY_PRUNED", "迁移计划载荷已清理，不能创建新的依赖准备授权")
+	}
 	var owner string
 	err = tx.QueryRowContext(ctx, "SELECT principal,request_hash FROM migration_dependencies WHERE plan_id=?", id).Scan(&owner, &prior)
 	if err == nil {

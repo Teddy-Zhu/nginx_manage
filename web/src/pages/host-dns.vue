@@ -365,6 +365,8 @@ async function loadMigrationCandidate() {
   if (typeof id !== "string" || typeof source !== "string") return;
   try {
     const migration = await api.migration(id, controller.signal);
+    if (migration.pruned_at)
+      throw new Error("迁移材料已清理，无法载入目标 DNS 配置");
     const item = migration.host_dns?.entries.find(
       (entry) => entry.source === source,
     );

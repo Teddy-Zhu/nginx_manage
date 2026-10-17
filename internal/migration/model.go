@@ -111,6 +111,7 @@ type Step struct {
 	Message  string `json:"message"`
 }
 type Plan struct {
+	PrunedAt      int64             `json:"pruned_at"`
 	Pull          *PullStatus       `json:"pull,omitempty"`
 	Mode          string            `json:"mode"`
 	HostDNS       *HostDNSPlan      `json:"host_dns,omitempty"`

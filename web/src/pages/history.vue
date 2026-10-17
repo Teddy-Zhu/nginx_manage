@@ -45,6 +45,7 @@ const filter = reactive({
   revision_keep: 20,
   certificate_keep: 3,
   order_keep: 10,
+  migration_keep: 0,
 });
 const preview = ref<HistoryPreview | null>(null);
 const result = ref<HistoryResult | null>(null);
@@ -54,6 +55,7 @@ const names: Record<string, string> = {
   revision: "配置修订",
   certificate: "证书版本",
   order: "ACME 订单",
+  migration: "迁移计划载荷",
 };
 function bytes(value: number) {
   return `${(value / 1024).toFixed(1)} KiB`;
@@ -132,7 +134,7 @@ async function execute() {
     <NTabPane name="database" tab="数据库材料">
       <div class="page-stack">
         <NAlert type="info" :bordered="false">
-          仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。
+          仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。迁移材料仅在依赖、安装、维护与自动迁入均结束后可清理，计划摘要及原操作回执保留。
           修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
         </NAlert>
         <section class="surface">
@@ -168,6 +170,18 @@ async function execute() {
               <NInputNumber
                 v-model:value="filter.order_keep"
                 :min="2"
+                :max="100"
+                :precision="0"
+                :clearable="false"
+                :disabled="busy || !!pending"
+              />
+            </NFormItem>
+            <NFormItem
+              label="每个操作者保留迁移计划数（0 不清理，启用时至少 2 份）"
+            >
+              <NInputNumber
+                v-model:value="filter.migration_keep"
+                :min="0"
                 :max="100"
                 :precision="0"
                 :clearable="false"

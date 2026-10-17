@@ -11,11 +11,12 @@ type Filter struct {
 	RevisionKeep    int   `json:"revision_keep"`
 	CertificateKeep int   `json:"certificate_keep"`
 	OrderKeep       int   `json:"order_keep"`
+	MigrationKeep   int   `json:"migration_keep"`
 }
 
 func (f Filter) Validate() error {
-	if f.Before < 1 || f.Before > time.Now().Unix() || f.RevisionKeep < 2 || f.RevisionKeep > 100 || f.CertificateKeep < 2 || f.CertificateKeep > 16 || f.OrderKeep < 2 || f.OrderKeep > 100 {
-		return fault.Invalid("历史维护须指定过去的截止时间，并至少保留 2 个配置、每证书 2 个版本及每签发配置 2 个订单；上限分别为 100、16、100")
+	if f.Before < 1 || f.Before > time.Now().Unix() || f.RevisionKeep < 2 || f.RevisionKeep > 100 || f.CertificateKeep < 2 || f.CertificateKeep > 16 || f.OrderKeep < 2 || f.OrderKeep > 100 || f.MigrationKeep != 0 && (f.MigrationKeep < 2 || f.MigrationKeep > 100) {
+		return fault.Invalid("历史维护须指定过去的截止时间，并至少保留 2 个配置、每证书 2 个版本及每签发配置 2 个订单；上限分别为 100、16、100。迁移计划设为 0 不清理，启用时每个操作者保留 2–100 份")
 	}
 	return nil
 }

@@ -97,7 +97,7 @@ func verifyPreparedDatabase(ctx context.Context, db *sql.DB, vault *secure.Vault
  UNION ALL SELECT 1 FROM acme_dns_records WHERE state NOT IN('cleaned','blocked')
  UNION ALL SELECT 1 FROM host_dns_plans
  UNION ALL SELECT 1 FROM host_dns_desired
- UNION ALL SELECT 1 FROM migration_plans WHERE expires_at>0
+ UNION ALL SELECT 1 FROM migration_plans WHERE expires_at>0 OR execution_principal<>'' OR execution_key<>'' OR execution_hash<>''
  UNION ALL SELECT 1 FROM migration_pushes WHERE expires_at>0 OR next_attempt_at<>0
  UNION ALL SELECT 1 FROM panel_updates WHERE cleanup_pending<>0
  UNION ALL SELECT 1 FROM maintenance_sessions WHERE phase NOT IN('released','failed')

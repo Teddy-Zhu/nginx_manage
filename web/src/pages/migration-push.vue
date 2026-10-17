@@ -465,6 +465,9 @@ onUnmounted(() => {
               · 执行任务：{{ selected.plan.task_id }}</span
             >
           </p>
+          <NAlert v-if="selected.plan.pruned_at" type="info">
+            目标迁移材料已清理，当前显示原计划摘要与执行结果。
+          </NAlert>
           <div class="table-wrap">
             <table>
               <thead>

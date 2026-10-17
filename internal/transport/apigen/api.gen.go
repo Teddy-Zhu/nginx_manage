@@ -58,6 +58,7 @@ type ExecuteRuntimeHistoryJSONRequestBody = RuntimeHistoryExecuteInput
 
 // HistoryFilter defines model for HistoryFilter.
 type HistoryFilter struct {
+	MigrationKeep   int   `json:"migration_keep"`
 	Before          int64 `json:"before"`
 	RevisionKeep    int   `json:"revision_keep"`
 	CertificateKeep int   `json:"certificate_keep"`
@@ -3123,6 +3124,7 @@ type MigrationPackage struct {
 
 // MigrationPlan defines model for MigrationPlan.
 type MigrationPlan struct {
+	PrunedAt      int64                      `json:"pruned_at"`
 	Pull          *MigrationPullStatus       `json:"pull,omitempty"`
 	Mode          string                     `json:"mode"`
 	HostDNS       *MigrationHostDNSPlan      `json:"host_dns,omitempty"`

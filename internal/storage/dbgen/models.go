@@ -239,20 +239,24 @@ type MetricSample struct {
 }
 
 type MigrationPlan struct {
-	ID            string `json:"id"`
-	Principal     string `json:"principal"`
-	Payload       []byte `json:"payload"`
-	Summary       []byte `json:"summary"`
-	State         string `json:"state"`
-	RevisionID    string `json:"revision_id"`
-	TaskID        string `json:"task_id"`
-	BasisRevision string `json:"basis_revision"`
-	BasisVersion  int64  `json:"basis_version"`
-	BasisApplied  string `json:"basis_applied"`
-	ExpiresAt     int64  `json:"expires_at"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
-	LastError     string `json:"last_error"`
+	PrunedAt           int64  `json:"pruned_at"`
+	ExecutionPrincipal string `json:"execution_principal"`
+	ExecutionKey       string `json:"execution_key"`
+	ExecutionHash      string `json:"execution_hash"`
+	ID                 string `json:"id"`
+	Principal          string `json:"principal"`
+	Payload            []byte `json:"payload"`
+	Summary            []byte `json:"summary"`
+	State              string `json:"state"`
+	RevisionID         string `json:"revision_id"`
+	TaskID             string `json:"task_id"`
+	BasisRevision      string `json:"basis_revision"`
+	BasisVersion       int64  `json:"basis_version"`
+	BasisApplied       string `json:"basis_applied"`
+	ExpiresAt          int64  `json:"expires_at"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
+	LastError          string `json:"last_error"`
 }
 
 type MigrationPull struct {
