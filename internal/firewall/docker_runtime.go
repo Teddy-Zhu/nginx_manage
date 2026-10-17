@@ -20,6 +20,9 @@ type DockerIPTablesRuntimeProgram struct {
 
 type DockerTransitionPlan struct {
 	Owner                   string               `json:"owner"`
+	HostOwner               string               `json:"host_owner"`
+	HostRuntimeHash         string               `json:"host_runtime_hash"`
+	HostRuntimeBytes        int                  `json:"host_runtime_bytes"`
 	RegistrationOperationID string               `json:"registration_operation_id"`
 	ParentOperationID       string               `json:"parent_operation_id"`
 	RegistrationHash        string               `json:"registration_hash"`
@@ -35,6 +38,16 @@ type DockerTransitionPlan struct {
 	TransactionHash         string               `json:"transaction_hash"`
 	TransactionBytes        int                  `json:"transaction_bytes"`
 	Families                []IPTablesFamilyPlan `json:"families"`
+}
+
+// Bind both independently compiled scopes without mixing their owners or
+// grammars. The transaction and its observation evidence have separate hashes.
+func IPTablesCombinedProgramHash(hostHash, dockerHash string) string {
+	if dockerHash == "" {
+		return hostHash
+	}
+	raw, _ := json.Marshal(struct{ Host, Docker string }{hostHash, dockerHash})
+	return secure.Hash(append([]byte("iptables:combined-runtime:v1:\x00"), raw...))
 }
 
 func CompileDockerIPTablesRuntime(policy Policy, targets DockerTargets, resolved []DockerResolvedBinding, owner, planID string) (*DockerIPTablesRuntimeProgram, error) {

@@ -2110,7 +2110,7 @@ components:
       type: object
       additionalProperties: false
       required: [engine_hash, snapshot_hash, configuration_hash, bindings_hash, observed_at, ports, truncated, addresses, bindings, compiled, program_hash, program_bytes, generated_rules, host_program_hash, host_generated_rules, transition, entries, entries_truncated, warnings, reason]
-      description: 目标实例、映射、本机地址及所选 DNAT/路由的只读核对与独立编译预览。完整绑定须具有独立本机 Docker 授权，生成初始空命名空间的代际及正反向切换批次，并通过固定工具读取与官方 --test；授权、路径及批次/预演摘要计入父程序摘要。主机 INPUT 与 Docker 转发分别编译；Docker 允许使用 RETURN。执行和独立恢复未完成，父计划 can_apply 始终为 false；不代表原子快照或外部可达性。
+      description: 目标实例、映射、本机地址及所选 DNAT/路由的只读核对与独立编译预览。完整绑定须具有独立本机 Docker 授权，生成初始空命名空间的代际及正反向切换批次，并通过固定工具读取与官方 --test；授权、路径及批次/预演摘要绑定私有事务。主机 INPUT 与 Docker 转发分别编译并独立授权，同一地址族合并为一次 filter 提交及对应撤回批次，共用完整读取容量和官方预演；父程序摘要绑定两类实际代际。Docker 允许使用 RETURN。执行和独立恢复未完成，父计划 can_apply 始终为 false；不代表原子快照或外部可达性。
       properties:
         engine_hash: {type: string, minLength: 64, maxLength: 64}
         snapshot_hash: {type: string, minLength: 64, maxLength: 64}
@@ -2135,17 +2135,20 @@ components:
     FirewallDockerTransitionPlan:
       type: object
       additionalProperties: false
-      required: [owner, registration_operation_id, parent_operation_id, registration_hash, tool_hash, toolchain_hash, dry_run_hash, dry_run_commands, hook_chain, entry_chain, runtime_hash, runtime_bytes, generated_rules, transaction_hash, transaction_bytes, families]
-      description: 仅从已授权空命名空间创建首代 Docker 链的只读计划。完整规则和批次仅存在 root 易失计划；不提供执行授权，不进入迁移归档。families 中的 preserved_rules 包括原有 INPUT、Docker 及第三方规则；after_hash 是结构投影，不是内核回执。枚举映射时 transition 为 null。
+      required: [owner, host_owner, host_runtime_hash, host_runtime_bytes, registration_operation_id, parent_operation_id, registration_hash, tool_hash, toolchain_hash, dry_run_hash, dry_run_commands, hook_chain, entry_chain, runtime_hash, runtime_bytes, generated_rules, transaction_hash, transaction_bytes, families]
+      description: 从已授权空 Docker 命名空间创建首代转发链，并与本次 INPUT 变更合并的只读计划。父计划 iptables 包含全部参与地址族，families 仅列 Docker 地址族，其批次摘要对应同一个联合事务，preserved_rules 不含本应用旧 INPUT 代际。transaction_hash 绑定 root 私有业务意图，transaction_bytes 是全部地址族候选批次合计。完整授权、目标、原始规则及批次仅存在 root 易失计划；不提供执行授权，不进入迁移归档。after_hash 是结构投影，不是内核回执。枚举映射时 transition 为 null。
       properties:
         owner: {type: string, format: uuid}
+        host_owner: {type: string, format: uuid}
+        host_runtime_hash: {type: string, minLength: 64, maxLength: 64}
+        host_runtime_bytes: {type: integer, minimum: 1, maximum: 2097152}
         registration_operation_id: {type: string, format: uuid}
         parent_operation_id: {type: string, format: uuid}
         registration_hash: {type: string, minLength: 64, maxLength: 64}
         tool_hash: {type: string, minLength: 64, maxLength: 64}
         toolchain_hash: {type: string, minLength: 64, maxLength: 64, description: 固定显式 command/save/restore、模块加载阻断工具及私有读取入口的 ELF 文件和版本摘要。}
         dry_run_hash: {type: string, minLength: 64, maxLength: 64, description: 绑定原完整基线、代际程序、固定工具及逐次官方预演输入和成功结果。}
-        dry_run_commands: {type: integer, minimum: 2, maximum: 4, description: 每个地址族分别预演候选及同表正反向批次，不安装规则。}
+        dry_run_commands: {type: integer, minimum: 2, maximum: 4, description: 全部参与地址族分别预演 INPUT/Docker 联合候选及同表正反向批次，不安装规则。}
         hook_chain: {type: string, enum: [DOCKER-USER]}
         entry_chain: {type: string, enum: [NGINXPANEL-DOCKER]}
         runtime_hash: {type: string, minLength: 64, maxLength: 64}
@@ -2172,7 +2175,7 @@ components:
     FirewallIPTablesPlan:
       type: object
       additionalProperties: false
-      description: 目标本机受管代际的首次应用、更新或移除计划；完整原生规则、正反向受管批次、工具绑定与预演结果均在 root 保留，不下发原文。固定显式 command/save/restore 的 ELF 文件、版本与后端，候选及同表正反向批次分别通过 --test，并核对前后规则不变；官方 go-iptables 链读取及完整 nft JSON 候选/恢复容量准入后可返回 can_apply=true；应用时仍重新核对，须新连接确认。仅支持主机入站。
+      description: 目标本机受管代际的首次应用、更新或移除计划；完整原生规则、正反向受管批次、工具绑定与预演结果均在 root 保留，不下发原文。固定显式 command/save/restore 的 ELF 文件、版本与后端，候选及同表正反向批次分别通过 --test，并核对前后规则不变；官方 go-iptables 链读取及完整 nft JSON 候选/恢复容量准入后可返回 can_apply=true；应用时仍重新核对，须新连接确认。Docker 完整绑定预览同时返回此摘要；其地址族批次还包含 Docker 变更，生成规则数仅计 INPUT 部分，父计划保持只读。
       required: [registration_operation_id, configuration_hash, tool_hash, toolchain_hash, dry_run_hash, dry_run_commands, logical_hash, protection_rules, families, warnings, reason]
       properties:
         registration_operation_id: {type: string}

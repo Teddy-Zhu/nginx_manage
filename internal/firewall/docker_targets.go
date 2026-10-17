@@ -187,17 +187,6 @@ func (targets DockerTargets) Normalize(policy Policy) (DockerTargets, error) {
 	return out, nil
 }
 
-func DockerPlanHash(policy Policy, plan *DockerPlan) string {
-	if plan == nil || !plan.Compiled {
-		return ""
-	}
-	raw, _ := json.Marshal(struct {
-		PolicyHash, ConfigurationHash, HostProgramHash, ProgramHash string
-		Transition                                                  *DockerTransitionPlan
-	}{policy.Hash(), plan.ConfigurationHash, plan.HostProgramHash, plan.ProgramHash, plan.Transition})
-	return secure.Hash(append([]byte("docker:combined-preview:v2:\x00"), raw...))
-}
-
 // This separate program cannot enter the host INPUT generation executor.
 // RETURN hands an allowed mapping back to DOCKER-USER and Docker's traversal.
 type DockerIPTablesProgram struct {

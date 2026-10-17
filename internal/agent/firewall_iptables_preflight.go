@@ -39,8 +39,15 @@ func preflightIPTables(ctx context.Context, transition *iptablesTransition) (*ip
 	if transition == nil || transition.Program == nil {
 		return nil, errors.New("iptables 官方预演缺少完整代际计划或工具绑定")
 	}
-	return preflightIPTablesMaterials(ctx, transition.Tools, transition.ConfigurationHash, transition.Program.Hash, transition.Materials, func(image iptablesImage) error {
-		return proveIPTablesGeneration(image, iptablesGeneration(iptablesPreviousProgram(transition), image.Family))
+	return preflightIPTablesMaterials(ctx, transition.Tools, transition.ConfigurationHash, iptablesTransitionProgramHash(transition), transition.Materials, func(image iptablesImage) error {
+		_, err := iptablesCombinedForeignImage(image, iptablesGeneration(iptablesPreviousProgram(transition), image.Family), dockerIPTablesGeneration(iptablesPreviousDocker(transition), image.Family))
+		if err != nil {
+			return err
+		}
+		if dockerIPTablesGeneration(transition.Docker, image.Family) != nil && !observeDockerFirewallHook(image).Observed {
+			return errors.New("Docker 官方预演的原始挂接无法核对")
+		}
+		return nil
 	})
 }
 

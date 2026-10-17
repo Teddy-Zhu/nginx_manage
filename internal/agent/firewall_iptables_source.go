@@ -14,6 +14,7 @@ type iptablesPolicySource struct {
 	Operation                                                                      firewall.Operation
 	CheckpointHash                                                                 string
 	Tools                                                                          iptablesToolBinding
+	Docker                                                                         *dockerIPTablesPolicyRecord `json:",omitempty"`
 }
 
 func validateIPTablesSource(source *iptablesPolicySource) error {
@@ -29,9 +30,12 @@ func validateIPTablesSource(source *iptablesPolicySource) error {
 	if !validID(record.OperationID) || !validID(record.PlanID) || record.OperationID == record.PlanID || record.OperationID == source.Owner || record.OperationID == source.RegistrationOperationID || op.ID != record.OperationID || op.PlanID != record.PlanID || op.Action != record.Action || op.Version != record.Version || op.PolicyHash != record.PolicyHash || op.ProgramHash != record.ProgramHash || op.State != "succeeded" || op.Stage != stage || op.Error != "" || op.Deadline <= 0 || op.UpdatedAt <= 0 || op.VerificationScope != "controlled-listener" || !validUFWConfirmationSource(op.ConfirmedSource) {
 		return invalid
 	}
-	program, err := firewall.CompileIPTablesRuntime(record.Policy, record.Protections, source.Owner, record.PlanID, record.Action)
+	if err := validateDockerIPTablesPolicy(source.Docker, record, source.Owner, source.MachineHash, source.RegistrationOperationID, source.RegistrationRequestHash); err != nil {
+		return err
+	}
+	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(record.Policy), record.Protections, source.Owner, record.PlanID, record.Action)
 	hash, hashErr := firewall.PolicyDigest(record.Policy)
-	if err != nil || hashErr != nil || hash != record.PolicyHash || program.Hash != record.ProgramHash || program.Marker != record.Marker {
+	if err != nil || hashErr != nil || hash != record.PolicyHash || iptablesTransitionProgramHash(&iptablesTransition{Program: program, Docker: source.Docker}) != record.ProgramHash || program.Marker != record.Marker {
 		return invalid
 	}
 	return nil
@@ -44,7 +48,7 @@ func iptablesPolicySourceFor(v *iptablesChangeCheckpoint) *iptablesPolicySource 
 	if v.Operation.State != "succeeded" {
 		return v.Transition.Previous
 	}
-	return &iptablesPolicySource{Owner: v.Transition.Owner, MachineHash: v.Transition.MachineHash, RegistrationOperationID: v.Transition.RegistrationOperationID, RegistrationRequestHash: v.Transition.RegistrationRequestHash, ToolHash: v.Transition.ToolHash, Policy: v.Policy, Operation: v.Operation, CheckpointHash: iptablesChangeHash(v), Tools: *v.Transition.Tools}
+	return &iptablesPolicySource{Owner: v.Transition.Owner, MachineHash: v.Transition.MachineHash, RegistrationOperationID: v.Transition.RegistrationOperationID, RegistrationRequestHash: v.Transition.RegistrationRequestHash, ToolHash: v.Transition.ToolHash, Policy: v.Policy, Operation: v.Operation, CheckpointHash: iptablesChangeHash(v), Tools: *v.Transition.Tools, Docker: v.Transition.Docker}
 }
 
 func iptablesPlanPrevious(v *iptablesChangeCheckpoint, owner, registrationID string) *iptablesPolicySource {
@@ -59,6 +63,15 @@ func verifyIPTablesSource(dataDir string, source *iptablesPolicySource) error {
 	if err := validateIPTablesSource(source); err != nil {
 		return err
 	}
+	if source.Docker != nil {
+		grant := &source.Docker.Registration
+		if grant.DataDir != dataDir {
+			return errors.New("Docker 原确认来源不属于本机数据目录")
+		}
+		if err := dockerRegistrationReceipt(dataDir, grant); err != nil {
+			return err
+		}
+	}
 	r, err := loadIPTablesReceipt(dataDir, source.Policy.OperationID)
 	if err != nil || r.Kind != firewallOperationKind || r.OperationID != source.Policy.OperationID || r.RequestHash != firewallRequestHash(source.Policy.PlanID, source.Policy.Action) || r.CandidateHash != source.CheckpointHash || r.State != source.Operation.State || r.Stage != source.Operation.Stage || r.Deadline != source.Operation.Deadline || r.Error != source.Operation.Error || r.Firewall == nil || !sameIPTablesValue(r.Firewall, source.Operation) {
 		return errors.New("iptables 原确认来源与独立终态回执不一致")
@@ -71,7 +84,7 @@ func iptablesPreviousProgram(transition *iptablesTransition) *firewall.IPTablesR
 		return nil
 	}
 	record := transition.Previous.Policy
-	program, _ := firewall.CompileIPTablesRuntime(record.Policy, record.Protections, transition.Previous.Owner, record.PlanID, record.Action)
+	program, _ := firewall.CompileIPTablesRuntime(firewall.HostPolicy(record.Policy), record.Protections, transition.Previous.Owner, record.PlanID, record.Action)
 	return program // Callers validate the immutable source before inspecting it.
 }
 
@@ -79,7 +92,7 @@ func iptablesTransitionFamilies(transition *iptablesTransition) []string {
 	out := []string{}
 	previous := iptablesPreviousProgram(transition)
 	for _, family := range []string{"ipv4", "ipv6"} {
-		if iptablesGeneration(transition.Program, family) != nil || iptablesGeneration(previous, family) != nil {
+		if iptablesGeneration(transition.Program, family) != nil || iptablesGeneration(previous, family) != nil || dockerIPTablesGeneration(transition.Docker, family) != nil || dockerIPTablesGeneration(iptablesPreviousDocker(transition), family) != nil {
 			out = append(out, family)
 		}
 	}

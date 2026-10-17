@@ -50,11 +50,14 @@ func iptablesRepairTerminal(v *iptablesRepairCheckpoint) bool {
 }
 
 func validateIPTablesRepair(v *iptablesRepairCheckpoint) error {
+	if v != nil && v.Source.Docker != nil {
+		return errors.New("Docker 已确认范围不能由仅支持 INPUT 的修复器接管")
+	}
 	invalid := errors.New("iptables 已确认策略修复检查点无效")
 	if v == nil || v.Schema != 2 || !validID(v.Status.ID) || v.Status.OperationID != v.Source.Policy.OperationID || v.Status.PlanID != v.Source.Policy.PlanID || !validID(v.Status.OperationID) || !validID(v.Status.PlanID) || v.Status.ID == v.Status.OperationID || v.Status.ID == v.Status.PlanID || v.Status.IntentHash != iptablesRepairIntentHash(v) || len(v.Status.Error) > 512 || v.Status.UpdatedAt <= 0 || !slices.Contains([]string{"running", "recovery_required", "succeeded", "superseded"}, v.Status.State) || validateIPTablesSource(&v.Source) != nil || !firewalldDigest(v.ConfigurationHash) || !v.Source.Tools.valid() || v.Source.Tools.Backend != v.Source.Policy.Policy.Backend || v.Source.Policy.Action != "apply" || v.Source.Policy.Version < 1 || validateFirewallProtectionBasis(v.Source.Policy.ProtectionBasis) != nil {
 		return invalid
 	}
-	program, err := firewall.CompileIPTablesRuntime(v.Source.Policy.Policy, v.Source.Policy.Protections, v.Source.Owner, v.Source.Policy.PlanID, v.Source.Policy.Action)
+	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(v.Source.Policy.Policy), v.Source.Policy.Protections, v.Source.Owner, v.Source.Policy.PlanID, v.Source.Policy.Action)
 	hash, hashErr := firewall.PolicyDigest(v.Source.Policy.Policy)
 	if err != nil || hashErr != nil || hash != v.Source.Policy.PolicyHash || program.Hash != v.Source.Policy.ProgramHash || program.Marker != v.Source.Policy.Marker || len(v.Materials) != len(program.Families) || len(v.Materials) == 0 || len(v.Materials) > 2 || len(v.Steps) != 3*len(v.Materials) {
 		return invalid
@@ -250,7 +253,7 @@ func runIPTablesRepairRestore(ctx context.Context, dataDir string, request iptab
 	if err != nil || current.Hash != repair.ConfigurationHash {
 		return nil, errors.New("iptables 原修复基线已变化")
 	}
-	program, err := firewall.CompileIPTablesRuntime(repair.Source.Policy.Policy, repair.Source.Policy.Protections, repair.Source.Owner, repair.Source.Policy.PlanID, repair.Source.Policy.Action)
+	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(repair.Source.Policy.Policy), repair.Source.Policy.Protections, repair.Source.Owner, repair.Source.Policy.PlanID, repair.Source.Policy.Action)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +315,7 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 	if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
 		return err
 	}
-	program, err := firewall.CompileIPTablesRuntime(source.Policy.Policy, source.Policy.Protections, source.Owner, source.Policy.PlanID, source.Policy.Action)
+	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(source.Policy.Policy), source.Policy.Protections, source.Owner, source.Policy.PlanID, source.Policy.Action)
 	if err != nil {
 		return err
 	}

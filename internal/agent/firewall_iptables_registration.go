@@ -302,7 +302,7 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认策略、原授权或固定工具无法核对"
 			return out
 		}
-		program, err := firewall.CompileIPTablesRuntime(source.Policy.Policy, source.Policy.Protections, source.Owner, source.Policy.PlanID, source.Policy.Action)
+		program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(source.Policy.Policy), source.Policy.Protections, source.Owner, source.Policy.PlanID, source.Policy.Action)
 		if err != nil {
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认程序无法核对"
 			return out

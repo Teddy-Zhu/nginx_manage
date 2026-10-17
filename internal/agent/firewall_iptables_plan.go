@@ -19,6 +19,7 @@ type iptablesTransition struct {
 	Owner, MachineHash                                                            string
 	RegistrationOperationID, RegistrationRequestHash, ConfigurationHash, ToolHash string
 	Program                                                                       *firewall.IPTablesRuntimeProgram
+	Docker                                                                        *dockerIPTablesPolicyRecord `json:",omitempty"`
 	Materials                                                                     []iptablesChangeMaterial
 	Tools                                                                         *iptablesToolBinding
 	DryRun                                                                        *iptablesDryRunProof
@@ -113,7 +114,7 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 		var readyErr error
 		if previous != nil {
 			record := previous.Policy
-			program, readyErr = firewall.CompileIPTablesRuntime(record.Policy, record.Protections, previous.Owner, record.PlanID, record.Action)
+			program, readyErr = firewall.CompileIPTablesRuntime(firewall.HostPolicy(record.Policy), record.Protections, previous.Owner, record.PlanID, record.Action)
 			if readyErr == nil {
 				current, readyErr = inspectIPTablesSource(call, f.dataDir, previous, false)
 			}
@@ -150,7 +151,7 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 
 func iptablesProtectionPolicy(record firewallPolicyRecord) firewall.Policy {
 	if record.Action != "remove" {
-		return record.Policy
+		return firewall.HostPolicy(record.Policy)
 	}
 	policy := firewall.DefaultPolicy()
 	policy.Backend = record.Policy.Backend
@@ -213,7 +214,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		return empty, fault.Unavailable(err.Error())
 	}
 	id := secure.ID()
-	program, err := firewall.CompileIPTablesRuntime(policy, protections, registered.NextClaim.Owner, id, in.Action)
+	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(policy), protections, registered.NextClaim.Owner, id, in.Action)
 	if err != nil {
 		return empty, err
 	}

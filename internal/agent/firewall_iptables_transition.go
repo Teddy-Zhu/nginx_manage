@@ -76,16 +76,29 @@ func validateIPTablesTransition(v *iptablesTransition, policy firewallPolicyReco
 	if policy.Action == "remove" && (v.Previous == nil || v.Previous.Policy.Action != "apply" || policy.Version != v.Previous.Policy.Version || !sameIPTablesValue(policy.Policy, v.Previous.Policy.Policy)) {
 		return invalid
 	}
+	if err := validateDockerIPTablesPolicy(v.Docker, policy, v.Owner, v.MachineHash, v.RegistrationOperationID, v.RegistrationRequestHash); err != nil {
+		return err
+	}
 	hash, err := firewall.PolicyDigest(policy.Policy)
-	program, compileErr := firewall.CompileIPTablesRuntime(policy.Policy, policy.Protections, v.Owner, policy.PlanID, policy.Action)
-	if err != nil || compileErr != nil || hash != policy.PolicyHash || program.Hash != policy.ProgramHash || program.Marker != policy.Marker || !sameIPTablesValue(program, v.Program) || len(v.Materials) != len(iptablesTransitionFamilies(v)) || len(v.Materials) == 0 || len(v.Materials) > 2 {
+	program, compileErr := firewall.CompileIPTablesRuntime(firewall.HostPolicy(policy.Policy), policy.Protections, v.Owner, policy.PlanID, policy.Action)
+	if err != nil || compileErr != nil || hash != policy.PolicyHash || !sameIPTablesValue(program, v.Program) || iptablesTransitionProgramHash(v) != policy.ProgramHash || program.Marker != policy.Marker || len(v.Materials) != len(iptablesTransitionFamilies(v)) || len(v.Materials) == 0 || len(v.Materials) > 2 {
 		return invalid
 	}
-	proof := &iptablesDryRunProof{ToolchainHash: v.Tools.Hash, ConfigurationHash: v.ConfigurationHash, ProgramHash: program.Hash, Calls: []iptablesDryRunCall{}}
+	generated := 0
+	for _, family := range program.Families {
+		generated += len(family.Rules) + 2
+	}
+	if v.Docker != nil {
+		generated += v.Docker.Program.GeneratedRules
+	}
+	if generated > firewall.MaxEntries {
+		return invalid
+	}
+	proof := &iptablesDryRunProof{ToolchainHash: v.Tools.Hash, ConfigurationHash: v.ConfigurationHash, ProgramHash: policy.ProgramHash, Calls: []iptablesDryRunCall{}}
 	for index, family := range iptablesTransitionFamilies(v) {
 		material := v.Materials[index]
-		expected, err := makeIPTablesChangeMaterial(material.Before, iptablesGeneration(iptablesPreviousProgram(v), family), iptablesGeneration(program, family))
-		if err != nil || !sameIPTablesValue(expected, material) {
+		expected, err := makeIPTablesTransitionMaterial(material.Before, v)
+		if err != nil || material.Family != family || !sameIPTablesValue(expected, material) {
 			return invalid
 		}
 		roundTrip, err := iptablesRoundTrip(material)
@@ -140,6 +153,11 @@ func validateIPTablesChange(v *iptablesChangeCheckpoint) error {
 	ids := map[string]bool{v.Operation.ID: true, v.Policy.PlanID: true, v.Transition.Owner: true, v.Transition.RegistrationOperationID: true}
 	if v.Transition.Previous != nil {
 		ids[v.Transition.Previous.Policy.OperationID], ids[v.Transition.Previous.Policy.PlanID] = true, true
+	}
+	for _, docker := range []*dockerIPTablesPolicyRecord{v.Transition.Docker, iptablesPreviousDocker(&v.Transition)} {
+		if docker != nil {
+			ids[docker.Registration.Owner], ids[docker.Registration.OperationID] = true, true
+		}
 	}
 	for index, step := range v.Steps {
 		material := v.Transition.Materials[index/(1+iptablesRestoreAttempts)]
@@ -248,6 +266,9 @@ func iptablesBusinessPending(dataDir string) bool {
 }
 
 func iptablesChangeAuthority(dataDir string, v *iptablesChangeCheckpoint) error {
+	if v.Transition.Docker != nil || iptablesPreviousDocker(&v.Transition) != nil {
+		return errors.New("Docker 联合业务的实时授权和独立恢复尚未接通")
+	}
 	registered, err := iptablesRegistrationAuthority(dataDir)
 	if err != nil {
 		return err
@@ -263,6 +284,9 @@ func iptablesChangeAuthority(dataDir string, v *iptablesChangeCheckpoint) error 
 func acceptIPTablesChangeLocked(ctx context.Context, dataDir, id string, plan firewallPrivatePlan) (*iptablesChangeCheckpoint, error) {
 	if os.Geteuid() != 0 || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir || (&HostDNS{Scope: "host"}).hostScopeReason() != "" || !validID(id) || !plan.view.CanApply || plan.record == nil || plan.iptables == nil || plan.view.IPTables == nil || plan.view.ID != plan.record.PlanID || plan.view.Action != plan.record.Action || plan.view.Version != plan.record.Version || plan.view.PolicyHash != plan.record.PolicyHash || plan.view.ProgramHash != plan.record.ProgramHash || plan.view.Backend != plan.record.Policy.Backend || time.Now().Unix() >= plan.view.ExpiresAt {
 		return nil, errors.New("iptables 业务操作尚不具备完整受理条件")
+	}
+	if plan.iptables.Docker != nil || iptablesPreviousDocker(plan.iptables) != nil || plan.view.Docker != nil {
+		return nil, errors.New("Docker 联合计划的实时授权、确认及恢复尚未接通，不能受理执行")
 	}
 	if err := validateIPTablesTransition(plan.iptables, *plan.record); err != nil {
 		return nil, err

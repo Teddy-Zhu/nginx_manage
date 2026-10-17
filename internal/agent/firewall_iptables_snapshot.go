@@ -308,6 +308,9 @@ func inspectIPTablesChangeScope(ctx context.Context, dataDir string, v *iptables
 }
 
 func inspectIPTablesSource(ctx context.Context, dataDir string, source *iptablesPolicySource, allowMissing bool) (iptablesRegistrationSnapshot, error) {
+	if source != nil && source.Docker != nil {
+		return iptablesRegistrationSnapshot{}, errors.New("Docker 已确认范围的实时核对和修复尚未接通")
+	}
 	if err := verifyIPTablesSource(dataDir, source); err != nil {
 		return iptablesRegistrationSnapshot{}, err
 	}
@@ -316,7 +319,7 @@ func inspectIPTablesSource(ctx context.Context, dataDir string, source *iptables
 		return iptablesRegistrationSnapshot{}, errors.New("iptables 原确认来源与本机授权不一致")
 	}
 	record := source.Policy
-	program, err := firewall.CompileIPTablesRuntime(record.Policy, record.Protections, source.Owner, record.PlanID, record.Action)
+	program, err := firewall.CompileIPTablesRuntime(firewall.HostPolicy(record.Policy), record.Protections, source.Owner, record.PlanID, record.Action)
 	if err != nil {
 		return iptablesRegistrationSnapshot{}, err
 	}

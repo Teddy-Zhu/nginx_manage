@@ -56,7 +56,6 @@ type firewallCheckpoint struct {
 }
 type firewallPrivatePlan struct {
 	iptables *iptablesTransition
-	docker   *dockerInitialTransition
 	view     firewall.Plan
 	record   *firewallPolicyRecord
 	ufw      *ufwPolicyTransition

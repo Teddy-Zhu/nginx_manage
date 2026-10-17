@@ -30,10 +30,21 @@ func dockerIPTablesNFTRuleBytes(chain string, args []string) (int, error) {
 	return reserved, nil
 }
 
-func admitDockerInitialReadback(snapshot iptablesRegistrationSnapshot, program *firewall.DockerIPTablesRuntimeProgram) error {
+func admitDockerInitialReadback(snapshot iptablesRegistrationSnapshot, program *firewall.DockerIPTablesRuntimeProgram, host, previous *firewall.IPTablesRuntimeProgram) error {
+	projected, err := projectDockerInitialReadback(snapshot, program)
+	if err != nil {
+		return err
+	}
+	return projected.admitReadback(host, previous)
+}
+
+// Reserve Docker first, then let INPUT's existing capacity accounting remove
+// and replace only its authenticated old chains. Both contributions therefore
+// share one full-ruleset limit, including metadata and counter growth.
+func projectDockerInitialReadback(snapshot iptablesRegistrationSnapshot, program *firewall.DockerIPTablesRuntimeProgram) (iptablesRegistrationSnapshot, error) {
 	capacity := snapshot.NFT
 	if !capacity.complete() || program == nil || !validIPTablesBackend(program.Backend) {
-		return errors.New("Docker 代际计划缺少完整 nft JSON 读取容量依据")
+		return snapshot, errors.New("Docker 代际计划缺少完整 nft JSON 读取容量依据")
 	}
 	projectedBytes, projectedObjects := capacity.Bytes+capacity.NumberGrowth, capacity.Objects
 	metadata := []firewall.Table{}
@@ -54,7 +65,7 @@ func admitDockerInitialReadback(snapshot iptablesRegistrationSnapshot, program *
 			for _, rule := range append([]firewall.IPTablesRule{{Arguments: generation.Hook}, {Arguments: generation.Pointer}}, generation.Rules...) {
 				reserved, err := dockerIPTablesNFTRuleBytes(generation.Chain, rule.Arguments)
 				if err != nil {
-					return err
+					return snapshot, err
 				}
 				projectedBytes += reserved
 			}
@@ -70,7 +81,7 @@ func admitDockerInitialReadback(snapshot iptablesRegistrationSnapshot, program *
 			}
 			scope, exists := capacity.Scopes[nftReadbackKey(family, "filter", "DOCKER-USER")]
 			if hook == nil || !exists || scope.Rules != len(hook.Rules) || scope.Objects != len(hook.Rules)+1 {
-				return errors.New("nft JSON 与原生 DOCKER-USER 在容量核对期间变化")
+				return snapshot, errors.New("nft JSON 与原生 DOCKER-USER 在容量核对期间变化")
 			}
 			found := false
 			for ti := range metadata {
@@ -81,7 +92,7 @@ func admitDockerInitialReadback(snapshot iptablesRegistrationSnapshot, program *
 				for ci := range table.Chains {
 					chain := &table.Chains[ci]
 					if chain.Name == firewall.IPTablesDockerChain || chain.Name == generation.Chain {
-						return errors.New("nft JSON 存在未核对的同名 Docker 代际链")
+						return snapshot, errors.New("nft JSON 存在未核对的同名 Docker 代际链")
 					}
 					if chain.Name == "DOCKER-USER" {
 						chain.Rules++
@@ -91,12 +102,23 @@ func admitDockerInitialReadback(snapshot iptablesRegistrationSnapshot, program *
 				table.Chains = append(table.Chains, firewall.Chain{Name: firewall.IPTablesDockerChain, Rules: 1}, firewall.Chain{Name: generation.Chain, Rules: len(generation.Rules)})
 			}
 			if !found {
-				return errors.New("nft JSON 缺少当前地址族的 DOCKER-USER 容量依据")
+				return snapshot, errors.New("nft JSON 缺少当前地址族的 DOCKER-USER 容量依据")
 			}
 		}
 	}
 	if projectedBytes > nftRulesetReadBytes || projectedObjects > firewallObjectLimit {
-		return errors.New("Docker 候选及补偿的完整 nft JSON 读取容量超过 4 MiB 或 16384 项")
+		return snapshot, errors.New("Docker 候选及补偿的完整 nft JSON 读取容量超过 4 MiB 或 16384 项")
 	}
-	return boundedFirewallTables(metadata)
+	if err := boundedFirewallTables(metadata); err != nil {
+		return snapshot, err
+	}
+	snapshot.NFT.Bytes = projectedBytes - capacity.NumberGrowth
+	snapshot.NFT.Objects = projectedObjects
+	snapshot.Observed.Rulesets = slices.Clone(snapshot.Observed.Rulesets)
+	for index := range snapshot.Observed.Rulesets {
+		if snapshot.Observed.Rulesets[index].ID == "nftables" {
+			snapshot.Observed.Rulesets[index].Tables = metadata
+		}
+	}
+	return snapshot, nil
 }
