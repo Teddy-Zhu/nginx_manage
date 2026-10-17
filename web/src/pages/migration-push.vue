@@ -351,10 +351,10 @@ onUnmounted(() => {
         >
         <div v-if="mode !== 'preview'">
           <NCheckbox v-model:checked="prepareDependencies"
-            >授权目标准备缺失的可信组件</NCheckbox
+            >授权目标准备 Nginx 可信组件</NCheckbox
           >
           <template v-if="prepareDependencies">
-            <NFormItem label="目标组件发行标签（可选）"
+            <NFormItem label="目标 Nginx 组件发行标签（可选）"
               ><NInput
                 v-model:value="dependencyTag"
                 placeholder="留空使用稳定版"

@@ -50,7 +50,7 @@ const stages: Record<string, string> = {
 <template>
   <div class="dependency-status">
     <p>
-      <strong>依赖处理</strong>
+      <strong>Nginx 依赖处理</strong>
       <NTag>{{ states[status.state] || status.state }}</NTag>
       {{ stages[status.stage] || status.stage }}
     </p>

@@ -134,7 +134,7 @@ func (s *Service) inspectFail2ban(ctx context.Context, st *storedPlan, add func(
 	}
 	f.Warnings = append(f.Warnings, "仅保存期望配置；不安装、启动或变更 Fail2ban 实例，不导入 Socket、所有权或封禁状态", "须在目标核对日志来源、白名单、实际流量路径与动作后端；保留的 jail 可能引用已替换站点")
 	add("fail2ban", "policy", "review", fmt.Sprintf("%s：导入 %d 个 jail，保留 %d 个，替换 %d 个；须在目标单独配置运行接入", f.Mode, f.SourceJails, f.PreservedJails, f.ReplacedJails))
-	return nil
+	return s.inspectFail2banDependencies(ctx, state.Candidate, add)
 }
 func (s *Service) importFail2ban(ctx context.Context, tx *sql.Tx, st *storedPlan, principal, requestID string) error {
 	if st.Fail2ban == nil {

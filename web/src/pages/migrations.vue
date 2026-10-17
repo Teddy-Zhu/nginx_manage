@@ -616,10 +616,10 @@ onUnmounted(() => {
       /></NFormItem>
       <div v-if="has('components.manage')">
         <NCheckbox v-model:checked="remoteDependencies"
-          >迁入前自动准备缺失依赖</NCheckbox
+          >迁入前自动准备 Nginx 依赖</NCheckbox
         >
         <template v-if="remoteDependencies">
-          <NFormItem label="可信组件发行标签（可选）">
+          <NFormItem label="Nginx 组件发行标签（可选）">
             <NInput
               v-model:value="dependencyTag"
               placeholder="留空使用稳定版"
@@ -799,7 +799,7 @@ onUnmounted(() => {
           !plan.dependencies
         "
       >
-        <NFormItem label="可信组件发行标签（可选）"
+        <NFormItem label="Nginx 组件发行标签（可选）"
           ><NInput v-model:value="dependencyTag" placeholder="留空使用稳定版"
         /></NFormItem>
         <NCheckbox v-model:checked="dependencyPrerelease"
@@ -819,8 +819,8 @@ onUnmounted(() => {
         </div>
         <NPopconfirm @positive-click="prepareDependencies"
           ><template #trigger
-            ><NButton :disabled="busy">准备缺失依赖</NButton></template
-          >按所选选项准备缺失依赖？首次安装仅适用于未安装 Nginx
+            ><NButton :disabled="busy">准备 Nginx 依赖</NButton></template
+          >按所选选项准备 Nginx 依赖？首次安装仅适用于未安装 Nginx
           的原生部署，Docker 模块由镜像提供。</NPopconfirm
         >
       </div>

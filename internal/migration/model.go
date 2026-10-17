@@ -153,6 +153,9 @@ type storedPlan struct {
 type Host interface {
 	NginxFeatures(context.Context) (agent.NginxFeatures, error)
 	NginxState(context.Context) (agent.NginxState, error)
+	ReadFail2ban(context.Context) (fail2ban.Observation, error)
+	ReadFail2banInstance(context.Context) (fail2ban.Instance, error)
+	ReadFail2banJailsRuntime(context.Context) (fail2ban.JailsRuntime, error)
 }
 type Service struct {
 	HostDNS         *hostdns.Service
