@@ -44,6 +44,7 @@ type ufwChangeCheckpoint struct {
 	Rollback    bool                  `json:"rollback"`
 	Confirmed   *firewallPolicyRecord `json:"confirmed"`
 	Files       []ufwFileCommit       `json:"files"`
+	LastRescue  string                `json:"last_rescue"`
 }
 
 func ufwChangePath(dataDir string) string {
@@ -52,7 +53,7 @@ func ufwChangePath(dataDir string) string {
 
 func ufwChangeHash(v *ufwChangeCheckpoint) string {
 	raw, _ := json.Marshal(v)
-	return secure.Hash(append([]byte("ufw:change:v2:\x00"), raw...))
+	return secure.Hash(append([]byte("ufw:change:v3:\x00"), raw...))
 }
 
 func ufwChangeIntentHash(v *ufwChangeCheckpoint) string {
@@ -60,6 +61,7 @@ func ufwChangeIntentHash(v *ufwChangeCheckpoint) string {
 	value.Operation.State, value.Operation.Stage, value.Operation.Error, value.Operation.ConfirmedSource = "", "", "", ""
 	value.Operation.UpdatedAt, value.Rollback = 0, false
 	value.Confirmed = nil
+	value.LastRescue = ""
 	value.Files = append([]ufwFileCommit{}, v.Files...)
 	for index := range value.Files {
 		value.Files[index].Candidate, value.Files[index].Previous = nil, nil
@@ -261,7 +263,7 @@ func validateUFWTransition(v *ufwPolicyTransition, record firewallPolicyRecord) 
 
 func validateUFWChange(v *ufwChangeCheckpoint) error {
 	invalid := errors.New("UFW 原业务操作恢复快照无效")
-	if v == nil || v.Schema != 2 || !validID(v.Operation.ID) || v.Policy.OperationID != v.Operation.ID || v.RequestHash != firewallRequestHash(v.Policy.PlanID, v.Policy.Action) || v.Operation.PlanID != v.Policy.PlanID || v.Operation.Action != v.Policy.Action || v.Operation.Version != v.Policy.Version || v.Operation.PolicyHash != v.Policy.PolicyHash || v.Operation.ProgramHash != v.Policy.ProgramHash || v.Operation.Deadline <= 0 || v.Operation.UpdatedAt <= 0 || len(v.Operation.Error) > 512 || !slices.Contains([]string{"running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"}, v.Operation.State) {
+	if v == nil || v.Schema != 3 || !validID(v.Operation.ID) || v.Policy.OperationID != v.Operation.ID || v.RequestHash != firewallRequestHash(v.Policy.PlanID, v.Policy.Action) || v.Operation.PlanID != v.Policy.PlanID || v.Operation.Action != v.Policy.Action || v.Operation.Version != v.Policy.Version || v.Operation.PolicyHash != v.Policy.PolicyHash || v.Operation.ProgramHash != v.Policy.ProgramHash || v.Operation.Deadline <= 0 || v.Operation.UpdatedAt <= 0 || len(v.Operation.Error) > 512 || v.LastRescue != "" && !validID(v.LastRescue) || !slices.Contains([]string{"running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"}, v.Operation.State) {
 		return invalid
 	}
 	if err := validateUFWTransition(&v.Transition, v.Policy); err != nil {
@@ -330,7 +332,11 @@ func ufwChangePending(dataDir string) bool {
 		return err != nil
 	}
 	r, err := loadUFWReceipt(dataDir, v.Operation.ID)
-	return err != nil || !ufwChangeReceiptMatches(r, v) || !slices.Contains([]string{"succeeded", "rolled_back", "failed"}, v.Operation.State)
+	return err != nil || !ufwChangeReceiptMatches(r, v) || !ufwChangeTerminal(v)
+}
+
+func ufwChangeTerminal(v *ufwChangeCheckpoint) bool {
+	return v != nil && slices.Contains([]string{"succeeded", "rolled_back", "failed"}, v.Operation.State)
 }
 
 func saveUFWChange(dataDir string, v *ufwChangeCheckpoint) error {
@@ -385,17 +391,11 @@ func saveUFWChange(dataDir string, v *ufwChangeCheckpoint) error {
 	return ufwRegistrationJournal(dataDir).Put(Record{OperationID: op.ID, RequestHash: v.RequestHash, Kind: firewallOperationKind, State: op.State, Stage: op.Stage, Deadline: op.Deadline, Error: op.Error, Firewall: op, CandidateHash: ufwChangeHash(v)})
 }
 
-// Acceptance does not write the firewall. Apply must still perform the whole
-// temporary/confirmation/persistence/recovery lifecycle before exposing it.
-func acceptUFWChange(ctx context.Context, dataDir, id string, plan firewallPrivatePlan) (*ufwChangeCheckpoint, error) {
+// Caller holds ufw-business.lock through submission and publication.
+func acceptUFWChangeLocked(ctx context.Context, dataDir, id string, plan firewallPrivatePlan) (*ufwChangeCheckpoint, error) {
 	if os.Geteuid() != 0 || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir || !validID(id) || plan.record == nil || plan.ufw == nil || plan.view.Backend != "ufw" || plan.view.ID != plan.record.PlanID || plan.view.UFW == nil || plan.view.UFW.BatchHash != plan.ufw.BatchHash || plan.view.UFW.ToolchainHash != plan.ufw.Tools.Hash || plan.view.UFW.ReloadHash != plan.ufw.Reload.Hash || plan.view.PolicyHash != plan.record.PolicyHash || plan.view.ProgramHash != plan.record.ProgramHash || plan.view.Version != plan.record.Version || plan.view.Action != plan.record.Action || time.Now().Unix() >= plan.view.ExpiresAt {
 		return nil, errors.New("UFW 业务操作尚不具备完整受理条件")
 	}
-	businessUnlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("ufw-business.lock")
-	if err != nil {
-		return nil, err
-	}
-	defer businessUnlock()
 	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
 	if err != nil {
 		return nil, err
@@ -410,6 +410,10 @@ func acceptUFWChange(ctx context.Context, dataDir, id string, plan firewallPriva
 	confirmed, err := ufwCurrentConfirmed(dataDir, plan.ufw.Owner)
 	if err != nil || !sameUFWPolicyRecord(confirmed, plan.ufw.Previous) {
 		return nil, errors.New("UFW 原确认策略在受理前变化，请重新计划")
+	}
+	previous, err := loadUFWChange(dataDir)
+	if err != nil {
+		return nil, err
 	}
 	if _, err := loadUFWReceipt(dataDir, id); !os.IsNotExist(err) {
 		return nil, errors.New("UFW 新业务操作 ID 已使用或无法核对")
@@ -431,7 +435,10 @@ func acceptUFWChange(ctx context.Context, dataDir, id string, plan firewallPriva
 	policy := *plan.record
 	policy.OperationID = id
 	op := firewall.Operation{ID: id, PlanID: policy.PlanID, Action: policy.Action, Version: policy.Version, PolicyHash: policy.PolicyHash, ProgramHash: policy.ProgramHash, State: "running", Stage: "submitting_runtime", Deadline: time.Now().Unix() + firewall.ConfirmationSeconds, UpdatedAt: time.Now().Unix(), VerificationScope: "controlled-listener"}
-	v := &ufwChangeCheckpoint{Schema: 2, RequestHash: firewallRequestHash(op.PlanID, op.Action), Policy: policy, Operation: op, Transition: *plan.ufw, Confirmed: confirmed}
+	v := &ufwChangeCheckpoint{Schema: 3, RequestHash: firewallRequestHash(op.PlanID, op.Action), Policy: policy, Operation: op, Transition: *plan.ufw, Confirmed: confirmed}
+	if previous != nil {
+		v.LastRescue = previous.LastRescue
+	}
 	for _, material := range v.Transition.Materials {
 		for _, target := range []string{"candidate", "previous"} {
 			v.Steps = append(v.Steps, ufwChangeStep{ID: secure.ID(), Family: material.Family, Target: target})

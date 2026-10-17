@@ -65,8 +65,10 @@ type hostFirewall struct {
 	owner                 string
 	firewalldRegistration *firewalldRegistrationCheckpoint
 	firewalldState        *firewalldCheckpoint
+	ufwState              *ufwChangeCheckpoint
 	available             bool
 	ufwPlanning           bool
+	ufwLastRescue         string
 	recovering            bool
 	policyUncertain       bool
 	journal               *Journal
@@ -183,18 +185,27 @@ func (f *hostFirewall) persist() (bool, error) {
 	return true, nil
 }
 func (f *hostFirewall) activeLocked() bool {
+	if f.ufwState != nil {
+		return !ufwChangeTerminal(f.ufwState)
+	}
 	if f.firewalldState != nil {
 		return f.firewalldState.Candidate != nil
 	}
 	return f.state.Candidate != nil
 }
 func (f *hostFirewall) currentOperation() *firewall.Operation {
+	if f.ufwState != nil {
+		return &f.ufwState.Operation
+	}
 	if f.firewalldState != nil {
 		return f.firewalldState.Operation
 	}
 	return f.state.Operation
 }
 func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
+	if f.ufwState != nil {
+		return f.ufwState.Confirmed
+	}
 	if f.firewalldState != nil {
 		return f.firewalldState.Confirmed
 	}
@@ -249,12 +260,14 @@ func (f *hostFirewall) Open() error {
 		f.owner = "firewalld"
 		return f.openFirewalldExecutor(managed)
 	}
-	if value == nil && ufwRestorePending(f.dataDir) {
-		call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := f.recoverUFWProcess(call)
-		cancel()
+	if value == nil {
+		ufw, err := loadUFWChange(f.dataDir)
 		if err != nil {
+			f.policyUncertain, f.problem = true, ufwProcessProblem+"业务快照无法读取"
 			return nil
+		}
+		if f.owner == "ufw" || ufwRestorePending(f.dataDir) || ufw != nil && (ufw.Confirmed != nil && ufw.Confirmed.Action == "apply" || !ufwChangeTerminal(ufw)) {
+			return f.openUFWExecutor(ufw)
 		}
 	}
 	if f.owner == "firewalld" {
@@ -323,6 +336,18 @@ func (f *hostFirewall) Close() {
 	}
 }
 func (f *hostFirewall) operationLocked(id string) (firewall.Operation, error) {
+	if f.ufwState != nil || f.owner == "ufw" && f.state.Schema == 0 {
+		if err := f.refreshUFWStateLocked(); err != nil {
+			return firewall.Operation{}, fault.Unavailable("UFW 独立操作记录无法读取")
+		}
+		if v := f.ufwState; v != nil && v.Operation.ID == id {
+			receipt, err := loadUFWReceipt(f.dataDir, id)
+			if err != nil || !ufwChangeReceiptMatches(receipt, v) {
+				return v.Operation, fault.Unavailable("UFW 原业务回执尚未完成核对，请恢复原操作")
+			}
+			return v.Operation, nil
+		}
+	}
 	if op := f.currentOperation(); op != nil && op.ID == id {
 		return *op, nil
 	}

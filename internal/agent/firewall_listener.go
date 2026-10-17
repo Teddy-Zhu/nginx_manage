@@ -34,6 +34,14 @@ func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Co
 			return fault.Unavailable("firewalld 已确认配置无法完整核对，禁止变更远程入口")
 		}
 		record = f.firewalldState.Confirmed
+	} else if f.ufwState != nil {
+		if f.problem != "" || f.activeLocked() {
+			return fault.Conflict("UFW 存在待确认、待恢复或不可核对状态")
+		}
+		if err := f.reconcileUFWConfirmedLocked(ctx); err != nil {
+			return fault.Unavailable("UFW 已确认配置与运行状态无法核对，禁止变更远程入口")
+		}
+		record = f.confirmedRecord()
 	} else if f.state.Schema == 0 {
 		return nil // No independent policy has been registered on this node.
 	} else {

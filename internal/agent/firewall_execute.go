@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"nginxpanel/internal/fault"
@@ -52,12 +51,17 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	if !validID(id) || !validID(planID) || (action != "apply" && action != "remove") {
 		return out, fault.Invalid("防火墙操作或计划 ID 无效")
 	}
+	if f.owner == "ufw" && f.state.Schema == 0 {
+		if err := f.refreshUFWStateLocked(); err != nil {
+			return out, fault.Unavailable("UFW 独立业务记录无法读取")
+		}
+	}
 	hash := firewallRequestHash(planID, action)
 	if old := f.currentOperation(); old != nil && old.ID == id {
 		if firewallRequestHash(old.PlanID, old.Action) != hash || old.Version != version || old.PolicyHash != policyHash || old.Action != action {
 			return out, fault.Conflict("幂等键已用于其他请求")
 		}
-		return *old, nil
+		return f.operationLocked(id)
 	}
 	if old, err := f.journal.Get(id); err == nil {
 		if old.Kind != firewallOperationKind || old.RequestHash != hash || old.Firewall == nil || old.Firewall.Version != version || old.Firewall.PolicyHash != policyHash || old.Firewall.Action != action {
@@ -71,7 +75,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 		return f.applyFirewalldLocked(ctx, id, planID, version, policyHash, action, connection)
 	}
 	if f.owner == "ufw" && f.state.Schema == 0 {
-		return out, fault.Unavailable("UFW 当前仅准备保护计划，正常应用、确认及持久化尚未开放")
+		return f.applyUFWLocked(ctx, id, planID, version, policyHash, action, connection)
 	}
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("防火墙执行未就绪")
@@ -212,6 +216,9 @@ func (f *hostFirewall) Decide(ctx context.Context, id, action, connection string
 	}
 	if f.firewalldState != nil {
 		return f.decideFirewalldLocked(ctx, id, action, connection)
+	}
+	if f.owner == "ufw" && f.state.Schema == 0 {
+		return f.decideUFWLocked(ctx, id, action, connection)
 	}
 	if !f.activeLocked() || f.state.Operation.ID != id {
 		return out, nil
@@ -477,7 +484,6 @@ func (f *hostFirewall) Run(ctx context.Context) {
 	defer ticker.Stop()
 	nextInspect := time.Now().Add(30 * time.Second)
 	nextProtectionInspect := time.Now()
-	nextUFWProcessInspect := time.Now()
 	for {
 		stopping := false
 		select {
@@ -487,13 +493,8 @@ func (f *hostFirewall) Run(ctx context.Context) {
 		}
 		f.remote.mu.Lock()
 		f.mu.Lock()
-		if f.firewalldState == nil && f.state.Schema == 0 && (stopping || !time.Now().Before(nextUFWProcessInspect)) {
-			nextUFWProcessInspect = time.Now().Add(10 * time.Second)
-			if ufwRestorePending(f.dataDir) || strings.HasPrefix(f.problem, ufwProcessProblem) {
-				call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				_ = f.recoverUFWProcess(call)
-				cancel()
-			}
+		if f.owner == "ufw" && f.firewalldState == nil && f.state.Schema == 0 {
+			f.runUFWLocked(ctx, stopping, &nextInspect, &nextProtectionInspect)
 		}
 		if f.firewalldState != nil {
 			f.runFirewalldLocked(ctx, stopping, &nextInspect, &nextProtectionInspect)

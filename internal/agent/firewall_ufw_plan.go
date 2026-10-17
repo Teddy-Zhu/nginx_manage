@@ -40,6 +40,8 @@ func (f *hostFirewall) ufwViewLocked() firewall.RuntimeView {
 			err = errors.New("UFW 原业务回执无法完整核对")
 		}
 		if err == nil && v.Transition.Owner == registered.NextClaim.Owner {
+			f.ufwState = v
+			f.ufwLastRescue = v.LastRescue
 			operation := v.Operation
 			out.Operation = &operation
 			if record := v.Confirmed; record != nil {
@@ -47,13 +49,13 @@ func (f *hostFirewall) ufwViewLocked() firewall.RuntimeView {
 				out.ConfirmedVersion, out.ConfirmedPolicyHash = record.Version, record.PolicyHash
 				if record.Action == "apply" {
 					out.Protections = append(out.Protections, record.Protections...)
-					out.ProtectionObservation = protectionObservation("unavailable", record.PlanID, "保护来源尚未完成当前核对，请刷新状态")
 				}
 			}
 		} else if err == nil && v.Confirmed != nil && v.Confirmed.Action == "apply" {
 			err = errors.New("UFW 已确认受管规则属于其他本机授权")
 		}
 	}
+	out.ProtectionObservation = f.protectionObservationLocked()
 	if err != nil {
 		out.CanPlan = false
 		out.Reason = "UFW 原业务记录无法完整核对，请恢复原操作"

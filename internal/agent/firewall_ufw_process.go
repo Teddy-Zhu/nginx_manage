@@ -540,6 +540,10 @@ func (f *hostFirewall) recoverUFWProcess(ctx context.Context) error {
 		f.problem = ufwProcessProblem + err.Error()
 		return err
 	}
+	if err := f.refreshUFWStateLocked(); err != nil {
+		return err
+	}
+	f.policyUncertain = false
 	if strings.HasPrefix(f.problem, ufwProcessProblem) {
 		f.problem = ""
 	}
