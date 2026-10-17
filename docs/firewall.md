@@ -294,3 +294,14 @@ nginxpanel iptables-remove --data-dir /srv/nginxpanel --firewall-scope host
 独立 root 意图及回执保存在数据目录的 `agent/firewall/iptables-registration.json` 和 `agent/operations`；`/var/lib/nginxpanel-host/iptables-owner.json` 持久绑定宿主机、数据目录、后端及原操作，防止其他数据目录重复授权。释放先发布中间占用、再保存终态回执、最后发布释放墓碑；崩溃后只核对原意图，不重放任何规则命令。未完成登记/释放阻止新的维护及可达性操作；其他防火墙新授权/执行拒绝尚未释放的占用，已受理操作仍按原恢复路径处理。
 
 宿主机诊断 API 的 `iptables_registration` 及防火墙页面显示后端、授权和本次核对；`registered/verified` 仅证明当前空命名空间授权，不能证明规则生效或入口可达。迁移预检核对目标自己的授权，源机占用、root 授权与回执不迁移。限时业务应用、确认规则恢复及 Docker 转发尚未接入；编译预览继续 `can_apply=false`。实现及源码审阅完成，生成器、构建、类型检查、lint、测试、浏览器与真实主机操作均待 P5。
+
+
+## iptables 初始代际计划
+
+在完成本机空命名空间授权后，Agent 须显式配置 `--firewall-owner iptables-nft` 或 `iptables-legacy`、`--firewall-scope host`、`--maintenance-scope host` 和本机确认的 `--firewall-ssh openssh|none`。通过目标实际管理 HTTPS 连接生成 apply 计划，root 固定原授权与回执，采集当前管理入口、OpenSSH 监听及来源保护，并在前后两次完整环境读取一致时保存计划；只读计划五分钟有效，最多保留八份。
+
+逻辑编译结果转换为固定入口链 `NGINXPANEL-HOST` 和包含随机所有者、计划及完整逻辑摘要的代际链。INPUT 跳转计划位于首位，入口链只保存一个精确指针；基线 RETURN、入口保护与业务规则均携带完整代际身份。生成规则数包含跳转和指针，最多 8192 条，完整代际程序最多 2 MiB。ACCEPT 可能结束后续 INPUT 判断，不表示其他过滤路径或云安全组允许。
+
+原生完整导出保留各链规则顺序及所有参数，第三方扩展只参与不透明读取与漂移核对；跨链声明顺序、计数器和导出时间不参与摘要。初始候选仅生成失败即停止的 `-N` 建链、受管追加和首位跳转，不声明或刷新已有用户链；反向材料仅精确删除本次跳转、指针及生成规则，再删除空受管链，不重放第三方历史规则或全局策略。完整原始/投影镜像和双向批次保留在 root 私有计划，正反批次合计最多 4 MiB，整个私有计划最多 16 MiB；Web/API 只返回摘要、计数与目标链。
+
+本阶段仅接通初始代际计划及页面展示，`can_plan` 与 `available` 分别表示可尝试准备和执行就绪。尚未执行官方预演，也未接入限时业务写入、子进程回执、新连接确认、持久化及业务恢复，`can_apply=false`，root 应用入口明确拒绝；不提供已确认策略的更新或移除计划。两个地址族不承诺共同原子性，Docker 转发仍未适配。迁移保留中立期望，在目标重新授权并准备，不迁入上述 root 材料。生成器、构建、类型检查、lint、测试、浏览器及真实主机命令仍待 P5 集中验证。

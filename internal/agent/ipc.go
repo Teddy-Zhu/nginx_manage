@@ -202,6 +202,7 @@ func (s *Server) Run(ctx context.Context) error {
 	fw := &hostFirewall{dataDir: s.DataDir, sshMode: s.FirewallSSH, owner: s.FirewallOwner, available: !s.Dev && s.FirewallScope == "host" && (s.FirewallOwner == "direct-nftables" || s.FirewallOwner == "firewalld") && (s.FirewallSSH == "openssh" || s.FirewallSSH == "none") && s.MaintenanceScope == "host", journal: s.Journal, remote: remote, dns: dns}
 	defer fw.Close()
 	fw.ufwPlanning = !s.Dev && s.FirewallScope == "host" && s.FirewallOwner == "ufw" && (s.FirewallSSH == "openssh" || s.FirewallSSH == "none") && s.MaintenanceScope == "host"
+	fw.iptablesPlanning = !s.Dev && s.FirewallScope == "host" && validIPTablesBackend(s.FirewallOwner) && (s.FirewallSSH == "openssh" || s.FirewallSSH == "none") && s.MaintenanceScope == "host"
 	if err := fw.Open(); err != nil {
 		return err
 	}

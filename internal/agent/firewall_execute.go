@@ -77,6 +77,9 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	if f.owner == "ufw" && f.state.Schema == 0 {
 		return f.applyUFWLocked(ctx, id, planID, version, policyHash, action, connection)
 	}
+	if f.iptablesPlannerLocked() {
+		return out, fault.Unavailable("iptables 计划尚未完成官方预演、子进程回执与业务恢复，不能应用")
+	}
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("防火墙执行未就绪")
 	}

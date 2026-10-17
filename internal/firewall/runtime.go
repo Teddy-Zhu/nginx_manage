@@ -50,6 +50,7 @@ type PlanPreparation struct {
 	Error             string `json:"error"`
 }
 type Plan struct {
+	IPTables            *IPTablesPlan    `json:"iptables"`
 	Preparation         *PlanPreparation `json:"preparation"`
 	Backend             string           `json:"backend"`
 	CanApply            bool             `json:"can_apply"`
@@ -72,6 +73,32 @@ type Plan struct {
 	TransactionHash     string           `json:"transaction_hash"`
 	TransactionBytes    int              `json:"transaction_bytes"`
 	GeneratedRules      int              `json:"generated_rules"`
+}
+
+type IPTablesPlan struct {
+	RegistrationOperationID string               `json:"registration_operation_id"`
+	ConfigurationHash       string               `json:"configuration_hash"`
+	ToolHash                string               `json:"tool_hash"`
+	LogicalHash             string               `json:"logical_hash"`
+	ProtectionRules         int                  `json:"protection_rules"`
+	Families                []IPTablesFamilyPlan `json:"families"`
+	Warnings                []string             `json:"warnings"`
+	Reason                  string               `json:"reason"`
+}
+
+type IPTablesFamilyPlan struct {
+	Family         string `json:"family"`
+	Binary         string `json:"binary"`
+	Chain          string `json:"chain"`
+	HookPosition   int    `json:"hook_position"`
+	GeneratedRules int    `json:"generated_rules"`
+	PreservedRules int    `json:"preserved_rules"`
+	BeforeHash     string `json:"before_hash"`
+	AfterHash      string `json:"after_hash"`
+	CandidateHash  string `json:"candidate_hash"`
+	PreviousHash   string `json:"previous_hash"`
+	CandidateBytes int    `json:"candidate_bytes"`
+	PreviousBytes  int    `json:"previous_bytes"`
 }
 
 type FirewalldPlan struct {

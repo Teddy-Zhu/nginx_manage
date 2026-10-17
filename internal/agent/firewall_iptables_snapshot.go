@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,49 +22,8 @@ func validIPTablesBackend(backend string) bool {
 type iptablesRegistrationSnapshot struct {
 	Hash     string
 	ToolHash string
-}
-
-// Only normalized structure participates in this drift detector. Save headers
-// and packet counters change independently of configuration and are excluded.
-func iptablesEmptyNamespace(raw []byte, family string) (string, error) {
-	if _, err := xtablesInventory(raw, family); err != nil {
-		return "", err
-	}
-	lines := [][]string{}
-	scanner := bufio.NewScanner(bytes.NewReader(raw))
-	scanner.Buffer(make([]byte, 4096), 128<<10)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		var args []string
-		if strings.HasPrefix(line, ":") {
-			args = strings.Fields(line)
-			// xtablesInventory has already checked the declaration shape.
-			args = args[:2]
-		} else {
-			var err error
-			args, err = xtablesWords(line)
-			if err != nil {
-				return "", err
-			}
-		}
-		for _, arg := range args {
-			if strings.HasPrefix(strings.TrimPrefix(arg, ":"), firewall.IPTablesHostChain) || strings.HasPrefix(arg, "nginxpanel:host:") {
-				return "", errors.New("存在本应用目标链、引用或规则标记；无独立业务回执，禁止接管或释放")
-			}
-		}
-		lines = append(lines, args)
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-	raw, err := json.Marshal(lines)
-	if err != nil {
-		return "", err
-	}
-	return secure.Hash(raw), nil
+	Observed firewall.Observation
+	Images   []iptablesImage
 }
 
 // Registration binds diagnostics, not an executable write capability. A future
@@ -176,6 +133,7 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 	// cannot detect a reserved jump/comment hidden among foreign rules.
 	names := []string{"iptables-nft-save", "ip6tables-nft-save", "iptables-legacy-save", "ip6tables-legacy-save"}
 	hashes, errs := make([]string, len(names)), make([]error, len(names))
+	images := make([]iptablesImage, len(names))
 	var wg sync.WaitGroup
 	for index, name := range names {
 		wg.Add(1)
@@ -187,7 +145,11 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 				if strings.HasPrefix(name, "ip6tables") {
 					family = "ipv6"
 				}
-				hashes[index], err = iptablesEmptyNamespace(raw, family)
+				images[index], err = parseIPTablesImage(raw, family)
+				if err == nil {
+					err = proveIPTablesGeneration(images[index], nil)
+					hashes[index] = images[index].hash()
+				}
 			}
 			errs[index] = err
 		}()
@@ -209,5 +171,11 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 		return out, err
 	}
 	out.Hash = secure.Hash(raw)
+	out.Observed = observed
+	for index, name := range names {
+		if strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
+			out.Images = append(out.Images, images[index])
+		}
+	}
 	return out, ctx.Err()
 }

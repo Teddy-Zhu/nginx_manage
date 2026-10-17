@@ -55,9 +55,10 @@ type firewallCheckpoint struct {
 	RestoreIntent   *firewall.KernelView  `json:"restore_intent"`
 }
 type firewallPrivatePlan struct {
-	view   firewall.Plan
-	record *firewallPolicyRecord
-	ufw    *ufwPolicyTransition
+	iptables *iptablesInitialTransition
+	view     firewall.Plan
+	record   *firewallPolicyRecord
+	ufw      *ufwPolicyTransition
 }
 type hostFirewall struct {
 	mu                    sync.Mutex
@@ -68,6 +69,7 @@ type hostFirewall struct {
 	ufwState              *ufwChangeCheckpoint
 	available             bool
 	ufwPlanning           bool
+	iptablesPlanning      bool
 	ufwLastRescue         string
 	ufwPreparation        *ufwPlanPreparation
 	recovering            bool
@@ -270,6 +272,9 @@ func (f *hostFirewall) Open() error {
 		if f.owner == "ufw" || ufwRestorePending(f.dataDir) || ufw != nil && (ufw.Confirmed != nil && ufw.Confirmed.Action == "apply" || !ufwChangeTerminal(ufw)) {
 			return f.openUFWExecutor(ufw)
 		}
+		if validIPTablesBackend(f.owner) {
+			return f.openIPTablesPlanner()
+		}
 	}
 	if f.owner == "firewalld" {
 		if value == nil {
@@ -385,6 +390,9 @@ func (f *hostFirewall) Operation(id string) (firewall.Operation, error) {
 func (f *hostFirewall) View() firewall.RuntimeView {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.iptablesPlannerLocked() {
+		return f.iptablesViewLocked()
+	}
 	if f.firewalldState != nil {
 		return f.firewalldViewLocked()
 	}
@@ -432,6 +440,9 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	defer f.remote.mu.Unlock()
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.iptablesPlannerLocked() {
+		return f.planIPTablesLocked(ctx, in, connection)
+	}
 	if in.PreparationID != "" || in.CancelPreparation {
 		return f.ufwPreparationPlanLocked(in)
 	}

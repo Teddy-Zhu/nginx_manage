@@ -2059,6 +2059,7 @@ type FirewallPlanPreparation struct {
 	Error             string `json:"error"`
 }
 type FirewallPlan struct {
+	Iptables            *FirewallIPTablesPlan    `json:"iptables"`
 	Preparation         *FirewallPlanPreparation `json:"preparation"`
 	Backend             string                   `json:"backend"`
 	CanApply            bool                     `json:"can_apply"`
@@ -2093,6 +2094,35 @@ type FirewallFirewalldPlan struct {
 	Warnings                []string                 `json:"warnings"`
 	Reason                  string                   `json:"reason"`
 }
+
+// FirewallIPTablesPlan defines model for FirewallIPTablesPlan.
+type FirewallIPTablesPlan struct {
+	RegistrationOperationId string                       `json:"registration_operation_id"`
+	ConfigurationHash       string                       `json:"configuration_hash"`
+	ToolHash                string                       `json:"tool_hash"`
+	LogicalHash             string                       `json:"logical_hash"`
+	ProtectionRules         int64                        `json:"protection_rules"`
+	Families                []FirewallIPTablesFamilyPlan `json:"families"`
+	Warnings                []string                     `json:"warnings"`
+	Reason                  string                       `json:"reason"`
+}
+
+// FirewallIPTablesFamilyPlan defines model for FirewallIPTablesFamilyPlan.
+type FirewallIPTablesFamilyPlan struct {
+	Family         string `json:"family"`
+	Binary         string `json:"binary"`
+	Chain          string `json:"chain"`
+	HookPosition   int64  `json:"hook_position"`
+	GeneratedRules int64  `json:"generated_rules"`
+	PreservedRules int64  `json:"preserved_rules"`
+	BeforeHash     string `json:"before_hash"`
+	AfterHash      string `json:"after_hash"`
+	CandidateHash  string `json:"candidate_hash"`
+	PreviousHash   string `json:"previous_hash"`
+	CandidateBytes int64  `json:"candidate_bytes"`
+	PreviousBytes  int64  `json:"previous_bytes"`
+}
+
 type FirewallUFWPlan struct {
 	RegistrationOperationId string                 `json:"registration_operation_id"`
 	ConfigurationHash       string                 `json:"configuration_hash"`

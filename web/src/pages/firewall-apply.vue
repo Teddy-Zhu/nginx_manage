@@ -35,6 +35,7 @@ import { useRoute } from "vue-router";
 import { useSession } from "../stores/session";
 import FirewalldPlanDetails from "../components/FirewalldPlanDetails.vue";
 import UFWPlanDetails from "../components/UFWPlanDetails.vue";
+import IPTablesPlanDetails from "../components/IPTablesPlanDetails.vue";
 
 const route = useRoute();
 const action = ref<FirewallPlanInput["action"]>(
@@ -520,7 +521,7 @@ onUnmounted(() => {
             : plan.backend === "ufw"
               ? "移除本应用 UFW 用户规则"
               : `移除 ${plan.baseline.rules} 条规则`
-          : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : "内核规则"}`
+          : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : plan.iptables ? "生成规则" : "内核规则"}`
       }}</n-tag>
     </div>
     <dl>
@@ -549,6 +550,11 @@ onUnmounted(() => {
       :plan="plan.ufw"
       :program-hash="plan.program_hash"
     />
+    <IPTablesPlanDetails
+      v-if="plan.iptables"
+      :plan="plan.iptables"
+      :program-hash="plan.program_hash"
+    />
     <n-data-table
       :columns="protections"
       :data="plan.protections"
@@ -563,7 +569,9 @@ onUnmounted(() => {
             ? "入口保护先于业务规则匹配。accept 可能结束后续 firewalld 过滤，其他内核规则或云安全组仍可阻止连接。"
             : plan.backend === "ufw"
               ? "计划优先保留入口保护；与保护条件完全相同的业务项已由保护项覆盖。逐条预演通过不代表规则已经应用或端口可达。"
-              : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
+              : plan.iptables
+                ? "入口保护先于业务规则匹配。ACCEPT 可能结束后续 INPUT 判断，其他过滤路径及云安全组仍可阻止连接。"
+                : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
       }}
     </p>
     <n-button

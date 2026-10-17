@@ -97,7 +97,7 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 其他入口：`POST /migrations/export`、`POST /migrations/plan`、`POST /migrations/{id}/execute`、`GET /migrations`。执行请求幂等；拉取请求在计划提交时持久关联幂等键，响应丢失后使用原请求和原键核对，避免重复迁入。
 
-目标选择 `iptables-nft` 或 `iptables-legacy` 时，预检使用独立参数编译器，并通过同次读取的宿主机报告提示目标管理器、显式工具后端、内核视图、INPUT 默认策略及同名链冲突；无需有接口映射项才执行这项检查。编译规模或 Docker 路径不支持时显示具体原因。迁入仍只保存期望，不修改 alternatives、不创建链或跳转；iptables 独立登记、执行与恢复尚未接入。
+目标选择 `iptables-nft` 或 `iptables-legacy` 时，预检使用独立参数编译器，并通过同次读取的宿主机报告提示目标管理器、显式工具后端、内核视图、INPUT 默认策略及同名链冲突；无需有接口映射项才执行这项检查。编译规模或 Docker 路径不支持时显示具体原因。迁入仍只保存期望，不修改 alternatives、不创建链或跳转；iptables 独立本机授权与初始代际保护计划已接入；目标须自行授权并准备，执行与业务恢复尚未接入。
 
 ## 资源边界
 

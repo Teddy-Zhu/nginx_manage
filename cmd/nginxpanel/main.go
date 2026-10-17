@@ -137,7 +137,7 @@ func run() error {
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd, netplan or unconfirmed")
 	firewallScope := flags.String("firewall-scope", "unconfirmed", "firewall namespace: host or unconfirmed")
 	firewallBackend := flags.String("firewall-backend", "", "explicit initial iptables grant: iptables-nft or iptables-legacy")
-	firewallOwner := flags.String("firewall-owner", "unconfirmed", "locally confirmed firewall owner: direct-nftables, firewalld, ufw, or unconfirmed")
+	firewallOwner := flags.String("firewall-owner", "unconfirmed", "locally confirmed firewall owner: direct-nftables, firewalld, ufw, iptables-nft, iptables-legacy, or unconfirmed")
 	firewallSSH := flags.String("firewall-ssh", "unconfirmed", "locally confirmed SSH protection: openssh, none or unconfirmed")
 	dnsScope := flags.String("dns-scope", "unconfirmed", "DNS namespace: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
@@ -400,7 +400,11 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "firewall-scope":
-			if command != "agent" && command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" && command != "firewalld-init" && command != "firewalld-registration" && command != "firewalld-recover" && command != "firewalld-remove" && command != "ufw-init" && command != "ufw-registration" && command != "ufw-recover" && command != "ufw-remove" {
+			if command != "agent" && command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" && command != "firewalld-init" && command != "firewalld-registration" && command != "firewalld-recover" && command != "firewalld-remove" && command != "ufw-init" && command != "ufw-registration" && command != "ufw-recover" && command != "ufw-remove" && command != "iptables-init" && command != "iptables-registration" && command != "iptables-recover" && command != "iptables-remove" {
+				invalidFlag = f.Name
+			}
+		case "firewall-backend":
+			if command != "iptables-init" {
 				invalidFlag = f.Name
 			}
 		case "firewall-owner", "firewall-ssh":
