@@ -271,7 +271,7 @@ paths:
     post:
       operationId: previewFirewall
       x-scopes: [read]
-      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式及程序摘要，其他后端或 Docker 路径明确阻塞。结合 Agent 诊断核对环境；不发送 netlink 事务，不是执行授权或外部连通性证明，can_apply 为 false。
+      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式及程序摘要，firewalld 生成独立 ANY 到 HOST policy 的有界 rich rules、顺序与完整配置摘要。其他后端、Docker 路径及 firewalld 接口选择明确阻塞。结合 Agent 诊断核对环境；不发送 netlink 或 D-Bus 写操作，不是执行授权或外部连通性证明，can_apply 为 false；firewalld 当前仅支持编译预览。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPreviewInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -4601,8 +4601,8 @@ components:
         priority: {type: integer, format: int32, nullable: true}
         ingress_zones: {type: array, maxItems: 128, items: {type: string}}
         egress_zones: {type: array, maxItems: 128, items: {type: string}}
-        rich_rules: {type: integer, minimum: 0, maximum: 1024}
-        entries: {type: integer, minimum: 0, maximum: 4096, description: 服务、端口、源端口、转发端口、协议、ICMP 和 rich rule 条目总数，包含 rich_rules。}
+        rich_rules: {type: integer, minimum: 0, maximum: 8192}
+        entries: {type: integer, minimum: 0, maximum: 8192, description: 服务、端口、源端口、转发端口、协议、ICMP 和 rich rule 条目总数，包含 rich_rules。}
         masquerade: {type: boolean, nullable: true}
     FirewallZone:
       type: object
@@ -4699,7 +4699,7 @@ components:
       additionalProperties: false
       required: ["backend", "rules"]
       properties:
-        backend: {"type": "string", "description": "目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；当前仅编译 direct-nftables"}
+        backend: {"type": "string", "description": "目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；当前可编译 direct-nftables 和不含接口选择的 firewalld 主机入站策略。"}
         rules: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallRule"}, "maxItems": 1000}
     FirewallPolicyView:
       type: object
@@ -4725,8 +4725,10 @@ components:
     FirewallPreviewEntry:
       type: object
       additionalProperties: false
-      required: ["rule_id", "family", "protocol", "source", "ports", "action", "interface", "priority"]
+      required: ["rule_id", "family", "protocol", "source", "ports", "action", "interface", "priority", "backend_priority", "expression"]
       properties:
+        backend_priority: {type: integer, nullable: true, minimum: -32768, maximum: -24577, description: firewalld 展开后的唯一负优先级；其他后端为 null。}
+        expression: {type: string, maxLength: 512, description: firewalld 生成的完整 rich rule；其他后端为空，不接受用户提供表达式。}
         rule_id: {"type": "string"}
         family: {"type": "string"}
         protocol: {"type": "string"}
@@ -4735,11 +4737,24 @@ components:
         action: {"type": "string"}
         interface: {"type": "string"}
         priority: {"type": "integer"}
+    FirewallFirewalldPreview:
+      type: object
+      additionalProperties: false
+      required: [policy, priority, target, ingress_zones, egress_zones, settings_bytes]
+      description: 编译目标为独立 nginxpanel-host policy，ANY 到 HOST，优先级 -100、默认 CONTINUE；名称不构成所有权证明，不写入 runtime/permanent。
+      properties:
+        policy: {type: string}
+        priority: {type: integer, format: int32}
+        target: {type: string}
+        ingress_zones: {type: array, maxItems: 1, items: {type: string}}
+        egress_zones: {type: array, maxItems: 1, items: {type: string}}
+        settings_bytes: {type: integer, minimum: 0, maximum: 491520, description: 全部编译 policy 设置的规范 JSON 字节数，包含未展示的规则；为观测字典的类型标记、缺省字段及独立身份元数据保留空间。}
     FirewallPreview:
       type: object
       additionalProperties: false
-      required: ["kernel", "transaction_hash", "transaction_bytes", "transaction_messages", "version", "policy_hash", "backend", "compiled", "can_apply", "table", "chain", "hook", "priority", "default_policy", "logical_rules", "generated_rules", "program_hash", "entries", "truncated", "observed_at", "errors", "warnings"]
+      required: ["firewalld", "kernel", "transaction_hash", "transaction_bytes", "transaction_messages", "version", "policy_hash", "backend", "compiled", "can_apply", "table", "chain", "hook", "priority", "default_policy", "logical_rules", "generated_rules", "program_hash", "entries", "truncated", "observed_at", "errors", "warnings"]
       properties:
+        firewalld: {allOf: [{$ref: '#/components/schemas/FirewallFirewalldPreview'}], nullable: true}
         kernel: {"$ref": "#/components/schemas/FirewallKernelView"}
         transaction_hash: {"type": "string", "description": "绑定命名空间、目标表快照和含规则代次前置条件的完整新建事务摘要；不构成执行授权"}
         transaction_bytes: {"type": "integer", "minimum": 0, "maximum": 8388608}
@@ -4755,7 +4770,7 @@ components:
         priority: {"type": "integer"}
         default_policy: {"type": "string"}
         logical_rules: {"type": "integer"}
-        generated_rules: {"type": "integer"}
+        generated_rules: {"type": "integer", "description": "直接 nftables 为含回环/会话保护的内核规则数量；firewalld 为 rich rule 数量，不计入管理器原有规则。"}
         program_hash: {"type": "string"}
         entries: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallPreviewEntry"}, "maxItems": 128}
         truncated: {"type": "boolean"}

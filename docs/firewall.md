@@ -33,7 +33,7 @@
 
 ## 编译预览
 
-`POST /api/v1/firewall/preview` 要求 `read` 和已保存版本，浏览器使用 CSRF；同一节点最多一份在途预览，结束前再次核对版本。直接 nftables 编译器使用固定库构造实际表达式与摘要，但不创建连接或发送 netlink 事务。启用的 Docker 发布端口规则及其他尚未适配的后端明确阻塞，不能降格为 INPUT 或自动切换管理器。
+`POST /api/v1/firewall/preview` 要求 `read` 和已保存版本，浏览器使用 CSRF；同一节点最多一份在途预览，结束前再次核对版本。直接 nftables 编译器使用固定库构造实际表达式与摘要，但不创建连接或发送 netlink 事务；firewalld 编译范围见下节。启用的 Docker 发布端口规则及其他尚未适配的后端明确阻塞，不能降格为 INPUT 或自动切换管理器。
 
 当前编译目标为独立 `inet nginxpanel_host` 表、`input` 过滤基础链、hook 优先级 10、自有链默认 accept。前两条返回回环及 ESTABLISHED/RELATED 流量；业务规则仅匹配 conntrack NEW，按地址族、来源、入站接口、协议和目的端口展开。allow 返回其余系统策略，deny 丢弃，reject 对 TCP 使用 RST、UDP 使用对应地址族不可达响应。未跟踪流量不在本阶段匹配范围内，不清理已有会话。含两条保护规则的总展开数最多 8192，超限失败，不返回部分成功；预览条目最多展示前 128 条，计数及程序摘要覆盖完整结果。
 
@@ -115,6 +115,20 @@ Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。�
 
 每项保留目标、优先级、配置字典及活动清单返回的入口/出口 zone、rich rule 数量、配置条目总数、地址伪装标志与完整返回配置摘要，不向 Web 返回原始 rich rules、服务描述或转发地址。活动清单中的 zone 是该活动 policy 的绑定，不证明每个 zone 的接口均处于活动状态。配置条目总数包含服务、端口、源端口、转发端口、协议、ICMP 和 rich rules。摘要包含全部已支持字段、D-Bus 类型、空值及列表顺序；缺省字段与显式空值可能产生不同摘要，不能据此推断规则语义等价。未知字段、签名或结构使采集明确不可用，不忽略未识别配置。
 
-运行与永久 policy 合并后最多 64 项，单份返回字典最多 64 KiB、合计 512 KiB；每字段最多 1024 项、每对象最多 4096 个规则条目、各方向最多 128 个 zone。采集 policy 最多 1.5 秒，仍受原 firewalld 3 秒与全局 6 秒诊断期限约束；D-Bus 单帧最多 1 MiB、整次 firewalld 接收最多 8 MiB。末尾再次比较清单和活动绑定，再核对服务唯一所有者；同一服务内的读取仍非原子快照，不能代替执行前复核、内核对象证明或新连接确认。
+运行与永久 policy 合并后最多 64 项，单份返回字典最多 512 KiB、合计 2 MiB；rich rules 最多 8192 项、其他列表字段最多 1024 项、每对象最多 8192 个规则条目、各方向最多 128 个 zone。采集 policy 最多 1.5 秒，仍受原 firewalld 3 秒与全局 6 秒诊断期限约束；D-Bus 单帧最多 1 MiB、整次 firewalld 接收最多 8 MiB。末尾再次比较清单和活动绑定，再核对服务唯一所有者；同一服务内的读取仍非原子快照，不能代替执行前复核、内核对象证明或新连接确认。
 
 自动扫描的防火墙页面展示仅运行、仅永久、配置摘要一致或不同及活动状态。该诊断不创建 policy、不写规则、不 reload firewalld、不修改运行或永久配置；firewalld 写入适配及其独立恢复仍未交付。Agent 为 70，数据库/迁移归档仍为 32/6；实现待 P5 集中验证。
+
+## firewalld 主机 policy 编译预览
+
+选择 `backend=firewalld` 后，保存仍只更新加密期望。预览使用[官方 policy 模型](https://firewalld.org/documentation/man-pages/firewalld.policy.html)与 [rich language](https://firewalld.org/documentation/man-pages/firewalld.richlanguage.html)，生成固定 `nginxpanel-host` policy，入口 `ANY`、出口 `HOST`、优先级 `-100`、默认目标 `CONTINUE`。不选择或重新绑定系统 zone，不创建对象，不采用已弃用的 direct 接口。
+
+只编译启用的主机入站规则。显式入站接口无法等价转成 rich rule，Docker 发布端口也不能改为主机流量，两者均整体拒绝编译；停用项不生成规则。按规范化后的业务顺序和 UUID，依次展开地址族、来源与合并端口区间，每项分配唯一负优先级 `-32768` 至 `-24577`，避免零优先级按动作分链或同优先级无序造成先后语义变化。规范化来源、协议和数字端口进入固定语法，名称、备注和用户表达式不进入程序。
+
+`allow/deny` 分别生成 `accept/drop`，TCP reject 使用 `tcp-reset`，UDP 使用对应 IPv4/IPv6 的端口不可达。`accept` 可能结束 firewalld 后续 zone/policy 的过滤，不能描述成只退出本应用链；其他内核基础链和云安全组仍可拒绝。会话、回环和 DNAT 的先行处理由 firewalld 本身决定；这些 rich rules 不带显式 conntrack NEW 条件，不能沿用 direct nftables 对未跟踪流量的排除声明。
+
+展开最多 8192 项，完整 policy 设置规范 JSON 最多 480 KiB，为返回字典的类型标记、缺省字段和独立身份元数据保留空间。`program_hash` 包含固定 policy 身份、全部设置、所有 rich rules 及其顺序；`settings_bytes` 覆盖完整配置。页面只展示前 128 项，分别列出业务顺序对应的 rich rules 和实际后端优先级；不把 policy 展开数标为内核总规则数或额外加入未生成的保护规则。
+
+预览结合已有宿主机诊断核对单一 firewalld、panic、混合/缺失后端视图、完整 runtime/permanent policy 清单及已有活动 policy 的优先级。同名对象尚无独立登记时拒绝接管，同优先级明确阻塞，先行的其他 policy 保留范围核对提示；诊断缓存不构成执行授权。统一响应的 `firewalld` 只在该后端编译成功时非 null，直接 nftables 的内核表信息保持独立；后端表达式和优先级在其他后端分别为空字符串和 null。
+
+`compiled=true` 仅代表完整生成，`can_apply` 仍为 false。firewalld 所有权登记、runtime 写入、永久配置确认及独立补偿尚待接入，原 direct nftables 执行器不会处理这些 rich rules。跨环境迁移可保存中立期望并查看独立编译限制，仍不自动启用、创建、reload 或应用 firewalld。实现待 P5 集中验证，未执行真实 D-Bus 操作或宿主机变更。

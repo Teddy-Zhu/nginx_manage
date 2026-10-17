@@ -238,7 +238,16 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 		if !enabled {
 			info.Warnings = append(info.Warnings, "目标防火墙模块保持停用，迁移不自动启用")
 		}
-		if _, err = firewall.CompileNFT(state.Candidate); err != nil {
+		if state.Candidate.Backend == "firewalld" {
+			if _, err = firewall.CompileFirewalld(state.Candidate); err != nil {
+				var known *fault.Error
+				if !errors.As(err, &known) {
+					return err
+				}
+				info.Warnings = append(info.Warnings, "firewalld 编译受阻："+known.Message)
+			}
+			info.Warnings = append(info.Warnings, "目标 firewalld 当前仅支持独立主机 policy 编译预览；迁入后仍是未应用期望")
+		} else if _, err = firewall.CompileNFT(state.Candidate); err != nil {
 			info.Warnings = append(info.Warnings, "目标所选后端或规则路径尚不能由当前执行器应用；可保存期望，生效须完成目标适配")
 		}
 		info.Warnings = append(info.Warnings, "迁移只保存防火墙期望策略；内核规则保持原状，须单独生成含入口保护的计划并用新连接确认")

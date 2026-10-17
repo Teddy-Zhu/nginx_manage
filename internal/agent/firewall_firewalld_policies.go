@@ -16,8 +16,6 @@ import (
 )
 
 const firewalldPolicyLimit = 64
-const firewalldPolicySettingsBytes = 64 << 10
-const firewalldPolicyInventoryBytes = 512 << 10
 
 func firewalldObjectName(value string) bool {
 	if value == "" || len(value) > 128 || strings.HasPrefix(value, "/") || strings.HasSuffix(value, "/") || strings.Contains(value, "//") {
@@ -118,7 +116,11 @@ func summarizeFirewalldPolicy(settings map[string]dbus.Variant) (*firewall.Firew
 			}
 		case "as":
 			values, ok := item.([]string)
-			if !ok || len(values) > 1024 {
+			limit := 1024
+			if key == "rich_rules" {
+				limit = firewall.MaxEntries
+			}
+			if !ok || len(values) > limit {
 				return nil, 0, invalid
 			}
 			for _, text := range values {
@@ -167,11 +169,11 @@ func summarizeFirewalldPolicy(settings map[string]dbus.Variant) (*firewall.Firew
 		}
 		canonical[key] = field{Signature: sig, Value: item}
 	}
-	if out.Entries > 4096 {
+	if out.Entries > firewall.MaxEntries {
 		return nil, 0, invalid
 	}
 	raw, err := json.Marshal(canonical)
-	if err != nil || len(raw) > firewalldPolicySettingsBytes {
+	if err != nil || len(raw) > firewall.FirewalldPolicyReadBytes {
 		return nil, 0, invalid
 	}
 	out.Hash = secure.Hash(append([]byte("firewalld.policy.settings\x00"), raw...))
@@ -235,7 +237,7 @@ func readFirewalldPolicies(ctx context.Context, conn *dbus.Conn, owner string) f
 			}
 			summary, size, err := summarizeFirewalldPolicy(settings)
 			budget += size
-			if err != nil || budget > firewalldPolicyInventoryBytes {
+			if err != nil || budget > firewall.FirewalldPolicyReadTotalBytes {
 				return failure
 			}
 			if persistent {
@@ -296,7 +298,7 @@ func validFirewalldPolicies(in firewall.FirewalldPolicyInventory) bool {
 				continue
 			}
 			hash, err := hex.DecodeString(settings.Hash)
-			if err != nil || len(hash) != 32 || strings.ToLower(settings.Hash) != settings.Hash || settings.IngressZones == nil || settings.EgressZones == nil || !firewalldZoneNames(settings.IngressZones) || !firewalldZoneNames(settings.EgressZones) || !slices.Contains([]string{"", "CONTINUE", "ACCEPT", "REJECT", "DROP"}, settings.Target) || settings.RichRules < 0 || settings.RichRules > 1024 || settings.Entries < settings.RichRules || settings.Entries > 4096 {
+			if err != nil || len(hash) != 32 || strings.ToLower(settings.Hash) != settings.Hash || settings.IngressZones == nil || settings.EgressZones == nil || !firewalldZoneNames(settings.IngressZones) || !firewalldZoneNames(settings.EgressZones) || !slices.Contains([]string{"", "CONTINUE", "ACCEPT", "REJECT", "DROP"}, settings.Target) || settings.RichRules < 0 || settings.RichRules > firewall.MaxEntries || settings.Entries < settings.RichRules || settings.Entries > firewall.MaxEntries {
 				return false
 			}
 		}

@@ -316,6 +316,18 @@ const previewColumns: DataTableColumns<FirewallPreview["entries"][number]> = [
     render: (r) => actionName(r.action),
   },
 ];
+const firewalldPreviewColumns: DataTableColumns<
+  FirewallPreview["entries"][number]
+> = [
+  ...previewColumns,
+  { title: "后端优先级", key: "backend_priority", width: 120 },
+  {
+    title: "Rich rule",
+    key: "expression",
+    minWidth: 400,
+    ellipsis: { tooltip: true },
+  },
+];
 async function load() {
   await run(async () => {
     const result = await api.firewallPolicy(controller.signal);
@@ -408,6 +420,11 @@ onUnmounted(() => controller.abort());
       排序。允许策略仅在本应用范围内生效；未匹配流量交回其余系统策略。选择后端不会切换系统
       alternatives 或停止现有管理器。
     </p>
+    <p v-if="policy.backend === 'firewalld'" class="muted">
+      firewalld 预览使用独立的 ANY → HOST
+      policy。当前仅支持不绑定接口的主机入站规则；允许动作采用 accept，可能先于后续
+      zone 或 policy 结束匹配。
+    </p>
     <div class="page-toolbar">
       <span>{{ policy.rules.length }} / 1000 条规则</span
       ><n-button
@@ -449,32 +466,59 @@ onUnmounted(() => controller.abort());
     >
     <template v-if="preview.compiled">
       <dl>
-        <dt>目标表 / 链</dt>
-        <dd>{{ preview.table }} / {{ preview.chain }}</dd>
-        <dt>挂接点</dt>
-        <dd>
-          {{ preview.hook }}，优先级 {{ preview.priority }}，默认
-          {{ preview.default_policy }}
-        </dd>
+        <template v-if="preview.firewalld">
+          <dt>目标 policy</dt>
+          <dd>{{ preview.firewalld.policy }}</dd>
+          <dt>流量范围</dt>
+          <dd>
+            {{ preview.firewalld.ingress_zones.join("、") }} →
+            {{ preview.firewalld.egress_zones.join("、") }}
+          </dd>
+          <dt>优先级 / 默认目标</dt>
+          <dd>
+            {{ preview.firewalld.priority }} / {{ preview.firewalld.target }}
+          </dd>
+          <dt>完整配置规模</dt>
+          <dd>
+            {{ preview.firewalld.settings_bytes }} 字节，未写入运行或永久配置
+          </dd>
+        </template>
+        <template v-else>
+          <dt>目标表 / 链</dt>
+          <dd>{{ preview.table }} / {{ preview.chain }}</dd>
+          <dt>挂接点</dt>
+          <dd>
+            {{ preview.hook }}，优先级 {{ preview.priority }}，默认
+            {{ preview.default_policy }}
+          </dd>
+        </template>
         <dt>规则数量</dt>
         <dd>
           {{ preview.logical_rules }} 条启用策略 →
-          {{ preview.generated_rules }} 条内核规则，包含 2 条会话/回环保护规则
+          <template v-if="preview.firewalld"
+            >{{ preview.generated_rules }} 条 rich rules</template
+          >
+          <template v-else
+            >{{ preview.generated_rules }} 条内核规则，包含 2
+            条会话/回环保护规则</template
+          >
         </dd>
         <dt>编译摘要</dt>
         <dd>
           <code>{{ preview.program_hash }}</code>
         </dd>
-        <dt>内核代次</dt>
-        <dd>
-          {{ preview.kernel.available ? preview.kernel.generation : "未知" }}
-        </dd>
-        <dt>目标表快照</dt>
-        <dd>
-          <code>{{
-            preview.kernel.fingerprint || preview.kernel.reason || "未取得"
-          }}</code>
-        </dd>
+        <template v-if="!preview.firewalld">
+          <dt>内核代次</dt>
+          <dd>
+            {{ preview.kernel.available ? preview.kernel.generation : "未知" }}
+          </dd>
+          <dt>目标表快照</dt>
+          <dd>
+            <code>{{
+              preview.kernel.fingerprint || preview.kernel.reason || "未取得"
+            }}</code>
+          </dd>
+        </template>
         <template v-if="preview.transaction_hash">
           <dt>新建事务摘要</dt>
           <dd>
@@ -499,10 +543,10 @@ onUnmounted(() => controller.abort());
         仅展示前 128 条展开结果，全部规则已参与编译和数量检查。
       </p>
       <n-data-table
-        :columns="previewColumns"
+        :columns="preview.firewalld ? firewalldPreviewColumns : previewColumns"
         :data="preview.entries"
         :pagination="{ pageSize: 20 }"
-        :scroll-x="850"
+        :scroll-x="preview.firewalld ? 1400 : 850"
       />
     </template>
   </section>

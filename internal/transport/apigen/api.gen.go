@@ -1934,40 +1934,53 @@ type FirewallPreviewInput struct {
 
 // FirewallPreviewEntry defines model for FirewallPreviewEntry.
 type FirewallPreviewEntry struct {
-	RuleId    string            `json:"rule_id"`
-	Family    string            `json:"family"`
-	Protocol  string            `json:"protocol"`
-	Source    string            `json:"source"`
-	Ports     FirewallPortRange `json:"ports"`
-	Action    string            `json:"action"`
-	Interface string            `json:"interface"`
-	Priority  int               `json:"priority"`
+	BackendPriority *int              `json:"backend_priority"`
+	Expression      string            `json:"expression"`
+	RuleId          string            `json:"rule_id"`
+	Family          string            `json:"family"`
+	Protocol        string            `json:"protocol"`
+	Source          string            `json:"source"`
+	Ports           FirewallPortRange `json:"ports"`
+	Action          string            `json:"action"`
+	Interface       string            `json:"interface"`
+	Priority        int               `json:"priority"`
 }
 
 // FirewallPreview defines model for FirewallPreview.
 type FirewallPreview struct {
-	Kernel              FirewallKernelView     `json:"kernel"`
-	TransactionHash     string                 `json:"transaction_hash"`
-	TransactionBytes    int                    `json:"transaction_bytes"`
-	TransactionMessages int                    `json:"transaction_messages"`
-	Version             int64                  `json:"version"`
-	PolicyHash          string                 `json:"policy_hash"`
-	Backend             string                 `json:"backend"`
-	Compiled            bool                   `json:"compiled"`
-	CanApply            bool                   `json:"can_apply"`
-	Table               string                 `json:"table"`
-	Chain               string                 `json:"chain"`
-	Hook                string                 `json:"hook"`
-	Priority            int                    `json:"priority"`
-	DefaultPolicy       string                 `json:"default_policy"`
-	LogicalRules        int                    `json:"logical_rules"`
-	GeneratedRules      int                    `json:"generated_rules"`
-	ProgramHash         string                 `json:"program_hash"`
-	Entries             []FirewallPreviewEntry `json:"entries"`
-	Truncated           bool                   `json:"truncated"`
-	ObservedAt          int64                  `json:"observed_at"`
-	Errors              []string               `json:"errors"`
-	Warnings            []string               `json:"warnings"`
+	Firewalld           *FirewallFirewalldPreview `json:"firewalld"`
+	Kernel              FirewallKernelView        `json:"kernel"`
+	TransactionHash     string                    `json:"transaction_hash"`
+	TransactionBytes    int                       `json:"transaction_bytes"`
+	TransactionMessages int                       `json:"transaction_messages"`
+	Version             int64                     `json:"version"`
+	PolicyHash          string                    `json:"policy_hash"`
+	Backend             string                    `json:"backend"`
+	Compiled            bool                      `json:"compiled"`
+	CanApply            bool                      `json:"can_apply"`
+	Table               string                    `json:"table"`
+	Chain               string                    `json:"chain"`
+	Hook                string                    `json:"hook"`
+	Priority            int                       `json:"priority"`
+	DefaultPolicy       string                    `json:"default_policy"`
+	LogicalRules        int                       `json:"logical_rules"`
+	GeneratedRules      int                       `json:"generated_rules"`
+	ProgramHash         string                    `json:"program_hash"`
+	Entries             []FirewallPreviewEntry    `json:"entries"`
+	Truncated           bool                      `json:"truncated"`
+	ObservedAt          int64                     `json:"observed_at"`
+	Errors              []string                  `json:"errors"`
+	Warnings            []string                  `json:"warnings"`
+}
+
+// FirewallFirewalldPreview defines model for FirewallFirewalldPreview.
+type FirewallFirewalldPreview struct {
+	Policy        string   `json:"policy"`
+	Priority      int32    `json:"priority"`
+	Target        string   `json:"target"`
+	IngressZones  []string `json:"ingress_zones"`
+	EgressZones   []string `json:"egress_zones"`
+	SettingsBytes int      `json:"settings_bytes"`
 }
 
 type SetFirewallPolicyParams struct {

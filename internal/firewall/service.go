@@ -148,7 +148,13 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 			out.LogicalRules++
 		}
 	}
-	program, e := CompileNFT(view.Policy)
+	var program *NFTProgram
+	var managed *FirewalldProgram
+	if view.Policy.Backend == "firewalld" {
+		managed, e = CompileFirewalld(view.Policy)
+	} else {
+		program, e = CompileNFT(view.Policy)
+	}
 	if e != nil {
 		var known *fault.Error
 		if errors.As(e, &known) {
@@ -156,6 +162,15 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 		} else {
 			return out, e
 		}
+	} else if managed != nil {
+		out.Compiled = true
+		out.Firewalld = managed.Preview()
+		out.Priority = FirewalldHostPriority
+		out.DefaultPolicy = managed.Settings.Target
+		out.GeneratedRules = len(managed.Settings.RichRules)
+		out.ProgramHash = managed.Hash
+		out.Entries = append(out.Entries, managed.Entries[:min(128, len(managed.Entries))]...)
+		out.Truncated = len(managed.Entries) > len(out.Entries)
 	} else {
 		out.Compiled = true
 		out.Table = "inet " + NFTHostTable
@@ -182,6 +197,9 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 			out.Warnings = append(out.Warnings, observed.Warnings...)
 			if !observed.Available || observed.Scope != "host" {
 				out.Errors = append(out.Errors, "宿主机观测范围未确认")
+			}
+			if view.Policy.Backend == "firewalld" {
+				inspectFirewalldPreview(&out, observed)
 			}
 			if view.Policy.Backend == "direct-nftables" {
 				if !observed.Kernel.Available {
@@ -239,6 +257,12 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 	if current != version {
 		return out, fault.Conflict("预览期间策略已变化，请重新生成")
 	}
-	out.Warnings = append(out.Warnings, "保存策略及编译结果均不代表内核生效；执行需生成应用计划并通过新连接确认", "allow 只终止本应用链的判断，其他基础链及云安全组仍可拒绝连接", "规则仅匹配 conntrack NEW；回环及已建立/关联会话保留，未跟踪流量不在此匹配范围")
+	out.Warnings = append(out.Warnings, "保存策略及编译结果均不代表内核生效；执行需生成应用计划并通过新连接确认")
+	if view.Policy.Backend == "firewalld" {
+		out.Errors = append(out.Errors, "firewalld 当前仅支持编译预览，不支持应用、永久配置确认或恢复")
+		out.Warnings = append(out.Warnings, "独立 policy 使用 ANY → HOST、负优先级及 CONTINUE 默认目标；不代表接管现有 zone 或 policy", "allow 编译为 firewalld accept，可提前结束该管理器的后续过滤；其他内核基础链和云安全组仍可拒绝连接", "会话与回环处理由 firewalld 自身规则决定；rich rules 不显式限制 conntrack NEW，未跟踪流量也可能命中端口规则")
+	} else {
+		out.Warnings = append(out.Warnings, "allow 只终止本应用链的判断，其他基础链及云安全组仍可拒绝连接", "规则仅匹配 conntrack NEW；回环及已建立/关联会话保留，未跟踪流量不在此匹配范围")
+	}
 	return out, nil
 }
