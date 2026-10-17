@@ -7,7 +7,7 @@
 诊断分别返回：
 
 - firewalld 当前运行、panic、默认 zone、活动接口/来源、runtime/permanent policy 及活动绑定，以及配置中的后端选择。通过固定本机 D-Bus 和唯一服务所有者读取，禁止自动启动；配置选择不视为内核运行后端。
-- UFW 受信工具可用性、`ufw.conf` 中的 ENABLED 和 `ufw status` 当前状态；未知值保留 null，启用配置与当前状态不一致时告警。
+- UFW 受信工具可用性、`ufw.conf` 中的 ENABLED、`/etc/default/ufw` 中的 IPV6、`ufw status` 当前状态及 `ufw show added` 用户规则报告；未知配置值保留 null，启用配置与当前状态不一致时告警。报告及编译限制见末节。
 - 默认 IPv4/IPv6 iptables 命令后端，以及 nftables、iptables-nft IPv4/IPv6、iptables-legacy IPv4/IPv6 五个独立结构视图。明确版本后再读取显式后端的 save 工具，不切换 alternatives。仅含表/链、hook/priority、默认策略、规则数和 DOCKER-USER 跳转标记，不返回规则表达式、集合内容、注释或计数器。
 - Docker `ip/ip6 docker-bridges` 与 `filter/DOCKER-USER` 标记、FORWARD 跳转线索。未核对 Docker 实例、DNAT 原始目的地址或实际数据包路径；原生 nftables 标记保持实验适配只读。
 
@@ -33,7 +33,7 @@
 
 ## 编译预览
 
-`POST /api/v1/firewall/preview` 要求 `read` 和已保存版本，浏览器使用 CSRF；同一节点最多一份在途预览，结束前再次核对版本。直接 nftables 编译器使用固定库构造实际表达式与摘要，但不创建连接或发送 netlink 事务；firewalld 编译范围见下节。启用的 Docker 发布端口规则及其他尚未适配的后端明确阻塞，不能降格为 INPUT 或自动切换管理器。
+`POST /api/v1/firewall/preview` 要求 `read` 和已保存版本，浏览器使用 CSRF；同一节点最多一份在途预览，结束前再次核对版本。直接 nftables 编译器使用固定库构造实际表达式与摘要，但不创建连接或发送 netlink 事务；firewalld 与 UFW 编译范围见下节。启用的 Docker 发布端口规则及其他尚未适配的后端明确阻塞，不能降格为 INPUT 或自动切换管理器。
 
 当前编译目标为独立 `inet nginxpanel_host` 表、`input` 过滤基础链、hook 优先级 10、自有链默认 accept。前两条返回回环及 ESTABLISHED/RELATED 流量；业务规则仅匹配 conntrack NEW，按地址族、来源、入站接口、协议和目的端口展开。allow 返回其余系统策略，deny 丢弃，reject 对 TCP 使用 RST、UDP 使用对应地址族不可达响应。未跟踪流量不在本阶段匹配范围内，不清理已有会话。含两条保护规则的总展开数最多 8192，超限失败，不返回部分成功；预览条目最多展示前 128 条，计数及程序摘要覆盖完整结果。
 
@@ -100,7 +100,7 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 
 `PUT /system/modules/firewall` 停用时必须指定 `firewall_rules`。`keep` 明确保留已确认规则；`remove` 另需 `read/security.write` 及已确认的 `firewall_operation_id`，只有原操作仍为当前确认的移除结果且无活动变更才停用；后续应用失败并恢复该空表时仍可引用原确认操作，后续成功应用会使其失效。初始空表经核对且尚无已确认规则时无需生成空的移除操作，可省略操作 ID 直接停用。公共执行提交与最终停用共用锁，防止停用核对期间插入新应用；失败不伪造停用成功，可继续引用同一操作重试。启用或其他模块拒绝携带停用选项。自动扫描的功能模块页面提供保留/先移除选择，防火墙应用页完成移除和新连接确认后提供最终停用；远程转发不执行移除流程。
 
-当前仅开放 direct-nftables 主机入站执行。Docker 转发路径、其余管理器/iptables 写入适配、Fail2ban action 仍待实施。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
+当前已接入 direct-nftables 与 firewalld 主机入站执行，UFW 支持下述只读报告及编译预览。Docker 转发路径、UFW/iptables 写入适配仍待实施；Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 
@@ -129,7 +129,7 @@ Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。�
 
 展开最多 8192 项，完整 policy 设置规范 JSON 最多 480 KiB，为返回字典的类型标记、缺省字段和独立身份元数据保留空间。`program_hash` 包含固定 policy 身份、全部设置、所有 rich rules 及其顺序；`settings_bytes` 覆盖完整配置。页面只展示前 128 项，分别列出业务顺序对应的 rich rules 和实际后端优先级；不把 policy 展开数标为内核总规则数或额外加入未生成的保护规则。
 
-预览结合已有宿主机诊断核对单一 firewalld、panic、混合/缺失后端视图、完整 runtime/permanent policy 清单及已有活动 policy 的优先级。同名对象尚无独立登记时拒绝接管，同优先级明确阻塞，先行的其他 policy 保留范围核对提示；诊断缓存不构成执行授权。统一响应的 `firewalld` 只在该后端编译成功时非 null，直接 nftables 的内核表信息保持独立；后端表达式和优先级在其他后端分别为空字符串和 null。
+预览结合已有宿主机诊断核对单一 firewalld、panic、混合/缺失后端视图、完整 runtime/permanent policy 清单及已有活动 policy 的优先级。同名对象尚无独立登记时拒绝接管，同优先级明确阻塞，先行的其他 policy 保留范围核对提示；诊断缓存不构成执行授权。统一响应的 `firewalld` 只在该后端编译成功时非 null，直接 nftables 的内核表信息保持独立；UFW 在 `expression` 展示命令且后端优先级为 null，其他后端表达式为空。
 
 `compiled=true` 仅代表完整生成，`can_apply` 仍为 false。firewalld 使用独立执行计划、运行/永久配置确认及持久恢复意图，见末节；原 direct nftables 执行器不处理这些 rich rules。跨环境迁移可保存中立期望并查看独立编译限制，仍不自动启用、创建、reload 或应用 firewalld。实现待 P5 集中验证，未执行真实 D-Bus 操作或宿主机变更。
 
@@ -175,3 +175,20 @@ nginxpanel firewalld-remove --data-dir /srv/nginxpanel --firewall-scope host
 未确认、期限已到、控制通道中断、Agent 停止或重启均恢复最后确认的运行和永久配置；重启不续做未确认候选。恢复先处理运行规则，再处理永久规则，只接受原登记完整设置和持久旧/新程序中的精确表达式子集，以容纳逐条写入的部分失败；第三方规则、元数据漂移、对象或活动绑定缺失均保留待恢复，禁止盲目覆盖或重建。已确认配置每 30 秒核对，原受管规则缺失时仅恢复有原业务意图且可证明的规则；不重建缺失的 policy，不自动接管同名对象。恢复与保护采样不依赖 serve 或模块启用，也不因撤销新操作授权停止。诊断 `managed` 表示已确认配置及独立回执通过，候选或未知调用期间保持未核对状态。
 
 `accept` 可能结束后续 firewalld 过滤，其他内核链和云安全组仍可能阻止连接；会话、回环和 DNAT 先行处理由 firewalld 决定，不声称只匹配 NEW。原空登记命令不负责业务材料退役，有业务恢复材料时禁止重新登记或移除原登记。root 材料不进入跨环境配置迁移，目标节点仍须独立登记及应用。Agent 为 73，数据库/迁移归档仍为 32/6。实现及源码审阅完成后集中整理格式，未执行生成器、构建、类型检查、lint、测试、浏览器或真实宿主机操作，待 P5 集中验证。
+
+
+## UFW 用户规则与主机入站编译
+
+诊断增加 `ufw.ipv6` 和 `ufw.rule_inventory`。Agent 只运行固定的 `ufw show added`，使用受信绝对路径、固定 C 语言环境、两秒命令期限及 512 KiB 输出上限。用户规则报告须完整符合已知格式，最多 8192 条、每条最多 4096 字节；未知内容、控制字符、无效 UTF-8、失败或超限均返回不可用，不返回成功前缀。公开报告仅展示前 128 条且最多 64 KiB，保留完整报告计数与 SHA-256。启用及 IPv6 配置分别从 root 持有的固定文件读取，未知或歧义保留 null；不求值 shell 内容。
+
+官方 `show added` 会合并部分相同双栈命令，汇总顺序也不等于各地址族完整内核顺序。报告文本仅供诊断展示，不能重放、据此恢复内核、推断完整系统策略或认领含本应用注释的第三方规则。状态、配置、用户报告及内核结构为独立读取，不承诺原子快照。
+
+UFW 编译支持启用的 `host_input`、TCP/UDP、单端口/范围、IPv4/IPv6/双栈、来源、接口和 allow/deny/reject，沿中立策略的优先级及稳定 ID 顺序生成参数数组。任意来源和目标显式写为对应地址族的 `/0`，避免隐式扩展另一地址族。编译注释使用固定前缀、规则 ID 和匹配条件摘要；业务名称及备注不进入参数。命令预览来自生成参数，不通过 shell，报告文本不进入编译器。`program_hash` 覆盖全部参数和顺序，最多 8192 条及 480 KiB 规范参数 JSON；页面只展示前 128 条。
+
+UFW 添加相同匹配条件可能更新原动作或注释，不能用不同注释保留重复规则。因此编译器拒绝同地址族、协议、规范来源、目标端口及接口的重复匹配项，即使动作不同。此检查只排除本次期望内部重复；现有第三方规则冲突及插入位置仍须在执行链路独立核对。Docker 发布端口明确阻塞；不把 INPUT 命令视为 FORWARD 保护。
+
+逻辑预览核对单一已启用 UFW、完整用户报告、混合/缺失内核视图、绑定接口及 IPv6 配置。`generated_rules` 表示生成命令数，后端优先级为 null，不增加未生成的会话或回环规则。UFW 自身的默认策略、会话与回环处理保持不变；allow 可能提前结束后续 UFW 规则，其他内核链及云安全组仍可拒绝连接。
+
+当前 `can_apply=false`；dry-run、独立所有权登记、与既有规则的冲突/顺序证明、实际应用、新连接确认及持久恢复仍待实施。迁移预检复用该编译器，迁入只保存中立期望，不执行 UFW。Agent 为 74，数据库/迁移归档仍为 32/6。实现与源码审阅完成，未运行构建、类型检查、lint、测试、浏览器、真实 UFW 命令或宿主机变更，待 P5 集中验证。
+
+依据：[Ubuntu UFW 手册](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html)、[Ubuntu 官方 UFW 0.36.2 源码归档](https://archive.ubuntu.com/ubuntu/pool/main/u/ufw/ufw_0.36.2.orig.tar.gz) 中的 `frontend.get_show_added`、`UFWCommandRule.get_command`、`UFWRule.match` 与后端规则更新流程。

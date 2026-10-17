@@ -35,6 +35,8 @@ func firewallRead(ctx context.Context, name, action string, limit int) ([]byte, 
 		args = []string{"--json", "--numeric", "--terse", "list", "ruleset"}
 	case name == "ufw" && action == "status":
 		args = []string{"status"}
+	case name == "ufw" && action == "added":
+		args = []string{"show", "added"}
 	case (name == "iptables" || name == "ip6tables" || name == "iptables-nft" || name == "ip6tables-nft" || name == "iptables-legacy" || name == "ip6tables-legacy") && action == "version":
 		args = []string{"--version"}
 	case (name == "iptables-nft-save" || name == "ip6tables-nft-save" || name == "iptables-legacy-save" || name == "ip6tables-legacy-save") && action == "rules":

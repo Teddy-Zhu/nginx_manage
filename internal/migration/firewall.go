@@ -246,7 +246,16 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 				}
 				info.Warnings = append(info.Warnings, "firewalld 编译受阻："+known.Message)
 			}
-			info.Warnings = append(info.Warnings, "目标 firewalld 当前仅支持独立主机 policy 编译预览；迁入后仍是未应用期望")
+			info.Warnings = append(info.Warnings, "目标 firewalld 须单独核对本机登记与入口保护；迁入后仍是未应用期望")
+		} else if state.Candidate.Backend == "ufw" {
+			if _, err = firewall.CompileUFW(state.Candidate); err != nil {
+				var known *fault.Error
+				if !errors.As(err, &known) {
+					return err
+				}
+				info.Warnings = append(info.Warnings, "UFW 编译受阻："+known.Message)
+			}
+			info.Warnings = append(info.Warnings, "目标 UFW 仅支持用户规则读取及编译预览；迁入期望不写入 UFW，应用与独立恢复尚未接入")
 		} else if _, err = firewall.CompileNFT(state.Candidate); err != nil {
 			info.Warnings = append(info.Warnings, "目标所选后端或规则路径尚不能由当前执行器应用；可保存期望，生效须完成目标适配")
 		}

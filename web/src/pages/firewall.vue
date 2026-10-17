@@ -24,6 +24,7 @@ import {
 } from "naive-ui";
 import { apiError, useNodeAPI, type FirewallObservation } from "../api/client";
 import FirewalldPolicies from "../components/FirewalldPolicies.vue";
+import UFWUserRules from "../components/UFWUserRules.vue";
 
 const api = useNodeAPI();
 const observation = ref<FirewallObservation | null>(null);
@@ -314,7 +315,10 @@ onUnmounted(() => {
             <dd>{{ status(observation.ufw.enabled) }}</dd>
             <dt>当前活动</dt>
             <dd>{{ status(observation.ufw.active) }}</dd>
+            <dt>IPv6 配置</dt>
+            <dd>{{ status(observation.ufw.ipv6) }}</dd>
           </dl>
+          <UFWUserRules :inventory="observation.ufw.rule_inventory" />
           <n-alert
             v-if="observation.ufw.reason"
             type="warning"

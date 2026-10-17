@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -140,10 +141,15 @@ func readFirewalld(parent context.Context) firewall.Firewalld {
 }
 
 func ufwConfigured() (*bool, error) {
-	if e := existingRootDirectory("/etc/ufw"); e != nil {
+	return ufwConfigurationFlag("/etc/ufw/ufw.conf", "ENABLED")
+}
+
+// Only the two fixed system configuration locations call this reader.
+func ufwConfigurationFlag(path, field string) (*bool, error) {
+	if e := existingRootDirectory(filepath.Dir(path)); e != nil {
 		return nil, e
 	}
-	f, e := os.OpenFile("/etc/ufw/ufw.conf", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if e != nil {
 		return nil, e
 	}
@@ -167,7 +173,7 @@ func ufwConfigured() (*bool, error) {
 			continue
 		}
 		key, value, ok := strings.Cut(line, "=")
-		if !ok || strings.TrimSpace(key) != "ENABLED" {
+		if !ok || strings.TrimSpace(key) != field {
 			continue
 		}
 		// No shell evaluation, expansion, guessed defaults or last-key wins.
@@ -178,7 +184,7 @@ func ufwConfigured() (*bool, error) {
 		enabled = firewallBool(value == "yes")
 	}
 	if enabled == nil {
-		return nil, errors.New("ufw enable state is unspecified")
+		return nil, errors.New("ufw configuration flag is unspecified")
 	}
 	after, e := f.Stat()
 	if e != nil || after.Size() != int64(len(raw)) || after.ModTime() != info.ModTime() {
@@ -188,7 +194,7 @@ func ufwConfigured() (*bool, error) {
 }
 
 func readUFW(ctx context.Context) firewall.UFW {
-	out := firewall.UFW{Reason: "未发现可用的 UFW 程序"}
+	out := firewall.UFW{RuleInventory: firewall.EmptyUFWRules("尚未读取 UFW 用户规则"), Reason: "未发现可用的 UFW 程序"}
 	for _, path := range []string{"/usr/sbin/ufw", "/usr/bin/ufw", "/sbin/ufw", "/bin/ufw"} {
 		if _, e := trustedFile(path, true); e == nil {
 			out.Installed = true
@@ -197,6 +203,8 @@ func readUFW(ctx context.Context) firewall.UFW {
 	}
 	configured, configErr := ufwConfigured()
 	out.Enabled = configured
+	ipv6, ipv6Err := ufwConfigurationFlag("/etc/default/ufw", "IPV6")
+	out.IPv6 = ipv6
 	if !out.Installed {
 		if configErr == nil {
 			out.Reason = "存在 UFW 启用配置，但程序不可用"
@@ -219,8 +227,19 @@ func readUFW(ctx context.Context) firewall.UFW {
 		return out
 	}
 	out.Reason = ""
-	if configErr != nil {
-		out.Reason = "UFW 当前状态已读取，持久启用配置无法确认"
+	if configErr != nil || ipv6Err != nil {
+		out.Reason = "UFW 当前状态已读取，持久启用或 IPv6 配置无法完整确认"
+	}
+	added, e := firewallRead(ctx, "ufw", "added", firewall.UFWReadBytes)
+	if e != nil {
+		out.RuleInventory = firewall.EmptyUFWRules("UFW 用户规则读取失败、超时或超过预算")
+	} else {
+		inventory, parseErr := parseUFWAdded(added)
+		if parseErr != nil {
+			out.RuleInventory = firewall.EmptyUFWRules("UFW 用户规则报告无法完整解析或超过预算")
+		} else {
+			out.RuleInventory = inventory
+		}
 	}
 	return out
 }

@@ -163,6 +163,11 @@ func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error)
 		e = errors.New("invalid firewall observation")
 	}
 	if e == nil {
+		if !validUFWRules(out.UFW.RuleInventory) || out.UFW.RuleInventory.Available && !out.UFW.Installed {
+			e = errors.New("invalid UFW rule inventory")
+		}
+	}
+	if e == nil {
 		if !validFirewalldPolicies(out.Firewalld.PolicyInventory) || !validFirewalldRegistrationView(out.Firewalld.Registration, out.Firewalld.PolicyInventory) || out.Firewalld.PolicyInventory.Available && (out.Firewalld.Running == nil || !*out.Firewalld.Running) {
 			e = errors.New("invalid firewalld policy inventory")
 		}

@@ -271,7 +271,7 @@ paths:
     post:
       operationId: previewFirewall
       x-scopes: [read]
-      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式及程序摘要，firewalld 生成独立 ANY 到 HOST policy 的有界 rich rules、顺序与完整配置摘要。其他后端、Docker 路径及 firewalld 接口选择明确阻塞。结合 Agent 诊断核对环境；不发送 netlink 或 D-Bus 写操作，不是执行授权或外部连通性证明，can_apply 为 false；firewalld 当前仅支持编译预览。
+      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式，firewalld 生成独立 ANY 到 HOST policy 的 rich rules，UFW 生成明确地址族、接口、端口及稳定注释的类型化命令预览，拒绝重复匹配条件。结合 Agent 诊断核对环境；此入口不写内核或管理器，can_apply 为 false，执行须另走独立计划。UFW 当前仅支持读取与编译预览，未确定与既有规则的插入关系，应用、dry-run、所有权登记和独立恢复尚未接入；Docker 路径及未适配条件明确阻塞。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPreviewInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -279,7 +279,7 @@ paths:
     get:
       operationId: getFirewall
       x-scopes: [read]
-      description: 宿主机只读防火墙诊断；返回 FirewallObservation。分别读取管理器、默认 iptables 命令、nft/legacy 规则结构和 Docker 标记；不修改规则，不将表名或链名当作所有权或外部可达性证明。Agent 缓存 30 秒，缺失或超限视图明确不可用。
+      description: 宿主机只读防火墙诊断；返回 FirewallObservation。分别读取管理器、默认 iptables 命令、nft/legacy 规则结构和 Docker 标记，以及 UFW 启用/IPv6 配置与有界用户规则报告；报告命令仅供展示，不重放或推断双栈内核顺序。不修改规则，不将名称、注释或摘要当作所有权或外部可达性证明。Agent 缓存 30 秒，缺失或超限视图明确不可用。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /backups:
     get:
@@ -4631,12 +4631,26 @@ components:
     FirewallUFW:
       type: object
       additionalProperties: false
-      required: ["installed", "enabled", "active", "reason"]
+      required: ["installed", "enabled", "active", "ipv6", "rule_inventory", "reason"]
       properties:
         installed: {"type": "boolean"}
         enabled: {"type": "boolean", "nullable": true}
         active: {"type": "boolean", "nullable": true}
+        ipv6: {type: boolean, nullable: true, description: 本机受信 /etc/default/ufw 的 IPV6 配置，无法严格读取时为 null；不代表内核 IPv6 规则生效。}
+        rule_inventory: {$ref: '#/components/schemas/FirewallUFWRuleInventory'}
         reason: {"type": "string"}
+    FirewallUFWRuleInventory:
+      type: object
+      additionalProperties: false
+      required: [available, hash, rules, commands, truncated, reason]
+      description: 官方 ufw show added 的有界独立只读报告；最多 512 KiB、8192 条记录，失败不返回成功前缀。双栈可能合并显示、顺序仅为汇总，不证明内核状态或所有权，命令字符串仅供展示，不可重放。
+      properties:
+        available: {type: boolean}
+        hash: {type: string, description: 完整原始报告的 SHA-256；不可用时为空。}
+        rules: {type: integer, minimum: 0, maximum: 8192, description: 报告命令记录数，不是内核规则数。}
+        commands: {type: array, maxItems: 128, items: {type: string, maxLength: 4096}, description: 最多 64 KiB 的报告前缀。}
+        truncated: {type: boolean}
+        reason: {type: string}
     FirewallIptables:
       type: object
       additionalProperties: false
@@ -4744,7 +4758,7 @@ components:
       required: ["rule_id", "family", "protocol", "source", "ports", "action", "interface", "priority", "backend_priority", "expression"]
       properties:
         backend_priority: {type: integer, nullable: true, minimum: -32768, maximum: -24577, description: firewalld 展开后的唯一负优先级；其他后端为 null。}
-        expression: {type: string, maxLength: 512, description: firewalld 生成的完整 rich rule；其他后端为空，不接受用户提供表达式。}
+        expression: {type: string, maxLength: 512, description: firewalld 生成的完整 rich rule，或 UFW 生成参数的命令预览；其他后端为空，不接受用户提供表达式或报告命令作为执行输入。}
         rule_id: {"type": "string"}
         family: {"type": "string"}
         protocol: {"type": "string"}
@@ -4786,7 +4800,7 @@ components:
         priority: {"type": "integer"}
         default_policy: {"type": "string"}
         logical_rules: {"type": "integer"}
-        generated_rules: {"type": "integer", "description": "直接 nftables 为含回环/会话保护的内核规则数量；firewalld 为 rich rule 数量，不计入管理器原有规则。"}
+        generated_rules: {"type": "integer", "description": "直接 nftables 为含回环/会话保护的内核规则数量；firewalld 为 rich rule 数量；UFW 为生成命令数，不计入管理器原有规则。"}
         program_hash: {"type": "string"}
         entries: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallPreviewEntry"}, "maxItems": 128}
         truncated: {"type": "boolean"}

@@ -150,9 +150,13 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 	}
 	var program *NFTProgram
 	var managed *FirewalldProgram
-	if view.Policy.Backend == "firewalld" {
+	var ufw *UFWProgram
+	switch view.Policy.Backend {
+	case "firewalld":
 		managed, e = CompileFirewalld(view.Policy)
-	} else {
+	case "ufw":
+		ufw, e = CompileUFW(view.Policy)
+	default:
 		program, e = CompileNFT(view.Policy)
 	}
 	if e != nil {
@@ -171,6 +175,14 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 		out.ProgramHash = managed.Hash
 		out.Entries = append(out.Entries, managed.Entries[:min(128, len(managed.Entries))]...)
 		out.Truncated = len(managed.Entries) > len(out.Entries)
+	} else if ufw != nil {
+		out.Compiled = true
+		out.Hook = "input"
+		out.DefaultPolicy = "unchanged"
+		out.GeneratedRules = len(ufw.Rules)
+		out.ProgramHash = ufw.Hash
+		out.Entries = append(out.Entries, ufw.Entries[:min(128, len(ufw.Entries))]...)
+		out.Truncated = len(ufw.Entries) > len(out.Entries)
 	} else {
 		out.Compiled = true
 		out.Table = "inet " + NFTHostTable
@@ -200,6 +212,32 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 			}
 			if view.Policy.Backend == "firewalld" {
 				inspectFirewalldPreview(&out, observed)
+			}
+			if view.Policy.Backend == "ufw" {
+				if observed.Manager != "ufw" || observed.UFW.Active == nil || !*observed.UFW.Active || observed.UFW.Enabled == nil || !*observed.UFW.Enabled {
+					out.Errors = append(out.Errors, "目标未确认由已启用的单一 UFW 管理，不能切换或接管管理器")
+				}
+				if !observed.UFW.RuleInventory.Available {
+					out.Errors = append(out.Errors, "UFW 用户规则报告无法完整读取")
+				}
+				if observed.Backend == "mixed" {
+					out.Errors = append(out.Errors, "观察到混合内核后端，须先核对规则所有权")
+				}
+				complete := len(observed.Rulesets) == 5
+				for _, set := range observed.Rulesets {
+					complete = complete && set.Available
+				}
+				if !complete {
+					out.Errors = append(out.Errors, "部分内核后端视图不完整，不能排除其他规则体系")
+				}
+				if ufw != nil {
+					for _, entry := range ufw.Entries {
+						if entry.Family == "ipv6" && (observed.UFW.IPv6 == nil || !*observed.UFW.IPv6) {
+							out.Errors = append(out.Errors, "目标 UFW 的 IPv6 配置未确认启用，不能承接 IPv6 规则")
+							break
+						}
+					}
+				}
 			}
 			if view.Policy.Backend == "direct-nftables" {
 				if !observed.Kernel.Available {
@@ -259,8 +297,10 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 	}
 	out.Warnings = append(out.Warnings, "保存策略及编译结果均不代表内核生效；执行需生成应用计划并通过新连接确认")
 	if view.Policy.Backend == "firewalld" {
-		out.Errors = append(out.Errors, "firewalld 当前仅支持编译预览，不支持应用、永久配置确认或恢复")
 		out.Warnings = append(out.Warnings, "独立 policy 使用 ANY → HOST、负优先级及 CONTINUE 默认目标；不代表接管现有 zone 或 policy", "allow 编译为 firewalld accept，可提前结束该管理器的后续过滤；其他内核基础链和云安全组仍可拒绝连接", "会话与回环处理由 firewalld 自身规则决定；rich rules 不显式限制 conntrack NEW，未跟踪流量也可能命中端口规则")
+	} else if view.Policy.Backend == "ufw" {
+		out.Errors = append(out.Errors, "UFW 当前仅支持用户规则读取与编译预览，应用、dry-run、所有权登记和独立恢复尚未接入")
+		out.Warnings = append(out.Warnings, "命令顺序仅表示中立策略内部顺序；尚未确定与现有 UFW 规则的插入关系，注释不构成所有权证明", "UFW 可更新相同匹配条件的既有规则，执行前必须排除第三方规则冲突，不能重放诊断报告", "默认策略、回环、已建立会话及其他 UFW 规则保持由管理器处理；allow 可能终止后续 UFW 判断，云安全组和其他内核链仍可拒绝连接")
 	} else {
 		out.Warnings = append(out.Warnings, "allow 只终止本应用链的判断，其他基础链及云安全组仍可拒绝连接", "规则仅匹配 conntrack NEW；回环及已建立/关联会话保留，未跟踪流量不在此匹配范围")
 	}

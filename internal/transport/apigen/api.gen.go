@@ -1837,10 +1837,22 @@ type FirewallZone struct {
 
 // FirewallUFW defines model for FirewallUFW.
 type FirewallUFW struct {
-	Installed bool   `json:"installed"`
-	Enabled   *bool  `json:"enabled"`
-	Active    *bool  `json:"active"`
-	Reason    string `json:"reason"`
+	Ipv6          *bool                    `json:"ipv6"`
+	RuleInventory FirewallUFWRuleInventory `json:"rule_inventory"`
+	Installed     bool                     `json:"installed"`
+	Enabled       *bool                    `json:"enabled"`
+	Active        *bool                    `json:"active"`
+	Reason        string                   `json:"reason"`
+}
+
+// FirewallUFWRuleInventory defines model for FirewallUFWRuleInventory.
+type FirewallUFWRuleInventory struct {
+	Available bool     `json:"available"`
+	Hash      string   `json:"hash"`
+	Rules     int      `json:"rules"`
+	Commands  []string `json:"commands"`
+	Truncated bool     `json:"truncated"`
+	Reason    string   `json:"reason"`
 }
 
 // FirewallIptables defines model for FirewallIptables.

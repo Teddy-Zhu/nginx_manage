@@ -1998,7 +1998,8 @@ export interface components {
         FirewallFirewalldPolicy: { name: string; active: boolean; active_ingress_zones: string[]; active_egress_zones: string[]; runtime: components["schemas"]["FirewallFirewalldPolicySettings"] | null; permanent: components["schemas"]["FirewallFirewalldPolicySettings"] | null; };
         FirewallFirewalldPolicySettings: { hash: string; target: "" | "CONTINUE" | "ACCEPT" | "REJECT" | "DROP"; priority: number | null; ingress_zones: string[]; egress_zones: string[]; rich_rules: number; entries: number; masquerade: boolean | null; };
         FirewallZone: { name: string; interfaces: string[]; sources: string[]; };
-        FirewallUFW: { installed: boolean; enabled: boolean | null; active: boolean | null; reason: string; };
+        FirewallUFW: { installed: boolean; enabled: boolean | null; active: boolean | null; ipv6: boolean | null; rule_inventory: components["schemas"]["FirewallUFWRuleInventory"]; reason: string; };
+        FirewallUFWRuleInventory: { available: boolean; hash: string; rules: number; commands: string[]; truncated: boolean; reason: string; };
         FirewallIptables: { family: string; backend: string; version: string; reason: string; };
         FirewallRuleset: { id: string; backend: string; family: string; available: boolean; tables: components["schemas"]["FirewallTable"][]; reason: string; };
         FirewallTable: { family: string; name: string; chains: components["schemas"]["FirewallChain"][]; };

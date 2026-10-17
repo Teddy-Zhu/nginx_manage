@@ -270,6 +270,7 @@ const columns: DataTableColumns<FirewallRule> = [
   },
 ];
 const previewColumns: DataTableColumns<FirewallPreview["entries"][number]> = [
+  { title: "策略优先级", key: "priority", width: 120 },
   {
     title: "规则 ID",
     key: "rule_id",
@@ -325,6 +326,15 @@ const firewalldPreviewColumns: DataTableColumns<
     title: "Rich rule",
     key: "expression",
     minWidth: 400,
+    ellipsis: { tooltip: true },
+  },
+];
+const ufwPreviewColumns: DataTableColumns<FirewallPreview["entries"][number]> = [
+  ...previewColumns,
+  {
+    title: "UFW 命令预览",
+    key: "expression",
+    minWidth: 440,
     ellipsis: { tooltip: true },
   },
 ];
@@ -425,6 +435,10 @@ onUnmounted(() => controller.abort());
       policy。当前仅支持不绑定接口的主机入站规则；允许动作采用 accept，可能先于后续
       zone 或 policy 结束匹配。
     </p>
+    <p v-if="policy.backend === 'ufw'" class="muted">
+      UFW 仅承接主机入站，重复匹配条件须先合并；允许动作可能提前结束后续 UFW
+      规则。命令预览尚未确定与既有规则的插入关系。
+    </p>
     <div class="page-toolbar">
       <span>{{ policy.rules.length }} / 1000 条规则</span
       ><n-button
@@ -483,6 +497,12 @@ onUnmounted(() => controller.abort());
             {{ preview.firewalld.settings_bytes }} 字节，未写入运行或永久配置
           </dd>
         </template>
+        <template v-else-if="preview.backend === 'ufw'">
+          <dt>目标范围</dt>
+          <dd>UFW 主机入站；保留默认策略</dd>
+          <dt>规则顺序</dt>
+          <dd>按期望策略顺序编译，尚未确定与既有规则的插入关系</dd>
+        </template>
         <template v-else>
           <dt>目标表 / 链</dt>
           <dd>{{ preview.table }} / {{ preview.chain }}</dd>
@@ -498,6 +518,9 @@ onUnmounted(() => controller.abort());
           <template v-if="preview.firewalld"
             >{{ preview.generated_rules }} 条 rich rules</template
           >
+          <template v-else-if="preview.backend === 'ufw'"
+            >{{ preview.generated_rules }} 条 UFW 命令</template
+          >
           <template v-else
             >{{ preview.generated_rules }} 条内核规则，包含 2
             条会话/回环保护规则</template
@@ -507,7 +530,7 @@ onUnmounted(() => controller.abort());
         <dd>
           <code>{{ preview.program_hash }}</code>
         </dd>
-        <template v-if="!preview.firewalld">
+        <template v-if="preview.backend === 'direct-nftables'">
           <dt>内核代次</dt>
           <dd>
             {{ preview.kernel.available ? preview.kernel.generation : "未知" }}
@@ -543,10 +566,16 @@ onUnmounted(() => controller.abort());
         仅展示前 128 条展开结果，全部规则已参与编译和数量检查。
       </p>
       <n-data-table
-        :columns="preview.firewalld ? firewalldPreviewColumns : previewColumns"
+        :columns="
+          preview.firewalld
+            ? firewalldPreviewColumns
+            : preview.backend === 'ufw'
+              ? ufwPreviewColumns
+              : previewColumns
+        "
         :data="preview.entries"
         :pagination="{ pageSize: 20 }"
-        :scroll-x="preview.firewalld ? 1400 : 850"
+        :scroll-x="preview.firewalld || preview.backend === 'ufw' ? 1600 : 1000"
       />
     </template>
   </section>
