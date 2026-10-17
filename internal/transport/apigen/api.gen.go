@@ -1380,6 +1380,8 @@ type ComponentOperation struct {
 
 // ComponentOverview defines model for ComponentOverview.
 type ComponentOverview struct {
+	SwitchAvailable  bool               `json:"switch_available"`
+	SwitchReason     string             `json:"switch_reason"`
 	Available        bool               `json:"available"`
 	InstallAvailable bool               `json:"install_available"`
 	InstallReason    string             `json:"install_reason"`
@@ -3300,6 +3302,99 @@ type NginxFeatures struct {
 	Version   string                  `json:"version"`
 }
 
+// NginxSwitchPlan defines model for NginxSwitchPlan.
+type NginxSwitchPlan struct {
+	AllowDowntime      bool   `json:"allow_downtime"`
+	AssetId            string `json:"asset_id"`
+	ExpectedDeployment string `json:"expected_deployment"`
+	ExpectedRevision   string `json:"expected_revision"`
+	ExpectedSha256     string `json:"expected_sha256"`
+	MaintenanceId      string `json:"maintenance_id"`
+	ManifestSha256     string `json:"manifest_sha256"`
+	PlanId             string `json:"plan_id"`
+	Prerelease         bool   `json:"prerelease"`
+	TrustSha256        string `json:"trust_sha256"`
+}
+
+// NginxSwitchCreateInput defines model for NginxSwitchCreateInput.
+type NginxSwitchCreateInput struct {
+	AllowDowntime      bool   `json:"allow_downtime"`
+	AssetId            string `json:"asset_id"`
+	ExpectedDeployment string `json:"expected_deployment"`
+	ExpectedRevision   string `json:"expected_revision"`
+	ExpectedSha256     string `json:"expected_sha256"`
+	MaintenanceId      string `json:"maintenance_id"`
+	PrepareTaskId      string `json:"prepare_task_id"`
+}
+
+// NginxSwitchAuthorization defines model for NginxSwitchAuthorization.
+type NginxSwitchAuthorization struct {
+	AuthorizationUntil int64           `json:"authorization_until"`
+	Command            string          `json:"command"`
+	Epoch              string          `json:"epoch"`
+	Input              NginxSwitchPlan `json:"input"`
+	OperationId        string          `json:"operation_id"`
+	Protocol           int64           `json:"protocol"`
+	Sequence           int64           `json:"sequence"`
+}
+
+// NginxSwitchComponent defines model for NginxSwitchComponent.
+type NginxSwitchComponent struct {
+	Owner   string `json:"owner"`
+	Sha256  string `json:"sha256"`
+	Version string `json:"version"`
+}
+
+// NginxSwitchConfirmation defines model for NginxSwitchConfirmation.
+type NginxSwitchConfirmation struct {
+	AgentPid     int64  `json:"agent_pid"`
+	ConfirmedAt  int64  `json:"confirmed_at"`
+	DeploymentId string `json:"deployment_id"`
+	NginxPid     int64  `json:"nginx_pid"`
+	RevisionId   string `json:"revision_id"`
+	Sha256       string `json:"sha256"`
+	Version      string `json:"version"`
+}
+
+// NginxSwitchOperation defines model for NginxSwitchOperation.
+type NginxSwitchOperation struct {
+	Active        bool                     `json:"active"`
+	Authorization NginxSwitchAuthorization `json:"authorization"`
+	Before        *NginxSwitchComponent    `json:"before,omitempty"`
+	Candidate     *NginxSwitchComponent    `json:"candidate,omitempty"`
+	ChildId       string                   `json:"child_id"`
+	Command       string                   `json:"command"`
+	Confirmation  *NginxSwitchConfirmation `json:"confirmation,omitempty"`
+	Deadline      int64                    `json:"deadline"`
+	Error         string                   `json:"error"`
+	Id            string                   `json:"id"`
+	Input         NginxSwitchPlan          `json:"input"`
+	IntentSha256  *string                  `json:"intent_sha256,omitempty"`
+	Protocol      int64                    `json:"protocol"`
+	RequestHash   string                   `json:"request_hash"`
+	Sequence      int64                    `json:"sequence"`
+	Stage         string                   `json:"stage"`
+	State         string                   `json:"state"`
+	UpdatedAt     int64                    `json:"updated_at"`
+}
+
+// NginxSwitchTask defines model for NginxSwitchTask.
+type NginxSwitchTask struct {
+	AuthorizationUntil int64                 `json:"authorization_until"`
+	Command            string                `json:"command"`
+	CreatedAt          int64                 `json:"created_at"`
+	Error              string                `json:"error"`
+	Id                 string                `json:"id"`
+	Input              NginxSwitchPlan       `json:"input"`
+	OperationId        string                `json:"operation_id"`
+	PrepareTaskId      string                `json:"prepare_task_id"`
+	Result             *NginxSwitchOperation `json:"result,omitempty"`
+	Sequence           int64                 `json:"sequence"`
+	Stage              string                `json:"stage"`
+	State              string                `json:"state"`
+	UpdatedAt          int64                 `json:"updated_at"`
+}
+
 // NginxInstallCreateInput defines model for NginxInstallCreateInput.
 type NginxInstallCreateInput struct {
 	AssetId       string `json:"asset_id"`
@@ -3969,6 +4064,13 @@ type CreateNginxInstallationParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
+// CreateNginxSwitchParams defines parameters for CreateNginxSwitch.
+type CreateNginxSwitchParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // CancelNginxInstallationParams defines parameters for CancelNginxInstallation.
 type CancelNginxInstallationParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -3976,8 +4078,22 @@ type CancelNginxInstallationParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
+// RollbackNginxSwitchParams defines parameters for RollbackNginxSwitch.
+type RollbackNginxSwitchParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // ResumeNginxInstallationParams defines parameters for ResumeNginxInstallation.
 type ResumeNginxInstallationParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// ResumeNginxSwitchParams defines parameters for ResumeNginxSwitch.
+type ResumeNginxSwitchParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
@@ -4485,6 +4601,9 @@ type CreateNodeJSONRequestBody = NodeCreateInput
 
 type CreatePanelUpdateJSONRequestBody = PanelUpdateCreateInput
 
+// CreateNginxSwitchJSONRequestBody defines body for CreateNginxSwitch.
+type CreateNginxSwitchJSONRequestBody = NginxSwitchCreateInput
+
 // CreateNginxInstallationJSONRequestBody defines body for CreateNginxInstallation for application/json ContentType.
 type CreateNginxInstallationJSONRequestBody = NginxInstallCreateInput
 
@@ -4761,17 +4880,32 @@ type ServerInterface interface {
 	// (GET /components/installations)
 	ListNginxInstallations(w http.ResponseWriter, r *http.Request)
 
+	// (GET /components/switches)
+	ListNginxSwitches(w http.ResponseWriter, r *http.Request)
+
 	// (POST /components/installations)
 	CreateNginxInstallation(w http.ResponseWriter, r *http.Request, params CreateNginxInstallationParams)
+
+	// (POST /components/switches)
+	CreateNginxSwitch(w http.ResponseWriter, r *http.Request, params CreateNginxSwitchParams)
 
 	// (GET /components/installations/{id})
 	GetNginxInstallation(w http.ResponseWriter, r *http.Request, id ID)
 
+	// (GET /components/switches/{id})
+	GetNginxSwitch(w http.ResponseWriter, r *http.Request, id ID)
+
 	// (POST /components/installations/{id}/cancel)
 	CancelNginxInstallation(w http.ResponseWriter, r *http.Request, id ID, params CancelNginxInstallationParams)
 
+	// (POST /components/switches/{id}/rollback)
+	RollbackNginxSwitch(w http.ResponseWriter, r *http.Request, id ID, params RollbackNginxSwitchParams)
+
 	// (POST /components/installations/{id}/resume)
 	ResumeNginxInstallation(w http.ResponseWriter, r *http.Request, id ID, params ResumeNginxInstallationParams)
+
+	// (POST /components/switches/{id}/resume)
+	ResumeNginxSwitch(w http.ResponseWriter, r *http.Request, id ID, params ResumeNginxSwitchParams)
 
 	// (GET /components/tasks)
 	ListComponentTasks(w http.ResponseWriter, r *http.Request)
@@ -6176,6 +6310,20 @@ func (siw *ServerInterfaceWrapper) ListNginxInstallations(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// ListNginxSwitches operation middleware
+func (siw *ServerInterfaceWrapper) ListNginxSwitches(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNginxSwitches(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListNodes operation middleware
 func (siw *ServerInterfaceWrapper) ListNodes(w http.ResponseWriter, r *http.Request) {
 
@@ -6704,6 +6852,70 @@ func (siw *ServerInterfaceWrapper) CreateNginxInstallation(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// CreateNginxSwitch operation middleware
+func (siw *ServerInterfaceWrapper) CreateNginxSwitch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateNginxSwitchParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNginxSwitch(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNginxInstallation operation middleware
 func (siw *ServerInterfaceWrapper) GetNginxInstallation(w http.ResponseWriter, r *http.Request) {
 
@@ -6721,6 +6933,32 @@ func (siw *ServerInterfaceWrapper) GetNginxInstallation(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetNginxInstallation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNginxSwitch operation middleware
+func (siw *ServerInterfaceWrapper) GetNginxSwitch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNginxSwitch(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6803,6 +7041,79 @@ func (siw *ServerInterfaceWrapper) CancelNginxInstallation(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// RollbackNginxSwitch operation middleware
+func (siw *ServerInterfaceWrapper) RollbackNginxSwitch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RollbackNginxSwitchParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RollbackNginxSwitch(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ResumeNginxInstallation operation middleware
 func (siw *ServerInterfaceWrapper) ResumeNginxInstallation(w http.ResponseWriter, r *http.Request) {
 
@@ -6867,6 +7178,79 @@ func (siw *ServerInterfaceWrapper) ResumeNginxInstallation(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ResumeNginxInstallation(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumeNginxSwitch operation middleware
+func (siw *ServerInterfaceWrapper) ResumeNginxSwitch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResumeNginxSwitchParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeNginxSwitch(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11520,10 +11904,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/updates/{id}", wrapper.GetPanelUpdate)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/updates/{id}/resume", wrapper.ResumePanelUpdate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/installations", wrapper.ListNginxInstallations)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/switches", wrapper.ListNginxSwitches)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations", wrapper.CreateNginxInstallation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches", wrapper.CreateNginxSwitch)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/installations/{id}", wrapper.GetNginxInstallation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/switches/{id}", wrapper.GetNginxSwitch)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations/{id}/resume", wrapper.ResumeNginxInstallation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches/{id}/resume", wrapper.ResumeNginxSwitch)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations/{id}/cancel", wrapper.CancelNginxInstallation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches/{id}/rollback", wrapper.RollbackNginxSwitch)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components", wrapper.GetComponents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/tasks", wrapper.ListComponentTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/tasks", wrapper.CreateComponentTask)

@@ -28,6 +28,8 @@ export type ComponentOperation = components["schemas"]["ComponentOperation"];
 export type ComponentTask = components["schemas"]["ComponentTask"];
 export type PanelUpdateTask = components["schemas"]["PanelUpdateTask"];
 export type PanelUpdateCreateInput = components["schemas"]["PanelUpdateCreateInput"];
+export type NginxSwitchTask = components["schemas"]["NginxSwitchTask"];
+export type NginxSwitchCreateInput = components["schemas"]["NginxSwitchCreateInput"];
 export type NginxInstallTask = components["schemas"]["NginxInstallTask"];
 export type NginxInstallCreateInput =
   components["schemas"]["NginxInstallCreateInput"];
@@ -574,6 +576,25 @@ function createAPI(scope: RequestScope) {
       method: "POST",
       headers: { "Idempotency-Key": key },
     }),
+  nginxSwitches: (signal?: AbortSignal) =>
+    request<NginxSwitchTask[]>({ url: "/components/switches", signal }),
+  createNginxSwitch: (data: NginxSwitchCreateInput, key: string) =>
+    request<NginxSwitchTask>({
+      url: "/components/switches",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  controlNginxSwitch: (
+    id: string,
+    command: "resume" | "rollback",
+    key: string,
+  ) =>
+    request<NginxSwitchTask>({
+      url: `/components/switches/${encodeURIComponent(id)}/${command}`,
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+    }),
   createComponentTask: (data: ComponentCreateInput, key: string) =>
     request<ComponentTask>({
       url: "/components/tasks",
@@ -1038,7 +1059,8 @@ function createAPI(scope: RequestScope) {
       data: { base_version },
       headers: { "Idempotency-Key": key },
     }),
-  nginxRuntime: () => request<NginxRuntime>({ url: "/nginx/runtime" }),
+  nginxRuntime: (signal?: AbortSignal) =>
+    request<NginxRuntime>({ url: "/nginx/runtime", signal }),
   revisions: () =>
     request<Revision[]>({ url: "/nginx/revisions", params: { limit: 100 } }),
   revision: (id: string) =>

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"nginxpanel/internal/nginxruntime"
+	"nginxpanel/internal/nginxswitch"
 	"nginxpanel/internal/secure"
 )
 
@@ -49,6 +50,8 @@ type NginxSwitchOptions struct {
 	Input                       NginxSwitchInput
 	DataDir, OperationID, Epoch string
 	Resume, Rollback            bool
+	dispatchID                  string
+	expected                    *nginxswitch.Input
 }
 
 func nginxSwitchHash(id string, i NginxSwitchIntent) string {
@@ -69,7 +72,7 @@ func nginxSwitchTerminal(state string) bool {
 
 func validNginxSwitch(r Record) error {
 	i := r.NginxSwitch
-	if r.Kind != nginxSwitchKind || i == nil || !validID(r.OperationID) || !validID(r.MaintenanceEpoch) || !validID(i.Input.MaintenanceID) || !i.Input.AllowDowntime || r.RequestHash != nginxSwitchHash(r.OperationID, *i) || r.Deadline <= 0 || i.Before.DataDir != i.Input.Source.DataDir || i.Candidate.DataDir != i.Input.Source.DataDir || i.Before.Owner != "local" && i.Before.Owner != "managed" || i.Candidate.Owner != "managed" || i.Candidate.Signed == nil || i.Before.SHA256 == i.Candidate.SHA256 || !validSwitchDigest(i.PublicationSHA256) || i.Directory != "bootstrap" && !validID(i.Directory) || len(i.Units) != 2 || r.NginxInstall != nil || r.PanelUpdate != nil || r.PanelRestore != nil || r.PanelService != nil || r.PanelSelection != nil || r.DisasterRestoreID != "" || r.DisasterActivation != nil {
+	if r.Kind != nginxSwitchKind || i == nil || !validID(r.OperationID) || !validID(r.MaintenanceEpoch) || !validID(i.Input.MaintenanceID) || !i.Input.AllowDowntime || r.RequestHash != nginxSwitchHash(r.OperationID, *i) || r.Deadline <= 0 || i.Before.DataDir != i.Input.Source.DataDir || i.Candidate.DataDir != i.Input.Source.DataDir || i.Before.Owner != "local" && i.Before.Owner != "managed" || i.Candidate.Owner != "managed" || i.Candidate.Signed == nil || i.Before.SHA256 == i.Candidate.SHA256 || !validSwitchDigest(i.PublicationSHA256) || i.Directory != "bootstrap" && !validID(i.Directory) || len(i.Units) != 2 || r.NginxInstall != nil || r.NginxSwitchJob != nil || r.PanelUpdate != nil || r.PanelRestore != nil || r.PanelService != nil || r.PanelSelection != nil || r.DisasterRestoreID != "" || r.DisasterActivation != nil {
 		return errors.New("Nginx 组件切换记录无效")
 	}
 	for _, unit := range []string{"nginxpanel-nginx.service", "nginxpanel-agent.service"} {

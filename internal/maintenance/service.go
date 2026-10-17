@@ -206,6 +206,13 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 	if installations != 0 {
 		return out, fault.Conflict("原 Nginx 安装任务仍在执行或待恢复，不能释放维护锁")
 	}
+	var switches int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM nginx_switches i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back')", id).Scan(&switches); err != nil {
+		return out, err
+	}
+	if switches != 0 {
+		return out, fault.Conflict("原 Nginx 切换任务仍在执行或待补偿，不能释放维护锁")
+	}
 	var updates int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM panel_updates i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back','cancelled')", id).Scan(&updates); err != nil {
 		return out, err

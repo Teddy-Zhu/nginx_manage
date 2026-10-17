@@ -137,6 +137,12 @@ func admitNginxSwitch(ctx context.Context, j *Journal, opts NginxSwitchOptions) 
 		if prior.Kind == "maintenance.lock" {
 			continue
 		}
+		if prior.OperationID == opts.dispatchID && opts.dispatchID != "" {
+			if err := switchJobOwns(prior, opts); err != nil {
+				return r, err
+			}
+			continue
+		}
 		if prior.Kind == panelUpdateKind {
 			settled, e := settledPanelUpdate(prior, opts.Input.MaintenanceID)
 			if e != nil {
@@ -173,6 +179,9 @@ func admitNginxSwitch(ctx context.Context, j *Journal, opts NginxSwitchOptions) 
 	}
 	if len(m.Modules) != 0 {
 		return r, errors.New("活动配置绑定动态模块，须先发布使用目标预置能力的配置")
+	}
+	if in := opts.expected; in != nil && (in.ExpectedSHA256 != before.SHA256 || in.ExpectedRevision != m.RevisionID || in.ExpectedDeployment != m.DeploymentID || candidate.Signed == nil || candidate.Signed.ManifestSHA256 != in.ManifestSHA256 || candidate.Signed.TrustSHA256 != in.TrustSHA256) {
+		return r, errors.New("组件或运行发布已偏离原 API 批准，不能切换")
 	}
 	i := NginxSwitchIntent{Input: opts.Input, Before: before, Candidate: candidate, Directory: dir, RevisionID: m.RevisionID, PublicationSHA256: manifestHash(m), Units: map[string]string{}}
 	for _, unit := range []string{"nginxpanel-nginx.service", "nginxpanel-agent.service"} {

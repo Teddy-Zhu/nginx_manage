@@ -128,6 +128,8 @@ type Operation struct {
 	Panel         *PanelPreparation `json:"panel,omitempty"`
 }
 type Overview struct {
+	SwitchAvailable  bool                       `json:"switch_available"`
+	SwitchReason     string                     `json:"switch_reason"`
 	InstallAvailable bool                       `json:"install_available"`
 	InstallReason    string                     `json:"install_reason"`
 	Installation     *nginxruntime.Installation `json:"installation,omitempty"`

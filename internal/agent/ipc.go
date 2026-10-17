@@ -177,6 +177,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.maintenanceHandlers(mux, rootMaintenance)
 	s.componentHandlers(mux, componentManager)
 	s.installationHandlers(mux)
+	s.nginxSwitchHandlers(mux)
 	s.panelUpdateHandlers(mux)
 	cleanupCtx, stopCleanup := context.WithCancel(ctx)
 	cleanupDone := make(chan struct{})

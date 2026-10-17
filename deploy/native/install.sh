@@ -223,7 +223,7 @@ if [[ -e $state/intent || -L $state/intent ]]; then
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
 else
   [[ ! -e $data && ! -L $data || -d $data && ! -L $data && -z $(find "$data" -mindepth 1 -maxdepth 1 -print -quit) ]] || die '数据目录非空，禁止将首次安装覆盖到已有数据'
-  for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service; do
+  for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service; do
     [[ $(systemctl show --property=LoadState --value "$unit") == not-found ]] || die "已有同名服务，停止接管：$unit"
   done
   [[ ! -e /opt/nginxpanel/current && ! -L /opt/nginxpanel/current ]] || die '已有程序指针，停止接管'
@@ -450,6 +450,31 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 EOF
+cat >"$work/nginxpanel-switch@.service" <<EOF
+[Unit]
+Description=NginxPanel independent Nginx component switch %i
+After=network.target
+
+[Service]
+Type=exec
+User=root
+Group=nginxpanel-ipc
+UMask=0077
+ExecStart=/opt/nginxpanel/current/nginxpanel nginx-switch-worker --data-dir $data --nginx-switch-operation %i
+Restart=no
+KillMode=mixed
+RuntimeMaxSec=1200
+TimeoutStopSec=500
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run $data/bin/components
+InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+EOF
 cat >"$work/nginxpanel-update@.service" <<EOF
 [Unit]
 Description=NginxPanel independent panel update %i
@@ -477,7 +502,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 EOF
 root_chain /etc/systemd/system
 install_units=(nginxpanel-agent.service nginxpanel-update@.service)
-if [[ -z $nginx_image ]]; then install_units+=(nginxpanel-nginx.service nginxpanel-install@.service); fi
+if [[ -z $nginx_image ]]; then install_units+=(nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service); fi
 if [[ $panel_mode == native ]]; then install_units+=(nginxpanel.service); fi
 for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"

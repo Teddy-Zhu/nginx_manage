@@ -19,9 +19,10 @@ func (s *Server) maintenanceAdmission(next http.Handler) http.Handler {
 		parts := strings.Split(path, "/")
 		release := len(parts) == 3 && parts[0] == "maintenance" && parts[2] == "release"
 		installation := r.Method == http.MethodPost && len(parts) >= 2 && parts[0] == "components" && parts[1] == "installations" && (len(parts) == 2 || len(parts) == 4 && (parts[3] == "resume" || parts[3] == "cancel"))
+		switchComponent := r.Method == http.MethodPost && len(parts) >= 2 && parts[0] == "components" && parts[1] == "switches" && (len(parts) == 2 || len(parts) == 4 && (parts[3] == "resume" || parts[3] == "rollback"))
 		update := r.Method == http.MethodPost && parts[0] == "panel" && len(parts) >= 2 && parts[1] == "updates" && (len(parts) == 2 || len(parts) == 4 && parts[3] == "resume")
 		backupCleanup := r.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "backups"
-		if path == "session" || path == "session/reauthenticate" || path == "bootstrap" || path == "maintenance" || release || installation || update || backupCleanup {
+		if path == "session" || path == "session/reauthenticate" || path == "bootstrap" || path == "maintenance" || release || installation || switchComponent || update || backupCleanup {
 			next.ServeHTTP(w, r)
 			return
 		}

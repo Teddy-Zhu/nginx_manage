@@ -339,6 +339,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/switches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNginxSwitches"];
+        put?: never;
+        post: operations["createNginxSwitch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/switches/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNginxSwitch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/switches/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeNginxSwitch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/switches/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rollbackNginxSwitch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components": {
         parameters: {
             query?: never;
@@ -2022,6 +2086,85 @@ export interface components {
             reason: string;
             session?: components["schemas"]["MaintenanceSession"];
         };
+        NginxSwitchPlan: {
+            maintenance_id: string;
+            plan_id: string;
+            asset_id: string;
+            manifest_sha256: string;
+            trust_sha256: string;
+            expected_sha256: string;
+            expected_revision: string;
+            expected_deployment: string;
+            prerelease: boolean;
+            allow_downtime: boolean;
+        };
+        NginxSwitchCreateInput: {
+            maintenance_id: string;
+            prepare_task_id: string;
+            asset_id: string;
+            expected_sha256: string;
+            expected_revision: string;
+            expected_deployment: string;
+            allow_downtime: boolean;
+        };
+        NginxSwitchAuthorization: {
+            operation_id: string;
+            epoch: string;
+            command: string;
+            protocol: number;
+            sequence: number;
+            authorization_until: number;
+            input: components["schemas"]["NginxSwitchPlan"];
+        };
+        NginxSwitchComponent: {
+            owner: string;
+            sha256: string;
+            version: string;
+        };
+        NginxSwitchConfirmation: {
+            sha256: string;
+            version: string;
+            revision_id: string;
+            deployment_id: string;
+            confirmed_at: number;
+            agent_pid: number;
+            nginx_pid: number;
+        };
+        NginxSwitchOperation: {
+            id: string;
+            request_hash: string;
+            command: string;
+            state: string;
+            stage: string;
+            error: string;
+            child_id: string;
+            intent_sha256?: string;
+            protocol: number;
+            sequence: number;
+            updated_at: number;
+            deadline: number;
+            active: boolean;
+            input: components["schemas"]["NginxSwitchPlan"];
+            authorization: components["schemas"]["NginxSwitchAuthorization"];
+            before?: components["schemas"]["NginxSwitchComponent"];
+            candidate?: components["schemas"]["NginxSwitchComponent"];
+            confirmation?: components["schemas"]["NginxSwitchConfirmation"];
+        };
+        NginxSwitchTask: {
+            id: string;
+            operation_id: string;
+            prepare_task_id: string;
+            command: string;
+            state: string;
+            stage: string;
+            error: string;
+            sequence: number;
+            authorization_until: number;
+            created_at: number;
+            updated_at: number;
+            input: components["schemas"]["NginxSwitchPlan"];
+            result?: components["schemas"]["NginxSwitchOperation"];
+        };
         NginxInstallPlan: {
             maintenance_id: string;
             plan_id: string;
@@ -2216,6 +2359,8 @@ export interface components {
             check_task_id: string;
         };
         ComponentOverview: {
+            switch_available: boolean;
+            switch_reason: string;
             available: boolean;
             scope: string;
             reason: string;
@@ -4017,6 +4162,93 @@ export interface operations {
         };
     };
     cancelNginxInstallation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listNginxSwitches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createNginxSwitch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NginxSwitchCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getNginxSwitch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    resumeNginxSwitch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    rollbackNginxSwitch: {
         parameters: {
             query?: never;
             header: {

@@ -806,6 +806,186 @@
         "x-query-keys": []
       }
     },
+    "/nodes/{connection}/components/switches": {
+      "get": {
+        "operationId": "remoteListNginxSwitches",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listNginxSwitches",
+        "x-forward-path": "/components/switches",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "post": {
+        "operationId": "remoteCreateNginxSwitch",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NginxSwitchCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createNginxSwitch",
+        "x-forward-path": "/components/switches",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/switches/{id}": {
+      "get": {
+        "operationId": "remoteGetNginxSwitch",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getNginxSwitch",
+        "x-forward-path": "/components/switches/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/switches/{id}/resume": {
+      "post": {
+        "operationId": "remoteResumeNginxSwitch",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resumeNginxSwitch",
+        "x-forward-path": "/components/switches/{id}/resume",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/switches/{id}/rollback": {
+      "post": {
+        "operationId": "remoteRollbackNginxSwitch",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "rollbackNginxSwitch",
+        "x-forward-path": "/components/switches/{id}/rollback",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": []
+      }
+    },
     "/nodes/{connection}/components": {
       "get": {
         "operationId": "remoteGetComponents",

@@ -264,7 +264,7 @@ Web 将任务输入及精简结果分别加密，保留最多 64 项，单条 64
 
 ## 原生 Nginx 运行组件维护切换
 
-本机 root 可使用 `component-switch` 将已运行的专用原生 Nginx 换成已准备的签名资产。入口要求原生安装 v12 已完成、Nginx 与 Agent 正常运行、独立维护会话已持有，以及明确允许重启停机。Docker 继续使用固定镜像及构建时预置模块，本入口不编译或增装模块。Web/API 切换和其他组件切换尚未接入。
+本机 root 可使用 `component-switch` 将已运行的专用原生 Nginx 换成已准备的签名资产。入口要求原生安装 v12 已完成、Nginx 与 Agent 正常运行、独立维护会话已持有，以及明确允许重启停机。Docker 继续使用固定镜像及构建时预置模块，本入口不编译或增装模块。Web/API 已接入同一切换核心，其他组件的运行版本切换仍待接入。
 
 ```sh
 sudo /opt/nginxpanel/current/nginxpanel component-switch \
@@ -285,3 +285,8 @@ sudo /opt/nginxpanel/current/nginxpanel component-switch \
 前进期限十分钟；失败后在八分钟独立期限内补偿原组件，并重新确认运行。新候选的签名失效不阻止补偿；原组件自身的文件和已安装来源仍须可信。遇到第三种组件选择、发布或服务偏离、未知进程和无法确认的服务状态时保留 `recovery_required` 与维护会话，不覆盖外部状态。
 
 `component-switch-status --data-dir <目录> --nginx-switch-operation <原UUID>` 只读持久记录，返回的是历史确认，不保证查询时仍在运行。中断后使用 `component-switch-resume`，或使用 `component-switch-rollback` 明确补偿；二者只接受原操作 UUID、数据目录与当前 `--maintenance-epoch`，不得替换来源或会话。Agent 已重启时须使用同一会话的新 epoch；服务未就绪时可由本机 root 从原维护记录读取。续办先核对实际选择与服务；目标已经正常运行时仅补齐确认。终态重放只返回原记录，另一次切换须使用新操作和新的准入。未完成记录阻止释放维护锁；终态后由原维护流程收尾。本入口尚未运行，留待 P5 集中验证。
+
+
+网页“组件切换”通过文件扫描路由接入，选择已完成的组件准备任务和 Nginx 资产，核对当前版本并明确允许停机。API 为 `GET/POST /components/switches`、`GET /components/switches/{id}` 及 `POST /components/switches/{id}/resume`、`POST /components/switches/{id}/rollback`；写操作须有 components.manage/system.write、原已持有维护会话、幂等键及浏览器近期认证。创建输入固定 expected_sha256、expected_revision、expected_deployment，空基线的两个发布标识也须显式传入空字符串。
+
+API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.service` 启动独立 worker，候选校验及服务控制不占用 Agent 请求。父记录固定唯一子操作；查询、服务重启和重复请求均不重用已领取授权。每次启动授权五分钟，原任务最多 32 次授权，记录总量最多 64 项；初次子操作仍使用十分钟前进及八分钟补偿期限，续办不延长前进期限。独立服务失败后，只有显式新授权才清除失败状态并启动；状态查询仅对账。补偿请求持久生效，后续续办继续补偿；尚未建立子操作时取消派发记为 failed/cancelled_before_switch，不虚构运行恢复证明。断连、记录缺失或执行状态不明时保留原任务与维护锁；完整备份恢复中的源切换任务隔离，不向新环境重放。页面/API、独立服务及故障恢复尚未实际执行，待 P5 集中验证。

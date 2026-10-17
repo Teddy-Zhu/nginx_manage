@@ -131,7 +131,7 @@ func validUpdateReadiness(p *PanelReadiness, started *Record, snapshot *panelrec
 
 func validPanelUpdate(r Record) error {
 	p := r.PanelUpdate
-	if r.Kind != panelUpdateKind || !validID(r.OperationID) || !validID(r.MaintenanceEpoch) || p == nil || r.PanelService != nil || r.PanelSelection != nil || r.PanelRestore != nil || r.NginxInstall != nil || r.NginxSwitch != nil {
+	if r.Kind != panelUpdateKind || !validID(r.OperationID) || !validID(r.MaintenanceEpoch) || p == nil || r.PanelService != nil || r.PanelSelection != nil || r.PanelRestore != nil || r.NginxInstall != nil || r.NginxSwitch != nil || r.NginxSwitchJob != nil {
 		return errors.New("面板更新独立记录身份无效")
 	}
 	i := p.Intent
@@ -182,7 +182,7 @@ func validPanelUpdate(r Record) error {
 			continue
 		}
 		c := *child.r
-		if c.PanelUpdate != nil || c.PanelSelection != nil || c.PanelRestore != nil || c.NginxInstall != nil || c.NginxSwitch != nil {
+		if c.PanelUpdate != nil || c.PanelSelection != nil || c.PanelRestore != nil || c.NginxInstall != nil || c.NginxSwitch != nil || c.NginxSwitchJob != nil {
 			return errors.New("更新进程子记录包含其他动作")
 		}
 		if err := validPanelService(c); err != nil {
@@ -198,7 +198,7 @@ func validPanelUpdate(r Record) error {
 	}
 	if p.Restore != nil {
 		c := *p.Restore
-		if c.PanelUpdate != nil || c.PanelService != nil || c.PanelSelection != nil || c.NginxInstall != nil || c.NginxSwitch != nil || c.OperationID != i.RestoreID || p.Snapshot == nil {
+		if c.PanelUpdate != nil || c.PanelService != nil || c.PanelSelection != nil || c.NginxInstall != nil || c.NginxSwitch != nil || c.NginxSwitchJob != nil || c.OperationID != i.RestoreID || p.Snapshot == nil {
 			return errors.New("更新恢复子记录身份无效")
 		}
 		if err := validPanelRestoreRecord(c); err != nil {

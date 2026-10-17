@@ -51,7 +51,7 @@ func validDisasterActivation(i panelrecovery.DisasterIntent, r Record) error {
 	}
 	if p.Start != nil {
 		c := p.Start
-		if c.DisasterActivation != nil || c.DisasterRestoreID != "" || c.PanelUpdate != nil || c.PanelRestore != nil || c.PanelSelection != nil || c.NginxInstall != nil || c.NginxSwitch != nil || c.RemoteListener != nil || c.LogPolicy != nil {
+		if c.DisasterActivation != nil || c.DisasterRestoreID != "" || c.PanelUpdate != nil || c.PanelRestore != nil || c.PanelSelection != nil || c.NginxInstall != nil || c.NginxSwitch != nil || c.NginxSwitchJob != nil || c.RemoteListener != nil || c.LogPolicy != nil {
 			return errors.New("恢复启动包含无关子操作")
 		}
 		if err = validPanelService(*c); err != nil {

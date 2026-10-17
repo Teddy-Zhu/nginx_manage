@@ -25,7 +25,7 @@ func validDisasterRestore(data string, r Record) (panelrecovery.DisasterIntent, 
 	if err != nil {
 		return i, err
 	}
-	if r.DisasterRestoreID != "" || r.Kind != disasterRestoreKind || !validID(r.MaintenanceEpoch) || r.RequestHash != i.SHA256() || r.CandidateHash != i.AdoptionSHA256 || r.RestoreSnapshot != i.Rollback.Manifest.OperationID || r.Deadline != i.ExpiresAt || r.PanelRestore != nil || r.PanelUpdate != nil || r.PanelSelection != nil || r.PanelService != nil || r.NginxInstall != nil || r.NginxSwitch != nil || r.RemoteListener != nil || r.LogPolicy != nil {
+	if r.DisasterRestoreID != "" || r.Kind != disasterRestoreKind || !validID(r.MaintenanceEpoch) || r.RequestHash != i.SHA256() || r.CandidateHash != i.AdoptionSHA256 || r.RestoreSnapshot != i.Rollback.Manifest.OperationID || r.Deadline != i.ExpiresAt || r.PanelRestore != nil || r.PanelUpdate != nil || r.PanelSelection != nil || r.PanelService != nil || r.NginxInstall != nil || r.NginxSwitch != nil || r.NginxSwitchJob != nil || r.RemoteListener != nil || r.LogPolicy != nil {
 		return i, errors.New("独立灾备恢复记录与原批准不一致")
 	}
 	if r.DisasterActivation != nil || strings.HasPrefix(r.Stage, "activation_") || r.Stage == "committed" {

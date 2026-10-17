@@ -39,6 +39,7 @@ const audits = ref<Audit[]>([]),
   offset = ref(0);
 const taskKinds: Record<string, string> = {
   "component.install": "Nginx 首次安装",
+  "component.switch": "Nginx 组件切换",
   "nginx.validate": "配置校验",
   "nginx.apply": "配置应用",
   "nginx.restore": "受管配置恢复",
