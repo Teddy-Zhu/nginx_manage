@@ -337,9 +337,21 @@ func orderFirewallTables(tables []firewall.Table) {
 		return tables[i].Name < tables[j].Name
 	})
 }
+func iptablesVersionTool(name string) string {
+	for _, family := range []string{"iptables", "ip6tables"} {
+		for _, suffix := range []string{"", "-save", "-restore"} {
+			if name == family+suffix || name == family+"-nft"+suffix || name == family+"-legacy"+suffix {
+				return family + suffix
+			}
+		}
+	}
+	return ""
+}
+
 func firewallVersion(raw []byte) (string, string, error) {
 	version := strings.TrimSpace(string(raw))
-	if len(version) > 256 || strings.ContainsAny(version, "\r\n\x00") || !(strings.HasPrefix(version, "iptables v") || strings.HasPrefix(version, "ip6tables v") || strings.HasPrefix(version, "iptables-save v") || strings.HasPrefix(version, "ip6tables-save v") || strings.HasPrefix(version, "iptables-restore v") || strings.HasPrefix(version, "ip6tables-restore v")) {
+	name, release, found := strings.Cut(version, " ")
+	if len(version) > 256 || strings.ContainsAny(version, "\r\n\x00") || !found || iptablesVersionTool(name) == "" || !strings.HasPrefix(release, "v") {
 		return "", "", errors.New("unknown xtables version output")
 	}
 	backend := "unknown"
@@ -363,9 +375,9 @@ func readXtables(ctx context.Context, variant, family string) firewall.Ruleset {
 	if e != nil {
 		return out
 	}
-	backend, _, e := firewallVersion(version)
-	if e != nil || backend != out.Backend {
-		out.Reason = "工具后端与声明的 nft/legacy 类型不一致"
+	backend, text, e := firewallVersion(version)
+	if e != nil || backend != out.Backend || !iptablesToolVersionMatches(name, text) {
+		out.Reason = "工具后端、地址族或命令角色与声明不一致"
 		return out
 	}
 	saveVersion, e := firewallRead(ctx, name+"-save", "version", 1024)
@@ -373,9 +385,9 @@ func readXtables(ctx context.Context, variant, family string) firewall.Ruleset {
 		out.Reason = "规则导出工具的后端无法确认"
 		return out
 	}
-	saveBackend, _, e := firewallVersion(saveVersion)
-	if e != nil || saveBackend != backend {
-		out.Reason = "规则导出工具与命令后端不一致"
+	saveBackend, text, e := firewallVersion(saveVersion)
+	if e != nil || saveBackend != backend || !iptablesToolVersionMatches(name+"-save", text) {
+		out.Reason = "规则导出工具与命令的后端或地址族不一致"
 		return out
 	}
 	raw, e := firewallRead(ctx, name+"-save", "rules", 1<<20)

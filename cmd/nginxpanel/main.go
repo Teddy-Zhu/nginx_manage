@@ -35,6 +35,18 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
+	if filepath.Base(os.Args[0]) == agent.IPTablesLibraryApplet {
+		if agent.RunIPTablesLibraryBridge() != nil {
+			os.Exit(125)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "_iptables-library" {
+		if agent.RunIPTablesLibrary() != nil {
+			os.Exit(125)
+		}
+		return
+	}
 	if len(os.Args) == 3 && os.Args[1] == "_iptables-restore" {
 		if agent.RunIPTablesRestoreGate(os.Args[2]) != nil {
 			os.Exit(125)

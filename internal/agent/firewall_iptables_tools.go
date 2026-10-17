@@ -23,6 +23,12 @@ type iptablesToolVersion struct {
 	Role, Version string
 }
 
+func iptablesToolVersionMatches(role, version string) bool {
+	name := iptablesVersionTool(role)
+	program, release, found := strings.Cut(version, " ")
+	return name != "" && found && (program == role || program == name) && strings.HasPrefix(release, "v")
+}
+
 // File identities and pinned ELF checks are shared with the UFW transport.
 // No source, script, default applet or PATH-selected backend is executable here.
 type iptablesToolBinding struct {
@@ -117,7 +123,7 @@ func bindIPTablesTools(ctx context.Context, backend string) (*iptablesToolBindin
 		}
 		kind, version, err := firewallVersion(raw)
 		_, current, found := strings.Cut(version, " ")
-		if err != nil || kind != wanted || !found || release != "" && current != release {
+		if err != nil || kind != wanted || !iptablesToolVersionMatches(tool.Role, version) || !found || release != "" && current != release {
 			return nil, errors.New("iptables command/save/restore 的后端或发行版本不一致")
 		}
 		release = current
@@ -164,7 +170,7 @@ func (binding *iptablesToolBinding) valid() bool {
 			version := binding.Versions[index]
 			kind, text, err := firewallVersion([]byte(version.Version))
 			_, current, found := strings.Cut(text, " ")
-			if version.Role != role || err != nil || kind != wanted || !found || release != "" && current != release {
+			if version.Role != role || err != nil || kind != wanted || !iptablesToolVersionMatches(role, text) || !found || release != "" && current != release {
 				return false
 			}
 			release = current
@@ -249,6 +255,18 @@ func runIPTablesBound(ctx context.Context, tool, blocker ufwBoundFile, action st
 			return nil, errors.New("iptables 官方预演材料无效或超过 4 MiB")
 		}
 		args, limit = []string{"--test", "--noflush", "--wait", "1", "--modprobe", "/proc/self/fd/4"}, 8<<10
+	case "list":
+		if !slices.Contains([]string{"iptables-nft", "ip6tables-nft", "iptables-legacy", "ip6tables-legacy"}, tool.Role) || len(input) != 0 && !validIPTablesLibraryChain(string(input)) {
+			return nil, errors.New("go-iptables 固定链读取范围无效")
+		}
+		args = []string{"-t", "filter", "-S"}
+		if len(input) != 0 {
+			args = append(args, string(input))
+		}
+		args = append(args, "--wait", "1", "--modprobe", "/proc/self/fd/4")
+		// -S may expose maximum-width rule counters in addition to the
+		// bounded native save text. The parser admits at most 16384 objects.
+		limit = iptablesExportBytes + 64*firewallObjectLimit
 	default:
 		return nil, errors.New("iptables 固定工具不允许该操作")
 	}
@@ -272,7 +290,9 @@ func runIPTablesBound(ctx context.Context, tool, blocker ufwBoundFile, action st
 	command.ExtraFiles = []*os.File{binary, blocked}
 	command.Dir = "/"
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C"}
-	command.Stdin = bytes.NewReader(input)
+	if action == "test" {
+		command.Stdin = bytes.NewReader(input)
+	}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	command.Cancel = func() error { return syscall.Kill(-command.Process.Pid, syscall.SIGKILL) }
 	command.WaitDelay = 250 * time.Millisecond

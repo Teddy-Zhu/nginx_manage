@@ -322,7 +322,7 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 		out.Warnings = append(out.Warnings, "UFW 逻辑预览不执行 dry-run；须先完成目标本机授权，再通过管理入口准备保护计划、应用并用新连接确认")
 		out.Warnings = append(out.Warnings, "命令顺序仅表示中立策略内部顺序；尚未确定与现有 UFW 规则的插入关系，注释不构成所有权证明", "UFW 可更新相同匹配条件的既有规则，执行前必须排除第三方规则冲突，不能重放诊断报告", "默认策略、回环、已建立会话及其他 UFW 规则保持由管理器处理；allow 可能终止后续 UFW 判断，云安全组和其他内核链仍可拒绝连接")
 	} else if slices.Contains([]string{"iptables-nft", "iptables-legacy"}, view.Policy.Backend) {
-		out.Errors = append(out.Errors, "iptables 限时应用及业务规则独立恢复尚未接入；本次仅编译预览，本机授权不授予本次策略写入")
+		out.Warnings = append(out.Warnings, "iptables 逻辑预览不执行官方预演；须先完成目标本机授权，再通过管理入口准备应用或移除计划，并用新连接确认")
 		out.Warnings = append(out.Warnings, "allow 编译为 ACCEPT，可能结束后续 INPUT 规则判断；未匹配流量返回调用链，不修改全局默认策略，其他内核过滤与云安全组仍可拒绝连接", "每个使用的地址族包含回环及 ESTABLISHED/RELATED 返回规则；业务项仅匹配 conntrack NEW，不涉及 NAT、FORWARD 或 Docker 发布端口", "IPv4 与 IPv6 分别处理，不承诺全局原子性；编译不探测或加载内核扩展，也不证明工具可接受规则")
 	} else {
 		out.Warnings = append(out.Warnings, "allow 只终止本应用链的判断，其他基础链及云安全组仍可拒绝连接", "规则仅匹配 conntrack NEW；回环及已建立/关联会话保留，未跟踪流量不在此匹配范围")

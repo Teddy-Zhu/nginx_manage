@@ -9,6 +9,7 @@ require (
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.4
 	github.com/alibabacloud-go/tea v1.5.3
+	github.com/coreos/go-iptables v0.8.0
 	github.com/go-acme/alidns-20150109/v5 v5.6.1
 	github.com/go-acme/lego/v5 v5.5.2
 	github.com/go-acme/tencentclouddnspod v1.3.131

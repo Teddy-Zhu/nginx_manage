@@ -93,6 +93,8 @@ const emptyInitial = computed(
     view.value.confirmed_action === "none" &&
     (view.value.backend === "firewalld" ||
       view.value.backend === "ufw" ||
+      view.value.backend === "iptables-nft" ||
+      view.value.backend === "iptables-legacy" ||
       (view.value.kernel.available &&
         view.value.kernel.table_exists &&
         view.value.kernel.chains === 0 &&

@@ -157,7 +157,7 @@ func (s *Service) SetManagement(ctx context.Context, p auth.Principal, enabled b
 			if !view.Available {
 				return fault.Conflict("防火墙运行状态不可核对，不能按移除方式停用")
 			}
-			empty := view.ConfirmedAction == "none" && (view.Backend == "firewalld" || view.Backend == "ufw" || view.Kernel.Available && view.Kernel.TableExists && view.Kernel.Chains == 0 && view.Kernel.Rules == 0)
+			empty := view.ConfirmedAction == "none" && (view.Backend == "firewalld" || view.Backend == "ufw" || view.Backend == "iptables-nft" || view.Backend == "iptables-legacy" || view.Kernel.Available && view.Kernel.TableExists && view.Kernel.Chains == 0 && view.Kernel.Rules == 0)
 			if empty {
 				if operationID != "" {
 					return fault.Invalid("尚无已确认规则时不接受移除操作 ID")

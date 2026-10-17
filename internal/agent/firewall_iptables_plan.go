@@ -59,7 +59,14 @@ func (f *hostFirewall) openIPTablesPlanner(v *iptablesChangeCheckpoint) error {
 func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 	registration, err := iptablesRegistrationAuthority(f.dataDir)
 	pending := iptablesRegistrationPending(f.dataDir)
-	out := firewall.RuntimeView{Backend: f.owner, CanPlan: f.iptablesPlanning && !f.policyUncertain && f.problem == "" && err == nil && !pending, Reason: f.problem, ConfirmedAction: "none", Protections: []firewall.Protection{}, ProtectionObservation: protectionObservation("not_applicable", "", "尚无已确认的 iptables 业务策略"), Kernel: firewall.KernelView{Reason: "iptables 使用独立的原生规则与代际链核对"}}
+	out := firewall.RuntimeView{Backend: f.owner, CanPlan: f.iptablesPlanning && f.recovering && !f.policyUncertain && f.problem == "" && err == nil && registration.NextClaim.Backend == f.owner && !pending, Reason: f.problem, ConfirmedAction: "none", Protections: []firewall.Protection{}, ProtectionObservation: protectionObservation("not_applicable", "", "尚无已确认的 iptables 业务策略"), Kernel: firewall.KernelView{Reason: "iptables 使用独立的原生规则与代际链核对"}}
+	stateErr := f.refreshIPTablesStateLocked()
+	if stateErr == nil && f.iptablesState != nil {
+		receipt, receiptErr := loadIPTablesReceipt(f.dataDir, f.iptablesState.Operation.ID)
+		if receiptErr != nil || !iptablesChangeReceiptMatches(receipt, f.iptablesState) {
+			stateErr = errors.New("iptables 原业务回执无法完整核对")
+		}
+	}
 	if f.iptablesState != nil && (err != nil || f.iptablesState.Transition.Owner == registration.NextClaim.Owner && f.iptablesState.Transition.RegistrationOperationID == registration.NextClaim.OperationID) {
 		op := f.iptablesState.Operation
 		out.Operation = &op
@@ -74,10 +81,17 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 		out.CanPlan, out.Reason = false, "iptables 原确认策略属于其他本机授权，请恢复原操作"
 	}
 	out.ProtectionObservation = f.protectionObservationLocked()
+	if stateErr != nil {
+		out.CanPlan, out.Reason = false, "iptables 原业务记录无法完整核对，请恢复原操作"
+		out.ProtectionObservation = protectionObservation("unavailable", "", "独立策略不可核对，保护状态未知")
+		return out
+	}
 	if out.Reason == "" {
 		switch {
 		case !f.iptablesPlanning:
 			out.Reason = "须由本机 root 明确确认显式 iptables 后端、宿主机范围及 SSH 保护配置"
+		case !f.recovering || f.policyUncertain:
+			out.Reason = "iptables 控制器或独立策略状态尚未核对，保持只读"
 		case err != nil:
 			out.Reason = "iptables 本机授权尚未完成或无法核对，请检查 iptables-registration"
 		case pending:
@@ -85,7 +99,50 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 		case registration.NextClaim.Backend != f.owner:
 			out.CanPlan, out.Reason = false, "本机授权后端与 Agent 显式选择不一致，不能切换系统 alternatives"
 		default:
-			out.Reason = "可准备应用或移除代际计划；完整执行准入尚未完成，保持只读"
+			out.Reason = "可生成主机入站应用或移除计划"
+		}
+	}
+	if out.CanPlan {
+		// Readiness must prove the current scope, including an empty namespace
+		// after removal. A historical confirmation alone cannot allow shutdown.
+		call, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		var current iptablesRegistrationSnapshot
+		program := &firewall.IPTablesRuntimeProgram{Backend: f.owner}
+		previous := iptablesPlanPrevious(f.iptablesState, registration.NextClaim.Owner, registration.NextClaim.OperationID)
+		var readyErr error
+		if previous != nil {
+			record := previous.Policy
+			program, readyErr = firewall.CompileIPTablesRuntime(record.Policy, record.Protections, previous.Owner, record.PlanID, record.Action)
+			if readyErr == nil {
+				current, readyErr = inspectIPTablesSource(call, f.dataDir, previous, false)
+			}
+			if readyErr == nil {
+				for _, generation := range program.Families {
+					if current.States[generation.Family] != "candidate" {
+						readyErr = errors.New("iptables 已确认地址族规则缺失，请先恢复")
+					}
+				}
+			}
+		} else {
+			current, readyErr = inspectIPTablesRegistration(call, f.dataDir, f.owner, false)
+			if readyErr == nil {
+				var tools *iptablesToolBinding
+				tools, readyErr = bindIPTablesTools(call, f.owner)
+				if readyErr == nil {
+					readyErr = current.verifyBound(call, tools)
+				}
+			}
+		}
+		if readyErr == nil {
+			readyErr = current.admitReadback(program, nil)
+		}
+		if readyErr == nil {
+			readyErr = call.Err()
+		}
+		out.Available = readyErr == nil
+		if readyErr != nil {
+			out.Reason = "iptables 当前规则、工具或完整读取容量无法核对：" + boundedIPTablesError(readyErr)
 		}
 	}
 	return out
@@ -102,7 +159,7 @@ func iptablesProtectionPolicy(record firewallPolicyRecord) firewall.Policy {
 
 func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.RuntimeInput, connection string) (firewall.Plan, error) {
 	var empty firewall.Plan
-	if !f.iptablesPlanning || f.policyUncertain || f.problem != "" || !f.iptablesPlannerLocked() || iptablesRegistrationPending(f.dataDir) {
+	if !f.iptablesPlanning || !f.recovering || f.policyUncertain || f.problem != "" || !f.iptablesPlannerLocked() || iptablesRegistrationPending(f.dataDir) {
 		return empty, fault.Unavailable("iptables 计划须由本机确认宿主机范围、显式后端及 SSH 保护配置")
 	}
 	if in.PreparationID != "" || in.CancelPreparation || in.Version < 1 || in.Action != "apply" && in.Action != "remove" {
@@ -205,7 +262,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		}
 	}
 	transition := &iptablesTransition{Previous: previous, Owner: registered.NextClaim.Owner, MachineHash: registered.NextClaim.MachineHash, RegistrationOperationID: registered.NextClaim.OperationID, RegistrationRequestHash: registered.RequestHash, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Tools: tools, Materials: []iptablesChangeMaterial{}}
-	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "候选及正反向批次已通过官方 --test；完整执行准入尚未完成，不可应用"}
+	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "主机入站计划已准备，应用后须通过新连接确认"}
 	generated, transactionBytes := 0, 0
 	prior := iptablesPreviousProgram(transition)
 	for _, family := range iptablesTransitionFamilies(transition) {
@@ -282,7 +339,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		return empty, errors.New("iptables 完整私有计划超过 16 MiB 或无法编码")
 	}
 	summary.Warnings = append(summary.Warnings, "INPUT 受管跳转位于首位；本应用 ACCEPT 可能结束后续 INPUT 判断，云安全组及其他过滤路径仍可拒绝", "IPv4/IPv6 分别处理，不保证跨地址族原子性；只操作本应用链及精确规则，不恢复第三方历史快照", "官方 --test 不安装规则，也不证明端口可达；系统共享库及扩展仍由宿主机提供")
-	view := firewall.Plan{Backend: f.owner, CanApply: false, IPTables: summary, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: firewall.KernelView{Reason: "完整 iptables 规则摘要见地址族代际计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: secure.Hash(append([]byte("iptables:plan:v2:\x00"), raw...)), TransactionBytes: transactionBytes, GeneratedRules: generated}
+	view := firewall.Plan{Backend: f.owner, CanApply: true, IPTables: summary, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: firewall.KernelView{Reason: "完整 iptables 规则摘要见地址族代际计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: secure.Hash(append([]byte("iptables:plan:v2:\x00"), raw...)), TransactionBytes: transactionBytes, GeneratedRules: generated}
 	if err = f.storePlanLocked(view, record); err != nil {
 		return empty, err
 	}

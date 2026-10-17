@@ -70,7 +70,7 @@ func iptablesRegistrationTools(ctx context.Context, backend string) (string, err
 			if backend == "iptables-legacy" {
 				wanted = "legacy"
 			}
-			if err != nil || kind != wanted {
+			if err != nil || kind != wanted || !iptablesToolVersionMatches(role, text) {
 				return "", errors.New("显式 iptables 诊断工具后端不一致")
 			}
 			tools = append(tools, struct{ Name, Path, Hash, Version string }{role, path, secure.Hash(raw), text})
@@ -336,14 +336,21 @@ func inspectIPTablesBound(ctx context.Context, dataDir, backend, toolHash string
 	if out.ToolHash != toolHash {
 		return out, errors.New("iptables 原诊断工具绑定已变化")
 	}
-	for _, image := range out.Images {
+	return out, out.verifyBound(ctx, tools)
+}
+
+func (snapshot iptablesRegistrationSnapshot) verifyBound(ctx context.Context, tools *iptablesToolBinding) error {
+	for _, image := range snapshot.Images {
 		bound, err := tools.image(ctx, image.Family)
 		if err != nil || bound.hash() != image.hash() {
-			return out, errors.New("iptables 规则在完整核对期间变化")
+			return errors.New("iptables 规则在完整核对期间变化")
+		}
+		if err = tools.verifyLibrary(ctx, bound); err != nil {
+			return err
 		}
 	}
 	if err := tools.verify(ctx); err != nil {
-		return out, err
+		return err
 	}
-	return out, ctx.Err()
+	return ctx.Err()
 }
