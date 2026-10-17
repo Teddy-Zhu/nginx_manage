@@ -127,10 +127,10 @@ func validVersion(s string) bool {
 	return true
 }
 func validateAsset(a Asset) error {
-	if !identifier.MatchString(a.ID) || slices.Contains([]string{"plan.json", "release-manifest.json", "release-manifest.sig"}, a.ID) || !slices.Contains([]string{"panel", "web", "nginx", "fail2ban"}, a.Component) || !validVersion(a.Version) || a.OS != "linux" || !slices.Contains([]string{"amd64", "arm64", "any"}, a.Architecture) || a.Architecture == "any" && a.Component != "web" {
+	if !identifier.MatchString(a.ID) || slices.Contains([]string{"plan.json", "release-manifest.json", "release-manifest.sig"}, a.ID) || !slices.Contains([]string{"panel", "web", "nginx", "fail2ban"}, a.Component) || !validVersion(a.Version) || a.OS != "linux" || !slices.Contains([]string{"amd64", "arm64", "any"}, a.Architecture) || a.Architecture == "any" && a.Component != "web" && a.Component != "fail2ban" {
 		return errors.New("资产标识、类型、版本或架构无效")
 	}
-	if !identifier.MatchString(a.Distribution) || !text(a.DistributionVersion, 64) || a.ABI != "static" && a.ABI != "constrained" || a.ABI == "constrained" && (a.Distribution == "any" || len(a.RuntimeFiles) == 0) || a.ABI == "static" && len(a.RuntimeFiles) != 0 {
+	if !identifier.MatchString(a.Distribution) || !text(a.DistributionVersion, 64) || a.ABI != "static" && a.ABI != "constrained" && a.ABI != "system-python" || a.ABI == "constrained" && (a.Distribution == "any" || len(a.RuntimeFiles) == 0) || a.ABI != "constrained" && len(a.RuntimeFiles) != 0 {
 		return errors.New("资产 ABI 或系统约束无效")
 	}
 	if !safePath(a.Archive) || strings.Contains(a.Archive, "/") || !strings.HasSuffix(a.Archive, ".tar.gz") || !validHash(a.SHA256) || a.Size <= 0 || a.Size > MaxArchiveBytes || a.UnpackedBytes <= 0 || a.UnpackedBytes > MaxUnpackedBytes || len(a.Files) == 0 || len(a.Files) > MaxFiles || len(a.RuntimeFiles) > 64 || len(a.Dependencies) > 8 {
@@ -190,15 +190,11 @@ func validateAsset(a Asset) error {
 		seenRuntime[f.Path] = true
 	}
 	if a.Component == "fail2ban" {
-		found := false
-		for _, file := range a.RuntimeFiles {
-			if pythonInterpreter.MatchString(file.Path) && file.Mode == 0755 {
-				found = true
-			}
+		if a.ABI != "system-python" || a.Architecture != "any" || a.Distribution != "any" || a.DistributionVersion != "any" || a.Python == nil || !a.Python.Valid() {
+			return errors.New("Fail2ban 代码须声明可移植的系统 Python 兼容范围")
 		}
-		if a.ABI != "constrained" || !found {
-			return errors.New("Fail2ban 须声明宿主机 Python 解释器约束")
-		}
+	} else if a.Python != nil || a.ABI == "system-python" {
+		return errors.New("仅 Fail2ban 代码资产可声明系统 Python 兼容范围")
 	}
 	if len(a.Features) > 64 || a.Component != "nginx" && len(a.Features) != 0 {
 		return errors.New("模块能力清单无效")

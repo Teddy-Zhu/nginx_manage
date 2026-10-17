@@ -96,7 +96,8 @@ func Prepared(ctx context.Context, in Input, id string) (Result, error) {
 	return inspectPrepared(ctx, in, id, time.Now().Unix(), "")
 }
 
-// RuntimeReadiness only inspects runtime files of already authenticated assets.
+// RuntimeReadiness checks authenticated file constraints and, for code-only
+// Fail2ban, the fixed system interpreter and required standard-library profile.
 func RuntimeReadiness(ctx context.Context, assets []Asset) error {
 	for _, a := range assets {
 		if err := validateAsset(a); err != nil {

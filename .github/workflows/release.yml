@@ -98,6 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/release/stage.py --input-root .release/input --source-sbom "$RUNNER_TEMP/source.spdx.json" --go-packages .release/go-packages.json --node-dependencies .release/node-dependencies.json --binaries .release/binaries
+      - name: Assemble pinned official Fail2ban code and compatibility files
+        run: python3 scripts/release/fail2ban.py --input-root .release/input
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         id: upload
         with:

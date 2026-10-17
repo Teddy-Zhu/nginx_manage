@@ -192,7 +192,7 @@ schema 6 加密迁移包可选择 `selection.fail2ban`，以固定 `config/fail2
 
 ## 签名受管引擎的本机安装
 
-无已有 Fail2ban 时，本机 root 可选择准备好的单个 `fail2ban` 签名代码资产（当前固定 1.1.1）。资产须包含 `bin/fail2ban-{server,client,regex}` 及对应官方模块，根目录直接包含 `fail2ban/`；签名运行文件须覆盖实际系统 Python。安装器不执行 pip、不带入独立 Python、不安装软件包，也不改写全局 site-packages。固定解释器以 `-I -S -B` 运行，只添加已认证资产目录；先核对标准库/SQLite，再检查完整官方 server/client 入口、版本及独立配置。
+无已有 Fail2ban 时，本机 root 可选择准备好的单个 `fail2ban` 签名代码资产（当前固定 1.1.1）。资产须包含 `bin/fail2ban-{server,client,regex}` 及对应官方模块，根目录直接包含 `fail2ban/`；签名资产使用可移植 `system-python` ABI，声明 CPython 3.9–3.14 的标准 GIL 模式；目标探测与安装绑定实际本机解释器，不引用其他系统的解释器文件散列。安装器不执行 pip、不带入独立 Python、不安装软件包，也不改写全局 site-packages。固定解释器以 `-I -S -B` 运行，只添加已认证资产目录；先核对标准库/SQLite，再检查完整官方 server/client 入口、版本及独立配置。
 
 示例中的 UUID、准备计划和资产标识须来自本机实际操作与组件准备结果：
 
@@ -204,7 +204,7 @@ nginxpanel fail2ban-install --data-dir /var/lib/nginxpanel --fail2ban-scope host
 
 默认仅安装，不启动、不设置开机启用。首次安装可显式添加 `--fail2ban-start`、`--fail2ban-enable`；发生中断后，使用同一 UUID、源选择及启动/启用选择添加 `--fail2ban-resume`。目标已有固定系统工具、已登记实例、服务、默认 Socket 或无法排除已有实例时，拒绝另建。拒绝覆盖未登记目标、变化的文件、systemd drop-in 或未知实际单元。操作由共同 root 锁串行化，安装意图先持久化再创建文件；文件通过无覆盖原子发布。
 
-安装事件位于 `DATA/agent/fail2ban/managed/history/`，`current.json` 只指向已持久事件。配置及 SQLite 分别位于该目录的操作 UUID 子目录内 `config/`、`state/`；专用服务为 `nginxpanel-fail2ban.service`，Socket/PID 位于 root 私有 `/run/nginxpanel-fail2ban/`。初始无启用 jail，不加载发行版的 jail/filter/action，配置目录出现额外入口会阻塞启动。专用服务的启动前检查重新认证签名代码、系统运行文件、固定解释器与管理程序、精确配置和服务单元；不能用安装时的标准库探测替代每次启动校验。
+安装事件位于 `DATA/agent/fail2ban/managed/history/`，`current.json` 只指向已持久事件。配置及 SQLite 分别位于该目录的操作 UUID 子目录内 `config/`、`state/`；专用服务为 `nginxpanel-fail2ban.service`，Socket/PID 位于 root 私有 `/run/nginxpanel-fail2ban/`。初始无启用 jail，不加载发行版的 jail/filter/action，配置目录出现额外入口会阻塞启动。专用服务的启动前检查重新认证签名代码、系统 Python 兼容范围和标准库、固定解释器与管理程序、精确配置和服务单元；不能用安装时的标准库探测替代每次启动校验。
 
 本机 root 后续可使用以下命令，均需相同 `--data-dir` 和 `--fail2ban-scope host`：
 
@@ -224,7 +224,7 @@ installed 状态的 root 安装登记授权对其专用服务、Socket 和固定
 
 `binding.engine` 和 `Fail2banTemplateCheck.engine` 返回代码来源：`owner` 为 existing/managed/none/unavailable，受管来源同时包括安装 UUID、准备计划、资产、清单摘要及实际 Python 路径/摘要。该对象不声明 jail 所有权。受管实例的读取授权 ID 使用当前安装事件 ID，安装/服务操作产生新事件后，原在途与缓存选择失效；读取不覆盖 root 安装记录，不把它转换成已有实例的接入文件。
 
-每次实际采集前后重新认证签名代码、系统运行文件、解释器及固定配置。只读客户端与过滤器通过隔离的系统 Python 加载相应官方模块，不依赖固定系统目录中另装一套 Fail2ban。客户端仅接收现有固定的 version/status 读取参数；过滤器仍只接受内置 ID、固定 filter/样例和空私有配置目录，不连接运行实例。受管 `fail2ban-regex` 使用官方模块的无参数 `exec_command_line()` 入口，client 使用其 argv 入口。
+每次实际采集前后重新认证签名代码、系统 Python 兼容范围和标准库、解释器及固定配置。只读客户端与过滤器通过隔离的系统 Python 加载相应官方模块，不依赖固定系统目录中另装一套 Fail2ban。客户端仅接收现有固定的 version/status 读取参数；过滤器仍只接受内置 ID、固定 filter/样例和空私有配置目录，不连接运行实例。受管 `fail2ban-regex` 使用官方模块的无参数 `exec_command_line()` 入口，client 使用其 argv 入口。
 
 受管服务采集还核对 systemd 的实际单元/覆盖项/加载版本、主进程所持监听 Socket、实际解释器文件 inode 及完整前台入口参数，前后核对服务代次。签名包及解释器验证纳入最多 10 秒的共享采集任务；仍限制 2 份在途、30 秒窗口 16 份新任务与有界输出，官方工具每次最多 2 秒。30 秒缓存命中返回原采样时间的结果，不作为新的执行校验证据；登记事件变化或撤回时不返回旧选择的成功结果。
 

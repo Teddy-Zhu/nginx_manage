@@ -26,7 +26,9 @@
 
 每个资产登记唯一 ID、组件、版本、Linux 架构、发行版及版本、ABI、必要系统文件的长度/权限/散列、归档长度/散列、展开总长、逐文件清单、同清单内的精确依赖 ID、许可文件、HTTPS 上游来源、维护状态及 Nginx 模块声明。仅允许 panel/web/nginx/fail2ban 四种组件；固定入口依次为 `nginxpanel`、`index.html`、`bin/nginx`、`bin/fail2ban-server`。panel 须包含 `web/index.html`，其版本与发行版本一致；独立 web 的版本与 frontend_version 一致。
 
-`abi=static` 不允许系统运行文件约束，ELF 主入口不得有解释器或动态库依赖；`abi=constrained` 必须固定实际发行版/版本和所需系统文件。静态资产可声明 distribution/distribution_version 为 any/any；仅 web 的 architecture 可为 any。宿主机动态依赖可位于 `/usr/lib/`、`/lib/`、`/lib64/` 或固定 `/usr/bin/python3[.版本]`，解析系统链接后再核对 root 文件身份、长度、权限与散列。依赖缺失、漂移或冲突直接失败，不回退安装其他管理器或组件。
+`abi=static` 不允许系统运行文件约束，ELF 主入口不得有解释器或动态库依赖；`abi=constrained` 必须固定实际发行版/版本和所需系统文件。静态资产可声明 distribution/distribution_version 为 any/any；web 和 Fail2ban 纯代码资产的 architecture 可为 any。宿主机动态依赖可位于 `/usr/lib/`、`/lib/`、`/lib64/` 或固定 `/usr/bin/python3[.版本]`，解析系统链接后再核对 root 文件身份、长度、权限与散列。依赖缺失、漂移或冲突直接失败，不回退安装其他管理器或组件。
+
+Fail2ban 固定使用 `abi=system-python`、Linux、architecture/distribution/distribution_version=any，并声明 `python={implementation:"cpython",minimum_minor:9,maximum_minor:14}`（边界均包含，主版本固定 3）。此 ABI 不携带 runtime_files；准备和复核通过固定受信 `/usr/bin/python3` 以 `-I -S -B` 探测标准库/SQLite 和标准 GIL 模式，不固定其他机器的 Python 文件散列。安装时另固定目标机实际解释器身份，后续漂移仍拒绝运行；详细边界见 [组件发布](publishing.md#fail2ban-官方代码组件)。
 
 文件清单每项为 `path/sha256/size/mode`，mode 使用 JSON 十进制 420（0644）或 493（0755）。路径为规范相对路径，只允许字母、数字、`_ . / + -`，最多 256 字节/16 层，禁止文件/目录冲突。许可文件必须实际包含且非空。ELF 主入口检查实际架构、直接动态依赖和固定 `$ORIGIN/lib`（Nginx 为 `$ORIGIN/../lib`）搜索路径；这些静态约束不代替后续 `nginx -t`、ABI 和运行确认。Fail2ban 只准备代码，拒绝包内 ELF，所需 Python 来自目标已有的受信解释器，不捆绑运行时或执行 pip。
 
@@ -80,7 +82,7 @@ manifest 最多 2 MiB/16 个资产/合计 4096 个文件，准备计划最多 4 
 
 仅接收单一 gzip 流包裹的 root USTAR，物理头逐块检查，拒绝 PAX/GNU 扩展、链接、设备、未知/重复文件、非零填充及额外压缩流。归档首先校验完整签名散列，再解包；复制期间再次散列并检查文件身份，gzip CRC 和完整文件清单通过后才发布。
 
-[发布工具与 CI 流程](publishing.md) 已接入面板/web 及 amd64/arm64 静态 Nginx 的打包、签名、源码/依赖 SBOM 和草稿发布，尚未运行或发布；项目许可和仓库签名配置仍需提供。Nginx 默认资产按固定源码配方预置模块，可复用现有准备、首次安装及迁移依赖准备入口。Fail2ban 默认组件构建、运行中组件切换和完整系统验收仍待补齐。
+[发布工具与 CI 流程](publishing.md) 已接入面板/web 及 amd64/arm64 静态 Nginx 的打包、签名、源码/依赖 SBOM 和草稿发布，尚未运行或发布；项目许可和仓库签名配置仍需提供。Nginx 默认资产按固定源码配方预置模块，可复用现有准备、首次安装及迁移依赖准备入口。Fail2ban 官方代码组装、许可/兼容文件、来源和默认签名发行也已接入，复用现有组件准备与受管安装；运行中组件切换和完整系统验收仍待补齐。
 
 ## 面板版本暂存
 

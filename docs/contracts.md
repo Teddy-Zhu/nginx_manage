@@ -262,3 +262,6 @@ protection 返回目标本机 root 管理/代理来源批准的状态、ID、时
 
 
 默认发布规格包含 nginx-linux-amd64/arm64，入口为 bin/nginx，版本取发布工具内嵌 nginx-source-lock.json，归档名同时绑定 Nginx 版本与面板发行版本。资产固定 static、Linux、any/any 和静态模块特征；目标选择只消除发行版动态库约束，不承诺实际系统运行验收。native-nginx-source-and-static-runtime provenance 绑定原发布仓库/版本/提交/资产/workflow、程序散列，以及 native_nginx 中的源码配方散列、完整参数、musl-gcc 版本、runner 镜像、nginx -V 与系统包清单散列及三份静态运行库名称/路径/包版本/散列/许可文件。SPDX 的四份源码、三份运行库和程序须与原材料完全对应，运行库 LicenseRef 原文须匹配归档 copyright/GPL-3。发布工具不执行输入 ELF，复用静态闭包检查并要求配方内各模块具有已定义对象符号；证据副本仍逐字节匹配签名文件清单。组件接收、首次安装、迁移准备和 Docker 模块策略不增加新协议或运行时编译入口。
+
+
+Agent 66 的 Fail2ban 发行资产使用 system-python ABI，architecture/distribution/distribution_version 为 any，runtime_files 为空，python 声明 cpython 及包含边界的 minimum_minor/maximum_minor（接收端只接受 9–14 内范围，主版本固定 3）。其他组件拒绝此 ABI/字段。实际准备及复核使用固定 root 保护 /usr/bin/python3，经 -I -S -B 在两秒内探测固定标准库、SQLite 内存读写与标准 GIL 模式；16 KiB stdout/4 KiB stderr、进程组超时终止，前后核对路径、inode 与散列。readiness 不等于官方服务运行成功；安装仍按原 root 记录绑定实际本机解释器身份。默认 fail2ban 组装来源以 fail2ban-official-code 绑定原发布身份、workflow、配方/逐源文件清单/入口版本记录散列及组装 Python 版本；签名工具核对官方入口/版本/兼容文件和许可、逐源文件清单及 SPDX。目标不运行安装脚本、pip、包内解释器或上游默认 jail/action，不保留首版前旧 ABI 兼容分支。

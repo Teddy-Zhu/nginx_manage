@@ -24,7 +24,20 @@ func checkRuntime(ctx context.Context, assets []Asset) error {
 		return err
 	}
 	checked := map[string]File{}
+	var python *SystemPython
 	for _, a := range assets {
+		if a.Python != nil {
+			if python == nil {
+				observed, err := InspectSystemPython(ctx)
+				if err != nil {
+					return fmt.Errorf("系统 Python 不可准备：%w", err)
+				}
+				python = &observed
+			}
+			if err := python.Check(*a.Python); err != nil {
+				return err
+			}
+		}
 		for _, file := range a.RuntimeFiles {
 			if err := ctx.Err(); err != nil {
 				return err

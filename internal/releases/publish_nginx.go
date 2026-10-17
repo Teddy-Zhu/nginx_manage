@@ -118,7 +118,7 @@ func nginxPublicationEvidence(directory string, asset Asset, spec PublicationSpe
 		return errors.New("Nginx 资产与内嵌源码、许可或静态模块配方不一致")
 	}
 	n := p.NativeNginx
-	if n == nil || p.Scope != "native-nginx-source-and-static-runtime" || p.GoVersion != "" || p.NodeVersion != "" || p.PNPMVersion != "" || p.GoSumSHA256 != "" || p.WebLockSHA256 != "" || n.LockSHA256 != hash(nginxSourceLock) || !slices.Equal(n.ConfigureArgs, recipe.ConfigureArgs) || n.Compiler != "musl-gcc" || !text(n.CompilerVersion, 4096) || !text(n.RunnerImage, 256) || len(n.RuntimeArchives) != 3 {
+	if n == nil || p.Fail2ban != nil || p.Scope != "native-nginx-source-and-static-runtime" || p.GoVersion != "" || p.NodeVersion != "" || p.PNPMVersion != "" || p.GoSumSHA256 != "" || p.WebLockSHA256 != "" || n.LockSHA256 != hash(nginxSourceLock) || !slices.Equal(n.ConfigureArgs, recipe.ConfigureArgs) || n.Compiler != "musl-gcc" || !text(n.CompilerVersion, 4096) || !text(n.RunnerImage, 256) || len(n.RuntimeArchives) != 3 {
 		return errors.New("Nginx 构建来源未绑定原生工具链和固定源码配方")
 	}
 	fileHashes := map[string]string{}

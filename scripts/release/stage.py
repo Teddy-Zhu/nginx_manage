@@ -146,8 +146,8 @@ def main():
     }
     for package in spec["packages"]:
         asset = package["asset"]
-        if asset["component"] == "nginx":
-            # Native runners stage these assets from the same approved spec.
+        if asset["component"] in ("nginx", "fail2ban"):
+            # Component assemblers stage these assets from the approved spec.
             continue
         destination = args.input_root / package["directory"]
         destination.mkdir()

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "version": "1.1.1",
+  "url": "https://codeload.github.com/fail2ban/fail2ban/tar.gz/refs/tags/1.1.1",
+  "sha256": "4be0ea0488e32de260058462a44a040f0542cd26a9fb6fa6d2514f9dd8ec1609",
+  "size": 627126,
+  "root": "fail2ban-1.1.1",
+  "python": {
+    "implementation": "cpython",
+    "minimum_minor": 9,
+    "maximum_minor": 14
+  },
+  "license": "GPL-2.0-or-later AND MIT AND LicenseRef-Async-Compat",
+  "license_files": [
+    "COPYING",
+    "fail2ban/compat/asyncore.py",
+    "fail2ban/compat/asynchat.py"
+  ],
+  "required_files": {
+    "fail2ban/compat/asyncore.py": "677c3c0e310ab49478dfcc0404e41654166817cf390ba36e0a048c6cbaaedd76",
+    "fail2ban/compat/asynchat.py": "4a50aeb51ab703dc4616dc0fff477ed27780b3ad7a8cc389474a22aeb2ac8aed",
+    "bin/fail2ban-server": "03a1d623d577733029ac7bef9f2daa1e4f68bc8cb748d2338b9fc01f589e5f93",
+    "bin/fail2ban-client": "22237ca4cfa57acded11404a9b210bc1dacf3d6c124d0b623a6cc69396613bf1",
+    "bin/fail2ban-regex": "adfc05e9ee89fe2add542033047bbada9094da0687026c1e2c65dff0cb4acfbd",
+    "fail2ban/version.py": "86c72d38f43585b97d4d4c81112e45c5f45f89fca542dea5d5346ae27c5889f2",
+    "COPYING": "a75fec0260742fe6275d63ff6a5d97b924b28766558306b3fa4069763096929b"
+  }
+}

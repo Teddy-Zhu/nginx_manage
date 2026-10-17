@@ -4,11 +4,11 @@
 
 ## 产物和证据
 
-默认发布规格包含 Linux amd64/arm64 面板包、独立 web 包及两种架构的静态 Nginx 包。面板包包含静态 Go 二进制、同版前端、项目许可、第三方许可原文、SPDX 和构建来源；web 包包含构建后的 HTML/CSS/JS 和对应记录，不包含 node_modules 或服务端构建工具。Nginx 包包含固定入口 `bin/nginx`、源码和静态运行库许可、锁定配方、构建记录及独立证据。
+默认发布规格包含 Linux amd64/arm64 面板包、独立 web 包、两种架构的静态 Nginx 包及架构无关的 Fail2ban 官方代码包。面板包包含静态 Go 二进制、同版前端、项目许可、第三方许可原文、SPDX 和构建来源；web 包包含构建后的 HTML/CSS/JS 和对应记录，不包含 node_modules 或服务端构建工具。Nginx 包包含固定入口 `bin/nginx`、源码和静态运行库许可、锁定配方、构建记录及独立证据。
 
 每个包的 `<asset-id>.spdx.json` 和 `<asset-id>.provenance.json` 同时放在归档与发行根目录。外部副本逐字节匹配签名清单中的文件长度/散列，因此也可以用已验签的文件清单核对。面板/web 的 SPDX 2.3 由固定 Syft 生成，范围明确为源码和构建依赖，包括声明的开发依赖，不宣称每项都存在于运行时 JavaScript。许可文件来自实际使用的 Go 模块、Go 标准库及前端生产依赖；缺少许可原文时停止，不能用任意许可证补齐。Nginx 的 SPDX 由原生构建器按锁定源码、实际静态运行库和二进制生成；全量已安装构建包另存有界版本清单，不冒充全部包均被链接进程序。
 
-构建来源绑定仓库、版本、完整提交、资产、Go/Node/pnpm 版本、go.sum 与 pnpm-lock 散列及 workflow run。面板另核对实际二进制散列、ELF 架构/静态链接、Go 模块和构建设置：干净 VCS 提交、目标平台、CGO=0、注入的 main.version；拒绝模块 replace。数据库目标版本从内嵌 SQL 派生，Agent 协议由 Agent 和发布工具共用单一常量，launcher 使用接收端同一常量。
+面板/web 构建来源绑定仓库、版本、完整提交、资产、Go/Node/pnpm 版本、go.sum 与 pnpm-lock 散列及 workflow run。面板另核对实际二进制散列、ELF 架构/静态链接、Go 模块和构建设置：干净 VCS 提交、目标平台、CGO=0、注入的 main.version；拒绝模块 replace。数据库目标版本从内嵌 SQL 派生，Agent 协议由 Agent 和发布工具共用单一常量，launcher 使用接收端同一常量。
 
 归档按路径排序，固定 root UID/GID、0644/0755 模式、零时间戳及 USTAR 格式，使用单 gzip 流；不接收链接、特殊文件或自行携带的计算字段。逐文件扫描后在打包时重算散列并核对文件身份，使用与接收端相同的资产/依赖图校验。单文件/归档/展开/清单预算沿用接收合同，整次发布输入与输出最多 2 GiB。SHA-256 清单按文件名排序，包含所有公开记录和归档，不包含其自身。
 
@@ -16,7 +16,7 @@
 
 ## 本机入口
 
-`make release-tool` 构建工具。准备目录沿用工作流布局：`panel-linux-amd64/`、`panel-linux-arm64/`、`web/`、`nginx-linux-amd64/`、`nginx-linux-arm64/`，各目录包含对应入口、实际许可原文及同 ID 的两份 JSON 证据。Nginx 资产须符合发布工具内嵌的源码锁定配方；Fail2ban 默认组件构建尚未接入。
+`make release-tool` 构建工具。准备目录沿用工作流布局：`panel-linux-amd64/`、`panel-linux-arm64/`、`web/`、`nginx-linux-amd64/`、`nginx-linux-arm64/`、`fail2ban/`，各目录包含对应入口、实际许可原文及同 ID 的两份 JSON 证据。Nginx 和 Fail2ban 资产须符合发布工具内嵌的各自源码锁定配方。
 
 ```sh
 bin/nginxpanel-release spec \
@@ -50,6 +50,16 @@ bin/nginxpanel-release bundle \
 
 签名工具独立检查二进制架构、静态 ELF 闭包、所需模块的已定义对象符号、实际二进制和各证据散列；SPDX 必须完整匹配锁定的四份源码、三份静态运行库及程序。只有原生构建任务执行自己生成的 `nginx -V`，签名任务不执行上传的程序。发布后原有可信组件准备、原生首次安装和迁移依赖准备按架构选择 `nginx-linux-amd64/arm64`；static any/any 只声明发行资产的系统选择约束，不能代替目标发行版、内核、配置和实际运行验收。
 
+## Fail2ban 官方代码组件
+
+默认 `fail2ban` 资产使用 `abi=system-python`，架构和发行版为 any，固定官方 1.1.1 源码归档、长度、SHA-256、三个入口、版本文件、COPYING 和 async 兼容文件散列；配方见 [fail2ban-source-lock.json](../internal/releases/fail2ban-source-lock.json)，上游为 [Fail2ban 官方发行](https://github.com/fail2ban/fail2ban/releases/tag/1.1.1)。归档包含官方 Python 库、三个原始脚本、供参考的 `.conf` 配置、许可、SPDX 及来源记录；排除测试包、setup.py、字节码、解释器和构建依赖。运行配置仍由现有受管实例生成，不激活归档中的发行版默认 jail/action。
+
+`build` 任务在面板/web 暂存后执行 `scripts/release/fail2ban.py`，绑定同一干净提交与规格；只复制经过散列核对的官方源码，使用隔离 Python 记录三个官方入口的版本，不执行安装、服务控制或 pip。provenance 绑定完整逐源文件清单、组装 Python 版本、入口版本记录和锁定配方；签名工具核对每个文件、固定入口/兼容文件及 SPDX 的官方源码与兼容许可。通用打包仍检查禁止携带 ELF，签名任务不执行上传代码。
+
+签名资产明确声明 CPython 主版本 3、可接受 minor 范围 9–14，要求标准 GIL 模式。目标机组件准备、已有产物复核及 Fail2ban 诊断复用固定 `/usr/bin/python3` 探测，先核对 root 路径/权限/文件身份，再执行两秒有界的 `-I -S -B` 标准库及 SQLite 内存读写检查；导入不读取用户 site-packages、环境 Python 路径或当前目录。探测前后核对解释器身份和散列，缺失依赖时停止准备，沿现有明确授权的系统 Python 包流程处理。
+
+正式安装另将实际目标机解释器路径、版本和散列写入原 root 安装记录；后续漂移仍阻止运行，不能以兼容范围替代本机批准。`runtime_ready` 对 Fail2ban 只证明上述解释器/标准库前提满足，完整配置、服务启动和运行结果仍由原安装器核对。此范围是代码准入声明，3.9–3.14 的真实发行版/架构与服务行为验收仍待 P5；不能据源码组装或标准库探测宣称系统矩阵已通过。面板 Docker 镜像继续不包含 Python/Fail2ban。
+
 ## 固定镜像发行
 
 镜像构建复用同次发行的面板静态程序及许可文本，分别使用 `ubuntu-24.04`、`ubuntu-24.04-arm` 原生运行器；不在服务器或运行容器中编译、增装模块。Buildx 固定版本，BuildKit 和 SBOM scanner 固定版本与摘要。Nginx 构建门禁继续核对预置模块、版本和程序散列，面板镜像只含 launcher、CA 和许可文件。
@@ -75,4 +85,4 @@ sudo /opt/nginxpanel/current/nginxpanel release-images \
 
 上传前核对当前标签仍指向批准的完整提交。已存在的发行或恢复草稿不会被自动覆盖；新建 draft，上传全部文件并核对资产名称、数量、状态、长度及可用的 GitHub SHA-256 后才公开。失败保留 draft，不自动删除、覆盖或跳过失败。稳定版使用 GitHub legacy 版本选择，预发布不会成为 latest；可配合仓库 immutable releases，但不能替代签名，相关字段见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
 
-当前仓库缺少项目自身的 LICENSE，正式产物和发布仍需补齐此业务输入。Fail2ban 默认组件构建及运行中组件切换仍在 P4 后续范围。原生组件和镜像发布均只完成源码接入，未执行构建、工具、CI、真实发布或系统验收，统一留到 P5。
+当前仓库缺少项目自身的 LICENSE，正式产物和发布仍需补齐此业务输入。运行中组件切换仍在 P4 后续范围。原生组件和镜像发布均只完成源码接入，未执行构建、工具、CI、真实发布或系统验收，统一留到 P5。

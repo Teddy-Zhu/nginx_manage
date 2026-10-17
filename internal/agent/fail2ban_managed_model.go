@@ -180,24 +180,14 @@ func admitFail2banManaged(ctx context.Context, in Fail2banInstallOptions) (*fail
 	if err != nil {
 		return nil, err
 	}
-	python := readFail2banPython(ctx)
-	if !python.Executable.Trusted || python.StandardLibrary == nil || !*python.StandardLibrary {
+	python, err := releases.InspectSystemPython(ctx)
+	if err != nil || a.Python == nil {
 		return nil, errors.New("须先准备系统 Python 及所需标准库；安装器不执行 pip 或安装软件包")
 	}
-	r.PythonPath, r.PythonVersion = python.Executable.Resolved, python.Version
-	found := false
-	for _, f := range a.RuntimeFiles {
-		if f.Path == r.PythonPath && f.Mode == 0755 {
-			found = true
-		}
-	}
-	if !found {
-		return nil, errors.New("签名资产未约束实际系统 Python 解释器")
-	}
-	r.PythonSHA256, err = secure.HashRootFile(r.PythonPath, 64<<20)
-	if err != nil {
+	if err := python.Check(*a.Python); err != nil {
 		return nil, err
 	}
+	r.PythonPath, r.PythonVersion, r.PythonSHA256 = python.Resolved, python.VersionString(), python.SHA256
 	r.ManagerPath, err = os.Executable()
 	if err != nil {
 		return nil, err

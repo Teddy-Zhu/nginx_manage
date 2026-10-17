@@ -60,6 +60,7 @@ type BuildProvenance struct {
 	BinarySHA256  string                 `json:"binary_sha256,omitempty"`
 	WorkflowRun   string                 `json:"workflow_run"`
 	NativeNginx   *NativeNginxProvenance `json:"native_nginx,omitempty"`
+	Fail2ban      *Fail2banProvenance    `json:"fail2ban,omitempty"`
 }
 
 func validCommit(commit string) bool {
@@ -97,6 +98,11 @@ func NewPublication(repo, version, commit string) (PublicationSpec, error) {
 		}
 		spec.Packages = append(spec.Packages, component)
 	}
+	fail2ban, err := fail2banPublicationPackage(version)
+	if err != nil {
+		return PublicationSpec{}, err
+	}
+	spec.Packages = append(spec.Packages, fail2ban)
 	return spec, nil
 }
 
@@ -133,7 +139,13 @@ func publicationEvidence(directory string, asset Asset, spec PublicationSpec) (m
 		}
 		return map[string][]byte{sbomName: sbom, provenanceName: raw}, nil
 	}
-	if p.NativeNginx != nil || p.Scope != "source-and-build-dependencies" || !text(p.GoVersion, 64) || !text(p.NodeVersion, 64) || !text(p.PNPMVersion, 64) || !validHash(p.GoSumSHA256) || !validHash(p.WebLockSHA256) {
+	if asset.Component == "fail2ban" {
+		if err := fail2banPublicationEvidence(directory, asset, spec, p, sbom); err != nil {
+			return nil, err
+		}
+		return map[string][]byte{sbomName: sbom, provenanceName: raw}, nil
+	}
+	if p.NativeNginx != nil || p.Fail2ban != nil || p.Scope != "source-and-build-dependencies" || !text(p.GoVersion, 64) || !text(p.NodeVersion, 64) || !text(p.PNPMVersion, 64) || !validHash(p.GoSumSHA256) || !validHash(p.WebLockSHA256) {
 		return nil, errors.New("发布构建来源缺少对应工具链及依赖输入")
 	}
 	if asset.Component == "panel" {

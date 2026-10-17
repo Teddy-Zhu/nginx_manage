@@ -41,26 +41,27 @@ type File struct {
 	Mode   uint32 `json:"mode"`
 }
 type Asset struct {
-	ID                  string   `json:"id"`
-	Component           string   `json:"component"`
-	Version             string   `json:"version"`
-	OS                  string   `json:"os"`
-	Architecture        string   `json:"architecture"`
-	Distribution        string   `json:"distribution"`
-	DistributionVersion string   `json:"distribution_version"`
-	ABI                 string   `json:"abi"`
-	RuntimeFiles        []File   `json:"runtime_files"`
-	Archive             string   `json:"archive"`
-	SHA256              string   `json:"sha256"`
-	Size                int64    `json:"size"`
-	UnpackedBytes       int64    `json:"unpacked_bytes"`
-	Files               []File   `json:"files"`
-	Dependencies        []string `json:"dependencies"`
-	License             string   `json:"license"`
-	LicenseFiles        []string `json:"license_files"`
-	SourceURL           string   `json:"source_url"`
-	Maintenance         string   `json:"maintenance"`
-	Features            []string `json:"features"`
+	ID                  string         `json:"id"`
+	Component           string         `json:"component"`
+	Version             string         `json:"version"`
+	OS                  string         `json:"os"`
+	Architecture        string         `json:"architecture"`
+	Distribution        string         `json:"distribution"`
+	DistributionVersion string         `json:"distribution_version"`
+	ABI                 string         `json:"abi"`
+	RuntimeFiles        []File         `json:"runtime_files"`
+	Python              *PythonRuntime `json:"python,omitempty"`
+	Archive             string         `json:"archive"`
+	SHA256              string         `json:"sha256"`
+	Size                int64          `json:"size"`
+	UnpackedBytes       int64          `json:"unpacked_bytes"`
+	Files               []File         `json:"files"`
+	Dependencies        []string       `json:"dependencies"`
+	License             string         `json:"license"`
+	LicenseFiles        []string       `json:"license_files"`
+	SourceURL           string         `json:"source_url"`
+	Maintenance         string         `json:"maintenance"`
+	Features            []string       `json:"features"`
 }
 type Manifest struct {
 	Schema               int              `json:"schema"`
@@ -138,6 +139,10 @@ func cloneAssets(input []Asset) []Asset {
 		out[i].Dependencies = slices.Clone(out[i].Dependencies)
 		out[i].LicenseFiles = slices.Clone(out[i].LicenseFiles)
 		out[i].Features = slices.Clone(out[i].Features)
+		if input[i].Python != nil {
+			python := *input[i].Python
+			out[i].Python = &python
+		}
 	}
 	return out
 }

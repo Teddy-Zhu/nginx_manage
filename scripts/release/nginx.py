@@ -55,7 +55,7 @@ class SourceRedirect(urllib.request.HTTPRedirectHandler):
 
 def download(source, archive):
     origin = urllib.parse.urlsplit(source["url"])
-    if origin.scheme != "https" or origin.hostname not in ("nginx.org", "github.com", "zlib.net") or origin.username or origin.password or origin.query or origin.fragment or origin.port not in (None, 443):
+    if origin.scheme != "https" or origin.hostname not in ("nginx.org", "github.com", "codeload.github.com", "zlib.net") or origin.username or origin.password or origin.query or origin.fragment or origin.port not in (None, 443):
         raise ValueError("source URL outside approved upstreams")
     hosts = {origin.hostname}
     if origin.hostname == "github.com":
