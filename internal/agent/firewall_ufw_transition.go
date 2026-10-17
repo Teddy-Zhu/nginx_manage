@@ -15,7 +15,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const ufwChangeBytes = 16 << 20
+const ufwChangeBytes = 64 << 20
 
 // This is local recovery material, never an exported policy or an ownership
 // claim inferred from comments. Only the accepted root parent can dispatch it.

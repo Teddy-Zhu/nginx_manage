@@ -107,7 +107,7 @@ func (w *ufwDryRunWorkspace) installUFWTools(binding *ufwToolBinding) error {
 // This material is disposable and is not a persistent operation receipt.
 func writeUFWWorkspaceFile(path string, raw []byte) error {
 	if len(raw) > firewall.UFWReadBytes {
-		return errors.New("UFW 私有配置文件超过 512 KiB")
+		return errors.New("UFW 私有配置文件超过 2 MiB")
 	}
 	temp := path + "." + secure.ID() + ".tmp"
 	f, err := os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)

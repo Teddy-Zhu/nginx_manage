@@ -17,8 +17,10 @@ type Protection struct {
 	Sources []string `json:"sources"`
 }
 type PlanInput struct {
-	Action  string `json:"action"`
-	Version int64  `json:"version"`
+	Action            string `json:"action"`
+	Version           int64  `json:"version"`
+	PreparationID     string `json:"preparation_id,omitempty"`
+	CancelPreparation bool   `json:"cancel_preparation,omitempty"`
 }
 type ApplyInput struct {
 	Action  string `json:"action"`
@@ -26,32 +28,50 @@ type ApplyInput struct {
 	Version int64  `json:"version"`
 }
 type RuntimeInput struct {
-	Action  string `json:"action"`
-	Version int64  `json:"version"`
-	Policy  Policy `json:"policy"`
+	Action            string `json:"action"`
+	Version           int64  `json:"version"`
+	Policy            Policy `json:"policy"`
+	PreparationID     string `json:"preparation_id,omitempty"`
+	CancelPreparation bool   `json:"cancel_preparation,omitempty"`
+}
+
+// Preparation has no host-rule side effects. Ready still requires a fresh
+// Apply admission; interrupted preparation never resumes a candidate write.
+type PlanPreparation struct {
+	ID                string `json:"id"`
+	Action            string `json:"action"`
+	Version           int64  `json:"version"`
+	State             string `json:"state"`
+	CompletedCommands int    `json:"completed_commands"`
+	TotalCommands     int    `json:"total_commands"`
+	StartedAt         int64  `json:"started_at"`
+	UpdatedAt         int64  `json:"updated_at"`
+	Deadline          int64  `json:"deadline"`
+	Error             string `json:"error"`
 }
 type Plan struct {
-	Backend             string         `json:"backend"`
-	CanApply            bool           `json:"can_apply"`
-	Firewalld           *FirewalldPlan `json:"firewalld"`
-	UFW                 *UFWPlan       `json:"ufw"`
-	Action              string         `json:"action"`
-	ID                  string         `json:"id"`
-	Version             int64          `json:"version"`
-	PolicyHash          string         `json:"policy_hash"`
-	ProgramHash         string         `json:"program_hash"`
-	Baseline            KernelView     `json:"baseline"`
-	Protections         []Protection   `json:"protections"`
-	SSHProfile          string         `json:"ssh_profile"`
-	SSHListeners        []string       `json:"ssh_listeners"`
-	ListenerVersion     int64          `json:"listener_version"`
-	Listener            string         `json:"listener"`
-	ControlSource       string         `json:"control_source"`
-	ConfirmationSeconds int            `json:"confirmation_seconds"`
-	ExpiresAt           int64          `json:"expires_at"`
-	TransactionHash     string         `json:"transaction_hash"`
-	TransactionBytes    int            `json:"transaction_bytes"`
-	GeneratedRules      int            `json:"generated_rules"`
+	Preparation         *PlanPreparation `json:"preparation"`
+	Backend             string           `json:"backend"`
+	CanApply            bool             `json:"can_apply"`
+	Firewalld           *FirewalldPlan   `json:"firewalld"`
+	UFW                 *UFWPlan         `json:"ufw"`
+	Action              string           `json:"action"`
+	ID                  string           `json:"id"`
+	Version             int64            `json:"version"`
+	PolicyHash          string           `json:"policy_hash"`
+	ProgramHash         string           `json:"program_hash"`
+	Baseline            KernelView       `json:"baseline"`
+	Protections         []Protection     `json:"protections"`
+	SSHProfile          string           `json:"ssh_profile"`
+	SSHListeners        []string         `json:"ssh_listeners"`
+	ListenerVersion     int64            `json:"listener_version"`
+	Listener            string           `json:"listener"`
+	ControlSource       string           `json:"control_source"`
+	ConfirmationSeconds int              `json:"confirmation_seconds"`
+	ExpiresAt           int64            `json:"expires_at"`
+	TransactionHash     string           `json:"transaction_hash"`
+	TransactionBytes    int              `json:"transaction_bytes"`
+	GeneratedRules      int              `json:"generated_rules"`
 }
 
 type FirewalldPlan struct {
@@ -116,6 +136,7 @@ type ProtectionObservation struct {
 	Reason       string       `json:"reason"`
 }
 type RuntimeView struct {
+	Preparation           *PlanPreparation      `json:"preparation"`
 	Backend               string                `json:"backend"`
 	CanPlan               bool                  `json:"can_plan"`
 	ProtectionObservation ProtectionObservation `json:"protection_observation"`

@@ -65,7 +65,7 @@ func projectUFWAuxiliaries(before, candidate []byte, family string) ([]byte, err
 	text.WriteString("COMMIT\n")
 	out := []byte(text.String())
 	if len(out) > firewall.UFWReadBytes {
-		return nil, errors.New("UFW 保留原辅助规则后的候选超过 512 KiB")
+		return nil, errors.New("UFW 保留原辅助规则后的候选超过 2 MiB")
 	}
 	parsed, err := parseUFWNative(out, family, false)
 	if err != nil || len(parsed.Rules) != len(generated.Rules) {
@@ -162,7 +162,7 @@ func ufwRestorePayload(material ufwReloadMaterial, target string) ([]byte, error
 	text.WriteString("COMMIT\n")
 	out := []byte(text.String())
 	if len(out) > firewall.UFWReadBytes {
-		return nil, errors.New("UFW 封闭重载程序超过 512 KiB")
+		return nil, errors.New("UFW 封闭重载程序超过 2 MiB")
 	}
 	return out, nil
 }

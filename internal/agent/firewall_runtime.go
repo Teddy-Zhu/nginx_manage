@@ -69,6 +69,7 @@ type hostFirewall struct {
 	available             bool
 	ufwPlanning           bool
 	ufwLastRescue         string
+	ufwPreparation        *ufwPlanPreparation
 	recovering            bool
 	policyUncertain       bool
 	journal               *Journal
@@ -214,7 +215,7 @@ func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
 func (f *hostFirewall) pending() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.activeLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil || ufwRegistrationPending(f.dataDir)
+	return f.activeLocked() || f.ufwPreparingLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil || ufwRegistrationPending(f.dataDir)
 }
 func (f *hostFirewall) emptyMarker() string { return nftRegistrationPrefix + f.state.Owner }
 func (f *hostFirewall) program(record *firewallPolicyRecord) (*firewall.NFTProgram, string, error) {
@@ -330,6 +331,15 @@ func (f *hostFirewall) Open() error {
 	return nil
 }
 func (f *hostFirewall) Close() {
+	f.mu.Lock()
+	preparation := f.ufwPreparation
+	if preparation != nil && preparation.cancel != nil {
+		preparation.cancel()
+	}
+	f.mu.Unlock()
+	if preparation != nil && preparation.done != nil {
+		<-preparation.done
+	}
 	if f.unlock != nil {
 		f.unlock()
 		f.unlock = nil
@@ -415,11 +425,14 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	defer f.remote.mu.Unlock()
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if in.PreparationID != "" || in.CancelPreparation {
+		return f.ufwPreparationPlanLocked(in)
+	}
 	if f.owner == "firewalld" {
 		return f.planFirewalldLocked(ctx, in, connection)
 	}
 	if f.owner == "ufw" && f.state.Schema == 0 {
-		return f.planUFWLocked(ctx, in, connection)
+		return f.startUFWPreparationLocked(ctx, in, connection)
 	}
 	var out firewall.Plan
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
@@ -512,7 +525,7 @@ func (f *hostFirewall) storePlanLocked(view firewall.Plan, record *firewallPolic
 			delete(f.plans, key)
 		}
 	}
-	if len(f.plans) >= 8 {
+	if _, exists := f.plans[view.ID]; !exists && len(f.plans) >= 8 {
 		return fault.New(429, "FIREWALL_PLAN_LIMIT", "待执行计划已达 8 份，请等待过期")
 	}
 	f.plans[view.ID] = firewallPrivatePlan{view: view, record: record}

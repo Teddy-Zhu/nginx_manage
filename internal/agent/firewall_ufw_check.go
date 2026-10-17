@@ -16,7 +16,9 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const ufwDryRunCommands = 64
+const ufwDryRunCommands = firewall.MaxEntries
+const ufwDryRunTotalBytes = 4 << 30
+const ufwDryRunOutputBytes = 5 << 20
 
 type ufwFileSnapshot struct {
 	Path              string
@@ -132,14 +134,14 @@ func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwCon
 // or comment. Reverse prepend steps accumulate only in the private datadir;
 // every candidate and the final per-family order must match the typed program.
 // This prepares a file batch, not a kernel transaction or ownership grant.
-func checkUFWDryRun(ctx context.Context, binary string, program, previous *firewall.UFWProgram, baseline ufwConfigurationSnapshot, ipv6 bool) (proof ufwDryRunProof, resultErr error) {
+func checkUFWDryRun(ctx context.Context, binary string, program, previous *firewall.UFWProgram, baseline ufwConfigurationSnapshot, ipv6 bool, progress func(int) error) (proof ufwDryRunProof, resultErr error) {
 	defer func() {
 		if resultErr != nil {
 			proof = ufwDryRunProof{}
 		}
 	}()
 	if len(program.Rules) > ufwDryRunCommands || len(previous.Rules) > ufwDryRunCommands || len(program.Rules) != len(program.Entries) || len(previous.Rules) != len(previous.Entries) {
-		return proof, errors.New("UFW 原策略与候选分别最多 64 条包含入口保护的生成规则")
+		return proof, errors.New("UFW 原策略与候选分别最多 8192 条包含入口保护的生成规则")
 	}
 	proof.Commands = len(program.Rules) + len(previous.Rules)
 	owned, err := ufwNativeProgram(previous)
@@ -186,7 +188,7 @@ func checkUFWDryRun(ctx context.Context, binary string, program, previous *firew
 		return proof, err
 	}
 	if len(native) > firewall.UFWProgramBytes {
-		return proof, errors.New("UFW 生成原生规则超过 480 KiB")
+		return proof, errors.New("UFW 生成原生规则超过 2 MiB")
 	}
 	proof.NativeHash = secure.Hash(append([]byte("ufw:native-host:v1:\x00"), native...))
 	proof.Warnings = []string{}
@@ -234,19 +236,24 @@ func checkUFWDryRun(ctx context.Context, binary string, program, previous *firew
 	for family, file := range before {
 		current[family] = file
 	}
+	stream, err := binding.dryRunStream(ctx, temp)
+	if err != nil {
+		return proof, err
+	}
+	defer stream.abort()
 	hashes := []string{}
-	total := 0
+	var total int64
 	for index, rule := range previous.Rules {
 		if err := ctx.Err(); err != nil {
 			return proof, err
 		}
-		raw, err := binding.python(ctx, temp, "delete", rule.Arguments, 1<<20)
+		raw, err := stream.run("delete", rule.Arguments)
 		if err != nil {
 			return proof, errors.New("UFW 原受管规则删除预演失败、超时或返回警告")
 		}
-		total += len(raw)
-		if total > 8<<20 {
-			return proof, errors.New("UFW dry-run 完整输出合计超过 8 MiB")
+		total += int64(len(raw))
+		if total > ufwDryRunTotalBytes {
+			return proof, errors.New("UFW dry-run 累计处理数据超过 4 GiB")
 		}
 		candidate, err := parseUFWDeleteCandidate(raw, owned[index], current[owned[index].Family])
 		if err != nil {
@@ -261,19 +268,22 @@ func checkUFWDryRun(ctx context.Context, binary string, program, previous *firew
 			warned[candidate.Warning] = true
 		}
 		hashes = append(hashes, secure.Hash(raw))
+		if err = progress(len(hashes)); err != nil {
+			return proof, err
+		}
 	}
 	for index := len(program.Rules) - 1; index >= 0; index-- {
 		if err := ctx.Err(); err != nil {
 			return proof, err
 		}
 		rule := program.Rules[index]
-		raw, err := binding.python(ctx, temp, "prepend", rule.Arguments, 1<<20)
+		raw, err := stream.run("prepend", rule.Arguments)
 		if err != nil {
 			return proof, errors.New("UFW dry-run 失败、超时或返回警告；未执行规则变更")
 		}
-		total += len(raw)
-		if total > 8<<20 {
-			return proof, errors.New("UFW dry-run 完整输出合计超过 8 MiB")
+		total += int64(len(raw))
+		if total > ufwDryRunTotalBytes {
+			return proof, errors.New("UFW dry-run 累计处理数据超过 4 GiB")
 		}
 		candidate, err := parseUFWDryRunCandidate(raw, expected[index], current[expected[index].Family])
 		if err != nil {
@@ -291,6 +301,12 @@ func checkUFWDryRun(ctx context.Context, binary string, program, previous *firew
 			warned[candidate.Warning] = true
 		}
 		hashes = append(hashes, secure.Hash(raw))
+		if err = progress(len(hashes)); err != nil {
+			return proof, err
+		}
+	}
+	if err = stream.finish(); err != nil {
+		return proof, err
 	}
 	raw, err := json.Marshal(hashes)
 	if err != nil {
@@ -391,7 +407,7 @@ func parseUFWDryRunCandidate(raw []byte, expected ufwNativeRule, before *ufwNati
 		return nil, errors.New("UFW dry-run 缺少对应地址族的更新结果，或已有匹配条件冲突")
 	}
 	if len(text) > firewall.UFWReadBytes {
-		return nil, errors.New("UFW 累积候选文件超过 512 KiB")
+		return nil, errors.New("UFW 累积候选文件超过 2 MiB")
 	}
 	candidate, err := parseUFWNative([]byte(text), expected.Family, false)
 	if err != nil {

@@ -42,11 +42,16 @@ func (s *Service) Plan(ctx context.Context, in PlanInput, connection string) (Pl
 	if in.Version < 1 || in.Action != "apply" && in.Action != "remove" {
 		return out, fault.Invalid("防火墙计划动作或版本无效")
 	}
-	executor, err := s.executor(ctx, in.Action == "apply")
+	executor, err := s.executor(ctx, in.Action == "apply" && in.PreparationID == "")
 	if err != nil {
 		return out, err
 	}
-	input := RuntimeInput{Action: in.Action, Version: in.Version, Policy: DefaultPolicy()}
+	input := RuntimeInput{Action: in.Action, Version: in.Version, Policy: DefaultPolicy(), PreparationID: in.PreparationID, CancelPreparation: in.CancelPreparation}
+	if in.PreparationID != "" || in.CancelPreparation {
+		// Poll/cancel the frozen original preparation, even if the desired
+		// policy changed. A new Apply still compares the current DB version.
+		return executor.PlanFirewall(ctx, input, connection)
+	}
 	if in.Action == "apply" {
 		view, err := s.Policy(ctx)
 		if err != nil {
@@ -152,7 +157,7 @@ func (s *Service) SetManagement(ctx context.Context, p auth.Principal, enabled b
 			if !view.Available {
 				return fault.Conflict("防火墙运行状态不可核对，不能按移除方式停用")
 			}
-			empty := view.ConfirmedAction == "none" && (view.Backend == "firewalld" || view.Kernel.Available && view.Kernel.TableExists && view.Kernel.Chains == 0 && view.Kernel.Rules == 0)
+			empty := view.ConfirmedAction == "none" && (view.Backend == "firewalld" || view.Backend == "ufw" || view.Kernel.Available && view.Kernel.TableExists && view.Kernel.Chains == 0 && view.Kernel.Rules == 0)
 			if empty {
 				if operationID != "" {
 					return fault.Invalid("尚无已确认规则时不接受移除操作 ID")

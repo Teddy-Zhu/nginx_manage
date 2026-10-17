@@ -46,6 +46,7 @@ func (f *hostFirewall) openUFWExecutor(v *ufwChangeCheckpoint) error {
 		return err
 	}
 	f.recovering, f.policyUncertain = true, false
+	preparationErr := f.openUFWPreparationLocked()
 	call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	// A restarted Agent cannot retain proof of the post-change listener. Never
@@ -59,6 +60,11 @@ func (f *hostFirewall) openUFWExecutor(v *ufwChangeCheckpoint) error {
 	}
 	if err := f.reconcileUFWConfirmedLocked(call); err != nil {
 		f.problem = ufwRuntimeProblem + err.Error()
+	}
+	if preparationErr != nil {
+		// Read-only preparation metadata must never prevent recovery of an
+		// already admitted host change. It only blocks new admissions.
+		f.problem = "UFW 计划准备记录无法读取，请本机检查"
 	}
 	return nil
 }
@@ -136,6 +142,25 @@ func (f *hostFirewall) rescueUFWLocked(ctx context.Context) error {
 
 func (f *hostFirewall) runUFWLocked(ctx context.Context, stopping bool, nextInspect, nextProtectionInspect *time.Time) {
 	if !f.recovering {
+		return
+	}
+	if f.ufwPreparingLocked() {
+		if stopping || f.remote.web == nil || f.remote.listener == nil || f.remote.problem != "" || f.problem != "" {
+			f.ufwPreparation.cancel()
+		}
+		// A rescue request takes precedence over a read-only preparation.
+		// Let its bounded child finish cancellation before acquiring its locks.
+		raw, err := listenerRead(filepath.Join(filepath.Dir(ufwChangePath(f.dataDir)), "rescue.json"), 1024)
+		if err == nil {
+			var request struct {
+				ID string `json:"id"`
+			}
+			if ufwToolJSON(raw, &request) != nil || !validID(request.ID) || request.ID != f.ufwLastRescue {
+				f.ufwPreparation.cancel()
+			}
+		} else if !os.IsNotExist(err) {
+			f.ufwPreparation.cancel()
+		}
 		return
 	}
 	if err := f.rescueUFWLocked(ctx); err != nil {

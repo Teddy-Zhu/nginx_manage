@@ -11,8 +11,8 @@ import (
 )
 
 const UFWCommentPrefix = "nginxpanel:host:v1:"
-const UFWProgramBytes = 480 << 10
-const UFWReadBytes = 512 << 10
+const UFWProgramBytes = 2 << 20
+const UFWReadBytes = 2 << 20
 
 // Only generated arguments may reach a future executor, never report strings
 // or shell input. Compilation establishes neither ownership nor placement.
@@ -112,7 +112,7 @@ func finishUFW(program *UFWProgram) (*UFWProgram, error) {
 		return nil, err
 	}
 	if len(raw) > UFWProgramBytes {
-		return nil, fault.Invalid("UFW 命令参数超过 480 KiB，请缩小规则组合")
+		return nil, fault.Invalid("UFW 命令参数超过 2 MiB，请缩小规则组合")
 	}
 	program.Bytes = len(raw)
 	program.Hash = secure.Hash(append([]byte("ufw:host:v1:\x00"), raw...))

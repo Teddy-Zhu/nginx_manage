@@ -52,7 +52,7 @@ func (s *Server) GetFirewallOperation(w http.ResponseWriter, r *http.Request, id
 	s.ok(w, r, out)
 }
 func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.PlanFirewallParams) {
-	p, ok := s.firewallPrincipal(w, r, true)
+	p, ok := s.firewallPrincipal(w, r, false)
 	if !ok {
 		return
 	}
@@ -61,14 +61,24 @@ func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.P
 		s.fail(w, r, err)
 		return
 	}
+	if (in.PreparationID == "" || in.CancelPreparation) && !s.recentAuthentication(r, p) {
+		s.fail(w, r, fault.New(403, "REAUTHENTICATION_REQUIRED", "请重新验证密码后继续"))
+		return
+	}
 	out, err := s.Firewall.Plan(r.Context(), in, remotelisten.ConnectionID(r.Context()))
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	if err = s.audit(r, p.ID, "firewall.plan", out.ID, out.Action+"_planned"); err != nil {
-		s.fail(w, r, err)
-		return
+	if in.PreparationID == "" || in.CancelPreparation {
+		state := "planned"
+		if out.Preparation != nil {
+			state = out.Preparation.State
+		}
+		if err = s.audit(r, p.ID, "firewall.plan", out.ID, out.Action+"_"+state); err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	}
 	s.ok(w, r, out)
 }

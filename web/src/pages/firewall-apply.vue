@@ -63,6 +63,22 @@ const canManage = computed(() =>
   ),
 );
 const operation = computed(() => view.value?.operation);
+const preparation = computed(() => {
+  const latest = view.value?.preparation;
+  return latest && ["running", "cancelling"].includes(latest.state)
+    ? latest
+    : plan.value?.preparation ?? latest;
+});
+const preparing = computed(
+  () => !!preparation.value && ["running", "cancelling"].includes(preparation.value.state),
+);
+const preparationStates = {
+  running: "正在准备",
+  cancelling: "正在取消",
+  ready: "准备完成",
+  failed: "准备失败",
+  cancelled: "已取消",
+};
 const observedProtections = computed(() => view.value?.protection_observation);
 const protectionStates = {
   unavailable: "尚不可核对",
@@ -75,6 +91,7 @@ const emptyInitial = computed(
     view.value?.available &&
     view.value.confirmed_action === "none" &&
     (view.value.backend === "firewalld" ||
+      view.value.backend === "ufw" ||
       (view.value.kernel.available &&
         view.value.kernel.table_exists &&
         view.value.kernel.chains === 0 &&
@@ -149,6 +166,23 @@ async function readRuntime() {
     updateDeadline();
     if (result.operation && result.operation.plan_id === plan.value?.id)
       uncertain.value = false;
+    const pending = result.preparation;
+    if (pending && ["running", "cancelling"].includes(pending.state))
+      action.value = pending.action;
+    if (
+      pending && pending.action === action.value &&
+      (["running", "cancelling"].includes(pending.state) ||
+        pending.action === "remove" || pending.version === stored.value?.version) &&
+      (plan.value?.id !== pending.id || plan.value?.preparation?.state !== pending.state) &&
+      ["running", "cancelling", "ready"].includes(pending.state)
+    ) {
+      plan.value = await api.planFirewall(
+        { action: pending.action, version: pending.version, preparation_id: pending.id },
+        controller.signal,
+      );
+    } else if (plan.value && pending && plan.value.id === pending.id) {
+      plan.value = { ...plan.value, preparation: pending };
+    }
   } catch (cause) {
     if (!closed) error.value = apiError(cause).message;
   } finally {
@@ -197,6 +231,21 @@ async function generate() {
     uncertain.value = false;
   });
 }
+async function cancelPreparation() {
+  const current = preparation.value;
+  if (!current || !preparing.value) return;
+  await run(async () => {
+    plan.value = await api.planFirewall(
+      {
+        action: current.action,
+        version: current.version,
+        preparation_id: current.id,
+        cancel_preparation: true,
+      },
+      controller.signal,
+    );
+  });
+}
 async function disableManagement() {
   if (!canDisable.value) return;
   const operationID = view.value?.confirmed_operation_id;
@@ -242,7 +291,9 @@ function apply() {
       plan.value?.action === "remove"
         ? plan.value.backend === "firewalld"
           ? "将清空本应用 policy 的业务规则和入口保护，保留空 policy 登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，确认后才清空永久规则，未确认将恢复原配置。"
-          : "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
+          : plan.value.backend === "ufw"
+            ? "将移除本应用 UFW 用户规则及入口保护，保留 UFW 授权和其他来源规则。120 秒内需通过新的管理 HTTPS 连接确认，确认后才保存配置，未确认将恢复原规则。"
+            : "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
         : "将应用所列入口保护和已保存策略。120 秒内需通过新的管理 HTTPS 连接确认；连接中断或超时会恢复最后确认策略。",
     positiveText: "执行",
     negativeText: "取消",
@@ -267,7 +318,7 @@ onMounted(() => {
   void load();
   timer = setInterval(() => {
     updateDeadline();
-    if (++ticks % (active.value || uncertain.value ? 3 : 30) === 0)
+    if (++ticks % (active.value || uncertain.value || preparing.value ? 3 : 30) === 0)
       void readRuntime();
   }, 1000);
 });
@@ -291,7 +342,8 @@ onUnmounted(() => {
             ? !stored?.version || managementDisabled !== false
             : view?.confirmed_action !== 'apply') ||
           active ||
-          uncertain
+          uncertain ||
+          preparing
         "
         @click="generate"
         >生成{{ action === "remove" ? "移除" : "应用" }}计划</n-button
@@ -301,7 +353,7 @@ onUnmounted(() => {
   <n-select
     :value="action"
     :options="actions"
-    :disabled="busy || active || uncertain"
+    :disabled="busy || active || uncertain || preparing"
     aria-label="防火墙动作"
     @update:value="setAction"
   />
@@ -319,7 +371,6 @@ onUnmounted(() => {
     >{{ view.reason }}</n-alert
   >
   <n-alert
-    v-if="view?.backend !== 'ufw'"
     type="info"
     :bordered="false"
     class="notice"
@@ -355,7 +406,7 @@ onUnmounted(() => {
       type="info"
       :bordered="false"
       class="notice"
-      >当前只有已核对的初始空登记，无已确认规则需要移除。</n-alert
+      >当前授权范围内无已确认规则需要移除。</n-alert
     >
     <n-button v-if="canDisable" :disabled="busy" @click="disableManagement"
       >停用防火墙管理</n-button
@@ -366,7 +417,9 @@ onUnmounted(() => {
         view.confirmed_action === "remove"
           ? view.backend === "firewalld"
             ? "本应用运行和永久 policy 规则已清空，保留空 policy 登记；期望草稿保留，其余系统策略继续生效。"
-            : "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
+            : view.backend === "ufw"
+              ? "本应用 UFW 用户规则及入口保护已移除，授权和期望草稿保留，其他来源规则继续生效。"
+              : "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
           : "尚无已确认的业务过滤策略。"
       }}
     </p>
@@ -428,7 +481,33 @@ onUnmounted(() => {
       </p>
     </template>
   </section>
-  <section v-if="plan" class="panel">
+  <section v-if="preparation" class="panel">
+    <div class="page-toolbar">
+      <h3>UFW 计划准备</h3>
+      <n-tag
+        :type="preparation.state === 'ready' ? 'success' : preparation.state === 'failed' ? 'error' : 'info'"
+      >
+        {{ preparationStates[preparation.state] }}
+      </n-tag>
+    </div>
+    <p>
+      已核对 {{ preparation.completed_commands }} / {{ preparation.total_commands }} 步 ·
+      版本 {{ preparation.version }}
+    </p>
+    <p v-if="preparing" class="muted">
+      准备期间尚未应用规则。截止时间 {{ new Date(preparation.deadline * 1000).toLocaleString() }}
+    </p>
+    <n-alert v-if="preparation.error" type="warning" :bordered="false" class="notice">
+      {{ preparation.error }}
+    </n-alert>
+    <n-button
+      v-if="preparing"
+      :disabled="busy || preparation.state === 'cancelling'"
+      @click="cancelPreparation"
+      >取消准备</n-button
+    >
+  </section>
+  <section v-if="plan && !preparing && (!plan.preparation || plan.preparation.state === 'ready')" class="panel">
     <div class="page-toolbar">
       <h3>
         版本 {{ plan.version }}
@@ -438,7 +517,9 @@ onUnmounted(() => {
         plan.action === "remove"
           ? plan.backend === "firewalld"
             ? "清空本应用 policy 规则"
-            : `移除 ${plan.baseline.rules} 条规则`
+            : plan.backend === "ufw"
+              ? "移除本应用 UFW 用户规则"
+              : `移除 ${plan.baseline.rules} 条规则`
           : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : "内核规则"}`
       }}</n-tag>
     </div>

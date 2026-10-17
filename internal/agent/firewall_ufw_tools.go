@@ -56,11 +56,56 @@ for name,module in list(sys.modules.items()):
   if name not in names or os.path.abspath(module.__file__)!=expected:
    raise ValueError('UFW import escaped frozen sources')
 import ufw.common
-if mode=='describe':
+if mode=='stream':
+ import io,contextlib,ufw.util
+ if not hasattr(ufw.util,'msg_output'):
+  raise ValueError('official capture hook is unavailable')
+ class Capture(io.TextIOBase):
+  def __init__(self,limit):
+   self.parts=[]
+   self.size=0
+   self.limit=limit
+  def write(self,text):
+   self.size+=len(text.encode('utf-8'))
+   if self.size>self.limit:
+    raise ValueError('dry-run output limit exceeded')
+   self.parts.append(text)
+   return len(text)
+  def flush(self):
+   pass
+ print(json.dumps({'protocol':1}),flush=True)
+ count=0
+ while True:
+  line=sys.stdin.readline(65537)
+  if not line:
+   break
+  if len(line)>65536 or not line.endswith('\n'):
+   raise ValueError('invalid frame')
+  request=json.loads(line)
+  if set(request)!=set(('mode','arguments')) or request['mode'] not in ('prepend','delete') or not isinstance(request['arguments'],list) or len(request['arguments'])>32 or any(not isinstance(x,str) or len(x)>4096 for x in request['arguments']):
+   raise ValueError('invalid dry-run request')
+  count+=1
+  if count>16384:
+   raise ValueError('dry-run command limit exceeded')
+  output,diagnostic=Capture(5242880),Capture(8192)
+  sys.argv=[os.path.join(root,'ufw-cli.py'),'--datadir='+root,'--dry-run',request['mode']]+request['arguments']
+  # The official hook captures both msg() and fd-based rule output.
+  # Redirecting sys.stdout would break its fileno() and imported defaults.
+  ufw.util.msg_output=output
+  try:
+   with contextlib.redirect_stderr(diagnostic):
+    try:
+     runpy.run_path(sys.argv[0],run_name='__main__')
+    except SystemExit as result:
+     if result.code not in (None,0):
+      raise ValueError('official dry-run failed')
+  finally:
+   ufw.util.msg_output=None
+  if diagnostic.size:
+   raise ValueError('official dry-run returned a warning')
+  print(json.dumps({'output':''.join(output.parts)},ensure_ascii=False),flush=True)
+elif mode=='describe':
  print(json.dumps({'protocol':1,'python':sys.version.split()[0],'program':ufw.common.programName,'checks':ufw.common.do_checks,'config_dir':ufw.common.config_dir,'state_dir':ufw.common.state_dir,'iptables_dir':ufw.common.iptables_dir}))
-elif mode in ('prepend','delete'):
- sys.argv=[os.path.join(root,'ufw-cli.py'),'--datadir='+root,'--dry-run',mode]+sys.argv[4:]
- runpy.run_path(sys.argv[0],run_name='__main__')
 else:
  raise ValueError('unsupported UFW operation')
 `
@@ -304,7 +349,7 @@ func (b *ufwToolBinding) verify(ctx context.Context) error {
 
 func (b *ufwToolBinding) python(ctx context.Context, root, mode string, args []string, limit int) ([]byte, error) {
 	python, err := b.tool("python")
-	if err != nil || !slices.Contains([]string{"describe", "prepend", "delete"}, mode) {
+	if err != nil || mode != "describe" || len(args) != 0 {
 		return nil, errors.New("UFW 固定 Python 操作无效")
 	}
 	names, err := json.Marshal(ufwSourceModules)

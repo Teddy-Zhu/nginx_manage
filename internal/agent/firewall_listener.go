@@ -18,6 +18,9 @@ import (
 func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Config) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.ufwPreparingLocked() {
+		return fault.Conflict("UFW 计划正在准备，请先取消或等待完成后变更管理入口")
+	}
 	if !config.Enabled {
 		f.protectionObservedAt = time.Time{}
 		return nil

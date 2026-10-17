@@ -2016,36 +2016,51 @@ type FirewallProtection struct {
 	Sources []string `json:"sources"`
 }
 type FirewallPlanInput struct {
-	Action  string `json:"action"`
-	Version int64  `json:"version"`
+	PreparationId     *string `json:"preparation_id,omitempty"`
+	CancelPreparation *bool   `json:"cancel_preparation,omitempty"`
+	Action            string  `json:"action"`
+	Version           int64   `json:"version"`
 }
 type FirewallApplyInput struct {
 	Action  string `json:"action"`
 	PlanId  string `json:"plan_id"`
 	Version int64  `json:"version"`
 }
+type FirewallPlanPreparation struct {
+	Id                string `json:"id"`
+	Action            string `json:"action"`
+	Version           int64  `json:"version"`
+	State             string `json:"state"`
+	CompletedCommands int    `json:"completed_commands"`
+	TotalCommands     int    `json:"total_commands"`
+	StartedAt         int64  `json:"started_at"`
+	UpdatedAt         int64  `json:"updated_at"`
+	Deadline          int64  `json:"deadline"`
+	Error             string `json:"error"`
+}
 type FirewallPlan struct {
-	Backend             string                 `json:"backend"`
-	CanApply            bool                   `json:"can_apply"`
-	Firewalld           *FirewallFirewalldPlan `json:"firewalld"`
-	Ufw                 *FirewallUFWPlan       `json:"ufw"`
-	Action              string                 `json:"action"`
-	Id                  string                 `json:"id"`
-	Version             int64                  `json:"version"`
-	PolicyHash          string                 `json:"policy_hash"`
-	ProgramHash         string                 `json:"program_hash"`
-	Baseline            FirewallKernelView     `json:"baseline"`
-	Protections         []FirewallProtection   `json:"protections"`
-	SshProfile          string                 `json:"ssh_profile"`
-	SshListeners        []string               `json:"ssh_listeners"`
-	ListenerVersion     int64                  `json:"listener_version"`
-	Listener            string                 `json:"listener"`
-	ControlSource       string                 `json:"control_source"`
-	ConfirmationSeconds int64                  `json:"confirmation_seconds"`
-	ExpiresAt           int64                  `json:"expires_at"`
-	TransactionHash     string                 `json:"transaction_hash"`
-	TransactionBytes    int64                  `json:"transaction_bytes"`
-	GeneratedRules      int64                  `json:"generated_rules"`
+	Preparation         *FirewallPlanPreparation `json:"preparation"`
+	Backend             string                   `json:"backend"`
+	CanApply            bool                     `json:"can_apply"`
+	Firewalld           *FirewallFirewalldPlan   `json:"firewalld"`
+	Ufw                 *FirewallUFWPlan         `json:"ufw"`
+	Action              string                   `json:"action"`
+	Id                  string                   `json:"id"`
+	Version             int64                    `json:"version"`
+	PolicyHash          string                   `json:"policy_hash"`
+	ProgramHash         string                   `json:"program_hash"`
+	Baseline            FirewallKernelView       `json:"baseline"`
+	Protections         []FirewallProtection     `json:"protections"`
+	SshProfile          string                   `json:"ssh_profile"`
+	SshListeners        []string                 `json:"ssh_listeners"`
+	ListenerVersion     int64                    `json:"listener_version"`
+	Listener            string                   `json:"listener"`
+	ControlSource       string                   `json:"control_source"`
+	ConfirmationSeconds int64                    `json:"confirmation_seconds"`
+	ExpiresAt           int64                    `json:"expires_at"`
+	TransactionHash     string                   `json:"transaction_hash"`
+	TransactionBytes    int64                    `json:"transaction_bytes"`
+	GeneratedRules      int64                    `json:"generated_rules"`
 }
 type FirewallFirewalldPlan struct {
 	RuntimeHash             string                   `json:"runtime_hash"`
@@ -2757,6 +2772,7 @@ type Fail2banObservation struct {
 	Warnings      []string            `json:"warnings"`
 }
 type FirewallRuntime struct {
+	Preparation           *FirewallPlanPreparation      `json:"preparation"`
 	Backend               string                        `json:"backend"`
 	CanPlan               bool                          `json:"can_plan"`
 	ProtectionObservation FirewallProtectionObservation `json:"protection_observation"`

@@ -149,7 +149,7 @@ func ufwBootstrapLines(prefix string) []string {
 
 func parseUFWNative(raw []byte, family string, bootstrap bool) (*ufwNativeFile, error) {
 	prefix, _, ok := ufwNativeIdentity(family)
-	if !ok || len(raw) == 0 || len(raw) > 1<<20 || !utf8.Valid(raw) {
+	if !ok || len(raw) == 0 || len(raw) > firewall.UFWReadBytes || !utf8.Valid(raw) {
 		return nil, errors.New("UFW 原生用户规则的地址族、大小或编码无效")
 	}
 	text := string(raw)

@@ -79,7 +79,7 @@ func (f *hostFirewall) applyUFWLocked(ctx context.Context, id, planID string, ve
 	if !f.ufwPlanning || f.problem != "" || f.policyUncertain || !f.recovering {
 		return out, fault.Unavailable("UFW 本机授权或独立恢复尚未就绪")
 	}
-	if f.activeLocked() || ufwRestorePending(f.dataDir) || f.dns.checkpoint != nil && dnsActive(f.dns.checkpoint.Status.State) {
+	if f.ufwPreparingLocked() || f.activeLocked() || ufwRestorePending(f.dataDir) || f.dns.checkpoint != nil && dnsActive(f.dns.checkpoint.Status.State) {
 		return out, fault.Conflict("存在未完成的可达性变更")
 	}
 	plan, ok := f.plans[planID]

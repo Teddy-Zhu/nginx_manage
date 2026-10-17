@@ -325,7 +325,7 @@ func ufwRegistrationView(ctx context.Context, dataDir string, observed firewall.
 		out.State, out.Reason = "drifted", "存在本应用标记但尚无规则写入回执，禁止接管或删除"
 		return out
 	}
-	out.State, out.Verified, out.Reason = "registered", true, "UFW 本机授权已核对；尚无已确认规则，未开放业务写入"
+	out.State, out.Verified, out.Reason = "registered", true, "UFW 本机授权已核对，当前授权范围内无受管用户规则"
 	return out
 }
 
