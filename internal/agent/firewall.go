@@ -104,7 +104,11 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 		out.Firewalld.Registration = firewalldRegistrationView(f.dataDir, out.Firewalld.PolicyInventory)
 	}()
 	wg.Add(1)
-	go func() { defer wg.Done(); out.UFW = readUFW(ctx) }()
+	go func() {
+		defer wg.Done()
+		out.UFW = readUFW(ctx)
+		out.UFW.Registration = ufwRegistrationView(ctx, f.dataDir, out.UFW)
+	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -163,7 +167,7 @@ func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error)
 		e = errors.New("invalid firewall observation")
 	}
 	if e == nil {
-		if !validUFWRules(out.UFW.RuleInventory) || out.UFW.RuleInventory.Available && !out.UFW.Installed {
+		if !validUFWRules(out.UFW.RuleInventory) || !validUFWRegistrationView(out.UFW.Registration) || out.UFW.RuleInventory.Available && !out.UFW.Installed || out.UFW.Registration.Verified && (!out.UFW.Installed || out.UFW.IPv6 == nil || !out.UFW.RuleInventory.Available) {
 			e = errors.New("invalid UFW rule inventory")
 		}
 	}

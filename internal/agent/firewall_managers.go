@@ -194,7 +194,7 @@ func ufwConfigurationFlag(path, field string) (*bool, error) {
 }
 
 func readUFW(ctx context.Context) firewall.UFW {
-	out := firewall.UFW{RuleInventory: firewall.EmptyUFWRules("尚未读取 UFW 用户规则"), Reason: "未发现可用的 UFW 程序"}
+	out := firewall.UFW{Registration: firewall.RegistrationView{State: "unavailable", Reason: "尚未核对 UFW 本机授权登记"}, RuleInventory: firewall.EmptyUFWRules("尚未读取 UFW 用户规则"), Reason: "未发现可用的 UFW 程序"}
 	for _, path := range []string{"/usr/sbin/ufw", "/usr/bin/ufw", "/sbin/ufw", "/bin/ufw"} {
 		if _, e := trustedFile(path, true); e == nil {
 			out.Installed = true

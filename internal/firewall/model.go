@@ -15,8 +15,8 @@ type KernelView struct {
 	Reason      string `json:"reason"`
 }
 
-// RegistrationView is based on an independent root record and an exact
-// coherent kernel fingerprint. Verification never grants policy write access.
+// RegistrationView reports backend-specific independent root registration.
+// Verification never grants policy write access or proves reachability.
 type RegistrationView struct {
 	State       string `json:"state"`
 	Verified    bool   `json:"verified"`
@@ -93,6 +93,7 @@ type Zone struct {
 	Sources    []string `json:"sources"`
 }
 type UFW struct {
+	Registration  RegistrationView `json:"registration"`
 	RuleInventory UFWRuleInventory `json:"rule_inventory"`
 	IPv6          *bool            `json:"ipv6"`
 	Installed     bool             `json:"installed"`
@@ -150,6 +151,6 @@ type Docker struct {
 
 func Empty(scope, reason string) Observation {
 	return Observation{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 root 独立登记"}, Source: "host-agent", Kernel: KernelView{Reason: "尚未读取受管目标表的内核快照"}, Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
-		Firewalld: Firewalld{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 firewalld root 登记"}, Zones: []Zone{}, PolicyInventory: EmptyFirewalldPolicies("尚未读取"), Reason: "尚未读取"}, UFW: UFW{RuleInventory: EmptyUFWRules("尚未读取"), Reason: "尚未读取"},
+		Firewalld: Firewalld{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 firewalld root 登记"}, Zones: []Zone{}, PolicyInventory: EmptyFirewalldPolicies("尚未读取"), Reason: "尚未读取"}, UFW: UFW{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 UFW 本机授权登记"}, RuleInventory: EmptyUFWRules("尚未读取"), Reason: "尚未读取"},
 		Iptables: []Iptables{}, Rulesets: []Ruleset{}, Docker: Docker{BackendHint: "unknown", Evidence: []string{}, Reason: "尚未核对 Docker 转发路径"}, Warnings: []string{}}
 }

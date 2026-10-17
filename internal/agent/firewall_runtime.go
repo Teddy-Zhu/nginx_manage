@@ -202,7 +202,7 @@ func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
 func (f *hostFirewall) pending() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.activeLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil
+	return f.activeLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil || ufwRegistrationPending(f.dataDir)
 }
 func (f *hostFirewall) emptyMarker() string { return nftRegistrationPrefix + f.state.Owner }
 func (f *hostFirewall) program(record *firewallPolicyRecord) (*firewall.NFTProgram, string, error) {
@@ -268,6 +268,13 @@ func (f *hostFirewall) Open() error {
 		return err
 	}
 	f.unlock = unlock
+	if err := forbidUFWRegistration(); err != nil {
+		if value == nil {
+			f.problem = err.Error()
+			return nil
+		}
+		f.available = false
+	}
 	if err := forbidFirewalldRegistration(f.dataDir); err != nil {
 		f.problem = err.Error()
 		return nil
@@ -331,14 +338,17 @@ func (f *hostFirewall) View() firewall.RuntimeView {
 		return f.firewalldViewLocked()
 	}
 	if f.owner == "ufw" && f.state.Schema == 0 {
+		_, registrationErr := ufwRegistrationAuthority(f.dataDir)
 		reason := f.problem
 		if reason == "" {
-			reason = "UFW 可准备保护计划及官方 dry-run；所有权登记、应用和独立恢复尚未接入"
+			reason = "UFW 本机授权已核对，可准备保护计划及官方 dry-run；应用和独立恢复尚未接入"
 			if !f.ufwPlanning {
 				reason = "须由本机 root 确认 UFW、宿主机范围及 SSH 保护配置后准备计划"
+			} else if registrationErr != nil {
+				reason = "UFW 本机授权登记尚未完成或无法核对，请本机检查 ufw-registration 并恢复原操作"
 			}
 		}
-		return firewall.RuntimeView{Backend: "ufw", CanPlan: f.ufwPlanning && f.problem == "", Reason: reason, Protections: []firewall.Protection{}, ConfirmedAction: "none", ProtectionObservation: f.protectionObservationLocked(), Kernel: firewall.KernelView{Reason: "UFW 计划不提供直接 nftables 事务证明"}}
+		return firewall.RuntimeView{Backend: "ufw", CanPlan: f.ufwPlanning && f.problem == "" && registrationErr == nil, Reason: reason, Protections: []firewall.Protection{}, ConfirmedAction: "none", ProtectionObservation: f.protectionObservationLocked(), Kernel: firewall.KernelView{Reason: "UFW 计划不提供直接 nftables 事务证明"}}
 	}
 	out := firewall.RuntimeView{Backend: f.owner, Available: f.available && f.problem == "" && f.state.Schema == firewallRuntimeSchema, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}, ConfirmedAction: "none"}
 	if f.state.Schema == firewallRuntimeSchema {

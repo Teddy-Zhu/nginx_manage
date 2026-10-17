@@ -198,6 +198,9 @@ func ManageFirewalldRegistration(ctx context.Context, dataDir, scope, action str
 }
 
 func firewalldRegistrationAdmission(ctx context.Context, dataDir, scope string) error {
+	if err := forbidUFWRegistration(); err != nil {
+		return err
+	}
 	managed, err := loadFirewalldState(dataDir)
 	if err != nil {
 		return err

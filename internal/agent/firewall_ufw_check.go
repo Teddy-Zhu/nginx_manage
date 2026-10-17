@@ -32,8 +32,9 @@ type ufwFileSnapshot struct {
 	Modified, Changed int64
 }
 type ufwConfigurationSnapshot struct {
-	Files          []ufwFileSnapshot
-	Hash, ToolHash string
+	Files             []ufwFileSnapshot
+	Hash, ToolHash    string
+	HasManagedMarkers bool
 }
 
 func ufwTool() (string, error) {
@@ -92,6 +93,9 @@ func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwCon
 			return out, errors.New("UFW 固定配置超过 4 MiB")
 		}
 		file.Present, file.Hash, file.Bytes = true, secure.Hash(raw), int64(len(raw))
+		if source.path != binary && (strings.Contains(string(raw), "nginxpanel:host:") || strings.Contains(strings.ToLower(string(raw)), hex.EncodeToString([]byte("nginxpanel:host:")))) {
+			out.HasManagedMarkers = true
+		}
 		file.Device, file.Inode, file.Mode = uint64(stat.Dev), stat.Ino, uint32(after.Mode())
 		file.Modified, file.Changed = after.ModTime().UnixNano(), stat.Ctim.Sec*1e9+stat.Ctim.Nsec
 		out.Files = append(out.Files, file)

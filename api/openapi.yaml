@@ -215,13 +215,13 @@ paths:
     get:
       operationId: getFirewallRuntime
       x-scopes: [read, security.write]
-      description: 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；UFW 仅允许显式本机授权后的保护计划与 dry-run，available=false；firewalld 采用运行/永久 policy 独立核对、新连接确认和持久恢复意图。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
+      description: 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；UFW 仅允许独立本机登记与显式授权后的保护计划和 dry-run，available=false；firewalld 采用运行/永久 policy 独立核对、新连接确认和持久恢复意图。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/plan:
     post:
       operationId: planFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 仅支持 apply 保护计划：核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW can_apply=false，尚无所有权登记、实际应用及独立恢复。计划 300 秒有效，不写运行规则或管理器源配置。
+      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 仅支持 apply 保护计划：核对宿主机占用、原本机登记与独立回执，注释绑定随机所有者和计划，再核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW can_apply=false，本机登记只授权空命名空间，尚无受管规则写入及独立恢复。计划 300 秒有效，不写运行规则或管理器源配置。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPlanInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -271,7 +271,7 @@ paths:
     post:
       operationId: previewFirewall
       x-scopes: [read]
-      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式，firewalld 生成独立 ANY 到 HOST policy 的 rich rules，UFW 生成明确地址族、接口、端口及稳定注释的类型化命令预览，拒绝重复匹配条件。结合 Agent 诊断核对环境；此入口不写内核或管理器，can_apply 为 false，执行须另走独立计划。UFW 逻辑预览不执行 dry-run，需在目标管理入口另行准备保护计划；当前不支持实际应用、所有权登记和独立恢复；Docker 路径及未适配条件明确阻塞。
+      description: 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式，firewalld 生成独立 ANY 到 HOST policy 的 rich rules，UFW 生成明确地址族、接口、端口及稳定注释的类型化命令预览，拒绝重复匹配条件。结合 Agent 诊断核对环境；此入口不写内核或管理器，can_apply 为 false，执行须另走独立计划。UFW 逻辑预览不执行 dry-run，需在目标管理入口另行准备保护计划；须先完成目标本机空命名空间授权，当前不支持实际应用和独立恢复；Docker 路径及未适配条件明确阻塞。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPreviewInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -2067,9 +2067,10 @@ components:
     FirewallUFWPlan:
       type: object
       additionalProperties: false
-      required: [configuration_hash, tool_hash, dry_run_hash, dry_run_commands, protection_rules, protection_overrides, entries, truncated, warnings, reason]
-      description: root 基于实际管理连接及 SSH 监听准备的 UFW 保护计划。每条生成命令独立执行官方 dry-run prepend，并核对源文件前后摘要与首条候选 tuple；不证明批次顺序、内核状态或所有权，不授权实际应用。
+      required: [registration_operation_id, configuration_hash, tool_hash, dry_run_hash, dry_run_commands, protection_rules, protection_overrides, entries, truncated, warnings, reason]
+      description: root 在本机空命名空间授权登记后，基于实际管理连接及 SSH 监听准备的 UFW 保护计划；注释绑定原随机所有者和计划身份。每条生成命令独立执行官方 dry-run prepend，并核对源文件前后摘要与首条候选 tuple；不证明批次顺序、内核状态或所有权，不授权实际应用。
       properties:
+        registration_operation_id: {type: string, format: uuid}
         configuration_hash: {type: string, minLength: 64, maxLength: 64}
         tool_hash: {type: string, minLength: 64, maxLength: 64, description: '受信 UFW 可执行文件摘要，不代表所有 Python 依赖'}
         dry_run_hash: {type: string, minLength: 64, maxLength: 64}
@@ -4560,7 +4561,7 @@ components:
     FirewallRegistrationView:
       type: object
       additionalProperties: false
-      description: 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对原登记或已确认 policy 的完整 runtime/permanent 设置与活动绑定；不表示获得业务策略写入授权或外部可达。
+      description: 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对原登记或已确认 policy 的完整 runtime/permanent 设置与活动绑定；UFW 核对宿主机持久占用、原本机授权与回执及空标记命名空间，未安装任何规则；不表示获得业务策略写入授权或外部可达。
       required: [state, verified, operation_id, observed_at, reason]
       properties:
         state: {type: string, enum: [unavailable, unregistered, registered, managed, released, missing, drifted, recovery_required]}
@@ -4647,13 +4648,14 @@ components:
     FirewallUFW:
       type: object
       additionalProperties: false
-      required: ["installed", "enabled", "active", "ipv6", "rule_inventory", "reason"]
+      required: ["installed", "enabled", "active", "ipv6", "rule_inventory", "registration", "reason"]
       properties:
         installed: {"type": "boolean"}
         enabled: {"type": "boolean", "nullable": true}
         active: {"type": "boolean", "nullable": true}
         ipv6: {type: boolean, nullable: true, description: 本机受信 /etc/default/ufw 的 IPV6 配置，无法严格读取时为 null；不代表内核 IPv6 规则生效。}
         rule_inventory: {$ref: '#/components/schemas/FirewallUFWRuleInventory'}
+        registration: {$ref: '#/components/schemas/FirewallRegistrationView'}
         reason: {"type": "string"}
     FirewallUFWRuleInventory:
       type: object

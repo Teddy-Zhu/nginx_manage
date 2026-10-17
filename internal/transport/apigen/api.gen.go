@@ -1837,6 +1837,7 @@ type FirewallZone struct {
 
 // FirewallUFW defines model for FirewallUFW.
 type FirewallUFW struct {
+	Registration  FirewallRegistrationView `json:"registration"`
 	Ipv6          *bool                    `json:"ipv6"`
 	RuleInventory FirewallUFWRuleInventory `json:"rule_inventory"`
 	Installed     bool                     `json:"installed"`
@@ -2058,16 +2059,17 @@ type FirewallFirewalldPlan struct {
 	Reason                  string                   `json:"reason"`
 }
 type FirewallUFWPlan struct {
-	ConfigurationHash   string                 `json:"configuration_hash"`
-	ToolHash            string                 `json:"tool_hash"`
-	DryRunHash          string                 `json:"dry_run_hash"`
-	DryRunCommands      int                    `json:"dry_run_commands"`
-	ProtectionRules     int                    `json:"protection_rules"`
-	ProtectionOverrides int                    `json:"protection_overrides"`
-	Entries             []FirewallPreviewEntry `json:"entries"`
-	Truncated           bool                   `json:"truncated"`
-	Warnings            []string               `json:"warnings"`
-	Reason              string                 `json:"reason"`
+	RegistrationOperationId string                 `json:"registration_operation_id"`
+	ConfigurationHash       string                 `json:"configuration_hash"`
+	ToolHash                string                 `json:"tool_hash"`
+	DryRunHash              string                 `json:"dry_run_hash"`
+	DryRunCommands          int                    `json:"dry_run_commands"`
+	ProtectionRules         int                    `json:"protection_rules"`
+	ProtectionOverrides     int                    `json:"protection_overrides"`
+	Entries                 []FirewallPreviewEntry `json:"entries"`
+	Truncated               bool                   `json:"truncated"`
+	Warnings                []string               `json:"warnings"`
+	Reason                  string                 `json:"reason"`
 }
 type FirewallOperation struct {
 	Action            string `json:"action"`

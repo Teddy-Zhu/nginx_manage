@@ -161,3 +161,29 @@ func CompileUFWProtected(policy Policy, protections []Protection) (*UFWProgram, 
 	}
 	return finishUFW(out)
 }
+
+func CompileUFWOwned(policy Policy, protections []Protection, owner, planID string) (*UFWProgram, error) {
+	const zero = "00000000-0000-0000-0000-000000000000"
+	if !ruleIDPattern.MatchString(owner) || !ruleIDPattern.MatchString(planID) || owner == zero || planID == zero || owner == planID {
+		return nil, fault.Invalid("UFW 所有者与计划身份无效")
+	}
+	program, err := CompileUFWProtected(policy, protections)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	for index, rule := range program.Rules {
+		raw, err := json.Marshal(rule)
+		if err != nil {
+			return nil, err
+		}
+		comment := UFWCommentPrefix + owner + ":" + planID + ":" + secure.Hash(raw)[:16]
+		if seen[comment] {
+			return nil, fault.Invalid("UFW 生成规则身份重复")
+		}
+		seen[comment] = true
+		rule.Arguments[len(rule.Arguments)-1] = comment
+		program.Entries[index].Expression = "ufw " + strings.Join(rule.Arguments, " ")
+	}
+	return finishUFW(program)
+}

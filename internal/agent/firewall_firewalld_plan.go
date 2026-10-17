@@ -25,6 +25,13 @@ func (f *hostFirewall) openFirewalldExecutor(saved *firewalldCheckpoint) error {
 		return err
 	}
 	f.unlock = unlock
+	if err := forbidUFWRegistration(); err != nil {
+		if saved == nil {
+			f.problem = err.Error()
+			return nil
+		}
+		f.available = false
+	}
 	v, err := loadFirewalldRegistration(f.dataDir)
 	if err != nil || v == nil || v.State != "registered" || v.MachineHash != machine || firewalldRegistrationReceipt(f.dataDir, v) != nil {
 		f.problem = "须先停止 Agent 并由本机 root 完成 firewalld 空 policy 登记"

@@ -189,12 +189,27 @@ UFW 添加相同匹配条件可能更新原动作或注释，不能用不同注�
 
 逻辑预览核对单一已启用 UFW、完整用户报告、混合/缺失内核视图、绑定接口及 IPv6 配置。`generated_rules` 表示生成命令数，后端优先级为 null，不增加未生成的会话或回环规则。UFW 自身的默认策略、会话与回环处理保持不变；allow 可能提前结束后续 UFW 规则，其他内核链及云安全组仍可拒绝连接。
 
-本机 root 明确设置 `--firewall-owner ufw --firewall-scope host --firewall-ssh openssh --maintenance-scope host` 后，运行状态可返回 `backend=ufw, can_plan=true, available=false`。确无 SSH 保护需求时才选择 `--firewall-ssh none`。`POST /api/v1/firewall/plan` 仅准备已保存策略的 apply 计划，须启用模块、近期认证并直接使用目标已确认的管理 HTTPS 连接；采集实际连接、受控来源及 OpenSSH 监听，保护项先于业务项。重复保护合并；业务条目与保护匹配条件完全相同时由保护项覆盖，单独报告计数。既有 nftables/firewalld 恢复材料仍由原执行器处理，不因选择 UFW 撤销原恢复职责。
+本机 root 先使用与 Agent 相同的规范绝对数据目录完成初始授权：
 
-计划期间独占跨数据目录的宿主机登记锁，不创建 UFW 所有权登记。读取受信 UFW 可执行文件及固定 `/etc/ufw/{ufw.conf,user.rules,before.rules,after.rules,user6.rules,before6.rules,after6.rules,sysctl.conf,before.init,after.init}`、`/etc/default/ufw`，必需文件缺失或不受信则拒绝；IPv6 规则文件在 IPv6 启用时必需。每份最多 512 KiB、合计最多 4 MiB，摘要包括内容、存在性及文件身份/时间，工具摘要只覆盖可执行文件，不代表全部 Python 依赖。
+```sh
+nginxpanel ufw-init --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel ufw-registration --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel ufw-recover --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel ufw-remove --data-dir /srv/nginxpanel --firewall-scope host
+```
+
+UFW 没有独立空 policy 对象，此登记只授权空规则命名空间，不创建任何规则，也不调用 enable、reload、reset 或删除命令。初始化要求完整确认单一启用的 UFW、全部后端视图、无直接 nftables 目标表、无其他登记/业务恢复材料，且固定配置中不存在本应用明文或十六进制标记。第三方已有规则保留；相同标记不能提供所有权证明，发现标记但无原写入回执时拒绝接管或释放。
+
+随机所有者、本机 machine-id 摘要、原操作、前后宿主机占用及配置/工具基线保存在 `agent/firewall/ufw-registration.json`，独立回执存入 root 操作日志。固定 `/var/lib/nginxpanel-host/ufw-owner.json` 在进程退出后仍阻止不同数据目录分别接管同一宿主机，登记、计划和释放共用原跨目录宿主机锁及维护准入。操作先保存原意图/回执，再核对和发布宿主机占用，源配置在前后核对中变化则保持待恢复。释放先发布不可再授权的 `releasing` 占用，终态本机回执完成后才发布 `released`；中断后 `recover` 续办同一元数据意图，不重放 UFW 写入，不覆盖其他所有者。完成释放后的宿主机复用不依赖旧数据目录继续存在，原审计回执不被本操作删除。重复操作只核对原结果。
+
+本阶段仅允许释放无本应用标记的原空授权，不实现业务规则移除。已授权元数据不证明任何规则已经安装；计划还须重新核对真实管理连接、工具、配置和候选结果。直接 nftables/firewalld 新登记和新执行器会拒绝未释放的 UFW 占用；原已接受的其他后端恢复继续执行，仅撤销冲突的新写入授权。待恢复的 UFW 元数据操作阻塞同一节点新的可达性/维护变更。
+
+完成本机授权后，root 明确设置 `--firewall-owner ufw --firewall-scope host --firewall-ssh openssh --maintenance-scope host` 后，运行状态可返回 `backend=ufw, can_plan=true, available=false`。确无 SSH 保护需求时才选择 `--firewall-ssh none`。`POST /api/v1/firewall/plan` 仅准备已保存策略的 apply 计划，须启用模块、近期认证并直接使用目标已确认的管理 HTTPS 连接；采集实际连接、受控来源及 OpenSSH 监听，保护项先于业务项。重复保护合并；业务条目与保护匹配条件完全相同时由保护项覆盖，单独报告计数。既有 nftables/firewalld 恢复材料仍由原执行器处理，不因选择 UFW 撤销原恢复职责。
+
+计划期间独占跨数据目录的宿主机登记锁，绑定原登记操作及宿主机占用；注释包含原随机所有者、计划 ID 和规则摘要，完整程序摘要随绑定更新。读取受信 UFW 可执行文件及固定 `/etc/ufw/{ufw.conf,user.rules,before.rules,after.rules,user6.rules,before6.rules,after6.rules,sysctl.conf,before.init,after.init}`、`/etc/default/ufw`，必需文件缺失或不受信则拒绝；IPv6 规则文件在 IPv6 启用时必需。每份最多 512 KiB、合计最多 4 MiB，摘要包括内容、存在性及文件身份/时间，工具摘要只覆盖可执行文件，不代表全部 Python 依赖。
 
 对包含保护项的最多 64 条生成参数逐条调用官方 `ufw --dry-run prepend ...`，每条最多两秒、标准输出 1 MiB、标准错误 8 KiB，完整输出合计最多 8 MiB，并受 Agent 原请求期限约束。使用固定 C 环境、禁写 Python 字节码及 `/run/nginxpanel-host` 私有临时目录，遗留目录达到 16 份时拒绝新增，清理失败不返回成功。任意命令失败、超时、警告或超限均拒绝整份计划；退出码零仍须核对完整已知候选格式、首条 tuple、生成注释及对应地址族的更新结果。`prepend` 对已有匹配项会跳过，缺少新候选时判为冲突，避免普通添加命令改写第三方动作或注释。预演后重新核对固定源文件及工具路径/摘要，变化则拒绝。
 
-每条 dry-run 都从同一宿主机源配置开始，不能证明批次累积效果、最终插入顺序、内核或第三方规则完整性。UFW dry-run 本身跳过普通 UFW 写入锁，前后摘要仅检测漂移，不提供原子锁定。计划 `ufw` 字段展示配置、工具、完整预演输出摘要及命令/保护计数；`can_apply=false`，Web 和 root 拒绝应用，不创建业务操作或确认窗口。独立所有权登记、可执行批次的冲突/顺序证明、实际应用、新连接确认及持久恢复继续实施。迁移只保存中立期望，在目标另行准备保护计划。Agent 为 75，数据库/迁移归档仍为 32/6。实现与源码审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、真实 UFW 命令或宿主机变更，待 P5 集中验证。
+每条 dry-run 都从同一宿主机源配置开始，不能证明批次累积效果、最终插入顺序、内核或第三方规则完整性。UFW dry-run 本身跳过普通 UFW 写入锁，前后摘要仅检测漂移，不提供原子锁定。计划 `ufw` 字段展示配置、工具、完整预演输出摘要及命令/保护计数；`can_apply=false`，Web 和 root 拒绝应用，不创建业务操作或确认窗口。受管规则写入意图与回执、可执行批次的冲突/顺序证明、实际应用、新连接确认及持久恢复继续实施。迁移只保存中立期望，不复制本机登记、宿主机占用或 root 回执，在目标另行授权并准备保护计划。Agent 为 76，数据库/迁移归档仍为 32/6。实现与源码审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、真实 UFW 命令或宿主机变更，待 P5 集中验证。
 
 依据：[Ubuntu UFW 手册](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html)、[Ubuntu 官方 UFW 0.36.2 源码归档](https://archive.ubuntu.com/ubuntu/pool/main/u/ufw/ufw_0.36.2.orig.tar.gz) 中的 `frontend.get_show_added`、`UFWCommandRule.get_command`、`UFWRule.match`、`_write_rules`、`util.create_lock/open_files` 与后端规则更新流程。

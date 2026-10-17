@@ -299,7 +299,7 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 	if view.Policy.Backend == "firewalld" {
 		out.Warnings = append(out.Warnings, "独立 policy 使用 ANY → HOST、负优先级及 CONTINUE 默认目标；不代表接管现有 zone 或 policy", "allow 编译为 firewalld accept，可提前结束该管理器的后续过滤；其他内核基础链和云安全组仍可拒绝连接", "会话与回环处理由 firewalld 自身规则决定；rich rules 不显式限制 conntrack NEW，未跟踪流量也可能命中端口规则")
 	} else if view.Policy.Backend == "ufw" {
-		out.Errors = append(out.Errors, "UFW 逻辑预览不执行 dry-run；须在目标管理入口另行准备保护计划，实际应用、所有权登记和独立恢复尚未接入")
+		out.Errors = append(out.Errors, "UFW 逻辑预览不执行 dry-run；须先完成目标本机授权并在管理入口准备保护计划，实际应用和独立恢复尚未接入")
 		out.Warnings = append(out.Warnings, "命令顺序仅表示中立策略内部顺序；尚未确定与现有 UFW 规则的插入关系，注释不构成所有权证明", "UFW 可更新相同匹配条件的既有规则，执行前必须排除第三方规则冲突，不能重放诊断报告", "默认策略、回环、已建立会话及其他 UFW 规则保持由管理器处理；allow 可能终止后续 UFW 判断，云安全组和其他内核链仍可拒绝连接")
 	} else {
 		out.Warnings = append(out.Warnings, "allow 只终止本应用链的判断，其他基础链及云安全组仍可拒绝连接", "规则仅匹配 conntrack NEW；回环及已建立/关联会话保留，未跟踪流量不在此匹配范围")

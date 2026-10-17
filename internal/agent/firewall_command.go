@@ -79,7 +79,7 @@ func firewallRead(ctx context.Context, name, action string, limit int) ([]byte, 
 	// xtables-nft/legacy-multi select their applet using the original argv[0].
 	cmd.Args[0] = invoked
 	cmd.Dir = "/"
-	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C"}
+	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C", "PYTHONDONTWRITEBYTECODE=1"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 250 * time.Millisecond

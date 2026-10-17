@@ -317,7 +317,24 @@ onUnmounted(() => {
             <dd>{{ status(observation.ufw.active) }}</dd>
             <dt>IPv6 配置</dt>
             <dd>{{ status(observation.ufw.ipv6) }}</dd>
+            <dt>本机授权登记</dt>
+            <dd>
+              {{
+                observation.ufw.registration.state === "registered"
+                  ? "已完成本机授权"
+                  : registrationNames[observation.ufw.registration.state]
+              }}
+            </dd>
+            <dt>原登记操作</dt>
+            <dd>{{ observation.ufw.registration.operation_id || "无" }}</dd>
           </dl>
+          <n-alert
+            v-if="observation.ufw.registration.reason"
+            :type="observation.ufw.registration.verified ? 'info' : 'warning'"
+            :bordered="false"
+          >
+            {{ observation.ufw.registration.reason }}
+          </n-alert>
           <UFWUserRules :inventory="observation.ufw.rule_inventory" />
           <n-alert
             v-if="observation.ufw.reason"

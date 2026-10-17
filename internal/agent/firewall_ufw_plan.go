@@ -34,6 +34,10 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 		return out, fault.Unavailable("宿主机防火墙登记锁不可用，未准备 UFW 计划")
 	}
 	defer unlock()
+	registered, err := ufwRegistrationAuthority(f.dataDir)
+	if err != nil {
+		return out, fault.Unavailable(err.Error())
+	}
 	observed := (&firewallObserver{ctx: ctx, scope: "host", dataDir: f.dataDir}).collect(ctx)
 	if !observed.Available || observed.Scope != "host" || observed.Manager != "ufw" || observed.Backend == "mixed" || observed.UFW.Active == nil || !*observed.UFW.Active || observed.UFW.Enabled == nil || !*observed.UFW.Enabled || observed.UFW.IPv6 == nil || !observed.UFW.RuleInventory.Available {
 		return out, fault.Unavailable("UFW 管理器、启用/IPv6 配置及完整用户规则报告无法核对，保持只读")
@@ -54,7 +58,8 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
 	}
-	program, err := firewall.CompileUFWProtected(policy, protections)
+	id := secure.ID()
+	program, err := firewall.CompileUFWOwned(policy, protections, registered.NextClaim.Owner, id)
 	if err != nil {
 		return out, err
 	}
@@ -71,6 +76,9 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	if err != nil {
 		return out, fault.Unavailable("UFW 固定配置及工具基线无法完整读取")
 	}
+	if before.HasManagedMarkers {
+		return out, fault.Conflict("UFW 存在本应用标记但无规则写入回执，禁止接管")
+	}
 	dryRunHash, err := checkUFWDryRun(ctx, binary, program)
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
@@ -86,6 +94,10 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	if err = ctx.Err(); err != nil {
 		return out, err
 	}
+	currentRegistration, err := ufwRegistrationAuthority(f.dataDir)
+	if err != nil || currentRegistration.RequestHash != registered.RequestHash {
+		return out, fault.Conflict("UFW 本机授权登记在计划期间变化")
+	}
 	hash, err := firewall.PolicyDigest(policy)
 	if err != nil {
 		return out, err
@@ -94,13 +106,13 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	for index := range entries {
 		entries[index].Expression = "ufw --dry-run prepend " + strings.Join(program.Rules[index].Arguments, " ")
 	}
-	out = firewall.Plan{Backend: "ufw", CanApply: false, Action: "apply", ID: secure.ID(), Version: in.Version, PolicyHash: hash, ProgramHash: program.Hash,
+	out = firewall.Plan{Backend: "ufw", CanApply: false, Action: "apply", ID: id, Version: in.Version, PolicyHash: hash, ProgramHash: program.Hash,
 		Baseline:    firewall.KernelView{Reason: "UFW 计划核对固定配置及 dry-run，不提供直接 nftables 事务证明"},
 		Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source,
 		ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: len(program.Rules),
-		UFW: &firewall.UFWPlan{ConfigurationHash: before.Hash, ToolHash: before.ToolHash, DryRunHash: dryRunHash, DryRunCommands: len(program.Rules), ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
-			Warnings: []string{"每条 prepend 命令单独基于同一源配置预演，不构成批次执行、内核或第三方规则完整性证明", "入口保护优先；与保护条件完全相同的业务条目由保护项覆盖，其余生成条目保持期望顺序", "UFW 注释、候选输出及摘要不能代替独立所有权登记；尚未授予写入或持久恢复权限"},
-			Reason:   "保护计划及逐条 dry-run 已完成；所有权登记、实际应用、新连接确认和独立恢复尚未接入"},
+		UFW: &firewall.UFWPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, DryRunHash: dryRunHash, DryRunCommands: len(program.Rules), ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
+			Warnings: []string{"每条 prepend 命令单独基于同一源配置预演，不构成批次执行、内核或第三方规则完整性证明", "入口保护优先；与保护条件完全相同的业务条目由保护项覆盖，其余生成条目保持期望顺序", "注释已绑定原本机授权和计划，但尚无规则写入回执；不能据此接管或删除任何既有规则"},
+			Reason:   "本机授权、保护计划及逐条 dry-run 已核对；实际应用、新连接确认和独立恢复尚未接入"},
 	}
 	return out, f.storePlanLocked(out, nil)
 }

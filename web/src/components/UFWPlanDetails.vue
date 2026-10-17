@@ -46,6 +46,8 @@ const columns: DataTableColumns<Entry> = [
     {{ warning }}
   </n-alert>
   <dl>
+    <dt>本机授权登记操作</dt>
+    <dd>{{ plan.registration_operation_id }}</dd>
     <dt>逐条 dry-run</dt>
     <dd>{{ plan.dry_run_commands }} 条</dd>
     <dt>入口保护 / 覆盖相同条件的业务项</dt>
