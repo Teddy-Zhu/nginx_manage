@@ -56,7 +56,7 @@ func fail2banHostSyncAdmission(dataDir string, apply bool) (func(), error) {
 				err = ErrBusy
 				break
 			}
-			if apply && (r.Kind == fail2banLifecycleKind || r.Kind == fail2banJailsKind || r.Kind == fail2banAddressKind || r.Kind == fail2banPythonKind || r.Kind == fail2banPythonPlanningKind) && pendingNginxRecord(r) {
+			if apply && (r.Kind == fail2banLifecycleKind || r.Kind == fail2banJailsKind || r.Kind == fail2banExistingKind || r.Kind == fail2banAddressKind || r.Kind == fail2banPythonKind || r.Kind == fail2banPythonPlanningKind) && pendingNginxRecord(r) {
 				err = ErrBusy
 				break
 			}

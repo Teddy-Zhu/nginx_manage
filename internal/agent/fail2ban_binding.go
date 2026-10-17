@@ -238,6 +238,9 @@ func ManageFail2banBinding(ctx context.Context, data, scope, action, service, so
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}
+	if err = fail2banExistingOwnershipIdle(data); err != nil {
+		return out, err
+	}
 	if err = saveFail2banBinding(data, b); err != nil {
 		return out, err
 	}

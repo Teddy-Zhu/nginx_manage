@@ -113,7 +113,7 @@ func (f *fail2banJailsExecutor) run(ctx context.Context) {
 		addressErr := f.advanceAddress(addressCall)
 		stopAddress()
 		call, cancel := context.WithTimeout(ctx, 90*time.Second)
-		err := errors.Join(addressErr, f.advanceJails(call))
+		err := errors.Join(addressErr, f.advanceExistingOwnership(call), f.advanceJails(call))
 		cancel()
 		last = time.Now()
 		if errors.Is(err, ErrBusy) || errors.Is(err, unix.EWOULDBLOCK) {

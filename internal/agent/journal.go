@@ -24,6 +24,7 @@ type Record struct {
 	Fail2banLifecycle      *fail2banLifecycleIntent     `json:"fail2ban_lifecycle,omitempty"`
 	Fail2banAddress        *fail2banAddressIntent       `json:"fail2ban_address,omitempty"`
 	Fail2banJails          *fail2banJailIntent          `json:"fail2ban_jails,omitempty"`
+	Fail2banExisting       *fail2banExistingIntent      `json:"fail2ban_existing,omitempty"`
 	ClientDeny             *clientDenyIntent            `json:"client_deny,omitempty"`
 	Firewall               *firewall.Operation          `json:"firewall,omitempty"`
 	RelatedOperationID     string                       `json:"related_operation_id,omitempty"`

@@ -78,6 +78,7 @@ type ExistingJailPlan struct {
 	At        int64               `json:"at"`
 	BindingID string              `json:"binding_id"`
 	Target    string              `json:"target"`
+	BanProof  string              `json:"ban_proof"`
 	Profile   ExistingJailProfile `json:"profile"`
 	Before    ExistingJailPolicy  `json:"before"`
 	After     ExistingJailPolicy  `json:"after"`

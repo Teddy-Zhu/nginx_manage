@@ -171,19 +171,9 @@ func verifyFail2banExistingAction(ctx context.Context, program fail2banProgram, 
 // Preview is local root admission only. It neither publishes ownership nor
 // writes /etc/fail2ban, reloads a jail, or grants a public mutation route.
 func PreviewFail2banExistingJail(ctx context.Context, data, scope string, input Fail2banExistingJailInput) (out fail2ban.ExistingJailPlan, resultErr error) {
-	out = fail2ban.ExistingJailPlan{At: time.Now().Unix(), Profile: input.Profile, Jails: []string{}, Impacts: []string{}}
 	if err := fail2banManagedRoot(data, scope); err != nil {
 		return out, err
 	}
-	if err := input.Profile.Validate(); err != nil {
-		return out, err
-	}
-	after, err := input.Policy.Normalize()
-	if err != nil {
-		return out, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
 	unlock, err := fail2banHostSyncLocks(data)
 	if err != nil {
 		return out, err
@@ -197,6 +187,22 @@ func PreviewFail2banExistingJail(ctx context.Context, data, scope string, input 
 		return out, err
 	}
 	defer leave()
+	return previewFail2banExistingJailLocked(ctx, data, input, nil)
+}
+
+// The caller holds the host/binding locks and admits the operation against
+// maintenance. Captured data stays root-private and never grants authority alone.
+func previewFail2banExistingJailLocked(ctx context.Context, data string, input Fail2banExistingJailInput, capture *fail2banExistingCapture) (out fail2ban.ExistingJailPlan, resultErr error) {
+	out = fail2ban.ExistingJailPlan{At: time.Now().Unix(), Profile: input.Profile, Jails: []string{}, Impacts: []string{}}
+	if err := input.Profile.Validate(); err != nil {
+		return out, err
+	}
+	after, err := input.Policy.Normalize()
+	if err != nil {
+		return out, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
 	b, err := selectFail2banBinding(data)
 	if err != nil {
 		return out, err
@@ -294,7 +300,7 @@ func PreviewFail2banExistingJail(ctx context.Context, data, scope string, input 
 	if fail2banDumpHash(profileCommands) != fail2banDumpHash(profileReference) {
 		return out, errors.New("目标 jail 的 filter/action、后端或来源与固定 SSH/nftables INPUT 配置不一致，不能自动接管")
 	}
-	overlay := "jail.d/zzzz-nginxpanel-existing-" + input.Profile.Name + ".local"
+	overlay := fail2banExistingOverlayName(input.Profile.Name)
 	if _, exists := snapshot.Files[overlay]; exists {
 		return out, errors.New("目标 jail 已存在同名接管文件，须核对原操作，禁止覆盖")
 	}
@@ -389,16 +395,20 @@ func PreviewFail2banExistingJail(ctx context.Context, data, scope string, input 
 		return out, err
 	}
 	out.BindingID, out.Before, out.After = b.ID, before, after
-	out.Impacts = []string{"接管将只生成目标 jail 的独立 jail.d 覆盖文件，保留原 filter/action、日志来源及其他 jail", "应用需另行确认并通过官方单 jail reload；可能短暂影响 SSH 保护，须核对原剩余封禁", "本机预检不授予接管权，不修改系统配置或当前保护"}
+	out.Impacts = []string{"首次接管只生成当前参数的独立 jail.d 覆盖文件并登记所有权，保留原 filter/action、日志来源及其他 jail", "参数调整或停用需单独确认运行变更；可能影响 SSH 保护，须核对原剩余封禁", "本机预检不授予接管权，不修改系统配置或当前保护"}
+	banRaw, _ := json.Marshal(bans)
+	out.BanProof = secure.Hash(banRaw)
 	raw, _ = json.Marshal(struct {
 		Binding                                                         *fail2banBinding
 		Unit, Server, Config, Program, AfterProgram, Invocation, Socket string
 		Input                                                           Fail2banExistingJailInput
 		Before                                                          fail2ban.ExistingJailPolicy
 		Jails                                                           []string
-		Bans                                                            map[string]fail2banHostBanTime
-	}{b, unit, server, snapshot.hash(), fail2banDumpHash(commands), fail2banDumpHash(afterCommands), live.invocation, live.inode, Fail2banExistingJailInput{input.Profile, after}, before, out.Jails, bans})
+	}{b, unit, server, snapshot.hash(), fail2banDumpHash(commands), fail2banDumpHash(afterCommands), live.invocation, live.inode, Fail2banExistingJailInput{input.Profile, after}, before, out.Jails})
 	out.Target = secure.Hash(raw)
+	if capture != nil {
+		*capture = fail2banExistingCapture{Plan: out, Binding: *b, Unit: unit, Server: server, Invocation: live.invocation, Socket: live.inode, Snapshot: snapshot, CandidateHash: (fail2banExistingConfigSnapshot{Files: candidate}).hash(), DumpHash: fail2banDumpHash(afterCommands)}
+	}
 	return out, ctx.Err()
 }
 
@@ -406,15 +416,23 @@ func PreviewFail2banExistingJailFile(ctx context.Context, data, scope, path stri
 	if err := fail2banManagedRoot(data, scope); err != nil {
 		return fail2ban.ExistingJailPlan{}, err
 	}
-	raw, err := secure.ReadRootFile(path, 16<<10)
+	input, err := readFail2banExistingJailInput(path)
 	if err != nil {
 		return fail2ban.ExistingJailPlan{}, err
 	}
+	return PreviewFail2banExistingJail(ctx, data, scope, input)
+}
+
+func readFail2banExistingJailInput(path string) (Fail2banExistingJailInput, error) {
 	var input Fail2banExistingJailInput
+	raw, err := secure.ReadRootFile(path, 16<<10)
+	if err != nil {
+		return input, err
+	}
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if d.Decode(&input) != nil || d.Decode(new(any)) != io.EOF {
-		return fail2ban.ExistingJailPlan{}, errors.New("已有 jail 预检文件须为明确的 profile/policy JSON 对象")
+		return input, errors.New("已有 jail 预检文件须为明确的 profile/policy JSON 对象")
 	}
-	return PreviewFail2banExistingJail(ctx, data, scope, input)
+	return input, nil
 }

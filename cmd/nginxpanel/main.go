@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -114,6 +114,8 @@ func run() error {
 	fail2banHostSourcesFile := flags.String("fail2ban-host-sources-file", "", "root-private JSON file with explicit official jail names and managed host jail approval")
 	fail2banPolicyFile := flags.String("fail2ban-policy-file", "", "typed jail policy JSON file for the dedicated managed instance")
 	fail2banExistingJailFile := flags.String("fail2ban-existing-jail-file", "", "root-owned typed profile/policy JSON for existing SSH jail takeover preview")
+	fail2banExistingTarget := flags.String("fail2ban-existing-jail-target", "", "exact local preview digest for initial existing jail ownership")
+	fail2banExistingBase := flags.String("fail2ban-existing-jail-base", "", "current existing jail adoption UUID to release")
 	fail2banJail := flags.String("fail2ban-jail", "", "exact root-approved Fail2ban jail name")
 	fail2banResource := flags.String("nginx-resource", "", "active HTTP resource UUID with an explicit client deny entry")
 	fail2banStart := flags.Bool("fail2ban-start", false, "start the newly installed dedicated Fail2ban service")
@@ -157,13 +159,17 @@ func run() error {
 		return errors.New("unexpected positional arguments")
 	}
 	runtimeFlags := map[string]map[string]bool{
-		"fail2ban-existing-jail-plan":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-existing-jail-file": true},
-		"fail2ban-host-recovery-status": {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-host-recovery-cancel": {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-host-sync-enable":     {"fail2ban-recover-on-boot": true, "data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-sync-base": true, "fail2ban-host-runtime-base": true},
-		"fail2ban-host-sync-disable":    {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-sync-base": true},
-		"fail2ban-host-sync-status":     {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-host-sync-refresh":    {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-existing-jail-adopt":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-existing-jail-target": true, "fail2ban-existing-jail-file": true},
+		"fail2ban-existing-jail-release": {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-existing-jail-base": true},
+		"fail2ban-existing-jail-status":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-existing-jail-cancel":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-existing-jail-plan":    {"data-dir": true, "fail2ban-scope": true, "fail2ban-existing-jail-file": true},
+		"fail2ban-host-recovery-status":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-host-recovery-cancel":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-host-sync-enable":      {"fail2ban-recover-on-boot": true, "data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-sync-base": true, "fail2ban-host-runtime-base": true},
+		"fail2ban-host-sync-disable":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-sync-base": true},
+		"fail2ban-host-sync-status":      {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-host-sync-refresh":     {"data-dir": true, "fail2ban-scope": true},
 
 		"fail2ban-host-runtime-apply":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-runtime-base": true},
 		"fail2ban-host-runtime-clear":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-runtime-base": true},
@@ -284,7 +290,7 @@ func run() error {
 		}
 		switch f.Name {
 		case "fail2ban-operation":
-			if command != "fail2ban-install" && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" {
+			if command != "fail2ban-install" && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-host-input-base":
@@ -327,8 +333,16 @@ func run() error {
 			if command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" {
 				invalidFlag = f.Name
 			}
+		case "fail2ban-existing-jail-target":
+			if command != "fail2ban-existing-jail-adopt" {
+				invalidFlag = f.Name
+			}
+		case "fail2ban-existing-jail-base":
+			if command != "fail2ban-existing-jail-release" {
+				invalidFlag = f.Name
+			}
 		case "fail2ban-existing-jail-file":
-			if command != "fail2ban-existing-jail-plan" {
+			if command != "fail2ban-existing-jail-plan" && command != "fail2ban-existing-jail-adopt" {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-policy-file":
@@ -344,7 +358,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-scope":
-			if command != "fail2ban-bind" && command != "fail2ban-binding" && command != "fail2ban-unbind" && command != "fail2ban-install" && !strings.HasPrefix(command, "fail2ban-python-") && !strings.HasPrefix(command, "fail2ban-managed") && !strings.HasPrefix(command, "fail2ban-nginx-") && !strings.HasPrefix(command, "fail2ban-jails-") && !strings.HasPrefix(command, "fail2ban-host-input-") && !strings.HasPrefix(command, "fail2ban-host-protection-") && !strings.HasPrefix(command, "fail2ban-host-sources-") && !strings.HasPrefix(command, "fail2ban-host-runtime-") && !strings.HasPrefix(command, "fail2ban-host-sync-") && !strings.HasPrefix(command, "fail2ban-host-recovery-") && command != "fail2ban-existing-jail-plan" {
+			if command != "fail2ban-bind" && command != "fail2ban-binding" && command != "fail2ban-unbind" && command != "fail2ban-install" && !strings.HasPrefix(command, "fail2ban-python-") && !strings.HasPrefix(command, "fail2ban-managed") && !strings.HasPrefix(command, "fail2ban-nginx-") && !strings.HasPrefix(command, "fail2ban-jails-") && !strings.HasPrefix(command, "fail2ban-host-input-") && !strings.HasPrefix(command, "fail2ban-host-protection-") && !strings.HasPrefix(command, "fail2ban-host-sources-") && !strings.HasPrefix(command, "fail2ban-host-runtime-") && !strings.HasPrefix(command, "fail2ban-host-sync-") && !strings.HasPrefix(command, "fail2ban-host-recovery-") && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-service-control":
@@ -491,6 +505,14 @@ func run() error {
 		installation = info
 	}
 	switch command {
+	case "fail2ban-existing-jail-adopt", "fail2ban-existing-jail-release", "fail2ban-existing-jail-status", "fail2ban-existing-jail-cancel":
+		out, err := agent.ManageFail2banExistingOwnership(ctx, absDir, *fail2banScope, strings.TrimPrefix(command, "fail2ban-existing-jail-"), *fail2banOperation, *fail2banExistingTarget, *fail2banExistingJailFile, *fail2banExistingBase)
+		if out.ID != "" {
+			if e := json.NewEncoder(os.Stdout).Encode(out); e != nil {
+				return errors.Join(err, e)
+			}
+		}
+		return err
 	case "fail2ban-existing-jail-plan":
 		out, err := agent.PreviewFail2banExistingJailFile(ctx, absDir, *fail2banScope, *fail2banExistingJailFile)
 		if err != nil {
