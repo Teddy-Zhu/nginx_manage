@@ -12,7 +12,7 @@ function state(value: boolean | null, yes: string, no: string) {
     <div class="actions">
       <h4>netplan 上游配置</h4>
       <NTag type="info">{{
-        source.state === "associated" ? "已关联来源 · 只读" : "来源待确认"
+        source.state === "associated" ? "已关联来源" : "来源待确认"
       }}</NTag>
     </div>
     <dl>

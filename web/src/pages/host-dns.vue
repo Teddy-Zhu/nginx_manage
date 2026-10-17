@@ -76,7 +76,9 @@ const families = ref([
 const networkManager = computed(
   () => observed.value?.owner === "networkmanager",
 );
-const networkd = computed(() => observed.value?.owner === "networkd");
+const networkd = computed(() =>
+  ["networkd", "netplan"].includes(observed.value?.owner ?? ""),
+);
 const connection = computed(() =>
   observed.value?.connections.find((c) => c.target === target.value),
 );
@@ -287,10 +289,12 @@ async function read() {
     ]);
     overview.value = state;
     const targets =
-      state.observed.owner === "networkd"
+      ["networkd", "netplan"].includes(state.observed.owner)
         ? state.observed.links
         : state.observed.connections;
-    const needsTarget = ["networkd", "networkmanager"].includes(state.observed.owner);
+    const needsTarget = ["networkd", "netplan", "networkmanager"].includes(
+      state.observed.owner,
+    );
     if (
       needsTarget
         ? !targets.some((item) => item.target === target.value)

@@ -215,6 +215,9 @@ func networkdObserveLink(b, resolved *dnsBus, ref networkdLinkRef) hostdns.Netwo
 }
 func (d *HostDNS) observeNetworkd() hostdns.Observation {
 	out := hostdns.Observation{Owner: "networkd", Source: dnsSource, Current: hostdns.Config{Servers: []string{}, Search: []string{}}, Links: []hostdns.NetworkLink{}, Reason: "未发现符合条件的静态 networkd 链路"}
+	if d.Owner == "netplan" {
+		out.Owner, out.Reason = "netplan", "未发现可安全局部管理的静态 netplan 链路"
+	}
 	path := dnsSource
 	if link, e := os.Readlink(dnsSource); e == nil {
 		out.LinkTarget = link
@@ -262,6 +265,10 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 			return d.withPending(out)
 		}
 		link := networkdObserveLink(b, resolved, ref)
+		if d.Owner == "netplan" {
+			link.Writable = false
+			link.Reason = "持久源未确认为可管理的 netplan 定义"
+		}
 		if len(link.LoadedSources) > 0 {
 			if _, candidate := netplanGeneratedID("networkd", link.LoadedSources[0]); candidate {
 				if netplan == nil {
@@ -271,6 +278,19 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 			}
 			if link.Netplan != nil {
 				link.Writable = false
+				if d.Owner == "netplan" {
+					sources, sourceErr := networkSources(link.LoadedSources[0])
+					if sourceErr != nil {
+						link.Reason = "无法复核 netplan 生成源"
+					} else {
+						link.Reason = netplanLinkReason(netplan, link, sources)
+						link.Writable = link.Reason == ""
+						if link.Writable {
+							link.SourceHash = netplanViewHash(netplan, link.SourceHash)
+							link.Netplan.Reason = ""
+						}
+					}
+				}
 			}
 		}
 		if !supported {
@@ -299,6 +319,14 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 	if netplan != nil && netplan.problem == "" && !netplan.stable() {
 		for i := range out.Links {
 			invalidateNetplanSource(out.Links[i].Netplan)
+			if d.Owner == "netplan" && out.Links[i].Netplan != nil {
+				out.Links[i].Writable = false
+				out.Links[i].Reason = out.Links[i].Netplan.Reason
+			}
+		}
+		out.Writable = false
+		for _, link := range out.Links {
+			out.Writable = out.Writable || link.Writable
 		}
 	}
 	if e = b.unchangedOwner(); e != nil {

@@ -26,12 +26,15 @@ type netplanDirectory struct {
 }
 
 type netplanSnapshot struct {
-	dirs    []netplanDirectory
-	files   []networkSource
-	paths   []string
-	network *yaml.Node
-	hash    string
-	problem string
+	dirs      []netplanDirectory
+	files     []networkSource
+	paths     []string
+	network   *yaml.Node
+	hash      string
+	problem   string
+	tool      netplanTool
+	toolRead  bool
+	toolError error
 }
 
 // Follow only the standard merged-/usr alias. Source-directory symlinks and

@@ -132,7 +132,7 @@ func run() error {
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
 	componentScope := flags.String("component-scope", "unconfirmed", "native component scope: host or unconfirmed")
 	maintenanceScope := flags.String("maintenance-scope", "unconfirmed", "host configuration maintenance scope: host or unconfirmed")
-	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd or unconfirmed")
+	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd, netplan or unconfirmed")
 	firewallScope := flags.String("firewall-scope", "unconfirmed", "firewall namespace: host or unconfirmed")
 	firewallOwner := flags.String("firewall-owner", "unconfirmed", "locally confirmed firewall owner: direct-nftables or unconfirmed")
 	firewallSSH := flags.String("firewall-ssh", "unconfirmed", "locally confirmed SSH protection: openssh, none or unconfirmed")
@@ -1031,7 +1031,7 @@ func run() error {
 		if *componentScope != "host" && *componentScope != "unconfirmed" {
 			return errors.New("component-scope must be host or unconfirmed")
 		}
-		if (*dnsOwner != "unconfirmed" && *dnsOwner != "regular-file" && *dnsOwner != "networkmanager" && *dnsOwner != "networkd") || (*dnsScope != "unconfirmed" && *dnsScope != "host") {
+		if (*dnsOwner != "unconfirmed" && *dnsOwner != "regular-file" && *dnsOwner != "networkmanager" && *dnsOwner != "networkd" && *dnsOwner != "netplan") || (*dnsScope != "unconfirmed" && *dnsScope != "host") {
 			return errors.New("unsupported DNS owner or namespace")
 		}
 		if *metricsScope != "host" && *metricsScope != "unconfirmed" {

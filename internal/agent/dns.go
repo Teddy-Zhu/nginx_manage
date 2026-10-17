@@ -28,6 +28,7 @@ type dnsCheckpoint struct {
 	After       dnsFile             `json:"after"`
 	NM          *nmCheckpoint       `json:"networkmanager"`
 	Networkd    *networkdCheckpoint `json:"networkd"`
+	Netplan     *netplanCheckpoint  `json:"netplan"`
 	VerifyAfter int64               `json:"verify_after"`
 }
 
@@ -107,7 +108,7 @@ func (d *HostDNS) Open() error {
 	if err := d.lock(filepath.Join(d.Dir, "lock")); err != nil {
 		return err
 	}
-	if (d.Owner == "regular-file" || d.Owner == "networkmanager" || d.Owner == "networkd") && d.Scope == "host" {
+	if (d.Owner == "regular-file" || d.Owner == "networkmanager" || d.Owner == "networkd" || d.Owner == "netplan") && d.Scope == "host" {
 		if err := d.lockHost(); err != nil {
 			return err
 		}
@@ -141,18 +142,18 @@ func (d *HostDNS) Open() error {
 		return errors.New("unrecognized reachability recovery checkpoint")
 	}
 	if c.Plan.Owner == "networkmanager" {
-		if c.Networkd != nil {
+		if c.Networkd != nil || c.Netplan != nil {
 			return errors.New("mixed DNS recovery owners")
 		}
 		if err = c.validateNM(); err != nil {
 			return err
 		}
-	} else if c.Plan.Owner == "networkd" {
+	} else if c.Plan.Owner == "networkd" || c.Plan.Owner == "netplan" {
 		if err = c.validateNetworkd(); err != nil {
 			return err
 		}
 	} else {
-		if c.NM != nil || c.Networkd != nil || c.Plan.Owner != "regular-file" || c.Plan.Input.Target != "" || c.Before.UID != 0 || c.Before.Mode&0022 != 0 || len(c.Before.Data) > hostdns.SourceLimit || len(c.After.Data) > hostdns.SourceLimit {
+		if c.NM != nil || c.Networkd != nil || c.Netplan != nil || c.Plan.Owner != "regular-file" || c.Plan.Input.Target != "" || c.Before.UID != 0 || c.Before.Mode&0022 != 0 || len(c.Before.Data) > hostdns.SourceLimit || len(c.After.Data) > hostdns.SourceLimit {
 			return errors.New("invalid DNS file snapshot")
 		}
 		expected := c.Before
@@ -200,7 +201,7 @@ func (d *HostDNS) Close() {
 	d.locks = nil
 }
 func (d *HostDNS) observe() hostdns.Observation {
-	if d.Owner == "networkd" {
+	if d.Owner == "networkd" || d.Owner == "netplan" {
 		return d.observeNetworkd()
 	}
 	if d.Owner == "networkmanager" {
@@ -243,7 +244,7 @@ func (d *HostDNS) observe() hostdns.Observation {
 		for _, entry := range entries {
 			if strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml") {
 				out.Owner = "netplan"
-				out.Reason = "netplan 源配置尚未适配，保持只读"
+				out.Reason = "须由本机确认 netplan 所有者及宿主机范围，未授权保持只读"
 				return d.withPending(out)
 			}
 		}
@@ -330,7 +331,7 @@ func (d *HostDNS) withPending(out hostdns.Observation) hostdns.Observation {
 	if out.Connections == nil {
 		out.Connections = []hostdns.Connection{}
 	}
-	if out.Owner == "networkd" && len(out.Links) == 0 {
+	if (out.Owner == "networkd" || out.Owner == "netplan") && len(out.Links) == 0 {
 		out.Writable = false
 	}
 	if d.checkpoint != nil && dnsActive(d.checkpoint.Status.State) {
@@ -354,6 +355,9 @@ func (d *HostDNS) Plan(input hostdns.PlanInput) (hostdns.Plan, error) {
 	}
 	input = input.Normalize()
 	if hostdns.NetworkdTarget(input.Target) {
+		if d.Owner == "netplan" {
+			return d.netplanPlan(input)
+		}
 		return d.networkdPlan(input)
 	}
 	if input.Target != "" {
@@ -395,7 +399,7 @@ func (d *HostDNS) status(id string) (hostdns.Status, error) {
 func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if !validID(id) || plan.ID != plan.Hash() || (plan.Owner != "regular-file" && plan.Owner != "networkmanager" && plan.Owner != "networkd") {
+	if !validID(id) || plan.ID != plan.Hash() || (plan.Owner != "regular-file" && plan.Owner != "networkmanager" && plan.Owner != "networkd" && plan.Owner != "netplan") {
 		return hostdns.Status{}, fault.Invalid("DNS 计划无效")
 	}
 	if err := plan.Input.Validate(); err != nil {
@@ -425,6 +429,9 @@ func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 	}
 	if plan.Owner == "networkd" {
 		return d.networkdApply(id, plan)
+	}
+	if plan.Owner == "netplan" {
+		return d.netplanApply(id, plan)
 	}
 	if plan.Input.Target != "" {
 		return hostdns.Status{}, fault.Invalid("普通文件计划不能包含连接目标")

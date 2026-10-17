@@ -89,7 +89,7 @@ Webhook 请求体为版本 1 的 NotificationPayload，包含 node_id 与事件 
 本机事件最多 2048 条/7 天、投递最多 8192 条、渠道最多 16 个，正文与加密渠道各最多 8 KiB；容量压力优先清理终态投递，丢弃未完成项与事件历史截断的计数在通知页显示。通知页面由 pages 自动扫描，概览提示投递异常，页面隐藏暂停轮询、卸载取消读取。配置/队列/API/页面已接入并生成合同代码；尚未运行构建、类型检查、lint、测试或实际通知投递，P5 统一验证。
 
 
-主机 DNS 与 ACME DNS 凭据分离。`/host/dns` 返回解析器入口、所有者线索、IPv4/IPv6 地址、搜索域、可确认的持久配置、最近期望与当前任务；入口值不冒充 NetworkManager/resolved 的完整运行解析状态。普通文件适配覆盖无外部管理器的普通 `/etc/resolv.conf`，须本机设置 `--dns-scope=host --dns-owner=regular-file` 并在请求中明确接管；开发、容器、符号链接、自动生成标记、已发现的网络管理器、netplan 或未知组合保持只读。NetworkManager 与纯静态 networkd/resolved 已接入下述适配；自动 DNS、netplan 源配置写入与 ifcfg 等其他组合仍待实现，不能将已接入适配标记为 DNS 全范围完成。
+主机 DNS 与 ACME DNS 凭据分离。`/host/dns` 返回解析器入口、所有者线索、IPv4/IPv6 地址、搜索域、可确认的持久配置、最近期望与当前任务；入口值不冒充 NetworkManager/resolved 的完整运行解析状态。普通文件适配覆盖无外部管理器的普通 `/etc/resolv.conf`，须本机设置 `--dns-scope=host --dns-owner=regular-file` 并在请求中明确接管；开发、容器、符号链接、自动生成标记、已发现的网络管理器、netplan 或未知组合保持只读。NetworkManager、纯静态 networkd/resolved 与 netplan/networkd 静态源已接入下述独立适配；自动 DNS、netplan/NetworkManager 源写入与 ifcfg 等其他组合仍待实现，不能将已接入适配标记为 DNS 全范围完成。
 
 DNS 使用 Plan → Apply → Confirm/Rollback。计划 5 分钟有效，绑定源内容、文件身份、权限与扩展属性的散列；每用户独立存放加密计划，最多保留 64 个未过期计划。所有写操作要求 host.dns.write、浏览器近期认证和幂等键；计划/任务/审计/幂等响应按业务事务保存，已提交任务保留独立加密快照。确认后的期望配置才进入 host_dns_desired；恢复只刷新匹配原期望的文件身份证明，不将外部配置当作原期望。未提交任务可取消，提交后由同一 Agent 操作 ID 查询和恢复，不能依据 API 超时重复创建 root 操作。
 
@@ -117,13 +117,19 @@ networkd 的 Plan/Apply/Confirm/Rollback 仅接管纯静态 DNS：配置须来�
 
 临时应用只调用经过签名检查的 SetLinkDNSEx/SetLinkDomains，不重启网络、不 Reload/Reconfigure，不调用同时清除其他 DNS 策略的 RevertDNS。保留搜索域顺序、路由域、IP/网关/路由和其他解析策略。运行状态与环境验证域名核验后才允许确认；确认时只在最后本机源追加或替换固定 DNS 专用尾段，保留原文、权限及扩展属性，运行覆盖继续生效并由持久源支持下次启动。源与运行状态变化后拒绝沿用旧计划，各目标确认期望分别加密保存。
 
-root 独立快照保存前后文件、运行 DNS、其他源散列、期限和每次写入前的调用意图。超时、解析失败或未确认重启先撤销自己的持久写入，再局部恢复 DNS；外部偏离不覆盖。networkd 不提供版本条件写入，未知 RPC 必须确认原 daemon 已退出后才能继续恢复，进程身份以 boot ID/PID/start ticks 核对；system bus 重连或仅看到旧 DNS 均不构成调用结束证据。无法确认时保留 `recovery_required`，禁止后续冲突操作，不自动重启网络服务。静态支持范围以外的完整策略恢复与 netplan 源写入仍待实施。
+root 独立快照保存前后文件、运行 DNS、其他源散列、期限和每次写入前的调用意图。超时、解析失败或未确认重启先撤销自己的持久写入，再局部恢复 DNS；外部偏离不覆盖。networkd 不提供版本条件写入，未知 RPC 必须确认原 daemon 已退出后才能继续恢复，进程身份以 boot ID/PID/start ticks 核对；system bus 重连或仅看到旧 DNS 均不构成调用结束证据。无法确认时保留 `recovery_required`，禁止后续冲突操作，不自动重启网络服务。静态支持范围以外的完整策略恢复仍待实施。
 
-netplan 上游只读观测复用上述宿主机范围授权。固定 networkd 与 NetworkManager 生成路径可与合并源中的同名定义及 renderer 关联；返回 `netplan.state=associated|unresolved`、定义/设备类型、合并源路径、源摘要及 DNS 字段，不更改既有 `writable` 边界。名称关联不证明当前生成内容与源一致，未匹配的命名或 renderer 冲突保留待确认。页面将源设置与 backend/解析器实际状态分开展示，不把生成文件中的 DNS 当作唯一持久来源。
+netplan 上游观测复用上述宿主机范围授权。固定 networkd 与 NetworkManager 生成路径可与合并源中的同名定义及 renderer 关联；返回 `netplan.state=associated|unresolved`、定义/设备类型、合并源路径、源摘要及 DNS 字段。名称关联不证明当前生成内容与源一致，也不授予写入权限；未匹配的命名或 renderer 冲突保留待确认。页面将源设置与 backend/解析器实际状态分开展示，不把生成文件中的 DNS 当作唯一持久来源。
 
 源读取按 `/lib/netplan`、`/etc/netplan`、`/run/netplan` 的同名遮盖，再按文件名排序进行映射递归合并、序列追加与标量覆盖，语义依据 [Netplan 配置](https://netplan.readthedocs.io/en/latest/netplan-yaml/)及 [generate 层级合同](https://netplan.readthedocs.io/en/1.0/netplan-generate/)。仅接受安全 root 普通 `.yaml`，允许标准 merged-/usr 别名；每目录最多 64 项、有效文件最多 64 份，每份 16 KiB、总量 256 KiB，节点最多 16384、深度最多 32。固定 Go YAML v3.0.5 只解析有界节点，不展开别名。重复键、合并键、自定义标签、类型冲突、多文档及读取变化保留未知；源原文、Wi-Fi 密钥和解析器错误原文不进入响应或日志。
 
-DNS 投影包括显式地址、搜索/路由域、DHCPv4/v6、UseDNS 策略及可选 accept-ra；未显式设置的 DHCP、UseDNS 与 RA 均保持 null，不把后端默认值冒充源字段。特殊地址、超限、未识别 DNS 属性、RA overrides 及 backend 透传覆盖不伪造可用投影。观测结束再次核对目录和源文件，变化后清除摘要与设置。此读取不调用 `netplan apply/generate`、不修改 YAML 或生成文件，不授予源写入、重启网络或恢复权限。原生生成一致性、安全局部应用及独立恢复仍继续实施；真实组合在 P5 验收。
+DNS 投影包括显式地址、搜索/路由域、DHCPv4/v6、UseDNS 策略及可选 accept-ra；未显式设置的 DHCP、UseDNS 与 RA 均保持 null，不把后端默认值冒充源字段。特殊地址、超限、未识别 DNS 属性、RA overrides 及 backend 透传覆盖不伪造可用投影。观测结束再次核对目录和源文件，变化后清除摘要与设置。普通读取不调用原生生成器或修改配置。
+
+netplan 源写入须本机设置 `--dns-scope=host --dns-owner=netplan`，沿用 `networkd:<接口名>` 目标及现有计划/应用/确认/回滚 API。当前范围为同名 Ethernet 定义、明确关闭 DHCPv4/DHCPv6/RA、按网卡名称独占且无 drop-in 的单一 networkd 生成文件、单一已有 `/etc/netplan/*.yaml` nameservers 字段，以及源、已加载 DNS 与 resolved 一致的静态链路。cloud-init 等外部生成标记、共享/未知源、NetworkManager 生成源及其他组合保持只读；迁移只携带既有逻辑 DNS 期望，不迁移本机所有者授权或恢复记录。
+
+计划和应用均在 root 私有临时目录调用固定受信 ELF 生成器，以同一有效 YAML 集分别生成当前与候选结果；冻结程序摘要，限制执行时间、输出及文件树，不返回原生诊断或秘密。当前原生输出必须逐字匹配目标生成文件，候选仅允许该文件 DNS/Domains 行与选定源 nameservers 字段变化，所有其他生成材料保持一致。固定中性 argv[0] 避免 systemd generator 模式，并设置 `SYSTEMD_OFFLINE=1` 与 `SYSTEMD_IN_CHROOT=1`，隔离原生启动阶段的 systemctl 路径；依据 [Netplan 原生生成器](https://github.com/canonical/netplan/blob/1.1/src/generate.c)及 [systemd 环境变量合同](https://github.com/systemd/systemd/blob/main/docs/ENVIRONMENT.md)。不运行 `netplan apply/try`，不重载整网。
+
+应用仅通过原有 networkd DNS 专用 D-Bus 调用调整所选网卡，系统解析验证后才可确认。root 独立记录同时冻结 YAML 与生成文件的前后内容、属性、完整有效源清单及运行状态；确认先原位原子保存原 YAML 的 nameservers 字段，再原子保存已核对的生成文件。超时、未确认重启及失败先撤销自己的 YAML 和生成文件写入，再按原调用意图与 daemon 退出证明局部恢复运行 DNS；外部修改不覆盖，无法确认保留 `recovery_required`。接口及页面已接入，真实系统组合统一在 P5 验收。
 
 原生语义依据 [systemd v257 networkd DNS 调用](https://github.com/systemd/systemd/blob/v257/src/network/networkd-link-bus.c)、[DNS 状态序列化](https://github.com/systemd/systemd/blob/v257/src/network/networkd-state-file.c)、[systemd.network 策略](https://github.com/systemd/systemd/blob/v257/man/systemd.network.xml) 和 [resolve1 接口](https://github.com/systemd/systemd/blob/v257/man/org.freedesktop.resolve1.xml)。源码调查与接口同步不构成系统能力验收；集中验证仍在 P5。
 

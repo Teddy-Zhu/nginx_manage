@@ -259,6 +259,9 @@ func (d *HostDNS) networkdSession(ctx context.Context) (*dnsBus, *dnsBus, *netwo
 	if e == nil && !sameDNSFile(t.Sources[len(t.Sources)-1].File, d.checkpoint.Before) && !sameDNSFile(t.Sources[len(t.Sources)-1].File, d.checkpoint.After) {
 		e = errors.New("networkd persistent DNS source changed externally")
 	}
+	if e == nil {
+		e = d.netplanSourceEither()
+	}
 	if e != nil {
 		b.close()
 		r.close()
@@ -349,6 +352,13 @@ func (d *HostDNS) networkdCheck(ctx context.Context, persistent bool) (string, e
 	if e = d.networkdRuntime(t, true, true); e != nil {
 		return "", e
 	}
+	if c.Netplan != nil {
+		s, err := d.netplanSourcesCheck(persistent)
+		if err != nil {
+			return "", err
+		}
+		return netplanViewHash(s, t.View.SourceHash), b.unchangedOwner()
+	}
 	return t.View.SourceHash, b.unchangedOwner()
 }
 
@@ -370,6 +380,14 @@ func (d *HostDNS) networkdConfirm(ctx context.Context) error {
 	if e = d.persist(); e != nil {
 		return e
 	}
+	if c.Netplan != nil {
+		if e = d.netplanPersistSource(); e != nil {
+			return e
+		}
+		if d.expired() {
+			return errors.New("netplan confirmation deadline elapsed")
+		}
+	}
 	if e = writeHostDNSFile(n.File, t.Sources[len(t.Sources)-1].File, c.After, c.Status.OperationID); e != nil {
 		return e
 	}
@@ -386,6 +404,11 @@ func (d *HostDNS) networkdRollback() (string, error) {
 	c, n := d.checkpoint, d.checkpoint.Networkd
 	if d.hostScopeReason() != "" {
 		return "", errors.New("host DNS scope is unconfirmed")
+	}
+	if c.Netplan != nil {
+		if e := d.netplanRestoreSource(); e != nil {
+			return "", e
+		}
 	}
 	if _, e := networkDirectoryState(filepath.Dir(n.File)); e != nil {
 		return "", e
@@ -473,6 +496,16 @@ func (d *HostDNS) networkdRollback() (string, error) {
 			if e = cleanDNSFileTemp(n.File, c.Status.OperationID); e != nil {
 				return "", e
 			}
+			if c.Netplan != nil {
+				if e = cleanDNSFileTemp(c.Netplan.File, c.Status.OperationID); e != nil {
+					return "", e
+				}
+				s, err := d.netplanSourcesCheck(false)
+				if err != nil {
+					return "", err
+				}
+				return netplanViewHash(s, t.View.SourceHash), nil
+			}
 			return t.View.SourceHash, nil
 		}
 		select {
@@ -485,7 +518,7 @@ func (d *HostDNS) networkdRollback() (string, error) {
 
 func (c *dnsCheckpoint) validateNetworkd() error {
 	n := c.Networkd
-	if n == nil || c.NM != nil || c.Plan.Owner != "networkd" || !hostdns.NetworkdTarget(c.Plan.Input.Target) || !networkWritableSource(n.File) || !networkSourcePath(n.Base, filepath.Base(n.Base), false) || n.File != n.Base && !networkSourcePath(n.File, filepath.Base(n.Base), true) || n.Index <= 0 || !validID(n.Boot) || len(n.OtherHash) != 64 || len(n.Routes) > 128 {
+	if n == nil || c.NM != nil || !(c.Plan.Owner == "networkd" && c.Netplan == nil || c.Plan.Owner == "netplan" && c.Netplan != nil) || !hostdns.NetworkdTarget(c.Plan.Input.Target) || c.Netplan == nil && !networkWritableSource(n.File) || c.Netplan != nil && n.File != n.Base || !networkSourcePath(n.Base, filepath.Base(n.Base), false) || n.File != n.Base && !networkSourcePath(n.File, filepath.Base(n.Base), true) || n.Index <= 0 || !validID(n.Boot) || len(n.OtherHash) != 64 || len(n.Routes) > 128 {
 		return errors.New("invalid networkd recovery identity")
 	}
 	for _, f := range []dnsFile{c.Before, c.After} {
@@ -493,7 +526,14 @@ func (c *dnsCheckpoint) validateNetworkd() error {
 			return errors.New("invalid networkd source snapshot")
 		}
 	}
-	expected, e := renderNetworkDNS(c.Before.Data, c.Plan.Input.Config, n.Routes)
+	var expected []byte
+	var e error
+	if c.Netplan != nil {
+		e = c.validateNetplan()
+		expected = c.After.Data
+	} else {
+		expected, e = renderNetworkDNS(c.Before.Data, c.Plan.Input.Config, n.Routes)
+	}
 	file := c.Before
 	file.Data = expected
 	before := networkConfigState(c.Plan.Before, n.Routes)
