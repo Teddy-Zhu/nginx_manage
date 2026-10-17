@@ -36,7 +36,7 @@ func validDockerPlan(out firewall.Plan, input firewall.RuntimeInput) bool {
 		return false
 	}
 	if !value.Compiled {
-		if input.DockerTargets != nil || len(value.Bindings) != 0 || value.BindingsHash != "" || value.ProgramHash != "" || value.ProgramBytes != 0 || value.GeneratedRules != 0 || len(value.Entries) != 0 || value.EntriesTruncated || out.ProgramHash != "" {
+		if input.DockerTargets != nil || value.Transition != nil || len(value.Bindings) != 0 || value.BindingsHash != "" || value.ProgramHash != "" || value.ProgramBytes != 0 || value.GeneratedRules != 0 || len(value.Entries) != 0 || value.EntriesTruncated || out.ProgramHash != "" {
 			return false
 		}
 	} else {
@@ -49,10 +49,33 @@ func validDockerPlan(out firewall.Plan, input firewall.RuntimeInput) bool {
 			}
 		}
 		program, err := firewall.CompileDockerIPTables(policy, *input.DockerTargets, value.Bindings)
-		if err != nil || value.BindingsHash != program.BindingsHash || value.ProgramHash != program.Hash || value.ProgramBytes != program.Bytes || value.GeneratedRules != len(program.Entries) || len(value.Entries) != min(128, len(program.Entries)) || value.EntriesTruncated != (len(program.Entries) > len(value.Entries)) || !slices.Equal(value.Entries, program.Entries[:len(value.Entries)]) || out.ProgramHash != firewall.DockerPlanHash(policy, value) {
+		if err != nil || value.BindingsHash != program.BindingsHash || value.ProgramHash != program.Hash || value.ProgramBytes != program.Bytes || value.GeneratedRules != len(program.Entries) || len(value.Entries) != min(128, len(program.Entries)) || value.EntriesTruncated != (len(program.Entries) > len(value.Entries)) || out.ProgramHash != firewall.DockerPlanHash(policy, value) {
+			return false
+		}
+		if !validDockerTransitionPlan(out, policy, *input.DockerTargets, 2*len(hostProgram.Families)) {
 			return false
 		}
 	}
 	raw, err := json.Marshal(out)
 	return err == nil && len(raw) <= 512<<10
+}
+
+func validDockerTransitionPlan(out firewall.Plan, policy firewall.Policy, targets firewall.DockerTargets, hostHooks int) bool {
+	v := out.Docker.Transition
+	if v == nil || !validID(v.Owner) || !validID(v.RegistrationOperationID) || !validID(v.ParentOperationID) || v.RegistrationOperationID == v.Owner || v.RegistrationOperationID == v.ParentOperationID || out.ID == v.RegistrationOperationID || out.ID == v.ParentOperationID || !firewalldDigest(v.RegistrationHash) || !firewalldDigest(v.ToolHash) || v.HookChain != "DOCKER-USER" || v.EntryChain != firewall.IPTablesDockerChain || !firewalldDigest(v.TransactionHash) || v.Families == nil {
+		return false
+	}
+	program, err := firewall.CompileDockerIPTablesRuntime(policy, targets, out.Docker.Bindings, v.Owner, out.ID)
+	if err != nil || v.RuntimeHash != program.Hash || v.RuntimeBytes != program.Bytes || v.GeneratedRules != program.GeneratedRules || v.GeneratedRules+out.Docker.HostGeneratedRules+hostHooks > firewall.MaxEntries || len(v.Families) != len(program.Families) || !slices.Equal(out.Docker.Entries, program.Entries[:len(out.Docker.Entries)]) {
+		return false
+	}
+	bytes := 0
+	for index, family := range v.Families {
+		generation := program.Families[index]
+		if family.Family != generation.Family || family.Binary != generation.Binary || family.Chain != generation.Chain || family.HookPosition != 1 || family.GeneratedRules != len(generation.Rules)+2 || family.PreservedRules < 0 || family.PreservedRules > firewallObjectLimit || !firewalldDigest(family.BeforeHash) || !firewalldDigest(family.AfterHash) || family.BeforeHash == family.AfterHash || !firewalldDigest(family.CandidateHash) || !firewalldDigest(family.PreviousHash) || family.CandidateBytes < 1 || family.CandidateBytes > firewall.IPTablesProgramBytes || family.PreviousBytes < 1 || family.PreviousBytes > firewall.IPTablesProgramBytes {
+			return false
+		}
+		bytes += family.CandidateBytes
+	}
+	return v.TransactionBytes == bytes
 }

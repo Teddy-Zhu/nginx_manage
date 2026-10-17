@@ -78,6 +78,7 @@ type DockerPlan struct {
 	GeneratedRules     int                     `json:"generated_rules"`
 	HostProgramHash    string                  `json:"host_program_hash"`
 	HostGeneratedRules int                     `json:"host_generated_rules"`
+	Transition         *DockerTransitionPlan   `json:"transition"`
 	Entries            []PreviewEntry          `json:"entries"`
 	EntriesTruncated   bool                    `json:"entries_truncated"`
 	Warnings           []string                `json:"warnings"`
@@ -190,7 +191,11 @@ func DockerPlanHash(policy Policy, plan *DockerPlan) string {
 	if plan == nil || !plan.Compiled {
 		return ""
 	}
-	return secure.Hash([]byte("docker:combined-preview:v1:\x00" + policy.Hash() + ":" + plan.ConfigurationHash + ":" + plan.HostProgramHash + ":" + plan.ProgramHash))
+	raw, _ := json.Marshal(struct {
+		PolicyHash, ConfigurationHash, HostProgramHash, ProgramHash string
+		Transition                                                  *DockerTransitionPlan
+	}{policy.Hash(), plan.ConfigurationHash, plan.HostProgramHash, plan.ProgramHash, plan.Transition})
+	return secure.Hash(append([]byte("docker:combined-preview:v2:\x00"), raw...))
 }
 
 // This separate program cannot enter the host INPUT generation executor.

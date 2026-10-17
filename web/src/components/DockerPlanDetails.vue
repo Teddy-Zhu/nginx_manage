@@ -77,6 +77,14 @@ const addressOptions = computed(() =>
   }),
 );
 const bindings = computed(() => props.targets?.bindings ?? []);
+const generations: DataTableColumns<NonNullable<Plan["transition"]>["families"][number]> = [
+  { title: "地址族", key: "family" },
+  { title: "代际链", key: "chain" },
+  { title: "新增规则", key: "generated_rules" },
+  { title: "保留现有规则", key: "preserved_rules" },
+  { title: "候选批次", key: "candidate_bytes", render: (row) => `${row.candidate_bytes} 字节` },
+  { title: "撤回批次", key: "previous_bytes", render: (row) => `${row.previous_bytes} 字节` },
+];
 watch([ruleID, () => props.plan.snapshot_hash], () => {
   mapping.value = null;
   address.value = null;
@@ -182,6 +190,17 @@ const resolved: DataTableColumns<Plan["bindings"][number]> = [
       <dt>目标绑定摘要</dt><dd class="digest">{{ plan.bindings_hash }}</dd>
       <dt>Docker 程序摘要</dt><dd class="digest">{{ plan.program_hash }}</dd>
     </dl>
+    <template v-if="plan.transition">
+      <h4>初始代际切换预览</h4>
+      <dl>
+        <dt>挂接路径</dt><dd>{{ plan.transition.hook_chain }} 首位 → {{ plan.transition.entry_chain }} → 代际链</dd>
+        <dt>独立授权</dt><dd class="digest">{{ plan.transition.registration_operation_id }}</dd>
+        <dt>含入口的生成规则</dt><dd>{{ plan.transition.generated_rules }} 条 / {{ plan.transition.runtime_bytes }} 字节</dd>
+        <dt>代际程序摘要</dt><dd class="digest">{{ plan.transition.runtime_hash }}</dd>
+        <dt>切换与撤回摘要</dt><dd class="digest">{{ plan.transition.transaction_hash }}</dd>
+      </dl>
+      <n-data-table :columns="generations" :data="plan.transition.families" :pagination="false" :scroll-x="1000" />
+    </template>
     <n-data-table :columns="resolved" :data="plan.bindings" :pagination="{ pageSize: 10 }" :scroll-x="1000" />
     <h4>Docker 规则预览</h4>
     <p v-if="plan.entries_truncated" class="muted">仅展示前 128 条；摘要包含完整编译规则。</p>

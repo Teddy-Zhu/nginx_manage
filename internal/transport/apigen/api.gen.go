@@ -2190,10 +2190,26 @@ type FirewallDockerPlan struct {
 	GeneratedRules     int                             `json:"generated_rules"`
 	HostProgramHash    string                          `json:"host_program_hash"`
 	HostGeneratedRules int                             `json:"host_generated_rules"`
+	Transition         *FirewallDockerTransitionPlan   `json:"transition"`
 	Entries            []FirewallPreviewEntry          `json:"entries"`
 	EntriesTruncated   bool                            `json:"entries_truncated"`
 	Warnings           []string                        `json:"warnings"`
 	Reason             string                          `json:"reason"`
+}
+type FirewallDockerTransitionPlan struct {
+	Owner                   string                       `json:"owner"`
+	RegistrationOperationId string                       `json:"registration_operation_id"`
+	ParentOperationId       string                       `json:"parent_operation_id"`
+	RegistrationHash        string                       `json:"registration_hash"`
+	ToolHash                string                       `json:"tool_hash"`
+	HookChain               string                       `json:"hook_chain"`
+	EntryChain              string                       `json:"entry_chain"`
+	RuntimeHash             string                       `json:"runtime_hash"`
+	RuntimeBytes            int                          `json:"runtime_bytes"`
+	GeneratedRules          int                          `json:"generated_rules"`
+	TransactionHash         string                       `json:"transaction_hash"`
+	TransactionBytes        int                          `json:"transaction_bytes"`
+	Families                []FirewallIPTablesFamilyPlan `json:"families"`
 }
 type FirewallFirewalldPlan struct {
 	RuntimeHash             string                   `json:"runtime_hash"`

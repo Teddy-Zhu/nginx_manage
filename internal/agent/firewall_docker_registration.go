@@ -161,6 +161,19 @@ func dockerRegistrationParent(v *dockerRegistrationCheckpoint, parent *iptablesR
 	return parent != nil && v.ParentOwner == parent.NextClaim.Owner && v.ParentOperationID == parent.NextClaim.OperationID && v.ParentRequestHash == parent.RequestHash && v.MachineHash == parent.NextClaim.MachineHash && v.Backend == parent.NextClaim.Backend
 }
 
+// The parent has already been checked against the local global claim. A
+// logical policy or a matching daemon report cannot supply the child grant.
+func dockerRegistrationAuthority(dataDir string, parent *iptablesRegistrationCheckpoint, engineHash string) (*dockerRegistrationCheckpoint, error) {
+	v, err := loadDockerRegistration(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || v.State != "registered" || !dockerRegistrationParent(v, parent) || v.EngineHash != engineHash || dockerRegistrationReceipt(dataDir, v) != nil {
+		return nil, errors.New("Docker 代际计划需要与当前父登记及实例一致的独立本机授权，请检查 docker-firewall-registration")
+	}
+	return v, nil
+}
+
 func forbidDockerRegistration(dataDir string) error {
 	v, err := loadDockerRegistration(dataDir)
 	if err != nil {
