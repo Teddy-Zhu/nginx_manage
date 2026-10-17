@@ -248,12 +248,16 @@ func ufwNativePreserved(before, candidate *ufwNativeFile, expected ufwNativeRule
 			return "", errors.New("UFW dry-run 改变、遗漏或重排既有用户规则")
 		}
 	}
-	prefix, _, _ := ufwNativeIdentity(expected.Family)
+	return ufwNativeAuxPreserved(before, candidate, expected.Family)
+}
+
+func ufwNativeAuxPreserved(before, candidate *ufwNativeFile, family string) (string, error) {
+	prefix, _, _ := ufwNativeIdentity(family)
 	if before.Bootstrap {
-		if candidate.Limiting != (expected.Family == "ipv4") || !ufwStandardRate(prefix, candidate.Limiting, candidate.Rate) {
+		if candidate.Limiting != (family == "ipv4") || !ufwStandardRate(prefix, candidate.Limiting, candidate.Rate) {
 			return "", errors.New("UFW 初始模板的候选限速段存在未知内容")
 		}
-		return expected.Family + " 原生文件为官方空初始模板；候选包含 UFW 生成的标准链、日志及限速段，尚无运行证明", nil
+		return family + " 原生文件为官方空初始模板；候选包含 UFW 生成的标准链、日志及限速段，尚无运行证明", nil
 	}
 	if !slices.Equal(before.Logging, candidate.Logging) {
 		return "", errors.New("UFW dry-run 改变既有日志段，未准备计划")
@@ -264,9 +268,9 @@ func ufwNativePreserved(before, candidate *ufwNativeFile, expected ufwNativeRule
 		}
 		return "", nil
 	}
-	projection := expected.Family == "ipv4" && !before.Limiting && candidate.Limiting || expected.Family == "ipv6" && before.Limiting && !candidate.Limiting
+	projection := family == "ipv4" && !before.Limiting && candidate.Limiting || family == "ipv6" && before.Limiting && !candidate.Limiting
 	if !projection || !ufwStandardRate(prefix, before.Limiting, before.Rate) || !ufwStandardRate(prefix, candidate.Limiting, candidate.Rate) {
 		return "", errors.New("UFW dry-run 的限速能力差异涉及未知辅助规则")
 	}
-	return expected.Family + " dry-run 限速链与当前文件不同；官方 dry-run 使用固定能力默认值，不能据此证明实际写入或内核能力", nil
+	return family + " dry-run 限速链与当前文件不同；官方 dry-run 使用固定能力默认值，不能据此证明实际写入或内核能力", nil
 }

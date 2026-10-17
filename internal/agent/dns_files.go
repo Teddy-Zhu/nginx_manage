@@ -37,6 +37,10 @@ func sameDNSFile(a, b dnsFile) bool {
 	return a.hash() == b.hash()
 }
 func readDNSFile(path string) (dnsFile, error) {
+	return readProtectedTextFile(path, hostdns.SourceLimit)
+}
+
+func readProtectedTextFile(path string, limit int64) (dnsFile, error) {
 	var out dnsFile
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -49,16 +53,16 @@ func readDNSFile(path string) (dnsFile, error) {
 		return out, err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || st.Uid != 0 || st.Nlink != 1 || info.Mode().Perm()&0022 != 0 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() > hostdns.SourceLimit {
-		return out, errors.New("DNS source has unsafe attributes or exceeds budget")
+	if !ok || !info.Mode().IsRegular() || st.Uid != 0 || st.Nlink != 1 || info.Mode().Perm()&0022 != 0 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() > limit {
+		return out, errors.New("Protected text source has unsafe attributes or exceeds budget")
 	}
 	out = dnsFile{Mode: uint32(info.Mode().Perm()), UID: st.Uid, GID: st.Gid, Dev: uint64(st.Dev), Ino: st.Ino, Mtime: info.ModTime().UnixNano(), Xattrs: map[string][]byte{}}
-	out.Data, err = io.ReadAll(io.LimitReader(f, hostdns.SourceLimit+1))
-	if err != nil || len(out.Data) > hostdns.SourceLimit {
-		return out, errors.New("DNS source cannot be read within budget")
+	out.Data, err = io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil || int64(len(out.Data)) > limit {
+		return out, errors.New("Protected text source cannot be read within budget")
 	}
 	if !utf8.Valid(out.Data) || bytes.IndexByte(out.Data, 0) >= 0 {
-		return out, errors.New("DNS source is not valid text")
+		return out, errors.New("Protected text source is not valid text")
 	}
 	buf := make([]byte, 8192)
 	n, err := unix.Flistxattr(fd, buf)
@@ -75,7 +79,7 @@ func readDNSFile(path string) (dnsFile, error) {
 			continue
 		}
 		if !utf8.ValidString(name) {
-			return out, errors.New("DNS attribute names cannot be preserved safely")
+			return out, errors.New("Protected text attribute names cannot be preserved safely")
 		}
 		value := make([]byte, 8192)
 		n, err := unix.Fgetxattr(fd, name, value)
@@ -84,13 +88,17 @@ func readDNSFile(path string) (dnsFile, error) {
 		}
 		total += len(name) + n
 		if total > 8192 {
-			return out, errors.New("DNS attributes exceed budget")
+			return out, errors.New("Protected text attributes exceed budget")
 		}
 		out.Xattrs[name] = value[:n]
 	}
 	after, err := f.Stat()
-	if err != nil || !os.SameFile(info, after) || after.Size() != int64(len(out.Data)) || after.ModTime() != info.ModTime() {
-		return out, errors.New("DNS source changed while reading")
+	if err != nil {
+		return out, err
+	}
+	last, ok := after.Sys().(*syscall.Stat_t)
+	if !ok || !os.SameFile(info, after) || after.Mode() != info.Mode() || last.Uid != st.Uid || last.Gid != st.Gid || last.Nlink != 1 || last.Ctim != st.Ctim || after.Size() != int64(len(out.Data)) || after.ModTime() != info.ModTime() {
+		return out, errors.New("Protected text source changed while reading")
 	}
 	return out, nil
 }
@@ -183,41 +191,7 @@ func writeHostDNSFile(source string, expected, desired dnsFile, operationID stri
 	}
 	defer os.Remove(tmp)
 	defer f.Close()
-	if _, err = f.Write(desired.Data); err != nil {
-		return err
-	}
-	if err = f.Chown(int(desired.UID), int(desired.GID)); err != nil {
-		return err
-	}
-	if err = f.Chmod(os.FileMode(desired.Mode)); err != nil {
-		return err
-	}
-	for name, value := range desired.Xattrs {
-		if err = unix.Fsetxattr(int(f.Fd()), name, value, 0); err != nil {
-			return err
-		}
-	}
-	// Remove inherited attributes absent from the snapshot, preserving ACL and
-	// SELinux labels exactly rather than inheriting the temporary file's labels.
-	attrs := make([]byte, 8192)
-	n, e := unix.Flistxattr(int(f.Fd()), attrs)
-	if errors.Is(e, unix.ENOTSUP) {
-		e = nil
-		n = 0
-	}
-	if e != nil {
-		return e
-	}
-	for _, name := range strings.Split(string(attrs[:n]), "\x00") {
-		if name != "" {
-			if _, ok := desired.Xattrs[name]; !ok {
-				if err = unix.Fremovexattr(int(f.Fd()), name); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	if err = f.Sync(); err != nil {
+	if err = writeProtectedTextFile(f, desired); err != nil {
 		return err
 	}
 	if err = f.Close(); err != nil {

@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -28,6 +27,7 @@ type ufwPolicyTransition struct {
 	Tools                                                ufwToolBinding
 	Reload                                               ufwReloadBaseline
 	Materials                                            []ufwReloadMaterial
+	Previous                                             *firewallPolicyRecord
 }
 
 type ufwChangeStep struct {
@@ -35,13 +35,15 @@ type ufwChangeStep struct {
 }
 
 type ufwChangeCheckpoint struct {
-	Schema      int                  `json:"schema"`
-	RequestHash string               `json:"request_hash"`
-	Policy      firewallPolicyRecord `json:"policy"`
-	Operation   firewall.Operation   `json:"operation"`
-	Transition  ufwPolicyTransition  `json:"transition"`
-	Steps       []ufwChangeStep      `json:"steps"`
-	Rollback    bool                 `json:"rollback"`
+	Schema      int                   `json:"schema"`
+	RequestHash string                `json:"request_hash"`
+	Policy      firewallPolicyRecord  `json:"policy"`
+	Operation   firewall.Operation    `json:"operation"`
+	Transition  ufwPolicyTransition   `json:"transition"`
+	Steps       []ufwChangeStep       `json:"steps"`
+	Rollback    bool                  `json:"rollback"`
+	Confirmed   *firewallPolicyRecord `json:"confirmed"`
+	Files       []ufwFileCommit       `json:"files"`
 }
 
 func ufwChangePath(dataDir string) string {
@@ -50,18 +52,24 @@ func ufwChangePath(dataDir string) string {
 
 func ufwChangeHash(v *ufwChangeCheckpoint) string {
 	raw, _ := json.Marshal(v)
-	return secure.Hash(append([]byte("ufw:change:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("ufw:change:v2:\x00"), raw...))
 }
 
 func ufwChangeIntentHash(v *ufwChangeCheckpoint) string {
 	value := *v
 	value.Operation.State, value.Operation.Stage, value.Operation.Error, value.Operation.ConfirmedSource = "", "", "", ""
 	value.Operation.UpdatedAt, value.Rollback = 0, false
+	value.Confirmed = nil
+	value.Files = append([]ufwFileCommit{}, v.Files...)
+	for index := range value.Files {
+		value.Files[index].Candidate, value.Files[index].Previous = nil, nil
+		value.Files[index].Phase = ""
+	}
 	return ufwChangeHash(&value)
 }
 
-func newUFWTransition(registration *ufwRegistrationCheckpoint, baseline ufwConfigurationSnapshot, proof ufwDryRunProof, ipv6 bool, record firewallPolicyRecord) (*ufwPolicyTransition, error) {
-	v := &ufwPolicyTransition{Owner: registration.NextClaim.Owner, MachineHash: registration.NextClaim.MachineHash, RegistrationOperationID: registration.NextClaim.OperationID, ConfigurationHash: baseline.Hash, NativeHash: proof.NativeHash, DryRunHash: proof.Hash, BatchHash: proof.BatchHash, IPv6: ipv6, Files: baseline.Files, Tools: proof.Tools, Reload: proof.Reload, Materials: proof.Materials}
+func newUFWTransition(registration *ufwRegistrationCheckpoint, baseline ufwConfigurationSnapshot, proof ufwDryRunProof, ipv6 bool, record firewallPolicyRecord, previous *firewallPolicyRecord) (*ufwPolicyTransition, error) {
+	v := &ufwPolicyTransition{Owner: registration.NextClaim.Owner, MachineHash: registration.NextClaim.MachineHash, RegistrationOperationID: registration.NextClaim.OperationID, ConfigurationHash: baseline.Hash, NativeHash: proof.NativeHash, DryRunHash: proof.Hash, BatchHash: proof.BatchHash, IPv6: ipv6, Files: baseline.Files, Tools: proof.Tools, Reload: proof.Reload, Materials: proof.Materials, Previous: previous}
 	if err := validateUFWTransition(v, record); err != nil {
 		return nil, err
 	}
@@ -81,13 +89,29 @@ func validUFWFileSnapshot(f ufwFileSnapshot, executable bool, limit int64) bool 
 
 func validateUFWTransition(v *ufwPolicyTransition, record firewallPolicyRecord) error {
 	invalid := errors.New("UFW 原业务转换材料无效")
-	if v == nil || !validID(v.Owner) || !validID(v.RegistrationOperationID) || !firewalldDigest(v.MachineHash) || !firewalldDigest(v.ConfigurationHash) || !firewalldDigest(v.NativeHash) || !firewalldDigest(v.DryRunHash) || !firewalldDigest(v.BatchHash) || !validID(record.PlanID) || record.Action != "apply" || record.Version < 1 || record.Policy.Backend != "ufw" || record.Marker != firewall.UFWCommentPrefix+v.Owner+":"+record.PlanID+":" || validateFirewallProtectionBasis(record.ProtectionBasis) != nil {
+	if v == nil || !validID(v.Owner) || !validID(v.RegistrationOperationID) || !firewalldDigest(v.MachineHash) || !firewalldDigest(v.ConfigurationHash) || !firewalldDigest(v.NativeHash) || !firewalldDigest(v.DryRunHash) || !firewalldDigest(v.BatchHash) || !validID(record.PlanID) || !slices.Contains([]string{"apply", "remove"}, record.Action) || record.Version < 1 || record.Policy.Backend != "ufw" || record.Marker != firewall.UFWCommentPrefix+v.Owner+":"+record.PlanID+":" || validateFirewallProtectionBasis(record.ProtectionBasis) != nil {
 		return invalid
 	}
 	policyHash, err := firewall.PolicyDigest(record.Policy)
-	program, programErr := firewall.CompileUFWOwned(record.Policy, record.Protections, v.Owner, record.PlanID)
+	program, programErr := firewall.CompileUFWRuntime(record.Policy, record.Protections, record.Action, v.Owner, record.PlanID)
 	if err != nil || policyHash != record.PolicyHash || programErr != nil || program.Hash != record.ProgramHash || len(program.Rules) > ufwDryRunCommands {
 		return invalid
+	}
+	previous, err := ufwPolicyProgram(v.Previous, v.Owner)
+	if err != nil {
+		return err
+	}
+	owned, err := ufwNativeProgram(previous)
+	if err != nil {
+		return err
+	}
+	for _, rule := range owned {
+		if rule.Family == "ipv6" && !v.IPv6 {
+			return invalid
+		}
+	}
+	if record.Action == "remove" && (v.Previous == nil || v.Previous.Action != "apply" || v.Previous.Version != record.Version || v.Previous.PolicyHash != record.PolicyHash) {
+		return errors.New("UFW 待移除策略与原确认回执不一致")
 	}
 	roles := append([]string{"cli", "python"}, ufwSourceModules...)
 	roles = append(roles, "iptables", "ip6tables", "iptables-restore", "ip6tables-restore", "iptables-save", "ip6tables-save", "ufw-init", "cat", "false")
@@ -177,9 +201,6 @@ func validateUFWTransition(v *ufwPolicyTransition, record firewallPolicyRecord) 
 				return invalid
 			}
 		}
-		if bytes.Contains(material.Before, []byte("nginxpanel:host:")) || bytes.Contains(bytes.ToLower(material.Before), []byte(hex.EncodeToString([]byte("nginxpanel:host:")))) {
-			return errors.New("UFW 原标记缺少本机已确认所有权，不能据此接管")
-		}
 		for _, target := range []string{"candidate", "previous"} {
 			if _, err = ufwRestorePayload(material, target); err != nil {
 				return err
@@ -190,6 +211,10 @@ func validateUFWTransition(v *ufwPolicyTransition, record firewallPolicyRecord) 
 			return errors.New("UFW 候选改变了原日志或限速辅助配置")
 		}
 		beforeFiles[family], err = parseUFWNative(material.Before, family, true)
+		if err != nil {
+			return err
+		}
+		beforeFiles[family], err = ufwUnownedRules(beforeFiles[family], family, owned)
 		if err != nil {
 			return err
 		}
@@ -236,13 +261,23 @@ func validateUFWTransition(v *ufwPolicyTransition, record firewallPolicyRecord) 
 
 func validateUFWChange(v *ufwChangeCheckpoint) error {
 	invalid := errors.New("UFW 原业务操作恢复快照无效")
-	if v == nil || v.Schema != 1 || !validID(v.Operation.ID) || v.Policy.OperationID != v.Operation.ID || v.RequestHash != firewallRequestHash(v.Policy.PlanID, v.Policy.Action) || v.Operation.PlanID != v.Policy.PlanID || v.Operation.Action != v.Policy.Action || v.Operation.Version != v.Policy.Version || v.Operation.PolicyHash != v.Policy.PolicyHash || v.Operation.ProgramHash != v.Policy.ProgramHash || v.Operation.Deadline <= 0 || v.Operation.UpdatedAt <= 0 || len(v.Operation.Error) > 512 || !slices.Contains([]string{"running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"}, v.Operation.State) {
+	if v == nil || v.Schema != 2 || !validID(v.Operation.ID) || v.Policy.OperationID != v.Operation.ID || v.RequestHash != firewallRequestHash(v.Policy.PlanID, v.Policy.Action) || v.Operation.PlanID != v.Policy.PlanID || v.Operation.Action != v.Policy.Action || v.Operation.Version != v.Policy.Version || v.Operation.PolicyHash != v.Policy.PolicyHash || v.Operation.ProgramHash != v.Policy.ProgramHash || v.Operation.Deadline <= 0 || v.Operation.UpdatedAt <= 0 || len(v.Operation.Error) > 512 || !slices.Contains([]string{"running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"}, v.Operation.State) {
 		return invalid
 	}
 	if err := validateUFWTransition(&v.Transition, v.Policy); err != nil {
 		return err
 	}
+	confirmed := v.Transition.Previous
+	if v.Operation.State == "succeeded" {
+		confirmed = &v.Policy
+	}
+	if !sameUFWPolicyRecord(v.Confirmed, confirmed) {
+		return errors.New("UFW 已确认选择与原业务结果不一致")
+	}
 	if v.Operation.ID == v.Policy.PlanID || v.Operation.ID == v.Transition.Owner || v.Operation.ID == v.Transition.RegistrationOperationID || v.Operation.VerificationScope != "controlled-listener" || len(v.Operation.Stage) == 0 || len(v.Operation.Stage) > 128 || v.Rollback != slices.Contains([]string{"compensating", "recovery_required", "rolled_back"}, v.Operation.State) {
+		return invalid
+	}
+	if v.Operation.ConfirmedSource != "" && !validUFWConfirmationSource(v.Operation.ConfirmedSource) || v.Operation.State == "succeeded" && v.Operation.ConfirmedSource == "" {
 		return invalid
 	}
 	if len(v.Steps) != len(v.Transition.Materials)*2 {
@@ -259,7 +294,7 @@ func validateUFWChange(v *ufwChangeCheckpoint) error {
 		}
 		seen[step.ID] = true
 	}
-	return nil
+	return validateUFWFileCommits(v, seen)
 }
 
 func loadUFWChange(dataDir string) (*ufwChangeCheckpoint, error) {
@@ -312,6 +347,20 @@ func saveUFWChange(dataDir string, v *ufwChangeCheckpoint) error {
 			if current.Rollback && !v.Rollback || slices.Contains([]string{"succeeded", "rolled_back", "failed"}, current.Operation.State) && current.Operation.State != v.Operation.State {
 				return errors.New("UFW 原业务已进入恢复或终态，禁止改变执行方向")
 			}
+			if current.Operation.ConfirmedSource != "" && current.Operation.ConfirmedSource != v.Operation.ConfirmedSource {
+				return errors.New("UFW 原新连接确认来源发生变化，禁止覆盖")
+			}
+			for index, file := range current.Files {
+				for position, image := range []*dnsFile{file.Candidate, file.Previous} {
+					next := v.Files[index].Candidate
+					if position == 1 {
+						next = v.Files[index].Previous
+					}
+					if image != nil && (next == nil || image.hash() != next.hash()) {
+						return errors.New("UFW 原持久文件准备回执发生变化，禁止覆盖")
+					}
+				}
+			}
 		} else if !slices.Contains([]string{"succeeded", "rolled_back", "failed"}, current.Operation.State) {
 			return errors.New("UFW 原业务操作尚未结束，禁止替换恢复快照")
 		}
@@ -358,6 +407,10 @@ func acceptUFWChange(ctx context.Context, dataDir, id string, plan firewallPriva
 	if err = validateUFWTransition(plan.ufw, *plan.record); err != nil {
 		return nil, err
 	}
+	confirmed, err := ufwCurrentConfirmed(dataDir, plan.ufw.Owner)
+	if err != nil || !sameUFWPolicyRecord(confirmed, plan.ufw.Previous) {
+		return nil, errors.New("UFW 原确认策略在受理前变化，请重新计划")
+	}
 	if _, err := loadUFWReceipt(dataDir, id); !os.IsNotExist(err) {
 		return nil, errors.New("UFW 新业务操作 ID 已使用或无法核对")
 	}
@@ -378,11 +431,17 @@ func acceptUFWChange(ctx context.Context, dataDir, id string, plan firewallPriva
 	policy := *plan.record
 	policy.OperationID = id
 	op := firewall.Operation{ID: id, PlanID: policy.PlanID, Action: policy.Action, Version: policy.Version, PolicyHash: policy.PolicyHash, ProgramHash: policy.ProgramHash, State: "running", Stage: "submitting_runtime", Deadline: time.Now().Unix() + firewall.ConfirmationSeconds, UpdatedAt: time.Now().Unix(), VerificationScope: "controlled-listener"}
-	v := &ufwChangeCheckpoint{Schema: 1, RequestHash: firewallRequestHash(op.PlanID, op.Action), Policy: policy, Operation: op, Transition: *plan.ufw}
+	v := &ufwChangeCheckpoint{Schema: 2, RequestHash: firewallRequestHash(op.PlanID, op.Action), Policy: policy, Operation: op, Transition: *plan.ufw, Confirmed: confirmed}
 	for _, material := range v.Transition.Materials {
 		for _, target := range []string{"candidate", "previous"} {
 			v.Steps = append(v.Steps, ufwChangeStep{ID: secure.ID(), Family: material.Family, Target: target})
 		}
+	}
+	if err = captureUFWFileCommits(ctx, v); err != nil {
+		return nil, err
+	}
+	if err = checkUFWTransitionSources(ctx, dataDir, plan.ufw); err != nil {
+		return nil, err
 	}
 	if err = ctx.Err(); err != nil {
 		return nil, err
@@ -408,6 +467,17 @@ func checkUFWTransitionSources(ctx context.Context, dataDir string, v *ufwPolicy
 	configuration, err := readUFWConfiguration(ctx, binary, v.IPv6)
 	if err != nil || configuration.Hash != v.ConfigurationHash {
 		return errors.New("UFW 业务操作的固定源配置已变化，禁止覆盖")
+	}
+	previous, err := ufwPolicyProgram(v.Previous, v.Owner)
+	if err != nil {
+		return err
+	}
+	owned, err := ufwNativeProgram(previous)
+	if err != nil {
+		return err
+	}
+	if err = verifyUFWOwnedConfiguration(configuration, v.IPv6, owned); err != nil {
+		return err
 	}
 	return v.Tools.verify(ctx)
 }

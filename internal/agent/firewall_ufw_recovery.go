@@ -50,7 +50,10 @@ func recoverUFWChange(ctx context.Context, dataDir string) error {
 		v.Operation.Error = "UFW 原业务规则尚未恢复；保留原快照，须核对配置、工具和内核范围"
 		return errors.Join(cause, saveUFWChange(dataDir, v))
 	}
-	if err = checkUFWTransitionSources(ctx, dataDir, &v.Transition); err != nil {
+	if err = persistUFWFilesLocked(ctx, dataDir, v, "previous"); err != nil {
+		return fail(err)
+	}
+	if err = checkUFWChangeSources(ctx, dataDir, v); err != nil {
 		return fail(err)
 	}
 	for _, material := range v.Transition.Materials {
@@ -86,7 +89,10 @@ func recoverUFWChange(ctx context.Context, dataDir string) error {
 		return fail(err)
 	}
 	defer lock.Close()
-	if err = checkUFWTransitionSources(ctx, dataDir, &v.Transition); err != nil {
+	if err = checkUFWChangeSources(ctx, dataDir, v); err != nil {
+		return fail(err)
+	}
+	if err = checkUFWPersistentFiles(ctx, v, "previous"); err != nil {
 		return fail(err)
 	}
 	for _, material := range v.Transition.Materials {

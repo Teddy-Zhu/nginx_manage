@@ -39,6 +39,7 @@ type ufwDryRunProof struct {
 	PythonVersion                              string
 	Reload                                     ufwReloadBaseline
 	PreservedRules                             int
+	Commands                                   int
 	Warnings                                   []string
 	Materials                                  []ufwReloadMaterial
 	Tools                                      ufwToolBinding
@@ -131,16 +132,25 @@ func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwCon
 // or comment. Reverse prepend steps accumulate only in the private datadir;
 // every candidate and the final per-family order must match the typed program.
 // This prepares a file batch, not a kernel transaction or ownership grant.
-func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWProgram, baseline ufwConfigurationSnapshot, ipv6 bool) (proof ufwDryRunProof, resultErr error) {
+func checkUFWDryRun(ctx context.Context, binary string, program, previous *firewall.UFWProgram, baseline ufwConfigurationSnapshot, ipv6 bool) (proof ufwDryRunProof, resultErr error) {
 	defer func() {
 		if resultErr != nil {
 			proof = ufwDryRunProof{}
 		}
 	}()
-	if len(program.Rules) > ufwDryRunCommands || len(program.Rules) != len(program.Entries) {
-		return proof, errors.New("UFW dry-run 计划最多 64 条包含入口保护的命令")
+	if len(program.Rules) > ufwDryRunCommands || len(previous.Rules) > ufwDryRunCommands || len(program.Rules) != len(program.Entries) || len(previous.Rules) != len(previous.Entries) {
+		return proof, errors.New("UFW 原策略与候选分别最多 64 条包含入口保护的生成规则")
+	}
+	proof.Commands = len(program.Rules) + len(previous.Rules)
+	owned, err := ufwNativeProgram(previous)
+	if err != nil {
+		return proof, err
+	}
+	if err = verifyUFWOwnedConfiguration(baseline, ipv6, owned); err != nil {
+		return proof, err
 	}
 	before := map[string]*ufwNativeFile{}
+	foreign := map[string]*ufwNativeFile{}
 	for _, item := range []struct{ family, path string }{{"ipv4", "/etc/ufw/user.rules"}, {"ipv6", "/etc/ufw/user6.rules"}} {
 		if item.family == "ipv6" && !ipv6 {
 			continue
@@ -151,7 +161,11 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 			return proof, err
 		}
 		before[item.family] = file
-		proof.PreservedRules += len(file.Rules)
+		foreign[item.family], err = ufwUnownedRules(file, item.family, owned)
+		if err != nil {
+			return proof, err
+		}
+		proof.PreservedRules += len(foreign[item.family].Rules)
 	}
 	if proof.PreservedRules+len(program.Rules) > firewall.MaxEntries {
 		return proof, errors.New("UFW 既有及生成原生用户规则合计超过 8192 条")
@@ -222,6 +236,32 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 	}
 	hashes := []string{}
 	total := 0
+	for index, rule := range previous.Rules {
+		if err := ctx.Err(); err != nil {
+			return proof, err
+		}
+		raw, err := binding.python(ctx, temp, "delete", rule.Arguments, 1<<20)
+		if err != nil {
+			return proof, errors.New("UFW 原受管规则删除预演失败、超时或返回警告")
+		}
+		total += len(raw)
+		if total > 8<<20 {
+			return proof, errors.New("UFW dry-run 完整输出合计超过 8 MiB")
+		}
+		candidate, err := parseUFWDeleteCandidate(raw, owned[index], current[owned[index].Family])
+		if err != nil {
+			return proof, err
+		}
+		if err = workspace.replace(owned[index].Family, candidate.Content); err != nil {
+			return proof, err
+		}
+		current[owned[index].Family] = candidate.File
+		if candidate.Warning != "" && !warned[candidate.Warning] {
+			proof.Warnings = append(proof.Warnings, candidate.Warning)
+			warned[candidate.Warning] = true
+		}
+		hashes = append(hashes, secure.Hash(raw))
+	}
 	for index := len(program.Rules) - 1; index >= 0; index-- {
 		if err := ctx.Err(); err != nil {
 			return proof, err
@@ -257,7 +297,7 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 		return proof, err
 	}
 	proof.Hash = secure.Hash(append([]byte("ufw:dry-run:v1:\x00"), raw...))
-	if err = verifyUFWBatchOrder(before, current, expected); err != nil {
+	if err = verifyUFWBatchOrder(foreign, current, expected); err != nil {
 		return proof, err
 	}
 	afterReload, err := readUFWReloadBaseline(ctx, baseline, ipv6, binding, temp)
@@ -358,6 +398,43 @@ func parseUFWDryRunCandidate(raw []byte, expected ufwNativeRule, before *ufwNati
 		return nil, err
 	}
 	warning, err := ufwNativePreserved(before, candidate, expected)
+	if err != nil {
+		return nil, err
+	}
+	return &ufwDryRunCandidate{File: candidate, Content: []byte(text), Warning: warning}, nil
+}
+
+func parseUFWDeleteCandidate(raw []byte, expected ufwNativeRule, before *ufwNativeFile) (*ufwDryRunCandidate, error) {
+	status := "Rules updated\n"
+	if expected.Family == "ipv6" {
+		status = "Rules updated (v6)\n"
+	}
+	text, ok := strings.CutSuffix(string(raw), status)
+	if !ok || len(text) > firewall.UFWReadBytes || before == nil {
+		return nil, errors.New("UFW 删除预演缺少完整原生候选及对应地址族结果")
+	}
+	candidate, err := parseUFWNative([]byte(text), expected.Family, false)
+	if err != nil {
+		return nil, err
+	}
+	remaining := []ufwNativeRule{}
+	removed := 0
+	for _, rule := range before.Rules {
+		if ufwNativeRuleEqual(rule, expected) {
+			removed++
+		} else {
+			remaining = append(remaining, rule)
+		}
+	}
+	if removed != 1 || len(candidate.Rules) != len(remaining) {
+		return nil, errors.New("UFW 删除预演未只移除一个原受管报文块")
+	}
+	for index, rule := range remaining {
+		if !ufwNativeRuleEqual(rule, candidate.Rules[index]) {
+			return nil, errors.New("UFW 删除预演改变、遗漏或重排其他用户规则")
+		}
+	}
+	warning, err := ufwNativeAuxPreserved(before, candidate, expected.Family)
 	if err != nil {
 		return nil, err
 	}

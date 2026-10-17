@@ -58,8 +58,8 @@ for name,module in list(sys.modules.items()):
 import ufw.common
 if mode=='describe':
  print(json.dumps({'protocol':1,'python':sys.version.split()[0],'program':ufw.common.programName,'checks':ufw.common.do_checks,'config_dir':ufw.common.config_dir,'state_dir':ufw.common.state_dir,'iptables_dir':ufw.common.iptables_dir}))
-elif mode=='prepend':
- sys.argv=[os.path.join(root,'ufw-cli.py'),'--datadir='+root,'--dry-run','prepend']+sys.argv[4:]
+elif mode in ('prepend','delete'):
+ sys.argv=[os.path.join(root,'ufw-cli.py'),'--datadir='+root,'--dry-run',mode]+sys.argv[4:]
  runpy.run_path(sys.argv[0],run_name='__main__')
 else:
  raise ValueError('unsupported UFW operation')
@@ -304,7 +304,7 @@ func (b *ufwToolBinding) verify(ctx context.Context) error {
 
 func (b *ufwToolBinding) python(ctx context.Context, root, mode string, args []string, limit int) ([]byte, error) {
 	python, err := b.tool("python")
-	if err != nil || !slices.Contains([]string{"describe", "prepend"}, mode) {
+	if err != nil || !slices.Contains([]string{"describe", "prepend", "delete"}, mode) {
 		return nil, errors.New("UFW 固定 Python 操作无效")
 	}
 	names, err := json.Marshal(ufwSourceModules)

@@ -329,7 +329,7 @@ func runUFWRestore(ctx context.Context, dataDir string, request ufwRestoreReques
 		return nil, err
 	}
 	defer managerLock.Close()
-	if err = checkUFWTransitionSources(ctx, dataDir, &change.Transition); err != nil {
+	if err = checkUFWChangeSources(ctx, dataDir, change); err != nil {
 		return nil, err
 	}
 	for _, family := range change.Transition.Materials {

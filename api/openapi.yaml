@@ -2082,8 +2082,8 @@ components:
         reload_hash: {type: string, minLength: 64, maxLength: 64, description: 重载范围的原运行链存在性、有序规则及绑定的 command/save/restore 版本摘要，不包含计数器或候选生效证明}
         reload_chains: {type: integer, minimum: 1, maximum: 32, description: 重载范围内实际存在的用户链数量，包含日志和限速链}
         reload_rules: {type: integer, minimum: 0, maximum: 8192, description: 重载范围内原运行报文规则总数，包含日志和限速规则，不按 tuple 计}
-        preserved_rules: {type: integer, minimum: 0, maximum: 8192, description: 本次核对的所有已启用地址族原生文件中既有用户 tuple 总数}
-        dry_run_commands: {type: integer, minimum: 0, maximum: 64}
+        preserved_rules: {type: integer, minimum: 0, maximum: 8192, description: 本次核对并保留的所有已启用地址族非本应用用户 tuple 总数}
+        dry_run_commands: {type: integer, minimum: 0, maximum: 128, description: 原已确认程序删除与新程序添加的预演命令合计}
         protection_rules: {type: integer, minimum: 0, maximum: 64}
         protection_overrides: {type: integer, minimum: 0, maximum: 8192}
         entries: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/FirewallPreviewEntry'}}

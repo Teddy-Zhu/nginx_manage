@@ -187,3 +187,17 @@ func CompileUFWOwned(policy Policy, protections []Protection, owner, planID stri
 	}
 	return finishUFW(program)
 }
+
+func CompileUFWRuntime(policy Policy, protections []Protection, action, owner, planID string) (*UFWProgram, error) {
+	if action == "apply" {
+		return CompileUFWOwned(policy, protections, owner, planID)
+	}
+	if action != "remove" {
+		return nil, fault.Invalid("UFW 动作须为 apply 或 remove")
+	}
+	normalized, err := policy.Normalize()
+	if err != nil || normalized.Backend != "ufw" {
+		return nil, fault.Invalid("UFW 移除策略无效")
+	}
+	return CompileUFWOwned(Policy{Backend: "ufw", Rules: []Rule{}}, nil, owner, planID)
+}
