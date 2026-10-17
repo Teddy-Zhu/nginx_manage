@@ -159,6 +159,11 @@ func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error)
 		e = errors.New("invalid firewall observation")
 	}
 	if e == nil {
+		if !validFirewalldPolicies(out.Firewalld.PolicyInventory) || out.Firewalld.PolicyInventory.Available && (out.Firewalld.Running == nil || !*out.Firewalld.Running) {
+			e = errors.New("invalid firewalld policy inventory")
+		}
+	}
+	if e == nil {
 		switch out.Registration.State {
 		case "unavailable", "unregistered", "registered", "managed", "released", "missing", "drifted", "recovery_required":
 		default:

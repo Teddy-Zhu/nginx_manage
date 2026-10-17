@@ -4562,14 +4562,48 @@ components:
     FirewallFirewalld:
       type: object
       additionalProperties: false
-      required: ["running", "configured_backend", "default_zone", "panic", "zones", "reason"]
+      required: ["running", "configured_backend", "default_zone", "panic", "zones", "policy_inventory", "reason"]
       properties:
         running: {"type": "boolean", "nullable": true}
         configured_backend: {"type": "string"}
         default_zone: {"type": "string"}
         panic: {"type": "boolean", "nullable": true}
         zones: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallZone"}}
+        policy_inventory: {"$ref": "#/components/schemas/FirewallFirewalldPolicyInventory"}
         reason: {"type": "string"}
+    FirewallFirewalldPolicyInventory:
+      type: object
+      additionalProperties: false
+      required: [available, policies, reason]
+      description: 同一唯一服务所有者下的有界只读采集，runtime/permanent 为独立读取；失败不返回成功前缀，不能作为内核状态、所有权或执行授权。
+      properties:
+        available: {type: boolean}
+        policies: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/FirewallFirewalldPolicy'}}
+        reason: {type: string}
+    FirewallFirewalldPolicy:
+      type: object
+      additionalProperties: false
+      required: [name, active, active_ingress_zones, active_egress_zones, runtime, permanent]
+      properties:
+        name: {type: string, maxLength: 128}
+        active: {type: boolean}
+        active_ingress_zones: {type: array, maxItems: 128, items: {type: string}}
+        active_egress_zones: {type: array, maxItems: 128, items: {type: string}}
+        runtime: {allOf: [{$ref: '#/components/schemas/FirewallFirewalldPolicySettings'}], nullable: true, description: null 表示运行清单中不存在该 policy。}
+        permanent: {allOf: [{$ref: '#/components/schemas/FirewallFirewalldPolicySettings'}], nullable: true, description: null 表示永久清单中不存在该 policy。}
+    FirewallFirewalldPolicySettings:
+      type: object
+      additionalProperties: false
+      required: [hash, target, priority, ingress_zones, egress_zones, rich_rules, entries, masquerade]
+      properties:
+        hash: {type: string, pattern: '^[0-9a-f]{64}$', description: 完整受支持返回字典的摘要，包含字段、D-Bus 类型、空值及列表顺序；不代表语义等价或内核证明。}
+        target: {type: string, enum: ['', CONTINUE, ACCEPT, REJECT, DROP]}
+        priority: {type: integer, format: int32, nullable: true}
+        ingress_zones: {type: array, maxItems: 128, items: {type: string}}
+        egress_zones: {type: array, maxItems: 128, items: {type: string}}
+        rich_rules: {type: integer, minimum: 0, maximum: 1024}
+        entries: {type: integer, minimum: 0, maximum: 4096, description: 服务、端口、源端口、转发端口、协议、ICMP 和 rich rule 条目总数，包含 rich_rules。}
+        masquerade: {type: boolean, nullable: true}
     FirewallZone:
       type: object
       additionalProperties: false

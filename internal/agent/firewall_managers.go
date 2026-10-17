@@ -22,8 +22,28 @@ const firewalldRoot = dbus.ObjectPath("/org/fedoraproject/FirewallD1")
 
 func firewallBool(value bool) *bool { return &value }
 
+// Retain the per-frame allocation bound and additionally bound the complete
+// manager observation, including replies to per-policy reads and bus signals.
+type firewalldBusWire struct {
+	dnsBusWire
+	readBytes int
+}
+
+func (w *firewalldBusWire) Read(p []byte) (int, error) {
+	remaining := (8 << 20) - w.readBytes
+	if remaining <= 0 {
+		return 0, errors.New("firewalld observation exceeds bus budget")
+	}
+	if len(p) > remaining {
+		p = p[:remaining]
+	}
+	n, err := w.dnsBusWire.Read(p)
+	w.readBytes += n
+	return n, err
+}
+
 func readFirewalld(parent context.Context) firewall.Firewalld {
-	out := firewall.Firewalld{Zones: []firewall.Zone{}, Reason: "无法读取本机 firewalld 状态"}
+	out := firewall.Firewalld{Zones: []firewall.Zone{}, PolicyInventory: firewall.EmptyFirewalldPolicies("firewalld policy 尚未读取"), Reason: "无法读取本机 firewalld 状态"}
 	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
 	defer cancel()
 	raw, e := (&net.Dialer{}).DialContext(ctx, "unix", "/run/dbus/system_bus_socket")
@@ -32,7 +52,7 @@ func readFirewalld(parent context.Context) firewall.Firewalld {
 	}
 	deadline, _ := ctx.Deadline()
 	_ = raw.SetDeadline(deadline)
-	conn, e := dbus.NewConn(&dnsBusWire{Conn: raw}, dbus.WithContext(ctx))
+	conn, e := dbus.NewConn(&firewalldBusWire{dnsBusWire: dnsBusWire{Conn: raw}}, dbus.WithContext(ctx))
 	if e != nil {
 		raw.Close()
 		return out
@@ -98,6 +118,9 @@ func readFirewalld(parent context.Context) firewall.Firewalld {
 			out.ConfiguredBackend = value
 		}
 	}
+	policyCtx, policyCancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	out.PolicyInventory = readFirewalldPolicies(policyCtx, conn, owner)
+	policyCancel()
 	var after string
 	if e = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", dbus.FlagNoAutoStart, firewalldName).Store(&after); e != nil || after != owner {
 		out.Running = nil
@@ -105,6 +128,7 @@ func readFirewalld(parent context.Context) firewall.Firewalld {
 		out.DefaultZone = ""
 		out.ConfiguredBackend = ""
 		out.Zones = []firewall.Zone{}
+		out.PolicyInventory = firewall.EmptyFirewalldPolicies("firewalld 在读取期间变化或无法再次核对，请刷新")
 		out.Reason = "firewalld 在读取期间变化，请刷新"
 		return out
 	}

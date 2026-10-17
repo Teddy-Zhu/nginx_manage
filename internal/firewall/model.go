@@ -47,13 +47,45 @@ type Observation struct {
 	Interfaces   []string         `json:"interfaces"`
 }
 type Firewalld struct {
-	Running           *bool  `json:"running"`
-	ConfiguredBackend string `json:"configured_backend"`
-	DefaultZone       string `json:"default_zone"`
-	Panic             *bool  `json:"panic"`
-	Zones             []Zone `json:"zones"`
-	Reason            string `json:"reason"`
+	Running           *bool                    `json:"running"`
+	ConfiguredBackend string                   `json:"configured_backend"`
+	DefaultZone       string                   `json:"default_zone"`
+	Panic             *bool                    `json:"panic"`
+	Zones             []Zone                   `json:"zones"`
+	PolicyInventory   FirewalldPolicyInventory `json:"policy_inventory"`
+	Reason            string                   `json:"reason"`
 }
+
+// The two settings documents are independent observations, not a kernel or
+// ownership proof. Nil means the policy was absent from that configuration.
+type FirewalldPolicyInventory struct {
+	Available bool              `json:"available"`
+	Policies  []FirewalldPolicy `json:"policies"`
+	Reason    string            `json:"reason"`
+}
+type FirewalldPolicy struct {
+	Name               string                   `json:"name"`
+	Active             bool                     `json:"active"`
+	ActiveIngressZones []string                 `json:"active_ingress_zones"`
+	ActiveEgressZones  []string                 `json:"active_egress_zones"`
+	Runtime            *FirewalldPolicySettings `json:"runtime"`
+	Permanent          *FirewalldPolicySettings `json:"permanent"`
+}
+type FirewalldPolicySettings struct {
+	Hash         string   `json:"hash"`
+	Target       string   `json:"target"`
+	Priority     *int32   `json:"priority"`
+	IngressZones []string `json:"ingress_zones"`
+	EgressZones  []string `json:"egress_zones"`
+	RichRules    int      `json:"rich_rules"`
+	Entries      int      `json:"entries"`
+	Masquerade   *bool    `json:"masquerade"`
+}
+
+func EmptyFirewalldPolicies(reason string) FirewalldPolicyInventory {
+	return FirewalldPolicyInventory{Policies: []FirewalldPolicy{}, Reason: reason}
+}
+
 type Zone struct {
 	Name       string   `json:"name"`
 	Interfaces []string `json:"interfaces"`
@@ -102,6 +134,6 @@ type Docker struct {
 
 func Empty(scope, reason string) Observation {
 	return Observation{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 root 独立登记"}, Source: "host-agent", Kernel: KernelView{Reason: "尚未读取受管目标表的内核快照"}, Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
-		Firewalld: Firewalld{Zones: []Zone{}, Reason: "尚未读取"}, UFW: UFW{Reason: "尚未读取"},
+		Firewalld: Firewalld{Zones: []Zone{}, PolicyInventory: EmptyFirewalldPolicies("尚未读取"), Reason: "尚未读取"}, UFW: UFW{Reason: "尚未读取"},
 		Iptables: []Iptables{}, Rulesets: []Ruleset{}, Docker: Docker{BackendHint: "unknown", Evidence: []string{}, Reason: "尚未核对 Docker 转发路径"}, Warnings: []string{}}
 }

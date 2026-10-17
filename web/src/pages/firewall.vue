@@ -23,6 +23,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import { apiError, useNodeAPI, type FirewallObservation } from "../api/client";
+import FirewalldPolicies from "../components/FirewalldPolicies.vue";
 
 const api = useNodeAPI();
 const observation = ref<FirewallObservation | null>(null);
@@ -299,6 +300,7 @@ onUnmounted(() => {
             <p>接口：{{ zone.interfaces.join("、") || "无" }}</p>
             <p>来源：{{ zone.sources.join("、") || "无" }}</p>
           </div>
+          <FirewalldPolicies :inventory="observation.firewalld.policy_inventory" />
         </section>
         <section class="panel">
           <h3>UFW</h3>

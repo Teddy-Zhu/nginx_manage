@@ -1789,12 +1789,42 @@ type FirewallObservation struct {
 
 // FirewallFirewalld defines model for FirewallFirewalld.
 type FirewallFirewalld struct {
-	Running           *bool          `json:"running"`
-	ConfiguredBackend string         `json:"configured_backend"`
-	DefaultZone       string         `json:"default_zone"`
-	Panic             *bool          `json:"panic"`
-	Zones             []FirewallZone `json:"zones"`
-	Reason            string         `json:"reason"`
+	Running           *bool                            `json:"running"`
+	ConfiguredBackend string                           `json:"configured_backend"`
+	DefaultZone       string                           `json:"default_zone"`
+	Panic             *bool                            `json:"panic"`
+	Zones             []FirewallZone                   `json:"zones"`
+	PolicyInventory   FirewallFirewalldPolicyInventory `json:"policy_inventory"`
+	Reason            string                           `json:"reason"`
+}
+
+// FirewallFirewalldPolicyInventory defines model for FirewallFirewalldPolicyInventory.
+type FirewallFirewalldPolicyInventory struct {
+	Available bool                      `json:"available"`
+	Policies  []FirewallFirewalldPolicy `json:"policies"`
+	Reason    string                    `json:"reason"`
+}
+
+// FirewallFirewalldPolicy defines model for FirewallFirewalldPolicy.
+type FirewallFirewalldPolicy struct {
+	Name               string                           `json:"name"`
+	Active             bool                             `json:"active"`
+	ActiveIngressZones []string                         `json:"active_ingress_zones"`
+	ActiveEgressZones  []string                         `json:"active_egress_zones"`
+	Runtime            *FirewallFirewalldPolicySettings `json:"runtime"`
+	Permanent          *FirewallFirewalldPolicySettings `json:"permanent"`
+}
+
+// FirewallFirewalldPolicySettings defines model for FirewallFirewalldPolicySettings.
+type FirewallFirewalldPolicySettings struct {
+	Hash         string   `json:"hash"`
+	Target       string   `json:"target"`
+	Priority     *int32   `json:"priority"`
+	IngressZones []string `json:"ingress_zones"`
+	EgressZones  []string `json:"egress_zones"`
+	RichRules    int      `json:"rich_rules"`
+	Entries      int      `json:"entries"`
+	Masquerade   *bool    `json:"masquerade"`
 }
 
 // FirewallZone defines model for FirewallZone.

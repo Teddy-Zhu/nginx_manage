@@ -6,7 +6,7 @@
 
 诊断分别返回：
 
-- firewalld 当前运行、panic、默认 zone、活动接口/来源，以及配置中的后端选择。通过固定本机 D-Bus 和唯一服务所有者读取，禁止自动启动；配置选择不视为内核运行后端。
+- firewalld 当前运行、panic、默认 zone、活动接口/来源、runtime/permanent policy 及活动绑定，以及配置中的后端选择。通过固定本机 D-Bus 和唯一服务所有者读取，禁止自动启动；配置选择不视为内核运行后端。
 - UFW 受信工具可用性、`ufw.conf` 中的 ENABLED 和 `ufw status` 当前状态；未知值保留 null，启用配置与当前状态不一致时告警。
 - 默认 IPv4/IPv6 iptables 命令后端，以及 nftables、iptables-nft IPv4/IPv6、iptables-legacy IPv4/IPv6 五个独立结构视图。明确版本后再读取显式后端的 save 工具，不切换 alternatives。仅含表/链、hook/priority、默认策略、规则数和 DOCKER-USER 跳转标记，不返回规则表达式、集合内容、注释或计数器。
 - Docker `ip/ip6 docker-bridges` 与 `filter/DOCKER-USER` 标记、FORWARD 跳转线索。未核对 Docker 实例、DNAT 原始目的地址或实际数据包路径；原生 nftables 标记保持实验适配只读。
@@ -108,3 +108,13 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 
 
 Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。共享快照、编码和语义证明通过闭合目标枚举选择布局，不接受调用方表名；人工端口规则的所有公开写入仍固定 `nginxpanel_host`。本机 root 可独立登记、核对、恢复及移除原样空表，采用另一所有者、持久记录、主机锁与操作/CAS，绝不接管已有未登记表；空表无链/hook，不表示保护已生效。预检核对独立登记、目标本机 root 管理/代理保护批准及官方 jail 来源的完整当前采样后，才合并本地保护并排除保护地址生成封禁候选材料，本机 root 一次性同步/清除和持久意图恢复已接入，已确认运行回执接续原登记的当前对象指纹；已批准官方 jail 的独立持续采样会话、同命名空间 Agent 启动核对及持久停用清除已接入；受管面板登录 jail 已接入固定通知模板，主机重启后的安全恢复及其他动作后端仍待完成。详情见 [Fail2ban 宿主机动作](fail2ban.md)。Agent 为 55；实际双目标隔离和内核矩阵留待 P5。
+
+## firewalld policy 配置诊断
+
+`firewalld.policy_inventory` 分别读取官方 `policy.getPolicies/getPolicySettings/getActivePolicies` 与 `config.getPolicyNames/getPolicyByName`、`config.policy.getSettings`，见 [firewalld D-Bus 合同](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)。运行、永久和活动配置分开展示；runtime/permanent 为 null 只表示对应清单未包含该 policy，采集失败则整份 inventory 不可用且不返回成功前缀。配置对象名称支持 policy set 的斜线限定名称，不转换为文件路径。
+
+每项保留目标、优先级、配置字典及活动清单返回的入口/出口 zone、rich rule 数量、配置条目总数、地址伪装标志与完整返回配置摘要，不向 Web 返回原始 rich rules、服务描述或转发地址。活动清单中的 zone 是该活动 policy 的绑定，不证明每个 zone 的接口均处于活动状态。配置条目总数包含服务、端口、源端口、转发端口、协议、ICMP 和 rich rules。摘要包含全部已支持字段、D-Bus 类型、空值及列表顺序；缺省字段与显式空值可能产生不同摘要，不能据此推断规则语义等价。未知字段、签名或结构使采集明确不可用，不忽略未识别配置。
+
+运行与永久 policy 合并后最多 64 项，单份返回字典最多 64 KiB、合计 512 KiB；每字段最多 1024 项、每对象最多 4096 个规则条目、各方向最多 128 个 zone。采集 policy 最多 1.5 秒，仍受原 firewalld 3 秒与全局 6 秒诊断期限约束；D-Bus 单帧最多 1 MiB、整次 firewalld 接收最多 8 MiB。末尾再次比较清单和活动绑定，再核对服务唯一所有者；同一服务内的读取仍非原子快照，不能代替执行前复核、内核对象证明或新连接确认。
+
+自动扫描的防火墙页面展示仅运行、仅永久、配置摘要一致或不同及活动状态。该诊断不创建 policy、不写规则、不 reload firewalld、不修改运行或永久配置；firewalld 写入适配及其独立恢复仍未交付。Agent 为 70，数据库/迁移归档仍为 32/6；实现待 P5 集中验证。
