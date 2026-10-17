@@ -112,6 +112,9 @@ func (g *maintenanceGate) records() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err = fail2banStateRestoreRecords(filepath.Dir(filepath.Dir(g.journal.Dir)), original, ""); err != nil {
+		return nil, err
+	}
 	records := make([]Record, 0, len(original))
 	for _, r := range original {
 		// All independent maintenance workers share this view. Keep the

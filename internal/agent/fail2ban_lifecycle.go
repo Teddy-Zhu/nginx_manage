@@ -38,6 +38,9 @@ type fail2banLifecycle struct {
 }
 
 func fail2banManagedIdle(data, allowed string) error {
+	if err := fail2banStateRestoreIdle(data, allowed); err != nil {
+		return err
+	}
 	if err := fail2banHostRuntimeIdle(data); err != nil {
 		return err
 	}

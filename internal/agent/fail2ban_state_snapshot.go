@@ -39,6 +39,7 @@ type fail2banStateFile struct {
 	Size    int64  `json:"size"`
 	SHA256  string `json:"sha256"`
 	Mode    uint32 `json:"mode"`
+	SELinux string `json:"selinux"`
 }
 
 type fail2banStateBasis struct {
@@ -50,6 +51,7 @@ type fail2banStateBasis struct {
 	Invocation    string                `json:"invocation"`
 	MachineID     string                `json:"machine_id"`
 	BootID        string                `json:"boot_id"`
+	StateLabel    string                `json:"state_label"`
 }
 
 type fail2banStateManifest struct {
@@ -148,12 +150,16 @@ func readFail2banStateBasis(ctx context.Context, data string) (fail2banStateBasi
 		return out, err
 	}
 	out.Configuration["service.unit"] = r.unit()
+	out.StateLabel, err = fail2banStateDirectoryLabel(filepath.Join(r.work(), "state"), nil)
+	if err != nil {
+		return out, err
+	}
 	return out, ctx.Err()
 }
 
 func (m fail2banStateManifest) validate(data, id string) error {
 	r := m.Basis.Managed
-	if m.Schema != 1 || m.OperationID != id || !validID(id) || m.DataDir != data || m.CreatedAt <= 0 || m.CreatedAt > time.Now().Unix()+300 || r.State != "installed" || r.ActionState != "completed" || !fail2banDigest.MatchString(m.Basis.MachineID) || !validID(m.Basis.BootID) || len(m.Files) != len(fail2banStateResources) {
+	if m.Schema != 1 || m.OperationID != id || !validID(id) || m.DataDir != data || m.CreatedAt <= 0 || m.CreatedAt > time.Now().Unix()+300 || r.State != "installed" || r.ActionState != "completed" || !fail2banDigest.MatchString(m.Basis.MachineID) || !validID(m.Basis.BootID) || len(m.Basis.StateLabel) > 4096 || len(m.Files) != len(fail2banStateResources) {
 		return errors.New("Fail2ban 状态快照身份无效")
 	}
 	if err := validateFail2banManagedRecord(r, data); err != nil {
@@ -188,10 +194,10 @@ func (m fail2banStateManifest) validate(data, id string) error {
 			return errors.New("Fail2ban 状态快照文件清单无效")
 		}
 		if file.Present {
-			if !fail2banDigest.MatchString(file.SHA256) || file.Mode > 0777 || file.Mode&0022 != 0 || file.Mode&0400 == 0 || i == 0 && file.Size == 0 || i != 0 && !m.Files[0].Present {
+			if !fail2banDigest.MatchString(file.SHA256) || file.Mode > 0777 || file.Mode&0022 != 0 || file.Mode&0400 == 0 || len(file.SELinux) > 4096 || i == 0 && file.Size == 0 || i != 0 && !m.Files[0].Present {
 				return errors.New("Fail2ban 状态快照文件身份无效")
 			}
-		} else if file.Size != 0 || file.SHA256 != "" || file.Mode != 0 {
+		} else if file.Size != 0 || file.SHA256 != "" || file.Mode != 0 || file.SELinux != "" {
 			return errors.New("Fail2ban 状态快照缺失文件不能包含伪造内容")
 		}
 	}

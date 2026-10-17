@@ -235,7 +235,11 @@ func openFail2banStateSources(ctx context.Context, dir string) ([]fail2banStateS
 		if _, err = f.Seek(0, io.SeekStart); err != nil {
 			return fail(err)
 		}
-		sources[len(sources)-1].meta = fail2banStateFile{Name: resource.name, Present: true, Size: n, SHA256: hex.EncodeToString(h.Sum(nil)), Mode: uint32(info.Mode().Perm())}
+		label, err := fail2banStateLabel(int(f.Fd()))
+		if err != nil || !secure.RootFileUnchanged(f, info) {
+			return fail(errors.Join(errors.New("Fail2ban 状态安全标签无法核对"), err))
+		}
+		sources[len(sources)-1].meta = fail2banStateFile{Name: resource.name, Present: true, Size: n, SHA256: hex.EncodeToString(h.Sum(nil)), Mode: uint32(info.Mode().Perm()), SELinux: label}
 	}
 	return sources, nil
 }

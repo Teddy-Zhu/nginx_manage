@@ -242,6 +242,9 @@ func CheckFail2banManaged(ctx context.Context, data, scope string) (fail2ban.Man
 	if err := fail2banManagedRoot(data, scope); err != nil {
 		return fail2ban.UnknownManaged(), err
 	}
+	if err := fail2banStateRestoreIdle(data, ""); err != nil {
+		return fail2ban.UnknownManaged(), err
+	}
 	r, err := loadFail2banManaged(data)
 	if err != nil {
 		return fail2ban.UnknownManaged(), err

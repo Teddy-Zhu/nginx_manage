@@ -123,6 +123,9 @@ func readFail2banUpgradeBasis(ctx context.Context, data string, candidate *fail2
 }
 
 func fail2banUpgradeIdle(j *Journal) error {
+	if err := fail2banStateRestoreIdle(filepath.Dir(filepath.Dir(j.Dir)), ""); err != nil {
+		return err
+	}
 	if err := fail2banHostRetirementIdle(filepath.Dir(filepath.Dir(j.Dir))); err != nil {
 		return err
 	}
