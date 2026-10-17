@@ -63,6 +63,7 @@ type hostFirewall struct {
 	dataDir, sshMode      string
 	owner                 string
 	firewalldRegistration *firewalldRegistrationCheckpoint
+	firewalldState        *firewalldCheckpoint
 	available             bool
 	recovering            bool
 	policyUncertain       bool
@@ -179,11 +180,28 @@ func (f *hostFirewall) persist() (bool, error) {
 	}
 	return true, nil
 }
-func (f *hostFirewall) activeLocked() bool { return f.state.Candidate != nil }
+func (f *hostFirewall) activeLocked() bool {
+	if f.firewalldState != nil {
+		return f.firewalldState.Candidate != nil
+	}
+	return f.state.Candidate != nil
+}
+func (f *hostFirewall) currentOperation() *firewall.Operation {
+	if f.firewalldState != nil {
+		return f.firewalldState.Operation
+	}
+	return f.state.Operation
+}
+func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
+	if f.firewalldState != nil {
+		return f.firewalldState.Confirmed
+	}
+	return f.state.Confirmed
+}
 func (f *hostFirewall) pending() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.activeLocked() || f.problem != ""
+	return f.activeLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil
 }
 func (f *hostFirewall) emptyMarker() string { return nftRegistrationPrefix + f.state.Owner }
 func (f *hostFirewall) program(record *firewallPolicyRecord) (*firewall.NFTProgram, string, error) {
@@ -219,9 +237,19 @@ func (f *hostFirewall) Open() error {
 		f.problem = "防火墙独立恢复记录无效，须本机处理"
 		return nil
 	}
+	managed, err := loadFirewalldState(f.dataDir)
+	if err != nil || managed != nil && value != nil {
+		f.policyUncertain, f.problem = true, "firewalld 恢复记录无效或与 nftables 恢复材料冲突，须本机处理"
+		return nil
+	}
+	if managed != nil {
+		f.available = f.available && f.owner == "firewalld"
+		f.owner = "firewalld"
+		return f.openFirewalldExecutor(managed)
+	}
 	if f.owner == "firewalld" {
 		if value == nil {
-			return f.openFirewalldPlanner()
+			return f.openFirewalldExecutor(nil)
 		}
 		// A new owner selection never revokes an admitted NFT recovery.
 		// Continue only that stored executor; grant no new direct-NFT writes.
@@ -278,8 +306,8 @@ func (f *hostFirewall) Close() {
 	}
 }
 func (f *hostFirewall) operationLocked(id string) (firewall.Operation, error) {
-	if f.state.Operation != nil && f.state.Operation.ID == id {
-		return *f.state.Operation, nil
+	if op := f.currentOperation(); op != nil && op.ID == id {
+		return *op, nil
 	}
 	r, err := f.journal.Get(id)
 	if err != nil {
@@ -298,16 +326,15 @@ func (f *hostFirewall) Operation(id string) (firewall.Operation, error) {
 func (f *hostFirewall) View() firewall.RuntimeView {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.firewalldState != nil {
+		return f.firewalldViewLocked()
+	}
 	out := firewall.RuntimeView{Backend: f.owner, Available: f.available && f.problem == "" && f.state.Schema == firewallRuntimeSchema, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}, ConfirmedAction: "none"}
 	if f.state.Schema == firewallRuntimeSchema {
 		out.Backend = "direct-nftables"
 	}
 	if out.Backend != "firewalld" && out.Backend != "direct-nftables" {
 		out.Backend = "unconfirmed"
-	}
-	if f.owner == "firewalld" && f.firewalldRegistration != nil && f.problem == "" {
-		out.CanPlan = true
-		out.Reason = firewalldPlanningReason
 	}
 	if f.state.Candidate != nil {
 		out.Available = false

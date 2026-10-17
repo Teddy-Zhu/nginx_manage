@@ -198,7 +198,14 @@ func ManageFirewalldRegistration(ctx context.Context, dataDir, scope, action str
 }
 
 func firewalldRegistrationAdmission(ctx context.Context, dataDir, scope string) error {
-	_, err := inspectFirewalldRegistration(ctx, dataDir, scope)
+	managed, err := loadFirewalldState(dataDir)
+	if err != nil {
+		return err
+	}
+	if managed != nil {
+		return errors.New("已有 firewalld 业务恢复材料，禁止重新登记或移除原空 policy 登记")
+	}
+	_, err = inspectFirewalldRegistration(ctx, dataDir, scope)
 	return err
 }
 

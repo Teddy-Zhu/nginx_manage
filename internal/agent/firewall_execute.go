@@ -52,8 +52,8 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 		return out, fault.Invalid("防火墙操作或计划 ID 无效")
 	}
 	hash := firewallRequestHash(planID, action)
-	if old := f.state.Operation; old != nil && old.ID == id {
-		if f.state.RequestHash != hash || old.Version != version || old.PolicyHash != policyHash || old.Action != action {
+	if old := f.currentOperation(); old != nil && old.ID == id {
+		if firewallRequestHash(old.PlanID, old.Action) != hash || old.Version != version || old.PolicyHash != policyHash || old.Action != action {
 			return out, fault.Conflict("幂等键已用于其他请求")
 		}
 		return *old, nil
@@ -67,7 +67,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 		return out, err
 	}
 	if f.owner == "firewalld" {
-		return out, fault.Unavailable(firewalldPlanningReason)
+		return f.applyFirewalldLocked(ctx, id, planID, version, policyHash, action, connection)
 	}
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("防火墙执行未就绪")
@@ -206,6 +206,9 @@ func (f *hostFirewall) Decide(ctx context.Context, id, action, connection string
 	if action != "confirm" && action != "rollback" {
 		return out, fault.Invalid("防火墙决定无效")
 	}
+	if f.firewalldState != nil {
+		return f.decideFirewalldLocked(ctx, id, action, connection)
+	}
 	if !f.activeLocked() || f.state.Operation.ID != id {
 		return out, nil
 	}
@@ -272,7 +275,8 @@ func (f *hostFirewall) Decide(ctx context.Context, id, action, connection string
 	return confirmed, nil
 }
 func (f *hostFirewall) expiredLocked() bool {
-	return f.activeLocked() && (time.Now().Unix() >= f.state.Operation.Deadline || !f.deadline.IsZero() && !time.Now().Before(f.deadline))
+	op := f.currentOperation()
+	return f.activeLocked() && op != nil && (time.Now().Unix() >= op.Deadline || !f.deadline.IsZero() && !time.Now().Before(f.deadline))
 }
 
 func (f *hostFirewall) rollbackLocked(reason string) error {
@@ -478,6 +482,9 @@ func (f *hostFirewall) Run(ctx context.Context) {
 		}
 		f.remote.mu.Lock()
 		f.mu.Lock()
+		if f.firewalldState != nil {
+			f.runFirewalldLocked(ctx, stopping, &nextInspect, &nextProtectionInspect)
+		}
 		if f.state.Schema == firewallRuntimeSchema {
 			if err := f.rescueLocked(); err != nil {
 				f.problem = "本机防火墙救援请求未处理完成"

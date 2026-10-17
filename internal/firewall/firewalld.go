@@ -144,6 +144,16 @@ func CompileFirewalldProtected(policy Policy, protections []Protection) (*Firewa
 	return finishFirewalld(base)
 }
 
+func CompileFirewalldRuntime(policy Policy, protections []Protection, action string) (*FirewalldProgram, error) {
+	if action == "apply" {
+		return CompileFirewalldProtected(policy, protections)
+	}
+	if action == "remove" {
+		return CompileFirewalld(Policy{Backend: "firewalld", Rules: []Rule{}})
+	}
+	return nil, fault.Invalid("firewalld 动作无效")
+}
+
 // Match the official Rich_Rule rendering: priority precedes family, then the
 // fixed source/port/verdict elements. No arbitrary rich-language input is used.
 func firewalldRichRule(entry PreviewEntry, priority int) string {

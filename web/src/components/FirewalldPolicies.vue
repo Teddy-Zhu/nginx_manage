@@ -12,6 +12,7 @@ const registrationNames: Record<string, string> = {
   unavailable: "无法核对",
   unregistered: "未登记",
   registered: "已登记空策略",
+  managed: "已登记受管策略",
   released: "已释放登记",
   missing: "登记策略缺失",
   drifted: "登记对象变化",

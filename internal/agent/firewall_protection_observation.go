@@ -107,10 +107,10 @@ func (f *hostFirewall) protectionObservationLocked() firewall.ProtectionObservat
 	if f.policyUncertain || f.problem != "" {
 		return protectionObservation("unavailable", "", "独立策略不可核对，保护状态未知")
 	}
-	if f.activeLocked() {
+	if f.activeLocked() || f.firewalldState != nil && f.firewalldState.Call != nil {
 		return protectionObservation("unavailable", "", "变更进行中；确认前将重新核对候选保护来源")
 	}
-	record := f.state.Confirmed
+	record := f.confirmedRecord()
 	if record == nil || record.Action == "remove" {
 		return protectionObservation("not_applicable", "", "尚无已确认的过滤规则需要核对保护来源")
 	}

@@ -25,24 +25,28 @@ func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Co
 	if f.policyUncertain {
 		return fault.Unavailable("防火墙独立策略记录不可核对，禁止变更远程入口")
 	}
-	if f.owner == "firewalld" && f.firewalldRegistration != nil {
-		if _, err := f.firewalldEmptySnapshot(ctx); err != nil {
-			return fault.Unavailable("firewalld 空策略登记无法完整核对，禁止变更远程入口")
+	record := f.state.Confirmed
+	if f.firewalldState != nil {
+		if f.problem != "" || f.activeLocked() || f.firewalldState.Call != nil {
+			return fault.Conflict("firewalld 存在待确认、待恢复或不可核对状态")
 		}
-		return nil
-	}
-	if f.state.Schema == 0 {
+		if _, err := f.firewalldConfirmedSnapshot(ctx); err != nil {
+			return fault.Unavailable("firewalld 已确认配置无法完整核对，禁止变更远程入口")
+		}
+		record = f.firewalldState.Confirmed
+	} else if f.state.Schema == 0 {
 		return nil // No independent policy has been registered on this node.
+	} else {
+		if f.state.Schema != firewallRuntimeSchema || f.problem != "" || f.activeLocked() {
+			return fault.Conflict("防火墙存在待确认、待恢复或不可核对状态")
+		}
+		current, err := f.snapshotContext(ctx, f.state.Confirmed)
+		if err != nil || !current.TableExists || current.NamespaceID != f.state.CurrentKernel.NamespaceID || current.Fingerprint != f.state.CurrentKernel.Fingerprint {
+			return fault.Conflict("无法证明当前受管防火墙对象；须先核对或恢复，再变更远程入口")
+		}
 	}
-	if f.state.Schema != firewallRuntimeSchema || f.problem != "" || f.activeLocked() {
-		return fault.Conflict("防火墙存在待确认、待恢复或不可核对状态")
-	}
-	current, err := f.snapshotContext(ctx, f.state.Confirmed)
-	if err != nil || !current.TableExists || current.NamespaceID != f.state.CurrentKernel.NamespaceID || current.Fingerprint != f.state.CurrentKernel.Fingerprint {
-		return fault.Conflict("无法证明当前受管防火墙对象；须先核对或恢复，再变更远程入口")
-	}
-	if f.state.Confirmed == nil || f.state.Confirmed.Action == "remove" {
-		return nil // A proven empty owned table cannot reject the candidate.
+	if record == nil || record.Action == "remove" {
+		return nil // A proven empty owned object cannot reject the candidate.
 	}
 	host, rawPort, err := net.SplitHostPort(config.Listen)
 	if err != nil {
@@ -73,7 +77,7 @@ func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Co
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	if err := firewall.CheckTCPIngress(ctx, f.state.Confirmed.Policy, f.state.Confirmed.Protections, port, sources); err != nil {
+	if err := firewall.CheckTCPIngress(ctx, record.Policy, record.Protections, port, sources); err != nil {
 		return err
 	}
 	// The caller is about to change or confirm listener context. A cached

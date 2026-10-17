@@ -215,13 +215,13 @@ paths:
     get:
       operationId: getFirewallRuntime
       x-scopes: [read, security.write]
-      description: 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；firewalld 当前仅可生成保护准备计划。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
+      description: 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；firewalld 采用运行/永久 policy 独立核对、新连接确认和持久恢复意图。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/plan:
     post:
       operationId: planFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 准备计划绑定原空 policy 的 runtime/permanent 完整摘要及登记操作，can_apply=false。计划 300 秒有效，不写内核或 firewalld 配置。
+      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。计划 300 秒有效，不写内核或 firewalld 配置。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPlanInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -229,7 +229,7 @@ paths:
     post:
       operationId: applyFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须近期认证；仅执行 can_apply=true 的直接 nftables 计划；firewalld 准备计划拒绝执行。绑定原动作、计划、版本及幂等键，先保存独立意图，再以单批原子替换受管表。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
+      description: 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须近期认证；仅执行 can_apply=true 的计划。绑定原动作、计划、版本及幂等键，先保存独立意图；直接 nftables 单批原子替换受管表，firewalld 只写原登记 policy 的 rich_rules，运行配置核对及新连接确认后才写永久配置；部分或未知结果独立恢复，禁止重放仍可能迟到的 D-Bus 请求。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallApplyInput"}}}}
       responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -2048,12 +2048,12 @@ components:
     FirewallApplyInput:
       {"type": "object", "additionalProperties": false, "required": ["plan_id", "version", "action"], "properties": {"plan_id": {"type": "string", "format": "uuid"}, "version": {"type": "integer", "format": "int64", "minimum": 1}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallPlan:
-      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action", "backend", "can_apply", "firewalld"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "backend": {"type": "string", "enum": ["direct-nftables", "firewalld"]}, "can_apply": {"type": "boolean", "description": "表示此后端支持执行该计划；仍须重新核对基线、版本和保护依据。firewalld 准备计划为 false。"}, "firewalld": {"allOf": [{"$ref": "#/components/schemas/FirewallFirewalldPlan"}], "nullable": true}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action", "backend", "can_apply", "firewalld"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "backend": {"type": "string", "enum": ["direct-nftables", "firewalld"]}, "can_apply": {"type": "boolean", "description": "表示此后端支持执行该计划；仍须重新核对基线、版本和保护依据。firewalld 还须核对运行/永久写入接口与原登记配置。"}, "firewalld": {"allOf": [{"$ref": "#/components/schemas/FirewallFirewalldPlan"}], "nullable": true}}}
     FirewallFirewalldPlan:
       type: object
       additionalProperties: false
       required: [runtime_hash, permanent_hash, registration_operation_id, settings, protection_rules, entries, truncated, warnings, reason]
-      description: root 在当前实际管理连接下生成的保护准备计划；当前只核对已登记空 policy，can_apply 为 false，不提交 D-Bus 写入，也不冒充内核事务。
+      description: root 在当前实际管理连接下生成的 firewalld 计划；绑定已确认运行/永久配置及原登记，先写运行规则，新连接确认后才写永久规则，不冒充直接 nftables 内核事务。
       properties:
         runtime_hash: {type: string, minLength: 64, maxLength: 64}
         permanent_hash: {type: string, minLength: 64, maxLength: 64}
@@ -4544,7 +4544,7 @@ components:
     FirewallRegistrationView:
       type: object
       additionalProperties: false
-      description: 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对空 policy 的完整 runtime/permanent 设置与活动绑定；不表示获得业务策略写入授权或外部可达。
+      description: 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对原登记或已确认 policy 的完整 runtime/permanent 设置与活动绑定；不表示获得业务策略写入授权或外部可达。
       required: [state, verified, operation_id, observed_at, reason]
       properties:
         state: {type: string, enum: [unavailable, unregistered, registered, managed, released, missing, drifted, recovery_required]}
@@ -4579,7 +4579,7 @@ components:
       additionalProperties: false
       required: ["registration", "running", "configured_backend", "default_zone", "panic", "zones", "policy_inventory", "reason"]
       properties:
-        registration: {$ref: '#/components/schemas/FirewallRegistrationView', description: 独立 root 意图及回执核对；等待本机 reload 或中断恢复时为 recovery_required，不凭同名或标记接管。}
+        registration: {$ref: '#/components/schemas/FirewallRegistrationView', description: 独立 root 登记与业务回执核对；managed 表示已确认的受管配置，变更待确认或恢复时为 recovery_required，不凭同名或标记接管。}
         running: {"type": "boolean", "nullable": true}
         configured_backend: {"type": "string"}
         default_zone: {"type": "string"}

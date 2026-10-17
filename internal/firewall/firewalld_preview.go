@@ -14,6 +14,25 @@ func inspectFirewalldPreview(out *Preview, observed Observation) {
 // Shared by the logical preview and the root protection plan; callers still
 // need fresh ownership/configuration proof before using a plan for any write.
 func FirewalldEnvironment(observed Observation) (errors, warnings []string) {
+	errors, warnings = FirewalldManagerEnvironment(observed)
+	if !observed.Firewalld.PolicyInventory.Available {
+		return errors, warnings
+	}
+	registration := observed.Firewalld.Registration
+	if registration.State == "recovery_required" || registration.State == "missing" || registration.State == "drifted" {
+		errors = append(errors, "firewalld root 登记尚未核对完成："+registration.Reason)
+	}
+	for _, policy := range observed.Firewalld.PolicyInventory.Policies {
+		if policy.Name == FirewalldHostPolicy && (!registration.Verified || registration.State != "registered" && registration.State != "managed") {
+			errors = append(errors, "固定目标 policy 已存在；独立登记未核对通过，禁止接管")
+		}
+	}
+	return errors, warnings
+}
+
+// During confirmation the root executor proves its pending candidate directly;
+// the public registration view correctly remains unverified until confirmation.
+func FirewalldManagerEnvironment(observed Observation) (errors, warnings []string) {
 	out := Preview{Errors: []string{}, Warnings: []string{}}
 	if observed.Manager != "firewalld" || observed.Firewalld.Running == nil || !*observed.Firewalld.Running {
 		out.Errors = append(out.Errors, "目标未确认由单一 firewalld 管理，不能切换或接管管理器")
@@ -36,15 +55,8 @@ func FirewalldEnvironment(observed Observation) (errors, warnings []string) {
 		out.Errors = append(out.Errors, "firewalld runtime/permanent policy 清单无法完整核对")
 		return out.Errors, out.Warnings
 	}
-	registration := observed.Firewalld.Registration
-	if registration.State == "recovery_required" || registration.State == "missing" || registration.State == "drifted" {
-		out.Errors = append(out.Errors, "firewalld root 登记尚未核对完成："+registration.Reason)
-	}
 	for _, policy := range inventory.Policies {
 		if policy.Name == FirewalldHostPolicy {
-			if !registration.Verified || registration.State != "registered" {
-				out.Errors = append(out.Errors, "固定目标 policy 已存在；独立登记未核对通过，禁止接管")
-			}
 			continue
 		}
 		// ANY excludes HOST. Forwarding/output policies cannot contend with

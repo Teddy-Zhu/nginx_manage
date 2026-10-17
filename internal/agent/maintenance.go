@@ -29,6 +29,7 @@ type maintenanceGate struct {
 	dev              bool
 	nginx            *Nginx
 	components       *components.Manager
+	firewall         *hostFirewall
 }
 
 func (g *maintenanceGate) open() error {
@@ -296,6 +297,9 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 			return out, err
 		}
 		out.Busy += busy
+	}
+	if g.firewall != nil && g.firewall.pending() {
+		out.Busy++
 	}
 	if g.nginx != nil {
 		if g.nginx.http01 != nil && g.nginx.http01.busy() {

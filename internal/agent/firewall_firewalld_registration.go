@@ -214,6 +214,35 @@ func firewalldRegistrationView(dataDir string, inventory firewall.FirewalldPolic
 		out.Reason = "firewalld policy 清单不完整，不能核对登记"
 		return out
 	}
+	managed, err := loadFirewalldState(dataDir)
+	if err != nil {
+		out.State, out.Reason = "recovery_required", "firewalld 业务恢复记录无法核对"
+		return out
+	}
+	if managed != nil {
+		if managed.Owner != v.Owner || managed.MachineHash != machine || managed.RegistrationOperationID != v.OperationID || v.State != "registered" {
+			out.State, out.Reason = "drifted", "firewalld 业务记录与原空 policy 登记不一致"
+			return out
+		}
+		if firewalldStateReceipt(dataDir, managed) != nil {
+			out.State, out.Reason = "recovery_required", "firewalld 业务独立回执尚未核对"
+			return out
+		}
+		if managed.Candidate != nil || managed.Call != nil {
+			out.State, out.Reason = "recovery_required", "firewalld 业务变更待确认或待恢复"
+			return out
+		}
+		if policy == nil || policy.Runtime == nil || policy.Permanent == nil {
+			out.State, out.Reason = "missing", "原 firewalld 运行或永久 policy 缺失"
+			return out
+		}
+		if policy.Runtime.Hash != managed.RuntimeHash || policy.Permanent.Hash != managed.PermanentHash || !policy.Active || !slices.Equal(policy.ActiveIngressZones, []string{"ANY"}) || !slices.Equal(policy.ActiveEgressZones, []string{"HOST"}) {
+			out.State, out.Reason = "drifted", "firewalld 业务完整配置或活动绑定发生变化"
+			return out
+		}
+		out.State, out.Verified = "managed", true
+		return out
+	}
 	if v.State == "released" {
 		out.State = "released"
 		if policy != nil {
@@ -237,6 +266,13 @@ func firewalldRegistrationView(dataDir string, inventory firewall.FirewalldPolic
 }
 
 func forbidFirewalldRegistration(dataDir string) error {
+	managed, err := loadFirewalldState(dataDir)
+	if err != nil {
+		return err
+	}
+	if managed != nil {
+		return errors.New("存在 firewalld 业务恢复材料，禁止切换为直接 nftables")
+	}
 	v, err := loadFirewalldRegistration(dataDir)
 	if err != nil {
 		return err
@@ -253,24 +289,24 @@ func forbidFirewalldRegistration(dataDir string) error {
 }
 
 func validFirewalldRegistrationView(v firewall.RegistrationView, inventory firewall.FirewalldPolicyInventory) bool {
-	if !slices.Contains([]string{"unavailable", "unregistered", "registered", "released", "missing", "drifted", "recovery_required"}, v.State) || v.ObservedAt < 0 || v.OperationID != "" && !validID(v.OperationID) {
+	if !slices.Contains([]string{"unavailable", "unregistered", "registered", "managed", "released", "missing", "drifted", "recovery_required"}, v.State) || v.ObservedAt < 0 || v.OperationID != "" && !validID(v.OperationID) {
 		return false
 	}
 	if !v.Verified {
-		return v.State != "registered"
+		return v.State != "registered" && v.State != "managed"
 	}
-	if v.State != "registered" || !validID(v.OperationID) || v.ObservedAt <= 0 || !inventory.Available || v.Reason != "" {
+	if v.State != "registered" && v.State != "managed" || !validID(v.OperationID) || v.ObservedAt <= 0 || !inventory.Available || v.Reason != "" {
 		return false
 	}
 	for _, p := range inventory.Policies {
 		if p.Name != firewall.FirewalldHostPolicy {
 			continue
 		}
-		if !p.Active || p.Runtime == nil || p.Permanent == nil || p.Runtime.Hash != p.Permanent.Hash || !slices.Equal(p.ActiveIngressZones, []string{"ANY"}) || !slices.Equal(p.ActiveEgressZones, []string{"HOST"}) {
+		if !p.Active || p.Runtime == nil || p.Permanent == nil || v.State == "registered" && p.Runtime.Hash != p.Permanent.Hash || !slices.Equal(p.ActiveIngressZones, []string{"ANY"}) || !slices.Equal(p.ActiveEgressZones, []string{"HOST"}) {
 			return false
 		}
 		for _, s := range []*firewall.FirewalldPolicySettings{p.Runtime, p.Permanent} {
-			if s.Target != "CONTINUE" || s.Priority == nil || *s.Priority != firewall.FirewalldHostPriority || s.Entries != 0 || s.RichRules != 0 || !slices.Equal(s.IngressZones, []string{"ANY"}) || !slices.Equal(s.EgressZones, []string{"HOST"}) || s.Masquerade != nil && *s.Masquerade {
+			if s.Target != "CONTINUE" || s.Priority == nil || *s.Priority != firewall.FirewalldHostPriority || s.Entries != s.RichRules || v.State == "registered" && s.RichRules != 0 || p.Runtime.RichRules != p.Permanent.RichRules || !slices.Equal(s.IngressZones, []string{"ANY"}) || !slices.Equal(s.EgressZones, []string{"HOST"}) || s.Masquerade != nil && *s.Masquerade {
 				return false
 			}
 		}

@@ -8,7 +8,7 @@ import (
 	"nginxpanel/internal/fault"
 )
 
-// CheckTCPIngress proves that this application's confirmed INPUT program does
+// CheckTCPIngress proves that this application's confirmed host-input program does
 // not reject any requested source on a fresh TCP connection. Each named rule
 // interface and the remaining interfaces are evaluated separately. It does not
 // certify other base chains, host routing, listeners or external firewalls.
@@ -20,8 +20,13 @@ func CheckTCPIngress(ctx context.Context, policy Policy, protections []Protectio
 	if err != nil {
 		return err
 	}
-	if normalized.Backend != "direct-nftables" {
-		return fault.Unavailable("当前管理入口核对仅支持 direct-nftables")
+	if normalized.Backend != "direct-nftables" && normalized.Backend != "firewalld" {
+		return fault.Unavailable("当前管理入口核对不支持此防火墙后端")
+	}
+	if normalized.Backend == "firewalld" {
+		if _, err := CompileFirewalldProtected(normalized, protections); err != nil {
+			return err
+		}
 	}
 	requested := make([]netip.Prefix, 0, len(sources))
 	for _, source := range sources {
@@ -127,7 +132,8 @@ func CheckTCPIngress(ctx context.Context, policy Policy, protections []Protectio
 				}
 			}
 		}
-		// Unmatched new connections return through the chain's ACCEPT policy.
+		// Unmatched connections continue to other system filtering. This checks
+		// only the owned program, not the disposition of subsequent chains/zones.
 	}
 	return nil
 }

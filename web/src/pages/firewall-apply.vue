@@ -73,10 +73,11 @@ const emptyInitial = computed(
   () =>
     view.value?.available &&
     view.value.confirmed_action === "none" &&
-    view.value.kernel.available &&
-    view.value.kernel.table_exists &&
-    view.value.kernel.chains === 0 &&
-    view.value.kernel.rules === 0,
+    (view.value.backend === "firewalld" ||
+      (view.value.kernel.available &&
+        view.value.kernel.table_exists &&
+        view.value.kernel.chains === 0 &&
+        view.value.kernel.rules === 0)),
 );
 const canDisable = computed(
   () =>
@@ -238,7 +239,9 @@ function apply() {
         : "应用防火墙策略",
     content:
       plan.value?.action === "remove"
-        ? "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
+        ? plan.value.backend === "firewalld"
+          ? "将清空本应用 policy 的业务规则和入口保护，保留空 policy 登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，确认后才清空永久规则，未确认将恢复原配置。"
+          : "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
         : "将应用所列入口保护和已保存策略。120 秒内需通过新的管理 HTTPS 连接确认；连接中断或超时会恢复最后确认策略。",
     positiveText: "执行",
     negativeText: "取消",
@@ -347,7 +350,7 @@ onUnmounted(() => {
       type="info"
       :bordered="false"
       class="notice"
-      >当前只有已核对的初始空表，无已确认规则需要移除。</n-alert
+      >当前只有已核对的初始空登记，无已确认规则需要移除。</n-alert
     >
     <n-button v-if="canDisable" :disabled="busy" @click="disableManagement"
       >停用防火墙管理</n-button
@@ -356,7 +359,9 @@ onUnmounted(() => {
     <p v-if="view.confirmed_action !== 'apply'" class="muted">
       {{
         view.confirmed_action === "remove"
-          ? "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
+          ? view.backend === "firewalld"
+            ? "本应用运行和永久 policy 规则已清空，保留空 policy 登记；期望草稿保留，其余系统策略继续生效。"
+            : "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
           : "尚无已确认的业务过滤策略。"
       }}
     </p>
@@ -426,7 +431,9 @@ onUnmounted(() => {
       </h3>
       <n-tag type="info">{{
         plan.action === "remove"
-          ? `移除 ${plan.baseline.rules} 条规则`
+          ? plan.backend === "firewalld"
+            ? "清空本应用 policy 规则"
+            : `移除 ${plan.baseline.rules} 条规则`
           : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : "内核规则"}`
       }}</n-tag>
     </div>

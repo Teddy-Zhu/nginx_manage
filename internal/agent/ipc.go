@@ -205,6 +205,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	remote.firewallPending = fw.pending
+	rootMaintenance.mu.Lock()
+	rootMaintenance.firewall = fw
+	rootMaintenance.mu.Unlock()
 	remote.firewallCheck = fw.checkListener
 	dns.ReachabilityBlocked = func() bool { return remote.pending() || fw.pending() }
 	s.firewallRuntimeHandlers(mux, fw)

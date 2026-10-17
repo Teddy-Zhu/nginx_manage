@@ -117,7 +117,7 @@ Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。�
 
 运行与永久 policy 合并后最多 64 项，单份返回字典最多 512 KiB、合计 2 MiB；rich rules 最多 8192 项、其他列表字段最多 1024 项、每对象最多 8192 个规则条目、各方向最多 128 个 zone。采集 policy 最多 1.5 秒，仍受原 firewalld 3 秒与全局 6 秒诊断期限约束；D-Bus 单帧最多 1 MiB、整次 firewalld 接收最多 8 MiB。末尾再次比较清单和活动绑定，再核对服务唯一所有者；同一服务内的读取仍非原子快照，不能代替执行前复核、内核对象证明或新连接确认。
 
-自动扫描的防火墙页面展示仅运行、仅永久、配置摘要一致或不同及活动状态。该诊断不创建 policy、不写规则、不 reload firewalld、不修改运行或永久配置；本机 root 空 policy 登记见下节，业务策略写入及独立补偿仍未交付。Agent 为 72，数据库/迁移归档仍为 32/6；实现待 P5 集中验证。
+自动扫描的防火墙页面展示仅运行、仅永久、配置摘要一致或不同及活动状态。该诊断不创建 policy、不写规则、不 reload firewalld、不修改运行或永久配置；本机 root 空 policy 登记见下节，业务规则应用、永久确认和独立恢复见末节。Agent 为 73，数据库/迁移归档仍为 32/6；实现待 P5 集中验证。
 
 ## firewalld 主机 policy 编译预览
 
@@ -131,7 +131,7 @@ Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。�
 
 预览结合已有宿主机诊断核对单一 firewalld、panic、混合/缺失后端视图、完整 runtime/permanent policy 清单及已有活动 policy 的优先级。同名对象尚无独立登记时拒绝接管，同优先级明确阻塞，先行的其他 policy 保留范围核对提示；诊断缓存不构成执行授权。统一响应的 `firewalld` 只在该后端编译成功时非 null，直接 nftables 的内核表信息保持独立；后端表达式和优先级在其他后端分别为空字符串和 null。
 
-`compiled=true` 仅代表完整生成，`can_apply` 仍为 false。firewalld 空 policy 所有权登记已接入；runtime 业务规则写入、永久业务配置确认及独立补偿尚待接入，原 direct nftables 执行器不会处理这些 rich rules。跨环境迁移可保存中立期望并查看独立编译限制，仍不自动启用、创建、reload 或应用 firewalld。实现待 P5 集中验证，未执行真实 D-Bus 操作或宿主机变更。
+`compiled=true` 仅代表完整生成，`can_apply` 仍为 false。firewalld 使用独立执行计划、运行/永久配置确认及持久恢复意图，见末节；原 direct nftables 执行器不处理这些 rich rules。跨环境迁移可保存中立期望并查看独立编译限制，仍不自动启用、创建、reload 或应用 firewalld。实现待 P5 集中验证，未执行真实 D-Bus 操作或宿主机变更。
 
 
 ## firewalld 本机 root 空 policy 登记
@@ -158,14 +158,20 @@ nginxpanel firewalld-remove --data-dir /srv/nginxpanel --firewall-scope host
 本阶段未运行生成器、构建、类型检查、lint、测试、浏览器或真实 D-Bus/宿主机命令，待 P5 集中验证。
 
 
-## firewalld 入口保护准备计划
+## firewalld 策略应用、确认与独立恢复
 
-完成上述空 policy 登记后，本机 root 可将 Agent 明确设置为 `--firewall-owner firewalld --firewall-scope host --firewall-ssh openssh --maintenance-scope host`；仅在本机确无 SSH 保护需要时使用 `--firewall-ssh none`。这项选择当前只开放计划核对，不能应用业务规则。Agent 持有原宿主机登记锁，启动时核对原登记操作、随机身份、完整空配置、活动绑定和本机身份；修改管理监听也须重新证明原空 policy，不能凭名称或陈旧缓存放行。若已有直接 nftables 运行材料，仍由原执行器独立恢复，禁止新操作或自动切换所有者。
+完成上述空 policy 登记后，本机 root 将 Agent 明确设置为 `--firewall-owner firewalld --firewall-scope host --firewall-ssh openssh --maintenance-scope host`；仅在本机确无 SSH 保护需要时使用 `--firewall-ssh none`。Agent 持有宿主机原登记锁，核对本机身份、原登记操作、随机所有者、完整配置及活动绑定。已有 firewalld 或直接 nftables 业务恢复材料时，新的所有者选择只撤销新操作授权，原执行器继续恢复；两套材料同时存在或记录损坏时报告冲突，不自动接管。
 
-`GET /api/v1/firewall/runtime` 分别返回 `backend`、`can_plan` 和策略执行就绪的 `available`；firewalld 在准备条件满足时为 `can_plan=true / available=false`。`POST /api/v1/firewall/plan` 沿用原权限、模块、近期认证和目标实际受控管理连接要求；仅接收后端为 firewalld 的已保存应用期望，不开放移除业务规则。重新核对当前连接的真实非回环来源、管理允许来源、实际 OpenSSH 监听及 SSH 会话来源，拒绝未完成 DNS 或管理入口变更，不接受客户端自报保护来源或转发头。
+`GET /api/v1/firewall/runtime` 分别返回 `backend`、`can_plan` 和执行就绪的 `available`。firewalld 计划沿用原权限、模块、近期认证和实际受控管理连接要求，支持应用与移除已确认规则。重新采集非回环控制来源、管理允许来源、实际 OpenSSH 监听和 SSH 会话来源，不接受客户端自报保护来源或转发头。DNS、管理监听和防火墙待确认变更串行；维护准入同时核对防火墙待恢复状态。
 
-防火墙后端共用类型化保护项到 TCP 来源规则的映射，保留 direct nftables 原编译语义。firewalld 保护规则单独规范化，全部置于业务规则之前，再为所有展开项统一赋予连续、唯一的负优先级；保护项和业务项共同受 8192 条及 480 KiB 完整配置预算约束。rich rule 采用[官方 Rich_Rule 输出顺序](https://github.com/firewalld/firewalld/blob/main/src/firewall/core/rich.py)，优先级在 family 前，后接固定来源、端口和动作；不接受原生表达式。保护优先级与普通业务预览中的编号可能不同，应以包含保护项的完整程序摘要和准备计划为准。
+保护项和业务规则共享 8192 条/480 KiB 完整配置预算，保护项在前，所有展开项采用唯一负优先级；rich rule 使用[官方 Rich_Rule 输出顺序](https://github.com/firewalld/firewalld/blob/main/src/firewall/core/rich.py)。计划核对单一管理器、完整后端、panic、活动 policy 优先级，以及原已确认 runtime/permanent 配置的完整摘要，返回全部计数和前 128 条表达式。`can_apply=true` 还要求实际 D-Bus introspection 确认运行 `setPolicySettings(sa{sv})` 与永久 `update(a{sv})` 接口；不盲试签名，不以文档中额外 timeout 参数代替实际接口。计划有效期 300 秒，最多保留 8 份；配置摘要不冒充内核事务，事务摘要和字节保持空/0。
 
-计划复用单一管理器、完整内核视图、panic、同优先级冲突及先行 policy 告警检查，最后重新读取并核对原空 policy 的完整 runtime/permanent 设置。返回 `backend=firewalld / can_apply=false`、原登记操作、两份配置摘要、保护项、完整程序摘要、完整条数及前 128 条具体 rich rules，明确标记展示截断。配置基线不冒充内核快照，事务摘要和事务字节保持空/0；每个 Agent 最多保留 8 份计划、300 秒过期。自动扫描的防火墙应用页面展示这些材料，按钮和 root 应用入口均拒绝执行准备计划；不会提交 D-Bus 写入、reload、开启确认窗口或伪造业务操作。
+执行只通过[官方 policy D-Bus 接口](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)更新原登记对象的 `rich_rules`；保留描述、目标、优先级、zone 和其他空设置，不调用 direct、reload、全局 runtimeToPermanent 或创建新 policy。提交前重新核对实际接口、服务唯一所有者、完整配置基线和 panic；本机 root 独立意图先于每次调用持久保存。运行规则逐项调整，不承诺单批原子性。完整回读证明候选运行规则及原永久配置后，重新创建管理监听并关闭其他旧连接，从提交意图开始计算的 120 秒期限由 Agent 持久状态及单调时间共同约束。
 
-`accept` 保护和业务放行可能结束后续 firewalld 过滤，仍可能被其他内核链或云安全组阻止；会话、回环和 DNAT 的先行处理仍由 firewalld 决定，不声称 rich rules 仅匹配 NEW。runtime 业务写入、永久业务配置确认和独立补偿继续实施，当前没有据此开放写入。Agent 为 72，数据库/迁移归档仍为 32/6；接口继续统一封装，root 准备材料不进入跨环境迁移。实现与源码审阅后统一整理格式，未执行生成器、构建、类型检查、lint、测试、浏览器或真实宿主机操作，仍待 P5 集中验证。
+确认必须经候选生效后新建的目标管理 TCP/TLS 连接，重新检查 SSH/保护来源、管理器/优先级和完整候选配置；通过后才写永久规则并完整回读两份配置，再持久保存确认结果。移除同样先清空运行 rich rules、新连接确认后清空永久 rich rules，仅保留原空 policy，不删除全局 firewalld 或影响其他 policy。停用管理可保留规则；按移除方式停用须引用当前已确认的移除回执，初始空登记无需虚构移除操作。管理监听修改在核对已确认完整配置后，再检查候选端口及所有允许来源不会被本应用规则拒绝。
+
+`agent/firewall/firewalld-runtime.json` 保存本机/原登记身份、原确认与候选策略、保护依据、操作期限、两份完整配置回执及每次调用的总线和进程身份；上限 2 MiB，操作摘要与 root 日志一致。调用成功或 firewalld 自身明确异常回执证明处理结束；超时、断连或仅总线名称变化均不构成证明。结果未知时禁止重放或覆盖，等待原进程的启动/PID/启动时间证明其结束后再恢复；本机 `firewall-rollback` 可请求恢复，也遵守这一约束。
+
+未确认、期限已到、控制通道中断、Agent 停止或重启均恢复最后确认的运行和永久配置；重启不续做未确认候选。恢复先处理运行规则，再处理永久规则，只接受原登记完整设置和持久旧/新程序中的精确表达式子集，以容纳逐条写入的部分失败；第三方规则、元数据漂移、对象或活动绑定缺失均保留待恢复，禁止盲目覆盖或重建。已确认配置每 30 秒核对，原受管规则缺失时仅恢复有原业务意图且可证明的规则；不重建缺失的 policy，不自动接管同名对象。恢复与保护采样不依赖 serve 或模块启用，也不因撤销新操作授权停止。诊断 `managed` 表示已确认配置及独立回执通过，候选或未知调用期间保持未核对状态。
+
+`accept` 可能结束后续 firewalld 过滤，其他内核链和云安全组仍可能阻止连接；会话、回环和 DNAT 先行处理由 firewalld 决定，不声称只匹配 NEW。原空登记命令不负责业务材料退役，有业务恢复材料时禁止重新登记或移除原登记。root 材料不进入跨环境配置迁移，目标节点仍须独立登记及应用。Agent 为 73，数据库/迁移归档仍为 32/6。实现及源码审阅完成后集中整理格式，未执行生成器、构建、类型检查、lint、测试、浏览器或真实宿主机操作，待 P5 集中验证。
