@@ -176,7 +176,7 @@ func validateIPTablesChange(v *iptablesChangeCheckpoint) error {
 	return nil
 }
 
-func loadIPTablesChange(dataDir string) (*iptablesChangeCheckpoint, error) {
+func loadIPTablesChangeRaw(dataDir string) (*iptablesChangeCheckpoint, error) {
 	raw, err := listenerRead(iptablesChangePath(dataDir), iptablesChangeBytes)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -192,6 +192,18 @@ func loadIPTablesChange(dataDir string) (*iptablesChangeCheckpoint, error) {
 		return nil, err
 	}
 	return &v, nil
+}
+
+func loadIPTablesChange(dataDir string) (*iptablesChangeCheckpoint, error) {
+	v, err := loadIPTablesChangeRaw(dataDir)
+	if err != nil || v == nil {
+		return v, err
+	}
+	retired, err := retiredIPTablesChange(dataDir, v)
+	if err != nil || retired {
+		return nil, err
+	}
+	return v, nil
 }
 
 func iptablesChangeReceiptMatches(r Record, v *iptablesChangeCheckpoint) bool {
@@ -257,6 +269,9 @@ func iptablesBusinessPending(dataDir string) bool {
 		}
 		if child == nil {
 			return false
+		}
+		if retired, retireErr := retiredIPTablesChild(dataDir, child); retireErr != nil || retired {
+			return retireErr != nil
 		}
 		parent, err := loadIPTablesReceipt(dataDir, child.OperationID)
 		return err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != child.OperationID || parent.State != parent.Firewall.State || !slices.Contains([]string{"rolled_back", "failed"}, parent.State)

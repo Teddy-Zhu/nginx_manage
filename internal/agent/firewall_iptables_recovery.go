@@ -171,6 +171,16 @@ func (f *hostFirewall) refreshIPTablesStateLocked() error {
 	v, err := loadIPTablesChange(f.dataDir)
 	if err != nil || v == nil && f.iptablesState != nil {
 		if err == nil {
+			retirement, retireErr := loadIPTablesRetirement(f.dataDir, f.iptablesState.Operation.ID)
+			if retireErr == nil && retirement != nil && iptablesChangeIntentHash(&retirement.Business) == iptablesChangeIntentHash(f.iptablesState) {
+				record, _, recordErr := retirement.record(f.dataDir)
+				if recordErr == nil && record.State == "succeeded" {
+					f.iptablesState, f.proofListener, f.deadline = nil, nil, time.Time{}
+					return nil
+				}
+			}
+		}
+		if err == nil {
 			err = errors.New("iptables 原业务快照丢失，请本机核对")
 		}
 		return err

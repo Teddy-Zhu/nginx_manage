@@ -283,6 +283,25 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 			}
 		}
 
+		if r.Kind == firewallOperationKind || r.Kind == iptablesRepairKind {
+			retired, err := retiredIPTablesRecord(filepath.Dir(filepath.Dir(g.journal.Dir)), r)
+			if err != nil {
+				return out, err
+			}
+			if retired {
+				continue
+			}
+		}
+		if r.Kind == iptablesRetirementKind {
+			retirement, err := loadIPTablesRetirement(filepath.Dir(filepath.Dir(g.journal.Dir)), r.RelatedOperationID)
+			if err != nil || retirement == nil {
+				return out, errors.Join(errors.New("iptables 退役缺少原本机意图"), err)
+			}
+			current, _, err := retirement.record(filepath.Dir(filepath.Dir(g.journal.Dir)))
+			if err != nil || !sameIPTablesRetirementRecord(current, r) {
+				return out, errors.Join(errors.New("iptables 退役维护回执冲突"), err)
+			}
+		}
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
 		case "queued", "running", "waiting_confirmation", "compensating", "recovery_required":

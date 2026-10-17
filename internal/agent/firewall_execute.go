@@ -67,7 +67,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 		if old.Kind != firewallOperationKind || old.RequestHash != hash || old.Firewall == nil || old.Firewall.Version != version || old.Firewall.PolicyHash != policyHash || old.Firewall.Action != action {
 			return out, fault.Conflict("幂等键已用于其他请求")
 		}
-		return *old.Firewall, nil
+		return f.operationLocked(id)
 	} else if !os.IsNotExist(err) {
 		return out, err
 	}

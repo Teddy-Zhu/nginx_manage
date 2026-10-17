@@ -421,6 +421,13 @@ func (f *hostFirewall) operationLocked(id string) (firewall.Operation, error) {
 	if r.Kind != firewallOperationKind || r.Firewall == nil || r.Firewall.ID != id || r.State != r.Firewall.State || r.RequestHash != firewallRequestHash(r.Firewall.PlanID, r.Firewall.Action) {
 		return firewall.Operation{}, fault.Conflict("操作标识已用于其他业务")
 	}
+	if retired, retireErr := retiredIPTablesRecord(f.dataDir, r); retireErr != nil {
+		return firewall.Operation{}, retireErr
+	} else if retired && (r.State == "running" || r.State == "waiting_confirmation" || r.State == "compensating" || r.State == "recovery_required") {
+		op := *r.Firewall
+		op.State, op.Stage, op.Error = "failed", "scope_retired", "本机已确认空范围并退役；原调用结果保留，未证明原操作已回滚"
+		return op, nil
+	}
 	return *r.Firewall, nil
 }
 func (f *hostFirewall) Operation(id string) (firewall.Operation, error) {

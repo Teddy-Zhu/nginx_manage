@@ -70,7 +70,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|iptables-retire|iptables-retirement|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -155,6 +155,8 @@ func run() error {
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd, netplan or unconfirmed")
 	firewallScope := flags.String("firewall-scope", "unconfirmed", "firewall namespace: host or unconfirmed")
 	firewallBackend := flags.String("firewall-backend", "", "explicit initial iptables grant: iptables-nft or iptables-legacy")
+	firewallOperation := flags.String("firewall-operation", "", "new UUID for a local firewall retirement")
+	firewallBase := flags.String("firewall-base", "", "original current iptables business operation UUID")
 	firewallDockerEngine := flags.String("firewall-docker-engine", "", "explicit local Docker engine hash for the initial forwarding grant")
 	firewallOwner := flags.String("firewall-owner", "unconfirmed", "locally confirmed firewall owner: direct-nftables, firewalld, ufw, iptables-nft, iptables-legacy, or unconfirmed")
 	firewallSSH := flags.String("firewall-ssh", "unconfirmed", "locally confirmed SSH protection: openssh, none or unconfirmed")
@@ -256,6 +258,8 @@ func run() error {
 		"iptables-registration":           {"data-dir": true, "firewall-scope": true},
 		"iptables-recover":                {"data-dir": true, "firewall-scope": true},
 		"iptables-remove":                 {"data-dir": true, "firewall-scope": true},
+		"iptables-retire":                 {"data-dir": true, "firewall-scope": true, "firewall-operation": true, "firewall-base": true},
+		"iptables-retirement":             {"data-dir": true, "firewall-scope": true, "firewall-base": true},
 		"docker-firewall-init":            {"data-dir": true, "firewall-scope": true, "firewall-docker-engine": true},
 		"docker-firewall-registration":    {"data-dir": true, "firewall-scope": true},
 		"docker-firewall-recover":         {"data-dir": true, "firewall-scope": true},
@@ -423,7 +427,15 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "firewall-scope":
-			if command != "agent" && command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" && command != "firewalld-init" && command != "firewalld-registration" && command != "firewalld-recover" && command != "firewalld-remove" && command != "ufw-init" && command != "ufw-registration" && command != "ufw-recover" && command != "ufw-remove" && command != "iptables-init" && command != "iptables-registration" && command != "iptables-recover" && command != "iptables-remove" && command != "docker-firewall-init" && command != "docker-firewall-registration" && command != "docker-firewall-recover" && command != "docker-firewall-remove" {
+			if command != "agent" && command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" && command != "firewalld-init" && command != "firewalld-registration" && command != "firewalld-recover" && command != "firewalld-remove" && command != "ufw-init" && command != "ufw-registration" && command != "ufw-recover" && command != "ufw-remove" && command != "iptables-init" && command != "iptables-registration" && command != "iptables-recover" && command != "iptables-remove" && command != "iptables-retire" && command != "iptables-retirement" && command != "docker-firewall-init" && command != "docker-firewall-registration" && command != "docker-firewall-recover" && command != "docker-firewall-remove" {
+				invalidFlag = f.Name
+			}
+		case "firewall-operation":
+			if command != "iptables-retire" {
+				invalidFlag = f.Name
+			}
+		case "firewall-base":
+			if command != "iptables-retire" && command != "iptables-retirement" {
 				invalidFlag = f.Name
 			}
 		case "firewall-docker-engine":
@@ -764,6 +776,16 @@ func run() error {
 			action = "status"
 		}
 		out, err := agent.ManageIPTablesRegistration(ctx, absDir, *firewallScope, *firewallBackend, action)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "iptables-retire", "iptables-retirement":
+		action := "retire"
+		if command == "iptables-retirement" {
+			action = "status"
+		}
+		out, err := agent.ManageIPTablesRetirement(ctx, absDir, *firewallScope, action, *firewallOperation, *firewallBase)
 		if err != nil {
 			return err
 		}

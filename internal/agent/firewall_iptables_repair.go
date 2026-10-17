@@ -84,7 +84,7 @@ func validateIPTablesRepair(v *iptablesRepairCheckpoint) error {
 	return nil
 }
 
-func loadIPTablesRepair(dataDir string) (*iptablesRepairCheckpoint, error) {
+func loadIPTablesRepairRaw(dataDir string) (*iptablesRepairCheckpoint, error) {
 	raw, err := listenerRead(iptablesRepairPath(dataDir), iptablesChangeBytes)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -100,6 +100,18 @@ func loadIPTablesRepair(dataDir string) (*iptablesRepairCheckpoint, error) {
 		return nil, err
 	}
 	return &v, nil
+}
+
+func loadIPTablesRepair(dataDir string) (*iptablesRepairCheckpoint, error) {
+	v, err := loadIPTablesRepairRaw(dataDir)
+	if err != nil || v == nil {
+		return v, err
+	}
+	retired, err := retiredIPTablesRepair(dataDir, v)
+	if err != nil || retired {
+		return nil, err
+	}
+	return v, nil
 }
 
 func iptablesRepairReceiptMatches(r Record, v *iptablesRepairCheckpoint) bool {

@@ -233,7 +233,8 @@ func (f *hostFirewall) decideIPTablesLocked(ctx context.Context, id, action, con
 	}
 	if action == "rollback" || f.expiredLocked() {
 		err := f.rollbackIPTablesLocked()
-		return f.iptablesState.Operation, err
+		op, readErr := f.operationLocked(id)
+		return op, errors.Join(err, readErr)
 	}
 	v, err := f.confirmIPTablesLocked(ctx, id, connection)
 	if err != nil {

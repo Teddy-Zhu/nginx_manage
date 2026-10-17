@@ -331,7 +331,11 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 		return nil, err
 	} else if latest != nil && latest.OperationID != v.Operation.ID {
 		parent, err := loadIPTablesReceipt(dataDir, latest.OperationID)
-		if err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != latest.OperationID || parent.Firewall.ProgramHash != latest.ProgramHash || parent.Firewall.State != parent.State || !slices.Contains([]string{"succeeded", "rolled_back", "failed"}, parent.State) {
+		retired, retireErr := retiredIPTablesChild(dataDir, latest)
+		if retireErr != nil {
+			return nil, retireErr
+		}
+		if !retired && (err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != latest.OperationID || parent.Firewall.ProgramHash != latest.ProgramHash || parent.Firewall.State != parent.State || !slices.Contains([]string{"succeeded", "rolled_back", "failed"}, parent.State)) {
 			return nil, errors.New("iptables 前一子进程的父业务尚未结束")
 		}
 	}
