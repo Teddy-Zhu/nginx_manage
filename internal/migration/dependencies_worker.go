@@ -79,6 +79,15 @@ func (s *Service) nextDependencies(ctx context.Context) error {
 			return finish("failed", "unavailable", "无法核对目标 Nginx 状态，未提交组件准备")
 		}
 		if features.Available {
+			parsed, e := nginxconfig.Parse(st.Payload.Files, s.Config.Policy)
+			if e != nil {
+				return e
+			}
+			for _, step := range inspectNginxDependencies(parsed, features) {
+				if step.State == "unavailable" || step.State == "blocked" {
+					return finish("failed", "target_dependencies", "目标 Nginx 未满足迁入配置的模块或能力要求，请核对迁移预检；已有实例不能通过首次安装替换，Docker 须更换预置对应模块的镜像")
+				}
+			}
 			return finish("succeeded", "not_required", "")
 		}
 		overview, e := s.Components.Overview(ctx)

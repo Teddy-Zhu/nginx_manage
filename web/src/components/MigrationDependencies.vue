@@ -14,6 +14,7 @@ const stages: Record<string, string> = {
   preparing: "准备签名资产",
   prepared: "资产已准备",
   not_required: "已有组件",
+  target_dependencies: "目标缺少配置依赖",
   unavailable: "当前部署不可准备",
   runtime_recovery: "原实例需要恢复",
   system_dependencies: "缺少系统运行依赖",

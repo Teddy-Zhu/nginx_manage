@@ -8,6 +8,16 @@ import (
 // InspectNginxTarget is shared by logical imports and offline restore planning.
 // Observations come from the target Agent; archive claims grant no capability.
 func InspectNginxTarget(parsed *nginxconfig.Parsed, features agent.NginxFeatures, runtime agent.NginxState) []Step {
+	out := inspectNginxDependencies(parsed, features)
+	if !runtime.Available || !runtime.Running || !runtime.Integrity || runtime.ExternalChange {
+		out = append(out, Step{"runtime", "nginx", "unavailable", "专用实例未就绪或存在外部修改，须先恢复目标接入状态"})
+	}
+	return out
+}
+
+// Preparation and import preflight must agree on capabilities. A readable
+// binary alone does not satisfy the mapped configuration's dependencies.
+func inspectNginxDependencies(parsed *nginxconfig.Parsed, features agent.NginxFeatures) []Step {
 	out := []Step{}
 	selectedFeatures := map[string]bool{}
 	seenModules := map[string]bool{}
@@ -47,9 +57,6 @@ func InspectNginxTarget(parsed *nginxconfig.Parsed, features agent.NginxFeatures
 				out = append(out, Step{"capability", name, "ready", "目标已具备所需能力"})
 			}
 		}
-	}
-	if !runtime.Available || !runtime.Running || !runtime.Integrity || runtime.ExternalChange {
-		out = append(out, Step{"runtime", "nginx", "unavailable", "专用实例未就绪或存在外部修改，须先恢复目标接入状态"})
 	}
 	return out
 }
