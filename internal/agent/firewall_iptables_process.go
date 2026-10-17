@@ -231,7 +231,7 @@ func openIPTablesExecutionLock() (*os.File, error) {
 	return f, nil
 }
 
-func iptablesRestoreMaterial(v *iptablesChangeCheckpoint, request iptablesRestoreRequest) (*iptablesInitialMaterial, error) {
+func iptablesRestoreMaterial(v *iptablesChangeCheckpoint, request iptablesRestoreRequest) (*iptablesChangeMaterial, error) {
 	if v.Operation.ID != request.OperationID {
 		return nil, errors.New("iptables 调用不属于原父操作")
 	}
@@ -330,7 +330,7 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 		return nil, err
 	} else if latest != nil && latest.OperationID != v.Operation.ID {
 		parent, err := loadIPTablesReceipt(dataDir, latest.OperationID)
-		if err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != latest.OperationID || parent.Firewall.ProgramHash != latest.ProgramHash || parent.Firewall.State != parent.State || !slices.Contains([]string{"rolled_back", "failed"}, parent.State) {
+		if err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != latest.OperationID || parent.Firewall.ProgramHash != latest.ProgramHash || parent.Firewall.State != parent.State || !slices.Contains([]string{"succeeded", "rolled_back", "failed"}, parent.State) {
 			return nil, errors.New("iptables 前一子进程的父业务尚未结束")
 		}
 	}
@@ -339,16 +339,18 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 		return nil, err
 	}
 	defer guard.Close()
-	current, err := inspectIPTablesChange(ctx, dataDir, v)
+	current, err := inspectIPTablesChangeScope(ctx, dataDir, v, request.Target == "previous")
 	if err != nil {
 		return nil, err
 	}
 	input := material.Previous
 	if request.Target == "candidate" {
-		if err = checkIPTablesInterfaces(v.Policy.Policy, current.Observed); err != nil {
-			return nil, err
+		if v.Policy.Action == "apply" {
+			if err = checkIPTablesInterfaces(v.Policy.Policy, current.Observed); err != nil {
+				return nil, err
+			}
 		}
-		if v.Rollback || v.Operation.State != "running" || time.Now().Unix() >= v.Operation.Deadline || current.Hash != v.Transition.ConfigurationHash || current.States[material.Family] != "empty" {
+		if v.Rollback || v.Operation.State != "running" || time.Now().Unix() >= v.Operation.Deadline || current.Hash != v.Transition.ConfigurationHash || current.States[material.Family] != "previous" {
 			return nil, errors.New("iptables 原候选基线或执行窗口已变化")
 		}
 		for family, state := range current.States {
@@ -518,7 +520,7 @@ func recoverIPTablesRestore(ctx context.Context, dataDir string) error {
 	matched := err == nil && iptablesRestoreMatchesChange(r, v)
 	if err == nil && r.Target == "repair" {
 		repair, repairErr := loadIPTablesRepair(dataDir)
-		matched = repairErr == nil && repair != nil && iptablesRepairSourceMatches(repair, v) && iptablesRestoreMatchesRepair(r, repair)
+		matched = repairErr == nil && repair != nil && iptablesPolicySourceMatches(repair, v) && iptablesRestoreMatchesRepair(r, repair)
 	}
 	if !matched {
 		return errors.New("iptables 原进程缺少对应的原 root 业务意图")

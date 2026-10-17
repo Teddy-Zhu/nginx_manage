@@ -205,86 +205,170 @@ func proveIPTablesGeneration(image iptablesImage, generation *firewall.IPTablesG
 	return nil
 }
 
-type iptablesInitialMaterial struct {
+type iptablesChangeMaterial struct {
 	Family, Binary, BeforeHash, AfterHash, CandidateHash, PreviousHash string
 	Before, After                                                      iptablesImage
 	Candidate, Previous                                                []byte
 }
 
-// Initial admission is fail-if-exists: -N never flushes an existing chain.
-// Recovery deletes the exact generated rules, then deletes empty chains. It
-// contains no historical foreign rule, policy replacement or global flush.
-func initialIPTablesMaterial(before iptablesImage, generation firewall.IPTablesGeneration) (iptablesInitialMaterial, error) {
-	var out iptablesInitialMaterial
-	if before.Family != generation.Family || proveIPTablesGeneration(before, nil) != nil {
-		return out, errors.New("iptables 原始空命名空间无法完整证明")
+func iptablesGeneration(program *firewall.IPTablesRuntimeProgram, family string) *firewall.IPTablesGeneration {
+	if program != nil {
+		for i := range program.Families {
+			if program.Families[i].Family == family {
+				return &program.Families[i]
+			}
+		}
+	}
+	return nil
+}
+
+// Every direction renders only the two accepted generations. A pointer switch
+// never declares/flushes an existing chain and never serializes foreign rules.
+func renderIPTablesChange(before iptablesImage, old, next *firewall.IPTablesGeneration) (iptablesImage, []byte, error) {
+	if old == nil && next == nil || old != nil && old.Family != before.Family || next != nil && next.Family != before.Family {
+		return iptablesImage{}, nil, errors.New("iptables 代际转换地址族无效")
+	}
+	if err := proveIPTablesGeneration(before, old); err != nil {
+		return iptablesImage{}, nil, err
 	}
 	input := before.chain("filter", "INPUT")
 	if input == nil || input.Policy != "ACCEPT" && input.Policy != "DROP" {
-		return out, errors.New("iptables 原 filter/INPUT 及默认策略无法核对")
+		return iptablesImage{}, nil, errors.New("iptables 原 filter/INPUT 及默认策略无法核对")
 	}
-	// Clone via the typed image so no slice in the original is mutated.
+	if old != nil && next != nil && (old.Chain == next.Chain || !slices.Equal(old.Hook, next.Hook)) {
+		return iptablesImage{}, nil, errors.New("iptables 新旧代际身份或固定入口冲突")
+	}
 	raw, err := json.Marshal(before)
 	if err != nil {
-		return out, err
+		return iptablesImage{}, nil, err
 	}
 	var after iptablesImage
 	if err = json.Unmarshal(raw, &after); err != nil {
-		return out, err
+		return after, nil, err
 	}
-	nextInput := after.chain("filter", "INPUT")
-	nextInput.Rules = append([][]string{slices.Clone(generation.Hook)}, nextInput.Rules...)
-	for index := range after.Tables {
-		if after.Tables[index].Name != "filter" {
-			continue
-		}
-		rules := iptablesImageChain{Name: generation.Chain, Policy: "-", Rules: [][]string{}}
-		for _, rule := range generation.Rules {
-			rules.Rules = append(rules.Rules, slices.Clone(rule.Arguments))
-		}
-		after.Tables[index].Chains = append(after.Tables[index].Chains, rules, iptablesImageChain{Name: firewall.IPTablesHostChain, Policy: "-", Rules: [][]string{slices.Clone(generation.Pointer)}})
-	}
-	if err = proveIPTablesGeneration(after, &generation); err != nil {
-		return out, err
-	}
-	if err = after.readbackBudget(); err != nil {
-		return out, err
-	}
-	var candidate, previous bytes.Buffer
-	candidate.WriteString("*filter\n-N " + generation.Chain + "\n-N " + firewall.IPTablesHostChain + "\n")
-	previous.WriteString("*filter\n")
-	write := func(buffer *bytes.Buffer, command, chain string, args []string) error {
+	var batch bytes.Buffer
+	batch.WriteString("*filter\n")
+	write := func(command, chain string, args []string) error {
 		text, err := firewall.IPTablesRuleText(args)
 		if err != nil {
 			return err
 		}
-		buffer.WriteString(command + " " + chain + " " + text + "\n")
+		batch.WriteString(command + " " + chain + " " + text + "\n")
 		return nil
 	}
-	if err = write(&previous, "-D", "INPUT", generation.Hook); err != nil {
-		return out, err
-	}
-	if err = write(&previous, "-D", firewall.IPTablesHostChain, generation.Pointer); err != nil {
-		return out, err
-	}
-	for _, rule := range generation.Rules {
-		if err = write(&candidate, "-A", generation.Chain, rule.Arguments); err != nil {
-			return out, err
+	if next != nil {
+		batch.WriteString("-N " + next.Chain + "\n")
+		for _, rule := range next.Rules {
+			if err = write("-A", next.Chain, rule.Arguments); err != nil {
+				return after, nil, err
+			}
 		}
-		if err = write(&previous, "-D", generation.Chain, rule.Arguments); err != nil {
-			return out, err
+		if old == nil {
+			batch.WriteString("-N " + firewall.IPTablesHostChain + "\n")
+			if err = write("-A", firewall.IPTablesHostChain, next.Pointer); err != nil {
+				return after, nil, err
+			}
+			if err = write("-I", "INPUT 1", next.Hook); err != nil {
+				return after, nil, err
+			}
+		} else {
+			if err = write("-I", firewall.IPTablesHostChain+" 1", next.Pointer); err != nil {
+				return after, nil, err
+			}
+			if err = write("-D", firewall.IPTablesHostChain, old.Pointer); err != nil {
+				return after, nil, err
+			}
 		}
+	} else {
+		if err = write("-D", "INPUT", old.Hook); err != nil {
+			return after, nil, err
+		}
+		if err = write("-D", firewall.IPTablesHostChain, old.Pointer); err != nil {
+			return after, nil, err
+		}
+		batch.WriteString("-X " + firewall.IPTablesHostChain + "\n")
 	}
-	if err = write(&candidate, "-A", firewall.IPTablesHostChain, generation.Pointer); err != nil {
+	if old != nil {
+		for _, rule := range old.Rules {
+			if err = write("-D", old.Chain, rule.Arguments); err != nil {
+				return after, nil, err
+			}
+		}
+		batch.WriteString("-X " + old.Chain + "\n")
+	}
+	batch.WriteString("COMMIT\n")
+	for ti := range after.Tables {
+		if after.Tables[ti].Name != "filter" {
+			continue
+		}
+		chains := []iptablesImageChain{}
+		for _, chain := range after.Tables[ti].Chains {
+			if old != nil && chain.Name == old.Chain {
+				continue
+			}
+			if chain.Name == firewall.IPTablesHostChain {
+				if next == nil {
+					continue
+				}
+				chain.Rules = [][]string{slices.Clone(next.Pointer)}
+			}
+			if chain.Name == "INPUT" {
+				if old != nil && next == nil {
+					chain.Rules = chain.Rules[1:]
+				}
+				if old == nil {
+					chain.Rules = append([][]string{slices.Clone(next.Hook)}, chain.Rules...)
+				}
+			}
+			chains = append(chains, chain)
+		}
+		if next != nil {
+			rules := [][]string{}
+			for _, rule := range next.Rules {
+				rules = append(rules, slices.Clone(rule.Arguments))
+			}
+			chains = append(chains, iptablesImageChain{Name: next.Chain, Policy: "-", Rules: rules})
+			if old == nil {
+				chains = append(chains, iptablesImageChain{Name: firewall.IPTablesHostChain, Policy: "-", Rules: [][]string{slices.Clone(next.Pointer)}})
+			}
+		}
+		after.Tables[ti].Chains = chains
+	}
+	if err = proveIPTablesGeneration(after, next); err != nil {
+		return after, nil, err
+	}
+	if err = after.readbackBudget(); err != nil {
+		return after, nil, err
+	}
+	return after, batch.Bytes(), nil
+}
+
+func makeIPTablesChangeMaterial(before iptablesImage, old, next *firewall.IPTablesGeneration) (iptablesChangeMaterial, error) {
+	var out iptablesChangeMaterial
+	after, candidate, err := renderIPTablesChange(before, old, next)
+	if err != nil {
 		return out, err
 	}
-	if err = write(&candidate, "-I", "INPUT 1", generation.Hook); err != nil {
+	restored, previous, err := renderIPTablesChange(after, next, old)
+	if err != nil {
 		return out, err
 	}
-	previous.WriteString("-X " + firewall.IPTablesHostChain + "\n-X " + generation.Chain + "\nCOMMIT\n")
-	candidate.WriteString("COMMIT\n")
-	if candidate.Len()+previous.Len() > 2*firewall.IPTablesProgramBytes {
+	originalForeign, _, err := iptablesForeignImage(before, old)
+	if err != nil {
+		return out, err
+	}
+	restoredForeign, _, err := iptablesForeignImage(restored, old)
+	if err != nil || originalForeign.hash() != restoredForeign.hash() {
+		return out, errors.New("iptables 正反向代际投影无法还原原始受管范围及第三方配置")
+	}
+	if len(candidate)+len(previous) > 2*firewall.IPTablesProgramBytes {
 		return out, errors.New("iptables 代际正反向批次超过 4 MiB")
 	}
-	return iptablesInitialMaterial{Family: generation.Family, Binary: generation.Binary, BeforeHash: before.hash(), AfterHash: after.hash(), CandidateHash: secure.Hash(candidate.Bytes()), PreviousHash: secure.Hash(previous.Bytes()), Before: before, After: after, Candidate: candidate.Bytes(), Previous: previous.Bytes()}, nil
+	binary := ""
+	if next != nil {
+		binary = next.Binary
+	} else {
+		binary = old.Binary
+	}
+	return iptablesChangeMaterial{Family: before.Family, Binary: binary, BeforeHash: before.hash(), AfterHash: after.hash(), CandidateHash: secure.Hash(candidate), PreviousHash: secure.Hash(previous), Before: before, After: after, Candidate: candidate, Previous: previous}, nil
 }

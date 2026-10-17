@@ -42,8 +42,10 @@ func withIPTablesCandidateProof(ctx context.Context, dataDir string, v *iptables
 	if err != nil {
 		return err
 	}
-	if err = checkIPTablesInterfaces(v.Policy.Policy, current.Observed); err != nil {
-		return err
+	if v.Policy.Action == "apply" {
+		if err = checkIPTablesInterfaces(v.Policy.Policy, current.Observed); err != nil {
+			return err
+		}
 	}
 	for _, material := range v.Transition.Materials {
 		if current.States[material.Family] != "candidate" {
@@ -83,7 +85,7 @@ func (f *hostFirewall) applyIPTablesLocked(ctx context.Context, id, planID strin
 	if f.remote.state.Version != plan.view.ListenerVersion || f.remote.state.Confirmed.Listen != plan.view.Listener || f.sshMode != plan.view.SSHProfile {
 		return out, fault.Conflict("管理监听或 SSH 保护方式变化，请重新计划")
 	}
-	protections, listeners, source, err := firewallProtections(ctx, plan.record.Policy, f.sshMode, f.remote, connection)
+	protections, listeners, source, err := firewallProtections(ctx, iptablesProtectionPolicy(*plan.record), f.sshMode, f.remote, connection)
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
 	}
@@ -190,7 +192,9 @@ func (f *hostFirewall) confirmIPTablesLocked(ctx context.Context, id, connection
 	}
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	observed := f.observeProtectionsLocked(ctx, &v.Policy)
+	proofRecord := v.Policy
+	proofRecord.Action, proofRecord.Policy = "apply", iptablesProtectionPolicy(v.Policy)
+	observed := f.observeProtectionsLocked(ctx, &proofRecord)
 	if observed.State == "changed" {
 		return v, errIPTablesProtectionChanged
 	}
@@ -205,6 +209,9 @@ func (f *hostFirewall) confirmIPTablesLocked(ctx context.Context, id, connection
 		// distribution restore file or historical foreign snapshot is installed.
 		v.Operation.State, v.Operation.Stage, v.Operation.ConfirmedSource, v.Operation.UpdatedAt = "succeeded", "confirmed", socket.source, time.Now().Unix()
 		v.Confirmed = &v.Policy
+		if v.Policy.Action == "remove" {
+			v.Operation.Stage = "rules_removed"
+		}
 		return saveIPTablesChange(f.dataDir, v)
 	})
 	if err == nil {

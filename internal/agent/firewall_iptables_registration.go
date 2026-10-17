@@ -285,20 +285,24 @@ func iptablesRegistrationView(ctx context.Context, dataDir string, observed fire
 	if business, err := loadIPTablesChange(dataDir); err != nil {
 		out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 原业务快照无法读取"
 		return out
-	} else if business != nil && business.Confirmed != nil {
-		receipt, err := loadIPTablesReceipt(dataDir, business.Operation.ID)
-		if err != nil || !iptablesChangeReceiptMatches(receipt, business) || business.Transition.Owner != v.NextClaim.Owner || business.Transition.MachineHash != v.NextClaim.MachineHash || business.Transition.RegistrationOperationID != v.NextClaim.OperationID || business.Transition.RegistrationRequestHash != v.RequestHash || business.Policy.Policy.Backend != v.NextClaim.Backend || business.Transition.Tools.verify(ctx) != nil {
+	} else if source := iptablesPolicySourceFor(business); source != nil && source.Policy.Action == "apply" {
+		if verifyIPTablesSource(dataDir, source) != nil || source.Owner != v.NextClaim.Owner || source.MachineHash != v.NextClaim.MachineHash || source.RegistrationOperationID != v.NextClaim.OperationID || source.RegistrationRequestHash != v.RequestHash || source.Policy.Policy.Backend != v.NextClaim.Backend || source.Tools.verify(ctx) != nil {
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认策略、原授权或固定工具无法核对"
 			return out
 		}
-		snapshot, err := snapshotIPTablesTransition(ctx, v.NextClaim.Backend, observed, business.Transition.Program)
-		if err != nil || snapshot.ToolHash != business.Transition.ToolHash {
+		program, err := firewall.CompileIPTablesRuntime(source.Policy.Policy, source.Policy.Protections, source.Owner, source.Policy.PlanID, source.Policy.Action)
+		if err != nil {
+			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认程序无法核对"
+			return out
+		}
+		snapshot, err := snapshotIPTablesTransition(ctx, v.NextClaim.Backend, observed, program)
+		if err != nil || snapshot.ToolHash != source.ToolHash {
 			out.Registration.State, out.Registration.Reason = "drifted", "iptables 已确认代际或当前环境无法完整核对，请本机恢复"
 			return out
 		}
-		for _, generation := range business.Transition.Program.Families {
-			if snapshot.States[generation.Family] != "candidate" || iptablesCandidateReceipt(dataDir, business, generation.Family) != nil {
-				out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 已确认地址族规则缺失或原调用回执无法核对"
+		for _, generation := range program.Families {
+			if snapshot.States[generation.Family] != "candidate" {
+				out.Registration.State, out.Registration.Reason = "recovery_required", "iptables 已确认地址族规则缺失"
 				return out
 			}
 		}

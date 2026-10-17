@@ -19,13 +19,13 @@ type iptablesDryRunProof struct {
 	Calls                                               []iptablesDryRunCall
 }
 
-func iptablesRoundTrip(material iptablesInitialMaterial) ([]byte, error) {
+func iptablesRoundTrip(material iptablesChangeMaterial) ([]byte, error) {
 	header, commit := []byte("*filter\n"), []byte("COMMIT\n")
 	if !bytes.HasPrefix(material.Candidate, header) || !bytes.HasPrefix(material.Previous, header) || !bytes.HasSuffix(material.Candidate, commit) || !bytes.HasSuffix(material.Previous, commit) || bytes.Count(material.Candidate, commit) != 1 || bytes.Count(material.Previous, commit) != 1 {
 		return nil, errors.New("iptables 正反向批次边界无效")
 	}
 	// Both directions must be parsed in one table image. Testing a standalone
-	// reverse batch against the still-empty live namespace would prove nothing.
+	// reverse batch against the unchanged live namespace would prove nothing.
 	batch := append([]byte{}, bytes.TrimSuffix(material.Candidate, commit)...)
 	batch = append(batch, bytes.TrimPrefix(material.Previous, header)...)
 	if len(batch) > 4<<20 {
@@ -34,7 +34,7 @@ func iptablesRoundTrip(material iptablesInitialMaterial) ([]byte, error) {
 	return batch, nil
 }
 
-func preflightIPTables(ctx context.Context, transition *iptablesInitialTransition) (*iptablesDryRunProof, error) {
+func preflightIPTables(ctx context.Context, transition *iptablesTransition) (*iptablesDryRunProof, error) {
 	if transition == nil || transition.Program == nil || transition.Tools == nil || len(transition.Materials) == 0 || len(transition.Materials) > 2 {
 		return nil, errors.New("iptables 官方预演缺少完整代际计划或工具绑定")
 	}
@@ -48,7 +48,7 @@ func preflightIPTables(ctx context.Context, transition *iptablesInitialTransitio
 	}
 	for _, material := range transition.Materials {
 		before, err := transition.Tools.image(ctx, material.Family)
-		if err != nil || before.hash() != material.BeforeHash || proveIPTablesGeneration(before, nil) != nil {
+		if err != nil || before.hash() != material.BeforeHash || proveIPTablesGeneration(before, iptablesGeneration(iptablesPreviousProgram(transition), material.Family)) != nil {
 			return nil, errors.New("iptables 固定工具的完整导出与计划原始基线不一致")
 		}
 		restore, err := transition.Tools.tool(material.Binary + "-restore")
@@ -74,7 +74,7 @@ func preflightIPTables(ctx context.Context, transition *iptablesInitialTransitio
 	// own pair, so later work cannot hide a change to an earlier family.
 	for _, material := range transition.Materials {
 		after, err := transition.Tools.image(ctx, material.Family)
-		if err != nil || after.hash() != material.BeforeHash || proveIPTablesGeneration(after, nil) != nil {
+		if err != nil || after.hash() != material.BeforeHash || proveIPTablesGeneration(after, iptablesGeneration(iptablesPreviousProgram(transition), material.Family)) != nil {
 			return nil, errors.New("iptables 官方预演后原完整规则不一致，未生成计划")
 		}
 	}

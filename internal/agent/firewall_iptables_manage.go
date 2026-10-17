@@ -62,7 +62,7 @@ func ManageIPTablesRegistration(parent context.Context, dataDir, scope, backend,
 	}
 	if action != "recover" {
 		business, err := loadIPTablesChange(dataDir)
-		if err != nil || business != nil && business.Confirmed != nil {
+		if err != nil || business != nil && business.Confirmed != nil && business.Confirmed.Action == "apply" {
 			return out, errors.New("iptables 已确认业务规则须先通过业务流程移除，不能释放原授权")
 		}
 	}

@@ -55,7 +55,7 @@ type firewallCheckpoint struct {
 	RestoreIntent   *firewall.KernelView  `json:"restore_intent"`
 }
 type firewallPrivatePlan struct {
-	iptables *iptablesInitialTransition
+	iptables *iptablesTransition
 	view     firewall.Plan
 	record   *firewallPolicyRecord
 	ufw      *ufwPolicyTransition
@@ -275,7 +275,7 @@ func (f *hostFirewall) Open() error {
 		return nil
 	}
 	iptablesPending := iptablesBusinessPending(f.dataDir)
-	iptablesManaged := iptables != nil && iptables.Confirmed != nil
+	iptablesManaged := iptables != nil && iptables.Confirmed != nil && iptables.Confirmed.Action == "apply"
 	if (iptablesPending || iptablesManaged) && (managed != nil || value != nil) {
 		f.policyUncertain, f.problem = true, "iptables 与其他防火墙恢复材料冲突，请本机核对"
 		return nil

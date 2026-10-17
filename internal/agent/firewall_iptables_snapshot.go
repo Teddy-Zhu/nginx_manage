@@ -131,6 +131,46 @@ func snapshotIPTablesTransition(ctx context.Context, backend string, observed fi
 }
 
 func snapshotIPTablesProgram(ctx context.Context, backend string, observed firewall.Observation, program *firewall.IPTablesRuntimeProgram, allowMissing bool) (iptablesRegistrationSnapshot, error) {
+	return snapshotIPTablesScope(ctx, backend, observed, program, nil, false, allowMissing, false)
+}
+
+func classifyIPTablesImage(image iptablesImage, next, previous *firewall.IPTablesGeneration, transition, allowMissing, allowPreviousMissing bool) (iptablesImage, string, error) {
+	if !transition {
+		if allowMissing && next != nil {
+			material, err := repairIPTablesMaterial(image, *next)
+			if err != nil {
+				return iptablesImage{}, "", err
+			}
+			foreign, state, err := iptablesForeignImage(material.After, next)
+			if material.Missing != 0 {
+				state = "missing"
+			}
+			return foreign, state, err
+		}
+		return iptablesForeignImage(image, next)
+	}
+	if next == nil && previous == nil {
+		return iptablesForeignImage(image, nil)
+	}
+	foreign, state, err := iptablesForeignImage(image, next)
+	if err == nil && (next == nil && state == "empty" || next != nil && state == "candidate") {
+		return foreign, "candidate", nil
+	}
+	foreign, state, err = iptablesForeignImage(image, previous)
+	if err == nil && (previous == nil && state == "empty" || previous != nil && state == "candidate") {
+		return foreign, "previous", nil
+	}
+	if allowPreviousMissing && previous != nil {
+		material, repairErr := repairIPTablesMaterial(image, *previous)
+		if repairErr == nil {
+			foreign, _, err = iptablesForeignImage(material.After, previous)
+			return foreign, "previous_missing", err
+		}
+	}
+	return iptablesImage{}, "", errors.New("iptables 当前规则不属于原确认或完整候选代际")
+}
+
+func snapshotIPTablesScope(ctx context.Context, backend string, observed firewall.Observation, program, previous *firewall.IPTablesRuntimeProgram, transition, allowMissing, allowPreviousMissing bool) (iptablesRegistrationSnapshot, error) {
 	var out iptablesRegistrationSnapshot
 	if !observed.Kernel.Available || observed.Kernel.TableExists {
 		return out, errors.New("直接 nftables 目标表不存在的状态无法确认")
@@ -157,27 +197,14 @@ func snapshotIPTablesProgram(ctx context.Context, backend string, observed firew
 				}
 				images[index], err = parseIPTablesImage(raw, family)
 				if err == nil {
-					var generation *firewall.IPTablesGeneration
-					if program != nil && strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
-						for position := range program.Families {
-							if program.Families[position].Family == family {
-								generation = &program.Families[position]
-							}
-						}
+					var generation, prior *firewall.IPTablesGeneration
+					if strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save") {
+						generation = iptablesGeneration(program, family)
+						prior = iptablesGeneration(previous, family)
 					}
 					var foreign iptablesImage
-					if allowMissing && generation != nil {
-						var material iptablesRepairMaterial
-						material, err = repairIPTablesMaterial(images[index], *generation)
-						if err == nil {
-							foreign, states[index], err = iptablesForeignImage(material.After, generation)
-							if material.Missing != 0 {
-								states[index] = "missing"
-							}
-						}
-					} else {
-						foreign, states[index], err = iptablesForeignImage(images[index], generation)
-					}
+					selected := strings.Contains(name, strings.TrimPrefix(backend, "iptables-")+"-save")
+					foreign, states[index], err = classifyIPTablesImage(images[index], generation, prior, transition && selected, allowMissing && selected, allowPreviousMissing && selected)
 					if err == nil {
 						hashes[index] = foreign.hash()
 					}
@@ -260,32 +287,56 @@ func inspectIPTablesChange(ctx context.Context, dataDir string, v *iptablesChang
 	return inspectIPTablesChangeScope(ctx, dataDir, v, false)
 }
 
-func inspectIPTablesChangeScope(ctx context.Context, dataDir string, v *iptablesChangeCheckpoint, allowMissing bool) (iptablesRegistrationSnapshot, error) {
-	var out iptablesRegistrationSnapshot
+func inspectIPTablesChangeScope(ctx context.Context, dataDir string, v *iptablesChangeCheckpoint, allowPreviousMissing bool) (iptablesRegistrationSnapshot, error) {
 	if err := iptablesChangeAuthority(dataDir, v); err != nil {
-		return out, err
+		return iptablesRegistrationSnapshot{}, err
 	}
-	if err := v.Transition.Tools.verify(ctx); err != nil {
+	if v.Transition.Previous != nil {
+		if err := verifyIPTablesSource(dataDir, v.Transition.Previous); err != nil {
+			return iptablesRegistrationSnapshot{}, err
+		}
+	}
+	return inspectIPTablesBound(ctx, dataDir, v.Policy.Policy.Backend, v.Transition.ToolHash, v.Transition.Tools, v.Transition.Program, iptablesPreviousProgram(&v.Transition), true, false, allowPreviousMissing)
+}
+
+func inspectIPTablesSource(ctx context.Context, dataDir string, source *iptablesPolicySource, allowMissing bool) (iptablesRegistrationSnapshot, error) {
+	if err := verifyIPTablesSource(dataDir, source); err != nil {
+		return iptablesRegistrationSnapshot{}, err
+	}
+	registered, err := iptablesRegistrationAuthority(dataDir)
+	if err != nil || registered.NextClaim.Owner != source.Owner || registered.NextClaim.MachineHash != source.MachineHash || registered.NextClaim.OperationID != source.RegistrationOperationID || registered.RequestHash != source.RegistrationRequestHash || registered.NextClaim.Backend != source.Policy.Policy.Backend {
+		return iptablesRegistrationSnapshot{}, errors.New("iptables 原确认来源与本机授权不一致")
+	}
+	record := source.Policy
+	program, err := firewall.CompileIPTablesRuntime(record.Policy, record.Protections, source.Owner, record.PlanID, record.Action)
+	if err != nil {
+		return iptablesRegistrationSnapshot{}, err
+	}
+	return inspectIPTablesBound(ctx, dataDir, record.Policy.Backend, source.ToolHash, &source.Tools, program, nil, false, allowMissing, false)
+}
+
+func inspectIPTablesBound(ctx context.Context, dataDir, backend, toolHash string, tools *iptablesToolBinding, program, previous *firewall.IPTablesRuntimeProgram, transition, allowMissing, allowPreviousMissing bool) (iptablesRegistrationSnapshot, error) {
+	var out iptablesRegistrationSnapshot
+	if err := tools.verify(ctx); err != nil {
 		return out, err
 	}
 	call, cancel := context.WithTimeout(ctx, 6*time.Second)
 	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true}).collect(call)
 	cancel()
-	out, err := snapshotIPTablesProgram(ctx, v.Policy.Policy.Backend, observed, v.Transition.Program, allowMissing)
+	out, err := snapshotIPTablesScope(ctx, backend, observed, program, previous, transition, allowMissing, allowPreviousMissing)
 	if err != nil {
 		return out, err
 	}
-	if out.ToolHash != v.Transition.ToolHash {
+	if out.ToolHash != toolHash {
 		return out, errors.New("iptables 原诊断工具绑定已变化")
 	}
-	// Native write/read must use the same pinned tools as the prepared plan.
 	for _, image := range out.Images {
-		bound, err := v.Transition.Tools.image(ctx, image.Family)
+		bound, err := tools.image(ctx, image.Family)
 		if err != nil || bound.hash() != image.hash() {
 			return out, errors.New("iptables 规则在完整核对期间变化")
 		}
 	}
-	if err := v.Transition.Tools.verify(ctx); err != nil {
+	if err := tools.verify(ctx); err != nil {
 		return out, err
 	}
 	return out, ctx.Err()

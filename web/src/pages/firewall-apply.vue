@@ -294,7 +294,9 @@ function apply() {
           ? "将清空本应用 policy 的业务规则和入口保护，保留空 policy 登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，确认后才清空永久规则，未确认将恢复原配置。"
           : plan.value.backend === "ufw"
             ? "将移除本应用 UFW 用户规则及入口保护，保留 UFW 授权和其他来源规则。120 秒内需通过新的管理 HTTPS 连接确认，确认后才保存配置，未确认将恢复原规则。"
-            : "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
+            : plan.value.iptables
+              ? "将移除本应用代际链、入口保护及 INPUT 跳转，保留本机授权和其他来源规则。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
+              : "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
         : "将应用所列入口保护和已保存策略。120 秒内需通过新的管理 HTTPS 连接确认；连接中断或超时会恢复最后确认策略。",
     positiveText: "执行",
     negativeText: "取消",
@@ -420,7 +422,9 @@ onUnmounted(() => {
             ? "本应用运行和永久 policy 规则已清空，保留空 policy 登记；期望草稿保留，其余系统策略继续生效。"
             : view.backend === "ufw"
               ? "本应用 UFW 用户规则及入口保护已移除，授权和期望草稿保留，其他来源规则继续生效。"
-              : "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
+              : view.backend === "iptables-nft" || view.backend === "iptables-legacy"
+                ? "本应用代际链、入口保护及 INPUT 跳转已移除，本机授权和期望草稿保留，其他来源规则继续生效。"
+                : "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
           : "尚无已确认的业务过滤策略。"
       }}
     </p>
@@ -520,7 +524,9 @@ onUnmounted(() => {
             ? "清空本应用 policy 规则"
             : plan.backend === "ufw"
               ? "移除本应用 UFW 用户规则"
-              : `移除 ${plan.baseline.rules} 条规则`
+              : plan.iptables
+                ? "移除本应用 iptables 链及跳转"
+                : `移除 ${plan.baseline.rules} 条规则`
           : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : plan.iptables ? "生成规则" : "内核规则"}`
       }}</n-tag>
     </div>

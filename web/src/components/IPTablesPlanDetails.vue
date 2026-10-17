@@ -15,7 +15,11 @@ const columns: DataTableColumns<Family> = [
   },
   { title: "后端工具", key: "binary" },
   { title: "代际链", key: "chain", minWidth: 250 },
-  { title: "INPUT 位置", key: "hook_position" },
+  {
+    title: "INPUT 位置",
+    key: "hook_position",
+    render: (entry) => (entry.hook_position === 0 ? "撤销跳转" : entry.hook_position),
+  },
   { title: "生成规则", key: "generated_rules" },
   { title: "保留既有规则", key: "preserved_rules" },
   {

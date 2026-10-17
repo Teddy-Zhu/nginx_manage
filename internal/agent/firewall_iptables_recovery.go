@@ -35,7 +35,7 @@ func recoverIPTablesChange(ctx context.Context, dataDir string) error {
 			matched := err == nil && child != nil && child.Phase == "ended" && iptablesRestoreMatchesChange(child, v)
 			if err == nil && child != nil && child.Target == "repair" {
 				repair, repairErr := loadIPTablesRepair(dataDir)
-				matched = repairErr == nil && repair != nil && iptablesRepairSourceMatches(repair, v) && iptablesRestoreMatchesRepair(child, repair)
+				matched = repairErr == nil && repair != nil && iptablesPolicySourceMatches(repair, v) && iptablesRestoreMatchesRepair(child, repair)
 			}
 			if !matched {
 				return errors.New("iptables 终态仍有未核对原子进程")
@@ -64,23 +64,32 @@ func recoverIPTablesChange(ctx context.Context, dataDir string) error {
 		return fail("iptables 原执行进程尚未完整结束或回执冲突")
 	}
 	if iptablesRepairPending(dataDir) {
-		return fail("iptables 已确认规则修复与未确认业务冲突，请本机核对")
+		repair, err := loadIPTablesRepair(dataDir)
+		if err != nil || repair == nil || !iptablesPolicySourceMatches(repair, v) {
+			return fail("iptables 原确认规则修复与当前业务冲突，请本机核对")
+		}
 	}
 	if err = iptablesChangeAuthority(dataDir, v); err != nil {
 		return fail("iptables 原本机授权或机器身份无法核对")
 	}
 	v.Rollback = true
-	v.Operation.State, v.Operation.Stage, v.Operation.Error = "compensating", "restoring_previous", "未确认操作恢复原空受管范围"
+	v.Operation.State, v.Operation.Stage, v.Operation.Error = "compensating", "restoring_previous", "未确认操作恢复原确认受管范围"
 	v.Operation.UpdatedAt = time.Now().Unix()
 	if err = saveIPTablesChange(dataDir, v); err != nil {
 		return err
 	}
 	for _, material := range v.Transition.Materials {
-		current, err := inspectIPTablesChange(ctx, dataDir, v)
+		current, err := inspectIPTablesChangeScope(ctx, dataDir, v, true)
 		if err != nil {
 			return fail("iptables 当前工具、管理器或完整规则无法核对：" + boundedIPTablesError(err))
 		}
-		if current.States[material.Family] == "empty" {
+		state := current.States[material.Family]
+		if state == "previous" || state == "previous_missing" {
+			continue
+		}
+		// Missing old rules after a removal/reboot are restored from the
+		// independent original confirmation, not attributed to an unproven call.
+		if state == "candidate" && iptablesGeneration(v.Transition.Program, material.Family) == nil {
 			continue
 		}
 		if current.States[material.Family] != "candidate" || iptablesCandidateReceipt(dataDir, v, material.Family) != nil {
@@ -113,13 +122,16 @@ func recoverIPTablesChange(ctx context.Context, dataDir string) error {
 		if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
 			return fail("iptables 补偿原进程尚未结束或回执未核对")
 		}
-		after, err := inspectIPTablesChange(ctx, dataDir, v)
-		if err != nil || after.States[material.Family] != "empty" {
+		after, err := inspectIPTablesChangeScope(ctx, dataDir, v, true)
+		if err != nil || after.States[material.Family] != "previous" {
 			if submitErr != nil {
 				return fail("iptables 原补偿调用未完成，保留原操作待核对")
 			}
-			return fail("iptables 补偿后完整空受管范围无法核对")
+			return fail("iptables 补偿后原确认受管范围无法核对")
 		}
+	}
+	if err = reconcileIPTablesConfirmedLocked(ctx, dataDir, v); err != nil {
+		return fail("iptables 原确认策略尚未完整恢复：" + boundedIPTablesError(err))
 	}
 	// Hold both registry and execution guard through the final observation and
 	// terminal publication. No delayed restore may run after rolled_back.
@@ -137,12 +149,12 @@ func recoverIPTablesChange(ctx context.Context, dataDir string) error {
 	if err != nil || iptablesRestorePending(dataDir) {
 		return fail("iptables 最终环境或执行回执无法核对")
 	}
-	for _, state := range final.States {
-		if state != "empty" {
-			return fail("iptables 最终受管范围仍有规则")
+	for _, material := range v.Transition.Materials {
+		if final.States[material.Family] != "previous" {
+			return fail("iptables 最终原确认范围无法核对")
 		}
 	}
-	v.Operation.State, v.Operation.Stage, v.Operation.Error = "rolled_back", "confirmed_restored", "原空受管范围已恢复；保留当前第三方规则"
+	v.Operation.State, v.Operation.Stage, v.Operation.Error = "rolled_back", "confirmed_restored", "原确认受管范围已恢复；保留当前第三方规则"
 	v.Operation.UpdatedAt = time.Now().Unix()
 	return saveIPTablesChange(dataDir, v)
 }
@@ -164,6 +176,9 @@ func (f *hostFirewall) refreshIPTablesStateLocked() error {
 		return err
 	}
 	f.iptablesState = v
+	if v != nil {
+		f.iptablesLastRescue = v.LastRescue
+	}
 	return nil
 }
 

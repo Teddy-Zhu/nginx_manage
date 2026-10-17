@@ -19,25 +19,41 @@ type IPTablesGeneration struct {
 }
 
 type IPTablesRuntimeProgram struct {
-	Backend, Owner, PlanID, LogicalHash, Marker, Hash string
-	Families                                          []IPTablesGeneration
-	Bytes, BaseRules, ProtectionRules                 int
+	Backend, Owner, PlanID, Action, LogicalHash, Marker, Hash string
+	Families                                                  []IPTablesGeneration
+	Bytes, BaseRules, ProtectionRules                         int
 }
 
-func CompileIPTablesRuntime(policy Policy, protections []Protection, owner, planID string) (*IPTablesRuntimeProgram, error) {
+func CompileIPTablesRuntime(policy Policy, protections []Protection, owner, planID, action string) (*IPTablesRuntimeProgram, error) {
+	if action != "apply" && action != "remove" {
+		return nil, fault.Invalid("iptables 运行计划动作无效")
+	}
 	const zero = "00000000-0000-0000-0000-000000000000"
 	if !ruleIDPattern.MatchString(owner) || !ruleIDPattern.MatchString(planID) || owner == zero || planID == zero || owner == planID {
 		return nil, fault.Invalid("iptables 运行计划的本机所有者或计划标识无效")
 	}
-	logical, err := CompileIPTablesProtected(policy, protections)
+	compiledPolicy := policy
+	if action == "remove" {
+		if _, err := policy.Normalize(); err != nil {
+			return nil, err
+		}
+		compiledPolicy = DefaultPolicy()
+		compiledPolicy.Backend = policy.Backend
+	}
+	logical, err := CompileIPTablesProtected(compiledPolicy, protections)
 	if err != nil {
 		return nil, err
 	}
 	name := IPTablesHostChain + "-" + secure.Hash([]byte(owner + ":" + planID + ":" + logical.Hash))[:12]
 	marker := "nginxpanel:host:generation:v1:" + owner + ":" + planID + ":" + logical.Hash
-	out := &IPTablesRuntimeProgram{Backend: logical.Backend, Owner: owner, PlanID: planID, LogicalHash: logical.Hash, Marker: marker, Families: []IPTablesGeneration{}, BaseRules: logical.BaseRules, ProtectionRules: logical.ProtectionRules}
+	out := &IPTablesRuntimeProgram{Backend: logical.Backend, Owner: owner, PlanID: planID, Action: action, LogicalHash: logical.Hash, Marker: marker, Families: []IPTablesGeneration{}, BaseRules: logical.BaseRules, ProtectionRules: logical.ProtectionRules}
 	ordinal := 0
-	for _, family := range logical.Families {
+	families := logical.Families
+	if action == "remove" {
+		families = nil
+		out.BaseRules, out.ProtectionRules = 0, 0
+	}
+	for _, family := range families {
 		generation := IPTablesGeneration{Family: family.Family, Binary: family.Binary, Chain: name, Hook: []string{"-m", "comment", "--comment", "nginxpanel:host:hook:v1:" + owner, "-j", IPTablesHostChain}, Pointer: []string{"-m", "comment", "--comment", marker, "-j", name}, Rules: []IPTablesRule{}}
 		for _, rule := range family.Rules {
 			args := slices.Clone(rule.Arguments)
@@ -65,16 +81,16 @@ func CompileIPTablesRuntime(policy Policy, protections []Protection, owner, plan
 		return nil, fault.Invalid("包含入口跳转和代际指针的 iptables 程序超过 8192 条")
 	}
 	raw, err := json.Marshal(struct {
-		Backend, Owner, PlanID, LogicalHash string
-		Families                            []IPTablesGeneration
-	}{out.Backend, owner, planID, out.LogicalHash, out.Families})
+		Backend, Owner, PlanID, Action, LogicalHash string
+		Families                                    []IPTablesGeneration
+	}{out.Backend, owner, planID, action, out.LogicalHash, out.Families})
 	if err != nil {
 		return nil, err
 	}
 	if len(raw) > IPTablesProgramBytes {
 		return nil, fault.Invalid("包含完整代际身份的 iptables 程序超过 2 MiB")
 	}
-	out.Bytes, out.Hash = len(raw), secure.Hash(append([]byte("iptables:runtime:v1:\x00"), raw...))
+	out.Bytes, out.Hash = len(raw), secure.Hash(append([]byte("iptables:runtime:v2:\x00"), raw...))
 	return out, nil
 }
 

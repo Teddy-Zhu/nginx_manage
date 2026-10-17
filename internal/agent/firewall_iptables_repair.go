@@ -15,12 +15,6 @@ import (
 
 const iptablesRepairKind = "firewall.iptables.repair"
 
-type iptablesRepairSource struct {
-	Owner, MachineHash, RegistrationOperationID, RegistrationRequestHash, ToolHash string
-	Policy                                                                         firewallPolicyRecord
-	Tools                                                                          iptablesToolBinding
-}
-
 type iptablesRepairStatus struct {
 	ID, OperationID, PlanID, State, Error, IntentHash string
 	UpdatedAt                                         int64
@@ -29,7 +23,7 @@ type iptablesRepairStatus struct {
 type iptablesRepairCheckpoint struct {
 	Schema            int
 	Status            iptablesRepairStatus
-	Source            iptablesRepairSource
+	Source            iptablesPolicySource
 	ConfigurationHash string
 	Materials         []iptablesRepairMaterial
 	Steps             []iptablesChangeStep
@@ -43,12 +37,12 @@ func iptablesRepairIntentHash(v *iptablesRepairCheckpoint) string {
 	copy := *v
 	copy.Status.State, copy.Status.Error, copy.Status.IntentHash, copy.Status.UpdatedAt = "", "", "", 0
 	raw, _ := json.Marshal(copy)
-	return secure.Hash(append([]byte("iptables:repair-intent:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("iptables:repair-intent:v2:\x00"), raw...))
 }
 
 func iptablesRepairHash(v *iptablesRepairCheckpoint) string {
 	raw, _ := json.Marshal(v)
-	return secure.Hash(append([]byte("iptables:repair:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("iptables:repair:v2:\x00"), raw...))
 }
 
 func iptablesRepairTerminal(v *iptablesRepairCheckpoint) bool {
@@ -57,10 +51,10 @@ func iptablesRepairTerminal(v *iptablesRepairCheckpoint) bool {
 
 func validateIPTablesRepair(v *iptablesRepairCheckpoint) error {
 	invalid := errors.New("iptables 已确认策略修复检查点无效")
-	if v == nil || v.Schema != 1 || !validID(v.Status.ID) || v.Status.OperationID != v.Source.Policy.OperationID || v.Status.PlanID != v.Source.Policy.PlanID || !validID(v.Status.OperationID) || !validID(v.Status.PlanID) || v.Status.ID == v.Status.OperationID || v.Status.ID == v.Status.PlanID || v.Status.IntentHash != iptablesRepairIntentHash(v) || len(v.Status.Error) > 512 || v.Status.UpdatedAt <= 0 || !slices.Contains([]string{"running", "recovery_required", "succeeded", "superseded"}, v.Status.State) || !validID(v.Source.Owner) || !validID(v.Source.RegistrationOperationID) || !firewalldDigest(v.Source.MachineHash) || !firewalldDigest(v.Source.RegistrationRequestHash) || !firewalldDigest(v.Source.ToolHash) || !firewalldDigest(v.ConfigurationHash) || !v.Source.Tools.valid() || v.Source.Tools.Backend != v.Source.Policy.Policy.Backend || v.Source.Policy.Action != "apply" || v.Source.Policy.Version < 1 || validateFirewallProtectionBasis(v.Source.Policy.ProtectionBasis) != nil {
+	if v == nil || v.Schema != 2 || !validID(v.Status.ID) || v.Status.OperationID != v.Source.Policy.OperationID || v.Status.PlanID != v.Source.Policy.PlanID || !validID(v.Status.OperationID) || !validID(v.Status.PlanID) || v.Status.ID == v.Status.OperationID || v.Status.ID == v.Status.PlanID || v.Status.IntentHash != iptablesRepairIntentHash(v) || len(v.Status.Error) > 512 || v.Status.UpdatedAt <= 0 || !slices.Contains([]string{"running", "recovery_required", "succeeded", "superseded"}, v.Status.State) || validateIPTablesSource(&v.Source) != nil || !firewalldDigest(v.ConfigurationHash) || !v.Source.Tools.valid() || v.Source.Tools.Backend != v.Source.Policy.Policy.Backend || v.Source.Policy.Action != "apply" || v.Source.Policy.Version < 1 || validateFirewallProtectionBasis(v.Source.Policy.ProtectionBasis) != nil {
 		return invalid
 	}
-	program, err := firewall.CompileIPTablesRuntime(v.Source.Policy.Policy, v.Source.Policy.Protections, v.Source.Owner, v.Source.Policy.PlanID)
+	program, err := firewall.CompileIPTablesRuntime(v.Source.Policy.Policy, v.Source.Policy.Protections, v.Source.Owner, v.Source.Policy.PlanID, v.Source.Policy.Action)
 	hash, hashErr := firewall.PolicyDigest(v.Source.Policy.Policy)
 	if err != nil || hashErr != nil || hash != v.Source.Policy.PolicyHash || program.Hash != v.Source.Policy.ProgramHash || program.Marker != v.Source.Policy.Marker || len(v.Materials) != len(program.Families) || len(v.Materials) == 0 || len(v.Materials) > 2 || len(v.Steps) != 3*len(v.Materials) {
 		return invalid
@@ -156,12 +150,9 @@ func iptablesRepairPending(dataDir string) bool {
 	return err != nil || !iptablesRepairReceiptMatches(r, v) || !iptablesRepairTerminal(v)
 }
 
-func iptablesRepairSourceFor(v *iptablesChangeCheckpoint) iptablesRepairSource {
-	return iptablesRepairSource{Owner: v.Transition.Owner, MachineHash: v.Transition.MachineHash, RegistrationOperationID: v.Transition.RegistrationOperationID, RegistrationRequestHash: v.Transition.RegistrationRequestHash, ToolHash: v.Transition.ToolHash, Policy: v.Policy, Tools: *v.Transition.Tools}
-}
-
-func iptablesRepairSourceMatches(repair *iptablesRepairCheckpoint, v *iptablesChangeCheckpoint) bool {
-	return v != nil && v.Operation.State == "succeeded" && v.Confirmed != nil && sameIPTablesValue(repair.Source, iptablesRepairSourceFor(v))
+func iptablesPolicySourceMatches(repair *iptablesRepairCheckpoint, v *iptablesChangeCheckpoint) bool {
+	source := iptablesPolicySourceFor(v)
+	return source != nil && source.Policy.Action == "apply" && sameIPTablesValue(repair.Source, source)
 }
 
 func iptablesRestoreMatchesRepair(r *iptablesRestoreReceipt, v *iptablesRepairCheckpoint) bool {
@@ -212,12 +203,15 @@ func runIPTablesRepairRestore(ctx context.Context, dataDir string, request iptab
 		return nil, err
 	}
 	repair, err := loadIPTablesRepair(dataDir)
-	if err != nil || repair == nil || iptablesRepairTerminal(repair) || !iptablesRepairSourceMatches(repair, v) || request.OperationID != v.Operation.ID {
+	if err != nil || repair == nil || iptablesRepairTerminal(repair) || !iptablesPolicySourceMatches(repair, v) || request.OperationID != repair.Source.Policy.OperationID {
 		return nil, errors.New("iptables 修复缺少原已确认业务及独立意图")
 	}
 	parent, err := loadIPTablesReceipt(dataDir, v.Operation.ID)
 	if err != nil || !iptablesChangeReceiptMatches(parent, v) {
 		return nil, errors.New("iptables 已确认业务回执尚未核对")
+	}
+	if err = verifyIPTablesSource(dataDir, &repair.Source); err != nil {
+		return nil, err
 	}
 	root, err := loadIPTablesReceipt(dataDir, repair.Status.ID)
 	if err != nil || !iptablesRepairReceiptMatches(root, repair) {
@@ -252,12 +246,14 @@ func runIPTablesRepairRestore(ctx context.Context, dataDir string, request iptab
 		return nil, err
 	}
 	defer guard.Close()
-	current, err := inspectIPTablesChangeScope(ctx, dataDir, v, true)
+	current, err := inspectIPTablesSource(ctx, dataDir, &repair.Source, true)
 	if err != nil || current.Hash != repair.ConfigurationHash {
 		return nil, errors.New("iptables 原修复基线已变化")
 	}
-	if err = checkIPTablesInterfaces(v.Policy.Policy, current.Observed); err != nil {
-		return nil, err
+	if !v.Rollback {
+		if err = checkIPTablesInterfaces(repair.Source.Policy.Policy, current.Observed); err != nil {
+			return nil, err
+		}
 	}
 	matched := false
 	for _, image := range current.Images {
@@ -286,28 +282,34 @@ func runIPTablesRepairRestore(ctx context.Context, dataDir string, request iptab
 
 // Caller owns the business lock; the source is the original root confirmation.
 func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *iptablesChangeCheckpoint) error {
-	if v == nil || v.Confirmed == nil {
+	source := iptablesPolicySourceFor(v)
+	if source == nil || source.Policy.Action == "remove" {
 		if iptablesRepairPending(dataDir) {
 			return errors.New("iptables 修复缺少原确认策略")
 		}
+		if source != nil {
+			return verifyIPTablesSource(dataDir, source)
+		}
 		return nil
 	}
-	if v.Operation.State != "succeeded" {
-		return errors.New("iptables 已确认策略对应的业务终态无效")
+	if !iptablesChangeTerminal(v) && !v.Rollback {
+		return errors.New("iptables 候选确认期间不能修复原策略")
 	}
 	parent, err := loadIPTablesReceipt(dataDir, v.Operation.ID)
 	if err != nil || !iptablesChangeReceiptMatches(parent, v) {
-		return errors.New("iptables 原确认回执尚未完成")
+		return errors.New("iptables 原业务回执尚未完整核对")
+	}
+	if err = verifyIPTablesSource(dataDir, source); err != nil {
+		return err
 	}
 	if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
 		return err
 	}
-	for _, generation := range v.Transition.Program.Families {
-		if err = iptablesCandidateReceipt(dataDir, v, generation.Family); err != nil {
-			return err
-		}
+	program, err := firewall.CompileIPTablesRuntime(source.Policy.Policy, source.Policy.Protections, source.Owner, source.Policy.PlanID, source.Policy.Action)
+	if err != nil {
+		return err
 	}
-	current, err := inspectIPTablesChangeScope(ctx, dataDir, v, true)
+	current, err := inspectIPTablesSource(ctx, dataDir, source, true)
 	if err != nil {
 		return err
 	}
@@ -319,7 +321,7 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 		if err = saveIPTablesRepair(dataDir, repair); err != nil {
 			return err
 		}
-		if !iptablesRepairTerminal(repair) && !iptablesRepairSourceMatches(repair, v) {
+		if !iptablesRepairTerminal(repair) && !iptablesPolicySourceMatches(repair, v) {
 			return errors.New("iptables 原修复对应其他确认来源")
 		}
 	}
@@ -352,8 +354,8 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 		}
 	}
 	if repair == nil || iptablesRepairTerminal(repair) {
-		repair = &iptablesRepairCheckpoint{Schema: 1, Status: iptablesRepairStatus{ID: secure.ID(), OperationID: v.Operation.ID, PlanID: v.Policy.PlanID, State: "running", UpdatedAt: time.Now().Unix()}, Source: iptablesRepairSourceFor(v), ConfigurationHash: current.Hash, Materials: []iptablesRepairMaterial{}, Steps: []iptablesChangeStep{}}
-		for _, generation := range v.Transition.Program.Families {
+		repair = &iptablesRepairCheckpoint{Schema: 2, Status: iptablesRepairStatus{ID: secure.ID(), OperationID: source.Policy.OperationID, PlanID: source.Policy.PlanID, State: "running", UpdatedAt: time.Now().Unix()}, Source: *source, ConfigurationHash: current.Hash, Materials: []iptablesRepairMaterial{}, Steps: []iptablesChangeStep{}}
+		for _, generation := range program.Families {
 			for _, image := range current.Images {
 				if image.Family != generation.Family {
 					continue
@@ -391,7 +393,7 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 		return errors.Join(errors.New(reason), saveIPTablesRepair(dataDir, repair))
 	}
 	for _, material := range repair.Materials {
-		current, err = inspectIPTablesChangeScope(ctx, dataDir, v, true)
+		current, err = inspectIPTablesSource(ctx, dataDir, source, true)
 		if err != nil {
 			return fail("iptables 已确认规则的当前完整状态无法核对")
 		}
@@ -419,11 +421,11 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 		if next == nil {
 			return fail("iptables 原修复调用许可已耗尽，请本机核对")
 		}
-		_, submitErr := runIPTablesRestore(ctx, dataDir, iptablesRestoreRequest{ID: next.ID, OperationID: v.Operation.ID, Target: "repair"})
+		_, submitErr := runIPTablesRestore(ctx, dataDir, iptablesRestoreRequest{ID: next.ID, OperationID: source.Policy.OperationID, Target: "repair"})
 		if err = recoverIPTablesRestore(ctx, dataDir); err != nil {
 			return fail("iptables 原修复进程尚未结束")
 		}
-		after, err := inspectIPTablesChangeScope(ctx, dataDir, v, true)
+		after, err := inspectIPTablesSource(ctx, dataDir, source, true)
 		if err != nil || after.States[material.Family] != "candidate" {
 			if submitErr != nil {
 				return fail("iptables 原修复未核对完成")
@@ -451,12 +453,16 @@ func finishIPTablesRepair(ctx context.Context, dataDir string, v *iptablesChange
 		return err
 	}
 	defer guard.Close()
-	current, err := inspectIPTablesChange(ctx, dataDir, v)
+	source := iptablesPolicySourceFor(v)
+	if source == nil || !sameIPTablesValue(source, repair.Source) {
+		return errors.New("iptables 最终修复来源变化")
+	}
+	current, err := inspectIPTablesSource(ctx, dataDir, source, false)
 	if err != nil || iptablesRestorePending(dataDir) {
 		return errors.New("iptables 最终修复规则或回执无法核对")
 	}
-	for _, generation := range v.Transition.Program.Families {
-		if current.States[generation.Family] != "candidate" {
+	for _, material := range repair.Materials {
+		if current.States[material.Family] != "candidate" {
 			return errors.New("iptables 已确认地址族仍缺少完整代际")
 		}
 	}

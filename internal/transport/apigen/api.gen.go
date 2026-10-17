@@ -2112,9 +2112,10 @@ type FirewallIPTablesPlan struct {
 
 // FirewallIPTablesFamilyPlan defines model for FirewallIPTablesFamilyPlan.
 type FirewallIPTablesFamilyPlan struct {
-	Family         string `json:"family"`
-	Binary         string `json:"binary"`
-	Chain          string `json:"chain"`
+	Family string `json:"family"`
+	Binary string `json:"binary"`
+	Chain  string `json:"chain"`
+	// HookPosition 候选首位跳转为 1；移除该地址族的跳转为 0。
 	HookPosition   int64  `json:"hook_position"`
 	GeneratedRules int64  `json:"generated_rules"`
 	PreservedRules int64  `json:"preserved_rules"`
