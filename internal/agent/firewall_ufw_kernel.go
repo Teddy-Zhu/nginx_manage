@@ -25,6 +25,7 @@ type ufwReloadFamily struct {
 type ufwReloadBaseline struct {
 	Hash, Backend string
 	Chains, Rules int
+	Families      []ufwReloadFamily
 }
 
 // prepend and delete can reload both enabled families through iptables-restore.
@@ -100,6 +101,7 @@ func readUFWReloadBaseline(ctx context.Context, configuration ufwConfigurationSn
 		return out, err
 	}
 	out.Hash = secure.Hash(append([]byte("ufw:reload-kernel:v2:\x00"), raw...))
+	out.Families = families
 	return out, nil
 }
 

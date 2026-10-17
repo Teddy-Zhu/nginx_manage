@@ -57,7 +57,7 @@ type firewallCheckpoint struct {
 type firewallPrivatePlan struct {
 	view   firewall.Plan
 	record *firewallPolicyRecord
-	ufw    []ufwReloadMaterial
+	ufw    *ufwPolicyTransition
 }
 type hostFirewall struct {
 	mu                    sync.Mutex
@@ -249,8 +249,8 @@ func (f *hostFirewall) Open() error {
 		f.owner = "firewalld"
 		return f.openFirewalldExecutor(managed)
 	}
-	if value == nil && ufwRestoreProcessPending(f.dataDir) {
-		call, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if value == nil && ufwRestorePending(f.dataDir) {
+		call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := f.recoverUFWProcess(call)
 		cancel()
 		if err != nil {
@@ -351,7 +351,7 @@ func (f *hostFirewall) View() firewall.RuntimeView {
 		pending := ufwRestorePending(f.dataDir)
 		reason := f.problem
 		if reason == "" {
-			reason = "UFW 本机授权已核对，可准备保护计划及官方 dry-run；应用和独立恢复尚未接入"
+			reason = "UFW 本机授权已核对，可准备保护计划；正常应用、确认及持久化尚未开放"
 			if !f.ufwPlanning {
 				reason = "须由本机 root 确认 UFW、宿主机范围及 SSH 保护配置后准备计划"
 			} else if registrationErr != nil {

@@ -264,7 +264,7 @@ func ufwRegistrationView(ctx context.Context, dataDir string, observed firewall.
 	}
 	out.OperationID = v.NextClaim.OperationID
 	if ufwRestorePending(dataDir) {
-		out.State, out.Reason = "recovery_required", "UFW 原重载进程或业务操作尚未完成；本机 ufw-recover 只核对子进程，规则仍须由原业务操作恢复"
+		out.State, out.Reason = "recovery_required", "UFW 原重载进程或业务操作尚未完成；须由原数据目录恢复原操作，外部配置或内核冲突保留现场"
 		return out
 	}
 	if err = ufwRegistrationReceipt(dataDir, v); err != nil || v.State == "preparing" {

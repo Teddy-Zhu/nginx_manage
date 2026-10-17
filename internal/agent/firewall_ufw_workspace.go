@@ -262,23 +262,28 @@ func verifyUFWBatchOrder(before, after map[string]*ufwNativeFile, expected []ufw
 	return nil
 }
 
+type ufwBatchFile struct {
+	Path, Hash string
+	Bytes      int
+}
+
 func (w *ufwDryRunWorkspace) digest(baseline, native, steps, tools string) (string, error) {
-	type file struct {
-		Path, Hash string
-		Bytes      int
-	}
-	files := []file{}
+	files := []ufwBatchFile{}
 	for _, path := range []string{"/etc/ufw/user.rules", "/etc/ufw/user6.rules"} {
 		if raw, present := w.contents[path]; present {
-			files = append(files, file{path, secure.Hash(raw), len(raw)})
+			files = append(files, ufwBatchFile{path, secure.Hash(raw), len(raw)})
 		}
 	}
+	return ufwBatchDigest(baseline, native, steps, tools, files)
+}
+
+func ufwBatchDigest(baseline, native, steps, tools string, files []ufwBatchFile) (string, error) {
 	raw, err := json.Marshal(struct {
 		Baseline, Native, Steps, Tools string
-		Files                          []file
+		Files                          []ufwBatchFile
 	}{baseline, native, steps, tools, files})
 	if err != nil {
 		return "", err
 	}
-	return secure.Hash(append([]byte("ufw:dry-run-batch:v2:\x00"), raw...)), nil
+	return secure.Hash(append([]byte("ufw:dry-run-batch:v3:\x00"), raw...)), nil
 }

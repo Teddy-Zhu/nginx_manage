@@ -260,17 +260,24 @@ func prepareUFWTools(ctx context.Context, w *ufwDryRunWorkspace, binary string, 
 		file.Raw = nil
 		out.Files = append(out.Files, file)
 	}
+	out.Hash, err = ufwToolsDigest(out)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func ufwToolsDigest(binding *ufwToolBinding) (string, error) {
 	encoded, err := json.Marshal(struct {
 		Files       []ufwBoundFile
 		Description ufwToolDescription
 		LocatorHash string
 		RunnerHash  string
-	}{out.Files, out.Description, secure.Hash([]byte(ufwLocateSources)), secure.Hash([]byte(ufwFrozenRunner))})
+	}{binding.Files, binding.Description, secure.Hash([]byte(ufwLocateSources)), secure.Hash([]byte(ufwFrozenRunner))})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	out.Hash = secure.Hash(append([]byte("ufw:tools:v1:\x00"), encoded...))
-	return out, nil
+	return secure.Hash(append([]byte("ufw:tools:v1:\x00"), encoded...)), nil
 }
 
 func (b *ufwToolBinding) tool(role string) (ufwBoundFile, error) {

@@ -22,7 +22,7 @@ import (
 
 const ufwRestoreKind = "firewall.ufw.restore"
 const ufwRestoreReceiptBytes = 32 << 10
-const ufwProcessProblem = "UFW 原重载子进程尚未完成核对："
+const ufwProcessProblem = "UFW 原业务或重载进程尚未完成核对："
 
 // The pipe is a one-use execution grant, not an API. Until the durable PID
 // identity has been published, EOF or a parent crash cannot execute the tool.
@@ -51,11 +51,11 @@ type ufwReloadMaterial struct {
 	Family, BeforeHash, AfterHash string
 	Before, After                 []byte
 	Python, Restore, Blocker      ufwBoundFile
+	BeforeKernel, AfterKernel     []ufwReloadChain
 }
 
 type ufwRestoreRequest struct {
-	ID, OperationID, BatchHash, ProgramHash, ToolchainHash, Target string
-	Material                                                       ufwReloadMaterial
+	ID, OperationID, Target string
 }
 
 type ufwRestoreReceipt struct {
@@ -205,13 +205,17 @@ func ufwRestoreProcessPending(dataDir string) bool {
 }
 
 func ufwRestorePending(dataDir string) bool {
-	if ufwRestoreProcessPending(dataDir) {
+	if ufwChangePending(dataDir) || ufwRestoreProcessPending(dataDir) {
 		return true
 	}
 	r, err := loadUFWRestore(dataDir)
 	if err != nil || r == nil {
 		return err != nil
 	}
+	return ufwRestoreParentPending(dataDir, r)
+}
+
+func ufwRestoreParentPending(dataDir string, r *ufwRestoreReceipt) bool {
 	parent, err := loadUFWReceipt(dataDir, r.OperationID)
 	return err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil || parent.Firewall.ID != r.OperationID || parent.Firewall.ProgramHash != r.ProgramHash || parent.RequestHash != firewallRequestHash(parent.Firewall.PlanID, parent.Firewall.Action) || parent.Firewall.State != parent.State || !slices.Contains([]string{"succeeded", "rolled_back", "failed"}, parent.State)
 }
@@ -245,29 +249,44 @@ func openUFWRestoreELF(tool ufwBoundFile) (*os.File, error) {
 	return f, nil
 }
 
-// The caller must first persist its old/new rule transition and acquire the
-// host registration lock. This transport confirms process completion only;
-// the caller must compare the actual kernel and persistence before proceeding.
+// The caller must first persist its old/new rule transition. The transport
+// acquires the host registration and official UFW locks, then checks the closed
+// source/kernel inputs. Completion still requires the parent's post-observation.
 func runUFWRestore(ctx context.Context, dataDir string, request ufwRestoreRequest) (*ufwRestoreReceipt, error) {
 	if os.Geteuid() != 0 || !filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir || request.Target != "candidate" && request.Target != "previous" {
 		return nil, errors.New("UFW 子进程执行范围或目标无效")
 	}
+	registrationUnlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
+	if err != nil {
+		return nil, err
+	}
+	defer registrationUnlock()
 	authority, err := ufwRegistrationAuthority(dataDir)
 	if err != nil {
 		return nil, err
 	}
-	material := request.Material
-	raw, hash := material.After, material.AfterHash
-	if request.Target == "previous" {
-		raw, hash = material.Before, material.BeforeHash
+	change, err := loadUFWChange(dataDir)
+	if err != nil || change == nil || change.Operation.ID != request.OperationID || change.Transition.Owner != authority.NextClaim.Owner || change.Transition.MachineHash != authority.NextClaim.MachineHash || change.Transition.RegistrationOperationID != authority.NextClaim.OperationID {
+		return nil, errors.New("UFW 原生执行缺少原 root 业务转换快照")
 	}
-	if hash != secure.Hash(raw) {
-		return nil, errors.New("UFW 原生执行材料与受信计划不一致")
+	var material *ufwReloadMaterial
+	for _, step := range change.Steps {
+		if step.ID == request.ID && step.Target == request.Target {
+			for index := range change.Transition.Materials {
+				if change.Transition.Materials[index].Family == step.Family {
+					material = &change.Transition.Materials[index]
+				}
+			}
+		}
 	}
-	if _, err = ufwReloadConfigured(raw, material.Family); err != nil {
+	if material == nil {
+		return nil, errors.New("UFW 子进程不属于原业务预先固定的地址族与执行方向")
+	}
+	raw, err := ufwRestorePayload(*material, request.Target)
+	if err != nil {
 		return nil, err
 	}
-	r := &ufwRestoreReceipt{Schema: 1, ID: request.ID, OperationID: request.OperationID, Owner: authority.NextClaim.Owner, MachineHash: authority.NextClaim.MachineHash, RegistrationOperationID: authority.NextClaim.OperationID, BatchHash: request.BatchHash, ProgramHash: request.ProgramHash, ToolchainHash: request.ToolchainHash, Target: request.Target, Family: material.Family, InputHash: hash, InputBytes: len(raw), Python: material.Python, Restore: material.Restore, Blocker: material.Blocker, GuardHash: secure.Hash([]byte(ufwRestoreGate)), Phase: "prepared", ExitCode: -1, UpdatedAt: time.Now().Unix()}
+	r := &ufwRestoreReceipt{Schema: 1, ID: request.ID, OperationID: request.OperationID, Owner: authority.NextClaim.Owner, MachineHash: authority.NextClaim.MachineHash, RegistrationOperationID: authority.NextClaim.OperationID, BatchHash: change.Transition.BatchHash, ProgramHash: change.Policy.ProgramHash, ToolchainHash: change.Transition.Tools.Hash, Target: request.Target, Family: material.Family, InputHash: secure.Hash(raw), InputBytes: len(raw), Python: material.Python, Restore: material.Restore, Blocker: material.Blocker, GuardHash: secure.Hash([]byte(ufwRestoreGate)), Phase: "prepared", ExitCode: -1, UpdatedAt: time.Now().Unix()}
 	r.RequestHash = ufwRestoreRequestHash(*r)
 	if !validUFWRestoreReceipt(r) {
 		return nil, errors.New("UFW 原生执行意图无效")
@@ -289,11 +308,11 @@ func runUFWRestore(ctx context.Context, dataDir string, request ufwRestoreReques
 	if err != nil {
 		return nil, err
 	}
-	if ufwRestoreProcessPending(dataDir) || ufwRestorePending(dataDir) && previous != nil && previous.OperationID != r.OperationID {
+	if ufwRestoreProcessPending(dataDir) || previous != nil && previous.OperationID != r.OperationID && ufwRestoreParentPending(dataDir, previous) {
 		return nil, errors.New("原 UFW 子进程尚未完成核对，禁止重放或补偿")
 	}
 	parent, err := loadUFWReceipt(dataDir, r.OperationID)
-	if err != nil || parent.Kind != firewallOperationKind || parent.Firewall == nil {
+	if err != nil || !ufwChangeReceiptMatches(parent, change) {
 		return nil, errors.New("UFW 原生执行缺少已接受的 root 业务操作")
 	}
 	op := parent.Firewall
@@ -305,13 +324,28 @@ func runUFWRestore(ctx context.Context, dataDir string, request ufwRestoreReques
 		ctx, cancel = context.WithDeadline(ctx, time.Unix(parent.Firewall.Deadline, 0))
 		defer cancel()
 	}
+	managerLock, err := lockUFWManager()
+	if err != nil {
+		return nil, err
+	}
+	defer managerLock.Close()
+	if err = checkUFWTransitionSources(ctx, dataDir, &change.Transition); err != nil {
+		return nil, err
+	}
+	for _, family := range change.Transition.Materials {
+		image, err := readUFWTransitionKernel(ctx, &change.Transition, family.Family, dataDir)
+		before, after := sameUFWReloadImage(image, family.BeforeKernel), sameUFWReloadImage(image, family.AfterKernel)
+		if err != nil || !before && !after || r.Target == "candidate" && family.Family == r.Family && !before {
+			return nil, errors.New("UFW 当前重载范围不属于原状态或原候选，禁止提交和覆盖")
+		}
+	}
 	if err = secure.RootDirectory(filepath.Dir(ufwRestorePath(dataDir)), 0700); err != nil {
 		return nil, err
 	}
 	if err = saveUFWRestore(dataDir, r); err != nil {
 		return r, err
 	}
-	return executeUFWRestore(ctx, dataDir, r, raw)
+	return executeUFWRestore(ctx, dataDir, r, raw, managerLock)
 }
 
 func ufwRestoreResult(r *ufwRestoreReceipt) error {
@@ -324,7 +358,7 @@ func ufwRestoreResult(r *ufwRestoreReceipt) error {
 	return nil
 }
 
-func executeUFWRestore(ctx context.Context, dataDir string, r *ufwRestoreReceipt, input []byte) (_ *ufwRestoreReceipt, resultErr error) {
+func executeUFWRestore(ctx context.Context, dataDir string, r *ufwRestoreReceipt, input []byte, managerLock *os.File) (_ *ufwRestoreReceipt, resultErr error) {
 	// This thread remains alive for Pdeathsig throughout the child lifetime.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -367,7 +401,7 @@ func executeUFWRestore(ctx context.Context, dataDir string, r *ufwRestoreReceipt
 	defer cancel()
 	command := exec.CommandContext(call, "/proc/self/fd/5", "-I", "-S", "-B", "-c", ufwRestoreGate, string(encoded))
 	command.Args[0] = r.Python.Invoked
-	command.ExtraFiles = []*os.File{gate, restore, python, blocker}
+	command.ExtraFiles = []*os.File{gate, restore, python, blocker, managerLock}
 	command.Dir = "/"
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C", "PYTHONDONTWRITEBYTECODE=1"}
 	command.Stdin = bytes.NewReader(input)
@@ -387,6 +421,9 @@ func executeUFWRestore(ctx context.Context, dataDir string, r *ufwRestoreReceipt
 	}
 	if err == nil {
 		err = call.Err()
+	}
+	if err == nil {
+		err = verifyUFWManagerLock(managerLock)
 	}
 	if err == nil {
 		var n int
@@ -490,7 +527,16 @@ func recoverUFWRestore(ctx context.Context, dataDir string) error {
 }
 
 func (f *hostFirewall) recoverUFWProcess(ctx context.Context) error {
+	if err := recoverUFWChange(ctx, f.dataDir); err != nil {
+		f.problem = ufwProcessProblem + err.Error()
+		return err
+	}
 	if err := recoverUFWRestore(ctx, f.dataDir); err != nil {
+		f.problem = ufwProcessProblem + err.Error()
+		return err
+	}
+	if ufwRestorePending(f.dataDir) {
+		err := errors.New("原 UFW 业务操作回执仍未完成，禁止新写入")
 		f.problem = ufwProcessProblem + err.Error()
 		return err
 	}

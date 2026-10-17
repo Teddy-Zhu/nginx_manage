@@ -41,6 +41,7 @@ type ufwDryRunProof struct {
 	PreservedRules                             int
 	Warnings                                   []string
 	Materials                                  []ufwReloadMaterial
+	Tools                                      ufwToolBinding
 }
 
 func ufwTool() (string, error) {
@@ -266,6 +267,21 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 	if proof.Reload.Hash != afterReload.Hash {
 		return proof, errors.New("UFW 重载范围的运行规则或绑定后端在预演期间变化，请重新准备计划")
 	}
+	for _, item := range []struct{ family, path string }{{"ipv4", "/etc/ufw/user.rules"}, {"ipv6", "/etc/ufw/user6.rules"}} {
+		if item.family == "ipv6" && !ipv6 {
+			continue
+		}
+		projected, err := projectUFWAuxiliaries(baseline.Contents[item.path], workspace.contents[item.path], item.family)
+		if err != nil {
+			return proof, err
+		}
+		if !bytes.Equal(projected, workspace.contents[item.path]) {
+			if err = workspace.replace(item.family, projected); err != nil {
+				return proof, err
+			}
+			proof.Warnings = append(proof.Warnings, item.family+" 候选保留原日志与限速辅助规则；不应用 dry-run 的能力默认值")
+		}
+	}
 	if err = binding.verify(ctx); err != nil {
 		return proof, err
 	}
@@ -293,7 +309,28 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 			return proof, err
 		}
 		original, candidate := baseline.Contents[item.path], workspace.contents[item.path]
-		proof.Materials = append(proof.Materials, ufwReloadMaterial{Family: item.family, BeforeHash: secure.Hash(original), AfterHash: secure.Hash(candidate), Before: bytes.Clone(original), After: bytes.Clone(candidate), Python: python, Restore: restore, Blocker: blocker})
+		var observed []ufwReloadChain
+		for _, family := range proof.Reload.Families {
+			if family.Family == item.family {
+				observed = family.Chains
+			}
+		}
+		previous, next, err := ufwReloadImages(original, candidate, item.family, observed)
+		if err != nil {
+			return proof, err
+		}
+		material := ufwReloadMaterial{Family: item.family, BeforeHash: secure.Hash(original), AfterHash: secure.Hash(candidate), Before: bytes.Clone(original), After: bytes.Clone(candidate), Python: python, Restore: restore, Blocker: blocker, BeforeKernel: previous, AfterKernel: next}
+		for _, target := range []string{"candidate", "previous"} {
+			if _, err = ufwRestorePayload(material, target); err != nil {
+				return proof, err
+			}
+		}
+		proof.Materials = append(proof.Materials, material)
+	}
+	proof.Tools = *binding
+	proof.Tools.Files = append([]ufwBoundFile{}, binding.Files...)
+	for index := range proof.Tools.Files {
+		proof.Tools.Files[index].Raw = nil
 	}
 	return proof, nil
 }

@@ -222,17 +222,23 @@ UFW 没有独立空 policy 对象，此登记只授权空规则命名空间，�
 
 UFW 根据 tuple 重建用户文件，普通注释只保存在 tuple，并不进入内核报文表达式。计划使用同次受信读取的 `user.rules/user6.rules` 内容逐块核对：新增首块须与类型化生成参数的地址族、来源、接口、TCP/UDP、单端口/范围和动作完全对应，TCP reject 还须生成 RST；其余 tuple 及对应全部报文规则必须保持原顺序、原内容。新增块夹带规则、旧块丢失/重排、无报文 tuple、未绑定 tuple 的自定义原生规则或未知文件结构均拒绝，不根据注释认领规则。既有与生成 tuple 合计最多 8192 条，完整生成原生规则材料仍受 480 KiB 预算约束。
 
-日志段须保持一致；限速段变化仅允许官方 dry-run 固定 IPv4 开启、IPv6 关闭的能力默认值与源文件不同，且只涉及精确已知的限速链及标准辅助规则，单独提示待核对。不能把该投影当成实际写入或内核能力。精确匹配官方空初始模板时允许候选生成标准链、日志及限速段，并明确提示首次标准化；任意自定义空文件不作为初始模板。除这些明确场景外，未知辅助规则变化均拒绝。
+日志段须保持一致；限速段变化仅允许官方 dry-run 固定 IPv4 开启、IPv6 关闭的能力默认值与源文件不同，且只涉及精确已知的限速链及标准辅助规则，单独提示待核对。精确匹配官方空初始模板时允许预演生成标准链、日志及限速段；任意自定义空文件不作为初始模板。最终候选保留原日志与限速辅助规则，不能把 dry-run 的能力默认值当成实际写入或内核能力；数值型入站规则不需要触发真实能力探测。投影后再次核对完整用户块、顺序和重载表达式，未知变化均拒绝。
 
-累积 dry-run 核对的是隔离文件批次，不证明候选已生效或第三方规则所有权。UFW dry-run 本身跳过普通 UFW 写入锁，宿主机前后摘要仅检测漂移，不提供原子锁定。计划 `ufw` 字段增加源码与工具绑定摘要 `toolchain_hash` 和解释器版本 `python_version`，并展示配置、CLI、按实际执行顺序计算的完整预演输出摘要 `dry_run_hash`、按目标顺序计算的原生材料摘要 `native_program_hash`、既有原生 tuple 数量 `preserved_rules` 及命令/保护计数；`batch_hash` 使用 v2 摘要域，绑定原配置基线、源码与工具、完整原生程序、各步输出和最终两个用户文件的内容摘要、大小及存在性。`reload_backend/reload_hash` 标识本次原运行重载范围及绑定的 command/save/restore 版本，使用 v2 摘要域保留每个固定链的存在性和有序规则；`reload_chains/reload_rules` 展示实际存在的用户链和报文规则数量，后者包含日志、限速规则，与 tuple 数量不同。私有材料完成后清理，不作为持久执行回执。
+累积 dry-run 核对的是隔离文件批次，不证明候选已生效或第三方规则所有权。UFW dry-run 本身跳过普通 UFW 写入锁，宿主机前后摘要仅检测漂移，不提供原子锁定。计划 `ufw` 字段增加源码与工具绑定摘要 `toolchain_hash` 和解释器版本 `python_version`，并展示配置、CLI、按实际执行顺序计算的完整预演输出摘要 `dry_run_hash`、按目标顺序计算的原生材料摘要 `native_program_hash`、既有原生 tuple 数量 `preserved_rules` 及命令/保护计数；`batch_hash` 使用 v3 摘要域，绑定原配置基线、源码与工具、完整原生程序、各步输出和最终两个用户文件的内容摘要、大小及存在性。`reload_backend/reload_hash` 标识本次原运行重载范围及绑定的 command/save/restore 版本，使用 v2 摘要域保留每个固定链的存在性和有序规则；`reload_chains/reload_rules` 展示实际存在的用户链和报文规则数量，后者包含日志、限速规则，与 tuple 数量不同。私有临时目录在预演结束后清理，计划材料本身不作为持久执行回执。
 
-root 私有计划现保留已核对地址族的原用户文件、官方完整候选及对应工具绑定，随原最多八份计划过期释放；不通过 API 返回原文件，也不作为规则写入回执。底层固定重载进程传输已实现，尚未由 Web/API 应用入口调度；调用者仍须先保存原业务转换、取得宿主机登记锁并核对当前配置及内核。传输只接收 root 计划材料，对应已接受的 root 防火墙父操作；候选须仍在执行期限内，恢复只允许原补偿状态。固定参数为 noflush、有限 xtables 等待和禁止模块加载，不接受用户命令或程序路径。
+root 私有计划保留已核对地址族的原用户文件、完整候选、配置身份清单、全部工具绑定及原/候选内核链镜像，随原最多八份计划过期释放；不通过 API 返回原文件。封闭重载程序仅声明两个状态涉及的固定 UFW 用户链；恢复时撤销本次新增而原先不存在的链，不重放内置链、其他表、第三方跳转或历史计数器。全部输入、原生块保留、辅助规则、链存在性及双向程序均须通过原策略的重新编译核对。
+
+私有受理器先核对原本机授权、配置、工具及全部原内核状态，再保存 `agent/firewall/ufw-change.json`（最多 16 MiB）及 root 父业务回执。快照冻结原转换、确认期限和每个地址族/方向的独立调用 ID；后续状态推进不得改变原意图或重开终态。底层传输不接受调用方提供的规则、路径或材料，只从原快照选择对应调用。候选须仍在执行期限内，恢复只允许原补偿状态；固定参数为 noflush、有限 xtables 等待和禁止模块加载。Web/API 尚未调度正常受理与应用。
+
+受理、提交及最终恢复核对使用官方 `/run/ufw.lock`。UFW 使用 POSIX `lockf`，此处使用与之互斥的 Linux OFD 写锁，不能用互不相干的 `flock` 替代。固定锁文件须为 root 持有的单链接普通文件，重新核对原路径/inode；同一打开描述符传给子进程并保留到退出，父进程退出不会提前释放仍在运行的子进程所持锁。锁只排除遵守它的 UFW 操作，直接外部写入仍须由内核前后核对发现。
 
 最新子进程检查点使用 `agent/firewall/ufw-execution.json`，每次调用另在原 root 操作日志保留 `firewall.ufw.restore` 回执。意图绑定父操作、原登记、宿主机、地址族、批次/程序/工具与输入摘要、固定许可程序及工具文件身份。先落盘 `prepared`，再启动只等待一次性管道许可的隔离 Python 子进程；PID、boot ID 和启动时间进入 `permitted` 检查点及审计回执后才发送许可。随后同一进程以固定文件描述符 exec 受信 restore ELF，保留原调用名供 xtables multi 使用；固定 false 描述符阻止 modprobe 回退。解释器、restore 和 false 均重新核对，拒绝 set-id、文件能力及未知能力属性；父线程保持到子进程结束，并设置父进程死亡信号。无许可时 EOF 不会执行工具；许可发布后的中断按未知结果处理。
 
-每个进程最多三秒，标准输出/错误各 8 KiB，只有完整、无输出或警告的成功退出才记录进程成功；这不证明内核规则已生效。相同调用 ID 只读取原回执，不重新提交；不能确认结束时保留原许可。Agent 启动及独立循环、停止路径与本机 `ufw-recover` 可核对原进程，以 boot ID/PID/启动时间和 pidfd 只终止原实例，等待结束后保留未知结果，不重放规则或伪造回滚成功。进程未结束、回执不一致或父业务操作未完成时，计划、授权初始化/释放及维护保持阻塞；子进程终态不会结束父操作。实际执行前后的完整配置/内核核对、受管规则所有权转换、确认后的持久配置安装、新连接确认及业务补偿仍须接入。
+每个进程最多三秒，标准输出/错误各 8 KiB，只有完整、无输出或警告的成功退出才记录进程成功；这不证明内核规则已生效。相同调用 ID 只读取原回执，不重新提交；不能确认结束时保留原许可。Agent 启动、独立循环/停止及本机 `ufw-recover` 先以 boot ID/PID/启动时间和 pidfd 只终止原进程实例，等待结束后保留未知结果。子进程终态不会直接结束父操作。
 
-`can_apply=false`，Web 和 root 应用入口仍拒绝创建业务操作或确认窗口。官方非 dry-run 能力探测会创建和清除临时内核链，当前底层传输不调用该路径，也不据工具绑定自动授权它。实际应用、新连接确认及持久恢复继续实施；当前 64 条及原请求期限预算不代表已完成千条规则容量验收。迁移只保存中立期望，不复制本机登记、宿主机占用或 root 回执，在目标另行授权并准备保护计划。Agent 为 81，数据库/迁移归档仍为 32/6。实现与源码审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、真实 UFW/iptables 命令或宿主机变更，待 P5 集中验证。
+原临时业务恢复先持久化补偿方向，逐地址族要求当前完整镜像等于原状态或原候选：已恢复的不写入，仍为候选的只执行原预分配恢复调用，其他状态拒绝覆盖。执行前重新核对原配置、工具和全部地址族；结束后核对本地址族，最终在官方管理锁下重新核对全部原内核及未改动的持久文件，才发布父操作 `rolled_back`。原进程未结束、配置/工具漂移、额外规则或回执冲突均保留 `recovery_required`，不以成功退出或缺失回复代替内核结果。发布中断从原快照修复同一回执，进程/父操作未结束时继续阻止计划、授权释放及维护。该层处理原持久文件尚未改变的临时转换；正常应用、已确认所有权更新/移除、新连接确认及确认后持久文件安装/补偿仍须完成。
+
+`can_apply=false`，Web 和 root 应用入口仍拒绝创建业务操作或确认窗口。官方非 dry-run 能力探测会创建和清除临时内核链，当前底层传输不调用该路径，也不据工具绑定自动授权它。实际应用、新连接确认及持久恢复继续实施；当前 64 条及原请求期限预算不代表已完成千条规则容量验收。迁移只保存中立期望，不复制本机登记、宿主机占用或 root 回执，在目标另行授权并准备保护计划。Agent 为 82，数据库/迁移归档仍为 32/6。实现与源码审阅完成，未运行生成器、构建、类型检查、lint、测试、浏览器、真实 UFW/iptables 命令或宿主机变更，待 P5 集中验证。
 
 依据：[Ubuntu UFW 手册](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html)、[Ubuntu 官方 UFW 0.36.2 源码归档](https://archive.ubuntu.com/ubuntu/pool/main/u/ufw/ufw_0.36.2.orig.tar.gz) 中的 CLI `--datadir`、`util._findpath/create_lock/open_files/close_files`、`applications.get_profiles`、`frontend.get_show_added`、`UFWCommandRule.get_command`、`UFWRule.match/format_rule`、`_read_rules/_write_rules`、`initcaps`、`conf/user.rules` 与 `conf/user6.rules` 及后端规则更新流程。
 
@@ -240,4 +246,4 @@ root 私有计划现保留已核对地址族的原用户文件、官方完整候
 
 Python 隔离及源包定位依据：[命令行选项](https://docs.python.org/3/using/cmdline.html)、[site 模块](https://docs.python.org/3/library/site.html)、[importlib](https://docs.python.org/3/library/importlib.html)。
 
-进程许可与恢复依据：[Python execve 描述符及进程替换语义](https://docs.python.org/3/library/os.html#os.execve)、[父进程死亡信号](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)、[pidfd_open](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) 与 [pidfd_send_signal](https://man7.org/linux/man-pages/man2/pidfd_send_signal.2.html)。
+进程许可与恢复依据：[Python execve 描述符及进程替换语义](https://docs.python.org/3/library/os.html#os.execve)、[父进程死亡信号](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)、[pidfd_open](https://man7.org/linux/man-pages/man2/pidfd_open.2.html)、[pidfd_send_signal](https://man7.org/linux/man-pages/man2/pidfd_send_signal.2.html) 与 [Linux OFD/POSIX 文件锁互斥和继承语义](https://man7.org/linux/man-pages/man2/F_OFD_SETLK.2const.html)。

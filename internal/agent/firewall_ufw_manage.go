@@ -76,8 +76,9 @@ func inspectUFWRegistration(ctx context.Context, dataDir string, active bool) (u
 	return out, nil
 }
 
-// These commands only manage root metadata for an empty rule namespace. They
-// never add/delete rules, enable/reload UFW, or reconstruct manager files.
+// Initial registration and release manage only an empty rule namespace.
+// Recovery can also compensate the original accepted temporary transition;
+// it never enables UFW or admits a new policy.
 func ManageUFWRegistration(parent context.Context, dataDir, scope, action string) (UFWRegistrationStatus, error) {
 	var out UFWRegistrationStatus
 	if !slices.Contains([]string{"init", "status", "recover", "remove"}, action) {
@@ -94,6 +95,11 @@ func ManageUFWRegistration(parent context.Context, dataDir, scope, action string
 	defer cancel()
 	if action == "status" {
 		return ufwRegistrationStatus(ctx, dataDir), nil
+	}
+	if action == "recover" && ufwChangePending(dataDir) {
+		if err = recoverUFWChange(ctx, dataDir); err != nil {
+			return ufwRegistrationStatus(ctx, dataDir), err
+		}
 	}
 	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("firewall-registration.lock")
 	if err != nil {

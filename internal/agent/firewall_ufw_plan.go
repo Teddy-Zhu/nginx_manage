@@ -121,15 +121,19 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 		ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: len(program.Rules),
 		UFW: &firewall.UFWPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, ToolchainHash: dryRun.ToolchainHash, PythonVersion: dryRun.PythonVersion, DryRunHash: dryRun.Hash, NativeProgramHash: dryRun.NativeHash, BatchHash: dryRun.BatchHash, ReloadBackend: reload.Backend, ReloadHash: reload.Hash, ReloadChains: reload.Chains, ReloadRules: reload.Rules, PreservedRules: dryRun.PreservedRules, DryRunCommands: len(program.Rules), ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
 			Warnings: warnings,
-			Reason:   "本机授权、受信源码与后端工具、原重载范围及隔离批次候选已核对；实际应用、新连接确认和独立恢复尚未接入"},
+			Reason:   "本机授权、受信工具、原重载范围及批次候选已核对；正常应用、新连接确认及确认后持久化尚未开放"},
 	}
 	record := &firewallPolicyRecord{Action: in.Action, PlanID: id, Version: in.Version, Policy: policy, PolicyHash: hash, ProgramHash: program.Hash, Protections: protections, Marker: firewall.UFWCommentPrefix + registered.NextClaim.Owner + ":" + id + ":",
 		ProtectionBasis: firewallProtectionBasis{SSHProfile: f.sshMode, SSHListeners: listeners, Listener: out.Listener, AllowedSources: append([]string{}, f.remote.state.Confirmed.AllowedSources...), ControlSource: source}}
+	transition, err := newUFWTransition(registered, before, dryRun, *observed.UFW.IPv6, *record)
+	if err != nil {
+		return firewall.Plan{}, fault.Unavailable(err.Error())
+	}
 	if err = f.storePlanLocked(out, record); err != nil {
 		return out, err
 	}
 	private := f.plans[id]
-	private.ufw = dryRun.Materials
+	private.ufw = transition
 	f.plans[id] = private
 	return out, nil
 }

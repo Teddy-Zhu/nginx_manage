@@ -71,7 +71,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 		return f.applyFirewalldLocked(ctx, id, planID, version, policyHash, action, connection)
 	}
 	if f.owner == "ufw" && f.state.Schema == 0 {
-		return out, fault.Unavailable("UFW 当前仅准备保护计划与 dry-run，应用和独立恢复尚未接入")
+		return out, fault.Unavailable("UFW 当前仅准备保护计划，正常应用、确认及持久化尚未开放")
 	}
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("防火墙执行未就绪")
@@ -489,8 +489,8 @@ func (f *hostFirewall) Run(ctx context.Context) {
 		f.mu.Lock()
 		if f.firewalldState == nil && f.state.Schema == 0 && (stopping || !time.Now().Before(nextUFWProcessInspect)) {
 			nextUFWProcessInspect = time.Now().Add(10 * time.Second)
-			if ufwRestoreProcessPending(f.dataDir) || strings.HasPrefix(f.problem, ufwProcessProblem) {
-				call, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			if ufwRestorePending(f.dataDir) || strings.HasPrefix(f.problem, ufwProcessProblem) {
+				call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				_ = f.recoverUFWProcess(call)
 				cancel()
 			}
