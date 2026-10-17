@@ -74,10 +74,16 @@ const families = ref([
   },
 ]);
 const networkManager = computed(
-  () => observed.value?.owner === "networkmanager",
+  () =>
+    observed.value?.owner === "networkmanager" ||
+    (observed.value?.owner === "netplan" &&
+      !target.value.startsWith("networkd:")),
 );
-const networkd = computed(() =>
-  ["networkd", "netplan"].includes(observed.value?.owner ?? ""),
+const networkd = computed(
+  () =>
+    observed.value?.owner === "networkd" ||
+    (observed.value?.owner === "netplan" &&
+      target.value.startsWith("networkd:")),
 );
 const connection = computed(() =>
   observed.value?.connections.find((c) => c.target === target.value),
@@ -98,18 +104,20 @@ const writable = computed(
     (!networkManager.value || connection.value?.writable) &&
     (!networkd.value || networkLink.value?.writable),
 );
-const choices = computed(
-  () =>
-    networkd.value
-      ? observed.value?.links.map((link) => ({
+const choices = computed(() => [
+  ...(["networkd", "netplan"].includes(observed.value?.owner ?? "")
+    ? (observed.value?.links.map((link) => ({
           label: `${link.interface}${link.writable ? "" : "（只读）"}`,
           value: link.target,
-        })) ?? []
-      : observed.value?.connections.map((c) => ({
+        })) ?? [])
+    : []),
+  ...(["networkmanager", "netplan"].includes(observed.value?.owner ?? "")
+    ? (observed.value?.connections.map((c) => ({
           label: `${c.name} · ${c.interface}${c.writable ? "" : "（只读）"}`,
           value: c.target,
-        })) ?? [],
-);
+        })) ?? [])
+    : []),
+]);
 const configText = (config: HostDNSPlanInput["config"] | null | undefined) => {
   if (!config) return "无法读取";
   if (!config.ipv4 && !config.ipv6)
@@ -289,9 +297,11 @@ async function read() {
     ]);
     overview.value = state;
     const targets =
-      ["networkd", "netplan"].includes(state.observed.owner)
-        ? state.observed.links
-        : state.observed.connections;
+      state.observed.owner === "netplan"
+        ? [...state.observed.links, ...state.observed.connections]
+        : state.observed.owner === "networkd"
+          ? state.observed.links
+          : state.observed.connections;
     const needsTarget = ["networkd", "netplan", "networkmanager"].includes(
       state.observed.owner,
     );
@@ -370,11 +380,11 @@ async function loadMigrationCandidate() {
       throw new Error("迁移计划中没有已保存的目标 DNS 配置");
     if (
       !observed.value ||
-      (networkManager.value
-        ? !observed.value.connections.some((c) => c.target === item.target)
-        : networkd.value
-          ? !observed.value.links.some((link) => link.target === item.target)
-          : observed.value.owner !== "regular-file" || item.target !== "")
+      (["networkmanager", "networkd", "netplan"].includes(observed.value.owner)
+        ? ![...observed.value.connections, ...observed.value.links].some(
+            (entry) => entry.target === item.target,
+          )
+        : observed.value.owner !== "regular-file" || item.target !== "")
     )
       throw new Error("迁移映射目标与当前 DNS 所有者不匹配，须重新映射");
     target.value = item.target;
@@ -758,8 +768,11 @@ onUnmounted(() => {
           @update:value="invalidate"
       /></n-form-item>
     </template>
-    <template v-else
-      ><template v-for="family in families" :key="family.label">
+    <template v-else>
+      <NAlert v-if="observed?.owner === 'netplan'" type="info">
+        此连接的 IPv4 与 IPv6 共用搜索域。
+      </NAlert>
+      <template v-for="family in families" :key="family.label">
         <div v-if="family.enabled">
           <h4>{{ family.label }}</h4>
           <n-form-item label="自动获取 DNS">

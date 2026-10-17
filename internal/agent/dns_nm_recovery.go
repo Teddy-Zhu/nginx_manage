@@ -17,10 +17,11 @@ import (
 )
 
 type nmPending struct {
-	Persistent bool   `json:"persistent"`
-	Version    uint64 `json:"version"`
-	Path       string `json:"path"`
-	Active     string `json:"active"`
+	Persistent bool            `json:"persistent"`
+	Version    uint64          `json:"version"`
+	Path       string          `json:"path"`
+	Active     string          `json:"active"`
+	Process    networkdProcess `json:"process"`
 }
 type nmCheckpoint struct {
 	BusID            string     `json:"bus_id"`
@@ -143,13 +144,19 @@ func (d *HostDNS) nmApply(id string, plan hostdns.Plan) (hostdns.Status, error) 
 	return d.checkpoint.Status, d.persist()
 }
 func (d *HostDNS) nmSession(ctx context.Context) (*dnsBus, *nmTarget, error) {
+	if d.hostScopeReason() != "" {
+		return nil, nil, errors.New("host DNS scope is unconfirmed")
+	}
 	b, e := openDNSBus(ctx)
 	if e != nil {
 		return nil, nil, e
 	}
-	t, e := nmFind(b, d.checkpoint.Plan.Input.Target)
+	t, e := nmFindSource(b, d.checkpoint.Plan.Input.Target, d.checkpoint.Netplan != nil)
 	if e == nil && t.Filename != d.checkpoint.NM.Filename {
 		e = errors.New("persistent source changed")
+	}
+	if e == nil && d.checkpoint.Netplan != nil {
+		e = d.netplanNMSession(t)
 	}
 	if e != nil {
 		b.close()
@@ -172,7 +179,11 @@ func (d *HostDNS) nmWrite(b *dnsBus, t *nmTarget, persistent bool, want nmDNS) e
 	}
 	n.BusID = b.busID
 	n.Owner = b.owner
-	pending := &nmPending{Persistent: persistent, Version: nmVersion(t, persistent), Path: string(t.Device), Active: string(t.Active)}
+	peer, e := b.processIdentity()
+	if e != nil {
+		return e
+	}
+	pending := &nmPending{Persistent: persistent, Version: nmVersion(t, persistent), Path: string(t.Device), Active: string(t.Active), Process: peer}
 	if persistent {
 		pending.Path = string(t.Profile)
 	}
@@ -189,6 +200,11 @@ func (d *HostDNS) nmWrite(b *dnsBus, t *nmTarget, persistent bool, want nmDNS) e
 			}
 		}
 		return e
+	}
+	if persistent && d.checkpoint.Netplan != nil {
+		if e := d.netplanNMCapture(b, t, want); e != nil {
+			return e
+		}
 	}
 	// A reply proves completion; persisting its consumption precedes any other
 	// mutation. A crash before consumption is handled by the version fence.
@@ -221,6 +237,13 @@ func (d *HostDNS) nmCheck(ctx context.Context, persistent bool) (string, error) 
 	if !nmSame(p, expected) || n.Pending != nil {
 		return "", nmReadError()
 	}
+	if d.checkpoint.Netplan != nil {
+		hash, err := d.netplanNMCheck(t, persistent)
+		if err != nil {
+			return "", err
+		}
+		return hash, b.unchangedOwner()
+	}
 	return t.View.SourceHash, b.unchangedOwner()
 }
 func (d *HostDNS) nmConfirm(ctx context.Context) error {
@@ -242,8 +265,24 @@ func (d *HostDNS) nmConfirm(ctx context.Context) error {
 	if e = d.persist(); e != nil {
 		return e
 	}
+	if d.checkpoint.Netplan != nil {
+		if _, e = d.netplanNMCheck(t, false); e != nil {
+			return e
+		}
+		if e = d.netplanPersistSource(); e != nil {
+			return e
+		}
+		if d.expired() {
+			return errors.New("netplan confirmation deadline elapsed")
+		}
+	}
 	if !nmSame(n.BeforePersistent, n.AfterPersistent) {
 		if e = d.nmWrite(b, t, true, n.AfterPersistent); e != nil {
+			return e
+		}
+	}
+	if d.checkpoint.Netplan != nil {
+		if e = d.netplanNMCanonical(true); e != nil {
 			return e
 		}
 	}
@@ -299,6 +338,11 @@ func (d *HostDNS) nmRestoreOne(ctx context.Context, persistent bool) error {
 			if e = nmUpdate(b, t, persistent, s); e != nil {
 				return e
 			}
+			if persistent && d.checkpoint.Netplan != nil {
+				if e = d.netplanNMCapture(b, t, fence); e != nil {
+					return e
+				}
+			}
 			b.close()
 			next, nt, err := d.nmSession(ctx)
 			if err != nil {
@@ -327,9 +371,28 @@ func (d *HostDNS) nmRestoreOne(ctx context.Context, persistent bool) error {
 	return d.nmWrite(b, t, persistent, before)
 }
 func (d *HostDNS) nmRollback() (string, error) {
+	if d.hostScopeReason() != "" {
+		return "", errors.New("host DNS scope is unconfirmed")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	n := d.checkpoint.NM
+	if d.checkpoint.Netplan != nil {
+		if e := d.netplanRestoreSource(); e != nil {
+			return "", e
+		}
+		if e := d.netplanNMCanonical(false); e != nil {
+			return "", e
+		}
+	}
+	if n.Pending != nil && networkdCallEnded(n.Pending.Process) {
+		pending := n.Pending
+		n.Pending = nil
+		if e := d.persist(); e != nil {
+			n.Pending = pending
+			return "", e
+		}
+	}
 	// Fence the outstanding phase first. Never overwrite its durable identity
 	// with a compensating call for the other address state.
 	first := true
@@ -341,6 +404,11 @@ func (d *HostDNS) nmRollback() (string, error) {
 	}
 	if e := d.nmRestoreOne(ctx, !first); e != nil {
 		return "", e
+	}
+	if d.checkpoint.Netplan != nil {
+		if e := d.netplanNMCanonical(false); e != nil {
+			return "", e
+		}
 	}
 	b, t, e := d.nmSession(ctx)
 	if e != nil {
@@ -355,10 +423,23 @@ func (d *HostDNS) nmRollback() (string, error) {
 	if e != nil || !nmSame(p, n.BeforePersistent) || n.Pending != nil {
 		return "", nmReadError()
 	}
+	if d.checkpoint.Netplan != nil {
+		if e = cleanDNSFileTemp(n.Filename, d.checkpoint.Status.OperationID); e != nil {
+			return "", e
+		}
+		if e = cleanDNSFileTemp(d.checkpoint.Netplan.File, d.checkpoint.Status.OperationID); e != nil {
+			return "", e
+		}
+		hash, err := d.netplanNMCheck(t, false)
+		if err != nil {
+			return "", err
+		}
+		return hash, b.unchangedOwner()
+	}
 	return t.View.SourceHash, b.unchangedOwner()
 }
 func (c *dnsCheckpoint) validateNM() error {
-	if c.NM == nil || c.Plan.Owner != "networkmanager" || c.Plan.Input.Target == "" {
+	if c.NM == nil || c.Networkd != nil || !(c.Plan.Owner == "networkmanager" && c.Netplan == nil || c.Plan.Owner == "netplan" && c.Netplan != nil) || c.Plan.Input.Target == "" || hostdns.NetworkdTarget(c.Plan.Input.Target) {
 		return errors.New("invalid NetworkManager recovery target")
 	}
 	n := c.NM
@@ -368,8 +449,16 @@ func (c *dnsCheckpoint) validateNM() error {
 	if n.Pending != nil && (n.Pending.Version == 0 || !strings.HasPrefix(n.Pending.Path, "/org/freedesktop/NetworkManager/") || len(n.Pending.Path) > 256 || len(n.Pending.Active) > 256) {
 		return errors.New("invalid pending DNS version")
 	}
-	if filepath.Dir(n.Filename) != "/etc/NetworkManager/system-connections" || !strings.HasSuffix(n.Filename, ".nmconnection") || n.SnapshotHash != n.hash() {
+	if n.Pending != nil && !validDNSProcess(n.Pending.Process) {
+		return errors.New("invalid pending NetworkManager process")
+	}
+	if n.SnapshotHash != n.hash() || c.Netplan == nil && (filepath.Dir(n.Filename) != "/etc/NetworkManager/system-connections" || !strings.HasSuffix(n.Filename, ".nmconnection")) {
 		return errors.New("invalid DNS snapshot identity")
+	}
+	if c.Netplan != nil {
+		if e := c.validateNetplanNM(); e != nil {
+			return e
+		}
 	}
 	for i, snapshot := range []nmDNS{n.BeforeApplied, n.AfterApplied, n.BeforePersistent, n.AfterPersistent} {
 		if len(snapshot) > 2 {
@@ -399,7 +488,11 @@ func (c *dnsCheckpoint) validateNM() error {
 			}
 		}
 		if i == 0 || i == 2 {
-			if e := nmModify(s, c.Plan.Input.Config); e != nil {
+			modify := nmModify
+			if c.Netplan != nil {
+				modify = netplanNMModify
+			}
+			if e := modify(s, c.Plan.Input.Config); e != nil {
 				return e
 			}
 			after, e := nmCapture(s)

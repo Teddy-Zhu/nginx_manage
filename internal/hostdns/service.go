@@ -151,7 +151,7 @@ func (s *Service) CreatePlan(ctx context.Context, p auth.Principal, requestID, k
 		if desiredCount >= 64 {
 			return nil, fault.Conflict("已保存 DNS 目标达到上限")
 		}
-		call, cancel := context.WithTimeout(ctx, 4*time.Second)
+		call, cancel := context.WithTimeout(ctx, 14*time.Second)
 		defer cancel()
 		plan, err := s.Agent.PlanHostDNS(call, input)
 		if err != nil {

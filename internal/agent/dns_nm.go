@@ -65,6 +65,23 @@ func nmProfileHash(path string) (string, error) {
 	// Only the hash leaves this function: keyfiles can contain Wi-Fi secrets.
 	return secure.Hash(raw), nil
 }
+
+func nmSourceHash(path string, netplan bool) (string, error) {
+	if !netplan {
+		return nmProfileHash(path)
+	}
+	if _, ok := netplanGeneratedID("NetworkManager", path); !ok {
+		return "", errors.New("not a netplan NetworkManager source")
+	}
+	if _, err := networkDirectoryState(filepath.Dir(path)); err != nil {
+		return "", err
+	}
+	file, err := readDNSFile(path)
+	if err != nil || file.Mode&0077 != 0 {
+		return "", errors.New("unsafe generated NetworkManager keyfile")
+	}
+	return secure.Hash(file.Data), nil
+}
 func nmSupported(b *dnsBus) error {
 	v, e := dnsProperty[string](b, nmRoot, nmName, "Version")
 	if e != nil {
@@ -95,7 +112,7 @@ func nmDevices(b *dnsBus) ([]dbus.ObjectPath, error) {
 	}
 	return paths, e
 }
-func nmReadDevice(b *dnsBus, path dbus.ObjectPath) (*nmTarget, error) {
+func nmReadDeviceSource(b *dnsBus, path dbus.ObjectPath, netplan bool) (*nmTarget, error) {
 	t := &nmTarget{Device: path}
 	t.View.RoutingDomains = []string{}
 	t.View.Reason = "连接无法完整读取，保持只读"
@@ -177,12 +194,12 @@ func nmReadDevice(b *dnsBus, path dbus.ObjectPath) (*nmTarget, error) {
 		return t, errors.New("device is not managed")
 	}
 	unsaved, e := dnsProperty[bool](b, t.Profile, nmName+".Settings.Connection", "Unsaved")
-	if e != nil || unsaved {
+	if e != nil || unsaved && !netplan {
 		t.View.Reason = "连接有未保存修改，须先由本机处理"
 		return t, errors.New("profile is unsaved")
 	}
 	flags, e := dnsProperty[uint32](b, t.Profile, nmName+".Settings.Connection", "Flags")
-	if e != nil || flags != 0 {
+	if e != nil || !netplan && flags != 0 || netplan && flags&^uint32(1) != 0 {
 		t.View.Reason = "生成、临时或外部连接保持只读"
 		return t, errors.New("profile is generated or external")
 	}
@@ -190,7 +207,7 @@ func nmReadDevice(b *dnsBus, path dbus.ObjectPath) (*nmTarget, error) {
 	if e != nil {
 		return t, e
 	}
-	t.FileHash, e = nmProfileHash(t.Filename)
+	t.FileHash, e = nmSourceHash(t.Filename, netplan)
 	if e != nil {
 		t.View.Reason = "持久源不是安全的 NetworkManager keyfile；netplan、ifcfg 等源保持只读"
 		return t, e
@@ -237,7 +254,11 @@ func (t *nmTarget) hash(b *dnsBus) string {
 	return secure.Hash(raw)
 }
 func nmFind(b *dnsBus, target string) (*nmTarget, error) {
-	if !hostdns.ValidTarget(target) {
+	return nmFindSource(b, target, false)
+}
+
+func nmFindSource(b *dnsBus, target string, netplan bool) (*nmTarget, error) {
+	if !hostdns.ValidTarget(target) || hostdns.NetworkdTarget(target) {
 		return nil, errors.New("invalid connection target")
 	}
 	parts := strings.SplitN(target, "@", 2)
@@ -253,7 +274,7 @@ func nmFind(b *dnsBus, target string) (*nmTarget, error) {
 		if iface != parts[1] {
 			continue
 		}
-		t, e := nmReadDevice(b, path)
+		t, e := nmReadDeviceSource(b, path, netplan)
 		if e != nil {
 			return nil, e
 		}
@@ -264,7 +285,7 @@ func nmFind(b *dnsBus, target string) (*nmTarget, error) {
 	}
 	return nil, errors.New("connection interface is unavailable")
 }
-func (d *HostDNS) observeNM() hostdns.Observation {
+func (d *HostDNS) observeNM(netplan *netplanSnapshot) hostdns.Observation {
 	out := hostdns.Observation{Owner: "networkmanager", Source: dnsSource, Connections: []hostdns.Connection{}, Current: hostdns.Config{Servers: []string{}, Search: []string{}}, Reason: "NetworkManager 未连接或不支持安全的连接级 DNS 管理"}
 	if f, e := readDNSFile(dnsSource); e == nil {
 		out.Current = parseDNS(f.Data)
@@ -293,10 +314,9 @@ func (d *HostDNS) observeNM() hostdns.Observation {
 	if e != nil {
 		return d.withPending(out)
 	}
-	var netplan *netplanSnapshot
 	netplanAllowed := d.hostScopeReason() == ""
 	for _, path := range paths {
-		t, e := nmReadDevice(b, path)
+		t, e := nmReadDeviceSource(b, path, d.Owner == "netplan")
 		if t == nil {
 			continue
 		}
@@ -312,6 +332,14 @@ func (d *HostDNS) observeNM() hostdns.Observation {
 				}
 				t.View.Netplan = netplan.source("NetworkManager", file)
 				t.View.Writable = false
+				if d.Owner == "netplan" && e == nil {
+					t.View.Reason = netplanNMReason(netplan, t)
+					t.View.Writable = t.View.Reason == ""
+					if t.View.Writable {
+						t.View.SourceHash = netplanViewHash(netplan, t.View.SourceHash)
+						t.View.Netplan.Reason = ""
+					}
+				}
 			}
 		}
 		if supported != nil {
@@ -325,6 +353,10 @@ func (d *HostDNS) observeNM() hostdns.Observation {
 	if netplan != nil && netplan.problem == "" && !netplan.stable() {
 		for i := range out.Connections {
 			invalidateNetplanSource(out.Connections[i].Netplan)
+			if d.Owner == "netplan" && out.Connections[i].Netplan != nil {
+				out.Connections[i].Writable = false
+				out.Connections[i].Reason = out.Connections[i].Netplan.Reason
+			}
 		}
 	}
 	if b.unchangedOwner() != nil {
@@ -355,13 +387,22 @@ func (d *HostDNS) observeNM() hostdns.Observation {
 var errNMSourceChanged = errors.New("NetworkManager keyfile changed before update")
 
 func nmUpdate(b *dnsBus, t *nmTarget, persistent bool, s nmSettings) error {
-	hash, err := nmProfileHash(t.Filename)
+	_, netplan := netplanGeneratedID("NetworkManager", t.Filename)
+	hash, err := nmSourceHash(t.Filename, netplan)
 	if err != nil || hash != t.FileHash {
 		return errNMSourceChanged
 	}
 	if persistent {
 		var result map[string]dbus.Variant
-		return b.call(t.Profile, nmName+".Settings.Connection.Update2", s, uint32(1|64), map[string]dbus.Variant{"version-id": dbus.MakeVariant(t.ProfileVersion)}).Store(&result)
+		flags := uint32(1 | 64)
+		args := map[string]dbus.Variant{"version-id": dbus.MakeVariant(t.ProfileVersion)}
+		if netplan {
+			// IN_MEMORY updates the existing /run keyfile; TO_DISK would migrate
+			// it to /etc and bypass its netplan owner. Pin the keyfile plugin.
+			flags = 2 | 64
+			args["plugin"] = dbus.MakeVariant("keyfile")
+		}
+		return b.call(t.Profile, nmName+".Settings.Connection.Update2", s, flags, args).Store(&result)
 	}
 	return b.call(t.Device, nmName+".Device.Reapply", s, t.AppliedVersion, uint32(1)).Err
 }

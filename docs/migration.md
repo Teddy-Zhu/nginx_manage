@@ -126,7 +126,11 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 文件导出、API 拉取及推送均支持 `selection.host_dns=true`。固定归档项 `config/host-dns.json` 只包含本应用已确认并保存的 DNS 期望配置，最多 64 个目标；不采集 DHCP 临时值、连接密钥或源主机系统文件，不复制源配置散列、接管授权或恢复快照。源节点未通过本应用确认的系统 DNS 不作为已保存设置导出；空列表会明确展示。
 
-目标默认 `host_dns: {mode: "preserve"}`，保留当前运行 DNS。映射模式另需 `host.dns.write`，并为每个源目标提供显式映射，包括同名目标。例如普通文件映射为目标 NetworkManager 连接：
+目标默认 `host_dns: {mode: "preserve"}`，保留当前运行 DNS。映射模式另需 `host.dns.write`，并为每个源目标提供显式映射，包括同名目标。
+
+目标为本机明确接管的 netplan 时，预检按观测中的可写网卡或连接核对：networkd 继续使用 `networkd:<接口名>` 与平面配置，NetworkManager 使用 `UUID@接口名` 与地址族配置。跨类型须显式提供目标 config；导入不授予 netplan 所有者权限，也不执行源主机的系统命令。
+
+例如普通文件映射为目标 NetworkManager 连接：
 
 ```json
 {

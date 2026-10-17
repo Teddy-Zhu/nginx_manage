@@ -201,8 +201,12 @@ func (d *HostDNS) netplanNativeCandidate(ctx context.Context, s *netplanSnapshot
 	if !found || !exists || !original.Mode.IsRegular() || !candidate.Mode.IsRegular() || !bytes.Equal(original.Data, generated.File.Data) || len(candidate.Data) > hostdns.SourceLimit {
 		return dnsFile{}, errors.New("netplan 源的原生生成结果与当前已加载文件不一致")
 	}
+	_, nm := netplanGeneratedID("NetworkManager", generated.Path)
 	left, e1 := stripNetworkDNS(original.Data)
 	right, e2 := stripNetworkDNS(candidate.Data)
+	if nm {
+		left, right, e1, e2 = stripNetplanNMDNS(original.Data), stripNetplanNMDNS(candidate.Data), nil, nil
+	}
 	if e1 != nil || e2 != nil || !bytes.Equal(left, right) || original.Mode != candidate.Mode {
 		return dnsFile{}, errors.New("netplan 候选改变了目标 DNS 以外的生成配置")
 	}
@@ -221,10 +225,17 @@ func (d *HostDNS) netplanNativeCandidate(ctx context.Context, s *netplanSnapshot
 	}
 	file := generated.File
 	file.Data = candidate.Data
-	projection, err := networkDNSProjection([]networkSource{{Path: generated.Path, File: file}})
-	expected := networkConfigState(want, routes)
-	if err != nil || projection == nil || !networkSame(&expected, ptrNetworkConfigState(projection)) {
-		return dnsFile{}, errors.New("netplan 候选 DNS 与确认的期望值不一致")
+	if nm {
+		config, domains, err := netplanNMFile(file.Data)
+		if err != nil || !reflect.DeepEqual(config, want) || !reflect.DeepEqual(domains, routes) {
+			return dnsFile{}, errors.New("netplan 候选连接 DNS 与确认的期望值不一致")
+		}
+	} else {
+		projection, err := networkDNSProjection([]networkSource{{Path: generated.Path, File: file}})
+		expected := networkConfigState(want, routes)
+		if err != nil || projection == nil || !networkSame(&expected, ptrNetworkConfigState(projection)) {
+			return dnsFile{}, errors.New("netplan 候选 DNS 与确认的期望值不一致")
+		}
 	}
 	if !s.stable() {
 		return dnsFile{}, errors.New("netplan 源在生成期间变化")

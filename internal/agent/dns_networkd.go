@@ -213,7 +213,7 @@ func networkdObserveLink(b, resolved *dnsBus, ref networkdLinkRef) hostdns.Netwo
 	}
 	return out
 }
-func (d *HostDNS) observeNetworkd() hostdns.Observation {
+func (d *HostDNS) observeNetworkd(netplan *netplanSnapshot) hostdns.Observation {
 	out := hostdns.Observation{Owner: "networkd", Source: dnsSource, Current: hostdns.Config{Servers: []string{}, Search: []string{}}, Links: []hostdns.NetworkLink{}, Reason: "未发现符合条件的静态 networkd 链路"}
 	if d.Owner == "netplan" {
 		out.Owner, out.Reason = "netplan", "未发现可安全局部管理的静态 netplan 链路"
@@ -257,7 +257,6 @@ func (d *HostDNS) observeNetworkd() hostdns.Observation {
 		return d.withPending(out)
 	}
 	observationBytes := 0
-	var netplan *netplanSnapshot
 	for _, ref := range refs {
 		if ref.Index <= 0 || len(ref.Name) == 0 || len(ref.Name) > 15 || strings.Trim(ref.Name, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-") != "" || !strings.HasPrefix(string(ref.Path), "/org/freedesktop/network1/link/") {
 			out.Reason = "networkd 网卡身份无效"

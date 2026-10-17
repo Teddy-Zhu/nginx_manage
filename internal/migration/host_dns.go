@@ -200,7 +200,7 @@ func dnsTargetReason(observed hostdns.Observation, target string) string {
 	if target == "" && observed.Owner == "regular-file" {
 		return ""
 	}
-	if observed.Owner == "networkmanager" {
+	if observed.Owner == "networkmanager" || observed.Owner == "netplan" {
 		for _, c := range observed.Connections {
 			if c.Target == target {
 				if c.Writable {
@@ -210,7 +210,7 @@ func dnsTargetReason(observed hostdns.Observation, target string) string {
 			}
 		}
 	}
-	if observed.Owner == "networkd" {
+	if observed.Owner == "networkd" || observed.Owner == "netplan" {
 		for _, link := range observed.Links {
 			if link.Target == target {
 				if link.Writable {

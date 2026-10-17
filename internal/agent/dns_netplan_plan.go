@@ -20,11 +20,14 @@ type netplanSourceProof struct {
 	Hash string `json:"hash"`
 }
 type netplanCheckpoint struct {
-	File    string               `json:"file"`
-	Before  dnsFile              `json:"before"`
-	After   dnsFile              `json:"after"`
-	Sources []netplanSourceProof `json:"sources"`
-	Tool    netplanTool          `json:"tool"`
+	File        string               `json:"file"`
+	Before      dnsFile              `json:"before"`
+	After       dnsFile              `json:"after"`
+	Sources     []netplanSourceProof `json:"sources"`
+	Tool        netplanTool          `json:"tool"`
+	ProfileHash string               `json:"profile_hash"`
+	AppliedHash string               `json:"applied_hash"`
+	WrittenHash string               `json:"written_hash"`
 }
 type netplanProposal struct {
 	Plan      hostdns.Plan
@@ -108,7 +111,9 @@ func (d *HostDNS) netplanPrepare(input hostdns.PlanInput) (netplanProposal, erro
 	if s.problem != "" {
 		return out, fault.Unavailable(s.problem)
 	}
-	b, r, err := openNetworkd(context.Background())
+	operation, stop := context.WithTimeout(context.Background(), 12*time.Second)
+	defer stop()
+	b, r, err := openNetworkd(operation)
 	if err != nil {
 		return out, fault.Unavailable("无法连接宿主机 networkd/resolved")
 	}
@@ -149,13 +154,13 @@ func (d *HostDNS) netplanPrepare(input hostdns.PlanInput) (netplanProposal, erro
 	// Native generation must not consume the lifetime of the D-Bus session.
 	b.close()
 	r.close()
-	call, cancel := context.WithTimeout(context.Background(), 7*time.Second)
+	call, cancel := context.WithTimeout(operation, 7*time.Second)
 	defer cancel()
 	generated, err := d.netplanNativeCandidate(call, s, tool, source, after, t.Sources[0], input.Config, t.View.Persistent.RoutingDomains)
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
 	}
-	b2, r2, err := openNetworkd(context.Background())
+	b2, r2, err := openNetworkd(operation)
 	if err != nil {
 		return out, fault.Unavailable("原生生成后无法复核运行状态")
 	}
@@ -208,7 +213,7 @@ func (d *HostDNS) netplanApply(id string, plan hostdns.Plan) (hostdns.Status, er
 	if err != nil {
 		return hostdns.Status{}, err
 	}
-	peer, err := b.networkdProcess()
+	peer, err := b.processIdentity()
 	if err != nil {
 		return hostdns.Status{}, err
 	}

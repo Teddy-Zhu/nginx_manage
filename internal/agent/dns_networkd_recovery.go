@@ -76,7 +76,7 @@ func networkProcess(pid uint32) (networkdProcess, error) {
 	out.Start = fields[19]
 	return out, nil
 }
-func (b *dnsBus) networkdProcess() (networkdProcess, error) {
+func (b *dnsBus) processIdentity() (networkdProcess, error) {
 	var pid uint32
 	if e := b.conn.BusObject().CallWithContext(b.ctx, "org.freedesktop.DBus.GetConnectionUnixProcessID", dbus.FlagNoAutoStart, b.owner).Store(&pid); e != nil {
 		return networkdProcess{}, e
@@ -97,6 +97,14 @@ func networkdCallEnded(p networkdProcess) bool {
 	}
 	now, e := networkProcess(p.PID)
 	return os.IsNotExist(e) || e == nil && now != p
+}
+
+func validDNSProcess(p networkdProcess) bool {
+	if !validID(p.Boot) || p.PID < 2 || len(p.Start) > 20 {
+		return false
+	}
+	start, err := strconv.ParseUint(p.Start, 10, 64)
+	return err == nil && start != 0
 }
 
 func openNetworkd(ctx context.Context) (*dnsBus, *dnsBus, error) {
@@ -199,7 +207,7 @@ func (d *HostDNS) networkdApply(id string, plan hostdns.Plan) (hostdns.Status, e
 	if e != nil {
 		return hostdns.Status{}, e
 	}
-	peer, e := b.networkdProcess()
+	peer, e := b.processIdentity()
 	if e != nil {
 		return hostdns.Status{}, e
 	}
@@ -278,7 +286,7 @@ func (d *HostDNS) networkdWrite(b *dnsBus, index int32, method string, want host
 	if n.Pending != nil {
 		return errors.New("unfenced networkd DNS call")
 	}
-	peer, e := b.networkdProcess()
+	peer, e := b.processIdentity()
 	if e != nil {
 		return e
 	}

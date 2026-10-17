@@ -141,8 +141,8 @@ func (d *HostDNS) Open() error {
 	if c.Kind != "host.dns.apply" || !validID(c.Status.OperationID) || c.Plan.ID != c.Plan.Hash() || c.Plan.Input.Validate() != nil || c.Status.PlanID != c.Plan.ID || c.Status.Deadline <= c.Plan.CreatedAt {
 		return errors.New("unrecognized reachability recovery checkpoint")
 	}
-	if c.Plan.Owner == "networkmanager" {
-		if c.Networkd != nil || c.Netplan != nil {
+	if c.Plan.Owner == "networkmanager" || c.Plan.Owner == "netplan" && c.NM != nil {
+		if c.Networkd != nil || c.Plan.Owner == "networkmanager" && c.Netplan != nil {
 			return errors.New("mixed DNS recovery owners")
 		}
 		if err = c.validateNM(); err != nil {
@@ -201,11 +201,14 @@ func (d *HostDNS) Close() {
 	d.locks = nil
 }
 func (d *HostDNS) observe() hostdns.Observation {
-	if d.Owner == "networkd" || d.Owner == "netplan" {
-		return d.observeNetworkd()
+	if d.Owner == "netplan" {
+		return d.observeNetplan()
+	}
+	if d.Owner == "networkd" {
+		return d.observeNetworkd(nil)
 	}
 	if d.Owner == "networkmanager" {
-		return d.observeNM()
+		return d.observeNM(nil)
 	}
 	out := hostdns.Observation{Owner: "unknown", Source: dnsSource, Current: hostdns.Config{Servers: []string{}, Search: []string{}}, Reason: "尚未确认持久配置所有者"}
 	path := dnsSource
@@ -331,7 +334,7 @@ func (d *HostDNS) withPending(out hostdns.Observation) hostdns.Observation {
 	if out.Connections == nil {
 		out.Connections = []hostdns.Connection{}
 	}
-	if (out.Owner == "networkd" || out.Owner == "netplan") && len(out.Links) == 0 {
+	if out.Owner == "networkd" && len(out.Links) == 0 || out.Owner == "netplan" && len(out.Links) == 0 && len(out.Connections) == 0 {
 		out.Writable = false
 	}
 	if d.checkpoint != nil && dnsActive(d.checkpoint.Status.State) {
@@ -361,6 +364,9 @@ func (d *HostDNS) Plan(input hostdns.PlanInput) (hostdns.Plan, error) {
 		return d.networkdPlan(input)
 	}
 	if input.Target != "" {
+		if d.Owner == "netplan" {
+			return d.netplanNMPlan(input)
+		}
 		return d.nmPlan(input)
 	}
 	view := d.observe()
@@ -431,6 +437,9 @@ func (d *HostDNS) Apply(id string, plan hostdns.Plan) (hostdns.Status, error) {
 		return d.networkdApply(id, plan)
 	}
 	if plan.Owner == "netplan" {
+		if !hostdns.NetworkdTarget(plan.Input.Target) {
+			return d.netplanNMApply(id, plan)
+		}
 		return d.netplanApply(id, plan)
 	}
 	if plan.Input.Target != "" {

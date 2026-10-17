@@ -136,7 +136,7 @@ Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2
 
 取消未转入执行的排队请求直接保存取消终态，不修改运行配置。转入执行后的取消仅保存请求，由原 worker 按上述原进程退出及原状态证明规则判断；不能取消时返回独立 `cancel_error`，清除待判断请求并继续观察原 reload，不把取消失败写成原操作完成或阻止原结果确认。本机 root 直接发起的操作仍由本机 CLI 取消，Agent 请求不能越过这一边界。
 
-队列、取消及执行共用 Nginx/宿主机/接入锁、维护排空和全局 journal 的 2048 项上限，不进入业务迁移或完整备份。Agent 协议为 63，数据库与归档仍为 26/6；无旧协议兼容。原生运行、超时、中断、取消及维护组合的验收统一留待 P5。
+队列、取消及执行共用 Nginx/宿主机/接入锁、维护排空和全局 journal 的 2048 项上限，不进入业务迁移或完整备份。Agent 协议为 64，数据库与归档仍为 26/6；无旧协议兼容。原生运行、超时、中断、取消及维护组合的验收统一留待 P5。
 
 ## 已接管 jail 的网页与业务 API
 
@@ -164,7 +164,7 @@ Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 63、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 64、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
 已有实例默认只读，可由本机 root 另行授予全局服务控制，或接管固定 SSH jail 并执行上述参数应用/停用。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 SSH jail 的参数、启用及停用已接入网页/API；该类 jail 的手动地址操作、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
