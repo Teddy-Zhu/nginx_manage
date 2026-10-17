@@ -273,6 +273,24 @@ Python 隔离及源包定位依据：[命令行选项](https://docs.python.org/3
 
 全部生成规则含基础返回与入口保护合计最多 8192 条，完整参数及目标身份 JSON 最多 2 MiB，摘要覆盖所选后端、完整顺序和两个地址族；页面显示每族显式工具名、数量、总字节及前 128 条业务表达式，不依赖默认 alternatives 推断显式工具。逻辑预览复用完整五份内核视图，核对单一管理器、目标后端、显式 command/save 观测和 filter/INPUT 默认策略；混合后端、读取不完整或同名链存在时给出明确原因，已有 INPUT 规则及默认 DROP 单独提示。编译不探测/加载内核扩展，也不证明规则能被执行工具接受。
 
-跨环境迁移复用同一编译及环境检查，只保存中立期望；接口仍须显式映射，源配置不授予目标规则所有权。`can_apply=false`；iptables 独立登记、代际切换、限时执行与补偿恢复仍须接入，不能从编译结果调用现有 nftables/UFW 执行器。Docker 发布端口不转换为 INPUT，转发挂接与原始目的连接跟踪另行适配。管理入口的中立策略判定已接入各后端保护编译，包括 UFW；这只核对本应用对新连接的处理，不证明其他系统规则或外部路径可达。
+跨环境迁移复用同一编译及环境检查，只保存中立期望；接口仍须显式映射，源配置不授予目标规则所有权。`can_apply=false`；iptables 代际切换、限时执行与业务规则补偿恢复仍须接入，不能从编译结果调用现有 nftables/UFW 执行器。Docker 发布端口不转换为 INPUT，转发挂接与原始目的连接跟踪另行适配。管理入口的中立策略判定已接入各后端保护编译，包括 UFW；这只核对本应用对新连接的处理，不证明其他系统规则或外部路径可达。
 
 语义依据：[iptables 官方手册](https://man7.org/linux/man-pages/man8/iptables.8.html)、[conntrack 与 REJECT 扩展手册](https://man7.org/linux/man-pages/man8/iptables-extensions.8.html)；Docker 转发边界见 [Docker iptables 文档](https://docs.docker.com/engine/network/firewall-iptables/)。本阶段未运行生成器、构建、类型检查、lint、测试或真实 iptables 命令，行为与容量待 P5 集中验证。
+
+
+## iptables 本机空命名空间授权
+
+本机 root 可显式登记 `iptables-nft` 或 `iptables-legacy`；不根据默认 alternatives 选择后端，不修改其设置，不创建链、不加载内核模块、不安装规则。须在真实宿主机范围操作，并与其他防火墙登记/执行器共用宿主机锁：
+
+```sh
+nginxpanel iptables-init --data-dir /srv/nginxpanel --firewall-scope host --firewall-backend iptables-nft
+nginxpanel iptables-registration --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel iptables-recover --data-dir /srv/nginxpanel --firewall-scope host
+nginxpanel iptables-remove --data-dir /srv/nginxpanel --firewall-scope host
+```
+
+初始化必须明确后端；其他操作沿用原登记，不接受替换后端。原登记未释放时不能改用另一个后端。登记/释放前核对完整五份内核视图、无启用管理器、无直接 nftables 目标表、其他本机授权及恢复材料，以及两后端/双地址族原生导出中的目标链、引用和 `nginxpanel:host:` 标记。任何未知或不完整读取均阻止授权；不是凭空链、名称或注释认领原规则。外部规则按完整参数和顺序做前后漂移核对，时间头和包计数不参与配置摘要。
+
+独立 root 意图及回执保存在数据目录的 `agent/firewall/iptables-registration.json` 和 `agent/operations`；`/var/lib/nginxpanel-host/iptables-owner.json` 持久绑定宿主机、数据目录、后端及原操作，防止其他数据目录重复授权。释放先发布中间占用、再保存终态回执、最后发布释放墓碑；崩溃后只核对原意图，不重放任何规则命令。未完成登记/释放阻止新的维护及可达性操作；其他防火墙新授权/执行拒绝尚未释放的占用，已受理操作仍按原恢复路径处理。
+
+宿主机诊断 API 的 `iptables_registration` 及防火墙页面显示后端、授权和本次核对；`registered/verified` 仅证明当前空命名空间授权，不能证明规则生效或入口可达。迁移预检核对目标自己的授权，源机占用、root 授权与回执不迁移。限时业务应用、确认规则恢复及 Docker 转发尚未接入；编译预览继续 `can_apply=false`。实现及源码审阅完成，生成器、构建、类型检查、lint、测试、浏览器与真实主机操作均待 P5。

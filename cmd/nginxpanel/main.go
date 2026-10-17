@@ -52,7 +52,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -136,7 +136,8 @@ func run() error {
 	maintenanceScope := flags.String("maintenance-scope", "unconfirmed", "host configuration maintenance scope: host or unconfirmed")
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd, netplan or unconfirmed")
 	firewallScope := flags.String("firewall-scope", "unconfirmed", "firewall namespace: host or unconfirmed")
-	firewallOwner := flags.String("firewall-owner", "unconfirmed", "locally confirmed firewall owner: direct-nftables, firewalld, ufw (plan/dry-run only), or unconfirmed")
+	firewallBackend := flags.String("firewall-backend", "", "explicit initial iptables grant: iptables-nft or iptables-legacy")
+	firewallOwner := flags.String("firewall-owner", "unconfirmed", "locally confirmed firewall owner: direct-nftables, firewalld, ufw, or unconfirmed")
 	firewallSSH := flags.String("firewall-ssh", "unconfirmed", "locally confirmed SSH protection: openssh, none or unconfirmed")
 	dnsScope := flags.String("dns-scope", "unconfirmed", "DNS namespace: host or unconfirmed")
 	nginxUser := flags.String("nginx-user", "nginxpanel-nginx", "dedicated Nginx worker account")
@@ -232,6 +233,10 @@ func run() error {
 		"firewalld-registration":          {"data-dir": true, "firewall-scope": true},
 		"firewalld-recover":               {"data-dir": true, "firewall-scope": true},
 		"firewalld-remove":                {"data-dir": true, "firewall-scope": true},
+		"iptables-init":                   {"data-dir": true, "firewall-scope": true, "firewall-backend": true},
+		"iptables-registration":           {"data-dir": true, "firewall-scope": true},
+		"iptables-recover":                {"data-dir": true, "firewall-scope": true},
+		"iptables-remove":                 {"data-dir": true, "firewall-scope": true},
 		"ufw-init":                        {"data-dir": true, "firewall-scope": true},
 		"ufw-registration":                {"data-dir": true, "firewall-scope": true},
 		"ufw-recover":                     {"data-dir": true, "firewall-scope": true},
@@ -708,6 +713,16 @@ func run() error {
 			action = "status"
 		}
 		out, err := agent.ManageUFWRegistration(ctx, absDir, *firewallScope, action)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	case "iptables-init", "iptables-registration", "iptables-recover", "iptables-remove":
+		action := strings.TrimPrefix(command, "iptables-")
+		if action == "registration" {
+			action = "status"
+		}
+		out, err := agent.ManageIPTablesRegistration(ctx, absDir, *firewallScope, *firewallBackend, action)
 		if err != nil {
 			return err
 		}

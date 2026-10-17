@@ -76,6 +76,9 @@ func withUFWCandidateProof(ctx context.Context, dataDir string, v *ufwChangeChec
 
 func (f *hostFirewall) applyUFWLocked(ctx context.Context, id, planID string, version int64, hash, action, connection string) (firewall.Operation, error) {
 	var out firewall.Operation
+	if err := forbidIPTablesRegistration(f.dataDir); err != nil {
+		return out, fault.Conflict(err.Error())
+	}
 	if !f.ufwPlanning || f.problem != "" || f.policyUncertain || !f.recovering {
 		return out, fault.Unavailable("UFW 本机授权或独立恢复尚未就绪")
 	}

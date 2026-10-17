@@ -215,7 +215,7 @@ func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
 func (f *hostFirewall) pending() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.activeLocked() || f.ufwPreparingLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil || ufwRegistrationPending(f.dataDir)
+	return f.activeLocked() || f.ufwPreparingLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil || ufwRegistrationPending(f.dataDir) || iptablesRegistrationPending(f.dataDir)
 }
 func (f *hostFirewall) emptyMarker() string { return nftRegistrationPrefix + f.state.Owner }
 func (f *hostFirewall) program(record *firewallPolicyRecord) (*firewall.NFTProgram, string, error) {
@@ -291,6 +291,13 @@ func (f *hostFirewall) Open() error {
 		return err
 	}
 	f.unlock = unlock
+	if err := forbidIPTablesRegistration(f.dataDir); err != nil {
+		if value == nil {
+			f.problem = err.Error()
+			return nil
+		}
+		f.available = false
+	}
 	if err := forbidUFWRegistration(); err != nil {
 		if value == nil {
 			f.problem = err.Error()

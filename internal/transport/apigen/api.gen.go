@@ -1768,23 +1768,30 @@ type FirewallRegistrationView struct {
 
 // FirewallObservation defines model for FirewallObservation.
 type FirewallObservation struct {
-	Registration FirewallRegistrationView `json:"registration"`
-	Kernel       FirewallKernelView       `json:"kernel"`
-	At           int64                    `json:"at"`
-	Source       string                   `json:"source"`
-	Scope        string                   `json:"scope"`
-	Available    bool                     `json:"available"`
-	Writable     bool                     `json:"writable"`
-	Manager      string                   `json:"manager"`
+	IptablesRegistration FirewallIPTablesRegistrationView `json:"iptables_registration"`
+	Registration         FirewallRegistrationView         `json:"registration"`
+	Kernel               FirewallKernelView               `json:"kernel"`
+	At                   int64                            `json:"at"`
+	Source               string                           `json:"source"`
+	Scope                string                           `json:"scope"`
+	Available            bool                             `json:"available"`
+	Writable             bool                             `json:"writable"`
+	Manager              string                           `json:"manager"`
+	Backend              string                           `json:"backend"`
+	Reason               string                           `json:"reason"`
+	Firewalld            FirewallFirewalld                `json:"firewalld"`
+	Ufw                  FirewallUFW                      `json:"ufw"`
+	Iptables             []FirewallIptables               `json:"iptables"`
+	Rulesets             []FirewallRuleset                `json:"rulesets"`
+	Docker               FirewallDocker                   `json:"docker"`
+	Warnings             []string                         `json:"warnings"`
+	Interfaces           []string                         `json:"interfaces"`
+}
+
+// FirewallIPTablesRegistrationView defines model for FirewallIPTablesRegistrationView.
+type FirewallIPTablesRegistrationView struct {
 	Backend      string                   `json:"backend"`
-	Reason       string                   `json:"reason"`
-	Firewalld    FirewallFirewalld        `json:"firewalld"`
-	Ufw          FirewallUFW              `json:"ufw"`
-	Iptables     []FirewallIptables       `json:"iptables"`
-	Rulesets     []FirewallRuleset        `json:"rulesets"`
-	Docker       FirewallDocker           `json:"docker"`
-	Warnings     []string                 `json:"warnings"`
-	Interfaces   []string                 `json:"interfaces"`
+	Registration FirewallRegistrationView `json:"registration"`
 }
 
 // FirewallFirewalld defines model for FirewallFirewalld.

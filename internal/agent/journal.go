@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	IPTablesRegistration      *iptablesRegistrationCheckpoint  `json:"iptables_registration,omitempty"`
 	UFWRegistration           *ufwRegistrationCheckpoint       `json:"ufw_registration,omitempty"`
 	FirewalldRegistration     *firewalldRegistrationCheckpoint `json:"firewalld_registration,omitempty"`
 	RuntimeHistory            *runtimeHistoryIntent            `json:"runtime_history,omitempty"`

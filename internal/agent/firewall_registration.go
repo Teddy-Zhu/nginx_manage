@@ -253,6 +253,9 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 	}
 	defer unlock()
 	if action != "recover" {
+		if err = forbidIPTablesRegistration(dataDir); err != nil {
+			return out, err
+		}
 		if err = forbidUFWRegistration(); err != nil {
 			return out, err
 		}

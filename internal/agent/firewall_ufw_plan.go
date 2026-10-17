@@ -101,6 +101,9 @@ func prepareUFWPlan(ctx context.Context, dataDir string, basis ufwPreparationBas
 		return empty, fault.Unavailable("宿主机防火墙登记锁不可用，未准备 UFW 计划")
 	}
 	defer unlock()
+	if err := forbidIPTablesRegistration(dataDir); err != nil {
+		return empty, fault.Conflict(err.Error())
+	}
 	registered, err := ufwRegistrationAuthority(dataDir)
 	if err != nil || registered.RequestHash != basis.Registration.RequestHash {
 		return empty, fault.Conflict("UFW 本机授权登记已变化")

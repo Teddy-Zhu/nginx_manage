@@ -4572,7 +4572,7 @@ components:
     FirewallRegistrationView:
       type: object
       additionalProperties: false
-      description: 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对原登记或已确认 policy 的完整 runtime/permanent 设置与活动绑定；UFW 核对宿主机持久占用、原本机授权与回执及空标记命名空间，未安装任何规则；不表示获得业务策略写入授权或外部可达。
+      description: 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对原登记或已确认 policy 的完整 runtime/permanent 设置与活动绑定；UFW 核对宿主机持久占用、原本机授权与回执及空标记命名空间，iptables 核对显式后端、本机占用与原回执及完整空命名空间；授权登记不安装规则；不表示获得业务策略写入授权或外部可达。
       required: [state, verified, operation_id, observed_at, reason]
       properties:
         state: {type: string, enum: [unavailable, unregistered, registered, managed, released, missing, drifted, recovery_required]}
@@ -4583,8 +4583,9 @@ components:
     FirewallObservation:
       type: object
       additionalProperties: false
-      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "rulesets", "docker", "warnings", "interfaces", "kernel", "registration"]
+      required: ["at", "source", "scope", "available", "writable", "manager", "backend", "reason", "firewalld", "ufw", "iptables", "iptables_registration", "rulesets", "docker", "warnings", "interfaces", "kernel", "registration"]
       properties:
+        iptables_registration: {$ref: '#/components/schemas/FirewallIPTablesRegistrationView'}
         registration: {"$ref": "#/components/schemas/FirewallRegistrationView"}
         kernel: {"$ref": "#/components/schemas/FirewallKernelView"}
         at: {"type": "integer", "format": "int64"}
@@ -4602,6 +4603,14 @@ components:
         docker: {"$ref": "#/components/schemas/FirewallDocker"}
         interfaces: {"type": "array", "items": {"type": "string"}, "maxItems": 512}
         warnings: {"type": "array", "items": {"type": "string"}}
+    FirewallIPTablesRegistrationView:
+      type: object
+      additionalProperties: false
+      description: 显式 nft/legacy 后端的本机空命名空间授权，核对宿主机持久占用、原意图与独立回执及当前完整规则；不创建链、不安装业务规则，不表示可应用或外部可达。
+      required: [backend, registration]
+      properties:
+        backend: {type: string, enum: ['', iptables-nft, iptables-legacy]}
+        registration: {$ref: '#/components/schemas/FirewallRegistrationView'}
     FirewallFirewalld:
       type: object
       additionalProperties: false

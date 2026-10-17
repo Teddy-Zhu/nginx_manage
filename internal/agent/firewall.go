@@ -18,14 +18,15 @@ import (
 // endpoint from repeatedly forking privileged tools. Cancellation of one HTTP
 // request never starts a second copy while the original job is still alive.
 type firewallObserver struct {
-	mu      sync.Mutex
-	ctx     context.Context
-	scope   string
-	dataDir string
-	dev     bool
-	done    chan struct{}
-	last    time.Time
-	value   firewall.Observation
+	skipIPTablesRegistration bool
+	mu                       sync.Mutex
+	ctx                      context.Context
+	scope                    string
+	dataDir                  string
+	dev                      bool
+	done                     chan struct{}
+	last                     time.Time
+	value                    firewall.Observation
 }
 
 func (f *firewallObserver) read(ctx context.Context) (firewall.Observation, error) {
@@ -150,6 +151,9 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	}
 	wg.Wait()
 	classifyFirewall(&out)
+	if !f.skipIPTablesRegistration {
+		out.IPTablesRegistration = iptablesRegistrationView(ctx, f.dataDir, out)
+	}
 	if out.Iptables[0].Backend != "unknown" && out.Iptables[1].Backend != "unknown" && out.Iptables[0].Backend != out.Iptables[1].Backend {
 		out.Warnings = append(out.Warnings, "默认 IPv4 与 IPv6 iptables 命令指向不同后端")
 	}
@@ -163,6 +167,15 @@ func (s *Server) firewallHandlers(mux *http.ServeMux, ctx context.Context) *fire
 func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error) {
 	var out firewall.Observation
 	e := c.envelopeRequest(ctx, http.MethodGet, "/v1/firewall", nil, &out)
+	if e == nil && !validIPTablesRegistrationView(out.IPTablesRegistration) {
+		e = errors.New("invalid iptables registration")
+	}
+	if e == nil && out.IPTablesRegistration.Registration.Verified {
+		problems, _ := firewall.IPTablesEnvironment(out, &firewall.IPTablesProgram{Backend: out.IPTablesRegistration.Backend})
+		if len(problems) != 0 || !out.Kernel.Available || out.Kernel.TableExists {
+			e = errors.New("invalid verified iptables environment")
+		}
+	}
 	if e == nil && (out.Source != "host-agent" && out.Source != "development-agent" || out.At <= 0 || out.Writable || out.Docker.Writable || len(out.Rulesets) > 5 || len(out.Iptables) > 2 || out.Kernel.Available && (out.Kernel.Generation == 0 || len(out.Kernel.NamespaceID) != 64 || len(out.Kernel.Fingerprint) != 64 || out.Kernel.Chains < 0 || out.Kernel.Chains > 128 || out.Kernel.Rules < 0 || out.Kernel.Rules > firewall.MaxEntries || out.Kernel.Bytes < 0 || out.Kernel.Bytes > nftReadBytes || out.Kernel.ObservedAt <= 0)) {
 		e = errors.New("invalid firewall observation")
 	}

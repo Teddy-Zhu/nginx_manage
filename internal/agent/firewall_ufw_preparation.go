@@ -140,6 +140,9 @@ func (f *hostFirewall) startUFWPreparationLocked(ctx context.Context, in firewal
 	if f.ufwPreparingLocked() || f.activeLocked() || ufwRestorePending(f.dataDir) || f.dns.checkpoint != nil && dnsActive(f.dns.checkpoint.Status.State) {
 		return empty, fault.Conflict("存在未完成的可达性变更或 UFW 计划准备")
 	}
+	if err := forbidIPTablesRegistration(f.dataDir); err != nil {
+		return empty, fault.Conflict(err.Error())
+	}
 	registered, err := ufwRegistrationAuthority(f.dataDir)
 	if err != nil {
 		return empty, fault.Unavailable(err.Error())

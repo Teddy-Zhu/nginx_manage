@@ -37,6 +37,9 @@ func ufwRegistrationStatus(ctx context.Context, dataDir string) UFWRegistrationS
 func inspectUFWRegistration(ctx context.Context, dataDir string, active bool) (ufwConfigurationSnapshot, error) {
 	var out ufwConfigurationSnapshot
 	if active {
+		if err := forbidIPTablesRegistration(dataDir); err != nil {
+			return out, err
+		}
 		nftRuntime, err := loadFirewallState(dataDir)
 		if err != nil {
 			return out, err

@@ -25,6 +25,13 @@ func (f *hostFirewall) openFirewalldExecutor(saved *firewalldCheckpoint) error {
 		return err
 	}
 	f.unlock = unlock
+	if err := forbidIPTablesRegistration(f.dataDir); err != nil {
+		if saved == nil {
+			f.problem = err.Error()
+			return nil
+		}
+		f.available = false
+	}
 	if err := forbidUFWRegistration(); err != nil {
 		if saved == nil {
 			f.problem = err.Error()

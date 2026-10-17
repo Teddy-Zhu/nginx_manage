@@ -25,26 +25,32 @@ type RegistrationView struct {
 	Reason      string `json:"reason"`
 }
 
+type IPTablesRegistrationView struct {
+	Backend      string           `json:"backend"`
+	Registration RegistrationView `json:"registration"`
+}
+
 // Observation describes independent, bounded reads. It does not certify rule
 // ownership or reachability and must never be used as authorization to write.
 type Observation struct {
-	Registration RegistrationView `json:"registration"`
-	Kernel       KernelView       `json:"kernel"`
-	At           int64            `json:"at"`
-	Source       string           `json:"source"`
-	Scope        string           `json:"scope"`
-	Available    bool             `json:"available"`
-	Writable     bool             `json:"writable"`
-	Manager      string           `json:"manager"`
-	Backend      string           `json:"backend"`
-	Reason       string           `json:"reason"`
-	Firewalld    Firewalld        `json:"firewalld"`
-	UFW          UFW              `json:"ufw"`
-	Iptables     []Iptables       `json:"iptables"`
-	Rulesets     []Ruleset        `json:"rulesets"`
-	Docker       Docker           `json:"docker"`
-	Warnings     []string         `json:"warnings"`
-	Interfaces   []string         `json:"interfaces"`
+	IPTablesRegistration IPTablesRegistrationView `json:"iptables_registration"`
+	Registration         RegistrationView         `json:"registration"`
+	Kernel               KernelView               `json:"kernel"`
+	At                   int64                    `json:"at"`
+	Source               string                   `json:"source"`
+	Scope                string                   `json:"scope"`
+	Available            bool                     `json:"available"`
+	Writable             bool                     `json:"writable"`
+	Manager              string                   `json:"manager"`
+	Backend              string                   `json:"backend"`
+	Reason               string                   `json:"reason"`
+	Firewalld            Firewalld                `json:"firewalld"`
+	UFW                  UFW                      `json:"ufw"`
+	Iptables             []Iptables               `json:"iptables"`
+	Rulesets             []Ruleset                `json:"rulesets"`
+	Docker               Docker                   `json:"docker"`
+	Warnings             []string                 `json:"warnings"`
+	Interfaces           []string                 `json:"interfaces"`
 }
 type Firewalld struct {
 	Registration      RegistrationView         `json:"registration"`
@@ -150,7 +156,7 @@ type Docker struct {
 }
 
 func Empty(scope, reason string) Observation {
-	return Observation{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 root 独立登记"}, Source: "host-agent", Kernel: KernelView{Reason: "尚未读取受管目标表的内核快照"}, Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
+	return Observation{IPTablesRegistration: IPTablesRegistrationView{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 iptables 本机授权登记"}}, Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 root 独立登记"}, Source: "host-agent", Kernel: KernelView{Reason: "尚未读取受管目标表的内核快照"}, Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
 		Firewalld: Firewalld{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 firewalld root 登记"}, Zones: []Zone{}, PolicyInventory: EmptyFirewalldPolicies("尚未读取"), Reason: "尚未读取"}, UFW: UFW{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 UFW 本机授权登记"}, RuleInventory: EmptyUFWRules("尚未读取"), Reason: "尚未读取"},
 		Iptables: []Iptables{}, Rulesets: []Ruleset{}, Docker: Docker{BackendHint: "unknown", Evidence: []string{}, Reason: "尚未核对 Docker 转发路径"}, Warnings: []string{}}
 }

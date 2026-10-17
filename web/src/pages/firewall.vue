@@ -345,6 +345,31 @@ onUnmounted(() => {
         </section>
       </div>
       <section class="panel">
+        <h3>iptables 本机授权</h3>
+        <dl>
+          <dt>显式后端</dt>
+          <dd>{{ observation.iptables_registration.backend || "未选择" }}</dd>
+          <dt>授权状态</dt>
+          <dd>
+            {{
+              observation.iptables_registration.registration.state === "registered"
+                ? "已授权空命名空间"
+                : registrationNames[observation.iptables_registration.registration.state]
+            }}
+          </dd>
+          <dt>本次核对</dt>
+          <dd>
+            {{ observation.iptables_registration.registration.verified ? "通过" : "未通过" }}
+          </dd>
+        </dl>
+        <n-alert
+          v-if="observation.iptables_registration.registration.reason"
+          :type="observation.iptables_registration.registration.verified ? 'info' : 'warning'"
+          :bordered="false"
+        >{{ observation.iptables_registration.registration.reason }}</n-alert
+        >
+      </section>
+      <section class="panel">
         <h3>默认 iptables 命令</h3>
         <dl v-for="tool in observation.iptables" :key="tool.family">
           <dt>{{ familyNames[tool.family] ?? tool.family }}</dt>
