@@ -1,11 +1,9 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
 
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/secure"
@@ -21,127 +19,6 @@ type dockerInitialTransition struct {
 	Materials         []iptablesChangeMaterial
 	Tools             *iptablesToolBinding
 	DryRun            *iptablesDryRunProof
-}
-
-func makeDockerInitialMaterial(before iptablesImage, generation firewall.IPTablesGeneration) (iptablesChangeMaterial, error) {
-	var out iptablesChangeMaterial
-	if before.Family != generation.Family || len(generation.Rules) == 0 {
-		return out, errors.New("Docker 初始代际的地址族或规则无效")
-	}
-	if err := proveEmptyDockerNamespace(before); err != nil {
-		return out, err
-	}
-	if hook := observeDockerFirewallHook(before); !hook.Observed {
-		return out, errors.New("Docker 初始代际挂接无法核对：" + hook.Reason)
-	}
-	// Render only compiler-owned tokens. No declaration, policy, flush or rule
-	// text from the existing image enters either restore batch.
-	var candidate, previous bytes.Buffer
-	candidate.WriteString("*filter\n-N " + generation.Chain + "\n")
-	previous.WriteString("*filter\n")
-	write := func(buffer *bytes.Buffer, command, chain string, args []string) error {
-		text, err := firewall.IPTablesRuleText(args)
-		if err != nil {
-			return err
-		}
-		buffer.WriteString(command + " " + chain + " " + text + "\n")
-		return nil
-	}
-	for _, rule := range generation.Rules {
-		if err := write(&candidate, "-A", generation.Chain, rule.Arguments); err != nil {
-			return out, err
-		}
-	}
-	candidate.WriteString("-N " + firewall.IPTablesDockerChain + "\n")
-	for _, step := range []struct {
-		Buffer         *bytes.Buffer
-		Command, Chain string
-		Args           []string
-	}{
-		{&candidate, "-A", firewall.IPTablesDockerChain, generation.Pointer},
-		{&candidate, "-I", "DOCKER-USER 1", generation.Hook},
-		{&previous, "-D", "DOCKER-USER", generation.Hook},
-		{&previous, "-D", firewall.IPTablesDockerChain, generation.Pointer},
-	} {
-		if err := write(step.Buffer, step.Command, step.Chain, step.Args); err != nil {
-			return out, err
-		}
-	}
-	candidate.WriteString("COMMIT\n")
-	previous.WriteString("-X " + firewall.IPTablesDockerChain + "\n")
-	for _, rule := range generation.Rules {
-		if err := write(&previous, "-D", generation.Chain, rule.Arguments); err != nil {
-			return out, err
-		}
-	}
-	previous.WriteString("-X " + generation.Chain + "\nCOMMIT\n")
-	if candidate.Len() > firewall.IPTablesProgramBytes || previous.Len() > firewall.IPTablesProgramBytes {
-		return out, errors.New("Docker 候选或补偿批次超过 2 MiB")
-	}
-	raw, err := json.Marshal(before)
-	if err != nil {
-		return out, err
-	}
-	var after iptablesImage
-	if err = json.Unmarshal(raw, &after); err != nil {
-		return out, err
-	}
-	for ti := range after.Tables {
-		table := &after.Tables[ti]
-		if table.Name != "filter" {
-			continue
-		}
-		for ci := range table.Chains {
-			if table.Chains[ci].Name == "DOCKER-USER" {
-				table.Chains[ci].Rules = append([][]string{slices.Clone(generation.Hook)}, table.Chains[ci].Rules...)
-			}
-		}
-		rules := [][]string{}
-		for _, rule := range generation.Rules {
-			rules = append(rules, slices.Clone(rule.Arguments))
-		}
-		table.Chains = append(table.Chains, iptablesImageChain{Name: firewall.IPTablesDockerChain, Policy: "-", Rules: [][]string{slices.Clone(generation.Pointer)}}, iptablesImageChain{Name: generation.Chain, Policy: "-", Rules: rules})
-	}
-	if err = after.readbackBudget(); err != nil {
-		return out, err
-	}
-	// Reverse the modeled insertion and require the complete original image,
-	// including INPUT, Docker and every third-party table and ordered rule.
-	raw, err = json.Marshal(after)
-	if err != nil {
-		return out, err
-	}
-	var restored iptablesImage
-	if err = json.Unmarshal(raw, &restored); err != nil {
-		return out, err
-	}
-	for ti := range restored.Tables {
-		table := &restored.Tables[ti]
-		if table.Name != "filter" {
-			continue
-		}
-		chains := []iptablesImageChain{}
-		for _, chain := range table.Chains {
-			if chain.Name == generation.Chain || chain.Name == firewall.IPTablesDockerChain {
-				continue
-			}
-			if chain.Name == "DOCKER-USER" {
-				if len(chain.Rules) == 0 || !slices.Equal(chain.Rules[0], generation.Hook) {
-					return out, errors.New("Docker 补偿投影的首位入口不一致")
-				}
-				chain.Rules = chain.Rules[1:]
-			}
-			chains = append(chains, chain)
-		}
-		table.Chains = chains
-	}
-	if err = proveEmptyDockerNamespace(restored); err != nil {
-		return out, err
-	}
-	if restored.hash() != before.hash() {
-		return out, errors.New("Docker 候选与补偿投影未完整还原原规则")
-	}
-	return iptablesChangeMaterial{Family: before.Family, Binary: generation.Binary, BeforeHash: before.hash(), AfterHash: after.hash(), CandidateHash: secure.Hash(candidate.Bytes()), PreviousHash: secure.Hash(previous.Bytes()), Before: before, After: after, Candidate: candidate.Bytes(), Previous: previous.Bytes()}, nil
 }
 
 func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistrationSnapshot, grant *dockerRegistrationCheckpoint, program *firewall.DockerIPTablesRuntimeProgram, tools *iptablesToolBinding) (*dockerInitialTransition, *firewall.DockerTransitionPlan, error) {
@@ -160,7 +37,7 @@ func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistra
 		if image == nil {
 			return nil, nil, errors.New("Docker 初始代际缺少完整地址族规则")
 		}
-		material, err := makeDockerInitialMaterial(*image, generation)
+		material, err := makeDockerIPTablesChangeMaterial(*image, nil, &generation)
 		if err != nil {
 			return nil, nil, err
 		}

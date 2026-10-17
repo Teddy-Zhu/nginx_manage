@@ -222,18 +222,32 @@ func iptablesGeneration(program *firewall.IPTablesRuntimeProgram, family string)
 	return nil
 }
 
-// Every direction renders only the two accepted generations. A pointer switch
-// never declares/flushes an existing chain and never serializes foreign rules.
 func renderIPTablesChange(before iptablesImage, old, next *firewall.IPTablesGeneration) (iptablesImage, []byte, error) {
+	return renderIPTablesScopedChange(before, old, next, iptablesGenerationScope{Entry: "INPUT", Anchor: firewall.IPTablesHostChain, Prove: proveIPTablesGeneration})
+}
+
+type iptablesGenerationScope struct {
+	Entry, Anchor string
+	UserEntry     bool
+	Prove         func(iptablesImage, *firewall.IPTablesGeneration) error
+}
+
+// Both fixed scopes render only compiler-owned generations. Their distinct
+// proof functions retain their ownership grammar; neither renderer declares,
+// flushes or serializes a foreign chain or changes a builtin policy.
+func renderIPTablesScopedChange(before iptablesImage, old, next *firewall.IPTablesGeneration, scope iptablesGenerationScope) (iptablesImage, []byte, error) {
 	if old == nil && next == nil || old != nil && old.Family != before.Family || next != nil && next.Family != before.Family {
 		return iptablesImage{}, nil, errors.New("iptables 代际转换地址族无效")
 	}
-	if err := proveIPTablesGeneration(before, old); err != nil {
+	if scope.Prove == nil || scope.Entry == "" || scope.Anchor == "" || scope.Entry == scope.Anchor {
+		return iptablesImage{}, nil, errors.New("iptables 代际转换缺少固定入口或范围证明")
+	}
+	if err := scope.Prove(before, old); err != nil {
 		return iptablesImage{}, nil, err
 	}
-	input := before.chain("filter", "INPUT")
-	if input == nil || input.Policy != "ACCEPT" && input.Policy != "DROP" {
-		return iptablesImage{}, nil, errors.New("iptables 原 filter/INPUT 及默认策略无法核对")
+	entry := before.chain("filter", scope.Entry)
+	if entry == nil || scope.UserEntry && entry.Policy != "-" || !scope.UserEntry && entry.Policy != "ACCEPT" && entry.Policy != "DROP" {
+		return iptablesImage{}, nil, errors.New("iptables 原 filter 入口及链策略无法核对")
 	}
 	if old != nil && next != nil && (old.Chain == next.Chain || !slices.Equal(old.Hook, next.Hook)) {
 		return iptablesImage{}, nil, errors.New("iptables 新旧代际身份或固定入口冲突")
@@ -264,29 +278,29 @@ func renderIPTablesChange(before iptablesImage, old, next *firewall.IPTablesGene
 			}
 		}
 		if old == nil {
-			batch.WriteString("-N " + firewall.IPTablesHostChain + "\n")
-			if err = write("-A", firewall.IPTablesHostChain, next.Pointer); err != nil {
+			batch.WriteString("-N " + scope.Anchor + "\n")
+			if err = write("-A", scope.Anchor, next.Pointer); err != nil {
 				return after, nil, err
 			}
-			if err = write("-I", "INPUT 1", next.Hook); err != nil {
+			if err = write("-I", scope.Entry+" 1", next.Hook); err != nil {
 				return after, nil, err
 			}
 		} else {
-			if err = write("-I", firewall.IPTablesHostChain+" 1", next.Pointer); err != nil {
+			if err = write("-I", scope.Anchor+" 1", next.Pointer); err != nil {
 				return after, nil, err
 			}
-			if err = write("-D", firewall.IPTablesHostChain, old.Pointer); err != nil {
+			if err = write("-D", scope.Anchor, old.Pointer); err != nil {
 				return after, nil, err
 			}
 		}
 	} else {
-		if err = write("-D", "INPUT", old.Hook); err != nil {
+		if err = write("-D", scope.Entry, old.Hook); err != nil {
 			return after, nil, err
 		}
-		if err = write("-D", firewall.IPTablesHostChain, old.Pointer); err != nil {
+		if err = write("-D", scope.Anchor, old.Pointer); err != nil {
 			return after, nil, err
 		}
-		batch.WriteString("-X " + firewall.IPTablesHostChain + "\n")
+		batch.WriteString("-X " + scope.Anchor + "\n")
 	}
 	if old != nil {
 		for _, rule := range old.Rules {
@@ -306,13 +320,13 @@ func renderIPTablesChange(before iptablesImage, old, next *firewall.IPTablesGene
 			if old != nil && chain.Name == old.Chain {
 				continue
 			}
-			if chain.Name == firewall.IPTablesHostChain {
+			if chain.Name == scope.Anchor {
 				if next == nil {
 					continue
 				}
 				chain.Rules = [][]string{slices.Clone(next.Pointer)}
 			}
-			if chain.Name == "INPUT" {
+			if chain.Name == scope.Entry {
 				if old != nil && next == nil {
 					chain.Rules = chain.Rules[1:]
 				}
@@ -329,12 +343,12 @@ func renderIPTablesChange(before iptablesImage, old, next *firewall.IPTablesGene
 			}
 			chains = append(chains, iptablesImageChain{Name: next.Chain, Policy: "-", Rules: rules})
 			if old == nil {
-				chains = append(chains, iptablesImageChain{Name: firewall.IPTablesHostChain, Policy: "-", Rules: [][]string{slices.Clone(next.Pointer)}})
+				chains = append(chains, iptablesImageChain{Name: scope.Anchor, Policy: "-", Rules: [][]string{slices.Clone(next.Pointer)}})
 			}
 		}
 		after.Tables[ti].Chains = chains
 	}
-	if err = proveIPTablesGeneration(after, next); err != nil {
+	if err = scope.Prove(after, next); err != nil {
 		return after, nil, err
 	}
 	if err = after.readbackBudget(); err != nil {

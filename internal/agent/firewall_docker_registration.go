@@ -5,10 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/secure"
 )
 
@@ -193,17 +191,14 @@ func dockerRegistrationPending(dataDir string) bool {
 // Until an independent Docker executor can prove ownership, every reserved
 // object must be absent. The check covers all tables/backends/families.
 func proveEmptyDockerNamespace(image iptablesImage) error {
-	reserved := func(value string) bool {
-		return strings.HasPrefix(value, firewall.IPTablesDockerChain) || strings.HasPrefix(value, "nginxpanel:docker:")
-	}
 	for _, table := range image.Tables {
 		for _, chain := range table.Chains {
-			if reserved(chain.Name) {
+			if dockerIPTablesReserved(chain.Name) {
 				return errors.New("存在未经 Docker 独立回执证明的保留链，拒绝接管或删除")
 			}
 			for _, rule := range chain.Rules {
 				for _, arg := range rule {
-					if reserved(arg) {
+					if dockerIPTablesReserved(arg) {
 						return errors.New("存在未经 Docker 独立回执证明的引用或标记，拒绝接管或删除")
 					}
 				}
