@@ -42,7 +42,9 @@ func (g *maintenanceGate) open() error {
 		return err
 	}
 	defer unlock()
-	records, err := g.records()
+	// Restore the maintenance lease even when a local retirement was
+	// interrupted. Admission will verify its proof before granting work.
+	records, err := g.rawRecords()
 	if err != nil {
 		return err
 	}
@@ -67,7 +69,7 @@ func (g *maintenanceGate) open() error {
 	}
 	return nil
 }
-func (g *maintenanceGate) records() ([]Record, error) {
+func (g *maintenanceGate) rawRecords() ([]Record, error) {
 	entries, err := os.ReadDir(g.journal.Dir)
 	if err != nil {
 		return nil, err
@@ -98,6 +100,40 @@ func (g *maintenanceGate) records() ([]Record, error) {
 		if r.Kind == clientDenyKind {
 			if _, err := clientDenyCheckpoint([]Record{r}); err != nil {
 				return nil, err
+			}
+		}
+		records = append(records, r)
+	}
+	return records, nil
+}
+
+func (g *maintenanceGate) records() ([]Record, error) {
+	original, err := g.rawRecords()
+	if err != nil {
+		return nil, err
+	}
+	records := make([]Record, 0, len(original))
+	for _, r := range original {
+		// All independent maintenance workers share this view. Keep the
+		// immutable audit on disk, but omit a disposed scope only after its
+		// retirement and original receipts have been verified together.
+		if r.Kind == firewallOperationKind || r.Kind == iptablesRepairKind {
+			retired, err := retiredIPTablesRecord(filepath.Dir(filepath.Dir(g.journal.Dir)), r)
+			if err != nil {
+				return nil, err
+			}
+			if retired {
+				continue
+			}
+		}
+		if r.Kind == iptablesRetirementKind {
+			retirement, err := loadIPTablesRetirement(filepath.Dir(filepath.Dir(g.journal.Dir)), r.RelatedOperationID)
+			if err != nil || retirement == nil {
+				return nil, errors.Join(errors.New("iptables 退役缺少原本机意图"), err)
+			}
+			current, _, err := retirement.record(filepath.Dir(filepath.Dir(g.journal.Dir)))
+			if err != nil || !sameIPTablesRetirementRecord(current, r) {
+				return nil, errors.Join(errors.New("iptables 退役维护回执冲突"), err)
 			}
 		}
 		records = append(records, r)
@@ -283,25 +319,6 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 			}
 		}
 
-		if r.Kind == firewallOperationKind || r.Kind == iptablesRepairKind {
-			retired, err := retiredIPTablesRecord(filepath.Dir(filepath.Dir(g.journal.Dir)), r)
-			if err != nil {
-				return out, err
-			}
-			if retired {
-				continue
-			}
-		}
-		if r.Kind == iptablesRetirementKind {
-			retirement, err := loadIPTablesRetirement(filepath.Dir(filepath.Dir(g.journal.Dir)), r.RelatedOperationID)
-			if err != nil || retirement == nil {
-				return out, errors.Join(errors.New("iptables 退役缺少原本机意图"), err)
-			}
-			current, _, err := retirement.record(filepath.Dir(filepath.Dir(g.journal.Dir)))
-			if err != nil || !sameIPTablesRetirementRecord(current, r) {
-				return out, errors.Join(errors.New("iptables 退役维护回执冲突"), err)
-			}
-		}
 		switch r.State {
 		case "succeeded", "failed", "rolled_back", "cancelled":
 		case "queued", "running", "waiting_confirmation", "compensating", "recovery_required":

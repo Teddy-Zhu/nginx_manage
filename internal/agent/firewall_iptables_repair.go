@@ -114,8 +114,15 @@ func loadIPTablesRepair(dataDir string) (*iptablesRepairCheckpoint, error) {
 	return v, nil
 }
 
+func iptablesRepairRecordState(status *iptablesRepairStatus) string {
+	if status.State == "superseded" {
+		return "cancelled"
+	}
+	return status.State
+}
+
 func iptablesRepairReceiptMatches(r Record, v *iptablesRepairCheckpoint) bool {
-	return r.Kind == iptablesRepairKind && r.OperationID == v.Status.ID && r.RelatedOperationID == v.Status.OperationID && r.RequestHash == v.Status.IntentHash && r.State == v.Status.State && r.Error == v.Status.Error && r.CandidateHash == iptablesRepairHash(v) && r.IPTablesRepair != nil && sameIPTablesValue(r.IPTablesRepair, v.Status)
+	return r.Kind == iptablesRepairKind && r.OperationID == v.Status.ID && r.RelatedOperationID == v.Status.OperationID && r.RequestHash == v.Status.IntentHash && r.State == iptablesRepairRecordState(&v.Status) && r.Error == v.Status.Error && r.CandidateHash == iptablesRepairHash(v) && r.IPTablesRepair != nil && sameIPTablesValue(r.IPTablesRepair, v.Status)
 }
 
 func saveIPTablesRepair(dataDir string, v *iptablesRepairCheckpoint) error {
@@ -139,7 +146,7 @@ func saveIPTablesRepair(dataDir string, v *iptablesRepairCheckpoint) error {
 		}
 	}
 	if r, err := loadIPTablesReceipt(dataDir, v.Status.ID); err == nil {
-		if r.Kind != iptablesRepairKind || r.RequestHash != v.Status.IntentHash || r.IPTablesRepair == nil || r.RelatedOperationID != v.Status.OperationID || r.IPTablesRepair.ID != v.Status.ID || r.IPTablesRepair.IntentHash != v.Status.IntentHash || slices.Contains([]string{"succeeded", "superseded"}, r.State) && !iptablesRepairReceiptMatches(r, v) {
+		if r.Kind != iptablesRepairKind || r.RequestHash != v.Status.IntentHash || r.IPTablesRepair == nil || r.RelatedOperationID != v.Status.OperationID || r.IPTablesRepair.ID != v.Status.ID || r.IPTablesRepair.IntentHash != v.Status.IntentHash || slices.Contains([]string{"succeeded", "cancelled"}, r.State) && !iptablesRepairReceiptMatches(r, v) {
 			return errors.New("iptables 原修复独立回执冲突")
 		}
 	} else if !os.IsNotExist(err) {
@@ -156,7 +163,7 @@ func saveIPTablesRepair(dataDir string, v *iptablesRepairCheckpoint) error {
 		return err
 	}
 	status := v.Status
-	return journal.Put(Record{OperationID: status.ID, RelatedOperationID: status.OperationID, Kind: iptablesRepairKind, RequestHash: status.IntentHash, State: status.State, Stage: "confirmed_runtime_repair", Error: status.Error, IPTablesRepair: &status, CandidateHash: iptablesRepairHash(v)})
+	return journal.Put(Record{OperationID: status.ID, RelatedOperationID: status.OperationID, Kind: iptablesRepairKind, RequestHash: status.IntentHash, State: iptablesRepairRecordState(&status), Stage: "confirmed_runtime_repair", Error: status.Error, IPTablesRepair: &status, CandidateHash: iptablesRepairHash(v)})
 }
 
 func iptablesRepairPending(dataDir string) bool {
