@@ -66,6 +66,9 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	} else if !os.IsNotExist(err) {
 		return out, err
 	}
+	if f.owner == "firewalld" {
+		return out, fault.Unavailable(firewalldPlanningReason)
+	}
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("防火墙执行未就绪")
 	}
@@ -78,6 +81,9 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 	}
 	if plan.view.Version != version || plan.view.PolicyHash != policyHash || plan.view.Action != action {
 		return out, fault.Conflict("已保存策略与计划不一致，请重新生成")
+	}
+	if !plan.view.CanApply || plan.record == nil {
+		return out, fault.Unavailable("该计划仅供核对，尚不能应用")
 	}
 	if action == "remove" && (f.state.Confirmed == nil || f.state.Confirmed.Action != "apply" || f.state.Confirmed.Version != version || f.state.Confirmed.PolicyHash != policyHash) {
 		return out, fault.Conflict("待移除的已确认策略已变化，请重新生成计划")

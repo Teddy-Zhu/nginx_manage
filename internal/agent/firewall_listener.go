@@ -25,6 +25,12 @@ func (f *hostFirewall) checkListener(ctx context.Context, config remotelisten.Co
 	if f.policyUncertain {
 		return fault.Unavailable("防火墙独立策略记录不可核对，禁止变更远程入口")
 	}
+	if f.owner == "firewalld" && f.firewalldRegistration != nil {
+		if _, err := f.firewalldEmptySnapshot(ctx); err != nil {
+			return fault.Unavailable("firewalld 空策略登记无法完整核对，禁止变更远程入口")
+		}
+		return nil
+	}
 	if f.state.Schema == 0 {
 		return nil // No independent policy has been registered on this node.
 	}

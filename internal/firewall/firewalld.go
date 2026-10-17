@@ -30,10 +30,11 @@ type FirewalldSettings struct {
 	RichRules    []string `json:"rich_rules"`
 }
 type FirewalldProgram struct {
-	Settings FirewalldSettings
-	Entries  []PreviewEntry
-	Hash     string
-	Bytes    int
+	Settings        FirewalldSettings
+	Entries         []PreviewEntry
+	Hash            string
+	Bytes           int
+	ProtectionRules int
 }
 type FirewalldPreview struct {
 	Policy        string   `json:"policy"`
@@ -90,54 +91,26 @@ func CompileFirewalld(policy Policy) (*FirewalldProgram, error) {
 					if len(program.Entries) >= MaxEntries {
 						return nil, fault.Invalid("firewalld 规则展开后超过 8192 条，请缩小端口和来源组合")
 					}
-					// Every expanded rule has a distinct negative priority. This
-					// preserves policy order even across different verdicts; zero
-					// would group rules by action, and equal priorities are unordered.
-					priority := -32768 + len(program.Entries)
-					var text strings.Builder
-					text.WriteString("rule family=\"")
-					text.WriteString(family)
-					text.WriteString("\" priority=\"")
-					text.WriteString(strconv.Itoa(priority))
-					text.WriteByte('"')
-					if source != "" {
-						text.WriteString(" source address=\"")
-						text.WriteString(source)
-						text.WriteByte('"')
-					}
-					text.WriteString(" port port=\"")
-					text.WriteString(strconv.Itoa(port.From))
-					if port.To != port.From {
-						text.WriteByte('-')
-						text.WriteString(strconv.Itoa(port.To))
-					}
-					text.WriteString("\" protocol=\"")
-					text.WriteString(rule.Protocol)
-					text.WriteString("\" ")
-					switch rule.Action {
-					case "allow":
-						text.WriteString("accept")
-					case "deny":
-						text.WriteString("drop")
-					case "reject":
-						kind := "icmp-port-unreachable"
-						if family == "ipv6" {
-							kind = "icmp6-port-unreachable"
-						}
-						if rule.Protocol == "tcp" {
-							kind = "tcp-reset"
-						}
-						text.WriteString("reject type=\"")
-						text.WriteString(kind)
-						text.WriteByte('"')
-					}
-					rich := text.String()
-					program.Settings.RichRules = append(program.Settings.RichRules, rich)
-					program.Entries = append(program.Entries, PreviewEntry{RuleID: rule.ID, Family: family, Protocol: rule.Protocol, Source: source, Ports: port, Action: rule.Action, Priority: rule.Priority, BackendPriority: &priority, Expression: rich})
+					program.Entries = append(program.Entries, PreviewEntry{RuleID: rule.ID, Family: family, Protocol: rule.Protocol, Source: source, Ports: port, Action: rule.Action, Priority: rule.Priority})
 				}
 			}
 		}
 	}
+	return finishFirewalld(program)
+}
+
+func finishFirewalld(program *FirewalldProgram) (*FirewalldProgram, error) {
+	program.Settings.RichRules = make([]string, 0, len(program.Entries))
+	// Unique negative priorities preserve order across protection/business rules
+	// and verdicts; zero groups by action, and equal priorities are unordered.
+	for i := range program.Entries {
+		entry := &program.Entries[i]
+		priority := -32768 + i
+		entry.BackendPriority = &priority
+		entry.Expression = firewalldRichRule(*entry, priority)
+		program.Settings.RichRules = append(program.Settings.RichRules, entry.Expression)
+	}
+
 	raw, err := json.Marshal(program.Settings)
 	if err != nil {
 		return nil, err
@@ -148,6 +121,70 @@ func CompileFirewalld(policy Policy) (*FirewalldProgram, error) {
 	program.Bytes = len(raw)
 	program.Hash = secure.Hash(append([]byte("firewalld:policy:v1:"+FirewalldHostPolicy+"\x00"), raw...))
 	return program, nil
+}
+
+func CompileFirewalldProtected(policy Policy, protections []Protection) (*FirewalldProgram, error) {
+	base, err := CompileFirewalld(policy)
+	if err != nil {
+		return nil, err
+	}
+	guards, err := protectionPolicy(protections, "firewalld")
+	if err != nil {
+		return nil, err
+	}
+	protected, err := CompileFirewalld(guards)
+	if err != nil {
+		return nil, err
+	}
+	if len(base.Entries)+len(protected.Entries) > MaxEntries {
+		return nil, fault.Invalid("包含保护项的 firewalld 规则超过 8192 条")
+	}
+	base.ProtectionRules = len(protected.Entries)
+	base.Entries = append(protected.Entries, base.Entries...)
+	return finishFirewalld(base)
+}
+
+// Match the official Rich_Rule rendering: priority precedes family, then the
+// fixed source/port/verdict elements. No arbitrary rich-language input is used.
+func firewalldRichRule(entry PreviewEntry, priority int) string {
+	var text strings.Builder
+	text.WriteString("rule priority=\"")
+	text.WriteString(strconv.Itoa(priority))
+	text.WriteString("\" family=\"")
+	text.WriteString(entry.Family)
+	text.WriteByte('"')
+	if entry.Source != "" {
+		text.WriteString(" source address=\"")
+		text.WriteString(entry.Source)
+		text.WriteByte('"')
+	}
+	text.WriteString(" port port=\"")
+	text.WriteString(strconv.Itoa(entry.Ports.From))
+	if entry.Ports.To != entry.Ports.From {
+		text.WriteByte('-')
+		text.WriteString(strconv.Itoa(entry.Ports.To))
+	}
+	text.WriteString("\" protocol=\"")
+	text.WriteString(entry.Protocol)
+	text.WriteString("\" ")
+	switch entry.Action {
+	case "allow":
+		text.WriteString("accept")
+	case "deny":
+		text.WriteString("drop")
+	case "reject":
+		kind := "icmp-port-unreachable"
+		if entry.Family == "ipv6" {
+			kind = "icmp6-port-unreachable"
+		}
+		if entry.Protocol == "tcp" {
+			kind = "tcp-reset"
+		}
+		text.WriteString("reject type=\"")
+		text.WriteString(kind)
+		text.WriteByte('"')
+	}
+	return text.String()
 }
 
 func (p *FirewalldProgram) Preview() *FirewalldPreview {

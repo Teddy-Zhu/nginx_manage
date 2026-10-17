@@ -33,6 +33,7 @@ import {
 import { useAction, useIdempotency } from "../composables/action";
 import { useRoute } from "vue-router";
 import { useSession } from "../stores/session";
+import FirewalldPlanDetails from "../components/FirewalldPlanDetails.vue";
 
 const route = useRoute();
 const action = ref<FirewallPlanInput["action"]>(
@@ -207,7 +208,7 @@ async function disableManagement() {
 }
 async function submit() {
   const current = plan.value;
-  if (!current) return;
+  if (!current?.can_apply) return;
   const input = {
     action: current.action,
     plan_id: current.id,
@@ -225,6 +226,7 @@ async function submit() {
   });
 }
 function apply() {
+  if (!plan.value?.can_apply) return;
   if (uncertain.value) {
     void submit();
     return;
@@ -280,7 +282,7 @@ onUnmounted(() => {
         :disabled="
           busy ||
           !canManage ||
-          !view?.available ||
+          !view?.can_plan ||
           (action === 'apply'
             ? !stored?.version || managementDisabled !== false
             : view?.confirmed_action !== 'apply') ||
@@ -425,7 +427,7 @@ onUnmounted(() => {
       <n-tag type="info">{{
         plan.action === "remove"
           ? `移除 ${plan.baseline.rules} 条规则`
-          : `${plan.generated_rules} 条内核规则`
+          : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : "内核规则"}`
       }}</n-tag>
     </div>
     <dl>
@@ -444,6 +446,11 @@ onUnmounted(() => {
       <dt>计划有效期</dt>
       <dd>{{ new Date(plan.expires_at * 1000).toLocaleString() }}</dd>
     </dl>
+    <FirewalldPlanDetails
+      v-if="plan.firewalld"
+      :plan="plan.firewalld"
+      :program-hash="plan.program_hash"
+    />
     <n-data-table
       :columns="protections"
       :data="plan.protections"
@@ -454,13 +461,16 @@ onUnmounted(() => {
       {{
         plan.action === "remove"
           ? "所列入口仅用于本次连接核对，移除后不再保留本应用保护条目；删除不等同于允许端口，其余系统策略仍可能阻止连接。"
-          : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
+          : plan.backend === "firewalld"
+            ? "入口保护先于业务规则匹配。accept 可能结束后续 firewalld 过滤，其他内核规则或云安全组仍可阻止连接。"
+            : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
       }}
     </p>
     <n-button
       type="warning"
       :disabled="
         busy ||
+        !plan.can_apply ||
         !canManage ||
         active ||
         operation?.plan_id === plan.id ||

@@ -198,32 +198,38 @@ func ManageFirewalldRegistration(ctx context.Context, dataDir, scope, action str
 }
 
 func firewalldRegistrationAdmission(ctx context.Context, dataDir, scope string) error {
+	_, err := inspectFirewalldRegistration(ctx, dataDir, scope)
+	return err
+}
+
+func inspectFirewalldRegistration(ctx context.Context, dataDir, scope string) (firewall.Observation, error) {
+	var observed firewall.Observation
 	runtime, err := loadFirewallState(dataDir)
 	if err != nil {
-		return err
+		return observed, err
 	}
 	if runtime != nil {
-		return errors.New("直接 nftables 独立执行器已有恢复材料，禁止 firewalld 登记")
+		return observed, errors.New("直接 nftables 独立执行器已有恢复材料，禁止 firewalld 登记")
 	}
 	nft, err := loadNFTRegistration(dataDir)
 	if err != nil {
-		return err
+		return observed, err
 	}
 	if nft != nil && nft.State != "released" {
-		return errors.New("存在直接 nftables 登记或待恢复意图，禁止切换所有者")
+		return observed, errors.New("存在直接 nftables 登记或待恢复意图，禁止切换所有者")
 	}
 	call, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
-	observed := (&firewallObserver{scope: scope, dataDir: dataDir}).collect(call)
+	observed = (&firewallObserver{scope: scope, dataDir: dataDir}).collect(call)
 	if !observed.Available || observed.Manager != "firewalld" || observed.Backend == "mixed" || observed.Firewalld.Running == nil || !*observed.Firewalld.Running || observed.Firewalld.Panic == nil || *observed.Firewalld.Panic || observed.Firewalld.ConfiguredBackend == "" || !observed.Firewalld.PolicyInventory.Available || !observed.Kernel.Available || observed.Kernel.TableExists || len(observed.Rulesets) != 5 {
-		return errors.New("须先完整确认单一 firewalld 管理器、非 panic 状态及无直接 nftables 目标表")
+		return observed, errors.New("须先完整确认单一 firewalld 管理器、非 panic 状态及无直接 nftables 目标表")
 	}
 	for _, set := range observed.Rulesets {
 		if !set.Available {
-			return errors.New("部分内核后端视图不完整，禁止 firewalld 登记变更")
+			return observed, errors.New("部分内核后端视图不完整，禁止 firewalld 登记变更")
 		}
 	}
-	return nil
+	return observed, nil
 }
 
 func reconcileFirewalldRegistration(ctx context.Context, dataDir string, v *firewalldRegistrationCheckpoint) (FirewalldRegistrationStatus, error) {

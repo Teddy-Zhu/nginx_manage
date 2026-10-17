@@ -199,7 +199,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := remote.open(); err != nil {
 		return err
 	}
-	fw := &hostFirewall{dataDir: s.DataDir, sshMode: s.FirewallSSH, available: !s.Dev && s.FirewallScope == "host" && s.FirewallOwner == "direct-nftables" && (s.FirewallSSH == "openssh" || s.FirewallSSH == "none") && s.MaintenanceScope == "host", journal: s.Journal, remote: remote, dns: dns}
+	fw := &hostFirewall{dataDir: s.DataDir, sshMode: s.FirewallSSH, owner: s.FirewallOwner, available: !s.Dev && s.FirewallScope == "host" && (s.FirewallOwner == "direct-nftables" || s.FirewallOwner == "firewalld") && (s.FirewallSSH == "openssh" || s.FirewallSSH == "none") && s.MaintenanceScope == "host", journal: s.Journal, remote: remote, dns: dns}
 	defer fw.Close()
 	if err := fw.Open(); err != nil {
 		return err

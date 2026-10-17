@@ -6,6 +6,15 @@ import (
 )
 
 func inspectFirewalldPreview(out *Preview, observed Observation) {
+	errors, warnings := FirewalldEnvironment(observed)
+	out.Errors = append(out.Errors, errors...)
+	out.Warnings = append(out.Warnings, warnings...)
+}
+
+// Shared by the logical preview and the root protection plan; callers still
+// need fresh ownership/configuration proof before using a plan for any write.
+func FirewalldEnvironment(observed Observation) (errors, warnings []string) {
+	out := Preview{Errors: []string{}, Warnings: []string{}}
 	if observed.Manager != "firewalld" || observed.Firewalld.Running == nil || !*observed.Firewalld.Running {
 		out.Errors = append(out.Errors, "目标未确认由单一 firewalld 管理，不能切换或接管管理器")
 	}
@@ -25,7 +34,7 @@ func inspectFirewalldPreview(out *Preview, observed Observation) {
 	inventory := observed.Firewalld.PolicyInventory
 	if !inventory.Available {
 		out.Errors = append(out.Errors, "firewalld runtime/permanent policy 清单无法完整核对")
-		return
+		return out.Errors, out.Warnings
 	}
 	registration := observed.Firewalld.Registration
 	if registration.State == "recovery_required" || registration.State == "missing" || registration.State == "drifted" {
@@ -51,4 +60,5 @@ func inspectFirewalldPreview(out *Preview, observed Observation) {
 			out.Warnings = append(out.Warnings, "活动 policy "+policy.Name+" 的优先级早于目标，可能先行结束匹配；需核对其流量范围")
 		}
 	}
+	return out.Errors, out.Warnings
 }

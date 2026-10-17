@@ -215,13 +215,13 @@ paths:
     get:
       operationId: getFirewallRuntime
       x-scopes: [read, security.write]
-      description: 返回 FirewallRuntime。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
+      description: 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；firewalld 当前仅可生成保护准备计划。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；30 秒后台采集、45 秒有效，GET 不启动宿主机检查。模块停用不撤销已确认策略、核对或恢复。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/plan:
     post:
       operationId: planFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对空表登记/原程序、管理器、SSH 监听、来源与代次。计划 300 秒有效，不写内核。
+      description: 返回 FirewallPlan。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 准备计划绑定原空 policy 的 runtime/permanent 完整摘要及登记操作，can_apply=false。计划 300 秒有效，不写内核或 firewalld 配置。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPlanInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -229,7 +229,7 @@ paths:
     post:
       operationId: applyFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须近期认证；绑定原动作、计划、版本及幂等键，先保存独立意图，再以单批原子替换受管表。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
+      description: 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须近期认证；仅执行 can_apply=true 的直接 nftables 计划；firewalld 准备计划拒绝执行。绑定原动作、计划、版本及幂等键，先保存独立意图，再以单批原子替换受管表。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallApplyInput"}}}}
       responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -2048,7 +2048,22 @@ components:
     FirewallApplyInput:
       {"type": "object", "additionalProperties": false, "required": ["plan_id", "version", "action"], "properties": {"plan_id": {"type": "string", "format": "uuid"}, "version": {"type": "integer", "format": "int64", "minimum": 1}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallPlan:
-      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
+      {"type": "object", "additionalProperties": false, "required": ["id", "version", "policy_hash", "program_hash", "baseline", "protections", "ssh_profile", "ssh_listeners", "listener_version", "listener", "control_source", "confirmation_seconds", "expires_at", "transaction_hash", "transaction_bytes", "generated_rules", "action", "backend", "can_apply", "firewalld"], "properties": {"id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "baseline": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "ssh_profile": {"type": "string"}, "ssh_listeners": {"type": "array", "items": {"type": "string"}}, "listener_version": {"type": "integer", "format": "int64"}, "listener": {"type": "string"}, "control_source": {"type": "string"}, "confirmation_seconds": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "transaction_hash": {"type": "string"}, "transaction_bytes": {"type": "integer", "format": "int64"}, "generated_rules": {"type": "integer", "format": "int64"}, "action": {"type": "string", "enum": ["apply", "remove"]}, "backend": {"type": "string", "enum": ["direct-nftables", "firewalld"]}, "can_apply": {"type": "boolean", "description": "表示此后端支持执行该计划；仍须重新核对基线、版本和保护依据。firewalld 准备计划为 false。"}, "firewalld": {"allOf": [{"$ref": "#/components/schemas/FirewallFirewalldPlan"}], "nullable": true}}}
+    FirewallFirewalldPlan:
+      type: object
+      additionalProperties: false
+      required: [runtime_hash, permanent_hash, registration_operation_id, settings, protection_rules, entries, truncated, warnings, reason]
+      description: root 在当前实际管理连接下生成的保护准备计划；当前只核对已登记空 policy，can_apply 为 false，不提交 D-Bus 写入，也不冒充内核事务。
+      properties:
+        runtime_hash: {type: string, minLength: 64, maxLength: 64}
+        permanent_hash: {type: string, minLength: 64, maxLength: 64}
+        registration_operation_id: {type: string, format: uuid}
+        settings: {$ref: '#/components/schemas/FirewallFirewalldPreview'}
+        protection_rules: {type: integer, minimum: 0, maximum: 8192}
+        entries: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/FirewallPreviewEntry'}}
+        truncated: {type: boolean}
+        warnings: {type: array, maxItems: 64, items: {type: string}}
+        reason: {type: string}
     FirewallOperation:
       {"type": "object", "additionalProperties": false, "required": ["id", "plan_id", "version", "policy_hash", "program_hash", "state", "stage", "deadline", "updated_at", "confirmed_source", "verification_scope", "error", "action"], "properties": {"id": {"type": "string"}, "plan_id": {"type": "string"}, "version": {"type": "integer", "format": "int64"}, "policy_hash": {"type": "string"}, "program_hash": {"type": "string"}, "state": {"type": "string", "enum": ["running", "waiting_confirmation", "compensating", "recovery_required", "succeeded", "rolled_back", "failed"]}, "stage": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "confirmed_source": {"type": "string"}, "verification_scope": {"type": "string"}, "error": {"type": "string"}, "action": {"type": "string", "enum": ["apply", "remove"]}}}
     FirewallProtectionObservation:
@@ -2178,7 +2193,7 @@ components:
     Fail2banObservation:
       {"type": "object", "additionalProperties": false, "required": ["at", "source", "scope", "available", "writable", "reason", "tools", "client_version", "python", "services", "socket", "missing", "warnings", "binding", "managed"], "properties": {"at": {"type": "integer", "format": "int64"}, "source": {"type": "string"}, "scope": {"type": "string"}, "available": {"type": "boolean"}, "writable": {"type": "boolean"}, "reason": {"type": "string"}, "tools": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banTool"}}, "client_version": {"type": "string"}, "python": {"$ref": "#/components/schemas/Fail2banPython"}, "services": {"type": "array", "maxItems": 3, "items": {"$ref": "#/components/schemas/Fail2banService"}}, "socket": {"$ref": "#/components/schemas/Fail2banSocket"}, "missing": {"type": "array", "maxItems": 4, "items": {"type": "string"}}, "warnings": {"type": "array", "maxItems": 8, "items": {"type": "string"}}, "binding": {"$ref": "#/components/schemas/Fail2banBindingView"}, "managed": {"$ref": "#/components/schemas/Fail2banManaged"}}}
     FirewallRuntime:
-      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id", "protection_observation"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}, "protection_observation": {"$ref": "#/components/schemas/FirewallProtectionObservation"}}}
+      {"type": "object", "additionalProperties": false, "required": ["available", "reason", "confirmed_version", "confirmed_policy_hash", "kernel", "protections", "operation", "confirmed_action", "confirmed_plan_id", "confirmed_operation_id", "protection_observation", "backend", "can_plan"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "confirmed_version": {"type": "integer", "format": "int64"}, "confirmed_policy_hash": {"type": "string"}, "kernel": {"$ref": "#/components/schemas/FirewallKernelView"}, "protections": {"type": "array", "items": {"$ref": "#/components/schemas/FirewallProtection"}}, "operation": {"allOf": [{"$ref": "#/components/schemas/FirewallOperation"}], "nullable": true}, "confirmed_action": {"type": "string", "enum": ["none", "apply", "remove"]}, "confirmed_plan_id": {"type": "string"}, "confirmed_operation_id": {"type": "string"}, "protection_observation": {"$ref": "#/components/schemas/FirewallProtectionObservation"}, "backend": {"type": "string", "enum": ["unconfirmed", "direct-nftables", "firewalld"]}, "can_plan": {"type": "boolean", "description": "可尝试生成计划；available 表示策略执行就绪，二者须分别显示。"}}}
     BackupInput:
       type: object
       additionalProperties: false

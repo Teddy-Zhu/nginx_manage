@@ -61,6 +61,8 @@ type firewallPrivatePlan struct {
 type hostFirewall struct {
 	mu                    sync.Mutex
 	dataDir, sshMode      string
+	owner                 string
+	firewalldRegistration *firewalldRegistrationCheckpoint
 	available             bool
 	recovering            bool
 	policyUncertain       bool
@@ -217,6 +219,14 @@ func (f *hostFirewall) Open() error {
 		f.problem = "防火墙独立恢复记录无效，须本机处理"
 		return nil
 	}
+	if f.owner == "firewalld" {
+		if value == nil {
+			return f.openFirewalldPlanner()
+		}
+		// A new owner selection never revokes an admitted NFT recovery.
+		// Continue only that stored executor; grant no new direct-NFT writes.
+		f.owner, f.available = "direct-nftables", false
+	}
 	if !f.available && value == nil {
 		return nil
 	}
@@ -288,7 +298,17 @@ func (f *hostFirewall) Operation(id string) (firewall.Operation, error) {
 func (f *hostFirewall) View() firewall.RuntimeView {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := firewall.RuntimeView{Available: f.available && f.problem == "" && f.state.Schema == firewallRuntimeSchema, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}, ConfirmedAction: "none"}
+	out := firewall.RuntimeView{Backend: f.owner, Available: f.available && f.problem == "" && f.state.Schema == firewallRuntimeSchema, Reason: f.problem, Kernel: f.state.CurrentKernel, Protections: []firewall.Protection{}, ConfirmedAction: "none"}
+	if f.state.Schema == firewallRuntimeSchema {
+		out.Backend = "direct-nftables"
+	}
+	if out.Backend != "firewalld" && out.Backend != "direct-nftables" {
+		out.Backend = "unconfirmed"
+	}
+	if f.owner == "firewalld" && f.firewalldRegistration != nil && f.problem == "" {
+		out.CanPlan = true
+		out.Reason = firewalldPlanningReason
+	}
 	if f.state.Candidate != nil {
 		out.Available = false
 		if out.Reason == "" {
@@ -296,7 +316,7 @@ func (f *hostFirewall) View() firewall.RuntimeView {
 		}
 	}
 	if !f.available && out.Reason == "" {
-		out.Reason = "须由本机 root 确认 direct-nftables 所有者、宿主机范围及 SSH 保护配置"
+		out.Reason = "须由本机 root 确认防火墙所有者、宿主机范围及 SSH 保护配置"
 	}
 	if r := f.state.Confirmed; r != nil {
 		out.ConfirmedAction, out.ConfirmedPlanID, out.ConfirmedOperationID = r.Action, r.PlanID, r.OperationID
@@ -311,6 +331,7 @@ func (f *hostFirewall) View() firewall.RuntimeView {
 		out.Operation = &copy
 	}
 	out.ProtectionObservation = f.protectionObservationLocked()
+	out.CanPlan = out.CanPlan || out.Available
 	return out
 }
 func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, connection string) (firewall.Plan, error) {
@@ -322,6 +343,9 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	defer f.remote.mu.Unlock()
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.owner == "firewalld" {
+		return f.planFirewalldLocked(ctx, in, connection)
+	}
 	var out firewall.Plan
 	if !f.available || f.problem != "" || f.state.Schema != firewallRuntimeSchema {
 		return out, fault.Unavailable("宿主机防火墙执行尚未由本机确认或需恢复")
@@ -403,15 +427,19 @@ func (f *hostFirewall) Plan(ctx context.Context, in firewall.RuntimeInput, conne
 	if current.Bytes+len(batch.Wire)+generatedRules*64+4096 > nftReadBytes {
 		return out, fault.Unavailable("现有快照与候选规模超过完整后读预算")
 	}
+	out = firewall.Plan{Backend: "direct-nftables", CanApply: true, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: programHash, Baseline: current, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: batch.Hash, TransactionBytes: len(batch.Wire), GeneratedRules: generatedRules}
+	return out, f.storePlanLocked(out, record)
+}
+
+func (f *hostFirewall) storePlanLocked(view firewall.Plan, record *firewallPolicyRecord) error {
 	for key, p := range f.plans {
 		if time.Now().Unix() >= p.view.ExpiresAt {
 			delete(f.plans, key)
 		}
 	}
 	if len(f.plans) >= 8 {
-		return out, fault.New(429, "FIREWALL_PLAN_LIMIT", "待执行计划已达 8 份，请等待过期")
+		return fault.New(429, "FIREWALL_PLAN_LIMIT", "待执行计划已达 8 份，请等待过期")
 	}
-	out = firewall.Plan{Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: programHash, Baseline: current, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: batch.Hash, TransactionBytes: len(batch.Wire), GeneratedRules: generatedRules}
-	f.plans[id] = firewallPrivatePlan{view: out, record: record}
-	return out, nil
+	f.plans[view.ID] = firewallPrivatePlan{view: view, record: record}
+	return nil
 }

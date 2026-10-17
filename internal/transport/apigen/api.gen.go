@@ -2012,23 +2012,37 @@ type FirewallApplyInput struct {
 	Version int64  `json:"version"`
 }
 type FirewallPlan struct {
-	Action              string               `json:"action"`
-	Id                  string               `json:"id"`
-	Version             int64                `json:"version"`
-	PolicyHash          string               `json:"policy_hash"`
-	ProgramHash         string               `json:"program_hash"`
-	Baseline            FirewallKernelView   `json:"baseline"`
-	Protections         []FirewallProtection `json:"protections"`
-	SshProfile          string               `json:"ssh_profile"`
-	SshListeners        []string             `json:"ssh_listeners"`
-	ListenerVersion     int64                `json:"listener_version"`
-	Listener            string               `json:"listener"`
-	ControlSource       string               `json:"control_source"`
-	ConfirmationSeconds int64                `json:"confirmation_seconds"`
-	ExpiresAt           int64                `json:"expires_at"`
-	TransactionHash     string               `json:"transaction_hash"`
-	TransactionBytes    int64                `json:"transaction_bytes"`
-	GeneratedRules      int64                `json:"generated_rules"`
+	Backend             string                 `json:"backend"`
+	CanApply            bool                   `json:"can_apply"`
+	Firewalld           *FirewallFirewalldPlan `json:"firewalld"`
+	Action              string                 `json:"action"`
+	Id                  string                 `json:"id"`
+	Version             int64                  `json:"version"`
+	PolicyHash          string                 `json:"policy_hash"`
+	ProgramHash         string                 `json:"program_hash"`
+	Baseline            FirewallKernelView     `json:"baseline"`
+	Protections         []FirewallProtection   `json:"protections"`
+	SshProfile          string                 `json:"ssh_profile"`
+	SshListeners        []string               `json:"ssh_listeners"`
+	ListenerVersion     int64                  `json:"listener_version"`
+	Listener            string                 `json:"listener"`
+	ControlSource       string                 `json:"control_source"`
+	ConfirmationSeconds int64                  `json:"confirmation_seconds"`
+	ExpiresAt           int64                  `json:"expires_at"`
+	TransactionHash     string                 `json:"transaction_hash"`
+	TransactionBytes    int64                  `json:"transaction_bytes"`
+	GeneratedRules      int64                  `json:"generated_rules"`
+}
+type FirewallFirewalldPlan struct {
+	RuntimeHash             string                   `json:"runtime_hash"`
+	PermanentHash           string                   `json:"permanent_hash"`
+	RegistrationOperationId string                   `json:"registration_operation_id"`
+	Settings                FirewallFirewalldPreview `json:"settings"`
+	ProtectionRules         int                      `json:"protection_rules"`
+	Entries                 []FirewallPreviewEntry   `json:"entries"`
+	Truncated               bool                     `json:"truncated"`
+	Warnings                []string                 `json:"warnings"`
+	Reason                  string                   `json:"reason"`
 }
 type FirewallOperation struct {
 	Action            string `json:"action"`
@@ -2707,6 +2721,8 @@ type Fail2banObservation struct {
 	Warnings      []string            `json:"warnings"`
 }
 type FirewallRuntime struct {
+	Backend               string                        `json:"backend"`
+	CanPlan               bool                          `json:"can_plan"`
 	ProtectionObservation FirewallProtectionObservation `json:"protection_observation"`
 	ConfirmedAction       string                        `json:"confirmed_action"`
 	ConfirmedPlanId       string                        `json:"confirmed_plan_id"`
