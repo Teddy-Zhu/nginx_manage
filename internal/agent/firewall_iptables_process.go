@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/secure"
 )
 
@@ -341,6 +342,14 @@ func runIPTablesRestore(ctx context.Context, dataDir string, request iptablesRes
 	defer guard.Close()
 	current, err := inspectIPTablesChangeScope(ctx, dataDir, v, request.Target == "previous")
 	if err != nil {
+		return nil, err
+	}
+	prior := iptablesPreviousProgram(&v.Transition)
+	targets := []*firewall.IPTablesRuntimeProgram{v.Transition.Program, prior}
+	if request.Target == "previous" {
+		targets = []*firewall.IPTablesRuntimeProgram{prior}
+	}
+	if err = current.admitReadback(v.Transition.Program, prior, targets...); err != nil {
 		return nil, err
 	}
 	input := material.Previous

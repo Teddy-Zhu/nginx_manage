@@ -46,11 +46,19 @@ func firewallName(name string) bool {
 // Only structural metadata leaves root. Match expressions, IP sets, comments,
 // counters and raw system rules are intentionally absent from the public model.
 func nftInventory(raw []byte) ([]firewall.Table, error) {
+	return nftInventoryReadback(raw, nil)
+}
+
+func nftInventoryReadback(raw []byte, budget *nftReadbackBudget) ([]firewall.Table, error) {
 	var doc struct {
 		Objects []map[string]json.RawMessage `json:"nftables"`
 	}
-	if json.Unmarshal(raw, &doc) != nil || doc.Objects == nil || len(doc.Objects) > firewallObjectLimit {
+	if len(raw) > nftRulesetReadBytes || json.Unmarshal(raw, &doc) != nil || doc.Objects == nil || len(doc.Objects) > firewallObjectLimit {
 		return nil, errors.New("invalid nftables inventory")
+	}
+	capacity := nftReadbackBudget{}
+	if budget != nil {
+		capacity = nftReadbackBudget{Bytes: len(raw), NumberGrowth: nftNumberGrowth(raw), Objects: len(doc.Objects), Scopes: map[string]nftReadbackScope{}}
 	}
 	tables := []firewall.Table{}
 	indices := map[string]int{}
@@ -63,6 +71,16 @@ func nftInventory(raw []byte) ([]firewall.Table, error) {
 	for _, item := range doc.Objects {
 		if len(item) != 1 {
 			return nil, errors.New("ambiguous nftables object")
+		}
+		if value, ok := item["metainfo"]; ok && budget != nil {
+			var meta struct {
+				Schema int `json:"json_schema_version"`
+			}
+			if json.Unmarshal(value, &meta) != nil || meta.Schema != 1 || capacity.Schema != 0 {
+				capacity.Schema = -1
+			} else {
+				capacity.Schema = meta.Schema
+			}
 		}
 		if value, ok := item["table"]; ok {
 			var t identity
@@ -99,6 +117,11 @@ func nftInventory(raw []byte) ([]firewall.Table, error) {
 			}
 			chains[key] = [2]int{ti, len(tables[ti].Chains)}
 			tables[ti].Chains = append(tables[ti].Chains, firewall.Chain{Name: c.Name, Type: c.Type, Hook: c.Hook, Priority: c.Priority, Policy: c.Policy})
+			if budget != nil {
+				// The raw value plus the smallest possible outer JSON object
+				// is a lower bound; separators/whitespace stay in the baseline.
+				capacity.Scopes[key] = nftReadbackScope{Bytes: len(value) + len("chain") + 5, NumberGrowth: nftNumberGrowth(value), Objects: 1}
+			}
 		}
 	}
 	for _, item := range doc.Objects {
@@ -118,6 +141,15 @@ func nftInventory(raw []byte) ([]firewall.Table, error) {
 			}
 			c := &tables[index[0]].Chains[index[1]]
 			c.Rules++
+			if budget != nil {
+				key := nftReadbackKey(r.Family, r.Table, r.Chain)
+				scope := capacity.Scopes[key]
+				scope.Bytes += len(value) + len("rule") + 5
+				scope.NumberGrowth += nftNumberGrowth(value)
+				scope.Objects++
+				scope.Rules++
+				capacity.Scopes[key] = scope
+			}
 			for _, expr := range r.Expr {
 				if jump, ok := expr["jump"]; ok {
 					var target struct {
@@ -134,6 +166,9 @@ func nftInventory(raw []byte) ([]firewall.Table, error) {
 	orderFirewallTables(tables)
 	if e := boundedFirewallTables(tables); e != nil {
 		return nil, e
+	}
+	if budget != nil {
+		*budget = capacity
 	}
 	return tables, nil
 }

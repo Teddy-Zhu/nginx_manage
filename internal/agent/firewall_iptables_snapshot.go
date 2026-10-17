@@ -25,6 +25,7 @@ type iptablesRegistrationSnapshot struct {
 	Observed firewall.Observation
 	Images   []iptablesImage
 	States   map[string]string
+	NFT      nftReadbackBudget
 }
 
 // Registration binds diagnostics, not an executable write capability. A future
@@ -117,9 +118,12 @@ func inspectIPTablesRegistration(ctx context.Context, dataDir, backend string, a
 	}
 	// Skip this backend's projection: it calls this inspector itself.
 	call, cancel := context.WithTimeout(ctx, 6*time.Second)
-	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true}).collect(call)
+	var capacity nftReadbackBudget
+	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true, nftReadback: &capacity}).collect(call)
 	cancel()
-	return snapshotIPTablesRegistration(ctx, backend, observed)
+	out, err := snapshotIPTablesRegistration(ctx, backend, observed)
+	out.NFT = capacity
+	return out, err
 }
 
 func snapshotIPTablesRegistration(ctx context.Context, backend string, observed firewall.Observation) (iptablesRegistrationSnapshot, error) {
@@ -321,9 +325,11 @@ func inspectIPTablesBound(ctx context.Context, dataDir, backend, toolHash string
 		return out, err
 	}
 	call, cancel := context.WithTimeout(ctx, 6*time.Second)
-	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true}).collect(call)
+	var capacity nftReadbackBudget
+	observed := (&firewallObserver{scope: "host", dataDir: dataDir, skipIPTablesRegistration: true, nftReadback: &capacity}).collect(call)
 	cancel()
 	out, err := snapshotIPTablesScope(ctx, backend, observed, program, previous, transition, allowMissing, allowPreviousMissing)
+	out.NFT = capacity
 	if err != nil {
 		return out, err
 	}

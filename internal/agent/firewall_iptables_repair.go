@@ -250,6 +250,13 @@ func runIPTablesRepairRestore(ctx context.Context, dataDir string, request iptab
 	if err != nil || current.Hash != repair.ConfigurationHash {
 		return nil, errors.New("iptables 原修复基线已变化")
 	}
+	program, err := firewall.CompileIPTablesRuntime(repair.Source.Policy.Policy, repair.Source.Policy.Protections, repair.Source.Owner, repair.Source.Policy.PlanID, repair.Source.Policy.Action)
+	if err != nil {
+		return nil, err
+	}
+	if err = current.admitReadback(program, nil); err != nil {
+		return nil, err
+	}
 	if !v.Rollback {
 		if err = checkIPTablesInterfaces(repair.Source.Policy.Policy, current.Observed); err != nil {
 			return nil, err
@@ -334,6 +341,9 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 			return finishIPTablesRepair(ctx, dataDir, v, repair)
 		}
 		return nil
+	}
+	if err = current.admitReadback(program, nil); err != nil {
+		return err
 	}
 	// A changed complete foreign baseline is never replayed. End all original
 	// children first, then preserve the old intent and prepare from current state.

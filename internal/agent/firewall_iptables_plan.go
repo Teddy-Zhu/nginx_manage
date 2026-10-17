@@ -244,6 +244,9 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		generated += count
 		transactionBytes += len(material.Candidate)
 	}
+	if err = before.admitReadback(program, prior); err != nil {
+		return empty, fault.Unavailable(err.Error())
+	}
 	transition.DryRun, err = preflightIPTables(ctx, transition)
 	if err != nil {
 		return empty, fault.Unavailable(err.Error())
@@ -252,6 +255,9 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	after, err := inspectIPTablesBound(ctx, f.dataDir, f.owner, transition.ToolHash, tools, prior, nil, false, false, false)
 	if err != nil || after.Hash != before.Hash {
 		return empty, fault.Conflict("iptables 工具、后端或完整规则在计划期间变化，请重新生成")
+	}
+	if err = after.admitReadback(program, prior); err != nil {
+		return empty, fault.Unavailable(err.Error())
 	}
 	for _, image := range before.Images {
 		for _, actual := range after.Images {

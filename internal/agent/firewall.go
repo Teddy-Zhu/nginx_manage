@@ -19,14 +19,16 @@ import (
 // request never starts a second copy while the original job is still alive.
 type firewallObserver struct {
 	skipIPTablesRegistration bool
-	mu                       sync.Mutex
-	ctx                      context.Context
-	scope                    string
-	dataDir                  string
-	dev                      bool
-	done                     chan struct{}
-	last                     time.Time
-	value                    firewall.Observation
+	// Only synchronous private root inspections request read-back evidence.
+	nftReadback *nftReadbackBudget
+	mu          sync.Mutex
+	ctx         context.Context
+	scope       string
+	dataDir     string
+	dev         bool
+	done        chan struct{}
+	last        time.Time
+	value       firewall.Observation
 }
 
 func (f *firewallObserver) read(ctx context.Context) (firewall.Observation, error) {
@@ -64,6 +66,9 @@ func (f *firewallObserver) read(ctx context.Context) (firewall.Observation, erro
 }
 func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	out := firewall.Empty(f.scope, "")
+	if f.nftReadback != nil {
+		*f.nftReadback = nftReadbackBudget{}
+	}
 	out.At = time.Now().Unix()
 	if f.dev {
 		out.Scope = "development"
@@ -114,8 +119,8 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	go func() {
 		defer wg.Done()
 		r := firewall.Ruleset{ID: "nftables", Backend: "nftables", Family: "all", Tables: []firewall.Table{}, Reason: "nft 程序不可用或无法完整读取内核规则"}
-		if raw, e := firewallRead(ctx, "nft", "rules", 4<<20); e == nil {
-			if tables, e := nftInventory(raw); e == nil {
+		if raw, e := firewallRead(ctx, "nft", "rules", nftRulesetReadBytes); e == nil {
+			if tables, e := nftInventoryReadback(raw, f.nftReadback); e == nil {
 				r.Tables = tables
 				r.Available = true
 				r.Reason = ""
