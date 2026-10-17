@@ -69,6 +69,8 @@ type UFWPlan struct {
 	RegistrationOperationID string         `json:"registration_operation_id"`
 	ConfigurationHash       string         `json:"configuration_hash"`
 	ToolHash                string         `json:"tool_hash"`
+	ToolchainHash           string         `json:"toolchain_hash"`
+	PythonVersion           string         `json:"python_version"`
 	DryRunHash              string         `json:"dry_run_hash"`
 	NativeProgramHash       string         `json:"native_program_hash"`
 	BatchHash               string         `json:"batch_hash"`

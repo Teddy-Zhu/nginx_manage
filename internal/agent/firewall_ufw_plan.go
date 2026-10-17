@@ -79,16 +79,13 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	if before.HasManagedMarkers {
 		return out, fault.Conflict("UFW 存在本应用标记但无规则写入回执，禁止接管")
 	}
-	reload, err := readUFWReloadBaseline(ctx, before, *observed.UFW.IPv6)
-	if err != nil {
-		return out, fault.Unavailable(err.Error())
-	}
-	if reload.Backend != observed.Backend {
-		return out, fault.Conflict("UFW 默认内核工具与完整观察的后端不一致，请核对本机工具及 alternatives")
-	}
 	dryRun, err := checkUFWDryRun(ctx, binary, program, before, *observed.UFW.IPv6)
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
+	}
+	reload := dryRun.Reload
+	if reload.Backend != observed.Backend {
+		return out, fault.Conflict("UFW 声明的后端工具与完整观察不一致，请核对本机工具及 alternatives")
 	}
 	current, err := ufwTool()
 	if err != nil || current != binary {
@@ -97,13 +94,6 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 	after, err := readUFWConfiguration(ctx, binary, *observed.UFW.IPv6)
 	if err != nil || before.Hash != after.Hash {
 		return out, fault.Conflict("UFW 配置或工具在预演期间变化，请重新准备计划")
-	}
-	afterReload, err := readUFWReloadBaseline(ctx, after, *observed.UFW.IPv6)
-	if err != nil {
-		return out, fault.Unavailable(err.Error())
-	}
-	if reload.Hash != afterReload.Hash {
-		return out, fault.Conflict("UFW 重载范围的运行规则或默认工具在预演期间变化，请重新准备计划")
 	}
 	if err = ctx.Err(); err != nil {
 		return out, err
@@ -126,9 +116,9 @@ func (f *hostFirewall) planUFWLocked(ctx context.Context, in firewall.RuntimeInp
 		Baseline:    firewall.KernelView{Reason: "UFW 计划核对固定配置及 dry-run，不提供直接 nftables 事务证明"},
 		Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source,
 		ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: len(program.Rules),
-		UFW: &firewall.UFWPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, DryRunHash: dryRun.Hash, NativeProgramHash: dryRun.NativeHash, BatchHash: dryRun.BatchHash, ReloadBackend: reload.Backend, ReloadHash: reload.Hash, ReloadChains: reload.Chains, ReloadRules: reload.Rules, PreservedRules: dryRun.PreservedRules, DryRunCommands: len(program.Rules), ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
+		UFW: &firewall.UFWPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, ToolchainHash: dryRun.ToolchainHash, PythonVersion: dryRun.PythonVersion, DryRunHash: dryRun.Hash, NativeProgramHash: dryRun.NativeHash, BatchHash: dryRun.BatchHash, ReloadBackend: reload.Backend, ReloadHash: reload.Hash, ReloadChains: reload.Chains, ReloadRules: reload.Rules, PreservedRules: dryRun.PreservedRules, DryRunCommands: len(program.Rules), ProtectionRules: program.ProtectionRules, ProtectionOverrides: program.ProtectionOverrides, Entries: entries, Truncated: len(entries) < len(program.Entries),
 			Warnings: warnings,
-			Reason:   "本机授权、原重载范围的运行规则及隔离批次候选已核对；实际应用、新连接确认和独立恢复尚未接入"},
+			Reason:   "本机授权、受信源码与后端工具、原重载范围及隔离批次候选已核对；实际应用、新连接确认和独立恢复尚未接入"},
 	}
 	return out, f.storePlanLocked(out, nil)
 }

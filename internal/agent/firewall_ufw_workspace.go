@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -20,6 +21,7 @@ import (
 type ufwDryRunWorkspace struct {
 	root     string
 	contents map[string][]byte
+	code     map[string][]byte
 }
 
 func ufwWorkspacePath(root, source string) (string, error) {
@@ -32,7 +34,7 @@ func ufwWorkspacePath(root, source string) (string, error) {
 }
 
 func newUFWDryRunWorkspace(ctx context.Context, root string, baseline ufwConfigurationSnapshot) (*ufwDryRunWorkspace, error) {
-	out := &ufwDryRunWorkspace{root: root, contents: map[string][]byte{}}
+	out := &ufwDryRunWorkspace{root: root, contents: map[string][]byte{}, code: map[string][]byte{}}
 	files := map[string]ufwFileSnapshot{}
 	for _, file := range baseline.Files {
 		files[file.Path] = file
@@ -66,12 +68,38 @@ func newUFWDryRunWorkspace(ctx context.Context, root string, baseline ufwConfigu
 	}
 	// Generated rules use explicit numeric selectors, never application profiles.
 	// Existing profile tuples still have to survive byte-for-byte in each result.
-	for _, dir := range []string{"etc/ufw/applications.d", "tmp"} {
+	for _, dir := range []string{"etc/ufw/applications.d", "tmp", "lib/ufw"} {
 		if err := secure.RootDirectory(filepath.Join(root, dir), 0700); err != nil {
 			return nil, err
 		}
 	}
 	return out, nil
+}
+
+func (w *ufwDryRunWorkspace) installUFWTools(binding *ufwToolBinding) error {
+	if len(w.code) != 0 {
+		return errors.New("UFW 私有源程序已经固定")
+	}
+	for _, file := range binding.Files {
+		name := "ufw-cli.py"
+		if file.Role != "cli" {
+			if !slices.Contains(ufwSourceModules, file.Role) {
+				continue
+			}
+			name = filepath.Join("lib", "ufw", ufwSourceLeaf(file.Role))
+		}
+		if int64(len(file.Raw)) != file.File.Bytes || secure.Hash(file.Raw) != file.File.Hash {
+			return errors.New("UFW 私有源码与原受信读取不匹配")
+		}
+		if err := writeUFWWorkspaceFile(filepath.Join(w.root, name), file.Raw); err != nil {
+			return err
+		}
+		w.code[name] = file.Raw
+	}
+	if len(w.code) != len(ufwSourceModules)+1 {
+		return errors.New("UFW 私有源码清单不完整")
+	}
+	return nil
 }
 
 // A private temporary file plus rename makes the next CLI invocation see the
@@ -126,13 +154,16 @@ func (w *ufwDryRunWorkspace) replace(family string, candidate []byte) error {
 // Enumerate a bounded, closed directory tree, including the empty profiles and
 // temporary directories. Unexpected files cannot silently become batch input.
 func (w *ufwDryRunWorkspace) verify(ctx context.Context) error {
-	directories := []string{".", "etc", "etc/default", "etc/ufw", "etc/ufw/applications.d", "tmp"}
+	directories := []string{".", "etc", "etc/default", "etc/ufw", "etc/ufw/applications.d", "tmp", "lib", "lib/ufw"}
 	allowed := map[string]bool{}
 	for _, dir := range directories {
 		allowed[dir] = true
 	}
 	for source := range w.contents {
 		allowed[strings.TrimPrefix(source, "/")] = false
+	}
+	for source := range w.code {
+		allowed[source] = false
 	}
 	for _, dir := range directories {
 		if err := ctx.Err(); err != nil {
@@ -168,6 +199,15 @@ func (w *ufwDryRunWorkspace) verify(ctx context.Context) error {
 			if !known || item.Type()&os.ModeSymlink != 0 || isDir != item.IsDir() || !isDir && !item.Type().IsRegular() {
 				return errors.New("UFW 私有预演存在未知文件或目录")
 			}
+		}
+	}
+	for source, expected := range w.code {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		current, err := listenerRead(filepath.Join(w.root, source), firewall.UFWReadBytes)
+		if err != nil || !bytes.Equal(current, expected) {
+			return errors.New("UFW 私有源码在预演期间变化")
 		}
 	}
 	for _, source := range ufwConfigurationSources("", false) {
@@ -222,7 +262,7 @@ func verifyUFWBatchOrder(before, after map[string]*ufwNativeFile, expected []ufw
 	return nil
 }
 
-func (w *ufwDryRunWorkspace) digest(baseline, native, steps string) (string, error) {
+func (w *ufwDryRunWorkspace) digest(baseline, native, steps, tools string) (string, error) {
 	type file struct {
 		Path, Hash string
 		Bytes      int
@@ -234,11 +274,11 @@ func (w *ufwDryRunWorkspace) digest(baseline, native, steps string) (string, err
 		}
 	}
 	raw, err := json.Marshal(struct {
-		Baseline, Native, Steps string
-		Files                   []file
-	}{baseline, native, steps, files})
+		Baseline, Native, Steps, Tools string
+		Files                          []file
+	}{baseline, native, steps, tools, files})
 	if err != nil {
 		return "", err
 	}
-	return secure.Hash(append([]byte("ufw:dry-run-batch:v1:\x00"), raw...)), nil
+	return secure.Hash(append([]byte("ufw:dry-run-batch:v2:\x00"), raw...)), nil
 }

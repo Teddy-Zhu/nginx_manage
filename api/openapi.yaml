@@ -2067,17 +2067,19 @@ components:
     FirewallUFWPlan:
       type: object
       additionalProperties: false
-      required: [registration_operation_id, configuration_hash, tool_hash, dry_run_hash, native_program_hash, batch_hash, reload_backend, reload_hash, reload_chains, reload_rules, preserved_rules, dry_run_commands, protection_rules, protection_overrides, entries, truncated, warnings, reason]
-      description: root 在本机空命名空间授权登记后，基于实际管理连接及 SSH 监听准备的 UFW 保护计划；注释绑定原随机所有者和计划身份。前后核对默认内核工具和 UFW 可重载的全部已启用地址族用户链，原运行规则须与持久用户文件一致；重载摘要忽略计数器及导出时间，保留链存在性、规则与匹配模块顺序。通过官方 datadir 在私有配置副本内逆序累积 dry-run prepend，核对每步新增块及既有用户规则保留、最终目标顺序和闭合目录清单；批次摘要绑定原基线、原生程序、步骤输出及最终用户文件。初始模板及官方限速能力默认值的已知投影差异单独提示，不证明候选已生效、全局原子性或所有权，不授权实际应用。
+      required: [registration_operation_id, configuration_hash, tool_hash, toolchain_hash, python_version, dry_run_hash, native_program_hash, batch_hash, reload_backend, reload_hash, reload_chains, reload_rules, preserved_rules, dry_run_commands, protection_rules, protection_overrides, entries, truncated, warnings, reason]
+      description: root 在本机空命名空间授权登记后，基于实际管理连接及 SSH 监听准备的 UFW 保护计划；注释绑定原随机所有者和计划身份。隔离 Python 固定受信 CLI 和常规源包，读取其中声明的配置及后端路径，绑定实际 command/save/restore 工具并核对相同后端。前后核对全部已启用地址族的重载用户链，原运行规则须与持久用户文件一致；重载摘要忽略计数器及导出时间，保留链存在性、规则与匹配模块顺序。通过官方 datadir 在私有源码及配置副本内逆序累积 dry-run prepend，核对每步新增块及既有用户规则保留、最终目标顺序和闭合目录清单；批次摘要绑定原基线、源码与工具、原生程序、步骤输出及最终用户文件。初始模板及官方限速能力默认值的已知投影差异单独提示，不证明候选已生效、全局原子性或所有权，不授权实际应用。
       properties:
         registration_operation_id: {type: string, format: uuid}
         configuration_hash: {type: string, minLength: 64, maxLength: 64}
-        tool_hash: {type: string, minLength: 64, maxLength: 64, description: '受信 UFW 可执行文件摘要，不代表所有 Python 依赖'}
+        tool_hash: {type: string, minLength: 64, maxLength: 64, description: '受信 UFW CLI 文件摘要'}
+        toolchain_hash: {type: string, minLength: 64, maxLength: 64, description: '受信 CLI、Python、固定 UFW 源模块及后端/辅助工具的内容、文件身份、路径与声明配置摘要，不覆盖全部标准库及系统共享库'}
+        python_version: {type: string, minLength: 3, maxLength: 64, description: 固定解释器报告的 Python 3 版本}
         dry_run_hash: {type: string, minLength: 64, maxLength: 64}
         native_program_hash: {type: string, minLength: 64, maxLength: 64, description: 按生成顺序排列的完整原生 tuple 及报文规则摘要，不是内核或规则所有权证明}
-        batch_hash: {type: string, minLength: 64, maxLength: 64, description: 隔离配置累积批次的基线、程序、执行顺序输出和最终用户文件摘要，不是已执行回执}
-        reload_backend: {type: string, enum: [nftables, legacy], description: 已核对默认命令和规则导出工具的相同内核后端}
-        reload_hash: {type: string, minLength: 64, maxLength: 64, description: 重载范围的原运行链存在性、有序规则及默认工具版本摘要，不包含计数器或候选生效证明}
+        batch_hash: {type: string, minLength: 64, maxLength: 64, description: 隔离累积批次的基线、源码与工具绑定、程序、执行顺序输出和最终用户文件摘要，不是已执行回执}
+        reload_backend: {type: string, enum: [nftables, legacy], description: UFW 声明的命令、规则导出及重载工具已核对的相同内核后端}
+        reload_hash: {type: string, minLength: 64, maxLength: 64, description: 重载范围的原运行链存在性、有序规则及绑定的 command/save/restore 版本摘要，不包含计数器或候选生效证明}
         reload_chains: {type: integer, minimum: 1, maximum: 32, description: 重载范围内实际存在的用户链数量，包含日志和限速链}
         reload_rules: {type: integer, minimum: 0, maximum: 8192, description: 重载范围内原运行报文规则总数，包含日志和限速规则，不按 tuple 计}
         preserved_rules: {type: integer, minimum: 0, maximum: 8192, description: 本次核对的所有已启用地址族原生文件中既有用户 tuple 总数}

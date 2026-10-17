@@ -58,6 +58,10 @@ const columns: DataTableColumns<Entry> = [
     <dd class="digest">{{ plan.configuration_hash }}</dd>
     <dt>UFW 可执行文件摘要</dt>
     <dd class="digest">{{ plan.tool_hash }}</dd>
+    <dt>UFW 源码与工具绑定摘要</dt>
+    <dd class="digest">{{ plan.toolchain_hash }}</dd>
+    <dt>Python 版本</dt>
+    <dd>{{ plan.python_version }}</dd>
     <dt>完整预演输出摘要</dt>
     <dd class="digest">{{ plan.dry_run_hash }}</dd>
     <dt>生成原生规则摘要</dt>

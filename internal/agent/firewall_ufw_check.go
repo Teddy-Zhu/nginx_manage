@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/nginxmodules"
@@ -36,9 +34,11 @@ type ufwConfigurationSnapshot struct {
 }
 
 type ufwDryRunProof struct {
-	Hash, NativeHash, BatchHash string
-	PreservedRules              int
-	Warnings                    []string
+	Hash, NativeHash, BatchHash, ToolchainHash string
+	PythonVersion                              string
+	Reload                                     ufwReloadBaseline
+	PreservedRules                             int
+	Warnings                                   []string
 }
 
 func ufwTool() (string, error) {
@@ -204,6 +204,15 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 	if err != nil {
 		return proof, err
 	}
+	binding, err := prepareUFWTools(ctx, workspace, binary, baseline)
+	if err != nil {
+		return proof, err
+	}
+	proof.ToolchainHash, proof.PythonVersion = binding.Hash, binding.Description.Python
+	proof.Reload, err = readUFWReloadBaseline(ctx, baseline, ipv6, binding, temp)
+	if err != nil {
+		return proof, err
+	}
 	current := map[string]*ufwNativeFile{}
 	for family, file := range before {
 		current[family] = file
@@ -215,22 +224,10 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 			return proof, err
 		}
 		rule := program.Rules[index]
-		call, cancel := context.WithTimeout(ctx, 2*time.Second)
-		args := append([]string{"--datadir=" + temp, "--dry-run", "prepend"}, rule.Arguments...)
-		command := exec.CommandContext(call, binary, args...)
-		command.Dir = "/"
-		command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C", "PYTHONDONTWRITEBYTECODE=1", "TMPDIR=" + filepath.Join(temp, "tmp")}
-		command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
-		command.Cancel = func() error { return syscall.Kill(-command.Process.Pid, syscall.SIGKILL) }
-		command.WaitDelay = 250 * time.Millisecond
-		stdout, stderr := firewallOutput{limit: 1 << 20}, firewallOutput{limit: 8 << 10}
-		command.Stdout, command.Stderr = &stdout, &stderr
-		err := command.Run()
-		cancel()
-		if err != nil || stdout.exceeded || stderr.exceeded || stderr.data.Len() != 0 {
+		raw, err := binding.python(ctx, temp, "prepend", rule.Arguments, 1<<20)
+		if err != nil {
 			return proof, errors.New("UFW dry-run 失败、超时或返回警告；未执行规则变更")
 		}
-		raw := stdout.data.Bytes()
 		total += len(raw)
 		if total > 8<<20 {
 			return proof, errors.New("UFW dry-run 完整输出合计超过 8 MiB")
@@ -260,10 +257,20 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 	if err = verifyUFWBatchOrder(before, current, expected); err != nil {
 		return proof, err
 	}
+	afterReload, err := readUFWReloadBaseline(ctx, baseline, ipv6, binding, temp)
+	if err != nil {
+		return proof, err
+	}
+	if proof.Reload.Hash != afterReload.Hash {
+		return proof, errors.New("UFW 重载范围的运行规则或绑定后端在预演期间变化，请重新准备计划")
+	}
+	if err = binding.verify(ctx); err != nil {
+		return proof, err
+	}
 	if err = workspace.verify(ctx); err != nil {
 		return proof, err
 	}
-	proof.BatchHash, err = workspace.digest(baseline.Hash, proof.NativeHash, proof.Hash)
+	proof.BatchHash, err = workspace.digest(baseline.Hash, proof.NativeHash, proof.Hash, binding.Hash)
 	if err != nil {
 		return proof, err
 	}

@@ -27,10 +27,6 @@ func (w *firewallOutput) Write(p []byte) (int, error) {
 // This is a closed read-only command set. Neither tool names nor arguments
 // originate in an HTTP request, a configuration file, or PATH lookup.
 func firewallRead(ctx context.Context, name, action string, limit int) ([]byte, error) {
-	return firewallReadCommand(ctx, name, action, limit, false)
-}
-
-func firewallReadCommand(ctx context.Context, name, action string, limit int, rejectDiagnostic bool) ([]byte, error) {
 	var args []string
 	switch {
 	case name == "sshd" && action == "effective":
@@ -93,8 +89,8 @@ func firewallReadCommand(ctx context.Context, name, action string, limit int, re
 	if e := cmd.Run(); e != nil {
 		return nil, e
 	}
-	if out.exceeded || diagnostic.exceeded || rejectDiagnostic && diagnostic.data.Len() != 0 {
-		return nil, errors.New("firewall read returned diagnostics or exceeded its output budget")
+	if out.exceeded || diagnostic.exceeded {
+		return nil, errors.New("firewall read exceeded its output budget")
 	}
 	return out.data.Bytes(), nil
 }

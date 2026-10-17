@@ -19,8 +19,8 @@ type ufwReloadChain struct {
 	Rules   []string
 }
 type ufwReloadFamily struct {
-	Family, Backend, ToolVersion, SaveVersion string
-	Chains                                    []ufwReloadChain
+	Family, Backend, ToolVersion, SaveVersion, RestoreVersion string
+	Chains                                                    []ufwReloadChain
 }
 type ufwReloadBaseline struct {
 	Hash, Backend string
@@ -30,7 +30,7 @@ type ufwReloadBaseline struct {
 // prepend and delete can reload both enabled families through iptables-restore.
 // Verify all chains the writer may declare, not only the new input selectors.
 // The hash excludes counters and save timestamps; no raw host rules leave root.
-func readUFWReloadBaseline(ctx context.Context, configuration ufwConfigurationSnapshot, ipv6 bool) (ufwReloadBaseline, error) {
+func readUFWReloadBaseline(ctx context.Context, configuration ufwConfigurationSnapshot, ipv6 bool, binding *ufwToolBinding, root string) (ufwReloadBaseline, error) {
 	var out ufwReloadBaseline
 	families := []ufwReloadFamily{}
 	for _, item := range []struct{ family, source, tool string }{
@@ -43,25 +43,32 @@ func readUFWReloadBaseline(ctx context.Context, configuration ufwConfigurationSn
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		version, err := firewallReadCommand(ctx, item.tool, "version", 1024, true)
+		version, err := binding.read(ctx, item.tool, "version", root)
 		if err != nil {
-			return out, errors.New("UFW 默认内核工具及后端不可核对")
+			return out, errors.New("UFW 声明的内核工具及后端不可核对")
 		}
 		backend, toolVersion, err := firewallVersion(version)
 		if err != nil || out.Backend != "" && out.Backend != backend {
-			return out, errors.New("UFW IPv4/IPv6 默认内核后端不一致或不可核对")
+			return out, errors.New("UFW IPv4/IPv6 声明的内核后端不一致或不可核对")
 		}
-		variant := map[string]string{"nftables": "nft", "legacy": "legacy"}[backend]
-		save := item.tool + "-" + variant + "-save"
-		version, err = firewallReadCommand(ctx, save, "version", 1024, true)
+		save := item.tool + "-save"
+		version, err = binding.read(ctx, save, "version", root)
 		if err != nil {
 			return out, errors.New("UFW 内核规则导出工具版本不可核对")
 		}
 		saveBackend, saveVersion, err := firewallVersion(version)
 		if err != nil || saveBackend != backend {
-			return out, errors.New("UFW 默认命令与规则导出工具的后端不一致")
+			return out, errors.New("UFW 声明的命令与规则导出工具的后端不一致")
 		}
-		raw, err := firewallReadCommand(ctx, save, "rules", 1<<20, true)
+		version, err = binding.read(ctx, item.tool+"-restore", "version", root)
+		if err != nil {
+			return out, errors.New("UFW 声明的重载工具版本不可核对")
+		}
+		restoreBackend, restoreVersion, err := firewallVersion(version)
+		if err != nil || restoreBackend != backend {
+			return out, errors.New("UFW 声明的命令与规则重载工具的后端不一致")
+		}
+		raw, err := binding.read(ctx, save, "rules", root)
 		if err != nil {
 			return out, errors.New("UFW 内核规则未完整读取或返回警告")
 		}
@@ -85,14 +92,14 @@ func readUFWReloadBaseline(ctx context.Context, configuration ufwConfigurationSn
 		if out.Rules > firewall.MaxEntries {
 			return out, errors.New("UFW 重载范围的运行规则合计超过 8192 条")
 		}
-		families = append(families, ufwReloadFamily{item.family, backend, toolVersion, saveVersion, chains})
+		families = append(families, ufwReloadFamily{item.family, backend, toolVersion, saveVersion, restoreVersion, chains})
 		out.Backend = backend
 	}
 	raw, err := json.Marshal(families)
 	if err != nil {
 		return out, err
 	}
-	out.Hash = secure.Hash(append([]byte("ufw:reload-kernel:v1:\x00"), raw...))
+	out.Hash = secure.Hash(append([]byte("ufw:reload-kernel:v2:\x00"), raw...))
 	return out, nil
 }
 

@@ -304,7 +304,7 @@ func orderFirewallTables(tables []firewall.Table) {
 }
 func firewallVersion(raw []byte) (string, string, error) {
 	version := strings.TrimSpace(string(raw))
-	if len(version) > 256 || strings.ContainsAny(version, "\r\n\x00") || !(strings.HasPrefix(version, "iptables v") || strings.HasPrefix(version, "ip6tables v") || strings.HasPrefix(version, "iptables-save v") || strings.HasPrefix(version, "ip6tables-save v")) {
+	if len(version) > 256 || strings.ContainsAny(version, "\r\n\x00") || !(strings.HasPrefix(version, "iptables v") || strings.HasPrefix(version, "ip6tables v") || strings.HasPrefix(version, "iptables-save v") || strings.HasPrefix(version, "ip6tables-save v") || strings.HasPrefix(version, "iptables-restore v") || strings.HasPrefix(version, "ip6tables-restore v")) {
 		return "", "", errors.New("unknown xtables version output")
 	}
 	backend := "unknown"
