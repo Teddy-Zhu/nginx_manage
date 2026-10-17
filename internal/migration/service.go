@@ -312,22 +312,31 @@ func (s *Service) inspect(ctx context.Context, st *storedPlan) error {
 	plan.CanSave = true
 	plan.CanApply = true
 	stepCount := 0
+	blocking := func(state string) bool { return state == "blocked" || state == "unavailable" }
 	add := func(kind, resource, state, message string) {
 		stepCount++
 		if len(message) > 1024 {
 			runes := []rune(message)
 			message = string(runes[:min(256, len(runes))]) + "…"
 		}
-		if len(plan.Steps) < 128 {
-			plan.Steps = append(plan.Steps, Step{kind, resource, state, message})
-		}
-		if state == "blocked" {
+		step := Step{kind, resource, state, message}
+		if blocking(state) {
 			plan.CanSave = false
 			plan.CanApply = false
-		}
-		if state == "unavailable" {
-			plan.CanSave = false
-			plan.CanApply = false
+			// Missing prerequisites must not disappear behind the resource inventory.
+			at := 0
+			for at < len(plan.Steps) && blocking(plan.Steps[at].State) {
+				at++
+			}
+			if at < 128 {
+				if len(plan.Steps) < 128 {
+					plan.Steps = append(plan.Steps, Step{})
+				}
+				copy(plan.Steps[at+1:], plan.Steps[at:len(plan.Steps)-1])
+				plan.Steps[at] = step
+			}
+		} else if len(plan.Steps) < 128 {
+			plan.Steps = append(plan.Steps, step)
 		}
 	}
 	if err := s.inspectHostDNS(ctx, st, add); err != nil {
@@ -444,7 +453,7 @@ func (s *Service) inspect(ctx context.Context, st *storedPlan) error {
 	add("restore", "acme", "ready", fmt.Sprintf("恢复 %d 个 ACME 账户和 %d 个签发配置；自动续期及部署停用，HTTP-01 须重新确认", len(st.Payload.Automation.Accounts), len(st.Payload.Automation.Profiles)))
 	add("restore", "notifications", "ready", fmt.Sprintf("恢复 %d 个通知渠道，全部保持停用", len(st.Payload.Channels)))
 	if stepCount > 128 {
-		plan.Steps = append(plan.Steps, Step{"preview", "remaining", "review", fmt.Sprintf("预检共 %d 项，展示前 128 项；全部项目均参与准入判断", stepCount)})
+		plan.Steps = append(plan.Steps, Step{"preview", "remaining", "review", fmt.Sprintf("预检共 %d 项，优先展示阻塞项，最多展示 128 项；全部项目均参与准入判断", stepCount)})
 	}
 	return nil
 }
