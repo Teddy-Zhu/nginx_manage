@@ -333,7 +333,7 @@ func previewFail2banExistingJailLocked(ctx context.Context, data string, input F
 	} else if len(afterCommands) != 0 || len(afterReference) != 0 {
 		return out, errors.New("候选 jail 停用期望被其他配置覆盖；未接管")
 	}
-	out.NativeProof, err = readFail2banExistingNativeProfile(ctx, program, b, input.Profile, before, commands)
+	out.NativeProof, err = readFail2banExistingNativeProfile(ctx, program, b, input.Profile, commands)
 	if err != nil {
 		return out, err
 	}

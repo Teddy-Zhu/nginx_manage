@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -20,6 +21,7 @@ type Fail2banExistingRuntime struct {
 	AdoptionID   string                      `json:"adoption_id"`
 	BindingID    string                      `json:"binding_id"`
 	Name         string                      `json:"name"`
+	PolicyID     string                      `json:"policy_id"`
 	Target       string                      `json:"target"`
 	ProfileProof string                      `json:"profile_proof"`
 	Timezone     fail2banExistingTimezone    `json:"timezone"`
@@ -32,7 +34,7 @@ type Fail2banExistingRuntime struct {
 // These are observations from the official running filter, including expanded
 // expressions. Compare native observations with native observations, rather
 // than treating a source <HOST> token as the engine's expanded expression.
-func readFail2banExistingNativeProfile(ctx context.Context, program fail2banProgram, b *fail2banBinding, profile fail2ban.ExistingJailProfile, policy fail2ban.ExistingJailPolicy, commands [][]any) (string, error) {
+func readFail2banExistingNativeProfile(ctx context.Context, program fail2banProgram, b *fail2banBinding, profile fail2ban.ExistingJailProfile, commands [][]any) (string, error) {
 	observed := map[string]string{}
 	total := 0
 	get := func(key string, args ...string) (string, error) {
@@ -79,8 +81,12 @@ func readFail2banExistingNativeProfile(ctx context.Context, program fail2banProg
 			if err != nil || n < 1 || n > 1000 {
 				return "", errors.New("已有 SSH jail 的实际行数/匹配预算未知")
 			}
-			if field == "maxmatches" && n == int64(policy.MaxRetry) {
-				observed[field] = "derived-from-maxretry"
+			if field == "maxmatches" {
+				_, expected, err := fail2banExistingMatchLimits(commands)
+				if err != nil || n != expected {
+					return "", errors.New("已有 SSH jail 的实际匹配预算与配置不一致")
+				}
+				observed[field] = "config-checked"
 			}
 		}
 	}
@@ -162,6 +168,14 @@ func readFail2banExistingNativeProfile(ctx context.Context, program fail2banProg
 	return secure.Hash(raw), ctx.Err()
 }
 
+type fail2banExistingRuntimeEvidence struct {
+	Capture   *fail2banExistingCapture
+	Selection fail2banExistingPolicySelection
+	Config    fail2banExistingConfigSnapshot
+	Live      fail2banLiveService
+	Program   fail2banProgram
+}
+
 func ReadFail2banExistingRuntime(ctx context.Context, data, scope, adoption string) (Fail2banExistingRuntime, error) {
 	out := Fail2banExistingRuntime{At: time.Now().Unix(), AdoptionID: adoption, Jails: []string{}, Bans: map[string]fail2banBanTime{}}
 	if err := fail2banManagedRoot(data, scope); err != nil {
@@ -185,6 +199,13 @@ func ReadFail2banExistingRuntime(ctx context.Context, data, scope, adoption stri
 		return out, err
 	}
 	defer leave()
+	return readFail2banExistingRuntimeLocked(ctx, data, adoption, nil, nil)
+}
+
+// Callers hold host/binding locks and maintenance admission. During a change,
+// the disk candidate and the running policy are checked separately.
+func readFail2banExistingRuntimeLocked(ctx context.Context, data, adoption string, expected *fail2banExistingPolicySelection, evidence *fail2banExistingRuntimeEvidence) (Fail2banExistingRuntime, error) {
+	out := Fail2banExistingRuntime{At: time.Now().Unix(), AdoptionID: adoption, Jails: []string{}, Bans: map[string]fail2banBanTime{}}
 	j := &Journal{Dir: filepath.Join(data, "agent", "operations")}
 	r, err := j.Get(adoption)
 	if err != nil {
@@ -200,6 +221,14 @@ func ReadFail2banExistingRuntime(ctx context.Context, data, scope, adoption stri
 	}
 	if r.State != "succeeded" || r.Fail2banExisting.Action != "adopt" || g == nil || g.ID != adoption || g.Action != "adopt" {
 		return out, errors.New("目标 jail 尚未由当前接管授权发布")
+	}
+	selected, err := loadFail2banExistingPolicy(data, c, adoption)
+	if err != nil {
+		return out, err
+	}
+	basis := selected
+	if expected != nil {
+		basis = *expected
 	}
 	b := &c.Binding
 	if err = fail2banCurrentBinding(data, b, true); err != nil {
@@ -236,6 +265,13 @@ func ReadFail2banExistingRuntime(ctx context.Context, data, scope, adoption stri
 		out.Jails = append(out.Jails, jail.Name)
 	}
 	sort.Strings(out.Jails)
+	found := false
+	for _, name := range out.Jails {
+		found = found || name == c.Plan.Profile.Name
+	}
+	if found != basis.Policy.Enabled {
+		return out, errors.New("接管后的 jail 实际启用状态变化")
+	}
 	config, err := readFail2banExistingConfig()
 	if err != nil {
 		return out, err
@@ -244,43 +280,59 @@ func ReadFail2banExistingRuntime(ctx context.Context, data, scope, adoption stri
 		return out, err
 	}
 	commands, err := dumpFail2banExisting(ctx, program, b, fail2banExistingConfig, c.Plan.Profile.Name)
-	if err != nil || fail2banDumpHash(commands) != c.DumpHash {
+	if err != nil || fail2banDumpHash(commands) != basis.DumpHash {
 		return out, errors.New("接管后的目标 jail 配置变化")
 	}
-	out.Policy, err = readFail2banExistingTuning(ctx, program, b, c.Plan.Profile.Name)
-	if err != nil || !equalFail2banExistingPolicy(out.Policy, c.Plan.Before) {
-		return out, errors.New("接管后的 jail 实际参数变化")
+	if basis.Policy.Enabled && expected != nil {
+		files := maps.Clone(config.Files)
+		files[fail2banExistingOverlayName(c.Plan.Profile.Name)] = []byte(fail2banExistingOverlay(c.Plan.Profile, basis.Policy))
+		commands, err = compileFail2banExistingPolicyFiles(ctx, data, program, b, files, c.Plan.Profile.Name)
+		if err != nil {
+			return out, err
+		}
+		if fail2banDumpHash(commands) != basis.EnabledDumpHash {
+			return out, errors.New("运行参数对应的启用配置无法核对")
+		}
 	}
-	out.ProfileProof, err = readFail2banExistingNativeProfile(ctx, program, b, c.Plan.Profile, out.Policy, commands)
-	if err != nil {
-		return out, err
+	out.Policy = basis.Policy
+	if basis.Policy.Enabled {
+		out.Policy, err = readFail2banExistingTuning(ctx, program, b, c.Plan.Profile.Name)
+		if err != nil || !equalFail2banExistingPolicy(out.Policy, basis.Policy) {
+			return out, errors.New("接管后的 jail 实际参数变化")
+		}
+		out.ProfileProof, err = readFail2banExistingNativeProfile(ctx, program, b, c.Plan.Profile, commands)
+		if err != nil {
+			return out, err
+		}
+		if out.ProfileProof != basis.NativeProof {
+			return out, errors.New("接管后的实际过滤器或动作属性变化")
+		}
+		out.Timezone, err = readFail2banExistingTimezone(ctx, b, live)
+		if err != nil {
+			return out, err
+		}
+		labels, err := readFail2banHostJail(ctx, program, b.Socket, c.Plan.Profile.Name)
+		if err != nil {
+			return out, err
+		}
+		out.Bans, err = fail2banExistingBanProof(labels, out.Timezone)
+		if err != nil {
+			return out, err
+		}
+		out.ClockProof, err = verifyFail2banExistingNativeClock(ctx, live, out.Timezone, labels, out.Bans)
+		if err != nil {
+			return out, err
+		}
 	}
-	if out.ProfileProof != c.Plan.NativeProof {
-		return out, errors.New("接管后的实际过滤器或动作属性变化")
-	}
-	out.Timezone, err = readFail2banExistingTimezone(ctx, b, live)
-	if err != nil {
-		return out, err
-	}
-	labels, err := readFail2banHostJail(ctx, program, b.Socket, c.Plan.Profile.Name)
-	if err != nil {
-		return out, err
-	}
-	out.Bans, err = fail2banExistingBanProof(labels, out.Timezone)
-	if err != nil {
-		return out, err
-	}
-	out.ClockProof, err = verifyFail2banExistingNativeClock(ctx, live, out.Timezone, labels, out.Bans)
-	if err != nil {
-		return out, err
-	}
-	currentPolicy, err := readFail2banExistingTuning(ctx, program, b, c.Plan.Profile.Name)
-	if err != nil || !equalFail2banExistingPolicy(currentPolicy, out.Policy) {
-		return out, errors.New("读取运行证明期间实际参数变化")
-	}
-	currentProfile, err := readFail2banExistingNativeProfile(ctx, program, b, c.Plan.Profile, currentPolicy, commands)
-	if err != nil || currentProfile != out.ProfileProof {
-		return out, errors.New("读取运行证明期间实际过滤器或动作变化")
+	if basis.Policy.Enabled {
+		currentPolicy, err := readFail2banExistingTuning(ctx, program, b, c.Plan.Profile.Name)
+		if err != nil || !equalFail2banExistingPolicy(currentPolicy, out.Policy) {
+			return out, errors.New("读取运行证明期间实际参数变化")
+		}
+		currentProfile, err := readFail2banExistingNativeProfile(ctx, program, b, c.Plan.Profile, commands)
+		if err != nil || currentProfile != out.ProfileProof {
+			return out, errors.New("读取运行证明期间实际过滤器或动作变化")
+		}
 	}
 	status, err = program.run(ctx, fail2banReadArgs(b.Socket, "status"), 128<<10)
 	if err != nil {
@@ -309,9 +361,11 @@ func ReadFail2banExistingRuntime(ctx context.Context, data, scope, adoption stri
 	if err = verifyFail2banExistingConfigSource(live, after); err != nil {
 		return out, err
 	}
-	afterZone, err := readFail2banExistingTimezone(ctx, b, live)
-	if err != nil || afterZone.SHA256 != out.Timezone.SHA256 || afterZone.StartedAt != out.Timezone.StartedAt {
-		return out, errors.New("读取封禁证明期间时区材料变化")
+	if basis.Policy.Enabled {
+		afterZone, err := readFail2banExistingTimezone(ctx, b, live)
+		if err != nil || afterZone.SHA256 != out.Timezone.SHA256 || afterZone.StartedAt != out.Timezone.StartedAt {
+			return out, errors.New("读取封禁证明期间时区材料变化")
+		}
 	}
 	currentLive, err := readFail2banLiveService(ctx, b)
 	if err != nil || !sameFail2banLive(live, currentLive) {
@@ -323,8 +377,11 @@ func ReadFail2banExistingRuntime(ctx context.Context, data, scope, adoption stri
 	if err = fail2banCurrentBinding(data, b, true); err != nil {
 		return out, err
 	}
-	out.Name, out.BindingID = c.Plan.Profile.Name, b.ID
-	raw, _ := json.Marshal([]string{adoption, b.ID, unit, config.hash(), out.ProfileProof, live.invocation, live.inode, out.Timezone.SHA256, out.ClockProof})
+	out.Name, out.BindingID, out.PolicyID = c.Plan.Profile.Name, b.ID, selected.ID
+	raw, _ := json.Marshal([]any{adoption, selected.ID, b.ID, unit, config.hash(), out.ProfileProof, live.invocation, live.inode, out.Timezone.SHA256, out.ClockProof, out.Jails})
 	out.Target = secure.Hash(raw)
+	if evidence != nil {
+		*evidence = fail2banExistingRuntimeEvidence{Capture: c, Selection: selected, Config: config, Live: live, Program: program}
+	}
 	return out, ctx.Err()
 }

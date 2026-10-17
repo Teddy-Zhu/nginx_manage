@@ -28,7 +28,7 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 ## 已有 SSH jail 接管预检
 
-本机 root 可预览一个正在原实例中运行的 SSH jail，明确期望参数及固定来源。此命令只完成预检，不发布接管授权、不写入系统配置、不 reload；首次接管、释放及未发布操作的取消见下文，参数调整和网页/API 修改入口继续实施。
+本机 root 可预览一个正在原实例中运行的 SSH jail，明确期望参数及固定来源。此命令只完成预检，不发布接管授权、不写入系统配置、不 reload；首次接管、释放、参数应用及操作取消见下文，网页/API 修改入口继续实施。
 
 将以下 JSON 保存为 root 所有且不可被组或其他用户写入的 `/root/sshd-takeover.json`；端口须按升序明确列出，日志来源可选 `auth-log`、`secure-log` 或 `systemd`：
 
@@ -94,11 +94,37 @@ nginxpanel fail2ban-existing-jail-runtime --data-dir /srv/nginxpanel --fail2ban-
   --fail2ban-existing-jail-base <ADOPTION_UUID>
 ```
 
-此入口只读，整体预算 90 秒，复用宿主机/实例锁及维护准入。目标必须仍由原接管授权管理，固定单元、配置流、原参数及实际过滤器/动作须一致；允许服务正常重启后核对当前实例。采集前后复核配置及进程根目录视图、服务身份、程序、实际参数、完整名单和时区材料。运行 `target` 绑定本次配置与时钟依据，不包含会正常变化的封禁集合；返回的 `bans` 是采样时的引擎记录，不证明内核阻断。
+此入口只读，整体预算 90 秒，复用宿主机/实例锁及维护准入。目标必须仍由原接管授权管理，固定单元、当前已确认配置流/参数及实际过滤器/动作须一致；允许服务正常重启后核对当前实例。采集前后复核配置及进程根目录视图、服务身份、程序、实际参数、完整名单和时区材料。运行 `target` 绑定当前 `policy_id`、完整名单、配置与时钟依据，不包含会正常变化的封禁集合；返回的 `bans` 是采样时的引擎记录，不证明内核阻断。已停用时核对完整名单中目标不存在，不返回运行过滤器或时钟证明。
 
 通过实际服务进程的初始 `TZ/TZDIR`、精确 UTC 启动时间及 root 保护的 TZif 文件识别时区，只支持固定 `/etc/localtime` 或 `/usr/share/zoneinfo` 数据；材料或系统程序/库在启动后变化、非标准目录、POSIX 时区表达式、夏令时重复/不存在的日历时间均拒绝换算。有限封禁须起止时间与时长一致，永久封禁保留 `duration=-1`。再使用实际固定系统 Python 的隔离进程按相同环境回算日历标签，核对可执行程序与库的映射设备、inode、进程根目录视图及启动前文件时间；结果不一致或读取不完整时返回失败，不默认按 UTC 处理。时钟证明、时区文件或原封禁不会进入迁移授权。
 
-受管 jail 的实际表达式核对同样使用已认证官方库展开固定 `<HOST>` 模板，再与引擎返回值比较。依据 [官方过滤器 getter](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)、[官方表达式展开](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/failregex.py)及 [systemd 时间格式](https://github.com/systemd/systemd/blob/v252/man/systemctl.xml)。本入口尚不应用参数或停用 jail；官方工具、时区及发行版运行验收仍待 P5。
+受管 jail 的实际表达式核对同样使用已认证官方库展开固定 `<HOST>` 模板，再与引擎返回值比较。依据 [官方过滤器 getter](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)、[官方表达式展开](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/failregex.py)及 [systemd 时间格式](https://github.com/systemd/systemd/blob/v252/man/systemctl.xml)。本入口只读，应用参数使用下述独立操作；官方工具、时区及发行版运行验收仍待 P5。
+
+## 已接管 SSH jail 的参数应用与停用
+
+本机 root 可复用原 profile/policy JSON 修改 `enabled/ban_time/find_time/max_retry/ignore_ips`；profile、来源和端口必须保持原接管值。每次先计划，再引用计划摘要和新的操作 UUID 应用：
+
+```sh
+nginxpanel fail2ban-existing-jail-policy-plan --data-dir /srv/nginxpanel --fail2ban-scope host \
+  --fail2ban-existing-jail-base <ADOPTION_UUID> --fail2ban-existing-jail-file /root/sshd-policy.json
+nginxpanel fail2ban-existing-jail-policy-apply --data-dir /srv/nginxpanel --fail2ban-scope host \
+  --fail2ban-existing-jail-base <ADOPTION_UUID> --fail2ban-existing-jail-file /root/sshd-policy.json \
+  --fail2ban-operation <NEW_UUID> --fail2ban-existing-jail-target <POLICY_TARGET>
+nginxpanel fail2ban-existing-jail-policy-status --data-dir /srv/nginxpanel --fail2ban-scope host \
+  --fail2ban-operation <ORIGINAL_UUID>
+nginxpanel fail2ban-existing-jail-policy-cancel --data-dir /srv/nginxpanel --fail2ban-scope host \
+  --fail2ban-operation <UNFINISHED_UUID>
+```
+
+从启用改为停用时，应用命令须额外提供 `--fail2ban-confirm-jail-stop`。计划绑定采样封禁集合及数量，发送前集合变化则不停止，须取消并重新确认。停用将结束该 SSH jail 的现有保护；修改停用中的参数或重新启用也必须重新计划。普通调整不接受此停用确认，避免意图混淆。未发送计划五分钟后过期；已提交操作续办始终沿用原 UUID、文件与摘要。
+
+预检核对当前已确认选择、实际参数及完整配置，并在私有目录比较候选、原 profile 和全部非调整参数。停用时也强制编译其启用副本，防止空配置流掩盖后端、过滤器或动作变化。`maxmatches` 须保持独立原值，或继续按原配置随 `maxretry` 派生；运行值须与对应配置一致。
+
+执行只原子替换本应用的覆盖文件，先保存完整快照和 journal，再持久记录发送意图及当前封禁。通过实际系统 Python 的隔离入口调用原官方客户端，固定只读 root 私有候选并执行 `reload --if-exists <name>`，不加 `--all/--restart/--unban`。预检和执行均限制官方解析器的 include 读取范围，超出冻结候选目录即拒绝；不依赖源机器的绝对 include。官方客户端单 jail 配置流仍包含全局设置，因此入口将选取固定在原 jail，移除已知全局日志/数据库设置，遇到其他 jail 或未知命令即拒绝；不改变全局服务参数。配置流与 reload 行为依据 [官方配置组装](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/configurator.py)、[官方 reload 客户端](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/client/fail2banclient.py)及 [官方服务分发](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/transmitter.py)。
+
+收到完成回包后重新核对候选、实际参数、过滤器/动作及完整名单；继续启用时，原未到期封禁必须保留相同的时长及绝对到期时间。只在这些证明完整后发布不可变参数事件和当前选择。回包丢失或提交后中断不重发，也不抢先回写原文件；原服务进程尚可能执行时保留 `recovery_required`。原 boot/PID/启动身份已证明结束后，可以观察新实例是否满足原候选；不能核对则保留现场，不自动重放封禁。
+
+未发送操作可取消，仅恢复本应用的覆盖文件。已发送请求只有原进程退出、原运行参数/名单和未到期封禁均重新证明后，才允许取消并撤回候选；已发布或已生效的候选须查询续办结果，再通过新计划恢复参数。解除接管前必须先以独立参数操作恢复首次接管的参数及启用状态。私有材料位于 `existing-jails/policy-{captures,events,current,configs}`；单配置树最多 8 MiB、单捕获最多 16 MiB，历史受 2048 项上限及共享 journal 配额约束，均不迁移。网页/API 修改入口继续实施，尚未运行官方工具或真实应用，待 P5 集中验收。
 
 ## 实例与 jail 读取
 
@@ -116,7 +142,7 @@ nginxpanel fail2ban-existing-jail-runtime --data-dir /srv/nginxpanel --fail2ban-
 
 公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 59、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
 
-已有实例默认只读，可由本机 root 另行授予全局服务控制或交接固定 SSH jail 的本机所有权。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 jail 参数修改及网页/API 接入、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
+已有实例默认只读，可由本机 root 另行授予全局服务控制，或接管固定 SSH jail 并执行上述参数应用/停用。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 jail 网页/API 修改接入、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
 实现与集成源码审阅已完成，未运行生成器、构建、类型检查、lint、测试、浏览器、服务或真实宿主机探测/接入命令；发行版、Python、systemd、Fail2ban 与日志后端组合留待 P5 集中验证。
 

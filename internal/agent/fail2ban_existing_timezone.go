@@ -250,6 +250,9 @@ func fail2banExistingBanProof(labels map[string]fail2banHostBanTime, zone fail2b
 			if err != nil {
 				return nil, err
 			}
+			if started.Unix() <= 0 || end.Unix() <= 0 {
+				return nil, errors.New("官方封禁时间超出可持久核对的 Unix 时间范围")
+			}
 			if delta := end.Unix() - started.Unix() - label.Duration; delta < -1 || delta > 1 {
 				return nil, errors.New("官方封禁的起止时间与时长不一致")
 			}

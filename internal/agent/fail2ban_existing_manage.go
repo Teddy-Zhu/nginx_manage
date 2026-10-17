@@ -228,6 +228,13 @@ func ManageFail2banExistingOwnership(ctx context.Context, data, scope, action, o
 		if original.Fail2banExisting.Action != "adopt" || original.State != "succeeded" {
 			return out, errors.New("原接管尚未成功，须先核对原操作")
 		}
+		selected, e := loadFail2banExistingPolicy(data, capture, base)
+		if e != nil {
+			return out, e
+		}
+		if !equalFail2banExistingPolicy(selected.Policy, capture.Plan.Before) || selected.DumpHash != capture.DumpHash {
+			return out, errors.New("释放前须通过独立参数计划恢复原接管参数及启用状态")
+		}
 		i.Name, i.BindingID, i.Target, i.CaptureHash = original.Fail2banExisting.Name, original.Fail2banExisting.BindingID, original.Fail2banExisting.Target, original.Fail2banExisting.CaptureHash
 		g, e := loadFail2banExistingGrant(data, i.Name)
 		if e != nil {
@@ -294,6 +301,13 @@ func advanceFail2banExistingOwnership(ctx context.Context, data string, j *Journ
 	actual := current.hash()
 	overlay := filepath.Join(fail2banExistingConfig, fail2banExistingOverlayName(i.Name))
 	if i.Action == "release" {
+		selected, err := loadFail2banExistingPolicy(data, c, i.AdoptionID)
+		if err != nil {
+			return fail(err)
+		}
+		if !equalFail2banExistingPolicy(selected.Policy, c.Plan.Before) || selected.DumpHash != c.DumpHash {
+			return fail(errors.New("释放前须通过独立参数计划恢复原接管参数及启用状态"))
+		}
 		expected := beforeHash
 		if actual != beforeHash && actual != c.CandidateHash {
 			expected, err = previewFail2banExistingRelease(ctx, data, c, current)
@@ -346,7 +360,7 @@ func advanceFail2banExistingOwnership(ctx context.Context, data string, j *Journ
 		if err != nil || !equalFail2banExistingPolicy(policy, c.Plan.Before) {
 			return fail(errors.New("接管期间原 jail 的实际参数变化"))
 		}
-		native, err := readFail2banExistingNativeProfile(ctx, program, &c.Binding, c.Plan.Profile, c.Plan.Before, commands)
+		native, err := readFail2banExistingNativeProfile(ctx, program, &c.Binding, c.Plan.Profile, commands)
 		if err != nil || native != c.Plan.NativeProof {
 			return fail(errors.New("接管期间实际过滤器或动作属性变化"))
 		}

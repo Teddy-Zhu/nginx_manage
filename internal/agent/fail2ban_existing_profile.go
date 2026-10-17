@@ -33,12 +33,16 @@ func (s fail2banExistingConfigSnapshot) hash() string {
 	return secure.Hash(raw)
 }
 func readFail2banExistingConfig() (fail2banExistingConfigSnapshot, error) {
+	return readFail2banExistingConfigAt(fail2banExistingConfig)
+}
+
+func readFail2banExistingConfigAt(root string) (fail2banExistingConfigSnapshot, error) {
 	out := fail2banExistingConfigSnapshot{Files: map[string][]byte{}}
-	if err := existingRootDirectory(fail2banExistingConfig); err != nil {
+	if err := existingRootDirectory(root); err != nil {
 		return out, err
 	}
 	entries, total := 0, 0
-	err := filepath.WalkDir(fail2banExistingConfig, func(name string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(root, func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -52,7 +56,7 @@ func readFail2banExistingConfig() (fail2banExistingConfigSnapshot, error) {
 		if !entry.Type().IsRegular() {
 			return errors.New("已有 Fail2ban 配置包含链接或特殊文件")
 		}
-		rel, err := filepath.Rel(fail2banExistingConfig, name)
+		rel, err := filepath.Rel(root, name)
 		if err != nil || strings.HasPrefix(rel, "../") || strings.ContainsAny(rel, "\x00\r\n\\") {
 			return errors.New("已有 Fail2ban 配置路径无效")
 		}
