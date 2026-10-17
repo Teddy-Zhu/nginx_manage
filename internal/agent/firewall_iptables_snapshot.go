@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -343,12 +344,16 @@ func inspectIPTablesBound(ctx context.Context, dataDir, backend, toolHash string
 }
 
 func (snapshot iptablesRegistrationSnapshot) verifyBound(ctx context.Context, tools *iptablesToolBinding) error {
+	return snapshot.verifyBoundDocker(ctx, tools, nil)
+}
+
+func (snapshot iptablesRegistrationSnapshot) verifyBoundDocker(ctx context.Context, tools *iptablesToolBinding, families []string) error {
 	for _, image := range snapshot.Images {
 		bound, err := tools.image(ctx, image.Family)
 		if err != nil || bound.hash() != image.hash() {
 			return errors.New("iptables 规则在完整核对期间变化")
 		}
-		if err = tools.verifyLibrary(ctx, bound); err != nil {
+		if err = tools.verifyLibrary(ctx, bound, slices.Contains(families, image.Family)); err != nil {
 			return err
 		}
 	}

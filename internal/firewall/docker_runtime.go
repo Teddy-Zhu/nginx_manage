@@ -24,6 +24,9 @@ type DockerTransitionPlan struct {
 	ParentOperationID       string               `json:"parent_operation_id"`
 	RegistrationHash        string               `json:"registration_hash"`
 	ToolHash                string               `json:"tool_hash"`
+	ToolchainHash           string               `json:"toolchain_hash"`
+	DryRunHash              string               `json:"dry_run_hash"`
+	DryRunCommands          int                  `json:"dry_run_commands"`
 	HookChain               string               `json:"hook_chain"`
 	EntryChain              string               `json:"entry_chain"`
 	RuntimeHash             string               `json:"runtime_hash"`

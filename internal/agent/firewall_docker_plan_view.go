@@ -62,7 +62,7 @@ func validDockerPlan(out firewall.Plan, input firewall.RuntimeInput) bool {
 
 func validDockerTransitionPlan(out firewall.Plan, policy firewall.Policy, targets firewall.DockerTargets, hostHooks int) bool {
 	v := out.Docker.Transition
-	if v == nil || !validID(v.Owner) || !validID(v.RegistrationOperationID) || !validID(v.ParentOperationID) || v.RegistrationOperationID == v.Owner || v.RegistrationOperationID == v.ParentOperationID || out.ID == v.RegistrationOperationID || out.ID == v.ParentOperationID || !firewalldDigest(v.RegistrationHash) || !firewalldDigest(v.ToolHash) || v.HookChain != "DOCKER-USER" || v.EntryChain != firewall.IPTablesDockerChain || !firewalldDigest(v.TransactionHash) || v.Families == nil {
+	if v == nil || !validID(v.Owner) || !validID(v.RegistrationOperationID) || !validID(v.ParentOperationID) || v.RegistrationOperationID == v.Owner || v.RegistrationOperationID == v.ParentOperationID || out.ID == v.RegistrationOperationID || out.ID == v.ParentOperationID || !firewalldDigest(v.RegistrationHash) || !firewalldDigest(v.ToolHash) || !firewalldDigest(v.ToolchainHash) || !firewalldDigest(v.DryRunHash) || v.DryRunCommands != 2*len(v.Families) || v.HookChain != "DOCKER-USER" || v.EntryChain != firewall.IPTablesDockerChain || !firewalldDigest(v.TransactionHash) || v.Families == nil {
 		return false
 	}
 	program, err := firewall.CompileDockerIPTablesRuntime(policy, targets, out.Docker.Bindings, v.Owner, out.ID)

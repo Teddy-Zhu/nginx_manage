@@ -197,6 +197,8 @@ const resolved: DataTableColumns<Plan["bindings"][number]> = [
         <dt>独立授权</dt><dd class="digest">{{ plan.transition.registration_operation_id }}</dd>
         <dt>含入口的生成规则</dt><dd>{{ plan.transition.generated_rules }} 条 / {{ plan.transition.runtime_bytes }} 字节</dd>
         <dt>代际程序摘要</dt><dd class="digest">{{ plan.transition.runtime_hash }}</dd>
+        <dt>官方预演</dt><dd>{{ plan.transition.dry_run_commands }} 个批次通过</dd>
+        <dt>预演摘要</dt><dd class="digest">{{ plan.transition.dry_run_hash }}</dd>
         <dt>切换与撤回摘要</dt><dd class="digest">{{ plan.transition.transaction_hash }}</dd>
       </dl>
       <n-data-table :columns="generations" :data="plan.transition.families" :pagination="false" :scroll-x="1000" />

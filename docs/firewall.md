@@ -49,7 +49,11 @@ Agent 重新读取当前实例、网络和容器，报告摘要不一致时拒�
 
 初始转换只接受空的应用命名空间。候选批次仅独占创建两条应用链、写入生成规则及插入精确首位入口；撤回批次只删除这些精确规则和空链，不声明、刷新、回放或改写 INPUT、Docker 或第三方配置。内存结构投影须能完整还原原规则；`after_hash` 是投影摘要，不是内核回执。原生完整导出与完整 nft JSON 候选/撤回读取预算均纳入准入，包含两类入口和指针的展开规则合计最多 8192 条；每个地址族单方向批次最多 2 MiB。计划结束前重新核对父子授权，变化或缺失回执拒绝返回成功计划。
 
-目标绑定及路径证据只存在于本次请求、易失计划和页面内存，完整规则及正反向批次仅存 root 易失计划；不改写期望规则、数据库或迁移归档，导出、导入和 API 迁移继续只携带中立期望。公开规则预览使用实际代际链及完整身份标记，IPC 边界重新编译核对。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 表示完成目标路径、独立授权及初始转换编译，`can_apply` 保持 false，提交执行会被拒绝。此阶段不执行官方预演或安装规则；后续代际更新、固定执行工具、官方预演、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
+完整绑定还固定显式后端双地址族 command/save/restore、禁止模块加载的 `false` 工具及私有读取入口的 ELF 身份和版本；已有已确认 INPUT 范围沿用原工具绑定，空范围重新绑定。官方 go-iptables 的隔离只读桥接核对完整 filter 链清单及 INPUT/原主机代际，并对所需 Docker 地址族增加 FORWARD/DOCKER-USER 的声明、数量、顺序及完整参数序列核对；两类导出不一致时拒绝，不解释或回放第三方扩展。
+
+每个所需地址族使用固定 restore 分别执行候选批次的 `--test`，以及把候选和撤回合成一个 filter/COMMIT 的正反向 `--test`，避免在原空命名空间单独预演删除。完整输入、基线、代际程序、工具摘要及逐次成功结果参与 `dry_run_hash`；`dry_run_commands` 为 2 或 4，进入转换及父程序摘要。非零结果、警告、任何输出、超时、工具变化或预演前后完整规则变化均不生成成功计划。预演后再次核对 Docker/原生规则/路由、固定工具的原生与库读取及候选读取容量，仍使用原十秒期限。`--test` 不安装规则，也不证明外部可达。
+
+目标绑定及路径证据只存在于本次请求、易失计划和页面内存，完整规则、工具、预演证明及正反向批次仅存 root 易失计划；不改写期望规则、数据库或迁移归档，导出、导入和 API 迁移继续只携带中立期望。公开规则预览使用实际代际链及完整身份标记，IPC 边界重新编译核对代际并检查预演摘要及批次数量。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 表示完成目标路径、独立授权、初始转换编译和官方预演，`can_apply` 保持 false，提交执行会被拒绝。代际执行/更新、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
 
 实现依据：[Moby bridge 名称及端点](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/bridge_linux.go)、[端口 DNAT 规则](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/port_mapping_linux.go)、[Docker 转发及原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[Linux 路由 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/rtnetlink.h)、[策略规则 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/fib_rules.h)、[IPv6 FIB 查询及导出](https://github.com/torvalds/linux/blob/v6.12/net/ipv6/route.c)。本阶段仅完成源码实现和集成审阅，未执行 Docker/API/系统能力验证，待 P5 集中验证。
 
@@ -159,7 +163,7 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 
 `PUT /system/modules/firewall` 停用时必须指定 `firewall_rules`。`keep` 明确保留已确认规则；`remove` 另需 `read/security.write` 及已确认的 `firewall_operation_id`，只有原操作仍为当前确认的移除结果且无活动变更才停用；后续应用失败并恢复该空表时仍可引用原确认操作，后续成功应用会使其失效。初始空表经核对且尚无已确认规则时无需生成空的移除操作，可省略操作 ID 直接停用。公共执行提交与最终停用共用锁，防止停用核对期间插入新应用；失败不伪造停用成功，可继续引用同一操作重试。启用或其他模块拒绝携带停用选项。自动扫描的功能模块页面提供保留/先移除选择，防火墙应用页完成移除和新连接确认后提供最终停用；远程转发不执行移除流程。
 
-当前已接入 direct-nftables、firewalld、UFW 与显式 iptables-nft/legacy 的主机入站计划、应用、确认和独立恢复。Docker 实例及端口映射只读报告、显式目标绑定、DNAT/路由核对、独立本机空命名空间授权和首代正反向切换预览已接入；官方预演、代际执行、新连接确认及持久恢复仍待实施。Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
+当前已接入 direct-nftables、firewalld、UFW 与显式 iptables-nft/legacy 的主机入站计划、应用、确认和独立恢复。Docker 实例及端口映射只读报告、显式目标绑定、DNAT/路由核对、独立本机空命名空间授权、首代正反向切换及固定工具/官方预演已接入；代际执行、新连接确认及持久恢复仍待实施。Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 

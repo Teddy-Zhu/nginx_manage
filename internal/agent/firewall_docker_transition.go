@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -18,6 +19,8 @@ type dockerInitialTransition struct {
 	ToolHash          string
 	Program           *firewall.DockerIPTablesRuntimeProgram
 	Materials         []iptablesChangeMaterial
+	Tools             *iptablesToolBinding
+	DryRun            *iptablesDryRunProof
 }
 
 func makeDockerInitialMaterial(before iptablesImage, generation firewall.IPTablesGeneration) (iptablesChangeMaterial, error) {
@@ -141,11 +144,11 @@ func makeDockerInitialMaterial(before iptablesImage, generation firewall.IPTable
 	return iptablesChangeMaterial{Family: before.Family, Binary: generation.Binary, BeforeHash: before.hash(), AfterHash: after.hash(), CandidateHash: secure.Hash(candidate.Bytes()), PreviousHash: secure.Hash(previous.Bytes()), Before: before, After: after, Candidate: candidate.Bytes(), Previous: previous.Bytes()}, nil
 }
 
-func prepareDockerInitialTransition(before iptablesRegistrationSnapshot, grant *dockerRegistrationCheckpoint, program *firewall.DockerIPTablesRuntimeProgram) (*dockerInitialTransition, *firewall.DockerTransitionPlan, error) {
-	if !validDockerRegistration(grant) || grant.State != "registered" || program == nil || program.Owner != grant.Owner || program.Backend != grant.Backend || program.PlanID == grant.OperationID || program.PlanID == grant.ParentOperationID || !firewalldDigest(before.Hash) || !firewalldDigest(before.ToolHash) {
-		return nil, nil, errors.New("Docker 初始代际缺少独立本机授权或当前完整基线")
+func prepareDockerInitialTransition(ctx context.Context, before iptablesRegistrationSnapshot, grant *dockerRegistrationCheckpoint, program *firewall.DockerIPTablesRuntimeProgram, tools *iptablesToolBinding) (*dockerInitialTransition, *firewall.DockerTransitionPlan, error) {
+	if !validDockerRegistration(grant) || grant.State != "registered" || program == nil || program.Owner != grant.Owner || program.Backend != grant.Backend || program.PlanID == grant.OperationID || program.PlanID == grant.ParentOperationID || !firewalldDigest(before.Hash) || !firewalldDigest(before.ToolHash) || !tools.valid() || tools.Backend != program.Backend {
+		return nil, nil, errors.New("Docker 初始代际缺少独立本机授权、当前完整基线或固定工具")
 	}
-	v := &dockerInitialTransition{Registration: *grant, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Materials: []iptablesChangeMaterial{}}
+	v := &dockerInitialTransition{Registration: *grant, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Materials: []iptablesChangeMaterial{}, Tools: tools}
 	summary := &firewall.DockerTransitionPlan{Owner: grant.Owner, RegistrationOperationID: grant.OperationID, ParentOperationID: grant.ParentOperationID, RegistrationHash: grant.RequestHash, ToolHash: before.ToolHash, HookChain: "DOCKER-USER", EntryChain: firewall.IPTablesDockerChain, RuntimeHash: program.Hash, RuntimeBytes: program.Bytes, GeneratedRules: program.GeneratedRules, Families: []firewall.IPTablesFamilyPlan{}}
 	for _, generation := range program.Families {
 		var image *iptablesImage
@@ -174,6 +177,20 @@ func prepareDockerInitialTransition(before iptablesRegistrationSnapshot, grant *
 	if err := admitDockerInitialReadback(before, program); err != nil {
 		return nil, nil, err
 	}
+	proof, err := preflightIPTablesMaterials(ctx, tools, before.Hash, program.Hash, v.Materials, func(image iptablesImage) error {
+		if err := proveEmptyDockerNamespace(image); err != nil {
+			return err
+		}
+		if hook := observeDockerFirewallHook(image); !hook.Observed {
+			return errors.New("Docker 官方预演的原始挂接无法核对：" + hook.Reason)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	v.DryRun = proof
+	summary.ToolchainHash, summary.DryRunHash, summary.DryRunCommands = tools.Hash, proof.Hash, len(proof.Calls)
 	// Hash typed summaries rather than serializing foreign rules into the public
 	// view. The full images and batches remain solely in the root private plan.
 	raw, err := json.Marshal(struct {
@@ -183,6 +200,6 @@ func prepareDockerInitialTransition(before iptablesRegistrationSnapshot, grant *
 	if err != nil {
 		return nil, nil, err
 	}
-	summary.TransactionHash = secure.Hash(append([]byte("iptables:docker-initial-transition:v1:\x00"), raw...))
+	summary.TransactionHash = secure.Hash(append([]byte("iptables:docker-initial-transition:v2:\x00"), raw...))
 	return v, summary, nil
 }

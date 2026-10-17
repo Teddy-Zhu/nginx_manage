@@ -256,7 +256,7 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 	native := nativeHashes(before)
 	routingHash := ""
 	var transition *dockerInitialTransition
-	detail := &firewall.DockerPlan{EngineHash: runtime.EngineHash, SnapshotHash: runtime.SnapshotHash, ObservedAt: runtime.ObservedAt, Ports: runtime.Ports, Truncated: runtime.Truncated, Addresses: host.Addresses, Bindings: []firewall.DockerResolvedBinding{}, Entries: []firewall.PreviewEntry{}, HostProgramHash: hostProgram.Hash, HostGeneratedRules: hostProgram.BaseRules + len(hostProgram.Entries), Warnings: []string{"绑定只覆盖明确选择的主机映射、原始目的地址和入口接口；不代表所有容器或通配地址均受保护", "路径核对仅支持可解释的 NAT 条件及默认策略路由；不执行规则、官方 --test 或数据包探测", "允许采用 RETURN 交还 DOCKER-USER 和 Docker 后续判断；路径证据不保证其他过滤规则、转发设置或云安全组放行", "受管代际执行、新连接确认与独立持久恢复尚未接通，当前计划不能应用"}, Reason: "请选择目标映射、实际原始目的地址及入口接口；当前计划仅供核对，不能应用"}
+	detail := &firewall.DockerPlan{EngineHash: runtime.EngineHash, SnapshotHash: runtime.SnapshotHash, ObservedAt: runtime.ObservedAt, Ports: runtime.Ports, Truncated: runtime.Truncated, Addresses: host.Addresses, Bindings: []firewall.DockerResolvedBinding{}, Entries: []firewall.PreviewEntry{}, HostProgramHash: hostProgram.Hash, HostGeneratedRules: hostProgram.BaseRules + len(hostProgram.Entries), Warnings: []string{"绑定只覆盖明确选择的主机映射、原始目的地址和入口接口；不代表所有容器或通配地址均受保护", "完整绑定计划使用固定工具预演候选与同表正反向批次；不安装规则或探测数据包", "允许采用 RETURN 交还 DOCKER-USER 和 Docker 后续判断；路径证据不保证其他过滤规则、转发设置或云安全组放行", "受管代际执行、新连接确认与独立持久恢复尚未接通，当前计划不能应用"}, Reason: "请选择目标映射、实际原始目的地址及入口接口；当前计划仅供核对，不能应用"}
 	if in.DockerTargets != nil {
 		targets, err := in.DockerTargets.Normalize(policy)
 		if err != nil {
@@ -281,6 +281,18 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 			}
 		}
 		slices.Sort(families)
+		var tools *iptablesToolBinding
+		if previous != nil {
+			tools = &previous.Tools
+		} else {
+			tools, err = bindIPTablesTools(ctx, f.owner)
+			if err != nil {
+				return out, fault.Unavailable("Docker 固定工具绑定失败：" + boundedIPTablesError(err))
+			}
+		}
+		if err = before.verifyBoundDocker(ctx, tools, families); err != nil {
+			return out, fault.Unavailable("Docker 固定规则读取失败：" + boundedIPTablesError(err))
+		}
 		routing, err := reader.snapshot(ctx, families)
 		if err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
@@ -322,11 +334,11 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		if runtimeProgram.GeneratedRules+detail.HostGeneratedRules+2*len(hostProgram.Families) > firewall.MaxEntries {
 			return out, fault.Invalid("包含主机保护、Docker 入口及代际指针的规则超过 8192 条")
 		}
-		transition, detail.Transition, err = prepareDockerInitialTransition(before, grant, runtimeProgram)
+		transition, detail.Transition, err = prepareDockerInitialTransition(ctx, before, grant, runtimeProgram, tools)
 		if err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
 		}
-		detail.Reason = "目标路径、独立授权及初始规则切换和撤回范围已核对；尚未完成执行准备，不能应用"
+		detail.Reason = "目标路径、独立授权、固定工具及初始切换/撤回官方预演已核对；执行和恢复尚未完成，不能应用"
 		// Bracket the proof with fresh native, routing and Docker observations.
 		// Keep the existing plan deadline: timeout rejects rather than returning
 		// a partial proof. These reads do not make the snapshots atomic.
@@ -350,6 +362,9 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		}
 		if after.Hash != before.Hash || after.ToolHash != before.ToolHash || !slices.Equal(native, nativeHashes(after)) || afterRouting.Hash != routing.Hash || afterRuntime.EngineHash != runtime.EngineHash || afterRuntime.SnapshotHash != runtime.SnapshotHash {
 			return out, fault.Conflict("Docker 实例、原生规则或路由在路径核对期间变化，请重新生成计划")
+		}
+		if err = after.verifyBoundDocker(ctx, tools, families); err != nil {
+			return out, fault.Unavailable("Docker 官方预演后的固定读取失败：" + boundedIPTablesError(err))
 		}
 		if err = admitDockerInitialReadback(after, runtimeProgram); err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
