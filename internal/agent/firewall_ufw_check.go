@@ -30,15 +30,15 @@ type ufwFileSnapshot struct {
 }
 type ufwConfigurationSnapshot struct {
 	Files             []ufwFileSnapshot
-	UserRules         map[string][]byte
+	Contents          map[string][]byte
 	Hash, ToolHash    string
 	HasManagedMarkers bool
 }
 
 type ufwDryRunProof struct {
-	Hash, NativeHash string
-	PreservedRules   int
-	Warnings         []string
+	Hash, NativeHash, BatchHash string
+	PreservedRules              int
+	Warnings                    []string
 }
 
 func ufwTool() (string, error) {
@@ -50,21 +50,27 @@ func ufwTool() (string, error) {
 	return "", errors.New("受信 UFW 程序不可用")
 }
 
-// Capture a fixed set of source files without interpreting shell settings or
-// copying them into the policy. Repeated reads detect drift, not an atomic lock.
-func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwConfigurationSnapshot, error) {
-	out := ufwConfigurationSnapshot{Files: []ufwFileSnapshot{}, UserRules: map[string][]byte{}}
-	sources := []struct {
-		path     string
-		required bool
-	}{
+type ufwConfigurationSource struct {
+	path     string
+	required bool
+}
+
+func ufwConfigurationSources(binary string, ipv6 bool) []ufwConfigurationSource {
+	return []ufwConfigurationSource{
 		{binary, true}, {"/etc/ufw/ufw.conf", true}, {"/etc/default/ufw", true},
 		{"/etc/ufw/user.rules", true}, {"/etc/ufw/before.rules", true}, {"/etc/ufw/after.rules", true},
 		{"/etc/ufw/user6.rules", ipv6}, {"/etc/ufw/before6.rules", ipv6}, {"/etc/ufw/after6.rules", ipv6},
 		{"/etc/ufw/sysctl.conf", false}, {"/etc/ufw/before.init", false}, {"/etc/ufw/after.init", false},
 	}
+}
+
+// Capture fixed source files without interpreting shell settings. These bytes
+// supply the private dry-run workspace; they never become portable policy.
+// Repeated reads detect drift, not an atomic lock.
+func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwConfigurationSnapshot, error) {
+	out := ufwConfigurationSnapshot{Files: []ufwFileSnapshot{}, Contents: map[string][]byte{}}
 	total := 0
-	for _, source := range sources {
+	for _, source := range ufwConfigurationSources(binary, ipv6) {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
@@ -97,8 +103,8 @@ func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwCon
 			return out, errors.New("UFW 固定配置超过 4 MiB")
 		}
 		file.Present, file.Hash, file.Bytes = true, secure.Hash(raw), int64(len(raw))
-		if source.path == "/etc/ufw/user.rules" || source.path == "/etc/ufw/user6.rules" && ipv6 {
-			out.UserRules[source.path] = raw
+		if source.path != binary {
+			out.Contents[source.path] = raw
 		}
 		if source.path != binary && (strings.Contains(string(raw), "nginxpanel:host:") || strings.Contains(strings.ToLower(string(raw)), hex.EncodeToString([]byte("nginxpanel:host:")))) {
 			out.HasManagedMarkers = true
@@ -119,10 +125,10 @@ func readUFWConfiguration(ctx context.Context, binary string, ipv6 bool) (ufwCon
 }
 
 // prepend refuses a matching existing selector instead of updating its action
-// or comment. Each candidate must contain exactly the new generated native
-// block followed by every original block, with auxiliary differences bounded
-// to known official projections. This is not a batch or kernel proof.
-func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWProgram, baseline ufwConfigurationSnapshot) (proof ufwDryRunProof, resultErr error) {
+// or comment. Reverse prepend steps accumulate only in the private datadir;
+// every candidate and the final per-family order must match the typed program.
+// This prepares a file batch, not a kernel transaction or ownership grant.
+func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWProgram, baseline ufwConfigurationSnapshot, ipv6 bool) (proof ufwDryRunProof, resultErr error) {
 	defer func() {
 		if resultErr != nil {
 			proof = ufwDryRunProof{}
@@ -133,10 +139,10 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 	}
 	before := map[string]*ufwNativeFile{}
 	for _, item := range []struct{ family, path string }{{"ipv4", "/etc/ufw/user.rules"}, {"ipv6", "/etc/ufw/user6.rules"}} {
-		raw, present := baseline.UserRules[item.path]
-		if !present && item.family == "ipv6" {
+		if item.family == "ipv6" && !ipv6 {
 			continue
 		}
+		raw := baseline.Contents[item.path]
 		file, err := parseUFWNative(raw, item.family, true)
 		if err != nil {
 			return proof, err
@@ -194,14 +200,26 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 			resultErr = errors.Join(resultErr, errors.New("UFW 私有预演目录清理失败，须本机核对"))
 		}
 	}()
+	workspace, err := newUFWDryRunWorkspace(ctx, temp, baseline)
+	if err != nil {
+		return proof, err
+	}
+	current := map[string]*ufwNativeFile{}
+	for family, file := range before {
+		current[family] = file
+	}
 	hashes := []string{}
 	total := 0
-	for index, rule := range program.Rules {
+	for index := len(program.Rules) - 1; index >= 0; index-- {
+		if err := ctx.Err(); err != nil {
+			return proof, err
+		}
+		rule := program.Rules[index]
 		call, cancel := context.WithTimeout(ctx, 2*time.Second)
-		args := append([]string{"--dry-run", "prepend"}, rule.Arguments...)
+		args := append([]string{"--datadir=" + temp, "--dry-run", "prepend"}, rule.Arguments...)
 		command := exec.CommandContext(call, binary, args...)
 		command.Dir = "/"
-		command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C", "PYTHONDONTWRITEBYTECODE=1", "TMPDIR=" + temp}
+		command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C", "PYTHONDONTWRITEBYTECODE=1", "TMPDIR=" + filepath.Join(temp, "tmp")}
 		command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 		command.Cancel = func() error { return syscall.Kill(-command.Process.Pid, syscall.SIGKILL) }
 		command.WaitDelay = 250 * time.Millisecond
@@ -217,13 +235,20 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 		if total > 8<<20 {
 			return proof, errors.New("UFW dry-run 完整输出合计超过 8 MiB")
 		}
-		warning, err := ufwDryRunMatches(raw, expected[index], before[expected[index].Family])
+		candidate, err := parseUFWDryRunCandidate(raw, expected[index], current[expected[index].Family])
 		if err != nil {
 			return proof, err
 		}
-		if warning != "" && !warned[warning] {
-			proof.Warnings = append(proof.Warnings, warning)
-			warned[warning] = true
+		if err = ctx.Err(); err != nil {
+			return proof, err
+		}
+		if err = workspace.replace(expected[index].Family, candidate.Content); err != nil {
+			return proof, err
+		}
+		current[expected[index].Family] = candidate.File
+		if candidate.Warning != "" && !warned[candidate.Warning] {
+			proof.Warnings = append(proof.Warnings, candidate.Warning)
+			warned[candidate.Warning] = true
 		}
 		hashes = append(hashes, secure.Hash(raw))
 	}
@@ -232,21 +257,44 @@ func checkUFWDryRun(ctx context.Context, binary string, program *firewall.UFWPro
 		return proof, err
 	}
 	proof.Hash = secure.Hash(append([]byte("ufw:dry-run:v1:\x00"), raw...))
+	if err = verifyUFWBatchOrder(before, current, expected); err != nil {
+		return proof, err
+	}
+	if err = workspace.verify(ctx); err != nil {
+		return proof, err
+	}
+	proof.BatchHash, err = workspace.digest(baseline.Hash, proof.NativeHash, proof.Hash)
+	if err != nil {
+		return proof, err
+	}
 	return proof, nil
 }
 
-func ufwDryRunMatches(raw []byte, expected ufwNativeRule, before *ufwNativeFile) (string, error) {
+type ufwDryRunCandidate struct {
+	File    *ufwNativeFile
+	Content []byte
+	Warning string
+}
+
+func parseUFWDryRunCandidate(raw []byte, expected ufwNativeRule, before *ufwNativeFile) (*ufwDryRunCandidate, error) {
 	status := "Rules updated\n"
 	if expected.Family == "ipv6" {
 		status = "Rules updated (v6)\n"
 	}
 	text, ok := strings.CutSuffix(string(raw), status)
 	if !ok {
-		return "", errors.New("UFW dry-run 缺少对应地址族的更新结果，或已有匹配条件冲突")
+		return nil, errors.New("UFW dry-run 缺少对应地址族的更新结果，或已有匹配条件冲突")
+	}
+	if len(text) > firewall.UFWReadBytes {
+		return nil, errors.New("UFW 累积候选文件超过 512 KiB")
 	}
 	candidate, err := parseUFWNative([]byte(text), expected.Family, false)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return ufwNativePreserved(before, candidate, expected)
+	warning, err := ufwNativePreserved(before, candidate, expected)
+	if err != nil {
+		return nil, err
+	}
+	return &ufwDryRunCandidate{File: candidate, Content: []byte(text), Warning: warning}, nil
 }

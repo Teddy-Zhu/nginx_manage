@@ -27,7 +27,7 @@ const columns: DataTableColumns<Entry> = [
     ellipsis: { tooltip: true },
   },
   {
-    title: "预演命令",
+    title: "预演命令（目标顺序）",
     key: "expression",
     minWidth: 420,
     ellipsis: { tooltip: true },
@@ -48,7 +48,7 @@ const columns: DataTableColumns<Entry> = [
   <dl>
     <dt>本机授权登记操作</dt>
     <dd>{{ plan.registration_operation_id }}</dd>
-    <dt>逐条 dry-run</dt>
+    <dt>累积批次 dry-run</dt>
     <dd>{{ plan.dry_run_commands }} 条</dd>
     <dt>核对保留的既有用户规则</dt>
     <dd>{{ plan.preserved_rules }} 条（按原生 tuple 计）</dd>
@@ -62,6 +62,8 @@ const columns: DataTableColumns<Entry> = [
     <dd class="digest">{{ plan.dry_run_hash }}</dd>
     <dt>生成原生规则摘要</dt>
     <dd class="digest">{{ plan.native_program_hash }}</dd>
+    <dt>完整候选批次摘要</dt>
+    <dd class="digest">{{ plan.batch_hash }}</dd>
     <dt>完整程序摘要</dt>
     <dd class="digest">{{ programHash }}</dd>
   </dl>

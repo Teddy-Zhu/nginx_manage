@@ -2067,14 +2067,15 @@ components:
     FirewallUFWPlan:
       type: object
       additionalProperties: false
-      required: [registration_operation_id, configuration_hash, tool_hash, dry_run_hash, native_program_hash, preserved_rules, dry_run_commands, protection_rules, protection_overrides, entries, truncated, warnings, reason]
-      description: root 在本机空命名空间授权登记后，基于实际管理连接及 SSH 监听准备的 UFW 保护计划；注释绑定原随机所有者和计划身份。每条命令独立执行官方 dry-run prepend，核对源文件前后摘要、新增 tuple 与完整原生表达式，以及既有用户规则块的顺序和内容；初始模板及官方限速能力默认值的已知投影差异单独提示。不证明批次顺序、内核状态或所有权，不授权实际应用。
+      required: [registration_operation_id, configuration_hash, tool_hash, dry_run_hash, native_program_hash, batch_hash, preserved_rules, dry_run_commands, protection_rules, protection_overrides, entries, truncated, warnings, reason]
+      description: root 在本机空命名空间授权登记后，基于实际管理连接及 SSH 监听准备的 UFW 保护计划；注释绑定原随机所有者和计划身份。通过官方 datadir 在私有配置副本内逆序累积 dry-run prepend，核对每步新增块及既有用户规则保留、最终目标顺序和闭合目录清单；批次摘要绑定原基线、原生程序、步骤输出及最终用户文件。初始模板及官方限速能力默认值的已知投影差异单独提示，不证明内核状态或所有权，不授权实际应用。
       properties:
         registration_operation_id: {type: string, format: uuid}
         configuration_hash: {type: string, minLength: 64, maxLength: 64}
         tool_hash: {type: string, minLength: 64, maxLength: 64, description: '受信 UFW 可执行文件摘要，不代表所有 Python 依赖'}
         dry_run_hash: {type: string, minLength: 64, maxLength: 64}
         native_program_hash: {type: string, minLength: 64, maxLength: 64, description: 按生成顺序排列的完整原生 tuple 及报文规则摘要，不是内核或规则所有权证明}
+        batch_hash: {type: string, minLength: 64, maxLength: 64, description: 隔离配置累积批次的基线、程序、执行顺序输出和最终用户文件摘要，不是已执行回执}
         preserved_rules: {type: integer, minimum: 0, maximum: 8192, description: 本次核对的所有已启用地址族原生文件中既有用户 tuple 总数}
         dry_run_commands: {type: integer, minimum: 0, maximum: 64}
         protection_rules: {type: integer, minimum: 0, maximum: 64}

@@ -2064,6 +2064,7 @@ type FirewallUFWPlan struct {
 	ToolHash                string                 `json:"tool_hash"`
 	DryRunHash              string                 `json:"dry_run_hash"`
 	NativeProgramHash       string                 `json:"native_program_hash"`
+	BatchHash               string                 `json:"batch_hash"`
 	PreservedRules          int                    `json:"preserved_rules"`
 	DryRunCommands          int                    `json:"dry_run_commands"`
 	ProtectionRules         int                    `json:"protection_rules"`
