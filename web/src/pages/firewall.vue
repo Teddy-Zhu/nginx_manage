@@ -25,6 +25,7 @@ import {
 import { apiError, useNodeAPI, type FirewallObservation } from "../api/client";
 import FirewalldPolicies from "../components/FirewalldPolicies.vue";
 import UFWUserRules from "../components/UFWUserRules.vue";
+import DockerFirewall from "../components/DockerFirewall.vue";
 
 const api = useNodeAPI();
 const observation = ref<FirewallObservation | null>(null);
@@ -435,6 +436,7 @@ onUnmounted(() => {
             <code>{{ item }}</code>
           </li>
         </ul>
+        <DockerFirewall :value="observation.docker" />
       </section>
     </template>
   </template>

@@ -19,6 +19,7 @@ import (
 // request never starts a second copy while the original job is still alive.
 type firewallObserver struct {
 	skipIPTablesRegistration bool
+	dockerInventory          bool
 	// Only synchronous private root inspections request read-back evidence.
 	nftReadback *nftReadbackBudget
 	mu          sync.Mutex
@@ -97,6 +98,14 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	out.Rulesets = make([]firewall.Ruleset, 5)
 	out.Iptables = make([]firewall.Iptables, 2)
 	var wg sync.WaitGroup
+	dockerHooks := make([]dockerFirewallHook, 4)
+	if f.dockerInventory {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out.Docker.Runtime = readDockerFirewallRuntime(ctx)
+		}()
+	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -133,7 +142,14 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	for index, variant := range []string{"nft", "legacy"} {
 		for fi, family := range []string{"ipv4", "ipv6"} {
 			wg.Add(1)
-			go func() { defer wg.Done(); out.Rulesets[1+2*index+fi] = readXtables(ctx, variant, family) }()
+			go func() {
+				defer wg.Done()
+				var hook *dockerFirewallHook
+				if f.dockerInventory {
+					hook = &dockerHooks[2*index+fi]
+				}
+				out.Rulesets[1+2*index+fi] = readXtables(ctx, variant, family, hook)
+			}()
 		}
 	}
 	for i, name := range []string{"iptables", "ip6tables"} {
@@ -156,6 +172,7 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	}
 	wg.Wait()
 	classifyFirewall(&out)
+	dockerFirewallCapabilities(&out, dockerHooks)
 	if !f.skipIPTablesRegistration {
 		out.IPTablesRegistration = iptablesRegistrationView(ctx, f.dataDir, out)
 	}
@@ -165,13 +182,16 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 	return out
 }
 func (s *Server) firewallHandlers(mux *http.ServeMux, ctx context.Context) *firewallObserver {
-	f := &firewallObserver{ctx: ctx, scope: s.MetricsScope, dev: s.Dev, dataDir: s.DataDir}
+	f := &firewallObserver{ctx: ctx, scope: s.MetricsScope, dev: s.Dev, dataDir: s.DataDir, dockerInventory: true}
 	mux.HandleFunc("GET /v1/firewall", func(w http.ResponseWriter, r *http.Request) { out, e := f.read(r.Context()); dnsReply(w, out, e) })
 	return f
 }
 func (c *Client) ReadFirewall(ctx context.Context) (firewall.Observation, error) {
 	var out firewall.Observation
 	e := c.envelopeRequest(ctx, http.MethodGet, "/v1/firewall", nil, &out)
+	if e == nil && !validDockerFirewall(out) {
+		e = errors.New("invalid Docker firewall inventory")
+	}
 	if e == nil && !validIPTablesRegistrationView(out.IPTablesRegistration) {
 		e = errors.New("invalid iptables registration")
 	}

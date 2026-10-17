@@ -365,7 +365,7 @@ func firewallVersion(raw []byte) (string, string, error) {
 	}
 	return backend, version, nil
 }
-func readXtables(ctx context.Context, variant, family string) firewall.Ruleset {
+func readXtables(ctx context.Context, variant, family string, dockerHook *dockerFirewallHook) firewall.Ruleset {
 	out := firewall.Ruleset{ID: "iptables-" + variant + "-" + family, Backend: map[string]string{"nft": "nftables", "legacy": "legacy"}[variant], Family: family, Tables: []firewall.Table{}, Reason: "工具或后端不可用"}
 	name := "iptables-" + variant
 	if family == "ipv6" {
@@ -403,6 +403,14 @@ func readXtables(ctx context.Context, variant, family string) firewall.Ruleset {
 	}
 	out.Available = true
 	out.Reason = ""
+	if dockerHook != nil {
+		image, err := parseIPTablesImage(raw, family)
+		if err != nil {
+			*dockerHook = dockerFirewallHook{Reason: "原生规则未能完整核对 DOCKER-USER 挂接"}
+		} else {
+			*dockerHook = observeDockerFirewallHook(image)
+		}
+	}
 	return out
 }
 

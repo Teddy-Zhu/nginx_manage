@@ -51,7 +51,7 @@ func streamOutput(body io.Reader) ([]byte, error) {
 func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c containerInfo, commandSHA string) error {
 	var state execInfo
 	path := "/exec/" + id + "/json"
-	if err := d.json(ctx, "GET", path, nil, &state); err != nil {
+	if err := d.JSON(ctx, "GET", path, nil, &state); err != nil {
 		return err
 	}
 	if state.ID != id || state.ContainerID != c.ID {
@@ -68,7 +68,7 @@ func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c 
 			return errors.New("原 Nginx 诊断尚未确认开始或结束，保留回执且不重新提交")
 		case <-tick.C:
 		}
-		if err := d.json(ctx, "GET", path, nil, &state); err != nil {
+		if err := d.JSON(ctx, "GET", path, nil, &state); err != nil {
 			return err
 		}
 		if state.ID != id || state.ContainerID != c.ID {
@@ -97,7 +97,7 @@ func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c 
 		return errors.New("原诊断 PID 的命令身份不匹配，拒绝发送信号")
 	}
 	var confirmed execInfo
-	if err = d.json(ctx, "GET", path, nil, &confirmed); err != nil {
+	if err = d.JSON(ctx, "GET", path, nil, &confirmed); err != nil {
 		return err
 	}
 	if confirmed.ID != id || confirmed.ContainerID != c.ID || confirmed.Pid != state.Pid {
@@ -110,7 +110,7 @@ func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c 
 		return err
 	}
 	for {
-		if err = d.json(ctx, "GET", path, nil, &confirmed); err != nil {
+		if err = d.JSON(ctx, "GET", path, nil, &confirmed); err != nil {
 			return err
 		}
 		if confirmed.ID != id || confirmed.ContainerID != c.ID {
@@ -135,7 +135,7 @@ func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runEr
 	if err != nil {
 		return nil, err
 	}
-	defer d.close()
+	defer d.Close()
 	if err = r.reconcileDiagnostic(ctx, d); err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runEr
 	}
 	b := r.Binding
 	input := map[string]any{"AttachStdout": true, "AttachStderr": true, "AttachStdin": false, "Tty": false, "Privileged": false, "User": strconv.Itoa(b.UID) + ":" + strconv.Itoa(b.GID), "WorkingDir": b.DataDir, "Env": []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "TZ=UTC"}, "Cmd": append([]string{Binary}, args...)}
-	if err = d.json(ctx, "POST", "/containers/"+c.ID+"/exec", input, &created); err != nil {
+	if err = d.JSON(ctx, "POST", "/containers/"+c.ID+"/exec", input, &created); err != nil {
 		return nil, err
 	}
 	if !hashValue.MatchString(created.ID) {
@@ -185,7 +185,7 @@ func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runEr
 		return nil, err
 	}
 	submitted = true
-	resp, err := d.request(ctx, "POST", "/exec/"+created.ID+"/start", map[string]bool{"Detach": false, "Tty": false})
+	resp, err := d.Request(ctx, "POST", "/exec/"+created.ID+"/start", map[string]bool{"Detach": false, "Tty": false})
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runEr
 		return nil, err
 	}
 	var state execInfo
-	if err = d.json(ctx, "GET", "/exec/"+created.ID+"/json", nil, &state); err != nil {
+	if err = d.JSON(ctx, "GET", "/exec/"+created.ID+"/json", nil, &state); err != nil {
 		return nil, err
 	}
 	if state.ID != created.ID || state.ContainerID != c.ID || state.Running || state.ExitCode == nil || *state.ExitCode != 0 {

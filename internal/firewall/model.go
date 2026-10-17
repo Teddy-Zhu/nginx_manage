@@ -149,14 +149,16 @@ type Chain struct {
 	DockerUserJump bool   `json:"docker_user_jump"`
 }
 type Docker struct {
-	BackendHint string   `json:"backend_hint"`
-	Evidence    []string `json:"evidence"`
-	Writable    bool     `json:"writable"`
-	Reason      string   `json:"reason"`
+	BackendHint  string             `json:"backend_hint"`
+	Evidence     []string           `json:"evidence"`
+	Writable     bool               `json:"writable"`
+	Reason       string             `json:"reason"`
+	Runtime      DockerRuntime      `json:"runtime"`
+	Capabilities []DockerCapability `json:"capabilities"`
 }
 
 func Empty(scope, reason string) Observation {
 	return Observation{IPTablesRegistration: IPTablesRegistrationView{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 iptables 本机授权登记"}}, Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 root 独立登记"}, Source: "host-agent", Kernel: KernelView{Reason: "尚未读取受管目标表的内核快照"}, Scope: scope, Manager: "unknown", Backend: "unknown", Reason: reason, Interfaces: []string{},
 		Firewalld: Firewalld{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 firewalld root 登记"}, Zones: []Zone{}, PolicyInventory: EmptyFirewalldPolicies("尚未读取"), Reason: "尚未读取"}, UFW: UFW{Registration: RegistrationView{State: "unavailable", Reason: "尚未核对 UFW 本机授权登记"}, RuleInventory: EmptyUFWRules("尚未读取"), Reason: "尚未读取"},
-		Iptables: []Iptables{}, Rulesets: []Ruleset{}, Docker: Docker{BackendHint: "unknown", Evidence: []string{}, Reason: "尚未核对 Docker 转发路径"}, Warnings: []string{}}
+		Iptables: []Iptables{}, Rulesets: []Ruleset{}, Docker: Docker{BackendHint: "unknown", Evidence: []string{}, Runtime: EmptyDockerRuntime("尚未读取 Docker 实例及端口映射"), Capabilities: []DockerCapability{}, Reason: "尚未核对 Docker 转发路径"}, Warnings: []string{}}
 }

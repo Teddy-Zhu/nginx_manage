@@ -1901,10 +1901,53 @@ type FirewallChain struct {
 
 // FirewallDocker defines model for FirewallDocker.
 type FirewallDocker struct {
-	BackendHint string   `json:"backend_hint"`
-	Evidence    []string `json:"evidence"`
-	Writable    bool     `json:"writable"`
-	Reason      string   `json:"reason"`
+	BackendHint  string                     `json:"backend_hint"`
+	Evidence     []string                   `json:"evidence"`
+	Writable     bool                       `json:"writable"`
+	Reason       string                     `json:"reason"`
+	Runtime      FirewallDockerRuntime      `json:"runtime"`
+	Capabilities []FirewallDockerCapability `json:"capabilities"`
+}
+
+// FirewallDockerRuntime defines model for FirewallDockerRuntime.
+type FirewallDockerRuntime struct {
+	Available      bool                          `json:"available"`
+	EngineHash     string                        `json:"engine_hash"`
+	Version        string                        `json:"version"`
+	APIVersion     string                        `json:"api_version"`
+	SnapshotHash   string                        `json:"snapshot_hash"`
+	ObservedAt     int64                         `json:"observed_at"`
+	Rootless       bool                          `json:"rootless"`
+	Swarm          string                        `json:"swarm"`
+	Networks       int                           `json:"networks"`
+	Containers     int                           `json:"containers"`
+	PublishedPorts int                           `json:"published_ports"`
+	Ports          []FirewallDockerPublishedPort `json:"ports"`
+	Truncated      bool                          `json:"truncated"`
+	Reason         string                        `json:"reason"`
+}
+
+// FirewallDockerPublishedPort defines model for FirewallDockerPublishedPort.
+type FirewallDockerPublishedPort struct {
+	ContainerID   string   `json:"container_id"`
+	Family        string   `json:"family"`
+	Protocol      string   `json:"protocol"`
+	HostIP        string   `json:"host_ip"`
+	HostPort      int      `json:"host_port"`
+	ContainerPort int      `json:"container_port"`
+	NetworkIDs    []string `json:"network_ids"`
+	Path          string   `json:"path"`
+	Reason        string   `json:"reason"`
+}
+
+// FirewallDockerCapability defines model for FirewallDockerCapability.
+type FirewallDockerCapability struct {
+	Backend   string `json:"backend"`
+	Family    string `json:"family"`
+	Hook      string `json:"hook"`
+	Observed  bool   `json:"observed"`
+	Supported bool   `json:"supported"`
+	Reason    string `json:"reason"`
 }
 
 // FirewallPortRange defines model for FirewallPortRange.

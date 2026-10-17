@@ -279,7 +279,7 @@ paths:
     get:
       operationId: getFirewall
       x-scopes: [read]
-      description: 宿主机只读防火墙诊断；返回 FirewallObservation。分别读取管理器、默认 iptables 命令、nft/legacy 规则结构和 Docker 标记，以及 UFW 启用/IPv6 配置与有界用户规则报告；报告命令仅供展示，不重放或推断双栈内核顺序。不修改规则，不将名称、注释或摘要当作所有权或外部可达性证明。Agent 缓存 30 秒，缺失或超限视图明确不可用。
+      description: 宿主机只读防火墙诊断；返回 FirewallObservation。分别读取管理器、默认 iptables 命令、nft/legacy 规则结构、Docker 标记及固定本机 Docker API 的实例/网络/主机端口映射与按后端、地址族区分的能力报告，以及 UFW 启用/IPv6 配置与有界用户规则报告；报告命令仅供展示，不重放或推断双栈内核顺序。不修改规则，不将名称、注释或摘要当作所有权或外部可达性证明。Agent 缓存 30 秒，缺失或超限视图明确不可用。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /backups:
     get:
@@ -4766,12 +4766,59 @@ components:
     FirewallDocker:
       type: object
       additionalProperties: false
-      required: ["backend_hint", "evidence", "writable", "reason"]
+      required: ["backend_hint", "evidence", "writable", "reason", "runtime", "capabilities"]
       properties:
-        backend_hint: {"type": "string"}
+        backend_hint: {"type": "string", "enum": [unknown, nftables, iptables, mixed]}
         evidence: {"type": "array", "items": {"type": "string"}}
-        writable: {"type": "boolean"}
+        writable: {"type": "boolean", "description": "当前 Docker 发布端口执行尚未开放，始终为 false；路径观察不授予写入。"}
         reason: {"type": "string"}
+        runtime: {"$ref": "#/components/schemas/FirewallDockerRuntime"}
+        capabilities: {"type": "array", "maxItems": 10, "items": {"$ref": "#/components/schemas/FirewallDockerCapability"}}
+    FirewallDockerRuntime:
+      type: object
+      additionalProperties: false
+      required: [available, engine_hash, version, api_version, snapshot_hash, observed_at, rootless, swarm, networks, containers, published_ports, ports, truncated, reason]
+      description: 固定本机 root Docker Socket 的有界只读报告。两次实例、网络及运行容器报告须一致；不是原子内核快照、所有权或规则写入证明。未映射至主机的 exposed-only 容器端口不计入；routed 模式不能从此清单推断完整发布范围。
+      properties:
+        available: {type: boolean}
+        engine_hash: {type: string}
+        version: {type: string, maxLength: 64}
+        api_version: {type: string}
+        snapshot_hash: {type: string}
+        observed_at: {type: integer, format: int64}
+        rootless: {type: boolean}
+        swarm: {type: string}
+        networks: {type: integer, minimum: 0, maximum: 128}
+        containers: {type: integer, minimum: 0, maximum: 128}
+        published_ports: {type: integer, minimum: 0, maximum: 1024}
+        ports: {type: array, maxItems: 128, items: {"$ref": "#/components/schemas/FirewallDockerPublishedPort"}}
+        truncated: {type: boolean}
+        reason: {type: string, maxLength: 2048}
+    FirewallDockerPublishedPort:
+      type: object
+      additionalProperties: false
+      required: [container_id, family, protocol, host_ip, host_port, container_port, network_ids, path, reason]
+      properties:
+        container_id: {type: string, minLength: 64, maxLength: 64}
+        family: {type: string, enum: [unknown, ipv4, ipv6]}
+        protocol: {type: string, enum: [tcp, udp, sctp]}
+        host_ip: {type: string, description: "原样报告主机发布地址，空字符串表示未报告；0.0.0.0 或 :: 是通配绑定，不是已选择的原始目的地址。"}
+        host_port: {type: integer, minimum: 0, maximum: 65535, description: "0 表示未报告主机发布端口，不自动采用容器端口。"}
+        container_port: {type: integer, minimum: 1, maximum: 65535}
+        network_ids: {type: array, maxItems: 16, items: {type: string}}
+        path: {type: string, enum: [bridge_nat_candidate, unconfirmed], description: "映射候选仍须核对原始目的、同族 DNAT、入口及转发出口；不证明已保护。"}
+        reason: {type: string, maxLength: 2048}
+    FirewallDockerCapability:
+      type: object
+      additionalProperties: false
+      required: [backend, family, hook, observed, supported, reason]
+      properties:
+        backend: {type: string, enum: [direct-nftables, iptables-nft, iptables-legacy, firewalld, ufw]}
+        family: {type: string, enum: [ipv4, ipv6]}
+        hook: {type: string, enum: ["", DOCKER-USER, forward]}
+        observed: {type: boolean, description: "观察到实际实例及明确的单一转发挂接，不代表具备所有权或可写。"}
+        supported: {type: boolean, description: "当前组合可配置发布端口规则；当前执行适配未开放，始终为 false。"}
+        reason: {type: string, maxLength: 2048}
     FirewallPortRange:
       type: object
       additionalProperties: false

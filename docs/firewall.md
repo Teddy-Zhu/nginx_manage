@@ -2,20 +2,32 @@
 
 `GET /api/v1/firewall` 要求 `read`，返回统一 `code/message/data/request_id/node_id` 外壳，`data` 为 `FirewallObservation`。已登记远程资源 `/nodes/{connection}/firewall`，沿用目标权限和永久节点身份检查。防火墙页面由 `src/pages/firewall.vue` 自动扫描接入。
 
-仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行诊断命令。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；`writable` 及 `docker.writable` 始终为 false。本机 root 空表登记命令使用独立范围授权，不由 API、模块开关或观测授权触发。防火墙模块默认停用，可显式启用；执行还须满足下述独立授权。Fail2ban 仍不可启用，默认停用时可读取独立的[宿主机诊断](fail2ban.md)。
+仅由 root Agent 在本机以 `--metrics-scope=host` 确认宿主机观测范围；容器、开发模式或未确认范围均不执行宿主机诊断或 Docker API 读取。此授权不允许写规则。`available` 只说明已进入宿主机读取，各管理器和规则视图仍可能未知或不可用；`writable` 及 `docker.writable` 始终为 false。本机 root 空表登记命令使用独立范围授权，不由 API、模块开关或观测授权触发。防火墙模块默认停用，可显式启用；执行还须满足下述独立授权。Fail2ban 的实例接入、受管 jail 与宿主机动作采用独立授权及恢复链路，见 [Fail2ban](fail2ban.md)。
 
 诊断分别返回：
 
 - firewalld 当前运行、panic、默认 zone、活动接口/来源、runtime/permanent policy 及活动绑定，以及配置中的后端选择。通过固定本机 D-Bus 和唯一服务所有者读取，禁止自动启动；配置选择不视为内核运行后端。
 - UFW 受信工具可用性、`ufw.conf` 中的 ENABLED、`/etc/default/ufw` 中的 IPV6、`ufw status` 当前状态及 `ufw show added` 用户规则报告；未知配置值保留 null，启用配置与当前状态不一致时告警。报告及编译限制见末节。
 - 默认 IPv4/IPv6 iptables 命令后端，以及 nftables、iptables-nft IPv4/IPv6、iptables-legacy IPv4/IPv6 五个独立结构视图。明确版本后再读取显式后端的 save 工具，不切换 alternatives。仅含表/链、hook/priority、默认策略、规则数和 DOCKER-USER 跳转标记，不返回规则表达式、集合内容、注释或计数器。
-- Docker `ip/ip6 docker-bridges` 与 `filter/DOCKER-USER` 标记、FORWARD 跳转线索。未核对 Docker 实例、DNAT 原始目的地址或实际数据包路径；原生 nftables 标记保持实验适配只读。
+- Docker `ip/ip6 docker-bridges` 与 `filter/DOCKER-USER` 标记，以及下述实际实例、网络、主机端口映射和按后端/地址族区分的能力报告。挂接观察不等于已核对 DNAT 原始目的或实际数据包路径；原生 nftables 保持实验适配只读。
 
 工具仅从固定系统目录选择 root 保护的文件，保留 xtables multi-call 的原调用名；不接受 API 提供的路径、参数、命令或环境。save 读取全部现有表，不指定单表；以固定受信 false 程序阻止 save 的 modprobe 回退。nft 使用 JSON/numeric/terse 输出。超时、未知格式、输出超限或 nft-save 不兼容表提示均令整个视图不可用，不将前缀作为完整结果。
 
 单次命令期限 2 秒、整个采集上下文期限 6 秒；每次采集只允许一份在途工作，缓存 30 秒，HTTP 请求取消不会另起相同采集。Web 每节点最多 4 个在途读取。nft 原始输出最多 4 MiB、每份 xtables 原始输出最多 1 MiB、stderr 最多 8 KiB；每个结构视图最多 16384 个对象和 384 KiB JSON 元数据。firewalld 最多 128 个 zone、各 zone 最多 256 个接口/来源且总值最多 32 KiB。超限明确失败，原始输出和错误不写入业务响应或日志。
 
 各管理器/CLI 视图独立读取，不保证原子快照。nftables 与 iptables-nft 可展示相同内核对象，不可累计计数；观测到规则不代表已排除其他后端。管理器冲突、孤立管理器标记、地址族后端差异保留告警。`direct-candidate` 只表示未观察到启用的现存管理器，不代表可接管。无活动规则时内核后端保持 unknown；链名和表名不能证明所有权或外部可达性。
+
+## Docker 实例、端口映射与能力
+
+`docker.runtime` 通过固定 `/run/docker.sock` 的 API 1.47 读取本机 Linux Docker 实例、网络与运行容器摘要。与 Nginx 容器运行共用 root Socket 属主/权限及对端检查、固定 API 前缀、禁用代理和重定向的传输；不读取 Docker 上下文、环境端点或用户提供的 URL，不启动 daemon，也不调用容器、网络或镜像的写入接口。列表响应中的标签、挂载等未选字段不保留或返回，未请求容器 inspect、凭据或 exec。
+
+单次采集按固定顺序读取两组 `/info`、`/networks`、`/containers/json?all=false&size=false`，四秒总期限，每份响应最多 256 KiB。两组选择字段规范化后必须完全一致；不重试漂移，不把跨接口读取当作原子快照。最多 128 个网络、128 个运行容器、每容器 16 个网络和合计 1024 项端口记录。完整数量和摘要包含所有项，页面仅显示前 128 个主机映射并明确截断；未发布到主机的 exposed-only 端口不计入，routed 模式的完整发布范围不能从该清单推断。读取失败、字段不完整、漂移或超限时整个运行子报告不可用，内核标记诊断独立保留。Docker 整体公共子报告最多 320 KiB，沿用 30 秒诊断缓存；普通主机入站执行的私有核对不额外读取 Docker API。
+
+每项分别展示主机地址/端口和容器端口，不用 DNAT 后容器端口替代外部发布端口。`0.0.0.0`、`::` 只是通配绑定，不自动选择原始目的地址；缺失主机端口保留为 0。仅将唯一 local bridge、nat 网关模式、运行容器和同地址族端点列为 `bridge_nat_candidate`；rootless、Swarm、非 nat、其他驱动、多个网络、回环路径、SCTP 及 IPv6 发布到仅 IPv4 端点等明确未确认，不将用户态代理视为同族转发。候选仍须核对实际 DNAT、入站及转发出口，不证明已受保护或外部可达。
+
+`docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。当前所有 `supported` 及 `docker.writable` 均为 false，独立原始目的绑定、受管代际执行、新连接确认与持久恢复仍待接入。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
+
+依据：[Docker Engine API 1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)、[官方 API 模型](https://github.com/moby/moby/blob/v27.5.1/api/swagger.yaml)、[Docker iptables 与原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[端口发布与网关模式](https://docs.docker.com/engine/network/port-publishing/)。本阶段完成源码实现和集成审阅，实际 Docker/API/内核组合仍待 P5 集中验证。
 
 ## 内核目标表快照
 
@@ -100,7 +112,7 @@ root 防火墙记录为 3，旧格式不兼容；观察缓存不写入业务库�
 
 `PUT /system/modules/firewall` 停用时必须指定 `firewall_rules`。`keep` 明确保留已确认规则；`remove` 另需 `read/security.write` 及已确认的 `firewall_operation_id`，只有原操作仍为当前确认的移除结果且无活动变更才停用；后续应用失败并恢复该空表时仍可引用原确认操作，后续成功应用会使其失效。初始空表经核对且尚无已确认规则时无需生成空的移除操作，可省略操作 ID 直接停用。公共执行提交与最终停用共用锁，防止停用核对期间插入新应用；失败不伪造停用成功，可继续引用同一操作重试。启用或其他模块拒绝携带停用选项。自动扫描的功能模块页面提供保留/先移除选择，防火墙应用页完成移除和新连接确认后提供最终停用；远程转发不执行移除流程。
 
-当前已接入 direct-nftables 与 firewalld 主机入站执行，UFW 支持下述只读报告、编译预览及保护计划/dry-run。Docker 转发路径、UFW/iptables 写入适配仍待实施；Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
+当前已接入 direct-nftables、firewalld、UFW 与显式 iptables-nft/legacy 的主机入站计划、应用、确认和独立恢复。Docker 实例及端口映射只读报告已接入，发布端口的原始目的绑定、代际执行及恢复仍待实施；Fail2ban 的独立动作链路见 [Fail2ban](fail2ban.md)。实现与集成源码审阅已完成，未运行构建、类型检查、lint、测试、浏览器、服务或真实规则操作；真实发行版/内核/Docker 矩阵在 P5 集中验证。
 
 接口依据：[firewalld D-Bus](https://firewalld.org/documentation/man-pages/firewalld.dbus.html)、[nftables 手册](https://netfilter.org/projects/nftables/manpage.html)、[iptables-save](https://man7.org/linux/man-pages/man8/iptables-save.8.html)、[Docker 原生 nftables 后端](https://docs.docker.com/engine/network/firewall-nftables/)。
 

@@ -2011,7 +2011,10 @@ export interface components {
         FirewallRuleset: { id: string; backend: string; family: string; available: boolean; tables: components["schemas"]["FirewallTable"][]; reason: string; };
         FirewallTable: { family: string; name: string; chains: components["schemas"]["FirewallChain"][]; };
         FirewallChain: { name: string; type: string; hook: string; priority: number | null; policy: string; rules: number; docker_user_jump: boolean; };
-        FirewallDocker: { backend_hint: string; evidence: string[]; writable: boolean; reason: string; };
+        FirewallDocker: { backend_hint: "unknown" | "nftables" | "iptables" | "mixed"; evidence: string[]; writable: boolean; reason: string; runtime: components["schemas"]["FirewallDockerRuntime"]; capabilities: components["schemas"]["FirewallDockerCapability"][]; };
+        FirewallDockerRuntime: { available: boolean; engine_hash: string; version: string; api_version: string; snapshot_hash: string; observed_at: number; rootless: boolean; swarm: string; networks: number; containers: number; published_ports: number; ports: components["schemas"]["FirewallDockerPublishedPort"][]; truncated: boolean; reason: string; };
+        FirewallDockerPublishedPort: { container_id: string; family: "unknown" | "ipv4" | "ipv6"; protocol: "tcp" | "udp" | "sctp"; host_ip: string; host_port: number; container_port: number; network_ids: string[]; path: "bridge_nat_candidate" | "unconfirmed"; reason: string; };
+        FirewallDockerCapability: { backend: "direct-nftables" | "iptables-nft" | "iptables-legacy" | "firewalld" | "ufw"; family: "ipv4" | "ipv6"; hook: "" | "DOCKER-USER" | "forward"; observed: boolean; supported: boolean; reason: string; };
         BackupInput: { name: string; encryption: "recipient" | "passphrase"; recipient: string; passphrase: string; };
         BackupPolicyInput: { base_version: number; enabled: boolean; recipient: string; key_saved: boolean; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; };
         BackupPolicy: { version: number; enabled: boolean; recipient: string; key_saved_at: number; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; next_run_at: number; error: string; updated_at: number; };

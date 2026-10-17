@@ -180,7 +180,7 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 	if err != nil {
 		return b, err
 	}
-	defer d.close()
+	defer d.Close()
 	image, err := localImage(ctx, d, in.Image, approval.Image.Platform.ConfigDigest)
 	if err != nil {
 		return b, err

@@ -21,7 +21,7 @@ func localImage(ctx context.Context, d *dockerClient, reference, expected string
 	if !imageValue.MatchString(reference) || !strings.HasPrefix(expected, "sha256:") || !hashValue.MatchString(strings.TrimPrefix(expected, "sha256:")) {
 		return image, errors.New("须指定签名镜像引用和当前架构配置摘要")
 	}
-	if err := d.json(ctx, "GET", "/images/"+url.PathEscape(reference)+"/json", nil, &image); err != nil {
+	if err := d.JSON(ctx, "GET", "/images/"+url.PathEscape(reference)+"/json", nil, &image); err != nil {
 		return image, err
 	}
 	matched := false
@@ -44,7 +44,7 @@ func imageArchive(ctx context.Context, d *dockerClient, imageID, path string, ma
 	}
 	input := map[string]any{"Image": imageID, "Entrypoint": []string{"/nginxpanel-metadata-never-start"}, "Cmd": []string{}, "NetworkDisabled": true,
 		"HostConfig": map[string]any{"NetworkMode": "none", "ReadonlyRootfs": true, "CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges:true"}}}
-	if err := d.json(ctx, "POST", "/containers/create?name=nginxpanel-metadata-"+secure.ID(), input, &created); err != nil {
+	if err := d.JSON(ctx, "POST", "/containers/create?name=nginxpanel-metadata-"+secure.ID(), input, &created); err != nil {
 		return err
 	}
 	if !hashValue.MatchString(created.ID) {
@@ -53,11 +53,11 @@ func imageArchive(ctx context.Context, d *dockerClient, imageID, path string, ma
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := d.json(cleanup, "DELETE", "/containers/"+created.ID, nil, nil); err != nil {
+		if err := d.JSON(cleanup, "DELETE", "/containers/"+created.ID, nil, nil); err != nil {
 			runErr = errors.Join(runErr, errors.New("未启动的镜像元数据容器未清理，请本机检查"))
 		}
 	}()
-	resp, err := d.request(ctx, "GET", "/containers/"+created.ID+"/archive?path="+url.QueryEscape(path), nil)
+	resp, err := d.Request(ctx, "GET", "/containers/"+created.ID+"/archive?path="+url.QueryEscape(path), nil)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func InspectPanelImage(ctx context.Context, reference, configDigest, launcherSHA
 	if err != nil {
 		return err
 	}
-	defer d.close()
+	defer d.Close()
 	image, err := localImage(ctx, d, reference, configDigest)
 	if err != nil {
 		return err

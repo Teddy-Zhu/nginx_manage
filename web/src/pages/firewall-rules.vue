@@ -29,6 +29,8 @@ import {
 } from "naive-ui";
 import {
   useNodeAPI,
+  apiError,
+  type FirewallObservation,
   type FirewallRule,
   type FirewallPolicy,
   type FirewallPolicyView,
@@ -46,6 +48,8 @@ const stored = ref<FirewallPolicyView | null>(null),
   policy = ref<FirewallPolicy>({ backend: "direct-nftables", rules: [] });
 const preview = ref<FirewallPreview | null>(null),
   editing = ref<FirewallRule | null>(null);
+const docker = ref<FirewallObservation["docker"] | null>(null),
+  dockerError = ref("");
 const portsText = ref(""),
   sourcesText = ref(""),
   formError = ref("");
@@ -76,10 +80,46 @@ const families = [
   { label: "IPv6", value: "ipv6" },
   { label: "IPv4 与 IPv6", value: "both" },
 ];
-const scopes = [
+function dockerSupported(family: string) {
+  const families = family === "both" ? ["ipv4", "ipv6"] : [family];
+  return (
+    !!docker.value?.writable &&
+    families.every((value) =>
+      docker.value?.capabilities.some(
+        (capability) =>
+          capability.backend === policy.value.backend &&
+          capability.family === value &&
+          capability.supported,
+      ),
+    )
+  );
+}
+const dockerReason = computed(() => {
+  if (dockerSupported(editing.value?.family ?? "both")) return "";
+  if (dockerError.value) return dockerError.value;
+  const family = editing.value?.family ?? "both";
+  const reasons =
+    docker.value?.capabilities
+      .filter(
+        (capability) =>
+          capability.backend === policy.value.backend &&
+          (family === "both" || capability.family === family),
+      )
+      .map((capability) => capability.reason) ?? [];
+  return (
+    [...new Set(reasons)].join("；") ||
+    docker.value?.reason ||
+    "尚未取得目标节点 Docker 发布端口能力报告"
+  );
+});
+const scopes = computed(() => [
   { label: "主机入站", value: "host_input" },
-  { label: "Docker 发布端口", value: "docker_published" },
-];
+  {
+    label: "Docker 发布端口",
+    value: "docker_published",
+    disabled: !dockerSupported(editing.value?.family ?? "both"),
+  },
+]);
 const actions = [
   { label: "允许", value: "allow" },
   { label: "丢弃", value: "deny" },
@@ -90,7 +130,7 @@ const familyName = (value: string) =>
 const actionName = (value: string) =>
   actions.find((item) => item.value === value)?.label ?? value;
 const scopeName = (value: string) =>
-  scopes.find((item) => item.value === value)?.label ?? value;
+  scopes.value.find((item) => item.value === value)?.label ?? value;
 function ports(rule: FirewallRule) {
   return rule.ports
     .map((port) =>
@@ -128,6 +168,14 @@ function commitRule() {
   const value = structuredClone(toRaw(editing.value));
   if (!value.name.trim()) {
     formError.value = "请填写规则名称";
+    return;
+  }
+  if (
+    value.enabled &&
+    value.scope === "docker_published" &&
+    !dockerSupported(value.family)
+  ) {
+    formError.value = dockerReason.value;
     return;
   }
   const parts = portsText.value
@@ -190,7 +238,12 @@ const columns: DataTableColumns<FirewallRule> = [
     render: (r) =>
       h(NSwitch, {
         value: r.enabled,
-        disabled: !canWrite.value || busy.value,
+        disabled:
+          !canWrite.value ||
+          busy.value ||
+          (!r.enabled &&
+            r.scope === "docker_published" &&
+            !dockerSupported(r.family)),
         "onUpdate:value": (value: boolean) => {
           r.enabled = value;
         },
@@ -340,9 +393,18 @@ const commandPreviewColumns: DataTableColumns<FirewallPreview["entries"][number]
 ];
 async function load() {
   await run(async () => {
-    const result = await api.firewallPolicy(controller.signal);
-    stored.value = result;
-    policy.value = structuredClone(result.policy);
+    docker.value = null;
+    dockerError.value = "";
+    const [saved, observed] = await Promise.allSettled([
+      api.firewallPolicy(controller.signal),
+      api.firewall(controller.signal),
+    ]);
+    if (observed.status === "fulfilled") docker.value = observed.value.docker;
+    else
+      dockerError.value = `Docker 能力报告无法读取：${apiError(observed.reason).message}`;
+    if (saved.status === "rejected") throw saved.reason;
+    stored.value = saved.value;
+    policy.value = structuredClone(saved.value.policy);
     preview.value = null;
   });
 }
@@ -443,6 +505,12 @@ onUnmounted(() => controller.abort());
       主机入站规则按地址族独立编译。允许采用 ACCEPT，可能结束后续 INPUT 判断；
       未匹配流量返回调用链，保留系统默认策略。Docker 发布端口须单独核对转发路径。
     </p>
+    <n-alert
+      v-if="dockerReason && policy.rules.some((rule) => rule.scope === 'docker_published')"
+      type="warning"
+      :bordered="false"
+      class="notice"
+    >{{ dockerReason }}</n-alert>
     <div class="page-toolbar">
       <span>{{ policy.rules.length }} / 1000 条规则</span
       ><n-button
@@ -631,6 +699,7 @@ onUnmounted(() => controller.abort());
           ><n-select v-model:value="editing.family" :options="families"
         /></n-form-item>
       </div>
+      <p v-if="dockerReason" class="muted">{{ dockerReason }}</p>
       <div class="grid">
         <n-form-item label="协议"
           ><n-select

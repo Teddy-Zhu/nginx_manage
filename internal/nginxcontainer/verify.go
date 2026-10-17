@@ -62,7 +62,7 @@ func VerifySource(ctx context.Context, in BindInput) (SourceVerification, error)
 	if err != nil {
 		return out, err
 	}
-	defer d.close()
+	defer d.Close()
 	image, err := localImage(ctx, d, in.Image, approval.Image.Platform.ConfigDigest)
 	if err != nil {
 		return out, err

@@ -78,7 +78,7 @@ func (r *Runtime) inspect(ctx context.Context, d *dockerClient) (containerInfo, 
 	if !reflect.DeepEqual(current, b) {
 		return c, errors.New("Nginx 容器绑定已被外部修改")
 	}
-	if err := d.json(ctx, "GET", "/containers/"+Name+"/json", nil, &c); err != nil {
+	if err := d.JSON(ctx, "GET", "/containers/"+Name+"/json", nil, &c); err != nil {
 		return c, err
 	}
 	h := c.HostConfig
@@ -271,7 +271,7 @@ func (r *Runtime) Master(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer d.close()
+	defer d.Close()
 	if err = r.reconcileDiagnostic(ctx, d); err != nil {
 		return 0, err
 	}
