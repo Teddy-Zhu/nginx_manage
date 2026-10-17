@@ -14,6 +14,8 @@
 import { computed, reactive, ref, watch } from "vue";
 import {
   NAlert,
+  NTabs,
+  NTabPane,
   NButton,
   NDataTable,
   NFormItem,
@@ -31,6 +33,7 @@ import {
   type HistoryScope,
 } from "../api/client";
 import { useAction } from "../composables/action";
+import RuntimeHistory from "../components/RuntimeHistory.vue";
 
 const api = useNodeAPI();
 const { busy, run } = useAction();
@@ -125,102 +128,109 @@ async function execute() {
 </script>
 
 <template>
-  <div class="page-stack">
-    <NAlert type="info" :bordered="false">
-      仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。
-      修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
-    </NAlert>
-    <section class="surface">
-      <div class="grid-2">
-        <NFormItem label="截止时间">
-          <input
-            v-model="filter.before"
-            type="datetime-local"
-            :disabled="busy || !!pending"
+  <NTabs type="line" animated>
+    <NTabPane name="database" tab="数据库材料">
+      <div class="page-stack">
+        <NAlert type="info" :bordered="false">
+          仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。
+          修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
+        </NAlert>
+        <section class="surface">
+          <div class="grid-2">
+            <NFormItem label="截止时间">
+              <input
+                v-model="filter.before"
+                type="datetime-local"
+                :disabled="busy || !!pending"
+              />
+            </NFormItem>
+            <NFormItem label="至少保留配置修订数">
+              <NInputNumber
+                v-model:value="filter.revision_keep"
+                :min="2"
+                :max="100"
+                :precision="0"
+                :clearable="false"
+                :disabled="busy || !!pending"
+              />
+            </NFormItem>
+            <NFormItem label="每份证书至少保留版本数">
+              <NInputNumber
+                v-model:value="filter.certificate_keep"
+                :min="2"
+                :max="16"
+                :precision="0"
+                :clearable="false"
+                :disabled="busy || !!pending"
+              />
+            </NFormItem>
+            <NFormItem label="每个签发配置至少保留订单数">
+              <NInputNumber
+                v-model:value="filter.order_keep"
+                :min="2"
+                :max="100"
+                :precision="0"
+                :clearable="false"
+                :disabled="busy || !!pending"
+              />
+            </NFormItem>
+          </div>
+          <NButton :loading="busy" :disabled="!!pending" @click="inspect"
+            >预览清理范围</NButton
+          >
+        </section>
+        <NAlert v-if="pending" type="warning" :bordered="false">
+          上次清理结果待确认。请使用原请求核对结果。
+          <NButton :loading="busy" @click="execute">核对原操作结果</NButton>
+        </NAlert>
+        <section v-if="preview" class="surface page-stack">
+          <div class="toolbar">
+            <span>本批 {{ total }} 项，每类最多 100 项</span>
+            <NPopconfirm v-if="!pending" @positive-click="execute">
+              <template #trigger>
+                <NButton type="error" :loading="busy" :disabled="!total"
+                  >清理本批材料</NButton
+                >
+              </template>
+              确认清理本批 {{ total }} 项历史材料？清理后无法再加载。
+            </NPopconfirm>
+          </div>
+          <NDataTable
+            :columns="scopeColumns"
+            :data="preview.scopes"
+            :bordered="false"
           />
-        </NFormItem>
-        <NFormItem label="至少保留配置修订数">
-          <NInputNumber
-            v-model:value="filter.revision_keep"
-            :min="2"
-            :max="100"
-            :precision="0"
-            :clearable="false"
-            :disabled="busy || !!pending"
+          <p class="muted">
+            预览有效至
+            {{
+              new Date(preview.expires_at * 1000).toLocaleString()
+            }}；引用或候选材料变化后须重新预览。
+          </p>
+          <NDataTable
+            :columns="itemColumns"
+            :data="preview.items"
+            :row-key="(row: HistoryItem) => `${row.kind}:${row.id}`"
+            :pagination="{ pageSize: 20 }"
+            :scroll-x="1000"
+            :bordered="false"
           />
-        </NFormItem>
-        <NFormItem label="每份证书至少保留版本数">
-          <NInputNumber
-            v-model:value="filter.certificate_keep"
-            :min="2"
-            :max="16"
-            :precision="0"
-            :clearable="false"
-            :disabled="busy || !!pending"
+        </section>
+        <section v-if="result" class="surface page-stack">
+          <NAlert type="success" :bordered="false"
+            >已完成清理，记录标识：{{ result.id }}</NAlert
+          >
+          <NDataTable
+            :columns="scopeColumns"
+            :data="result.scopes"
+            :bordered="false"
           />
-        </NFormItem>
-        <NFormItem label="每个签发配置至少保留订单数">
-          <NInputNumber
-            v-model:value="filter.order_keep"
-            :min="2"
-            :max="100"
-            :precision="0"
-            :clearable="false"
-            :disabled="busy || !!pending"
-          />
-        </NFormItem>
+        </section>
       </div>
-      <NButton :loading="busy" :disabled="!!pending" @click="inspect"
-        >预览清理范围</NButton
-      >
-    </section>
-    <NAlert v-if="pending" type="warning" :bordered="false">
-      上次清理结果待确认。请使用原请求核对结果。
-      <NButton :loading="busy" @click="execute">核对原操作结果</NButton>
-    </NAlert>
-    <section v-if="preview" class="surface page-stack">
-      <div class="toolbar">
-        <span>本批 {{ total }} 项，每类最多 100 项</span>
-        <NPopconfirm v-if="!pending" @positive-click="execute">
-          <template #trigger>
-            <NButton type="error" :loading="busy" :disabled="!total"
-              >清理本批材料</NButton
-            >
-          </template>
-          确认清理本批 {{ total }} 项历史材料？清理后无法再加载。
-        </NPopconfirm>
-      </div>
-      <NDataTable
-        :columns="scopeColumns"
-        :data="preview.scopes"
-        :bordered="false"
-      />
-      <p class="muted">
-        预览有效至
-        {{
-          new Date(preview.expires_at * 1000).toLocaleString()
-        }}；引用或候选材料变化后须重新预览。
-      </p>
-      <NDataTable
-        :columns="itemColumns"
-        :data="preview.items"
-        :row-key="(row: HistoryItem) => `${row.kind}:${row.id}`"
-        :pagination="{ pageSize: 20 }"
-        :scroll-x="1000"
-        :bordered="false"
-      />
-    </section>
-    <section v-if="result" class="surface page-stack">
-      <NAlert type="success" :bordered="false"
-        >已完成清理，记录标识：{{ result.id }}</NAlert
-      >
-      <NDataTable
-        :columns="scopeColumns"
-        :data="result.scopes"
-        :bordered="false"
-      />
-    </section>
-  </div>
+    </NTabPane>
+    <NTabPane name="runtime" tab="运行文件" display-directive="if"
+      ><RuntimeHistory
+    /></NTabPane>
+  </NTabs>
 </template>
 
 <style scoped>

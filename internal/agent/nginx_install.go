@@ -159,6 +159,20 @@ func InstallNginx(ctx context.Context, opts NginxInstallOptions) (Record, error)
 }
 
 func installGrant(j *Journal, id, epoch string, allowClosing bool) error {
+	records, err := (&maintenanceGate{journal: j}).records()
+	if err != nil {
+		return err
+	}
+	for _, prior := range records {
+		if prior.Kind == runtimeHistoryKind {
+			if err := validRuntimeHistory(prior); err != nil {
+				return err
+			}
+			if !historyTerminal(prior) {
+				return errors.New("运行材料清理尚未结束，须先续办原操作")
+			}
+		}
+	}
 	r, err := j.Get(id)
 	if err != nil {
 		return err

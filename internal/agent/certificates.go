@@ -54,6 +54,9 @@ func (n *Nginx) prepareCertificates(p *nginxconfig.Parsed, materials []certifica
 	return nil
 }
 func (n *Nginx) storeCertificate(id, version string, pair *certificates.Pair) error {
+	if err := checkCertificateHistory(n.DataDir, id, version, pair); err != nil {
+		return err
+	}
 	root := filepath.Join(n.DataDir, "certificates")
 	parent := filepath.Join(root, id)
 	target := filepath.Join(parent, version)

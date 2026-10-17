@@ -1303,6 +1303,12 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /history/runtime:
+    {"get": {"operationId": "listRuntimeHistory", "x-scopes": ["read", "system.write", "config.secrets"], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "返回最近 16 条 RuntimeHistoryStatus。root 清理中断须按原操作续办，记录不删除。"}}
+  /history/runtime/preview:
+    {"post": {"operationId": "previewRuntimeHistory", "x-scopes": ["system.write", "config.write", "config.secrets"], "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RuntimeHistoryFilter"}}}}, "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目、16 MiB；保留当前、回滚及恢复引用。"}}
+  /history/runtime/execute:
+    {"post": {"operationId": "executeRuntimeHistory", "x-scopes": ["system.write", "config.write", "config.secrets"], "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RuntimeHistoryExecuteInput"}}}}, "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有的发布树或未引用证书副本，不清理 root 操作记录及灾备材料。"}}
   /history/preview:
     {"post": {"operationId": "previewHistory", "x-scopes": ["system.write", "config.write", "config.secrets"], "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HistoryFilter"}}}}, "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。"}}
   /history/execute:
@@ -1918,6 +1924,14 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    RuntimeHistoryFilter:
+      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "kind", "before", "keep"], "properties": {"maintenance_id": {"type": "string"}, "kind": {"type": "string"}, "before": {"type": "integer", "format": "int64"}, "keep": {"type": "integer", "minimum": 2, "maximum": 32}}}
+    RuntimeHistoryExecuteInput:
+      {"type": "object", "additionalProperties": false, "required": ["operation_id", "filter", "sha256"], "properties": {"operation_id": {"type": "string"}, "filter": {"$ref": "#/components/schemas/RuntimeHistoryFilter"}, "sha256": {"type": "string"}}}
+    RuntimeHistoryPreview:
+      {"type": "object", "additionalProperties": false, "required": ["filter", "active", "targets", "entries", "bytes", "more", "sha256"], "properties": {"filter": {"$ref": "#/components/schemas/RuntimeHistoryFilter"}, "active": {"type": "string"}, "targets": {"type": "array", "items": {"type": "string"}, "maxItems": 8}, "entries": {"type": "integer"}, "bytes": {"type": "integer", "format": "int64"}, "more": {"type": "boolean"}, "sha256": {"type": "string"}}}
+    RuntimeHistoryStatus:
+      {"type": "object", "additionalProperties": false, "required": ["operation_id", "state", "stage", "error", "updated_at", "preview"], "properties": {"operation_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "updated_at": {"type": "integer", "format": "int64"}, "preview": {"$ref": "#/components/schemas/RuntimeHistoryPreview"}}}
     HistoryFilter:
       {"type": "object", "additionalProperties": false, "required": ["before", "revision_keep", "certificate_keep", "order_keep"], "properties": {"before": {"type": "integer", "format": "int64", "minimum": 1}, "revision_keep": {"type": "integer", "minimum": 2, "maximum": 100}, "certificate_keep": {"type": "integer", "minimum": 2, "maximum": 16}, "order_keep": {"type": "integer", "minimum": 2, "maximum": 100}}}
     HistoryItem:

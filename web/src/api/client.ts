@@ -8,6 +8,10 @@ type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
 type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
+export type RuntimeHistoryFilter = components["schemas"]["RuntimeHistoryFilter"];
+export type RuntimeHistoryExecuteInput = components["schemas"]["RuntimeHistoryExecuteInput"];
+export type RuntimeHistoryPreview = components["schemas"]["RuntimeHistoryPreview"];
+export type RuntimeHistoryStatus = components["schemas"]["RuntimeHistoryStatus"];
 export type HistoryFilter = components["schemas"]["HistoryFilter"];
 export type HistoryItem = components["schemas"]["HistoryItem"];
 export type HistoryScope = components["schemas"]["HistoryScope"];
@@ -456,6 +460,9 @@ function createAPI(scope: RequestScope) {
   return {
   request,
   downloadLogFile: (data: LogQuery) => downloadLogFileFor(data, scope),
+  runtimeHistory: () => request<RuntimeHistoryStatus[]>({ url: "/history/runtime" }),
+  previewRuntimeHistory: (data: RuntimeHistoryFilter) => request<RuntimeHistoryPreview>({ url: "/history/runtime/preview", method: "POST", data }),
+  executeRuntimeHistory: (data: RuntimeHistoryExecuteInput) => request<RuntimeHistoryStatus>({ url: "/history/runtime/execute", method: "POST", data, headers: { "Idempotency-Key": data.operation_id } }),
   previewHistory: (data: HistoryFilter) => request<HistoryPreview>({ url: "/history/preview", method: "POST", data }),
   executeHistory: (data: HistoryExecuteInput, key: string) => request<HistoryResult>({ url: "/history/execute", method: "POST", data, headers: { "Idempotency-Key": key } }),
   audit: (params: AuditQuery) => request<AuditPage>({ url: "/audit", params }),

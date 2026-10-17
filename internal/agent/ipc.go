@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -61,6 +62,7 @@ type Server struct {
 	ReleaseTrust     string
 	ReleaseToken     string
 	Installation     *nginxruntime.Installation
+	historyReads     atomic.Int32
 	eventLogs        *eventLogStore
 	logReader        *logs.Reader
 	fail2banJails    *fail2banJailsExecutor
@@ -178,6 +180,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	rootMaintenance.components = componentManager
 	s.maintenanceHandlers(mux, rootMaintenance)
+	s.runtimeHistoryHandlers(mux)
 	s.componentHandlers(mux, componentManager)
 	s.installationHandlers(mux)
 	s.nginxSwitchHandlers(mux)

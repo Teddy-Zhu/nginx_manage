@@ -6260,6 +6260,140 @@
         "x-body-limit": 8192,
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/history/runtime": {
+      "get": {
+        "operationId": "remoteListRuntimeHistory",
+        "x-scopes": [
+          "read",
+          "system.write",
+          "config.secrets"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "返回最近 16 条 RuntimeHistoryStatus。root 清理中断须按原操作续办，记录不删除。",
+        "x-local-operation": "listRuntimeHistory",
+        "x-forward-path": "/history/runtime",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/nodes/{connection}/history/runtime/preview": {
+      "post": {
+        "operationId": "remotePreviewRuntimeHistory",
+        "x-scopes": [
+          "system.write",
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/RuntimeHistoryFilter"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目、16 MiB；保留当前、回滚及恢复引用。",
+        "x-local-operation": "previewRuntimeHistory",
+        "x-forward-path": "/history/runtime/preview",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/history/runtime/execute": {
+      "post": {
+        "operationId": "remoteExecuteRuntimeHistory",
+        "x-scopes": [
+          "system.write",
+          "config.write",
+          "config.secrets"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/RuntimeHistoryExecuteInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有的发布树或未引用证书副本，不清理 root 操作记录及灾备材料。",
+        "x-local-operation": "executeRuntimeHistory",
+        "x-forward-path": "/history/runtime/execute",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": []
+      }
     }
   },
   "security": [

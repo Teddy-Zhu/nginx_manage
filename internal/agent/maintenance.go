@@ -144,6 +144,16 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 		if r.Kind == "maintenance.lock" {
 			continue
 		}
+		if r.Kind == runtimeHistoryKind {
+			if err := validRuntimeHistory(r); err != nil {
+				return out, err
+			}
+			// The original cleanup can resume after a fresh Agent epoch. Release
+			// remains blocked explicitly until all approved unlinks finish.
+			if r.RuntimeHistory.Input.Filter.MaintenanceID == g.id {
+				continue
+			}
+		}
 		if r.Kind == fail2banHostBootRecoveryKind {
 			boot, err := loadFail2banHostBootRecoveryEvent(filepath.Dir(filepath.Dir(g.journal.Dir)), r.OperationID)
 			if err != nil {
@@ -409,6 +419,14 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 		return maintenance.RootStatus{}, fault.Conflict("面板仍处于持久停机状态，不能释放维护锁")
 	}
 	for _, record := range records {
+		if record.Kind == runtimeHistoryKind {
+			if err := validRuntimeHistory(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if !historyTerminal(record) {
+				return maintenance.RootStatus{}, fault.Conflict("运行材料清理尚未结束，须先按原标识续办")
+			}
+		}
 		if record.Kind == panelUpdateKind {
 			if err := validPanelUpdate(record); err != nil {
 				return maintenance.RootStatus{}, err
@@ -537,7 +555,7 @@ func (s *Server) maintenanceHandlers(mux *http.ServeMux, g *maintenanceGate) {
 }
 func (g *maintenanceGate) handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/v1/maintenance/acquire" || r.URL.Path == "/v1/maintenance/release" || r.Method == http.MethodPost && (r.URL.Path == "/v1/components/nginx-installations" || r.URL.Path == "/v1/panel/updates" || r.URL.Path == "/v1/nginx/disaster") {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || (r.URL.Path == "/v1/history/runtime/preview" || r.URL.Path == "/v1/history/runtime/execute") || r.URL.Path == "/v1/maintenance/acquire" || r.URL.Path == "/v1/maintenance/release" || r.Method == http.MethodPost && (r.URL.Path == "/v1/components/nginx-installations" || r.URL.Path == "/v1/panel/updates" || r.URL.Path == "/v1/nginx/disaster") {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	RuntimeHistory            *runtimeHistoryIntent         `json:"runtime_history,omitempty"`
 	Fail2banPythonPlanning    *fail2banPythonPlanning       `json:"fail2ban_python_planning,omitempty"`
 	Fail2banPython            *fail2banPythonIntent         `json:"fail2ban_python,omitempty"`
 	Fail2banLifecycle         *fail2banLifecycleIntent      `json:"fail2ban_lifecycle,omitempty"`

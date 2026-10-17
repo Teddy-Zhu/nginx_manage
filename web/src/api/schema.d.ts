@@ -4,6 +4,9 @@
  */
 
 export interface paths {
+    "/history/runtime/execute": { post: operations["executeRuntimeHistory"]; };
+    "/history/runtime/preview": { post: operations["previewRuntimeHistory"]; };
+    "/history/runtime": { get: operations["listRuntimeHistory"]; };
     "/history/execute": {
         parameters: { query?: never; header?: never; path?: never; cookie?: never; };
         get?: never; put?: never; post: operations["executeHistory"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
@@ -1834,6 +1837,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RuntimeHistoryFilter: {
+            maintenance_id: string;
+            kind: string;
+            before: number;
+            keep: number;
+        };
+        RuntimeHistoryExecuteInput: {
+            operation_id: string;
+            filter: components["schemas"]["RuntimeHistoryFilter"];
+            sha256: string;
+        };
+        RuntimeHistoryPreview: {
+            filter: components["schemas"]["RuntimeHistoryFilter"];
+            active: string;
+            targets: string[];
+            entries: number;
+            bytes: number;
+            more: boolean;
+            sha256: string;
+        };
+        RuntimeHistoryStatus: {
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            updated_at: number;
+            preview: components["schemas"]["RuntimeHistoryPreview"];
+        };
         HistoryFilter: {
             before: number;
             revision_keep: number;
@@ -3827,6 +3858,9 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    executeRuntimeHistory: { parameters: {query?: never; header: {"X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"];}; path?: never; cookie?: never; }; requestBody: {content: {"application/json": components["schemas"]["RuntimeHistoryExecuteInput"]; }; }; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    previewRuntimeHistory: { parameters: {query?: never; header?: {"X-CSRF-Token"?: components["parameters"]["CSRF"];}; path?: never; cookie?: never; }; requestBody: {content: {"application/json": components["schemas"]["RuntimeHistoryFilter"]; }; }; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
+    listRuntimeHistory: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     executeHistory: {
         parameters: { query?: never; header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; }; path?: never; cookie?: never; };
         requestBody: { content: { "application/json": components["schemas"]["HistoryExecuteInput"]; }; };
