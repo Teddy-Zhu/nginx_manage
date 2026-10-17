@@ -2149,6 +2149,17 @@ type FirewallDockerResolvedBinding struct {
 	Binding          FirewallDockerRuleBinding `json:"binding"`
 	ContainerAddress string                    `json:"container_address"`
 	OutputInterface  string                    `json:"output_interface"`
+	Path             FirewallDockerPathProof   `json:"path"`
+}
+type FirewallDockerPathProof struct {
+	DnatHash          string `json:"dnat_hash"`
+	DnatRules         int    `json:"dnat_rules"`
+	RoutingHash       string `json:"routing_hash"`
+	OriginalRouteHash string `json:"original_route_hash"`
+	RouteHash         string `json:"route_hash"`
+	RoutePrefix       string `json:"route_prefix"`
+	RouteTable        int    `json:"route_table"`
+	OutputIndex       int    `json:"output_index"`
 }
 type FirewallDockerLocalAddress struct {
 	Interface string `json:"interface"`

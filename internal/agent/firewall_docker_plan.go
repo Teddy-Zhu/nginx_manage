@@ -185,17 +185,19 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 	var inspectErr error
 	var runtime firewall.DockerRuntime
 	var snapshot *dockerFirewallSnapshot
+	previous := iptablesPlanPrevious(f.iptablesState, registration.NextClaim.Owner, registration.NextClaim.OperationID)
+	inspect := func() (iptablesRegistrationSnapshot, error) {
+		if previous != nil {
+			return inspectIPTablesSource(ctx, f.dataDir, previous, false)
+		}
+		return inspectIPTablesRegistration(ctx, f.dataDir, f.owner, false)
+	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); runtime, snapshot = readDockerFirewallState(ctx) }()
 	go func() {
 		defer wg.Done()
-		previous := iptablesPlanPrevious(f.iptablesState, registration.NextClaim.Owner, registration.NextClaim.OperationID)
-		if previous != nil {
-			before, inspectErr = inspectIPTablesSource(ctx, f.dataDir, previous, false)
-		} else {
-			before, inspectErr = inspectIPTablesRegistration(ctx, f.dataDir, f.owner, false)
-		}
+		before, inspectErr = inspect()
 	}()
 	wg.Wait()
 	if inspectErr != nil {
@@ -242,11 +244,17 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 	if err != nil {
 		return out, fault.Unavailable(err.Error())
 	}
-	configuration, err := json.Marshal(struct{ Rules, Tools, Interfaces string }{before.Hash, before.ToolHash, host.Hash})
-	if err != nil {
-		return out, err
+	nativeHashes := func(value iptablesRegistrationSnapshot) []string {
+		out := []string{}
+		for _, image := range value.Images {
+			out = append(out, image.Family+":"+image.hash())
+		}
+		slices.Sort(out)
+		return out
 	}
-	detail := &firewall.DockerPlan{EngineHash: runtime.EngineHash, SnapshotHash: runtime.SnapshotHash, ConfigurationHash: secure.Hash(append([]byte("docker:planning-environment:v1:\x00"), configuration...)), ObservedAt: runtime.ObservedAt, Ports: runtime.Ports, Truncated: runtime.Truncated, Addresses: host.Addresses, Bindings: []firewall.DockerResolvedBinding{}, Entries: []firewall.PreviewEntry{}, HostProgramHash: hostProgram.Hash, HostGeneratedRules: hostProgram.BaseRules + len(hostProgram.Entries), Warnings: []string{"绑定只覆盖明确选择的主机映射、原始目的地址和入口接口；不代表所有容器或通配地址均受保护", "编译不执行规则、官方 --test 或数据包探测；DNAT、路由、受管代际执行与独立恢复仍须接入", "允许采用 RETURN 交还 DOCKER-USER 和 Docker 后续判断，其余规则和云安全组仍可拒绝"}, Reason: "请选择目标映射、实际原始目的地址及入口接口；当前计划仅供核对，不能应用"}
+	native := nativeHashes(before)
+	routingHash := ""
+	detail := &firewall.DockerPlan{EngineHash: runtime.EngineHash, SnapshotHash: runtime.SnapshotHash, ObservedAt: runtime.ObservedAt, Ports: runtime.Ports, Truncated: runtime.Truncated, Addresses: host.Addresses, Bindings: []firewall.DockerResolvedBinding{}, Entries: []firewall.PreviewEntry{}, HostProgramHash: hostProgram.Hash, HostGeneratedRules: hostProgram.BaseRules + len(hostProgram.Entries), Warnings: []string{"绑定只覆盖明确选择的主机映射、原始目的地址和入口接口；不代表所有容器或通配地址均受保护", "路径核对仅支持可解释的 NAT 条件及默认策略路由；不执行规则、官方 --test 或数据包探测", "允许采用 RETURN 交还 DOCKER-USER 和 Docker 后续判断；路径证据不保证其他过滤规则、转发设置或云安全组放行", "受管代际执行、新连接确认与独立持久恢复尚未接通，当前计划不能应用"}, Reason: "请选择目标映射、实际原始目的地址及入口接口；当前计划仅供核对，不能应用"}
 	if in.DockerTargets != nil {
 		targets, err := in.DockerTargets.Normalize(policy)
 		if err != nil {
@@ -255,10 +263,41 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		if targets.EngineHash != runtime.EngineHash || targets.SnapshotHash != runtime.SnapshotHash {
 			return out, fault.Conflict("Docker 实例、网络或端口映射已变化，请重新读取目标并绑定")
 		}
+		reader, err := openDockerRouteRead()
+		if err != nil {
+			return out, fault.Unavailable("无法建立只读路由查询：" + boundedIPTablesError(err))
+		}
+		defer reader.close()
+		families := []string{}
+		for _, binding := range targets.Bindings {
+			if !slices.Contains(families, binding.Family) {
+				families = append(families, binding.Family)
+			}
+		}
+		slices.Sort(families)
+		routing, err := reader.snapshot(ctx, families)
+		if err != nil {
+			return out, fault.Unavailable(boundedIPTablesError(err))
+		}
+		routingHash = routing.Hash
+		natBudget := 65536
 		for _, binding := range targets.Bindings {
 			resolved, err := resolveDockerTarget(snapshot, host, binding)
 			if err != nil {
 				return out, fault.Conflict(err.Error())
+			}
+			resolved.Path, err = reader.prove(ctx, routing, resolved, host.Interfaces[binding.InputInterface].Index, host.Interfaces[resolved.OutputInterface].Index)
+			if err != nil {
+				return out, fault.Unavailable(boundedIPTablesError(err))
+			}
+			for _, image := range before.Images {
+				if image.Family != binding.Family {
+					continue
+				}
+				resolved.Path.DNATHash, resolved.Path.DNATRules, err = proveDockerDNAT(ctx, image, resolved, dockerRuleSources(policy, binding), &natBudget)
+				if err != nil {
+					return out, fault.Unavailable(boundedIPTablesError(err))
+				}
 			}
 			detail.Bindings = append(detail.Bindings, resolved)
 		}
@@ -270,19 +309,54 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		detail.GeneratedRules = len(program.Entries)
 		detail.Entries = append(detail.Entries, program.Entries[:min(128, len(program.Entries))]...)
 		detail.EntriesTruncated = len(program.Entries) > len(detail.Entries)
-		detail.Reason = "目标映射、主机地址、入口及同族 bridge 端点已核对并编译；执行和恢复尚未接通，不能应用"
+		detail.Reason = "目标映射、原始目的本地路由、DNAT 顺序及 bridge 路由出口已核对并编译；执行和恢复尚未接通，不能应用"
+		// Bracket the proof with fresh native, routing and Docker observations.
+		// Keep the existing plan deadline: timeout rejects rather than returning
+		// a partial proof. These reads do not make the snapshots atomic.
+		var after iptablesRegistrationSnapshot
+		var afterRuntime firewall.DockerRuntime
+		var afterRouting dockerRoutingSnapshot
+		var afterRoutingErr error
+		wg.Add(3)
+		go func() { defer wg.Done(); after, inspectErr = inspect() }()
+		go func() { defer wg.Done(); afterRuntime, _ = readDockerFirewallState(ctx) }()
+		go func() { defer wg.Done(); afterRouting, afterRoutingErr = reader.snapshot(ctx, families) }()
+		wg.Wait()
+		if inspectErr != nil {
+			return out, fault.Unavailable("DNAT 后读失败：" + boundedIPTablesError(inspectErr))
+		}
+		if afterRoutingErr != nil {
+			return out, fault.Unavailable("路由后读失败：" + boundedIPTablesError(afterRoutingErr))
+		}
+		if !afterRuntime.Available {
+			return out, fault.Unavailable(afterRuntime.Reason)
+		}
+		if after.Hash != before.Hash || after.ToolHash != before.ToolHash || !slices.Equal(native, nativeHashes(after)) || afterRouting.Hash != routing.Hash || afterRuntime.EngineHash != runtime.EngineHash || afterRuntime.SnapshotHash != runtime.SnapshotHash {
+			return out, fault.Conflict("Docker 实例、原生规则或路由在路径核对期间变化，请重新生成计划")
+		}
 	}
 	afterHost, err := readDockerTargetHost(ctx)
-	if err != nil || host.Hash != afterHost.Hash {
+	if err != nil {
+		return out, fault.Unavailable("主机接口后读失败：" + boundedIPTablesError(err))
+	}
+	if host.Hash != afterHost.Hash {
 		return out, fault.Conflict("主机接口或地址在目标计划期间变化，请重新读取")
 	}
 	if err = ctx.Err(); err != nil {
 		return out, err
 	}
+	configuration, err := json.Marshal(struct {
+		Rules, Tools, Interfaces, Routing string
+		Native                            []string
+	}{before.Hash, before.ToolHash, host.Hash, routingHash, native})
+	if err != nil {
+		return out, err
+	}
+	detail.ConfigurationHash = secure.Hash(append([]byte("docker:planning-environment:v2:\x00"), configuration...))
 	if detail.GeneratedRules+detail.HostGeneratedRules > firewall.MaxEntries {
 		return out, fault.Invalid("包含主机入口保护及 Docker 目标的规则展开后超过 8192 条")
 	}
-	out = firewall.Plan{Docker: detail, Backend: f.owner, CanApply: false, Action: "apply", ID: secure.ID(), Version: in.Version, PolicyHash: policy.Hash(), ProgramHash: firewall.DockerPlanHash(policy, detail), Baseline: firewall.KernelView{Reason: "Docker 计划仅核对目标绑定；完整环境摘要见 Docker 子计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: detail.GeneratedRules + detail.HostGeneratedRules}
+	out = firewall.Plan{Docker: detail, Backend: f.owner, CanApply: false, Action: "apply", ID: secure.ID(), Version: in.Version, PolicyHash: policy.Hash(), ProgramHash: firewall.DockerPlanHash(policy, detail), Baseline: firewall.KernelView{Reason: "Docker 目标与路径核对摘要见 Docker 子计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, GeneratedRules: detail.GeneratedRules + detail.HostGeneratedRules}
 	if !validDockerPlan(out, in) {
 		return firewall.Plan{}, errors.New("Docker 完整目标计划无法编码或超过预算")
 	}

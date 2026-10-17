@@ -2078,11 +2078,26 @@ components:
     FirewallDockerResolvedBinding:
       type: object
       additionalProperties: false
-      required: [binding, container_address, output_interface]
+      required: [binding, container_address, output_interface, path]
       properties:
         binding: {$ref: '#/components/schemas/FirewallDockerRuleBinding'}
         container_address: {type: string}
         output_interface: {type: string, minLength: 1, maxLength: 15}
+        path: {$ref: '#/components/schemas/FirewallDockerPathProof'}
+    FirewallDockerPathProof:
+      type: object
+      additionalProperties: false
+      required: [dnat_hash, dnat_rules, routing_hash, original_route_hash, route_hash, route_prefix, route_table, output_index]
+      description: 只读核对原始目的的本地路由、PREROUTING 有序 DNAT 和容器永久直连 bridge 路由。仅支持默认策略路由及可完整解释的 NAT 条件；所有来源须得到相同路径结论。前后报告一致仍不是原子快照、执行授权或外部可达性证明。
+      properties:
+        dnat_hash: {type: string, minLength: 64, maxLength: 64}
+        dnat_rules: {type: integer, minimum: 1, maximum: 16384}
+        routing_hash: {type: string, minLength: 64, maxLength: 64}
+        original_route_hash: {type: string, minLength: 64, maxLength: 64}
+        route_hash: {type: string, minLength: 64, maxLength: 64}
+        route_prefix: {type: string, description: 内核 FIB 选中的同族规范网络前缀，必须包含容器地址。}
+        route_table: {type: integer, enum: [254]}
+        output_index: {type: integer, minimum: 1, maximum: 2147483647}
     FirewallDockerLocalAddress:
       type: object
       additionalProperties: false
@@ -2095,7 +2110,7 @@ components:
       type: object
       additionalProperties: false
       required: [engine_hash, snapshot_hash, configuration_hash, bindings_hash, observed_at, ports, truncated, addresses, bindings, compiled, program_hash, program_bytes, generated_rules, host_program_hash, host_generated_rules, entries, entries_truncated, warnings, reason]
-      description: 目标实例、映射和本机地址的即时读取及独立编译预览。主机 INPUT 与 Docker 转发分别编译；Docker 允许使用 RETURN。当前尚无执行转换和独立恢复记录，父计划 can_apply 始终为 false；不是 DNAT、路由、原子快照或外部可达性证明。
+      description: 目标实例、映射、本机地址及所选 DNAT/路由的只读核对与独立编译预览。主机 INPUT 与 Docker 转发分别编译；Docker 允许使用 RETURN。路径证据计入绑定及程序摘要。当前尚无执行转换和独立恢复记录，父计划 can_apply 始终为 false；不代表原子快照或外部可达性。
       properties:
         engine_hash: {type: string, minLength: 64, maxLength: 64}
         snapshot_hash: {type: string, minLength: 64, maxLength: 64}

@@ -150,6 +150,8 @@ const resolved: DataTableColumns<Plan["bindings"][number]> = [
   { title: "容器地址", key: "container_address", minWidth: 190 },
   { title: "bridge 出口", key: "output_interface", minWidth: 170 },
   { title: "原始目的", key: "binding.destination", minWidth: 210, render: (row) => `[${row.binding.destination}]:${row.binding.host_port}` },
+  { title: "DNAT 路径", key: "path.dnat_rules", minWidth: 130, render: (row) => `已核对 ${row.path.dnat_rules} 条规则` },
+  { title: "实际路由", key: "path.route_prefix", minWidth: 230, render: (row) => `${row.path.route_prefix} / 表 ${row.path.route_table}` },
 ];
 </script>
 
@@ -180,7 +182,7 @@ const resolved: DataTableColumns<Plan["bindings"][number]> = [
       <dt>目标绑定摘要</dt><dd class="digest">{{ plan.bindings_hash }}</dd>
       <dt>Docker 程序摘要</dt><dd class="digest">{{ plan.program_hash }}</dd>
     </dl>
-    <n-data-table :columns="resolved" :data="plan.bindings" :pagination="{ pageSize: 10 }" :scroll-x="650" />
+    <n-data-table :columns="resolved" :data="plan.bindings" :pagination="{ pageSize: 10 }" :scroll-x="1000" />
     <h4>Docker 规则预览</h4>
     <p v-if="plan.entries_truncated" class="muted">仅展示前 128 条；摘要包含完整编译规则。</p>
     <n-data-table :columns="entries" :data="plan.entries" :pagination="{ pageSize: 10 }" :scroll-x="1100" />

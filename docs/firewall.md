@@ -25,7 +25,7 @@
 
 每项分别展示主机地址/端口和容器端口，不用 DNAT 后容器端口替代外部发布端口。`0.0.0.0`、`::` 只是通配绑定，不自动选择原始目的地址；缺失主机端口保留为 0。仅将唯一 local bridge、nat 网关模式、运行容器和同地址族端点列为 `bridge_nat_candidate`；rootless、Swarm、非 nat、其他驱动、多个网络、回环路径、SCTP 及 IPv6 发布到仅 IPv4 端点等明确未确认，不将用户态代理视为同族转发。候选仍须核对实际 DNAT、入站及转发出口，不证明已受保护或外部可达。
 
-`docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。当前所有 `supported` 及 `docker.writable` 均为 false，目标绑定与独立编译见下节；DNAT/路由核对、受管代际执行、新连接确认与持久恢复仍待接入。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
+`docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。当前所有 `supported` 及 `docker.writable` 均为 false，目标绑定、DNAT/路由核对与独立编译见下节；受管代际执行、新连接确认与持久恢复仍待接入。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
 
 依据：[Docker Engine API 1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)、[官方 API 模型](https://github.com/moby/moby/blob/v27.5.1/api/swagger.yaml)、[Docker iptables 与原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[端口发布与网关模式](https://docs.docker.com/engine/network/port-publishing/)。本阶段完成源码实现和集成审阅，实际 Docker/API/内核组合仍待 P5 集中验证。
 
@@ -35,13 +35,19 @@
 
 再次提交可携带 `docker_targets.engine_hash/snapshot_hash/bindings`，每项明确规则、容器、网络、地址族、协议、Docker 主机地址/端口、容器端口、实际原始目的地址及入口接口。最多 128 项、96 KiB；每条启用 Docker 规则的每个地址族、每个主机端口必须完整覆盖，不能把端口区间静默缩成现有映射子集。同一规则、入口及原始目的端口不能绑定冲突容器；映射、协议或来源仍使用目标已保存规则。通配绑定必须选择实际本机入口地址，固定绑定则必须相等；回环、链路本地、映射地址、接口通配及未知接口均不接受。选定目标只定义这些明确映射的覆盖范围，不代表覆盖所有容器或所有通配地址。
 
-Agent 重新读取当前实例、网络和容器，报告摘要不一致时拒绝沿用旧绑定。解析要求运行容器、唯一 local bridge/NAT、同族容器端点及当前实际 bridge 接口；显式 bridge 名直接核对，未命名自建 bridge 按官方生成名称定位后仍核对宿主机接口和 sysfs 类型，不以名称证明链路。入口地址与接口必须实际对应，接口、标识、状态、MTU 及地址在计划期间须一致，最多 512 个接口、合计 2048 个接口地址、512 个可绑定地址和 256 KiB 私有接口报告。它仍不是 DNAT、路由或数据包路径证明，跨接口报告不是原子快照。
+Agent 重新读取当前实例、网络和容器，报告摘要不一致时拒绝沿用旧绑定。解析要求运行容器、唯一 local bridge/NAT、同族容器端点及当前实际 bridge 接口；显式 bridge 名直接核对，未命名自建 bridge 按官方生成名称定位后仍核对宿主机接口和 sysfs 类型，不以名称证明链路。入口地址与接口必须实际对应，接口、标识、状态、MTU 及地址在计划期间须一致，最多 512 个接口、合计 2048 个接口地址、512 个可绑定地址和 256 KiB 私有接口报告。
+
+提交完整绑定后，逐项按原生 `nat/PREROUTING` 规则顺序解释普通链 jump/goto/RETURN，最终必须命中 `DOCKER` 中与所选同族容器地址和端口完全一致的 DNAT。仅解释入口、协议、来源/目的前缀、目标端口、LOCAL 地址类型、NEW/ORIGINAL 连接状态及注释；来源条件必须对规则的全部来源前缀有相同结果，部分命中、未知扩展、提前终止、循环或错误目的均拒绝。不从未知扩展后面的 token 推断不匹配。每绑定最多解释 16384 条，全计划最多 65536 条，链深度最多 16。
+
+只读 `NETLINK_ROUTE` GETRULE/GETROUTE 完整读取所需地址族的路由和策略规则，仅支持默认无条件 local/main（及可选 default）查表；条件策略规则、来源专用及 TOS 路由明确阻塞。内核 `FIB_MATCH` 须选中原始目的的所选入口本地路由，以及容器地址经实际 bridge 的 main 表永久 kernel 直连路由；拒绝网关、多路径、nexthop/封装等未支持结果，并与完整清单交叉核对。逐数据报检查来源、序列、边界、截断及 multipart 完成，累计读取和前后核对共限 2 MiB/8192 项、每数据报 64 KiB。摘要仅去除缓存使用计数和时间戳，保留到期与错误；前后完整路由摘要须一致。
+
+每个解析绑定的 `path` 返回 DNAT 摘要/读取条数、完整路由摘要、本地路由摘要、实际出口路由摘要/前缀/表号及 bridge 索引。路径证据计入绑定与程序摘要；环境摘要同时固定完整原生规则、工具、接口和路由。核对后再次读取完整原生规则及 Docker 报告，并核对接口身份和地址，变化、超限或原计划十秒期限内未完成则整体失败，不返回部分成功。前后相等不构成原子快照，也不证明转发设置、其他过滤规则及云安全组允许外部新连接。
 
 主机入站及其 SSH/管理入口保护使用原编译器，Docker 使用独立程序类型，不能传给 INPUT 执行器。Docker 规则同时匹配入口、bridge 出口、同族容器地址/端口、来源，以及 conntrack ORIGINAL 的原始目的地址/主机端口和 NEW 状态。允许使用 RETURN，拒绝或丢弃分别使用相应目标；不使用全面 ACCEPT 绕过 Docker 后续隔离。规则仍仅作用于新连接，不清理 conntrack。完整绑定和两类程序分别参与摘要；包含保护项的两类规则合计最多 8192 条，Docker 程序最多 2 MiB、计划回包最多 512 KiB，页面展示前 128 条并注明截断。IPC 边界使用类型化输入重新编译核对摘要、数量和展示内容，不把展示命令作为执行输入。
 
-目标绑定只存在于本次请求、易失计划及页面内存，不改写期望规则、数据库或迁移归档；导出、导入和 API 迁移继续只携带中立期望。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 仅表示完成目标编译，`can_apply` 保持 false，提交执行会被拒绝；发布端口的 DNAT/路由核对、独立本机写入授权、代际转换、官方预演、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
+目标绑定及路径证据只存在于本次请求、易失计划及页面内存，不改写期望规则、数据库或迁移归档；导出、导入和 API 迁移继续只携带中立期望。页面绑定修改后立即清除旧编译结果，重新读取目标时清除旧选择。`plan.docker.compiled` 表示完成目标路径核对及编译，`can_apply` 保持 false，提交执行会被拒绝；独立本机写入授权、代际转换、官方预演、新连接确认和持久恢复继续实施。原生 Docker nftables 仍保持实验适配只读。
 
-实现依据：[Moby bridge 名称及端点](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/bridge_linux.go)、[Docker 转发及原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)。本阶段仅完成源码实现和集成审阅，未执行 Docker/API/系统能力验证，待 P5 集中验证。
+实现依据：[Moby bridge 名称及端点](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/bridge_linux.go)、[端口 DNAT 规则](https://github.com/moby/moby/blob/v27.5.1/libnetwork/drivers/bridge/port_mapping_linux.go)、[Docker 转发及原始目的匹配](https://docs.docker.com/engine/network/firewall-iptables/)、[Linux 路由 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/rtnetlink.h)、[策略规则 UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/fib_rules.h)、[IPv6 FIB 查询及导出](https://github.com/torvalds/linux/blob/v6.12/net/ipv6/route.c)。本阶段仅完成源码实现和集成审阅，未执行 Docker/API/系统能力验证，待 P5 集中验证。
 
 ## 内核目标表快照
 

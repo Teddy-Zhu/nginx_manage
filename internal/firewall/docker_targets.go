@@ -36,12 +36,24 @@ type DockerRuleBinding struct {
 	InputInterface string `json:"input_interface"`
 }
 
-// Only the host resolver supplies the endpoint and bridge. A binding is not a
-// packet trace, an execution grant, or a claim about other published mappings.
+// Only the host resolver supplies the endpoint, bridge and bounded path proof.
+// These observations grant neither execution nor external reachability.
 type DockerResolvedBinding struct {
 	Binding          DockerRuleBinding `json:"binding"`
 	ContainerAddress string            `json:"container_address"`
 	OutputInterface  string            `json:"output_interface"`
+	Path             DockerPathProof   `json:"path"`
+}
+
+type DockerPathProof struct {
+	DNATHash          string `json:"dnat_hash"`
+	DNATRules         int    `json:"dnat_rules"`
+	RoutingHash       string `json:"routing_hash"`
+	OriginalRouteHash string `json:"original_route_hash"`
+	RouteHash         string `json:"route_hash"`
+	RoutePrefix       string `json:"route_prefix"`
+	RouteTable        int    `json:"route_table"`
+	OutputIndex       int    `json:"output_index"`
 }
 
 type DockerLocalAddress struct {
@@ -206,10 +218,23 @@ func CompileDockerIPTables(policy Policy, targets DockerTargets, resolved []Dock
 	slices.SortFunc(resolved, func(a, b DockerResolvedBinding) int {
 		return strings.Compare(dockerBindingKey(a.Binding), dockerBindingKey(b.Binding))
 	})
+	natRules := 0
+	outputIndexes := map[string]int{}
 	for index, binding := range resolved {
 		if binding.Binding != targets.Bindings[index] || !DockerTargetAddress(binding.ContainerAddress, binding.Binding.Family) || binding.ContainerAddress == binding.Binding.Destination || !DockerTargetInterface(binding.OutputInterface) || binding.OutputInterface == binding.Binding.InputInterface {
 			return nil, fault.Invalid("Docker 容器端点或 bridge 出口解析无效")
 		}
+		proof := binding.Path
+		prefix, err := netip.ParsePrefix(proof.RoutePrefix)
+		endpoint, _ := netip.ParseAddr(binding.ContainerAddress)
+		if !dockerDigest.MatchString(proof.DNATHash) || proof.DNATRules < 1 || proof.DNATRules > 16384 || !dockerDigest.MatchString(proof.RoutingHash) || !dockerDigest.MatchString(proof.OriginalRouteHash) || !dockerDigest.MatchString(proof.RouteHash) || err != nil || prefix.String() != proof.RoutePrefix || prefix != prefix.Masked() || prefix.Bits() == 0 || !prefix.Contains(endpoint) || proof.RouteTable != 254 || proof.OutputIndex < 1 || proof.OutputIndex > 1<<31-1 {
+			return nil, fault.Invalid("Docker DNAT 或路由证据不完整")
+		}
+		natRules += proof.DNATRules
+		if natRules > 65536 || index > 0 && proof.RoutingHash != resolved[0].Path.RoutingHash || outputIndexes[binding.OutputInterface] != 0 && outputIndexes[binding.OutputInterface] != proof.OutputIndex {
+			return nil, fault.Invalid("Docker 路径证据不一致或超过预算")
+		}
+		outputIndexes[binding.OutputInterface] = proof.OutputIndex
 	}
 	raw, err := json.Marshal(struct {
 		Targets  DockerTargets
