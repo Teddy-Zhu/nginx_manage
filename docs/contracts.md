@@ -259,3 +259,6 @@ protection 返回目标本机 root 管理/代理来源批准的状态、ID、时
 
 
 离线恢复新增 root 只读 `backup-restore-external` 及固定非 root 描述符助手：原对账摘要、类别和游标固定输入，每页最多 64 条，完整清单摘要覆盖全部分类源记录，绑定原恢复/对账。激活输入新增 external_review（完整清单摘要及按类别排序的 count/sha256/resolution/evidence），只接收 verified/remediated/no_effect 人工结论；空清单也显式提交空数组。两个数据库助手独立重新扫描，覆盖或摘要不符不批准激活。复核为管理员声明，不推断第三方结果、不发送请求或重放；原结论随 schema 2 激活意图和报告不可变保存，所有重试核对原内容。输入上限 32 KiB、证据每项 512 字节；最多 10 类、每类 100 万条、每字段 16 MiB、扫描总材料 2 GiB，沿用原助手期限。Agent/数据库/归档仍为 65/27/6，公开 JSON 和自动扫描路由不变。未运行构建、类型检查、lint、测试或真实恢复，待 P5。
+
+
+默认发布规格包含 nginx-linux-amd64/arm64，入口为 bin/nginx，版本取发布工具内嵌 nginx-source-lock.json，归档名同时绑定 Nginx 版本与面板发行版本。资产固定 static、Linux、any/any 和静态模块特征；目标选择只消除发行版动态库约束，不承诺实际系统运行验收。native-nginx-source-and-static-runtime provenance 绑定原发布仓库/版本/提交/资产/workflow、程序散列，以及 native_nginx 中的源码配方散列、完整参数、musl-gcc 版本、runner 镜像、nginx -V 与系统包清单散列及三份静态运行库名称/路径/包版本/散列/许可文件。SPDX 的四份源码、三份运行库和程序须与原材料完全对应，运行库 LicenseRef 原文须匹配归档 copyright/GPL-3。发布工具不执行输入 ELF，复用静态闭包检查并要求配方内各模块具有已定义对象符号；证据副本仍逐字节匹配签名文件清单。组件接收、首次安装、迁移准备和 Docker 模块策略不增加新协议或运行时编译入口。

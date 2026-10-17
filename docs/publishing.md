@@ -4,9 +4,9 @@
 
 ## 产物和证据
 
-默认发布规格包含 Linux amd64/arm64 面板包及独立 web 包。面板包包含静态 Go 二进制、同版前端、项目许可、第三方许可原文、SPDX 和构建来源；web 包包含构建后的 HTML/CSS/JS 和对应记录，不包含 node_modules 或服务端构建工具。
+默认发布规格包含 Linux amd64/arm64 面板包、独立 web 包及两种架构的静态 Nginx 包。面板包包含静态 Go 二进制、同版前端、项目许可、第三方许可原文、SPDX 和构建来源；web 包包含构建后的 HTML/CSS/JS 和对应记录，不包含 node_modules 或服务端构建工具。Nginx 包包含固定入口 `bin/nginx`、源码和静态运行库许可、锁定配方、构建记录及独立证据。
 
-每个包的 `<asset-id>.spdx.json` 和 `<asset-id>.provenance.json` 同时放在归档与发行根目录。外部副本逐字节匹配签名清单中的文件长度/散列，因此也可以用已验签的文件清单核对。SPDX 2.3 由固定 Syft 生成，范围明确为源码和构建依赖，包括声明的开发依赖，不宣称每项都存在于运行时 JavaScript。许可文件来自实际使用的 Go 模块、Go 标准库及前端生产依赖；缺少许可原文时停止，不能用任意许可证补齐。
+每个包的 `<asset-id>.spdx.json` 和 `<asset-id>.provenance.json` 同时放在归档与发行根目录。外部副本逐字节匹配签名清单中的文件长度/散列，因此也可以用已验签的文件清单核对。面板/web 的 SPDX 2.3 由固定 Syft 生成，范围明确为源码和构建依赖，包括声明的开发依赖，不宣称每项都存在于运行时 JavaScript。许可文件来自实际使用的 Go 模块、Go 标准库及前端生产依赖；缺少许可原文时停止，不能用任意许可证补齐。Nginx 的 SPDX 由原生构建器按锁定源码、实际静态运行库和二进制生成；全量已安装构建包另存有界版本清单，不冒充全部包均被链接进程序。
 
 构建来源绑定仓库、版本、完整提交、资产、Go/Node/pnpm 版本、go.sum 与 pnpm-lock 散列及 workflow run。面板另核对实际二进制散列、ELF 架构/静态链接、Go 模块和构建设置：干净 VCS 提交、目标平台、CGO=0、注入的 main.version；拒绝模块 replace。数据库目标版本从内嵌 SQL 派生，Agent 协议由 Agent 和发布工具共用单一常量，launcher 使用接收端同一常量。
 
@@ -16,7 +16,7 @@
 
 ## 本机入口
 
-`make release-tool` 构建工具。准备目录沿用工作流布局：`panel-linux-amd64/`、`panel-linux-arm64/`、`web/`，各目录实际包含上述入口、LICENSE、THIRD_PARTY_NOTICES.txt 及同 ID 的两份 JSON 证据。也可在当前严格 schema 中声明其他已准备组件及其 ABI/运行文件约束；本轮默认构建流程只生产面板和 web，不生产 Nginx/Fail2ban 包。
+`make release-tool` 构建工具。准备目录沿用工作流布局：`panel-linux-amd64/`、`panel-linux-arm64/`、`web/`、`nginx-linux-amd64/`、`nginx-linux-arm64/`，各目录包含对应入口、实际许可原文及同 ID 的两份 JSON 证据。Nginx 资产须符合发布工具内嵌的源码锁定配方；Fail2ban 默认组件构建尚未接入。
 
 ```sh
 bin/nginxpanel-release spec \
@@ -39,6 +39,16 @@ bin/nginxpanel-release bundle \
 [release.yml](../.github/workflows/release.yml) 在 v 标签推送或指定已有标签的手工触发时运行。所有 action 使用固定 commit，Go 读取 go.mod/toolchain，Node 使用 24.x，pnpm 来自 packageManager；依赖冻结安装。构建任务只授予 contents:read，执行现有 make verify 一轮，然后构建前端和两种静态二进制，生成依赖记录、许可原文和 SBOM。前端直接调用 Vite，复用前序类型检查结果，不重复执行 build 脚本中的同一检查。
 
 发布任务使用 release environment，按构建任务确认的 commit 检出源码，自行构建发布工具；归档使用构建任务指定的 artifact ID，镜像回执使用当前工作流中固定名称的 artifact，不执行上传的程序。签名 seed 仅在打包签名步骤写入临时 0600 文件，步骤结束清理；上传步骤只持有 GitHub Token。
+
+## 原生 Nginx 组件
+
+[`nginx-source-lock.json`](../internal/releases/nginx-source-lock.json) 是构建器与签名工具共同使用的来源：Nginx 1.30.6、OpenSSL 3.5.9、PCRE2 10.49、zlib 1.3.2 均固定官方 HTTPS 源码、长度、SHA-256 与许可路径。上游分别为 [Nginx](https://nginx.org/en/download.html)、[OpenSSL](https://openssl-library.org/source/)、[PCRE2](https://github.com/PCRE2Project/pcre2/releases) 和 [zlib](https://zlib.net/)。升级须修改此配方并重新发布完整签名资产，不在目标机器编译源码或增装模块。
+
+工作流在 `ubuntu-24.04`、`ubuntu-24.04-arm` 各自的原生架构运行器构建，CI 安装 musl/GCC/Perl 构建工具，使用 musl-gcc 和固定参数静态链接上述依赖。HTTP/TLS/Real IP、Stream/TLS/Real IP/SSL Preread、限流和当前代理所需的内置模块直接进入二进制；另开启 HTTP/2 与 PCRE JIT。构建参数参考 [Nginx 官方配置说明](https://nginx.org/en/docs/configure.html)。源码下载、解包、构建和记录均有长度/时间限制，源码链接与特殊文件拒绝展开；不安装生成的 Nginx 服务。
+
+`scripts/release/nginx.py` 绑定批准的干净源码提交、规格和 runner 架构，保留未剥离符号的二进制，记录 `nginx -V`、编译器版本、runner 镜像版本、系统包版本以及 libc.a/libgcc.a/libgcc_eh.a 的实际包版本和 SHA-256。包内保存这三份运行库对应的真实 copyright、GCC 运行库例外和 GPL-3 原文；缺失即停止。源码配方、构建记录和系统包清单都由 provenance 散列绑定，并进入签名文件清单。
+
+签名工具独立检查二进制架构、静态 ELF 闭包、所需模块的已定义对象符号、实际二进制和各证据散列；SPDX 必须完整匹配锁定的四份源码、三份静态运行库及程序。只有原生构建任务执行自己生成的 `nginx -V`，签名任务不执行上传的程序。发布后原有可信组件准备、原生首次安装和迁移依赖准备按架构选择 `nginx-linux-amd64/arm64`；static any/any 只声明发行资产的系统选择约束，不能代替目标发行版、内核、配置和实际运行验收。
 
 ## 固定镜像发行
 
@@ -65,4 +75,4 @@ sudo /opt/nginxpanel/current/nginxpanel release-images \
 
 上传前核对当前标签仍指向批准的完整提交。已存在的发行或恢复草稿不会被自动覆盖；新建 draft，上传全部文件并核对资产名称、数量、状态、长度及可用的 GitHub SHA-256 后才公开。失败保留 draft，不自动删除、覆盖或跳过失败。稳定版使用 GitHub legacy 版本选择，预发布不会成为 latest；可配合仓库 immutable releases，但不能替代签名，相关字段见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
 
-当前仓库缺少项目自身的 LICENSE，正式产物和发布仍需补齐此业务输入。组件构建、运行中切换、更新 worker/回滚仍在 P4 后续范围。镜像发布与验签均只完成源码接入，未执行镜像构建、工具、CI、真实发布或系统验收，统一留到 P5。
+当前仓库缺少项目自身的 LICENSE，正式产物和发布仍需补齐此业务输入。Fail2ban 默认组件构建及运行中组件切换仍在 P4 后续范围。原生组件和镜像发布均只完成源码接入，未执行构建、工具、CI、真实发布或系统验收，统一留到 P5。

@@ -46,19 +46,20 @@ type PublicationResult struct {
 	Key            Key    `json:"key"`
 }
 type BuildProvenance struct {
-	Schema        int    `json:"schema"`
-	Repository    string `json:"repository"`
-	Version       string `json:"version"`
-	Commit        string `json:"commit"`
-	Asset         string `json:"asset"`
-	Scope         string `json:"scope"`
-	GoVersion     string `json:"go_version"`
-	NodeVersion   string `json:"node_version"`
-	PNPMVersion   string `json:"pnpm_version"`
-	GoSumSHA256   string `json:"go_sum_sha256"`
-	WebLockSHA256 string `json:"web_lock_sha256"`
-	BinarySHA256  string `json:"binary_sha256,omitempty"`
-	WorkflowRun   string `json:"workflow_run"`
+	Schema        int                    `json:"schema"`
+	Repository    string                 `json:"repository"`
+	Version       string                 `json:"version"`
+	Commit        string                 `json:"commit"`
+	Asset         string                 `json:"asset"`
+	Scope         string                 `json:"scope"`
+	GoVersion     string                 `json:"go_version,omitempty"`
+	NodeVersion   string                 `json:"node_version,omitempty"`
+	PNPMVersion   string                 `json:"pnpm_version,omitempty"`
+	GoSumSHA256   string                 `json:"go_sum_sha256,omitempty"`
+	WebLockSHA256 string                 `json:"web_lock_sha256,omitempty"`
+	BinarySHA256  string                 `json:"binary_sha256,omitempty"`
+	WorkflowRun   string                 `json:"workflow_run"`
+	NativeNginx   *NativeNginxProvenance `json:"native_nginx,omitempty"`
 }
 
 func validCommit(commit string) bool {
@@ -66,8 +67,7 @@ func validCommit(commit string) bool {
 	return err == nil && (len(raw) == 20 || len(raw) == 32) && commit == strings.ToLower(commit)
 }
 
-// NewPublication describes the panel binaries and matching standalone frontend.
-// Component publishers can supply the same strict spec with explicit ABI data.
+// NewPublication describes matching panel/web and prebuilt native Nginx assets.
 func NewPublication(repo, version, commit string) (PublicationSpec, error) {
 	if !repository.MatchString(repo) || !validVersion(version) || !validCommit(commit) {
 		return PublicationSpec{}, errors.New("发布身份或版本无效")
@@ -89,6 +89,13 @@ func NewPublication(repo, version, commit string) (PublicationSpec, error) {
 			id, component, archive, executable = "web", "web", "nginxpanel_"+version+"_web.tar.gz", []string{}
 		}
 		spec.Packages = append(spec.Packages, PackageSource{Directory: id, ExecutableFiles: executable, Asset: Asset{ID: id, Component: component, Version: version, OS: "linux", Architecture: arch, Distribution: "any", DistributionVersion: "any", ABI: "static", Archive: archive, License: "LicenseRef-Project", LicenseFiles: []string{"LICENSE", "THIRD_PARTY_NOTICES.txt"}, SourceURL: "https://github.com/" + repo + "/tree/" + commit, Maintenance: "maintained"}})
+	}
+	for _, arch := range []string{"amd64", "arm64"} {
+		component, err := nginxPublicationPackage(arch, version)
+		if err != nil {
+			return PublicationSpec{}, err
+		}
+		spec.Packages = append(spec.Packages, component)
 	}
 	return spec, nil
 }
@@ -117,8 +124,17 @@ func publicationEvidence(directory string, asset Asset, spec PublicationSpec) (m
 	if err := strictJSON(raw, &p); err != nil {
 		return nil, err
 	}
-	if p.Schema != Schema || p.Repository != spec.Manifest.Repository || p.Version != spec.Manifest.Version || p.Commit != spec.Commit || p.Asset != asset.ID || p.Scope != "source-and-build-dependencies" || !text(p.GoVersion, 64) || !text(p.NodeVersion, 64) || !text(p.PNPMVersion, 64) || !validHash(p.GoSumSHA256) || !validHash(p.WebLockSHA256) || !text(p.WorkflowRun, 256) {
+	if p.Schema != Schema || p.Repository != spec.Manifest.Repository || p.Version != spec.Manifest.Version || p.Commit != spec.Commit || p.Asset != asset.ID || !text(p.WorkflowRun, 256) {
 		return nil, errors.New("发布构建来源与仓库、版本、提交或依赖输入不一致")
+	}
+	if asset.Component == "nginx" {
+		if err := nginxPublicationEvidence(directory, asset, spec, p, sbom); err != nil {
+			return nil, err
+		}
+		return map[string][]byte{sbomName: sbom, provenanceName: raw}, nil
+	}
+	if p.NativeNginx != nil || p.Scope != "source-and-build-dependencies" || !text(p.GoVersion, 64) || !text(p.NodeVersion, 64) || !text(p.PNPMVersion, 64) || !validHash(p.GoSumSHA256) || !validHash(p.WebLockSHA256) {
+		return nil, errors.New("发布构建来源缺少对应工具链及依赖输入")
 	}
 	if asset.Component == "panel" {
 		var binaryHash string

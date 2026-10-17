@@ -107,6 +107,48 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
+  nginx:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact }}
+          path: .release/input
+          merge-multiple: true
+      - name: Install native release build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y musl-tools build-essential perl
+      - name: Build locked static Nginx and stage its source and runtime evidence
+        env:
+          RELEASE_ARCHITECTURE: ${{ matrix.architecture }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release/nginx.py --spec .release/input/publication.json --architecture "$RELEASE_ARCHITECTURE" --output ".release/nginx-$RELEASE_ARCHITECTURE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-nginx-${{ matrix.architecture }}
+          path: .release/nginx-${{ matrix.architecture }}/
+          if-no-files-found: error
+          retention-days: 7
+
   images:
     needs: build
     strategy:
@@ -165,7 +207,7 @@ jobs:
         run: docker logout ghcr.io
 
   publish:
-    needs: [build, images]
+    needs: [build, nginx, images]
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     environment: release
@@ -190,6 +232,11 @@ jobs:
         with:
           pattern: image-build-*
           path: .release/image-build-input
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: native-nginx-*
+          path: .release/input
           merge-multiple: true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:

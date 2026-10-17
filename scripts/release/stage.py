@@ -146,6 +146,9 @@ def main():
     }
     for package in spec["packages"]:
         asset = package["asset"]
+        if asset["component"] == "nginx":
+            # Native runners stage these assets from the same approved spec.
+            continue
         destination = args.input_root / package["directory"]
         destination.mkdir()
         provenance = dict(shared, asset=asset["id"])
