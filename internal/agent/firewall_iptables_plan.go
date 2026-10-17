@@ -18,6 +18,8 @@ type iptablesInitialTransition struct {
 	RegistrationOperationID, RegistrationRequestHash, ConfigurationHash, ToolHash string
 	Program                                                                       *firewall.IPTablesRuntimeProgram
 	Materials                                                                     []iptablesInitialMaterial
+	Tools                                                                         *iptablesToolBinding
+	DryRun                                                                        *iptablesDryRunProof
 }
 
 func (f *hostFirewall) iptablesPlannerLocked() bool {
@@ -109,7 +111,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		}
 	}
 	transition := &iptablesInitialTransition{RegistrationOperationID: registered.NextClaim.OperationID, RegistrationRequestHash: registered.RequestHash, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, Program: program, Materials: []iptablesInitialMaterial{}}
-	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "代际程序及正反向受管批次已生成；尚未执行官方预演或规则写入，不可应用"}
+	summary := &firewall.IPTablesPlan{RegistrationOperationID: registered.NextClaim.OperationID, ConfigurationHash: before.Hash, ToolHash: before.ToolHash, LogicalHash: program.LogicalHash, ProtectionRules: program.ProtectionRules, Families: []firewall.IPTablesFamilyPlan{}, Warnings: warnings, Reason: "候选及正反向批次已通过官方 --test；业务写入与独立恢复尚未接入，不可应用"}
 	generated, transactionBytes := 0, 0
 	for _, generation := range program.Families {
 		var image *iptablesImage
@@ -136,6 +138,15 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 		generated += len(generation.Rules) + 2
 		transactionBytes += len(material.Candidate)
 	}
+	transition.Tools, err = bindIPTablesTools(ctx, f.owner)
+	if err != nil {
+		return empty, fault.Unavailable(err.Error())
+	}
+	transition.DryRun, err = preflightIPTables(ctx, transition)
+	if err != nil {
+		return empty, fault.Unavailable(err.Error())
+	}
+	summary.ToolchainHash, summary.DryRunHash, summary.DryRunCommands = transition.Tools.Hash, transition.DryRun.Hash, len(transition.DryRun.Calls)
 	after, err := inspectIPTablesRegistration(ctx, f.dataDir, f.owner, true)
 	if err != nil || after.Hash != before.Hash {
 		return empty, fault.Conflict("iptables 工具、后端或完整规则在计划期间变化，请重新生成")
@@ -143,6 +154,9 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	current, err := iptablesRegistrationAuthority(f.dataDir)
 	if err != nil || current.RequestHash != registered.RequestHash {
 		return empty, fault.Conflict("iptables 本机授权在计划期间变化")
+	}
+	if err = transition.Tools.verify(ctx); err != nil {
+		return empty, fault.Conflict(err.Error())
 	}
 	if err = ctx.Err(); err != nil {
 		return empty, err
@@ -155,7 +169,7 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	if err != nil {
 		return empty, err
 	}
-	summary.Warnings = append(summary.Warnings, "INPUT 跳转计划插入首位；本应用 ACCEPT 可能结束后续 INPUT 判断，云安全组及其他过滤路径仍可拒绝", "IPv4/IPv6 分别处理，不保证跨地址族原子性；只生成本应用链及精确规则操作，不恢复第三方历史快照")
+	summary.Warnings = append(summary.Warnings, "INPUT 跳转计划插入首位；本应用 ACCEPT 可能结束后续 INPUT 判断，云安全组及其他过滤路径仍可拒绝", "IPv4/IPv6 分别处理，不保证跨地址族原子性；只生成本应用链及精确规则操作，不恢复第三方历史快照", "官方 --test 不安装规则，也不证明端口可达；系统共享库及扩展仍由宿主机提供")
 	view := firewall.Plan{Backend: f.owner, CanApply: false, IPTables: summary, Action: in.Action, ID: id, Version: in.Version, PolicyHash: policyHash, ProgramHash: program.Hash, Baseline: firewall.KernelView{Reason: "完整 iptables 规则摘要见地址族代际计划"}, Protections: protections, SSHProfile: f.sshMode, SSHListeners: listeners, ListenerVersion: f.remote.state.Version, Listener: f.remote.state.Confirmed.Listen, ControlSource: source, ConfirmationSeconds: firewall.ConfirmationSeconds, ExpiresAt: time.Now().Unix() + 300, TransactionHash: secure.Hash(append([]byte("iptables:initial-plan:v1:\x00"), raw...)), TransactionBytes: transactionBytes, GeneratedRules: generated}
 	record := &firewallPolicyRecord{Action: in.Action, PlanID: id, Version: in.Version, Policy: policy, PolicyHash: policyHash, ProgramHash: program.Hash, Protections: protections, Marker: program.Marker, ProtectionBasis: firewallProtectionBasis{SSHProfile: f.sshMode, SSHListeners: listeners, Listener: view.Listener, AllowedSources: slices.Clone(f.remote.state.Confirmed.AllowedSources), ControlSource: source}}
 	if err = f.storePlanLocked(view, record); err != nil {

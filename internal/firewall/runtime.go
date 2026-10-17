@@ -79,6 +79,9 @@ type IPTablesPlan struct {
 	RegistrationOperationID string               `json:"registration_operation_id"`
 	ConfigurationHash       string               `json:"configuration_hash"`
 	ToolHash                string               `json:"tool_hash"`
+	ToolchainHash           string               `json:"toolchain_hash"`
+	DryRunHash              string               `json:"dry_run_hash"`
+	DryRunCommands          int                  `json:"dry_run_commands"`
 	LogicalHash             string               `json:"logical_hash"`
 	ProtectionRules         int                  `json:"protection_rules"`
 	Families                []IPTablesFamilyPlan `json:"families"`

@@ -2100,6 +2100,9 @@ type FirewallIPTablesPlan struct {
 	RegistrationOperationId string                       `json:"registration_operation_id"`
 	ConfigurationHash       string                       `json:"configuration_hash"`
 	ToolHash                string                       `json:"tool_hash"`
+	ToolchainHash           string                       `json:"toolchain_hash"`
+	DryRunHash              string                       `json:"dry_run_hash"`
+	DryRunCommands          int64                        `json:"dry_run_commands"`
 	LogicalHash             string                       `json:"logical_hash"`
 	ProtectionRules         int64                        `json:"protection_rules"`
 	Families                []FirewallIPTablesFamilyPlan `json:"families"`

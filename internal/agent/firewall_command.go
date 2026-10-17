@@ -89,8 +89,8 @@ func firewallRead(ctx context.Context, name, action string, limit int) ([]byte, 
 	if e := cmd.Run(); e != nil {
 		return nil, e
 	}
-	if out.exceeded || diagnostic.exceeded {
-		return nil, errors.New("firewall read exceeded its output budget")
+	if out.exceeded || diagnostic.exceeded || diagnostic.data.Len() != 0 {
+		return nil, errors.New("firewall read returned a warning or exceeded its output budget")
 	}
 	return out.data.Bytes(), nil
 }

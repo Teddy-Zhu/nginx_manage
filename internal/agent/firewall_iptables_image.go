@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 
 	"nginxpanel/internal/firewall"
@@ -30,7 +31,7 @@ type iptablesImage struct {
 // extensions remain opaque argument arrays; they are never fed to an executor.
 func parseIPTablesImage(raw []byte, family string) (iptablesImage, error) {
 	out := iptablesImage{Family: family, Tables: []iptablesImageTable{}}
-	if family != "ipv4" && family != "ipv6" || len(raw) > 1<<20 {
+	if family != "ipv4" && family != "ipv6" || len(raw) > iptablesExportBytes {
 		return out, errors.New("iptables 原生导出的地址族或大小无效")
 	}
 	if _, err := xtablesInventory(raw, family); err != nil {
@@ -87,6 +88,46 @@ func (image iptablesImage) chain(table, name string) *iptablesImageChain {
 		}
 	}
 	return nil
+}
+
+// Reserve a conservative native export budget, including quoted arguments,
+// maximum counters and save headers. A candidate must remain fully observable
+// with the same parser and byte limits after it is eventually installed.
+func (image iptablesImage) readbackBudget() error {
+	bytes, objects := 0, 0
+	metadata := []firewall.Table{}
+	for _, table := range image.Tables {
+		bytes += len(table.Name) + 512
+		objects += 2
+		view := firewall.Table{Family: image.Family, Name: table.Name, Chains: []firewall.Chain{}}
+		for _, chain := range table.Chains {
+			bytes += len(chain.Name) + len(chain.Policy) + 64
+			objects++
+			entry := firewall.Chain{Name: chain.Name, Policy: strings.ToLower(chain.Policy), Rules: len(chain.Rules)}
+			if chain.Policy != "-" {
+				entry.Type, entry.Hook = "builtin", strings.ToLower(chain.Name)
+			}
+			// false is one byte longer than true, conservatively accounting
+			// for the only extra derived flag in the public chain metadata.
+			view.Chains = append(view.Chains, entry)
+			for _, rule := range chain.Rules {
+				line := len(chain.Name) + 5
+				for _, arg := range rule {
+					line += len(strconv.Quote(arg)) + 1
+				}
+				if line >= 128<<10 {
+					return errors.New("iptables 候选规则超过完整导出的单行预算")
+				}
+				bytes += line
+				objects++
+			}
+		}
+		metadata = append(metadata, view)
+	}
+	if bytes > iptablesExportBytes || objects > firewallObjectLimit {
+		return errors.New("iptables 候选完整规则超过 1 MiB 或 16384 项的后续读取预算")
+	}
+	return boundedFirewallTables(metadata)
 }
 
 func iptablesReservedArgument(args []string) bool {
@@ -204,6 +245,9 @@ func initialIPTablesMaterial(before iptablesImage, generation firewall.IPTablesG
 		after.Tables[index].Chains = append(after.Tables[index].Chains, rules, iptablesImageChain{Name: firewall.IPTablesHostChain, Policy: "-", Rules: [][]string{slices.Clone(generation.Pointer)}})
 	}
 	if err = proveIPTablesGeneration(after, &generation); err != nil {
+		return out, err
+	}
+	if err = after.readbackBudget(); err != nil {
 		return out, err
 	}
 	var candidate, previous bytes.Buffer

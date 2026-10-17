@@ -139,7 +139,7 @@ func snapshotIPTablesRegistration(ctx context.Context, backend string, observed 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			raw, err := firewallRead(ctx, name, "rules", 1<<20)
+			raw, err := firewallRead(ctx, name, "rules", iptablesExportBytes)
 			if err == nil {
 				family := "ipv4"
 				if strings.HasPrefix(name, "ip6tables") {
