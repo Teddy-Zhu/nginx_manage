@@ -16,6 +16,7 @@ import (
 func runPanelImage(ctx context.Context, command string, args []string) error {
 	allowed := map[string]map[string]bool{
 		"panel-image":        {"data-dir": true, "panel-image": true, "image": true, "release-plan": true, "release-prerelease": true, "image-manifest": true, "image-signature": true, "image-manifest-sha256": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-image-rescue": {"data-dir": true, "panel-image": true, "maintenance-epoch": true},
 		"panel-image-resume": {"data-dir": true, "panel-image": true, "maintenance-epoch": true},
 		"panel-image-status": {"data-dir": true, "panel-image": true},
 		"panel-image-worker": {"data-dir": true, "panel-image": true},
@@ -73,6 +74,8 @@ func runPanelImage(ctx context.Context, command string, args []string) error {
 		out, err = agent.QueuePanelImage(ctx, agent.PanelImageInput{Stage: panelruntime.StageInput{DataDir: abs, PlanID: *plan, TrustPath: trust, AllowPrerelease: *prerelease}, Signature: releases.ImageInput{TrustPath: trust, ManifestPath: *manifest, SignaturePath: *signature, ExpectedManifestSHA256: *manifestHash, AllowPrerelease: *prerelease}, Image: *image, MaintenanceID: *maintenanceID}, *id, *epoch)
 	case "panel-image-resume":
 		out, err = agent.ResumePanelImage(ctx, abs, *id, *epoch)
+	case "panel-image-rescue":
+		out, err = agent.RescuePanelImage(ctx, abs, *id, *epoch)
 	case "panel-image-status":
 		out, err = agent.PanelImageStatus(abs, *id)
 	case "panel-image-worker":

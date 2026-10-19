@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
@@ -57,7 +58,7 @@ func panelImageHost(ctx context.Context, data, id string) (string, bool, error) 
 	if count != 1 {
 		return "", false, errors.New("镜像替换服务入口无效")
 	}
-	v, err := agentUpgradeProperties(ctx, panelImageUnit(id), "LoadState,FragmentPath,DropInPaths,NeedDaemonReload,User,Group,Type,Restart,KillMode,ActiveState")
+	v, err := agentUpgradeProperties(ctx, panelImageUnit(id), "LoadState,FragmentPath,DropInPaths,NeedDaemonReload,User,Group,Type,Restart,KillMode,ActiveState,SubState,MainPID,ControlPID")
 	if err != nil {
 		return "", false, err
 	}
@@ -68,10 +69,45 @@ func panelImageHost(ctx context.Context, data, id string) (string, bool, error) 
 	case "active", "activating", "deactivating", "reloading":
 		return secure.Hash(raw), true, nil
 	case "inactive", "failed":
+		if v["MainPID"] != "0" || v["ControlPID"] != "0" || v["ActiveState"] == "inactive" && v["SubState"] != "dead" || v["ActiveState"] == "failed" && v["SubState"] != "failed" {
+			return "", false, errors.New("独立镜像服务的进程尚未停止")
+		}
 		return secure.Hash(raw), false, nil
 	default:
 		return "", false, errors.New("独立镜像服务状态不明")
 	}
+}
+
+func dispatchPanelImage(ctx context.Context, id string) error {
+	v, err := agentUpgradeProperties(ctx, panelImageUnit(id), "ActiveState,MainPID,ControlPID")
+	if err != nil {
+		return err
+	}
+	if (v["ActiveState"] != "failed" && v["ActiveState"] != "inactive") || v["MainPID"] != "0" || v["ControlPID"] != "0" {
+		return errors.New("独立镜像服务仍在运行，不能重复启动")
+	}
+	if v["ActiveState"] == "failed" {
+		if _, err = installationSystemctl(ctx, "reset-failed", panelImageUnit(id)); err != nil {
+			return err
+		}
+	}
+	_, err = installationSystemctl(ctx, "start", "--no-block", panelImageUnit(id))
+	return err
+}
+
+// An explicit local-root rescue remains possible when a failed container leaves
+// the Web/API unavailable. It appends the same bounded, durable authorization
+// as API resume and can neither replace the original intent nor release it.
+func RescuePanelImage(ctx context.Context, data, id, epoch string) (Record, error) {
+	r, err := PanelImageStatus(data, id)
+	if err != nil || panelImageTerminal(r) {
+		return r, err
+	}
+	if len(r.PanelImage.Authorizations) == 0 {
+		return r, errors.New("本机镜像事务应使用普通续办入口")
+	}
+	req := imageupdates.Request{Actor: "local-root", RequestID: secure.ID(), Protocol: Protocol, OperationID: id, Input: panelImageAPIInput(r.PanelImage.Intent.Input), Sequence: len(r.PanelImage.Authorizations) + 1, Command: "resume", Epoch: epoch, AuthorizationUntil: time.Now().Unix() + 300}
+	return resumePanelImage(ctx, data, id, epoch, &req)
 }
 
 func RunPanelImage(ctx context.Context, data, id string) (Record, error) {
@@ -112,6 +148,26 @@ func RunPanelImage(ctx context.Context, data, id string) (Record, error) {
 	}
 	defer service()
 	w := &panelImageWorker{j: j, r: r}
+	if a := w.r.PanelImage.Authorizations; len(a) > 0 {
+		last := &a[len(a)-1]
+		if last.ClaimedAt != 0 || last.Request.AuthorizationUntil <= time.Now().Unix() {
+			return r, errors.New("镜像替换启动授权已使用或过期，须显式续办")
+		}
+		access, err := panelUpdateAccess(ctx, j, id, last.Request.Input.MaintenanceID, last.Request.Epoch, false)
+		if err != nil {
+			return r, err
+		}
+		last.ClaimedAt = time.Now().Unix()
+		if last.ClaimedAt >= last.Request.AuthorizationUntil {
+			access()
+			return r, errors.New("镜像替换授权在领取前过期")
+		}
+		err = w.save()
+		access()
+		if err != nil {
+			return r, err
+		}
+	}
 	if !w.r.PanelImage.Rollback {
 		forward, cancel := context.WithDeadline(ctx, time.Unix(r.PanelImage.Intent.Deadline, 0))
 		err = w.forward(forward)

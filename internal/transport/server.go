@@ -19,6 +19,7 @@ import (
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/history"
 	"nginxpanel/internal/hostdns"
+	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/migration"
 	"nginxpanel/internal/modules"
@@ -38,37 +39,38 @@ import (
 )
 
 type Server struct {
-	FrontendVersion func() (string, []string, error)
-	History         *history.Service
-	Audit           *auditlog.Service
-	Fail2ban        *fail2ban.PolicyService
-	Maintenance     *maintenance.Service
-	DB              *sql.DB
-	Auth            *auth.Service
-	Config          *nginxconfig.Service
-	ACME            *acme.Service
-	Monitoring      *monitoring.Service
-	Notifications   *notifications.Service
-	HostDNS         *hostdns.Service
-	Firewall        *firewall.Service
-	Components      *components.Service
-	Installations   *nginxinstall.Service
-	Switches        *nginxswitch.Service
-	AgentUpgrades   *agentupdates.Service
-	Updates         *panelupdates.Service
-	Migration       *migration.Service
-	Backups         *backup.Service
-	Nodes           *nodes.Service
-	Agent           *agent.Client
-	NodeID          string
-	Dev             bool
-	Version         string
-	PanelRuntime    string
-	logStreams      atomic.Int32
-	loginLogWarn    atomic.Int64
-	metricReads     atomic.Int32
-	firewallReads   atomic.Int32
-	fail2banReads   atomic.Int32
+	FrontendVersion    func() (string, []string, error)
+	History            *history.Service
+	Audit              *auditlog.Service
+	Fail2ban           *fail2ban.PolicyService
+	Maintenance        *maintenance.Service
+	DB                 *sql.DB
+	Auth               *auth.Service
+	Config             *nginxconfig.Service
+	ACME               *acme.Service
+	Monitoring         *monitoring.Service
+	Notifications      *notifications.Service
+	HostDNS            *hostdns.Service
+	Firewall           *firewall.Service
+	Components         *components.Service
+	Installations      *nginxinstall.Service
+	Switches           *nginxswitch.Service
+	AgentUpgrades      *agentupdates.Service
+	PanelImageUpgrades *imageupdates.Service
+	Updates            *panelupdates.Service
+	Migration          *migration.Service
+	Backups            *backup.Service
+	Nodes              *nodes.Service
+	Agent              *agent.Client
+	NodeID             string
+	Dev                bool
+	Version            string
+	PanelRuntime       string
+	logStreams         atomic.Int32
+	loginLogWarn       atomic.Int64
+	metricReads        atomic.Int32
+	firewallReads      atomic.Int32
+	fail2banReads      atomic.Int32
 }
 
 var _ apigen.ServerInterface = (*Server)(nil)

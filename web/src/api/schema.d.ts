@@ -130,6 +130,57 @@ export interface paths {
         trace?: never;
     };
 
+    "/panel/images/upgrades/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumePanelImageUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/panel/images/upgrades/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPanelImageUpgrade"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/panel/images/upgrades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPanelImageUpgrades"];
+        put?: never;
+        post: operations["createPanelImageUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
     "/agent/upgrades/{id}/resume": {
         parameters: {
             query?: never;
@@ -2501,6 +2552,66 @@ export interface components {
             revocation: string;
             version: number;
         };
+        PanelImageUpgradeInput: {
+            maintenance_id: string;
+            plan_id: string;
+            prerelease: boolean;
+        };
+        PanelImageUpgradeCreateInput: {
+            maintenance_id: string;
+            prepare_task_id: string;
+        };
+        PanelImageUpgradeAuthorization: {
+            actor: string;
+            request_id: string;
+            protocol: number;
+            operation_id: string;
+            input: components["schemas"]["PanelImageUpgradeInput"];
+            sequence: number;
+            command: string;
+            epoch: string;
+            authorization_until: number;
+        };
+        PanelImageUpgradeOperation: {
+            before_image: string;
+            target_image: string;
+            authorization: components["schemas"]["PanelImageUpgradeAuthorization"];
+            protocol: number;
+            id: string;
+            input: components["schemas"]["PanelImageUpgradeInput"];
+            request_hash: string;
+            intent_sha256: string;
+            sequence: number;
+            command: string;
+            state: string;
+            stage: string;
+            error: string;
+            failure: string;
+            deadline: number;
+            updated_at: number;
+            active: boolean;
+            before_image_id: string;
+            target_image_id: string;
+            target_version: string;
+            panel_id: string;
+            ready_epoch: string;
+            finalized: boolean;
+        };
+        PanelImageUpgradeTask: {
+            id: string;
+            operation_id: string;
+            prepare_task_id: string;
+            input: components["schemas"]["PanelImageUpgradeInput"];
+            sequence: number;
+            command: string;
+            authorization_until: number;
+            state: string;
+            stage: string;
+            error: string;
+            created_at: number;
+            updated_at: number;
+            result?: components["schemas"]["PanelImageUpgradeOperation"];
+        };
         AgentUpgradeInput: {
             maintenance_id: string;
             plan_id: string;
@@ -4213,6 +4324,78 @@ export interface operations {
         };
         requestBody?: never;
         responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+
+    resumePanelImageUpgrade: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    getPanelImageUpgrade: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    createPanelImageUpgrade: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PanelImageUpgradeCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    listPanelImageUpgrades: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
     };
 
     resumeAgentUpgrade: {

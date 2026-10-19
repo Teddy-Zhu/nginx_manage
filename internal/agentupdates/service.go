@@ -196,11 +196,11 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	}
 	defer tx.Rollback()
 	var count, active int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('panel.update','agent.upgrade') AND state NOT IN ('succeeded','failed','rolled_back','cancelled')").Scan(&active); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('panel.update','agent.upgrade','panel.image') AND state NOT IN ('succeeded','failed','rolled_back','cancelled') AND stage<>'restore_isolated'").Scan(&active); err != nil {
 		return zero, err
 	}
 	if active != 0 {
-		return zero, fault.Conflict("已有 Agent 升级任务执行中或待恢复")
+		return zero, fault.Conflict("已有独立更新任务执行中或待恢复")
 	}
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_upgrades").Scan(&count); err != nil {
 		return zero, err

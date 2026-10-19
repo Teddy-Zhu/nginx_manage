@@ -6874,6 +6874,164 @@
           "system.write"
         ]
       }
+    },
+    "/nodes/{connection}/panel/images/upgrades": {
+      "get": {
+        "operationId": "remoteListPanelImageUpgrades",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listPanelImageUpgrades",
+        "x-forward-path": "/panel/images/upgrades",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      },
+      "post": {
+        "operationId": "remoteCreatePanelImageUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/PanelImageUpgradeCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createPanelImageUpgrade",
+        "x-forward-path": "/panel/images/upgrades",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
+    },
+    "/nodes/{connection}/panel/images/upgrades/{id}": {
+      "get": {
+        "operationId": "remoteGetPanelImageUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getPanelImageUpgrade",
+        "x-forward-path": "/panel/images/upgrades/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
+    },
+    "/nodes/{connection}/panel/images/upgrades/{id}/resume": {
+      "post": {
+        "operationId": "remoteResumePanelImageUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resumePanelImageUpgrade",
+        "x-forward-path": "/panel/images/upgrades/{id}/resume",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
     }
   },
   "security": [

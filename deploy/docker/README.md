@@ -107,13 +107,15 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
   --release-plan <signed-panel-plan-sha256> \
   --image ghcr.io/<owner>/nginxpanel-runtime@sha256:<digest> \
   --image-manifest /root/offline/release-manifest.json \
-  --image-signature /root/offline/release-manifest.sig.json \
+  --image-signature /root/offline/release-manifest.sig \
   --image-manifest-sha256 <manifest-sha256>
 /opt/nginxpanel/current/nginxpanel panel-image-status --data-dir /srv/nginxpanel --panel-image <operation-uuid>
 ```
 
-固定发布信任为 `/etc/nginxpanel/release-trust.json`，预发布需显式添加 `--release-prerelease`。API/Web 的普通应用更新不会调用此入口。安装器登记 `nginxpanel-image@.service`；独立 root worker 在持久意图发布后停止、删除原固定实例，切换 root 只读绑定与生成的 Compose，再按固定权限策略重建并检查实际容器、应用、HTTPS、原配置和维护身份。Compose 项目标签及容器标签随事务保留；以后运行 Compose 可能按其配置散列再次重建，仍须使用生成的摘要引用。禁止强制删除、删除原镜像、指定任意 Docker 地址或接管同名未知容器。
+固定发布信任为 `/etc/nginxpanel/release-trust.json`，预发布需显式添加 `--release-prerelease`。普通应用更新与镜像替换分别管理。网页“运行镜像”及 `/api/v1/panel/images/upgrades` 已接入同一独立 worker，创建仅引用已完成的面板准备任务与原维护会话，镜像摘要和离线文件位置从 root 签名计划推导，不能在请求中指定任意镜像地址、路径或信任。安装器登记 `nginxpanel-image@.service`；独立 root worker 在持久意图发布后停止、删除原固定实例，切换 root 只读绑定与生成的 Compose，再按固定权限策略重建并检查实际容器、应用、HTTPS、原配置和维护身份。Compose 项目标签及容器标签随事务保留；以后运行 Compose 可能按其配置散列再次重建，仍须使用生成的摘要引用。禁止强制删除、删除原镜像、指定任意 Docker 地址或接管同名未知容器。
 
 前进期限固定为授权后十分钟。失败先持久记录恢复方向，再使用保留的原镜像恢复；恢复不依赖目标签名文件或目标公钥继续可用，不恢复或覆盖业务数据库。若原容器尚未改变且仍就绪，直接确认原实例。未确认的结果保留 `recovery_required`，继续阻止维护释放。进程停止后只能使用原 UUID 显式续办，不重新创建任务；续办不延长期限，也不反转恢复方向。Agent 重启后，可通过 `panel-image-probe --data-dir /srv/nginxpanel --maintenance-id <maintenance-uuid>` 以登记账户重新确认原维护会话，再将返回的 epoch 传给 `panel-image-resume --data-dir /srv/nginxpanel --panel-image <operation-uuid> --maintenance-epoch <epoch>`。若主机重启使原容器产生新的运行代次，只有显式续办能够登记该代次，并转为确认或恢复原镜像。事务成功或完整恢复后，仍由原维护流程显式释放维护会话。
+
+网页/API 创建持久任务并在 IPC 前记录派发；断连后仅查询原事务，服务停止须以新幂等键显式续办。root 启动授权按连续序号保存且只领取一次，普通 CLI 不能绕过托管任务续办。若容器不可用导致网页无法访问，先用 `panel-image-probe` 核对原维护会话，再执行 `panel-image-rescue --data-dir /srv/nginxpanel --panel-image <operation-uuid> --maintenance-epoch <epoch>`，以 `local-root` 记录追加同一事务的救援授权；页面恢复后会对账该结果，不新建或重放任务。
 
 本轮仅完成实现与源码审阅，未在开发主机调用 Docker、launcher 或修改部署环境；实际容器字段、权限、重建与恢复故障场景待 P5 隔离集中验证。

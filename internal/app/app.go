@@ -36,6 +36,7 @@ import (
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/history"
 	"nginxpanel/internal/hostdns"
+	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/migration"
 	"nginxpanel/internal/modules"
@@ -282,6 +283,7 @@ func Run(ctx context.Context, o Options) error {
 	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	switchService := &nginxswitch.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	agentUpgradeService := &agentupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
+	imageUpgradeService := &imageupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	updateService := &panelupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	fail2banService := &fail2ban.PolicyService{DB: db, Vault: vault, Maintenance: maintenanceService}
 	if agentClient != nil {
@@ -291,7 +293,7 @@ func Run(ctx context.Context, o Options) error {
 	migrationService := &migration.Service{HostDNS: dnsService, Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
 	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
 	static := &frontendHandler{data: o.DataDir, baseID: running.Release.ID, development: spa(o.WebDir), dev: o.Dev}
-	api := (&transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, AgentUpgrades: agentUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
+	api := (&transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, AgentUpgrades: agentUpgradeService, PanelImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			api.ServeHTTP(w, r)
@@ -303,14 +305,14 @@ func Run(ctx context.Context, o Options) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// Shutdown may wait for every worker without receiving another result.
-	result := make(chan error, 17)
+	result := make(chan error, 18)
 	listener, err := net.Listen("tcp", o.Listen)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(15)
+	workers.Add(16)
 	if eventLogs != nil {
 		eventCtx, stopEvents := context.WithCancel(context.WithoutCancel(runCtx))
 		eventDone := make(chan struct{})
@@ -361,6 +363,7 @@ func Run(ctx context.Context, o Options) error {
 	go func() { defer workers.Done(); result <- switchService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- updateService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- agentUpgradeService.Run(runCtx) }()
+	go func() { defer workers.Done(); result <- imageUpgradeService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- maintenanceService.Run(runCtx) }()
 	select {
 	case <-ctx.Done():

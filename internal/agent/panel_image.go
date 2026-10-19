@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	"nginxpanel/internal/fault"
+	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/releases"
@@ -54,6 +57,9 @@ func panelImageLocks(ctx context.Context, data string) (*Journal, func(), error)
 	return j, func() { installer(); lock() }, nil
 }
 func QueuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string) (Record, error) {
+	return queuePanelImage(ctx, in, id, epoch, nil)
+}
+func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, authorization *imageupdates.Request) (out Record, resultErr error) {
 	var zero Record
 	if !validID(id) || !validID(in.MaintenanceID) || id == in.MaintenanceID || !validID(epoch) || !panelSelectionDigest.MatchString(in.Signature.ExpectedManifestSHA256) || in.Stage.TrustPath != "/etc/nginxpanel/release-trust.json" || in.Signature.TrustPath != in.Stage.TrustPath || in.Signature.AllowPrerelease != in.Stage.AllowPrerelease {
 		return zero, errors.New("镜像替换须使用独立操作 UUID、原维护身份、预期清单散列和固定发布信任")
@@ -64,12 +70,26 @@ func QueuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string) 
 	}
 	defer unlock()
 	if prior, err := PanelImageStatus(in.Stage.DataDir, id); err == nil {
+		if len(prior.PanelImage.Authorizations) != 0 || authorization != nil {
+			return zero, errors.New("托管镜像替换须由原 API 授权查询或续办")
+		}
 		if prior.PanelImage.Intent.Input != in {
 			return zero, errors.New("镜像替换标识已用于不同请求")
 		}
 		return prior, nil
 	} else if !os.IsNotExist(err) {
 		return zero, err
+	}
+	publicationAttempted := false
+	defer func() {
+		if authorization != nil && resultErr != nil && !publicationAttempted {
+			resultErr = fault.New(http.StatusConflict, "PANEL_IMAGE_REJECTED", panelRestoreError(resultErr))
+		}
+	}()
+	if authorization != nil {
+		if err := validatePanelImageAuthorization(*authorization, id, in, epoch, 1); err != nil {
+			return zero, err
+		}
 	}
 	access, err := panelUpdateAccess(ctx, j, id, in.MaintenanceID, epoch, false)
 	if err != nil {
@@ -204,15 +224,25 @@ func QueuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string) 
 	now := time.Now().Unix()
 	intent := PanelImageIntent{Input: in, Epoch: epoch, Before: before.Deployment, Target: target, PanelID: before.Release.ID, ApprovalSHA256: selectionValueHash(staged.Approval), BeforeCompose: oldCompose.Bytes(), TargetCompose: newCompose.Bytes(), TargetLabels: targetLabels, Container: container, Baseline: ready, FrontendSHA256: frontend, WorkerUnit: unit, CreatedAt: now, Deadline: now + 600}
 	r := Record{OperationID: id, Kind: panelImageKind, State: "running", Stage: "authorized", RequestHash: panelImageHash(id, intent), PanelImage: &PanelImageOperation{Intent: intent, Epoch: epoch}, CreatedAt: now, UpdatedAt: now}
-	w := &panelImageWorker{j: j, r: r}
-	if err = w.save(); err != nil {
-		return zero, err
+	if authorization != nil {
+		if err := validatePanelImageAuthorization(*authorization, id, in, epoch, 1); err != nil {
+			return zero, err
+		}
+		r.PanelImage.Authorizations = []PanelImageAuthorization{{Request: *authorization, AcceptedAt: time.Now().Unix()}}
 	}
-	_, err = installationSystemctl(ctx, "start", "--no-block", panelImageUnit(id))
+	w := &panelImageWorker{j: j, r: r}
+	publicationAttempted = true
+	if err = w.save(); err != nil {
+		return w.r, err
+	}
+	err = dispatchPanelImage(ctx, id)
 	return w.r, err
 }
 
 func ResumePanelImage(ctx context.Context, data, id, epoch string) (Record, error) {
+	return resumePanelImage(ctx, data, id, epoch, nil)
+}
+func resumePanelImage(ctx context.Context, data, id, epoch string, authorization *imageupdates.Request) (Record, error) {
 	if !validID(epoch) {
 		return Record{}, errors.New("续办镜像替换须提供当前维护 epoch")
 	}
@@ -224,6 +254,21 @@ func ResumePanelImage(ctx context.Context, data, id, epoch string) (Record, erro
 	r, err := PanelImageStatus(data, id)
 	if err != nil || panelImageTerminal(r) {
 		return r, err
+	}
+	if len(r.PanelImage.Authorizations) != 0 && authorization == nil || len(r.PanelImage.Authorizations) == 0 && authorization != nil {
+		return r, errors.New("托管镜像替换须使用原 API 授权续办")
+	}
+	if authorization != nil {
+		a := r.PanelImage.Authorizations
+		if authorization.Sequence <= len(a) {
+			if authorization.Sequence < 1 || a[authorization.Sequence-1].Request != *authorization {
+				return r, errors.New("原镜像替换授权不能改变")
+			}
+			return r, nil
+		}
+		if err := validatePanelImageAuthorization(*authorization, id, r.PanelImage.Intent.Input, epoch, len(a)+1); err != nil {
+			return r, err
+		}
 	}
 	hash, active, err := panelImageHost(ctx, data, id)
 	if err != nil {
@@ -262,11 +307,17 @@ func ResumePanelImage(ctx context.Context, data, id, epoch string) (Record, erro
 			r.State, r.Stage = "compensating", "rollback_stopping"
 		}
 	}
+	if authorization != nil {
+		if err := validatePanelImageAuthorization(*authorization, id, r.PanelImage.Intent.Input, epoch, len(r.PanelImage.Authorizations)+1); err != nil {
+			return r, err
+		}
+		r.PanelImage.Authorizations = append(r.PanelImage.Authorizations, PanelImageAuthorization{Request: *authorization, AcceptedAt: time.Now().Unix()})
+	}
 	w := &panelImageWorker{j: j, r: r}
 	if err = w.save(); err != nil {
 		return r, err
 	}
-	_, err = installationSystemctl(ctx, "start", "--no-block", panelImageUnit(id))
+	err = dispatchPanelImage(ctx, id)
 	return w.r, err
 }
 

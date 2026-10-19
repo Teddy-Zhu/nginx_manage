@@ -98,7 +98,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-runtime-staged \
 
 自定义本机信任文件须与准备一致；预发布须显式传入 `--release-prerelease`。完整目录同步并不覆盖发布后，才写入 root 只读的 `runtime/approvals/<计划散列>.json`。首次绑定和暂存共用发布锁，最多保留 32 个版本和 64 个批准记录；中断前已复制但未批准的目录不能作为更新授权。相同计划重复暂存使用原批准时间、主机/协议身份和初始信任散列重新认证当前公钥，增加无关公钥不改变计划，撤销签名公钥则拒绝续用。续用仍需保留原准备计划及签名材料；只读查询不下载或执行程序。
 
-`state=staged` 仅表示持久副本及其批准记录就绪，返回数据库 schema、协议门槛和签名回滚声明供后续准入使用。不切换当前版本、不迁移数据库、不重启面板或 Nginx/Fail2ban；独立 worker、版本切换、健康检查与失败回滚编排仍待接入。本入口尚未运行，统一留到 P5 集中验证。
+`state=staged` 仅表示持久副本及其批准记录就绪，返回数据库 schema、协议门槛和签名回滚声明供后续准入使用。不切换当前版本、不迁移数据库、不重启面板或 Nginx/Fail2ban；独立 worker、版本切换、健康检查与失败回滚编排已在后续更新入口接入。本入口尚未运行，统一留到 P5 集中验证。
 
 ## 面板程序版本选择
 
@@ -357,3 +357,12 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 网页进入「Agent 升级」，选择当前用户可读取且已完成签名暂存的面板准备任务，在原维护会话处于 held 时提交。`POST /api/v1/agent/upgrades` 接收 `maintenance_id` 和 `prepare_task_id`，要求 `components.manage`、`system.write`、近期认证及幂等键；浏览器同时要求 CSRF。`GET /api/v1/agent/upgrades` 与 `GET /api/v1/agent/upgrades/{id}` 读取本人任务，`auth.manage` 可读取其他用户任务。`POST /api/v1/agent/upgrades/{id}/resume` 要求相同写权限、原维护会话、当前 epoch、新幂等授权和已停止且未结束的原 root 事务。返回统一使用 `code/message/data/request_id/node_id`，成功受理为 HTTP 202。远程节点仅转发这些明确资源，并核对相同权限。
 
 任务和授权加密保存，单次启动授权五分钟，root 最多保留 32 次连续授权，本地每任务最多保留 64 次请求、共 64 项任务。派发标记先提交，HTTP 断开、Agent 重启或服务启动结果不明后只查询原记录；曾提交但 root 记录缺失时须本机处理。源备份隔离任务不得在恢复目标提交或续办。面板更新与 Agent 升级不能并行；事务确认后在配置维护页显式释放维护锁。首次安装器预建 root 程序发布目录，并登记 `/etc/tmpfiles.d/nginxpanel.conf` 以在开机时创建共享安装锁目录；Agent 服务只获得发布子目录写入权，程序指针仍由独立升级服务切换。
+
+
+### 面板运行镜像替换
+
+容器面板在“运行镜像”页选择已完成的签名面板准备任务，持有配置维护会话后更换 launcher 镜像。当前应用、前端选择与业务数据库保留；运行镜像须已在目标主机按摘要准备。统一 API 为 `GET/POST /api/v1/panel/images/upgrades`、`GET /api/v1/panel/images/upgrades/{id}` 和 `POST /api/v1/panel/images/upgrades/{id}/resume`，创建字段为 `maintenance_id`、`prepare_task_id`。写请求需要组件管理、系统写权限、重新认证或显式授权 Token、幂等键；远程节点使用已登记的同资源转发路径。
+
+持久任务与 root 意图分别保存，签名清单决定镜像地址，禁止调用者指定 Docker 地址、宿主路径、任意镜像或发布信任。启动/续办授权有效期五分钟、连续保存并仅领取一次；断连、进程停止和结果不明只查询原 UUID，显式续办不延长原十分钟前进期限。独立 worker 的失败恢复和本机救援见 [Docker 部署说明](../deploy/docker/README.md#面板容器与-launcher-对端核对)。页面退出不取消 worker，替换期间页面可能断开，恢复连接后继续查询原任务。
+
+面板更新、Agent 升级和运行镜像替换共用活动任务限制，未结束时不能释放维护；完整备份中的隔离源任务保留审计和结果，不参与目标的新任务活动限制，不能从目标续办或重放。实际容器重建、恢复、权限和远程调用尚未执行，待 P5 隔离集中验证。
