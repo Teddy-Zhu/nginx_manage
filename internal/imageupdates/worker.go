@@ -27,7 +27,7 @@ func (s *Service) Run(ctx context.Context) error {
 			cancel()
 			if err != nil && ctx.Err() == nil {
 				if !reported {
-					slog.Warn("面板镜像替换任务对账失败", "error", err)
+					slog.Warn("镜像替换任务对账失败", "error", err)
 				}
 				reported = true
 			} else if err == nil {
@@ -44,10 +44,10 @@ func (s *Service) Run(ctx context.Context) error {
 
 func (s *Service) observed(ctx context.Context, t Task, base dbgen.Task, op Operation) error {
 	if err := op.Validate(t.OperationID, t.Input); err != nil {
-		return s.store(ctx, t, base, "recovery_required", "operation_mismatch", "面板镜像替换回执与原任务不一致", nil, false)
+		return s.store(ctx, t, base, "recovery_required", "operation_mismatch", "镜像替换回执与原任务不一致", nil, false)
 	}
 	if t.Result != nil && t.Result.IntentSHA256 != op.IntentSHA256 {
-		return s.store(ctx, t, base, "recovery_required", "intent_mismatch", "面板镜像替换原意图已偏离，须本机恢复", nil, false)
+		return s.store(ctx, t, base, "recovery_required", "intent_mismatch", "镜像替换原意图已偏离，须本机恢复", nil, false)
 	}
 	message := op.Error
 	if message == "" && op.Failure != "" {
@@ -80,31 +80,31 @@ func (s *Service) next(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	op, err := s.Agent.PanelImageUpgrade(ctx, t.OperationID)
+	op, err := s.Agent.ImageUpgrade(ctx, t.Input.Component, t.OperationID)
 	var prior *Operation
 	var remote *fault.Error
 	if errors.As(err, &remote) && remote.Status == 404 && remote.Code == "NOT_FOUND" {
 		if t.dispatched || base.SubmitStarted != 0 || base.AgentAccepted != 0 || t.Sequence != 1 {
-			return s.store(ctx, t, base, "recovery_required", "operation_missing", "曾提交的面板镜像替换记录缺失，不能重建或假定未执行", nil, false)
+			return s.store(ctx, t, base, "recovery_required", "operation_missing", "曾提交的镜像替换记录缺失，不能重建或假定未执行", nil, false)
 		}
 	} else if err != nil {
 		if errors.As(err, &remote) && (remote.Status == 400 || remote.Status == 409) {
 			return s.store(ctx, t, base, "recovery_required", "operation_mismatch", remote.Message, nil, false)
 		}
-		return s.store(ctx, t, base, t.State, "agent_unconfirmed", "无法确认面板镜像替换状态，继续查询原事务", nil, false)
+		return s.store(ctx, t, base, t.State, "agent_unconfirmed", "无法确认镜像替换状态，继续查询原事务", nil, false)
 	} else {
 		if err = op.Validate(t.OperationID, t.Input); err != nil {
-			return s.store(ctx, t, base, "recovery_required", "operation_mismatch", "面板镜像替换回执与原任务不一致", nil, false)
+			return s.store(ctx, t, base, "recovery_required", "operation_mismatch", "镜像替换回执与原任务不一致", nil, false)
 		}
 		if t.Result != nil && t.Result.IntentSHA256 != op.IntentSHA256 {
-			return s.store(ctx, t, base, "recovery_required", "intent_mismatch", "面板镜像替换原意图已偏离，须本机恢复", nil, false)
+			return s.store(ctx, t, base, "recovery_required", "intent_mismatch", "镜像替换原意图已偏离，须本机恢复", nil, false)
 		}
 		prior = &op
 		if op.Finalized || op.Authorization == t.Request || op.Active || op.Sequence >= t.Sequence {
 			return s.observed(ctx, t, base, op)
 		}
 		if op.Sequence != t.Sequence-1 {
-			return s.store(ctx, t, base, "recovery_required", "control_mismatch", "面板镜像替换续办授权与独立事务序号不连续", prior, true)
+			return s.store(ctx, t, base, "recovery_required", "control_mismatch", "镜像替换续办授权与独立事务序号不连续", prior, true)
 		}
 		if t.dispatched {
 			return s.store(ctx, t, base, "recovery_required", "control_unconfirmed", "续办提交尚未确认，仅查询原事务；再次执行须显式授权", prior, true)
@@ -115,15 +115,15 @@ func (s *Service) next(ctx context.Context) error {
 		if prior == nil {
 			state = "failed"
 		}
-		return s.store(ctx, t, base, state, "authorization_expired", "面板镜像替换启动授权已过期，尚未提交本次授权", prior, prior != nil)
+		return s.store(ctx, t, base, state, "authorization_expired", "镜像替换启动授权已过期，尚未提交本次授权", prior, prior != nil)
 	}
 	root, done, err := s.Maintenance.Held(t.Input.MaintenanceID)
 	if err != nil {
-		return s.store(ctx, t, base, "recovery_required", "maintenance_unconfirmed", "等待原维护会话确认，尚未提交面板镜像替换授权", prior, prior != nil)
+		return s.store(ctx, t, base, "recovery_required", "maintenance_unconfirmed", "等待原维护会话确认，尚未提交镜像替换授权", prior, prior != nil)
 	}
 	defer done()
 	if root.Epoch != t.Request.Epoch {
-		return s.store(ctx, t, base, "recovery_required", "epoch_changed", "维护授权已变化，须重新确认原面板镜像替换续办", prior, prior != nil)
+		return s.store(ctx, t, base, "recovery_required", "epoch_changed", "维护授权已变化，须重新确认原镜像替换续办", prior, prior != nil)
 	}
 	// Persist the attempt before contacting root. A lost response only queries
 	// the original operation and cannot recreate or restart the root worker.
@@ -157,12 +157,12 @@ func (s *Service) next(ctx context.Context) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	op, err = s.Agent.SubmitPanelImageUpgrade(ctx, t.Request)
+	op, err = s.Agent.SubmitImageUpgrade(ctx, t.Request)
 	if err != nil {
 		if errors.As(err, &remote) && (remote.Status == 400 || remote.Status == 409) {
 			// Only this root code proves rejection before parent publication while
 			// holding the worker locks. All other submission failures stay uncertain.
-			if prior == nil && remote.Code == "PANEL_IMAGE_REJECTED" {
+			if prior == nil && remote.Code == rejectionCode(t.Input.Component) {
 				return s.store(ctx, t, base, "failed", "preflight_rejected", remote.Message, nil, false)
 			}
 			state, stage := "recovery_required", "control_rejected"
@@ -171,7 +171,7 @@ func (s *Service) next(ctx context.Context) error {
 			}
 			return s.store(ctx, t, base, state, stage, remote.Message, prior, prior != nil)
 		}
-		return s.store(ctx, t, base, "recovery_required", "agent_unconfirmed", "提交结果尚未确认，仅查询原面板镜像替换记录", prior, prior != nil)
+		return s.store(ctx, t, base, "recovery_required", "agent_unconfirmed", "提交结果尚未确认，仅查询原镜像替换记录", prior, prior != nil)
 	}
 	return s.observed(ctx, t, base, op)
 }
@@ -190,7 +190,7 @@ func (s *Service) store(ctx context.Context, t Task, base dbgen.Task, state, sta
 			return err
 		}
 		if len(raw) > 12<<10 {
-			return errors.New("面板镜像替换回执超出持久化预算")
+			return errors.New("镜像替换回执超出持久化预算")
 		}
 		hash = secure.Hash(raw)
 	}
@@ -221,9 +221,16 @@ func (s *Service) store(ctx context.Context, t Task, base dbgen.Task, state, sta
 	}
 
 	if state != base.State && (state == "succeeded" || state == "failed" || state == "rolled_back" || state == "recovery_required") {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,'panel-image-upgrade-worker','system','panel.image',?,?,?)", secure.ID(), t.ID, state, now); err != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,'image-upgrade-worker','system',?,?,?,?)", secure.ID(), Kind(t.Input.Component), t.ID, state, now); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+func rejectionCode(component string) string {
+	if component == Nginx {
+		return "NGINX_IMAGE_REJECTED"
+	}
+	return "PANEL_IMAGE_REJECTED"
 }

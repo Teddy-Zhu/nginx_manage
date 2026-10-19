@@ -1377,11 +1377,13 @@ type NodeConnection struct {
 	Version      int64                   `json:"version"`
 }
 
-// PanelImageUpgradeInput defines model for PanelImageUpgradeInput.
-type PanelImageUpgradeInput struct {
-	MaintenanceId string `json:"maintenance_id"`
-	PlanId        string `json:"plan_id"`
-	Prerelease    bool   `json:"prerelease"`
+// ImageUpgradeInput defines model for ImageUpgradeInput.
+type ImageUpgradeInput struct {
+	Component     ImageUpgradeInputComponent `json:"component"`
+	AllowDowntime bool                       `json:"allow_downtime"`
+	MaintenanceId string                     `json:"maintenance_id"`
+	PlanId        string                     `json:"plan_id"`
+	Prerelease    bool                       `json:"prerelease"`
 }
 
 // PanelImageUpgradeCreateInput defines model for PanelImageUpgradeCreateInput.
@@ -1390,61 +1392,74 @@ type PanelImageUpgradeCreateInput struct {
 	PrepareTaskId string `json:"prepare_task_id"`
 }
 
-// PanelImageUpgradeAuthorization defines model for PanelImageUpgradeAuthorization.
-type PanelImageUpgradeAuthorization struct {
-	Actor              string                 `json:"actor"`
-	RequestId          string                 `json:"request_id"`
-	Protocol           int64                  `json:"protocol"`
+type ImageUpgradeInputComponent = string
+
+const (
+	ImageUpgradeInputComponentPanelLauncher ImageUpgradeInputComponent = "panel-launcher"
+	ImageUpgradeInputComponentNginx         ImageUpgradeInputComponent = "nginx"
+)
+
+type NginxImageUpgradeCreateInput struct {
+	MaintenanceId string `json:"maintenance_id"`
+	PrepareTaskId string `json:"prepare_task_id"`
+	AllowDowntime bool   `json:"allow_downtime"`
+}
+
+// ImageUpgradeAuthorization defines model for ImageUpgradeAuthorization.
+type ImageUpgradeAuthorization struct {
+	Actor              string            `json:"actor"`
+	RequestId          string            `json:"request_id"`
+	Protocol           int64             `json:"protocol"`
+	OperationId        string            `json:"operation_id"`
+	Input              ImageUpgradeInput `json:"input"`
+	Sequence           int64             `json:"sequence"`
+	Command            string            `json:"command"`
+	Epoch              string            `json:"epoch"`
+	AuthorizationUntil int64             `json:"authorization_until"`
+}
+
+// ImageUpgradeOperation defines model for ImageUpgradeOperation.
+type ImageUpgradeOperation struct {
+	BeforeImage   string                    `json:"before_image"`
+	TargetImage   string                    `json:"target_image"`
+	Authorization ImageUpgradeAuthorization `json:"authorization"`
+	Protocol      int64                     `json:"protocol"`
+	Id            string                    `json:"id"`
+	Input         ImageUpgradeInput         `json:"input"`
+	RequestHash   string                    `json:"request_hash"`
+	IntentSha256  string                    `json:"intent_sha256"`
+	Sequence      int64                     `json:"sequence"`
+	Command       string                    `json:"command"`
+	State         string                    `json:"state"`
+	Stage         string                    `json:"stage"`
+	Error         string                    `json:"error"`
+	Failure       string                    `json:"failure"`
+	Deadline      int64                     `json:"deadline"`
+	UpdatedAt     int64                     `json:"updated_at"`
+	Active        bool                      `json:"active"`
+	BeforeImageId string                    `json:"before_image_id"`
+	TargetImageId string                    `json:"target_image_id"`
+	TargetVersion string                    `json:"target_version"`
+	PanelId       string                    `json:"panel_id"`
+	ReadyEpoch    string                    `json:"ready_epoch"`
+	Finalized     bool                      `json:"finalized"`
+}
+
+// ImageUpgradeTask defines model for ImageUpgradeTask.
+type ImageUpgradeTask struct {
+	Id                 string                 `json:"id"`
 	OperationId        string                 `json:"operation_id"`
-	Input              PanelImageUpgradeInput `json:"input"`
+	PrepareTaskId      string                 `json:"prepare_task_id"`
+	Input              ImageUpgradeInput      `json:"input"`
 	Sequence           int64                  `json:"sequence"`
 	Command            string                 `json:"command"`
-	Epoch              string                 `json:"epoch"`
 	AuthorizationUntil int64                  `json:"authorization_until"`
-}
-
-// PanelImageUpgradeOperation defines model for PanelImageUpgradeOperation.
-type PanelImageUpgradeOperation struct {
-	BeforeImage   string                         `json:"before_image"`
-	TargetImage   string                         `json:"target_image"`
-	Authorization PanelImageUpgradeAuthorization `json:"authorization"`
-	Protocol      int64                          `json:"protocol"`
-	Id            string                         `json:"id"`
-	Input         PanelImageUpgradeInput         `json:"input"`
-	RequestHash   string                         `json:"request_hash"`
-	IntentSha256  string                         `json:"intent_sha256"`
-	Sequence      int64                          `json:"sequence"`
-	Command       string                         `json:"command"`
-	State         string                         `json:"state"`
-	Stage         string                         `json:"stage"`
-	Error         string                         `json:"error"`
-	Failure       string                         `json:"failure"`
-	Deadline      int64                          `json:"deadline"`
-	UpdatedAt     int64                          `json:"updated_at"`
-	Active        bool                           `json:"active"`
-	BeforeImageId string                         `json:"before_image_id"`
-	TargetImageId string                         `json:"target_image_id"`
-	TargetVersion string                         `json:"target_version"`
-	PanelId       string                         `json:"panel_id"`
-	ReadyEpoch    string                         `json:"ready_epoch"`
-	Finalized     bool                           `json:"finalized"`
-}
-
-// PanelImageUpgradeTask defines model for PanelImageUpgradeTask.
-type PanelImageUpgradeTask struct {
-	Id                 string                      `json:"id"`
-	OperationId        string                      `json:"operation_id"`
-	PrepareTaskId      string                      `json:"prepare_task_id"`
-	Input              PanelImageUpgradeInput      `json:"input"`
-	Sequence           int64                       `json:"sequence"`
-	Command            string                      `json:"command"`
-	AuthorizationUntil int64                       `json:"authorization_until"`
-	State              string                      `json:"state"`
-	Stage              string                      `json:"stage"`
-	Error              string                      `json:"error"`
-	CreatedAt          int64                       `json:"created_at"`
-	UpdatedAt          int64                       `json:"updated_at"`
-	Result             *PanelImageUpgradeOperation `json:"result,omitempty"`
+	State              string                 `json:"state"`
+	Stage              string                 `json:"stage"`
+	Error              string                 `json:"error"`
+	CreatedAt          int64                  `json:"created_at"`
+	UpdatedAt          int64                  `json:"updated_at"`
+	Result             *ImageUpgradeOperation `json:"result,omitempty"`
 }
 
 // AgentUpgradeInput defines model for AgentUpgradeInput.
@@ -4852,6 +4867,12 @@ type CreatePanelImageUpgradeParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
+type CreateNginxImageUpgradeParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 type CreateAgentUpgradeParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
@@ -4859,6 +4880,12 @@ type CreateAgentUpgradeParams struct {
 }
 
 type ResumePanelImageUpgradeParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+type ResumeNginxImageUpgradeParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
@@ -5426,6 +5453,8 @@ type CreateNodeJSONRequestBody = NodeCreateInput
 
 type CreatePanelImageUpgradeJSONRequestBody = PanelImageUpgradeCreateInput
 
+type CreateNginxImageUpgradeJSONRequestBody = NginxImageUpgradeCreateInput
+
 type CreateAgentUpgradeJSONRequestBody = AgentUpgradeCreateInput
 
 type CreatePanelUpdateJSONRequestBody = PanelUpdateCreateInput
@@ -5646,6 +5675,10 @@ type ServerInterface interface {
 	CreatePanelImageUpgrade(w http.ResponseWriter, r *http.Request, params CreatePanelImageUpgradeParams)
 	GetPanelImageUpgrade(w http.ResponseWriter, r *http.Request, id ID)
 	ResumePanelImageUpgrade(w http.ResponseWriter, r *http.Request, id ID, params ResumePanelImageUpgradeParams)
+	ListNginxImageUpgrades(w http.ResponseWriter, r *http.Request)
+	CreateNginxImageUpgrade(w http.ResponseWriter, r *http.Request, params CreateNginxImageUpgradeParams)
+	GetNginxImageUpgrade(w http.ResponseWriter, r *http.Request, id ID)
+	ResumeNginxImageUpgrade(w http.ResponseWriter, r *http.Request, id ID, params ResumeNginxImageUpgradeParams)
 	ListAgentUpgrades(w http.ResponseWriter, r *http.Request)
 	CreateAgentUpgrade(w http.ResponseWriter, r *http.Request, params CreateAgentUpgradeParams)
 	GetAgentUpgrade(w http.ResponseWriter, r *http.Request, id ID)
@@ -7742,6 +7775,183 @@ func (siw *ServerInterfaceWrapper) ResumePanelImageUpgrade(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ResumePanelImageUpgrade(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNginxImageUpgrades operation middleware
+func (siw *ServerInterfaceWrapper) ListNginxImageUpgrades(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNginxImageUpgrades(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNginxImageUpgrade operation middleware
+func (siw *ServerInterfaceWrapper) CreateNginxImageUpgrade(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateNginxImageUpgradeParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNginxImageUpgrade(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNginxImageUpgrade operation middleware
+func (siw *ServerInterfaceWrapper) GetNginxImageUpgrade(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNginxImageUpgrade(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumeNginxImageUpgrade operation middleware
+func (siw *ServerInterfaceWrapper) ResumeNginxImageUpgrade(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResumeNginxImageUpgradeParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeNginxImageUpgrade(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13507,6 +13717,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/images/upgrades", wrapper.CreatePanelImageUpgrade)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/images/upgrades/{id}", wrapper.GetPanelImageUpgrade)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/images/upgrades/{id}/resume", wrapper.ResumePanelImageUpgrade)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/images/upgrades", wrapper.ListNginxImageUpgrades)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/images/upgrades", wrapper.CreateNginxImageUpgrade)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/images/upgrades/{id}", wrapper.GetNginxImageUpgrade)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/images/upgrades/{id}/resume", wrapper.ResumeNginxImageUpgrade)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/agent/upgrades", wrapper.ListAgentUpgrades)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/agent/upgrades", wrapper.CreateAgentUpgrade)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/agent/upgrades/{id}", wrapper.GetAgentUpgrade)

@@ -13,23 +13,23 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { NAlert, NButton, NFormItem, NPopconfirm, NSelect, NTag } from "naive-ui";
-import { useNodeAPI, apiError, type PanelImageUpgradeTask, type ComponentTask, type MaintenanceView } from "../api/client";
+import { useNodeAPI, apiError, type ImageUpgradeTask, type ComponentTask, type MaintenanceView } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 
 const api = useNodeAPI(), session = useSession(), { run, busy } = useAction();
 let keyFor = useIdempotency();
-const preparations = ref<ComponentTask[]>([]), tasks = ref<PanelImageUpgradeTask[]>([]), maintenance = ref<MaintenanceView | null>(null), selected = ref(""), error = ref("");
+const preparations = ref<ComponentTask[]>([]), tasks = ref<ImageUpgradeTask[]>([]), maintenance = ref<MaintenanceView | null>(null), selected = ref(""), error = ref("");
 const canWrite = computed(() => !!session.me?.scopes.includes("components.manage") && !!session.me?.scopes.includes("system.write"));
 const held = computed(() => maintenance.value?.phase === "held" && maintenance.value.agent.phase === "held" && maintenance.value.agent.id === maintenance.value.session?.task_id && maintenance.value.agent.epoch === maintenance.value.session?.root_epoch);
-const prepared = computed(() => preparations.value.filter((t) => t.action === "prepare" && t.state === "succeeded" && t.result?.runtime_ready && t.result.panel && t.result.release));
+const prepared = computed(() => preparations.value.filter((t) => t.action === "prepare" && t.state === "succeeded" && t.result?.runtime_ready && t.result.panel && t.result.release?.images?.some((image) => image.id === "panel-launcher")));
 const chosen = computed(() => prepared.value.find((t) => t.id === selected.value));
 const active = computed(() => tasks.value.some((t) => t.stage !== "restore_isolated" && !["succeeded", "failed", "rolled_back", "cancelled"].includes(t.state)));
 const canCreate = computed(() => canWrite.value && held.value && !!chosen.value && !active.value && !busy.value);
 const states: Record<string, string> = { queued: "排队中", running: "升级中", compensating: "恢复原版本", recovery_required: "待恢复", succeeded: "升级完成", failed: "升级未完成", rolled_back: "已恢复原版本", cancelled: "已取消" };
 const stages: Record<string, string> = { queued: "等待受理", control_pending: "等待续办", agent_submit_pending: "正在提交", authorized: "已授权", stopping: "停止原容器", removing: "移除原容器", selecting: "切换镜像", creating: "创建新容器", starting: "启动新容器", checking: "检查运行状态", committed: "镜像替换完成", rollback_stopping: "停止候选容器", rollback_selecting: "恢复原镜像", rollback_creating: "创建原镜像容器", rollback_starting: "启动原镜像容器", rollback_checking: "检查恢复状态", compensated: "原镜像已恢复", authorization_expired: "授权已过期", maintenance_unconfirmed: "等待维护确认", epoch_changed: "维护授权已变化", agent_unconfirmed: "等待执行状态", preflight_rejected: "准备检查未通过", preflight_unconfirmed: "准备结果待核对", control_rejected: "续办未受理", operation_missing: "原操作缺失", operation_mismatch: "原操作待核对", intent_mismatch: "原意图待核对", control_mismatch: "续办授权待核对", control_unconfirmed: "续办结果待核对", restore_isolated: "源任务已隔离" };
 function date(value: number) { return new Date(value * 1000).toLocaleString(); }
-function canResume(t: PanelImageUpgradeTask) {
+function canResume(t: ImageUpgradeTask) {
   const result = t.result;
   return canWrite.value && held.value && maintenance.value?.agent.id === t.input.maintenance_id && !busy.value && t.state === "recovery_required" && !["operation_missing", "operation_mismatch", "intent_mismatch", "control_mismatch", "restore_isolated"].includes(t.stage) && (result ? !result.active && !result.finalized && result.sequence < 32 : ["epoch_changed", "maintenance_unconfirmed"].includes(t.stage));
 }
@@ -49,7 +49,7 @@ async function upgrade() {
   await run(async () => { const t = await api.createPanelImageUpgrade(input, keyFor(input)); tasks.value = [t, ...tasks.value.filter((item) => item.id !== t.id)]; keyFor = useIdempotency(); }, "面板镜像替换任务已受理");
   await load();
 }
-async function resume(t: PanelImageUpgradeTask) {
+async function resume(t: ImageUpgradeTask) {
   if (!canResume(t)) return;
   await run(async () => { await api.resumePanelImageUpgrade(t.id, keyFor({ id: t.id, sequence: t.result?.sequence ?? 0, command: "resume" })); keyFor = useIdempotency(); }, "原镜像替换续办请求已受理");
   await load();

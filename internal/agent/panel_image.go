@@ -87,7 +87,7 @@ func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, 
 		}
 	}()
 	if authorization != nil {
-		if err := validatePanelImageAuthorization(*authorization, id, in, epoch, 1); err != nil {
+		if err := validateImageAuthorization(*authorization, id, panelImageAPIInput(in), epoch, 1); err != nil {
 			return zero, err
 		}
 	}
@@ -225,10 +225,10 @@ func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, 
 	intent := PanelImageIntent{Input: in, Epoch: epoch, Before: before.Deployment, Target: target, PanelID: before.Release.ID, ApprovalSHA256: selectionValueHash(staged.Approval), BeforeCompose: oldCompose.Bytes(), TargetCompose: newCompose.Bytes(), TargetLabels: targetLabels, Container: container, Baseline: ready, FrontendSHA256: frontend, WorkerUnit: unit, CreatedAt: now, Deadline: now + 600}
 	r := Record{OperationID: id, Kind: panelImageKind, State: "running", Stage: "authorized", RequestHash: panelImageHash(id, intent), PanelImage: &PanelImageOperation{Intent: intent, Epoch: epoch}, CreatedAt: now, UpdatedAt: now}
 	if authorization != nil {
-		if err := validatePanelImageAuthorization(*authorization, id, in, epoch, 1); err != nil {
+		if err := validateImageAuthorization(*authorization, id, panelImageAPIInput(in), epoch, 1); err != nil {
 			return zero, err
 		}
-		r.PanelImage.Authorizations = []PanelImageAuthorization{{Request: *authorization, AcceptedAt: time.Now().Unix()}}
+		r.PanelImage.Authorizations = []ImageAuthorization{{Request: *authorization, AcceptedAt: time.Now().Unix()}}
 	}
 	w := &panelImageWorker{j: j, r: r}
 	publicationAttempted = true
@@ -266,7 +266,7 @@ func resumePanelImage(ctx context.Context, data, id, epoch string, authorization
 			}
 			return r, nil
 		}
-		if err := validatePanelImageAuthorization(*authorization, id, r.PanelImage.Intent.Input, epoch, len(a)+1); err != nil {
+		if err := validateImageAuthorization(*authorization, id, panelImageAPIInput(r.PanelImage.Intent.Input), epoch, len(a)+1); err != nil {
 			return r, err
 		}
 	}
@@ -308,10 +308,10 @@ func resumePanelImage(ctx context.Context, data, id, epoch string, authorization
 		}
 	}
 	if authorization != nil {
-		if err := validatePanelImageAuthorization(*authorization, id, r.PanelImage.Intent.Input, epoch, len(r.PanelImage.Authorizations)+1); err != nil {
+		if err := validateImageAuthorization(*authorization, id, panelImageAPIInput(r.PanelImage.Intent.Input), epoch, len(r.PanelImage.Authorizations)+1); err != nil {
 			return r, err
 		}
-		r.PanelImage.Authorizations = append(r.PanelImage.Authorizations, PanelImageAuthorization{Request: *authorization, AcceptedAt: time.Now().Unix()})
+		r.PanelImage.Authorizations = append(r.PanelImage.Authorizations, ImageAuthorization{Request: *authorization, AcceptedAt: time.Now().Unix()})
 	}
 	w := &panelImageWorker{j: j, r: r}
 	if err = w.save(); err != nil {

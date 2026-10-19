@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
 	"os"
@@ -115,6 +116,26 @@ func RunNginxImage(ctx context.Context, data, id string) (Record, error) {
 		return r, errors.New("Nginx 镜像 worker 不是原服务主进程")
 	}
 	w := &nginxImageWorker{j: j, r: r}
+	if as := w.r.NginxImage.Authorizations; len(as) > 0 {
+		last := &as[len(as)-1]
+		if last.ClaimedAt != 0 || last.Request.AuthorizationUntil <= time.Now().Unix() {
+			return r, errors.New("Nginx 镜像启动授权已使用或过期，须显式续办")
+		}
+		access, e := panelUpdateAccess(ctx, j, id, last.Request.Input.MaintenanceID, last.Request.Epoch, false)
+		if e != nil {
+			return r, e
+		}
+		last.ClaimedAt = time.Now().Unix()
+		if last.ClaimedAt >= last.Request.AuthorizationUntil {
+			access()
+			return r, errors.New("Nginx 镜像启动授权在领取前过期")
+		}
+		e = w.save()
+		access()
+		if e != nil {
+			return r, e
+		}
+	}
 	if !r.NginxImage.Rollback {
 		forward, cancel := context.WithDeadline(ctx, time.Unix(r.Deadline, 0))
 		err = w.forward(forward)
@@ -204,4 +225,18 @@ func (w *nginxImageWorker) recover(ctx context.Context) error {
 		return w.confirm(ctx, i.Before, i.BeforeCompose)
 	}
 	return w.runtime(ctx)
+}
+
+// The host root can append a bounded rescue authorization when restarting the
+// Agent is necessary to make the managed Web/API workflow available again.
+func RescueNginxImage(ctx context.Context, data, id, epoch string) (Record, error) {
+	r, err := NginxImageStatus(data, id)
+	if err != nil || nginxImageTerminal(r) {
+		return r, err
+	}
+	if len(r.NginxImage.Authorizations) == 0 {
+		return r, errors.New("本机 Nginx 镜像事务应使用普通续办入口")
+	}
+	req := imageupdates.Request{Actor: "local-root", RequestID: secure.ID(), Protocol: Protocol, OperationID: id, Input: nginxImageAPIInput(r.NginxImage.Intent.Input), Sequence: len(r.NginxImage.Authorizations) + 1, Command: "resume", Epoch: epoch, AuthorizationUntil: time.Now().Unix() + 300}
+	return resumeNginxImage(ctx, data, id, epoch, &req)
 }

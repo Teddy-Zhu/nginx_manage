@@ -232,7 +232,7 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 		return out, err
 	}
 	if imageUpgrades != 0 {
-		return out, fault.Conflict("原面板镜像替换仍在执行或待恢复，不能释放维护锁")
+		return out, fault.Conflict("原镜像替换仍在执行或待恢复，不能释放维护锁")
 	}
 	session, err := readSession(tx.QueryRowContext(ctx, "SELECT "+columns+" FROM maintenance_sessions WHERE task_id=?", id))
 	if errors.Is(err, sql.ErrNoRows) {

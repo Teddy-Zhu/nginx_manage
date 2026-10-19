@@ -7082,6 +7082,164 @@
         ],
         "description": "签名镜像拉取；action 必须为 pull，引用本人的 prepare_task_id，仅允许 panel-launcher 或 nginx 的已签名摘要与本机架构。要求 components.manage 与 system.write。"
       }
+    },
+    "/nodes/{connection}/nginx/images/upgrades": {
+      "get": {
+        "operationId": "remoteListNginxImageUpgrades",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listNginxImageUpgrades",
+        "x-forward-path": "/nginx/images/upgrades",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      },
+      "post": {
+        "operationId": "remoteCreateNginxImageUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/NginxImageUpgradeCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createNginxImageUpgrade",
+        "x-forward-path": "/nginx/images/upgrades",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
+    },
+    "/nodes/{connection}/nginx/images/upgrades/{id}": {
+      "get": {
+        "operationId": "remoteGetNginxImageUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getNginxImageUpgrade",
+        "x-forward-path": "/nginx/images/upgrades/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
+    },
+    "/nodes/{connection}/nginx/images/upgrades/{id}/resume": {
+      "post": {
+        "operationId": "remoteResumeNginxImageUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resumeNginxImageUpgrade",
+        "x-forward-path": "/nginx/images/upgrades/{id}/resume",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
     }
   },
   "security": [

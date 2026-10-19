@@ -44,8 +44,9 @@ export type ComponentAsset = components["schemas"]["ComponentAsset"];
 export type ComponentRelease = components["schemas"]["ComponentRelease"];
 export type ComponentOperation = components["schemas"]["ComponentOperation"];
 export type ComponentTask = components["schemas"]["ComponentTask"];
-export type PanelImageUpgradeTask = components["schemas"]["PanelImageUpgradeTask"];
+export type ImageUpgradeTask = components["schemas"]["ImageUpgradeTask"];
 export type PanelImageUpgradeCreateInput = components["schemas"]["PanelImageUpgradeCreateInput"];
+export type NginxImageUpgradeCreateInput = components["schemas"]["NginxImageUpgradeCreateInput"];
 export type AgentUpgradeTask = components["schemas"]["AgentUpgradeTask"];
 export type AgentUpgradeCreateInput = components["schemas"]["AgentUpgradeCreateInput"];
 export type PanelUpdateTask = components["schemas"]["PanelUpdateTask"];
@@ -611,17 +612,32 @@ function createAPI(scope: RequestScope) {
   componentTasks: (signal?: AbortSignal) =>
     request<ComponentTask[]>({ url: "/components/tasks", signal }),
   panelImageUpgrades: (signal?: AbortSignal) =>
-    request<PanelImageUpgradeTask[]>({ url: "/panel/images/upgrades", signal }),
+    request<ImageUpgradeTask[]>({ url: "/panel/images/upgrades", signal }),
   createPanelImageUpgrade: (data: PanelImageUpgradeCreateInput, key: string) =>
-    request<PanelImageUpgradeTask>({
+    request<ImageUpgradeTask>({
       url: "/panel/images/upgrades",
       method: "POST",
       data,
       headers: { "Idempotency-Key": key },
     }),
   resumePanelImageUpgrade: (id: string, key: string) =>
-    request<PanelImageUpgradeTask>({
+    request<ImageUpgradeTask>({
       url: `/panel/images/upgrades/${encodeURIComponent(id)}/resume`,
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+    }),
+  nginxImageUpgrades: (signal?: AbortSignal) =>
+    request<ImageUpgradeTask[]>({ url: "/nginx/images/upgrades", signal }),
+  createNginxImageUpgrade: (data: NginxImageUpgradeCreateInput, key: string) =>
+    request<ImageUpgradeTask>({
+      url: "/nginx/images/upgrades",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  resumeNginxImageUpgrade: (id: string, key: string) =>
+    request<ImageUpgradeTask>({
+      url: `/nginx/images/upgrades/${encodeURIComponent(id)}/resume`,
       method: "POST",
       headers: { "Idempotency-Key": key },
     }),

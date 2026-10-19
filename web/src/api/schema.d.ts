@@ -182,6 +182,57 @@ export interface paths {
         trace?: never;
     };
 
+    "/nginx/images/upgrades/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeNginxImageUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/nginx/images/upgrades/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNginxImageUpgrade"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/nginx/images/upgrades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNginxImageUpgrades"];
+        put?: never;
+        post: operations["createNginxImageUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
     "/agent/upgrades/{id}/resume": {
         parameters: {
             query?: never;
@@ -2553,7 +2604,9 @@ export interface components {
             revocation: string;
             version: number;
         };
-        PanelImageUpgradeInput: {
+        ImageUpgradeInput: {
+            component: "panel-launcher" | "nginx";
+            allow_downtime: boolean;
             maintenance_id: string;
             plan_id: string;
             prerelease: boolean;
@@ -2562,24 +2615,29 @@ export interface components {
             maintenance_id: string;
             prepare_task_id: string;
         };
-        PanelImageUpgradeAuthorization: {
+        NginxImageUpgradeCreateInput: {
+            maintenance_id: string;
+            prepare_task_id: string;
+            allow_downtime: true;
+        };
+        ImageUpgradeAuthorization: {
             actor: string;
             request_id: string;
             protocol: number;
             operation_id: string;
-            input: components["schemas"]["PanelImageUpgradeInput"];
+            input: components["schemas"]["ImageUpgradeInput"];
             sequence: number;
             command: string;
             epoch: string;
             authorization_until: number;
         };
-        PanelImageUpgradeOperation: {
+        ImageUpgradeOperation: {
             before_image: string;
             target_image: string;
-            authorization: components["schemas"]["PanelImageUpgradeAuthorization"];
+            authorization: components["schemas"]["ImageUpgradeAuthorization"];
             protocol: number;
             id: string;
-            input: components["schemas"]["PanelImageUpgradeInput"];
+            input: components["schemas"]["ImageUpgradeInput"];
             request_hash: string;
             intent_sha256: string;
             sequence: number;
@@ -2598,11 +2656,11 @@ export interface components {
             ready_epoch: string;
             finalized: boolean;
         };
-        PanelImageUpgradeTask: {
+        ImageUpgradeTask: {
             id: string;
             operation_id: string;
             prepare_task_id: string;
-            input: components["schemas"]["PanelImageUpgradeInput"];
+            input: components["schemas"]["ImageUpgradeInput"];
             sequence: number;
             command: string;
             authorization_until: number;
@@ -2611,7 +2669,7 @@ export interface components {
             error: string;
             created_at: number;
             updated_at: number;
-            result?: components["schemas"]["PanelImageUpgradeOperation"];
+            result?: components["schemas"]["ImageUpgradeOperation"];
         };
         AgentUpgradeInput: {
             maintenance_id: string;
@@ -4402,6 +4460,78 @@ export interface operations {
     };
 
     listPanelImageUpgrades: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    resumeNginxImageUpgrade: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    getNginxImageUpgrade: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    createNginxImageUpgrade: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NginxImageUpgradeCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    listNginxImageUpgrades: {
         parameters: {
             query?: never;
             header?: never;

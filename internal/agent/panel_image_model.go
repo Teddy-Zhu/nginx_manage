@@ -45,28 +45,12 @@ type PanelImageIntent struct {
 	Deadline       int64                        `json:"deadline"`
 }
 
-type PanelImageAuthorization struct {
-	Request    imageupdates.Request `json:"request"`
-	AcceptedAt int64                `json:"accepted_at"`
-	ClaimedAt  int64                `json:"claimed_at"`
-}
-
 func panelImageAPIInput(in PanelImageInput) imageupdates.Input {
-	return imageupdates.Input{MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
-}
-func validatePanelImageAuthorization(req imageupdates.Request, id string, in PanelImageInput, epoch string, sequence int) error {
-	if err := req.Validate(); err != nil {
-		return err
-	}
-	now := time.Now().Unix()
-	if req.OperationID != id || req.Input != panelImageAPIInput(in) || req.Epoch != epoch || req.Sequence != sequence || req.AuthorizationUntil <= now || req.AuthorizationUntil > now+305 {
-		return errors.New("镜像替换授权与原操作不一致或已过期")
-	}
-	return nil
+	return imageupdates.Input{Component: imageupdates.Panel, MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
 }
 
 type PanelImageOperation struct {
-	Authorizations      []PanelImageAuthorization    `json:"authorizations,omitempty"`
+	Authorizations      []ImageAuthorization         `json:"authorizations,omitempty"`
 	Intent              PanelImageIntent             `json:"intent"`
 	Epoch               string                       `json:"epoch"`
 	Rollback            bool                         `json:"rollback"`
@@ -93,21 +77,10 @@ func validPanelImage(r Record) error {
 		return errors.New("镜像替换记录身份无效")
 	}
 	i := p.Intent
-	if len(p.Authorizations) > 32 {
-		return errors.New("镜像替换授权超过保留上限")
+	if err := validImageAuthorizations(p.Authorizations, r.OperationID, panelImageAPIInput(i.Input), i.Epoch, p.Epoch, panelImageTerminal(r)); err != nil {
+		return err
 	}
-	for n, a := range p.Authorizations {
-		q := a.Request
-		if q.Validate() != nil || q.OperationID != r.OperationID || q.Input != panelImageAPIInput(i.Input) || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt >= q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != i.Epoch || n > 0 && a.AcceptedAt < p.Authorizations[n-1].AcceptedAt {
-			return errors.New("镜像替换持久授权与原事务不一致")
-		}
-	}
-	if len(p.Authorizations) > 0 {
-		last := p.Authorizations[len(p.Authorizations)-1]
-		if last.Request.Epoch != p.Epoch || panelImageTerminal(r) && last.ClaimedAt == 0 {
-			return errors.New("镜像替换终态或维护 epoch 缺少原授权")
-		}
-	}
+
 	raw, err := json.Marshal(i)
 	if err != nil || len(raw) > 104<<10 {
 		return errors.New("镜像替换意图超过保留预算")

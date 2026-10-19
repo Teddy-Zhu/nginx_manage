@@ -213,6 +213,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/nginx-images': RouteRecordInfo<
+      '/nginx-images',
+      '/nginx-images',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/panel-updates': RouteRecordInfo<
       '/panel-updates',
       '/panel-updates',
@@ -464,6 +471,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/panel-images.vue': {
       routes:
         | '/panel-images'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/nginx-images.vue': {
+      routes:
+        | '/nginx-images'
       views:
         | never
       pathParamNames:

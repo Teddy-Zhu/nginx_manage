@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"nginxpanel/internal/dockerapi"
+	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/releases"
@@ -20,6 +21,7 @@ import (
 const nginxImageKind = "nginx.image"
 const nginxImageTemplate = "nginxpanel-nginx-image@.service"
 const nginxImageRecordLimit = 256 << 10
+const nginxImageIntentLimit = 144 << 10
 
 type NginxImageInput struct {
 	Stage         panelruntime.StageInput `json:"stage"`
@@ -62,6 +64,7 @@ type NginxImageConfirmation struct {
 	Runtime     NginxState   `json:"runtime"`
 }
 type NginxImageOperation struct {
+	Authorizations          []ImageAuthorization     `json:"authorizations,omitempty"`
 	Intent                  NginxImageIntent         `json:"intent"`
 	Rollback                bool                     `json:"rollback"`
 	Failure                 string                   `json:"failure"`
@@ -101,6 +104,12 @@ func validNginxImage(r Record) error {
 		return errors.New("Nginx 镜像事务身份无效")
 	}
 	i := p.Intent
+	if err := validImageAuthorizations(p.Authorizations, r.OperationID, nginxImageAPIInput(i.Input), i.Epoch, r.MaintenanceEpoch, nginxImageTerminal(r)); err != nil {
+		return err
+	}
+	if raw, err := json.Marshal(i); err != nil || len(raw) > nginxImageIntentLimit {
+		return errors.New("Nginx 镜像意图超过保留预算")
+	}
 	in := i.Input
 	if !in.AllowDowntime || !validID(in.MaintenanceID) || in.MaintenanceID == r.OperationID || !validID(i.Epoch) || in.Stage.DataDir != i.Before.DataDir || in.Stage.TrustPath != "/etc/nginxpanel/release-trust.json" || in.Signature.TrustPath != in.Stage.TrustPath || in.Signature.AllowPrerelease != in.Stage.AllowPrerelease || !panelSelectionDigest.MatchString(in.Stage.PlanID) || !panelSelectionDigest.MatchString(in.Signature.ExpectedManifestSHA256) || !nginxcontainer.SameIdentity(i.Before, i.Target) || i.Before.ImageID == i.Target.ImageID || i.Target.Image != in.Image || i.Target.SignedImage.ManifestSHA256 != in.Signature.ExpectedManifestSHA256 || i.Panel.Mode != "docker" || i.Panel.DataDir != in.Stage.DataDir || !panelSelectionDigest.MatchString(i.PanelID) || !panelSelectionDigest.MatchString(i.FrontendSHA256) || !panelSelectionDigest.MatchString(i.ApprovalSHA256) || !panelSelectionDigest.MatchString(i.PublicationSHA256) || !panelSelectionDigest.MatchString(i.AgentUnit) || !panelSelectionDigest.MatchString(i.WorkerUnit) || r.CreatedAt != i.CreatedAt || r.Deadline != i.Deadline || r.UpdatedAt < r.CreatedAt || i.CreatedAt <= 0 || i.CreatedAt > time.Now().Unix()+300 || i.Deadline != i.CreatedAt+600 || r.RequestHash != nginxImageHash(r.OperationID, i) || len(p.Failure) > 4000 || len(r.Error) > 4000 {
 		return errors.New("Nginx 镜像意图或运行来源不一致")
@@ -219,4 +228,8 @@ func NginxImageStatus(data, id string) (Record, error) {
 		return out, errors.New("Nginx 镜像记录格式无效")
 	}
 	return out, validNginxImage(out)
+}
+
+func nginxImageAPIInput(in NginxImageInput) imageupdates.Input {
+	return imageupdates.Input{Component: imageupdates.Nginx, AllowDowntime: in.AllowDowntime, MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
 }

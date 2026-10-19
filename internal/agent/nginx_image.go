@@ -10,6 +10,9 @@ import (
 	"reflect"
 	"time"
 
+	"net/http"
+	"nginxpanel/internal/fault"
+	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/releases"
@@ -175,6 +178,9 @@ func (w *nginxImageWorker) guard(ctx context.Context) error {
 // Admission only inspects retained images. Pulling is a separate signed task;
 // this durable transaction cannot download or change a source on continuation.
 func QueueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string) (Record, error) {
+	return queueNginxImage(ctx, in, id, epoch, nil)
+}
+func queueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string, authorization *imageupdates.Request) (out Record, resultErr error) {
 	var zero Record
 	if !validID(id) || !validID(epoch) || !validID(in.MaintenanceID) || in.MaintenanceID == id || !in.AllowDowntime || in.Stage.TrustPath != "/etc/nginxpanel/release-trust.json" || in.Signature.TrustPath != in.Stage.TrustPath || in.Signature.AllowPrerelease != in.Stage.AllowPrerelease || !panelSelectionDigest.MatchString(in.Signature.ExpectedManifestSHA256) {
 		return zero, errors.New("Nginx 镜像替换须指定固定签名、独立维护身份并允许停机")
@@ -185,12 +191,26 @@ func QueueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string) 
 	}
 	defer unlock()
 	if prior, e := NginxImageStatus(in.Stage.DataDir, id); e == nil {
+		if len(prior.NginxImage.Authorizations) != 0 || authorization != nil {
+			return zero, errors.New("托管 Nginx 镜像替换须由原 API 授权查询或续办")
+		}
 		if prior.NginxImage.Intent.Input != in {
 			return zero, errors.New("Nginx 镜像标识已用于不同请求")
 		}
 		return prior, nil
 	} else if !os.IsNotExist(e) {
 		return zero, e
+	}
+	publicationAttempted := false
+	defer func() {
+		if authorization != nil && resultErr != nil && !publicationAttempted {
+			resultErr = fault.New(http.StatusConflict, "NGINX_IMAGE_REJECTED", panelRestoreError(resultErr))
+		}
+	}()
+	if authorization != nil {
+		if err := validateImageAuthorization(*authorization, id, nginxImageAPIInput(in), epoch, 1); err != nil {
+			return zero, err
+		}
 	}
 	access, err := panelUpdateAccess(ctx, j, id, in.MaintenanceID, epoch, false)
 	if err != nil {
@@ -321,9 +341,16 @@ func QueueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string) 
 		return zero, err
 	}
 	defer access()
-	if raw, marshalErr := json.Marshal(w.r); marshalErr != nil || len(raw) > nginxImageRecordLimit-(32<<10) {
+	if raw, marshalErr := json.Marshal(i); marshalErr != nil || len(raw) > nginxImageIntentLimit {
 		return zero, errors.New("Nginx 镜像意图未保留足够恢复记录预算")
 	}
+	if authorization != nil {
+		if err = validateImageAuthorization(*authorization, id, nginxImageAPIInput(in), epoch, 1); err != nil {
+			return zero, err
+		}
+		w.r.NginxImage.Authorizations = []ImageAuthorization{{Request: *authorization, AcceptedAt: time.Now().Unix()}}
+	}
+	publicationAttempted = true
 	if err = w.save(); err != nil {
 		return w.r, err
 	}
@@ -331,6 +358,9 @@ func QueueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string) 
 }
 
 func ResumeNginxImage(ctx context.Context, data, id, epoch string) (Record, error) {
+	return resumeNginxImage(ctx, data, id, epoch, nil)
+}
+func resumeNginxImage(ctx context.Context, data, id, epoch string, authorization *imageupdates.Request) (Record, error) {
 	if !validID(epoch) {
 		return Record{}, errors.New("Nginx 镜像续办须提供当前维护 epoch")
 	}
@@ -342,6 +372,21 @@ func ResumeNginxImage(ctx context.Context, data, id, epoch string) (Record, erro
 	r, err := NginxImageStatus(data, id)
 	if err != nil || nginxImageTerminal(r) {
 		return r, err
+	}
+	if len(r.NginxImage.Authorizations) != 0 && authorization == nil || len(r.NginxImage.Authorizations) == 0 && authorization != nil {
+		return r, errors.New("托管 Nginx 镜像替换须使用原 API 授权续办")
+	}
+	if authorization != nil {
+		as := r.NginxImage.Authorizations
+		if authorization.Sequence <= len(as) {
+			if authorization.Sequence < 1 || as[authorization.Sequence-1].Request != *authorization {
+				return r, errors.New("原 Nginx 镜像替换授权不能改变")
+			}
+			return r, nil
+		}
+		if err := validateImageAuthorization(*authorization, id, nginxImageAPIInput(r.NginxImage.Intent.Input), epoch, len(as)+1); err != nil {
+			return r, err
+		}
 	}
 	hash, active, err := nginxImageHost(ctx, data, id)
 	if err != nil {
@@ -373,6 +418,12 @@ func ResumeNginxImage(ctx context.Context, data, id, epoch string) (Record, erro
 	}
 	if p.Rollback {
 		r.State, r.Stage = "compensating", "rollback_stopping_agent"
+	}
+	if authorization != nil {
+		if err := validateImageAuthorization(*authorization, id, nginxImageAPIInput(p.Intent.Input), epoch, len(p.Authorizations)+1); err != nil {
+			return r, err
+		}
+		p.Authorizations = append(p.Authorizations, ImageAuthorization{Request: *authorization, AcceptedAt: time.Now().Unix()})
 	}
 	w := &nginxImageWorker{j: j, r: r}
 	if err = w.save(); err != nil {

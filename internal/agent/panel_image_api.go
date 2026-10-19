@@ -42,15 +42,15 @@ func hostedPanelImage(r Record, active bool) (imageupdates.Operation, error) {
 	}
 	return o, o.Validate(r.OperationID, in)
 }
-func (s *Server) panelImageScope() error {
+func (s *Server) imageUpgradeScope() error {
 	if s.Dev || s.ComponentScope != "host" || s.MaintenanceScope != "host" || s.ReleaseTrust != "/etc/nginxpanel/release-trust.json" {
-		return fault.Unavailable("面板镜像替换的宿主机范围或固定发布信任未配置")
+		return fault.Unavailable("镜像替换的宿主机范围或固定发布信任未配置")
 	}
 	return nil
 }
 func (s *Server) readPanelImageUpgrade(ctx context.Context, id string) (imageupdates.Operation, error) {
 	var zero imageupdates.Operation
-	if err := s.panelImageScope(); err != nil {
+	if err := s.imageUpgradeScope(); err != nil {
 		return zero, err
 	}
 	if !validID(id) {
@@ -72,7 +72,7 @@ func (s *Server) readPanelImageUpgrade(ctx context.Context, id string) (imageupd
 
 // Resolve both reference and offline paths from the exact root-owned prepared
 // plan. A Web request cannot select a registry, path, trust file or timestamp.
-func (s *Server) panelImageInput(ctx context.Context, req imageupdates.Request) (PanelImageInput, error) {
+func (s *Server) imageInput(ctx context.Context, req imageupdates.Request) (PanelImageInput, error) {
 	var out PanelImageInput
 	stage := panelruntime.StageInput{DataDir: s.DataDir, PlanID: req.Input.PlanID, TrustPath: s.ReleaseTrust, AllowPrerelease: req.Input.Prerelease}
 	staged, err := panelruntime.Staged(ctx, stage)
@@ -86,12 +86,12 @@ func (s *Server) panelImageInput(ctx context.Context, req imageupdates.Request) 
 	}
 	image := ""
 	for _, candidate := range source.Plan.Manifest.Images {
-		if candidate.ID == "panel-launcher" {
+		if candidate.ID == req.Input.Component {
 			image = candidate.Repository + "@" + candidate.Digest
 		}
 	}
 	if image == "" {
-		return out, errors.New("签名准备任务未提供面板 launcher 镜像")
+		return out, errors.New("签名准备任务未提供所选组件镜像")
 	}
 	return PanelImageInput{Stage: stage, MaintenanceID: req.Input.MaintenanceID, Image: image, Signature: releases.ImageInput{TrustPath: s.ReleaseTrust, ManifestPath: filepath.Join(source.Directory, "release-manifest.json"), SignaturePath: filepath.Join(source.Directory, "release-manifest.sig"), ExpectedManifestSHA256: a.ManifestSHA256, AllowPrerelease: req.Input.Prerelease}}, nil
 }
@@ -101,7 +101,10 @@ func (s *Server) queuePanelImageUpgrade(ctx context.Context, req imageupdates.Re
 	if err := req.Validate(); err != nil {
 		return zero, err
 	}
-	if err := s.panelImageScope(); err != nil {
+	if req.Input.Component != imageupdates.Panel {
+		return zero, fault.Invalid("面板镜像替换不能选择其他组件")
+	}
+	if err := s.imageUpgradeScope(); err != nil {
 		return zero, err
 	}
 	r, err := PanelImageStatus(s.DataDir, req.OperationID)
@@ -124,7 +127,7 @@ func (s *Server) queuePanelImageUpgrade(ctx context.Context, req imageupdates.Re
 		if req.Sequence != 1 || req.Command != "upgrade" {
 			return zero, fault.NotFound("续办的原面板镜像替换不存在")
 		}
-		in, inputErr := s.panelImageInput(ctx, req)
+		in, inputErr := s.imageInput(ctx, req)
 		if inputErr != nil {
 			// Only a root absence proved under the transaction locks is a definitive
 			// preflight rejection. Other failures retain uncertain-dispatch semantics.
@@ -169,23 +172,44 @@ func (s *Server) panelImageHandlers(mux *http.ServeMux) {
 		componentReply(w, o, err)
 	})
 }
-func (c *Client) PanelImageUpgrade(ctx context.Context, id string) (imageupdates.Operation, error) {
+func imageUpgradePath(component string) (string, error) {
+	switch component {
+	case imageupdates.Panel:
+		return "/v1/panel/images/upgrades", nil
+	case imageupdates.Nginx:
+		return "/v1/nginx/images/upgrades", nil
+	default:
+		return "", fault.Invalid("镜像组件无效")
+	}
+}
+func (c *Client) ImageUpgrade(ctx context.Context, component, id string) (imageupdates.Operation, error) {
 	var out imageupdates.Operation
 	if !validID(id) {
-		return out, fault.Invalid("面板镜像替换操作标识无效")
+		return out, fault.Invalid("镜像替换操作标识无效")
 	}
-	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/panel/images/upgrades/"+id, nil, &out)
+	path, err := imageUpgradePath(component)
+	if err != nil {
+		return out, err
+	}
+	err = c.envelopeRequest(ctx, http.MethodGet, path+"/"+id, nil, &out)
 	if err == nil {
 		err = out.Validate(id, out.Input)
+		if err == nil && out.Input.Component != component {
+			err = fault.Conflict("镜像替换回执组件不一致")
+		}
 	}
 	return out, err
 }
-func (c *Client) SubmitPanelImageUpgrade(ctx context.Context, in imageupdates.Request) (imageupdates.Operation, error) {
+func (c *Client) SubmitImageUpgrade(ctx context.Context, in imageupdates.Request) (imageupdates.Operation, error) {
 	var out imageupdates.Operation
 	if err := in.Validate(); err != nil {
 		return out, err
 	}
-	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/panel/images/upgrades", in, &out)
+	path, err := imageUpgradePath(in.Input.Component)
+	if err != nil {
+		return out, err
+	}
+	err = c.envelopeRequest(ctx, http.MethodPost, path, in, &out)
 	if err == nil {
 		err = out.Validate(in.OperationID, in.Input)
 	}

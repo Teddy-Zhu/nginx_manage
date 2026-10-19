@@ -16,6 +16,7 @@ import (
 func runNginxImage(ctx context.Context, command string, args []string) error {
 	allowed := map[string]map[string]bool{
 		"nginx-image":        {"data-dir": true, "nginx-image-operation": true, "image": true, "release-plan": true, "release-prerelease": true, "image-manifest": true, "image-signature": true, "image-manifest-sha256": true, "maintenance-id": true, "maintenance-epoch": true, "allow-downtime": true},
+		"nginx-image-rescue": {"data-dir": true, "nginx-image-operation": true, "maintenance-epoch": true},
 		"nginx-image-resume": {"data-dir": true, "nginx-image-operation": true, "maintenance-epoch": true},
 		"nginx-image-status": {"data-dir": true, "nginx-image-operation": true},
 		"nginx-image-worker": {"data-dir": true, "nginx-image-operation": true},
@@ -64,6 +65,8 @@ func runNginxImage(ctx context.Context, command string, args []string) error {
 	case "nginx-image":
 		const trust = "/etc/nginxpanel/release-trust.json"
 		out, err = agent.QueueNginxImage(ctx, agent.NginxImageInput{Stage: panelruntime.StageInput{DataDir: abs, PlanID: *plan, TrustPath: trust, AllowPrerelease: *prerelease}, Signature: releases.ImageInput{TrustPath: trust, ManifestPath: *manifest, SignaturePath: *signature, ExpectedManifestSHA256: *manifestHash, AllowPrerelease: *prerelease}, Image: *image, MaintenanceID: *maintenanceID, AllowDowntime: *allowDowntime}, *id, *epoch)
+	case "nginx-image-rescue":
+		out, err = agent.RescueNginxImage(ctx, abs, *id, *epoch)
 	case "nginx-image-resume":
 		out, err = agent.ResumeNginxImage(ctx, abs, *id, *epoch)
 	case "nginx-image-status":

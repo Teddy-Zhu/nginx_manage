@@ -137,7 +137,7 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 
 ## Nginx 容器镜像切换
 
-目标主机首次安装时登记独立 `nginxpanel-nginx-image@.service`。本机 root 使用以下入口切换已运行的固定 Nginx 容器；当前只提供本机命令，网页/API 任务尚待接入。
+目标主机首次安装时登记独立 `nginxpanel-nginx-image@.service`。本机 root 使用以下入口切换已运行的固定 Nginx 容器；网页“Nginx 镜像”与 API 通过同一独立事务管理切换。
 
 ```sh
 /opt/nginxpanel/current/nginxpanel nginx-image --data-dir /srv/nginxpanel \
@@ -157,3 +157,8 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 准备计划和 Nginx 镜像须属于同一签名发行，新旧镜像都须保留在本地；该命令不拉取镜像，不编译或增装模块。必须持有原维护会话并明确允许中断。独立任务先用候选镜像的非 root Nginx 程序对冻结的完整发布执行 `nginx -t`，通过后才停止 Agent 和原 Nginx。之后切换 root 只读 Compose 与 Nginx 绑定、按固定权限重建容器，并在重启 Agent 前释放 Nginx 执行锁。完成确认覆盖容器代次、实际 Nginx 程序、原配置/监听/TLS 探针、Agent 实际进程、组件镜像来源和原维护会话；应用、前端、数据目录和业务数据库保持原选择。
 
 前进期限自原授权起十分钟，失败先持久确定恢复方向，再核对并恢复保留的原镜像；恢复不依赖目标离线文件或目标公钥。候选配置未通过且尚未停机时，只清理本次校验容器并确认原服务。未知实例、外部修改、失联或未确认结果保留 `recovery_required` 并阻止维护释放，不能强制接管同名容器。创建和启动意图在 Docker 调用前持久保存，已派发但未确认的动作不重复执行；续办只能使用原 UUID、输入和期限。主机重启后的原容器新代次仅能通过显式续办登记，并永久转为原镜像恢复。Agent 运行时可用 `panel-image-probe` 核对原维护会话的当前 epoch；Agent 尚未恢复时沿用该事务最后持有的维护 epoch。只有成功或完整恢复并确认后，才由原维护流程释放会话。
+
+
+网页/API 创建仅引用已完成的签名面板准备任务和原维护会话：`POST /api/v1/nginx/images/upgrades` 的请求为 `{ "maintenance_id": "<uuid>", "prepare_task_id": "<uuid>", "allow_downtime": true }`。请求须具备组件管理、系统写权限、重新认证与幂等键；镜像地址、签名路径、平台和信任配置由目标节点的 root 准备计划确定。列表、单项查询和原任务续办分别使用同一路径的 GET、`/{id}` 和 `/{id}/resume`，远程节点提供对应显式路由。应用更新、Agent 升级及两种镜像切换共用活动任务约束。
+
+派发前持久保存加密任务、启动授权和审计，断连后只查询原操作；续办须使用新幂等键并追加连续授权。每项 root 授权只领取一次，最多 32 项，Agent 重启后按原维护会话核对新的 epoch。普通本机续办不能绕过托管授权；网页或 Agent 不可用时，root 可执行 `nginx-image-rescue --data-dir /srv/nginxpanel --nginx-image-operation <operation-uuid> --maintenance-epoch <epoch>`，以 `local-root` 为原事务追加救援授权。网页恢复后对账实际结果，不重放已提交动作。从备份恢复的源任务保持隔离，不在目标节点启动或续办。

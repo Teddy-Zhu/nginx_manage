@@ -26,29 +26,29 @@ type Service struct {
 
 type rowReader interface{ Scan(...any) error }
 
-const taskColumns = "t.id,t.operation_id,i.prepare_task_id,t.state,t.stage,t.last_error,t.created_at,t.updated_at,i.input,i.result,i.principal,q.id,q.payload,q.dispatched"
+const taskColumns = "t.id,t.operation_id,t.kind,i.prepare_task_id,t.state,t.stage,t.last_error,t.created_at,t.updated_at,i.input,i.result,i.principal,q.id,q.payload,q.dispatched"
 const taskJoin = " FROM panel_image_upgrades i JOIN tasks t ON t.id=i.task_id JOIN panel_image_upgrade_requests q ON q.id=i.request_id AND q.task_id=i.task_id "
 
 func (s *Service) read(row rowReader) (Task, string, error) {
 	var t Task
 	var input, result, request []byte
-	var owner string
-	if err := row.Scan(&t.ID, &t.OperationID, &t.PrepareTaskID, &t.State, &t.Stage, &t.Error, &t.CreatedAt, &t.UpdatedAt, &input, &result, &owner, &t.requestID, &request, &t.dispatched); err != nil {
+	var owner, kind string
+	if err := row.Scan(&t.ID, &t.OperationID, &kind, &t.PrepareTaskID, &t.State, &t.Stage, &t.Error, &t.CreatedAt, &t.UpdatedAt, &input, &result, &owner, &t.requestID, &request, &t.dispatched); err != nil {
 		return t, owner, err
 	}
 	raw, err := s.Vault.Open(input, "panel-image-upgrade:input:"+t.ID)
 	if err != nil {
 		return t, owner, err
 	}
-	if json.Unmarshal(raw, &t.Input) != nil || t.Input.Validate() != nil {
-		return t, owner, errors.New("面板镜像替换任务输入损坏")
+	if json.Unmarshal(raw, &t.Input) != nil || t.Input.Validate() != nil || Kind(t.Input.Component) != kind {
+		return t, owner, errors.New("镜像替换任务输入损坏")
 	}
 	raw, err = s.Vault.Open(request, "panel-image-upgrade:request:"+t.requestID)
 	if err != nil {
 		return t, owner, err
 	}
 	if json.Unmarshal(raw, &t.Request) != nil || t.Request.Validate() != nil || t.Request.OperationID != t.OperationID || t.Request.Input != t.Input {
-		return t, owner, errors.New("面板镜像替换任务授权与原输入不一致")
+		return t, owner, errors.New("镜像替换任务授权与原输入不一致")
 	}
 	t.Sequence, t.Command, t.AuthorizationUntil = t.Request.Sequence, t.Request.Command, t.Request.AuthorizationUntil
 	if len(result) > 0 {
@@ -58,23 +58,32 @@ func (s *Service) read(row rowReader) (Task, string, error) {
 		}
 		var op Operation
 		if json.Unmarshal(raw, &op) != nil || op.Validate(t.OperationID, t.Input) != nil {
-			return t, owner, errors.New("面板镜像替换任务回执与原输入不一致")
+			return t, owner, errors.New("镜像替换任务回执与原输入不一致")
 		}
 		t.Result = &op
 	}
 	return t, owner, nil
 }
 
-func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Task, error) {
+func (s *Service) Get(ctx context.Context, p auth.Principal, component, id string) (Task, error) {
 	if err := p.Require("read", "components.manage"); err != nil {
 		return Task{}, err
 	}
-	if !components.ValidID(id) {
-		return Task{}, fault.Invalid("面板镜像替换任务标识无效")
+	return s.ownedTask(ctx, p, component, id)
+}
+
+// Write-authorized continuation must not depend on an additional read scope.
+// Both entry points retain the same component and principal ownership checks.
+func (s *Service) ownedTask(ctx context.Context, p auth.Principal, component, id string) (Task, error) {
+	if err := p.Require("components.manage"); err != nil {
+		return Task{}, err
 	}
-	t, owner, err := s.read(s.DB.QueryRowContext(ctx, "SELECT "+taskColumns+taskJoin+"WHERE t.id=?", id))
+	if Kind(component) == "" || !components.ValidID(id) {
+		return Task{}, fault.Invalid("镜像替换任务标识无效")
+	}
+	t, owner, err := s.read(s.DB.QueryRowContext(ctx, "SELECT "+taskColumns+taskJoin+"WHERE t.id=? AND t.kind=?", id, Kind(component)))
 	if errors.Is(err, sql.ErrNoRows) {
-		return Task{}, fault.NotFound("面板镜像替换任务不存在")
+		return Task{}, fault.NotFound("镜像替换任务不存在")
 	}
 	if err == nil && owner != p.ID && !p.Has("auth.manage") {
 		return Task{}, auth.ErrForbidden
@@ -82,11 +91,14 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Task, e
 	return t, err
 }
 
-func (s *Service) List(ctx context.Context, p auth.Principal) ([]Task, error) {
+func (s *Service) List(ctx context.Context, p auth.Principal, component string) ([]Task, error) {
 	if err := p.Require("read", "components.manage"); err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT "+taskColumns+taskJoin+"WHERE i.principal=? OR ? ORDER BY t.created_at DESC,t.id DESC LIMIT 64", p.ID, p.Has("auth.manage"))
+	if Kind(component) == "" {
+		return nil, fault.Invalid("镜像组件无效")
+	}
+	rows, err := s.DB.QueryContext(ctx, "SELECT "+taskColumns+taskJoin+"WHERE t.kind=? AND (i.principal=? OR ?) ORDER BY t.created_at DESC,t.id DESC LIMIT 64", Kind(component), p.ID, p.Has("auth.manage"))
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +137,7 @@ func (s *Service) replay(ctx context.Context, p auth.Principal, key, hash string
 		return t, false, err
 	}
 	if previous != hash {
-		return t, false, fault.Conflict("同一幂等键不能改换面板镜像替换请求")
+		return t, false, fault.Conflict("同一幂等键不能改换镜像替换请求")
 	}
 	raw, err := s.Vault.Open(sealed, "idempotency:"+p.ID+":"+key)
 	if err == nil {
@@ -156,20 +168,20 @@ func (s *Service) saveAuthorization(ctx context.Context, tx *sql.Tx, p auth.Prin
 	return err
 }
 
-func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key string, in CreateInput) (Task, error) {
+func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key, component string, in CreateInput) (Task, error) {
 	var zero Task
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return zero, err
 	}
-	if !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
-		return zero, fault.Invalid("面板镜像替换参数或幂等键无效")
+	if Kind(component) == "" || component == Nginx && !in.AllowDowntime || component == Panel && in.AllowDowntime || !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
+		return zero, fault.Invalid("镜像替换参数或幂等键无效")
 	}
-	hash := requestHash("panel.image", in)
+	hash := requestHash(Kind(component), in)
 	if t, found, err := s.replay(ctx, p, key, hash); err != nil || found {
 		return t, err
 	}
 	if s.Agent == nil || s.Components == nil || s.Maintenance == nil {
-		return zero, fault.Unavailable("面板镜像替换执行器未配置")
+		return zero, fault.Unavailable("镜像替换执行器未配置")
 	}
 	prepared, err := s.Components.Get(ctx, p, in.PrepareTaskID)
 	if err != nil {
@@ -181,6 +193,15 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	}
 	if err = r.Validate(components.Request{Protocol: r.Protocol, OperationID: r.ID, Input: r.Input}); err != nil {
 		return zero, err
+	}
+	available := false
+	for _, image := range r.Release.Images {
+		if image.ID == component {
+			available = true
+		}
+	}
+	if !available {
+		return zero, fault.Conflict("签名准备任务未提供所选组件镜像")
 	}
 	root, done, err := s.Maintenance.Held(in.MaintenanceID)
 	if err != nil {
@@ -196,7 +217,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	}
 	defer tx.Rollback()
 	var count, active int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('panel.update','agent.upgrade','panel.image') AND state NOT IN ('succeeded','failed','rolled_back','cancelled') AND stage<>'restore_isolated'").Scan(&active); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('panel.update','agent.upgrade','panel.image','nginx.image') AND state NOT IN ('succeeded','failed','rolled_back','cancelled') AND stage<>'restore_isolated'").Scan(&active); err != nil {
 		return zero, err
 	}
 	if active != 0 {
@@ -206,15 +227,15 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 		return zero, err
 	}
 	if count >= 64 {
-		return zero, fault.Conflict("面板镜像替换任务达到 64 项保留上限，须本机维护")
+		return zero, fault.Conflict("镜像替换任务达到 64 项保留上限，须本机维护")
 	}
 	now := time.Now().Unix()
-	t := Task{ID: secure.ID(), OperationID: secure.ID(), PrepareTaskID: in.PrepareTaskID, Input: Input{MaintenanceID: in.MaintenanceID, PlanID: r.Release.PlanID, Prerelease: r.Input.Prerelease}, State: "queued", Stage: "queued", Sequence: 1, Command: "upgrade", AuthorizationUntil: now + 300, CreatedAt: now, UpdatedAt: now, requestID: secure.ID()}
+	t := Task{ID: secure.ID(), OperationID: secure.ID(), PrepareTaskID: in.PrepareTaskID, Input: Input{Component: component, AllowDowntime: in.AllowDowntime, MaintenanceID: in.MaintenanceID, PlanID: r.Release.PlanID, Prerelease: r.Input.Prerelease}, State: "queued", Stage: "queued", Sequence: 1, Command: "upgrade", AuthorizationUntil: now + 300, CreatedAt: now, UpdatedAt: now, requestID: secure.ID()}
 	t.Request = Request{Actor: p.ID, RequestID: requestID, Protocol: protocol.Agent, OperationID: t.OperationID, Input: t.Input, Sequence: 1, Command: "upgrade", Epoch: root.Epoch, AuthorizationUntil: t.AuthorizationUntil}
 	if err = t.Request.Validate(); err != nil {
 		return zero, err
 	}
-	if _, err = tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,state,stage,operation_id,created_at,updated_at) VALUES(?,'panel.image','panel-launcher','queued','queued',?,?,?)", t.ID, t.OperationID, now, now); err != nil {
+	if _, err = tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,state,stage,operation_id,created_at,updated_at) VALUES(?,?,?,'queued','queued',?,?,?)", t.ID, Kind(component), component, t.OperationID, now, now); err != nil {
 		return zero, err
 	}
 	raw, err := json.Marshal(t.Input)
@@ -227,25 +248,25 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	if err = s.saveAuthorization(ctx, tx, p, t); err != nil {
 		return zero, err
 	}
-	if err = s.receipt(ctx, tx, p, requestID, key, hash, "panel.image", t); err != nil {
+	if err = s.receipt(ctx, tx, p, requestID, key, hash, Kind(component), t); err != nil {
 		return zero, err
 	}
 	return t, tx.Commit()
 }
 
-func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, id string) (Task, error) {
+func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, component, id string) (Task, error) {
 	var zero Task
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return zero, err
 	}
-	if !validKey(key) || !components.ValidID(id) {
-		return zero, fault.Invalid("面板镜像替换续办参数无效")
+	if Kind(component) == "" || !validKey(key) || !components.ValidID(id) {
+		return zero, fault.Invalid("镜像替换续办参数无效")
 	}
-	hash := requestHash("panel.image.resume", id)
+	hash := requestHash(Kind(component)+".resume", id)
 	if t, found, err := s.replay(ctx, p, key, hash); err != nil || found {
 		return t, err
 	}
-	t, err := s.Get(ctx, p, id)
+	t, err := s.ownedTask(ctx, p, component, id)
 	if err != nil {
 		return zero, err
 	}
@@ -257,24 +278,24 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 	if prior, found, e := s.replay(ctx, p, key, hash); e != nil || found {
 		return prior, e
 	}
-	t, err = s.Get(ctx, p, id)
+	t, err = s.ownedTask(ctx, p, component, id)
 	if err != nil {
 		return zero, err
 	}
 	if s.Agent == nil {
-		return zero, fault.Unavailable("面板镜像替换执行器未配置")
+		return zero, fault.Unavailable("镜像替换执行器未配置")
 	}
 	if t.State != "recovery_required" {
-		return zero, fault.Conflict("须先核对原面板镜像替换的待恢复状态")
+		return zero, fault.Conflict("须先核对原镜像替换的待恢复状态")
 	}
 	var isolated int
 	if err = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM restore_quarantined_tasks WHERE task_id=?", id).Scan(&isolated); err != nil {
 		return zero, err
 	}
 	if isolated != 0 || t.Stage == "restore_isolated" {
-		return zero, fault.Conflict("从备份隔离的源面板镜像替换不能在恢复目标续办")
+		return zero, fault.Conflict("从备份隔离的源镜像替换不能在恢复目标续办")
 	}
-	op, err := s.Agent.PanelImageUpgrade(ctx, t.OperationID)
+	op, err := s.Agent.ImageUpgrade(ctx, t.Input.Component, t.OperationID)
 	sequence, command := 1, "upgrade"
 	var observed *Operation
 	var remote *fault.Error
@@ -284,7 +305,7 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 			return zero, err
 		}
 		if attempts != 0 || t.Result != nil {
-			return zero, fault.Conflict("曾提交的面板镜像替换记录缺失，须本机恢复，不能重建")
+			return zero, fault.Conflict("曾提交的镜像替换记录缺失，须本机恢复，不能重建")
 		}
 	} else if err != nil {
 		return zero, err
@@ -296,7 +317,7 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 			return zero, fault.Conflict("须先确认原事务停止且尚未结束，才能追加续办授权")
 		}
 		if t.Result != nil && t.Result.IntentSHA256 != op.IntentSHA256 {
-			return zero, fault.Conflict("面板镜像替换原意图已偏离，须本机恢复")
+			return zero, fault.Conflict("镜像替换原意图已偏离，须本机恢复")
 		}
 		sequence, command = op.Sequence+1, "resume"
 		observed = &op
@@ -311,7 +332,7 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 		return zero, err
 	}
 	if count >= 64 {
-		return zero, fault.Conflict("面板镜像替换续办请求达到保留上限，须本机维护")
+		return zero, fault.Conflict("镜像替换续办请求达到保留上限，须本机维护")
 	}
 	previous := t.requestID
 	t.requestID = secure.ID()
@@ -349,7 +370,7 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 		return zero, err
 	}
 	if n != 1 {
-		return zero, fault.Conflict("原面板镜像替换授权已变化，请重新核对")
+		return zero, fault.Conflict("原镜像替换授权已变化，请重新核对")
 	}
 	changed, err = tx.ExecContext(ctx, "UPDATE tasks SET state='running',stage='control_pending',last_error='',updated_at=? WHERE id=? AND state='recovery_required'", t.UpdatedAt, id)
 	if err != nil {
@@ -360,9 +381,9 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 		return zero, err
 	}
 	if n != 1 {
-		return zero, fault.Conflict("原面板镜像替换状态已变化，请重新核对")
+		return zero, fault.Conflict("原镜像替换状态已变化，请重新核对")
 	}
-	if err = s.receipt(ctx, tx, p, requestID, key, hash, "panel.image.resume", t); err != nil {
+	if err = s.receipt(ctx, tx, p, requestID, key, hash, Kind(component)+".resume", t); err != nil {
 		return zero, err
 	}
 	return t, tx.Commit()

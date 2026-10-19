@@ -1,4 +1,4 @@
-// Package imageupdates coordinates durable panel launcher image replacement.
+// Package imageupdates coordinates durable panel and Nginx image replacement.
 package imageupdates
 
 import (
@@ -18,15 +18,31 @@ import (
 var digest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var imageReference = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$`)
 
+const Panel = "panel-launcher"
+const Nginx = "nginx"
+
+func Kind(component string) string {
+	switch component {
+	case Panel:
+		return "panel.image"
+	case Nginx:
+		return "nginx.image"
+	default:
+		return ""
+	}
+}
+
 type Input struct {
+	Component     string `json:"component"`
+	AllowDowntime bool   `json:"allow_downtime"`
 	MaintenanceID string `json:"maintenance_id"`
 	PlanID        string `json:"plan_id"`
 	Prerelease    bool   `json:"prerelease"`
 }
 
 func (in Input) Validate() error {
-	if !components.ValidID(in.MaintenanceID) || !digest.MatchString(in.PlanID) {
-		return fault.Invalid("面板镜像替换须绑定原维护会话与签名暂存计划")
+	if Kind(in.Component) == "" || in.Component == Nginx && !in.AllowDowntime || in.Component == Panel && in.AllowDowntime || !components.ValidID(in.MaintenanceID) || !digest.MatchString(in.PlanID) {
+		return fault.Invalid("镜像替换须绑定原维护会话与签名暂存计划")
 	}
 	return nil
 }
@@ -45,10 +61,10 @@ type Request struct {
 
 func (r Request) Validate() error {
 	if r.Actor == "" || len(r.Actor) > 128 || strings.TrimSpace(r.Actor) != r.Actor || strings.ContainsAny(r.Actor, "\x00\r\n") || !components.ValidID(r.RequestID) {
-		return fault.Invalid("面板镜像替换授权缺少有效的发起人或请求标识")
+		return fault.Invalid("镜像替换授权缺少有效的发起人或请求标识")
 	}
 	if r.Protocol != protocol.Agent || !components.ValidID(r.OperationID) || r.OperationID == r.Input.MaintenanceID || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || (r.Command != "upgrade" && r.Command != "resume") || (r.Command == "upgrade") != (r.Sequence == 1) {
-		return fault.Invalid("面板镜像替换操作、授权序号或协议无效")
+		return fault.Invalid("镜像替换操作、授权序号或协议无效")
 	}
 	return r.Input.Validate()
 }
@@ -94,30 +110,38 @@ type Operation struct {
 
 func (o Operation) Validate(id string, in Input) error {
 	if o.Authorization.Validate() != nil || o.Authorization.OperationID != id || o.Authorization.Input != in || o.Authorization.Sequence != o.Sequence || o.Authorization.Command != o.Command || in.Validate() != nil || o.Protocol != protocol.Agent || !components.ValidID(id) || o.ID != id || o.Input != in || o.RequestHash != Hash(id, in) || !digest.MatchString(o.IntentSHA256) || !imageID(o.BeforeImageID) || !imageID(o.TargetImageID) || o.BeforeImageID == o.TargetImageID || !imageReference.MatchString(o.BeforeImage) || !imageReference.MatchString(o.TargetImage) || !digest.MatchString(o.PanelID) || o.TargetVersion == "" || len(o.TargetVersion) > 96 || len(o.Error) > 4000 || len(o.Failure) > 4000 || o.Deadline <= 0 || o.UpdatedAt <= 0 || o.ReadyEpoch != "" && !components.ValidID(o.ReadyEpoch) {
-		return errors.New("面板镜像替换回执与原任务不一致")
+		return errors.New("镜像替换回执与原任务不一致")
 	}
 	if o.Finalized {
-		if !components.ValidID(o.ReadyEpoch) || o.ReadyEpoch != o.Authorization.Epoch || o.State == "succeeded" && (o.Stage != "committed" || o.Failure != "" || o.Error != "") || o.State == "rolled_back" && (o.Stage != "compensated" || o.Failure == "") || o.State != "succeeded" && o.State != "rolled_back" {
-			return errors.New("面板镜像替换结果缺少就绪确认")
+		if !components.ValidID(o.ReadyEpoch) || in.Component == Panel && o.ReadyEpoch != o.Authorization.Epoch || o.State == "succeeded" && (o.Stage != "committed" || o.Failure != "" || o.Error != "") || o.State == "rolled_back" && (o.Stage != "compensated" || o.Failure == "") || o.State != "succeeded" && o.State != "rolled_back" && (in.Component != Nginx || o.State != "failed" || o.Stage != "rejected" || o.Failure == "") {
+			return errors.New("镜像替换结果缺少就绪确认")
 		}
 		return nil
 	}
-	if slices.Contains([]string{"rollback_stopping", "rollback_selecting", "rollback_creating", "rollback_starting", "rollback_checking"}, o.Stage) {
+	forward := []string{"authorized", "stopping", "removing", "selecting", "creating", "starting", "checking"}
+	rollback := []string{"rollback_stopping", "rollback_selecting", "rollback_creating", "rollback_starting", "rollback_checking"}
+	if in.Component == Nginx {
+		forward = []string{"authorized", "check_creating", "checking", "check_removing", "stopping_agent", "stopping", "removing", "selecting", "creating", "starting", "confirming_nginx", "starting_agent", "confirming_agent"}
+		rollback = []string{"rollback_stopping_agent", "rollback_stopping", "rollback_selecting", "rollback_creating", "rollback_starting", "rollback_confirming_nginx", "rollback_starting_agent", "rollback_confirming_agent"}
+	}
+	if slices.Contains(rollback, o.Stage) {
 		if o.Failure != "" && (o.State == "compensating" || o.State == "recovery_required") {
 			return nil
 		}
-	} else if slices.Contains([]string{"authorized", "stopping", "removing", "selecting", "creating", "starting", "checking"}, o.Stage) && o.Failure == "" && (o.State == "running" || o.State == "recovery_required") {
+	} else if slices.Contains(forward, o.Stage) && o.Failure == "" && (o.State == "running" || o.State == "recovery_required") {
 		return nil
 	}
-	return errors.New("面板镜像替换阶段或恢复方向无效")
+
+	return errors.New("镜像替换阶段或恢复方向无效")
 }
 
 type Agent interface {
-	SubmitPanelImageUpgrade(context.Context, Request) (Operation, error)
-	PanelImageUpgrade(context.Context, string) (Operation, error)
+	SubmitImageUpgrade(context.Context, Request) (Operation, error)
+	ImageUpgrade(context.Context, string, string) (Operation, error)
 }
 
 type CreateInput struct {
+	AllowDowntime bool   `json:"allow_downtime"`
 	MaintenanceID string `json:"maintenance_id"`
 	PrepareTaskID string `json:"prepare_task_id"`
 }
