@@ -162,3 +162,21 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 网页/API 创建仅引用已完成的签名面板准备任务和原维护会话：`POST /api/v1/nginx/images/upgrades` 的请求为 `{ "maintenance_id": "<uuid>", "prepare_task_id": "<uuid>", "allow_downtime": true }`。请求须具备组件管理、系统写权限、重新认证与幂等键；镜像地址、签名路径、平台和信任配置由目标节点的 root 准备计划确定。列表、单项查询和原任务续办分别使用同一路径的 GET、`/{id}` 和 `/{id}/resume`，远程节点提供对应显式路由。应用更新、Agent 升级及两种镜像切换共用活动任务约束。
 
 派发前持久保存加密任务、启动授权和审计，断连后只查询原操作；续办须使用新幂等键并追加连续授权。每项 root 授权只领取一次，最多 32 项，Agent 重启后按原维护会话核对新的 epoch。普通本机续办不能绕过托管授权；网页或 Agent 不可用时，root 可执行 `nginx-image-rescue --data-dir /srv/nginxpanel --nginx-image-operation <operation-uuid> --maintenance-epoch <epoch>`，以 `local-root` 为原事务追加救援授权。网页恢复后对账实际结果，不重放已提交动作。从备份恢复的源任务保持隔离，不在目标节点启动或续办。
+
+## 面板与宿主 Agent 协调更新
+
+目标 Agent 协议变化时，可在面板更新页选择“同时更新 Agent”并确认停机；API 沿用 `POST /api/v1/panel/updates`，增加 `coordinate_agent: true` 和 `allow_downtime: true`。必须先完成签名面板准备、进入维护，并满足同一 launcher 协议及发布允许自动回滚的条件。镜像和 Nginx 不随此操作替换。
+
+本机 root 可使用同一独立 systemd 更新服务。初次受理指定新 UUID；恢复只引用原 UUID，不修改目标、不延长原前进期限。省略 epoch 时读取原维护记录的当前 epoch。服务结果不明时先查询，不重复初次命令。
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel deployment-upgrade --data-dir /srv/nginxpanel \
+  --operation-id <new-uuid> --release-plan <prepared-plan-sha256> \
+  --maintenance-id <held-maintenance-uuid> --allow-downtime
+sudo /opt/nginxpanel/current/nginxpanel deployment-upgrade-status --data-dir /srv/nginxpanel \
+  --operation-id <original-uuid>
+sudo /opt/nginxpanel/current/nginxpanel deployment-upgrade-resume --data-dir /srv/nginxpanel \
+  --operation-id <original-uuid>
+```
+
+目标程序在停机前只读检查持久日志。切换后通过对应程序自身的非 root 辅助入口核对 Agent 协议、进程和原维护会话，再确认面板数据库、前端及 HTTPS；维护释放前失败沿原快照补偿。Agent 不可用或主机重启后可从本机续办；新 boot 代次的 root 救援只恢复原版本。服务定义、程序或进程身份偏离时保留恢复依据，要求本机核对。跨 launcher 协议的更新仍需先完成基础部署。此流程尚待 P5 隔离运行验收。

@@ -75,6 +75,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	command := os.Args[1]
+	if strings.HasPrefix(command, "deployment-upgrade") {
+		return runDeploymentUpgrade(ctx, command, os.Args[2:])
+	}
 	if command == "release-image-pull" {
 		return runReleaseImagePull(ctx, os.Args[2:])
 	}

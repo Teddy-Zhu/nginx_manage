@@ -47,7 +47,7 @@ func (s *Service) read(row rowReader) (Task, string, error) {
 	if err != nil {
 		return t, owner, err
 	}
-	if json.Unmarshal(raw, &t.Request) != nil || t.Request.Validate() != nil || t.Request.OperationID != t.OperationID || t.Request.Input != t.Input {
+	if json.Unmarshal(raw, &t.Request) != nil || t.Request.ValidateStored() != nil || t.Request.OperationID != t.OperationID || t.Request.Input != t.Input {
 		return t, owner, errors.New("镜像替换任务授权与原输入不一致")
 	}
 	t.Sequence, t.Command, t.AuthorizationUntil = t.Request.Sequence, t.Request.Command, t.Request.AuthorizationUntil

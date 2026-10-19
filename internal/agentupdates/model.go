@@ -43,10 +43,19 @@ type Request struct {
 }
 
 func (r Request) Validate() error {
+	if r.Protocol != protocol.Agent {
+		return fault.Invalid("更新请求协议不匹配")
+	}
+	return r.ValidateStored()
+}
+
+// ValidateStored authenticates the original bounded authorization after a wire upgrade.
+// New requests must pass Validate at the live IPC boundary.
+func (r Request) ValidateStored() error {
 	if r.Actor == "" || len(r.Actor) > 128 || strings.TrimSpace(r.Actor) != r.Actor || strings.ContainsAny(r.Actor, "\x00\r\n") || !components.ValidID(r.RequestID) {
 		return fault.Invalid("Agent 升级授权缺少有效的发起人或请求标识")
 	}
-	if r.Protocol != protocol.Agent || !components.ValidID(r.OperationID) || r.OperationID == r.Input.MaintenanceID || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || (r.Command != "upgrade" && r.Command != "resume") || (r.Command == "upgrade") != (r.Sequence == 1) {
+	if r.Protocol <= 0 || !components.ValidID(r.OperationID) || r.OperationID == r.Input.MaintenanceID || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || (r.Command != "upgrade" && r.Command != "resume") || (r.Command == "upgrade") != (r.Sequence == 1) {
 		return fault.Invalid("Agent 升级操作、授权序号或协议无效")
 	}
 	return r.Input.Validate()
@@ -57,7 +66,7 @@ func Hash(id string, in Input) string {
 		Protocol int
 		ID       string
 		Input    Input
-	}{protocol.Agent, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 
@@ -86,7 +95,7 @@ type Operation struct {
 }
 
 func (o Operation) Validate(id string, in Input) error {
-	if o.Authorization.Validate() != nil || o.Authorization.OperationID != id || o.Authorization.Input != in || o.Authorization.Sequence != o.Sequence || o.Authorization.Command != o.Command || in.Validate() != nil || o.Protocol != protocol.Agent || !components.ValidID(id) || o.ID != id || o.Input != in || o.RequestHash != Hash(id, in) || !digest.MatchString(o.IntentSHA256) || !digest.MatchString(o.BeforeSHA256) || !digest.MatchString(o.TargetSHA256) || o.BeforeSHA256 == o.TargetSHA256 || !digest.MatchString(o.PanelID) || o.TargetVersion == "" || len(o.TargetVersion) > 96 || len(o.Error) > 4000 || len(o.Failure) > 4000 || o.Deadline <= 0 || o.UpdatedAt <= 0 || o.ReadyEpoch != "" && !components.ValidID(o.ReadyEpoch) {
+	if o.Authorization.ValidateStored() != nil || o.Authorization.OperationID != id || o.Authorization.Input != in || o.Authorization.Sequence != o.Sequence || o.Authorization.Command != o.Command || in.Validate() != nil || o.Protocol <= 0 || !components.ValidID(id) || o.ID != id || o.Input != in || o.RequestHash != Hash(id, in) || !digest.MatchString(o.IntentSHA256) || !digest.MatchString(o.BeforeSHA256) || !digest.MatchString(o.TargetSHA256) || o.BeforeSHA256 == o.TargetSHA256 || !digest.MatchString(o.PanelID) || o.TargetVersion == "" || len(o.TargetVersion) > 96 || len(o.Error) > 4000 || len(o.Failure) > 4000 || o.Deadline <= 0 || o.UpdatedAt <= 0 || o.ReadyEpoch != "" && !components.ValidID(o.ReadyEpoch) {
 		return errors.New("Agent 独立升级回执与原任务不一致")
 	}
 	if o.Finalized {

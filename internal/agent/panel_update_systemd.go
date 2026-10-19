@@ -77,7 +77,7 @@ func panelUpdateHost(ctx context.Context, data, id string) (active, failed bool,
 }
 
 func panelUpdateAPIInput(in PanelUpdateInput) panelupdates.Input {
-	return panelupdates.Input{MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
+	return panelupdates.Input{CoordinateAgent: in.CoordinateAgent, AllowDowntime: in.AllowDowntime, MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
 }
 
 // Checked again inside the worker lock so a delayed service cannot consume a

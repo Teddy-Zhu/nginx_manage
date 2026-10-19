@@ -28,7 +28,7 @@ func validImageAuthorizations(as []ImageAuthorization, id string, in imageupdate
 	}
 	for n, a := range as {
 		q := a.Request
-		if q.Validate() != nil || q.OperationID != id || q.Input != in || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt >= q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != originalEpoch || n > 0 && a.AcceptedAt < as[n-1].AcceptedAt {
+		if q.ValidateStored() != nil || q.OperationID != id || q.Input != in || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt >= q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != originalEpoch || n > 0 && a.AcceptedAt < as[n-1].AcceptedAt {
 			return errors.New("镜像替换持久授权与原事务不一致")
 		}
 	}

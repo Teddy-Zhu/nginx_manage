@@ -17,13 +17,15 @@ import (
 var digest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type Input struct {
-	MaintenanceID string `json:"maintenance_id"`
-	PlanID        string `json:"plan_id"`
-	Prerelease    bool   `json:"prerelease"`
+	CoordinateAgent bool   `json:"coordinate_agent"`
+	AllowDowntime   bool   `json:"allow_downtime"`
+	MaintenanceID   string `json:"maintenance_id"`
+	PlanID          string `json:"plan_id"`
+	Prerelease      bool   `json:"prerelease"`
 }
 
 func (in Input) Validate() error {
-	if !components.ValidID(in.MaintenanceID) || !digest.MatchString(in.PlanID) {
+	if in.CoordinateAgent != in.AllowDowntime || !components.ValidID(in.MaintenanceID) || !digest.MatchString(in.PlanID) {
 		return fault.Invalid("更新须绑定原维护会话与签名暂存计划")
 	}
 	return nil
@@ -42,10 +44,19 @@ type Request struct {
 }
 
 func (r Request) Validate() error {
+	if r.Protocol != protocol.Agent {
+		return fault.Invalid("更新请求协议不匹配")
+	}
+	return r.ValidateStored()
+}
+
+// ValidateStored authenticates the original bounded authorization after a wire upgrade.
+// New requests must pass Validate at the live IPC boundary.
+func (r Request) ValidateStored() error {
 	if r.Actor == "" || len(r.Actor) > 128 || strings.TrimSpace(r.Actor) != r.Actor || strings.ContainsAny(r.Actor, "\x00\r\n") || !components.ValidID(r.RequestID) {
 		return fault.Invalid("更新授权缺少有效的发起人或请求标识")
 	}
-	if r.Protocol != protocol.Agent || !components.ValidID(r.OperationID) || r.OperationID == r.Input.MaintenanceID || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || (r.Command != "update" && r.Command != "resume") || (r.Command == "update") != (r.Sequence == 1) {
+	if r.Protocol <= 0 || !components.ValidID(r.OperationID) || r.OperationID == r.Input.MaintenanceID || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || (r.Command != "update" && r.Command != "resume") || (r.Command == "update") != (r.Sequence == 1) {
 		return fault.Invalid("更新操作、授权序号或协议无效")
 	}
 	return r.Input.Validate()
@@ -56,7 +67,7 @@ func Hash(id string, in Input) string {
 		Protocol int
 		ID       string
 		Input    Input
-	}{protocol.Agent, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 
@@ -119,10 +130,10 @@ func (o Operation) Validate(id string, in Input) error {
 	if err := o.Cleanup.Validate(o.ReleaseAcknowledged); err != nil {
 		return err
 	}
-	if o.Authorization.Validate() != nil || o.Authorization.OperationID != id || o.Authorization.Input != in || o.Authorization.Sequence != o.Sequence || o.Authorization.Command != o.Command {
+	if o.Authorization.ValidateStored() != nil || o.Authorization.OperationID != id || o.Authorization.Input != in || o.Authorization.Sequence != o.Sequence || o.Authorization.Command != o.Command {
 		return errors.New("更新回执缺少匹配的原启动授权")
 	}
-	if in.Validate() != nil || o.Protocol != protocol.Agent || !components.ValidID(id) || o.ID != id || o.Input != in || o.RequestHash != Hash(id, in) || !digest.MatchString(o.IntentSHA256) || o.Sequence < 1 || o.Sequence > 32 || (o.Command != "update" && o.Command != "resume") || (o.Command == "update") != (o.Sequence == 1) || !digest.MatchString(o.BeforeID) || !digest.MatchString(o.TargetID) || o.BeforeID == o.TargetID || !components.ValidID(o.SnapshotID) || o.BeforeSchema <= 0 || o.TargetSchema < o.BeforeSchema || o.Deadline <= 0 || o.UpdatedAt <= 0 || len(o.Error) > 1024 || len(o.Failure) > 1024 {
+	if in.Validate() != nil || o.Protocol <= 0 || !components.ValidID(id) || o.ID != id || o.Input != in || o.RequestHash != Hash(id, in) || !digest.MatchString(o.IntentSHA256) || o.Sequence < 1 || o.Sequence > 32 || (o.Command != "update" && o.Command != "resume") || (o.Command == "update") != (o.Sequence == 1) || !digest.MatchString(o.BeforeID) || !digest.MatchString(o.TargetID) || o.BeforeID == o.TargetID || !components.ValidID(o.SnapshotID) || o.BeforeSchema <= 0 || o.TargetSchema < o.BeforeSchema || o.Deadline <= 0 || o.UpdatedAt <= 0 || len(o.Error) > 1024 || len(o.Failure) > 1024 {
 		return errors.New("独立更新回执与原任务不一致")
 	}
 	outcome := map[string]string{"committed": "succeeded", "compensated": "rolled_back", "aborted": "failed"}[o.Stage]
@@ -164,8 +175,10 @@ type Agent interface {
 }
 
 type CreateInput struct {
-	MaintenanceID string `json:"maintenance_id"`
-	PrepareTaskID string `json:"prepare_task_id"`
+	CoordinateAgent bool   `json:"coordinate_agent"`
+	AllowDowntime   bool   `json:"allow_downtime"`
+	MaintenanceID   string `json:"maintenance_id"`
+	PrepareTaskID   string `json:"prepare_task_id"`
 }
 
 type Task struct {

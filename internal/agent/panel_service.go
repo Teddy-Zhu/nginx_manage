@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"nginxpanel/internal/protocol"
 	"os"
 	"path/filepath"
 	"time"
@@ -41,7 +42,7 @@ func panelServiceHash(id string, in PanelServiceIntent) string {
 		Protocol int                `json:"protocol"`
 		ID       string             `json:"operation_id"`
 		Intent   PanelServiceIntent `json:"intent"`
-	}{Protocol, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 func validServiceObservation(o PanelServiceObservation) bool {

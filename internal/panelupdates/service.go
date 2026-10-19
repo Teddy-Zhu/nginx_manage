@@ -47,7 +47,7 @@ func (s *Service) read(row rowReader) (Task, string, error) {
 	if err != nil {
 		return t, owner, err
 	}
-	if json.Unmarshal(raw, &t.Request) != nil || t.Request.Validate() != nil || t.Request.OperationID != t.OperationID || t.Request.Input != t.Input {
+	if json.Unmarshal(raw, &t.Request) != nil || t.Request.ValidateStored() != nil || t.Request.OperationID != t.OperationID || t.Request.Input != t.Input {
 		return t, owner, errors.New("更新任务授权与原输入不一致")
 	}
 	t.Sequence, t.Command, t.AuthorizationUntil = t.Request.Sequence, t.Request.Command, t.Request.AuthorizationUntil
@@ -67,6 +67,13 @@ func (s *Service) read(row rowReader) (Task, string, error) {
 
 func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Task, error) {
 	if err := p.Require("read", "components.manage"); err != nil {
+		return Task{}, err
+	}
+	return s.ownedTask(ctx, p, id)
+}
+
+func (s *Service) ownedTask(ctx context.Context, p auth.Principal, id string) (Task, error) {
+	if err := p.Require("components.manage"); err != nil {
 		return Task{}, err
 	}
 	if !components.ValidID(id) {
@@ -161,7 +168,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return zero, err
 	}
-	if !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
+	if in.CoordinateAgent != in.AllowDowntime || !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
 		return zero, fault.Invalid("更新参数或幂等键无效")
 	}
 	hash := requestHash("panel.update", in)
@@ -179,8 +186,11 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	if prepared.Action != "prepare" || prepared.State != "succeeded" || r == nil || r.Release == nil || !r.RuntimeReady || r.Panel == nil || !r.Panel.AutomaticRollback {
 		return zero, fault.Conflict("须选择已完成暂存且允许自动回滚的面板准备任务")
 	}
-	if r.Panel.RequiresCoordination {
+	if r.Panel.RequiresCoordination && !in.CoordinateAgent {
 		return zero, fault.Conflict("目标需要协调升级 Agent 或 launcher，不能创建独立更新任务")
+	}
+	if in.CoordinateAgent && r.Panel.LauncherVersion != r.Release.Receiver.Launcher {
+		return zero, fault.Conflict("须先满足目标 launcher 协议，再协调更新面板与 Agent")
 	}
 	if err = r.Validate(components.Request{Protocol: r.Protocol, OperationID: r.ID, Input: r.Input}); err != nil {
 		return zero, err
@@ -212,7 +222,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 		return zero, fault.Conflict("更新任务达到 64 项保留上限，须本机维护")
 	}
 	now := time.Now().Unix()
-	t := Task{ID: secure.ID(), OperationID: secure.ID(), PrepareTaskID: in.PrepareTaskID, Input: Input{MaintenanceID: in.MaintenanceID, PlanID: r.Release.PlanID, Prerelease: r.Input.Prerelease}, State: "queued", Stage: "queued", Sequence: 1, Command: "update", AuthorizationUntil: now + 300, CreatedAt: now, UpdatedAt: now, requestID: secure.ID()}
+	t := Task{ID: secure.ID(), OperationID: secure.ID(), PrepareTaskID: in.PrepareTaskID, Input: Input{CoordinateAgent: in.CoordinateAgent, AllowDowntime: in.AllowDowntime, MaintenanceID: in.MaintenanceID, PlanID: r.Release.PlanID, Prerelease: r.Input.Prerelease}, State: "queued", Stage: "queued", Sequence: 1, Command: "update", AuthorizationUntil: now + 300, CreatedAt: now, UpdatedAt: now, requestID: secure.ID()}
 	t.Request = Request{Actor: p.ID, RequestID: requestID, Protocol: protocol.Agent, OperationID: t.OperationID, Input: t.Input, Sequence: 1, Command: "update", Epoch: root.Epoch, AuthorizationUntil: t.AuthorizationUntil}
 	if err = t.Request.Validate(); err != nil {
 		return zero, err
@@ -248,7 +258,7 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 	if t, found, err := s.replay(ctx, p, key, hash); err != nil || found {
 		return t, err
 	}
-	t, err := s.Get(ctx, p, id)
+	t, err := s.ownedTask(ctx, p, id)
 	if err != nil {
 		return zero, err
 	}
@@ -260,7 +270,7 @@ func (s *Service) Resume(ctx context.Context, p auth.Principal, requestID, key, 
 	if prior, found, e := s.replay(ctx, p, key, hash); e != nil || found {
 		return prior, e
 	}
-	t, err = s.Get(ctx, p, id)
+	t, err = s.ownedTask(ctx, p, id)
 	if err != nil {
 		return zero, err
 	}

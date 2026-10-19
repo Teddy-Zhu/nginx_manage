@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"nginxpanel/internal/protocol"
 	"os"
 	"path/filepath"
 	"slices"
@@ -95,7 +96,7 @@ func nginxImageHash(id string, i NginxImageIntent) string {
 		Protocol int
 		ID       string
 		Intent   NginxImageIntent
-	}{Protocol, id, i})
+	}{protocol.Journal, id, i})
 	return secure.Hash(raw)
 }
 func validNginxImage(r Record) error {

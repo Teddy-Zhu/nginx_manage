@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"nginxpanel/internal/protocol"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,11 +17,14 @@ import (
 const panelUpdateKind = "panel.update"
 
 type PanelUpdateInput struct {
-	Stage         panelruntime.StageInput `json:"stage"`
-	MaintenanceID string                  `json:"maintenance_id"`
+	CoordinateAgent bool                    `json:"coordinate_agent"`
+	AllowDowntime   bool                    `json:"allow_downtime"`
+	Stage           panelruntime.StageInput `json:"stage"`
+	MaintenanceID   string                  `json:"maintenance_id"`
 }
 
 type PanelUpdateIntent struct {
+	Agent               *CoordinatedAgentIntent `json:"agent,omitempty"`
 	Input               PanelUpdateInput        `json:"input"`
 	BeforeID            string                  `json:"before_id"`
 	TargetID            string                  `json:"target_id"`
@@ -51,6 +55,7 @@ type PanelUpdateAuthorization struct {
 }
 
 type PanelUpdateOperation struct {
+	Agent               *CoordinatedAgentState     `json:"agent,omitempty"`
 	Authorizations      []PanelUpdateAuthorization `json:"authorizations,omitempty"`
 	Intent              PanelUpdateIntent          `json:"intent"`
 	Snapshot            *panelrecovery.Receipt     `json:"snapshot,omitempty"`
@@ -79,7 +84,7 @@ func panelUpdateHash(id string, in PanelUpdateIntent) string {
 		Protocol int               `json:"protocol"`
 		ID       string            `json:"operation_id"`
 		Intent   PanelUpdateIntent `json:"intent"`
-	}{Protocol, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 
@@ -135,11 +140,14 @@ func validPanelUpdate(r Record) error {
 		return errors.New("面板更新独立记录身份无效")
 	}
 	i := p.Intent
+	if err := validCoordinatedAgent(r); err != nil {
+		return err
+	}
 	s := i.Input.Stage
 	if _, err := panelruntime.Root(s.DataDir); err != nil {
 		return err
 	}
-	if !validID(i.Input.MaintenanceID) || !panelSelectionDigest.MatchString(s.PlanID) || !filepath.IsAbs(s.TrustPath) || filepath.Clean(s.TrustPath) != s.TrustPath || len(s.TrustPath) > 512 || !panelSelectionDigest.MatchString(i.BeforeID) || !panelSelectionDigest.MatchString(i.TargetID) || i.BeforeID == i.TargetID || i.BeforeSchema <= 0 || i.TargetSchema < i.BeforeSchema || !panelSelectionDigest.MatchString(i.BindingSHA256) || !panelSelectionDigest.MatchString(i.ApprovalSHA256) || i.UID <= 0 || i.GID <= 0 || i.SnapshotEpoch != r.MaintenanceEpoch || !validServiceObservation(i.Before) || i.Before.State != "running" || i.Before.ReleaseID != i.BeforeID || r.RequestHash != panelUpdateHash(r.OperationID, i) || r.Deadline <= 0 || len(p.Failure) > 1024 || len(r.Error) > 1024 {
+	if !validID(i.Input.MaintenanceID) || !panelSelectionDigest.MatchString(s.PlanID) || !filepath.IsAbs(s.TrustPath) || filepath.Clean(s.TrustPath) != s.TrustPath || len(s.TrustPath) > 512 || !panelSelectionDigest.MatchString(i.BeforeID) || !panelSelectionDigest.MatchString(i.TargetID) || i.BeforeID == i.TargetID || i.BeforeSchema <= 0 || i.TargetSchema < i.BeforeSchema || !panelSelectionDigest.MatchString(i.BindingSHA256) || !panelSelectionDigest.MatchString(i.ApprovalSHA256) || i.UID <= 0 || i.GID <= 0 || !validID(i.SnapshotEpoch) || i.Agent == nil && i.SnapshotEpoch != r.MaintenanceEpoch || !validServiceObservation(i.Before) || i.Before.State != "running" || i.Before.ReleaseID != i.BeforeID || r.RequestHash != panelUpdateHash(r.OperationID, i) || r.Deadline <= 0 || len(p.Failure) > 1024 || len(r.Error) > 1024 {
 		return errors.New("面板更新记录与原批准不一致")
 	}
 	if len(p.Authorizations) > 32 {
@@ -147,7 +155,7 @@ func validPanelUpdate(r Record) error {
 	}
 	for n, a := range p.Authorizations {
 		q := a.Request
-		if q.Validate() != nil || q.OperationID != r.OperationID || q.Input != panelUpdateAPIInput(i.Input) || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt > q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != i.SnapshotEpoch || n > 0 && a.AcceptedAt < p.Authorizations[n-1].AcceptedAt {
+		if q.ValidateStored() != nil || q.OperationID != r.OperationID || q.Input != panelUpdateAPIInput(i.Input) || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt > q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != i.SnapshotEpoch || n > 0 && a.AcceptedAt < p.Authorizations[n-1].AcceptedAt {
 			return errors.New("更新授权历史与原意图不一致")
 		}
 	}

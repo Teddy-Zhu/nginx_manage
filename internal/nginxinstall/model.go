@@ -46,10 +46,17 @@ type Request struct {
 }
 
 func (r Request) Validate() error {
+	if r.Protocol != protocol.Agent {
+		return fault.Invalid("组件请求协议不匹配")
+	}
+	return r.ValidateStored()
+}
+
+func (r Request) ValidateStored() error {
 	if r.AuthorizationUntil <= 0 {
 		return fault.Invalid("安装授权期限无效")
 	}
-	if r.Protocol != protocol.Agent || !components.ValidID(r.OperationID) || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || (r.Command != "install" && r.Command != "resume" && r.Command != "cancel") || (r.Command == "install") != (r.Sequence == 1) {
+	if r.Protocol <= 0 || !components.ValidID(r.OperationID) || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || (r.Command != "install" && r.Command != "resume" && r.Command != "cancel") || (r.Command == "install") != (r.Sequence == 1) {
 		return fault.Invalid("首次安装操作、授权序号或协议无效")
 	}
 	return r.Input.Validate()
@@ -60,7 +67,7 @@ func Hash(id string, in Input) string {
 		Protocol    int
 		OperationID string
 		Input       Input
-	}{protocol.Agent, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 
@@ -82,7 +89,7 @@ type Operation struct {
 }
 
 func (o Operation) Validate(id string, in Input) error {
-	if in.Validate() != nil || !components.ValidID(id) || o.Protocol != protocol.Agent || o.ID != id || o.RequestHash != Hash(id, in) || Hash(id, o.Input) != o.RequestHash || o.Sequence < 1 || o.Sequence > 32 || o.Deadline <= 0 || o.UpdatedAt <= 0 || (o.Command != "install" && o.Command != "resume" && o.Command != "cancel") || (o.Command == "install") != (o.Sequence == 1) || o.Stage == "" {
+	if in.Validate() != nil || !components.ValidID(id) || o.Protocol <= 0 || o.ID != id || o.RequestHash != Hash(id, in) || Hash(id, o.Input) != o.RequestHash || o.Sequence < 1 || o.Sequence > 32 || o.Deadline <= 0 || o.UpdatedAt <= 0 || (o.Command != "install" && o.Command != "resume" && o.Command != "cancel") || (o.Command == "install") != (o.Sequence == 1) || o.Stage == "" {
 		return errors.New("首次安装回执与原任务不一致")
 	}
 	switch o.State {

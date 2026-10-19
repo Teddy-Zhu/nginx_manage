@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"nginxpanel/internal/protocol"
 	"os"
 	"path/filepath"
 	"sync"
@@ -504,7 +505,10 @@ func (g *maintenanceGate) acquire(ctx context.Context, in maintenance.RootReques
 	return out, nil
 }
 func maintenanceHash(in maintenance.RootRequest) string {
-	raw, _ := json.Marshal(in)
+	raw, _ := json.Marshal(struct {
+		Journal int    `json:"journal"`
+		ID      string `json:"operation_id"`
+	}{protocol.Journal, in.OperationID})
 	return secure.Hash(raw)
 }
 func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootRequest) (maintenance.RootStatus, error) {

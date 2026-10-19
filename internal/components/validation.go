@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 )
@@ -22,7 +21,7 @@ func (out Operation) Validate(req Request) error {
 	if err != nil {
 		return err
 	}
-	if req.Protocol != protocol.Agent || !ValidID(req.OperationID) || req.Input.Validate() != nil || out.Protocol != req.Protocol || out.ID != req.OperationID || out.RequestHash != secure.Hash(raw) || out.CreatedAt <= 0 || out.UpdatedAt < out.CreatedAt || out.Deadline != out.CreatedAt+600 || !containsState(out.State) {
+	if req.Protocol <= 0 || !ValidID(req.OperationID) || req.Input.Validate() != nil || out.Protocol != req.Protocol || out.ID != req.OperationID || out.RequestHash != secure.Hash(raw) || out.CreatedAt <= 0 || out.UpdatedAt < out.CreatedAt || out.Deadline != out.CreatedAt+600 || !containsState(out.State) {
 		return errors.New("组件操作身份或状态无效")
 	}
 	input, _ := json.Marshal(out.Input)
@@ -53,7 +52,7 @@ func (out Operation) Validate(req Request) error {
 		return nil
 	}
 	r := out.Release
-	if r == nil || r.Requirements.Validate() != nil || !releases.ValidNotes(r.Notes) || r.Receiver != receiver() || r.StagingOnly != (len(r.Requirements.Incompatibilities(r.Receiver)) != 0) || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != "v"+r.Version || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) == 0 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
+	if r == nil || r.Requirements.Validate() != nil || !releases.ValidNotes(r.Notes) || r.Receiver.APIMajor != 1 || r.Receiver.AgentProtocol <= 0 || r.Receiver.Launcher <= 0 || r.StagingOnly != (len(r.Requirements.Incompatibilities(r.Receiver)) != 0) || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != "v"+r.Version || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) == 0 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
 		return errors.New("组件成功结果不完整")
 	}
 	if req.Input.Tag != "" && r.Tag != req.Input.Tag {
@@ -99,7 +98,7 @@ func (out Operation) Validate(req Request) error {
 		return errors.New("此组件操作不应包含前端发布回执")
 	}
 	if req.Input.Action == "prepare" && found["panel"] != "" {
-		if out.Panel == nil || !digest(out.Panel.ReleaseID) || out.Panel.DatabaseSchema != r.Requirements.DatabaseSchema || out.Panel.AgentProtocol < r.Requirements.MinimumAgentProtocol || out.Panel.LauncherVersion < r.Requirements.MinimumLauncher || out.Panel.RequiresCoordination != (out.Panel.AgentProtocol != protocol.Agent || out.Panel.LauncherVersion != releases.LauncherVersion) {
+		if out.Panel == nil || !digest(out.Panel.ReleaseID) || out.Panel.DatabaseSchema != r.Requirements.DatabaseSchema || out.Panel.AgentProtocol < r.Requirements.MinimumAgentProtocol || out.Panel.LauncherVersion < r.Requirements.MinimumLauncher || out.Panel.RequiresCoordination != (out.Panel.AgentProtocol != r.Receiver.AgentProtocol || out.Panel.LauncherVersion != r.Receiver.Launcher) {
 			return errors.New("面板准备缺少持久版本暂存回执")
 		}
 	} else if out.Panel != nil {

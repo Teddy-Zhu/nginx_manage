@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"nginxpanel/internal/protocol"
 	"os"
 	"path/filepath"
 	"slices"
@@ -67,7 +68,7 @@ func panelImageHash(id string, i PanelImageIntent) string {
 		Protocol int
 		ID       string
 		Intent   PanelImageIntent
-	}{Protocol, id, i})
+	}{protocol.Journal, id, i})
 	return secure.Hash(raw)
 }
 func panelImageTerminal(r Record) bool { return r.State == "succeeded" || r.State == "rolled_back" }

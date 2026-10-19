@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"nginxpanel/internal/protocol"
 
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nginxinstall"
@@ -43,7 +44,7 @@ func installHash(id string, in NginxInstallInput) string {
 		Protocol    int
 		OperationID string
 		Input       NginxInstallInput
-	}{Protocol, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 func validInstallRecord(r Record) error {

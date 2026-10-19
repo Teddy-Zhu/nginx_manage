@@ -47,7 +47,14 @@ type Request struct {
 }
 
 func (r Request) Validate() error {
-	if r.Protocol != protocol.Agent || !components.ValidID(r.OperationID) || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || r.Command != "switch" && r.Command != "resume" && r.Command != "rollback" || (r.Sequence == 1) != (r.Command == "switch") {
+	if r.Protocol != protocol.Agent {
+		return fault.Invalid("组件请求协议不匹配")
+	}
+	return r.ValidateStored()
+}
+
+func (r Request) ValidateStored() error {
+	if r.Protocol <= 0 || !components.ValidID(r.OperationID) || !components.ValidID(r.Epoch) || r.Sequence < 1 || r.Sequence > 32 || r.AuthorizationUntil <= 0 || r.Command != "switch" && r.Command != "resume" && r.Command != "rollback" || (r.Sequence == 1) != (r.Command == "switch") {
 		return fault.Invalid("组件切换协议、标识或授权序号无效")
 	}
 	return r.Input.Validate()
@@ -58,7 +65,7 @@ func Hash(id string, in Input) string {
 		Protocol    int
 		OperationID string
 		Input       Input
-	}{protocol.Agent, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 
@@ -103,7 +110,7 @@ func Terminal(state string) bool {
 
 func (o Operation) Validate(id string, in Input) error {
 	a := o.Authorization
-	if in.Validate() != nil || !components.ValidID(id) || o.Protocol != protocol.Agent || o.ID != id || o.RequestHash != Hash(id, in) || o.Input != in || a.Validate() != nil || a.Input != in || a.OperationID != id || a.Sequence != o.Sequence || a.Command != o.Command || !components.ValidID(o.ChildID) || o.ChildID == id || o.UpdatedAt <= 0 || o.Stage == "" {
+	if in.Validate() != nil || !components.ValidID(id) || o.Protocol <= 0 || o.ID != id || o.RequestHash != Hash(id, in) || o.Input != in || a.ValidateStored() != nil || a.Input != in || a.OperationID != id || a.Sequence != o.Sequence || a.Command != o.Command || !components.ValidID(o.ChildID) || o.ChildID == id || o.UpdatedAt <= 0 || o.Stage == "" {
 		return errors.New("组件切换回执与原任务不一致")
 	}
 	switch o.State {

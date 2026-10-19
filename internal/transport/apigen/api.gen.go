@@ -1535,15 +1535,19 @@ type AgentUpgradeTask struct {
 
 // PanelUpdateInput defines model for PanelUpdateInput.
 type PanelUpdateInput struct {
-	MaintenanceId string `json:"maintenance_id"`
-	PlanId        string `json:"plan_id"`
-	Prerelease    bool   `json:"prerelease"`
+	CoordinateAgent bool   `json:"coordinate_agent"`
+	AllowDowntime   bool   `json:"allow_downtime"`
+	MaintenanceId   string `json:"maintenance_id"`
+	PlanId          string `json:"plan_id"`
+	Prerelease      bool   `json:"prerelease"`
 }
 
 // PanelUpdateCreateInput defines model for PanelUpdateCreateInput.
 type PanelUpdateCreateInput struct {
-	MaintenanceId string `json:"maintenance_id"`
-	PrepareTaskId string `json:"prepare_task_id"`
+	CoordinateAgent *bool  `json:"coordinate_agent,omitempty"`
+	AllowDowntime   *bool  `json:"allow_downtime,omitempty"`
+	MaintenanceId   string `json:"maintenance_id"`
+	PrepareTaskId   string `json:"prepare_task_id"`
 }
 
 // PanelUpdateAuthorization defines model for PanelUpdateAuthorization.

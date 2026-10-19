@@ -40,7 +40,7 @@ func validSwitchJob(r Record) error {
 	}
 	for index, a := range j.Authorizations {
 		q := a.Request
-		if q.Validate() != nil || q.Input != j.Input || q.OperationID != r.OperationID || index == 0 && q.Sequence != 1 || index > 0 && q.Sequence <= j.Authorizations[index-1].Request.Sequence || a.ClaimedAt < 0 || a.ClaimedAt != 0 && a.ClaimedAt > q.AuthorizationUntil {
+		if q.ValidateStored() != nil || q.Input != j.Input || q.OperationID != r.OperationID || index == 0 && q.Sequence != 1 || index > 0 && q.Sequence <= j.Authorizations[index-1].Request.Sequence || a.ClaimedAt < 0 || a.ClaimedAt != 0 && a.ClaimedAt > q.AuthorizationUntil {
 			return errors.New("组件切换派发授权与原记录不一致")
 		}
 	}

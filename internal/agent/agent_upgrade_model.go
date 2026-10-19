@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"nginxpanel/internal/protocol"
 	"os"
 	"path/filepath"
 	"slices"
@@ -84,7 +85,7 @@ func agentUpgradeHash(id string, in AgentUpgradeIntent) string {
 		Protocol int                `json:"protocol"`
 		ID       string             `json:"id"`
 		Intent   AgentUpgradeIntent `json:"intent"`
-	}{Protocol, id, in})
+	}{protocol.Journal, id, in})
 	return secure.Hash(raw)
 }
 func agentUpgradeTerminal(r Record) bool {
@@ -101,7 +102,7 @@ func validAgentUpgrade(r Record) error {
 	}
 	for n, a := range p.Authorizations {
 		q := a.Request
-		if q.Validate() != nil || q.OperationID != r.OperationID || q.Input != agentUpgradeAPIInput(i.Input) || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt > q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != i.Epoch || n > 0 && a.AcceptedAt < p.Authorizations[n-1].AcceptedAt {
+		if q.ValidateStored() != nil || q.OperationID != r.OperationID || q.Input != agentUpgradeAPIInput(i.Input) || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt > q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != i.Epoch || n > 0 && a.AcceptedAt < p.Authorizations[n-1].AcceptedAt {
 			return errors.New("Agent 升级持久授权与原操作不一致")
 		}
 	}

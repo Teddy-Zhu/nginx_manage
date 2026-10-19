@@ -2733,11 +2733,15 @@ export interface components {
             result?: components["schemas"]["AgentUpgradeOperation"];
         };
         PanelUpdateInput: {
+            coordinate_agent: boolean;
+            allow_downtime: boolean;
             maintenance_id: string;
             plan_id: string;
             prerelease: boolean;
         };
         PanelUpdateCreateInput: {
+            coordinate_agent?: boolean;
+            allow_downtime?: boolean;
             maintenance_id: string;
             prepare_task_id: string;
         };

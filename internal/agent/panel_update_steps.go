@@ -309,6 +309,9 @@ func (w *panelUpdateWorker) abort(ctx context.Context) (Record, error) {
 		err = errors.New("中止前原面板运行状态未确认")
 	}
 	if err == nil {
+		err = w.checkCoordinatedAbort(call)
+	}
+	if err == nil {
 		w.r.PanelUpdate.AbortObservation = &o
 		w.r.State, w.r.Stage, w.r.Error = "waiting_confirmation", "aborted", w.r.PanelUpdate.Failure
 		err = w.save()
@@ -350,6 +353,9 @@ func (w *panelUpdateWorker) compensate(ctx context.Context) (Record, error) {
 				return w.pending(err)
 			}
 		case "rollback_selecting":
+			if err := w.coordinateAgent(call, true); err != nil {
+				return w.pending(err)
+			}
 			if err := w.selectVersion(call, true); err != nil {
 				return w.pending(err)
 			}
@@ -384,6 +390,9 @@ func (w *panelUpdateWorker) compensate(ctx context.Context) (Record, error) {
 			}
 			ready, err := observePanelReadiness(call, w.j, s, *p.RollbackStart, *p.Snapshot, w.epoch)
 			if err != nil {
+				return w.pending(err)
+			}
+			if err = w.checkCoordinatedReady(call, true); err != nil {
 				return w.pending(err)
 			}
 			access, err := w.access(call, false)

@@ -104,8 +104,11 @@ func (s *Server) readPanelUpdate(ctx context.Context, id string) (panelupdates.O
 	return hostedPanelUpdate(r, active)
 }
 
-func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request) (panelupdates.Operation, error) {
+func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request, rootRecovery bool) (panelupdates.Operation, error) {
 	var zero panelupdates.Operation
+	if rootRecovery && (os.Geteuid() != 0 || !req.Input.CoordinateAgent || req.Command != "resume") {
+		return zero, fault.Invalid("协调更新本机恢复入口无效")
+	}
 	if err := req.Validate(); err != nil {
 		return zero, err
 	}
@@ -196,7 +199,7 @@ func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request)
 		}
 		return zero, fault.Conflict("更新启动授权已过期或超过五分钟")
 	}
-	access, err := panelUpdateAccess(ctx, s.Journal, req.OperationID, req.Input.MaintenanceID, req.Epoch, false)
+	access, err := panelUpdateAccess(ctx, s.Journal, req.OperationID, req.Input.MaintenanceID, req.Epoch, rootRecovery)
 	if err != nil {
 		if fresh {
 			return zero, fault.New(http.StatusConflict, "PANEL_UPDATE_REJECTED", panelRestoreError(err))
@@ -209,7 +212,7 @@ func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request)
 		}
 	}()
 	if fresh {
-		in := PanelUpdateInput{MaintenanceID: req.Input.MaintenanceID, Stage: panelruntime.StageInput{DataDir: s.DataDir, PlanID: req.Input.PlanID, TrustPath: s.ReleaseTrust, AllowPrerelease: req.Input.Prerelease}}
+		in := PanelUpdateInput{CoordinateAgent: req.Input.CoordinateAgent, AllowDowntime: req.Input.AllowDowntime, MaintenanceID: req.Input.MaintenanceID, Stage: panelruntime.StageInput{DataDir: s.DataDir, PlanID: req.Input.PlanID, TrustPath: s.ReleaseTrust, AllowPrerelease: req.Input.Prerelease}}
 		r, err = preparePanelUpdate(ctx, in, req.OperationID, req.Epoch)
 		if err != nil {
 			// The worker locks still prove the original parent did not exist; no
@@ -219,6 +222,11 @@ func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request)
 		r.State = "queued"
 	} else if r.PanelUpdate.Intent.Input.Stage.TrustPath != s.ReleaseTrust {
 		return zero, fault.Conflict("本机更新信任登记与原操作不同")
+	}
+	if rootRecovery {
+		if err = registerCoordinatedBootRescue(ctx, s.DataDir, &r); err != nil {
+			return zero, err
+		}
 	}
 	now = time.Now().Unix()
 	if req.AuthorizationUntil <= now {
@@ -264,7 +272,7 @@ func (s *Server) panelUpdateHandlers(mux *http.ServeMux) {
 			componentReply(w, nil, fault.Invalid("独立更新请求无效"))
 			return
 		}
-		o, err := s.queuePanelUpdate(r.Context(), req)
+		o, err := s.queuePanelUpdate(r.Context(), req, false)
 		componentReply(w, o, err)
 	})
 }

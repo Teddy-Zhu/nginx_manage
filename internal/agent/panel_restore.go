@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"nginxpanel/internal/protocol"
 	"os"
 	"path/filepath"
 	"time"
@@ -27,7 +28,7 @@ func panelRestoreHash(id string, receipt panelrecovery.Receipt) string {
 		Protocol int                   `json:"protocol"`
 		ID       string                `json:"operation_id"`
 		Receipt  panelrecovery.Receipt `json:"receipt"`
-	}{Protocol, id, receipt})
+	}{protocol.Journal, id, receipt})
 	return secure.Hash(raw)
 }
 

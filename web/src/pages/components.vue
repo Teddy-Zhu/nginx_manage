@@ -425,7 +425,7 @@ onUnmounted(() => {
         </p>
         <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
         <NAlert v-if="task.result?.release?.staging_only || task.result?.panel?.requires_coordination" type="warning" title="需要协调部署">
-          目标要求同步更新 Agent 或 launcher。签名产物可先行暂存，独立更新入口不可用于此版本。
+          Agent 协议变化可在面板更新中选择协调更新；launcher 协议变化需要先更新基础部署。此准备结果不能用于独立更新。
         </NAlert>
         <p v-if="task.result?.panel" class="muted">目标 Agent 协议 {{ task.result.panel.agent_protocol }} · launcher 协议 {{ task.result.panel.launcher_version }}</p>
         <template v-if="task.action === 'prepare' && task.state === 'succeeded' && task.result?.release?.images.length">

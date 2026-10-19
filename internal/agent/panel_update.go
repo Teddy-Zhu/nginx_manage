@@ -65,6 +65,9 @@ func panelUpdateAccess(ctx context.Context, j *Journal, id, maintenanceID, epoch
 
 func (w *panelUpdateWorker) access(ctx context.Context, closing bool) (func(), error) {
 	i := w.r.PanelUpdate.Intent
+	if err := w.refreshCoordinatedEpoch(ctx, closing); err != nil {
+		return nil, err
+	}
 	return panelUpdateAccess(ctx, w.j, w.r.OperationID, i.Input.MaintenanceID, w.epoch, closing)
 }
 func (w *panelUpdateWorker) save() error {
@@ -102,6 +105,12 @@ func (w *panelUpdateWorker) approved(ctx context.Context) error {
 	}
 	if s.Release.ID != i.TargetID || selectionValueHash(s.Approval) != i.ApprovalSHA256 || s.Compatibility.DatabaseSchema != i.TargetSchema || !s.Compatibility.AutomaticRollback {
 		return errors.New("原更新签名批准、schema 或自动回滚声明已变化")
+	}
+	if i.Agent != nil {
+		if s.Release.AgentProtocol != i.Agent.TargetProtocol || s.Release.LauncherVersion != i.Agent.Launcher || s.Release.BinarySHA256 != i.Agent.Target.BinarySHA256 {
+			return errors.New("协调更新的目标程序协议已变化")
+		}
+		return nil
 	}
 	return s.RequireCurrent()
 }
@@ -247,8 +256,13 @@ func preparePanelUpdate(ctx context.Context, in PanelUpdateInput, id, epoch stri
 	if err != nil {
 		return Record{}, err
 	}
-	if err = target.RequireCurrent(); err != nil {
-		return Record{}, err
+	if in.CoordinateAgent != in.AllowDowntime {
+		return Record{}, errors.New("协调 Agent 更新必须单独明确允许停机")
+	}
+	if !in.CoordinateAgent {
+		if err = target.RequireCurrent(); err != nil {
+			return Record{}, err
+		}
 	}
 	if !target.Compatibility.AutomaticRollback {
 		return Record{}, errors.New("此发布未声明允许自动回滚，不能进入自动更新流程")
@@ -264,7 +278,15 @@ func preparePanelUpdate(ctx context.Context, in PanelUpdateInput, id, epoch stri
 		return Record{}, errors.New("原面板进程尚未稳定运行")
 	}
 	i := PanelUpdateIntent{Input: in, BeforeID: before.Release.ID, TargetID: target.Release.ID, BeforeSchema: before.Release.DatabaseSchema, TargetSchema: target.Compatibility.DatabaseSchema, BindingSHA256: selectionValueHash(before.Deployment), ApprovalSHA256: selectionValueHash(target.Approval), UID: uid, GID: gid, SnapshotEpoch: epoch, SnapshotID: secure.ID(), StopID: secure.ID(), SelectionID: secure.ID(), StartID: secure.ID(), RollbackStopID: secure.ID(), RollbackSelectionID: secure.ID(), RestoreID: secure.ID(), RollbackStartID: secure.ID(), Before: observed}
-	return Record{OperationID: id, Kind: panelUpdateKind, State: "running", Stage: "capturing", MaintenanceEpoch: epoch, Deadline: time.Now().Add(20 * time.Minute).Unix(), RequestHash: panelUpdateHash(id, i), PanelUpdate: &PanelUpdateOperation{Intent: i}}, nil
+	var bridge *CoordinatedAgentState
+	if in.CoordinateAgent {
+		i.Agent, err = prepareCoordinatedAgent(ctx, in, before, target, id)
+		if err != nil {
+			return Record{}, err
+		}
+		bridge = &CoordinatedAgentState{Epoch: epoch}
+	}
+	return Record{OperationID: id, Kind: panelUpdateKind, State: "running", Stage: "capturing", MaintenanceEpoch: epoch, Deadline: time.Now().Add(20 * time.Minute).Unix(), RequestHash: panelUpdateHash(id, i), PanelUpdate: &PanelUpdateOperation{Intent: i, Agent: bridge}}, nil
 }
 
 func (w *panelUpdateWorker) forward(ctx context.Context) error {
@@ -276,6 +298,9 @@ func (w *panelUpdateWorker) forward(ctx context.Context) error {
 		}
 		switch w.r.Stage {
 		case "capturing":
+			if err := w.inspectTargetAgent(ctx); err != nil {
+				return err
+			}
 			access, err := w.access(ctx, false)
 			if err != nil {
 				return err
@@ -307,6 +332,9 @@ func (w *panelUpdateWorker) forward(ctx context.Context) error {
 				return err
 			}
 		case "selecting":
+			if err := w.coordinateAgent(ctx, false); err != nil {
+				return err
+			}
 			if err := w.selectVersion(ctx, false); err != nil {
 				return err
 			}
@@ -337,6 +365,9 @@ func (w *panelUpdateWorker) forward(ctx context.Context) error {
 			}
 			ready, err := observePanelReadiness(ctx, w.j, s, *p.Start, *p.Snapshot, w.epoch)
 			if err != nil {
+				return err
+			}
+			if err = w.checkCoordinatedReady(ctx, false); err != nil {
 				return err
 			}
 			access, err := w.access(ctx, false)
