@@ -75,6 +75,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	command := os.Args[1]
+	if strings.HasPrefix(command, "panel-image") {
+		return runPanelImage(ctx, command, os.Args[2:])
+	}
 	if strings.HasPrefix(command, "agent-upgrade") {
 		return runAgentUpgrade(ctx, command, os.Args[2:])
 	}

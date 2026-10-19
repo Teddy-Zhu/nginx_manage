@@ -187,12 +187,18 @@ func observePanelReadiness(ctx context.Context, j *Journal, current panelruntime
 }
 
 func observePanelReadinessDatabase(ctx context.Context, j *Journal, current panelruntime.Snapshot, started Record, database panelrecovery.Database, material func(context.Context) error, epoch string) (out PanelReadiness, err error) {
+	i := started.PanelService.Intent
+	return observePanelReadinessSource(ctx, current, started.OperationID, started.RequestHash, i.BindingSHA256, i.Input.MaintenanceID, epoch, *started.PanelService.After, database, material, func(ctx context.Context, closing bool) error {
+		return panelReadinessGrant(ctx, j, current.Deployment.DataDir, i.Input.MaintenanceID, epoch, closing)
+	})
+}
+
+// The process evidence is shared by application updates and image-only
+// replacement. Callers supply their real root authorization, not a synthetic
+// successful panel.service operation.
+func observePanelReadinessSource(ctx context.Context, current panelruntime.Snapshot, startID, startHash, bindingHash, maintenanceID, epoch string, expected PanelServiceObservation, database panelrecovery.Database, material func(context.Context) error, grant func(context.Context, bool) error) (out PanelReadiness, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
-	data := current.Deployment.DataDir
-	maintenanceID := started.PanelService.Intent.Input.MaintenanceID
-	i := started.PanelService.Intent
-	expected := *started.PanelService.After
 	var status panelready.Status
 	var hostPID, parent int
 	// A started process can still be initializing its DB, TLS listener and
@@ -200,7 +206,7 @@ func observePanelReadinessDatabase(ctx context.Context, j *Journal, current pane
 	wait, stop := context.WithTimeout(ctx, 90*time.Second)
 	defer stop()
 	for {
-		if err = panelReadinessGrant(wait, j, data, maintenanceID, epoch, true); err != nil {
+		if err = grant(wait, true); err != nil {
 			return out, err
 		}
 		observed, e := observePanelService(wait, current)
@@ -260,8 +266,8 @@ func observePanelReadinessDatabase(ctx context.Context, j *Journal, current pane
 	if err = material(ctx); err != nil {
 		return out, err
 	}
-	if err = panelReadinessGrant(ctx, j, data, maintenanceID, epoch, false); err != nil {
+	if err = grant(ctx, false); err != nil {
 		return out, err
 	}
-	return PanelReadiness{StartID: started.OperationID, StartSHA256: started.RequestHash, BindingSHA256: i.BindingSHA256, CheckedAt: time.Now().Unix(), Process: expected, Application: status, HTTPS: https}, nil
+	return PanelReadiness{StartID: startID, StartSHA256: startHash, BindingSHA256: bindingHash, CheckedAt: time.Now().Unix(), Process: expected, Application: status, HTTPS: https}, nil
 }

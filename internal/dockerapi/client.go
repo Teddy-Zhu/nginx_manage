@@ -30,6 +30,11 @@ type Client struct {
 	transport *http.Transport
 }
 
+// StatusError distinguishes an authoritative absence from a lost response.
+type StatusError struct{ StatusCode int }
+
+func (e *StatusError) Error() string { return fmt.Sprintf("Docker IPC 返回 HTTP %d", e.StatusCode) }
+
 func New() (*Client, error) {
 	if os.Geteuid() != 0 {
 		return nil, errors.New("Docker 接入仅允许宿主机 root")
@@ -109,7 +114,7 @@ func (d *Client) Request(ctx context.Context, method, path string, input any) (*
 	}
 	if (resp.StatusCode < 200 || resp.StatusCode >= 300) && !(upgrade && resp.StatusCode == http.StatusSwitchingProtocols) {
 		resp.Body.Close()
-		return nil, fmt.Errorf("Docker IPC 返回 HTTP %d", resp.StatusCode)
+		return nil, &StatusError{StatusCode: resp.StatusCode}
 	}
 	return resp, nil
 }

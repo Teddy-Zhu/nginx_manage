@@ -38,6 +38,7 @@ type dockerContainer struct {
 		StartedAt                                    string
 	}
 	Config struct {
+		Labels                              map[string]string
 		Image, User, WorkingDir, StopSignal string
 		Entrypoint, Cmd                     []string
 		Volumes                             map[string]any
@@ -107,11 +108,19 @@ func InspectDocker(ctx context.Context, d Deployment, peerPID int) (DockerInstan
 }
 
 func checkDockerDefinition(c dockerContainer, d Deployment, peerPID int) error {
-	s, h := c.State, c.HostConfig
+	s := c.State
 	started, err := time.Parse(time.RFC3339Nano, s.StartedAt)
 	if !digest.MatchString(c.ID) || c.Name != "/"+DockerName || c.Image != d.ImageID || c.RestartCount < 0 || !s.Running || s.Status != "running" || s.Paused || s.Restarting || s.Dead || s.OOMKilled || s.Pid != peerPID || err != nil || started.IsZero() {
 		return errors.New("实际面板容器、镜像或运行代次与 launcher 对端不一致")
 	}
+	return checkDockerConfiguration(c, d)
+}
+
+func checkDockerConfiguration(c dockerContainer, d Deployment) error {
+	if !digest.MatchString(c.ID) || c.Name != "/"+DockerName || c.Image != d.ImageID || c.RestartCount < 0 {
+		return errors.New("实际面板容器或镜像不属于固定部署")
+	}
+	h := c.HostConfig
 	config := c.Config
 	if config.Image != d.Image || config.User != fmt.Sprintf("%d:%d", d.UID, d.GID) || config.WorkingDir != d.DataDir || !slices.Equal(config.Entrypoint, []string{DockerLauncher, "launcher"}) || !slices.Equal(config.Cmd, []string{"--data-dir", d.DataDir}) || len(config.Volumes) != 0 || len(config.Healthcheck) != 0 || config.Tty || config.OpenStdin || config.StdinOnce || config.StopSignal != "SIGTERM" || config.StopTimeout == nil || *config.StopTimeout != 60 {
 		return errors.New("面板容器启动定义不属于固定部署")

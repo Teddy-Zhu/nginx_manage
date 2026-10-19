@@ -98,4 +98,22 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 
 实际容器主 PID 必须等于 Unix Socket 内核给出的对端 PID。客户端继续从宿主机核对进程完整 UID/GID、附加组、capabilities、禁止提权、PID 1、用户映射、命名空间、实际参数和签名程序散列。响应读取后再次核对容器 ID、启动时间、重启计数、进程及程序 inode/元数据；连接期间发生重启、重建、程序或运行绑定变化时拒绝响应，结果不明的动作继续按原操作查询。核对只读取容器和内核信息，不创建容器、不执行诊断进程或拉取镜像；Docker Socket 仍只供宿主机 root 使用。字段语义见 [Docker Engine API v1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)。
 
-固定 launcher 镜像的受控替换及补偿流程尚待接入，不能直接修改已批准绑定或将镜像标签替换视为受管升级完成。本轮仅完成实现与源码审阅，未在开发主机调用 Docker、launcher 或修改部署环境；实际容器字段、权限与重建故障场景待 P5 隔离集中验证。
+固定 launcher 镜像支持宿主机 root 发起的独立替换事务。先持有原维护会话、完成同一签名发行的面板资源准备，并将新旧镜像按摘要保留在目标主机；命令不拉取镜像。替换只改变容器镜像和 launcher 批准，当前应用、前端选择、数据库、身份、数据目录及监听地址保持原值。该入口不用于跨应用/Agent 协议或 launcher 协议的协调升级，也不替换 Nginx 容器镜像。
+
+```sh
+# 以下命令只在实际部署的目标主机执行。UUID、epoch、准备计划和摘要均须使用实际值。
+/opt/nginxpanel/current/nginxpanel panel-image --data-dir /srv/nginxpanel \
+  --panel-image <operation-uuid> --maintenance-id <maintenance-uuid> --maintenance-epoch <epoch> \
+  --release-plan <signed-panel-plan-sha256> \
+  --image ghcr.io/<owner>/nginxpanel-runtime@sha256:<digest> \
+  --image-manifest /root/offline/release-manifest.json \
+  --image-signature /root/offline/release-manifest.sig.json \
+  --image-manifest-sha256 <manifest-sha256>
+/opt/nginxpanel/current/nginxpanel panel-image-status --data-dir /srv/nginxpanel --panel-image <operation-uuid>
+```
+
+固定发布信任为 `/etc/nginxpanel/release-trust.json`，预发布需显式添加 `--release-prerelease`。API/Web 的普通应用更新不会调用此入口。安装器登记 `nginxpanel-image@.service`；独立 root worker 在持久意图发布后停止、删除原固定实例，切换 root 只读绑定与生成的 Compose，再按固定权限策略重建并检查实际容器、应用、HTTPS、原配置和维护身份。Compose 项目标签及容器标签随事务保留；以后运行 Compose 可能按其配置散列再次重建，仍须使用生成的摘要引用。禁止强制删除、删除原镜像、指定任意 Docker 地址或接管同名未知容器。
+
+前进期限固定为授权后十分钟。失败先持久记录恢复方向，再使用保留的原镜像恢复；恢复不依赖目标签名文件或目标公钥继续可用，不恢复或覆盖业务数据库。若原容器尚未改变且仍就绪，直接确认原实例。未确认的结果保留 `recovery_required`，继续阻止维护释放。进程停止后只能使用原 UUID 显式续办，不重新创建任务；续办不延长期限，也不反转恢复方向。Agent 重启后，可通过 `panel-image-probe --data-dir /srv/nginxpanel --maintenance-id <maintenance-uuid>` 以登记账户重新确认原维护会话，再将返回的 epoch 传给 `panel-image-resume --data-dir /srv/nginxpanel --panel-image <operation-uuid> --maintenance-epoch <epoch>`。若主机重启使原容器产生新的运行代次，只有显式续办能够登记该代次，并转为确认或恢复原镜像。事务成功或完整恢复后，仍由原维护流程显式释放维护会话。
+
+本轮仅完成实现与源码审阅，未在开发主机调用 Docker、launcher 或修改部署环境；实际容器字段、权限、重建与恢复故障场景待 P5 隔离集中验证。

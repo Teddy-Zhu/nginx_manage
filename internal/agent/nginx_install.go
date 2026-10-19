@@ -168,6 +168,14 @@ func installGrantForOperation(j *Journal, id, epoch string, allowClosing bool, o
 		return err
 	}
 	for _, prior := range records {
+		if prior.Kind == panelImageKind {
+			if err := validPanelImage(prior); err != nil {
+				return err
+			}
+			if !panelImageTerminal(prior) && prior.OperationID != operationID {
+				return errors.New("面板镜像替换尚未完成，不能执行其他维护动作")
+			}
+		}
 		if prior.Kind == agentUpgradeKind {
 			if err := validAgentUpgrade(prior); err != nil {
 				return err

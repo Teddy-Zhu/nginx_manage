@@ -15,6 +15,14 @@ func WriteCompose(w io.Writer, data string) error {
 	if err != nil {
 		return err
 	}
+	return ComposeDeployment(w, d)
+}
+
+// ComposeDeployment renders an already approved binding without selecting it.
+func ComposeDeployment(w io.Writer, d Deployment) error {
+	if err := d.validate(d.DataDir); err != nil {
+		return err
+	}
 	if d.Mode != "docker" {
 		return errors.New("Compose 仅用于已绑定的容器面板")
 	}
@@ -23,7 +31,7 @@ func WriteCompose(w io.Writer, data string) error {
 		return err
 	}
 	var nginx *nginxcontainer.Binding
-	binding, err := nginxcontainer.Read(data)
+	binding, err := nginxcontainer.Read(d.DataDir)
 	if err == nil {
 		nginx = &binding
 	} else if !errors.Is(err, os.ErrNotExist) {
