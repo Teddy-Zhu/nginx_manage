@@ -12,6 +12,7 @@
 <script setup lang="ts">
 import Fail2banPythonPanel from "../components/Fail2banPythonPanel.vue";
 import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
+import Fail2banUpgradePanel from "../components/Fail2banUpgradePanel.vue";
 import Fail2banAddressPanel from "../components/Fail2banAddressPanel.vue";
 import Fail2banExistingPanel from "../components/Fail2banExistingPanel.vue";
 import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
@@ -240,6 +241,10 @@ onUnmounted(() => {
         ) ?? null
       "
       :observed-at="view?.at ?? 0"
+      @changed="load"
+    />
+    <Fail2banUpgradePanel
+      :module-enabled="moduleEnabled === true"
       @changed="load"
     />
     <Fail2banExistingPanel

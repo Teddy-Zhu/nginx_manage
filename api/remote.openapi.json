@@ -6394,6 +6394,89 @@
         "x-body-limit": 4096,
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/fail2ban/upgrade": {
+      "post": {
+        "operationId": "remoteChangeFail2banUpgrade",
+        "x-scopes": [
+          "components.manage",
+          "security.write"
+        ],
+        "responses": {
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "changeFail2banUpgrade",
+        "x-forward-path": "/fail2ban/upgrade",
+        "x-response-kind": "json",
+        "x-body-limit": 2048,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "x-query-keys": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/Fail2banUpgradeInput"
+              }
+            }
+          }
+        },
+        "description": "运行中受管 Fail2ban 的异步候选检查、准备与独立确认升级；固定目标及本机执行来源，HTTP 202 仅表示排队。"
+      }
+    },
+    "/nodes/{connection}/fail2ban/upgrade/tasks": {
+      "get": {
+        "operationId": "remoteGetFail2banUpgradeTasks",
+        "x-scopes": [
+          "read"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banUpgradeTasks",
+        "x-forward-path": "/fail2ban/upgrade/tasks",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "description": "返回最近 16 条保存的升级任务及历史结果快照。"
+      }
     }
   },
   "security": [

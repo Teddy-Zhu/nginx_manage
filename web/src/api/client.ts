@@ -88,6 +88,14 @@ export type Fail2banPythonTask = components["schemas"]["Fail2banPythonTask"];
 export type Fail2banPythonTaskStatus = components["schemas"]["Fail2banPythonTaskStatus"];
 export type Fail2banManaged = components["schemas"]["Fail2banManaged"];
 export type Fail2banService = components["schemas"]["Fail2banService"];
+export type Fail2banUpgradeInput = components["schemas"]["Fail2banUpgradeInput"];
+export type Fail2banUpgradeBans = components["schemas"]["Fail2banUpgradeBans"];
+export type Fail2banUpgradePlan = components["schemas"]["Fail2banUpgradePlan"];
+export type Fail2banUpgradePreparation = components["schemas"]["Fail2banUpgradePreparation"];
+export type Fail2banUpgradeRunResult = components["schemas"]["Fail2banUpgradeRunResult"];
+export type Fail2banUpgradeOperation = components["schemas"]["Fail2banUpgradeOperation"];
+export type Fail2banUpgradeTask = components["schemas"]["Fail2banUpgradeTask"];
+export type Fail2banUpgradeTaskStatus = components["schemas"]["Fail2banUpgradeTaskStatus"];
 export type Fail2banLifecyclePreviewInput = components["schemas"]["Fail2banLifecyclePreviewInput"];
 export type Fail2banLifecycleInput = components["schemas"]["Fail2banLifecycleInput"];
 export type Fail2banLifecyclePlan = components["schemas"]["Fail2banLifecyclePlan"];
@@ -688,6 +696,10 @@ function createAPI(scope: RequestScope) {
     request<Fail2banPythonTaskStatus[]>({ url: "/fail2ban/python/tasks", signal }),
   changeFail2banPython: (data: Fail2banPythonTaskInput, key: string) =>
     request<Fail2banPythonTask>({ url: "/fail2ban/python", method: "POST", data, headers: { "Idempotency-Key": key } }),
+  changeFail2banUpgrade: (data: Fail2banUpgradeInput, key: string) =>
+    request<Fail2banUpgradeTask>({ url: "/fail2ban/upgrade", method: "POST", data, headers: { "Idempotency-Key": key } }),
+  fail2banUpgradeTasks: (signal?: AbortSignal) =>
+    request<Fail2banUpgradeTaskStatus[]>({ url: "/fail2ban/upgrade/tasks", signal }),
   previewFail2banLifecycle: (data: Fail2banLifecyclePreviewInput, signal?: AbortSignal) =>
     request<Fail2banLifecyclePlan>({ url: "/fail2ban/lifecycle/preview", method: "POST", data, signal }),
   fail2banLifecycleTasks: (signal?: AbortSignal) =>

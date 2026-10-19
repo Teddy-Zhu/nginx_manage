@@ -17,6 +17,8 @@ export interface paths {
     };
  "/fail2ban/python": { post:operations["changeFail2banPython"]; };
  "/fail2ban/python/tasks": { get:operations["getFail2banPythonTasks"]; };
+ "/fail2ban/upgrade": { post:operations["changeFail2banUpgrade"]; };
+ "/fail2ban/upgrade/tasks": { get:operations["getFail2banUpgradeTasks"]; };
  "/fail2ban/lifecycle/preview": { post:operations["previewFail2banLifecycle"]; };
  "/fail2ban/lifecycle": { post:operations["changeFail2banLifecycle"]; };
  "/fail2ban/lifecycle/tasks": { get:operations["getFail2banLifecycleTasks"]; };
@@ -1943,6 +1945,14 @@ export interface components {
         Fail2banPythonTaskOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banPythonTaskInput"];state:"running"|"recovery_required"|"succeeded"|"failed";stage:string;submission:"not_sent"|"unknown"|"acknowledged";at:number;plan:components["schemas"]["Fail2banPythonPlan"]|null;python:components["schemas"]["Fail2banPython"];error:string; };
         Fail2banPythonTask: { task_id:string;operation_id:string; };
         Fail2banPythonTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banPythonTaskInput"];result:components["schemas"]["Fail2banPythonTaskOperation"]|null; };
+        Fail2banUpgradeInput: { action:"check"|"prepare"|"run";plan_id:string;asset_id:string;prerelease:boolean;target:string;preparation_id:string; };
+        Fail2banUpgradeBans: { observed_at:number;count:number;sha256:string; };
+        Fail2banUpgradePlan: { at:number;target:string;installation_id:string;event_id:string;source_version:string;candidate_version:string;running:boolean;jails:string[];impacts:string[];scope_verified:boolean;blockers:string[];nginx_grants:number;host_sources:boolean;host_sync:boolean;bans:components["schemas"]["Fail2banUpgradeBans"]|null; };
+        Fail2banUpgradePreparation: { id:string;intent_sha256:string;created_at:number;source_version:string;candidate_version:string; };
+        Fail2banUpgradeRunResult: { id:string;state:"running"|"recovery_required"|"succeeded"|"failed"|"cancelled";stage:string;completed_at:number; };
+        Fail2banUpgradeOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banUpgradeInput"];child_id:string;state:"running"|"recovery_required"|"succeeded"|"failed"|"cancelled";stage:string;at:number;error:string;plan:components["schemas"]["Fail2banUpgradePlan"]|null;preparation:components["schemas"]["Fail2banUpgradePreparation"]|null;run:components["schemas"]["Fail2banUpgradeRunResult"]|null; };
+        Fail2banUpgradeTask: { task_id:string;operation_id:string; };
+        Fail2banUpgradeTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banUpgradeInput"];result:components["schemas"]["Fail2banUpgradeOperation"]|null; };
         Fail2banLifecyclePreviewInput: { engine_owner:"managed"|"existing";action:"install"|"resume"|"rollback"|"start"|"stop"|"enable"|"disable";plan_id:string;asset_id:string;prerelease:boolean; };
         Fail2banLifecycleInput: components["schemas"]["Fail2banLifecyclePreviewInput"] & { base_id:string;target:string;start:boolean;enable:boolean; };
         Fail2banLifecyclePlan: { at:number;input:components["schemas"]["Fail2banLifecycleInput"];managed:components["schemas"]["Fail2banManaged"];service:components["schemas"]["Fail2banService"];jails:string[];impacts:string[]; };
@@ -3902,6 +3912,8 @@ export interface operations {
  getFail2banPythonTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
 
  previewFail2banLifecycle: { parameters:{query?:never;header?:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecyclePreviewInput"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ changeFail2banUpgrade: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banUpgradeInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ getFail2banUpgradeTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  changeFail2banLifecycle: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecycleInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  getFail2banLifecycleTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
 

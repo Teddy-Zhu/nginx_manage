@@ -67,6 +67,20 @@ paths:
       x-scopes: [read]
       description: 返回最近 16 条 Fail2banPythonTaskStatus 及保存的计划、解释器和结果快照；已有快照在 Agent 离线时仍可读取，备份隔离任务不重放。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /fail2ban/upgrade:
+    post:
+      operationId: changeFail2banUpgrade
+      x-scopes: [components.manage, security.write]
+      description: 返回 Fail2banUpgradeTask。check 异步检查单个已准备签名资产；prepare 使用 check 的 target 固定运行实例与恢复材料；run 只接受准备完成的 preparation_id 及 intent_sha256 作为 target。仅管理运行中的独立受管实例。准备不停止服务，run 独立确认停止、状态捕获、切换、保护核对及候选失败后的原版本恢复。均要求模块启用、近期认证和幂等键；HTTP 202 只表示持久排队，不表示升级或保护已完成。不接受主机路径、服务名称、命令或新的信任来源。
+      parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banUpgradeInput'}}}}
+      responses: {"202": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
+  /fail2ban/upgrade/tasks:
+    get:
+      operationId: getFail2banUpgradeTasks
+      x-scopes: [read]
+      description: 返回最近 16 条 Fail2banUpgradeTaskStatus 和保存的检查、准备、升级或恢复结果。结果为历史快照，不证明当前实时保护；已接受的原 Agent 记录丢失时保留恢复状态，不重建执行授权。
+      responses: {"200": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
   /fail2ban/lifecycle/preview:
     post:
       operationId: previewFail2banLifecycle
@@ -2292,6 +2306,22 @@ components:
       {"type": "object", "additionalProperties": false, "required": ["task_id", "operation_id"], "properties": {"task_id": {"type": "string", "format": "uuid"}, "operation_id": {"type": "string", "format": "uuid"}}}
     Fail2banPythonTaskStatus:
       {"type": "object", "additionalProperties": false, "required": ["id", "operation_id", "state", "stage", "error", "created_at", "input", "result"], "properties": {"id": {"type": "string"}, "operation_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "input": {"$ref": "#/components/schemas/Fail2banPythonTaskInput"}, "result": {"allOf": [{"$ref": "#/components/schemas/Fail2banPythonTaskOperation"}], "nullable": true}}}
+    Fail2banUpgradeInput:
+      {"type": "object", "additionalProperties": false, "required": ["action", "plan_id", "asset_id", "prerelease", "target", "preparation_id"], "properties": {"action": {"type": "string", "enum": ["check", "prepare", "run"]}, "plan_id": {"type": "string", "maxLength": 64}, "asset_id": {"type": "string", "maxLength": 128}, "prerelease": {"type": "boolean"}, "target": {"type": "string", "maxLength": 64}, "preparation_id": {"type": "string", "maxLength": 36}}}
+    Fail2banUpgradeBans:
+      {"type": "object", "additionalProperties": false, "required": ["observed_at", "count", "sha256"], "properties": {"observed_at": {"type": "integer", "format": "int64"}, "count": {"type": "integer", "format": "int64", "minimum": 0}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+    Fail2banUpgradePlan:
+      {"type": "object", "additionalProperties": false, "required": ["at", "target", "installation_id", "event_id", "source_version", "candidate_version", "running", "jails", "impacts", "scope_verified", "blockers", "nginx_grants", "host_sources", "host_sync", "bans"], "properties": {"at": {"type": "integer", "format": "int64"}, "target": {"type": "string"}, "installation_id": {"type": "string"}, "event_id": {"type": "string"}, "source_version": {"type": "string"}, "candidate_version": {"type": "string"}, "running": {"type": "boolean"}, "jails": {"type": "array", "maxItems": 64, "items": {"type": "string"}}, "impacts": {"type": "array", "maxItems": 16, "items": {"type": "string"}}, "scope_verified": {"type": "boolean"}, "blockers": {"type": "array", "items": {"type": "string"}}, "nginx_grants": {"type": "integer", "format": "int64", "minimum": 0, "maximum": 64}, "host_sources": {"type": "boolean"}, "host_sync": {"type": "boolean"}, "bans": {"allOf": [{"$ref": "#/components/schemas/Fail2banUpgradeBans"}], "nullable": true}}}
+    Fail2banUpgradePreparation:
+      {"type": "object", "additionalProperties": false, "required": ["id", "intent_sha256", "created_at", "source_version", "candidate_version"], "properties": {"id": {"type": "string"}, "intent_sha256": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "source_version": {"type": "string"}, "candidate_version": {"type": "string"}}}
+    Fail2banUpgradeRunResult:
+      {"type": "object", "additionalProperties": false, "required": ["id", "state", "stage", "completed_at"], "properties": {"id": {"type": "string"}, "state": {"type": "string", "enum": ["running", "recovery_required", "succeeded", "failed", "cancelled"]}, "stage": {"type": "string"}, "completed_at": {"type": "integer", "format": "int64"}}}
+    Fail2banUpgradeOperation:
+      {"type": "object", "additionalProperties": false, "required": ["id", "request_hash", "input", "child_id", "state", "stage", "at", "error", "plan", "preparation", "run"], "properties": {"id": {"type": "string"}, "request_hash": {"type": "string"}, "input": {"$ref": "#/components/schemas/Fail2banUpgradeInput"}, "child_id": {"type": "string"}, "state": {"type": "string", "enum": ["running", "recovery_required", "succeeded", "failed", "cancelled"]}, "stage": {"type": "string"}, "at": {"type": "integer", "format": "int64"}, "error": {"type": "string"}, "plan": {"allOf": [{"$ref": "#/components/schemas/Fail2banUpgradePlan"}], "nullable": true}, "preparation": {"allOf": [{"$ref": "#/components/schemas/Fail2banUpgradePreparation"}], "nullable": true}, "run": {"allOf": [{"$ref": "#/components/schemas/Fail2banUpgradeRunResult"}], "nullable": true}}}
+    Fail2banUpgradeTask:
+      {"type": "object", "additionalProperties": false, "required": ["task_id", "operation_id"], "properties": {"task_id": {"type": "string", "format": "uuid"}, "operation_id": {"type": "string", "format": "uuid"}}}
+    Fail2banUpgradeTaskStatus:
+      {"type": "object", "additionalProperties": false, "required": ["id", "operation_id", "state", "stage", "error", "created_at", "input", "result"], "properties": {"id": {"type": "string"}, "operation_id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "input": {"$ref": "#/components/schemas/Fail2banUpgradeInput"}, "result": {"allOf": [{"$ref": "#/components/schemas/Fail2banUpgradeOperation"}], "nullable": true}}}
     Fail2banLifecyclePreviewInput:
       {"type": "object", "additionalProperties": false, "required": ["action", "plan_id", "asset_id", "prerelease", "engine_owner"], "properties": {"action": {"type": "string", "enum": ["install", "resume", "rollback", "start", "stop", "enable", "disable"]}, "plan_id": {"type": "string", "maxLength": 64}, "asset_id": {"type": "string", "maxLength": 128}, "prerelease": {"type": "boolean"}, "engine_owner": {"type": "string", "enum": ["managed", "existing"]}}}
     Fail2banLifecycleInput:

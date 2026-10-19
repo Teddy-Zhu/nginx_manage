@@ -49,7 +49,7 @@ func (s *PolicyService) nextJailTask(ctx context.Context, executor JailsExecutor
 	}
 	defer done()
 	var id string
-	err := s.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('fail2ban.apply','fail2ban.address','fail2ban.lifecycle','fail2ban.python','fail2ban.existing') AND state IN ('queued','running','compensating','recovery_required') ORDER BY created_at,id LIMIT 1").Scan(&id)
+	err := s.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('fail2ban.apply','fail2ban.address','fail2ban.lifecycle','fail2ban.python','fail2ban.existing','fail2ban.upgrade') AND state IN ('queued','running','compensating','recovery_required') ORDER BY created_at,id LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -62,6 +62,13 @@ func (s *PolicyService) nextJailTask(ctx context.Context, executor JailsExecutor
 	}
 	if task.Stage == "restore_isolated" {
 		return nil
+	}
+	if task.Kind == "fail2ban.upgrade" {
+		upgradeExecutor, ok := s.Agent.(UpgradeExecutor)
+		if !ok {
+			return fault.Unavailable("未连接升级执行器")
+		}
+		return s.nextUpgradeTask(ctx, upgradeExecutor, task)
 	}
 	if task.Kind == "fail2ban.existing" {
 		existingExecutor, ok := s.Agent.(ExistingPolicyExecutor)

@@ -2559,6 +2559,76 @@ type Fail2banPythonTaskStatus struct {
 }
 type ChangeFail2banPythonParams = SetFail2banPolicyParams
 type ChangeFail2banPythonJSONRequestBody = Fail2banPythonTaskInput
+type Fail2banUpgradeInput struct {
+	Action        string `json:"action"`
+	PlanID        string `json:"plan_id"`
+	AssetID       string `json:"asset_id"`
+	Prerelease    bool   `json:"prerelease"`
+	Target        string `json:"target"`
+	PreparationID string `json:"preparation_id"`
+}
+type Fail2banUpgradeBans struct {
+	ObservedAt int64  `json:"observed_at"`
+	Count      int    `json:"count"`
+	SHA256     string `json:"sha256"`
+}
+type Fail2banUpgradePlan struct {
+	At               int64                `json:"at"`
+	Target           string               `json:"target"`
+	InstallationID   string               `json:"installation_id"`
+	EventID          string               `json:"event_id"`
+	SourceVersion    string               `json:"source_version"`
+	CandidateVersion string               `json:"candidate_version"`
+	Running          bool                 `json:"running"`
+	Jails            []string             `json:"jails"`
+	Impacts          []string             `json:"impacts"`
+	ScopeVerified    bool                 `json:"scope_verified"`
+	Blockers         []string             `json:"blockers"`
+	NginxGrants      int                  `json:"nginx_grants"`
+	HostSources      bool                 `json:"host_sources"`
+	HostSync         bool                 `json:"host_sync"`
+	Bans             *Fail2banUpgradeBans `json:"bans"`
+}
+type Fail2banUpgradePreparation struct {
+	ID               string `json:"id"`
+	IntentSHA256     string `json:"intent_sha256"`
+	CreatedAt        int64  `json:"created_at"`
+	SourceVersion    string `json:"source_version"`
+	CandidateVersion string `json:"candidate_version"`
+}
+type Fail2banUpgradeRunResult struct {
+	ID          string `json:"id"`
+	State       string `json:"state"`
+	Stage       string `json:"stage"`
+	CompletedAt int64  `json:"completed_at"`
+}
+type Fail2banUpgradeOperation struct {
+	ID          string                      `json:"id"`
+	RequestHash string                      `json:"request_hash"`
+	Input       Fail2banUpgradeInput        `json:"input"`
+	ChildID     string                      `json:"child_id"`
+	State       string                      `json:"state"`
+	Stage       string                      `json:"stage"`
+	At          int64                       `json:"at"`
+	Error       string                      `json:"error"`
+	Plan        *Fail2banUpgradePlan        `json:"plan"`
+	Preparation *Fail2banUpgradePreparation `json:"preparation"`
+	Run         *Fail2banUpgradeRunResult   `json:"run"`
+}
+type Fail2banUpgradeTaskStatus struct {
+	ID          string                    `json:"id"`
+	OperationID string                    `json:"operation_id"`
+	State       string                    `json:"state"`
+	Stage       string                    `json:"stage"`
+	Error       string                    `json:"error"`
+	CreatedAt   int64                     `json:"created_at"`
+	Input       Fail2banUpgradeInput      `json:"input"`
+	Result      *Fail2banUpgradeOperation `json:"result"`
+}
+type Fail2banUpgradeTask = Fail2banAddressTask
+type ChangeFail2banUpgradeParams = SetFail2banPolicyParams
+type ChangeFail2banUpgradeJSONRequestBody = Fail2banUpgradeInput
+
 type Fail2banLifecyclePreviewInput struct {
 	EngineOwner string `json:"engine_owner"`
 	Action      string `json:"action"`
@@ -5220,6 +5290,8 @@ type ServerInterface interface {
 	ChangeFail2banPython(w http.ResponseWriter, r *http.Request, params ChangeFail2banPythonParams)
 	GetFail2banPythonTasks(w http.ResponseWriter, r *http.Request)
 	CheckFail2banTemplates(w http.ResponseWriter, r *http.Request, params CheckFail2banTemplatesParams)
+	ChangeFail2banUpgrade(w http.ResponseWriter, r *http.Request, params ChangeFail2banUpgradeParams)
+	GetFail2banUpgradeTasks(w http.ResponseWriter, r *http.Request)
 	PreviewFail2banLifecycle(w http.ResponseWriter, r *http.Request, params PreviewFail2banLifecycleParams)
 	ChangeFail2banLifecycle(w http.ResponseWriter, r *http.Request, params ChangeFail2banLifecycleParams)
 	GetFail2banLifecycleTasks(w http.ResponseWriter, r *http.Request)
@@ -8310,6 +8382,28 @@ func (siw *ServerInterfaceWrapper) PreviewFail2banLifecycle(w http.ResponseWrite
 		params.XCSRFToken = &token
 	}
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.PreviewFail2banLifecycle(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) ChangeFail2banUpgrade(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := ChangeFail2banUpgradeParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.ChangeFail2banUpgrade(w, r, params) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+	handler.ServeHTTP(w, r)
+}
+func (siw *ServerInterfaceWrapper) GetFail2banUpgradeTasks(w http.ResponseWriter, r *http.Request) {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.GetFail2banUpgradeTasks(w, r) }))
 	for _, middleware := range siw.HandlerMiddlewares {
 		handler = middleware(handler)
 	}
@@ -12806,6 +12900,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/python", wrapper.ChangeFail2banPython)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/python/tasks", wrapper.GetFail2banPythonTasks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/upgrade", wrapper.ChangeFail2banUpgrade)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/upgrade/tasks", wrapper.GetFail2banUpgradeTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/lifecycle/preview", wrapper.PreviewFail2banLifecycle)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/fail2ban/lifecycle", wrapper.ChangeFail2banLifecycle)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/lifecycle/tasks", wrapper.GetFail2banLifecycleTasks)

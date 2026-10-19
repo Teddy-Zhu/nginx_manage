@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -133,6 +134,16 @@ func fail2banUpgradeIdleFor(j *Journal, allowed string) error {
 	}
 	progressingUpgrade := parentID != ""
 	if allowed != "" {
+		if r, e := j.Get(allowed); e == nil && r.Kind == fail2banUpgradeTaskKind {
+			if e = validFail2banUpgradeTask(r); e != nil {
+				return e
+			}
+			progressingUpgrade = progressingUpgrade || r.Fail2banUpgrade.Sent
+		} else if e != nil && !os.IsNotExist(e) {
+			return e
+		}
+	}
+	if allowed != "" {
 		restoring, _, err := pendingFail2banUpgradeRestore(data)
 		if err != nil {
 			return err
@@ -174,12 +185,12 @@ func fail2banUpgradeIdleFor(j *Journal, allowed string) error {
 // through fixed version, config-test and regex diagnostics. It never selects
 // code, changes grants, stops the engine or writes its configuration/database.
 func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fail2banUpgradePlan, error) {
-	return planFail2banUpgrade(parent, in, nil)
+	return planFail2banUpgrade(parent, in, "", nil)
 }
 
 // Finalization runs under the same locks and authenticated selection as the
 // diagnostics. Preparation must not reassemble a target from unlocked reads.
-func planFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions, finalize func(context.Context, Fail2banUpgradePlan, fail2banUpgradeBasis) error) (Fail2banUpgradePlan, error) {
+func planFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions, allowed string, finalize func(context.Context, Fail2banUpgradePlan, fail2banUpgradeBasis) error) (Fail2banUpgradePlan, error) {
 	var out Fail2banUpgradePlan
 	if err := fail2banManagedRoot(in.DataDir, in.Scope); err != nil {
 		return out, err
@@ -206,7 +217,7 @@ func planFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions, fina
 		return out, err
 	}
 	defer access()
-	if err = fail2banUpgradeIdle(j); err != nil {
+	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
 	binding, err := selectFail2banBinding(in.DataDir)
@@ -315,7 +326,7 @@ func planFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions, fina
 	if err != nil || afterGrants.hash() != grants.hash() {
 		return out, errors.Join(errors.New("候选检查期间动作批准范围或原运行检查点已变化"), err)
 	}
-	if err = fail2banUpgradeIdle(j); err != nil {
+	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
 	if err = ctx.Err(); err != nil {

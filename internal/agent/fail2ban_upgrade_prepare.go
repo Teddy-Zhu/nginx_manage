@@ -101,6 +101,10 @@ func existingFail2banUpgradePreparation(ctx context.Context, in Fail2banUpgradeP
 // while preserving the running selection. Stop, snapshot, switch and recovery
 // remain distinct durable execution stages and cannot be inferred from ready.
 func PrepareFail2banUpgrade(parent context.Context, in Fail2banUpgradePreparationOptions) (out Fail2banUpgradePreparation, err error) {
+	return prepareFail2banUpgradeFor(parent, in, "")
+}
+
+func prepareFail2banUpgradeFor(parent context.Context, in Fail2banUpgradePreparationOptions, allowed string) (out Fail2banUpgradePreparation, err error) {
 	if !fail2banDigest.MatchString(in.Target) {
 		return out, errors.New("升级准备须提供原候选预览的精确目标摘要")
 	}
@@ -115,9 +119,12 @@ func PrepareFail2banUpgrade(parent context.Context, in Fail2banUpgradePreparatio
 	if found || err != nil {
 		return existing, err
 	}
-	_, err = planFail2banUpgrade(ctx, in.Fail2banUpgradeOptions, func(ctx context.Context, plan Fail2banUpgradePlan, basis fail2banUpgradeBasis) error {
+	_, err = planFail2banUpgrade(ctx, in.Fail2banUpgradeOptions, allowed, func(ctx context.Context, plan Fail2banUpgradePlan, basis fail2banUpgradeBasis) error {
+		if allowed != "" && !plan.Running {
+			return errors.New("网页升级准备仅接受正在运行的受管实例")
+		}
 		var e error
-		out, e = prepareFail2banUpgradeLocked(ctx, in, plan, basis, "")
+		out, e = prepareFail2banUpgradeLocked(ctx, in, plan, basis, allowed)
 		return e
 	})
 	return out, err
