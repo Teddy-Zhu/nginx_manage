@@ -12,9 +12,29 @@ import (
 )
 
 func readFail2banUpgradeRestoreSource(data, id string) (fail2banUpgradeActivationIntent, fail2banUpgradeSwitch, fail2banUpgradeActivationFacts, error) {
-	a, s, err := readFail2banUpgradeActivation(data, id)
+	var s fail2banUpgradeSwitch
+	a, err := readFail2banUpgradeActivationIntent(data, id)
 	if err != nil {
 		return a, s, fail2banUpgradeActivationFacts{}, err
+	}
+	if a.Request.RestoreID != "" || !validID(a.Request.SwitchID) {
+		return a, s, fail2banUpgradeActivationFacts{}, errors.New("原版本恢复只接受升级候选启动，不能递归引用恢复启动")
+	}
+	s, receipt, err := readFail2banUpgradeVerificationSwitch(data, a.Request.SwitchID)
+	if err != nil {
+		return a, s, fail2banUpgradeActivationFacts{}, err
+	}
+	if err = a.validate(data, id, selectionFromFail2banUpgradeSwitch(s, receipt)); err != nil {
+		return a, s, fail2banUpgradeActivationFacts{}, err
+	}
+	// Reject other outcomes before facts can follow a successful activation's
+	// proof reference. Recovery dependencies must terminate at a stopped source.
+	var stopped fail2banUpgradeActivationReceipt
+	if err = readFail2banUpgradeActivationJSON(filepath.Join(a.dir(), "receipt.json"), &stopped); err != nil {
+		return a, s, fail2banUpgradeActivationFacts{}, err
+	}
+	if stopped.Outcome != "stopped" {
+		return a, s, fail2banUpgradeActivationFacts{}, errors.New("升级恢复只接受已停止候选，不能引用成功启动的保护证明")
 	}
 	f, err := a.facts()
 	if err != nil {

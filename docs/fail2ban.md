@@ -717,7 +717,7 @@ nginxpanel fail2ban-upgrade-activation-stop --data-dir /var/lib/nginxpanel \
 
 意图、执行标识、许可、运行回执、停止意图及完成回执均为 root 专用 `0700/0600` 材料，最多 8 项目录、单文件 64 KiB、总预算 1 MiB，含临时材料并预留后续完成写入空间；完整保护证明使用其独立配额。完成回执已保存但审计未确认时为 `completion_unacknowledged`，发布结果不明时为 `completion_unknown`；原 UUID 查询及续办不得覆盖冲突材料。不自动清理审计或恢复依据，也不进入跨环境迁移或业务备份。
 
-候选停止回执同时保存停止服务、Invocation、原状态目录身份和完整数据库文件摘要，供独立恢复事务核对。该事务补齐已完成选择后的受控启动、动作收敛和保护证明确认；运行实例的停止/捕获/停止态准备见上文，失败后的停止态原版本及数据库恢复见下文。整体升级父任务、恢复后的受控启动/保护确认和 Web/API 升级任务仍待完成。全部服务、通道、内核及故障行为待 P5 在隔离环境集中验证；开发期间未操作当前主机服务或系统配置。
+候选停止回执同时保存停止服务、Invocation、原状态目录身份和完整数据库文件摘要，供独立恢复事务核对。该事务补齐已完成选择后的受控启动、动作收敛和保护证明确认；运行实例的停止/捕获/停止态准备见上文，失败后的原版本及数据库恢复、原版本受控启动见下文。整体升级父任务和 Web/API 升级任务仍待完成。全部服务、通道、内核及故障行为待 P5 在隔离环境集中验证；开发期间未操作当前主机服务或系统配置。
 
 ### 候选失败后的停止态原版本恢复
 
@@ -744,9 +744,39 @@ nginxpanel fail2ban-upgrade-restore-cancel --data-dir /var/lib/nginxpanel \
 
 恢复期间自动启动、配置/生命周期/批准变更、Nginx 和宿主机动作均保持隔离；只允许原事务续办。首次执行许可为五分钟，执行标识前可取消，标识后只能继续原恢复。宿主机 Agent 每 30 秒续办已有执行或完成材料，不自动创建首次恢复授权。发布选择、批准、数据库交换、完成回执或终态审计之间中断，均沿原 UUID 及精确前后镜像继续；原执行审计丢失时不重新生成授权。历史终态只认证不可变事件与回执，不依赖后续活动数据库内容。
 
-`succeeded/original_restored_stopped` 仅表示原版本、配置、批准及升级前状态库已恢复，服务仍然停止。当前已确认的宿主机规则和 Nginx 拒绝集合保持原样，未证明它们等于原快照中的封禁，也未证明流量保护已经恢复；后续受控启动、官方封禁及实际动作核对仍待接入。升级候选期间产生的新数据库内容保留供核查，不合并到原快照。
+`succeeded/original_restored_stopped` 仅表示原版本、配置、批准及升级前状态库已恢复，服务仍然停止。当前已确认的宿主机规则和 Nginx 拒绝集合保持原样，未证明它们等于原快照中的封禁，也未证明流量保护已经恢复；下一步使用下文独立授权的原版本启动与保护核对。升级候选期间产生的新数据库内容保留供核查，不合并到原快照。
 
 控制材料为 root 专用 `0700/0600`，最多 8 项、单文件 8 MiB、总预算 128 MiB，含临时材料及完成空间；交换材料独立受状态恢复的 8 项/1 GiB 配额限制，复制前预留完整目录及控制空间。所有材料仅供本机恢复，不进入迁移或业务备份，不自动清理。实现及源码集成审阅完成，构建、类型检查、测试、实际服务/数据库/内核及中断组合留待 P5 隔离验证。
+
+### 恢复后的受控启动与保护确认
+
+停止态恢复及其审计完成后，以独立启动 UUID 引用该恢复：
+
+```sh
+nginxpanel fail2ban-upgrade-activate --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RECOVERY_ACTIVATION_UUID \
+  --fail2ban-upgrade-restore RESTORE_UUID \
+  --nginx-container --nginx-user nginxpanel-nginx
+
+nginxpanel fail2ban-upgrade-activation --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RECOVERY_ACTIVATION_UUID
+
+nginxpanel fail2ban-upgrade-activation-resume --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RECOVERY_ACTIVATION_UUID
+
+nginxpanel fail2ban-upgrade-activation-stop --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RECOVERY_ACTIVATION_UUID
+```
+
+原生 Nginx 仍使用可信二进制及原专用用户；仅宿主机动作时不需 Nginx 参数。`--fail2ban-upgrade-switch` 与 `--fail2ban-upgrade-restore` 必须且只能指定一个。共用启动事务直接认证所选来源的意图摘要、完成回执及原审计，恢复来源绑定其新原版本选择、完整 jail 配置及新动作批准，不能取得原切换的候选启动权限，也不能复用安装、准备、快照、原启动/证明或新选择/批准的 UUID。原版本恢复入口只接受升级候选的失败停止来源，拒绝递归引用恢复启动。
+
+首次启动前重新认证原加密快照/暂存、原版本及完整配置，确认已交换的原状态目录、候选数据库保留副本、停止服务/Invocation、批准、已确认宿主机内核及 Nginx 动作检查点均未变化，并冻结 Nginx 实际运行来源。随后复用单次启动许可、固定服务 cgroup/Invocation 核对及后台续办机制；不重发未知启动，不重写数据库，也不改动服务启用偏好或只读沙箱。官方实例启动后允许其正常写入状态库；查询原恢复完成事实只认证不可变材料，不再比较活动数据库字节。
+
+等待期间仅允许本次原版本代次的动作收敛。五分钟内须同时证明原快照的未到期封禁仍在、当前完整官方封禁及到期时间正确、实际宿主机规则/Nginx 拒绝集合与当前封禁和保护来源一致，并绑定新选择、原版本 Invocation/Socket 和固定 Nginx 运行来源。分别保存完整保护证明、独立证明审计、启动完成回执和终态审计后，结果为 `succeeded/original_protection_verified`。该结果描述本次观测，不替代后续实时状态查询。
+
+原版本启动失败、显式停止或超期仍无有效证明时，沿原许可停止该原版本代次，保存停止服务及数据库摘要，结果为 `failed/restored_stopped`。不回切升级候选、不重新复制原快照，也不把未核对的保护判为恢复成功；后续操作须有新的授权及匹配的当前状态。原审计、来源证明或选择丢失/变化时保留隔离；已保存保护证明后的中断只补齐历史确认，不重采样或重放启动。
+
+独立保护观测也可使用 `fail2ban-upgrade-verify --fail2ban-upgrade-restore RESTORE_UUID`，其余参数与下文一致。它认证同一恢复来源及原版本选择谱系，复用完整官方封禁和实际动作核对，不启动服务或修复动作。原版本和候选共用既有启动/保护材料配额、维护排空及 Agent 续办机制；材料仅供本机恢复，不迁移、不自动清理。以上实现及源码集成已接入，运行、故障和配额组合待 P5 在隔离环境集中验证。
 
 ### 升级后的保护核对与持久证明
 

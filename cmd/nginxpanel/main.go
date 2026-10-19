@@ -127,6 +127,7 @@ func run() error {
 	fail2banUpgradeTarget := flags.String("fail2ban-upgrade-target", "", "exact managed Fail2ban upgrade preview digest")
 	fail2banUpgradePreparation := flags.String("fail2ban-upgrade-preparation", "", "exact root Fail2ban upgrade preparation UUID")
 	fail2banUpgradePreparedSHA256 := flags.String("fail2ban-upgrade-prepared-sha256", "", "exact Fail2ban upgrade preparation intent digest")
+	fail2banUpgradeRestore := flags.String("fail2ban-upgrade-restore", "", "exact completed local Fail2ban stopped recovery UUID")
 	fail2banUpgradeActivation := flags.String("fail2ban-upgrade-activation", "", "exact completed stopped Fail2ban candidate activation UUID")
 	fail2banUpgradeSwitch := flags.String("fail2ban-upgrade-switch", "", "exact completed local Fail2ban upgrade switch UUID")
 	fail2banNginxBase := flags.String("fail2ban-nginx-base", "", "expected current Nginx action authorization UUID")
@@ -254,11 +255,11 @@ func run() error {
 		"fail2ban-upgrade-switch-resume":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-upgrade-switch-revert":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-upgrade-switch-status":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-upgrade-activate":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
+		"fail2ban-upgrade-activate":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "fail2ban-upgrade-restore": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
 		"fail2ban-upgrade-activation-resume": {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-upgrade-activation-stop":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-upgrade-activation":        {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-upgrade-verify":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
+		"fail2ban-upgrade-verify":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "fail2ban-upgrade-restore": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
 		"fail2ban-upgrade-verification":      {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-state-capture":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-state-inspect":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
@@ -380,6 +381,10 @@ func run() error {
 		switch f.Name {
 		case "fail2ban-upgrade-activation":
 			if command != "fail2ban-upgrade-restore" {
+				invalidFlag = f.Name
+			}
+		case "fail2ban-upgrade-restore":
+			if command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-activate" {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-upgrade-switch":
@@ -816,7 +821,7 @@ func run() error {
 		var err error
 		switch command {
 		case "fail2ban-upgrade-activate":
-			out, err = agent.ActivateFail2banUpgrade(ctx, agent.Fail2banUpgradeActivationOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, SwitchID: *fail2banUpgradeSwitch, NginxBinary: *nginxBinary, NginxWorker: *nginxUser, NginxContainer: *nginxContainer})
+			out, err = agent.ActivateFail2banUpgrade(ctx, agent.Fail2banUpgradeActivationOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, SwitchID: *fail2banUpgradeSwitch, RestoreID: *fail2banUpgradeRestore, NginxBinary: *nginxBinary, NginxWorker: *nginxUser, NginxContainer: *nginxContainer})
 		case "fail2ban-upgrade-activation-resume":
 			out, err = agent.ResumeFail2banUpgradeActivation(ctx, absDir, *fail2banScope, *fail2banOperation)
 		case "fail2ban-upgrade-activation-stop":
@@ -832,7 +837,7 @@ func run() error {
 		var out agent.Fail2banUpgradeVerification
 		var err error
 		if command == "fail2ban-upgrade-verify" {
-			out, err = agent.VerifyFail2banUpgrade(ctx, agent.Fail2banUpgradeVerificationOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, SwitchID: *fail2banUpgradeSwitch, NginxBinary: *nginxBinary, NginxWorker: *nginxUser, NginxContainer: *nginxContainer})
+			out, err = agent.VerifyFail2banUpgrade(ctx, agent.Fail2banUpgradeVerificationOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, SwitchID: *fail2banUpgradeSwitch, RestoreID: *fail2banUpgradeRestore, NginxBinary: *nginxBinary, NginxWorker: *nginxUser, NginxContainer: *nginxContainer})
 		} else {
 			out, err = agent.ReadFail2banUpgradeVerification(ctx, absDir, *fail2banScope, *fail2banOperation)
 		}

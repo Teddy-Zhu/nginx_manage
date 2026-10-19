@@ -11,8 +11,8 @@ import (
 )
 
 func ActivateFail2banUpgrade(ctx context.Context, in Fail2banUpgradeActivationOptions) (Fail2banUpgradeActivation, error) {
-	if !validID(in.SwitchID) {
-		return Fail2banUpgradeActivation{}, errors.New("升级启动须指定已完成的切换 UUID")
+	if !fail2banUpgradeSelectionRef(in.SwitchID, in.RestoreID) {
+		return Fail2banUpgradeActivation{}, errors.New("升级启动须且只能指定一个已完成的切换或停止态恢复 UUID")
 	}
 	return operateFail2banUpgradeActivation(ctx, in, "activate")
 }
@@ -33,12 +33,12 @@ func beginFail2banUpgradeActivation(ctx context.Context, in Fail2banUpgradeActiv
 	if _, err := j.Get(in.OperationID); !os.IsNotExist(err) {
 		return i, errors.Join(errors.New("升级启动 UUID 已存在审计或无法核对"), err)
 	}
-	s, receipt, err := readFail2banUpgradeVerificationSwitch(in.DataDir, in.SwitchID)
+	s, err := readFail2banUpgradeSelection(in.DataDir, in.SwitchID, in.RestoreID)
 	if err != nil {
 		return i, err
 	}
-	i = fail2banUpgradeActivationIntent{Schema: 1, CreatedAt: time.Now().Unix(), Request: in, VerificationID: secure.ID(), SelectedEvent: s.After.EventID, SwitchSHA256: s.hash(), SwitchReceiptSHA256: fail2banUpgradeGrantHash("switch-receipt", receipt)}
-	if fail2banJailNeedsNginx(s.Prepared.Material.Bundle) {
+	i = fail2banUpgradeActivationIntent{Schema: 1, CreatedAt: time.Now().Unix(), Request: in, VerificationID: secure.ID(), SelectedEvent: s.Managed.EventID, SourceSHA256: s.SHA256, SourceReceiptSHA256: s.ReceiptSHA256}
+	if fail2banJailNeedsNginx(s.Bundle) {
 		n, _, runtimeHash, err := fail2banUpgradeNginxObserver(i.verification())
 		if err != nil {
 			return i, err
@@ -47,7 +47,7 @@ func beginFail2banUpgradeActivation(ctx context.Context, in Fail2banUpgradeActiv
 		if err != nil {
 			return i, err
 		}
-		if dir != s.Prepared.Material.Bundle.NginxDir || manifestHash(m) != s.Prepared.Material.Bundle.NginxHash {
+		if dir != s.Bundle.NginxDir || manifestHash(m) != s.Bundle.NginxHash {
 			return i, errors.New("升级启动须保持原活动 Nginx 修订")
 		}
 		if err = n.observe(ctx, m); err != nil {
@@ -55,7 +55,7 @@ func beginFail2banUpgradeActivation(ctx context.Context, in Fail2banUpgradeActiv
 		}
 		i.NginxRuntimeSHA256 = runtimeHash
 	}
-	if err = i.validate(in.DataDir, in.OperationID, s, receipt); err != nil {
+	if err = i.validate(in.DataDir, in.OperationID, s); err != nil {
 		return i, err
 	}
 	if err = i.beforeStart(ctx, s); err != nil {
@@ -73,17 +73,14 @@ func beginFail2banUpgradeActivation(ctx context.Context, in Fail2banUpgradeActiv
 	return i, nil
 }
 
-func (i fail2banUpgradeActivationIntent) beforeStart(ctx context.Context, s fail2banUpgradeSwitch) error {
+func (i fail2banUpgradeActivationIntent) beforeStart(ctx context.Context, s fail2banUpgradeSelection) error {
 	if _, err := i.selection(ctx); err != nil {
 		return err
 	}
-	if err := s.snapshot(ctx); err != nil {
-		return err
-	}
-	return s.observe(ctx, nil)
+	return s.beforeStart(ctx)
 }
 
-func ensureFail2banUpgradeActivationJournal(ctx context.Context, i fail2banUpgradeActivationIntent, s fail2banUpgradeSwitch, f fail2banUpgradeActivationFacts, j *Journal) error {
+func ensureFail2banUpgradeActivationJournal(ctx context.Context, i fail2banUpgradeActivationIntent, s fail2banUpgradeSelection, f fail2banUpgradeActivationFacts, j *Journal) error {
 	audit, err := j.Get(i.Request.OperationID)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -232,7 +229,7 @@ func operateFail2banUpgradeActivation(parent context.Context, in Fail2banUpgrade
 				closeStart()
 				return stopFailedFail2banUpgradeActivation(i, s, f, j, "start_failed", err)
 			}
-			if err = waitFail2banManagedLive(ctx, &s.After); err != nil {
+			if err = waitFail2banManagedLive(ctx, &s.Managed); err != nil {
 				closeStart()
 				return stopFailedFail2banUpgradeActivation(i, s, f, j, "start_failed", err)
 			}
@@ -243,7 +240,7 @@ func operateFail2banUpgradeActivation(parent context.Context, in Fail2banUpgrade
 		if err != nil {
 			return out, err
 		}
-		live, e := readFail2banLiveService(ctx, s.After.binding())
+		live, e := readFail2banLiveService(ctx, s.Managed.binding())
 		if e != nil || f.Claim == nil || live.invocation != f.Claim.Invocation {
 			return stopFailedFail2banUpgradeActivation(i, s, f, j, "start_unconfirmed", errors.Join(errors.New("无法确认原启动许可的服务代次"), e))
 		}
@@ -275,7 +272,7 @@ func operateFail2banUpgradeActivation(parent context.Context, in Fail2banUpgrade
 	if _, err = i.selection(ctx); err != nil {
 		return out, err
 	}
-	live, err := readFail2banLiveService(ctx, s.After.binding())
+	live, err := readFail2banLiveService(ctx, s.Managed.binding())
 	if err != nil {
 		return out, err
 	}
@@ -324,12 +321,12 @@ func finishFail2banUpgradeActivation(i fail2banUpgradeActivationIntent, f fail2b
 	return i.result(f, true), nil
 }
 
-func stopFailedFail2banUpgradeActivation(i fail2banUpgradeActivationIntent, s fail2banUpgradeSwitch, f fail2banUpgradeActivationFacts, j *Journal, reason string, cause error) (Fail2banUpgradeActivation, error) {
+func stopFailedFail2banUpgradeActivation(i fail2banUpgradeActivationIntent, s fail2banUpgradeSelection, f fail2banUpgradeActivationFacts, j *Journal, reason string, cause error) (Fail2banUpgradeActivation, error) {
 	out, err := stopFail2banUpgradeActivation(i, s, f, j, reason)
 	return out, errors.Join(cause, err)
 }
 
-func stopFail2banUpgradeActivation(i fail2banUpgradeActivationIntent, s fail2banUpgradeSwitch, f fail2banUpgradeActivationFacts, j *Journal, reason string) (Fail2banUpgradeActivation, error) {
+func stopFail2banUpgradeActivation(i fail2banUpgradeActivationIntent, s fail2banUpgradeSelection, f fail2banUpgradeActivationFacts, j *Journal, reason string) (Fail2banUpgradeActivation, error) {
 	// Cancellation cannot strand an already sent start solely because its caller left.
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -372,10 +369,10 @@ func stopFail2banUpgradeActivation(i fail2banUpgradeActivationIntent, s fail2ban
 	if err != nil {
 		return out, err
 	}
-	if err = fail2banExistingStopped(s.After.binding(), service); err != nil {
+	if err = fail2banExistingStopped(s.Managed.binding(), service); err != nil {
 		return out, err
 	}
-	directory, files, err := observeFail2banStateDirectory(ctx, filepath.Join(s.After.work(), "state"))
+	directory, files, err := observeFail2banStateDirectory(ctx, filepath.Join(s.Managed.work(), "state"))
 	if err != nil {
 		return out, err
 	}

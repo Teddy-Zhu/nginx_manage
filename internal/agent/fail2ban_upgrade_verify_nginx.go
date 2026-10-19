@@ -67,8 +67,8 @@ func fail2banUpgradeNginxSourceKey(registry, invocation, socket string) string {
 	return secure.Hash(raw)
 }
 
-func validateFail2banUpgradeNginxVerification(i fail2banUpgradeSwitch, proof fail2banBanProof, invocation string, h fail2banUpgradeNginxVerification) error {
-	b := i.Prepared.Material.Bundle
+func validateFail2banUpgradeNginxVerification(i fail2banUpgradeSelection, proof fail2banBanProof, invocation string, h fail2banUpgradeNginxVerification) error {
+	b := i.Bundle
 	if b == nil || h.Directory != b.NginxDir || manifestHash(h.Manifest) != b.NginxHash || h.PID < 2 || h.StartTicks == 0 || h.BootID != i.Manifest.Basis.BootID || h.UID < 1 || h.GID < 1 || !fail2banDigest.MatchString(h.BinarySHA256) || !fail2banDigest.MatchString(h.RuntimeSHA256) {
 		return errors.New("升级 Nginx 运行证明缺少原修订、完整内容或进程身份")
 	}
@@ -79,7 +79,7 @@ func validateFail2banUpgradeNginxVerification(i fail2banUpgradeSwitch, proof fai
 	if err != nil || inode == 0 {
 		return errors.New("升级 Nginx 动作缺少候选 Socket 身份")
 	}
-	registry, _, _ := fail2banUpgradeVerificationGrants(i)
+	registry := i.Registry
 	if h.Snapshot.SourceKey != fail2banUpgradeNginxSourceKey(registry.ID, invocation, h.SocketInode) || h.Snapshot.ObservedAt <= 0 || h.Snapshot.ObservedAt > time.Now().Unix()+300 {
 		return errors.New("升级 Nginx 拒绝集合并非来自候选的当前运行代次")
 	}
@@ -104,7 +104,7 @@ func validateFail2banUpgradeNginxVerification(i fail2banUpgradeSwitch, proof fai
 		if _, owned := wanted[grant.ResourceID]; !owned {
 			continue
 		}
-		if selected[grant.Jail] != grant.ResourceID || grant.EngineKey != fail2banNginxEngineKey(i.After.binding()) {
+		if selected[grant.Jail] != grant.ResourceID || grant.EngineKey != fail2banNginxEngineKey(i.Managed.binding()) {
 			return errors.New("升级 Nginx 资源存在其他来源的合并批准，无法证明候选完整集合")
 		}
 		seen[grant.Jail] = true
@@ -197,7 +197,7 @@ func fail2banUpgradeNginxProcess(pid int) (string, uint64, error) {
 	return strings.TrimSpace(string(boot)), start, nil
 }
 
-func readFail2banUpgradeNginxVerification(ctx context.Context, in Fail2banUpgradeVerificationOptions, i fail2banUpgradeSwitch, o fail2banStateRecoveryObservation) (*fail2banUpgradeNginxVerification, error) {
+func readFail2banUpgradeNginxVerification(ctx context.Context, in Fail2banUpgradeVerificationOptions, i fail2banUpgradeSelection, o fail2banStateRecoveryObservation) (*fail2banUpgradeNginxVerification, error) {
 	if !fail2banJailNeedsNginx(o.Bundle) {
 		return nil, nil
 	}

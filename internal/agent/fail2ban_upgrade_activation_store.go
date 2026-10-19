@@ -38,27 +38,34 @@ func writeFail2banUpgradeActivationJSON(path string, value any) error {
 	return writeFail2banJailImmutable(path, raw, fail2banUpgradeActivationLimit)
 }
 
-func readFail2banUpgradeActivation(data, id string) (fail2banUpgradeActivationIntent, fail2banUpgradeSwitch, error) {
+// Intent decoding is separate so a failed candidate recovery can require the
+// original switch branch before following any recovery source reference.
+func readFail2banUpgradeActivationIntent(data, id string) (fail2banUpgradeActivationIntent, error) {
 	var i fail2banUpgradeActivationIntent
-	var s fail2banUpgradeSwitch
 	if !validID(id) {
-		return i, s, errors.New("升级启动 UUID 无效")
+		return i, errors.New("升级启动 UUID 无效")
 	}
 	dir := filepath.Join(fail2banUpgradeActivations(data), id)
 	if err := fail2banStatePrivateDir(dir, false); err != nil {
-		return i, s, err
+		return i, err
 	}
 	if err := readFail2banUpgradeActivationJSON(filepath.Join(dir, "intent.json"), &i); err != nil {
-		return i, s, err
+		return i, err
 	}
-	s, receipt, err := readFail2banUpgradeVerificationSwitch(data, i.Request.SwitchID)
+	return i, nil
+}
+
+func readFail2banUpgradeActivation(data, id string) (fail2banUpgradeActivationIntent, fail2banUpgradeSelection, error) {
+	var s fail2banUpgradeSelection
+	i, err := readFail2banUpgradeActivationIntent(data, id)
 	if err != nil {
 		return i, s, err
 	}
-	if err = i.validate(data, id, s, receipt); err != nil {
+	s, err = readFail2banUpgradeSelection(data, i.Request.SwitchID, i.Request.RestoreID)
+	if err != nil {
 		return i, s, err
 	}
-	return i, s, nil
+	return i, s, i.validate(data, id, s)
 }
 
 func (i fail2banUpgradeActivationIntent) facts() (f fail2banUpgradeActivationFacts, err error) {

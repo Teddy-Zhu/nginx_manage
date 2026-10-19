@@ -13,14 +13,15 @@ const fail2banUpgradeActivationLimit = 64 << 10
 const fail2banUpgradeActivationWindow = 5 * time.Minute
 
 type Fail2banUpgradeActivationOptions struct {
-	DataDir, Scope, OperationID, SwitchID string
-	NginxBinary, NginxWorker              string
-	NginxContainer                        bool
+	DataDir, Scope, OperationID, SwitchID, RestoreID string
+	NginxBinary, NginxWorker                         string
+	NginxContainer                                   bool
 }
 
 type Fail2banUpgradeActivation struct {
 	ID             string `json:"id"`
-	SwitchID       string `json:"switch_id"`
+	SwitchID       string `json:"switch_id,omitempty"`
+	RestoreID      string `json:"restore_id,omitempty"`
 	VerificationID string `json:"verification_id"`
 	State          string `json:"state"`
 	Stage          string `json:"stage"`
@@ -35,7 +36,7 @@ type fail2banUpgradeActivationIntent struct {
 	CreatedAt                         int64
 	Request                           Fail2banUpgradeActivationOptions
 	VerificationID, SelectedEvent     string
-	SwitchSHA256, SwitchReceiptSHA256 string
+	SourceSHA256, SourceReceiptSHA256 string
 	NginxRuntimeSHA256                string
 }
 
@@ -103,41 +104,47 @@ func (i fail2banUpgradeActivationIntent) deadline() int64 {
 }
 func (i fail2banUpgradeActivationIntent) verification() Fail2banUpgradeVerificationOptions {
 	in := i.Request
-	return Fail2banUpgradeVerificationOptions{DataDir: in.DataDir, Scope: in.Scope, OperationID: i.VerificationID, SwitchID: in.SwitchID, NginxBinary: in.NginxBinary, NginxWorker: in.NginxWorker, NginxContainer: in.NginxContainer}
+	return Fail2banUpgradeVerificationOptions{DataDir: in.DataDir, Scope: in.Scope, OperationID: i.VerificationID, SwitchID: in.SwitchID, RestoreID: in.RestoreID, NginxBinary: in.NginxBinary, NginxWorker: in.NginxWorker, NginxContainer: in.NginxContainer}
 }
 
-func (i fail2banUpgradeActivationIntent) validate(data, id string, s fail2banUpgradeSwitch, receipt fail2banUpgradeSwitchReceipt) error {
+func (i fail2banUpgradeActivationIntent) validate(data, id string, s fail2banUpgradeSelection) error {
 	in := i.Request
-	if i.Schema != 1 || in.DataDir != data || in.Scope != "host" || in.OperationID != id || !validID(id) || !validID(i.VerificationID) || id == i.VerificationID || in.SwitchID != s.Request.OperationID || i.SelectedEvent != s.After.EventID || i.CreatedAt < receipt.CompletedAt || i.CreatedAt > time.Now().Unix()+300 || i.SwitchSHA256 != s.hash() || i.SwitchReceiptSHA256 != fail2banUpgradeGrantHash("switch-receipt", receipt) {
+	if i.Schema != 1 || in.DataDir != data || in.Scope != "host" || in.OperationID != id || !validID(id) || !validID(i.VerificationID) || id == i.VerificationID || !s.matches(in.SwitchID, in.RestoreID) || i.SelectedEvent != s.Managed.EventID || i.CreatedAt < s.CompletedAt || i.CreatedAt > time.Now().Unix()+300 || i.SourceSHA256 != s.SHA256 || i.SourceReceiptSHA256 != s.ReceiptSHA256 {
 		return errors.New("升级启动意图与原选择或独立标识不匹配")
 	}
-	if err := fail2banUpgradeVerificationID(id, s); err != nil {
+	if err := s.independentID(id); err != nil {
 		return err
 	}
-	if err := fail2banUpgradeVerificationID(i.VerificationID, s); err != nil {
+	if err := s.independentID(i.VerificationID); err != nil {
 		return err
 	}
-	if fail2banJailNeedsNginx(s.Prepared.Material.Bundle) != (i.NginxRuntimeSHA256 != "") || i.NginxRuntimeSHA256 != "" && !fail2banDigest.MatchString(i.NginxRuntimeSHA256) {
+	if fail2banJailNeedsNginx(s.Bundle) != (i.NginxRuntimeSHA256 != "") || i.NginxRuntimeSHA256 != "" && !fail2banDigest.MatchString(i.NginxRuntimeSHA256) {
 		return errors.New("升级启动缺少固定 Nginx 运行来源")
 	}
 	return nil
 }
 
 func (i fail2banUpgradeActivationIntent) record(receipt *fail2banUpgradeActivationReceipt) Record {
-	r := Record{Kind: fail2banUpgradeActivationKind, OperationID: i.Request.OperationID, RelatedOperationID: i.Request.SwitchID, RequestHash: fail2banUpgradeGrantHash("activation-request", i.Request), CandidateHash: i.hash(), BeforeRevision: i.SwitchSHA256, AfterRevision: i.VerificationID, State: "running", Stage: "activation"}
+	r := Record{Kind: fail2banUpgradeActivationKind, OperationID: i.Request.OperationID, RelatedOperationID: fail2banUpgradeSelectionSourceID(i.Request.SwitchID, i.Request.RestoreID), RequestHash: fail2banUpgradeGrantHash("activation-request", i.Request), CandidateHash: i.hash(), BeforeRevision: i.SourceSHA256, AfterRevision: i.VerificationID, State: "running", Stage: "activation"}
 	if receipt != nil {
 		r.ObservedRevision = fail2banUpgradeGrantHash("activation-receipt", receipt)
 		if receipt.Outcome == "verified" {
 			r.State, r.Stage = "succeeded", "protection_verified"
+			if i.Request.RestoreID != "" {
+				r.Stage = "original_protection_verified"
+			}
 		} else {
 			r.State, r.Stage = "failed", "candidate_stopped"
+			if i.Request.RestoreID != "" {
+				r.Stage = "restored_stopped"
+			}
 		}
 	}
 	return r
 }
 
 func (i fail2banUpgradeActivationIntent) result(f fail2banUpgradeActivationFacts, acknowledged bool) Fail2banUpgradeActivation {
-	out := Fail2banUpgradeActivation{ID: i.Request.OperationID, SwitchID: i.Request.SwitchID, VerificationID: i.VerificationID, Deadline: i.deadline(), State: "running", Stage: "intent_reserved"}
+	out := Fail2banUpgradeActivation{ID: i.Request.OperationID, SwitchID: i.Request.SwitchID, RestoreID: i.Request.RestoreID, VerificationID: i.VerificationID, Deadline: i.deadline(), State: "running", Stage: "intent_reserved"}
 	if f.Execution {
 		out.Stage = "starting"
 	}
@@ -146,12 +153,15 @@ func (i fail2banUpgradeActivationIntent) result(f fail2banUpgradeActivationFacts
 	}
 	if f.Stop != nil {
 		out.State, out.Stage, out.Reason = "compensating", "stopping_candidate", f.Stop.Reason
+		if i.Request.RestoreID != "" {
+			out.Stage = "stopping_restored"
+		}
 	}
 	if f.Receipt != nil {
+		record := i.record(f.Receipt)
+		out.State, out.Stage = record.State, record.Stage
 		if f.Receipt.Outcome == "verified" {
-			out.State, out.Stage, out.VerifiedAt, out.ProofSHA256 = "succeeded", "protection_verified", f.Receipt.CompletedAt, f.Receipt.VerificationSHA256
-		} else {
-			out.State, out.Stage = "failed", "candidate_stopped"
+			out.VerifiedAt, out.ProofSHA256 = f.Receipt.CompletedAt, f.Receipt.VerificationSHA256
 		}
 		if !acknowledged {
 			out.State, out.Stage = "recovery_required", "completion_unacknowledged"

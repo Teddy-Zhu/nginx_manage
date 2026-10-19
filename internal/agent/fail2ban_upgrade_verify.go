@@ -34,39 +34,39 @@ func readFail2banUpgradeVerificationSwitch(data, id string) (fail2banUpgradeSwit
 	return i, *r, nil
 }
 
-func checkFail2banUpgradeCandidateLineage(i fail2banUpgradeSwitch, r fail2banManagedRecord) error {
+func checkFail2banUpgradeCandidateLineage(i fail2banUpgradeSelection, r fail2banManagedRecord) error {
 	if r.ActionState != "completed" {
-		return errors.New("候选实例仍有待核对服务操作")
+		return errors.New("目标实例仍有待核对服务操作")
 	}
 	for n := 0; n < 128; n++ {
-		if !fail2banUpgradeCandidateCore(i.After, r) {
-			return errors.New("当前选择的代码或 jail 已不属于原升级候选")
+		if !fail2banUpgradeCandidateCore(i.Managed, r) {
+			return errors.New("当前代码或 jail 不属于本次授权选择")
 		}
-		if r.EventID == i.After.EventID {
-			if !fail2banUpgradeOneOf(r, i.After) {
-				return errors.New("原候选选择事件内容变化")
+		if r.EventID == i.Managed.EventID {
+			if !fail2banUpgradeOneOf(r, i.Managed) {
+				return errors.New("原选择事件内容变化")
 			}
 			return nil
 		}
 		if !validID(r.PreviousEvent) {
-			return errors.New("候选服务事件缺少原升级选择祖先")
+			return errors.New("服务事件缺少本次授权选择祖先")
 		}
 		var previous fail2banManagedRecord
-		if err := readFail2banUpgradeSwitchJSON(filepath.Join(fail2banManagedDir(i.Request.DataDir), "history", r.PreviousEvent+".json"), &previous); err != nil {
+		if err := readFail2banUpgradeSwitchJSON(filepath.Join(fail2banManagedDir(i.DataDir), "history", r.PreviousEvent+".json"), &previous); err != nil {
 			return err
 		}
 		if previous.EventID != r.PreviousEvent {
-			return errors.New("候选事件历史指针不匹配")
+			return errors.New("受管事件历史指针不匹配")
 		}
-		if err := validateFail2banManagedRecord(previous, i.Request.DataDir); err != nil {
+		if err := validateFail2banManagedRecord(previous, i.DataDir); err != nil {
 			return err
 		}
 		r = previous
 	}
-	return errors.New("候选选择历史超过 128 项核对预算，须本机维护")
+	return errors.New("受管选择历史超过 128 项核对预算，须本机维护")
 }
 
-func observeFail2banUpgradeVerification(ctx context.Context, in Fail2banUpgradeVerificationOptions, i fail2banUpgradeSwitch, receipt fail2banUpgradeSwitchReceipt, result Fail2banStateRecovery, o fail2banStateRecoveryObservation) (fail2banUpgradeVerification, error) {
+func observeFail2banUpgradeVerification(ctx context.Context, in Fail2banUpgradeVerificationOptions, i fail2banUpgradeSelection, result Fail2banStateRecovery, o fail2banStateRecoveryObservation) (fail2banUpgradeVerification, error) {
 	var v fail2banUpgradeVerification
 	if !fail2banUpgradeOneOf(o.Receipt, i.Snapshot) || !fail2banUpgradeOneOf(o.Manifest, i.Manifest) {
 		return v, errors.New("升级保护核对未使用原切换固定的状态快照")
@@ -74,8 +74,8 @@ func observeFail2banUpgradeVerification(ctx context.Context, in Fail2banUpgradeV
 	if err := checkFail2banUpgradeCandidateLineage(i, *o.Managed); err != nil {
 		return v, err
 	}
-	if !fail2banUpgradeOneOf(o.Bundle, i.Prepared.Material.Bundle) {
-		return v, errors.New("候选完整 jail 材料与原切换不同")
+	if !fail2banUpgradeOneOf(o.Bundle, i.Bundle) {
+		return v, errors.New("当前完整 jail 材料与授权选择不同")
 	}
 	if err := checkFail2banUpgradeVerificationGrants(in.DataDir, i); err != nil {
 		return v, err
@@ -136,8 +136,8 @@ func observeFail2banUpgradeVerification(ctx context.Context, in Fail2banUpgradeV
 		return v, errors.New("动作核对期间候选实例或 Socket 代次变化")
 	}
 	result.At = time.Now().Unix()
-	v = fail2banUpgradeVerification{Schema: 1, Request: in, CreatedAt: result.At, SwitchSHA256: i.hash(), SwitchReceiptSHA256: fail2banUpgradeGrantHash("switch-receipt", receipt), Managed: *o.Managed, Recovery: result, Expected: o.Expected, Actual: o.Actual, Host: host, Nginx: nginx}
-	if err = v.validate(in.DataDir, in.OperationID, i, receipt); err != nil {
+	v = fail2banUpgradeVerification{Schema: 1, Request: in, CreatedAt: result.At, SourceSHA256: i.SHA256, SourceReceiptSHA256: i.ReceiptSHA256, Managed: *o.Managed, Recovery: result, Expected: o.Expected, Actual: o.Actual, Host: host, Nginx: nginx}
+	if err = v.validate(in.DataDir, in.OperationID, i); err != nil {
 		return v, err
 	}
 	return v, ctx.Err()
@@ -146,8 +146,8 @@ func observeFail2banUpgradeVerification(ctx context.Context, in Fail2banUpgradeV
 // VerifyFail2banUpgrade performs one bounded root observation. It never starts an engine,
 // repairs actions, replays bans or changes a service/database/configuration.
 func VerifyFail2banUpgrade(parent context.Context, in Fail2banUpgradeVerificationOptions) (out Fail2banUpgradeVerification, resultErr error) {
-	if !validID(in.SwitchID) || in.SwitchID == in.OperationID {
-		return out, errors.New("升级保护核对须使用独立 UUID 并指定原切换 UUID")
+	if !fail2banUpgradeSelectionRef(in.SwitchID, in.RestoreID) || fail2banUpgradeSelectionSourceID(in.SwitchID, in.RestoreID) == in.OperationID {
+		return out, errors.New("升级保护核对须使用独立 UUID，并且只指定一个已完成切换或停止态恢复 UUID")
 	}
 	unlock, err := fail2banUpgradePreparationAccess(in.DataDir, in.Scope, in.OperationID)
 	if err != nil {
@@ -185,19 +185,19 @@ func verifyFail2banUpgradeLocked(ctx context.Context, in Fail2banUpgradeVerifica
 	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
-	i, receipt, err := readFail2banUpgradeVerificationSwitch(in.DataDir, in.SwitchID)
+	i, err := readFail2banUpgradeSelection(in.DataDir, in.SwitchID, in.RestoreID)
 	if err != nil {
 		return out, err
 	}
-	if err = fail2banUpgradeVerificationID(in.OperationID, i); err != nil {
+	if err = i.independentID(in.OperationID); err != nil {
 		return out, err
 	}
 	if err = reserveFail2banUpgradeVerification(in.DataDir); err != nil {
 		return out, err
 	}
-	_, err = verifyFail2banStateRecoveryFor(ctx, Fail2banStateSnapshotOptions{DataDir: in.DataDir, Scope: in.Scope, OperationID: i.Request.SnapshotID}, j, allowed, func(result Fail2banStateRecovery, o fail2banStateRecoveryObservation) error {
+	_, err = verifyFail2banStateRecoveryFor(ctx, Fail2banStateSnapshotOptions{DataDir: in.DataDir, Scope: in.Scope, OperationID: i.Snapshot.OperationID}, j, allowed, func(result Fail2banStateRecovery, o fail2banStateRecoveryObservation) error {
 		var err error
-		v, err = observeFail2banUpgradeVerification(ctx, in, i, receipt, result, o)
+		v, err = observeFail2banUpgradeVerification(ctx, in, i, result, o)
 		return err
 	})
 	if err != nil {

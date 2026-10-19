@@ -13,9 +13,9 @@ const fail2banUpgradeVerificationKind = "fail2ban_upgrade_verification"
 const fail2banUpgradeVerificationLimit = 12 << 20
 
 type Fail2banUpgradeVerificationOptions struct {
-	DataDir, Scope, OperationID, SwitchID string
-	NginxBinary, NginxWorker              string
-	NginxContainer                        bool
+	DataDir, Scope, OperationID, SwitchID, RestoreID string
+	NginxBinary, NginxWorker                         string
+	NginxContainer                                   bool
 }
 
 type Fail2banUpgradeActionVerification struct {
@@ -29,7 +29,8 @@ type Fail2banUpgradeActionVerification struct {
 
 type Fail2banUpgradeVerification struct {
 	ID          string                             `json:"id"`
-	SwitchID    string                             `json:"switch_id"`
+	SwitchID    string                             `json:"switch_id,omitempty"`
+	RestoreID   string                             `json:"restore_id,omitempty"`
 	State       string                             `json:"state"`
 	VerifiedAt  int64                              `json:"verified_at"`
 	ProofSHA256 string                             `json:"proof_sha256"`
@@ -64,8 +65,8 @@ type fail2banUpgradeVerification struct {
 	Schema              int
 	Request             Fail2banUpgradeVerificationOptions
 	CreatedAt           int64
-	SwitchSHA256        string
-	SwitchReceiptSHA256 string
+	SourceSHA256        string
+	SourceReceiptSHA256 string
 	Managed             fail2banManagedRecord
 	Recovery            Fail2banStateRecovery
 	Expected, Actual    fail2banBanProof
@@ -84,16 +85,16 @@ func (v fail2banUpgradeVerification) hash() string {
 }
 
 func (v fail2banUpgradeVerification) record() Record {
-	return Record{Kind: fail2banUpgradeVerificationKind, OperationID: v.Request.OperationID, RelatedOperationID: v.Request.SwitchID, RequestHash: fail2banUpgradeGrantHash("verification-request", v.Request), CandidateHash: v.hash(), BeforeRevision: v.Recovery.Source.EngineKey, AfterRevision: v.Managed.EventID, ObservedRevision: fail2banUpgradeGrantHash("verification-actions", struct {
+	return Record{Kind: fail2banUpgradeVerificationKind, OperationID: v.Request.OperationID, RelatedOperationID: fail2banUpgradeSelectionSourceID(v.Request.SwitchID, v.Request.RestoreID), RequestHash: fail2banUpgradeGrantHash("verification-request", v.Request), CandidateHash: v.hash(), BeforeRevision: v.Recovery.Source.EngineKey, AfterRevision: v.Managed.EventID, ObservedRevision: fail2banUpgradeGrantHash("verification-actions", struct {
 		Host  *fail2banUpgradeHostVerification
 		Nginx *fail2banUpgradeNginxVerification
 	}{v.Host, v.Nginx}), State: "succeeded", Stage: "protection_verified"}
 }
 
-func (v fail2banUpgradeVerification) result(i fail2banUpgradeSwitch) (Fail2banUpgradeVerification, error) {
-	out := Fail2banUpgradeVerification{ID: v.Request.OperationID, SwitchID: v.Request.SwitchID, State: "verified_unacknowledged", VerifiedAt: v.CreatedAt, ProofSHA256: v.hash(), Recovery: v.Recovery}
+func (v fail2banUpgradeVerification) result(i fail2banUpgradeSelection) (Fail2banUpgradeVerification, error) {
+	out := Fail2banUpgradeVerification{ID: v.Request.OperationID, SwitchID: v.Request.SwitchID, RestoreID: v.Request.RestoreID, State: "verified_unacknowledged", VerifiedAt: v.CreatedAt, ProofSHA256: v.hash(), Recovery: v.Recovery}
 	hostJails, nginxJails := 0, 0
-	if b := i.Prepared.Material.Bundle; b != nil {
+	if b := i.Bundle; b != nil {
 		for _, jail := range b.Policy.Jails {
 			if !jail.Enabled {
 				continue
@@ -106,14 +107,14 @@ func (v fail2banUpgradeVerification) result(i fail2banUpgradeSwitch) (Fail2banUp
 		}
 	}
 	if v.Host != nil {
-		wanted, excluded, err := fail2banUpgradeHostAddresses(i.Prepared.Material.Bundle, v.Actual, v.Host.Protected)
+		wanted, excluded, err := fail2banUpgradeHostAddresses(i.Bundle, v.Actual, v.Host.Protected)
 		if err != nil {
 			return out, err
 		}
 		out.Host = &Fail2banUpgradeActionVerification{State: "verified", Jails: hostJails, Banned: len(wanted), Protected: excluded, SHA256: v.Host.Kernel.Fingerprint, OperationID: v.Host.Runtime.Intent.OperationID}
 	}
 	if v.Nginx != nil {
-		entries, excluded, err := fail2banUpgradeNginxEntries(i.Prepared.Material.Bundle, v.Actual, v.Nginx.Manifest.ClientDeny)
+		entries, excluded, err := fail2banUpgradeNginxEntries(i.Bundle, v.Actual, v.Nginx.Manifest.ClientDeny)
 		if err != nil {
 			return out, err
 		}
@@ -126,25 +127,25 @@ func (v fail2banUpgradeVerification) result(i fail2banUpgradeSwitch) (Fail2banUp
 	return out, nil
 }
 
-func (v fail2banUpgradeVerification) validate(data, id string, i fail2banUpgradeSwitch, receipt fail2banUpgradeSwitchReceipt) error {
+func (v fail2banUpgradeVerification) validate(data, id string, i fail2banUpgradeSelection) error {
 	in := v.Request
-	if v.Schema != 1 || in.DataDir != data || in.Scope != "host" || in.OperationID != id || !validID(id) || !validID(in.SwitchID) || id == in.SwitchID || in.SwitchID != i.Request.OperationID || id == i.Request.PreparationID || id == i.Request.SnapshotID || v.CreatedAt < receipt.CompletedAt || v.CreatedAt > time.Now().Unix()+300 || v.SwitchSHA256 != i.hash() || v.SwitchReceiptSHA256 != fail2banUpgradeGrantHash("switch-receipt", receipt) || receipt.Outcome != "selected" {
+	if v.Schema != 1 || in.DataDir != data || in.Scope != "host" || in.OperationID != id || !validID(id) || !i.matches(in.SwitchID, in.RestoreID) || v.CreatedAt < i.CompletedAt || v.CreatedAt > time.Now().Unix()+300 || v.SourceSHA256 != i.SHA256 || v.SourceReceiptSHA256 != i.ReceiptSHA256 {
 		return errors.New("升级保护核对身份、切换或完成证明不匹配")
 	}
-	if err := fail2banUpgradeVerificationID(id, i); err != nil {
+	if err := i.independentID(id); err != nil {
 		return err
 	}
 	r := v.Recovery
-	if r.State != "verified" || r.SnapshotID != i.Request.SnapshotID || r.ManifestSHA256 != i.Snapshot.ManifestSHA256 || r.InstallationID != i.After.OperationID || r.EventID != v.Managed.EventID || r.JailSelection != i.After.JailSelection || r.At != v.CreatedAt || r.DatabaseSchema != 4 || !fail2banInvocation.MatchString(r.Invocation) || r.Source != i.Snapshot.Component || r.Current != fail2banUpgradeComponent(&v.Managed) || !fail2banUpgradeCandidateCore(i.After, v.Managed) || v.Managed.ActionState != "completed" || v.Expected == nil || v.Actual == nil {
+	if r.State != "verified" || r.SnapshotID != i.Snapshot.OperationID || r.ManifestSHA256 != i.Snapshot.ManifestSHA256 || r.InstallationID != i.Managed.OperationID || r.EventID != v.Managed.EventID || r.JailSelection != i.Managed.JailSelection || r.At != v.CreatedAt || r.DatabaseSchema != 4 || !fail2banInvocation.MatchString(r.Invocation) || r.Source != i.Snapshot.Component || r.Current != fail2banUpgradeComponent(&v.Managed) || !fail2banUpgradeCandidateCore(i.Managed, v.Managed) || v.Managed.ActionState != "completed" || v.Expected == nil || v.Actual == nil {
 		return errors.New("升级保护证明的代码、官方封禁或配置身份无效")
 	}
 	if err := validateFail2banManagedRecord(v.Managed, data); err != nil {
 		return err
 	}
-	if len(v.Expected) != len(v.Actual) || len(v.Actual) != len(fail2banJailNames(i.Prepared.Material.Bundle)) {
+	if len(v.Expected) != len(v.Actual) || len(v.Actual) != len(fail2banJailNames(i.Bundle)) {
 		return errors.New("升级保护证明未覆盖完整启用 jail")
 	}
-	for _, name := range fail2banJailNames(i.Prepared.Material.Bundle) {
+	for _, name := range fail2banJailNames(i.Bundle) {
 		if v.Expected[name] == nil || v.Actual[name] == nil {
 			return errors.New("升级保护证明缺少官方 jail")
 		}
@@ -161,7 +162,7 @@ func (v fail2banUpgradeVerification) validate(data, id string, i fail2banUpgrade
 	if err := checkFail2banBanPreservationAt(v.Expected, v.Actual, r.At); err != nil {
 		return err
 	}
-	if fail2banJailNeedsHost(i.Prepared.Material.Bundle) != (v.Host != nil) || fail2banJailNeedsNginx(i.Prepared.Material.Bundle) != (v.Nginx != nil) {
+	if fail2banJailNeedsHost(i.Bundle) != (v.Host != nil) || fail2banJailNeedsNginx(i.Bundle) != (v.Nginx != nil) {
 		return errors.New("升级保护证明遗漏已启用动作")
 	}
 	if v.Host != nil {

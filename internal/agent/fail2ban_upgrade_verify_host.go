@@ -42,8 +42,8 @@ func fail2banUpgradeVerificationGrants(i fail2banUpgradeSwitch) (fail2banNginxRe
 	return registry, sources, sync
 }
 
-func checkFail2banUpgradeVerificationGrants(data string, i fail2banUpgradeSwitch) error {
-	registry, sources, sync := fail2banUpgradeVerificationGrants(i)
+func checkFail2banUpgradeVerificationGrants(data string, i fail2banUpgradeSelection) error {
+	registry, sources, sync := i.Registry, i.Sources, i.Sync
 	actualRegistry, err := loadFail2banNginxRegistry(data)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func checkFail2banUpgradeVerificationGrants(data string, i fail2banUpgradeSwitch
 	if err != nil {
 		return err
 	}
-	if !fail2banUpgradeOneOf(registry, actualRegistry) || !fail2banUpgradeOneOf(sources, actualSources) || !fail2banUpgradeOneOf(sync, actualSync) || !fail2banUpgradeOneOf(root, i.Prepared.Basis.HostRegistration) || !fail2banUpgradeOneOf(protection, i.Prepared.Basis.HostProtection) {
+	if !fail2banUpgradeOneOf(registry, actualRegistry) || !fail2banUpgradeOneOf(sources, actualSources) || !fail2banUpgradeOneOf(sync, actualSync) || !fail2banUpgradeOneOf(root, i.Registration) || !fail2banUpgradeOneOf(protection, i.Protection) {
 		return errors.New("升级保护核对的动作批准、保护或本机登记已超出原切换范围")
 	}
 	stopping, err := loadFail2banHostSyncStop(data, actualSync)
@@ -77,18 +77,18 @@ func checkFail2banUpgradeVerificationGrants(data string, i fail2banUpgradeSwitch
 	return nil
 }
 
-func validateFail2banUpgradeHostVerification(i fail2banUpgradeSwitch, proof fail2banBanProof, h fail2banUpgradeHostVerification) error {
-	p := i.Prepared
-	_, sources, sync := fail2banUpgradeVerificationGrants(i)
-	root := p.Basis.HostRegistration
-	if root == nil || root.State != "registered" || sources == nil || sources.Action != "approve" || sync == nil || sync.Action != "enable" || sources.EngineKey != fail2banNginxEngineKey(i.After.binding()) || sync.SourcesID != sources.ID || sync.EngineKey != sources.EngineKey || sync.ProtectionID != p.Material.Bundle.HostProtectionID {
+func validateFail2banUpgradeHostVerification(i fail2banUpgradeSelection, proof fail2banBanProof, h fail2banUpgradeHostVerification) error {
+	b := i.Bundle
+	sources, sync := i.Sources, i.Sync
+	root := i.Registration
+	if root == nil || root.State != "registered" || sources == nil || sources.Action != "approve" || sync == nil || sync.Action != "enable" || sources.EngineKey != fail2banNginxEngineKey(i.Managed.binding()) || sync.SourcesID != sources.ID || sync.EngineKey != sources.EngineKey || sync.ProtectionID != b.HostProtectionID {
 		return errors.New("升级宿主机动作缺少候选来源、持续会话或原保护批准")
 	}
-	if !sameFail2banHostJails(h.Protected, p.Material.Bundle.HostProtected) {
+	if !sameFail2banHostJails(h.Protected, b.HostProtected) {
 		return errors.New("当前宿主机保护范围与候选完整配置不同")
 	}
 	names := []string{}
-	for _, jail := range p.Material.Bundle.Policy.Jails {
+	for _, jail := range b.Policy.Jails {
 		if jail.Enabled && jail.Action == "host-input" {
 			names = append(names, fail2banJailNameFor(jail.ID))
 		}
@@ -97,7 +97,7 @@ func validateFail2banUpgradeHostVerification(i fail2banUpgradeSwitch, proof fail
 	if !sources.Policy.Managed && !sameFail2banHostJails(sources.Policy.Jails, names) {
 		return errors.New("升级官方来源未精确覆盖候选宿主机 jail")
 	}
-	wanted, _, err := fail2banUpgradeHostAddresses(p.Material.Bundle, proof, h.Protected)
+	wanted, _, err := fail2banUpgradeHostAddresses(b, proof, h.Protected)
 	if err != nil {
 		return err
 	}
@@ -112,11 +112,11 @@ func validateFail2banUpgradeHostVerification(i fail2banUpgradeSwitch, proof fail
 	return nil
 }
 
-func readFail2banUpgradeHostVerification(ctx context.Context, i fail2banUpgradeSwitch, proof fail2banBanProof) (*fail2banUpgradeHostVerification, error) {
-	if !fail2banJailNeedsHost(i.Prepared.Material.Bundle) {
+func readFail2banUpgradeHostVerification(ctx context.Context, i fail2banUpgradeSelection, proof fail2banBanProof) (*fail2banUpgradeHostVerification, error) {
+	if !fail2banJailNeedsHost(i.Bundle) {
 		return nil, nil
 	}
-	data := i.Request.DataDir
+	data := i.DataDir
 	basis, err := loadFail2banHostSourcesBasis(ctx, data)
 	if err != nil {
 		return nil, err

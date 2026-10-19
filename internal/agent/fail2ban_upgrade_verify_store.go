@@ -13,9 +13,9 @@ import (
 
 var errFail2banUpgradeVerificationAbsent = errors.New("原升级保护证明不存在")
 
-func readFail2banUpgradeVerification(data, id string) (fail2banUpgradeVerification, fail2banUpgradeSwitch, error) {
+func readFail2banUpgradeVerification(data, id string) (fail2banUpgradeVerification, fail2banUpgradeSelection, error) {
 	var v fail2banUpgradeVerification
-	var i fail2banUpgradeSwitch
+	var i fail2banUpgradeSelection
 	if !validID(id) {
 		return v, i, errors.New("升级保护核对 UUID 无效")
 	}
@@ -40,11 +40,11 @@ func readFail2banUpgradeVerification(data, id string) (fail2banUpgradeVerificati
 	if err != nil || !bytes.Equal(canonical, raw) {
 		return v, i, errors.New("升级保护证明字段或规范格式变化")
 	}
-	i, receipt, err := readFail2banUpgradeVerificationSwitch(data, v.Request.SwitchID)
+	i, err := readFail2banUpgradeSelection(data, v.Request.SwitchID, v.Request.RestoreID)
 	if err != nil {
 		return v, i, err
 	}
-	if err = v.validate(data, id, i, receipt); err != nil {
+	if err = v.validate(data, id, i); err != nil {
 		return v, i, err
 	}
 	if err = checkFail2banUpgradeCandidateLineage(i, v.Managed); err != nil {

@@ -90,7 +90,7 @@ func fail2banUpgradeActivationIdle(data, allowed string) error {
 	return nil
 }
 
-func (i fail2banUpgradeActivationIntent) selection(ctx context.Context) (fail2banUpgradeSwitch, error) {
+func (i fail2banUpgradeActivationIntent) selection(ctx context.Context) (fail2banUpgradeSelection, error) {
 	return i.selected(ctx, true)
 }
 
@@ -99,16 +99,19 @@ func (i fail2banUpgradeActivationIntent) engine(ctx context.Context, nginx bool)
 	return err
 }
 
-func (i fail2banUpgradeActivationIntent) selected(ctx context.Context, nginx bool) (fail2banUpgradeSwitch, error) {
-	s, _, err := readFail2banUpgradeVerificationSwitch(i.Request.DataDir, i.Request.SwitchID)
+func (i fail2banUpgradeActivationIntent) selected(ctx context.Context, nginx bool) (fail2banUpgradeSelection, error) {
+	s, err := readFail2banUpgradeSelection(i.Request.DataDir, i.Request.SwitchID, i.Request.RestoreID)
 	if err != nil {
 		return s, err
+	}
+	if s.SHA256 != i.SourceSHA256 || s.ReceiptSHA256 != i.SourceReceiptSHA256 || s.Managed.EventID != i.SelectedEvent {
+		return s, errors.New("升级启动的原选择或完成证明变化")
 	}
 	current, err := loadFail2banManaged(i.Request.DataDir)
 	if err != nil {
 		return s, err
 	}
-	if current == nil || !fail2banUpgradeOneOf(current, s.After) {
+	if current == nil || !fail2banUpgradeOneOf(current, s.Managed) {
 		return s, errors.New("升级启动不得覆盖其他代码或服务选择事件")
 	}
 	if err = checkFail2banUpgradeVerificationGrants(i.Request.DataDir, s); err != nil {
@@ -156,7 +159,7 @@ func fail2banUpgradeActivationActions(ctx context.Context, data string) error {
 	if err != nil {
 		return err
 	}
-	live, err := readFail2banLiveService(ctx, s.After.binding())
+	live, err := readFail2banLiveService(ctx, s.Managed.binding())
 	if err != nil {
 		return err
 	}
