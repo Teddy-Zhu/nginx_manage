@@ -589,6 +589,11 @@ func (n *Nginx) httpDefaults(p *nginxconfig.Parsed, httpBlock *nginxconfig.Node,
 		existing[node.Name] = true
 	}
 	var out strings.Builder
+	// UUID-scoped WAF and client-deny variables exceed the stock 64-byte
+	// bucket once Nginx's hash entry overhead is included.
+	if !existing["variables_hash_bucket_size"] {
+		out.WriteString("    variables_hash_bucket_size 128;\n")
+	}
 	if !existing["access_log"] {
 		out.WriteString("    access_log logs/nginx-global/access.log nginxpanel_http;\n")
 	}

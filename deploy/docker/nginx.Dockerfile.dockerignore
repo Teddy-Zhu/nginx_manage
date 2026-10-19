@@ -1,0 +1,14 @@
+**
+!deploy/
+!deploy/docker/
+!deploy/docker/nginx.Dockerfile
+!deploy/docker/check-nginx-image.sh
+!deploy/docker/nginx-capabilities.json
+!.release/
+!.release/binaries/
+!.release/binaries/nginxpanel-amd64
+!.release/binaries/nginxpanel-arm64
+!.release/binaries/licenses-amd64/
+!.release/binaries/licenses-amd64/**
+!.release/binaries/licenses-arm64/
+!.release/binaries/licenses-arm64/**
