@@ -204,7 +204,7 @@ nginxpanel fail2ban-install --data-dir /var/lib/nginxpanel --fail2ban-scope host
 
 默认仅安装，不启动、不设置开机启用。首次安装可显式添加 `--fail2ban-start`、`--fail2ban-enable`；发生中断后，使用同一 UUID、源选择及启动/启用选择添加 `--fail2ban-resume`。目标已有固定系统工具、已登记实例、服务、默认 Socket 或无法排除已有实例时，拒绝另建。拒绝覆盖未登记目标、变化的文件、systemd drop-in 或未知实际单元。操作由共同 root 锁串行化，安装意图先持久化再创建文件；文件通过无覆盖原子发布。
 
-安装事件位于 `DATA/agent/fail2ban/managed/history/`，`current.json` 只指向已持久事件。配置及 SQLite 分别位于该目录的操作 UUID 子目录内 `config/`、`state/`；专用服务为 `nginxpanel-fail2ban.service`，Socket/PID 位于 root 私有 `/run/nginxpanel-fail2ban/`。初始无启用 jail，不加载发行版的 jail/filter/action，配置目录出现额外入口会阻塞启动。专用服务的启动前检查重新认证签名代码、系统 Python 兼容范围和标准库、固定解释器与管理程序、精确配置和服务单元；不能用安装时的标准库探测替代每次启动校验。
+安装事件位于 `DATA/agent/fail2ban/managed/history/`，`current.json` 原子选择一份已经持久保存的完整事件。事件同时保存签名代码身份与 `jail_selection`，读取只使用该事件关联的配置包，避免分别读取代码、配置两个指针时拼出不同代次。配置及 SQLite 分别位于该目录的操作 UUID 子目录内 `config/`、`state/`；专用服务为 `nginxpanel-fail2ban.service`，Socket/PID 位于 root 私有 `/run/nginxpanel-fail2ban/`。初始无启用 jail，不加载发行版的 jail/filter/action，配置目录出现额外入口会阻塞启动。专用服务的启动前检查重新认证签名代码、系统 Python 兼容范围和标准库、固定解释器与管理程序、精确配置和服务单元；不能用安装时的标准库探测替代每次启动校验。
 
 本机 root 后续可使用以下命令，均需相同 `--data-dir` 和 `--fail2ban-scope host`：
 
@@ -280,7 +280,9 @@ nginxpanel fail2ban-jails-status --data-dir /var/lib/nginxpanel --fail2ban-scope
 
 失败或重启先恢复原配置与动作授权，核对官方状态库恢复出的原未过期封禁；外部文件、授权或运行状态无法核对时保留 `recovery_required`，阻止新的 Nginx/jail 写入。尚未切换的中断只结束原操作，不擅自重启服务。应用及恢复与安装/服务控制共用 root 锁；未完成操作阻止独立启停、启用/禁用和撤回，并能在维护排空期间继续完成。jail 逻辑 UUID 的站点、模板与动作永久固定，退役后不能复用为其他来源，避免状态库中的旧封禁转移。
 
-配置包及备份树位于安装 UUID 下的 `jail-bundles/`、`jail-configs/`，`jail-current.json` 指向所选包，`jail-identities/` 保留身份约束；以上均为 root 私有、禁止迁移的运行材料。单策略最多 32 项、64 KiB，配置包最多 256 KiB；原封禁时间证明独立存储，最多 4 MiB、每 jail 1024 个地址，journal 仅保存其摘要。
+配置包及备份树位于安装 UUID 下的 `jail-bundles/`、`jail-configs/`，所选包由安装事件的 `jail_selection` 唯一确定，`jail-identities/` 保留身份约束；不再使用独立的配置选择文件。选择变更和补偿均保存新的 `select-jails` 安装事件，与原代码身份一起原子发布；相同选择重试不新增事件。发布前核对当前事件及目标配置包，旧事件不能覆盖后续选择，原实例操作尚未确认时拒绝新的配置应用。快照直接保存原安装事件中的选择。以上均为 root 私有、禁止迁移的运行材料。单策略最多 32 项、64 KiB，配置包最多 256 KiB；原封禁时间证明独立存储，最多 4 MiB、每 jail 1024 个地址，journal 仅保存其摘要。
+
+受管安装记录格式为 2，旧格式明确拒绝，首版发布前不保留兼容读取或双写路径。原子选择只保证代码与配置包身份的一致性；实际配置交换、官方 reload、封禁核对和动作授权仍由相应操作协调，不能据此声称完整升级已经实现。相关安装、应用、补偿与快照路径待 P5 集中验证，未运行真实系统操作。
 
 当前 Agent 为 44，策略为 nginxpanel-8，数据库为 26、迁移 schema 为 4。实现及源码集成审阅完成；生成器、构建、类型检查、lint、测试、浏览器、官方实例及真实 Nginx 验收均未执行，统一留待 P5。P5 还须核对目录交换/掉电恢复、官方 reload 与状态库的剩余封禁时间、动作回调无死锁、服务停止及维护衔接。手动封禁/解封、历史、网页/API 安装与独立服务控制已接入，其他动作后端继续实施。
 

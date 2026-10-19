@@ -276,7 +276,7 @@ func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fai
 	if err = ctx.Err(); err != nil {
 		return out, err
 	}
-	out = Fail2banUpgradePlan{At: time.Now().Unix(), Target: basis.hash(), InstallationID: current.OperationID, EventID: current.EventID, JailSelection: current.jailSelection, Current: fail2banUpgradeComponent(current), Candidate: fail2banUpgradeComponent(candidate), Service: basis.Service, Running: basis.Service.Active == "active", Jails: fail2banJailNames(basis.Bundle), Templates: checks, Bans: bans, StateSnapshotRequired: true, RestartRequired: basis.Service.Active == "active", Impacts: []string{"须在停止后保存匹配版本的加密状态快照；候选启动后核对官方恢复的未过期封禁", "原代码、配置和封禁恢复证明须保留至切换成功或完整补偿；不执行 pip 或安装系统包"}}
+	out = Fail2banUpgradePlan{At: time.Now().Unix(), Target: basis.hash(), InstallationID: current.OperationID, EventID: current.EventID, JailSelection: current.JailSelection, Current: fail2banUpgradeComponent(current), Candidate: fail2banUpgradeComponent(candidate), Service: basis.Service, Running: basis.Service.Active == "active", Jails: fail2banJailNames(basis.Bundle), Templates: checks, Bans: bans, StateSnapshotRequired: true, RestartRequired: basis.Service.Active == "active", Impacts: []string{"须在停止后保存匹配版本的加密状态快照；候选启动后核对官方恢复的未过期封禁", "原代码、配置和封禁恢复证明须保留至切换成功或完整补偿；不执行 pip 或安装系统包"}}
 	if out.Running {
 		out.Impacts = append(out.Impacts, "切换须单独授权停止及重启独立实例，封禁保护可能短暂中断")
 	}

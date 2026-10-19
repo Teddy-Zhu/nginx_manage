@@ -68,6 +68,10 @@ func (f *fail2banJailsExecutor) jailsStatus(ctx context.Context) (Fail2banJailsS
 	if b != nil {
 		out.Policy = b.Policy
 	}
+	if r.ActionState != "completed" {
+		out.Reason = "原受管实例操作尚未确认完成"
+		return out, nil
+	}
 	if err = verifyFail2banManaged(ctx, r, true); err != nil {
 		return out, err
 	}

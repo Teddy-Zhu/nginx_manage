@@ -134,7 +134,7 @@ func (f *fail2banInstanceReader) readInstance(ctx context.Context) (fail2ban.Ins
 	}
 	cacheKey := b.ID
 	if b.managed != nil {
-		cacheKey += "/" + b.managed.jailSelection
+		cacheKey += "/" + b.managed.JailSelection
 	}
 	out, err := f.instances.read(ctx, f.ctx, &f.budget, cacheKey, func(call context.Context) fail2ban.Instance {
 		value := initial
@@ -200,7 +200,7 @@ func (f *fail2banInstanceReader) readJail(ctx context.Context, name string) (fai
 	}
 	cacheKey := b.ID + "/" + name
 	if b.managed != nil {
-		cacheKey += "/" + b.managed.jailSelection
+		cacheKey += "/" + b.managed.JailSelection
 	}
 	value, err := f.jails.read(ctx, f.ctx, &f.budget, cacheKey, func(call context.Context) fail2ban.Jail {
 		value := out

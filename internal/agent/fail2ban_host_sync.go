@@ -71,7 +71,7 @@ func (f *fail2banHostSyncExecutor) status() fail2ban.HostInputSyncView {
 			r, e := loadFail2banManaged(f.server.DataDir)
 			if e != nil || r == nil || r.State != "installed" || fail2banNginxEngineKey(r.binding()) != event.EngineKey {
 				out.State, out.Reason = "paused", "受管实例身份无法核对"
-			} else if r.jailSelection != selection {
+			} else if r.JailSelection != selection {
 				out.State, out.Reason = "waiting", "受管 jail 配置变化，等待完整新采样"
 			}
 		}
@@ -253,7 +253,7 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 		if e != nil || r == nil || r.State != "installed" {
 			return out, errors.Join(errors.New("已同步样本的受管来源选择无法核对"), e)
 		}
-		selection = r.jailSelection
+		selection = r.JailSelection
 	}
 	f.mu.Lock()
 	f.selection = selection

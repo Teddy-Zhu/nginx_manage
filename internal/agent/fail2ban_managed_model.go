@@ -22,6 +22,7 @@ import (
 const fail2banManagedUnit = "/etc/systemd/system/nginxpanel-fail2ban.service"
 const fail2banManagedSocket = "/run/nginxpanel-fail2ban/fail2ban.sock"
 const fail2banManagedService = "nginxpanel-fail2ban.service"
+const fail2banManagedSchema = 2
 
 type Fail2banInstallOptions struct {
 	DataDir, Scope, OperationID, PlanID, AssetID, TrustPath string
@@ -29,7 +30,6 @@ type Fail2banInstallOptions struct {
 }
 
 type fail2banManagedRecord struct {
-	jailSelection  string
 	Schema         int               `json:"schema"`
 	EventID        string            `json:"event_id"`
 	At             int64             `json:"at"`
@@ -58,6 +58,7 @@ type fail2banManagedRecord struct {
 	ManagerSHA256  string            `json:"manager_sha256"`
 	Start          bool              `json:"start"`
 	Enable         bool              `json:"enable"`
+	JailSelection  string            `json:"jail_selection"`
 }
 
 func fail2banManagedDir(data string) string {
@@ -79,6 +80,19 @@ func fail2banManagedRoot(data, scope string) error {
 	return nil
 }
 func loadFail2banManaged(data string) (*fail2banManagedRecord, error) {
+	r, err := readFail2banManagedRecord(data)
+	if err != nil || r == nil {
+		return r, err
+	}
+	if _, err = loadFail2banJailBundle(r, r.JailSelection); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// Read one selection snapshot and its exact immutable event. The referenced
+// bundle is validated separately with this event's engine identity.
+func readFail2banManagedRecord(data string) (*fail2banManagedRecord, error) {
 	if !fail2banManagedData(data) {
 		return nil, errors.New("受管 Fail2ban 数据目录无效")
 	}
@@ -98,32 +112,35 @@ func loadFail2banManaged(data string) (*fail2banManagedRecord, error) {
 	if err := validateFail2banManagedRecord(r, data); err != nil {
 		return nil, err
 	}
+	canonical, err := json.Marshal(r)
+	if err != nil || !bytes.Equal(canonical, raw) {
+		return nil, errors.New("受管 Fail2ban 安装选择字段不完整或格式已变化")
+	}
 	// A current pointer may only refer to an already durable immutable event.
 	event, err := listenerRead(filepath.Join(fail2banManagedDir(data), "history", r.EventID+".json"), 16384)
 	if err != nil || !bytes.Equal(event, raw) {
 		return nil, errors.New("受管 Fail2ban 安装审计记录不一致")
 	}
-	r.jailSelection, _, err = selectedFail2banJails(&r)
-	if err != nil {
-		return nil, err
-	}
 	return &r, nil
 }
 
 // Historical state snapshots validate the same record contract without
-// selecting that old engine or changing the current jail pointer.
+// selecting that old engine or publishing its historical jail selection.
 func validateFail2banManagedRecord(r fail2banManagedRecord, data string) error {
-	if r.Schema != 1 || !validID(r.EventID) || r.PreviousEvent != "" && !validID(r.PreviousEvent) || !validID(r.OperationID) || r.DataDir != data || r.ApprovedAt <= 0 || r.ApprovedAt > time.Now().Unix()+300 || !fail2banDigest.MatchString(r.PlanID) || !fail2banDigest.MatchString(r.TrustSHA256) || !fail2banDigest.MatchString(r.ManifestSHA256) || !fail2banDigest.MatchString(r.PythonSHA256) || !fail2banDigest.MatchString(r.ManagerSHA256) || r.Version != fail2ban.RegexVersion || !fail2banPythonPath.MatchString(r.PythonPath) || !fail2banVersion.MatchString(r.PythonVersion) || !filepath.IsAbs(r.ManagerPath) || filepath.Clean(r.ManagerPath) != r.ManagerPath || len(r.ManagerPath) > 512 || len(r.Reason) > 1024 {
+	if r.Schema != fail2banManagedSchema || !validID(r.EventID) || r.PreviousEvent != "" && !validID(r.PreviousEvent) || !validID(r.OperationID) || r.DataDir != data || r.ApprovedAt <= 0 || r.ApprovedAt > time.Now().Unix()+300 || !fail2banDigest.MatchString(r.PlanID) || !fail2banDigest.MatchString(r.TrustSHA256) || !fail2banDigest.MatchString(r.ManifestSHA256) || !fail2banDigest.MatchString(r.PythonSHA256) || !fail2banDigest.MatchString(r.ManagerSHA256) || r.Version != fail2ban.RegexVersion || !fail2banPythonPath.MatchString(r.PythonPath) || !fail2banVersion.MatchString(r.PythonVersion) || !filepath.IsAbs(r.ManagerPath) || filepath.Clean(r.ManagerPath) != r.ManagerPath || len(r.ManagerPath) > 512 || len(r.Reason) > 1024 || r.JailSelection != "" && !validID(r.JailSelection) {
 		return errors.New("受管 Fail2ban 安装记录无效")
 	}
 	if r.At <= 0 || r.At > time.Now().Unix()+300 {
 		return errors.New("受管引擎事件时间无效")
 	}
-	if r.Action != "install" && r.Action != "start" && r.Action != "stop" && r.Action != "enable" && r.Action != "disable" && r.Action != "rollback" {
+	if r.Action != "install" && r.Action != "start" && r.Action != "stop" && r.Action != "enable" && r.Action != "disable" && r.Action != "rollback" && r.Action != "select-jails" {
 		return errors.New("受管引擎操作登记无效")
 	}
 	if r.ActionState != "pending" && r.ActionState != "completed" && r.ActionState != "unknown" {
 		return errors.New("受管引擎操作结果登记无效")
+	}
+	if r.Action == "select-jails" && (r.State != "installed" || r.ActionState != "completed") {
+		return errors.New("受管 jail 选择事件状态无效")
 	}
 	switch r.State {
 	case "reserved", "ready", "installed", "interrupted", "rolling-back", "rolled-back":
@@ -135,10 +152,27 @@ func validateFail2banManagedRecord(r fail2banManagedRecord, data string) error {
 	}
 	return nil
 }
+
+// Caller holds the installation binding lock throughout admission and publish.
 func saveFail2banManaged(r *fail2banManagedRecord, state, reason string) error {
+	// Every code or jail selection advances the immutable event. A writer
+	// holding an older event cannot overwrite a later selection after retry.
+	current, err := loadFail2banManaged(r.DataDir)
+	if err != nil {
+		return err
+	}
+	if current == nil && r.EventID != "" || current != nil && current.EventID != r.EventID {
+		return ErrExternalChange
+	}
 	next := *r
 	next.PreviousEvent, next.EventID, next.State, next.Reason = r.EventID, secure.ID(), state, reason
 	next.At = time.Now().Unix()
+	if err = validateFail2banManagedRecord(next, r.DataDir); err != nil {
+		return err
+	}
+	if _, err = loadFail2banJailBundle(&next, next.JailSelection); err != nil {
+		return err
+	}
 	dir := fail2banManagedDir(r.DataDir)
 	if err := secure.RootDirectory(filepath.Join(dir, "history"), 0700); err != nil {
 		return err
@@ -182,7 +216,7 @@ func fail2banManagedRelease(p releases.Result, assetID string) (releases.Asset, 
 }
 func admitFail2banManaged(ctx context.Context, in Fail2banInstallOptions) (*fail2banManagedRecord, error) {
 	p := platform.Detect()
-	r := &fail2banManagedRecord{Schema: 1, Action: "install", ActionState: "pending", OperationID: in.OperationID, DataDir: in.DataDir, PlanID: in.PlanID, AssetID: in.AssetID, TrustPath: in.TrustPath, Prerelease: in.Prerelease, Start: in.Start, Enable: in.Enable, ApprovedAt: time.Now().Unix(), Host: releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: p.OS, Version: p.Version}, Receiver: releases.Receiver{APIMajor: 1, AgentProtocol: protocol.Agent, Launcher: releases.LauncherVersion}}
+	r := &fail2banManagedRecord{Schema: fail2banManagedSchema, Action: "install", ActionState: "pending", OperationID: in.OperationID, DataDir: in.DataDir, PlanID: in.PlanID, AssetID: in.AssetID, TrustPath: in.TrustPath, Prerelease: in.Prerelease, Start: in.Start, Enable: in.Enable, ApprovedAt: time.Now().Unix(), Host: releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: p.OS, Version: p.Version}, Receiver: releases.Receiver{APIMajor: 1, AgentProtocol: protocol.Agent, Launcher: releases.LauncherVersion}}
 	prepared, err := releases.Prepared(ctx, r.releaseInput(), r.PlanID)
 	if err != nil {
 		return nil, err

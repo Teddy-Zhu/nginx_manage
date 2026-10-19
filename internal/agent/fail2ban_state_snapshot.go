@@ -44,7 +44,6 @@ type fail2banStateFile struct {
 
 type fail2banStateBasis struct {
 	Managed       fail2banManagedRecord `json:"managed"`
-	JailSelection string                `json:"jail_selection"`
 	Bundle        *fail2banJailBundle   `json:"bundle"`
 	Configuration map[string]string     `json:"configuration"`
 	Service       fail2ban.Service      `json:"service"`
@@ -141,7 +140,7 @@ func readFail2banStateBasis(ctx context.Context, data string) (fail2banStateBasi
 		return out, err
 	}
 	out.Managed = *r
-	out.JailSelection, out.Bundle, err = selectedFail2banJails(r)
+	_, out.Bundle, err = selectedFail2banJails(r)
 	if err != nil {
 		return out, err
 	}
@@ -166,10 +165,10 @@ func (m fail2banStateManifest) validate(data, id string) error {
 		return err
 	}
 	if m.Basis.Bundle == nil {
-		if m.Basis.JailSelection != "" {
+		if r.JailSelection != "" {
 			return errors.New("Fail2ban 状态快照缺少原 jail 配置包")
 		}
-	} else if m.Basis.Bundle.ID != m.Basis.JailSelection {
+	} else if m.Basis.Bundle.ID != r.JailSelection {
 		return errors.New("Fail2ban 状态快照 jail 身份不匹配")
 	}
 	config, err := fail2banJailConfig(&r, m.Basis.Bundle)

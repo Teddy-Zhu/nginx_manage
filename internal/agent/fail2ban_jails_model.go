@@ -1,9 +1,9 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -130,27 +130,41 @@ func loadFail2banJailBundle(r *fail2banManagedRecord, id string) (*fail2banJailB
 }
 
 func selectedFail2banJails(r *fail2banManagedRecord) (string, *fail2banJailBundle, error) {
-	var pointer struct {
-		ID string `json:"id"`
-	}
-	err := readFail2banNginxJSON(filepath.Join(r.work(), "jail-current.json"), &pointer, 1024)
-	if os.IsNotExist(err) {
-		return "", nil, nil
-	}
+	// Code and jail selection come from one authenticated installation event.
+	// Re-reading cannot combine a historical engine with a newer jail pointer.
+	current, err := readFail2banManagedRecord(r.DataDir)
 	if err != nil {
 		return "", nil, err
 	}
-	b, err := loadFail2banJailBundle(r, pointer.ID)
-	return pointer.ID, b, err
+	expected, _ := json.Marshal(r)
+	actual, _ := json.Marshal(current)
+	if current == nil || !bytes.Equal(expected, actual) {
+		return "", nil, ErrExternalChange
+	}
+	b, err := loadFail2banJailBundle(r, r.JailSelection)
+	return r.JailSelection, b, err
 }
 
 func selectFail2banJails(r *fail2banManagedRecord, id string) error {
+	if r.State != "installed" || r.ActionState != "completed" {
+		return errors.New("原受管实例操作尚未确认完成，不能选择 jail 配置包")
+	}
+	if _, _, err := selectedFail2banJails(r); err != nil {
+		return err
+	}
 	if _, err := loadFail2banJailBundle(r, id); err != nil {
 		return err
 	}
-	return rootJSONWrite(filepath.Join(r.work(), "jail-current.json"), struct {
-		ID string `json:"id"`
-	}{id}, 1024)
+	if r.JailSelection == id {
+		return nil
+	}
+	next := *r
+	next.JailSelection, next.Action, next.ActionState = id, "select-jails", "completed"
+	if err := saveFail2banManaged(&next, r.State, "受管 jail 配置选择已更新"); err != nil {
+		return err
+	}
+	*r = next
+	return nil
 }
 
 func saveFail2banJailBundle(r *fail2banManagedRecord, b fail2banJailBundle) error {
@@ -185,7 +199,7 @@ func ownedFail2banJails(b *fail2banBinding) (map[string]bool, error) {
 	if b.managed == nil {
 		return out, nil
 	}
-	bundle, err := loadFail2banJailBundle(b.managed, b.managed.jailSelection)
+	bundle, err := loadFail2banJailBundle(b.managed, b.managed.JailSelection)
 	if err != nil {
 		return nil, err
 	}

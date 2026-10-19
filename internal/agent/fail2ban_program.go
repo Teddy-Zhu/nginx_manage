@@ -73,7 +73,7 @@ func (p fail2banProgram) key() string {
 			Event, Kind, Jails string
 			Unselected         bool
 			Engine             fail2ban.EngineIdentity
-		}{p.managed.EventID, p.kind, p.managed.jailSelection, p.unselected, p.engine()})
+		}{p.managed.EventID, p.kind, p.managed.JailSelection, p.unselected, p.engine()})
 		return "managed/" + secure.Hash(raw)
 	}
 	return "existing/" + p.kind + "/" + p.tool.Path + "\x00" + p.tool.Resolved + "\x00" + p.hash

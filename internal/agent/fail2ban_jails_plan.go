@@ -72,6 +72,9 @@ func (f *fail2banJailsExecutor) submitJails(ctx context.Context, in Fail2banJail
 		return out, errors.New("jail 应用仅允许独立受管实例；已有实例保持只读")
 	}
 	r := binding.managed
+	if r.ActionState != "completed" {
+		return out, fault.Conflict("原受管实例操作尚未确认完成，不能应用 jail 配置")
+	}
 	if err = verifyFail2banManaged(ctx, r, true); err != nil {
 		return out, err
 	}

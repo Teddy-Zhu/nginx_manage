@@ -72,7 +72,7 @@ func sameFail2banStateRestoreControl(a, b fail2banStateBasis) bool {
 }
 
 func compatibleFail2banStateSnapshot(current, snapshot fail2banStateBasis) bool {
-	if fail2banUpgradeComponent(&current.Managed) != fail2banUpgradeComponent(&snapshot.Managed) || current.Managed.DataDir != snapshot.Managed.DataDir || current.Managed.PythonVersion != snapshot.Managed.PythonVersion || current.Managed.ManagerPath != snapshot.Managed.ManagerPath || current.Managed.ManagerSHA256 != snapshot.Managed.ManagerSHA256 || current.MachineID != snapshot.MachineID || current.JailSelection != snapshot.JailSelection || current.StateLabel != snapshot.StateLabel {
+	if fail2banUpgradeComponent(&current.Managed) != fail2banUpgradeComponent(&snapshot.Managed) || current.Managed.DataDir != snapshot.Managed.DataDir || current.Managed.PythonVersion != snapshot.Managed.PythonVersion || current.Managed.ManagerPath != snapshot.Managed.ManagerPath || current.Managed.ManagerSHA256 != snapshot.Managed.ManagerSHA256 || current.MachineID != snapshot.MachineID || current.Managed.JailSelection != snapshot.Managed.JailSelection || current.StateLabel != snapshot.StateLabel {
 		return false
 	}
 	x, _ := json.Marshal(struct {
