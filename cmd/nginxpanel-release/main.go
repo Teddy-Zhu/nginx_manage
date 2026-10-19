@@ -37,6 +37,7 @@ func run() error {
 	keyFile := f.String("key-file", "", "private 0600 Ed25519 seed file outside input/output (bundle)")
 	keyID := f.String("key-id", "", "approved signing key ID (bundle)")
 	public := f.String("public-key", "", "independently approved Base64 public key (bundle)")
+	notesFile := f.String("notes-file", "", "approved UTF-8 release notes, at most 8 KiB (spec)")
 	if err := f.Parse(os.Args[2:]); err != nil {
 		return err
 	}
@@ -44,7 +45,14 @@ func run() error {
 		return errors.New("须提供输出路径，不能使用额外位置参数")
 	}
 	if os.Args[1] == "spec" {
-		spec, err := releases.NewPublication(*repo, *version, *commit)
+		if *notesFile == "" {
+			return errors.New("spec 须提供 --notes-file")
+		}
+		notes, err := releases.ReadPublicationNotes(*notesFile)
+		if err != nil {
+			return err
+		}
+		spec, err := releases.NewPublication(*repo, *version, *commit, notes)
 		if err != nil {
 			return err
 		}
@@ -68,6 +76,9 @@ func run() error {
 			return err
 		}
 		return closeErr
+	}
+	if *notesFile != "" {
+		return errors.New("bundle 使用 spec 中的已批准说明，不能提供 --notes-file")
 	}
 	if *specFile == "" || *inputRoot == "" || *keyFile == "" {
 		return errors.New("bundle 须提供 --spec、--input-root 和 --key-file")

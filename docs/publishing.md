@@ -21,7 +21,8 @@
 ```sh
 bin/nginxpanel-release spec \
   --repository owner/nginxpanel --version 1.2.3 \
-  --commit <完整提交> --output .release/input/publication.json
+  --commit <完整提交> --notes-file deploy/release/notes/1.2.3.md \
+  --output .release/input/publication.json
 
 bin/nginxpanel-release bundle \
   --repository owner/nginxpanel --version 1.2.3 --commit <完整提交> \
@@ -29,6 +30,8 @@ bin/nginxpanel-release bundle \
   --key-file /home/publisher/keys/release.seed --key-id release-2026 \
   --public-key <独立确认的Base64公钥> --output .release/output
 ```
+
+`spec` 必须通过 `--notes-file` 指定本次发布批准的非空 UTF-8 说明（LF 换行），最多 8 KiB、默认 JSON 编码后最多 16 KiB。说明进入 `manifest.notes`，与协议、数据库和 Agent/launcher 要求共同签名；`bundle` 只使用规格中的说明，不能另行覆盖。GitHub 流水线读取标签提交内的 `deploy/release/notes/<不带 v 的 SemVer>.md`，发标签前须提交该文件；缺失或无效时发布失败。GitHub release 正文使用同一说明，接收端只信任签名清单，不以可编辑正文判断接收条件。
 
 包含镜像时，`bundle` 另外指定 `--images .release/images/publication.json`。输入清单与其同目录的 `panel-launcher.oci.json`、`nginx.oci.json` 来自下述镜像步骤；私钥须位于镜像输入树之外。原生归档发行可省略镜像输入，不能只登记一个镜像或一种架构。
 

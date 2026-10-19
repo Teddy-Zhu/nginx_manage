@@ -62,7 +62,7 @@ jobs:
           test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$commit"
           mkdir -p .release/input .release/binaries
           go build -trimpath -o "$RUNNER_TEMP/nginxpanel-release" ./cmd/nginxpanel-release
-          "$RUNNER_TEMP/nginxpanel-release" spec --repository "$RELEASE_REPOSITORY" --version "$version" --commit "$commit" --output .release/input/publication.json
+          "$RUNNER_TEMP/nginxpanel-release" spec --repository "$RELEASE_REPOSITORY" --version "$version" --commit "$commit" --notes-file "deploy/release/notes/$version.md" --output .release/input/publication.json
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"

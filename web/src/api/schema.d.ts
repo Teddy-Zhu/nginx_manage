@@ -2579,7 +2579,38 @@ export interface components {
             /** Format: int64 */
             unpacked_bytes: number;
         };
+        ComponentReleaseRequirements: {
+            api_major: number;
+            database_schema: number;
+            minimum_agent_protocol: number;
+            minimum_launcher: number;
+            frontend_version: string;
+            automatic_rollback: boolean;
+        };
+        ComponentReleaseReceiver: {
+            api_major: number;
+            agent_protocol: number;
+            launcher: number;
+        };
+        ComponentReleaseAnnouncement: {
+            repository: string;
+            version: string;
+            tag: string;
+            channel: string;
+            key_id: string;
+            manifest_sha256: string;
+            trust_sha256: string;
+            expires_at: number;
+            notes: string;
+            requirements: components["schemas"]["ComponentReleaseRequirements"];
+            receiver: components["schemas"]["ComponentReleaseReceiver"];
+            receiver_compatible: boolean;
+            incompatibilities: string[];
+        };
         ComponentRelease: {
+            notes: string;
+            requirements: components["schemas"]["ComponentReleaseRequirements"];
+            receiver: components["schemas"]["ComponentReleaseReceiver"];
             plan_id: string;
             manifest_sha256: string;
             trust_sha256: string;
@@ -2598,6 +2629,7 @@ export interface components {
             unpacked_bytes: number;
         };
         ComponentOperation: {
+            announcement?: components["schemas"]["ComponentReleaseAnnouncement"];
             frontend?: components["schemas"]["ComponentFrontendResult"];
             panel?: components["schemas"]["ComponentPanelPreparation"];
             /** Format: int64 */

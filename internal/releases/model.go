@@ -18,6 +18,8 @@ const (
 	MaxFiles          = 4096
 	MaxEntries        = 8192
 	MaxReleaseAssets  = 64
+	MaxNotesBytes     = 8 << 10
+	MaxNotesJSONBytes = 16 << 10
 )
 
 type Key struct {
@@ -76,6 +78,7 @@ type Manifest struct {
 	MinimumLauncher      int              `json:"minimum_launcher"`
 	FrontendVersion      string           `json:"frontend_version"`
 	AutomaticRollback    bool             `json:"automatic_rollback"`
+	Notes                string           `json:"notes"`
 	Assets               []Asset          `json:"assets"`
 	Images               []ContainerImage `json:"images"`
 }

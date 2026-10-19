@@ -12,6 +12,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import ComponentOfflineUpload from "../components/ComponentOfflineUpload.vue";
+import ComponentReleaseDetails from "../components/ComponentReleaseDetails.vue";
 import {
   NAlert,
   NButton,
@@ -331,6 +332,7 @@ onUnmounted(() => {
           {{ bytes(release.unpacked_bytes) }} · 有效期至
           {{ date(release.expires_at) }}
         </p>
+        <ComponentReleaseDetails :details="release" />
         <NAlert v-if="!checked.result?.runtime_ready" type="warning"
           >系统依赖未就绪：{{ checked.result?.runtime_reason }}</NAlert
         >
@@ -409,6 +411,15 @@ onUnmounted(() => {
           {{ task.result?.release?.tag || task.id }}
         </p>
         <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
+        <template v-if="task.result?.announcement">
+          <p>{{ task.result.announcement.repository }} · {{ task.result.announcement.tag }} · 签名密钥 {{ task.result.announcement.key_id }}</p>
+          <ComponentReleaseDetails :details="task.result.announcement" />
+          <NAlert type="warning">
+            <p v-for="issue in task.result.announcement.incompatibilities" :key="issue">{{ issue }}</p>
+            <p v-if="task.result.announcement.requirements.api_major !== task.result.announcement.receiver.api_major">请选择与当前面板 API 主版本匹配的发行。</p>
+            <p v-if="task.result.announcement.requirements.minimum_agent_protocol > task.result.announcement.receiver.agent_protocol || task.result.announcement.requirements.minimum_launcher > task.result.announcement.receiver.launcher">请由节点管理员按部署文档更新 Agent 或 launcher 后重新检查；容器部署需要替换受信任镜像。</p>
+          </NAlert>
+        </template>
         <template v-if="task.action === 'prepare' && task.result?.frontend">
           <p>独立前端 {{ task.result.frontend.version }} · {{ task.result.frontend.release_id }}</p>
           <NPopconfirm :disabled="!canActivate(task)" @positive-click="activate(task)">

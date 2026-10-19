@@ -1532,22 +1532,23 @@ type ComponentInputComponents string
 
 // ComponentOperation defines model for ComponentOperation.
 type ComponentOperation struct {
-	Frontend      *ComponentFrontendResult   `json:"frontend,omitempty"`
-	Panel         *ComponentPanelPreparation `json:"panel,omitempty"`
-	CreatedAt     int64                      `json:"created_at"`
-	Deadline      int64                      `json:"deadline"`
-	Error         string                     `json:"error"`
-	ErrorCode     string                     `json:"error_code"`
-	Id            string                     `json:"id"`
-	Input         ComponentInput             `json:"input"`
-	Protocol      int64                      `json:"protocol"`
-	Release       *ComponentRelease          `json:"release,omitempty"`
-	RequestHash   string                     `json:"request_hash"`
-	RuntimeReady  bool                       `json:"runtime_ready"`
-	RuntimeReason string                     `json:"runtime_reason"`
-	Stage         string                     `json:"stage"`
-	State         string                     `json:"state"`
-	UpdatedAt     int64                      `json:"updated_at"`
+	Announcement  *ComponentReleaseAnnouncement `json:"announcement,omitempty"`
+	Frontend      *ComponentFrontendResult      `json:"frontend,omitempty"`
+	Panel         *ComponentPanelPreparation    `json:"panel,omitempty"`
+	CreatedAt     int64                         `json:"created_at"`
+	Deadline      int64                         `json:"deadline"`
+	Error         string                        `json:"error"`
+	ErrorCode     string                        `json:"error_code"`
+	Id            string                        `json:"id"`
+	Input         ComponentInput                `json:"input"`
+	Protocol      int64                         `json:"protocol"`
+	Release       *ComponentRelease             `json:"release,omitempty"`
+	RequestHash   string                        `json:"request_hash"`
+	RuntimeReady  bool                          `json:"runtime_ready"`
+	RuntimeReason string                        `json:"runtime_reason"`
+	Stage         string                        `json:"stage"`
+	State         string                        `json:"state"`
+	UpdatedAt     int64                         `json:"updated_at"`
 }
 
 // AuditFilter defines model for AuditFilter.
@@ -1615,21 +1616,58 @@ type ComponentOverview struct {
 	TrustSha256      string                  `json:"trust_sha256"`
 }
 
+// ComponentReleaseRequirements defines model for ComponentReleaseRequirements.
+type ComponentReleaseRequirements struct {
+	ApiMajor             int64  `json:"api_major"`
+	DatabaseSchema       int64  `json:"database_schema"`
+	MinimumAgentProtocol int64  `json:"minimum_agent_protocol"`
+	MinimumLauncher      int64  `json:"minimum_launcher"`
+	FrontendVersion      string `json:"frontend_version"`
+	AutomaticRollback    bool   `json:"automatic_rollback"`
+}
+
+// ComponentReleaseReceiver defines model for ComponentReleaseReceiver.
+type ComponentReleaseReceiver struct {
+	ApiMajor      int64 `json:"api_major"`
+	AgentProtocol int64 `json:"agent_protocol"`
+	Launcher      int64 `json:"launcher"`
+}
+
+// ComponentReleaseAnnouncement defines model for ComponentReleaseAnnouncement.
+type ComponentReleaseAnnouncement struct {
+	Repository         string                       `json:"repository"`
+	Version            string                       `json:"version"`
+	Tag                string                       `json:"tag"`
+	Channel            string                       `json:"channel"`
+	KeyId              string                       `json:"key_id"`
+	ManifestSha256     string                       `json:"manifest_sha256"`
+	TrustSha256        string                       `json:"trust_sha256"`
+	ExpiresAt          int64                        `json:"expires_at"`
+	Notes              string                       `json:"notes"`
+	Requirements       ComponentReleaseRequirements `json:"requirements"`
+	Receiver           ComponentReleaseReceiver     `json:"receiver"`
+	ReceiverCompatible bool                         `json:"receiver_compatible"`
+	Incompatibilities  []string                     `json:"incompatibilities"`
+}
+
 // ComponentRelease defines model for ComponentRelease.
 type ComponentRelease struct {
-	ArchiveBytes   int64            `json:"archive_bytes"`
-	Assets         []ComponentAsset `json:"assets"`
-	Channel        string           `json:"channel"`
-	ExpiresAt      int64            `json:"expires_at"`
-	KeyId          string           `json:"key_id"`
-	ManifestSha256 string           `json:"manifest_sha256"`
-	PlanId         string           `json:"plan_id"`
-	Repository     string           `json:"repository"`
-	Selected       []string         `json:"selected"`
-	Tag            string           `json:"tag"`
-	TrustSha256    string           `json:"trust_sha256"`
-	UnpackedBytes  int64            `json:"unpacked_bytes"`
-	Version        string           `json:"version"`
+	Notes          string                       `json:"notes"`
+	Requirements   ComponentReleaseRequirements `json:"requirements"`
+	Receiver       ComponentReleaseReceiver     `json:"receiver"`
+	ArchiveBytes   int64                        `json:"archive_bytes"`
+	Assets         []ComponentAsset             `json:"assets"`
+	Channel        string                       `json:"channel"`
+	ExpiresAt      int64                        `json:"expires_at"`
+	KeyId          string                       `json:"key_id"`
+	ManifestSha256 string                       `json:"manifest_sha256"`
+	PlanId         string                       `json:"plan_id"`
+	Repository     string                       `json:"repository"`
+	Selected       []string                     `json:"selected"`
+	Tag            string                       `json:"tag"`
+	TrustSha256    string                       `json:"trust_sha256"`
+	UnpackedBytes  int64                        `json:"unpacked_bytes"`
+	Version        string                       `json:"version"`
 }
 
 // ComponentTask defines model for ComponentTask.

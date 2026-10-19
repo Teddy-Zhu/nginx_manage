@@ -330,8 +330,9 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 	if err := strictJSON(raw, &m); err != nil {
 		return nil, fmt.Errorf("发行清单：%w", err)
 	}
-	if m.Schema != Schema || m.Repository != publisher.trust.Repository || !validVersion(m.Version) || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.APIMajor != in.Receiver.APIMajor || m.DatabaseSchema < 1 || m.MinimumAgentProtocol < 1 || m.MinimumAgentProtocol > in.Receiver.AgentProtocol || m.MinimumLauncher < 1 || m.MinimumLauncher > in.Receiver.Launcher || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
-		return nil, errors.New("发行清单身份、有效期或接收端协议条件不满足")
+	requirements := ManifestRequirements(m)
+	if m.Schema != Schema || m.Repository != publisher.trust.Repository || !validVersion(m.Version) || requirements.Validate() != nil || !ValidNotes(m.Notes) || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
+		return nil, errors.New("发行清单身份、有效期或发行要求无效")
 	}
 	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "prerelease" && !in.AllowPrerelease || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
 		return nil, errors.New("发行渠道或预发布授权无效")
@@ -345,6 +346,12 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 	assets, err := manifestCatalog(m)
 	if err != nil {
 		return nil, err
+	}
+	if in.Receiver.APIMajor < 1 || in.Receiver.AgentProtocol < 1 || in.Receiver.Launcher < 1 {
+		return nil, errors.New("接收端协议尚未确认")
+	}
+	if issues := requirements.Incompatibilities(in.Receiver); len(issues) != 0 {
+		return nil, &receiverCompatibilityError{announcement: Announcement{Repository: m.Repository, Version: m.Version, Tag: "v" + m.Version, Channel: m.Channel, KeyID: sig.KeyID, ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), ExpiresAt: m.ExpiresAt, Notes: m.Notes, Requirements: requirements, Receiver: in.Receiver, ReceiverCompatible: false, Incompatibilities: issues}}
 	}
 	selected, err := selectAssets(m, in.Host, in.Assets, in.Components)
 	if err != nil {

@@ -69,9 +69,12 @@ func validCommit(commit string) bool {
 }
 
 // NewPublication describes matching panel/web and prebuilt native Nginx assets.
-func NewPublication(repo, version, commit string) (PublicationSpec, error) {
+func NewPublication(repo, version, commit, notes string) (PublicationSpec, error) {
 	if !repository.MatchString(repo) || !validVersion(version) || !validCommit(commit) {
 		return PublicationSpec{}, errors.New("发布身份或版本无效")
+	}
+	if !ValidNotes(notes) || strings.TrimSpace(notes) == "" {
+		return PublicationSpec{}, errors.New("发布须包含符合长度和编码限制的非空发行说明")
 	}
 	databaseSchema, err := migrations.LatestVersion()
 	if err != nil {
@@ -82,7 +85,7 @@ func NewPublication(repo, version, commit string) (PublicationSpec, error) {
 	if strings.Contains(strings.Split(version, "+")[0], "-") {
 		channel = "prerelease"
 	}
-	spec := PublicationSpec{Commit: commit, Manifest: Manifest{Schema: Schema, Repository: repo, Version: version, Channel: channel, CreatedAt: now, ExpiresAt: now + 365*86400, APIMajor: 1, DatabaseSchema: databaseSchema, MinimumAgentProtocol: protocol.Agent, MinimumLauncher: LauncherVersion, FrontendVersion: version}}
+	spec := PublicationSpec{Commit: commit, Manifest: Manifest{Schema: Schema, Repository: repo, Version: version, Channel: channel, CreatedAt: now, ExpiresAt: now + 365*86400, APIMajor: 1, DatabaseSchema: databaseSchema, MinimumAgentProtocol: protocol.Agent, MinimumLauncher: LauncherVersion, FrontendVersion: version, Notes: notes}}
 	for _, arch := range []string{"amd64", "arm64", "any"} {
 		id, component, archive := "panel-linux-"+arch, "panel", "nginxpanel_"+version+"_linux_"+arch+".tar.gz"
 		executable := []string{"nginxpanel"}
@@ -236,7 +239,7 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	if err != nil {
 		return PublicationResult{}, err
 	}
-	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || m.AutomaticRollback || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) == 0 || len(spec.Packages) > 16 {
+	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || m.AutomaticRollback || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) == 0 || len(spec.Packages) > 16 {
 		return PublicationResult{}, errors.New("发布清单身份、有效期、协议或回滚条件不满足")
 	}
 	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {

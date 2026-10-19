@@ -18,11 +18,11 @@
 
 `release-manifest.sig` 是 JSON，字段为 `schema=1`、`key_id`、`signature`。签名使用标准 Ed25519，消息为 UTF-8 字节 `nginxpanel-release-manifest-v1\n`（末尾为一个实际换行）拼接 **未经修改的完整 manifest 文件字节**；`signature` 为规范标准 Base64 的 64 字节签名。签名后不能再格式化 manifest。公钥也使用规范标准 Base64。此流程不生成或托管发布私钥。
 
-验签前只读有界文件和签名信封，认证后解析清单；JSON 拒绝未知字段、重复字段、非法 UTF-8、尾随值及过深结构。清单须匹配本机信任中的仓库，使用当前 schema/API 主版本，并满足接收端 Agent/launcher 最低版本。有效期必须明确、未过期、最长两年；创建时间不得超过本机时间 5 分钟。预发布必须显式 `--release-prerelease`。
+验签前只读有界文件和签名信封，认证后解析清单；JSON 拒绝未知字段、重复字段、非法 UTF-8、尾随值及过深结构。清单须匹配本机信任中的仓库并使用当前 schema；准备还须匹配接收端 API 主版本并满足 Agent/launcher 最低版本。有效期必须明确、未过期、最长两年；创建时间不得超过本机时间 5 分钟。预发布必须显式 `--release-prerelease`。
 
 ## 清单合同
 
-清单字段以 `internal/releases/model.go` 及 `images.go` 为唯一模型，包含 `schema/repository/version/channel/created_at/expires_at/api_major/database_schema/minimum_agent_protocol/minimum_launcher/frontend_version/automatic_rollback/assets/images`。版本使用 SemVer，channel 为 stable/prerelease；数据库 schema 和自动回滚标志是后续激活准入的材料，准备流程不据此承诺已迁移或能够回滚。镜像引用、平台摘要与 OCI 元数据也受同一清单签名保护；`release-images` 的只读认证入口见 [固定镜像发行](publishing.md#固定镜像发行)。
+清单字段以 `internal/releases/model.go` 及 `images.go` 为唯一模型，包含 `schema/repository/version/channel/created_at/expires_at/api_major/database_schema/minimum_agent_protocol/minimum_launcher/frontend_version/automatic_rollback/notes/assets/images`。版本使用 SemVer，channel 为 stable/prerelease；数据库 schema 和自动回滚标志是后续激活准入的材料，准备流程不据此承诺已迁移或能够回滚。镜像引用、平台摘要与 OCI 元数据也受同一清单签名保护；`release-images` 的只读认证入口见 [固定镜像发行](publishing.md#固定镜像发行)。
 
 每个资产登记唯一 ID、组件、版本、Linux 架构、发行版及版本、ABI、必要系统文件的长度/权限/散列、归档长度/散列、展开总长、逐文件清单、同清单内的精确依赖 ID、许可文件、HTTPS 上游来源、维护状态及 Nginx 模块声明。仅允许 panel/web/nginx/fail2ban 四种组件；固定入口依次为 `nginxpanel`、`index.html`、`bin/nginx`、`bin/fail2ban-server`。panel 须包含 `web/index.html`，其版本与发行版本一致；独立 web 的版本与 frontend_version 一致。
 
@@ -320,3 +320,12 @@ API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.s
 生产静态服务仅从批准清单读取文件，并在返回前核对长度与 SHA-256。页面入口和无内容散列文件使用 `no-store`；内容散列资源使用不可变长缓存，当前目录缺失的同类资源可从上一前端读取。面板联合更新前另行保存前一程序来源；新后端默认使用自身配套前端，旧独立前端不会自动套用到不同后端。更新及补偿的 HTTPS 就绪观察核对实际批准选择及全部文件。
 
 `GET /api/v1/system/version` 返回 `frontend_id/frontend_entries`。页面对照实际加载的模块、样式及预加载入口资源，在版本变化时提供重新载入按钮，并确认未保存修改；不自动刷新。该检查始终针对提供页面的本机面板，节点业务操作仍使用显式选中节点。当前 Agent/数据库/归档为 111/33/6；接口声明与实现同步，生成器、构建、类型检查、lint、测试、浏览器及真实切换尚未执行，留待 P5 隔离环境集中验证。
+
+
+## 已验签发行说明与接收端要求
+
+组件检查结果和离线上传信息保留清单签名覆盖的 `notes/requirements/receiver`，展示 API 主版本、目标数据库结构、Agent/launcher 下限、配套前端版本和自动回滚标志。发行说明按纯文本显示，不执行 HTML 或 Markdown。说明最多 8 KiB UTF-8、默认 JSON 编码后最多 16 KiB，仅允许 LF 和 TAB 控制字符；空说明在接收端显示为未提供，发布工具要求非空说明。
+
+在线检查在签名、清单结构、仓库、标签、渠道、有效期及当前信任核对通过后，即使接收端版本不满足要求，也将已认证的 `announcement` 保存在失败任务中，错误码为 `COMPONENT_RECEIVER_INCOMPATIBLE`。说明包含要求、当前接收端版本及差异，不含准备计划 ID、资产或可执行授权；失败任务不能用于准备或激活。未经认证、来源不一致、清单过期或信任变化的响应不会保留此说明。离线创建仍须通过完整接收准入，版本不满足时直接拒绝并返回要求差异。
+
+接收端不满足要求时，页面提示选择匹配 API 的发行，或由节点管理员处理 Agent/launcher 更新后重新检查；容器方式通过替换受信任镜像更新。此改动不提供 Agent 热更新能力。Agent/数据库/归档为 112/33/6；本轮仅完成实现和源码审阅，生成器、构建、类型检查、lint、测试、浏览器、发布工具及真实系统操作均留待 P5 隔离集中验证。

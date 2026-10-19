@@ -197,6 +197,7 @@ func bounded(message string) string {
 	return string(chars)
 }
 func (m *Manager) interrupted(ctx context.Context, out *Operation) {
+	out.Announcement = nil
 	out.State, out.Stage, out.ErrorCode, out.Error = "failed", "interrupted", "COMPONENT_INTERRUPTED", "组件操作在确认完成前中断，未启用或切换运行版本"
 	if out.Input.Action == "activate" {
 		out.Error = "前端激活中断，最终选择尚未确认"
@@ -239,6 +240,7 @@ func (m *Manager) run(out Operation) {
 		} else {
 			result, err = releases.Online(ctx, in)
 		}
+		out.Announcement = result.Announcement
 		if err == nil {
 			_, err = panelSelection(result.Plan)
 		}
@@ -265,6 +267,9 @@ func (m *Manager) run(out Operation) {
 	}
 	if err != nil {
 		out.State, out.Stage, out.ErrorCode, out.Error = "failed", "failed", "COMPONENT_OPERATION_FAILED", bounded(err.Error())
+		if errors.Is(err, releases.ErrReceiverIncompatible) {
+			out.ErrorCode = "COMPONENT_RECEIVER_INCOMPATIBLE"
+		}
 		if errors.Is(err, releases.ErrReleaseChanged) {
 			out.ErrorCode = "COMPONENT_SOURCE_CHANGED"
 		}

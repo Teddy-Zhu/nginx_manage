@@ -9,6 +9,7 @@ import {
   type ComponentOfflineUpload,
 } from "../api/client";
 import { useSession } from "../stores/session";
+import ComponentReleaseDetails from "./ComponentReleaseDetails.vue";
 
 const props = defineProps<{ available: boolean; blocked: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
@@ -229,6 +230,7 @@ onUnmounted(() => { closed = true; paused.value = true; controller.abort(); });
     </NFormItem>
     <section v-if="chosen" class="surface page-stack">
       <p>{{ chosen.release.repository }} · {{ chosen.release.tag }} · {{ chosen.id }}</p>
+      <ComponentReleaseDetails :details="chosen.release" />
       <p>有效期至 {{ new Date(chosen.expires_at * 1000).toLocaleString() }}</p>
       <article v-for="asset in chosen.assets" :key="asset.id">
         <p>{{ asset.archive }} · {{ bytes(asset.received) }} / {{ bytes(asset.size) }}</p>

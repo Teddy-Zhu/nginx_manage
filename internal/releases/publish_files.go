@@ -24,6 +24,22 @@ import (
 
 // Publication inputs belong to the publishing account, not necessarily root.
 // Receiving hosts retain their separate root-only trust and preparation policy.
+func ReadPublicationNotes(name string) (string, error) {
+	abs, err := filepath.Abs(name)
+	if err != nil {
+		return "", err
+	}
+	raw, err := readPublicationFile(abs, MaxNotesBytes)
+	if err != nil {
+		return "", err
+	}
+	notes := string(raw)
+	if !ValidNotes(notes) || strings.TrimSpace(notes) == "" {
+		return "", errors.New("发行说明须为非空 UTF-8 纯文本，最多 8 KiB、JSON 编码后最多 16 KiB，仅允许换行及制表控制字符")
+	}
+	return notes, nil
+}
+
 func openPublicationFile(name string, maximum int64) (*os.File, os.FileInfo, error) {
 	fd, err := unix.Open(name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
 	if err != nil {

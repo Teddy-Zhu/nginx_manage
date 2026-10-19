@@ -108,23 +108,26 @@ type Asset struct {
 	UnpackedBytes       int64    `json:"unpacked_bytes"`
 }
 type Release struct {
-	PlanID         string   `json:"plan_id"`
-	ManifestSHA256 string   `json:"manifest_sha256"`
-	TrustSHA256    string   `json:"trust_sha256"`
-	Repository     string   `json:"repository"`
-	Version        string   `json:"version"`
-	Tag            string   `json:"tag"`
-	Channel        string   `json:"channel"`
-	KeyID          string   `json:"key_id"`
-	ExpiresAt      int64    `json:"expires_at"`
-	Selected       []string `json:"selected"`
-	Assets         []Asset  `json:"assets"`
-	ArchiveBytes   int64    `json:"archive_bytes"`
-	UnpackedBytes  int64    `json:"unpacked_bytes"`
+	Notes          string                `json:"notes"`
+	Requirements   releases.Requirements `json:"requirements"`
+	Receiver       releases.Receiver     `json:"receiver"`
+	PlanID         string                `json:"plan_id"`
+	ManifestSHA256 string                `json:"manifest_sha256"`
+	TrustSHA256    string                `json:"trust_sha256"`
+	Repository     string                `json:"repository"`
+	Version        string                `json:"version"`
+	Tag            string                `json:"tag"`
+	Channel        string                `json:"channel"`
+	KeyID          string                `json:"key_id"`
+	ExpiresAt      int64                 `json:"expires_at"`
+	Selected       []string              `json:"selected"`
+	Assets         []Asset               `json:"assets"`
+	ArchiveBytes   int64                 `json:"archive_bytes"`
+	UnpackedBytes  int64                 `json:"unpacked_bytes"`
 }
 
 func release(plan releases.Plan) Release {
-	out := Release{PlanID: plan.ID, ManifestSHA256: plan.ManifestSHA256, TrustSHA256: plan.TrustSHA256, Repository: plan.Manifest.Repository, Version: plan.Manifest.Version, Tag: "v" + plan.Manifest.Version, Channel: plan.Manifest.Channel, KeyID: plan.KeyID, ExpiresAt: plan.Manifest.ExpiresAt, Selected: slices.Clone(plan.Selected), Assets: []Asset{}, ArchiveBytes: plan.ArchiveBytes, UnpackedBytes: plan.UnpackedBytes}
+	out := Release{Notes: plan.Manifest.Notes, Requirements: releases.ManifestRequirements(plan.Manifest), Receiver: plan.Receiver, PlanID: plan.ID, ManifestSHA256: plan.ManifestSHA256, TrustSHA256: plan.TrustSHA256, Repository: plan.Manifest.Repository, Version: plan.Manifest.Version, Tag: "v" + plan.Manifest.Version, Channel: plan.Manifest.Channel, KeyID: plan.KeyID, ExpiresAt: plan.Manifest.ExpiresAt, Selected: slices.Clone(plan.Selected), Assets: []Asset{}, ArchiveBytes: plan.ArchiveBytes, UnpackedBytes: plan.UnpackedBytes}
 	for _, a := range plan.Assets {
 		out.Assets = append(out.Assets, Asset{ID: a.ID, Component: a.Component, Version: a.Version, Architecture: a.Architecture, Distribution: a.Distribution, DistributionVersion: a.DistributionVersion, ABI: a.ABI, SourceURL: a.SourceURL, License: a.License, Maintenance: a.Maintenance, Features: append([]string{}, a.Features...), Dependencies: append([]string{}, a.Dependencies...), RuntimeFiles: len(a.RuntimeFiles), ArchiveBytes: a.Size, UnpackedBytes: a.UnpackedBytes})
 	}
@@ -132,22 +135,23 @@ func release(plan releases.Plan) Release {
 }
 
 type Operation struct {
-	Frontend      *FrontendResult   `json:"frontend,omitempty"`
-	Protocol      int               `json:"protocol"`
-	ID            string            `json:"id"`
-	RequestHash   string            `json:"request_hash"`
-	Input         Input             `json:"input"`
-	State         string            `json:"state"`
-	Stage         string            `json:"stage"`
-	ErrorCode     string            `json:"error_code"`
-	Error         string            `json:"error"`
-	CreatedAt     int64             `json:"created_at"`
-	UpdatedAt     int64             `json:"updated_at"`
-	Deadline      int64             `json:"deadline"`
-	RuntimeReady  bool              `json:"runtime_ready"`
-	RuntimeReason string            `json:"runtime_reason"`
-	Release       *Release          `json:"release,omitempty"`
-	Panel         *PanelPreparation `json:"panel,omitempty"`
+	Announcement  *releases.Announcement `json:"announcement,omitempty"`
+	Frontend      *FrontendResult        `json:"frontend,omitempty"`
+	Protocol      int                    `json:"protocol"`
+	ID            string                 `json:"id"`
+	RequestHash   string                 `json:"request_hash"`
+	Input         Input                  `json:"input"`
+	State         string                 `json:"state"`
+	Stage         string                 `json:"stage"`
+	ErrorCode     string                 `json:"error_code"`
+	Error         string                 `json:"error"`
+	CreatedAt     int64                  `json:"created_at"`
+	UpdatedAt     int64                  `json:"updated_at"`
+	Deadline      int64                  `json:"deadline"`
+	RuntimeReady  bool                   `json:"runtime_ready"`
+	RuntimeReason string                 `json:"runtime_reason"`
+	Release       *Release               `json:"release,omitempty"`
+	Panel         *PanelPreparation      `json:"panel,omitempty"`
 }
 type Overview struct {
 	Frontend         panelruntime.FrontendStatus `json:"frontend"`

@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 
 
 def api(endpoint, body=None):
@@ -54,8 +55,13 @@ def main():
         expected[path.name] = (path.stat().st_size, "sha256:" + digest.hexdigest())
     # Upload failure retains the draft for inspection. No clobber, deletion or
     # automatic reuse of a partial prior publication is performed.
-    subprocess.run(["gh", "release", "create", args.tag, *map(str, files), "--repo", args.repository,
-                    "--draft", "--verify-tag", "--target", args.commit, "--title", args.tag, "--generate-notes"], check=True)
+    # Use the same approved notes as the signed manifest. GitHub's editable
+    # release body is never an authority for receiver-side compatibility.
+    with tempfile.TemporaryDirectory(prefix="nginxpanel-notes-") as temporary:
+        notes = Path(temporary) / "notes.txt"
+        notes.write_text(manifest["notes"], encoding="utf-8")
+        subprocess.run(["gh", "release", "create", args.tag, *map(str, files), "--repo", args.repository,
+                        "--draft", "--verify-tag", "--target", args.commit, "--title", args.tag, "--notes-file", str(notes)], check=True)
     release = api(endpoint)
     if release["tag_name"] != args.tag or not release["draft"] or release["target_commitish"] != args.commit:
         raise ValueError("created draft release identity changed")

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"nginxpanel/internal/protocol"
+	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 )
 
@@ -29,11 +30,16 @@ func (out Operation) Validate(req Request) error {
 	if string(input) != string(expected) {
 		return errors.New("组件操作输入不一致")
 	}
+	if a := out.Announcement; a != nil {
+		if a.Validate() != nil || a.Receiver != receiver() || a.ReceiverCompatible || out.State != "failed" || out.ErrorCode != "COMPONENT_RECEIVER_INCOMPATIBLE" || req.Input.Action == "activate" || req.Input.OfflineID != "" || req.Input.Tag != "" && a.Tag != req.Input.Tag || a.Channel == "prerelease" && !req.Input.Prerelease || a.ExpiresAt <= out.CreatedAt || req.Input.ManifestSHA256 != "" && a.ManifestSHA256 != req.Input.ManifestSHA256 || req.Input.TrustSHA256 != "" && a.TrustSHA256 != req.Input.TrustSHA256 {
+			return errors.New("组件失败结果的已验签说明不匹配")
+		}
+	}
 	if out.State != "succeeded" {
 		return nil
 	}
 	r := out.Release
-	if r == nil || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != "v"+r.Version || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) == 0 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
+	if r == nil || r.Requirements.Validate() != nil || !releases.ValidNotes(r.Notes) || r.Receiver != receiver() || len(r.Requirements.Incompatibilities(r.Receiver)) != 0 || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != "v"+r.Version || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) == 0 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
 		return errors.New("组件成功结果不完整")
 	}
 	if req.Input.Tag != "" && r.Tag != req.Input.Tag {

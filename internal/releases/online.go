@@ -32,6 +32,7 @@ type ReleaseSource struct {
 }
 
 type OnlineResult struct {
+	Announcement *Announcement `json:"announcement,omitempty"`
 	Result
 	Source ReleaseSource `json:"source"`
 }
@@ -225,6 +226,23 @@ func Online(ctx context.Context, in OnlineInput) (OnlineResult, error) {
 	}
 	verified, err := Verify(Input{TrustPath: in.TrustPath, ManifestPath: filepath.Join(stage, manifest.Name), SignaturePath: filepath.Join(stage, sig.Name), Assets: in.Assets, Components: in.Components, AllowedComponents: in.AllowedComponents, AllowPrerelease: in.AllowPrerelease, Host: in.Host, Receiver: in.Receiver})
 	if err != nil {
+		var incompatible *receiverCompatibilityError
+		if errors.As(err, &incompatible) {
+			a := incompatible.announcement
+			if a.TrustSHA256 != hash(publisher.raw) || a.Tag != release.Tag || release.Prerelease != (a.Channel == "prerelease") {
+				return OnlineResult{}, errors.New("签名说明与本机信任、GitHub 发行标签或渠道不一致")
+			}
+			if sourceErr := s.currentSource(); sourceErr != nil {
+				return OnlineResult{}, sourceErr
+			}
+			if in.ExpectedManifestSHA256 != "" && in.ExpectedManifestSHA256 != a.ManifestSHA256 {
+				return OnlineResult{}, ErrReleaseChanged
+			}
+			if time.Now().Unix() >= a.ExpiresAt {
+				return OnlineResult{}, errors.New("发行清单已过期，须重新检查")
+			}
+			return OnlineResult{Announcement: &a, Source: ReleaseSource{Repository: a.Repository, Tag: a.Tag, ReleaseID: release.ID, MetadataCached: metadataCached, ManifestCached: manifestCached}}, err
+		}
 		return OnlineResult{}, err
 	}
 	if verified.plan.TrustSHA256 != hash(publisher.raw) || "v"+verified.plan.Manifest.Version != release.Tag || release.Prerelease != (verified.plan.Manifest.Channel == "prerelease") {
