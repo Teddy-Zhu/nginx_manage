@@ -118,6 +118,19 @@ func (g *maintenanceGate) records() ([]Record, error) {
 	if _, err = fail2banUpgradeSwitchRecords(filepath.Dir(filepath.Dir(g.journal.Dir)), original, ""); err != nil {
 		return nil, err
 	}
+	quiesce, _, err := pendingFail2banUpgradeQuiesce(filepath.Dir(filepath.Dir(g.journal.Dir)))
+	if err != nil {
+		return nil, err
+	}
+	if quiesce != nil {
+		found := false
+		for _, r := range original {
+			found = found || r.Kind == fail2banUpgradeQuiesceKind && r.OperationID == quiesce.Request.OperationID
+		}
+		if !found {
+			return nil, errors.New("升级停止隔离尚无原审计确认，须沿原 UUID 续办或取消")
+		}
+	}
 	activation, _, err := pendingFail2banUpgradeActivation(filepath.Dir(filepath.Dir(g.journal.Dir)))
 	if err != nil {
 		return nil, err

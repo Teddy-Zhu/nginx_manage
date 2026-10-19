@@ -371,6 +371,9 @@ func (n *Nginx) submit(in ApplyRequest, disasterID, epoch, disasterBefore string
 		}
 		defer unlock()
 	}
+	if err = fail2banUpgradeQuiesceIdle(n.DataDir, ""); err != nil {
+		return Record{}, err
+	}
 	if err = fail2banUpgradeActivationIdle(n.DataDir, ""); err != nil {
 		return Record{}, err
 	}

@@ -13,6 +13,12 @@ import (
 )
 
 func fail2banStateRestoreAdmission(data, allowed string) error {
+	if err := fail2banUpgradeQuiesceIdle(data, ""); err != nil {
+		return err
+	}
+	if err := fail2banUpgradeActivationIdle(data, ""); err != nil {
+		return err
+	}
 	if err := fail2banHostRetirementIdle(data); err != nil {
 		return err
 	}

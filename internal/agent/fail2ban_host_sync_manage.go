@@ -48,6 +48,9 @@ func fail2banHostSyncAdmission(dataDir string, apply bool) (func(), error) {
 }
 
 func fail2banHostSyncAdmissionFor(ctx context.Context, dataDir string, apply, actions bool) (func(), error) {
+	if err := fail2banUpgradeQuiesceIdle(dataDir, ""); err != nil {
+		return nil, err
+	}
 	progressingActivation := false
 	if actions {
 		if err := fail2banUpgradeActivationActions(ctx, dataDir); err != nil {

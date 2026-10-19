@@ -105,6 +105,10 @@ func (f *fail2banNginxExecutor) reconcile(ctx context.Context) (Fail2banNginxSta
 		n.mu.Unlock()
 		return out, err
 	}
+	if err = fail2banUpgradeQuiesceIdle(n.DataDir, ""); err != nil {
+		n.mu.Unlock()
+		return out, err
+	}
 	records, err := n.Journal.List()
 	if err != nil {
 		n.mu.Unlock()

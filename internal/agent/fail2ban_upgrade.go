@@ -127,13 +127,18 @@ func fail2banUpgradeIdle(j *Journal) error {
 
 func fail2banUpgradeIdleFor(j *Journal, allowed string) error {
 	data := filepath.Dir(filepath.Dir(j.Dir))
-	progressingActivation := false
+	progressingUpgrade := false
 	if allowed != "" {
 		activation, _, err := pendingFail2banUpgradeActivation(data)
 		if err != nil {
 			return err
 		}
-		progressingActivation = activation != nil && activation.Request.OperationID == allowed
+		progressingUpgrade = activation != nil && activation.Request.OperationID == allowed
+		quiesce, _, err := pendingFail2banUpgradeQuiesce(data)
+		if err != nil {
+			return err
+		}
+		progressingUpgrade = progressingUpgrade || quiesce != nil && quiesce.Request.OperationID == allowed
 	}
 	if err := fail2banStateRestoreIdle(filepath.Dir(filepath.Dir(j.Dir)), allowed); err != nil {
 		return err
@@ -149,7 +154,7 @@ func fail2banUpgradeIdleFor(j *Journal, allowed string) error {
 		if pendingNginxRecord(r) && r.OperationID != allowed {
 			return errors.New("实例变更、Nginx 变更或独立维护尚未结束，不能检查升级候选")
 		}
-		if r.Kind == "maintenance.lock" && r.State != "succeeded" && (!progressingActivation || r.State != "running" || r.Stage != "closing") {
+		if r.Kind == "maintenance.lock" && r.State != "succeeded" && (!progressingUpgrade || r.State != "running" || r.Stage != "closing") {
 			return ErrBusy
 		}
 	}

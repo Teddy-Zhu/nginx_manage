@@ -597,7 +597,7 @@ nginxpanel fail2ban-upgrade-plan --data-dir /var/lib/nginxpanel \
 
 `scope_sha256` 只绑定配置和原批准范围，运行检查点摘要另列在 `host_checkpoint`。检查点核对原运行意图、事务和审计回执，持续同步还核对初始运行基础、父操作和未完成停用意图；已完成退役沿原退役回执核对。待定事务的 `rules_present` 为 `null`，不能当作规则已清空。输出不含封禁地址或保护来源明文；检查点证明限于原记录和回执，不代替内核规则及升级后实际动作核对。`scope_verified` 为真仅表示本次预检无范围或恢复依据阻塞；原批准和运行检查点须在升级持久操作中保留，不能改写原 ID 或仅替换引擎摘要后沿用。
 
-检查结果只用于诊断，不授予执行授权。升级准备、已停止实例的代码/批准切换及候选启动后的保护核对见下文；运行中自动停止/快照/切换/启动、失败补偿及 Web/API 升级任务尚未接入，不能用配置检查或封禁摘要替代。实现待 P5 集中验证，未执行真实候选检查或升级。
+检查结果只用于诊断，不授予执行授权。升级准备、运行实例的授权停止/快照、已停止实例的代码/批准切换及候选受控启动后的保护核对见下文；整体升级父任务、自动失败补偿及 Web/API 升级任务尚未接入，不能用配置检查或封禁摘要替代。实现待 P5 集中验证，未执行真实候选检查或升级。
 
 ### 受管升级准备事务
 
@@ -622,9 +622,41 @@ nginxpanel fail2ban-upgrade-preparation --data-dir /var/lib/nginxpanel \
 
 准备材料不进入文件/API 逻辑迁移或业务备份。`prepared` 只证明准备事务完成；停止保护、匹配版本的状态快照、批准发布、代码切换、启动后封禁及动作核对、失败补偿仍须由后续持久升级执行流程完成，当前命令不会执行这些步骤。首版不保留旧准备格式兼容，Agent/数据库/迁移归档仍为 108/32/6；本实现及原生工具调用均待 P5 集中验证。
 
+### 运行实例的停止与状态捕获
+
+运行准备已完成审计后，本机 root 可用其 `intent_sha256` 显式授权停止原实例，捕获匹配代码的状态，并生成供停止态切换使用的新准备：
+
+```sh
+nginxpanel fail2ban-upgrade-quiesce --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation QUIESCE_UUID \
+  --fail2ban-upgrade-preparation RUNNING_PREPARATION_UUID \
+  --fail2ban-upgrade-prepared-sha256 RUNNING_PREPARATION_INTENT_SHA256
+
+nginxpanel fail2ban-upgrade-quiesce-status --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation QUIESCE_UUID
+
+nginxpanel fail2ban-upgrade-quiesce-resume --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation QUIESCE_UUID
+
+nginxpanel fail2ban-upgrade-quiesce-cancel --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation QUIESCE_UUID
+```
+
+执行前核对原运行准备、签名代码、完整配置与批准、Invocation/PID/Socket、机器及启动代次和状态目录身份。封禁自然变化不要求重建配置准备；当前完整官方封禁、最新已确认宿主机运行检查点及实际内核规则会另行冻结。包含 Nginx 动作时保存完整原拒绝集合及已成功确认或完整补偿的审计，并核对原活动配置元数据；这不替代实际流量保护验证。停止前检查子材料路径、审计容量及快照/暂存/官方数据库副本的配额；后续仍按实际材料大小复核。
+
+意图、启动/变更隔离和原审计先持久化，再保存执行标识并调用固定服务停止。隔离同时阻止自动重启、配置/批准/生命周期变更及后台动作更新；已进入关闭准入阶段的维护允许原事务续办，不能越过未完成捕获取得独占维护权。停止请求中断时先核对服务作业；原 Invocation/PID/Socket 仍在且无作业时，才可再次停止同一代次。其他代次、启动代次变化或原审计丢失均不重建执行授权。
+
+确认服务停止且无 Socket 文件或内核引用后，保存原状态文件摘要，捕获并暂存加密快照。官方数据库只在可丢弃副本上读取，要求原完整 jail 名单及仍有效封禁/到期时间被保留；缺少数据库、未知版本或缺失 jail 不当作空集合。随后保持原代码、策略、批准及检查点，重新生成停止态候选配置和单元，并通过候选官方配置校验。原状态文件、Nginx 集合或内核规则变化时保留隔离，不覆盖未知状态。
+
+成功为 `succeeded/prepared_stopped`，返回 `snapshot_id`、`stopped_preparation_id` 和 `stopped_preparation_sha256`；这些字段分别用于下节切换的状态快照、准备 UUID 和准备摘要。原代码仍被选中且实例已停止，尚未执行代码切换、候选启动或保护恢复。完成回执和原审计分别保存；发布结果不明时为 `completion_unknown`，缺少终态审计时为 `completion_unacknowledged`。原 UUID 重试仅补齐匹配历史确认，查询不补写，也不要求后续活动数据库保持旧字节。
+
+未保存执行标识的操作可取消，结果为 `cancelled/cancelled_before_stop`；首次执行授权五分钟内有效，过期后可取消并重新准备。执行标识保存后即不能按未执行取消，应沿原 UUID 续办。宿主机 Agent 每 30 秒续办已有执行标识或完成回执的事务，重启不创建新的停止授权；Agent 离线时使用手动续办。捕获或配置准备失败不会擅自启动旧实例，自动恢复旧代码/数据库/保护及整体升级父任务仍待接入。
+
+私有意图包含地址证据，只在本机 root 的 `0700/0600` 材料中保存，公开输出仅有数量、摘要和材料标识。最多 8 项目录、单文件 8 MiB、总预算 128 MiB，控制回执单文件 64 KiB，临时材料及原子写入空间计入准入；快照和配置准备使用各自已有配额。不自动删除审计或恢复依据，不进入跨环境逻辑迁移或业务备份。服务、数据库、维护和故障组合仍待 P5 在 Docker 等隔离环境集中验证；开发期间未操作本机环境。
+
 ### 已停止实例的升级切换
 
-本机 root 可对已停止实例执行独立持久切换。先通过现有服务控制显式停止实例，再捕获并准备原代码匹配的加密状态快照，并在停止后重新执行候选预览和升级准备。运行时准备材料不能直接用于此分支；原选择、完整批准或检查点变化须重新准备。切换输入中的摘要取准备结果的 `intent_sha256`，与候选预览的 `target` 分开。
+本机 root 可对已停止实例执行独立持久切换。运行实例可使用上节事务生成快照和停止态准备；也可通过现有服务控制显式停止实例，再捕获并准备原代码匹配的加密状态快照，并在停止后重新执行候选预览和升级准备。运行时准备材料不能直接用于此分支；原选择、完整批准或检查点变化须重新准备。切换输入中的摘要取准备结果的 `intent_sha256`，与候选预览的 `target` 分开。
 
 ```sh
 nginxpanel fail2ban-upgrade-switch --data-dir /var/lib/nginxpanel \
@@ -685,7 +717,7 @@ nginxpanel fail2ban-upgrade-activation-stop --data-dir /var/lib/nginxpanel \
 
 意图、执行标识、许可、运行回执、停止意图及完成回执均为 root 专用 `0700/0600` 材料，最多 8 项目录、单文件 64 KiB、总预算 1 MiB，含临时材料并预留后续完成写入空间；完整保护证明使用其独立配额。完成回执已保存但审计未确认时为 `completion_unacknowledged`，发布结果不明时为 `completion_unknown`；原 UUID 查询及续办不得覆盖冲突材料。不自动清理审计或恢复依据，也不进入跨环境迁移或业务备份。
 
-该事务补齐已完成选择后的受控启动、动作收敛和保护证明确认；运行实例的自动停止/捕获/准备/切换、旧代码及数据库的自动失败补偿、Web/API 升级任务仍待完成。全部服务、通道、内核及故障行为待 P5 在隔离环境集中验证；开发期间未操作当前主机服务或系统配置。
+该事务补齐已完成选择后的受控启动、动作收敛和保护证明确认；运行实例的停止/捕获/停止态准备见上文；整体升级父任务、旧代码及数据库的自动失败补偿、Web/API 升级任务仍待完成。全部服务、通道、内核及故障行为待 P5 在隔离环境集中验证；开发期间未操作当前主机服务或系统配置。
 
 ### 升级后的保护核对与持久证明
 

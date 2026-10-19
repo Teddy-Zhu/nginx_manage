@@ -9,8 +9,8 @@ import (
 )
 
 // The host Agent continues only an already sent root operation. It cannot
-// invent a start authorization or replace a missing original audit.
-func (s *Server) startFail2banUpgradeActivation(ctx context.Context, gate *maintenanceGate) func() {
+// invent a stop/start authorization or replace a missing original audit.
+func (s *Server) startFail2banUpgradeRecovery(ctx context.Context, gate *maintenanceGate) func() {
 	if s.Dev || os.Geteuid() != 0 || s.MetricsScope != "host" || s.MaintenanceScope != "host" || (&HostDNS{Scope: "host"}).hostScopeReason() != "" {
 		return func() {}
 	}
@@ -22,7 +22,12 @@ func (s *Server) startFail2banUpgradeActivation(ctx context.Context, gate *maint
 		defer ticker.Stop()
 		lastError := ""
 		for {
-			i, f, err := pendingFail2banUpgradeActivation(s.DataDir)
+			err := s.resumeFail2banUpgradeQuiesce(run, gate)
+			var i *fail2banUpgradeActivationIntent
+			var f fail2banUpgradeActivationFacts
+			if err == nil {
+				i, f, err = pendingFail2banUpgradeActivation(s.DataDir)
+			}
 			if err == nil && i != nil && (f.Execution || f.Stop != nil || f.Receipt != nil) {
 				audit, e := (&Journal{Dir: filepath.Join(s.DataDir, "agent", "operations")}).Get(i.Request.OperationID)
 				if e != nil {
@@ -39,7 +44,7 @@ func (s *Server) startFail2banUpgradeActivation(ctx context.Context, gate *maint
 			}
 			if err != nil && err.Error() != lastError {
 				lastError = err.Error()
-				slog.Warn("Fail2ban 升级启动续办未确认", "error", err)
+				slog.Warn("Fail2ban 升级续办未确认", "error", err)
 			} else if err == nil {
 				lastError = ""
 			}
@@ -51,4 +56,27 @@ func (s *Server) startFail2banUpgradeActivation(ctx context.Context, gate *maint
 		}
 	}()
 	return func() { stop(); <-done }
+}
+
+func (s *Server) resumeFail2banUpgradeQuiesce(ctx context.Context, gate *maintenanceGate) error {
+	i, f, err := pendingFail2banUpgradeQuiesce(s.DataDir)
+	if err != nil || i == nil || !f.Execution && f.Receipt == nil {
+		return err
+	}
+	audit, err := (&Journal{Dir: filepath.Join(s.DataDir, "agent", "operations")}).Get(i.Request.OperationID)
+	if err != nil {
+		return err
+	}
+	if !pendingFail2banUpgradeQuiesceRecord(audit, i.record(nil)) {
+		return nil
+	}
+	leave, ok := gate.enter(true)
+	if !ok {
+		return nil
+	}
+	defer leave()
+	call, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	_, err = ResumeFail2banUpgradeQuiesce(call, s.DataDir, "host", i.Request.OperationID)
+	return err
 }

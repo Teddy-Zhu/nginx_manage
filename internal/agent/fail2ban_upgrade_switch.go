@@ -28,6 +28,12 @@ func RevertFail2banUpgradeSwitch(ctx context.Context, data, scope, id string) (F
 }
 
 func fail2banUpgradeSwitchAdmission(data, allowed string) error {
+	if err := fail2banUpgradeQuiesceIdle(data, ""); err != nil {
+		return err
+	}
+	if err := fail2banUpgradeActivationIdle(data, ""); err != nil {
+		return err
+	}
 	records, err := fail2banStateRestoreRawRecords(data)
 	if err != nil {
 		return err

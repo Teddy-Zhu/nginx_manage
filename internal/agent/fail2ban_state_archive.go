@@ -18,7 +18,11 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-func captureFail2banState(ctx context.Context, in Fail2banStateSnapshotOptions, j *Journal) (out Fail2banStateSnapshot, resultErr error) {
+func captureFail2banState(ctx context.Context, in Fail2banStateSnapshotOptions, j *Journal) (Fail2banStateSnapshot, error) {
+	return captureFail2banStateFor(ctx, in, j, "")
+}
+
+func captureFail2banStateFor(ctx context.Context, in Fail2banStateSnapshotOptions, j *Journal, allowed string) (out Fail2banStateSnapshot, resultErr error) {
 	basis, err := readFail2banStateBasis(ctx, in.DataDir)
 	if err != nil {
 		return out, err
@@ -85,7 +89,7 @@ func captureFail2banState(ctx context.Context, in Fail2banStateSnapshotOptions, 
 	if err != nil || !bytes.Equal(beforeRaw, afterRaw) {
 		return out, errors.Join(errors.New("状态捕获期间实例、配置或服务发生变化"), err)
 	}
-	if err = fail2banUpgradeIdle(j); err != nil {
+	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
 	if err = unchangedFail2banStateSources(stateDir, sources); err != nil {

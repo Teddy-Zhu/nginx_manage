@@ -188,6 +188,9 @@ func fail2banHostRetirementIdle(dataDir string) error {
 }
 
 func fail2banHostRetirementIdleFor(dataDir, allowed string) error {
+	if err := fail2banUpgradeQuiesceIdle(dataDir, allowed); err != nil {
+		return err
+	}
 	if err := fail2banUpgradeActivationIdle(dataDir, allowed); err != nil {
 		return err
 	}
