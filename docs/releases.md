@@ -328,4 +328,28 @@ API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.s
 
 在线检查在签名、清单结构、仓库、标签、渠道、有效期及当前信任核对通过后，即使接收端版本不满足要求，也将已认证的 `announcement` 保存在失败任务中，错误码为 `COMPONENT_RECEIVER_INCOMPATIBLE`。说明包含要求、当前接收端版本及差异，不含准备计划 ID、资产或可执行授权；失败任务不能用于准备或激活。未经认证、来源不一致、清单过期或信任变化的响应不会保留此说明。离线创建仍须通过完整接收准入，版本不满足时直接拒绝并返回要求差异。
 
-接收端不满足要求时，页面提示选择匹配 API 的发行，或由节点管理员处理 Agent/launcher 更新后重新检查；容器方式通过替换受信任镜像更新。此改动不提供 Agent 热更新能力。Agent/数据库/归档为 112/33/6；本轮仅完成实现和源码审阅，生成器、构建、类型检查、lint、测试、浏览器、发布工具及真实系统操作均留待 P5 隔离集中验证。
+接收端不满足要求时，页面提示选择匹配 API 的发行，或由节点管理员处理 Agent/launcher 更新后重新检查；容器方式通过替换受信任镜像更新。独立 Agent 升级见下一节，跨协议变更仍须协调部署。Agent/数据库/归档为 112/33/6；本轮仅完成实现和源码审阅，生成器、构建、类型检查、lint、测试、浏览器、发布工具及真实系统操作均留待 P5 隔离集中验证。
+
+
+## 独立 Agent 与宿主机工具升级
+
+本机 root 可使用已经准备的单一签名静态面板资产升级 `/opt/nginxpanel/current` 中的 Agent 与固定宿主机工具。目标须与当前选中面板的 Agent 协议、数据库结构和 launcher 合同一致；不替换 `runtime/current`、容器 launcher 镜像、Nginx 或 Fail2ban，不迁移业务数据库。当前入口是本机命令，Web/API 编排仍待接入。
+
+先通过原组件流程检查和准备面板资产，并在系统页取得已排空的维护会话及 Agent epoch，再提交新的操作 UUID：
+
+```sh
+sudo /opt/nginxpanel/current/nginxpanel agent-upgrade \
+  --data-dir /srv/nginxpanel --agent-upgrade <新操作UUID> \
+  --release-plan <已准备的面板计划散列> \
+  --maintenance-id <已持有的维护UUID> --maintenance-epoch <当前Agent-epoch>
+sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-status \
+  --data-dir /srv/nginxpanel --agent-upgrade <原操作UUID>
+sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
+  --data-dir /srv/nginxpanel --agent-upgrade <原操作UUID>
+```
+
+首次提交绑定原程序散列及指针、原 Agent 进程/启动身份、运行绑定、目标签名暂存批准、两个 systemd unit 散列和十分钟前进期限。独立 `nginxpanel-agent-upgrade@.service` 在停止原 Agent 后原子切换程序指针，再启动候选；通过真实可执行文件 inode、完整参数、服务 cgroup、Invocation、启动时钟和以专用 Web 身份执行的同协议维护请求确认就绪。原 Agent 停止不会终止此 worker，Unix 对端 UID 白名单不放宽。
+
+失败由 worker 在独立十分钟窗口恢复原程序及 Agent；原始批准版本以固定散列恢复，不要求候选签名继续有效。异常指针、服务文件、进程或维护身份无法确认时保留 `recovery_required`。进程中断后只能沿原 UUID 显式续办，原前进期限不续期；原维护记录必须仍在，过期仅允许补偿。幂等重放不重新派发，未确认派发使用 resume。升级与补偿未确认前阻止维护锁释放及其他维护动作；成功或完整补偿后由原维护流程恢复写入。
+
+程序发布在 root 持有的 `/opt/nginxpanel/agent-releases/<程序SHA-256>`，不覆盖旧目录，保留最多八项（含本次暂存），单程序最多 192 MiB；审计在节点私有 `agent/operations`，不进入业务迁移或灾备包。原安装器同时登记固定 worker；自定义 drop-in、缺失模板或未登记服务须本机处理，不能以首次安装器覆盖现有安装。Agent/数据库/归档为 113/33/6；本轮只完成实现与源码集成审阅，构建、测试、服务控制和故障注入待 P5 隔离环境集中验证。

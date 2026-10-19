@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	AgentUpgrade              *AgentUpgradeOperation           `json:"agent_upgrade,omitempty"`
 	Fail2banUpgrade           *fail2banUpgradeTaskIntent       `json:"fail2ban_upgrade,omitempty"`
 	Fail2banUpgradeID         string                           `json:"fail2ban_upgrade_id,omitempty"`
 	DockerRegistration        *dockerRegistrationCheckpoint    `json:"docker_registration,omitempty"`

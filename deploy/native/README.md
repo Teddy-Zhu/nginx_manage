@@ -148,3 +148,8 @@ Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安
 配合 `--nginx-image <已在本机准备的镜像@sha256:摘要>` 可同时接入预置模块 Nginx 容器，使用同一镜像发行清单验签；与原生程序、签名组件和 `--without-nginx` 选择互斥。此分支只登记宿主机 Agent，生成双服务 Compose；不登记原生 Nginx、原生首次安装或组件切换 unit。Docker Socket 仅由宿主机 root Agent 访问，不挂入容器。首次安装意图为 v7，首版发布前不保留旧意图兼容路径。
 
 运行中的原生 Nginx 可通过独立 root 命令在已持有维护会话中切换至签名准备组件，支持原记录续办、补偿和只读查询；要求明确允许停机，保留当前发布及原组件。详见 [组件维护切换](../../docs/releases.md#原生-nginx-运行组件维护切换)。网页“组件切换”和 `/components/switches` API 使用同一切换核心，由安装器登记的 `nginxpanel-switch@.service` 独立执行。每次五分钟启动授权只领取一次，失败后须在原任务显式续办或恢复原组件；源环境恢复任务不自动重放。此入口及服务尚未执行验证，待 P5 集中验证。
+
+
+## 宿主机 Agent 升级
+
+安装器同时登记独立的 `nginxpanel-agent-upgrade@.service`。Agent 和 `/opt/nginxpanel/current` 中的宿主机工具使用[独立 Agent 升级](../../docs/releases.md#独立-agent-与宿主机工具升级)，要求已准备签名产物、同协议/数据库/launcher 合同及已排空维护会话；不通过重复首次安装覆盖版本。独立 worker 保留原程序，停止 Agent 后切换、启动并确认，失败补偿；原维护会话在事务确认前不能释放。此入口适用于原生与 Docker 面板的宿主机 Agent，容器 launcher 仍通过受信镜像替换。实现待 P5 隔离集中验证，未在开发主机执行安装或升级。

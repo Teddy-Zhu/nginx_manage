@@ -271,6 +271,14 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 			}
 			continue
 		}
+		if r.Kind == agentUpgradeKind {
+			if err := validAgentUpgrade(r); err != nil {
+				return out, err
+			}
+			if g.id != "" && r.AgentUpgrade.Intent.Input.MaintenanceID == g.id || agentUpgradeTerminal(r) {
+				continue
+			}
+		}
 		if r.Kind == panelUpdateKind {
 			if err := validPanelUpdate(r); err != nil {
 				return out, err
@@ -527,6 +535,15 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 			if !historyTerminal(record) {
 				return maintenance.RootStatus{}, fault.Conflict("运行材料清理尚未结束，须先按原标识续办")
 			}
+		}
+		if record.Kind == agentUpgradeKind {
+			if err := validAgentUpgrade(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if !agentUpgradeTerminal(record) {
+				return maintenance.RootStatus{}, fault.Conflict("Agent 升级尚未确认或完整补偿，须沿原操作续办")
+			}
+			continue
 		}
 		if record.Kind == panelUpdateKind {
 			if err := validPanelUpdate(record); err != nil {

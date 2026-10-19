@@ -223,7 +223,7 @@ if [[ -e $state/intent || -L $state/intent ]]; then
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
 else
   [[ ! -e $data && ! -L $data || -d $data && ! -L $data && -z $(find "$data" -mindepth 1 -maxdepth 1 -print -quit) ]] || die '数据目录非空，禁止将首次安装覆盖到已有数据'
-  for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service; do
+  for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service; do
     [[ $(systemctl show --property=LoadState --value "$unit") == not-found ]] || die "已有同名服务，停止接管：$unit"
   done
   [[ ! -e /opt/nginxpanel/current && ! -L /opt/nginxpanel/current ]] || die '已有程序指针，停止接管'
@@ -500,8 +500,36 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 EOF
+cat >"$work/nginxpanel-agent-upgrade@.service" <<EOF
+[Unit]
+Description=NginxPanel independent Agent upgrade %i
+After=network.target
+
+[Service]
+Type=exec
+User=root
+Group=root
+UMask=0077
+ExecStart=/opt/nginxpanel/current/nginxpanel agent-upgrade-worker --data-dir $data --agent-upgrade %i
+Restart=no
+KillMode=mixed
+RuntimeMaxSec=1500
+TimeoutStopSec=660
+RuntimeDirectory=nginxpanel-install
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=$data/agent $data/runtime $data/run /opt/nginxpanel /run/nginxpanel-install
+InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+EOF
 root_chain /etc/systemd/system
-install_units=(nginxpanel-agent.service nginxpanel-update@.service)
+install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service)
 if [[ -z $nginx_image ]]; then install_units+=(nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service); fi
 if [[ $panel_mode == native ]]; then install_units+=(nginxpanel.service); fi
 for unit in "${install_units[@]}"; do

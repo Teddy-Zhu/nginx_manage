@@ -27,7 +27,7 @@ func panelUpdateAccess(ctx context.Context, j *Journal, id, maintenanceID, epoch
 	if err != nil {
 		return nil, err
 	}
-	if err = installGrant(j, maintenanceID, epoch, closing); err != nil {
+	if err = installGrantForOperation(j, maintenanceID, epoch, closing, id); err != nil {
 		unlock()
 		return nil, err
 	}

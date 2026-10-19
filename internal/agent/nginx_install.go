@@ -159,11 +159,23 @@ func InstallNginx(ctx context.Context, opts NginxInstallOptions) (Record, error)
 }
 
 func installGrant(j *Journal, id, epoch string, allowClosing bool) error {
+	return installGrantForOperation(j, id, epoch, allowClosing, "")
+}
+
+func installGrantForOperation(j *Journal, id, epoch string, allowClosing bool, operationID string) error {
 	records, err := (&maintenanceGate{journal: j}).records()
 	if err != nil {
 		return err
 	}
 	for _, prior := range records {
+		if prior.Kind == agentUpgradeKind {
+			if err := validAgentUpgrade(prior); err != nil {
+				return err
+			}
+			if !agentUpgradeTerminal(prior) && prior.OperationID != operationID {
+				return errors.New("Agent 独立升级尚未完成，不能执行其他维护动作")
+			}
+		}
 		if prior.Kind == runtimeHistoryKind {
 			if err := validRuntimeHistory(prior); err != nil {
 				return err
