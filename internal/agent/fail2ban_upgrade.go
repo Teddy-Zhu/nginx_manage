@@ -129,11 +129,16 @@ func fail2banUpgradeIdleFor(j *Journal, allowed string) error {
 	data := filepath.Dir(filepath.Dir(j.Dir))
 	progressingUpgrade := false
 	if allowed != "" {
+		restoring, _, err := pendingFail2banUpgradeRestore(data)
+		if err != nil {
+			return err
+		}
+		progressingUpgrade = restoring != nil && restoring.Request.OperationID == allowed
 		activation, _, err := pendingFail2banUpgradeActivation(data)
 		if err != nil {
 			return err
 		}
-		progressingUpgrade = activation != nil && activation.Request.OperationID == allowed
+		progressingUpgrade = progressingUpgrade || activation != nil && activation.Request.OperationID == allowed
 		quiesce, _, err := pendingFail2banUpgradeQuiesce(data)
 		if err != nil {
 			return err

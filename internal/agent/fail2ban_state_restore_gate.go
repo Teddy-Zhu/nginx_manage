@@ -100,6 +100,9 @@ func fail2banStateRestoreRawRecords(data string) ([]Record, error) {
 }
 
 func fail2banStateRestoreIdle(data, allowed string) error {
+	if err := fail2banUpgradeRestoreIdle(data, allowed); err != nil {
+		return err
+	}
 	if err := fail2banUpgradeQuiesceIdle(data, allowed); err != nil {
 		return err
 	}

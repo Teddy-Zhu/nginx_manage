@@ -202,6 +202,13 @@ func fail2banUpgradeSwitchIdle(data, allowed string) error {
 }
 
 func fail2banUpgradeTransferredParent(data string, r Record) (bool, error) {
+	authorization, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).Get(r.Fail2banUpgradeID)
+	if err != nil {
+		return false, err
+	}
+	if authorization.Kind == fail2banUpgradeRestoreKind {
+		return fail2banUpgradeRestoreTransferredParent(data, r)
+	}
 	i, err := readFail2banUpgradeSwitch(data, r.Fail2banUpgradeID)
 	if err != nil {
 		return false, err
@@ -250,6 +257,18 @@ func fail2banUpgradeTransferredRuntime(data string, parent Record, event *fail2b
 	ok, err := fail2banUpgradeTransferredParent(data, parent)
 	if err != nil || !ok {
 		return false
+	}
+	authorization, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).Get(parent.Fail2banUpgradeID)
+	if err != nil {
+		return false
+	}
+	if authorization.Kind == fail2banUpgradeRestoreKind {
+		i, s, err := readFail2banUpgradeRestore(data, parent.Fail2banUpgradeID)
+		if err != nil {
+			return false
+		}
+		_, _, sync := fail2banUpgradeVerificationGrants(s)
+		return sync != nil && sync.ID == event.ID && i.Recovery.Runtime != nil && fail2banUpgradeOneOf(runtime, i.Recovery.Runtime)
 	}
 	i, err := readFail2banUpgradeSwitch(data, parent.Fail2banUpgradeID)
 	return err == nil && i.Prepared.Basis.HostSync != nil && i.Prepared.Basis.HostSync.ID == event.ID && i.Prepared.Recovery.Runtime != nil && fail2banUpgradeGrantHash("runtime", runtime) == fail2banUpgradeGrantHash("runtime", i.Prepared.Recovery.Runtime)

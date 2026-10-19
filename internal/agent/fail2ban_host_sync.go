@@ -153,6 +153,9 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 	if err = fail2banUpgradeSwitchIdle(dataDir, ""); err != nil {
 		return out, err
 	}
+	if err = fail2banUpgradeRestoreIdle(dataDir, ""); err != nil {
+		return out, err
+	}
 	if err = fail2banUpgradeQuiesceIdle(dataDir, ""); err != nil {
 		return out, err
 	}

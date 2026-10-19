@@ -22,7 +22,10 @@ func (s *Server) startFail2banUpgradeRecovery(ctx context.Context, gate *mainten
 		defer ticker.Stop()
 		lastError := ""
 		for {
-			err := s.resumeFail2banUpgradeQuiesce(run, gate)
+			err := s.resumeFail2banUpgradeRestore(run, gate)
+			if err == nil {
+				err = s.resumeFail2banUpgradeQuiesce(run, gate)
+			}
 			var i *fail2banUpgradeActivationIntent
 			var f fail2banUpgradeActivationFacts
 			if err == nil {

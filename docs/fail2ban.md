@@ -717,7 +717,36 @@ nginxpanel fail2ban-upgrade-activation-stop --data-dir /var/lib/nginxpanel \
 
 意图、执行标识、许可、运行回执、停止意图及完成回执均为 root 专用 `0700/0600` 材料，最多 8 项目录、单文件 64 KiB、总预算 1 MiB，含临时材料并预留后续完成写入空间；完整保护证明使用其独立配额。完成回执已保存但审计未确认时为 `completion_unacknowledged`，发布结果不明时为 `completion_unknown`；原 UUID 查询及续办不得覆盖冲突材料。不自动清理审计或恢复依据，也不进入跨环境迁移或业务备份。
 
-该事务补齐已完成选择后的受控启动、动作收敛和保护证明确认；运行实例的停止/捕获/停止态准备见上文；整体升级父任务、旧代码及数据库的自动失败补偿、Web/API 升级任务仍待完成。全部服务、通道、内核及故障行为待 P5 在隔离环境集中验证；开发期间未操作当前主机服务或系统配置。
+候选停止回执同时保存停止服务、Invocation、原状态目录身份和完整数据库文件摘要，供独立恢复事务核对。该事务补齐已完成选择后的受控启动、动作收敛和保护证明确认；运行实例的停止/捕获/停止态准备见上文，失败后的停止态原版本及数据库恢复见下文。整体升级父任务、恢复后的受控启动/保护确认和 Web/API 升级任务仍待完成。全部服务、通道、内核及故障行为待 P5 在隔离环境集中验证；开发期间未操作当前主机服务或系统配置。
+
+### 候选失败后的停止态原版本恢复
+
+原启动已完成 `failed/candidate_stopped` 审计后，可用新的操作 UUID 授权恢复原代码、完整 jail 配置、动作批准及升级前状态库：
+
+```sh
+nginxpanel fail2ban-upgrade-restore --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RESTORE_UUID \
+  --fail2ban-upgrade-activation ACTIVATION_UUID
+
+nginxpanel fail2ban-upgrade-restore-status --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RESTORE_UUID
+
+nginxpanel fail2ban-upgrade-restore-resume --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RESTORE_UUID
+
+nginxpanel fail2ban-upgrade-restore-cancel --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation RESTORE_UUID
+```
+
+只接受原停止回执仍匹配的服务、Invocation、数据库目录和全部文件；原候选选择、完整配置、全部动作批准、机器及启动代次也须保持一致。重新认证原加密快照及恢复暂存，并冻结候选停止后的已确认宿主机检查点/内核和 Nginx 拒绝集合/终结审计。未完成的动作事务、其他选择、配置/规则漂移、原审计或恢复依据丢失均拒绝恢复，不重建或接管未知状态。
+
+意图、当前隔离、原审计和执行标识依次持久化，再以新事件重新选择原代码及 jail 配置，并为受影响动作发布独立批准。候选持续会话沿原审计交接，新会话保留当前已确认运行基础，避免把旧批准的历史指针重新设为当前状态。随后加载原单元，复用状态目录恢复执行器在同一文件系统原子交换原完整 SQLite 及辅助文件；候选停止时的数据库目录留存于 `upgrade-restore-states/RESTORE_UUID/exchange`，原加密快照和准备材料保持不变。
+
+恢复期间自动启动、配置/生命周期/批准变更、Nginx 和宿主机动作均保持隔离；只允许原事务续办。首次执行许可为五分钟，执行标识前可取消，标识后只能继续原恢复。宿主机 Agent 每 30 秒续办已有执行或完成材料，不自动创建首次恢复授权。发布选择、批准、数据库交换、完成回执或终态审计之间中断，均沿原 UUID 及精确前后镜像继续；原执行审计丢失时不重新生成授权。历史终态只认证不可变事件与回执，不依赖后续活动数据库内容。
+
+`succeeded/original_restored_stopped` 仅表示原版本、配置、批准及升级前状态库已恢复，服务仍然停止。当前已确认的宿主机规则和 Nginx 拒绝集合保持原样，未证明它们等于原快照中的封禁，也未证明流量保护已经恢复；后续受控启动、官方封禁及实际动作核对仍待接入。升级候选期间产生的新数据库内容保留供核查，不合并到原快照。
+
+控制材料为 root 专用 `0700/0600`，最多 8 项、单文件 8 MiB、总预算 128 MiB，含临时材料及完成空间；交换材料独立受状态恢复的 8 项/1 GiB 配额限制，复制前预留完整目录及控制空间。所有材料仅供本机恢复，不进入迁移或业务备份，不自动清理。实现及源码集成审阅完成，构建、类型检查、测试、实际服务/数据库/内核及中断组合留待 P5 隔离验证。
 
 ### 升级后的保护核对与持久证明
 

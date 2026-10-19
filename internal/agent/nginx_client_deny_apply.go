@@ -107,6 +107,9 @@ func (n *Nginx) applyClientDeny(ctx context.Context, expectedDir, expectedHash s
 	if n.closed || n.unlock == nil || n.disasterBusy != "" || n.http01 != nil && n.http01.busy() {
 		return "", ErrBusy
 	}
+	if err := fail2banUpgradeRestoreIdle(n.DataDir, ""); err != nil {
+		return "", err
+	}
 	if err := fail2banUpgradeQuiesceIdle(n.DataDir, ""); err != nil {
 		return "", err
 	}

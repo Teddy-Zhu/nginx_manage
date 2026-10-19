@@ -35,13 +35,16 @@ func (t fail2banStateRestoreTarget) hash() string {
 }
 
 type fail2banStateRestoreIntent struct {
-	Schema    int                        `json:"schema"`
-	ID        string                     `json:"id"`
-	CreatedAt int64                      `json:"created_at"`
-	DataDir   string                     `json:"data_dir"`
-	Target    string                     `json:"target"`
-	Input     fail2banStateRestoreTarget `json:"input"`
-	After     []fail2banStateFile        `json:"after"`
+	// A parent upgrade recovery owns the exchange without creating a second
+	// public restore authorization, journal or independently writable fence.
+	privateDir string
+	Schema     int                        `json:"schema"`
+	ID         string                     `json:"id"`
+	CreatedAt  int64                      `json:"created_at"`
+	DataDir    string                     `json:"data_dir"`
+	Target     string                     `json:"target"`
+	Input      fail2banStateRestoreTarget `json:"input"`
+	After      []fail2banStateFile        `json:"after"`
 }
 
 func (i fail2banStateRestoreIntent) hash() string {
@@ -96,6 +99,9 @@ func fail2banStateRestores(data string) string {
 }
 
 func (i fail2banStateRestoreIntent) dir() string {
+	if i.privateDir != "" {
+		return i.privateDir
+	}
 	return filepath.Join(fail2banStateRestores(i.DataDir), i.ID)
 }
 

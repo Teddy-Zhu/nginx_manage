@@ -210,6 +210,9 @@ func (f *fail2banNginxExecutor) manage(ctx context.Context, in Fail2banNginxRequ
 	if prior.ID != in.BaseID {
 		return prior, fault.Conflict("动作授权基准已变化，请重新读取")
 	}
+	if err = fail2banUpgradeRestoreIdle(n.DataDir, ""); err != nil {
+		return prior, err
+	}
 	if err = fail2banUpgradeQuiesceIdle(n.DataDir, ""); err != nil {
 		return prior, err
 	}

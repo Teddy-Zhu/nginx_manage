@@ -368,14 +368,18 @@ func stopFail2banUpgradeActivation(i fail2banUpgradeActivationIntent, s fail2ban
 			return out, err
 		}
 	}
-	service, _, err = lifecycleService(ctx)
+	service, invocation, err = lifecycleService(ctx)
 	if err != nil {
 		return out, err
 	}
 	if err = fail2banExistingStopped(s.After.binding(), service); err != nil {
 		return out, err
 	}
-	receipt := fail2banUpgradeActivationReceipt{fail2banUpgradeActivationMarker: i.marker(), CompletedAt: time.Now().Unix(), Outcome: "stopped"}
+	directory, files, err := observeFail2banStateDirectory(ctx, filepath.Join(s.After.work(), "state"))
+	if err != nil {
+		return out, err
+	}
+	receipt := fail2banUpgradeActivationReceipt{fail2banUpgradeActivationMarker: i.marker(), CompletedAt: time.Now().Unix(), Outcome: "stopped", Stopped: &fail2banUpgradeActivationStopped{Service: service, Invocation: invocation, Directory: directory, FilesSHA256: fail2banStateFilesHash(files)}}
 	if err = writeFail2banUpgradeActivationJSON(filepath.Join(i.dir(), "receipt.json"), receipt); err != nil {
 		return out, err
 	}

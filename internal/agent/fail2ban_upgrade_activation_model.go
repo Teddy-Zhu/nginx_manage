@@ -4,6 +4,8 @@ import (
 	"errors"
 	"path/filepath"
 	"time"
+
+	"nginxpanel/internal/fail2ban"
 )
 
 const fail2banUpgradeActivationKind = "nginx.fail2ban-upgrade-activation"
@@ -66,6 +68,14 @@ type fail2banUpgradeActivationReceipt struct {
 	CompletedAt        int64
 	Outcome            string
 	VerificationSHA256 string
+	Stopped            *fail2banUpgradeActivationStopped
+}
+
+type fail2banUpgradeActivationStopped struct {
+	Service     fail2ban.Service
+	Invocation  string
+	Directory   fail2banStateDirectory
+	FilesSHA256 string
 }
 
 type fail2banUpgradeActivationFacts struct {

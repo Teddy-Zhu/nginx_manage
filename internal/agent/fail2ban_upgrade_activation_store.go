@@ -116,7 +116,7 @@ func (i fail2banUpgradeActivationIntent) facts() (f fail2banUpgradeActivationFac
 		}
 		switch receipt.Outcome {
 		case "verified":
-			if f.Started == nil || f.Stop != nil {
+			if f.Started == nil || f.Stop != nil || receipt.Stopped != nil {
 				return f, errors.New("保护完成与候选启动或停止意图冲突")
 			}
 			v, _, e := readFail2banUpgradeVerification(i.Request.DataDir, i.VerificationID)
@@ -134,8 +134,13 @@ func (i fail2banUpgradeActivationIntent) facts() (f fail2banUpgradeActivationFac
 				return f, errors.Join(errors.New("升级启动缺少保护证明的独立审计"), e)
 			}
 		case "stopped":
-			if f.Stop == nil || receipt.VerificationSHA256 != "" || receipt.CompletedAt < f.Stop.At {
+			if f.Stop == nil || receipt.VerificationSHA256 != "" || receipt.CompletedAt < f.Stop.At || receipt.Stopped == nil {
 				return f, errors.New("候选停止回执与原意图不匹配")
+			}
+			stopped := receipt.Stopped
+			service := stopped.Service
+			if !service.Available || service.ID != fail2banManagedService || service.Load != "loaded" || service.MainPID == nil || *service.MainPID != 0 || service.Active != "inactive" && service.Active != "failed" || stopped.Invocation != "" && !fail2banInvocation.MatchString(stopped.Invocation) || stopped.Directory.Inode == 0 || !fail2banDigest.MatchString(stopped.FilesSHA256) {
+				return f, errors.New("候选停止回执缺少明确的服务及数据库观察")
 			}
 		default:
 			return f, errors.New("升级启动完成结果未知")

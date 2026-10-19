@@ -182,6 +182,10 @@ func (i fail2banUpgradeSwitch) applyGrants(u *fail2banUpgradeSwitchUndo) error {
 			}
 		}
 	}
+	return publishFail2banUpgradeGrants(data, nginx, sources, sync)
+}
+
+func publishFail2banUpgradeGrants(data string, nginx *fail2banNginxRegistry, sources *fail2banHostSourcesEvent, sync *fail2banHostSyncEvent) error {
 	if nginx != nil {
 		actual, err := loadFail2banNginxRegistry(data)
 		if err != nil {
@@ -258,6 +262,10 @@ func (i fail2banUpgradeSwitch) grantEvents(u *fail2banUpgradeSwitchUndo) error {
 	if u != nil {
 		nginx, sources, sync = u.Nginx, u.Sources, u.Sync
 	}
+	return checkFail2banUpgradeGrantEvents(data, nginx, sources, sync, u == nil)
+}
+
+func checkFail2banUpgradeGrantEvents(data string, nginx *fail2banNginxRegistry, sources *fail2banHostSourcesEvent, sync *fail2banHostSyncEvent, reserveUndo bool) error {
 	type eventFile struct {
 		path     string
 		expected any
@@ -290,7 +298,7 @@ func (i fail2banUpgradeSwitch) grantEvents(u *fail2banUpgradeSwitchUndo) error {
 		} else if !bytes.Equal(raw, want) {
 			return ErrExternalChange
 		}
-		if u == nil {
+		if reserveUndo {
 			extra++
 		}
 		entries, err := os.ReadDir(filepath.Dir(file.path))
@@ -305,7 +313,10 @@ func (i fail2banUpgradeSwitch) grantEvents(u *fail2banUpgradeSwitchUndo) error {
 }
 
 func (i fail2banUpgradeSwitch) replaceUnit(target fail2banManagedRecord) error {
-	before, after := i.Prepared.Basis.Current.unit(), i.After.unit()
+	return replaceFail2banUpgradeUnit(i.Request.OperationID, i.Prepared.Basis.Current.unit(), i.After.unit(), target)
+}
+
+func replaceFail2banUpgradeUnit(id, before, after string, target fail2banManagedRecord) error {
 	raw, err := nginxmodules.ReadTrusted(fail2banManagedUnit, 64<<10)
 	if err != nil {
 		return err
@@ -319,7 +330,7 @@ func (i fail2banUpgradeSwitch) replaceUnit(target fail2banManagedRecord) error {
 	if err = fail2banManagedFile(fail2banManagedUnit, string(raw)); err != nil {
 		return err
 	}
-	tmp := filepath.Join(filepath.Dir(fail2banManagedUnit), ".nginxpanel-fail2ban-"+i.Request.OperationID+"-"+target.EventID+".tmp")
+	tmp := filepath.Join(filepath.Dir(fail2banManagedUnit), ".nginxpanel-fail2ban-"+id+"-"+target.EventID+".tmp")
 	if _, err = os.Lstat(tmp); os.IsNotExist(err) {
 		if err = durableFile(tmp, []byte(target.unit()), 0644, 0); err != nil {
 			return err
