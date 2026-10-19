@@ -34,6 +34,7 @@ type apiNode struct {
 	client             *http.Client
 	base, csrf, nodeID string
 	bootstrap          string
+	dataDir            string
 }
 
 func startAPINode(t *testing.T) *apiNode {
@@ -98,7 +99,7 @@ func startAPINode(t *testing.T) *apiNode {
 		cancel()
 		t.Fatal(err)
 	}
-	n := &apiNode{client: &http.Client{Jar: jar, Timeout: 10 * time.Second}, base: "http://" + address + "/api/v1", bootstrap: strings.TrimSpace(string(token))}
+	n := &apiNode{client: &http.Client{Jar: jar, Timeout: 10 * time.Second}, base: "http://" + address + "/api/v1", bootstrap: strings.TrimSpace(string(token)), dataDir: dir}
 	t.Cleanup(func() {
 		cancel()
 		n.client.CloseIdleConnections()
