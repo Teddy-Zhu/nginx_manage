@@ -88,6 +88,14 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
   --launcher-operation <original-uuid>
 ```
 
-一次启动保留最多 64 个操作回执，同一操作 ID 的不同请求被拒绝。同一 boot ID 内重试返回原记录，容器重建改变 boot ID，原请求不能原样派发到新启动；独立进程维护记录先查询实际状态，再记录新的启动身份，并保留最多四次派发。运行实例另有 UUID，停止或重启须匹配观测的实例。root 持久停机标记存在时 launcher 保持控制入口在线并不启动 serve，容器重建也保留停机状态。标记及维护释放由独立 root 事务核对，生命周期入口见 [发行说明](../../docs/releases.md#面板进程维护)。控制客户端需要宿主机 root 的进程检查权限。持久版本选择和面板进程维护已接入；完整独立更新/回滚 worker、readiness 和成功清理仍待补齐，UI 仅显示运行模式及版本。
+一次启动保留最多 64 个操作回执，同一操作 ID 的不同请求被拒绝。同一 boot ID 内重试返回原记录，容器重建改变 boot ID，原请求不能原样派发到新启动；独立进程维护记录先查询实际状态，再记录新的启动身份，并保留最多四次派发。运行实例另有 UUID，停止或重启须匹配观测的实例。root 持久停机标记存在时 launcher 保持控制入口在线并不启动 serve，容器重建也保留停机状态。标记及维护释放由独立 root 事务核对，生命周期入口见 [发行说明](../../docs/releases.md#面板进程维护)。控制客户端需要宿主机 root 的进程检查权限。持久版本选择、面板进程维护、独立更新/回滚 worker、readiness、维护释放与恢复材料清理及网页/API 更新任务已接入源码，仍待 P5 集中验证。
 
 本阶段只实施并审阅源码和配置，尚未运行镜像构建、安装器、launcher、Compose、服务、类型检查、lint 或测试，统一留待 P5 集中验证。
+
+## 面板容器与 launcher 对端核对
+
+每次宿主机 launcher 查询或控制均通过固定 `/run/docker.sock` 的 Docker API v1.47 读取 `nginxpanel` 容器，核对签名批准中的实际镜像 ID、完整摘要引用、固定入口/参数、数字身份、IPC 附加组及数据工作目录；Compose 显式设置工作目录，不依赖镜像默认目录。容器必须保持 host network、独立 PID/挂载命名空间、只读根、全部 capabilities 删除、禁止提权、固定进程及临时空间限制和 `unless-stopped` 重启策略。只接受同路径的业务数据可写 bind 与 `/etc/nginxpanel` 只读 bind，拒绝额外挂载、设备、容器共享、特权、交互入口或健康检查进程。
+
+实际容器主 PID 必须等于 Unix Socket 内核给出的对端 PID。客户端继续从宿主机核对进程完整 UID/GID、附加组、capabilities、禁止提权、PID 1、用户映射、命名空间、实际参数和签名程序散列。响应读取后再次核对容器 ID、启动时间、重启计数、进程及程序 inode/元数据；连接期间发生重启、重建、程序或运行绑定变化时拒绝响应，结果不明的动作继续按原操作查询。核对只读取容器和内核信息，不创建容器、不执行诊断进程或拉取镜像；Docker Socket 仍只供宿主机 root 使用。字段语义见 [Docker Engine API v1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)。
+
+固定 launcher 镜像的受控替换及补偿流程尚待接入，不能直接修改已批准绑定或将镜像标签替换视为受管升级完成。本轮仅完成实现与源码审阅，未在开发主机调用 Docker、launcher 或修改部署环境；实际容器字段、权限与重建故障场景待 P5 隔离集中验证。

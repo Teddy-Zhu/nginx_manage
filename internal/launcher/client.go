@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -25,63 +24,90 @@ type Client struct{ DataDir string }
 
 var ErrOperationNotFound = errors.New("当前 launcher 启动中没有原操作记录")
 
-// A same-UID serve process can replace a writable socket inode. SO_PEERCRED,
-// namespace PID 1 and the immutable launcher digest authenticate the responder.
-func verifyPeer(c *net.UnixConn, d panelruntime.Deployment) error {
+// The connection binds a daemon container generation, its actual PID 1 and
+// executable inode. Response data cannot supply or replace this evidence.
+type peerProof struct {
+	container  panelruntime.DockerInstance
+	executable os.FileInfo
+}
+
+func verifyPeer(ctx context.Context, c *net.UnixConn, d panelruntime.Deployment) (peerProof, error) {
+	var zero peerProof
 	cred, err := credentials(c)
 	if err != nil {
-		return err
+		return zero, err
 	}
 	if cred == nil || int(cred.Uid) != d.UID || cred.Pid <= 1 {
-		return errors.New("launcher 响应进程身份不匹配")
+		return zero, errors.New("launcher 响应进程身份不匹配")
+	}
+	instance, err := panelruntime.InspectDocker(ctx, d, int(cred.Pid))
+	if err != nil {
+		return zero, err
 	}
 	base := "/proc/" + strconv.Itoa(int(cred.Pid))
-	f, err := os.Open(base + "/status")
-	if err != nil {
-		return err
-	}
-	raw, err := io.ReadAll(io.LimitReader(f, 16385))
-	f.Close()
-	if err != nil || len(raw) > 16384 {
-		return errors.New("无法核对 launcher PID 命名空间")
-	}
-	init := false
-	for _, line := range strings.Split(string(raw), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 3 && fields[0] == "NSpid:" && fields[1] == strconv.Itoa(int(cred.Pid)) && fields[len(fields)-1] == "1" {
-			init = true
-		}
-	}
-	if !init {
-		return errors.New("launcher 必须是独立容器 PID 1")
+	if err = verifyPeerProcess(base, int(cred.Pid), d); err != nil {
+		return zero, err
 	}
 	exe, err := os.Open(base + "/exe")
 	if err != nil {
-		return err
+		return zero, err
 	}
 	defer exe.Close()
 	info, err := exe.Stat()
 	if err != nil {
-		return err
+		return zero, err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || st.Uid != 0 || info.Mode().Perm()&0022 != 0 || info.Size() > panelruntime.BinaryLimit {
-		return errors.New("launcher 执行文件的归属或类型无效")
+	if !ok || !info.Mode().IsRegular() || st.Uid != 0 || st.Gid != 0 || info.Mode().Perm() != 0555 || info.Size() <= 0 || info.Size() > panelruntime.BinaryLimit {
+		return zero, errors.New("launcher 执行文件的归属或类型无效")
 	}
 	h := sha256.New()
 	n, err := io.Copy(h, io.LimitReader(exe, panelruntime.BinaryLimit+1))
 	if err != nil {
-		return err
+		return zero, err
 	}
 	if n != info.Size() || !secure.RootFileUnchanged(exe, info) || hex.EncodeToString(h.Sum(nil)) != d.LauncherSHA256 {
-		return errors.New("launcher 执行文件与宿主机批准不匹配")
+		return zero, errors.New("launcher 执行文件与宿主机批准不匹配")
 	}
-	return nil
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	return peerProof{container: instance, executable: info}, nil
 }
+
+func (p peerProof) confirm(ctx context.Context, d panelruntime.Deployment) error {
+	if p.executable == nil {
+		return errors.New("launcher 连接缺少宿主机核对依据")
+	}
+	after, err := panelruntime.InspectDocker(ctx, d, p.container.PID)
+	if err != nil {
+		return err
+	}
+	if after != p.container {
+		return errors.New("面板容器在 launcher 请求期间重启或重建")
+	}
+	base := "/proc/" + strconv.Itoa(p.container.PID)
+	if err = verifyPeerProcess(base, p.container.PID, d); err != nil {
+		return err
+	}
+	info, err := os.Stat(base + "/exe")
+	if err != nil {
+		return err
+	}
+	beforeStat, beforeOK := p.executable.Sys().(*syscall.Stat_t)
+	afterStat, afterOK := info.Sys().(*syscall.Stat_t)
+	if !beforeOK || !afterOK || !os.SameFile(p.executable, info) || p.executable.Mode() != info.Mode() || p.executable.Size() != info.Size() || beforeStat.Uid != afterStat.Uid || beforeStat.Gid != afterStat.Gid || beforeStat.Mtim != afterStat.Mtim || beforeStat.Ctim != afterStat.Ctim {
+		return errors.New("launcher 实际程序在请求期间变化")
+	}
+	return ctx.Err()
+}
+
 func (c Client) call(ctx context.Context, method, path string, in, out any) error {
 	return c.callPeer(ctx, method, path, in, out, nil)
 }
 func (c Client) callPeer(ctx context.Context, method, path string, in, out any, peerPID *int) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	if os.Geteuid() != 0 {
 		return errors.New("launcher 控制仅允许宿主机 root")
 	}
@@ -92,7 +118,10 @@ func (c Client) callPeer(ctx context.Context, method, path string, in, out any, 
 	if d.Mode != "docker" {
 		return errors.New("launcher 控制需要容器面板绑定")
 	}
-	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+	var proof peerProof
+	// Transport may detach its dial context from request cancellation. Use the
+	// bounded caller context for both the socket and host-side Docker checks.
+	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
 		conn, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", Socket(c.DataDir))
 		if err != nil {
 			return nil, err
@@ -102,22 +131,12 @@ func (c Client) callPeer(ctx context.Context, method, path string, in, out any, 
 			conn.Close()
 			return nil, errors.New("launcher 连接不是 Unix Socket")
 		}
-		if err = verifyPeer(unixConn, d); err != nil {
+		checked, err := verifyPeer(ctx, unixConn, d)
+		if err != nil {
 			conn.Close()
 			return nil, err
 		}
-		if peerPID != nil {
-			cred, err := credentials(unixConn)
-			if err != nil {
-				conn.Close()
-				return nil, err
-			}
-			if cred == nil || cred.Pid <= 1 {
-				conn.Close()
-				return nil, errors.New("launcher 对端进程身份缺失")
-			}
-			*peerPID = int(cred.Pid)
-		}
+		proof = checked
 		return conn, nil
 	}}
 	defer transport.CloseIdleConnections()
@@ -143,6 +162,12 @@ func (c Client) callPeer(ctx context.Context, method, path string, in, out any, 
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 16385))
 	if err != nil || len(raw) > 16384 {
 		return errors.New("launcher 响应超过限制")
+	}
+	if err = proof.confirm(ctx, d); err != nil {
+		return err
+	}
+	if peerPID != nil {
+		*peerPID = proof.container.PID
 	}
 	var envelope struct {
 		Code      string          `json:"code"`

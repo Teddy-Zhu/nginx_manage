@@ -5,6 +5,7 @@ services:
     container_name: nginxpanel
     network_mode: host
     user: "{{.UID}}:{{.GID}}"
+    working_dir: "{{.DataDir}}"
     group_add:
       - "{{.IPCGID}}"
     restart: unless-stopped
