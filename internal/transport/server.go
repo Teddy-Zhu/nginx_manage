@@ -9,6 +9,7 @@ import (
 
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
+	"nginxpanel/internal/agentupdates"
 	"nginxpanel/internal/auditlog"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/backup"
@@ -53,6 +54,7 @@ type Server struct {
 	Components      *components.Service
 	Installations   *nginxinstall.Service
 	Switches        *nginxswitch.Service
+	AgentUpgrades   *agentupdates.Service
 	Updates         *panelupdates.Service
 	Migration       *migration.Service
 	Backups         *backup.Service

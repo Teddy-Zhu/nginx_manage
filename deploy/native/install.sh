@@ -170,6 +170,7 @@ exec 9>/run/nginxpanel-install/lock
 flock -n 9 || die '另一个安装操作正在执行'
 ensure_dir /opt/nginxpanel 755 root root
 ensure_dir /opt/nginxpanel/releases 755 root root
+ensure_dir /opt/nginxpanel/agent-releases 755 root root
 ensure_dir /opt/nginxpanel/prepared 755 root root
 ensure_dir /opt/nginxpanel/release-downloads 700 root root
 ensure_dir /etc/nginxpanel 755 root root
@@ -364,7 +365,7 @@ EOF
 cat >"$work/nginxpanel-agent.service" <<EOF
 [Unit]
 Description=NginxPanel local privileged agent
-After=nginxpanel-nginx.service
+After=nginxpanel-nginx.service systemd-tmpfiles-setup.service
 Before=nginxpanel.service
 
 [Service]
@@ -383,7 +384,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads
+ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes
@@ -529,6 +530,12 @@ LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX
 EOF
 root_chain /etc/systemd/system
+# tmpfiles creates the shared root lock directory on boot. Keeping it outside
+# the Agent's RuntimeDirectory prevents an Agent restart from replacing locks
+# still held by the independent upgrade worker or the installer.
+ensure_dir /etc/tmpfiles.d 755 root root
+printf 'd /run/nginxpanel-install 0700 root root -\n' >"$work/nginxpanel.conf"
+write_owned "$work/nginxpanel.conf" /etc/tmpfiles.d/nginxpanel.conf
 install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service)
 if [[ -z $nginx_image ]]; then install_units+=(nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service); fi
 if [[ $panel_mode == native ]]; then install_units+=(nginxpanel.service); fi

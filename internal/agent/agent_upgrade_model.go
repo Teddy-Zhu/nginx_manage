@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"nginxpanel/internal/agentupdates"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 )
@@ -48,12 +49,23 @@ type AgentUpgradeIntent struct {
 	Deadline       int64             `json:"deadline"`
 }
 type AgentUpgradeOperation struct {
-	Intent        AgentUpgradeIntent `json:"intent"`
-	Rollback      bool               `json:"rollback"`
-	Failure       string             `json:"failure"`
-	Ready         *AgentProcess      `json:"ready,omitempty"`
-	RollbackReady *AgentProcess      `json:"rollback_ready,omitempty"`
-	ReadyEpoch    string             `json:"ready_epoch"`
+	Authorizations []AgentUpgradeAuthorization `json:"authorizations,omitempty"`
+	Intent         AgentUpgradeIntent          `json:"intent"`
+	Rollback       bool                        `json:"rollback"`
+	Failure        string                      `json:"failure"`
+	Ready          *AgentProcess               `json:"ready,omitempty"`
+	RollbackReady  *AgentProcess               `json:"rollback_ready,omitempty"`
+	ReadyEpoch     string                      `json:"ready_epoch"`
+}
+
+type AgentUpgradeAuthorization struct {
+	Request    agentupdates.Request `json:"request"`
+	AcceptedAt int64                `json:"accepted_at"`
+	ClaimedAt  int64                `json:"claimed_at"`
+}
+
+func agentUpgradeAPIInput(in AgentUpgradeInput) agentupdates.Input {
+	return agentupdates.Input{MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
 }
 
 func agentProgramLinkValid(link string) bool {
@@ -84,6 +96,18 @@ func validAgentUpgrade(r Record) error {
 		return errors.New("Agent 升级记录身份无效")
 	}
 	i := p.Intent
+	if len(p.Authorizations) > 32 {
+		return errors.New("Agent 升级授权超过保留上限")
+	}
+	for n, a := range p.Authorizations {
+		q := a.Request
+		if q.Validate() != nil || q.OperationID != r.OperationID || q.Input != agentUpgradeAPIInput(i.Input) || q.Sequence != n+1 || a.AcceptedAt <= 0 || a.AcceptedAt > q.AuthorizationUntil || q.AuthorizationUntil > a.AcceptedAt+305 || a.ClaimedAt != 0 && (a.ClaimedAt < a.AcceptedAt || a.ClaimedAt >= q.AuthorizationUntil) || n == 0 && q.Epoch != i.Epoch || n > 0 && a.AcceptedAt < p.Authorizations[n-1].AcceptedAt {
+			return errors.New("Agent 升级持久授权与原操作不一致")
+		}
+	}
+	if agentUpgradeTerminal(r) && len(p.Authorizations) != 0 && p.Authorizations[len(p.Authorizations)-1].ClaimedAt == 0 {
+		return errors.New("Agent 升级终态缺少已领取的启动授权")
+	}
 	if _, err := panelruntime.Root(i.Input.Stage.DataDir); err != nil {
 		return err
 	}

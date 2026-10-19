@@ -333,7 +333,7 @@ API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.s
 
 ## 独立 Agent 与宿主机工具升级
 
-本机 root 可使用已经准备的单一签名静态面板资产升级 `/opt/nginxpanel/current` 中的 Agent 与固定宿主机工具。目标须与当前选中面板的 Agent 协议、数据库结构和 launcher 合同一致；不替换 `runtime/current`、容器 launcher 镜像、Nginx 或 Fail2ban，不迁移业务数据库。当前入口是本机命令，Web/API 编排仍待接入。
+本机 root 可使用已经准备的单一签名静态面板资产升级 `/opt/nginxpanel/current` 中的 Agent 与固定宿主机工具。目标须与当前选中面板的 Agent 协议、数据库结构和 launcher 合同一致；不替换 `runtime/current`、容器 launcher 镜像、Nginx 或 Fail2ban，不迁移业务数据库。可使用本机命令，或通过网页/API 创建和续办持久任务。
 
 先通过原组件流程检查和准备面板资产，并在系统页取得已排空的维护会话及 Agent epoch，再提交新的操作 UUID：
 
@@ -350,6 +350,10 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 
 首次提交绑定原程序散列及指针、原 Agent 进程/启动身份、运行绑定、目标签名暂存批准、两个 systemd unit 散列和十分钟前进期限。独立 `nginxpanel-agent-upgrade@.service` 在停止原 Agent 后原子切换程序指针，再启动候选；通过真实可执行文件 inode、完整参数、服务 cgroup、Invocation、启动时钟和以专用 Web 身份执行的同协议维护请求确认就绪。原 Agent 停止不会终止此 worker，Unix 对端 UID 白名单不放宽。
 
-失败由 worker 在独立十分钟窗口恢复原程序及 Agent；原始批准版本以固定散列恢复，不要求候选签名继续有效。异常指针、服务文件、进程或维护身份无法确认时保留 `recovery_required`。进程中断后只能沿原 UUID 显式续办，原前进期限不续期；原维护记录必须仍在，过期仅允许补偿。幂等重放不重新派发，未确认派发使用 resume。升级与补偿未确认前阻止维护锁释放及其他维护动作；成功或完整补偿后由原维护流程恢复写入。
+失败由 worker 在独立十分钟窗口恢复原程序及 Agent；原始批准版本以固定散列恢复，不要求候选签名继续有效。异常指针、服务文件、进程或维护身份无法确认时保留 `recovery_required`。进程中断后只能沿原 UUID 显式续办，原前进期限不续期；原维护记录必须仍在，过期仅允许补偿。幂等重放不重新派发；本机命令创建的操作使用原 UUID resume，网页/API 创建的操作须通过原任务续办接口重新授权。升级与补偿未确认前阻止维护锁释放及其他维护动作；成功或完整补偿后由原维护流程恢复写入。
 
-程序发布在 root 持有的 `/opt/nginxpanel/agent-releases/<程序SHA-256>`，不覆盖旧目录，保留最多八项（含本次暂存），单程序最多 192 MiB；审计在节点私有 `agent/operations`，不进入业务迁移或灾备包。原安装器同时登记固定 worker；自定义 drop-in、缺失模板或未登记服务须本机处理，不能以首次安装器覆盖现有安装。Agent/数据库/归档为 113/33/6；本轮只完成实现与源码集成审阅，构建、测试、服务控制和故障注入待 P5 隔离环境集中验证。
+程序发布在 root 持有的 `/opt/nginxpanel/agent-releases/<程序SHA-256>`，不覆盖旧目录，保留最多八项（含本次暂存），单程序最多 192 MiB；审计在节点私有 `agent/operations`，不进入业务迁移或灾备包。原安装器同时登记固定 worker；自定义 drop-in、缺失模板或未登记服务须本机处理，不能以首次安装器覆盖现有安装。Agent/数据库/归档为 114/34/6；本轮只完成实现与源码集成审阅，构建、测试、服务控制和故障注入待 P5 隔离环境集中验证。
+
+网页进入「Agent 升级」，选择当前用户可读取且已完成签名暂存的面板准备任务，在原维护会话处于 held 时提交。`POST /api/v1/agent/upgrades` 接收 `maintenance_id` 和 `prepare_task_id`，要求 `components.manage`、`system.write`、近期认证及幂等键；浏览器同时要求 CSRF。`GET /api/v1/agent/upgrades` 与 `GET /api/v1/agent/upgrades/{id}` 读取本人任务，`auth.manage` 可读取其他用户任务。`POST /api/v1/agent/upgrades/{id}/resume` 要求相同写权限、原维护会话、当前 epoch、新幂等授权和已停止且未结束的原 root 事务。返回统一使用 `code/message/data/request_id/node_id`，成功受理为 HTTP 202。远程节点仅转发这些明确资源，并核对相同权限。
+
+任务和授权加密保存，单次启动授权五分钟，root 最多保留 32 次连续授权，本地每任务最多保留 64 次请求、共 64 项任务。派发标记先提交，HTTP 断开、Agent 重启或服务启动结果不明后只查询原记录；曾提交但 root 记录缺失时须本机处理。源备份隔离任务不得在恢复目标提交或续办。面板更新与 Agent 升级不能并行；事务确认后在配置维护页显式释放维护锁。首次安装器预建 root 程序发布目录，并登记 `/etc/tmpfiles.d/nginxpanel.conf` 以在开机时创建共享安装锁目录；Agent 服务只获得发布子目录写入权，程序指针仍由独立升级服务切换。

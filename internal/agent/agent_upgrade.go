@@ -67,6 +67,9 @@ func QueueAgentUpgrade(ctx context.Context, in AgentUpgradeInput, id, epoch stri
 	}
 	defer unlock()
 	if prior, err := AgentUpgradeStatus(in.Stage.DataDir, id); err == nil {
+		if len(prior.AgentUpgrade.Authorizations) != 0 {
+			return zero, errors.New("托管 Agent 升级须由原 API 授权续办")
+		}
 		if prior.AgentUpgrade.Intent.Input != in {
 			return zero, errors.New("Agent 升级标识已用于不同请求")
 		}
@@ -74,14 +77,31 @@ func QueueAgentUpgrade(ctx context.Context, in AgentUpgradeInput, id, epoch stri
 	} else if !os.IsNotExist(err) {
 		return zero, err
 	}
-	if _, err := installationExecutable(); err != nil {
-		return zero, err
-	}
 	access, err := panelUpdateAccess(ctx, j, id, in.MaintenanceID, epoch, false)
 	if err != nil {
 		return zero, err
 	}
 	defer access()
+	r, err := prepareAgentUpgrade(ctx, in, id, epoch)
+	if err != nil {
+		return zero, err
+	}
+	w := &agentUpgradeWorker{j: j, r: r}
+	if err := w.save(); err != nil {
+		return zero, err
+	}
+	_, err = installationSystemctl(ctx, "start", "--no-block", agentUpgradeUnit(id))
+	return w.r, err
+}
+
+// Called with the upgrade, installer and maintenance locks held. Preparation
+// publishes only immutable program material; the caller persists authorization
+// before it can dispatch an independent worker.
+func prepareAgentUpgrade(ctx context.Context, in AgentUpgradeInput, id, epoch string) (Record, error) {
+	var zero Record
+	if _, err := installationExecutable(); err != nil {
+		return zero, err
+	}
 	panel, err := panelruntime.Read(in.Stage.DataDir)
 	if err != nil {
 		return zero, err
@@ -119,12 +139,7 @@ func QueueAgentUpgrade(ctx context.Context, in AgentUpgradeInput, id, epoch stri
 	}
 	now := time.Now().Unix()
 	i := AgentUpgradeIntent{Input: in, Before: before, Target: program, BeforeProcess: process, PanelID: panel.Release.ID, BindingSHA256: selectionValueHash(panel.Deployment), TargetVersion: target.Release.Version, ApprovalSHA256: selectionValueHash(target.Approval), AgentUnit: agentUnit, WorkerUnit: workerUnit, Epoch: epoch, CreatedAt: now, Deadline: now + 600}
-	w := &agentUpgradeWorker{j: j, r: Record{OperationID: id, Kind: agentUpgradeKind, State: "running", Stage: "authorized", RequestHash: agentUpgradeHash(id, i), AgentUpgrade: &AgentUpgradeOperation{Intent: i}}}
-	if err := w.save(); err != nil {
-		return zero, err
-	}
-	_, err = installationSystemctl(ctx, "start", "--no-block", agentUpgradeUnit(id))
-	return w.r, err
+	return Record{OperationID: id, Kind: agentUpgradeKind, State: "running", Stage: "authorized", RequestHash: agentUpgradeHash(id, i), AgentUpgrade: &AgentUpgradeOperation{Intent: i}}, nil
 }
 
 func ResumeAgentUpgrade(ctx context.Context, data, id string) (Record, error) {
@@ -136,6 +151,9 @@ func ResumeAgentUpgrade(ctx context.Context, data, id string) (Record, error) {
 	r, err := AgentUpgradeStatus(data, id)
 	if err != nil || agentUpgradeTerminal(r) {
 		return r, err
+	}
+	if len(r.AgentUpgrade.Authorizations) != 0 {
+		return r, errors.New("托管 Agent 升级须由原 API 授权续办")
 	}
 	access, err := panelUpdateAccess(ctx, j, id, r.AgentUpgrade.Intent.Input.MaintenanceID, "", true)
 	if err != nil {
@@ -485,6 +503,26 @@ func RunAgentUpgrade(ctx context.Context, data, id string) (Record, error) {
 	}
 	defer service()
 	w := &agentUpgradeWorker{j: j, r: r}
+	if a := w.r.AgentUpgrade.Authorizations; len(a) != 0 {
+		last := &a[len(a)-1]
+		if last.ClaimedAt != 0 || last.Request.AuthorizationUntil <= time.Now().Unix() {
+			return r, errors.New("Agent 升级启动授权已使用或过期，须显式续办")
+		}
+		access, err := panelUpdateAccess(ctx, j, id, last.Request.Input.MaintenanceID, last.Request.Epoch, false)
+		if err != nil {
+			return r, err
+		}
+		last.ClaimedAt = time.Now().Unix()
+		if last.ClaimedAt >= last.Request.AuthorizationUntil {
+			access()
+			return r, errors.New("Agent 升级授权在领取前过期")
+		}
+		err = w.save()
+		access()
+		if err != nil {
+			return r, err
+		}
+	}
 	if !w.r.AgentUpgrade.Rollback {
 		forward, cancel := context.WithDeadline(ctx, time.Unix(r.AgentUpgrade.Intent.Deadline, 0))
 		err = w.forward(forward)

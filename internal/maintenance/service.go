@@ -220,6 +220,13 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 	if updates != 0 {
 		return out, fault.Conflict("原面板更新仍在执行或待恢复，不能手工释放维护锁")
 	}
+	var upgrades int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_upgrades i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back','cancelled')", id).Scan(&upgrades); err != nil {
+		return out, err
+	}
+	if upgrades != 0 {
+		return out, fault.Conflict("原 Agent 升级仍在执行或待恢复，不能释放维护锁")
+	}
 	session, err := readSession(tx.QueryRowContext(ctx, "SELECT "+columns+" FROM maintenance_sessions WHERE task_id=?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		if err = p.Require("auth.manage"); err != nil {

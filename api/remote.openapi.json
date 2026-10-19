@@ -12,6 +12,164 @@
   ],
   "x-forward-response-limit": 33554432,
   "paths": {
+    "/nodes/{connection}/agent/upgrades": {
+      "get": {
+        "operationId": "remoteListAgentUpgrades",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "listAgentUpgrades",
+        "x-forward-path": "/agent/upgrades",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      },
+      "post": {
+        "operationId": "remoteCreateAgentUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/AgentUpgradeCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createAgentUpgrade",
+        "x-forward-path": "/agent/upgrades",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
+    },
+    "/nodes/{connection}/agent/upgrades/{id}": {
+      "get": {
+        "operationId": "remoteGetAgentUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getAgentUpgrade",
+        "x-forward-path": "/agent/upgrades/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
+    },
+    "/nodes/{connection}/agent/upgrades/{id}/resume": {
+      "post": {
+        "operationId": "remoteResumeAgentUpgrade",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resumeAgentUpgrade",
+        "x-forward-path": "/agent/upgrades/{id}/resume",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
+    },
     "/nodes/{connection}/fail2ban/instance": {
       "get": {
         "operationId": "remoteGetFail2banInstance",

@@ -187,6 +187,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.installationHandlers(mux)
 	s.nginxSwitchHandlers(mux)
 	s.panelUpdateHandlers(mux)
+	s.agentUpgradeHandlers(mux)
 	cleanupCtx, stopCleanup := context.WithCancel(ctx)
 	cleanupDone := make(chan struct{})
 	go func() { defer close(cleanupDone); s.runPanelUpdateCleanup(cleanupCtx) }()

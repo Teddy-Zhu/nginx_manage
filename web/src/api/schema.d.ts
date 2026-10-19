@@ -130,6 +130,57 @@ export interface paths {
         trace?: never;
     };
 
+    "/agent/upgrades/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeAgentUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/agent/upgrades/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAgentUpgrade"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
+    "/agent/upgrades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAgentUpgrades"];
+        put?: never;
+        post: operations["createAgentUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+
     "/panel/updates/{id}/resume": {
         parameters: {
             query?: never;
@@ -2450,6 +2501,64 @@ export interface components {
             revocation: string;
             version: number;
         };
+        AgentUpgradeInput: {
+            maintenance_id: string;
+            plan_id: string;
+            prerelease: boolean;
+        };
+        AgentUpgradeCreateInput: {
+            maintenance_id: string;
+            prepare_task_id: string;
+        };
+        AgentUpgradeAuthorization: {
+            actor: string;
+            request_id: string;
+            protocol: number;
+            operation_id: string;
+            input: components["schemas"]["AgentUpgradeInput"];
+            sequence: number;
+            command: string;
+            epoch: string;
+            authorization_until: number;
+        };
+        AgentUpgradeOperation: {
+            authorization: components["schemas"]["AgentUpgradeAuthorization"];
+            protocol: number;
+            id: string;
+            input: components["schemas"]["AgentUpgradeInput"];
+            request_hash: string;
+            intent_sha256: string;
+            sequence: number;
+            command: string;
+            state: string;
+            stage: string;
+            error: string;
+            failure: string;
+            deadline: number;
+            updated_at: number;
+            active: boolean;
+            before_sha256: string;
+            target_sha256: string;
+            target_version: string;
+            panel_id: string;
+            ready_epoch: string;
+            finalized: boolean;
+        };
+        AgentUpgradeTask: {
+            id: string;
+            operation_id: string;
+            prepare_task_id: string;
+            input: components["schemas"]["AgentUpgradeInput"];
+            sequence: number;
+            command: string;
+            authorization_until: number;
+            state: string;
+            stage: string;
+            error: string;
+            created_at: number;
+            updated_at: number;
+            result?: components["schemas"]["AgentUpgradeOperation"];
+        };
         PanelUpdateInput: {
             maintenance_id: string;
             plan_id: string;
@@ -4104,6 +4213,78 @@ export interface operations {
         };
         requestBody?: never;
         responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+    };
+
+    resumeAgentUpgrade: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    getAgentUpgrade: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    createAgentUpgrade: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpgradeCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+
+    listAgentUpgrades: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
     };
 
     resumePanelUpdate: {

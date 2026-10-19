@@ -196,7 +196,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	}
 	defer tx.Rollback()
 	var count, active int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind='panel.update' AND state NOT IN ('succeeded','failed','rolled_back','cancelled')").Scan(&active); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('panel.update','agent.upgrade') AND state NOT IN ('succeeded','failed','rolled_back','cancelled')").Scan(&active); err != nil {
 		return zero, err
 	}
 	if active != 0 {

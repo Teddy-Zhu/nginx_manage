@@ -44,6 +44,8 @@ export type ComponentAsset = components["schemas"]["ComponentAsset"];
 export type ComponentRelease = components["schemas"]["ComponentRelease"];
 export type ComponentOperation = components["schemas"]["ComponentOperation"];
 export type ComponentTask = components["schemas"]["ComponentTask"];
+export type AgentUpgradeTask = components["schemas"]["AgentUpgradeTask"];
+export type AgentUpgradeCreateInput = components["schemas"]["AgentUpgradeCreateInput"];
 export type PanelUpdateTask = components["schemas"]["PanelUpdateTask"];
 export type PanelUpdateCreateInput = components["schemas"]["PanelUpdateCreateInput"];
 export type NginxSwitchTask = components["schemas"]["NginxSwitchTask"];
@@ -604,6 +606,21 @@ function createAPI(scope: RequestScope) {
     request<ComponentTask>({ url: "/components/frontend/activate", method: "POST", data, headers: { "Idempotency-Key": key } }),
   componentTasks: (signal?: AbortSignal) =>
     request<ComponentTask[]>({ url: "/components/tasks", signal }),
+  agentUpgrades: (signal?: AbortSignal) =>
+    request<AgentUpgradeTask[]>({ url: "/agent/upgrades", signal }),
+  createAgentUpgrade: (data: AgentUpgradeCreateInput, key: string) =>
+    request<AgentUpgradeTask>({
+      url: "/agent/upgrades",
+      method: "POST",
+      data,
+      headers: { "Idempotency-Key": key },
+    }),
+  resumeAgentUpgrade: (id: string, key: string) =>
+    request<AgentUpgradeTask>({
+      url: `/agent/upgrades/${encodeURIComponent(id)}/resume`,
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+    }),
   panelUpdates: (signal?: AbortSignal) =>
     request<PanelUpdateTask[]>({ url: "/panel/updates", signal }),
   createPanelUpdate: (data: PanelUpdateCreateInput, key: string) =>

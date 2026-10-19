@@ -199,6 +199,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/agent-upgrades': RouteRecordInfo<
+      '/agent-upgrades',
+      '/agent-upgrades',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/panel-updates': RouteRecordInfo<
       '/panel-updates',
       '/panel-updates',
@@ -434,6 +441,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/notifications.vue': {
       routes:
         | '/notifications'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/agent-upgrades.vue': {
+      routes:
+        | '/agent-upgrades'
       views:
         | never
       pathParamNames:
