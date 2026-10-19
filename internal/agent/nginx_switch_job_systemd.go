@@ -12,11 +12,11 @@ func switchJobUnit(id string) string { return "nginxpanel-switch@" + id + ".serv
 
 func nginxSwitchServiceTemplate(data string) error {
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != "native-install-v12\n" {
+	if err != nil || string(ready) != "native-install-v13\n" {
 		return errors.New("原生切换服务缺少完成安装登记")
 	}
 	intent, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/intent", 4096)
-	if err != nil || !strings.HasPrefix(string(intent), "native-install-v12\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nnginx_image=\n") {
+	if err != nil || !strings.HasPrefix(string(intent), "native-install-v13\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\nnginx_image=\n") {
 		return errors.New("原生切换服务不属于本机安装")
 	}
 	raw, err := nginxmodules.ReadTrusted("/etc/systemd/system/"+nginxSwitchTemplate, 64<<10)

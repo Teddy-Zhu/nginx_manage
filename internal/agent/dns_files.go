@@ -154,7 +154,20 @@ func writeDNSFile(expected, desired dnsFile, operationID string) error {
 }
 
 func dnsWritableSource(path string) bool {
-	return path == dnsSource || networkWritableSource(path)
+	if path == dnsSource || networkWritableSource(path) {
+		return true
+	}
+	if netplanSnapshotPath(path) && filepath.Dir(path) == "/etc/netplan" {
+		return true
+	}
+	// These generated files are selected and snapshotted by the netplan
+	// adapter; the API cannot supply a source path to this writer.
+	for _, renderer := range []string{"networkd", "NetworkManager"} {
+		if _, ok := netplanGeneratedID(renderer, path); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func writeHostDNSFile(source string, expected, desired dnsFile, operationID string) error {

@@ -6,15 +6,16 @@ umask 077
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--start]
+用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--start]
 面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
+--dns-owner 明确批准宿主机 DNS 所有者并开放对应服务写入路径；默认 unconfirmed，仅允许读取。不会安装、启停或切换网络管理器。
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed
 while (($#)); do
   case "$1" in
-    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image)
+    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image|--dns-owner)
       (($# >= 2)) || die "参数缺少值：$1"
       case "$1" in
         --binary) binary=$2 ;; --web-dir) web=$2 ;; --nginx-binary) nginx=$2 ;;
@@ -22,6 +23,7 @@ while (($#)); do
         --data-dir) data=$2 ;; --listen) listen=$2 ;;
         --panel-mode) panel_mode=$2 ;; --panel-image) panel_image=$2 ;;
         --nginx-image) nginx_image=$2 ;;
+        --dns-owner) dns_owner=$2 ;;
         --release-manifest) release_manifest=$2 ;; --release-signature) release_signature=$2 ;;
       esac
       shift 2 ;;
@@ -32,6 +34,22 @@ while (($#)); do
     *) usage; die "未知参数：$1" ;;
   esac
 done
+dns_agent_flags= dns_write_paths=
+case "$dns_owner" in
+  unconfirmed) ;;
+  regular-file)
+    dns_agent_flags='--dns-scope host --dns-owner regular-file'
+    # Atomic replacement of resolv.conf requires a writable parent directory.
+    dns_write_paths=/etc ;;
+  networkmanager) dns_agent_flags='--dns-scope host --dns-owner networkmanager' ;;
+  networkd)
+    dns_agent_flags='--dns-scope host --dns-owner networkd'
+    dns_write_paths=-/etc/systemd/network ;;
+  netplan)
+    dns_agent_flags='--dns-scope host --dns-owner netplan'
+    dns_write_paths='-/etc/netplan -/run/systemd/network -/run/NetworkManager/system-connections' ;;
+  *) die 'dns-owner 仅允许 unconfirmed、regular-file、networkmanager、networkd 或 netplan' ;;
+esac
 [[ $EUID == 0 ]] || die '安装需要本机 root'
 [[ -n $binary && -n $web ]] || { usage; exit 1; }
 case "$panel_mode" in
@@ -218,7 +236,7 @@ nginx_hash=
 if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v12\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" >"$work/intent"
+printf 'native-install-v13\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -313,7 +331,7 @@ else
   "$release_dir/nginxpanel" panel-native-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" >"$work/panel-runtime.json"
 fi
 # Only unfinished installations run init; a live panel owns the writer lock.
-printf 'native-install-v12\n' >"$work/ready"
+printf 'native-install-v13\n' >"$work/ready"
 if [[ -e $state/ready || -L $state/ready ]]; then
   trusted_file "$state/ready" 64
   cmp -s "$work/ready" "$state/ready" || die '安装就绪记录不匹配'
@@ -383,7 +401,7 @@ Type=exec
 User=root
 Group=nginxpanel-ipc
 UMask=0027
-ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host
+ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host $dns_agent_flags
 Restart=on-failure
 RestartSec=3
 TimeoutStartSec=180
@@ -394,7 +412,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases
+ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases $dns_write_paths
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes

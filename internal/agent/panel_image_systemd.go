@@ -37,7 +37,7 @@ func panelImageHost(ctx context.Context, data, id string) (string, bool, error) 
 		return "", false, err
 	}
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != "native-install-v12\n" || !strings.HasPrefix(string(intent), "native-install-v12\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\npanel_mode=docker\n") {
+	if err != nil || string(ready) != "native-install-v13\n" || !strings.HasPrefix(string(intent), "native-install-v13\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\npanel_mode=docker\n") {
 		return "", false, errors.New("镜像替换缺少已完成的容器面板安装登记")
 	}
 	name := "/etc/systemd/system/" + panelImageTemplate

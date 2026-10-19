@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-19。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听和 direct nftables 指定中断恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
+2026-10-19。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件 DNS 的双栈解析与独立恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
 
 ## 隔离环境
 
@@ -126,9 +126,31 @@ Debian 官方 `debian-12-genericcloud-amd64.qcow2` 已与同源 [SHA512SUMS](htt
 
 本轮仅证明原生面板和直接 nftables 的上述范围；整机重启为正常系统重启，未覆盖强制掉电。第三方表在重启后由其自己的夹具服务重建，不计为面板持久化第三方规则。旧 TCP 连接拒绝、证书轮换、其他监听来源/地址组合及其他防火墙所有者仍待验收。
 
+### Debian 双节点普通文件 DNS 与独立恢复
+
+复用上述 Debian 12/amd64 云镜像和 QEMU 工具镜像，在无外部网络、无宿主端口映射的容器内运行两台独立内核虚拟机。目标使用当前原生安装器及 `--without-nginx --dns-owner regular-file --start`；客户端同时提供两个不同答案的真实 UDP/TCP DNS 服务，绑定 `192.0.2.11/12`、`fd42:5::11/12`，通过双栈受控 HTTPS 管理入口执行实际会话、CSRF 和统一 API。逐连接核对管理证书指纹，使用目标系统的 `getaddrinfo` 检查解析答案。
+
+目标云镜像原有 `/etc/netplan/50-cloud-init.yaml` 时，Agent 正确报告 netplan 所有者并保持只读；验收夹具将该源备存于虚拟机 root 私有目录，关闭该虚拟机的自动网络渲染和相关网络服务，以独立 LAN 服务建立真正无上游管理器的普通文件场景。安装器自身不启停、切换或接管网络管理器。开发宿主机的包、服务、网络及 Docker 配置未修改。
+
+本轮修复原生 Agent 的 DNS 写入授权和 netplan 固定文件写入准入。安装意图升级为 v13，冻结明确选择的所有者，并同步所有原生安装记录读取入口；未确认所有者时不开放额外路径。程序 SHA-256 为 `0cdb19ade730ce087ae84c4a83844721fa2de3bfbe4ee03fcef842b262ab88eb`，安装器为 `87ceddd41663898b0f6648fd635780b1a5ea9eebdc201180ca0ab165252b9718`。
+
+集中验证通过 Agent 现有测试、主程序构建和安装脚本语法检查。另以只读根文件系统、无网络、无额外 capabilities 的 root 容器，在三个私有 tmpfs DNS 目录中执行 `TestNetplanDNSSourceReplacement`：原生 YAML、networkd 和 NetworkManager 生成配置均可原子替换并保留 UID/GID、权限和扩展属性；越界路径及过期快照被拒绝。记录为 `.validation/native-vm/dns-go-round2.log`、`dns-files-round1.log`。此检查只证明固定文件写入，不代表 netplan 后端已完成实际系统验收。
+
+真实双节点通过范围：
+
+- 过期源计划、符号链接、硬链接、生成标记及不安全权限均拒绝写入；重复提交同一应用请求返回原任务。未确认配置不进入期望配置，活动 DNS 事务阻止管理监听变更。
+- 不同 DNS 服务实际改变系统解析答案；分别确认双栈服务器和仅 IPv6 的服务器配置。应用和恢复保留原有注释、非 DNS 选项、UID/GID、权限及 `user.p5-dns` 扩展属性。
+- 解析失败、确认超时、停止 Web、SIGKILL Agent 后，原任务均进入 `rolled_back`，恢复已确认的 IPv6 DNS 配置、完整文件属性及实际解析，双栈管理入口保持可访问。
+- 未确认配置期间通过 QMP `system_reset` 强制重置目标虚拟机；新 boot 下查询相同原操作编号，原配置、期望配置和实际解析恢复。该操作没有执行 guest 正常关机，不等同于宿主掉电或虚拟磁盘缓存丢失。
+- 外部修改期间保持文件原样、进入 `recovery_required` 并阻止新计划；本机处理源文件后，显式续办同一事务，最终恢复精确基线、完整属性及实际解析。
+
+主要记录为 `.validation/native-vm/dns-round5.log`、`dns-target-5.log`、`dns-client-5.log`。第 5 轮完成上述解析与中断恢复，输出 `P5_DNS_HARD_RESET_RESTORED`；最后一项夹具将异步恢复尚未更新的状态过早判为失败。修正等待后，以 `dns-target-5.qcow2` 为只读基底创建目标克隆，仅补验外部修改恢复，不重跑已通过范围。补验记录为 `dns-round6.log`、`dns-target-6.log`、`dns-client-6.log`，原任务 `e7d1cd05-ccbd-4cd7-aa6d-8ccceddb3f8a` 已对账为 `rolled_back`；新事务同操作恢复后输出 `P5_DNS_EXTERNAL_CHANGE_PRESERVED_AND_ORIGINAL_OPERATION_RECOVERED` 和 `P5_DNS_TWO_VM_EXTERNAL_RECOVERY_ALL_PASS`。磁盘及记录保留，两台虚拟机已关机，验证容器已退出。
+
+本轮未验证 NetworkManager、networkd/resolved 或 netplan 的完整 DNS 事务、不同接口/DHCP/RA 组合及跨发行版行为；这些范围继续按能力门禁保持只读或等待独立验收。
+
 ## 尚待验收
 
-- 其他系统/架构及 Docker 面板组合的账户与 systemd、各 DNS 所有者、其他防火墙后端、Fail2ban、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
+- 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
 - 两种架构的正式原生资产、arm64 预置模块镜像、签名镜像来源准入、不可变镜像绑定、升级/回滚和其他备份恢复故障注入，仍需完成产物构建及运行验收；本轮 amd64 模块运行、固定启动器及上述克隆恢复结果不替代这些检查。
 - 真实域名的 ACME/DNS、通知接收端及跨主机 API 一键迁移，尚未进行外部集成验收；容器内双节点迁移与授权结果见上节。
 - 正式 GitHub 仓库及发布凭据尚未配置，未运行真实发布 CI、推送或发布。项目 MIT 许可证已补齐，第三方组件保留各自许可。

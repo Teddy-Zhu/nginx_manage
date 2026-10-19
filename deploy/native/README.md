@@ -32,6 +32,12 @@ sudo bash deploy/native/install.sh \
 
 后端及前端按内容散列存入 `/opt/nginxpanel/releases/<digest>`，复制完整并复核后在同一文件系统中发布，通过 root 所有的 `current` 指针接入。前端拒绝链接、设备和不规范路径，最多 4096 项、12 层、每文件 8 MiB、合计 64 MiB。程序、清单、unit 和本机安装记录均由 root 持有。
 
+## DNS 本机授权
+
+需要管理宿主机 DNS 时，首次安装显式指定 `--dns-owner regular-file|networkmanager|networkd|netplan`。安装意图固定此选择，Agent 同时获得 `--dns-scope host` 及对应所有者参数；省略时仅可读取。此选择不安装、启停或切换网络管理器，实际源不满足适配条件时仍拒绝写入。模块还须单独启用，业务变更继续经过 Plan/Apply/Confirm/Rollback。
+
+服务保持 `ProtectSystem=strict`。普通文件的原子替换需要开放父目录 `/etc`；networkd 仅开放 `/etc/systemd/network`；netplan 开放 `/etc/netplan` 及两个渲染器的固定运行配置目录；NetworkManager 通过本机 D-Bus 修改，未额外开放配置目录。Agent 仍只接受适配器核验并保存快照的固定 DNS 路径，不接受 API 提供文件路径。未确认所有者时不开放这些路径。
+
 ## 身份和目录
 
 | 范围 | 所有者与权限 |
@@ -44,7 +50,7 @@ sudo bash deploy/native/install.sh \
 
 创建 `nginxpanel` 和 `nginxpanel-nginx` 两个不同的无登录账户，以及独立 IPC 组。安装器拒绝复用不匹配的账户、带额外授权的身份或已有外部成员的组。不会递归 chown 数据根，也不会把 root 执行目录授予 Web。
 
-安装意图 v12 在业务初始化前由 root 登记 `run/panel-writer.lock`，文件为 root 持有、面板专用组可读写的 0660 常规文件，上层目录不可被面板账户替换。正式 `init/serve` 共用此锁，恢复启动标记存在时保持关闭；开发模式使用独立写锁。systemd 仅额外开放该锁文件的写权限。完整安装重放核对 root 所有的就绪记录，跳过重复数据库初始化；未完成的安装继续执行初始化。
+安装意图 v13 在业务初始化前由 root 登记 `run/panel-writer.lock`，文件为 root 持有、面板专用组可读写的 0660 常规文件，上层目录不可被面板账户替换。正式 `init/serve` 共用此锁，恢复启动标记存在时保持关闭；开发模式使用独立写锁。Web 服务仅额外开放该锁文件的写权限。完整安装重放核对 root 所有的就绪记录，跳过重复数据库初始化；未完成的安装继续执行初始化。
 
 原生面板的初始程序及前端也复制到 root 持有的 `DATA/runtime/releases/<内容散列>`，运行绑定固定原生模式、身份和监听，`runtime/current` 选择完整版本。systemd 通过固定 `panel-native-serve` 入口启动所选程序；`/opt/nginxpanel/current` 继续用于宿主机 Agent 和安装工具。正式启动在写锁内核对实际程序与前端，初始安装重放保留当前选择，指针丢失时不会重置为旧代码。root 版本选择入口及尚未完成的更新编排见 [发行说明](../../docs/releases.md#面板程序版本选择)。
 
