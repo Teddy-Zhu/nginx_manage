@@ -184,6 +184,13 @@ func (r *fail2banHostRetirement) record(dataDir string) (Record, error) {
 }
 
 func fail2banHostRetirementIdle(dataDir string) error {
+	return fail2banHostRetirementIdleFor(dataDir, "")
+}
+
+func fail2banHostRetirementIdleFor(dataDir, allowed string) error {
+	if err := fail2banUpgradeActivationIdle(dataDir, allowed); err != nil {
+		return err
+	}
 	if err := fail2banUpgradeSwitchIdle(dataDir, ""); err != nil {
 		return err
 	}

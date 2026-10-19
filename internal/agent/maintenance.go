@@ -118,6 +118,19 @@ func (g *maintenanceGate) records() ([]Record, error) {
 	if _, err = fail2banUpgradeSwitchRecords(filepath.Dir(filepath.Dir(g.journal.Dir)), original, ""); err != nil {
 		return nil, err
 	}
+	activation, _, err := pendingFail2banUpgradeActivation(filepath.Dir(filepath.Dir(g.journal.Dir)))
+	if err != nil {
+		return nil, err
+	}
+	if activation != nil {
+		found := false
+		for _, r := range original {
+			found = found || r.Kind == fail2banUpgradeActivationKind && r.OperationID == activation.Request.OperationID
+		}
+		if !found {
+			return nil, errors.New("升级启动隔离尚无原审计确认，须沿原 UUID 续办")
+		}
+	}
 	records := make([]Record, 0, len(original))
 	for _, r := range original {
 		// All independent maintenance workers share this view. Keep the

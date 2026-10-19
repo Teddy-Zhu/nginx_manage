@@ -190,6 +190,11 @@ func (f *fail2banNginxExecutor) manage(ctx context.Context, in Fail2banNginxRequ
 	if err := ctx.Err(); err != nil {
 		return fail2banNginxRegistry{}, err
 	}
+	unlock, err := (&Journal{Dir: fail2banBindingDir(n.DataDir)}).rootLock("binding.lock")
+	if err != nil {
+		return fail2banNginxRegistry{}, err
+	}
+	defer unlock()
 	prior, err := loadFail2banNginxRegistry(n.DataDir)
 	if err != nil {
 		return prior, err
@@ -204,6 +209,9 @@ func (f *fail2banNginxExecutor) manage(ctx context.Context, in Fail2banNginxRequ
 	}
 	if prior.ID != in.BaseID {
 		return prior, fault.Conflict("动作授权基准已变化，请重新读取")
+	}
+	if err = fail2banUpgradeActivationIdle(n.DataDir, ""); err != nil {
+		return prior, err
 	}
 	records, err := n.Journal.List()
 	if err != nil {

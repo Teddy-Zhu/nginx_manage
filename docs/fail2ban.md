@@ -653,9 +653,43 @@ nginxpanel fail2ban-upgrade-switch-revert --data-dir /var/lib/nginxpanel \
 
 切换材料使用 root 专用 `0700/0600`，最多 8 项目录，单文件不超过 8 MiB，总预算 128 MiB，包含遗留临时材料及补偿写入预留，不自动删除审计或恢复依据，也不进入跨环境迁移或业务备份。候选启动后的官方封禁及实际动作可通过下述独立入口核对；此切换分支本身不声称保护已恢复。完整的运行中停启编排、自动失败补偿及 Web/API 升级任务仍待接入，真实系统行为待 P5 集中验证。
 
+### 切换后的受控启动与保护确认
+
+已停止实例的代码切换与审计完成后，可显式授权候选启动，并由独立事务等待保护确认：
+
+```sh
+nginxpanel fail2ban-upgrade-activate --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation ACTIVATION_UUID \
+  --fail2ban-upgrade-switch UPGRADE_SWITCH_UUID \
+  --nginx-container --nginx-user nginxpanel-nginx
+
+nginxpanel fail2ban-upgrade-activation --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation ACTIVATION_UUID
+
+nginxpanel fail2ban-upgrade-activation-resume --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation ACTIVATION_UUID
+
+nginxpanel fail2ban-upgrade-activation-stop --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation ACTIVATION_UUID
+```
+
+原生 Nginx 使用可信 `--nginx-binary` 和原专用 `--nginx-user` 替换容器参数；仅宿主机动作时不需 Nginx 参数。启动前重新认证原切换、快照及暂存、原状态目录和文件、已停止服务、候选完整选择、全部批准及原内核规则，冻结 Nginx 运行来源。独立启动意图、当前隔离和审计先持久化，随后才发送一次固定服务启动；不变更服务启用偏好、单元沙箱或其他实例，不直接改写活动 SQLite 文件。官方启动仍会正常更新状态库。
+
+固定服务的 `ExecStartPre` 核对当前意图、服务所属运行代次及配置，经 root 专用本机通道请求持锁的父进程保存一次性许可。通道核对 root 对端和固定服务 cgroup；服务自身不写入 root 事务目录。许可消费后，待定事务中的自动重启被拒绝。启动调用中断时，续办只观测已许可的 Invocation/Socket/PID，不重新发送启动；原审计丢失或范围变化保留隔离，不重建执行授权。
+
+`running/awaiting_protection` 表示候选已启动，尚未确认完整保护。等待期间只放行绑定原候选运行代次的宿主机/Nginx 动作收敛，配置发布、独立实例控制、动作批准和新维护变更仍受隔离约束；已进入关闭准入阶段的维护允许原事务及其动作完成。宿主机 Agent 在已确认的 host 范围每 30 秒续办已有执行记录，重启后继续读取原材料，不创建新启动授权。Agent 离线时可用原 UUID 手动续办。
+
+保护确认调用下文完整核对入口，并绑定本次启动的独立证明 ID、选择事件、Invocation、Socket、Nginx 运行来源及五分钟授权窗口。成功须同时保存原保护证明、独立证明审计、启动完成回执和终态审计，结果为 `succeeded/protection_verified`。已发布证明后的中断仅补齐原完成确认，不重新观测活动数据库或重放启动；历史终态查询不代表当前实时保护。
+
+启动失败、显式停止，或续办时超过五分钟仍无有效保护证明，均先保存不可变停止意图，再核对并停止原许可的候选代次；服务作业未结束、代次或选择变化时保留恢复状态。已确认无服务、无 Socket 文件及内核引用后，结果为 `failed/candidate_stopped`，仅证明候选已停止，不代表旧代码、数据库或保护已经恢复。停止意图后不再正向完成；已成功的启动不能用旧停止授权影响后续运行。Agent 离线时不承诺期限到达即执行停止，下一次续办继续处理原意图。
+
+意图、执行标识、许可、运行回执、停止意图及完成回执均为 root 专用 `0700/0600` 材料，最多 8 项目录、单文件 64 KiB、总预算 1 MiB，含临时材料并预留后续完成写入空间；完整保护证明使用其独立配额。完成回执已保存但审计未确认时为 `completion_unacknowledged`，发布结果不明时为 `completion_unknown`；原 UUID 查询及续办不得覆盖冲突材料。不自动清理审计或恢复依据，也不进入跨环境迁移或业务备份。
+
+该事务补齐已完成选择后的受控启动、动作收敛和保护证明确认；运行实例的自动停止/捕获/准备/切换、旧代码及数据库的自动失败补偿、Web/API 升级任务仍待完成。全部服务、通道、内核及故障行为待 P5 在隔离环境集中验证；开发期间未操作当前主机服务或系统配置。
+
 ### 升级后的保护核对与持久证明
 
-已停止实例的切换完成且审计确认后，候选须已由本机 root 显式启动，普通宿主机/Nginx 动作执行器须已按候选运行代次采样并落实当前封禁，才能核对升级后的保护：
+已停止实例的切换完成且审计确认后，候选须已由上述受控事务或本机 root 显式启动，普通宿主机/Nginx 动作执行器须已按候选运行代次采样并落实当前封禁，才能核对升级后的保护。受控事务使用其内部保留的证明 ID；以下独立入口使用新的 UUID：
 
 ```sh
 nginxpanel fail2ban-upgrade-verify --data-dir /var/lib/nginxpanel \

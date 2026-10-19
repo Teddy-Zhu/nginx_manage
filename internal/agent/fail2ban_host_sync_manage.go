@@ -44,6 +44,23 @@ func fail2banHostSyncLocks(dataDir string) (func(), error) {
 }
 
 func fail2banHostSyncAdmission(dataDir string, apply bool) (func(), error) {
+	return fail2banHostSyncAdmissionFor(context.Background(), dataDir, apply, false)
+}
+
+func fail2banHostSyncAdmissionFor(ctx context.Context, dataDir string, apply, actions bool) (func(), error) {
+	progressingActivation := false
+	if actions {
+		if err := fail2banUpgradeActivationActions(ctx, dataDir); err != nil {
+			return nil, err
+		}
+		activation, _, err := pendingFail2banUpgradeActivation(dataDir)
+		if err != nil {
+			return nil, err
+		}
+		progressingActivation = activation != nil
+	} else if err := fail2banUpgradeActivationIdle(dataDir, ""); err != nil {
+		return nil, err
+	}
 	if err := fail2banUpgradeSwitchIdle(dataDir, ""); err != nil {
 		return nil, err
 	}
@@ -55,7 +72,7 @@ func fail2banHostSyncAdmission(dataDir string, apply bool) (func(), error) {
 	records, err := j.List()
 	if err == nil {
 		for _, r := range records {
-			if r.Kind == "maintenance.lock" && r.State != "succeeded" {
+			if r.Kind == "maintenance.lock" && r.State != "succeeded" && (!progressingActivation || r.State != "running" || r.Stage != "closing") {
 				err = ErrBusy
 				break
 			}

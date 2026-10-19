@@ -362,6 +362,18 @@ func (n *Nginx) submit(in ApplyRequest, disasterID, epoch, disasterBefore string
 	} else if !os.IsNotExist(err) {
 		return Record{}, err
 	}
+	// Upgrade admission uses this same lock and is limited to these host data
+	// directories. Keep its fence check atomic with publication admission.
+	if fail2banManagedData(n.DataDir) {
+		unlock, e := (&Journal{Dir: fail2banBindingDir(n.DataDir)}).rootLock("binding.lock")
+		if e != nil {
+			return Record{}, e
+		}
+		defer unlock()
+	}
+	if err = fail2banUpgradeActivationIdle(n.DataDir, ""); err != nil {
+		return Record{}, err
+	}
 	if disasterID != "" && n.disasterBusy != "" {
 		return Record{}, ErrBusy
 	}

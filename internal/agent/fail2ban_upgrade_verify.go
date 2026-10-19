@@ -156,6 +156,10 @@ func VerifyFail2banUpgrade(parent context.Context, in Fail2banUpgradeVerificatio
 	defer unlock()
 	ctx, cancel := context.WithTimeout(parent, 3*time.Minute)
 	defer cancel()
+	return verifyFail2banUpgradeLocked(ctx, in, "")
+}
+
+func verifyFail2banUpgradeLocked(ctx context.Context, in Fail2banUpgradeVerificationOptions, allowed string) (out Fail2banUpgradeVerification, resultErr error) {
 	j := &Journal{Dir: filepath.Join(in.DataDir, "agent", "operations")}
 	v, i, err := readFail2banUpgradeVerification(in.DataDir, in.OperationID)
 	if err == nil {
@@ -178,7 +182,7 @@ func VerifyFail2banUpgrade(parent context.Context, in Fail2banUpgradeVerificatio
 	if _, err = j.Get(in.OperationID); !os.IsNotExist(err) {
 		return out, errors.Join(errors.New("保护核对 UUID 已存在其他审计或原证明丢失"), err)
 	}
-	if err = fail2banUpgradeIdle(j); err != nil {
+	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
 	i, receipt, err := readFail2banUpgradeVerificationSwitch(in.DataDir, in.SwitchID)
@@ -191,7 +195,7 @@ func VerifyFail2banUpgrade(parent context.Context, in Fail2banUpgradeVerificatio
 	if err = reserveFail2banUpgradeVerification(in.DataDir); err != nil {
 		return out, err
 	}
-	_, err = verifyFail2banStateRecovery(ctx, Fail2banStateSnapshotOptions{DataDir: in.DataDir, Scope: in.Scope, OperationID: i.Request.SnapshotID}, j, func(result Fail2banStateRecovery, o fail2banStateRecoveryObservation) error {
+	_, err = verifyFail2banStateRecoveryFor(ctx, Fail2banStateSnapshotOptions{DataDir: in.DataDir, Scope: in.Scope, OperationID: i.Request.SnapshotID}, j, allowed, func(result Fail2banStateRecovery, o fail2banStateRecoveryObservation) error {
 		var err error
 		v, err = observeFail2banUpgradeVerification(ctx, in, i, receipt, result, o)
 		return err
@@ -199,7 +203,7 @@ func VerifyFail2banUpgrade(parent context.Context, in Fail2banUpgradeVerificatio
 	if err != nil {
 		return out, err
 	}
-	if err = fail2banUpgradeIdle(j); err != nil {
+	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
 	if err = ctx.Err(); err != nil {

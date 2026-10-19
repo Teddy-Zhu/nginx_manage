@@ -117,6 +117,13 @@ func (f *fail2banNginxExecutor) reconcile(ctx context.Context) (Fail2banNginxSta
 	}
 	for _, r := range records {
 		if pendingNginxRecord(r) && r.Kind != clientDenyKind {
+			if r.Kind == fail2banUpgradeActivationKind {
+				if err = fail2banUpgradeActivationActions(ctx, n.DataDir); err != nil {
+					n.mu.Unlock()
+					return out, err
+				}
+				continue
+			}
 			n.mu.Unlock()
 			return out, ErrBusy
 		}
@@ -128,8 +135,17 @@ func (f *fail2banNginxExecutor) reconcile(ctx context.Context) (Fail2banNginxSta
 		}
 	}
 	if n.maintenance.closing() {
-		n.mu.Unlock()
-		return out, ErrBusy
+		activation, _, e := pendingFail2banUpgradeActivation(n.DataDir)
+		if e == nil && activation == nil {
+			e = ErrBusy
+		}
+		if e == nil {
+			e = fail2banUpgradeActivationActions(ctx, n.DataDir)
+		}
+		if e != nil {
+			n.mu.Unlock()
+			return out, e
+		}
 	}
 	dir, m, err := n.active()
 	if err != nil {

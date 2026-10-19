@@ -206,8 +206,12 @@ func VerifyFail2banStateRecovery(parent context.Context, in Fail2banStateSnapsho
 }
 
 func verifyFail2banStateRecovery(ctx context.Context, in Fail2banStateSnapshotOptions, j *Journal, complete func(Fail2banStateRecovery, fail2banStateRecoveryObservation) error) (out Fail2banStateRecovery, resultErr error) {
+	return verifyFail2banStateRecoveryFor(ctx, in, j, "", complete)
+}
+
+func verifyFail2banStateRecoveryFor(ctx context.Context, in Fail2banStateSnapshotOptions, j *Journal, allowed string, complete func(Fail2banStateRecovery, fail2banStateRecoveryObservation) error) (out Fail2banStateRecovery, resultErr error) {
 	var err error
-	if err = fail2banUpgradeIdle(j); err != nil {
+	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
 	dir := filepath.Join(fail2banStateDir(in.DataDir), in.OperationID)
@@ -289,7 +293,7 @@ func verifyFail2banStateRecovery(ctx context.Context, in Fail2banStateSnapshotOp
 	if err != nil || !sameFail2banLive(before, after) || current.EventID != r.EventID || currentSelection != selection || fail2banUpgradeComponent(current) != fail2banUpgradeComponent(r) {
 		return out, errors.Join(errors.New("封禁恢复核对期间安装、配置或运行代次发生变化"), err)
 	}
-	if err = fail2banUpgradeIdle(j); err != nil {
+	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
 	if err = ctx.Err(); err != nil {

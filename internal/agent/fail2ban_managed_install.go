@@ -236,13 +236,17 @@ func installFail2ban(ctx context.Context, in Fail2banInstallOptions, allowed str
 	return out, nil
 }
 
-// CheckFail2banManaged is also the systemd ExecStartPre entry. It never writes a
-// lock or receipt, so a parent installer may safely wait for the service start.
+// CheckFail2banManaged is also the systemd ExecStartPre entry. It takes no
+// parent lock; controlled upgrades ask the parent to persist one start claim.
 func CheckFail2banManaged(ctx context.Context, data, scope string) (fail2ban.Managed, error) {
 	if err := fail2banManagedRoot(data, scope); err != nil {
 		return fail2ban.UnknownManaged(), err
 	}
-	if err := fail2banStateRestoreIdle(data, ""); err != nil {
+	activation, err := fail2banUpgradeActivationPrestart(ctx, data, false)
+	if err != nil {
+		return fail2ban.UnknownManaged(), err
+	}
+	if err := fail2banStateRestoreIdle(data, activation); err != nil {
 		return fail2ban.UnknownManaged(), err
 	}
 	r, err := loadFail2banManaged(data)
@@ -263,7 +267,13 @@ func CheckFail2banManaged(ctx context.Context, data, scope string) (fail2ban.Man
 	if err = fail2banManagedEffective(call); err != nil {
 		return r.view(), err
 	}
-	return r.view(), checkFail2banManaged(call, r)
+	if err = checkFail2banManaged(call, r); err != nil {
+		return r.view(), err
+	}
+	if activation != "" {
+		_, err = fail2banUpgradeActivationPrestart(call, data, true)
+	}
+	return r.view(), err
 }
 
 // ManageFail2banManaged only controls the dedicated unit admitted above. It

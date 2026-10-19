@@ -113,6 +113,12 @@ func (n *Nginx) applyClientDeny(ctx context.Context, expectedDir, expectedHash s
 	}
 	for _, r := range records {
 		if pendingNginxRecord(r) {
+			if r.Kind == fail2banUpgradeActivationKind {
+				if err = fail2banUpgradeActivationActions(ctx, n.DataDir); err != nil {
+					return "", err
+				}
+				continue
+			}
 			return "", ErrBusy
 		}
 	}

@@ -70,7 +70,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-upgrade-plan|fail2ban-upgrade-prepare|fail2ban-upgrade-preparation|fail2ban-upgrade-switch|fail2ban-upgrade-switch-resume|fail2ban-upgrade-switch-revert|fail2ban-upgrade-switch-status|fail2ban-upgrade-verify|fail2ban-upgrade-verification|fail2ban-state-capture|fail2ban-state-inspect|fail2ban-state-prepare|fail2ban-state-recovery-check|fail2ban-state-restore-plan|fail2ban-state-restore|fail2ban-state-restore-status|fail2ban-state-restore-revert|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|iptables-retire|iptables-retirement|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-upgrade-plan|fail2ban-upgrade-prepare|fail2ban-upgrade-preparation|fail2ban-upgrade-switch|fail2ban-upgrade-switch-resume|fail2ban-upgrade-switch-revert|fail2ban-upgrade-switch-status|fail2ban-upgrade-activate|fail2ban-upgrade-activation-resume|fail2ban-upgrade-activation-stop|fail2ban-upgrade-activation|fail2ban-upgrade-verify|fail2ban-upgrade-verification|fail2ban-state-capture|fail2ban-state-inspect|fail2ban-state-prepare|fail2ban-state-recovery-check|fail2ban-state-restore-plan|fail2ban-state-restore|fail2ban-state-restore-status|fail2ban-state-restore-revert|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|iptables-retire|iptables-retirement|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -225,121 +225,125 @@ func run() error {
 		"fail2ban-host-protection-revoke":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-protection-base": true},
 		"fail2ban-host-protection-status":  {"data-dir": true, "fail2ban-scope": true},
 
-		"fail2ban-host-input-retire":      {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-input-base": true},
-		"fail2ban-host-input-retirement":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-host-input-init":        {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-input-base": true},
-		"fail2ban-host-input-status":      {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-host-input-recover":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-host-input-remove":      {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-input-base": true},
-		"fail2ban-jails-apply":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-jails-base": true, "fail2ban-policy-file": true},
-		"fail2ban-jails-status":           {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-nginx-bind":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-nginx-base": true, "fail2ban-jail": true, "nginx-resource": true},
-		"fail2ban-nginx-unbind":           {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-nginx-base": true, "fail2ban-jail": true},
-		"fail2ban-nginx-status":           {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-nginx-refresh":          {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-install":                {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-start": true, "fail2ban-enable": true, "fail2ban-resume": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
-		"fail2ban-upgrade-plan":           {"data-dir": true, "fail2ban-scope": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
-		"fail2ban-upgrade-prepare":        {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-target": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
-		"fail2ban-upgrade-preparation":    {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-upgrade-switch":         {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-preparation": true, "fail2ban-upgrade-prepared-sha256": true, "fail2ban-state-snapshot": true},
-		"fail2ban-upgrade-switch-resume":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-upgrade-switch-revert":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-upgrade-switch-status":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-upgrade-verify":         {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
-		"fail2ban-upgrade-verification":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-state-capture":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-state-inspect":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-state-prepare":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-state-recovery-check":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-state-restore-plan":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-state-snapshot": true},
-		"fail2ban-state-restore":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-state-snapshot": true, "fail2ban-state-target": true},
-		"fail2ban-state-restore-status":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-state-restore-revert":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-python-plan":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-python-refresh": true},
-		"fail2ban-python-install":         {"data-dir": true, "fail2ban-scope": true, "fail2ban-python-plan": true, "fail2ban-python-confirm": true, "fail2ban-operation": true},
-		"fail2ban-python-status":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
-		"fail2ban-managed":                {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-managed-check":          {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-managed-start":          {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-managed-stop":           {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-managed-enable":         {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-managed-disable":        {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-managed-rollback":       {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-bind":                   {"data-dir": true, "fail2ban-scope": true, "fail2ban-service": true, "fail2ban-socket": true, "fail2ban-service-control": true},
-		"fail2ban-binding":                {"data-dir": true, "fail2ban-scope": true},
-		"fail2ban-unbind":                 {"data-dir": true, "fail2ban-scope": true},
-		"firewall-rollback":               {"data-dir": true},
-		"firewall-init":                   {"data-dir": true, "firewall-scope": true},
-		"firewall-registration":           {"data-dir": true, "firewall-scope": true},
-		"firewall-recover":                {"data-dir": true, "firewall-scope": true},
-		"firewall-remove":                 {"data-dir": true, "firewall-scope": true},
-		"firewalld-init":                  {"data-dir": true, "firewall-scope": true},
-		"firewalld-registration":          {"data-dir": true, "firewall-scope": true},
-		"firewalld-recover":               {"data-dir": true, "firewall-scope": true},
-		"firewalld-remove":                {"data-dir": true, "firewall-scope": true},
-		"iptables-init":                   {"data-dir": true, "firewall-scope": true, "firewall-backend": true},
-		"iptables-registration":           {"data-dir": true, "firewall-scope": true},
-		"iptables-recover":                {"data-dir": true, "firewall-scope": true},
-		"iptables-remove":                 {"data-dir": true, "firewall-scope": true},
-		"iptables-retire":                 {"data-dir": true, "firewall-scope": true, "firewall-operation": true, "firewall-base": true},
-		"iptables-retirement":             {"data-dir": true, "firewall-scope": true, "firewall-base": true},
-		"docker-firewall-init":            {"data-dir": true, "firewall-scope": true, "firewall-docker-engine": true},
-		"docker-firewall-registration":    {"data-dir": true, "firewall-scope": true},
-		"docker-firewall-recover":         {"data-dir": true, "firewall-scope": true},
-		"docker-firewall-remove":          {"data-dir": true, "firewall-scope": true},
-		"ufw-init":                        {"data-dir": true, "firewall-scope": true},
-		"ufw-registration":                {"data-dir": true, "firewall-scope": true},
-		"ufw-recover":                     {"data-dir": true, "firewall-scope": true},
-		"ufw-remove":                      {"data-dir": true, "firewall-scope": true},
-		"backup-inspect":                  {"backup-file": true},
-		"backup-prepare":                  {"data-dir": true, "backup-file": true, "restore-operation": true},
-		"backup-prepare-data":             {"data-dir": true, "restore-operation": true, "backup-input-fd": true},
-		"backup-preparation":              {"data-dir": true, "restore-operation": true},
-		"backup-preparation-data":         {"data-dir": true, "restore-operation": true},
-		"backup-preparation-cleanup":      {"data-dir": true, "restore-operation": true},
-		"backup-preparation-cleanup-data": {"data-dir": true, "restore-operation": true},
-		"backup-adopt":                    {"data-dir": true, "restore-operation": true},
-		"backup-adoption":                 {"data-dir": true, "restore-operation": true},
-		"backup-adoption-cleanup":         {"data-dir": true, "restore-operation": true},
-		"backup-adoption-verify-data":     {"data-dir": true, "restore-operation": true},
-		"backup-restore":                  {"data-dir": true, "restore-operation": true},
-		"backup-restore-rollback":         {"data-dir": true, "restore-operation": true},
-		"backup-restore-status":           {"data-dir": true, "restore-operation": true},
-		"backup-restore-plan":             {"data-dir": true, "restore-operation": true},
-		"backup-restore-plan-status":      {"data-dir": true, "restore-operation": true},
-		"backup-restore-plan-data":        {"data-dir": true, "restore-operation": true},
-		"launcher":                        {"data-dir": true},
-		"panel-native-bind":               {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
-		"panel-native-serve":              {"data-dir": true},
-		"panel-runtime-bind":              {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-verify":            {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-status":            {"data-dir": true},
-		"panel-runtime-stage":             {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
-		"panel-runtime-staged":            {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
-		"panel-runtime-select":            {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "panel-selection": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-selection-status":          {"data-dir": true, "panel-selection": true},
-		"panel-service-status":            {"data-dir": true},
-		"panel-service-operation":         {"data-dir": true, "panel-service-operation": true},
-		"panel-service-control":           {"data-dir": true, "panel-service-operation": true, "panel-service-action": true, "panel-service-stop": true, "panel-selection": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-readiness":                 {"data-dir": true, "panel-service-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"update-worker":                   {"data-dir": true, "panel-update": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-update-status":             {"data-dir": true, "panel-update": true},
-		"panel-update-worker":             {"data-dir": true, "panel-update": true},
-		"panel-snapshot-capture":          {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-snapshot-check":            {"data-dir": true, "recovery-operation": true},
-		"panel-snapshot-db":               {"data-dir": true, "recovery-operation": true},
-		"panel-writer-bind":               {"data-dir": true, "panel-gid": true},
-		"panel-snapshot-restore":          {"data-dir": true, "recovery-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
-		"panel-restore-status":            {"data-dir": true, "recovery-operation": true},
-		"panel-runtime-compose":           {"data-dir": true},
-		"launcher-status":                 {"data-dir": true},
-		"launcher-operation":              {"data-dir": true, "launcher-operation": true},
-		"launcher-restart":                {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true, "launcher-instance": true},
-		"nginx-container-bind":            {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"nginx-container-verify":          {"data-dir": true, "nginx-image": true, "launcher-binary": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"nginx-container-status":          {"data-dir": true},
-		"nginx-container-launch":          {"data-dir": true},
-		"release-images":                  {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
+		"fail2ban-host-input-retire":         {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-input-base": true},
+		"fail2ban-host-input-retirement":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-host-input-init":           {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-input-base": true},
+		"fail2ban-host-input-status":         {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-host-input-recover":        {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-host-input-remove":         {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-host-input-base": true},
+		"fail2ban-jails-apply":               {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-jails-base": true, "fail2ban-policy-file": true},
+		"fail2ban-jails-status":              {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-nginx-bind":                {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-nginx-base": true, "fail2ban-jail": true, "nginx-resource": true},
+		"fail2ban-nginx-unbind":              {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-nginx-base": true, "fail2ban-jail": true},
+		"fail2ban-nginx-status":              {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-nginx-refresh":             {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-install":                   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-start": true, "fail2ban-enable": true, "fail2ban-resume": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
+		"fail2ban-upgrade-plan":              {"data-dir": true, "fail2ban-scope": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
+		"fail2ban-upgrade-prepare":           {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-target": true, "release-plan": true, "release-select": true, "release-trust": true, "release-prerelease": true},
+		"fail2ban-upgrade-preparation":       {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-switch":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-preparation": true, "fail2ban-upgrade-prepared-sha256": true, "fail2ban-state-snapshot": true},
+		"fail2ban-upgrade-switch-resume":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-switch-revert":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-switch-status":     {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-activate":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
+		"fail2ban-upgrade-activation-resume": {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-activation-stop":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-activation":        {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-verify":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
+		"fail2ban-upgrade-verification":      {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-state-capture":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-state-inspect":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-state-prepare":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-state-recovery-check":      {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-state-restore-plan":        {"data-dir": true, "fail2ban-scope": true, "fail2ban-state-snapshot": true},
+		"fail2ban-state-restore":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-state-snapshot": true, "fail2ban-state-target": true},
+		"fail2ban-state-restore-status":      {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-state-restore-revert":      {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-python-plan":               {"data-dir": true, "fail2ban-scope": true, "fail2ban-python-refresh": true},
+		"fail2ban-python-install":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-python-plan": true, "fail2ban-python-confirm": true, "fail2ban-operation": true},
+		"fail2ban-python-status":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-managed":                   {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-check":             {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-start":             {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-stop":              {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-enable":            {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-disable":           {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-managed-rollback":          {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-bind":                      {"data-dir": true, "fail2ban-scope": true, "fail2ban-service": true, "fail2ban-socket": true, "fail2ban-service-control": true},
+		"fail2ban-binding":                   {"data-dir": true, "fail2ban-scope": true},
+		"fail2ban-unbind":                    {"data-dir": true, "fail2ban-scope": true},
+		"firewall-rollback":                  {"data-dir": true},
+		"firewall-init":                      {"data-dir": true, "firewall-scope": true},
+		"firewall-registration":              {"data-dir": true, "firewall-scope": true},
+		"firewall-recover":                   {"data-dir": true, "firewall-scope": true},
+		"firewall-remove":                    {"data-dir": true, "firewall-scope": true},
+		"firewalld-init":                     {"data-dir": true, "firewall-scope": true},
+		"firewalld-registration":             {"data-dir": true, "firewall-scope": true},
+		"firewalld-recover":                  {"data-dir": true, "firewall-scope": true},
+		"firewalld-remove":                   {"data-dir": true, "firewall-scope": true},
+		"iptables-init":                      {"data-dir": true, "firewall-scope": true, "firewall-backend": true},
+		"iptables-registration":              {"data-dir": true, "firewall-scope": true},
+		"iptables-recover":                   {"data-dir": true, "firewall-scope": true},
+		"iptables-remove":                    {"data-dir": true, "firewall-scope": true},
+		"iptables-retire":                    {"data-dir": true, "firewall-scope": true, "firewall-operation": true, "firewall-base": true},
+		"iptables-retirement":                {"data-dir": true, "firewall-scope": true, "firewall-base": true},
+		"docker-firewall-init":               {"data-dir": true, "firewall-scope": true, "firewall-docker-engine": true},
+		"docker-firewall-registration":       {"data-dir": true, "firewall-scope": true},
+		"docker-firewall-recover":            {"data-dir": true, "firewall-scope": true},
+		"docker-firewall-remove":             {"data-dir": true, "firewall-scope": true},
+		"ufw-init":                           {"data-dir": true, "firewall-scope": true},
+		"ufw-registration":                   {"data-dir": true, "firewall-scope": true},
+		"ufw-recover":                        {"data-dir": true, "firewall-scope": true},
+		"ufw-remove":                         {"data-dir": true, "firewall-scope": true},
+		"backup-inspect":                     {"backup-file": true},
+		"backup-prepare":                     {"data-dir": true, "backup-file": true, "restore-operation": true},
+		"backup-prepare-data":                {"data-dir": true, "restore-operation": true, "backup-input-fd": true},
+		"backup-preparation":                 {"data-dir": true, "restore-operation": true},
+		"backup-preparation-data":            {"data-dir": true, "restore-operation": true},
+		"backup-preparation-cleanup":         {"data-dir": true, "restore-operation": true},
+		"backup-preparation-cleanup-data":    {"data-dir": true, "restore-operation": true},
+		"backup-adopt":                       {"data-dir": true, "restore-operation": true},
+		"backup-adoption":                    {"data-dir": true, "restore-operation": true},
+		"backup-adoption-cleanup":            {"data-dir": true, "restore-operation": true},
+		"backup-adoption-verify-data":        {"data-dir": true, "restore-operation": true},
+		"backup-restore":                     {"data-dir": true, "restore-operation": true},
+		"backup-restore-rollback":            {"data-dir": true, "restore-operation": true},
+		"backup-restore-status":              {"data-dir": true, "restore-operation": true},
+		"backup-restore-plan":                {"data-dir": true, "restore-operation": true},
+		"backup-restore-plan-status":         {"data-dir": true, "restore-operation": true},
+		"backup-restore-plan-data":           {"data-dir": true, "restore-operation": true},
+		"launcher":                           {"data-dir": true},
+		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-native-serve":                 {"data-dir": true},
+		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-verify":               {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-status":               {"data-dir": true},
+		"panel-runtime-stage":                {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-staged":               {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
+		"panel-runtime-select":               {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "panel-selection": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-selection-status":             {"data-dir": true, "panel-selection": true},
+		"panel-service-status":               {"data-dir": true},
+		"panel-service-operation":            {"data-dir": true, "panel-service-operation": true},
+		"panel-service-control":              {"data-dir": true, "panel-service-operation": true, "panel-service-action": true, "panel-service-stop": true, "panel-selection": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-readiness":                    {"data-dir": true, "panel-service-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"update-worker":                      {"data-dir": true, "panel-update": true, "release-plan": true, "release-trust": true, "release-prerelease": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-update-status":                {"data-dir": true, "panel-update": true},
+		"panel-update-worker":                {"data-dir": true, "panel-update": true},
+		"panel-snapshot-capture":             {"data-dir": true, "recovery-operation": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-snapshot-check":               {"data-dir": true, "recovery-operation": true},
+		"panel-snapshot-db":                  {"data-dir": true, "recovery-operation": true},
+		"panel-writer-bind":                  {"data-dir": true, "panel-gid": true},
+		"panel-snapshot-restore":             {"data-dir": true, "recovery-operation": true, "recovery-snapshot": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-restore-status":               {"data-dir": true, "recovery-operation": true},
+		"panel-runtime-compose":              {"data-dir": true},
+		"launcher-status":                    {"data-dir": true},
+		"launcher-operation":                 {"data-dir": true, "launcher-operation": true},
+		"launcher-restart":                   {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true, "launcher-instance": true},
+		"nginx-container-bind":               {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-verify":             {"data-dir": true, "nginx-image": true, "launcher-binary": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-status":             {"data-dir": true},
+		"nginx-container-launch":             {"data-dir": true},
+		"release-images":                     {"release-trust": true, "release-manifest": true, "release-signature": true, "release-prerelease": true},
 
 		"backup-restore-plan-verify-data":  {"data-dir": true, "restore-operation": true},
 		"backup-restore-plan-cleanup":      {"data-dir": true, "restore-operation": true},
@@ -366,7 +370,7 @@ func run() error {
 		}
 		switch f.Name {
 		case "fail2ban-upgrade-switch":
-			if command != "fail2ban-upgrade-verify" {
+			if command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-activate" {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-upgrade-preparation", "fail2ban-upgrade-prepared-sha256":
@@ -386,7 +390,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-operation":
-			if command != "fail2ban-install" && command != "fail2ban-upgrade-prepare" && command != "fail2ban-upgrade-preparation" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-verification" && !strings.HasPrefix(command, "fail2ban-upgrade-switch") && !strings.HasPrefix(command, "fail2ban-state-") && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
+			if command != "fail2ban-install" && command != "fail2ban-upgrade-prepare" && command != "fail2ban-upgrade-preparation" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-verification" && command != "fail2ban-upgrade-activate" && !strings.HasPrefix(command, "fail2ban-upgrade-activation") && !strings.HasPrefix(command, "fail2ban-upgrade-switch") && !strings.HasPrefix(command, "fail2ban-state-") && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-host-input-base":
@@ -546,7 +550,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "nginx-container":
-			if command != "agent" && command != "nginx-init" && command != "fail2ban-upgrade-verify" {
+			if command != "agent" && command != "nginx-init" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-activate" {
 				invalidFlag = f.Name
 			}
 		case "panel-gid":
@@ -755,6 +759,23 @@ func run() error {
 			out, err = agent.RevertFail2banUpgradeSwitch(ctx, absDir, *fail2banScope, *fail2banOperation)
 		case "fail2ban-upgrade-switch-status":
 			out, err = agent.ReadFail2banUpgradeSwitchStatus(ctx, absDir, *fail2banScope, *fail2banOperation)
+		}
+		if out.ID == "" && err != nil {
+			return err
+		}
+		return errors.Join(err, json.NewEncoder(os.Stdout).Encode(out))
+	case "fail2ban-upgrade-activate", "fail2ban-upgrade-activation-resume", "fail2ban-upgrade-activation-stop", "fail2ban-upgrade-activation":
+		var out agent.Fail2banUpgradeActivation
+		var err error
+		switch command {
+		case "fail2ban-upgrade-activate":
+			out, err = agent.ActivateFail2banUpgrade(ctx, agent.Fail2banUpgradeActivationOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, SwitchID: *fail2banUpgradeSwitch, NginxBinary: *nginxBinary, NginxWorker: *nginxUser, NginxContainer: *nginxContainer})
+		case "fail2ban-upgrade-activation-resume":
+			out, err = agent.ResumeFail2banUpgradeActivation(ctx, absDir, *fail2banScope, *fail2banOperation)
+		case "fail2ban-upgrade-activation-stop":
+			out, err = agent.StopFail2banUpgradeActivation(ctx, absDir, *fail2banScope, *fail2banOperation)
+		case "fail2ban-upgrade-activation":
+			out, err = agent.ReadFail2banUpgradeActivation(ctx, absDir, *fail2banScope, *fail2banOperation)
 		}
 		if out.ID == "" && err != nil {
 			return err

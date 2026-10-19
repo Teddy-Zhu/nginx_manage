@@ -151,6 +151,8 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	defer stopHostSync()
+	stopUpgradeActivation := s.startFail2banUpgradeActivation(ctx, rootMaintenance)
+	defer stopUpgradeActivation()
 	stopJails, err := s.startFail2banJails(ctx, rootMaintenance, cancelRun, challengeErrors)
 	if err != nil {
 		return err

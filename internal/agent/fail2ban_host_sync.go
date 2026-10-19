@@ -153,6 +153,9 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 	if err = fail2banUpgradeSwitchIdle(dataDir, ""); err != nil {
 		return out, err
 	}
+	if err = fail2banUpgradeActivationActions(ctx, dataDir); err != nil {
+		return out, err
+	}
 	if changed, e := advanceFail2banHostRetirement(ctx, dataDir); e != nil || changed {
 		latest, readErr := loadFail2banHostSync(dataDir)
 		out = fail2banHostBootRecoveryView(dataDir, fail2banHostRetirementSyncView(dataDir, fail2banHostSyncMetadata(latest)))
@@ -218,9 +221,18 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 		}
 	}
 	if f.gate.closing() {
-		return out, ErrBusy
+		activation, _, e := pendingFail2banUpgradeActivation(dataDir)
+		if e != nil {
+			return out, e
+		}
+		if activation == nil {
+			return out, ErrBusy
+		}
+		if e = fail2banUpgradeActivationActions(ctx, dataDir); e != nil {
+			return out, e
+		}
 	}
-	admit, err := fail2banHostSyncAdmission(dataDir, true)
+	admit, err := fail2banHostSyncAdmissionFor(ctx, dataDir, true, true)
 	if err != nil {
 		return out, err
 	}
