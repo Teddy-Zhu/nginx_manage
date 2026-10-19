@@ -126,6 +126,15 @@ func waitInstallationProbe(ctx context.Context, data string, b nginxruntime.Bind
 }
 
 func waitNativeNginxProbe(ctx context.Context, data string, b nginxruntime.Binding, running bool, revision, deployment string) (NginxInstallationProbe, error) {
+	return waitNginxInstallationProbe(ctx, data, running, revision, deployment, func(info *nginxruntime.Installation) bool {
+		matches := info != nil && info.Owner == b.Owner && info.SHA256 == b.SHA256 && info.Version == b.Version
+		if matches && b.Signed != nil {
+			matches = info.PlanID == b.Signed.PlanID && info.AssetID == b.Signed.AssetID
+		}
+		return matches
+	})
+}
+func waitNginxInstallationProbe(ctx context.Context, data string, running bool, revision, deployment string, sourceMatches func(*nginxruntime.Installation) bool) (NginxInstallationProbe, error) {
 	var result NginxInstallationProbe
 	executable, err := installationExecutable()
 	if err != nil {
@@ -166,12 +175,7 @@ func waitNativeNginxProbe(ctx context.Context, data string, b nginxruntime.Bindi
 		err = cmd.Run()
 		stop()
 		if err == nil && json.Unmarshal([]byte(output.String()), &result) == nil {
-			info := result.Components.Installation
-			sourceMatches := info != nil && info.Owner == b.Owner && info.SHA256 == b.SHA256 && info.Version == b.Version
-			if sourceMatches && b.Signed != nil {
-				sourceMatches = info.PlanID == b.Signed.PlanID && info.AssetID == b.Signed.AssetID
-			}
-			if sourceMatches && result.Runtime.Available && result.Runtime.Integrity && !result.Runtime.ExternalChange && result.Runtime.RevisionID == revision && result.Runtime.DeploymentID == deployment && (!running || result.Runtime.Running) {
+			if sourceMatches(result.Components.Installation) && result.Runtime.Available && result.Runtime.Integrity && !result.Runtime.ExternalChange && result.Runtime.RevisionID == revision && result.Runtime.DeploymentID == deployment && (!running || result.Runtime.Running) {
 				return result, nil
 			}
 		}

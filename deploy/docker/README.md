@@ -133,3 +133,27 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 网页/API 创建持久任务并在 IPC 前记录派发；断连后仅查询原事务，服务停止须以新幂等键显式续办。root 启动授权按连续序号保存且只领取一次，普通 CLI 不能绕过托管任务续办。若容器不可用导致网页无法访问，先用 `panel-image-probe` 核对原维护会话，再执行 `panel-image-rescue --data-dir /srv/nginxpanel --panel-image <operation-uuid> --maintenance-epoch <epoch>`，以 `local-root` 记录追加同一事务的救援授权；页面恢复后会对账该结果，不新建或重放任务。
 
 本轮仅完成实现与源码审阅，未在开发主机调用 Docker、launcher 或修改部署环境；实际容器字段、权限、重建与恢复故障场景待 P5 隔离集中验证。
+
+
+## Nginx 容器镜像切换
+
+目标主机首次安装时登记独立 `nginxpanel-nginx-image@.service`。本机 root 使用以下入口切换已运行的固定 Nginx 容器；当前只提供本机命令，网页/API 任务尚待接入。
+
+```sh
+/opt/nginxpanel/current/nginxpanel nginx-image --data-dir /srv/nginxpanel \
+  --nginx-image-operation <operation-uuid> --maintenance-id <maintenance-uuid> \
+  --maintenance-epoch <epoch> --allow-downtime \
+  --release-plan <signed-panel-plan-sha256> \
+  --image ghcr.io/<owner>/<repository>/nginx@sha256:<digest> \
+  --image-manifest /root/offline/release-manifest.json \
+  --image-signature /root/offline/release-manifest.sig \
+  --image-manifest-sha256 <manifest-sha256>
+/opt/nginxpanel/current/nginxpanel nginx-image-status --data-dir /srv/nginxpanel \
+  --nginx-image-operation <operation-uuid>
+/opt/nginxpanel/current/nginxpanel nginx-image-resume --data-dir /srv/nginxpanel \
+  --nginx-image-operation <operation-uuid> --maintenance-epoch <epoch>
+```
+
+准备计划和 Nginx 镜像须属于同一签名发行，新旧镜像都须保留在本地；该命令不拉取镜像，不编译或增装模块。必须持有原维护会话并明确允许中断。独立任务先用候选镜像的非 root Nginx 程序对冻结的完整发布执行 `nginx -t`，通过后才停止 Agent 和原 Nginx。之后切换 root 只读 Compose 与 Nginx 绑定、按固定权限重建容器，并在重启 Agent 前释放 Nginx 执行锁。完成确认覆盖容器代次、实际 Nginx 程序、原配置/监听/TLS 探针、Agent 实际进程、组件镜像来源和原维护会话；应用、前端、数据目录和业务数据库保持原选择。
+
+前进期限自原授权起十分钟，失败先持久确定恢复方向，再核对并恢复保留的原镜像；恢复不依赖目标离线文件或目标公钥。候选配置未通过且尚未停机时，只清理本次校验容器并确认原服务。未知实例、外部修改、失联或未确认结果保留 `recovery_required` 并阻止维护释放，不能强制接管同名容器。创建和启动意图在 Docker 调用前持久保存，已派发但未确认的动作不重复执行；续办只能使用原 UUID、输入和期限。主机重启后的原容器新代次仅能通过显式续办登记，并永久转为原镜像恢复。Agent 运行时可用 `panel-image-probe` 核对原维护会话的当前 epoch；Agent 尚未恢复时沿用该事务最后持有的维护 epoch。只有成功或完整恢复并确认后，才由原维护流程释放会话。

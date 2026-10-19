@@ -168,6 +168,14 @@ func installGrantForOperation(j *Journal, id, epoch string, allowClosing bool, o
 		return err
 	}
 	for _, prior := range records {
+		if prior.Kind == nginxImageKind {
+			if err := validNginxImage(prior); err != nil {
+				return err
+			}
+			if !nginxImageTerminal(prior) && prior.OperationID != operationID {
+				return errors.New("Nginx 镜像替换尚未完成，不能执行其他维护动作")
+			}
+		}
 		if prior.Kind == panelImageKind {
 			if err := validPanelImage(prior); err != nil {
 				return err

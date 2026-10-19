@@ -26,20 +26,37 @@ type Runtime struct {
 	gate    chan struct{}
 }
 type containerInfo struct {
-	ID          string `json:"Id"`
-	Name, Image string
-	State       struct {
+	ID           string `json:"Id"`
+	Name, Image  string
+	RestartCount int
+	State        struct {
 		Running, Paused, Restarting, Dead bool
+		Status, StartedAt, FinishedAt     string
+		OOMKilled                         bool
+		ExitCode                          int
 		Pid                               int
 	}
 	Config struct {
 		Image, User          string
+		Labels               map[string]string
+		StopSignal           string
+		StopTimeout          *int
 		Entrypoint, Cmd, Env []string
 		Volumes              map[string]any
 		WorkingDir           string
 	}
 	HostConfig struct {
-		Privileged, ReadonlyRootfs, AutoRemove                     bool
+		Privileged, ReadonlyRootfs, AutoRemove bool
+		PublishAllPorts                        bool
+		UTSMode, CgroupnsMode                  string
+		PidsLimit                              *int64
+		DeviceCgroupRules                      []string
+		Sysctls                                map[string]string
+		PortBindings                           map[string]any
+		RestartPolicy                          struct {
+			Name              string
+			MaximumRetryCount int
+		}
 		NetworkMode, PidMode, IpcMode, UsernsMode                  string
 		CapAdd, CapDrop, SecurityOpt, VolumesFrom, Links, GroupAdd []string
 		Devices, DeviceRequests                                    []jsonObject
@@ -81,30 +98,11 @@ func (r *Runtime) inspect(ctx context.Context, d *dockerClient) (containerInfo, 
 	if err := d.JSON(ctx, "GET", "/containers/"+Name+"/json", nil, &c); err != nil {
 		return c, err
 	}
-	h := c.HostConfig
-	if !hashValue.MatchString(c.ID) || c.Name != "/"+Name || c.Image != b.ImageID || !c.State.Running || c.State.Paused || c.State.Restarting || c.State.Dead || c.State.Pid <= 1 || c.Config.Image != b.Image || c.Config.User != "0:0" || c.Config.WorkingDir != b.DataDir || !reflect.DeepEqual(c.Config.Entrypoint, []string{Bootstrap, "nginx-container-launch"}) || !reflect.DeepEqual(c.Config.Cmd, []string{"--data-dir", b.DataDir}) || !reflect.DeepEqual(c.Config.Env, b.Environment) || len(c.Config.Volumes) != 0 {
-		return c, errors.New("固定 Nginx 容器、镜像或启动定义不匹配")
+	if err := checkConfiguration(c, b); err != nil {
+		return c, err
 	}
-	if h.Privileged || !h.ReadonlyRootfs || h.AutoRemove || h.NetworkMode != "host" || h.PidMode != "" || (h.IpcMode != "private" && h.IpcMode != "") || h.UsernsMode != "" || h.Init != nil && *h.Init || len(h.Devices) != 0 || len(h.DeviceRequests) != 0 || len(h.VolumesFrom) != 0 || len(h.Links) != 0 || len(h.GroupAdd) != 0 || !reflect.DeepEqual(capabilities(h.CapDrop), []string{"ALL"}) || !reflect.DeepEqual(capabilities(h.CapAdd), []string{"NET_BIND_SERVICE", "SETGID", "SETPCAP", "SETUID"}) || !reflect.DeepEqual(sorted(h.SecurityOpt), []string{"no-new-privileges:true"}) || len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,noexec,nosuid,nodev,size=64m,mode=1777" {
-		return c, errors.New("Nginx 容器的权限或命名空间不符合固定策略")
-	}
-	expected := b.Mounts()
-	if len(c.Mounts) != len(expected) {
-		return c, errors.New("Nginx 容器挂载数量不匹配")
-	}
-	seen := map[string]bool{}
-	for _, m := range c.Mounts {
-		match := false
-		for _, want := range expected {
-			if m.Type == "bind" && m.Source == want.Source && m.Destination == want.Target && m.RW != want.ReadOnly && m.Propagation == "rprivate" && !seen[m.Destination] {
-				match = true
-				seen[m.Destination] = true
-				break
-			}
-		}
-		if !match {
-			return c, errors.New("Nginx 容器存在非预期或可写配置挂载")
-		}
+	if !c.State.Running || c.State.Paused || c.State.Restarting || c.State.Dead || c.State.OOMKilled || c.State.Pid <= 1 {
+		return c, errors.New("Nginx 容器未稳定运行")
 	}
 	if err := r.process(c.State.Pid, c.State.Pid, true); err != nil {
 		return c, err
@@ -313,4 +311,47 @@ func (r *Runtime) CheckProcess(ctx context.Context, pid, master int) error {
 		return err
 	}
 	return r.process(pid, master, pid == master)
+}
+
+func checkConfiguration(c containerInfo, b Binding) error { return checkPolicy(c, b, Name, nil) }
+
+func checkPolicy(c containerInfo, b Binding, name string, revision *string) error {
+	user := "0:0"
+	entry := []string{Bootstrap, "nginx-container-launch"}
+	args := []string{"--data-dir", b.DataDir}
+	signal, timeout, pids, restart := "SIGQUIT", 65, int64(2048), "unless-stopped"
+	caps := []string{"NET_BIND_SERVICE", "SETGID", "SETPCAP", "SETUID"}
+	if revision != nil {
+		user = strconv.Itoa(b.UID) + ":" + strconv.Itoa(b.GID)
+		entry = []string{Binary}
+		args = []string{"-t", "-q", "-p", b.DataDir + "/", "-c", filepath.Join(b.DataDir, "nginx", "revisions", *revision, "nginx.conf"), "-e", "stderr"}
+		signal, timeout, pids, restart = "SIGTERM", 5, 128, "no"
+		caps = []string{"NET_BIND_SERVICE"}
+	}
+	h := c.HostConfig
+	if !hashValue.MatchString(c.ID) || c.Name != "/"+name || c.Image != b.ImageID || c.Config.Image != b.Image || c.Config.User != user || c.Config.WorkingDir != b.DataDir || !reflect.DeepEqual(c.Config.Entrypoint, entry) || !reflect.DeepEqual(c.Config.Cmd, args) || !reflect.DeepEqual(c.Config.Env, b.Environment) || len(c.Config.Volumes) != 0 || c.Config.StopSignal != signal || c.Config.StopTimeout == nil || *c.Config.StopTimeout != timeout {
+		return errors.New("固定 Nginx 容器、镜像或启动定义不匹配")
+	}
+	if h.PidsLimit == nil || *h.PidsLimit != pids || h.RestartPolicy.Name != restart || h.RestartPolicy.MaximumRetryCount != 0 || h.PublishAllPorts || h.UTSMode != "" || (h.CgroupnsMode != "" && h.CgroupnsMode != "private") || len(h.DeviceCgroupRules) != 0 || len(h.Sysctls) != 0 || len(h.PortBindings) != 0 || h.Privileged || !h.ReadonlyRootfs || h.AutoRemove || h.NetworkMode != "host" || h.PidMode != "" || (h.IpcMode != "private" && h.IpcMode != "") || h.UsernsMode != "" || h.Init != nil && *h.Init || len(h.Devices) != 0 || len(h.DeviceRequests) != 0 || len(h.VolumesFrom) != 0 || len(h.Links) != 0 || len(h.GroupAdd) != 0 || !reflect.DeepEqual(capabilities(h.CapDrop), []string{"ALL"}) || !reflect.DeepEqual(capabilities(h.CapAdd), caps) || !reflect.DeepEqual(sorted(h.SecurityOpt), []string{"no-new-privileges:true"}) || len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,noexec,nosuid,nodev,size=64m,mode=1777" {
+		return errors.New("Nginx 容器的权限或命名空间不符合固定策略")
+	}
+	expected := b.Mounts()
+	if len(c.Mounts) != len(expected) {
+		return errors.New("Nginx 容器挂载数量不匹配")
+	}
+	seen := map[string]bool{}
+	for _, m := range c.Mounts {
+		match := false
+		for _, want := range expected {
+			if m.Type == "bind" && m.Source == want.Source && m.Destination == want.Target && m.RW != want.ReadOnly && m.Propagation == "rprivate" && !seen[m.Destination] {
+				match = true
+				seen[m.Destination] = true
+				break
+			}
+		}
+		if !match {
+			return errors.New("Nginx 容器存在非预期或可写配置挂载")
+		}
+	}
+	return nil
 }

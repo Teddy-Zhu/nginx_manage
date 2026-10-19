@@ -271,6 +271,14 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 			}
 			continue
 		}
+		if r.Kind == nginxImageKind {
+			if err := validNginxImage(r); err != nil {
+				return out, err
+			}
+			if g.id != "" && r.NginxImage.Intent.Input.MaintenanceID == g.id || nginxImageTerminal(r) {
+				continue
+			}
+		}
 		if r.Kind == panelImageKind {
 			if err := validPanelImage(r); err != nil {
 				return out, err
@@ -543,6 +551,15 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 			if !historyTerminal(record) {
 				return maintenance.RootStatus{}, fault.Conflict("运行材料清理尚未结束，须先按原标识续办")
 			}
+		}
+		if record.Kind == nginxImageKind {
+			if err := validNginxImage(record); err != nil {
+				return maintenance.RootStatus{}, err
+			}
+			if !nginxImageTerminal(record) {
+				return maintenance.RootStatus{}, fault.Conflict("Nginx 镜像替换尚未确认或完整恢复，须沿原操作续办")
+			}
+			continue
 		}
 		if record.Kind == panelImageKind {
 			if err := validPanelImage(record); err != nil {

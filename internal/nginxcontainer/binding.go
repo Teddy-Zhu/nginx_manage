@@ -27,6 +27,7 @@ type imageInfo struct {
 	RepoDigests      []string
 	Architecture, Os string
 	Config           struct {
+		Labels  map[string]string
 		Env     []string
 		Volumes map[string]any
 	}
@@ -191,29 +192,8 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 	if existing != nil {
 		return *existing, nil
 	}
-	files, err := imageMetadata(ctx, d, image.ID)
+	b, err = bindingMetadata(ctx, d, in, approval, image, launcherHash)
 	if err != nil {
-		return b, err
-	}
-	var c Capabilities
-	decoder := json.NewDecoder(bytes.NewReader(files["capabilities.json"]))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&c) != nil || decoder.Decode(new(any)) != io.EOF {
-		return b, errors.New("镜像能力清单格式无效")
-	}
-	nginxHash, err := checksum(files["nginx.sha256"], Binary)
-	if err != nil {
-		return b, err
-	}
-	bootstrapHash, err := checksum(files["launcher.sha256"], Bootstrap)
-	if err != nil {
-		return b, err
-	}
-	if bootstrapHash != launcherHash {
-		return b, errors.New("Nginx 镜像启动器与本机批准的面板程序不一致")
-	}
-	b = Binding{Schema: Schema, DataDir: in.DataDir, Image: in.Image, ImageID: image.ID, Architecture: image.Architecture, UID: in.UID, GID: in.GID, BinarySHA256: nginxHash, BootstrapSHA256: bootstrapHash, Build: string(files["nginx-build.txt"]), Capabilities: c, Environment: image.Config.Env, BoundAt: approval.ApprovedAt, SignedImage: approval}
-	if err = b.validate(in.DataDir); err != nil {
 		return b, err
 	}
 	for _, path := range []string{in.DataDir, filepath.Join(in.DataDir, "bin"), filepath.Dir(name)} {
@@ -249,4 +229,34 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 		return b, err
 	}
 	return Read(in.DataDir)
+}
+
+func bindingMetadata(ctx context.Context, d *dockerClient, in BindInput, approval releases.ImageApproval, image imageInfo, launcherHash string) (Binding, error) {
+	var b Binding
+	files, err := imageMetadata(ctx, d, image.ID)
+	if err != nil {
+		return b, err
+	}
+	var c Capabilities
+	decoder := json.NewDecoder(bytes.NewReader(files["capabilities.json"]))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&c) != nil || decoder.Decode(new(any)) != io.EOF {
+		return b, errors.New("镜像能力清单格式无效")
+	}
+	nginxHash, err := checksum(files["nginx.sha256"], Binary)
+	if err != nil {
+		return b, err
+	}
+	bootstrapHash, err := checksum(files["launcher.sha256"], Bootstrap)
+	if err != nil {
+		return b, err
+	}
+	if bootstrapHash != launcherHash {
+		return b, errors.New("Nginx 镜像启动器与本机批准的面板程序不一致")
+	}
+	b = Binding{Schema: Schema, DataDir: in.DataDir, Image: in.Image, ImageID: image.ID, Architecture: image.Architecture, UID: in.UID, GID: in.GID, BinarySHA256: nginxHash, BootstrapSHA256: bootstrapHash, Build: string(files["nginx-build.txt"]), Capabilities: c, Environment: image.Config.Env, BoundAt: approval.ApprovedAt, SignedImage: approval}
+	if err = b.validate(in.DataDir); err != nil {
+		return b, err
+	}
+	return b, nil
 }

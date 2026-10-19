@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	NginxImage                *NginxImageOperation             `json:"nginx_image,omitempty"`
 	PanelImage                *PanelImageOperation             `json:"panel_image,omitempty"`
 	AgentUpgrade              *AgentUpgradeOperation           `json:"agent_upgrade,omitempty"`
 	Fail2banUpgrade           *fail2banUpgradeTaskIntent       `json:"fail2ban_upgrade,omitempty"`

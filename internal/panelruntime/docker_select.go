@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/secure"
 )
 
@@ -21,6 +22,27 @@ func SameDockerApplication(before, after Deployment) bool {
 	}
 	after.Image, after.ImageID, after.LauncherSHA256, after.SignedImage = before.Image, before.ImageID, before.LauncherSHA256, before.SignedImage
 	return before == after
+}
+
+// SelectNginxImage preserves the panel deployment and writes each Nginx side
+// only when it is still one of the two frozen transaction values.
+func SelectNginxImage(before, after nginxcontainer.Binding, beforeCompose, afterCompose []byte) error {
+	if os.Geteuid() != 0 || !nginxcontainer.SameIdentity(before, after) || len(beforeCompose) == 0 || len(afterCompose) == 0 || len(beforeCompose) > DockerComposeLimit || len(afterCompose) > DockerComposeLimit {
+		return errors.New("Nginx 镜像切换绑定或 Compose 无效")
+	}
+	root, err := Root(before.DataDir)
+	if err != nil {
+		return err
+	}
+	unlock, err := publicationLock(root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err = replaceDockerFile(DockerComposePath, beforeCompose, afterCompose, DockerComposeLimit); err != nil {
+		return err
+	}
+	return nginxcontainer.SelectBinding(before, after)
 }
 
 func replaceDockerFile(name string, before, after []byte, limit int64) error {

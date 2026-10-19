@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"nginxpanel/internal/dockerapi"
 )
@@ -24,20 +23,7 @@ type DockerContainer struct {
 
 // ValidateDockerLabels bounds the metadata retained across replacement.
 func ValidateDockerLabels(labels map[string]string) error {
-	if len(labels) > 64 {
-		return errors.New("面板容器标签超过预算")
-	}
-	total := 0
-	for k, v := range labels {
-		total += len(k) + len(v)
-		if k == "" || len(k) > 256 || len(v) > 2048 || strings.ContainsAny(k+v, "\x00\r\n") {
-			return errors.New("面板容器标签无效")
-		}
-	}
-	if total > 8192 {
-		return errors.New("面板容器标签超过预算")
-	}
-	return nil
+	return dockerapi.ValidateLabels(labels)
 }
 
 // DockerImageLabels freezes inherited metadata before any running container is
