@@ -30,8 +30,22 @@ func (out Operation) Validate(req Request) error {
 	if string(input) != string(expected) {
 		return errors.New("组件操作输入不一致")
 	}
+	if out.Image != nil {
+		if req.Input.Action != "pull" || out.Release == nil || out.Image.Choice.ID != req.Input.ImageID || !out.Image.Choice.valid(out.Release.Repository) || out.Image.ApprovedAt < out.CreatedAt || out.Image.ApprovedAt >= out.Deadline {
+			return errors.New("镜像准备回执或批准时间无效")
+		}
+		matched := false
+		for _, image := range out.Release.Images {
+			if image == out.Image.Choice {
+				matched = true
+			}
+		}
+		if !matched {
+			return errors.New("镜像准备目标与签名发行不一致")
+		}
+	}
 	if a := out.Announcement; a != nil {
-		if a.Validate() != nil || a.Receiver != receiver() || a.ReceiverCompatible || out.State != "failed" || out.ErrorCode != "COMPONENT_RECEIVER_INCOMPATIBLE" || req.Input.Action == "activate" || req.Input.OfflineID != "" || req.Input.Tag != "" && a.Tag != req.Input.Tag || a.Channel == "prerelease" && !req.Input.Prerelease || a.ExpiresAt <= out.CreatedAt || req.Input.ManifestSHA256 != "" && a.ManifestSHA256 != req.Input.ManifestSHA256 || req.Input.TrustSHA256 != "" && a.TrustSHA256 != req.Input.TrustSHA256 {
+		if a.Validate() != nil || a.Receiver != receiver() || a.ReceiverCompatible || out.State != "failed" || out.ErrorCode != "COMPONENT_RECEIVER_INCOMPATIBLE" || req.Input.Action == "activate" || req.Input.Action == "pull" || req.Input.OfflineID != "" || req.Input.Tag != "" && a.Tag != req.Input.Tag || a.Channel == "prerelease" && !req.Input.Prerelease || a.ExpiresAt <= out.CreatedAt || req.Input.ManifestSHA256 != "" && a.ManifestSHA256 != req.Input.ManifestSHA256 || req.Input.TrustSHA256 != "" && a.TrustSHA256 != req.Input.TrustSHA256 {
 			return errors.New("组件失败结果的已验签说明不匹配")
 		}
 	}
@@ -60,6 +74,16 @@ func (out Operation) Validate(req Request) error {
 	}
 	if found["web"] != "" && len(found) != 1 {
 		return errors.New("前端须使用独立准备计划")
+	}
+	if len(r.Images) != 0 && (found["panel"] == "" || len(r.Images) != 2) {
+		return errors.New("签名镜像必须来自完整面板发行")
+	}
+	seenImages := map[string]bool{}
+	for _, image := range r.Images {
+		if !image.valid(r.Repository) || seenImages[image.ID] {
+			return errors.New("签名镜像选择无效")
+		}
+		seenImages[image.ID] = true
 	}
 	if req.Input.Action != "check" && found["web"] != "" {
 		if out.Frontend == nil || !digest(out.Frontend.ReleaseID) || out.Frontend.Version != r.Assets[0].Version || out.Frontend.Activated != (req.Input.Action == "activate") {
@@ -96,6 +120,12 @@ func (out Operation) Validate(req Request) error {
 	}
 	if req.Input.Action != "check" {
 		stage := "prepared"
+		if req.Input.Action == "pull" {
+			stage = "image_ready"
+			if found["panel"] == "" || out.Image == nil || out.Frontend != nil || out.Panel != nil {
+				return errors.New("镜像拉取缺少持久准备回执")
+			}
+		}
 		if req.Input.Action == "activate" {
 			stage = "activated"
 			if found["web"] == "" || out.Frontend == nil || out.Frontend.BaseID != req.Input.FrontendBaseID || out.Frontend.PreviousID != req.Input.ExpectedFrontendID {

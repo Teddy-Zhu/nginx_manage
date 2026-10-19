@@ -36,6 +36,10 @@ type StatusError struct{ StatusCode int }
 func (e *StatusError) Error() string { return fmt.Sprintf("Docker IPC 返回 HTTP %d", e.StatusCode) }
 
 func New() (*Client, error) {
+	return newClient(20 * time.Second)
+}
+
+func newClient(timeout time.Duration) (*Client, error) {
 	if os.Geteuid() != 0 {
 		return nil, errors.New("Docker 接入仅允许宿主机 root")
 	}
@@ -74,7 +78,7 @@ func New() (*Client, error) {
 			c.Close()
 			return nil, err
 		}
-		deadline := time.Now().Add(20 * time.Second)
+		deadline := time.Now().Add(timeout)
 		if requested, ok := ctx.Deadline(); ok && requested.Before(deadline) {
 			deadline = requested
 		}
@@ -84,7 +88,7 @@ func New() (*Client, error) {
 		}
 		return c, nil
 	}}
-	return &Client{&http.Client{Transport: t, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("Docker IPC 不允许重定向") }}, t}, nil
+	return &Client{&http.Client{Transport: t, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("Docker IPC 不允许重定向") }}, t}, nil
 }
 func (d *Client) Close() { d.transport.CloseIdleConnections() }
 func (d *Client) Request(ctx context.Context, method, path string, input any) (*http.Response, error) {

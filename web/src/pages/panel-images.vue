@@ -62,7 +62,7 @@ onUnmounted(() => { closed = true; controller?.abort(); if (timer) clearInterval
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">
       <div class="toolbar"><h2>更换运行镜像</h2><NButton @click="load">刷新</NButton></div>
-      <p>在<RouterLink to="/components">组件准备</RouterLink>完成目标发行版的面板准备，并在<RouterLink to="/maintenance">配置维护</RouterLink>进入维护后更换运行镜像。</p>
+      <p>在<RouterLink to="/components">组件准备</RouterLink>完成目标发行版的面板准备与镜像拉取，再在<RouterLink to="/maintenance">配置维护</RouterLink>进入维护后更换运行镜像。</p>
       <NAlert type="info">仅适用于容器部署。替换期间管理页面会暂时中断；失败时恢复原镜像。</NAlert>
       <p class="muted">镜像须已存在于目标节点。当前应用版本、数据库及配置保持不变。</p>
       <NAlert v-if="canWrite && !held" type="warning">尚未进入配置维护，请先确认维护状态。</NAlert>

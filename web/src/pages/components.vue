@@ -52,7 +52,7 @@ const permitted = computed(
 );
 const active = computed(() =>
   tasks.value.some((t) =>
-    ["queued", "running", "recovery_required"].includes(t.state),
+    t.stage !== "restore_isolated" && ["queued", "running", "recovery_required"].includes(t.state),
   ),
 );
 const checks = computed(() =>
@@ -86,7 +86,7 @@ function chooseComponents(value: Array<"nginx" | "fail2ban" | "panel" | "web">) 
 }
 function taskLabel(t: ComponentTask) {
   if (t.state === "succeeded")
-    return t.action === "activate" ? "激活完成" : t.action === "prepare" ? "准备完成" : "检查完成";
+    return t.action === "activate" ? "激活完成" : t.action === "pull" ? "镜像已就绪" : t.action === "prepare" ? "准备完成" : "检查完成";
   return stateLabels[t.state] ?? t.state;
 }
 function bytes(n: number) {
@@ -121,7 +121,7 @@ async function load() {
 }
 async function submit(input: ComponentCreateInput) {
   await run(async () => {
-    const task = await (input.input.action === "activate" ? api.activateFrontend(input, keyFor(input)) : api.createComponentTask(input, keyFor(input)));
+    const task = await (input.input.action === "activate" ? api.activateFrontend(input, keyFor(input)) : input.input.action === "pull" ? api.pullComponentImage(input, keyFor(input)) : api.createComponentTask(input, keyFor(input)));
     tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
     keyFor = useIdempotency();
   }, "组件任务已排队");
@@ -160,6 +160,19 @@ async function prepare() {
       trust_sha256: r.trust_sha256,
     },
   });
+}
+function canPull(t: ComponentTask) {
+  return permitted.value && !!session.me?.scopes.includes("system.write") && t.action === "prepare" && t.state === "succeeded" && !!t.result?.panel && !!t.result.runtime_ready &&
+    (t.result.release?.expires_at ?? 0) * 1000 > clock.value && !active.value && !busy.value;
+}
+async function pull(t: ComponentTask, imageID: string) {
+  const source = t.result;
+  if (!canPull(t) || !source?.release || !source.release.images.some((image) => image.id === imageID)) return;
+  await submit({ check_task_id: "", prepare_task_id: t.id, input: {
+    action: "pull", image_id: imageID, offline_id: source.input.offline_id, tag: source.release.tag, assets: source.release.selected,
+    prerelease: source.input.prerelease, plan_id: source.release.plan_id, manifest_sha256: source.release.manifest_sha256,
+    trust_sha256: source.release.trust_sha256,
+  } });
 }
 function canActivate(t: ComponentTask) {
   return permitted.value && !!session.me?.scopes.includes("system.write") && t.action === "prepare" && t.state === "succeeded" && !!t.result?.frontend &&
@@ -393,7 +406,7 @@ onUnmounted(() => {
       <div v-for="task in tasks" :key="task.id" class="component-task">
         <div class="toolbar">
           <strong>{{
-            task.action === "activate" ? "前端激活" : task.action === "check" ? "发行检查" : "组件准备"
+            task.action === "activate" ? "前端激活" : task.action === "pull" ? "镜像拉取" : task.action === "check" ? "发行检查" : "组件准备"
           }}</strong
           ><NTag
             :type="
@@ -411,6 +424,20 @@ onUnmounted(() => {
           {{ task.result?.release?.tag || task.id }}
         </p>
         <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
+        <template v-if="task.action === 'prepare' && task.state === 'succeeded' && task.result?.release?.images.length">
+          <div v-for="image in task.result.release.images" :key="image.id" class="page-stack">
+            <strong>{{ image.id === 'nginx' ? 'Nginx 镜像' : '面板运行镜像' }} · {{ image.architecture }}</strong>
+            <p class="muted" style="overflow-wrap: anywhere">{{ image.reference }}</p>
+            <NPopconfirm :disabled="!canPull(task)" @positive-click="pull(task, image.id)">
+              <template #trigger><NButton :disabled="!canPull(task)">拉取镜像</NButton></template>
+              确认下载此签名镜像？下载完成后可单独执行运行版本切换。
+            </NPopconfirm>
+          </div>
+        </template>
+        <template v-if="task.result?.image">
+          <p class="muted" style="overflow-wrap: anywhere">{{ task.result.image.choice.reference }}</p>
+          <p v-if="task.state === 'succeeded'">{{ task.result.image.reused ? '已核对本地镜像' : '镜像下载与核对完成' }}</p>
+        </template>
         <template v-if="task.result?.announcement">
           <p>{{ task.result.announcement.repository }} · {{ task.result.announcement.tag }} · 签名密钥 {{ task.result.announcement.key_id }}</p>
           <ComponentReleaseDetails :details="task.result.announcement" />

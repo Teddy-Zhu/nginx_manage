@@ -604,6 +604,8 @@ function createAPI(scope: RequestScope) {
     request<ComponentOfflineUpload>({ url: `/components/offline/${encodeURIComponent(id)}/assets/${encodeURIComponent(asset)}`, method: "PUT", data }),
   discardComponentOfflineUpload: (id: string) =>
     request<ComponentOfflineUpload>({ url: `/components/offline/${encodeURIComponent(id)}`, method: "DELETE" }),
+  pullComponentImage: (data: ComponentCreateInput, key: string) =>
+    request<ComponentTask>({ url: "/components/images/pull", method: "POST", data, headers: { "Idempotency-Key": key } }),
   activateFrontend: (data: ComponentCreateInput, key: string) =>
     request<ComponentTask>({ url: "/components/frontend/activate", method: "POST", data, headers: { "Idempotency-Key": key } }),
   componentTasks: (signal?: AbortSignal) =>

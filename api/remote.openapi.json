@@ -7032,6 +7032,56 @@
           "system.write"
         ]
       }
+    },
+    "/nodes/{connection}/components/images/pull": {
+      "post": {
+        "operationId": "remoteCreateComponentImagePull",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ComponentCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createComponentImagePull",
+        "x-forward-path": "/components/images/pull",
+        "x-response-kind": "json",
+        "x-body-limit": 16384,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ],
+        "description": "签名镜像拉取；action 必须为 pull，引用本人的 prepare_task_id，仅允许 panel-launcher 或 nginx 的已签名摘要与本机架构。要求 components.manage 与 system.write。"
+      }
     }
   },
   "security": [

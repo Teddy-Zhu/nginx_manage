@@ -366,3 +366,11 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 持久任务与 root 意图分别保存，签名清单决定镜像地址，禁止调用者指定 Docker 地址、宿主路径、任意镜像或发布信任。启动/续办授权有效期五分钟、连续保存并仅领取一次；断连、进程停止和结果不明只查询原 UUID，显式续办不延长原十分钟前进期限。独立 worker 的失败恢复和本机救援见 [Docker 部署说明](../deploy/docker/README.md#面板容器与-launcher-对端核对)。页面退出不取消 worker，替换期间页面可能断开，恢复连接后继续查询原任务。
 
 面板更新、Agent 升级和运行镜像替换共用活动任务限制，未结束时不能释放维护；完整备份中的隔离源任务保留审计和结果，不参与目标的新任务活动限制，不能从目标续办或重放。实际容器重建、恢复、权限和远程调用尚未执行，待 P5 隔离集中验证。
+
+## 签名镜像拉取
+
+完成面板签名准备后，组件页展示同一发行的本机架构镜像。选择“拉取镜像”会创建独立 `component.pull` 持久任务；API 为 `POST /api/v1/components/images/pull`，请求使用 `ComponentCreateInput`，其中 `prepare_task_id` 为本人的成功准备任务、`check_task_id` 为空，`input.action=pull`、`input.image_id=panel-launcher|nginx`，其余标签、资产、计划与签名散列须和准备结果一致。写入口要求 `components.manage`、`system.write`、重新认证或显式授权 Token、幂等键，远程节点沿登记路径转发。镜像拉取应在进入配置维护之前完成。
+
+root 重新核对准备目录及当前发布信任，从签名清单推导固定 GHCR 摘要和 Linux amd64/arm64 平台；不接受用户镜像地址、Docker 地址或 Registry 凭据。当前入口下载可公开访问的发行镜像；私有包访问策略须由发布方在发布前安排。通过固定 Docker Engine API 1.47 读取下载进度，十分钟期限、8 MiB 总进度、64 KiB 单条进度与 65,536 条记录上限；HTTP 成功但流中报错也判失败。下载后核对实际镜像摘要、配置、架构、卷声明及签名启动器字节，过程只创建并删除未启动的元数据容器。已有镜像核对通过则复用，仅权威镜像缺失允许下载。
+
+启动意图先持久化。Web 断连只查询原 UUID，Agent 重启后按原 root 意图重新验签并只检查本地内容；已存在且核对通过则确认就绪，其他情况记录失败，显式新建任务才可再次下载。不删除缓存层、既有镜像或运行容器，也不修改当前部署选择。首次安装可使用 [Docker 部署说明](../deploy/docker/README.md#签名镜像下载) 的 root 命令。下载就绪与运行切换分别授权；实现待 P5 隔离验证。

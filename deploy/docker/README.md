@@ -1,5 +1,19 @@
 # Docker 部署产物
 
+## 签名镜像下载
+
+首次部署可由目标主机 root 使用已批准程序、固定发行信任和独立核对的清单 SHA-256 下载镜像：
+
+```sh
+/opt/approved/nginxpanel release-image-pull \
+  --component panel-launcher \
+  --release-manifest /root/offline/release-manifest.json \
+  --release-signature /root/offline/release-manifest.sig \
+  --release-manifest-sha256 <manifest-sha256>
+```
+
+配套 Nginx 镜像将 `--component` 改为 `nginx`。只从签名清单推导固定 GHCR 摘要及当前架构，当前支持公开发行包；不接受任意镜像或 Registry 凭据。固定信任为 `/etc/nginxpanel/release-trust.json`，预发布须显式 `--release-prerelease`。下载后核对实际镜像和签名启动器，不启动容器。中断不会切换运行版本；再次显式执行时先核对本地镜像，核对通过则复用。已有面板可在组件页完成签名面板准备后分别拉取镜像，再进入配置维护执行运行镜像替换。镜像下载、安装与运行切换分别授权，安装器和日常启动仍不隐式拉取。
+
 ## Nginx 固定模块镜像
 
 ```sh
@@ -12,7 +26,7 @@ docker build -f deploy/docker/nginx.Dockerfile --build-arg TARGETARCH=amd64 -t n
 
 修改模块集合须重新构建并发布镜像；运行环境缺失模块时更换包含对应能力的受信镜像，重新生成迁移计划。镜像不携带源节点二进制、动态模块或业务秘密。
 
-Nginx 镜像尚未执行构建、启动或 ABI 验证。固定实例执行适配、镜像摘要/OCI 证据签名发布及安装验签已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)；真实构建、发布与系统验证仍待 P5。本机管理员先按签名清单准备镜像，安装器自动验证来源与本地内容，不负责拉取镜像。
+Nginx 镜像尚未执行构建、启动或 ABI 验证。固定实例执行适配、镜像摘要/OCI 证据签名发布及安装验签已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)；真实构建、发布与系统验证仍待 P5。本机管理员先使用下述签名镜像下载命令或按签名清单准备镜像；已有面板可从组件页显式拉取。安装器验证来源与本地内容，不隐式拉取镜像。
 
 上游构建及模块参数参见 [Nginx 官方镜像源码](https://github.com/nginx/docker-nginx) 和 [Nginx 构建选项](https://nginx.org/en/docs/configure.html)。
 

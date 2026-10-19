@@ -56,12 +56,12 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	if err := in.Input.Validate(); err != nil {
 		return out, err
 	}
-	if in.Input.Action == "activate" {
+	if in.Input.Action == "activate" || in.Input.Action == "pull" {
 		if err := p.Require("system.write"); err != nil {
 			return out, err
 		}
 		if !ValidID(in.PrepareTaskID) || in.CheckTaskID != "" {
-			return out, fault.Invalid("前端激活须引用本人准备任务")
+			return out, fault.Invalid("此操作须引用本人准备任务")
 		}
 	} else if in.PrepareTaskID != "" {
 		return out, fault.Invalid("此操作不能引用准备任务")
@@ -111,7 +111,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		return out, err
 	}
 	var active, count int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.activate') AND state IN ('queued','running','recovery_required')").Scan(&active); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.activate','component.pull') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&active); err != nil {
 		return out, err
 	}
 	if active != 0 {
@@ -124,6 +124,11 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		return out, fault.Conflict("组件任务达到 64 项保留上限，须本机维护")
 	}
 	now := time.Now().Unix()
+	if in.Input.Action == "pull" {
+		if err = s.validateImageParent(ctx, tx, p.ID, in, now); err != nil {
+			return out, err
+		}
+	}
 	if in.Input.Action == "activate" {
 		if err = s.validateFrontendParent(ctx, tx, p.ID, in, now); err != nil {
 			return out, err

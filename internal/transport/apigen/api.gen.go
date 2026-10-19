@@ -503,6 +503,7 @@ const (
 	Activate ComponentInputAction = "activate"
 	Check    ComponentInputAction = "check"
 	Prepare  ComponentInputAction = "prepare"
+	Pull     ComponentInputAction = "pull"
 )
 
 // Valid indicates whether the value is a known member of the ComponentInputAction enum.
@@ -513,6 +514,8 @@ func (e ComponentInputAction) Valid() bool {
 	case Check:
 		return true
 	case Prepare:
+		return true
+	case Pull:
 		return true
 	default:
 		return false
@@ -1637,6 +1640,8 @@ type ComponentOfflineUpload struct {
 	Release     ComponentRelease        `json:"release"`
 	Assets      []ComponentOfflineAsset `json:"assets"`
 }
+type CreateComponentImagePullParams = CreateComponentTaskParams
+type CreateComponentImagePullJSONRequestBody = ComponentCreateInput
 type CreateFrontendActivationParams = CreateComponentTaskParams
 type CreateFrontendActivationJSONRequestBody = ComponentCreateInput
 type CreateComponentOfflineUploadParams = CreateComponentTaskParams
@@ -1648,7 +1653,21 @@ type CreateComponentOfflineUploadJSONRequestBody = ComponentOfflineInput
 type WriteComponentOfflineChunkJSONRequestBody = ComponentOfflineChunk
 
 // ComponentInput defines model for ComponentInput.
+type ComponentImage struct {
+	ID             string `json:"id"`
+	Reference      string `json:"reference"`
+	Architecture   string `json:"architecture"`
+	PlatformDigest string `json:"platform_digest"`
+	ConfigDigest   string `json:"config_digest"`
+}
+type ComponentImagePreparation struct {
+	Choice     ComponentImage `json:"choice"`
+	ApprovedAt int64          `json:"approved_at"`
+	Reused     bool           `json:"reused"`
+}
+
 type ComponentInput struct {
+	ImageID            *string                     `json:"image_id,omitempty"`
 	FrontendBaseID     *string                     `json:"frontend_base_id,omitempty"`
 	ExpectedFrontendID *string                     `json:"expected_frontend_id,omitempty"`
 	OfflineID          *string                     `json:"offline_id,omitempty"`
@@ -1670,6 +1689,7 @@ type ComponentInputComponents string
 
 // ComponentOperation defines model for ComponentOperation.
 type ComponentOperation struct {
+	Image         *ComponentImagePreparation    `json:"image,omitempty"`
 	Announcement  *ComponentReleaseAnnouncement `json:"announcement,omitempty"`
 	Frontend      *ComponentFrontendResult      `json:"frontend,omitempty"`
 	Panel         *ComponentPanelPreparation    `json:"panel,omitempty"`
@@ -1790,6 +1810,7 @@ type ComponentReleaseAnnouncement struct {
 
 // ComponentRelease defines model for ComponentRelease.
 type ComponentRelease struct {
+	Images         []ComponentImage             `json:"images"`
 	Notes          string                       `json:"notes"`
 	Requirements   ComponentReleaseRequirements `json:"requirements"`
 	Receiver       ComponentReleaseReceiver     `json:"receiver"`
@@ -5702,6 +5723,7 @@ type ServerInterface interface {
 
 	// (GET /components)
 	CreateFrontendActivation(w http.ResponseWriter, r *http.Request, params CreateFrontendActivationParams)
+	CreateComponentImagePull(w http.ResponseWriter, r *http.Request, params CreateComponentImagePullParams)
 	ListComponentOfflineUploads(w http.ResponseWriter, r *http.Request)
 	CreateComponentOfflineUpload(w http.ResponseWriter, r *http.Request, params CreateComponentOfflineUploadParams)
 	WriteComponentOfflineChunk(w http.ResponseWriter, r *http.Request, id, asset string, params WriteComponentOfflineChunkParams)
@@ -7168,6 +7190,18 @@ func (siw *ServerInterfaceWrapper) CreateFrontendActivation(w http.ResponseWrite
 		params.XCSRFToken = &token
 	}
 	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.CreateFrontendActivation(w, r, params) })
+}
+
+func (siw *ServerInterfaceWrapper) CreateComponentImagePull(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := CreateComponentImagePullParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.CreateComponentImagePull(w, r, params) })
 }
 
 func (siw *ServerInterfaceWrapper) ListComponentOfflineUploads(w http.ResponseWriter, r *http.Request) {
@@ -13492,6 +13526,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations/{id}/cancel", wrapper.CancelNginxInstallation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches/{id}/rollback", wrapper.RollbackNginxSwitch)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/frontend/activate", wrapper.CreateFrontendActivation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/images/pull", wrapper.CreateComponentImagePull)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/offline", wrapper.ListComponentOfflineUploads)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/offline", wrapper.CreateComponentOfflineUpload)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/offline/{id}/assets/{asset}", wrapper.WriteComponentOfflineChunk)

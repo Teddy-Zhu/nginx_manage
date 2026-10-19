@@ -199,6 +199,14 @@ func bounded(message string) string {
 func (m *Manager) interrupted(ctx context.Context, out *Operation) {
 	out.Announcement = nil
 	out.State, out.Stage, out.ErrorCode, out.Error = "failed", "interrupted", "COMPONENT_INTERRUPTED", "组件操作在确认完成前中断，未启用或切换运行版本"
+	if out.Input.Action == "pull" {
+		if out.Image != nil {
+			if err := m.reconcileImage(ctx, out); err != nil {
+				out.State, out.Stage, out.ErrorCode, out.Error = "failed", "image_unconfirmed", "COMPONENT_IMAGE_UNCONFIRMED", "镜像下载结果未确认："+bounded(err.Error())
+			}
+		}
+		return
+	}
 	if out.Input.Action == "activate" {
 		out.Error = "前端激活中断，最终选择尚未确认"
 		m.reconcileFrontend(out)
@@ -229,7 +237,9 @@ func (m *Manager) run(out Operation) {
 	defer cancel()
 	out.State, out.Stage = "running", "checking"
 	err := m.write(&out)
-	if err == nil && out.Input.Action == "activate" {
+	if err == nil && out.Input.Action == "pull" {
+		err = m.pullImage(ctx, &out)
+	} else if err == nil && out.Input.Action == "activate" {
 		err = m.activateFrontend(ctx, &out)
 	} else if err == nil {
 		in := out.Input.online()
@@ -276,7 +286,7 @@ func (m *Manager) run(out Operation) {
 		if out.Input.Action == "activate" {
 			m.reconcileFrontend(&out)
 		}
-		if out.Input.Action == "prepare" {
+		if out.Input.Action == "prepare" || out.Input.Action == "pull" {
 			// A failed response is not evidence that the atomic publication failed.
 			recoverCtx, stop := context.WithTimeout(context.Background(), 30*time.Second)
 			prior := out

@@ -15,6 +15,7 @@ import (
 )
 
 type Input struct {
+	ImageID            string   `json:"image_id,omitempty"`
 	FrontendBaseID     string   `json:"frontend_base_id,omitempty"`
 	ExpectedFrontendID string   `json:"expected_frontend_id,omitempty"`
 	OfflineID          string   `json:"offline_id,omitempty"`
@@ -39,11 +40,18 @@ func (in Input) Validate() error {
 	if in.OfflineID != "" && (!ValidID(in.OfflineID) || in.Tag == "" || len(in.Components) != 0 || len(in.Assets) == 0) {
 		return fault.Invalid("离线组件须引用上传 UUID、固定标签及资产选择")
 	}
-	if in.Action != "check" && in.Action != "prepare" && in.Action != "activate" {
+	if in.Action != "check" && in.Action != "prepare" && in.Action != "activate" && in.Action != "pull" {
 		return fault.Invalid("未知组件操作")
 	}
 	if len(in.Components)+len(in.Assets) > 2 {
 		return fault.Invalid("每次最多选择两个组件")
+	}
+	if in.Action == "pull" {
+		if (in.ImageID != "panel-launcher" && in.ImageID != "nginx") || len(in.Assets) != 1 {
+			return fault.Invalid("镜像拉取须选择签名面板计划中的固定镜像")
+		}
+	} else if in.ImageID != "" {
+		return fault.Invalid("此组件操作不能选择镜像")
 	}
 	for _, id := range in.Components {
 		if id != "nginx" && id != "fail2ban" && id != "panel" && id != "web" {
@@ -108,6 +116,7 @@ type Asset struct {
 	UnpackedBytes       int64    `json:"unpacked_bytes"`
 }
 type Release struct {
+	Images         []Image               `json:"images"`
 	Notes          string                `json:"notes"`
 	Requirements   releases.Requirements `json:"requirements"`
 	Receiver       releases.Receiver     `json:"receiver"`
@@ -128,6 +137,7 @@ type Release struct {
 
 func release(plan releases.Plan) Release {
 	out := Release{Notes: plan.Manifest.Notes, Requirements: releases.ManifestRequirements(plan.Manifest), Receiver: plan.Receiver, PlanID: plan.ID, ManifestSHA256: plan.ManifestSHA256, TrustSHA256: plan.TrustSHA256, Repository: plan.Manifest.Repository, Version: plan.Manifest.Version, Tag: "v" + plan.Manifest.Version, Channel: plan.Manifest.Channel, KeyID: plan.KeyID, ExpiresAt: plan.Manifest.ExpiresAt, Selected: slices.Clone(plan.Selected), Assets: []Asset{}, ArchiveBytes: plan.ArchiveBytes, UnpackedBytes: plan.UnpackedBytes}
+	out.Images = images(plan)
 	for _, a := range plan.Assets {
 		out.Assets = append(out.Assets, Asset{ID: a.ID, Component: a.Component, Version: a.Version, Architecture: a.Architecture, Distribution: a.Distribution, DistributionVersion: a.DistributionVersion, ABI: a.ABI, SourceURL: a.SourceURL, License: a.License, Maintenance: a.Maintenance, Features: append([]string{}, a.Features...), Dependencies: append([]string{}, a.Dependencies...), RuntimeFiles: len(a.RuntimeFiles), ArchiveBytes: a.Size, UnpackedBytes: a.UnpackedBytes})
 	}
@@ -135,6 +145,7 @@ func release(plan releases.Plan) Release {
 }
 
 type Operation struct {
+	Image         *ImagePreparation      `json:"image,omitempty"`
 	Announcement  *releases.Announcement `json:"announcement,omitempty"`
 	Frontend      *FrontendResult        `json:"frontend,omitempty"`
 	Protocol      int                    `json:"protocol"`
