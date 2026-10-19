@@ -44,6 +44,9 @@ func fail2banHostSyncLocks(dataDir string) (func(), error) {
 }
 
 func fail2banHostSyncAdmission(dataDir string, apply bool) (func(), error) {
+	if err := fail2banUpgradeSwitchIdle(dataDir, ""); err != nil {
+		return nil, err
+	}
 	j := &Journal{Dir: filepath.Join(dataDir, "agent", "operations")}
 	leave, err := j.maintenanceLock()
 	if err != nil {
@@ -88,6 +91,39 @@ func loadFail2banHostSyncStop(dataDir string, current *fail2banHostSyncEvent) (*
 	}
 	if current != nil && (e.ID == current.ID || e.ID == current.PreviousID) {
 		return nil, nil
+	}
+	// A stopped upgrade can replace an enabled session without a disable
+	// event. Only authenticated transferred ancestors can carry an already
+	// completed stopping pointer across that handover.
+	if current != nil && current.Action == "enable" && e.PreviousID != current.ID {
+		previous := current.PreviousID
+		for n := 0; previous != "" && n < 32; n++ {
+			ancestor, err := loadFail2banHostSyncEvent(dataDir, previous)
+			if err != nil {
+				return nil, err
+			}
+			if ancestor.Action != "enable" {
+				break
+			}
+			parent, err := (&Journal{Dir: filepath.Join(dataDir, "agent", "operations")}).Get(ancestor.ID)
+			if err != nil {
+				return nil, err
+			}
+			if parent.State != "succeeded" || parent.Stage != "transferred" {
+				break
+			}
+			ok, err := fail2banUpgradeTransferredParent(dataDir, parent)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, errors.New("持续会话交接审计无法核对")
+			}
+			if e.ID == ancestor.PreviousID {
+				return nil, nil
+			}
+			previous = ancestor.PreviousID
+		}
 	}
 	if current == nil || current.Action != "enable" || e.PreviousID != current.ID || e.SessionID != current.SessionID {
 		return nil, errors.New("持续同步停用意图与当前批准冲突")

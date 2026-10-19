@@ -164,6 +164,9 @@ func fail2banHostSyncRuntimeReceipt(dataDir string, v *fail2banHostRuntime) bool
 		return false
 	}
 	r, err := (&Journal{Dir: filepath.Join(dataDir, "agent", "operations")}).Get(e.ID)
+	if err == nil && r.State == "succeeded" && r.Stage == "transferred" {
+		return fail2banUpgradeTransferredRuntime(dataDir, r, e, v)
+	}
 	want := fail2banHostSyncRuntimeJournal(e, v)
 	return err == nil && fail2banHostSyncParentMatches(r, e) && (r.State == "running" || r.State == "succeeded" && (v.State == "succeeded" || v.State == "failed") && v.effective().Set == nil) && r.Stage == want.Stage && r.BeforeRevision == want.BeforeRevision && r.AfterRevision == want.AfterRevision && r.CandidateHash == want.CandidateHash && r.ObservedRevision == want.ObservedRevision && r.Error == want.Error
 }
@@ -212,6 +215,9 @@ func fail2banHostSyncMaintenanceIdle(dataDir string, r Record) (bool, error) {
 		return false, errors.Join(errors.New("持续同步维护回执无效"), err)
 	}
 	if r.State == "succeeded" {
+		if r.Stage == "transferred" {
+			return fail2banUpgradeTransferredParent(dataDir, r)
+		}
 		if r.Stage == "disabled_retired" {
 			return fail2banHostRetiredParent(dataDir, r, e)
 		}

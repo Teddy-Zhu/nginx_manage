@@ -24,7 +24,7 @@ func (in Fail2banUpgradePreparationOptions) hash() string {
 }
 
 type fail2banUpgradeMaterialIDs struct {
-	Jails, Nginx, Sources, Stop, Sync, Clear string
+	Jails, Nginx, Sources, Sync string
 }
 
 type fail2banUpgradeMaterial struct {
@@ -32,7 +32,6 @@ type fail2banUpgradeMaterial struct {
 	Bundle  *fail2banJailBundle
 	Nginx   *fail2banNginxRegistry
 	Sources *fail2banHostSourcesEvent
-	Stop    *fail2banHostSyncEvent
 	Sync    *fail2banHostSyncEvent
 }
 
@@ -71,9 +70,7 @@ type Fail2banUpgradePreparation struct {
 	CandidateJailSelection string                   `json:"candidate_jail_selection"`
 	NginxRegistryID        string                   `json:"candidate_nginx_registry_id"`
 	HostSourcesID          string                   `json:"candidate_host_sources_id"`
-	HostStopID             string                   `json:"host_stop_id"`
 	HostSyncID             string                   `json:"candidate_host_sync_id"`
-	HostClearID            string                   `json:"host_clear_id"`
 	ScopeCurrent           *bool                    `json:"scope_current"`
 	CheckpointCurrent      *bool                    `json:"checkpoint_current"`
 }
@@ -102,7 +99,7 @@ func (i fail2banUpgradePreparation) record(r fail2banUpgradePreparationReceipt) 
 	return Record{Kind: fail2banUpgradePreparationKind, OperationID: i.Request.OperationID, RequestHash: i.Request.hash(), RelatedOperationID: i.Basis.Current.OperationID, BeforeRevision: i.Basis.Current.EventID, AfterRevision: i.Material.IDs.Jails, CandidateHash: i.hash(), ObservedRevision: fail2banUpgradeGrantHash("preparation-receipt", r), State: "succeeded", Stage: "prepared"}
 }
 
-func newFail2banUpgradeMaterialIDs(b fail2banUpgradeBasis, p Fail2banUpgradeGrants, r fail2banUpgradeHostRecovery) fail2banUpgradeMaterialIDs {
+func newFail2banUpgradeMaterialIDs(b fail2banUpgradeBasis, p Fail2banUpgradeGrants) fail2banUpgradeMaterialIDs {
 	var ids fail2banUpgradeMaterialIDs
 	if b.Bundle != nil {
 		ids.Jails = secure.ID()
@@ -114,10 +111,7 @@ func newFail2banUpgradeMaterialIDs(b fail2banUpgradeBasis, p Fail2banUpgradeGran
 		ids.Sources = secure.ID()
 	}
 	if p.MigrateHostSync {
-		ids.Stop, ids.Sync = secure.ID(), secure.ID()
-	}
-	if r.Runtime != nil && r.Runtime.effective().Set != nil {
-		ids.Clear = secure.ID()
+		ids.Sync = secure.ID()
 	}
 	return ids
 }
@@ -159,7 +153,7 @@ func buildFail2banUpgradeMaterial(b fail2banUpgradeBasis, p Fail2banUpgradeGrant
 	checks := []struct {
 		id       string
 		required bool
-	}{{ids.Jails, b.Bundle != nil}, {ids.Nginx, len(p.NginxMoves) != 0}, {ids.Sources, p.MigrateHostSources}, {ids.Stop, p.MigrateHostSync}, {ids.Sync, p.MigrateHostSync}, {ids.Clear, r.Runtime != nil && r.Runtime.effective().Set != nil}}
+	}{{ids.Jails, b.Bundle != nil}, {ids.Nginx, len(p.NginxMoves) != 0}, {ids.Sources, p.MigrateHostSources}, {ids.Sync, p.MigrateHostSync}}
 	seen := map[string]bool{}
 	for _, check := range checks {
 		if check.required != (check.id != "") || check.id != "" && (!validID(check.id) || seen[check.id]) {
@@ -212,20 +206,17 @@ func buildFail2banUpgradeMaterial(b fail2banUpgradeBasis, p Fail2banUpgradeGrant
 		if b.HostSync == nil || b.HostSync.Action != "enable" || out.Sources == nil {
 			return out, errors.New("升级同步材料缺少原会话或候选来源")
 		}
-		stop := *b.HostSync
-		stop.ID, stop.PreviousID, stop.Action, stop.ApprovedAt = ids.Stop, stop.ID, "disable", at
-		stop.RequestHash = stop.requestHash()
 		next := *b.HostSync
-		next.ID, next.PreviousID, next.SessionID, next.EngineKey, next.SourcesID, next.RecoveryID, next.ApprovedAt = ids.Sync, ids.Stop, ids.Sync, to, ids.Sources, "", at
-		next.RuntimeBaseID = ids.Clear
-		if next.RuntimeBaseID == "" && r.Runtime != nil {
+		next.ID, next.PreviousID, next.SessionID, next.EngineKey, next.SourcesID, next.RecoveryID, next.ApprovedAt = ids.Sync, b.HostSync.ID, ids.Sync, to, ids.Sources, "", at
+		next.RuntimeBaseID = ""
+		if r.Runtime != nil {
 			next.RuntimeBaseID = r.Runtime.Intent.OperationID
 		}
 		next.RequestHash = next.requestHash()
-		if !stop.valid() || !next.valid() {
+		if !next.valid() {
 			return out, errors.New("升级同步候选材料无效")
 		}
-		out.Stop, out.Sync = &stop, &next
+		out.Sync = &next
 	}
 	return out, nil
 }
@@ -282,7 +273,7 @@ func (i fail2banUpgradePreparation) validate(data, id string) error {
 	if fail2banUpgradeGrantHash("material", expected) != fail2banUpgradeGrantHash("material", i.Material) {
 		return errors.New("升级准备的候选配置或批准超出原范围")
 	}
-	for _, next := range []string{i.Material.IDs.Jails, i.Material.IDs.Nginx, i.Material.IDs.Sources, i.Material.IDs.Stop, i.Material.IDs.Sync, i.Material.IDs.Clear} {
+	for _, next := range []string{i.Material.IDs.Jails, i.Material.IDs.Nginx, i.Material.IDs.Sources, i.Material.IDs.Sync} {
 		if next == id {
 			return errors.New("升级准备标识不能兼作候选动作标识")
 		}

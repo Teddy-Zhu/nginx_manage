@@ -133,13 +133,13 @@ func validateFail2banManagedRecord(r fail2banManagedRecord, data string) error {
 	if r.At <= 0 || r.At > time.Now().Unix()+300 {
 		return errors.New("受管引擎事件时间无效")
 	}
-	if r.Action != "install" && r.Action != "start" && r.Action != "stop" && r.Action != "enable" && r.Action != "disable" && r.Action != "rollback" && r.Action != "select-jails" {
+	if r.Action != "install" && r.Action != "start" && r.Action != "stop" && r.Action != "enable" && r.Action != "disable" && r.Action != "rollback" && r.Action != "select-jails" && r.Action != "upgrade" && r.Action != "upgrade-revert" {
 		return errors.New("受管引擎操作登记无效")
 	}
 	if r.ActionState != "pending" && r.ActionState != "completed" && r.ActionState != "unknown" {
 		return errors.New("受管引擎操作结果登记无效")
 	}
-	if r.Action == "select-jails" && (r.State != "installed" || r.ActionState != "completed") {
+	if (r.Action == "select-jails" || r.Action == "upgrade" || r.Action == "upgrade-revert") && (r.State != "installed" || r.ActionState != "completed") {
 		return errors.New("受管 jail 选择事件状态无效")
 	}
 	switch r.State {
@@ -155,25 +155,33 @@ func validateFail2banManagedRecord(r fail2banManagedRecord, data string) error {
 
 // Caller holds the installation binding lock throughout admission and publish.
 func saveFail2banManaged(r *fail2banManagedRecord, state, reason string) error {
-	// Every code or jail selection advances the immutable event. A writer
-	// holding an older event cannot overwrite a later selection after retry.
-	current, err := loadFail2banManaged(r.DataDir)
-	if err != nil {
-		return err
-	}
-	if current == nil && r.EventID != "" || current != nil && current.EventID != r.EventID {
-		return ErrExternalChange
-	}
 	next := *r
 	next.PreviousEvent, next.EventID, next.State, next.Reason = r.EventID, secure.ID(), state, reason
 	next.At = time.Now().Unix()
-	if err = validateFail2banManagedRecord(next, r.DataDir); err != nil {
+	if err := publishFail2banManagedRecord(r.DataDir, r.EventID, next); err != nil {
+		return err
+	}
+	*r = next
+	return nil
+}
+
+func publishFail2banManagedRecord(data, expected string, next fail2banManagedRecord) error {
+	// Every code or jail selection advances the immutable event. A writer
+	// holding an older event cannot overwrite a later selection after retry.
+	current, err := loadFail2banManaged(data)
+	if err != nil {
+		return err
+	}
+	if next.DataDir != data || next.PreviousEvent != expected || next.EventID == expected || current == nil && expected != "" || current != nil && current.EventID != expected {
+		return ErrExternalChange
+	}
+	if err = validateFail2banManagedRecord(next, data); err != nil {
 		return err
 	}
 	if _, err = loadFail2banJailBundle(&next, next.JailSelection); err != nil {
 		return err
 	}
-	dir := fail2banManagedDir(r.DataDir)
+	dir := fail2banManagedDir(data)
 	if err := secure.RootDirectory(filepath.Join(dir, "history"), 0700); err != nil {
 		return err
 	}
@@ -190,7 +198,6 @@ func saveFail2banManaged(r *fail2banManagedRecord, state, reason string) error {
 	if err := rootJSONWrite(filepath.Join(dir, "current.json"), &next, 16384); err != nil {
 		return err
 	}
-	*r = next
 	return nil
 }
 func (r fail2banManagedRecord) releaseInput() releases.Input {

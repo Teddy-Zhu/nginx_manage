@@ -29,7 +29,7 @@ func fail2banUpgradePreparationAccess(data, scope, id string) (func(), error) {
 }
 
 func (i fail2banUpgradePreparation) result(receipt fail2banUpgradePreparationReceipt) Fail2banUpgradePreparation {
-	return Fail2banUpgradePreparation{State: "prepared_unacknowledged", ID: i.Request.OperationID, CreatedAt: i.CreatedAt, Target: i.Request.Target, InstallationID: i.Basis.Current.OperationID, EventID: i.Basis.Current.EventID, Source: fail2banUpgradeComponent(&i.Basis.Current), Candidate: fail2banUpgradeComponent(&i.Basis.Candidate), IntentSHA256: receipt.IntentSHA256, ConfigurationSHA256: receipt.ConfigurationSHA256, UnitSHA256: receipt.UnitSHA256, CandidateJailSelection: i.Material.IDs.Jails, NginxRegistryID: i.Material.IDs.Nginx, HostSourcesID: i.Material.IDs.Sources, HostStopID: i.Material.IDs.Stop, HostSyncID: i.Material.IDs.Sync, HostClearID: i.Material.IDs.Clear}
+	return Fail2banUpgradePreparation{State: "prepared_unacknowledged", ID: i.Request.OperationID, CreatedAt: i.CreatedAt, Target: i.Request.Target, InstallationID: i.Basis.Current.OperationID, EventID: i.Basis.Current.EventID, Source: fail2banUpgradeComponent(&i.Basis.Current), Candidate: fail2banUpgradeComponent(&i.Basis.Candidate), IntentSHA256: receipt.IntentSHA256, ConfigurationSHA256: receipt.ConfigurationSHA256, UnitSHA256: receipt.UnitSHA256, CandidateJailSelection: i.Material.IDs.Jails, NginxRegistryID: i.Material.IDs.Nginx, HostSourcesID: i.Material.IDs.Sources, HostSyncID: i.Material.IDs.Sync}
 }
 
 func fail2banUpgradePreparationStatus(ctx context.Context, i fail2banUpgradePreparation, receipt fail2banUpgradePreparationReceipt) (Fail2banUpgradePreparation, error) {
@@ -131,7 +131,7 @@ func PrepareFail2banUpgrade(parent context.Context, in Fail2banUpgradePreparatio
 			return err
 		}
 		i := fail2banUpgradePreparation{Schema: 1, CreatedAt: time.Now().Unix(), Request: in, Basis: basis, Grants: plan.Grants, Recovery: recovery}
-		i.Material, err = buildFail2banUpgradeMaterial(basis, plan.Grants, recovery, newFail2banUpgradeMaterialIDs(basis, plan.Grants, recovery), i.CreatedAt)
+		i.Material, err = buildFail2banUpgradeMaterial(basis, plan.Grants, recovery, newFail2banUpgradeMaterialIDs(basis, plan.Grants), i.CreatedAt)
 		if err != nil {
 			return err
 		}

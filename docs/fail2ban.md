@@ -614,13 +614,44 @@ nginxpanel fail2ban-upgrade-preparation --data-dir /var/lib/nginxpanel \
   --fail2ban-scope host --fail2ban-operation UPGRADE_PREPARATION_UUID
 ```
 
-准备事务在原候选认证及同一组锁内保存完整原安装、jail、Nginx/宿主机批准、运行检查点和审计回执，生成候选完整配置、服务单元及新事件材料。jail、Nginx 和宿主机来源使用新 ID；其他引擎批准及原保护范围保持不变。持续同步预留原会话停用、新会话及必要规则清除的独立 ID，新会话绑定候选来源与清除后的精确运行基础，并保留原开机恢复偏好；原启动恢复派生 ID 不赋给新批准。候选配置须通过候选官方客户端完整校验，发布前再次核对原范围、原检查点及签名代码。准备阶段保留当前运行选择、服务、状态库及所有活动批准。
+准备事务在原候选认证及同一组锁内保存完整原安装、jail、Nginx/宿主机批准、运行检查点和审计回执，生成候选完整配置、服务单元及新事件材料。jail、Nginx 和宿主机来源使用新 ID；其他引擎批准及原保护范围保持不变。持续同步预留独立新会话，绑定候选来源及原精确运行检查点，保留原开机恢复偏好；原启动恢复派生 ID 不赋给新批准。切换通过持久交接证明移交原会话，保留已确认规则，不为批准身份变化清空规则。候选配置须通过候选官方客户端完整校验，发布前再次核对原范围、原检查点及签名代码。准备阶段保留当前运行选择、服务、状态库及所有活动批准。
 
 材料以 root 专用目录及文件权限 `0700/0600` 保存，完整目录原子发布并持久化完成回执，随后写独立准备审计。相同 UUID、相同请求重试读取原材料，不重新生成 ID 或覆盖原检查点；目录已发布但审计尚未写完时，仅经完整核对后补齐原审计。请求或原审计冲突则拒绝。`prepared_unacknowledged` 表示已发布材料尚无匹配审计，`preparation_unknown` 表示发布结果需沿原 UUID 查询；二者不声称准备事务已完整结束。
 
 结果只返回原/候选代码、预留 ID 及内容摘要。`scope_current` 核对当前选择、服务代次和批准范围，`checkpoint_current` 单独核对原运行及审计检查点；无法完整观测时字段保持 `null` 并返回错误。原状态变化不会改写已发布材料，需重新确认相应范围。状态查询验证暂存配置及单元的实际完整内容，不执行候选诊断，也不替代执行前的签名资产复核。最多保留 8 项准备目录，单项不超过 4 MiB，总预算 32 MiB，遗留临时目录计入配额；不自动删除原恢复依据或审计。
 
 准备材料不进入文件/API 逻辑迁移或业务备份。`prepared` 只证明准备事务完成；停止保护、匹配版本的状态快照、批准发布、代码切换、启动后封禁及动作核对、失败补偿仍须由后续持久升级执行流程完成，当前命令不会执行这些步骤。首版不保留旧准备格式兼容，Agent/数据库/迁移归档仍为 108/32/6；本实现及原生工具调用均待 P5 集中验证。
+
+### 已停止实例的升级切换
+
+本机 root 可对已停止实例执行独立持久切换。先通过现有服务控制显式停止实例，再捕获并准备原代码匹配的加密状态快照，并在停止后重新执行候选预览和升级准备。运行时准备材料不能直接用于此分支；原选择、完整批准或检查点变化须重新准备。切换输入中的摘要取准备结果的 `intent_sha256`，与候选预览的 `target` 分开。
+
+```sh
+nginxpanel fail2ban-upgrade-switch --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation UPGRADE_SWITCH_UUID \
+  --fail2ban-upgrade-preparation UPGRADE_PREPARATION_UUID \
+  --fail2ban-upgrade-prepared-sha256 PREPARATION_INTENT_SHA256 \
+  --fail2ban-state-snapshot ORIGINAL_STATE_SNAPSHOT_UUID
+
+nginxpanel fail2ban-upgrade-switch-status --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation UPGRADE_SWITCH_UUID
+
+nginxpanel fail2ban-upgrade-switch-resume --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation UPGRADE_SWITCH_UUID
+
+nginxpanel fail2ban-upgrade-switch-revert --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation UPGRADE_SWITCH_UUID
+```
+
+受理前认证原/候选签名代码、完整准备材料、加密归档及明文暂存，核对原状态文件、目录身份与安全标签、机器和启动代次、服务停止及固定 Socket 无文件或内核引用，并证明原宿主机规则完整。此分支要求新旧物理 jail 配置逐字相同。root 意图、启动隔离和独立审计先持久化，随后才替换固定受管单元、以单个新选择事件发布候选代码及 jail 包、发布新 Nginx/来源/持续同步批准并加载单元。只执行 `daemon-reload`，不隐式启动服务，不打开或迁移 SQLite，不重放规则或历史批准指针。
+
+持续会话交接保存原审计及原运行检查点的完整身份，旧父操作以 `transferred` 留证；原运行回执仅凭该次交接证明继续被认可。新会话以该检查点为初始基础，后续正常采样才产生新的运行事务。已经完成的历史停用指针仅沿有证明的已交接祖先确认，不忽略真实未完成停用。
+
+成功结果为 `state=succeeded, stage=selected_stopped, outcome=selected`，只证明停止状态下选择完成。任一中断均保留隔离；启动前检查、维护、服务变更、动作批准和后台同步不能越过未完成事务。相同 UUID 和请求可重送，续办沿原事件继续。若完成回执已发布而审计未确认，状态为 `completion_unacknowledged`，续办只补齐匹配审计；历史终态查询不再要求后续运行中的数据库保持旧字节。执行前留证后若原审计丢失，拒绝重新创建授权。
+
+未完成切换可显式撤回：先保存不可变补偿意图，再为原代码选择及受影响批准创建新事件；不把历史当前指针重设为旧值。撤回成功为 `state=failed, stage=reverted, outcome=reverted`。补偿意图保存后，续办自动继续补偿；已完成选择不能再用原撤回授权覆盖后续启动或数据。代码、配置、批准、状态或内核出现范围外变化，以及跨启动代次的原证明失效，均保留 `recovery_required`，须本机处理，不能据此重建未知规则。
+
+切换材料使用 root 专用 `0700/0600`，最多 8 项目录，单文件不超过 8 MiB，总预算 128 MiB，包含遗留临时材料及补偿写入预留，不自动删除审计或恢复依据，也不进入跨环境迁移或业务备份。完整的运行中停启编排、候选启动后的官方封禁恢复与实际动作证明、自动失败补偿及 Web/API 升级任务仍待接入；此分支不声称保护已恢复。实现和真实系统行为待 P5 集中验证。
 
 ### 受管实例本机状态快照
 

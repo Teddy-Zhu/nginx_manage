@@ -150,6 +150,9 @@ func (f *fail2banHostSyncExecutor) reconcile(ctx context.Context) (fail2ban.Host
 		return out, err
 	}
 	defer leave()
+	if err = fail2banUpgradeSwitchIdle(dataDir, ""); err != nil {
+		return out, err
+	}
 	if changed, e := advanceFail2banHostRetirement(ctx, dataDir); e != nil || changed {
 		latest, readErr := loadFail2banHostSync(dataDir)
 		out = fail2banHostBootRecoveryView(dataDir, fail2banHostRetirementSyncView(dataDir, fail2banHostSyncMetadata(latest)))
