@@ -92,7 +92,7 @@ func NewPublication(repo, version, commit, notes string) (PublicationSpec, error
 		if arch == "any" {
 			id, component, archive, executable = "web", "web", "nginxpanel_"+version+"_web.tar.gz", []string{}
 		}
-		spec.Packages = append(spec.Packages, PackageSource{Directory: id, ExecutableFiles: executable, Asset: Asset{ID: id, Component: component, Version: version, OS: "linux", Architecture: arch, Distribution: "any", DistributionVersion: "any", ABI: "static", Archive: archive, License: "LicenseRef-Project", LicenseFiles: []string{"LICENSE", "THIRD_PARTY_NOTICES.txt"}, SourceURL: "https://github.com/" + repo + "/tree/" + commit, Maintenance: "maintained"}})
+		spec.Packages = append(spec.Packages, PackageSource{Directory: id, ExecutableFiles: executable, Asset: Asset{ID: id, Component: component, Version: version, OS: "linux", Architecture: arch, Distribution: "any", DistributionVersion: "any", ABI: "static", Archive: archive, License: "MIT", LicenseFiles: []string{"LICENSE", "THIRD_PARTY_NOTICES.txt"}, SourceURL: "https://github.com/" + repo + "/tree/" + commit, Maintenance: "maintained"}})
 	}
 	for _, arch := range []string{"amd64", "arm64"} {
 		component, err := nginxPublicationPackage(arch, version)

@@ -27,9 +27,9 @@ onUnmounted(() => { closed = true; controller.abort(); if (timer) clearInterval(
 <template>
   <NAlert v-if="changed" class="version-notice" type="info">
     页面有新版本。保存当前修改后可重新载入。
-    <template #action><NPopconfirm @positive-click="reload"><template #trigger><NButton size="small">重新载入</NButton></template>重新载入会丢弃未保存的修改，是否继续？</NPopconfirm></template>
+    <NPopconfirm @positive-click="reload"><template #trigger><NButton size="small">重新载入</NButton></template>重新载入会丢弃未保存的修改，是否继续？</NPopconfirm>
   </NAlert>
-  <NAlert v-else-if="error" class="version-notice" type="warning">无法检查页面版本：{{ error }}<template #action><NButton size="small" @click="check">重试</NButton></template></NAlert>
+  <NAlert v-else-if="error" class="version-notice" type="warning">无法检查页面版本：{{ error }}<NButton size="small" @click="check">重试</NButton></NAlert>
 </template>
 
 <style scoped>

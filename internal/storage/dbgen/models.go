@@ -110,6 +110,25 @@ type AcmeRenewal struct {
 	LastError      string `json:"last_error"`
 }
 
+type AgentUpgrade struct {
+	TaskID        string `json:"task_id"`
+	Principal     string `json:"principal"`
+	MaintenanceID string `json:"maintenance_id"`
+	PrepareTaskID string `json:"prepare_task_id"`
+	Input         []byte `json:"input"`
+	RequestID     string `json:"request_id"`
+	Result        []byte `json:"result"`
+}
+
+type AgentUpgradeRequest struct {
+	ID         string `json:"id"`
+	TaskID     string `json:"task_id"`
+	Principal  string `json:"principal"`
+	Payload    []byte `json:"payload"`
+	Dispatched int64  `json:"dispatched"`
+	CreatedAt  int64  `json:"created_at"`
+}
+
 type ApiCredential struct {
 	ID             string        `json:"id"`
 	Name           string        `json:"name"`
@@ -130,6 +149,61 @@ type AuditLog struct {
 	ResourceID string `json:"resource_id"`
 	Outcome    string `json:"outcome"`
 	CreatedAt  int64  `json:"created_at"`
+}
+
+type BackupDownload struct {
+	TokenHash   string        `json:"token_hash"`
+	TaskID      string        `json:"task_id"`
+	Principal   string        `json:"principal"`
+	SessionHash string        `json:"session_hash"`
+	ExpiresAt   int64         `json:"expires_at"`
+	UsedAt      sql.NullInt64 `json:"used_at"`
+}
+
+type BackupPolicy struct {
+	ID                 int64  `json:"id"`
+	Version            int64  `json:"version"`
+	Recipient          string `json:"recipient"`
+	KeySavedAt         int64  `json:"key_saved_at"`
+	IntervalHours      int64  `json:"interval_hours"`
+	KeepCount          int64  `json:"keep_count"`
+	RetentionDays      int64  `json:"retention_days"`
+	Principal          string `json:"principal"`
+	IssuerMachine      int64  `json:"issuer_machine"`
+	IssuerEpoch        int64  `json:"issuer_epoch"`
+	AuthorizationUntil int64  `json:"authorization_until"`
+	NextRunAt          int64  `json:"next_run_at"`
+	LastError          string `json:"last_error"`
+	UpdatedAt          int64  `json:"updated_at"`
+}
+
+type BackupRecord struct {
+	TaskID             string         `json:"task_id"`
+	Principal          string         `json:"principal"`
+	IssuerMachine      int64          `json:"issuer_machine"`
+	IssuerEpoch        int64          `json:"issuer_epoch"`
+	Name               string         `json:"name"`
+	Encryption         string         `json:"encryption"`
+	Recipient          string         `json:"recipient"`
+	AuthorizationUntil int64          `json:"authorization_until"`
+	PolicyVersion      int64          `json:"policy_version"`
+	MaintenanceID      sql.NullString `json:"maintenance_id"`
+	RequestID          string         `json:"request_id"`
+	Manifest           []byte         `json:"manifest"`
+	ArchiveSize        int64          `json:"archive_size"`
+	ArchiveSha256      string         `json:"archive_sha256"`
+	CapturedAt         int64          `json:"captured_at"`
+	FinishedAt         int64          `json:"finished_at"`
+	ExpiresAt          int64          `json:"expires_at"`
+	DeleteStarted      int64          `json:"delete_started"`
+	DeletedAt          sql.NullInt64  `json:"deleted_at"`
+}
+
+type BackupRequest struct {
+	Principal   string `json:"principal"`
+	Key         string `json:"key"`
+	RequestHash string `json:"request_hash"`
+	TaskID      string `json:"task_id"`
 }
 
 type Certificate struct {
@@ -203,6 +277,36 @@ type DnsCredential struct {
 	UpdatedAt  int64  `json:"updated_at"`
 }
 
+type EventLogQueue struct {
+	Sequence int64  `json:"sequence"`
+	Payload  string `json:"payload"`
+}
+
+type EventLogStatus struct {
+	ID      int64 `json:"id"`
+	Dropped int64 `json:"dropped"`
+	Paused  int64 `json:"paused"`
+}
+
+type Fail2banOperation struct {
+	TaskID  string `json:"task_id"`
+	Payload []byte `json:"payload"`
+}
+
+type Fail2banPolicy struct {
+	ID        int64  `json:"id"`
+	Version   int64  `json:"version"`
+	Payload   []byte `json:"payload"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
+type FirewallPolicy struct {
+	ID        int64  `json:"id"`
+	Version   int64  `json:"version"`
+	Payload   []byte `json:"payload"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
 type HostDnsDesired struct {
 	Target     string `json:"target"`
 	Version    int64  `json:"version"`
@@ -232,17 +336,42 @@ type IdempotencyKey struct {
 	CreatedAt   int64  `json:"created_at"`
 }
 
+type MaintenanceSession struct {
+	TaskID        string         `json:"task_id"`
+	Principal     string         `json:"principal"`
+	Phase         string         `json:"phase"`
+	Deadline      int64          `json:"deadline"`
+	RootRequested int64          `json:"root_requested"`
+	RootEpoch     string         `json:"root_epoch"`
+	LastError     string         `json:"last_error"`
+	CreatedAt     int64          `json:"created_at"`
+	UpdatedAt     int64          `json:"updated_at"`
+	OwnerTaskID   sql.NullString `json:"owner_task_id"`
+}
+
 type MetricSample struct {
 	Minute  int64  `json:"minute"`
 	Payload []byte `json:"payload"`
 	Bytes   int64  `json:"bytes"`
 }
 
+type MigrationDependency struct {
+	PlanID            string `json:"plan_id"`
+	TaskID            string `json:"task_id"`
+	Principal         string `json:"principal"`
+	RequestHash       string `json:"request_hash"`
+	Payload           []byte `json:"payload"`
+	CheckTaskID       string `json:"check_task_id"`
+	PrepareTaskID     string `json:"prepare_task_id"`
+	Deadline          int64  `json:"deadline"`
+	MaintenanceTaskID string `json:"maintenance_task_id"`
+	InstallTaskID     string `json:"install_task_id"`
+	SettlementState   string `json:"settlement_state"`
+	SettlementStage   string `json:"settlement_stage"`
+	SettlementError   string `json:"settlement_error"`
+}
+
 type MigrationPlan struct {
-	PrunedAt           int64  `json:"pruned_at"`
-	ExecutionPrincipal string `json:"execution_principal"`
-	ExecutionKey       string `json:"execution_key"`
-	ExecutionHash      string `json:"execution_hash"`
 	ID                 string `json:"id"`
 	Principal          string `json:"principal"`
 	Payload            []byte `json:"payload"`
@@ -257,14 +386,40 @@ type MigrationPlan struct {
 	CreatedAt          int64  `json:"created_at"`
 	UpdatedAt          int64  `json:"updated_at"`
 	LastError          string `json:"last_error"`
+	PrunedAt           int64  `json:"pruned_at"`
+	ExecutionPrincipal string `json:"execution_principal"`
+	ExecutionKey       string `json:"execution_key"`
+	ExecutionHash      string `json:"execution_hash"`
 }
 
 type MigrationPull struct {
-	Principal   string `json:"principal"`
-	Key         string `json:"key"`
-	RequestHash string `json:"request_hash"`
+	Principal    string `json:"principal"`
+	Key          string `json:"key"`
+	RequestHash  string `json:"request_hash"`
+	PlanID       string `json:"plan_id"`
+	CreatedAt    int64  `json:"created_at"`
+	Continuation []byte `json:"continuation"`
+	State        string `json:"state"`
+	Stage        string `json:"stage"`
+	Mode         string `json:"mode"`
+	Deadline     int64  `json:"deadline"`
+	LastError    string `json:"last_error"`
+}
+
+type MigrationPush struct {
+	TaskID        string `json:"task_id"`
+	Principal     string `json:"principal"`
+	Payload       []byte `json:"payload"`
+	Summary       []byte `json:"summary"`
+	RemoteStarted int64  `json:"remote_started"`
+	Version       int64  `json:"version"`
+	ExpiresAt     int64  `json:"expires_at"`
+	NextAttemptAt int64  `json:"next_attempt_at"`
+}
+
+type MigrationReceife struct {
 	PlanID      string `json:"plan_id"`
-	CreatedAt   int64  `json:"created_at"`
+	RequestHash string `json:"request_hash"`
 }
 
 type ModuleSetting struct {
@@ -313,6 +468,18 @@ type NginxConfigFile struct {
 	Sha256     string `json:"sha256"`
 }
 
+type NginxInstallation struct {
+	TaskID             string `json:"task_id"`
+	Principal          string `json:"principal"`
+	MaintenanceID      string `json:"maintenance_id"`
+	PrepareTaskID      string `json:"prepare_task_id"`
+	Sequence           int64  `json:"sequence"`
+	Command            string `json:"command"`
+	AuthorizationUntil int64  `json:"authorization_until"`
+	Payload            []byte `json:"payload"`
+	Result             []byte `json:"result"`
+}
+
 type NginxResourceBinding struct {
 	RevisionID string `json:"revision_id"`
 	ResourceID string `json:"resource_id"`
@@ -320,6 +487,95 @@ type NginxResourceBinding struct {
 	BlockKey   string `json:"block_key"`
 	Kind       string `json:"kind"`
 	Projection []byte `json:"projection"`
+}
+
+type NginxSwitch struct {
+	TaskID             string `json:"task_id"`
+	Principal          string `json:"principal"`
+	MaintenanceID      string `json:"maintenance_id"`
+	PrepareTaskID      string `json:"prepare_task_id"`
+	Sequence           int64  `json:"sequence"`
+	Command            string `json:"command"`
+	AuthorizationUntil int64  `json:"authorization_until"`
+	Payload            []byte `json:"payload"`
+	Result             []byte `json:"result"`
+}
+
+type Node struct {
+	ID           string        `json:"id"`
+	NodeID       string        `json:"node_id"`
+	Name         string        `json:"name"`
+	Endpoint     string        `json:"endpoint"`
+	Fingerprint  string        `json:"fingerprint"`
+	CredentialID string        `json:"credential_id"`
+	Token        []byte        `json:"token"`
+	Scopes       string        `json:"scopes"`
+	ExpiresAt    int64         `json:"expires_at"`
+	ApiVersion   int64         `json:"api_version"`
+	Capabilities []byte        `json:"capabilities"`
+	State        string        `json:"state"`
+	LastError    string        `json:"last_error"`
+	CheckedAt    int64         `json:"checked_at"`
+	CreatedAt    int64         `json:"created_at"`
+	UpdatedAt    int64         `json:"updated_at"`
+	RemovedAt    sql.NullInt64 `json:"removed_at"`
+	Revocation   string        `json:"revocation"`
+	Version      int64         `json:"version"`
+}
+
+type NodePairing struct {
+	ID                  string         `json:"id"`
+	Principal           string         `json:"principal"`
+	IssuerMachine       int64          `json:"issuer_machine"`
+	IssuerEpoch         int64          `json:"issuer_epoch"`
+	CreateKey           string         `json:"create_key"`
+	RequestHash         string         `json:"request_hash"`
+	Name                string         `json:"name"`
+	ControllerNodeID    string         `json:"controller_node_id"`
+	Scopes              string         `json:"scopes"`
+	AllowedSources      string         `json:"allowed_sources"`
+	CredentialExpiresAt int64          `json:"credential_expires_at"`
+	SecretHash          string         `json:"secret_hash"`
+	ClaimHash           sql.NullString `json:"claim_hash"`
+	CredentialID        sql.NullString `json:"credential_id"`
+	Token               []byte         `json:"token"`
+	State               string         `json:"state"`
+	CreatedAt           int64          `json:"created_at"`
+	ExpiresAt           int64          `json:"expires_at"`
+	ClaimedAt           sql.NullInt64  `json:"claimed_at"`
+	ConfirmedAt         sql.NullInt64  `json:"confirmed_at"`
+	RevokedAt           sql.NullInt64  `json:"revoked_at"`
+}
+
+type NodePairingJob struct {
+	ID               string         `json:"id"`
+	Principal        string         `json:"principal"`
+	RequestKey       string         `json:"request_key"`
+	RequestHash      string         `json:"request_hash"`
+	Name             string         `json:"name"`
+	Endpoint         string         `json:"endpoint"`
+	Fingerprint      string         `json:"fingerprint"`
+	ControllerNodeID string         `json:"controller_node_id"`
+	TargetNodeID     string         `json:"target_node_id"`
+	PairingID        string         `json:"pairing_id"`
+	Material         []byte         `json:"material"`
+	CredentialID     string         `json:"credential_id"`
+	ConnectionID     sql.NullString `json:"connection_id"`
+	State            string         `json:"state"`
+	Stage            string         `json:"stage"`
+	LastError        string         `json:"last_error"`
+	Revocation       string         `json:"revocation"`
+	CreatedAt        int64          `json:"created_at"`
+	UpdatedAt        int64          `json:"updated_at"`
+}
+
+type NodeRequest struct {
+	Principal    string `json:"principal"`
+	Key          string `json:"key"`
+	Action       string `json:"action"`
+	RequestHash  string `json:"request_hash"`
+	ConnectionID string `json:"connection_id"`
+	CreatedAt    int64  `json:"created_at"`
 }
 
 type NotificationChannel struct {
@@ -389,6 +645,66 @@ type NotificationSignal struct {
 	Active    int64          `json:"active"`
 	Episode   int64          `json:"episode"`
 	VersionID sql.NullString `json:"version_id"`
+}
+
+type PanelImageUpgrade struct {
+	TaskID        string `json:"task_id"`
+	Principal     string `json:"principal"`
+	MaintenanceID string `json:"maintenance_id"`
+	PrepareTaskID string `json:"prepare_task_id"`
+	Input         []byte `json:"input"`
+	RequestID     string `json:"request_id"`
+	Result        []byte `json:"result"`
+}
+
+type PanelImageUpgradeRequest struct {
+	ID         string `json:"id"`
+	TaskID     string `json:"task_id"`
+	Principal  string `json:"principal"`
+	Payload    []byte `json:"payload"`
+	Dispatched int64  `json:"dispatched"`
+	CreatedAt  int64  `json:"created_at"`
+}
+
+type PanelUpdate struct {
+	TaskID           string `json:"task_id"`
+	Principal        string `json:"principal"`
+	MaintenanceID    string `json:"maintenance_id"`
+	PrepareTaskID    string `json:"prepare_task_id"`
+	Input            []byte `json:"input"`
+	RequestID        string `json:"request_id"`
+	Result           []byte `json:"result"`
+	CleanupPending   int64  `json:"cleanup_pending"`
+	CleanupCheckedAt int64  `json:"cleanup_checked_at"`
+}
+
+type PanelUpdateRequest struct {
+	ID         string `json:"id"`
+	TaskID     string `json:"task_id"`
+	Principal  string `json:"principal"`
+	Payload    []byte `json:"payload"`
+	Dispatched int64  `json:"dispatched"`
+	CreatedAt  int64  `json:"created_at"`
+}
+
+type RestoreBarrier struct {
+	ID            string `json:"id"`
+	Mode          string `json:"mode"`
+	SourceNodeID  string `json:"source_node_id"`
+	TargetNodeID  string `json:"target_node_id"`
+	ArchiveSha256 string `json:"archive_sha256"`
+	PreparedAt    int64  `json:"prepared_at"`
+	State         string `json:"state"`
+	Report        string `json:"report"`
+}
+
+type RestoreQuarantinedTask struct {
+	TaskID        string `json:"task_id"`
+	RestoreID     string `json:"restore_id"`
+	OriginalState string `json:"original_state"`
+	OriginalStage string `json:"original_stage"`
+	OriginalError string `json:"original_error"`
+	IsolatedAt    int64  `json:"isolated_at"`
 }
 
 type Session struct {

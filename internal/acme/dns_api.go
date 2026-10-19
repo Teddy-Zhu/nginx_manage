@@ -21,7 +21,7 @@ import (
 	dnspod "github.com/go-acme/tencentclouddnspod/v20210323"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
 	tcerrors "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/errors"
-	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
+	cloudprofile "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
 )
 
 type dnsRecord struct {
@@ -90,7 +90,7 @@ func newDNSAPI(provider string, secrets map[string]string) (*dnsAPI, error) {
 	case "alidns":
 		d.ali, err = alidns.NewClient(new(openapi.Config).SetAccessKeyId(secrets["access_key_id"]).SetAccessKeySecret(secrets["access_key_secret"]).SetRegionId("cn-hangzhou").SetConnectTimeout(10000).SetReadTimeout(20000))
 	case "tencentcloud":
-		config := profile.NewClientProfile()
+		config := cloudprofile.NewClientProfile()
 		config.HttpProfile.Endpoint = "dnspod.tencentcloudapi.com"
 		config.HttpProfile.ReqTimeout = 20
 		config.DisableRegionBreaker = true

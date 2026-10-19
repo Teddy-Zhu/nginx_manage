@@ -92,8 +92,9 @@ func (s *Service) CheckCSRF(r *http.Request) bool {
 	return want != "" && subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
 }
 func (s *Service) Recent(ctx context.Context) bool {
-	t := s.Sessions.GetTime(ctx, "reauth")
-	return !t.IsZero() && time.Since(t) < 5*time.Minute
+	then := s.Sessions.GetInt64(ctx, "reauth")
+	now := time.Now().Unix()
+	return then > 0 && then <= now && now-then < int64((5*time.Minute)/time.Second)
 }
 
 func (s *Service) rate(ip string) error {
@@ -154,14 +155,14 @@ func (s *Service) Login(ctx context.Context, ip, username, password string) erro
 	}
 	s.Sessions.Put(ctx, "user", u.Username)
 	s.Sessions.Put(ctx, "epoch", u.SessionEpoch)
-	s.Sessions.Put(ctx, "reauth", time.Now())
+	s.Sessions.Put(ctx, "reauth", time.Now().Unix())
 	s.Sessions.Put(ctx, "csrf", secure.Token())
 	return nil
 }
 func (s *Service) Reauthenticate(ctx context.Context, ip, password string) error {
 	_, err := s.check(ctx, ip, s.Sessions.GetString(ctx, "user"), password)
 	if err == nil {
-		s.Sessions.Put(ctx, "reauth", time.Now())
+		s.Sessions.Put(ctx, "reauth", time.Now().Unix())
 	}
 	return err
 }

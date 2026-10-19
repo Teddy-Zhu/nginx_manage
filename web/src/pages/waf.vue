@@ -38,7 +38,7 @@ const api = useNodeAPI();
 
 function emptyConfig(): WAFConfig {
   return {
-    metadata: { name: "", notes: "", enabled: false },
+    metadata: { name: "", notes: "", enabled: false, client_deny: false },
     rate: 0,
     rate_unit: "r/s",
     burst: 0,

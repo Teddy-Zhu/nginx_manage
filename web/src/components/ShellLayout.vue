@@ -120,7 +120,7 @@ onUnmounted(() => {
         <p class="muted">节点：{{ currentNode }} · {{ route.meta.localOnly ? sourceNodeId : nodes.selected?.nodeId ?? sourceNodeId }}</p>
         <n-alert v-if="nodes.error && !route.meta.localOnly" type="error" style="margin-bottom: 16px">
           {{ nodes.error }}
-          <template #action><n-button v-if="nodes.selected" size="small" :disabled="busy || nodes.switching" @click="selectNode(nodes.selected.connection)">重新检查连接</n-button></template>
+          <n-button v-if="nodes.selected" size="small" :disabled="busy || nodes.switching" @click="selectNode(nodes.selected.connection)">重新检查连接</n-button>
         </n-alert>
         <slot />
       </main>

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/firewall"
@@ -40,11 +41,11 @@ func (s *Server) GetFirewallRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	s.ok(w, r, out)
 }
-func (s *Server) GetFirewallOperation(w http.ResponseWriter, r *http.Request, id apigen.ID) {
+func (s *Server) GetFirewallOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	if _, ok := s.firewallPrincipal(w, r, false); !ok {
 		return
 	}
-	out, err := s.Agent.FirewallOperation(r.Context(), id)
+	out, err := s.Agent.FirewallOperation(r.Context(), id.String())
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -124,11 +125,11 @@ func (s *Server) ApplyFirewall(w http.ResponseWriter, r *http.Request, params ap
 	}
 	s.respond(w, r, http.StatusAccepted, "OK", "防火墙操作已记录", out)
 }
-func (s *Server) ConfirmFirewall(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.ConfirmFirewallParams) {
-	s.decideFirewall(w, r, id, "confirm")
+func (s *Server) ConfirmFirewall(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, _ apigen.ConfirmFirewallParams) {
+	s.decideFirewall(w, r, id.String(), "confirm")
 }
-func (s *Server) RollbackFirewall(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.RollbackFirewallParams) {
-	s.decideFirewall(w, r, id, "rollback")
+func (s *Server) RollbackFirewall(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, _ apigen.RollbackFirewallParams) {
+	s.decideFirewall(w, r, id.String(), "rollback")
 }
 func (s *Server) decideFirewall(w http.ResponseWriter, r *http.Request, id, action string) {
 	p, ok := s.firewallPrincipal(w, r, true)

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
-	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/secure"
 )
 

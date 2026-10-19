@@ -764,7 +764,7 @@ onUnmounted(() => {
       >
         {{ states[plan.pull.state] ?? plan.pull.state }} ·
         {{ pullStages[plan.pull.stage] ?? plan.pull.stage }} ·
-        {{ options.find((item) => item.value === plan.pull?.mode)?.label }}
+        {{ options.find((item) => item.value === plan?.pull?.mode)?.label }}
         <p>迁入授权有效期至 {{ time(plan.pull.deadline) }}</p>
         <p v-if="plan.pull.error">{{ plan.pull.error }}</p>
       </NAlert>

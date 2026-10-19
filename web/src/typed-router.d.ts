@@ -59,6 +59,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/agent-upgrades': RouteRecordInfo<
+      '/agent-upgrades',
+      '/agent-upgrades',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/backups': RouteRecordInfo<
       '/backups',
       '/backups',
@@ -94,6 +101,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/component-switches': RouteRecordInfo<
+      '/component-switches',
+      '/component-switches',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/components': RouteRecordInfo<
       '/components',
       '/components',
@@ -101,9 +115,23 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/fail2ban': RouteRecordInfo<
+      '/fail2ban',
+      '/fail2ban',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/firewall': RouteRecordInfo<
       '/firewall',
       '/firewall',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/firewall-apply': RouteRecordInfo<
+      '/firewall-apply',
+      '/firewall-apply',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -185,6 +213,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/nginx-images': RouteRecordInfo<
+      '/nginx-images',
+      '/nginx-images',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/nodes': RouteRecordInfo<
       '/nodes',
       '/nodes',
@@ -199,23 +234,9 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
-    '/agent-upgrades': RouteRecordInfo<
-      '/agent-upgrades',
-      '/agent-upgrades',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
     '/panel-images': RouteRecordInfo<
       '/panel-images',
       '/panel-images',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
-    '/nginx-images': RouteRecordInfo<
-      '/nginx-images',
-      '/nginx-images',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -300,6 +321,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/agent-upgrades.vue': {
+      routes:
+        | '/agent-upgrades'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/backups.vue': {
       routes:
         | '/backups'
@@ -340,6 +369,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/component-switches.vue': {
+      routes:
+        | '/component-switches'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/components.vue': {
       routes:
         | '/components'
@@ -348,9 +385,25 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/fail2ban.vue': {
+      routes:
+        | '/fail2ban'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/firewall.vue': {
       routes:
         | '/firewall'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/firewall-apply.vue': {
+      routes:
+        | '/firewall-apply'
       views:
         | never
       pathParamNames:
@@ -444,6 +497,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/nginx-images.vue': {
+      routes:
+        | '/nginx-images'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/nodes.vue': {
       routes:
         | '/nodes'
@@ -460,25 +521,9 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
-    'src/pages/agent-upgrades.vue': {
-      routes:
-        | '/agent-upgrades'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
     'src/pages/panel-images.vue': {
       routes:
         | '/panel-images'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/nginx-images.vue': {
-      routes:
-        | '/nginx-images'
       views:
         | never
       pathParamNames:

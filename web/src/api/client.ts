@@ -301,7 +301,7 @@ function assertScope(scope: RequestScope) {
 function endpoint(url: string, scope: RequestScope) {
   assertScope(scope);
   if (!url.startsWith("/") || url.startsWith("//")) throw new ApiError("INVALID_REQUEST", "接口路径无效", 0);
-  return scope.target ? `/nodes/${scope.target.connection}${url}` : url;
+  return scope.target ? `/nodes/connections/${scope.target.connection}${url}` : url;
 }
 export function request<T>(config: RequestConfig): Promise<T> { return scopedRequest<T>(config, controlScope); }
 async function scopedRequest<T>(config: RequestConfig, scope: RequestScope): Promise<T> {

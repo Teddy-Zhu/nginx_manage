@@ -24,6 +24,8 @@ type contextKey uint8
 
 const requestIDKey contextKey = 1
 
+type sessionFailure struct{ err error }
+
 // All API paths, including middleware, malformed requests and unknown routes,
 // go through this envelope. HTTP status remains meaningful independently.
 type Response struct {
@@ -106,7 +108,11 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		defer func() {
-			if recover() != nil {
+			if recovered := recover(); recovered != nil {
+				if failure, ok := recovered.(sessionFailure); ok {
+					s.fail(w, r, failure.err)
+					return
+				}
 				slog.Error("API panic", "request_id", id)
 				s.respond(w, r, 500, "INTERNAL_ERROR", "内部错误", nil)
 			}

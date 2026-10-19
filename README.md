@@ -1,16 +1,16 @@
 # NginxPanel
 
-基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前处于基础工程实施阶段，尚未发布，不声明系统兼容性验收通过。
+基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前进入 P5 集中验证，尚未发布，真实系统能力矩阵仍待验收。
 
 当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单与基础 WAF 策略、手动证书版本与 HTTPS 绑定/跳转/HSTS、不可变修订、原文差异、外部快照/草稿捕获/受管恢复、并发保护和独立草稿；Unix Socket Agent 身份校验、Nginx 编译/受信动态模块能力、不可变发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
 
-安全发布流程代码已接入，尚未集中验证。ACME 已接入独立测试/正式账户、DNS 凭据、DNS-01 签发及持久订单恢复；HTTP-01、自动续期、完整代理能力、安全/主机管理、多节点、备份和发布更新继续实施；保存与校验不会显示为已生效。
+ACME、主机 DNS、防火墙、Fail2ban、多节点、加密备份与跨环境迁移、原生与 Docker 部署及签名更新均已接入，实际运行能力须按目标系统验收；保存与校验不会显示为已生效。
 
 ## 开发
 
 开发阶段不得修改当前主机的软件包、系统服务、网络、防火墙或 Docker 配置。运行验证使用隔离的 Docker/虚拟机环境；安装器仅在实际部署目标执行，并须正确配置目标宿主机。
 
-需要 Go 1.27.2（`go.mod` 自动选择）、Node.js 24、pnpm 10.33.0。生产运行不需要 Node、独立数据库、Python 或 Docker。
+开发需要 Go 1.27.2（`go.mod` 自动选择）、Node.js 24、pnpm 10.33.0。面板核心运行不需要 Node 或独立数据库；Docker 部署需要目标 Docker Engine，启用 Fail2ban 需要受支持的目标 Python 环境。
 
 ```sh
 pnpm --dir web install --frozen-lockfile
@@ -33,13 +33,13 @@ go run ./cmd/nginxpanel agent --dev --data-dir=.local
 
 实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。[原生安装入口](deploy/native/README.md) 已接入账户/目录分区、不可变产物及三个 systemd 服务，支持 `--without-nginx` 仅安装 Web/Agent，显式 `--start` 才按所选组件启用启动；不接管已有系统 Nginx。安装与实际服务尚未验证。开发 Agent 不开放实际执行。
 
-未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；当前生产入口仅允许回环 HTTPS。P4 原生首次安装已开始接入，签名发布、可信组件自动准备及完整 Docker 持久运行继续实施。
+未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；生产保留回环 HTTPS 救援入口，远程管理通过受控监听开放。部署方式见 [原生安装](deploy/native/README.md) 和 [Docker 部署](deploy/docker/README.md)。
 
-本机 `release-verify/release-prepare` 与 `release-check/release-fetch` 已接入固定发布公钥、离线签名清单、固定 GitHub 仓库的受限下载和有界资产准备，见 [发行资产合同](docs/releases.md)。准备好的 panel 可交给原生安装器；此入口不启动组件或切换当前版本，在线更新及迁移自动准备继续实施，尚未运行验证。
+本机 `release-verify/release-prepare` 与 `release-check/release-fetch` 已接入固定发布公钥、离线签名清单、固定 GitHub 仓库的受限下载和有界资产准备，见 [发行资产合同](docs/releases.md)。准备好的 panel 可交给原生安装器；组件激活、在线更新及迁移依赖安装通过各自的维护流程执行。
 
-面板/web 的 [发布工具与 GitHub 工作流](docs/publishing.md) 已接入打包、实际许可文件、依赖 SBOM、构建来源及 Ed25519 签名，先上传完整草稿再公开。当前尚未运行，正式使用仍需项目许可证和仓库发布密钥配置。
+项目采用 [MIT 许可](LICENSE)。面板/web 的 [发布工具与 GitHub 工作流](docs/publishing.md) 已接入打包、实际许可文件、依赖 SBOM、构建来源及 Ed25519 签名，先上传完整草稿再公开。正式发布仍需配置仓库和发布密钥。
 
-生成代码：`make generate`。构建：`make build`。验证：`make verify`，仅在业务实现和集成稳定后的集中验证阶段执行；不包含 UI 自动化。当前实现尚未执行构建、类型检查或业务验证。
+生成代码：`make generate`。构建：`make build`。验证：`make verify`，仅在业务实现和集成稳定后的集中验证阶段执行；不包含 UI 自动化。开发验证须在隔离环境执行，已执行范围及待验收项见 [验证记录](docs/validation.md)。
 
 ## 接口与约束
 

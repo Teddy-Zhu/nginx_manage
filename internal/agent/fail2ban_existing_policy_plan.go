@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/secure"
 )
 

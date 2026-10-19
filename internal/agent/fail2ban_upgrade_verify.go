@@ -185,7 +185,7 @@ func verifyFail2banUpgradeLocked(ctx context.Context, in Fail2banUpgradeVerifica
 	if err = fail2banUpgradeIdleFor(j, allowed); err != nil {
 		return out, err
 	}
-	i, err := readFail2banUpgradeSelection(in.DataDir, in.SwitchID, in.RestoreID)
+	i, err = readFail2banUpgradeSelection(in.DataDir, in.SwitchID, in.RestoreID)
 	if err != nil {
 		return out, err
 	}

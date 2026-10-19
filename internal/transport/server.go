@@ -83,7 +83,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.respond(w, r, 404, "NOT_FOUND", "接口不存在", nil)
 	})
-	s.Auth.Sessions.ErrorFunc = func(w http.ResponseWriter, r *http.Request, err error) { s.fail(w, r, err) }
+	// SCS continues its original Write after ErrorFunc returns. Unwind to the
+	// outer response boundary so a failed session commit cannot append success JSON.
+	s.Auth.Sessions.ErrorFunc = func(_ http.ResponseWriter, _ *http.Request, err error) { panic(sessionFailure{err}) }
 	s.remoteRoutes(mux)
 	return s.middleware(s.remoteBoundary(s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux)))))
 }

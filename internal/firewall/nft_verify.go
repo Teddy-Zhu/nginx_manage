@@ -17,6 +17,10 @@ import (
 // between our encoding and supported kernels' dumps.
 type nftShape map[uint16]nftShape
 
+// Linux UAPI enum nft_bitwise_attributes assigns OP = 6. The pinned x/sys
+// exports the preceding fields but does not export NFTA_BITWISE_OP.
+const nftaBitwiseOp uint16 = 6
+
 func nftAttrMap(raw []byte) (map[uint16]netlink.Attribute, error) {
 	attrs, err := netlink.UnmarshalAttributes(raw)
 	if err != nil {
@@ -100,11 +104,11 @@ func nftExpressionEqual(expected, actual []byte) bool {
 		shape = nftShape{unix.NFTA_CMP_DATA: dataValue}
 	case "bitwise\x00":
 		shape = nftShape{unix.NFTA_BITWISE_MASK: dataValue, unix.NFTA_BITWISE_XOR: dataValue}
-		if op, ok := gotFields[unix.NFTA_BITWISE_OP]; ok {
-			if op.Type != unix.NFTA_BITWISE_OP || len(op.Data) != 4 || binary.BigEndian.Uint32(op.Data) != unix.NFT_BITWISE_BOOL {
+		if op, ok := gotFields[nftaBitwiseOp]; ok {
+			if op.Type != nftaBitwiseOp || len(op.Data) != 4 || binary.BigEndian.Uint32(op.Data) != unix.NFT_BITWISE_BOOL {
 				return false
 			}
-			delete(gotFields, unix.NFTA_BITWISE_OP)
+			delete(gotFields, nftaBitwiseOp)
 		}
 	case "range\x00":
 		shape = nftShape{unix.NFTA_RANGE_FROM_DATA: dataValue, unix.NFTA_RANGE_TO_DATA: dataValue}

@@ -15,6 +15,12 @@ import (
 
 const nftRegistrationPrefix = "nginxpanel:registration:v1:"
 
+// Linux nf_tables UAPI attributes not exported by the pinned x/sys version.
+const (
+	nftaTableHandle uint16 = 4
+	nftaChainFlags  uint16 = 10
+)
+
 // Registration has no chains, hooks, rules or executable input. Its only
 // mutations are exclusive creation and deletion of one proved-empty table.
 // Policy application must use a separate reachability/recovery executor.
@@ -114,8 +120,8 @@ func verifyNFTRegistrationTable(attrs map[uint16]netlink.Attribute, owner string
 			return errors.New("登记表包含标志或使用者")
 		}
 	}
-	handle, ok := attrs[unix.NFTA_TABLE_HANDLE]
-	if !ok || handle.Type != unix.NFTA_TABLE_HANDLE || len(handle.Data) != 8 || binary.BigEndian.Uint64(handle.Data) == 0 {
+	handle, ok := attrs[nftaTableHandle]
+	if !ok || handle.Type != nftaTableHandle || len(handle.Data) != 8 || binary.BigEndian.Uint64(handle.Data) == 0 {
 		return errors.New("登记表句柄无效")
 	}
 	marker, ok := attrs[6]

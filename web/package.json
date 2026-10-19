@@ -2,6 +2,7 @@
   "name": "nginxpanel-web",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
@@ -10,7 +11,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vue-tsc --noEmit -p tsconfig.app.json && vite build",
-    "typecheck": "vue-tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.app.json && tsc6 --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "format": "prettier --write src vite.config.ts",
     "generate:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",

@@ -117,18 +117,18 @@ function add() {
   const template = templates.value[0];
   if (!template || busy.value || jails.value.length >= 32) return;
   const id = crypto.randomUUID();
-  jails.value.push({
+  const common = {
     id,
     name: template.name,
     enabled: false,
-    template: template.id,
-    resource_id: "",
-    action: template.id === panelTemplate ? "host-input" : "nginx-client",
     ban_time: template.ban_time,
     find_time: template.find_time,
     max_retry: template.max_retry,
     ignore_ips: [],
-  });
+  };
+  jails.value.push(template.id === panelTemplate
+    ? { ...common, template: panelTemplate, resource_id: "", action: "host-input" }
+    : { ...common, template: template.id, resource_id: "", action: "nginx-client" });
   ignoreText.value[id] = "";
   preview.value = null;
 }

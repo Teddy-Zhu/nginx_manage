@@ -82,7 +82,7 @@ func snapshotNFTTargetProgram(ctx context.Context, target firewall.NFTTarget, pr
 			if program != nil {
 				use = 1
 			}
-			_, validHandle := nftHandle(attrs, unix.NFTA_TABLE_HANDLE)
+			_, validHandle := nftHandle(attrs, nftaTableHandle)
 			if len(attrs) != 5 || !validHandle || !nftBytes(attrs, unix.NFTA_TABLE_NAME, []byte(layout.Table+"\x00")) || !nftUint32(attrs, unix.NFTA_TABLE_FLAGS, 0) || !nftUint32(attrs, unix.NFTA_TABLE_USE, use) || !nftBytes(attrs, 6, []byte(marker)) {
 				return errors.New("受管表与独立登记或编译结果不匹配")
 			}
@@ -92,7 +92,7 @@ func snapshotNFTTargetProgram(ctx context.Context, target firewall.NFTTarget, pr
 				return errors.New("受管表包含未预期的链")
 			}
 			_, validHandle := nftHandle(attrs, unix.NFTA_CHAIN_HANDLE)
-			if !validHandle || !nftBytes(attrs, unix.NFTA_CHAIN_TABLE, []byte(layout.Table+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_NAME, []byte(layout.Chain+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_TYPE, []byte("filter\x00")) || !nftUint32(attrs, unix.NFTA_CHAIN_POLICY, uint32(expr.VerdictAccept)) || !nftUint32(attrs, unix.NFTA_CHAIN_FLAGS, 1 /* NFT_CHAIN_BASE, Linux UAPI */) || !nftUint32(attrs, unix.NFTA_CHAIN_USE, uint32(expectedRules)) {
+			if !validHandle || !nftBytes(attrs, unix.NFTA_CHAIN_TABLE, []byte(layout.Table+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_NAME, []byte(layout.Chain+"\x00")) || !nftBytes(attrs, unix.NFTA_CHAIN_TYPE, []byte("filter\x00")) || !nftUint32(attrs, unix.NFTA_CHAIN_POLICY, uint32(expr.VerdictAccept)) || !nftUint32(attrs, nftaChainFlags, 1 /* NFT_CHAIN_BASE, Linux UAPI */) || !nftUint32(attrs, unix.NFTA_CHAIN_USE, uint32(expectedRules)) {
 				return errors.New("受管基础链的结构、策略或引用数变化")
 			}
 			hook, ok := attrs[unix.NFTA_CHAIN_HOOK]

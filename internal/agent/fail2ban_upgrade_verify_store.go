@@ -40,7 +40,7 @@ func readFail2banUpgradeVerification(data, id string) (fail2banUpgradeVerificati
 	if err != nil || !bytes.Equal(canonical, raw) {
 		return v, i, errors.New("升级保护证明字段或规范格式变化")
 	}
-	i, err := readFail2banUpgradeSelection(data, v.Request.SwitchID, v.Request.RestoreID)
+	i, err = readFail2banUpgradeSelection(data, v.Request.SwitchID, v.Request.RestoreID)
 	if err != nil {
 		return v, i, err
 	}

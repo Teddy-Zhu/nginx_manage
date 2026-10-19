@@ -294,7 +294,7 @@ func queueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string, 
 	}
 	now := time.Now().Unix()
 	i := NginxImageIntent{Input: in, Epoch: epoch, Before: before, Target: target, Panel: panel.Deployment, PanelID: panel.Release.ID, FrontendSHA256: frontend, ApprovalSHA256: selectionValueHash(staged.Approval), Agent: agent, AgentProcess: process, AgentUnit: agentUnit, WorkerUnit: unit, BeforeCompose: oldCompose.Bytes(), TargetCompose: newCompose.Bytes(), TargetLabels: labels, Container: container, CreatedAt: now, Deadline: now + 600}
-	w := &nginxImageWorker{j: j, r: Record{OperationID: id, Kind: nginxImageKind, State: "running", Stage: "authorized", MaintenanceEpoch: epoch, CreatedAt: now, UpdatedAt: now, Deadline: i.Deadline, NginxImage: &NginxImageOperation{Intent: i}}}
+	w := &nginxImageWorker{j: j, r: Record{OperationID: id, Kind: nginxImageKind, State: "running", Stage: "authorized", MaintenanceEpoch: epoch, UpdatedAt: now, Deadline: i.Deadline, NginxImage: &NginxImageOperation{Intent: i}}}
 	n := w.nginx(before)
 	if err = n.setup(); err != nil {
 		return zero, err

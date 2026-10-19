@@ -2,7 +2,6 @@ package nginxconfig
 
 import (
 	"path"
-	"strings"
 )
 
 func childContext(parent, name string) string {

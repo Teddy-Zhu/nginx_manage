@@ -89,7 +89,7 @@ const createVisible = ref(false),
 const createName = ref(""),
   createNotes = ref(""),
   createMembers = ref("");
-const metadata = ref<ResourceMetadata>({ name: "", notes: "", enabled: true });
+const metadata = ref<ResourceMetadata>({ name: "", notes: "", enabled: true, client_deny: false });
 const createKind = ref<"http" | "stream">("http"),
   createListen = ref("8080"),
   createDomains = ref(""),
@@ -494,6 +494,7 @@ async function preview() {
       files: files.value,
       draft: false,
       validate: false,
+      apply: false,
     });
     diagnostics.value = result.diagnostics;
     if (!result.diagnostics.length) message.success("配置解析与安全校验通过");
@@ -652,6 +653,7 @@ async function createResource() {
       name: createName.value.trim(),
       notes: createNotes.value,
       enabled: true,
+      client_deny: false,
     },
     domains:
       createKind.value === "http"

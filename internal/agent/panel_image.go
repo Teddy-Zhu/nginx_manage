@@ -232,7 +232,7 @@ func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, 
 	}
 	now := time.Now().Unix()
 	intent := PanelImageIntent{Input: in, Epoch: epoch, Before: before.Deployment, Target: target, PanelID: before.Release.ID, ApprovalSHA256: selectionValueHash(staged.Approval), BeforeCompose: oldCompose.Bytes(), TargetCompose: newCompose.Bytes(), TargetLabels: targetLabels, Container: container, Baseline: ready, FrontendSHA256: frontend, WorkerUnit: unit, CreatedAt: now, Deadline: now + 600}
-	r := Record{OperationID: id, Kind: panelImageKind, State: "running", Stage: "authorized", RequestHash: panelImageHash(id, intent), PanelImage: &PanelImageOperation{Intent: intent, Epoch: epoch}, CreatedAt: now, UpdatedAt: now}
+	r := Record{OperationID: id, Kind: panelImageKind, State: "running", Stage: "authorized", RequestHash: panelImageHash(id, intent), PanelImage: &PanelImageOperation{Intent: intent, Epoch: epoch}, UpdatedAt: now}
 	if authorization != nil {
 		if err := validateImageAuthorization(*authorization, id, panelImageAPIInput(in), epoch, 1); err != nil {
 			return zero, err

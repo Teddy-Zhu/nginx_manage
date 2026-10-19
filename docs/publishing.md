@@ -84,8 +84,8 @@ sudo /opt/nginxpanel/current/nginxpanel release-images \
 
 此入口复用归档验签、有效期和接收协议规则，返回当前架构的固定引用、配置摘要及证据散列；`images_verified` 仅表示镜像清单已认证，不代表本机已有镜像、已绑定、已运行或通过部署验收。镜像可由本机管理员使用[签名镜像下载命令](../deploy/docker/README.md#签名镜像下载)准备，已有面板也可从组件页显式拉取；[Docker 安装器](../deploy/docker/README.md#安装来源与批准记录) 在写入意图前自动检查签名、本地镜像和程序/前端，并在绑定时重新检查、保存只读批准记录。模块变化通过新镜像发行处理。
 
-正式使用需要仓库已有实际 LICENSE，以及 release environment 中的 `RELEASE_ED25519_SEED` secret、`RELEASE_ED25519_PUBLIC_KEY` 和 `RELEASE_KEY_ID` variables。environment 的审批、受信标签限制和私钥保管由仓库维护者配置；代码不假定这些仓库设置已经完成。接收主机仍须由本机 root 独立批准仓库和公钥，普通配置迁移不覆盖它们。
+项目采用 [MIT 许可](../LICENSE)，面板/web 资产的 SPDX 标识为 `MIT`，归档及镜像包含项目 LICENSE 和第三方许可声明；第三方组件保留各自许可证。正式发布需要配置 release environment 中的 `RELEASE_ED25519_SEED` secret、`RELEASE_ED25519_PUBLIC_KEY` 和 `RELEASE_KEY_ID` variables。environment 的审批、受信标签限制和私钥保管由仓库维护者配置；代码不假定这些仓库设置已经完成。接收主机仍须由本机 root 独立批准仓库和公钥，普通配置迁移不覆盖它们。
 
 上传前核对当前标签仍指向批准的完整提交。已存在的发行或恢复草稿不会被自动覆盖；新建 draft，上传全部文件并核对资产名称、数量、状态、长度及可用的 GitHub SHA-256 后才公开。失败保留 draft，不自动删除、覆盖或跳过失败。稳定版使用 GitHub legacy 版本选择，预发布不会成为 latest；可配合仓库 immutable releases，但不能替代签名，相关字段见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
 
-当前仓库缺少项目自身的 LICENSE，正式产物和发布仍需补齐此业务输入。运行中组件切换仍在 P4 后续范围。原生组件和镜像发布均只完成源码接入，未执行构建、工具、CI、真实发布或系统验收，统一留到 P5。
+项目许可证已补齐；正式仓库与发布凭据尚未配置。原生组件和镜像发行仍需在 P5 完成产物生成与系统验收，真实 CI、签名发布和外部部署尚未执行。

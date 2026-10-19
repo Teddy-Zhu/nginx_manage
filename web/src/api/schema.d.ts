@@ -4,79 +4,910 @@
  */
 
 export interface paths {
- "/components/frontend/activate": { post: operations["createFrontendActivation"]; };
- "/components/images/pull": { post: operations["createComponentImagePull"]; };
- "/components/offline": { get:operations["listComponentOfflineUploads"]; post:operations["createComponentOfflineUpload"]; };
- "/components/offline/{id}/assets/{asset}": { put:operations["writeComponentOfflineChunk"]; };
- "/components/offline/{id}": { delete:operations["discardComponentOfflineUpload"]; };
-
-    "/history/runtime/execute": { post: operations["executeRuntimeHistory"]; };
-    "/history/runtime/preview": { post: operations["previewRuntimeHistory"]; };
-    "/history/runtime": { get: operations["listRuntimeHistory"]; };
-    "/history/execute": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
-        get?: never; put?: never; post: operations["executeHistory"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
+    "/fail2ban/existing/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最多 64 条 Fail2banExistingResource 本机接管登记。仅元数据，不证明实时运行保护，也不授予接管权。 */
+        get: operations["getFail2banExistingResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    "/history/preview": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
-        get?: never; put?: never; post: operations["previewHistory"]; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
+    "/fail2ban/existing/resources/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banExistingResourcePolicy 已保存参数及固定来源；完整原生运行核对由异步预览执行。 */
+        get: operations["getFail2banExistingResource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
- "/fail2ban/python": { post:operations["changeFail2banPython"]; };
- "/fail2ban/python/tasks": { get:operations["getFail2banPythonTasks"]; };
- "/fail2ban/upgrade": { post:operations["changeFail2banUpgrade"]; };
- "/fail2ban/upgrade/tasks": { get:operations["getFail2banUpgradeTasks"]; };
- "/fail2ban/lifecycle/preview": { post:operations["previewFail2banLifecycle"]; };
- "/fail2ban/lifecycle": { post:operations["changeFail2banLifecycle"]; };
- "/fail2ban/lifecycle/tasks": { get:operations["getFail2banLifecycleTasks"]; };
- "/fail2ban/addresses/status": { get: operations["getFail2banAddress"]; };
- "/fail2ban/addresses": { post: operations["changeFail2banAddress"]; };
- "/fail2ban/addresses/tasks": { get: operations["getFail2banAddressTasks"]; };
- "/fail2ban/existing/resources": { get: operations["getFail2banExistingResources"]; };
- "/fail2ban/existing/resources/{name}": { get: operations["getFail2banExistingResource"]; };
- "/fail2ban/existing/operations": { post: operations["changeFail2banExistingPolicy"]; };
- "/fail2ban/existing/tasks": { get: operations["getFail2banExistingTasks"]; };
- "/fail2ban/existing/tasks/{id}": { get: operations["getFail2banExistingTask"]; };
- "/fail2ban/existing/tasks/{id}/cancel": { post: operations["cancelFail2banExistingPolicy"]; };
- "/fail2ban/tasks": { get: operations["getFail2banTasks"]; };
- "/fail2ban/runtime": { get: operations["getFail2banRuntime"]; };
- "/fail2ban/apply": { post: operations["applyFail2ban"]; };
-    "/fail2ban/templates/check": { post: operations["checkFail2banTemplates"]; };
-    "/fail2ban/policy": { get: operations["getFail2banPolicy"]; put: operations["setFail2banPolicy"]; };
-    "/fail2ban/host-input": { get: operations["getFail2banHostInput"]; };
-    "/fail2ban/panel-login": { get: operations["getFail2banPanelLogin"]; };
-    "/fail2ban/templates": { get: operations["getFail2banTemplates"]; };
-    "/fail2ban/preview": { post: operations["previewFail2ban"]; };
-    "/fail2ban/instance": { get: operations["getFail2banInstance"]; };
-    "/fail2ban/jails/{name}": { get: operations["getFail2banJail"]; };
-    "/fail2ban": { get: operations["getFail2ban"]; };
-    "/firewall/runtime": { get: operations["getFirewallRuntime"]; };
-    "/firewall/plan": { post: operations["planFirewall"]; };
-    "/firewall/apply": { post: operations["applyFirewall"]; };
-    "/firewall/operations/{id}": { get: operations["getFirewallOperation"]; };
-    "/firewall/operations/{id}/confirm": { post: operations["confirmFirewall"]; };
-    "/firewall/operations/{id}/rollback": { post: operations["rollbackFirewall"]; };
-
-    "/firewall/policy": { get: operations["getFirewallPolicy"]; put: operations["setFirewallPolicy"]; };
-    "/firewall/preview": { post: operations["previewFirewall"]; };
-    "/firewall": { get: operations["getFirewall"]; };
-    "/backups": { get: operations["listBackups"]; post: operations["createBackup"]; };
-    "/backups/policy": { get: operations["getBackupPolicy"]; put: operations["setBackupPolicy"]; };
-    "/backups/{id}": { get: operations["getBackup"]; delete: operations["deleteBackup"]; };
-    "/backups/{id}/download": { get: operations["downloadBackup"]; post: operations["createBackupDownload"]; };
-    "/management/listener": { get: operations["getManagementListener"]; post: operations["applyManagementListener"]; };
-    "/management/listener/operations/{id}": { get: operations["getManagementListenerOperation"]; };
-    "/management/listener/operations/{id}/confirm": { post: operations["confirmManagementListener"]; };
-    "/management/listener/operations/{id}/rollback": { post: operations["rollbackManagementListener"]; };
-    "/remote/pairings": { get: operations["listPairings"]; post: operations["createPairing"]; };
-    "/remote/pairings/{id}": { delete: operations["revokePairing"]; };
-    "/remote/pairings/{id}/exchange": { post: operations["exchangePairing"]; };
-    "/remote/pairings/{id}/confirm": { post: operations["confirmPairing"]; };
-    "/nodes/pairings": { get: operations["listPairingJobs"]; post: operations["startPairing"]; };
-    "/nodes/pairings/{id}": { get: operations["getPairingJob"]; };
-    "/nodes/pairings/{id}/resume": { post: operations["resumePairing"]; };
-    "/nodes/pairings/{id}/abandon": { post: operations["abandonPairing"]; };
+    "/fail2ban/existing/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banExistingPolicyTask。preview/apply 均持久排队并要求模块启用、近期认证及幂等键。apply 的 preview_id 是五分钟内成功预览的 operation_id，参数、target 与独立停用确认必须一致。不能授予接管权、改变来源或执行任意命令；HTTP 202 不表示运行生效。 */
+        post: operations["changeFail2banExistingPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/existing/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最近 16 条 Fail2banExistingTaskStatus，包含保存的预览、执行和取消结果。Agent 离线不伪造当前运行状态。 */
+        get: operations["getFail2banExistingTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/existing/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回指定 Fail2banExistingTaskStatus；仅读取保存结果。 */
+        get: operations["getFail2banExistingTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/existing/tasks/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回原 Fail2banExistingPolicyTask，持久保存取消申请；模块停用后仍可申请。已开始提交且原记录缺失时不重建、不伪造取消成功。运行取消由 root 核对，拒绝原因单独保留；已完成或恢复隔离任务不可取消。 */
+        post: operations["cancelFail2banExistingPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/python": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banPythonTask。action=plan 异步生成最小系统 Python 依赖计划，refresh=true 明确允许刷新现有仓库索引；不安装包。action=install 只接受原计划 plan_id 且 refresh=false，独立确认安装，不安装或启动 Fail2ban。均要求模块启用、components.manage、近期认证及幂等键；HTTP 202 仅表示持久排队。派发后不自动重复刷新索引或重放安装，来源、包或工具变化须重新规划。 */
+        post: operations["changeFail2banPython"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/python/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最近 16 条 Fail2banPythonTaskStatus 及保存的计划、解释器和结果快照；已有快照在 Agent 离线时仍可读取，备份隔离任务不重放。 */
+        get: operations["getFail2banPythonTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/upgrade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banUpgradeTask。check 异步检查单个已准备签名资产；prepare 使用 check 的 target 固定运行实例与恢复材料；run 只接受准备完成的 preparation_id 及 intent_sha256 作为 target。仅管理运行中的独立受管实例。准备不停止服务，run 独立确认停止、状态捕获、切换、保护核对及候选失败后的原版本恢复。均要求模块启用、近期认证和幂等键；HTTP 202 只表示持久排队，不表示升级或保护已完成。不接受主机路径、服务名称、命令或新的信任来源。 */
+        post: operations["changeFail2banUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/upgrade/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最近 16 条 Fail2banUpgradeTaskStatus 和保存的检查、准备、升级或恢复结果。结果为历史快照，不证明当前实时保护；已接受的原 Agent 记录丢失时保留恢复状态，不重建执行授权。 */
+        get: operations["getFail2banUpgradeTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/lifecycle/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。仅预览本应用的独立实例，冻结实际服务、安装、配置和签名资产基准并显示影响，不执行安装或服务控制。 */
+        post: operations["previewFail2banLifecycle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。派发后中断不自动重放，须核对并重新预览续办或撤回；不控制系统全局实例。 */
+        post: operations["changeFail2banLifecycle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/lifecycle/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最近 16 条 Fail2banLifecycleTaskStatus，包含该次执行器回执和服务/安装结果快照；不是持续的服务健康保证。完整备份隔离任务不重放。 */
+        get: operations["getFail2banLifecycleTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/addresses/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banAddressStatus。核对本应用独立受管的 Nginx/面板登录 jail 或本机已接管 SSH jail、官方引擎状态、保护地址及对应动作代次。宿主机规则无法证明或动作批准失效时禁止新增封禁，仍可明确解封；动作集合未包含地址不表示其他保护允许访问。须使用本次 target 提交操作。 */
+        get: operations["getFail2banAddress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banAddressTask，浏览器要求近期认证。通过官方客户端执行单 jail 的 ban/unban，不接受全局解封、命令或时长覆盖；ban 使用当前 jail 时长，已封禁地址不续期。已记录派发后不重复客户端调用，回执不明仅核对当前引擎状态；任务成功仅证明官方引擎状态，Nginx 集合或宿主机规则仍需分别核对。 */
+        post: operations["changeFail2banAddress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/addresses/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最近 16 条 Fail2banAddressTaskStatus。保留手动操作及引擎观测快照，区别客户端派发回执；不是自动封禁全历史。解封仅影响所选 jail，其他 jail 可继续拒绝同一地址。 */
+        get: operations["getFail2banAddressTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最近 16 条 Fail2banApplyTaskStatus；排队、应用、补偿、待恢复及终态明确区分，不包含冻结策略正文。 */
+        get: operations["getFail2banTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banJailsRuntime，核对独立受管实例及动作授权；Nginx 只作为相应 jail 的日志/动作依赖。所选策略不是运行确认；待恢复操作保持可见。 */
+        get: operations["getFail2banRuntime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 显式应用保存版本到本机独立受管实例，浏览器须近期认证。固定预览摘要及目标，创建持久任务并通过原 Agent 执行器核对；只支持 nginx-client，安装和启动独立授权。返回 Fail2banApplyTask，进度沿用 /tasks/{id}；提交不表示生效。 */
+        post: operations["applyFail2ban"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/templates/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banTemplateCheck 数组。使用固定系统程序或已批准签名组件中的官方 fail2ban-regex 1.1.1 检查内置过滤器与固定样例，并返回执行来源与解释器身份；不接收用户正则、文件路径或命令，不连接实例或改变保护。未知、超时或输出不完整不算通过。 */
+        post: operations["checkFail2banTemplates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banPolicyView，读取版本化 jail 期望配置；不表示实例保护已经生效。 */
+        get: operations["getFail2banPolicy"];
+        /** @description 保存类型化 jail 期望配置，要求近期认证、幂等键与基础版本；不安装、启用或修改实例。 */
+        put: operations["setFail2banPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/host-input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banHostInputPreview。只读检查实际管理器、独立固定 inet 目标表、本机 root 空表登记、管理/代理来源批准、本地地址保护和官方当前封禁集合的事务准备摘要；runtime 与 sync 分别报告规则对象和本机 root 已批准的独立持续会话。can_prepare 仅表示可生成当前集合的准备材料，can_apply 始终为 false，此读取不创建表、不登记所有权、不批准或应用封禁。模块停用时仍可读取。 */
+        get: operations["getFail2banHostInput"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/panel-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banPanelLoginStatus；读取独立密码认证失败日志、容量和最近 20 条 TCP 对端事件。日志就绪不表示封禁已启用，反向代理对端不是原客户端；模块停用时仍可读取。不接受公开事件写入。 */
+        get: operations["getFail2banPanelLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回内置 Fail2banTemplate 数组；不接受自定义正则或 shell 动作。 */
+        get: operations["getFail2banTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 Fail2banPolicyPreview，核对保存版本的运行日志来源与实例状态；只有模块启用、独立受管实例及已发布客户端入口可核对时 can_apply 为 true。面板模板单独核对密码失败日志，宿主机入口封禁未接通时启用项始终阻止应用；列出将停用的受管 jail。 */
+        post: operations["previewFail2ban"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/instance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banInstance。本机 root 已登记的运行实例只读状态及完整 jail 列表；接入不接管 jail。拒绝激活依赖、服务身份变化或客户端漂移，默认未接入时不连接实例。 */
+        get: operations["getFail2banInstance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban/jails/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banJail，只允许读取当前完整列表中的 jail。失败/封禁计数及地址为引擎记录，不代表动作适用于当前流量路径；未接管 jail 只读，未知和超限不返回部分成功。 */
+        get: operations["getFail2banJail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fail2ban": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 Fail2banObservation。默认停用时仍可诊断固定系统工具、Python 标准库/SQLite 与软件包归属、systemd 元数据及默认 Socket 文件；不连接实例、不触发 Socket 激活。安装、模块启用、实例健康与 jail 保护分开核对。宿主机授权、单份在途采集及有界缓存由目标 Agent 执行。 */
+        get: operations["getFail2ban"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 FirewallRuntime。backend 标识当前所有者，can_plan 与策略执行 available 分开；UFW 在独立本机登记与显式授权后支持保护计划、dry-run、限时应用和确认持久化；firewalld 采用运行/永久 policy 独立核对、新连接确认和持久恢复意图。iptables 主机入站执行就绪须新读取当前受管范围、固定工具和容量，不能仅凭旧空授权或移除回执允许模块停用。直接连接目标节点，包含 root 独立状态、原操作及绑定确认计划的保护依据采样；保护依据每 30 秒后台采集、45 秒有效，GET 不重新采集保护依据。模块停用不撤销已确认策略、核对或恢复。 */
+        get: operations["getFirewallRuntime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 FirewallPlan。含启用 Docker 规则时，显式 iptables 后端可先读取目标候选，再提交 docker_targets 生成联合执行计划；完整父子授权、固定工具、目标路径、官方预演和原恢复目标均可核对时 can_apply=true。未绑定或原恢复目标失效时仅可预览。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 支持 apply/remove 保护计划：核对宿主机占用、原本机登记与独立回执，注释绑定随机所有者和计划，再核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW 准备完成后才可应用，确认后持久化。iptables-nft/legacy 支持首次应用、已确认策略更新及移除计划，固定原确认来源、本机授权、完整受管范围与入口保护，返回正反受管批次的摘要及计数；候选与正反向批次须通过固定官方 restore 的 --test，前后完整规则保持一致；初始执行、子进程回执、新连接确认及已确认规则修复已接入，完整 nft JSON 候选及恢复容量已准入；官方 go-iptables 链读取与原生完整导出交叉核对通过后，主机入站计划可应用；Docker 完整绑定通过后，INPUT 与 Docker 同族合并提交，沿同一持久操作和独立子进程回执执行、确认或恢复；原目标变化会阻止不安全的撤回重装并保留待恢复状态。计划 300 秒有效，不写运行规则或管理器源配置。 */
+        post: operations["planFirewall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须近期认证；仅执行 can_apply=true 的计划。绑定原动作、计划、版本及幂等键，先保存独立意图；直接 nftables 单批原子替换受管表，firewalld 只写原登记 policy 的 rich_rules，运行配置核对及新连接确认后才写永久配置；部分或未知结果独立恢复，禁止重放仍可能迟到的 D-Bus 请求。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。 */
+        post: operations["applyFirewall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/operations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回原 FirewallOperation，独立于 Web 数据库及任务进程。 */
+        get: operations["getFirewallOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/operations/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 FirewallOperation。近期认证且通过生效后重建的目标管理监听新 TCP/TLS 连接确认；旧连接、回环入口、转发及请求头均不能提供连接证明。应用确认前重新采集 SSH/保护来源并证明候选对象；依据变化返回已恢复的原操作，未知读取不确认，原期限不延长。确认范围为该目标管理监听，不代表云安全组或全部业务端口。 */
+        post: operations["confirmFirewall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/operations/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 FirewallOperation。近期认证，按原操作恢复最后确认策略或初始空表；模块停用及维护收尾期间仍允许恢复。 */
+        post: operations["rollbackFirewall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回 FirewallPolicyView。未保存时 version 为 0；仅表示期望策略，不代表内核生效。 */
+        get: operations["getFirewallPolicy"];
+        /** @description 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须近期认证。最多 1000 条规则及 256 KiB 规范策略，来源须匹配地址族。 */
+        put: operations["setFirewallPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 读取指定的已保存版本，返回 FirewallPreview；直接 nftables 生成有界表达式，firewalld 生成独立 ANY 到 HOST policy 的 rich rules，UFW 生成明确地址族、接口、端口及稳定注释的类型化命令预览，拒绝重复匹配条件。结合 Agent 诊断核对环境；此入口不写内核或管理器，can_apply 为 false，执行须另走独立计划。UFW 逻辑预览不执行 dry-run，需在目标管理入口另行准备保护计划；须先完成目标本机空命名空间授权，当前不支持实际应用和独立恢复；Docker 路径及未适配条件明确阻塞。 */
+        post: operations["previewFirewall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 宿主机只读防火墙诊断；返回 FirewallObservation。分别读取管理器、默认 iptables 命令、nft/legacy 规则结构、Docker 标记及固定本机 Docker API 的实例/网络/主机端口映射与按后端、地址族区分的能力报告，以及 UFW 启用/IPv6 配置与有界用户规则报告；报告命令仅供展示，不重放或推断双栈内核顺序。不修改规则，不将名称、注释或摘要当作所有权或外部可达性证明。Agent 缓存 30 秒，缺失或超限视图明确不可用。 */
+        get: operations["getFirewall"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 本机完整备份概览及最近 128 条记录；包包含全部业务秘密，下载额外要求 backup.secrets 和近期认证。拒绝递归转发。 */
+        get: operations["listBackups"];
+        put?: never;
+        /** @description 幂等创建完整加密备份。口令仅驻当前进程内存；一致性捕获使用共同维护边界，释放维护后流式加密，完成前不可下载。须近期认证及直接连接本节点。 */
+        post: operations["createBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getBackupPolicy"];
+        /** @description 版本比较后保存公钥、离线密钥确认、授权期限、周期及保留策略；定期任务复查原授权主体、会话代次、Token 权限及期限。须近期认证。 */
+        put: operations["setBackupPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getBackup"];
+        put?: never;
+        post?: never;
+        /** @description 删除已结束的本主体备份；auth.manage 可管理其他主体。持久化删除意图，下载期间拒绝清理，保留原任务与审计。cleanup_failed 可显式续办清理。须近期认证。 */
+        delete: operations["deleteBackup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 机器 Bearer 直接下载；浏览器须当前会话、近期认证及单次票据。流式返回 age 加密 tar，最多并发 2 个、5 分钟，持续复查授权，不支持 Range。错误采用统一 JSON 外壳。 */
+        get: operations["downloadBackup"];
+        put?: never;
+        /** @description 浏览器近期认证后签发绑定当前会话的 60 秒单次下载凭据；返回 BackupDownloadTicket，不返回备份或解密密钥。机器凭据直接调用 GET。 */
+        post: operations["createBackupDownload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/listener": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementListener"];
+        put?: never;
+        /** @description 直接连接本节点并近期认证后暂用新监听。提交前证明当前受管防火墙对象并按已确认策略核对候选端口和完整允许来源，冲突时保留原入口。Agent 独立持久保存旧配置与 120 秒期限；新 TCP/TLS 连接确认后生效。相同幂等键只重放原操作。停用须从回环入口执行。拒绝递归转发，不返回私钥。 */
+        post: operations["applyManagementListener"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/listener/operations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementListenerOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/listener/operations/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 须直接通过当前候选监听建立的新 TCP/TLS 连接确认，再次核对当前已确认防火墙对象及完整候选允许来源；核对期间超时仍恢复原入口。只证明当前观察来源到该节点的可达性，不推断其他公网来源。禁止使用回环入口或变更前已有连接确认。 */
+        post: operations["confirmManagementListener"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/listener/operations/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rollbackManagementListener"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/pairings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPairings"];
+        put?: never;
+        post: operations["createPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/pairings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokePairing"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/pairings/{id}/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 独立后端通过短期配对秘密领取同一控制节点的临时凭据。拒绝 Cookie、Origin、Authorization 和递归转发。相同领取随机数仅重放原领取，确认后不再返回 Token。 */
+        post: operations["exchangePairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/pairings/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 仅原临时机器凭据可确认；确认与延长到批准有效期同事务。确认回执丢失后原凭据可重查，不创建第二份授权。 */
+        post: operations["confirmPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/pairings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPairingJobs"];
+        put?: never;
+        post: operations["startPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/pairings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPairingJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/pairings/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumePairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/pairings/{id}/abandon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["abandonPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nodes": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["listNodes"];
         put?: never;
         post: operations["createNode"];
@@ -87,7 +918,12 @@ export interface paths {
         trace?: never;
     };
     "/nodes/{id}": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["getNode"];
         put?: never;
         post?: never;
@@ -98,7 +934,12 @@ export interface paths {
         trace?: never;
     };
     "/nodes/{id}/refresh": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get?: never;
         put?: never;
         post: operations["refreshNode"];
@@ -109,7 +950,12 @@ export interface paths {
         trace?: never;
     };
     "/remote/identity": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["getRemoteIdentity"];
         put?: never;
         post?: never;
@@ -120,7 +966,12 @@ export interface paths {
         trace?: never;
     };
     "/remote/authorization": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get?: never;
         put?: never;
         post?: never;
@@ -130,41 +981,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
-    "/panel/images/upgrades/{id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resumePanelImageUpgrade"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-
-    "/panel/images/upgrades/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getPanelImageUpgrade"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-
     "/panel/images/upgrades": {
         parameters: {
             query?: never;
@@ -181,32 +997,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
-    "/nginx/images/upgrades/{id}/resume": {
+    "/panel/images/upgrades/{id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        post: operations["resumeNginxImageUpgrade"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-
-    "/nginx/images/upgrades/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getNginxImageUpgrade"];
+        get: operations["getPanelImageUpgrade"];
         put?: never;
         post?: never;
         delete?: never;
@@ -215,7 +1013,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
+    "/panel/images/upgrades/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumePanelImageUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/images/upgrades": {
         parameters: {
             query?: never;
@@ -232,32 +1045,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
-    "/agent/upgrades/{id}/resume": {
+    "/nginx/images/upgrades/{id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        post: operations["resumeAgentUpgrade"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-
-    "/agent/upgrades/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAgentUpgrade"];
+        get: operations["getNginxImageUpgrade"];
         put?: never;
         post?: never;
         delete?: never;
@@ -266,7 +1061,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
+    "/nginx/images/upgrades/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeNginxImageUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agent/upgrades": {
         parameters: {
             query?: never;
@@ -283,32 +1093,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
-    "/panel/updates/{id}/resume": {
+    "/agent/upgrades/{id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        post: operations["resumePanelUpdate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-
-    "/panel/updates/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getPanelUpdate"];
+        get: operations["getAgentUpgrade"];
         put?: never;
         post?: never;
         delete?: never;
@@ -317,7 +1109,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
+    "/agent/upgrades/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeAgentUpgrade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/panel/updates": {
         parameters: {
             query?: never;
@@ -334,7 +1141,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-
+    "/panel/updates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPanelUpdate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/panel/updates/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumePanelUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/migrations/receiver": {
         parameters: {
             query?: never;
@@ -575,6 +1413,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/offline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最多 32 条本机离线上传及已接收字节。清单和进度为历史材料，不表示归档已验签解包或安装。 */
+        get: operations["listComponentOfflineUploads"];
+        put?: never;
+        /** @description 以 UUID 幂等键上传 base64 编码的原始签名清单与签名文件，按固定本机信任和目标平台验签；每次最多两个资产。返回签名归档文件名、SHA-256、长度和上传 UUID，有效期最多一天。此操作不下载、解包、安装或启动组件。 */
+        post: operations["createComponentOfflineUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/offline/{id}/assets/{asset}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description 按 offset 上传最多 256 KiB 的 base64 分块。只写签名计划中的固定归档；已有前缀须逐字节相同，不覆盖或跳过字节，回执在同步落盘后返回。 */
+        put: operations["writeComponentOfflineChunk"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/offline/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description 幂等清除该上传的归档字节，保留清单、签名、原记录与清除标识。组件任务未结束时拒绝；不删除已准备、安装或运行版本。 */
+        delete: operations["discardComponentOfflineUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components": {
         parameters: {
             query?: never;
@@ -585,6 +1475,40 @@ export interface paths {
         get: operations["getComponents"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/frontend/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 独立前端确认激活；action 必须为 activate，引用本人的 prepare_task_id，并绑定当前 frontend_base_id/expected_frontend_id。要求 components.manage 与 system.write。 */
+        post: operations["createFrontendActivation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/images/pull": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 签名镜像拉取；action 必须为 pull，引用本人的 prepare_task_id，仅允许 panel-launcher 或 nginx 的已签名摘要与本机架构。要求 components.manage 与 system.write。 */
+        post: operations["createComponentImagePull"];
         delete?: never;
         options?: never;
         head?: never;
@@ -632,6 +1556,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description mode=portable 导出普通 .tar，仅重建明确允许的受管字段、ACL 和基础 WAF；站点停用并报告省略，不含完整原文及可选材料。mode=encrypted 导出完整原文与所选材料的 .tar.age，额外要求 backup.secrets/config.secrets。均要求浏览器近期认证。 */
         post: operations["exportMigration"];
         delete?: never;
         options?: never;
@@ -648,6 +1573,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 接收当前 schema 6 的普通 portable 归档或 age 加密配置包。普通归档口令为空，且重新核对规范化字段与站点停用；加密包须提供口令。共用映射、依赖检测及导入执行器。 */
         post: operations["prepareMigration"];
         delete?: never;
         options?: never;
@@ -941,6 +1867,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /** @description 停用 firewall 须明确提供 firewall_rules=keep 或 remove；remove 另需 read/security.write，并引用当前已独立确认移除的 firewall_operation_id；初始确认空表且从未确认规则时可省略。启用或其他模块不接受这些选项。 */
         put: operations["setModule"];
         post?: never;
         delete?: never;
@@ -1546,6 +2473,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description 返回分页修订元数据；pruned_at 大于零表示历史材料已清理，仍保留修订与父级记录。 */
         get: operations["listRevisions"];
         put?: never;
         post?: never;
@@ -1564,6 +2492,7 @@ export interface paths {
             };
             cookie?: never;
         };
+        /** @description 返回修订原文；已清理的历史材料返回 HTTP 410 HISTORY_PRUNED。 */
         get: operations["getRevision"];
         put?: never;
         post?: never;
@@ -1607,6 +2536,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/history/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 返回最近 16 条 RuntimeHistoryStatus。root 清理中断须按原操作续办，记录不删除。 */
+        get: operations["listRuntimeHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/runtime/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目、16 MiB；保留当前、回滚及恢复引用。 */
+        post: operations["previewRuntimeHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/runtime/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有的发布树或未引用证书副本，不清理 root 操作记录及灾备材料。 */
+        post: operations["executeRuntimeHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。migration_keep=0 不清理迁移材料，2–100 按操作者保留；启用时额外要求 backup.restore/backup.secrets，非 auth.manage 仅清理自己的计划。 */
+        post: operations["previewHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 返回 HistoryResult。同事务重查预览摘要并清理无引用的历史材料，保留修订、任务、订单、迁移摘要/回执及审计元数据；迁移材料只在依赖、安装、维护及自动拉取均结束后可清理，额外要求 backup.restore/backup.secrets。过期未执行计划标记失败；已执行计划的原身份/幂等键/选项仍可核对原结果。不清理 root 文件，不保证物理磁盘收缩。幂等键须在结果不确定时原样重试。 */
+        post: operations["executeHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit": {
         parameters: {
             query?: never;
@@ -1617,6 +2631,22 @@ export interface paths {
         get: operations["listAudit"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exportAudit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1646,6 +2676,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description data 返回可用的 LogPolicyView 数组，system 与 nginx 分别保留独立策略。 */
         get: operations["getLogPolicy"];
         put: operations["setLogPolicy"];
         post?: never;
@@ -1698,23 +2729,6 @@ export interface paths {
         get: operations["streamLogs"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/audit/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 完整有界审计归档，首行清单及后续记录行；不删除源记录。 */
-        post: operations["exportAudit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2001,6 +3015,7 @@ export interface components {
         RuntimeHistoryFilter: {
             maintenance_id: string;
             kind: string;
+            /** Format: int64 */
             before: number;
             keep: number;
         };
@@ -2014,6 +3029,7 @@ export interface components {
             active: string;
             targets: string[];
             entries: number;
+            /** Format: int64 */
             bytes: number;
             more: boolean;
             sha256: string;
@@ -2023,39 +3039,49 @@ export interface components {
             state: string;
             stage: string;
             error: string;
+            /** Format: int64 */
             updated_at: number;
             preview: components["schemas"]["RuntimeHistoryPreview"];
         };
         HistoryFilter: {
-            migration_keep: number;
+            /** Format: int64 */
             before: number;
             revision_keep: number;
             certificate_keep: number;
             order_keep: number;
+            /** @description 0 不清理；启用时每个操作者至少保留 2 份，额外要求 backup.restore/backup.secrets；非 auth.manage 仅清理自己的计划 */
+            migration_keep: number;
         };
         HistoryItem: {
             kind: string;
             id: string;
             resource_id: string;
+            /** Format: int64 */
             version: number;
+            /** Format: int64 */
             created_at: number;
+            /** Format: int64 */
             bytes: number;
         };
         HistoryScope: {
             kind: string;
+            /** Format: int64 */
             retained: number;
             selected: number;
+            /** Format: int64 */
             bytes: number;
             more: boolean;
         };
         HistoryPreview: {
             node_id: string;
             filter: components["schemas"]["HistoryFilter"];
+            /** Format: int64 */
             base_version: number;
             scopes: components["schemas"]["HistoryScope"][];
             items: components["schemas"]["HistoryItem"][];
             sha256: string;
             token: string;
+            /** Format: int64 */
             expires_at: number;
         };
         HistoryExecuteInput: {
@@ -2065,199 +3091,1365 @@ export interface components {
             id: string;
             node_id: string;
             sha256: string;
+            /** Format: int64 */
             completed_at: number;
             scopes: components["schemas"]["HistoryScope"][];
         };
-        FirewallProtection: { service: "ssh" | "management"; family: "ipv4" | "ipv6"; port: number; sources: string[]; };
-        FirewallPlanInput: { docker_targets?: components["schemas"]["FirewallDockerTargets"]; action: "apply" | "remove"; version: number; preparation_id?: string; cancel_preparation?: boolean; };
-        FirewallApplyInput: { action: "apply" | "remove"; plan_id: string; version: number; };
-        FirewallPlanPreparation: { id: string; action: "apply" | "remove"; version: number; state: "running" | "cancelling" | "ready" | "failed" | "cancelled"; completed_commands: number; total_commands: number; started_at: number; updated_at: number; deadline: number; error: string; };
-        FirewallPlan: { docker: components["schemas"]["FirewallDockerPlan"] | null; iptables: components["schemas"]["FirewallIPTablesPlan"] | null; preparation: components["schemas"]["FirewallPlanPreparation"] | null; backend: "direct-nftables" | "firewalld" | "ufw" | "iptables-nft" | "iptables-legacy"; can_apply: boolean; firewalld: components["schemas"]["FirewallFirewalldPlan"] | null; ufw: components["schemas"]["FirewallUFWPlan"] | null; action: "apply" | "remove"; id: string; version: number; policy_hash: string; program_hash: string; baseline: components["schemas"]["FirewallKernelView"]; protections: components["schemas"]["FirewallProtection"][]; ssh_profile: string; ssh_listeners: string[]; listener_version: number; listener: string; control_source: string; confirmation_seconds: number; expires_at: number; transaction_hash: string; transaction_bytes: number; generated_rules: number; };
-        FirewallFirewalldPlan: { runtime_hash: string; permanent_hash: string; registration_operation_id: string; settings: components["schemas"]["FirewallFirewalldPreview"]; protection_rules: number; entries: components["schemas"]["FirewallPreviewEntry"][]; truncated: boolean; warnings: string[]; reason: string; };
-        FirewallIPTablesPlan: { registration_operation_id: string; configuration_hash: string; tool_hash: string; toolchain_hash: string; dry_run_hash: string; dry_run_commands: number; logical_hash: string; protection_rules: number; families: components["schemas"]["FirewallIPTablesFamilyPlan"][]; warnings: string[]; reason: string; };
-        FirewallIPTablesFamilyPlan: { family: "ipv4" | "ipv6"; binary: "iptables-nft" | "ip6tables-nft" | "iptables-legacy" | "ip6tables-legacy"; chain: string; hook_position: 0 | 1; generated_rules: number; preserved_rules: number; before_hash: string; after_hash: string; candidate_hash: string; previous_hash: string; candidate_bytes: number; previous_bytes: number; };
-        FirewallUFWPlan: { registration_operation_id: string; configuration_hash: string; tool_hash: string; toolchain_hash: string; python_version: string; dry_run_hash: string; native_program_hash: string; batch_hash: string; reload_backend: "nftables" | "legacy"; reload_hash: string; reload_chains: number; reload_rules: number; preserved_rules: number; dry_run_commands: number; protection_rules: number; protection_overrides: number; entries: components["schemas"]["FirewallPreviewEntry"][]; truncated: boolean; warnings: string[]; reason: string; };
-        FirewallOperation: { action: "apply" | "remove"; id: string; plan_id: string; version: number; policy_hash: string; program_hash: string; state: "running" | "waiting_confirmation" | "compensating" | "recovery_required" | "succeeded" | "rolled_back" | "failed"; stage: string; deadline: number; updated_at: number; confirmed_source: string; verification_scope: string; error: string; };
-        FirewallProtectionObservation: { state: "unavailable" | "not_applicable" | "current" | "changed"; plan_id: string; observed_at: number; ssh_profile: string; ssh_listeners: string[]; protections: components["schemas"]["FirewallProtection"][]; reason: string; };
-        Fail2banHostInputProtectionView: { at: number; state: "unavailable" | "unapproved" | "approved" | "stale" | "revoked"; verified: boolean; id: string; approved_at: number; policy_hash: string; admin_sources: string[]; proxy_sources: string[]; reason: string; };
-        Fail2banHostInputSourcesView: { managed: boolean; at: number; state: "unavailable" | "unapproved" | "stale" | "revoked" | "ready"; id: string; approved_at: number; jails: string[]; collected_at: number; source_hash: string; time_basis: "engine-current"; banned_count: number; protected_count: number; reason: string; };
-        Fail2banHostInputRuntimeView: { at: number; state: "unavailable" | "uninitialized" | "empty" | "applied" | "recovery_required" | "missing" | "drifted"; verified: boolean; operation_id: string; action: "" | "apply" | "clear"; operation_state: "" | "running" | "recovery_required" | "succeeded" | "failed"; updated_at: number; banned_count: number; protected_count: number; reason: string; };
-        Fail2banHostInputSyncView: { at: number; id: string; session_id: string; retirement_id: string; recover_on_boot: boolean; recovery_id: string; enabled: boolean; approved_at: number; state: "unavailable" | "disabled" | "waiting" | "collecting" | "current" | "stopping" | "paused" | "failed" | "recovery_required" | "recovering"; queued: boolean; collected_at: number; confirmed_at: number; source_hash: string; kernel_operation_id: string; reason: string; };
-        Fail2banHostInputPreview: { sync: components["schemas"]["Fail2banHostInputSyncView"]; runtime: components["schemas"]["Fail2banHostInputRuntimeView"]; sources: components["schemas"]["Fail2banHostInputSourcesView"]; protection: components["schemas"]["Fail2banHostInputProtectionView"]; registration: components["schemas"]["FirewallRegistrationView"]; manager_observed_at: number; at: number; scope: string; available: boolean; manager: string; backend: "direct-nftables"; table: "nginxpanel_fail2ban"; hook: "input"; priority: -10; can_prepare: boolean; can_apply: false; kernel: components["schemas"]["FirewallKernelView"]; protected_sources: string[]; program_hash: string; transaction_hash: string; transaction_bytes: number; generated_rules: number; reason: string; };
-        Fail2banPanelLoginEvent: { time_iso8601: string; event: "login_failed"; peer_addr: string; source: "tcp_peer"; request_id: string; };
-        Fail2banPanelLoginStatus: { at: number; available: boolean; source_id: "panel:login"; format: "nginxpanel_auth"; scope: string; reason: string; bytes: number; limit_bytes: 8388608; events: components["schemas"]["Fail2banPanelLoginEvent"][]; };
-        Fail2banFilterSample: { name: string; line: string; expected_ip: string; };
-        Fail2banTemplateCheckInput: { templates: ("nginx-http-401" | "nginx-authorization-401" | "panel-login-failure")[]; };
-        Fail2banTemplateCheck: { engine: components["schemas"]["Fail2banEngineIdentity"]; template: string; at: number; source: string; scope: string; available: boolean; passed: boolean; filter_sha256: string; samples_sha256: string; tool_path: string; tool_sha256: string; tool_version: string; expected_ips: string[]; matched_ips: string[]; reason: string; };
-        Fail2banDesiredJail: { id: string; name: string; enabled: boolean; template: "nginx-http-401" | "nginx-authorization-401" | "panel-login-failure"; resource_id: string; action: "host-input" | "docker-forward" | "nginx-client"; ban_time: number; find_time: number; max_retry: number; ignore_ips: string[]; };
-        Fail2banPolicy: { jails: components["schemas"]["Fail2banDesiredJail"][]; };
-        Fail2banPolicyView: { version: number; policy: components["schemas"]["Fail2banPolicy"]; updated_at: number; };
-        Fail2banPolicyInput: { base_version: number; policy: components["schemas"]["Fail2banPolicy"]; };
-        Fail2banTemplate: { id: "nginx-http-401" | "nginx-authorization-401" | "panel-login-failure"; filter_sha256: string; samples_sha256: string; samples: components["schemas"]["Fail2banFilterSample"][]; name: string; description: string; category: string; format: string; ban_time: number; find_time: number; max_retry: number; };
-        Fail2banPreviewInput: { version: number; };
-        Fail2banJailPreview: { template_ready: boolean; id: string; jail_name: string; enabled: boolean; source_id: string; source_ready: boolean; errors: string[]; };
-        Fail2banJailsOperation: { id:string;state:string;stage:string;before_id:string;after_id:string;request_hash:string;target:string;error:string; };
-        Fail2banJailsRuntime: { nginx_ready: boolean; nginx_reason: string; host_ready: boolean; host_reason: string; available:boolean;target:string;selected_id:string;policy:components["schemas"]["Fail2banPolicy"];resources:string[];pending:components["schemas"]["Fail2banJailsOperation"][];reason:string; };
-        Fail2banPythonPackage: { name:string;version:string;architecture:string;source:string;repository:string;filename:string;sha256:string;download_bytes:number;installed_bytes:number; };
-        Fail2banPythonPlan: { id:string;at:number;expires_at:number;os:string;version:string;architecture:"amd64"|"arm64";manager:"apt"|"dnf";packages:components["schemas"]["Fail2banPythonPackage"][];download_bytes:number;installed_bytes:number;impacts:string[]; };
-        Fail2banPythonTaskInput: { action:"plan"|"install";plan_id:string;refresh:boolean; };
-        Fail2banPythonTaskOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banPythonTaskInput"];state:"running"|"recovery_required"|"succeeded"|"failed";stage:string;submission:"not_sent"|"unknown"|"acknowledged";at:number;plan:components["schemas"]["Fail2banPythonPlan"]|null;python:components["schemas"]["Fail2banPython"];error:string; };
-        Fail2banPythonTask: { task_id:string;operation_id:string; };
-        Fail2banPythonTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banPythonTaskInput"];result:components["schemas"]["Fail2banPythonTaskOperation"]|null; };
-        Fail2banUpgradeInput: { action:"check"|"prepare"|"run";plan_id:string;asset_id:string;prerelease:boolean;target:string;preparation_id:string; };
-        Fail2banUpgradeBans: { observed_at:number;count:number;sha256:string; };
-        Fail2banUpgradePlan: { at:number;target:string;installation_id:string;event_id:string;source_version:string;candidate_version:string;running:boolean;jails:string[];impacts:string[];scope_verified:boolean;blockers:string[];nginx_grants:number;host_sources:boolean;host_sync:boolean;bans:components["schemas"]["Fail2banUpgradeBans"]|null; };
-        Fail2banUpgradePreparation: { id:string;intent_sha256:string;created_at:number;source_version:string;candidate_version:string; };
-        Fail2banUpgradeRunResult: { id:string;state:"running"|"recovery_required"|"succeeded"|"failed"|"cancelled";stage:string;completed_at:number; };
-        Fail2banUpgradeOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banUpgradeInput"];child_id:string;state:"running"|"recovery_required"|"succeeded"|"failed"|"cancelled";stage:string;at:number;error:string;plan:components["schemas"]["Fail2banUpgradePlan"]|null;preparation:components["schemas"]["Fail2banUpgradePreparation"]|null;run:components["schemas"]["Fail2banUpgradeRunResult"]|null; };
-        Fail2banUpgradeTask: { task_id:string;operation_id:string; };
-        Fail2banUpgradeTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banUpgradeInput"];result:components["schemas"]["Fail2banUpgradeOperation"]|null; };
-        Fail2banLifecyclePreviewInput: { engine_owner:"managed"|"existing";action:"install"|"resume"|"rollback"|"start"|"stop"|"enable"|"disable";plan_id:string;asset_id:string;prerelease:boolean; };
-        Fail2banLifecycleInput: components["schemas"]["Fail2banLifecyclePreviewInput"] & { base_id:string;target:string;start:boolean;enable:boolean; };
-        Fail2banLifecyclePlan: { at:number;input:components["schemas"]["Fail2banLifecycleInput"];managed:components["schemas"]["Fail2banManaged"];service:components["schemas"]["Fail2banService"];jails:string[];impacts:string[]; };
-        Fail2banLifecycleOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banLifecycleInput"];state:"running"|"recovery_required"|"succeeded"|"failed";stage:string;submission:"not_sent"|"unknown"|"acknowledged";at:number;managed:components["schemas"]["Fail2banManaged"];service:components["schemas"]["Fail2banService"];error:string; };
-        Fail2banLifecycleTask: { task_id:string;operation_id:string; };
-        Fail2banLifecycleTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banLifecycleInput"];result:components["schemas"]["Fail2banLifecycleOperation"]|null; };
-        Fail2banExistingResource: { name:string;adoption_id:string;binding_id:string; };
-        Fail2banExistingPolicy: { enabled:boolean;ban_time:number;find_time:number;max_retry:number;ignore_ips:string[]; };
-        Fail2banExistingProfile: { name:string;profile:string;log_source:string;ports:number[]; };
-        Fail2banExistingResourcePolicy: components["schemas"]["Fail2banExistingResource"] & { selected_id:string;profile:components["schemas"]["Fail2banExistingProfile"];policy:components["schemas"]["Fail2banExistingPolicy"]; };
-        Fail2banExistingPolicyInput: { action:"preview"|"apply";adoption_id:string;policy:components["schemas"]["Fail2banExistingPolicy"];preview_id:string;target:string;confirm_stop:boolean; };
-        Fail2banExistingPlan: { at:number;adoption_id:string;binding_id:string;base_id:string;name:string;target:string;before:components["schemas"]["Fail2banExistingPolicy"];after:components["schemas"]["Fail2banExistingPolicy"];ban_count:number;stop_confirmation:boolean;impacts:string[]; };
-        Fail2banExistingOperation: { id:string;request_hash:string;action:"preview"|"apply";state:"running"|"recovery_required"|"succeeded"|"failed";stage:string;adoption_id:string;target:string;sent:boolean;submission:""|"pending"|"confirmed"|"unknown";cancel_requested:boolean;cancel_error:string;error:string;plan?:components["schemas"]["Fail2banExistingPlan"]; };
-        Fail2banExistingPolicyTask: { task_id:string;operation_id:string; };
-        Fail2banExistingTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banExistingPolicyInput"];result:components["schemas"]["Fail2banExistingOperation"]|null;cancel_requested:boolean;cancel_pending:boolean;cancel_error:string; };
-        Fail2banAddressInput: { engine_owner:"managed"|"existing";adoption_id:string;jail:string;ip:string;action:"ban"|"unban";target:string; };
-        Fail2banAddressStatus: { engine_owner:"managed"|"existing";adoption_id:string;backend: "" | "nginx-client" | "host-input" | "existing-ssh"; at:number;jail:string;ip:string;available:boolean;target:string;engine_state:"unknown"|"banned"|"clear";expires_at:number;permanent:boolean;ban_time:number;can_ban:boolean;action_state:"unknown"|"denied"|"clear";generation:string;reason:string; };
-        Fail2banAddressOperation: { id:string;request_hash:string;input:components["schemas"]["Fail2banAddressInput"];state:"running"|"succeeded"|"failed";stage:string;submission:"not_sent"|"not_needed"|"unknown"|"acknowledged";engine_state:"unknown"|"banned"|"clear";observed_at:number;expires_at:number;permanent:boolean;error:string; };
-        Fail2banAddressTask: { task_id:string;operation_id:string; };
-        Fail2banAddressTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number;input:components["schemas"]["Fail2banAddressInput"];result:components["schemas"]["Fail2banAddressOperation"]|null; };
-        Fail2banApplyInput: { version:number;policy_hash:string;base_id:string;target:string; };
-        Fail2banApplyTaskStatus: { id:string;operation_id:string;state:string;stage:string;error:string;created_at:number; };
-        Fail2banApplyTask: { task_id:string;operation_id:string;version:number; };
-        Fail2banPolicyPreview: { host_input?: components["schemas"]["Fail2banHostInputPreview"]; runtime:components["schemas"]["Fail2banJailsRuntime"];removed:string[]; template_checks: components["schemas"]["Fail2banTemplateCheck"][]; version: number; policy_hash: string; can_apply: boolean; entries: components["schemas"]["Fail2banJailPreview"][]; warnings: string[]; };
-        MigrationMonitoringInput: { mode: "preserve" | "replace"; base_version?: number; };
-        MigrationMonitoringPlan: { mode: "preserve" | "replace"; state: "preserved" | "pending_import" | "not_imported" | "saved" | "restored" | "recovery_required"; base_version: number; saved_version: number; settings: components["schemas"]["MonitoringSettings"]; settings_hash: string; };
-        MigrationFail2banInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; };
-        MigrationFail2banPlan: { mode: "preserve" | "merge" | "replace"; state: string; base_version: number; saved_version: number; source_jails: number; preserved_jails: number; replaced_jails: number; total_jails: number; policy_hash: string; warnings: string[]; };
-        Fail2banEngineIdentity: { owner: "existing" | "managed" | "none" | "unavailable"; installation_id: string; plan_id: string; asset_id: string; manifest_sha256: string; python_path: string; python_sha256: string; };
-        Fail2banBindingView: { service_control: boolean; engine: components["schemas"]["Fail2banEngineIdentity"]; state: "unavailable" | "unbound" | "bound"; id: string; service: string; socket: string; client_path: string; client_version: string; approved_at: number; reason: string; };
-        Fail2banJailSummary: { name: string; managed: boolean; };
-        Fail2banInstance: { at: number; source: string; scope: string; available: boolean; writable: boolean; binding: components["schemas"]["Fail2banBindingView"]; server_version: string; service: components["schemas"]["Fail2banService"]; jails: components["schemas"]["Fail2banJailSummary"][]; reason: string; };
-        Fail2banJail: { at: number; source: string; scope: string; available: boolean; writable: boolean; binding_id: string; name: string; managed: boolean; server_version: string; current_failed: number | null; total_failed: number | null; current_banned: number | null; total_banned: number | null; banned: string[]; reason: string; };
-        Fail2banTool: { id: string; present: boolean | null; trusted: boolean; path: string; resolved: string; reason: string; };
-        Fail2banPythonModule: { name: string; available: boolean; };
-        Fail2banPackage: { available: boolean; manager: string; name: string; version: string; reason: string; };
-        Fail2banPython: { executable: components["schemas"]["Fail2banTool"]; version: string; standard_library: boolean | null; sqlite_version: string; modules: components["schemas"]["Fail2banPythonModule"][]; package: components["schemas"]["Fail2banPackage"]; reason: string; };
-        Fail2banService: { id: string; available: boolean; load: string; active: string; sub: string; unit_file: string; main_pid: number | null; reason: string; };
-        Fail2banSocket: { path: string; present: boolean | null; root_protected: boolean; reason: string; };
-        Fail2banManaged: { available: boolean; state: string; operation_id: string; version: string; plan_id: string; asset_id: string; service: string; socket: string; python_path: string; python_version: string; approved_at: number; reason: string; };
-        Fail2banObservation: { managed: components["schemas"]["Fail2banManaged"]; binding: components["schemas"]["Fail2banBindingView"]; at: number; source: string; scope: string; available: boolean; writable: boolean; reason: string; tools: components["schemas"]["Fail2banTool"][]; client_version: string; python: components["schemas"]["Fail2banPython"]; services: components["schemas"]["Fail2banService"][]; socket: components["schemas"]["Fail2banSocket"]; missing: string[]; warnings: string[]; };
-        FirewallRuntime: { preparation: components["schemas"]["FirewallPlanPreparation"] | null; backend: "unconfirmed" | "direct-nftables" | "firewalld" | "ufw" | "iptables-nft" | "iptables-legacy"; can_plan: boolean; protection_observation: components["schemas"]["FirewallProtectionObservation"]; confirmed_action: "none" | "apply" | "remove"; confirmed_plan_id: string; confirmed_operation_id: string; available: boolean; reason: string; confirmed_version: number; confirmed_policy_hash: string; kernel: components["schemas"]["FirewallKernelView"]; protections: components["schemas"]["FirewallProtection"][]; operation: components["schemas"]["FirewallOperation"] | null; };
-        FirewallPortRange: { from: number; to: number; };
-        FirewallRule: { id: string; name: string; enabled: boolean; scope: string; family: string; protocol: string; ports: components["schemas"]["FirewallPortRange"][]; sources: string[]; action: string; priority: number; interface: string; comment: string; };
-        FirewallPolicy: { backend: string; rules: components["schemas"]["FirewallRule"][]; };
-        FirewallPolicyView: { version: number; policy: components["schemas"]["FirewallPolicy"]; updated_at: number; };
-        FirewallPolicyInput: { base_version: number; policy: components["schemas"]["FirewallPolicy"]; };
-        FirewallPreviewInput: { version: number; };
-        FirewallPreviewEntry: { backend_priority: number | null; expression: string; rule_id: string; family: string; protocol: string; source: string; ports: components["schemas"]["FirewallPortRange"]; action: string; interface: string; priority: number; };
-        FirewallFirewalldPreview: { policy: string; priority: number; target: string; ingress_zones: string[]; egress_zones: string[]; settings_bytes: number; };
-        FirewallIPTablesFamilyPreview: { family: "ipv4" | "ipv6"; binary: "iptables-nft" | "ip6tables-nft" | "iptables-legacy" | "ip6tables-legacy"; generated_rules: number; };
-        FirewallIPTablesPreview: { program_bytes: number; base_rules: number; protection_rules: number; families: components["schemas"]["FirewallIPTablesFamilyPreview"][]; };
-        FirewallPreview: { iptables: components["schemas"]["FirewallIPTablesPreview"] | null; firewalld: components["schemas"]["FirewallFirewalldPreview"] | null; kernel: components["schemas"]["FirewallKernelView"]; transaction_hash: string; transaction_bytes: number; transaction_messages: number; version: number; policy_hash: string; backend: string; compiled: boolean; can_apply: boolean; table: string; chain: string; hook: string; priority: number; default_policy: string; logical_rules: number; generated_rules: number; program_hash: string; entries: components["schemas"]["FirewallPreviewEntry"][]; truncated: boolean; observed_at: number; errors: string[]; warnings: string[]; };
-        FirewallKernelView: { available: boolean; table_exists: boolean; generation: number; namespace_id: string; fingerprint: string; chains: number; rules: number; bytes: number; observed_at: number; reason: string; };
-        FirewallRegistrationView: { state: "unavailable" | "unregistered" | "registered" | "managed" | "released" | "missing" | "drifted" | "recovery_required"; verified: boolean; operation_id: string; observed_at: number; reason: string; };
-        FirewallIPTablesRegistrationView: { backend: "" | "iptables-nft" | "iptables-legacy"; registration: components["schemas"]["FirewallRegistrationView"]; };
-        FirewallObservation: { iptables_registration: components["schemas"]["FirewallIPTablesRegistrationView"]; registration: components["schemas"]["FirewallRegistrationView"]; kernel: components["schemas"]["FirewallKernelView"]; interfaces: string[]; at: number; source: string; scope: string; available: boolean; writable: boolean; manager: string; backend: string; reason: string; firewalld: components["schemas"]["FirewallFirewalld"]; ufw: components["schemas"]["FirewallUFW"]; iptables: components["schemas"]["FirewallIptables"][]; rulesets: components["schemas"]["FirewallRuleset"][]; docker: components["schemas"]["FirewallDocker"]; warnings: string[]; };
-        FirewallFirewalld: { registration: components["schemas"]["FirewallRegistrationView"]; running: boolean | null; configured_backend: string; default_zone: string; panic: boolean | null; zones: components["schemas"]["FirewallZone"][]; policy_inventory: components["schemas"]["FirewallFirewalldPolicyInventory"]; reason: string; };
-        FirewallFirewalldPolicyInventory: { available: boolean; policies: components["schemas"]["FirewallFirewalldPolicy"][]; reason: string; };
-        FirewallFirewalldPolicy: { name: string; active: boolean; active_ingress_zones: string[]; active_egress_zones: string[]; runtime: components["schemas"]["FirewallFirewalldPolicySettings"] | null; permanent: components["schemas"]["FirewallFirewalldPolicySettings"] | null; };
-        FirewallFirewalldPolicySettings: { hash: string; target: "" | "CONTINUE" | "ACCEPT" | "REJECT" | "DROP"; priority: number | null; ingress_zones: string[]; egress_zones: string[]; rich_rules: number; entries: number; masquerade: boolean | null; };
-        FirewallZone: { name: string; interfaces: string[]; sources: string[]; };
-        FirewallUFW: { registration: components["schemas"]["FirewallRegistrationView"]; installed: boolean; enabled: boolean | null; active: boolean | null; ipv6: boolean | null; rule_inventory: components["schemas"]["FirewallUFWRuleInventory"]; reason: string; };
-        FirewallUFWRuleInventory: { available: boolean; hash: string; rules: number; commands: string[]; truncated: boolean; reason: string; };
-        FirewallIptables: { family: string; backend: string; version: string; reason: string; };
-        FirewallRuleset: { id: string; backend: string; family: string; available: boolean; tables: components["schemas"]["FirewallTable"][]; reason: string; };
-        FirewallTable: { family: string; name: string; chains: components["schemas"]["FirewallChain"][]; };
-        FirewallChain: { name: string; type: string; hook: string; priority: number | null; policy: string; rules: number; docker_user_jump: boolean; };
-        FirewallDockerTargets: { engine_hash: string; snapshot_hash: string; bindings: components["schemas"]["FirewallDockerRuleBinding"][]; };
-        FirewallDockerRuleBinding: { rule_id: string; container_id: string; network_id: string; family: "ipv4" | "ipv6"; protocol: "tcp" | "udp"; host_ip: string; host_port: number; container_port: number; destination: string; input_interface: string; };
-        FirewallDockerResolvedBinding: { binding: components["schemas"]["FirewallDockerRuleBinding"]; container_address: string; output_interface: string; path: components["schemas"]["FirewallDockerPathProof"]; };
-        FirewallDockerPathProof: { dnat_hash: string; dnat_rules: number; routing_hash: string; original_route_hash: string; route_hash: string; route_prefix: string; route_table: 254; output_index: number; };
-        FirewallDockerLocalAddress: { interface: string; family: "ipv4" | "ipv6"; address: string; };
-        FirewallDockerPlan: { engine_hash: string; snapshot_hash: string; configuration_hash: string; bindings_hash: string; observed_at: number; ports: components["schemas"]["FirewallDockerPublishedPort"][]; truncated: boolean; addresses: components["schemas"]["FirewallDockerLocalAddress"][]; bindings: components["schemas"]["FirewallDockerResolvedBinding"][]; compiled: boolean; program_hash: string; program_bytes: number; generated_rules: number; host_program_hash: string; host_generated_rules: number; transition: components["schemas"]["FirewallDockerTransitionPlan"] | null; entries: components["schemas"]["FirewallPreviewEntry"][]; entries_truncated: boolean; warnings: string[]; reason: string; };
-        FirewallDockerTransitionPlan: { owner: string; host_owner: string; host_runtime_hash: string; host_runtime_bytes: number; registration_operation_id: string; parent_operation_id: string; registration_hash: string; tool_hash: string; toolchain_hash: string; dry_run_hash: string; dry_run_commands: number; hook_chain: "DOCKER-USER"; entry_chain: "NGINXPANEL-DOCKER"; runtime_hash: string; runtime_bytes: number; generated_rules: number; transaction_hash: string; transaction_bytes: number; families: components["schemas"]["FirewallIPTablesFamilyPlan"][]; };
-        FirewallDocker: { registration: components["schemas"]["FirewallDockerRegistrationView"]; backend_hint: "unknown" | "nftables" | "iptables" | "mixed"; evidence: string[]; writable: boolean; reason: string; runtime: components["schemas"]["FirewallDockerRuntime"]; capabilities: components["schemas"]["FirewallDockerCapability"][]; };
-        FirewallDockerRegistrationView: { backend: "" | "iptables-nft" | "iptables-legacy"; engine_hash: string; parent_operation_id: string; registration: components["schemas"]["FirewallRegistrationView"]; };
-        FirewallDockerRuntime: { available: boolean; engine_hash: string; version: string; api_version: string; snapshot_hash: string; observed_at: number; rootless: boolean; swarm: string; networks: number; containers: number; published_ports: number; ports: components["schemas"]["FirewallDockerPublishedPort"][]; truncated: boolean; reason: string; };
-        FirewallDockerPublishedPort: { container_id: string; family: "unknown" | "ipv4" | "ipv6"; protocol: "tcp" | "udp" | "sctp"; host_ip: string; host_port: number; container_port: number; network_ids: string[]; path: "bridge_nat_candidate" | "unconfirmed"; reason: string; };
-        FirewallDockerCapability: { backend: "direct-nftables" | "iptables-nft" | "iptables-legacy" | "firewalld" | "ufw"; family: "ipv4" | "ipv6"; hook: "" | "DOCKER-USER" | "forward"; observed: boolean; supported: boolean; reason: string; };
-        BackupInput: { name: string; encryption: "recipient" | "passphrase"; recipient: string; passphrase: string; };
-        BackupPolicyInput: { base_version: number; enabled: boolean; recipient: string; key_saved: boolean; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; };
-        BackupPolicy: { version: number; enabled: boolean; recipient: string; key_saved_at: number; interval_hours: number; keep_count: number; retention_days: number; authorization_until: number; next_run_at: number; error: string; updated_at: number; };
-        BackupDatabase: { schema_version: number; node_id: string; desired_revision: string; applied_revision: string; head_version: number; };
-        BackupRecord: { id: string; name: string; state: string; stage: string; error: string; encryption: "recipient" | "passphrase"; recipient: string; scheduled: boolean; maintenance_id: string; archive_size: number; archive_sha256: string; captured_at: number; created_at: number; finished_at: number; expires_at: number; deleted_at: number; available: boolean; database: components["schemas"]["BackupDatabase"] | null; };
-        BackupOverview: { policy: components["schemas"]["BackupPolicy"]; records: components["schemas"]["BackupRecord"][]; archive_max: number; store_max: number; };
-        BackupDownloadTicket: { url: string; expires_at: number; };
-        ManagementListenerInput: { version: number; enabled: boolean; listen: string; allowed_sources: string[]; certificate_pem: string; key_pem: string; rotate_certificate: boolean; };
-        ManagementListenerConfig: { enabled: boolean; listen: string; allowed_sources: string[]; tls_fingerprint: string; certificate_expires_at: number; };
-        ManagementListenerOperation: { id: string; version: number; state: "waiting_confirmation" | "succeeded" | "rolled_back" | "recovery_required"; stage: string; deadline: number; config: components["schemas"]["ManagementListenerConfig"]; confirmed_source: string; error: string; };
-        ManagementListenerView: { available: boolean; version: number; confirmed: components["schemas"]["ManagementListenerConfig"]; operation: components["schemas"]["ManagementListenerOperation"] | null; serving: boolean; attached: boolean; reason: string; };
-        PairingInput: {
+        Fail2banExistingResource: {
             name: string;
-            controller_node_id: string;
-            scopes: string[];
-            allowed_sources: string[];
-            credential_expires_at: number;
+            adoption_id: string;
+            binding_id: string;
         };
-        Pairing: {
+        Fail2banExistingPolicy: {
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description -1 表示永久；其他值须为正秒数
+             */
+            ban_time: number;
+            /** Format: int64 */
+            find_time: number;
+            max_retry: number;
+            ignore_ips: string[];
+        };
+        Fail2banExistingProfile: {
+            name: string;
+            profile: string;
+            log_source: string;
+            ports: number[];
+        };
+        Fail2banExistingResourcePolicy: {
+            name: string;
+            adoption_id: string;
+            binding_id: string;
+            selected_id: string;
+            profile: components["schemas"]["Fail2banExistingProfile"];
+            policy: components["schemas"]["Fail2banExistingPolicy"];
+        };
+        Fail2banExistingPolicyInput: {
+            /** @enum {string} */
+            action: "preview" | "apply";
+            adoption_id: string;
+            policy: components["schemas"]["Fail2banExistingPolicy"];
+            preview_id: string;
+            target: string;
+            confirm_stop: boolean;
+        };
+        Fail2banExistingPlan: {
+            /** Format: int64 */
+            at: number;
+            adoption_id: string;
+            binding_id: string;
+            base_id: string;
+            name: string;
+            target: string;
+            before: components["schemas"]["Fail2banExistingPolicy"];
+            after: components["schemas"]["Fail2banExistingPolicy"];
+            ban_count: number;
+            stop_confirmation: boolean;
+            impacts: string[];
+        };
+        Fail2banExistingOperation: {
             id: string;
-            node_id: string;
-            name: string;
-            controller_node_id: string;
-            scopes: string[];
-            allowed_sources: string[];
-            credential_expires_at: number;
-            credential_id: string;
-            state: "offered" | "claimed" | "confirmed" | "revoked" | "expired";
-            created_at: number;
-            expires_at: number;
-            claimed_at: number;
-            confirmed_at: number;
-            revoked_at: number;
-        };
-        PairingOffer: { pairing: components["schemas"]["Pairing"]; readonly secret: string; };
-        PairingClaim: { secret: string; controller_node_id: string; claim: string; };
-        PairingConfirmation: { controller_node_id: string; claim: string; };
-        PairingExchange: { pairing: components["schemas"]["Pairing"]; readonly token: string; };
-        PairingJobInput: {
-            name: string;
-            url: string;
-            fingerprint: string;
-            target_node_id: string;
-            pairing_id: string;
-            secret: string;
-        };
-        PairingJob: {
-            id: string;
-            name: string;
-            url: string;
-            fingerprint: string;
-            controller_node_id: string;
-            target_node_id: string;
-            pairing_id: string;
-            credential_id: string;
-            connection_id: string;
-            state: "pending" | "recovery_required" | "abandoning" | "succeeded" | "abandoned";
-            stage: "exchange" | "confirm" | "register" | "finished";
+            request_hash: string;
+            /** @enum {string} */
+            action: "preview" | "apply";
+            /** @enum {string} */
+            state: "running" | "recovery_required" | "succeeded" | "failed";
+            stage: string;
+            adoption_id: string;
+            target: string;
+            sent: boolean;
+            /** @enum {string} */
+            submission: "" | "pending" | "confirmed" | "unknown";
+            cancel_requested: boolean;
+            cancel_error: string;
             error: string;
-            revocation: "" | "pending" | "revoked";
+            plan?: components["schemas"]["Fail2banExistingPlan"];
+        };
+        Fail2banExistingPolicyTask: {
+            task_id: string;
+            operation_id: string;
+        };
+        Fail2banExistingTaskStatus: {
+            id: string;
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
             created_at: number;
+            input: components["schemas"]["Fail2banExistingPolicyInput"];
+            result: components["schemas"]["Fail2banExistingOperation"] | null;
+            cancel_requested: boolean;
+            cancel_pending: boolean;
+            cancel_error: string;
+        };
+        FirewallProtection: {
+            /** @enum {string} */
+            service: "ssh" | "management";
+            /** @enum {string} */
+            family: "ipv4" | "ipv6";
+            port: number;
+            sources: string[];
+        };
+        FirewallPlanInput: {
+            docker_targets?: components["schemas"]["FirewallDockerTargets"];
+            /** @enum {string} */
+            action: "apply" | "remove";
+            /**
+             * Format: int64
+             * @description apply 使用已保存期望版本；remove 使用当前已确认运行版本。
+             */
+            version: number;
+            /**
+             * Format: uuid
+             * @description 查询原 UFW 后台准备；不传时创建新准备。查询固定原动作及版本，不重新执行预演。
+             */
+            preparation_id?: string;
+            /** @description 取消 preparation_id 对应的在途准备，不改变运行规则。 */
+            cancel_preparation?: boolean;
+        };
+        FirewallApplyInput: {
+            /** Format: uuid */
+            plan_id: string;
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            action: "apply" | "remove";
+        };
+        FirewallPlanPreparation: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            action: "apply" | "remove";
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            state: "running" | "cancelling" | "ready" | "failed" | "cancelled";
+            completed_commands: number;
+            total_commands: number;
+            /** Format: int64 */
+            started_at: number;
+            /** Format: int64 */
+            updated_at: number;
+            /**
+             * Format: int64
+             * @description 原后台准备期限，重复查询不延长。
+             */
+            deadline: number;
+            error: string;
+        };
+        FirewallPlan: {
+            docker: components["schemas"]["FirewallDockerPlan"] | null;
+            id: string;
+            /** Format: int64 */
+            version: number;
+            policy_hash: string;
+            program_hash: string;
+            baseline: components["schemas"]["FirewallKernelView"];
+            protections: components["schemas"]["FirewallProtection"][];
+            ssh_profile: string;
+            ssh_listeners: string[];
+            /** Format: int64 */
+            listener_version: number;
+            listener: string;
+            control_source: string;
+            /** Format: int64 */
+            confirmation_seconds: number;
+            /** Format: int64 */
+            expires_at: number;
+            transaction_hash: string;
+            /** Format: int64 */
+            transaction_bytes: number;
+            /** Format: int64 */
+            generated_rules: number;
+            /** @enum {string} */
+            action: "apply" | "remove";
+            /** @enum {string} */
+            backend: "direct-nftables" | "firewalld" | "ufw" | "iptables-nft" | "iptables-legacy";
+            /** @description 后端已完成该计划的执行准备；仍须重新核对基线、版本及保护依据。UFW 准备中、失败、取消或失效时为 false；iptables 主机入站计划须通过官方 go-iptables 链读取、原生完整规则及 nft JSON 候选与恢复容量准入；Docker 完整目标绑定、独立本机授权和原恢复目标均须有效；仅枚举映射或原目标失效时保持 false。 */
+            can_apply: boolean;
+            firewalld: components["schemas"]["FirewallFirewalldPlan"] | null;
+            ufw: components["schemas"]["FirewallUFWPlan"] | null;
+            preparation: components["schemas"]["FirewallPlanPreparation"] | null;
+            iptables: components["schemas"]["FirewallIPTablesPlan"] | null;
+        };
+        /** @description 仅属于目标机器的映射选择，受理后保留于 root 持久业务意图；不属于期望规则、数据库或可移植归档。每条启用的 Docker 规则、地址族和主机端口必须完整覆盖；最多 128 个绑定、96 KiB。 */
+        FirewallDockerTargets: {
+            engine_hash: string;
+            snapshot_hash: string;
+            bindings: components["schemas"]["FirewallDockerRuleBinding"][];
+        };
+        FirewallDockerRuleBinding: {
+            /** Format: uuid */
+            rule_id: string;
+            container_id: string;
+            network_id: string;
+            /** @enum {string} */
+            family: "ipv4" | "ipv6";
+            /** @enum {string} */
+            protocol: "tcp" | "udp";
+            /** @description Docker 报告的主机绑定地址；通配地址必须另选实际原始目的地址。 */
+            host_ip: string;
+            host_port: number;
+            container_port: number;
+            /** @description 与入口接口当前地址严格对应的同族规范单播地址，不能使用通配、回环或链路本地地址。 */
+            destination: string;
+            input_interface: string;
+        };
+        FirewallDockerResolvedBinding: {
+            binding: components["schemas"]["FirewallDockerRuleBinding"];
+            container_address: string;
+            output_interface: string;
+            path: components["schemas"]["FirewallDockerPathProof"];
+        };
+        /** @description 只读核对原始目的的本地路由、PREROUTING 有序 DNAT 和容器永久直连 bridge 路由。仅支持默认策略路由及可完整解释的 NAT 条件；所有来源须得到相同路径结论。前后报告一致仍不是原子快照、执行授权或外部可达性证明。 */
+        FirewallDockerPathProof: {
+            /** @description 完整 NAT 表及有序 PREROUTING/DOCKER 路径摘要，不包含 filter 代际。 */
+            dnat_hash: string;
+            dnat_rules: number;
+            routing_hash: string;
+            original_route_hash: string;
+            route_hash: string;
+            /** @description 内核 FIB 选中的同族规范网络前缀，必须包含容器地址。 */
+            route_prefix: string;
+            /** @enum {integer} */
+            route_table: 254;
+            output_index: number;
+        };
+        FirewallDockerLocalAddress: {
+            interface: string;
+            /** @enum {string} */
+            family: "ipv4" | "ipv6";
+            address: string;
+        };
+        /** @description 目标实例、映射、本机地址及所选 DNAT/路由的核对与独立编译。完整绑定须具有独立本机 Docker 授权，生成首代或更新代际及正反向切换批次，并通过固定工具读取与官方 --test；授权、路径及批次/预演摘要绑定私有事务。主机 INPUT 与 Docker 转发分别编译并独立授权，同一地址族合并为一次 filter 提交及对应撤回批次，共用完整读取容量和官方预演；父程序摘要绑定两类实际代际。Docker 允许使用 RETURN。原恢复目标有效时父计划可返回 can_apply=true，受理及每次正向提交重新核对；实际提交后保存 root 持久操作，须新连接确认。未绑定或原目标失效时仅可预览；不代表原子快照或外部可达性。 */
+        FirewallDockerPlan: {
+            engine_hash: string;
+            snapshot_hash: string;
+            configuration_hash: string;
+            bindings_hash: string;
+            /** Format: int64 */
+            observed_at: number;
+            ports: components["schemas"]["FirewallDockerPublishedPort"][];
+            truncated: boolean;
+            addresses: components["schemas"]["FirewallDockerLocalAddress"][];
+            bindings: components["schemas"]["FirewallDockerResolvedBinding"][];
+            compiled: boolean;
+            program_hash: string;
+            program_bytes: number;
+            generated_rules: number;
+            host_program_hash: string;
+            host_generated_rules: number;
+            transition: components["schemas"]["FirewallDockerTransitionPlan"] | null;
+            entries: components["schemas"]["FirewallPreviewEntry"][];
+            entries_truncated: boolean;
+            warnings: string[];
+            reason: string;
+        };
+        /** @description 已独立授权的 Docker 转发首代或更新计划，与本次 INPUT 变更合并。父计划 iptables 包含全部参与地址族，families 仅列 Docker 地址族，其批次摘要对应同一个联合事务，preserved_rules 不含本应用旧 INPUT/Docker 代际。transaction_hash 绑定 root 私有业务意图，transaction_bytes 是全部地址族候选批次合计。完整授权、目标、原始规则及批次在受理后保存到 root 持久业务意图，不进入迁移归档；公开摘要不提供执行授权。after_hash 是结构投影，不是内核回执。枚举映射时 transition 为 null。 */
+        FirewallDockerTransitionPlan: {
+            /** Format: uuid */
+            owner: string;
+            /** Format: uuid */
+            host_owner: string;
+            host_runtime_hash: string;
+            host_runtime_bytes: number;
+            /** Format: uuid */
+            registration_operation_id: string;
+            /** Format: uuid */
+            parent_operation_id: string;
+            registration_hash: string;
+            tool_hash: string;
+            /** @description 固定显式 command/save/restore、模块加载阻断工具及私有读取入口的 ELF 文件和版本摘要。 */
+            toolchain_hash: string;
+            /** @description 绑定原完整基线、代际程序、固定工具及逐次官方预演输入和成功结果。 */
+            dry_run_hash: string;
+            /** @description 全部参与地址族分别预演 INPUT/Docker 联合候选及同表正反向批次，不安装规则。 */
+            dry_run_commands: number;
+            /** @enum {string} */
+            hook_chain: "DOCKER-USER";
+            /** @enum {string} */
+            entry_chain: "NGINXPANEL-DOCKER";
+            runtime_hash: string;
+            runtime_bytes: number;
+            /** @description 包含 DOCKER-USER 首位跳转、稳定入口指针及完整代际业务规则。 */
+            generated_rules: number;
+            transaction_hash: string;
+            transaction_bytes: number;
+            families: components["schemas"]["FirewallIPTablesFamilyPlan"][];
+        };
+        /** @description root 在当前实际管理连接下生成的 firewalld 计划；绑定已确认运行/永久配置及原登记，先写运行规则，新连接确认后才写永久规则，不冒充直接 nftables 内核事务。 */
+        FirewallFirewalldPlan: {
+            runtime_hash: string;
+            permanent_hash: string;
+            /** Format: uuid */
+            registration_operation_id: string;
+            settings: components["schemas"]["FirewallFirewalldPreview"];
+            protection_rules: number;
+            entries: components["schemas"]["FirewallPreviewEntry"][];
+            truncated: boolean;
+            warnings: string[];
+            reason: string;
+        };
+        /** @description 目标本机受管代际的首次应用、更新或移除计划；完整原生规则、正反向受管批次、工具绑定与预演结果均在 root 保留，不下发原文。固定显式 command/save/restore 的 ELF 文件、版本与后端，候选及同表正反向批次分别通过 --test，并核对前后规则不变；官方 go-iptables 链读取及完整 nft JSON 候选/恢复容量准入后可返回 can_apply=true；应用时仍重新核对，须新连接确认。Docker 完整绑定同时返回此摘要；其地址族批次还包含 Docker 变更，生成规则数仅计 INPUT 部分。原恢复目标有效时可执行，受理和每次正向提交重新核对。 */
+        FirewallIPTablesPlan: {
+            registration_operation_id: string;
+            configuration_hash: string;
+            tool_hash: string;
+            /** @description 固定后端双地址族 command/save/restore 及模块加载阻断工具的文件身份与版本摘要，不覆盖系统共享库或扩展。 */
+            toolchain_hash: string;
+            /** @description 包含基线、程序、工具及每次预演输入和成功结果的完整摘要。 */
+            dry_run_hash: string;
+            /** @description 每个使用地址族分别预演候选及同表正反向批次。 */
+            dry_run_commands: number;
+            logical_hash: string;
+            protection_rules: number;
+            families: components["schemas"]["FirewallIPTablesFamilyPlan"][];
+            warnings: string[];
+            reason: string;
+        };
+        FirewallIPTablesFamilyPlan: {
+            /** @enum {string} */
+            family: "ipv4" | "ipv6";
+            /** @enum {string} */
+            binary: "iptables-nft" | "ip6tables-nft" | "iptables-legacy" | "ip6tables-legacy";
+            chain: string;
+            /**
+             * @description 候选首位跳转为 1；移除该地址族的跳转为 0。
+             * @enum {integer}
+             */
+            hook_position: 0 | 1;
+            /** @description 包含入口跳转、代际指针、基础返回、保护与业务规则。 */
+            generated_rules: number;
+            /** @description 当前完整地址族导出中的第三方规则数，不写入任何候选或恢复批次。 */
+            preserved_rules: number;
+            before_hash: string;
+            /** @description 候选规则结构投影摘要，不是内核应用回执。 */
+            after_hash: string;
+            candidate_hash: string;
+            previous_hash: string;
+            candidate_bytes: number;
+            previous_bytes: number;
+        };
+        /** @description root 在本机空命名空间授权登记后，基于实际管理连接及 SSH 监听准备的 UFW 保护计划；注释绑定原随机所有者和计划身份。隔离 Python 固定受信 CLI 和常规源包，读取其中声明的配置及后端路径，绑定实际 command/save/restore 工具并核对相同后端。前后核对全部已启用地址族的重载用户链，原运行规则须与持久用户文件一致；重载摘要忽略计数器及导出时间，保留链存在性、规则与匹配模块顺序。通过官方 datadir 在私有源码及配置副本内逆序累积 dry-run prepend，核对每步新增块及既有用户规则保留、最终目标顺序和闭合目录清单；批次摘要绑定原基线、源码与工具、原生程序、步骤输出及最终用户文件。初始模板及官方限速能力默认值的已知投影差异单独提示，不证明候选已生效、全局原子性或所有权，不授权实际应用。 */
+        FirewallUFWPlan: {
+            /** Format: uuid */
+            registration_operation_id: string;
+            configuration_hash: string;
+            /** @description 受信 UFW CLI 文件摘要 */
+            tool_hash: string;
+            /** @description 受信 CLI、Python、固定 UFW 源模块及后端/辅助工具的内容、文件身份、路径与声明配置摘要，不覆盖全部标准库及系统共享库 */
+            toolchain_hash: string;
+            /** @description 固定解释器报告的 Python 3 版本 */
+            python_version: string;
+            dry_run_hash: string;
+            /** @description 按生成顺序排列的完整原生 tuple 及报文规则摘要，不是内核或规则所有权证明 */
+            native_program_hash: string;
+            /** @description 隔离累积批次的基线、源码与工具绑定、程序、执行顺序输出和最终用户文件摘要，不是已执行回执 */
+            batch_hash: string;
+            /**
+             * @description UFW 声明的命令、规则导出及重载工具已核对的相同内核后端
+             * @enum {string}
+             */
+            reload_backend: "nftables" | "legacy";
+            /** @description 重载范围的原运行链存在性、有序规则及绑定的 command/save/restore 版本摘要，不包含计数器或候选生效证明 */
+            reload_hash: string;
+            /** @description 重载范围内实际存在的用户链数量，包含日志和限速链 */
+            reload_chains: number;
+            /** @description 重载范围内原运行报文规则总数，包含日志和限速规则，不按 tuple 计 */
+            reload_rules: number;
+            /** @description 本次核对并保留的所有已启用地址族非本应用用户 tuple 总数 */
+            preserved_rules: number;
+            /** @description 原已确认程序删除与新程序添加的预演命令合计 */
+            dry_run_commands: number;
+            protection_rules: number;
+            protection_overrides: number;
+            entries: components["schemas"]["FirewallPreviewEntry"][];
+            truncated: boolean;
+            warnings: string[];
+            reason: string;
+        };
+        FirewallOperation: {
+            id: string;
+            plan_id: string;
+            /** Format: int64 */
+            version: number;
+            policy_hash: string;
+            program_hash: string;
+            /** @enum {string} */
+            state: "running" | "waiting_confirmation" | "compensating" | "recovery_required" | "succeeded" | "rolled_back" | "failed";
+            stage: string;
+            /** Format: int64 */
+            deadline: number;
+            /** Format: int64 */
+            updated_at: number;
+            confirmed_source: string;
+            verification_scope: string;
+            error: string;
+            /** @enum {string} */
+            action: "apply" | "remove";
+        };
+        FirewallProtectionObservation: {
+            /**
+             * @description 只比较原确认计划与采样时的保护依据，不证明外部可达性
+             * @enum {string}
+             */
+            state: "unavailable" | "not_applicable" | "current" | "changed";
+            /** @description 本次核对对应的原确认计划；无适用计划时为空 */
+            plan_id: string;
+            /**
+             * Format: int64
+             * @description 采样 Unix 时间；尚未采样时为 0
+             */
+            observed_at: number;
+            /** @description 当前本机授权的 SSH 保护方式；未核对时可为空 */
+            ssh_profile: string;
+            ssh_listeners: string[];
+            protections: components["schemas"]["FirewallProtection"][];
+            reason: string;
+        };
+        Fail2banHostInputProtectionView: {
+            /** Format: int64 */
+            at: number;
+            /** @enum {string} */
+            state: "unavailable" | "unapproved" | "approved" | "stale" | "revoked";
+            verified: boolean;
+            id: string;
+            /** Format: int64 */
+            approved_at: number;
+            policy_hash: string;
+            admin_sources: string[];
+            proxy_sources: string[];
+            reason: string;
+        };
+        Fail2banHostInputSourcesView: {
+            /** Format: int64 */
+            at: number;
+            /** @enum {string} */
+            state: "unavailable" | "unapproved" | "stale" | "revoked" | "ready";
+            id: string;
+            /** Format: int64 */
+            approved_at: number;
+            jails: string[];
+            /** Format: int64 */
+            collected_at: number;
+            source_hash: string;
+            /** @enum {string} */
+            time_basis: "engine-current";
+            banned_count: number;
+            protected_count: number;
+            reason: string;
+            /** @description 本机 root 已明确授权从本应用受管配置派生宿主机 jail；仅完整当前集合可用于内核动作 */
+            managed: boolean;
+        };
+        /** @description 本机 root 明确批准的持续会话，只读状态不授予执行权；current 仅证明最近完整官方采样与所属内核对象一致，采样超过 60 秒则等待重新核对。 */
+        Fail2banHostInputSyncView: {
+            /** Format: int64 */
+            at: number;
+            id: string;
+            session_id: string;
+            enabled: boolean;
+            /** Format: int64 */
+            approved_at: number;
+            /** @enum {string} */
+            state: "unavailable" | "disabled" | "waiting" | "collecting" | "current" | "stopping" | "paused" | "failed" | "recovery_required" | "recovering";
+            queued: boolean;
+            /** Format: int64 */
+            collected_at: number;
+            /** Format: int64 */
+            confirmed_at: number;
+            source_hash: string;
+            kernel_operation_id: string;
+            reason: string;
+            /** @description 本机显式退役操作标识；待完成时不执行旧范围，完成停用不表示旧命名空间规则已清除 */
+            retirement_id: string;
+            /** @description 本机 root 已明确允许此会话在同一主机的新启动范围恢复；不表示当前防护已生效 */
+            recover_on_boot: boolean;
+            /** @description 关联的本机启动恢复操作；取消保留现场，不声称旧规则已清除 */
+            recovery_id: string;
+        };
+        Fail2banHostInputRuntimeView: {
+            /** Format: int64 */
+            at: number;
+            /** @enum {string} */
+            state: "unavailable" | "uninitialized" | "empty" | "applied" | "recovery_required" | "missing" | "drifted";
+            verified: boolean;
+            operation_id: string;
+            /** @enum {string} */
+            action: "" | "apply" | "clear";
+            /** @enum {string} */
+            operation_state: "" | "running" | "recovery_required" | "succeeded" | "failed";
+            /** Format: int64 */
+            updated_at: number;
+            banned_count: number;
+            protected_count: number;
+            reason: string;
+        };
+        Fail2banHostInputPreview: {
+            /** Format: int64 */
+            at: number;
+            scope: string;
+            available: boolean;
+            manager: string;
+            /** @enum {string} */
+            backend: "direct-nftables";
+            /** @enum {string} */
+            table: "nginxpanel_fail2ban";
+            /** @enum {string} */
+            hook: "input";
+            /** @enum {integer} */
+            priority: -10;
+            /** @description 须本机登记、保护来源及完整官方 jail 封禁快照均已核对，才生成当前集合的准备材料；不授予封禁执行权 */
+            can_prepare: boolean;
+            /** @enum {boolean} */
+            can_apply: false;
+            kernel: components["schemas"]["FirewallKernelView"];
+            /** @description 完整条件满足后，本次采样的本地单地址、固定保留网段及 root 批准的管理/代理来源的规范化并集 */
+            protected_sources: string[];
+            program_hash: string;
+            transaction_hash: string;
+            transaction_bytes: number;
+            generated_rules: number;
+            reason: string;
+            /**
+             * Format: int64
+             * @description 管理器缓存采样时间，区别本次独立目标表采样；尚未取得为 0
+             */
+            manager_observed_at: number;
+            registration: components["schemas"]["FirewallRegistrationView"];
+            protection: components["schemas"]["Fail2banHostInputProtectionView"];
+            sources: components["schemas"]["Fail2banHostInputSourcesView"];
+            runtime: components["schemas"]["Fail2banHostInputRuntimeView"];
+            sync: components["schemas"]["Fail2banHostInputSyncView"];
+        };
+        Fail2banPanelLoginEvent: {
+            /** Format: date-time */
+            time_iso8601: string;
+            /** @enum {string} */
+            event: "login_failed";
+            /** @description 规范化数值 TCP 对端，不采信转发头 */
+            peer_addr: string;
+            /** @enum {string} */
+            source: "tcp_peer";
+            /** Format: uuid */
+            request_id: string;
+        };
+        Fail2banPanelLoginStatus: {
+            /** Format: int64 */
+            at: number;
+            available: boolean;
+            /** @enum {string} */
+            source_id: "panel:login";
+            /** @enum {string} */
+            format: "nginxpanel_auth";
+            scope: string;
+            reason: string;
+            /** Format: int64 */
+            bytes: number;
+            /**
+             * Format: int64
+             * @enum {integer}
+             */
+            limit_bytes: 8388608;
+            events: components["schemas"]["Fail2banPanelLoginEvent"][];
+        };
+        Fail2banFilterSample: {
+            name: string;
+            line: string;
+            /** @description 空字符串表示不应匹配 */
+            expected_ip: string;
+        };
+        Fail2banTemplateCheckInput: {
+            templates: ("nginx-http-401" | "nginx-authorization-401" | "panel-login-failure")[];
+        };
+        Fail2banTemplateCheck: {
+            template: string;
+            source: string;
+            scope: string;
+            filter_sha256: string;
+            samples_sha256: string;
+            tool_path: string;
+            tool_sha256: string;
+            tool_version: string;
+            reason: string;
+            /** Format: int64 */
+            at: number;
+            available: boolean;
+            passed: boolean;
+            expected_ips: string[];
+            matched_ips: string[];
+            engine: components["schemas"]["Fail2banEngineIdentity"];
+        };
+        Fail2banDesiredJail: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            enabled: boolean;
+            /** @enum {string} */
+            template: "nginx-http-401" | "nginx-authorization-401" | "panel-login-failure";
+            /** @description 面板登录模板须为空；Nginx 模板须为站点 UUID */
+            resource_id: string;
+            /** @enum {string} */
+            action: "host-input" | "docker-forward" | "nginx-client";
+            /**
+             * Format: int64
+             * @description -1 永久封禁，否则为 1–31536000 秒
+             */
+            ban_time: number;
+            /** Format: int64 */
+            find_time: number;
+            max_retry: number;
+            ignore_ips: string[];
+        } & ({
+            /** @enum {unknown} */
+            template?: "panel-login-failure";
+            /** @enum {unknown} */
+            resource_id?: "";
+            /** @enum {unknown} */
+            action?: "host-input";
+        } | {
+            /** @enum {unknown} */
+            template?: "nginx-http-401" | "nginx-authorization-401";
+            /** Format: uuid */
+            resource_id?: unknown;
+        });
+        Fail2banPolicy: {
+            jails: components["schemas"]["Fail2banDesiredJail"][];
+        };
+        Fail2banPolicyView: {
+            /** Format: int64 */
+            version: number;
+            policy: components["schemas"]["Fail2banPolicy"];
+            /** Format: int64 */
             updated_at: number;
         };
+        Fail2banPolicyInput: {
+            /** Format: int64 */
+            base_version: number;
+            policy: components["schemas"]["Fail2banPolicy"];
+        };
+        Fail2banTemplate: {
+            /** @enum {string} */
+            id: "nginx-http-401" | "nginx-authorization-401" | "panel-login-failure";
+            name: string;
+            description: string;
+            category: string;
+            format: string;
+            /** Format: int64 */
+            ban_time: number;
+            /** Format: int64 */
+            find_time: number;
+            max_retry: number;
+            filter_sha256: string;
+            samples_sha256: string;
+            samples: components["schemas"]["Fail2banFilterSample"][];
+        };
+        Fail2banJailsOperation: {
+            id: string;
+            state: string;
+            stage: string;
+            before_id: string;
+            after_id: string;
+            request_hash: string;
+            target: string;
+            error: string;
+        };
+        Fail2banJailsRuntime: {
+            available: boolean;
+            target: string;
+            selected_id: string;
+            policy: components["schemas"]["Fail2banPolicy"];
+            resources: string[];
+            pending: components["schemas"]["Fail2banJailsOperation"][];
+            reason: string;
+            host_ready: boolean;
+            host_reason: string;
+            nginx_ready: boolean;
+            nginx_reason: string;
+        };
+        Fail2banPythonPackage: {
+            name: string;
+            version: string;
+            architecture: string;
+            source: string;
+            repository: string;
+            filename: string;
+            sha256: string;
+            /** Format: int64 */
+            download_bytes: number;
+            /** Format: int64 */
+            installed_bytes: number;
+        };
+        Fail2banPythonPlan: {
+            id: string;
+            /** Format: int64 */
+            at: number;
+            /** Format: int64 */
+            expires_at: number;
+            os: string;
+            version: string;
+            /** @enum {string} */
+            architecture: "amd64" | "arm64";
+            /** @enum {string} */
+            manager: "apt" | "dnf";
+            packages: components["schemas"]["Fail2banPythonPackage"][];
+            /** Format: int64 */
+            download_bytes: number;
+            /** Format: int64 */
+            installed_bytes: number;
+            impacts: string[];
+        };
+        Fail2banPythonTaskInput: {
+            /** @enum {string} */
+            action: "plan" | "install";
+            plan_id: string;
+            refresh: boolean;
+        };
+        Fail2banPythonTaskOperation: {
+            id: string;
+            request_hash: string;
+            input: components["schemas"]["Fail2banPythonTaskInput"];
+            /** @enum {string} */
+            state: "running" | "recovery_required" | "succeeded" | "failed";
+            stage: string;
+            /** @enum {string} */
+            submission: "not_sent" | "unknown" | "acknowledged";
+            /** Format: int64 */
+            at: number;
+            plan: components["schemas"]["Fail2banPythonPlan"] | null;
+            python: components["schemas"]["Fail2banPython"];
+            error: string;
+        };
+        Fail2banPythonTask: {
+            /** Format: uuid */
+            task_id: string;
+            /** Format: uuid */
+            operation_id: string;
+        };
+        Fail2banPythonTaskStatus: {
+            id: string;
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
+            created_at: number;
+            input: components["schemas"]["Fail2banPythonTaskInput"];
+            result: components["schemas"]["Fail2banPythonTaskOperation"] | null;
+        };
+        Fail2banUpgradeInput: {
+            /** @enum {string} */
+            action: "check" | "prepare" | "run";
+            plan_id: string;
+            asset_id: string;
+            prerelease: boolean;
+            target: string;
+            preparation_id: string;
+        };
+        Fail2banUpgradeBans: {
+            /** Format: int64 */
+            observed_at: number;
+            /** Format: int64 */
+            count: number;
+            sha256: string;
+        };
+        Fail2banUpgradePlan: {
+            /** Format: int64 */
+            at: number;
+            target: string;
+            installation_id: string;
+            event_id: string;
+            source_version: string;
+            candidate_version: string;
+            running: boolean;
+            jails: string[];
+            impacts: string[];
+            scope_verified: boolean;
+            blockers: string[];
+            /** Format: int64 */
+            nginx_grants: number;
+            host_sources: boolean;
+            host_sync: boolean;
+            bans: components["schemas"]["Fail2banUpgradeBans"] | null;
+        };
+        Fail2banUpgradePreparation: {
+            id: string;
+            intent_sha256: string;
+            /** Format: int64 */
+            created_at: number;
+            source_version: string;
+            candidate_version: string;
+        };
+        Fail2banUpgradeRunResult: {
+            id: string;
+            /** @enum {string} */
+            state: "running" | "recovery_required" | "succeeded" | "failed" | "cancelled";
+            stage: string;
+            /** Format: int64 */
+            completed_at: number;
+        };
+        Fail2banUpgradeOperation: {
+            id: string;
+            request_hash: string;
+            input: components["schemas"]["Fail2banUpgradeInput"];
+            child_id: string;
+            /** @enum {string} */
+            state: "running" | "recovery_required" | "succeeded" | "failed" | "cancelled";
+            stage: string;
+            /** Format: int64 */
+            at: number;
+            error: string;
+            plan: components["schemas"]["Fail2banUpgradePlan"] | null;
+            preparation: components["schemas"]["Fail2banUpgradePreparation"] | null;
+            run: components["schemas"]["Fail2banUpgradeRunResult"] | null;
+        };
+        Fail2banUpgradeTask: {
+            /** Format: uuid */
+            task_id: string;
+            /** Format: uuid */
+            operation_id: string;
+        };
+        Fail2banUpgradeTaskStatus: {
+            id: string;
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
+            created_at: number;
+            input: components["schemas"]["Fail2banUpgradeInput"];
+            result: components["schemas"]["Fail2banUpgradeOperation"] | null;
+        };
+        Fail2banLifecyclePreviewInput: {
+            /** @enum {string} */
+            action: "install" | "resume" | "rollback" | "start" | "stop" | "enable" | "disable";
+            plan_id: string;
+            asset_id: string;
+            prerelease: boolean;
+            /** @enum {string} */
+            engine_owner: "managed" | "existing";
+        };
+        Fail2banLifecycleInput: {
+            /** @enum {string} */
+            action: "install" | "resume" | "rollback" | "start" | "stop" | "enable" | "disable";
+            plan_id: string;
+            asset_id: string;
+            prerelease: boolean;
+            base_id: string;
+            target: string;
+            start: boolean;
+            enable: boolean;
+            /** @enum {string} */
+            engine_owner: "managed" | "existing";
+        };
+        Fail2banLifecyclePlan: {
+            /** Format: int64 */
+            at: number;
+            input: components["schemas"]["Fail2banLifecycleInput"];
+            managed: components["schemas"]["Fail2banManaged"];
+            service: components["schemas"]["Fail2banService"];
+            jails: string[];
+            impacts: string[];
+        };
+        Fail2banLifecycleOperation: {
+            id: string;
+            request_hash: string;
+            input: components["schemas"]["Fail2banLifecycleInput"];
+            /** @enum {string} */
+            state: "running" | "recovery_required" | "succeeded" | "failed";
+            stage: string;
+            /** @enum {string} */
+            submission: "not_sent" | "unknown" | "acknowledged";
+            /** Format: int64 */
+            at: number;
+            managed: components["schemas"]["Fail2banManaged"];
+            service: components["schemas"]["Fail2banService"];
+            error: string;
+        };
+        Fail2banLifecycleTask: {
+            /** Format: uuid */
+            task_id: string;
+            /** Format: uuid */
+            operation_id: string;
+        };
+        Fail2banLifecycleTaskStatus: {
+            id: string;
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
+            created_at: number;
+            input: components["schemas"]["Fail2banLifecycleInput"];
+            result: components["schemas"]["Fail2banLifecycleOperation"] | null;
+        };
+        Fail2banAddressInput: {
+            jail: string;
+            ip: string;
+            /** @enum {string} */
+            action: "ban" | "unban";
+            target: string;
+            /** @enum {string} */
+            engine_owner: "managed" | "existing";
+            adoption_id: string;
+        };
+        Fail2banAddressStatus: {
+            /** Format: int64 */
+            at: number;
+            jail: string;
+            ip: string;
+            available: boolean;
+            target: string;
+            /** @enum {string} */
+            engine_state: "unknown" | "banned" | "clear";
+            /** Format: int64 */
+            expires_at: number;
+            permanent: boolean;
+            /** Format: int64 */
+            ban_time: number;
+            can_ban: boolean;
+            /** @enum {string} */
+            action_state: "unknown" | "denied" | "clear";
+            generation: string;
+            reason: string;
+            /**
+             * @description 受管动作或已接管 SSH jail 的官方动作；existing-ssh 仅证明引擎状态，action_state 为 unknown，不推断内核阻断。
+             * @enum {string}
+             */
+            backend: "" | "nginx-client" | "host-input" | "existing-ssh";
+            /** @enum {string} */
+            engine_owner: "managed" | "existing";
+            adoption_id: string;
+        };
+        Fail2banAddressOperation: {
+            id: string;
+            request_hash: string;
+            input: components["schemas"]["Fail2banAddressInput"];
+            /** @enum {string} */
+            state: "running" | "succeeded" | "failed";
+            stage: string;
+            /** @enum {string} */
+            submission: "not_sent" | "not_needed" | "unknown" | "acknowledged";
+            /** @enum {string} */
+            engine_state: "unknown" | "banned" | "clear";
+            /** Format: int64 */
+            observed_at: number;
+            /** Format: int64 */
+            expires_at: number;
+            permanent: boolean;
+            error: string;
+        };
+        Fail2banAddressTask: {
+            /** Format: uuid */
+            task_id: string;
+            /** Format: uuid */
+            operation_id: string;
+        };
+        Fail2banAddressTaskStatus: {
+            id: string;
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
+            created_at: number;
+            input: components["schemas"]["Fail2banAddressInput"];
+            result: components["schemas"]["Fail2banAddressOperation"] | null;
+        };
+        Fail2banApplyInput: {
+            /** Format: int64 */
+            version: number;
+            policy_hash: string;
+            base_id: string;
+            target: string;
+        };
+        Fail2banApplyTaskStatus: {
+            id: string;
+            operation_id: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** Format: int64 */
+            created_at: number;
+        };
+        Fail2banApplyTask: {
+            task_id: string;
+            operation_id: string;
+            /** Format: int64 */
+            version: number;
+        };
+        Fail2banPreviewInput: {
+            /** Format: int64 */
+            version: number;
+        };
+        Fail2banJailPreview: {
+            id: string;
+            jail_name: string;
+            enabled: boolean;
+            source_id: string;
+            source_ready: boolean;
+            errors: string[];
+            template_ready: boolean;
+        };
+        Fail2banPolicyPreview: {
+            /** Format: int64 */
+            version: number;
+            policy_hash: string;
+            can_apply: boolean;
+            entries: components["schemas"]["Fail2banJailPreview"][];
+            warnings: string[];
+            template_checks: components["schemas"]["Fail2banTemplateCheck"][];
+            runtime: components["schemas"]["Fail2banJailsRuntime"];
+            removed: string[];
+            host_input?: components["schemas"]["Fail2banHostInputPreview"];
+        };
+        MigrationMonitoringInput: {
+            /** @enum {string} */
+            mode: "preserve" | "replace";
+            /** Format: int64 */
+            base_version?: number;
+        };
+        MigrationMonitoringPlan: {
+            /** @enum {string} */
+            mode: "preserve" | "replace";
+            /** @enum {string} */
+            state: "preserved" | "pending_import" | "not_imported" | "saved" | "restored" | "recovery_required";
+            /** Format: int64 */
+            base_version: number;
+            /** Format: int64 */
+            saved_version: number;
+            settings: components["schemas"]["MonitoringSettings"];
+            settings_hash: string;
+        };
+        MigrationFail2banInput: {
+            /**
+             * @default preserve
+             * @enum {string}
+             */
+            mode: "preserve" | "merge" | "replace";
+            /** Format: int64 */
+            base_version?: number;
+        };
+        MigrationFail2banPlan: {
+            /** @enum {string} */
+            mode: "preserve" | "merge" | "replace";
+            state: string;
+            /** Format: int64 */
+            base_version: number;
+            /** Format: int64 */
+            saved_version: number;
+            source_jails: number;
+            preserved_jails: number;
+            replaced_jails: number;
+            total_jails: number;
+            policy_hash: string;
+            warnings: string[];
+        };
+        Fail2banEngineIdentity: {
+            /** @enum {string} */
+            owner: "existing" | "managed" | "none" | "unavailable";
+            installation_id: string;
+            plan_id: string;
+            asset_id: string;
+            manifest_sha256: string;
+            python_path: string;
+            python_sha256: string;
+        };
+        Fail2banBindingView: {
+            /** @enum {string} */
+            state: "unavailable" | "unbound" | "bound";
+            id: string;
+            service: string;
+            socket: string;
+            client_path: string;
+            client_version: string;
+            /** Format: int64 */
+            approved_at: number;
+            reason: string;
+            engine: components["schemas"]["Fail2banEngineIdentity"];
+            service_control: boolean;
+        };
+        Fail2banJailSummary: {
+            name: string;
+            managed: boolean;
+        };
+        Fail2banInstance: {
+            /** Format: int64 */
+            at: number;
+            source: string;
+            scope: string;
+            available: boolean;
+            writable: boolean;
+            binding: components["schemas"]["Fail2banBindingView"];
+            server_version: string;
+            service: components["schemas"]["Fail2banService"];
+            jails: components["schemas"]["Fail2banJailSummary"][];
+            reason: string;
+        };
+        Fail2banJail: {
+            /** Format: int64 */
+            at: number;
+            source: string;
+            scope: string;
+            available: boolean;
+            writable: boolean;
+            binding_id: string;
+            name: string;
+            managed: boolean;
+            server_version: string;
+            /** Format: int64 */
+            current_failed: number | null;
+            /** Format: int64 */
+            total_failed: number | null;
+            /** Format: int64 */
+            current_banned: number | null;
+            /** Format: int64 */
+            total_banned: number | null;
+            banned: string[];
+            reason: string;
+        };
+        Fail2banTool: {
+            id: string;
+            present: boolean | null;
+            trusted: boolean;
+            path: string;
+            resolved: string;
+            reason: string;
+        };
+        Fail2banPythonModule: {
+            name: string;
+            available: boolean;
+        };
+        Fail2banPackage: {
+            available: boolean;
+            manager: string;
+            name: string;
+            version: string;
+            reason: string;
+        };
+        Fail2banPython: {
+            executable: components["schemas"]["Fail2banTool"];
+            version: string;
+            standard_library: boolean | null;
+            sqlite_version: string;
+            modules: components["schemas"]["Fail2banPythonModule"][];
+            package: components["schemas"]["Fail2banPackage"];
+            reason: string;
+        };
+        Fail2banService: {
+            id: string;
+            available: boolean;
+            load: string;
+            active: string;
+            sub: string;
+            unit_file: string;
+            /** Format: int64 */
+            main_pid: number | null;
+            reason: string;
+        };
+        Fail2banSocket: {
+            path: string;
+            present: boolean | null;
+            root_protected: boolean;
+            reason: string;
+        };
+        Fail2banManaged: {
+            available: boolean;
+            state: string;
+            operation_id: string;
+            version: string;
+            plan_id: string;
+            asset_id: string;
+            service: string;
+            socket: string;
+            python_path: string;
+            python_version: string;
+            /** Format: int64 */
+            approved_at: number;
+            reason: string;
+        };
+        Fail2banObservation: {
+            /** Format: int64 */
+            at: number;
+            source: string;
+            scope: string;
+            available: boolean;
+            writable: boolean;
+            reason: string;
+            tools: components["schemas"]["Fail2banTool"][];
+            client_version: string;
+            python: components["schemas"]["Fail2banPython"];
+            services: components["schemas"]["Fail2banService"][];
+            socket: components["schemas"]["Fail2banSocket"];
+            missing: string[];
+            warnings: string[];
+            binding: components["schemas"]["Fail2banBindingView"];
+            managed: components["schemas"]["Fail2banManaged"];
+        };
+        FirewallRuntime: {
+            available: boolean;
+            reason: string;
+            /** Format: int64 */
+            confirmed_version: number;
+            confirmed_policy_hash: string;
+            kernel: components["schemas"]["FirewallKernelView"];
+            protections: components["schemas"]["FirewallProtection"][];
+            operation: components["schemas"]["FirewallOperation"] | null;
+            /** @enum {string} */
+            confirmed_action: "none" | "apply" | "remove";
+            confirmed_plan_id: string;
+            confirmed_operation_id: string;
+            protection_observation: components["schemas"]["FirewallProtectionObservation"];
+            /** @enum {string} */
+            backend: "unconfirmed" | "direct-nftables" | "firewalld" | "ufw" | "iptables-nft" | "iptables-legacy";
+            /** @description 可尝试生成计划；available 表示策略执行就绪，二者须分别显示。 */
+            can_plan: boolean;
+            preparation: components["schemas"]["FirewallPlanPreparation"] | null;
+        };
+        BackupInput: {
+            name: string;
+            /** @enum {string} */
+            encryption: "recipient" | "passphrase";
+            /** @description recipient 模式为 age X25519 公钥；口令模式为空 */
+            recipient: string;
+            /** @description 口令模式 16–256 字节；recipient 模式为空；不持久保存 */
+            passphrase: string;
+        };
+        BackupPolicyInput: {
+            /** Format: int64 */
+            base_version: number;
+            enabled: boolean;
+            recipient: string;
+            key_saved: boolean;
+            /** Format: int64 */
+            interval_hours: number;
+            keep_count: number;
+            /** Format: int64 */
+            retention_days: number;
+            /**
+             * Format: int64
+             * @description 启用时须为未来 366 天内的 Unix 秒，且不超过机器凭据期限
+             */
+            authorization_until: number;
+        };
+        BackupPolicy: {
+            /** Format: int64 */
+            version: number;
+            enabled: boolean;
+            recipient: string;
+            /** Format: int64 */
+            key_saved_at: number;
+            /** Format: int64 */
+            interval_hours: number;
+            keep_count: number;
+            /** Format: int64 */
+            retention_days: number;
+            /** Format: int64 */
+            authorization_until: number;
+            /** Format: int64 */
+            next_run_at: number;
+            error: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        BackupDatabase: {
+            /** Format: int64 */
+            schema_version: number;
+            node_id: string;
+            desired_revision: string;
+            applied_revision: string;
+            /** Format: int64 */
+            head_version: number;
+        };
+        BackupRecord: {
+            id: string;
+            name: string;
+            state: string;
+            stage: string;
+            error: string;
+            /** @enum {string} */
+            encryption: "recipient" | "passphrase";
+            recipient: string;
+            scheduled: boolean;
+            maintenance_id: string;
+            /** Format: int64 */
+            archive_size: number;
+            archive_sha256: string;
+            /** Format: int64 */
+            captured_at: number;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            finished_at: number;
+            /** Format: int64 */
+            expires_at: number;
+            /** Format: int64 */
+            deleted_at: number;
+            available: boolean;
+            database: components["schemas"]["BackupDatabase"] | null;
+        };
+        BackupOverview: {
+            policy: components["schemas"]["BackupPolicy"];
+            records: components["schemas"]["BackupRecord"][];
+            /** Format: int64 */
+            archive_max: number;
+            /** Format: int64 */
+            store_max: number;
+        };
+        BackupDownloadTicket: {
+            url: string;
+            /** Format: int64 */
+            expires_at: number;
+        };
+        ManagementListenerInput: {
+            /** Format: int64 */
+            version: number;
+            enabled: boolean;
+            /** @description 规范 IP:端口，支持通配地址，端口 1024–65535，不能使用回环地址 */
+            listen: string;
+            /** @description 启用时必须显式配置来源 CIDR */
+            allowed_sources: string[];
+            /** @description 与私钥同时留空可沿用已确认的证书；首次启用自动创建独立自签证书 */
+            certificate_pem: string;
+            key_pem: string;
+            /** @description 无上传证书时显式创建新的自签证书 */
+            rotate_certificate: boolean;
+        };
+        ManagementListenerConfig: {
+            enabled: boolean;
+            listen: string;
+            allowed_sources: string[];
+            /** @description 叶证书 DER 的 SHA256 十六进制摘要 */
+            tls_fingerprint: string;
+            /** Format: int64 */
+            certificate_expires_at: number;
+        };
+        ManagementListenerOperation: {
+            id: string;
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            state: "waiting_confirmation" | "succeeded" | "rolled_back" | "recovery_required";
+            stage: string;
+            /** Format: int64 */
+            deadline: number;
+            config: components["schemas"]["ManagementListenerConfig"];
+            confirmed_source: string;
+            error: string;
+        };
+        ManagementListenerView: {
+            available: boolean;
+            /** Format: int64 */
+            version: number;
+            confirmed: components["schemas"]["ManagementListenerConfig"];
+            operation: components["schemas"]["ManagementListenerOperation"] | null;
+            serving: boolean;
+            attached: boolean;
+            reason: string;
+        };
         SystemVersion: {
-            frontend_id: string;
-            frontend_entries: string[];
             version: string;
             /** Format: int64 */
             api_version: number;
@@ -2269,10 +4461,15 @@ export interface components {
             launcher_version: number;
             /** @enum {string} */
             runtime: "native" | "docker" | "development";
+            frontend_id: string;
+            frontend_entries: string[];
         };
         MigrationReceiver: {
-            /** Format: int64 */
-            schema: number;
+            /**
+             * Format: int64
+             * @enum {integer}
+             */
+            schema: 6;
             node_id: string;
             /** Format: int64 */
             version: number;
@@ -2300,10 +4497,6 @@ export interface components {
             install_task_id: string;
         };
         MigrationPushInput: {
-            host_dns?: components["schemas"]["MigrationHostDNSInput"];
-            monitoring?: components["schemas"]["MigrationMonitoringInput"];
-            fail2ban?: components["schemas"]["MigrationFail2banInput"];
-            firewall?: components["schemas"]["MigrationFirewallInput"];
             remote: components["schemas"]["MigrationRemote"];
             mappings: {
                 [key: string]: string;
@@ -2314,6 +4507,10 @@ export interface components {
             /** Format: int64 */
             base_version?: number;
             dependencies?: components["schemas"]["MigrationDependencyInput"];
+            firewall?: components["schemas"]["MigrationFirewallInput"];
+            fail2ban?: components["schemas"]["MigrationFail2banInput"];
+            monitoring?: components["schemas"]["MigrationMonitoringInput"];
+            host_dns?: components["schemas"]["MigrationHostDNSInput"];
         };
         MigrationPushResumeInput: {
             api_key: string;
@@ -2380,7 +4577,9 @@ export interface components {
             session?: components["schemas"]["MaintenanceSession"];
         };
         AuditFilter: {
+            /** Format: int64 */
             from: number;
+            /** Format: int64 */
             until: number;
             principal?: string;
             action?: string;
@@ -2395,21 +4594,23 @@ export interface components {
             action: string;
             resource_id: string;
             outcome: string;
+            /** Format: int64 */
             created_at: number;
         };
         AuditPage: {
-            start_cursor: string;
             rows: components["schemas"]["AuditRow"][];
             cursor: string;
             more: boolean;
             scanned: number;
             notice: string;
+            start_cursor: string;
         };
         AuditArchiveManifest: {
             type: string;
             schema: number;
             id: string;
             node_id: string;
+            /** Format: int64 */
             created_at: number;
             filter: components["schemas"]["AuditFilter"];
             count: number;
@@ -2440,8 +4641,11 @@ export interface components {
             operation_id: string;
             epoch: string;
             command: string;
+            /** Format: int64 */
             protocol: number;
+            /** Format: int64 */
             sequence: number;
+            /** Format: int64 */
             authorization_until: number;
             input: components["schemas"]["NginxSwitchPlan"];
         };
@@ -2455,8 +4659,11 @@ export interface components {
             version: string;
             revision_id: string;
             deployment_id: string;
+            /** Format: int64 */
             confirmed_at: number;
+            /** Format: int64 */
             agent_pid: number;
+            /** Format: int64 */
             nginx_pid: number;
         };
         NginxSwitchOperation: {
@@ -2468,9 +4675,13 @@ export interface components {
             error: string;
             child_id: string;
             intent_sha256?: string;
+            /** Format: int64 */
             protocol: number;
+            /** Format: int64 */
             sequence: number;
+            /** Format: int64 */
             updated_at: number;
+            /** Format: int64 */
             deadline: number;
             active: boolean;
             input: components["schemas"]["NginxSwitchPlan"];
@@ -2487,9 +4698,13 @@ export interface components {
             state: string;
             stage: string;
             error: string;
+            /** Format: int64 */
             sequence: number;
+            /** Format: int64 */
             authorization_until: number;
+            /** Format: int64 */
             created_at: number;
+            /** Format: int64 */
             updated_at: number;
             input: components["schemas"]["NginxSwitchPlan"];
             result?: components["schemas"]["NginxSwitchOperation"];
@@ -2562,12 +4777,92 @@ export interface components {
             bound_at: number;
         };
         ComponentPanelPreparation: {
+            release_id: string;
+            /** Format: int64 */
+            database_schema: number;
+            automatic_rollback: boolean;
             agent_protocol: number;
             launcher_version: number;
             requires_coordination: boolean;
-            release_id: string;
-            database_schema: number;
-            automatic_rollback: boolean;
+        };
+        PairingInput: {
+            name: string;
+            controller_node_id: string;
+            scopes: string[];
+            allowed_sources: string[];
+            /** Format: int64 */
+            credential_expires_at: number;
+        };
+        Pairing: {
+            id: string;
+            node_id: string;
+            name: string;
+            controller_node_id: string;
+            scopes: string[];
+            allowed_sources: string[];
+            /** Format: int64 */
+            credential_expires_at: number;
+            credential_id: string;
+            /** @enum {string} */
+            state: "offered" | "claimed" | "confirmed" | "revoked" | "expired";
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            expires_at: number;
+            /** Format: int64 */
+            claimed_at: number;
+            /** Format: int64 */
+            confirmed_at: number;
+            /** Format: int64 */
+            revoked_at: number;
+        };
+        PairingOffer: {
+            pairing: components["schemas"]["Pairing"];
+            /** @description 仅首次成功创建时展示；幂等重放为空。 */
+            readonly secret: string;
+        };
+        PairingClaim: {
+            secret: string;
+            controller_node_id: string;
+            claim: string;
+        };
+        PairingConfirmation: {
+            controller_node_id: string;
+            claim: string;
+        };
+        PairingExchange: {
+            pairing: components["schemas"]["Pairing"];
+            readonly token: string;
+        };
+        PairingJobInput: {
+            name: string;
+            url: string;
+            fingerprint: string;
+            target_node_id: string;
+            pairing_id: string;
+            secret: string;
+        };
+        PairingJob: {
+            id: string;
+            name: string;
+            url: string;
+            fingerprint: string;
+            controller_node_id: string;
+            target_node_id: string;
+            pairing_id: string;
+            credential_id: string;
+            connection_id: string;
+            /** @enum {string} */
+            state: "pending" | "recovery_required" | "abandoning" | "succeeded" | "abandoned";
+            /** @enum {string} */
+            stage: "exchange" | "confirm" | "register" | "finished";
+            error: string;
+            /** @enum {string} */
+            revocation: "" | "pending" | "revoked";
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
         };
         NodeCreateInput: {
             name: string;
@@ -2579,12 +4874,17 @@ export interface components {
             node_id: string;
             credential_id: string;
             scopes: string[];
+            /** Format: int64 */
             expires_at: number;
+            /** Format: int64 */
             api_version: number;
+            /** Format: int64 */
             database_schema: number;
+            /** Format: int64 */
             agent_protocol: number;
             parser_version: string;
             policy_version: string;
+            /** Format: int64 */
             remote_protocol: number;
         };
         NodeConnection: {
@@ -2595,24 +4895,34 @@ export interface components {
             fingerprint: string;
             credential_id: string;
             scopes: string[];
+            /** Format: int64 */
             expires_at: number;
+            /** Format: int64 */
             api_version: number;
-            capabilities: { [key: string]: unknown } | null;
+            capabilities: {
+                [key: string]: unknown;
+            } | null;
             state: string;
             error: string;
+            /** Format: int64 */
             checked_at: number;
+            /** Format: int64 */
             created_at: number;
+            /** Format: int64 */
             updated_at: number;
+            /** Format: int64 */
             removed_at: number;
             revocation: string;
+            /** Format: int64 */
             version: number;
         };
         ImageUpgradeInput: {
-            component: "panel-launcher" | "nginx";
-            allow_downtime: boolean;
             maintenance_id: string;
             plan_id: string;
             prerelease: boolean;
+            /** @enum {string} */
+            component: "panel-launcher" | "nginx";
+            allow_downtime: boolean;
         };
         PanelImageUpgradeCreateInput: {
             allow_downtime?: boolean;
@@ -2622,56 +4932,68 @@ export interface components {
         NginxImageUpgradeCreateInput: {
             maintenance_id: string;
             prepare_task_id: string;
+            /** @enum {boolean} */
             allow_downtime: true;
         };
         ImageUpgradeAuthorization: {
-            actor: string;
-            request_id: string;
+            /** Format: int64 */
             protocol: number;
             operation_id: string;
             input: components["schemas"]["ImageUpgradeInput"];
+            /** Format: int64 */
             sequence: number;
             command: string;
             epoch: string;
+            /** Format: int64 */
             authorization_until: number;
+            actor: string;
+            request_id: string;
         };
         ImageUpgradeOperation: {
-            before_image: string;
-            target_image: string;
             authorization: components["schemas"]["ImageUpgradeAuthorization"];
+            /** Format: int64 */
             protocol: number;
             id: string;
             input: components["schemas"]["ImageUpgradeInput"];
             request_hash: string;
             intent_sha256: string;
+            /** Format: int64 */
             sequence: number;
             command: string;
             state: string;
             stage: string;
             error: string;
             failure: string;
+            /** Format: int64 */
             deadline: number;
+            /** Format: int64 */
             updated_at: number;
             active: boolean;
+            finalized: boolean;
             before_image_id: string;
             target_image_id: string;
             target_version: string;
             panel_id: string;
             ready_epoch: string;
-            finalized: boolean;
+            before_image: string;
+            target_image: string;
         };
         ImageUpgradeTask: {
             id: string;
             operation_id: string;
             prepare_task_id: string;
             input: components["schemas"]["ImageUpgradeInput"];
+            /** Format: int64 */
             sequence: number;
             command: string;
+            /** Format: int64 */
             authorization_until: number;
             state: string;
             stage: string;
             error: string;
+            /** Format: int64 */
             created_at: number;
+            /** Format: int64 */
             updated_at: number;
             result?: components["schemas"]["ImageUpgradeOperation"];
         };
@@ -2685,93 +5007,113 @@ export interface components {
             prepare_task_id: string;
         };
         AgentUpgradeAuthorization: {
-            actor: string;
-            request_id: string;
+            /** Format: int64 */
             protocol: number;
             operation_id: string;
             input: components["schemas"]["AgentUpgradeInput"];
+            /** Format: int64 */
             sequence: number;
             command: string;
             epoch: string;
+            /** Format: int64 */
             authorization_until: number;
+            actor: string;
+            request_id: string;
         };
         AgentUpgradeOperation: {
             authorization: components["schemas"]["AgentUpgradeAuthorization"];
+            /** Format: int64 */
             protocol: number;
             id: string;
             input: components["schemas"]["AgentUpgradeInput"];
             request_hash: string;
             intent_sha256: string;
+            /** Format: int64 */
             sequence: number;
             command: string;
             state: string;
             stage: string;
             error: string;
             failure: string;
+            /** Format: int64 */
             deadline: number;
+            /** Format: int64 */
             updated_at: number;
             active: boolean;
+            finalized: boolean;
             before_sha256: string;
             target_sha256: string;
             target_version: string;
             panel_id: string;
             ready_epoch: string;
-            finalized: boolean;
         };
         AgentUpgradeTask: {
             id: string;
             operation_id: string;
             prepare_task_id: string;
             input: components["schemas"]["AgentUpgradeInput"];
+            /** Format: int64 */
             sequence: number;
             command: string;
+            /** Format: int64 */
             authorization_until: number;
             state: string;
             stage: string;
             error: string;
+            /** Format: int64 */
             created_at: number;
+            /** Format: int64 */
             updated_at: number;
             result?: components["schemas"]["AgentUpgradeOperation"];
         };
         PanelUpdateInput: {
-            coordinate_agent: boolean;
-            allow_downtime: boolean;
             maintenance_id: string;
             plan_id: string;
             prerelease: boolean;
+            coordinate_agent: boolean;
+            allow_downtime: boolean;
         };
         PanelUpdateCreateInput: {
-            coordinate_agent?: boolean;
-            allow_downtime?: boolean;
             maintenance_id: string;
             prepare_task_id: string;
+            coordinate_agent?: boolean;
+            allow_downtime?: boolean;
         };
         PanelUpdateAuthorization: {
-            actor: string;
-            request_id: string;
+            /** Format: int64 */
             protocol: number;
             operation_id: string;
             input: components["schemas"]["PanelUpdateInput"];
+            /** Format: int64 */
             sequence: number;
             command: string;
             epoch: string;
+            /** Format: int64 */
             authorization_until: number;
+            actor: string;
+            request_id: string;
         };
         PanelUpdateCleanup: {
             state: string;
             error: string;
+            /** Format: int64 */
             entries: number;
+            /** Format: int64 */
             bytes: number;
+            /** Format: int64 */
             attempted_at: number;
+            /** Format: int64 */
             completed_at: number;
         };
         PanelUpdateOperation: {
             authorization: components["schemas"]["PanelUpdateAuthorization"];
+            /** Format: int64 */
             protocol: number;
             id: string;
             input: components["schemas"]["PanelUpdateInput"];
             request_hash: string;
             intent_sha256: string;
+            /** Format: int64 */
             sequence: number;
             command: string;
             state: string;
@@ -2781,9 +5123,13 @@ export interface components {
             before_id: string;
             target_id: string;
             snapshot_id: string;
+            /** Format: int64 */
             before_schema: number;
+            /** Format: int64 */
             target_schema: number;
+            /** Format: int64 */
             deadline: number;
+            /** Format: int64 */
             updated_at: number;
             active: boolean;
             finalized: boolean;
@@ -2795,22 +5141,72 @@ export interface components {
             operation_id: string;
             prepare_task_id: string;
             input: components["schemas"]["PanelUpdateInput"];
+            /** Format: int64 */
             sequence: number;
             command: string;
+            /** Format: int64 */
             authorization_until: number;
             state: string;
             stage: string;
             error: string;
+            /** Format: int64 */
             created_at: number;
+            /** Format: int64 */
             updated_at: number;
             result?: components["schemas"]["PanelUpdateOperation"];
         };
-        ComponentOfflineInput: { manifest:string;signature:string;assets:string[];components:("nginx"|"fail2ban"|"panel")[];prerelease:boolean; };
-        ComponentOfflineChunk: { offset:number;data:string; };
-        ComponentOfflineAsset: { id:string;archive:string;sha256:string;size:number;received:number; };
-        ComponentOfflineUpload: { id:string;request_hash:string;created_at:number;expires_at:number;prerelease:boolean;discarded:boolean;complete:boolean;release:components["schemas"]["ComponentRelease"];assets:components["schemas"]["ComponentOfflineAsset"][]; };
-        ComponentFrontendResult: { release_id:string;version:string;activated:boolean;base_id:string;previous_id:string; };
-        ComponentFrontendStatus: { available:boolean;reason:string;base_id:string;current_id:string;version:string;previous_id:string; };
+        ComponentOfflineInput: {
+            /** Format: byte */
+            manifest: string;
+            /** Format: byte */
+            signature: string;
+            assets: string[];
+            components: ("nginx" | "fail2ban" | "panel" | "web")[];
+            prerelease: boolean;
+        };
+        ComponentOfflineChunk: {
+            /** Format: int64 */
+            offset: number;
+            /** Format: byte */
+            data: string;
+        };
+        ComponentOfflineAsset: {
+            id: string;
+            archive: string;
+            sha256: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            received: number;
+        };
+        ComponentOfflineUpload: {
+            id: string;
+            request_hash: string;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            expires_at: number;
+            prerelease: boolean;
+            discarded: boolean;
+            complete: boolean;
+            release: components["schemas"]["ComponentRelease"];
+            assets: components["schemas"]["ComponentOfflineAsset"][];
+        };
+        ComponentFrontendResult: {
+            activated: boolean;
+            release_id: string;
+            version: string;
+            base_id: string;
+            previous_id: string;
+        };
+        ComponentFrontendStatus: {
+            available: boolean;
+            reason: string;
+            base_id: string;
+            current_id: string;
+            version: string;
+            previous_id: string;
+        };
         ComponentImage: {
             id: string;
             reference: string;
@@ -2820,14 +5216,11 @@ export interface components {
         };
         ComponentImagePreparation: {
             choice: components["schemas"]["ComponentImage"];
+            /** Format: int64 */
             approved_at: number;
             reused: boolean;
         };
         ComponentInput: {
-            image_id?: string;
-            frontend_base_id?: string;
-            expected_frontend_id?: string;
-            offline_id?:string;
             /** @enum {string} */
             action: "check" | "prepare" | "activate" | "pull";
             tag: string;
@@ -2837,16 +5230,18 @@ export interface components {
             plan_id: string;
             manifest_sha256: string;
             trust_sha256: string;
+            /** @description 可选的本机离线上传 UUID；不存在时从已配置在线源检查/准备。准备必须保留原检查来源。 */
+            offline_id?: string;
+            frontend_base_id?: string;
+            expected_frontend_id?: string;
+            image_id?: string;
         };
         ComponentCreateInput: {
-            prepare_task_id?: string;
             input: components["schemas"]["ComponentInput"];
             check_task_id: string;
+            prepare_task_id?: string;
         };
         ComponentOverview: {
-            frontend: components["schemas"]["ComponentFrontendStatus"];
-            switch_available: boolean;
-            switch_reason: string;
             available: boolean;
             scope: string;
             reason: string;
@@ -2858,6 +5253,9 @@ export interface components {
             runtime_reason: string;
             install_available: boolean;
             install_reason: string;
+            switch_available: boolean;
+            switch_reason: string;
+            frontend: components["schemas"]["ComponentFrontendStatus"];
         };
         ComponentAsset: {
             id: string;
@@ -2880,16 +5278,23 @@ export interface components {
             unpacked_bytes: number;
         };
         ComponentReleaseRequirements: {
+            /** Format: int64 */
             api_major: number;
+            /** Format: int64 */
             database_schema: number;
+            /** Format: int64 */
             minimum_agent_protocol: number;
+            /** Format: int64 */
             minimum_launcher: number;
             frontend_version: string;
             automatic_rollback: boolean;
         };
         ComponentReleaseReceiver: {
+            /** Format: int64 */
             api_major: number;
+            /** Format: int64 */
             agent_protocol: number;
+            /** Format: int64 */
             launcher: number;
         };
         ComponentReleaseAnnouncement: {
@@ -2900,6 +5305,7 @@ export interface components {
             key_id: string;
             manifest_sha256: string;
             trust_sha256: string;
+            /** Format: int64 */
             expires_at: number;
             notes: string;
             requirements: components["schemas"]["ComponentReleaseRequirements"];
@@ -2908,11 +5314,6 @@ export interface components {
             incompatibilities: string[];
         };
         ComponentRelease: {
-            staging_only: boolean;
-            images: components["schemas"]["ComponentImage"][];
-            notes: string;
-            requirements: components["schemas"]["ComponentReleaseRequirements"];
-            receiver: components["schemas"]["ComponentReleaseReceiver"];
             plan_id: string;
             manifest_sha256: string;
             trust_sha256: string;
@@ -2929,12 +5330,13 @@ export interface components {
             archive_bytes: number;
             /** Format: int64 */
             unpacked_bytes: number;
+            notes: string;
+            requirements: components["schemas"]["ComponentReleaseRequirements"];
+            receiver: components["schemas"]["ComponentReleaseReceiver"];
+            images: components["schemas"]["ComponentImage"][];
+            staging_only: boolean;
         };
         ComponentOperation: {
-            image?: components["schemas"]["ComponentImagePreparation"];
-            announcement?: components["schemas"]["ComponentReleaseAnnouncement"];
-            frontend?: components["schemas"]["ComponentFrontendResult"];
-            panel?: components["schemas"]["ComponentPanelPreparation"];
             /** Format: int64 */
             protocol: number;
             id: string;
@@ -2953,6 +5355,10 @@ export interface components {
             runtime_ready: boolean;
             runtime_reason: string;
             release?: components["schemas"]["ComponentRelease"];
+            panel?: components["schemas"]["ComponentPanelPreparation"];
+            frontend?: components["schemas"]["ComponentFrontendResult"];
+            announcement?: components["schemas"]["ComponentReleaseAnnouncement"];
+            image?: components["schemas"]["ComponentImagePreparation"];
         };
         ComponentTask: {
             id: string;
@@ -3235,12 +5641,14 @@ export interface components {
             compress: boolean;
         };
         LogPolicyInput: {
+            /** @enum {string} */
             scope: "system" | "nginx";
             /** Format: int64 */
             base_version: number;
             policy: components["schemas"]["LogPolicy"];
         };
         LogPolicyView: {
+            /** @enum {string} */
             scope: "system" | "nginx";
             /** Format: int64 */
             version: number;
@@ -3255,6 +5663,7 @@ export interface components {
             warning: string;
         };
         LogSource: {
+            /** @description 当前发布日志包含认证头存在标记 */
             auth_presence: boolean;
             id: string;
             resource_id: string;
@@ -3369,7 +5778,11 @@ export interface components {
             diagnostics: components["schemas"]["Diagnostic"][];
         };
         ResourceMetadata: {
-            client_deny?: boolean;
+            /**
+             * @description 为明确配置可信代理的 HTTP 站点声明独立客户端拒绝入口；不启用 Fail2ban 或导入封禁状态。
+             * @default false
+             */
+            client_deny: boolean;
             name: string;
             notes: string;
             enabled: boolean;
@@ -3808,6 +6221,7 @@ export interface components {
             version: string;
             reason: string;
             modules: components["schemas"]["NativeModule"][];
+            /** @description 目标实际编译及确认运行的能力；HTTP 与 Stream 的 map、访问控制、日志、连接限制等分别报告，不能跨上下文替代。原生受信模块尚未加载时，其候选能力在 modules 中报告，须由应用执行器验证加载。 */
             features: {
                 [key: string]: components["schemas"]["NginxFeature"];
             };
@@ -3821,6 +6235,7 @@ export interface components {
             available: boolean;
             /** @description 相同散列副本所属发布已确认运行。 */
             running: boolean;
+            /** @description 已批准内容可提供的候选能力，包括对应编译参数确认的 Stream 默认子模块；available 不表示已经加载或通过 ABI 校验。 */
             features: string[];
             reason: string;
         };
@@ -3949,7 +6364,9 @@ export interface components {
             use_dns4: boolean | null;
             use_dns6: boolean | null;
         };
+        /** @description 从固定生成文件名称关联的 netplan 合并源。不是原生生成一致性或写入授权证明；不返回原文和 Wi-Fi 等凭据。未识别或变化的材料保持未知。 */
         HostNetplanSource: {
+            /** @enum {string} */
             state: "associated" | "unresolved";
             definition: string;
             device_type: string;
@@ -4097,30 +6514,102 @@ export interface components {
         HostDNSChange: {
             task_id: string;
         };
-        MigrationFirewallInput: { mode: "preserve" | "merge" | "replace"; base_version?: number; backend: string; interfaces: Record<string,string>; };
-        MigrationFirewallInterface: { source: string; target: string; resolved: boolean; observed: boolean; };
-        MigrationFirewallPlan: { mode: string; state: string; source_backend: string; target_backend: string; base_version: number; saved_version: number; source_rules: number; preserved_rules: number; replaced_rules: number; total_rules: number; policy_hash: string; interfaces: components["schemas"]["MigrationFirewallInterface"][]; entries: components["schemas"]["FirewallRule"][]; truncated: boolean; warnings: string[]; };
-        MigrationHostDNSMapping: { target: string; config?: components["schemas"]["HostDNSConfig"]; };
-        MigrationHostDNSInput: { mode: "preserve" | "map"; mappings?: Record<string, components["schemas"]["MigrationHostDNSMapping"]>; };
-        MigrationHostDNSItem: { source: string; source_config: components["schemas"]["HostDNSConfig"]; target: string | null; config: components["schemas"]["HostDNSConfig"] | null; readiness: "preserved" | "ready" | "blocked"; reason: string; };
-        MigrationHostDNSPlan: { mode: "preserve" | "map"; state: "preserved" | "pending_import" | "staged"; source_hash: string; mapping_hash: string; entries: components["schemas"]["MigrationHostDNSItem"][]; };
+        MigrationFirewallInput: {
+            /**
+             * @default preserve
+             * @enum {string}
+             */
+            mode: "preserve" | "merge" | "replace";
+            /** Format: int64 */
+            base_version?: number;
+            /** @description 非 preserve 时必须明确选择目标后端；合并保留既有后端。 */
+            backend: string;
+            /** @description 每个源绑定接口均须显式映射；空字符串明确解除绑定。 */
+            interfaces: {
+                [key: string]: string;
+            };
+        };
+        MigrationFirewallInterface: {
+            source: string;
+            target: string;
+            resolved: boolean;
+            observed: boolean;
+        };
+        MigrationFirewallPlan: {
+            mode: string;
+            state: string;
+            source_backend: string;
+            target_backend: string;
+            /** Format: int64 */
+            base_version: number;
+            /** Format: int64 */
+            saved_version: number;
+            /** Format: int64 */
+            source_rules: number;
+            /** Format: int64 */
+            preserved_rules: number;
+            /** Format: int64 */
+            replaced_rules: number;
+            /** Format: int64 */
+            total_rules: number;
+            policy_hash: string;
+            interfaces: components["schemas"]["MigrationFirewallInterface"][];
+            entries: components["schemas"]["FirewallRule"][];
+            truncated: boolean;
+            warnings: string[];
+        };
+        MigrationHostDNSMapping: {
+            target: string;
+            config?: components["schemas"]["HostDNSConfig"];
+        };
+        /** @description 默认保留目标 DNS；map 仅保存显式映射材料，须在目标另行生成 DNS 计划并确认，不直接改写运行配置或已确认期望。 */
+        MigrationHostDNSInput: {
+            /** @enum {string} */
+            mode: "preserve" | "map";
+            mappings?: {
+                [key: string]: components["schemas"]["MigrationHostDNSMapping"];
+            };
+        };
+        MigrationHostDNSItem: {
+            source: string;
+            source_config: components["schemas"]["HostDNSConfig"];
+            target: string | null;
+            config: components["schemas"]["HostDNSConfig"] | null;
+            /** @enum {string} */
+            readiness: "preserved" | "ready" | "blocked";
+            reason: string;
+        };
+        /** @description DNS 迁移材料及生成独立变更计划的条件；staged 不表示 DNS 已应用，Nginx 迁移状态独立核对。 */
+        MigrationHostDNSPlan: {
+            /** @enum {string} */
+            mode: "preserve" | "map";
+            /** @enum {string} */
+            state: "preserved" | "pending_import" | "staged";
+            source_hash: string;
+            mapping_hash: string;
+            entries: components["schemas"]["MigrationHostDNSItem"][];
+        };
         MigrationSelection: {
-            host_dns: boolean;
-            monitoring: boolean;
-            fail2ban: boolean;
-            firewall: boolean;
             certificates: boolean;
             dns_credentials: boolean;
             automation: boolean;
             notifications: boolean;
+            firewall: boolean;
+            fail2ban: boolean;
+            monitoring: boolean;
+            host_dns: boolean;
         };
         MigrationExportInput: {
+            /** @enum {string} */
             mode: "portable" | "encrypted";
+            /** @description portable 必须为空；encrypted 为 16–256 字节口令。portable 的 selection 全为 false。 */
             passphrase: string;
             selection: components["schemas"]["MigrationSelection"];
         };
         MigrationManifest: {
+            /** @enum {string} */
             mode: "portable" | "encrypted";
+            /** @enum {integer} */
             schema: 6;
             source_node: string;
             source_version: string;
@@ -4140,10 +6629,6 @@ export interface components {
             manifest: components["schemas"]["MigrationManifest"];
         };
         MigrationImportInput: {
-            host_dns?: components["schemas"]["MigrationHostDNSInput"];
-            monitoring?: components["schemas"]["MigrationMonitoringInput"];
-            fail2ban?: components["schemas"]["MigrationFail2banInput"];
-            firewall?: components["schemas"]["MigrationFirewallInput"];
             /** Format: byte */
             content: string;
             passphrase: string;
@@ -4152,6 +6637,10 @@ export interface components {
             mappings: {
                 [key: string]: string;
             };
+            firewall?: components["schemas"]["MigrationFirewallInput"];
+            fail2ban?: components["schemas"]["MigrationFail2banInput"];
+            monitoring?: components["schemas"]["MigrationMonitoringInput"];
+            host_dns?: components["schemas"]["MigrationHostDNSInput"];
         };
         MigrationExecuteInput: {
             /** @enum {string} */
@@ -4168,6 +6657,7 @@ export interface components {
         MigrationPullStatus: {
             state: string;
             stage: string;
+            /** @enum {string} */
             mode: "draft" | "save" | "apply";
             error: string;
             /** Format: int64 */
@@ -4175,10 +6665,6 @@ export interface components {
         };
         MigrationPullInput: {
             dependencies?: components["schemas"]["MigrationDependencyInput"];
-            host_dns?: components["schemas"]["MigrationHostDNSInput"];
-            monitoring?: components["schemas"]["MigrationMonitoringInput"];
-            fail2ban?: components["schemas"]["MigrationFail2banInput"];
-            firewall?: components["schemas"]["MigrationFirewallInput"];
             remote: components["schemas"]["MigrationRemote"];
             /** Format: int64 */
             base_version: number;
@@ -4188,6 +6674,10 @@ export interface components {
             /** @enum {string} */
             mode: "preview" | "draft" | "save" | "apply";
             enable_nginx: boolean;
+            firewall?: components["schemas"]["MigrationFirewallInput"];
+            fail2ban?: components["schemas"]["MigrationFail2banInput"];
+            monitoring?: components["schemas"]["MigrationMonitoringInput"];
+            host_dns?: components["schemas"]["MigrationHostDNSInput"];
         };
         MigrationStep: {
             kind: string;
@@ -4196,14 +6686,14 @@ export interface components {
             message: string;
         };
         MigrationPlan: {
-            /** Format: int64; 载荷清理时间，摘要与回执保留。 */
+            /**
+             * Format: int64
+             * @description 载荷清理时间；摘要与原操作回执仍保留
+             */
             pruned_at: number;
             pull?: components["schemas"]["MigrationPullStatus"];
+            /** @enum {string} */
             mode: "portable" | "encrypted";
-            host_dns?: components["schemas"]["MigrationHostDNSPlan"];
-            monitoring?: components["schemas"]["MigrationMonitoringPlan"];
-            fail2ban?: components["schemas"]["MigrationFail2banPlan"];
-            firewall?: components["schemas"]["MigrationFirewallPlan"];
             id: string;
             source_node: string;
             source_version: string;
@@ -4222,6 +6712,346 @@ export interface components {
             last_error: string;
             package_sha256: string;
             dependencies?: components["schemas"]["MigrationDependencyStatus"];
+            firewall?: components["schemas"]["MigrationFirewallPlan"];
+            fail2ban?: components["schemas"]["MigrationFail2banPlan"];
+            monitoring?: components["schemas"]["MigrationMonitoringPlan"];
+            host_dns?: components["schemas"]["MigrationHostDNSPlan"];
+        };
+        /** @description 本机 root 独立登记核对结果；直接 nftables 核对空表及内核快照，firewalld 核对原登记或已确认 policy 的完整 runtime/permanent 设置与活动绑定；UFW 核对宿主机持久占用、原本机授权与回执及空标记命名空间，iptables 核对显式后端、本机占用、原回执以及空命名空间或已确认的完整受管代际；授权登记不安装规则；不表示获得业务策略写入授权或外部可达。 */
+        FirewallRegistrationView: {
+            /** @enum {string} */
+            state: "unavailable" | "unregistered" | "registered" | "managed" | "released" | "missing" | "drifted" | "recovery_required";
+            verified: boolean;
+            operation_id: string;
+            /** Format: int64 */
+            observed_at: number;
+            reason: string;
+        };
+        FirewallObservation: {
+            iptables_registration: components["schemas"]["FirewallIPTablesRegistrationView"];
+            registration: components["schemas"]["FirewallRegistrationView"];
+            kernel: components["schemas"]["FirewallKernelView"];
+            /** Format: int64 */
+            at: number;
+            source: string;
+            scope: string;
+            available: boolean;
+            writable: boolean;
+            manager: string;
+            backend: string;
+            reason: string;
+            firewalld: components["schemas"]["FirewallFirewalld"];
+            ufw: components["schemas"]["FirewallUFW"];
+            iptables: components["schemas"]["FirewallIptables"][];
+            rulesets: components["schemas"]["FirewallRuleset"][];
+            docker: components["schemas"]["FirewallDocker"];
+            interfaces: string[];
+            warnings: string[];
+        };
+        /** @description 显式 nft/legacy 后端的本机授权与受管状态，核对宿主机持久占用、原意图与独立回执及当前完整规则；registered 表示空命名空间，managed 表示已确认的完整受管代际。登记本身不创建链或安装业务规则，不表示可应用或外部可达。 */
+        FirewallIPTablesRegistrationView: {
+            /** @enum {string} */
+            backend: "" | "iptables-nft" | "iptables-legacy";
+            registration: components["schemas"]["FirewallRegistrationView"];
+        };
+        FirewallFirewalld: {
+            /** @description 独立 root 登记与业务回执核对；managed 表示已确认的受管配置，变更待确认或恢复时为 recovery_required，不凭同名或标记接管。 */
+            registration: components["schemas"]["FirewallRegistrationView"];
+            running: boolean | null;
+            configured_backend: string;
+            default_zone: string;
+            panic: boolean | null;
+            zones: components["schemas"]["FirewallZone"][];
+            policy_inventory: components["schemas"]["FirewallFirewalldPolicyInventory"];
+            reason: string;
+        };
+        /** @description 同一唯一服务所有者下的有界只读采集，runtime/permanent 为独立读取；失败不返回成功前缀，不能作为内核状态、所有权或执行授权。 */
+        FirewallFirewalldPolicyInventory: {
+            available: boolean;
+            policies: components["schemas"]["FirewallFirewalldPolicy"][];
+            reason: string;
+        };
+        FirewallFirewalldPolicy: {
+            name: string;
+            active: boolean;
+            active_ingress_zones: string[];
+            active_egress_zones: string[];
+            /** @description null 表示运行清单中不存在该 policy。 */
+            runtime: components["schemas"]["FirewallFirewalldPolicySettings"] | null;
+            /** @description null 表示永久清单中不存在该 policy。 */
+            permanent: components["schemas"]["FirewallFirewalldPolicySettings"] | null;
+        };
+        FirewallFirewalldPolicySettings: {
+            /** @description 完整受支持返回字典的摘要，包含字段、D-Bus 类型、空值及列表顺序；不代表语义等价或内核证明。 */
+            hash: string;
+            /** @enum {string} */
+            target: "" | "CONTINUE" | "ACCEPT" | "REJECT" | "DROP";
+            /** Format: int32 */
+            priority: number | null;
+            ingress_zones: string[];
+            egress_zones: string[];
+            rich_rules: number;
+            /** @description 服务、端口、源端口、转发端口、协议、ICMP 和 rich rule 条目总数，包含 rich_rules。 */
+            entries: number;
+            masquerade: boolean | null;
+        };
+        FirewallZone: {
+            name: string;
+            interfaces: string[];
+            sources: string[];
+        };
+        FirewallUFW: {
+            installed: boolean;
+            enabled: boolean | null;
+            active: boolean | null;
+            /** @description 本机受信 /etc/default/ufw 的 IPV6 配置，无法严格读取时为 null；不代表内核 IPv6 规则生效。 */
+            ipv6: boolean | null;
+            rule_inventory: components["schemas"]["FirewallUFWRuleInventory"];
+            registration: components["schemas"]["FirewallRegistrationView"];
+            reason: string;
+        };
+        /** @description 官方 ufw show added 的有界独立只读报告；最多 512 KiB、8192 条记录，失败不返回成功前缀。双栈可能合并显示、顺序仅为汇总，不证明内核状态或所有权，命令字符串仅供展示，不可重放。 */
+        FirewallUFWRuleInventory: {
+            available: boolean;
+            /** @description 完整原始报告的 SHA-256；不可用时为空。 */
+            hash: string;
+            /** @description 报告命令记录数，不是内核规则数。 */
+            rules: number;
+            /** @description 最多 64 KiB 的报告前缀。 */
+            commands: string[];
+            truncated: boolean;
+            reason: string;
+        };
+        FirewallIptables: {
+            family: string;
+            backend: string;
+            version: string;
+            reason: string;
+        };
+        FirewallRuleset: {
+            id: string;
+            backend: string;
+            family: string;
+            available: boolean;
+            tables: components["schemas"]["FirewallTable"][];
+            reason: string;
+        };
+        FirewallTable: {
+            family: string;
+            name: string;
+            chains: components["schemas"]["FirewallChain"][];
+        };
+        FirewallChain: {
+            name: string;
+            type: string;
+            hook: string;
+            /** Format: int64 */
+            priority: number | null;
+            policy: string;
+            rules: number;
+            docker_user_jump: boolean;
+        };
+        FirewallDocker: {
+            registration: components["schemas"]["FirewallDockerRegistrationView"];
+            /** @enum {string} */
+            backend_hint: "unknown" | "nftables" | "iptables" | "mixed";
+            evidence: string[];
+            /** @description 已核对独立本机授权且至少一个当前组合支持联合计划；未完成操作或修复时为 false。能力报告不授予规则写入，执行须另行生成完整计划。 */
+            writable: boolean;
+            reason: string;
+            runtime: components["schemas"]["FirewallDockerRuntime"];
+            capabilities: components["schemas"]["FirewallDockerCapability"][];
+        };
+        /** @description Docker 转发独立本机 root 授权，绑定原 iptables 宿主机占用与 Docker 实例。registered/verified 只表示空命名空间授权及当前观察已核对，不表示规则安装、执行开放或外部可达。原意图及回执不随文件/API 迁移或备份授予目标权限。 */
+        FirewallDockerRegistrationView: {
+            /** @enum {string} */
+            backend: "" | "iptables-nft" | "iptables-legacy";
+            engine_hash: string;
+            parent_operation_id: string;
+            registration: components["schemas"]["FirewallRegistrationView"];
+        };
+        /** @description 固定本机 root Docker Socket 的有界只读报告。两次实例、网络及运行容器报告须一致；不是原子内核快照、所有权或规则写入证明。未映射至主机的 exposed-only 容器端口不计入；routed 模式不能从此清单推断完整发布范围。 */
+        FirewallDockerRuntime: {
+            available: boolean;
+            engine_hash: string;
+            version: string;
+            api_version: string;
+            snapshot_hash: string;
+            /** Format: int64 */
+            observed_at: number;
+            rootless: boolean;
+            swarm: string;
+            networks: number;
+            containers: number;
+            published_ports: number;
+            ports: components["schemas"]["FirewallDockerPublishedPort"][];
+            truncated: boolean;
+            reason: string;
+        };
+        FirewallDockerPublishedPort: {
+            container_id: string;
+            /** @enum {string} */
+            family: "unknown" | "ipv4" | "ipv6";
+            /** @enum {string} */
+            protocol: "tcp" | "udp" | "sctp";
+            /** @description 原样报告主机发布地址，空字符串表示未报告；0.0.0.0 或 :: 是通配绑定，不是已选择的原始目的地址。 */
+            host_ip: string;
+            /** @description 0 表示未报告主机发布端口，不自动采用容器端口。 */
+            host_port: number;
+            container_port: number;
+            network_ids: string[];
+            /**
+             * @description 映射候选仍须核对原始目的、同族 DNAT、入口及转发出口；不证明已保护。
+             * @enum {string}
+             */
+            path: "bridge_nat_candidate" | "unconfirmed";
+            reason: string;
+        };
+        FirewallDockerCapability: {
+            /** @enum {string} */
+            backend: "direct-nftables" | "iptables-nft" | "iptables-legacy" | "firewalld" | "ufw";
+            /** @enum {string} */
+            family: "ipv4" | "ipv6";
+            /** @enum {string} */
+            hook: "" | "DOCKER-USER" | "forward";
+            /** @description 观察到实际实例及明确的单一转发挂接，不代表具备所有权或可写。 */
+            observed: boolean;
+            /** @description 当前后端及地址族观察到受支持的显式 iptables/DOCKER-USER 路径；仅表示可生成目标计划，仍须独立本机授权和完整绑定。 */
+            supported: boolean;
+            reason: string;
+        };
+        FirewallPortRange: {
+            from: number;
+            to: number;
+        };
+        FirewallRule: {
+            id: string;
+            name: string;
+            enabled: boolean;
+            /** @description host_input 或 docker_published；Docker 原始目的与实际映射由独立应用计划绑定，不属于可迁移期望规则；普通逻辑预览不编译 Docker 转发 */
+            scope: string;
+            /** @description ipv4、ipv6 或 both；非空来源须覆盖所选地址族 */
+            family: string;
+            /** @description tcp 或 udp */
+            protocol: string;
+            ports: components["schemas"]["FirewallPortRange"][];
+            /** @description IP 或网络起点 CIDR；空数组表示任意来源；规范化后不得重复 */
+            sources: string[];
+            /** @description allow、deny 或 reject */
+            action: string;
+            priority: number;
+            /** @description 目标入站接口；空字符串表示任意接口 */
+            interface: string;
+            comment: string;
+        };
+        FirewallPolicy: {
+            /** @description 目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；五种后端均提供主机入站编译；Docker 目标编译仅支持显式 iptables 后端，执行尚未开放。 */
+            backend: string;
+            rules: components["schemas"]["FirewallRule"][];
+        };
+        FirewallPolicyView: {
+            /** Format: int64 */
+            version: number;
+            policy: components["schemas"]["FirewallPolicy"];
+            /** Format: int64 */
+            updated_at: number;
+        };
+        FirewallPolicyInput: {
+            /** Format: int64 */
+            base_version: number;
+            policy: components["schemas"]["FirewallPolicy"];
+        };
+        FirewallPreviewInput: {
+            /** Format: int64 */
+            version: number;
+        };
+        FirewallPreviewEntry: {
+            /** @description firewalld 展开后的唯一负优先级；其他后端为 null。 */
+            backend_priority: number | null;
+            /** @description firewalld 生成的完整 rich rule，或 UFW/iptables 生成参数的命令预览；直接 nftables 为空，不接受用户提供表达式或报告命令作为执行输入。 */
+            expression: string;
+            rule_id: string;
+            family: string;
+            protocol: string;
+            source: string;
+            ports: components["schemas"]["FirewallPortRange"];
+            action: string;
+            interface: string;
+            priority: number;
+        };
+        /** @description 编译目标为独立 nginxpanel-host policy，ANY 到 HOST，优先级 -100、默认 CONTINUE；名称不构成所有权证明，不写入 runtime/permanent。 */
+        FirewallFirewalldPreview: {
+            policy: string;
+            /** Format: int32 */
+            priority: number;
+            target: string;
+            ingress_zones: string[];
+            egress_zones: string[];
+            /** @description 全部编译 policy 设置的规范 JSON 字节数，包含未展示的规则；为观测字典的类型标记、缺省字段及独立身份元数据保留空间。 */
+            settings_bytes: number;
+        };
+        FirewallIPTablesFamilyPreview: {
+            /** @enum {string} */
+            family: "ipv4" | "ipv6";
+            /**
+             * @description 显式命令名，仅用于预览，不通过 PATH 或 API 请求执行。
+             * @enum {string}
+             */
+            binary: "iptables-nft" | "ip6tables-nft" | "iptables-legacy" | "ip6tables-legacy";
+            generated_rules: number;
+        };
+        /** @description 主机入站的封闭参数编译，按地址族独立处理；不创建链、跳转或规则，不构成所有权与执行证明。 */
+        FirewallIPTablesPreview: {
+            program_bytes: number;
+            /** @description 每个使用地址族的回环及已建立/关联连接返回规则。 */
+            base_rules: number;
+            protection_rules: number;
+            families: components["schemas"]["FirewallIPTablesFamilyPreview"][];
+        };
+        FirewallPreview: {
+            iptables: components["schemas"]["FirewallIPTablesPreview"] | null;
+            firewalld: components["schemas"]["FirewallFirewalldPreview"] | null;
+            kernel: components["schemas"]["FirewallKernelView"];
+            /** @description 绑定命名空间、目标表快照和含规则代次前置条件的完整新建事务摘要；不构成执行授权 */
+            transaction_hash: string;
+            transaction_bytes: number;
+            transaction_messages: number;
+            /** Format: int64 */
+            version: number;
+            policy_hash: string;
+            backend: string;
+            compiled: boolean;
+            can_apply: boolean;
+            table: string;
+            chain: string;
+            hook: string;
+            priority: number;
+            default_policy: string;
+            logical_rules: number;
+            /** @description 直接 nftables 为含回环/会话保护的内核规则数量；firewalld 为 rich rule 数量；UFW 为生成命令数；iptables 为各使用地址族的业务及基础返回规则合计，不计入管理器原有规则。 */
+            generated_rules: number;
+            program_hash: string;
+            entries: components["schemas"]["FirewallPreviewEntry"][];
+            truncated: boolean;
+            /** Format: int64 */
+            observed_at: number;
+            errors: string[];
+            warnings: string[];
+        };
+        /** @description 固定 inet 目标表在同一内核代次的有界快照；完整原始表达式仅参与摘要，不返回规则正文，不证明所有权。 */
+        FirewallKernelView: {
+            available: boolean;
+            table_exists: boolean;
+            /** Format: int64 */
+            generation: number;
+            namespace_id: string;
+            fingerprint: string;
+            chains: number;
+            rules: number;
+            bytes: number;
+            /** Format: int64 */
+            observed_at: number;
+            reason: string;
         };
     };
     responses: {
@@ -4249,97 +7079,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
- createFrontendActivation: operations["createComponentTask"];
- createComponentImagePull: operations["createComponentTask"];
- listComponentOfflineUploads: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- createComponentOfflineUpload: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];"Idempotency-Key":components["parameters"]["Idempotency"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["ComponentOfflineInput"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- writeComponentOfflineChunk: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path:{ id:string;asset:string; };cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["ComponentOfflineChunk"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- discardComponentOfflineUpload: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path:{ id:string; };cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
-
-    executeRuntimeHistory: { parameters: {query?: never; header: {"X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"];}; path?: never; cookie?: never; }; requestBody: {content: {"application/json": components["schemas"]["RuntimeHistoryExecuteInput"]; }; }; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    previewRuntimeHistory: { parameters: {query?: never; header?: {"X-CSRF-Token"?: components["parameters"]["CSRF"];}; path?: never; cookie?: never; }; requestBody: {content: {"application/json": components["schemas"]["RuntimeHistoryFilter"]; }; }; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    listRuntimeHistory: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    executeHistory: {
-        parameters: { query?: never; header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; }; path?: never; cookie?: never; };
-        requestBody: { content: { "application/json": components["schemas"]["HistoryExecuteInput"]; }; };
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
-    };
-    previewHistory: {
-        parameters: { query?: never; header?: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; }; path?: never; cookie?: never; };
-        requestBody: { content: { "application/json": components["schemas"]["HistoryFilter"]; }; };
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
-    };
- changeFail2banPython: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banPythonTaskInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banPythonTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
-
- previewFail2banLifecycle: { parameters:{query?:never;header?:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecyclePreviewInput"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- changeFail2banUpgrade: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banUpgradeInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banUpgradeTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- changeFail2banLifecycle: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banLifecycleInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banLifecycleTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
-
- getFail2banAddress: { parameters:{query:{engine_owner:string;adoption_id?:string;jail:string;ip:string;};header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banExistingResources: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banExistingResource: { parameters:{query?:never;header?:never;path:{name:string;};cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- changeFail2banExistingPolicy: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banExistingPolicyInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banExistingTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banExistingTask: { parameters:{query?:never;header?:never;path:{id:components["parameters"]["ID"];};cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- cancelFail2banExistingPolicy: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path:{id:components["parameters"]["ID"];};cookie?:never;};requestBody?:never;responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banAddressTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- changeFail2banAddress: { parameters:{query?:never;header:{"Idempotency-Key":components["parameters"]["Idempotency"];"X-CSRF-Token"?:components["parameters"]["CSRF"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banAddressInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
-
- getFail2banTasks: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- getFail2banRuntime: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
- applyFail2ban: { parameters:{query?:never;header:{"X-CSRF-Token"?:string;"Idempotency-Key":string;};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["Fail2banApplyInput"];};};responses:{202:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
-    checkFail2banTemplates: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banTemplateCheckInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFail2banHostInput: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFail2banPanelLogin: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFail2banTemplates: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    previewFail2ban: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPreviewInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    setFail2banPolicy: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["Fail2banPolicyInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFail2banPolicy: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFail2banInstance: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFail2banJail: { parameters: { query?: never; header?: never; path: { name: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFail2ban: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFirewallRuntime: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    planFirewall: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallPlanInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    applyFirewall: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallApplyInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFirewallOperation: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    confirmFirewall: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    rollbackFirewall: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-
-    getFirewallPolicy: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    setFirewallPolicy: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallPolicyInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    previewFirewall: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["FirewallPreviewInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getFirewall: {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
-        requestBody?: never;
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
-    };
-    listBackups: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    createBackup: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["BackupInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getBackup: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    deleteBackup: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getBackupPolicy: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    setBackupPolicy: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["BackupPolicyInput"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    createBackupDownload: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    downloadBackup: { parameters: { query?: { ticket?: string; }; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: { headers: { "X-Backup-SHA256"?: string; [name: string]: unknown; }; content: { "application/octet-stream": string; }; }; default: components["responses"]["JSON"]; }; };
-    getManagementListener: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    applyManagementListener: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["ManagementListenerInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getManagementListenerOperation: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    confirmManagementListener: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    rollbackManagementListener: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    listPairings: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    createPairing: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingInput"]; }; }; responses: { 201: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    revokePairing: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    exchangePairing: { parameters: { query?: never; header: { "X-Nginxpanel-Target-Node": string; "X-Nginxpanel-Remote-Protocol": "1"; }; path: { id: string; }; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingClaim"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    confirmPairing: { parameters: { query?: never; header: { "X-Nginxpanel-Target-Node": string; "X-Nginxpanel-Remote-Protocol": "1"; }; path: { id: string; }; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingConfirmation"]; }; }; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    listPairingJobs: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    startPairing: { parameters: { query?: never; header: { "X-CSRF-Token"?: string; "Idempotency-Key": string; }; path?: never; cookie?: never; }; requestBody: { content: { "application/json": components["schemas"]["PairingJobInput"]; }; }; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    getPairingJob: { parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    resumePairing: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 202: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    abandonPairing: { parameters: { query?: never; header?: { "X-CSRF-Token"?: string; }; path: { id: string; }; cookie?: never; }; requestBody?: never; responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
-    listNodes: {
+    getFail2banExistingResources: {
         parameters: {
             query?: never;
             header?: never;
@@ -4347,49 +7087,48 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
     };
-    getNode: {
+    getFail2banExistingResource: {
         parameters: {
             query?: never;
             header?: never;
-            path: { id: components["parameters"]["ID"]; };
+            path: {
+                name: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
     };
-    createNode: {
+    changeFail2banExistingPolicy: {
         parameters: {
             query?: never;
-            header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; };
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody: { content: { "application/json": components["schemas"]["NodeCreateInput"]; }; };
-        responses: { 201: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
-    };
-    refreshNode: {
-        parameters: {
-            query?: never;
-            header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; };
-            path: { id: components["parameters"]["ID"]; };
-            cookie?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banExistingPolicyInput"];
+            };
         };
-        requestBody?: never;
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
-    };
-    deleteNode: {
-        parameters: {
-            query?: never;
-            header: { "X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"]; };
-            path: { id: components["parameters"]["ID"]; };
-            cookie?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
         };
-        requestBody?: never;
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
     };
-    getRemoteIdentity: {
+    getFail2banExistingTasks: {
         parameters: {
             query?: never;
             header?: never;
@@ -4397,20 +7136,27 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
     };
-    revokeRemoteAuthorization: {
+    getFail2banExistingTask: {
         parameters: {
             query?: never;
-            header: { "X-Nginxpanel-Target-Node": string; };
-            path?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
             cookie?: never;
         };
         requestBody?: never;
-        responses: { 200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
     };
-
-    resumePanelImageUpgrade: {
+    cancelFail2banExistingPolicy: {
         parameters: {
             query?: never;
             header: {
@@ -4429,8 +7175,621 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    getPanelImageUpgrade: {
+    changeFail2banPython: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banPythonTaskInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banPythonTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    changeFail2banUpgrade: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banUpgradeInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banUpgradeTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    previewFail2banLifecycle: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banLifecyclePreviewInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    changeFail2banLifecycle: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banLifecycleInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banLifecycleTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banAddress: {
+        parameters: {
+            query: {
+                engine_owner: string;
+                adoption_id?: string;
+                jail: string;
+                ip: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    changeFail2banAddress: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banAddressInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banAddressTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    applyFail2ban: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banApplyInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    checkFail2banTemplates: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banTemplateCheckInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setFail2banPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banPolicyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banHostInput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banPanelLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    previewFail2ban: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Fail2banPreviewInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banJail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2ban: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFirewallRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    planFirewall: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirewallPlanInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    applyFirewall: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirewallApplyInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFirewallOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    confirmFirewall: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    rollbackFirewall: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFirewallPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setFirewallPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirewallPolicyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    previewFirewall: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirewallPreviewInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFirewall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createBackup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getBackupPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setBackupPolicy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupPolicyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getBackup: {
         parameters: {
             query?: never;
             header?: never;
@@ -4445,7 +7804,463 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
+    deleteBackup: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    downloadBackup: {
+        parameters: {
+            query?: {
+                ticket?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 完整加密备份；X-Backup-SHA256 为加密文件散列。 */
+            200: {
+                headers: {
+                    "X-Backup-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            default: components["responses"]["JSON"];
+        };
+    };
+    createBackupDownload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getManagementListener: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    applyManagementListener: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagementListenerInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getManagementListenerOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    confirmManagementListener: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    rollbackManagementListener: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listPairings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createPairing: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    revokePairing: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    exchangePairing: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Nginxpanel-Target-Node": string;
+                "X-Nginxpanel-Remote-Protocol": "1";
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingClaim"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    confirmPairing: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Nginxpanel-Target-Node": string;
+                "X-Nginxpanel-Remote-Protocol": "1";
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingConfirmation"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listPairingJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    startPairing: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingJobInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getPairingJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    resumePairing: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    abandonPairing: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeCreateInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    deleteNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    refreshNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getRemoteIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    revokeRemoteAuthorization: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 须匹配目标永久节点 ID，校验后才撤销当前 Token。 */
+                "X-Nginxpanel-Target-Node": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    listPanelImageUpgrades: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     createPanelImageUpgrade: {
         parameters: {
             query?: never;
@@ -4467,12 +8282,13 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    listPanelImageUpgrades: {
+    getPanelImageUpgrade: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4481,8 +8297,7 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    resumeNginxImageUpgrade: {
+    resumePanelImageUpgrade: {
         parameters: {
             query?: never;
             header: {
@@ -4501,14 +8316,11 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    getNginxImageUpgrade: {
+    listNginxImageUpgrades: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4517,7 +8329,6 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
     createNginxImageUpgrade: {
         parameters: {
             query?: never;
@@ -4539,12 +8350,13 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    listNginxImageUpgrades: {
+    getNginxImageUpgrade: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4553,8 +8365,7 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    resumeAgentUpgrade: {
+    resumeNginxImageUpgrade: {
         parameters: {
             query?: never;
             header: {
@@ -4573,14 +8384,11 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    getAgentUpgrade: {
+    listAgentUpgrades: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4589,7 +8397,6 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
     createAgentUpgrade: {
         parameters: {
             query?: never;
@@ -4611,12 +8418,13 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    listAgentUpgrades: {
+    getAgentUpgrade: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4625,8 +8433,7 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    resumePanelUpdate: {
+    resumeAgentUpgrade: {
         parameters: {
             query?: never;
             header: {
@@ -4645,14 +8452,11 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    getPanelUpdate: {
+    listPanelUpdates: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4661,7 +8465,6 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
     createPanelUpdate: {
         parameters: {
             query?: never;
@@ -4683,12 +8486,13 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
-    listPanelUpdates: {
+    getPanelUpdate: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4697,7 +8501,25 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-
+    resumePanelUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     getMigrationReceiver: {
         parameters: {
             query?: never;
@@ -5031,6 +8853,81 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
+    listComponentOfflineUploads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createComponentOfflineUpload: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComponentOfflineInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    writeComponentOfflineChunk: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+                asset: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComponentOfflineChunk"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    discardComponentOfflineUpload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     getComponents: {
         parameters: {
             query?: never;
@@ -5041,6 +8938,48 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createFrontendActivation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComponentCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    createComponentImagePull: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComponentCreateInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };
@@ -5483,7 +9422,9 @@ export interface operations {
             content: {
                 "application/json": {
                     enabled: boolean;
+                    /** @enum {string} */
                     firewall_rules?: "keep" | "remove";
+                    /** Format: uuid */
                     firewall_operation_id?: string;
                 };
             };
@@ -6431,6 +10372,101 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
+    listRuntimeHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    previewRuntimeHistory: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeHistoryFilter"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    executeRuntimeHistory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeHistoryExecuteInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    previewHistory: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HistoryFilter"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    executeHistory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HistoryExecuteInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     listAudit: {
         parameters: {
             query: {
@@ -6451,6 +10487,35 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    exportAudit: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditFilter"];
+            };
+        };
+        responses: {
+            /** @description 完整有界审计归档，首行清单及后续记录行；不删除源记录 */
+            200: {
+                headers: {
+                    "X-Archive-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
             default: components["responses"]["JSON"];
         };
     };
@@ -6561,35 +10626,6 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": string;
-                };
-            };
-            default: components["responses"]["JSON"];
-        };
-    };
-    exportAudit: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuditFilter"];
-            };
-        };
-        responses: {
-            /** @description 完整有界审计归档，源记录保留。 */
-            200: {
-                headers: {
-                    "X-Archive-SHA256"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": string;
                 };
             };
             default: components["responses"]["JSON"];

@@ -5,7 +5,7 @@ import Components from "unplugin-vue-components/vite";
 import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 import { VueRouterAutoImports } from "vue-router/unplugin";
 import VueRouter from "vue-router/vite";
-import { routeOptions } from "./routing.config";
+import { routeOptions } from "./routing.config.ts";
 
 export default defineConfig({
   plugins: [
