@@ -25,7 +25,7 @@ func CancelFail2banUpgradeQuiesce(ctx context.Context, data, scope, id string) (
 
 func beginFail2banUpgradeQuiesce(ctx context.Context, in Fail2banUpgradeQuiesceOptions, j *Journal) (fail2banUpgradeQuiesceIntent, error) {
 	var i fail2banUpgradeQuiesceIntent
-	if err := fail2banUpgradeIdle(j); err != nil {
+	if err := fail2banUpgradeIdleFor(j, in.OperationID); err != nil {
 		return i, err
 	}
 	if _, err := j.Get(in.OperationID); !os.IsNotExist(err) {
@@ -128,7 +128,7 @@ func ensureFail2banUpgradeQuiesceJournal(ctx context.Context, i fail2banUpgradeQ
 		if err == nil || f.Execution || f.Stopped != nil || f.Receipt != nil {
 			return errors.New("升级停止隔离变化，不重新取得执行授权")
 		}
-		if e = fail2banUpgradeIdle(j); e != nil {
+		if e = fail2banUpgradeIdleFor(j, i.Request.OperationID); e != nil {
 			return e
 		}
 		if !cancel {

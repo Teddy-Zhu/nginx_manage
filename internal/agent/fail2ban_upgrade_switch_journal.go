@@ -35,7 +35,7 @@ func ensureFail2banUpgradeSwitchJournal(ctx context.Context, i fail2banUpgradeSw
 		if err = i.noExecution(); err != nil {
 			return err
 		}
-		if err = fail2banUpgradeSwitchAdmission(i.Request.DataDir, ""); err != nil {
+		if err = fail2banUpgradeSwitchAdmission(i.Request.DataDir, i.Request.OperationID); err != nil {
 			return err
 		}
 		if err = i.original(ctx); err != nil {

@@ -28,6 +28,10 @@ func RevertFail2banUpgradeSwitch(ctx context.Context, data, scope, id string) (F
 }
 
 func fail2banUpgradeSwitchAdmission(data, allowed string) error {
+	parentID, err := fail2banUpgradeRunAdmission(data, allowed)
+	if err != nil {
+		return err
+	}
 	if err := fail2banUpgradeRestoreIdle(data, ""); err != nil {
 		return err
 	}
@@ -56,7 +60,7 @@ func fail2banUpgradeSwitchAdmission(data, allowed string) error {
 		return ErrBusy
 	}
 	for _, r := range records {
-		if pendingNginxRecord(r) && r.OperationID != allowed || r.Kind == "maintenance.lock" && r.State != "succeeded" {
+		if pendingNginxRecord(r) && r.OperationID != allowed && r.OperationID != parentID || r.Kind == "maintenance.lock" && r.State != "succeeded" && (parentID == "" || r.State != "running" || r.Stage != "closing") {
 			return ErrBusy
 		}
 	}
@@ -120,7 +124,7 @@ func (i fail2banUpgradeSwitch) snapshot(ctx context.Context) error {
 
 func beginFail2banUpgradeSwitch(ctx context.Context, in Fail2banUpgradeSwitchOptions, j *Journal) (fail2banUpgradeSwitch, error) {
 	var i fail2banUpgradeSwitch
-	if err := fail2banUpgradeIdle(j); err != nil {
+	if err := fail2banUpgradeIdleFor(j, in.OperationID); err != nil {
 		return i, err
 	}
 	if _, err := j.Get(in.OperationID); !os.IsNotExist(err) {

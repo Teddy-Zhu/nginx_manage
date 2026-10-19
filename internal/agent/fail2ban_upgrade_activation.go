@@ -27,7 +27,7 @@ func StopFail2banUpgradeActivation(ctx context.Context, data, scope, id string) 
 
 func beginFail2banUpgradeActivation(ctx context.Context, in Fail2banUpgradeActivationOptions, j *Journal) (fail2banUpgradeActivationIntent, error) {
 	var i fail2banUpgradeActivationIntent
-	if err := fail2banUpgradeIdle(j); err != nil {
+	if err := fail2banUpgradeIdleFor(j, in.OperationID); err != nil {
 		return i, err
 	}
 	if _, err := j.Get(in.OperationID); !os.IsNotExist(err) {
@@ -99,7 +99,7 @@ func ensureFail2banUpgradeActivationJournal(ctx context.Context, i fail2banUpgra
 		if err == nil || f.Execution || f.Claim != nil || f.Started != nil || f.Stop != nil || f.Receipt != nil {
 			return errors.New("升级启动隔离变化，不重新取得执行授权")
 		}
-		if e = fail2banUpgradeIdle(j); e != nil {
+		if e = fail2banUpgradeIdleFor(j, i.Request.OperationID); e != nil {
 			return e
 		}
 		if e = i.beforeStart(ctx, s); e != nil {

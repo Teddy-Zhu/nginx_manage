@@ -27,7 +27,7 @@ func CancelFail2banUpgradeRestore(ctx context.Context, data, scope, id string) (
 
 func beginFail2banUpgradeRestore(ctx context.Context, in Fail2banUpgradeRestoreOptions, j *Journal) (fail2banUpgradeRestoreIntent, error) {
 	var i fail2banUpgradeRestoreIntent
-	if err := fail2banUpgradeIdle(j); err != nil {
+	if err := fail2banUpgradeIdleFor(j, in.OperationID); err != nil {
 		return i, err
 	}
 	if _, err := j.Get(in.OperationID); !os.IsNotExist(err) {
@@ -174,7 +174,7 @@ func ensureFail2banUpgradeRestoreJournal(ctx context.Context, i fail2banUpgradeR
 		if err == nil || f.Execution || f.State != nil || f.Receipt != nil {
 			return errors.New("升级恢复隔离变化，不重新生成执行授权")
 		}
-		if e = fail2banUpgradeIdle(j); e != nil {
+		if e = fail2banUpgradeIdleFor(j, i.Request.OperationID); e != nil {
 			return e
 		}
 		if !cancel {

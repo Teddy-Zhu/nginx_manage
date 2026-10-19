@@ -22,7 +22,10 @@ func (s *Server) startFail2banUpgradeRecovery(ctx context.Context, gate *mainten
 		defer ticker.Stop()
 		lastError := ""
 		for {
-			err := s.resumeFail2banUpgradeRestore(run, gate)
+			err := s.resumeFail2banUpgradeRun(run, gate)
+			if err == nil {
+				err = s.resumeFail2banUpgradeRestore(run, gate)
+			}
 			if err == nil {
 				err = s.resumeFail2banUpgradeQuiesce(run, gate)
 			}
@@ -59,6 +62,27 @@ func (s *Server) startFail2banUpgradeRecovery(ctx context.Context, gate *mainten
 		}
 	}()
 	return func() { stop(); <-done }
+}
+
+func (s *Server) resumeFail2banUpgradeRun(ctx context.Context, gate *maintenanceGate) error {
+	i, f, err := pendingFail2banUpgradeRun(s.DataDir)
+	if err != nil || i == nil || !f.Execution && f.Receipt == nil {
+		return err
+	}
+	audit, err := (&Journal{Dir: filepath.Join(s.DataDir, "agent", "operations")}).Get(i.Request.OperationID)
+	if err != nil {
+		return err
+	}
+	if !pendingFail2banUpgradeRunRecord(audit, i.record(nil)) {
+		return nil
+	}
+	leave, ok := gate.enter(true)
+	if !ok {
+		return nil
+	}
+	defer leave()
+	_, err = ResumeFail2banUpgradeRun(ctx, s.DataDir, "host", i.Request.OperationID)
+	return err
 }
 
 func (s *Server) resumeFail2banUpgradeQuiesce(ctx context.Context, gate *maintenanceGate) error {

@@ -148,6 +148,9 @@ func (i fail2banUpgradeActivationIntent) selected(ctx context.Context, nginx boo
 // Background action executors alone may progress while waiting for protection.
 // Ordinary configuration, installation and lifecycle admission still sees the fence.
 func fail2banUpgradeActivationActions(ctx context.Context, data string) error {
+	if err := fail2banUpgradeRunActions(data); err != nil {
+		return err
+	}
 	i, f, err := pendingFail2banUpgradeActivation(data)
 	if err != nil || i == nil {
 		return err
