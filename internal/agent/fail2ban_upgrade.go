@@ -48,13 +48,7 @@ type Fail2banUpgradePlan struct {
 	Jails                 []string                 `json:"jails"`
 	Templates             []fail2ban.TemplateCheck `json:"templates"`
 	Bans                  *Fail2banUpgradeBans     `json:"bans"`
-	NginxGrants           int                      `json:"nginx_grants"`
-	HostSourcesID         string                   `json:"host_sources_id"`
-	HostSourcesActive     bool                     `json:"host_sources_active"`
-	HostProtectionID      string                   `json:"host_protection_id"`
-	HostProtectionActive  bool                     `json:"host_protection_active"`
-	HostSyncID            string                   `json:"host_sync_id"`
-	HostSyncActive        bool                     `json:"host_sync_active"`
+	Grants                Fail2banUpgradeGrants    `json:"grants"`
 	StateSnapshotRequired bool                     `json:"state_snapshot_required"`
 	RestartRequired       bool                     `json:"restart_required"`
 	Impacts               []string                 `json:"impacts"`
@@ -65,15 +59,16 @@ func fail2banUpgradeComponent(r *fail2banManagedRecord) Fail2banUpgradeComponent
 }
 
 type fail2banUpgradeBasis struct {
-	Current        fail2banManagedRecord
-	Candidate      fail2banManagedRecord
-	Bundle         *fail2banJailBundle
-	Registry       fail2banNginxRegistry
-	HostSources    *fail2banHostSourcesEvent
-	HostProtection *fail2banHostProtectionEvent
-	HostSync       *fail2banHostSyncEvent
-	Service        fail2ban.Service
-	Invocation     string
+	Current          fail2banManagedRecord
+	Candidate        fail2banManagedRecord
+	Bundle           *fail2banJailBundle
+	Registry         fail2banNginxRegistry
+	HostSources      *fail2banHostSourcesEvent
+	HostProtection   *fail2banHostProtectionEvent
+	HostSync         *fail2banHostSyncEvent
+	HostRegistration *fail2banHostRegistration
+	Service          fail2ban.Service
+	Invocation       string
 }
 
 func (b fail2banUpgradeBasis) hash() string {
@@ -81,7 +76,7 @@ func (b fail2banUpgradeBasis) hash() string {
 	// separate: normal ban expiry must not change the configuration identity.
 	b.Candidate.ApprovedAt = 0
 	raw, _ := json.Marshal(b)
-	return secure.Hash(append([]byte("fail2ban:upgrade-check:v1:\x00"), raw...))
+	return secure.Hash(append([]byte("fail2ban:upgrade-check:v2:\x00"), raw...))
 }
 
 func readFail2banUpgradeBasis(ctx context.Context, data string, candidate *fail2banManagedRecord) (fail2banUpgradeBasis, error) {
@@ -108,6 +103,10 @@ func readFail2banUpgradeBasis(ctx context.Context, data string, candidate *fail2
 		return out, err
 	}
 	out.HostSync, err = loadFail2banHostSync(data)
+	if err != nil {
+		return out, err
+	}
+	out.HostRegistration, err = loadFail2banHostRegistration(data)
 	if err != nil {
 		return out, err
 	}
@@ -158,7 +157,9 @@ func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fai
 	}
 	ctx, cancel := context.WithTimeout(parent, 3*time.Minute)
 	defer cancel()
-	unlock, err := (&Journal{Dir: fail2banBindingDir(in.DataDir)}).rootLock("binding.lock")
+	// Host approvals and runtime checkpoints share this ordering with the
+	// action workers. Taking the host lock after binding would deadlock them.
+	unlock, err := fail2banHostSyncLocks(in.DataDir)
 	if err != nil {
 		return out, err
 	}
@@ -205,6 +206,10 @@ func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fai
 	}
 	if basis.Current.EventID != current.EventID {
 		return out, ErrExternalChange
+	}
+	grants, err := planFail2banUpgradeGrants(in.DataDir, basis)
+	if err != nil {
+		return out, err
 	}
 	for _, client := range []bool{false, true} {
 		raw, e := candidate.run(ctx, client, "--version")
@@ -270,6 +275,10 @@ func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fai
 	if err != nil || after.hash() != basis.hash() {
 		return out, errors.Join(errors.New("候选检查期间实例、配置、服务或动作授权已变化"), err)
 	}
+	afterGrants, err := planFail2banUpgradeGrants(in.DataDir, after)
+	if err != nil || afterGrants.hash() != grants.hash() {
+		return out, errors.Join(errors.New("候选检查期间动作批准范围或原运行检查点已变化"), err)
+	}
 	if err = fail2banUpgradeIdle(j); err != nil {
 		return out, err
 	}
@@ -280,24 +289,12 @@ func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fai
 	if out.Running {
 		out.Impacts = append(out.Impacts, "切换须单独授权停止及重启独立实例，封禁保护可能短暂中断")
 	}
-	for _, grant := range basis.Registry.Grants {
-		if grant.EngineKey == out.Current.EngineKey {
-			out.NginxGrants++
-		}
+	out.Grants = grants
+	if len(grants.NginxMoves) != 0 || grants.MigrateHostSources || grants.MigrateHostSync {
+		out.Impacts = append(out.Impacts, "代码身份变化后须为列出的原范围新建动作批准，保留原批准及检查点；宿主机保护策略与代码无关，应保留其原批准")
 	}
-	if basis.HostSources != nil {
-		out.HostSourcesID = basis.HostSources.ID
-		out.HostSourcesActive = basis.HostSources.Action == "approve"
-	}
-	if basis.HostProtection != nil {
-		out.HostProtectionID = basis.HostProtection.ID
-		out.HostProtectionActive = basis.HostProtection.Action == "approve"
-	}
-	if basis.HostSync != nil {
-		out.HostSyncID, out.HostSyncActive = basis.HostSync.ID, basis.HostSync.Action == "enable"
-	}
-	if out.NginxGrants != 0 || out.HostSourcesActive || out.HostProtectionActive || out.HostSyncActive {
-		out.Impacts = append(out.Impacts, "代码身份变化后须核对并迁移 Nginx/宿主机动作批准及持续同步授权，不能沿用旧引擎身份")
+	if len(grants.Blockers) != 0 {
+		out.Impacts = append(out.Impacts, "动作批准范围或原事务存在阻塞；本次诊断不能作为升级执行授权")
 	}
 	if bans == nil {
 		out.Impacts = append(out.Impacts, "当前实例已停止，不能因代码切换擅自启动；未观测运行封禁，状态库保留内容须在独立快照及后续授权启动时核对")
