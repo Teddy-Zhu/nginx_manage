@@ -66,7 +66,7 @@ port=${BASH_REMATCH[2]}
 
 canonical() {
   [[ $1 == /* && $1 != */ && $1 != *//* && $1 != */./* && $1 != */../* && $1 != */. && $1 != */.. ]] || die "路径不是规范绝对路径：$1"
-  [[ $1 =~ ^/[a-zA-Z0-9_./-]+$ ]] || die "路径包含不支持的字符：$1"
+  [[ $1 =~ ^/[a-zA-Z0-9_./@-]+$ ]] || die "路径包含不支持的字符：$1"
 }
 # Do not follow a writable ancestor, even when the final file belongs to root.
 root_chain() {
@@ -225,7 +225,10 @@ if [[ -e $state/intent || -L $state/intent ]]; then
 else
   [[ ! -e $data && ! -L $data || -d $data && ! -L $data && -z $(find "$data" -mindepth 1 -maxdepth 1 -print -quit) ]] || die '数据目录非空，禁止将首次安装覆盖到已有数据'
   for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service nginxpanel-image@.service nginxpanel-nginx-image@.service; do
-    [[ $(systemctl show --property=LoadState --value "$unit") == not-found ]] || die "已有同名服务，停止接管：$unit"
+    # systemctl show requires an instance when querying a template unit.
+    probe_unit=${unit/@.service/@install-check.service}
+    load_state=$(systemctl show --property=LoadState --value "$probe_unit") || die "无法检查服务状态：$unit"
+    [[ $load_state == not-found ]] || die "已有同名服务，停止接管：$unit"
   done
   [[ ! -e /opt/nginxpanel/current && ! -L /opt/nginxpanel/current ]] || die '已有程序指针，停止接管'
   write_owned "$work/intent" "$state/intent" 600
@@ -309,7 +312,14 @@ if [[ $panel_mode == docker ]]; then
 else
   "$release_dir/nginxpanel" panel-native-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" >"$work/panel-runtime.json"
 fi
-runuser -u nginxpanel -- "$data/runtime/current/nginxpanel" init --data-dir "$data"
+# Only unfinished installations run init; a live panel owns the writer lock.
+printf 'native-install-v12\n' >"$work/ready"
+if [[ -e $state/ready || -L $state/ready ]]; then
+  trusted_file "$state/ready" 64
+  cmp -s "$work/ready" "$state/ready" || die '安装就绪记录不匹配'
+else
+  runuser -u nginxpanel -- "$data/runtime/current/nginxpanel" init --data-dir "$data"
+fi
 if [[ $native_nginx == yes ]]; then
   [[ $(sha256sum "$nginx" | cut -d ' ' -f1) == "$nginx_hash" ]] || die 'Nginx 程序已变化'
 fi
@@ -601,7 +611,6 @@ for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-printf 'native-install-v12\n' >"$work/ready"
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
   start_units=(nginxpanel-agent.service)

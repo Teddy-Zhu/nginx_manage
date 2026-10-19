@@ -1,6 +1,6 @@
 # 原生 systemd 安装
 
-此入口为 Debian/Ubuntu 等使用 systemd、GNU coreutils 和 shadow 账户工具的 Linux 宿主机准备首次安装，支持 amd64/arm64。安装器及生成的服务尚未执行，语法、权限、实际系统及故障恢复验证统一留到 P5；目前不作为已验收发行包。
+此入口面向使用 systemd、GNU coreutils 和 shadow 账户工具的 Linux 宿主机，目标架构为 amd64/arm64。Debian 12/amd64 的 `--without-nginx` 首次安装、运行中重放、权限隔离及重启持久化已通过独立虚拟机验收；含 Nginx 的安装、其他系统组合及故障恢复仍待 P5，详见[验证记录](../../docs/validation.md)。当前输入为本机批准的开发产物，尚不是正式签名发行包。
 
 将配套后端二进制、构建后的前端，以及选择同时安装时所需的本机批准 Nginx 放在 root 所有、上层目录不可被普通账户写入的目录。源文件必须是无硬链接的普通文件；Nginx 程序可通过系统路径的符号链接指定，安装时解析并固定实际路径。安装器检查 ELF 架构并对复制内容计算/复核散列。它只接收本机批准的产物，不下载、编译或自动安装系统包；面板产物自身仍须本机批准；签名 Nginx 可直接通过下述计划/资产入口安装，散列本身不证明发布者身份。
 
@@ -44,7 +44,7 @@ sudo bash deploy/native/install.sh \
 
 创建 `nginxpanel` 和 `nginxpanel-nginx` 两个不同的无登录账户，以及独立 IPC 组。安装器拒绝复用不匹配的账户、带额外授权的身份或已有外部成员的组。不会递归 chown 数据根，也不会把 root 执行目录授予 Web。
 
-安装意图 v9 在业务初始化前由 root 登记 `run/panel-writer.lock`，文件为 root 持有、面板专用组可读写的 0660 常规文件，上层目录不可被面板账户替换。正式 `init/serve` 共用此锁，恢复启动标记存在时保持关闭；开发模式使用独立写锁。systemd 仅额外开放该锁文件的写权限。
+安装意图 v12 在业务初始化前由 root 登记 `run/panel-writer.lock`，文件为 root 持有、面板专用组可读写的 0660 常规文件，上层目录不可被面板账户替换。正式 `init/serve` 共用此锁，恢复启动标记存在时保持关闭；开发模式使用独立写锁。systemd 仅额外开放该锁文件的写权限。完整安装重放核对 root 所有的就绪记录，跳过重复数据库初始化；未完成的安装继续执行初始化。
 
 原生面板的初始程序及前端也复制到 root 持有的 `DATA/runtime/releases/<内容散列>`，运行绑定固定原生模式、身份和监听，`runtime/current` 选择完整版本。systemd 通过固定 `panel-native-serve` 入口启动所选程序；`/opt/nginxpanel/current` 继续用于宿主机 Agent 和安装工具。正式启动在写锁内核对实际程序与前端，初始安装重放保留当前选择，指针丢失时不会重置为旧代码。root 版本选择入口及尚未完成的更新编排见 [发行说明](../../docs/releases.md#面板程序版本选择)。
 

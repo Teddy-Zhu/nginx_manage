@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-19。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权及 amd64 预置 Nginx 镜像运行验证，P5 尚未完成。以下结果不代表宿主机部署、内核操作或全部业务功能已验收。
+2026-10-19。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行，以及 Debian 12/amd64 仅面板原生安装与重启验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
 
 ## 隔离环境
 
@@ -60,9 +60,27 @@
 
 `internal/nginxcontainer` 的 `TestPrepareNginxLauncherFixture` 仅在显式环境变量下准备 root 所有的隔离登记夹具，随后直接运行镜像的实际入口。分别验证正常降权/低端口监听、无登记、启动器哈希不匹配及 Nginx 哈希不匹配。端口阈值只设置在 `--network none` 容器的网络命名空间中；未修改宿主机 sysctl。登记夹具的签名来源字段是合成数据，这组结果不能证明发行签名、Registry 来源或宿主机安装器准入已通过。验证容器和对应夹具卷已回收。
 
+### Debian 原生安装与重启
+
+在上述 Go 镜像内安装 QEMU `7.2.22`、ISO 工具，随后以 UID/GID 1000、只读根文件系统、移除全部 capabilities、禁止提权及 `--network none` 运行 QEMU TCG。虚拟机使用独立内核、命名卷中的磁盘和只读安装介质；QEMU 内部 DHCP 不连接宿主机网络，未使用 KVM、主机设备、端口映射或 binfmt 注册。安装器对账户、目录和 systemd 的实际修改均发生在虚拟机中。
+
+Debian 官方 `debian-12-genericcloud-amd64.qcow2` 已与同源 [SHA512SUMS](https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS) 核对，SHA-512 为 `dc0d7b526a3a9a9265142fe8e903984c03f8d605ac4ba6f14d15d27988a69581fb05fc06cd2a6d79f6eaf68ba9725f2eb38b5ddd64ad166faadad279af776c9e`。通过 [NoCloud 安装介质](https://docs.cloud-init.io/en/latest/reference/datasources/nocloud.html#source-2-drive-with-labeled-filesystem) 输入实际面板程序、锁定依赖构建的前端和当前原生安装器，由虚拟机 root 批准文件并执行 `--without-nginx --start`。
+
+| 系统/架构 | 内核 / systemd | 部署组合 | 验收结果 |
+| --- | --- | --- | --- |
+| Debian 12 / amd64 | `6.1.0-54-cloud-amd64` / `252.39-1~deb12u2` | 原生面板 + 宿主 Agent，Nginx 未安装 | 以下范围通过 |
+
+- 首次安装实际创建专用账户、受保护目录、程序及前端运行绑定，并启用和启动 Web/Agent；Nginx 服务保持未启用、未运行。
+- Web 进程的四项 UID 均为专用账户，`CapEff=0`、`NoNewPrivs=1`；数据根为 root:0755，秘密目录为 Web:0700，写锁为 root:nginxpanel:0660。Web 用户无法读取 Agent 目录，Agent 挂载命名空间内不可见业务主密钥。
+- 使用实际本机证书并验证 TLS，完成管理员初始化、登录、CSRF 请求、未认证拒绝、配置创建及统一响应身份核对。
+- 在 Web 运行时以相同参数重放安装成功；重启 Web/Agent 后原会话、永久节点编号、配置版本和修订均保留。
+- 真实系统重启后再次核对服务、权限及相同会话、节点和配置，最终输出 `P5_NATIVE_ALL_PASS` 后关机。
+
+这组验收修复了首次安装直接查询 systemd 模板导致误报冲突、运行中重放重复初始化触发写锁，以及重放校验拒绝模板文件名 `@` 的三个缺陷。整机重启核对分两段完成：修正验收夹具的依赖环后，沿用原磁盘继续检查持久化。当前结果不覆盖含 Nginx 的原生安装、生产签名资产、危险操作补偿或其他发行版/架构，也未执行 UI 自动化。
+
 ## 尚待验收
 
-- 原生安装、目标账户与 systemd、各 DNS/防火墙所有者、Fail2ban、管理监听、Nginx 实际应用及重启/断电/中断后的恢复，需要独立 Linux 系统环境；不在开发宿主机执行。
+- 含 Nginx 的原生安装、其他系统的账户与 systemd、各 DNS/防火墙所有者、Fail2ban、管理监听、Nginx 实际应用及危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；本轮 Debian 仅面板安装结果不替代这些检查。
 - 两种架构的正式原生资产、arm64 预置模块镜像、签名镜像来源准入、不可变镜像绑定、升级/回滚和备份恢复故障注入，仍需完成产物构建及运行验收；本轮 amd64 模块运行与固定启动器结果不替代这些检查。
 - 真实域名的 ACME/DNS、通知接收端及跨主机 API 一键迁移，尚未进行外部集成验收；容器内双节点迁移与授权结果见上节。
 - 正式 GitHub 仓库及发布凭据尚未配置，未运行真实发布 CI、推送或发布。项目 MIT 许可证已补齐，第三方组件保留各自许可。
