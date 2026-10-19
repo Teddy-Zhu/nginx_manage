@@ -4,6 +4,10 @@
  */
 
 export interface paths {
+ "/components/offline": { get:operations["listComponentOfflineUploads"]; post:operations["createComponentOfflineUpload"]; };
+ "/components/offline/{id}/assets/{asset}": { put:operations["writeComponentOfflineChunk"]; };
+ "/components/offline/{id}": { delete:operations["discardComponentOfflineUpload"]; };
+
     "/history/runtime/execute": { post: operations["executeRuntimeHistory"]; };
     "/history/runtime/preview": { post: operations["previewRuntimeHistory"]; };
     "/history/runtime": { get: operations["listRuntimeHistory"]; };
@@ -2511,7 +2515,12 @@ export interface components {
             updated_at: number;
             result?: components["schemas"]["PanelUpdateOperation"];
         };
+        ComponentOfflineInput: { manifest:string;signature:string;assets:string[];components:("nginx"|"fail2ban"|"panel")[];prerelease:boolean; };
+        ComponentOfflineChunk: { offset:number;data:string; };
+        ComponentOfflineAsset: { id:string;archive:string;sha256:string;size:number;received:number; };
+        ComponentOfflineUpload: { id:string;request_hash:string;created_at:number;expires_at:number;prerelease:boolean;discarded:boolean;complete:boolean;release:components["schemas"]["ComponentRelease"];assets:components["schemas"]["ComponentOfflineAsset"][]; };
         ComponentInput: {
+            offline_id?:string;
             /** @enum {string} */
             action: "check" | "prepare";
             tag: string;
@@ -3895,6 +3904,11 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+ listComponentOfflineUploads: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ createComponentOfflineUpload: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];"Idempotency-Key":components["parameters"]["Idempotency"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["ComponentOfflineInput"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ writeComponentOfflineChunk: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path:{ id:string;asset:string; };cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["ComponentOfflineChunk"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+ discardComponentOfflineUpload: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path:{ id:string; };cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
+
     executeRuntimeHistory: { parameters: {query?: never; header: {"X-CSRF-Token"?: components["parameters"]["CSRF"]; "Idempotency-Key": components["parameters"]["Idempotency"];}; path?: never; cookie?: never; }; requestBody: {content: {"application/json": components["schemas"]["RuntimeHistoryExecuteInput"]; }; }; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     previewRuntimeHistory: { parameters: {query?: never; header?: {"X-CSRF-Token"?: components["parameters"]["CSRF"];}; path?: never; cookie?: never; }; requestBody: {content: {"application/json": components["schemas"]["RuntimeHistoryFilter"]; }; }; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };
     listRuntimeHistory: { parameters: { query?: never; header?: never; path?: never; cookie?: never; }; requestBody?: never; responses: {200: components["responses"]["JSON"]; default: components["responses"]["JSON"]; }; };

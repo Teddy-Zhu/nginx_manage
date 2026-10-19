@@ -32,6 +32,10 @@ export type MaintenanceView = components["schemas"]["MaintenanceView"];
 export type MaintenanceSession = components["schemas"]["MaintenanceSession"];
 export type MaintenanceStartInput =
   components["schemas"]["MaintenanceStartInput"];
+export type ComponentOfflineInput = components["schemas"]["ComponentOfflineInput"];
+export type ComponentOfflineChunk = components["schemas"]["ComponentOfflineChunk"];
+export type ComponentOfflineAsset = components["schemas"]["ComponentOfflineAsset"];
+export type ComponentOfflineUpload = components["schemas"]["ComponentOfflineUpload"];
 export type ComponentInput = components["schemas"]["ComponentInput"];
 export type ComponentCreateInput =
   components["schemas"]["ComponentCreateInput"];
@@ -588,6 +592,14 @@ function createAPI(scope: RequestScope) {
     }),
   components: (signal?: AbortSignal) =>
     request<ComponentOverview>({ url: "/components", signal }),
+  componentOfflineUploads: (signal?: AbortSignal) =>
+    request<ComponentOfflineUpload[]>({ url: "/components/offline", signal }),
+  createComponentOfflineUpload: (data: ComponentOfflineInput, key: string) =>
+    request<ComponentOfflineUpload>({ url: "/components/offline", method: "POST", data, headers: { "Idempotency-Key": key } }),
+  writeComponentOfflineChunk: (id: string, asset: string, data: ComponentOfflineChunk) =>
+    request<ComponentOfflineUpload>({ url: `/components/offline/${encodeURIComponent(id)}/assets/${encodeURIComponent(asset)}`, method: "PUT", data }),
+  discardComponentOfflineUpload: (id: string) =>
+    request<ComponentOfflineUpload>({ url: `/components/offline/${encodeURIComponent(id)}`, method: "DELETE" }),
   componentTasks: (signal?: AbortSignal) =>
     request<ComponentTask[]>({ url: "/components/tasks", signal }),
   panelUpdates: (signal?: AbortSignal) =>

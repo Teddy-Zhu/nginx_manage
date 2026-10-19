@@ -14,6 +14,7 @@ import (
 )
 
 type Input struct {
+	OfflineID      string   `json:"offline_id,omitempty"`
 	Action         string   `json:"action"`
 	Tag            string   `json:"tag"`
 	Prerelease     bool     `json:"prerelease"`
@@ -32,6 +33,9 @@ func digest(value string) bool {
 	return err == nil && len(raw) == 32 && value == strings.ToLower(value)
 }
 func (in Input) Validate() error {
+	if in.OfflineID != "" && (!ValidID(in.OfflineID) || in.Tag == "" || len(in.Components) != 0 || len(in.Assets) == 0) {
+		return fault.Invalid("离线组件须引用上传 UUID、固定标签及资产选择")
+	}
 	if in.Action != "check" && in.Action != "prepare" {
 		return fault.Invalid("未知组件操作")
 	}

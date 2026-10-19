@@ -280,3 +280,6 @@ Agent 66 的 Fail2ban 发行资产使用 system-python ABI，architecture/distri
 
 
 Fail2ban 运行实例升级新增 `POST /fail2ban/upgrade` 与 `GET /fail2ban/upgrade/tasks`。写入为 check/prepare/run 三个独立持久任务，均要求 components.manage 与 security.write、模块启用、近期认证、浏览器 CSRF 和幂等键；check 固定签名来源，prepare 另绑定检查 target，run 只引用准备 UUID 和 intent_sha256，不接收本机路径、命令或新的信任来源。HTTP 202 仅表示排队，公开 JSON 继续统一封装，远程节点合同同步。共享加密操作记录和原任务 UUID，root 元数据队列固定子 UUID、本机信任与 Nginx 来源，独立后台工作器执行长时诊断/准备或原整体升级父事务；既有不可变子材料/审计和父阶段隔离仍是执行依据。五分钟只限制尚未派发的排队授权，已接受的原记录缺失不重建授权。read 返回最近 16 条保存结果，不执行实时保护证明。只有 protection_verified 为升级成功；原版本恢复确认保持 failed/original_protection_verified，恢复未确认保留隔离。Agent 协议为 109，数据库/迁移归档仍为 32/6，无首版前兼容路径；生成器及运行验证留待 P5 隔离环境。
+
+
+组件离线接收新增 GET/POST /components/offline、PUT /components/offline/{id}/assets/{asset} 和 DELETE /components/offline/{id}，显式远程合同同步，JSON 继续统一封装。写入要求 components.manage、近期认证和浏览器 CSRF，列表额外要求 read；创建的幂等键必须是上传 UUID。原始清单与签名采用 base64，不接收新信任、公钥、仓库或路径；按固定本机信任与目标平台验签后，只写签名清单中指定归档。256 KiB 顺序分块及相同前缀重试，字节和目录同步后返回进度，不以接收完整代替归档认证。清除先发布不可变标识，再只删除原归档，保留签名、原材料和审计；32 项记录、512 项目录/文件、1 GiB 暂存、一天授权，均含中断遗留容量。原组件任务增加可选 offline_id，检查和准备绑定同一来源；准备继续引用本人检查和精确标签/选择/计划/清单/信任摘要，重新验签并沿用完整散列及严格解包，不回退在线源、不启动安装。当前 Agent 为 110，数据库/归档仍为 32/6；未执行生成器、构建或运行验证，待 P5 隔离环境。

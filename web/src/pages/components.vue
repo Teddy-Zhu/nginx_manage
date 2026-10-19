@@ -11,6 +11,7 @@
 </route>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import ComponentOfflineUpload from "../components/ComponentOfflineUpload.vue";
 import {
   NAlert,
   NButton,
@@ -148,6 +149,7 @@ async function prepare() {
     check_task_id: t.id,
     input: {
       action: "prepare",
+      offline_id: t.result?.input.offline_id,
       tag: r.tag,
       prerelease: !!t.result?.input.prerelease,
       assets: r.selected,
@@ -178,6 +180,7 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-stack">
+    <ComponentOfflineUpload :available="overview?.available === true" :blocked="active || busy" @changed="load" />
     <section v-if="overview?.installation" class="panel page-stack">
       <div class="toolbar">
         <h2>
@@ -292,7 +295,7 @@ onUnmounted(() => {
         v-model:value="checkID"
         :options="
           checks.map((t) => ({
-            label: `${t.result?.release?.tag} · ${date(t.created_at)}`,
+            label: `${t.result?.input.offline_id ? '离线' : '在线'} · ${t.result?.release?.tag} · ${date(t.created_at)}`,
             value: t.id,
           }))
         "
@@ -303,7 +306,7 @@ onUnmounted(() => {
           签名密钥 {{ release.key_id }}
         </p>
         <p>
-          下载 {{ bytes(release.archive_bytes) }} · 展开
+          {{ checked.result?.input.offline_id ? '归档' : '下载' }} {{ bytes(release.archive_bytes) }} · 展开
           {{ bytes(release.unpacked_bytes) }} · 有效期至
           {{ date(release.expires_at) }}
         </p>
@@ -357,7 +360,7 @@ onUnmounted(() => {
             ><NButton type="primary" :disabled="!canPrepare"
               >准备已检查的组件</NButton
             ></template
-          >下载并校验此检查结果对应的组件产物？</NPopconfirm
+          >{{ checked.result?.input.offline_id ? '校验并解包此离线检查结果对应的组件产物？' : '下载并校验此检查结果对应的组件产物？' }}</NPopconfirm
         >
       </template>
     </section>

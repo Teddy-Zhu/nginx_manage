@@ -249,11 +249,26 @@ sudo /opt/nginxpanel/current/nginxpanel panel-restore-status \
 
 原生 Agent 由本机 root 设置 `--component-scope host`，沿用 `--release-trust` 与可选 `--release-token-file`；默认未确认范围及开发 Agent 不准备组件。Web/API 不接收仓库 URL、公钥、Token 或文件路径，`components.manage` 权限及写操作重新认证约束此入口。页面 `/components` 自动扫描接入，使用统一 JSON 外壳；`GET /api/v1/components` 读来源，`GET/POST /api/v1/components/tasks` 读本人任务或提交带幂等键的检查/准备。
 
-检查可用 `components: ["nginx"]`（可另选 `fail2ban`）按架构/发行版唯一匹配，多个匹配项须使用明确 `assets` ID，不猜测最新 ABI。准备须引用本人成功检查任务 `check_task_id`，显式绑定 `tag/prerelease/assets/plan_id/manifest_sha256/trust_sha256`；过期、来源变化或系统运行依赖缺失时停止准备。root Agent 再次验证全部材料，在下载归档前核对期望散列。`runtime_ready` 只说明已声明的本机运行文件满足校验，不代表实际执行或 ABI 验收。
+检查可用 `components: ["nginx"]`（可另选 `fail2ban`）按架构/发行版唯一匹配，多个匹配项须使用明确 `assets` ID，不猜测最新 ABI。准备须引用本人成功检查任务 `check_task_id`，显式绑定 `tag/prerelease/assets/plan_id/manifest_sha256/trust_sha256` 及原检查的可选离线上传 `offline_id`；过期、来源变化或系统运行依赖缺失时停止准备。root Agent 再次验证全部材料；在线来源在下载前核对期望散列，离线来源仅使用原上传归档。`runtime_ready` 只说明已声明的本机运行文件满足校验，不代表实际执行或 ABI 验收。
 
 Web 将任务输入及精简结果分别加密，保留最多 64 项，单条 64 KiB；root 使用独立私有操作目录和同等记录上限，单次期限十分钟，节点串行。提交意图先于 IPC 持久化；接受情况不明只查询原 ID，记录缺失进入待恢复，阻止新任务。Agent 重启对中断准备仅重新验签并复核既有不可变回执；不凭超时判定未落盘，不替换未知目录。容量用尽或材料无法确认须由本机维护，不能直接删除记录后重试。
 
-原生安装器预建 root 持有的 `/opt/nginxpanel/prepared` 与私有 `/opt/nginxpanel/release-downloads`，Agent unit 仅增加这两处写范围。准备成功只产生受信产物；原生首次安装见后文；Web 安装、运行中切换和迁移自动准备仍待后续接入，Docker Nginx 模块继续固定在镜像中。
+原生安装器预建 root 持有的 `/opt/nginxpanel/prepared` 与私有 `/opt/nginxpanel/release-downloads`，Agent unit 仅增加这两处写范围。准备成功只产生受信产物；原生首次安装见后文；Web/API 首次安装、原生 Nginx 维护切换及迁移依赖准备复用已有执行器；Docker Nginx 模块继续固定在镜像中。
+
+## 网页/API 离线签名上传
+
+组件页支持发布清单、签名文件和原始 `.tar.gz` 资产的离线接收。所有 JSON 继续使用统一响应外壳，写入要求 `components.manage`、近期认证和浏览器 CSRF；列表额外要求 `read`。显式远程节点沿用同一合同，上传目标随页面节点上下文固定，不自动访问新发行仓库或安装运行时依赖。
+
+- `POST /api/v1/components/offline`：`Idempotency-Key` 必须是新的上传 UUID。正文的 `manifest/signature` 是原始文件的 base64，`components/assets` 按与在线检查相同的规则选择，`prerelease` 必须显式授权预发布。签名按本机信任验证后返回 `ComponentOfflineUpload`，包含精确计划、签名归档名称/SHA-256/长度及已接收偏移。相同 UUID 同材料读取原结果，不同材料拒绝，不覆盖旧上传。
+- `GET /api/v1/components/offline`：返回最多 32 条保存的上传状态，包含已清除及已过期记录。刷新页面或进程重启后可重新选择本地原文件，按服务端进度继续。该读取不执行归档解包、代码或组件安装。
+- `PUT /api/v1/components/offline/{id}/assets/{asset}`：正文为 `{offset,data}`，`data` 为最多 256 KiB 原始字节的 base64。禁止跳过前缀或覆盖不同字节；重试比较原前缀，并可续写因中断只保存了一部分的相同块。写入与目录均同步后才返回实际进度。最后一块只证明字节接收完成，完整资产认证仍由准备任务执行。
+- `DELETE /api/v1/components/offline/{id}`：先原子发布清除标识并落盘，再只移除该计划列出的归档；相同请求可继续中断清除。原清单、签名、上传材料和标识保留，禁止复用已清除 UUID，不删除已准备产物、安装版本或审计。Web/Agent 有未结束组件任务时拒绝，预防清除正在使用的来源。
+
+上传存于 `<data>/agent/component-uploads`，目录/文件为 `0700/0600`，仅宿主机 root Agent 可写，开发 Agent 不创建材料。每次最多两个完整选择的独立资产（面板单独准备）；单清单 2 MiB、签名 4 KiB、单归档 128 MiB，上传期限取清单有效期和一天中的较早者。保存最多 32 个上传及遗留暂存目录、512 项目录/文件和 1 GiB；清除归档释放字节额度，原记录保留，记录上限需本机维护。未确认的临时材料计入容量，不自动删除未知恢复或审计依据。
+
+接收完成后，以该上传的 `offline_id/tag/assets/prerelease` 创建原 `/components/tasks` 检查任务，`components` 不填、三个准备摘要为空。确认准备时仍引用本人成功检查 UUID，并保留相同 `offline_id` 和精确摘要。离线执行不回退到在线下载；当前签名、公钥撤销、清单期限、平台、完整归档 SHA-256、严格 USTAR 文件树和系统依赖均沿用既有验证，面板继续执行同一版本暂存。已保存上传过期、被清除或当前信任变化时不能由旧检查重新准备；已原子发布的准备回执仍沿原中断对账入口核对。
+
+Agent/数据库/归档为 110/32/6，无首版前兼容路径。源码实现与集成完成，生成器、构建、类型检查、lint、测试、浏览器及真实上传/解包/安装未执行，待 P5 隔离 Docker/虚拟机集中验收；不增加 UI 自动化测试。验收须覆盖签名/平台/选择拒绝、重复请求错绑、完整及部分分块重试、断连/重启续传、偏移和前缀冲突、清除发布/删除中断、来源过期/撤销、检查来源替换、篡改归档和解包拒绝、维护准入及容量边界。
 
 ## 原生运行绑定
 

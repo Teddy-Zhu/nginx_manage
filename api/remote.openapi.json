@@ -6477,6 +6477,196 @@
         "x-query-keys": [],
         "description": "返回最近 16 条保存的升级任务及历史结果快照。"
       }
+    },
+    "/nodes/{connection}/components/offline": {
+      "get": {
+        "operationId": "remoteListComponentOfflineUploads",
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "返回最多 32 条本机离线上传及已接收字节。清单和进度为历史材料，不表示归档已验签解包或安装。",
+        "x-local-operation": "listComponentOfflineUploads",
+        "x-forward-path": "/components/offline",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "x-query-keys": [],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "remoteCreateComponentOfflineUpload",
+        "x-scopes": [
+          "components.manage"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ComponentOfflineInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "以 UUID 幂等键上传 base64 编码的原始签名清单与签名文件，按固定本机信任和目标平台验签；每次最多两个资产。返回签名归档文件名、SHA-256、长度和上传 UUID，有效期最多一天。此操作不下载、解包、安装或启动组件。",
+        "x-local-operation": "createComponentOfflineUpload",
+        "x-forward-path": "/components/offline",
+        "x-response-kind": "json",
+        "x-body-limit": 3145728,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/offline/{id}/assets/{asset}": {
+      "put": {
+        "operationId": "remoteWriteComponentOfflineChunk",
+        "x-scopes": [
+          "components.manage"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36
+            }
+          },
+          {
+            "name": "asset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ComponentOfflineChunk"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "按 offset 上传最多 256 KiB 的 base64 分块。只写签名计划中的固定归档；已有前缀须逐字节相同，不覆盖或跳过字节，回执在同步落盘后返回。",
+        "x-local-operation": "writeComponentOfflineChunk",
+        "x-forward-path": "/components/offline/{id}/assets/{asset}",
+        "x-response-kind": "json",
+        "x-body-limit": 524288,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/{connection}/components/offline/{id}": {
+      "delete": {
+        "operationId": "remoteDiscardComponentOfflineUpload",
+        "x-scopes": [
+          "components.manage"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "description": "幂等清除该上传的归档字节，保留清单、签名、原记录与清除标识。组件任务未结束时拒绝；不删除已准备、安装或运行版本。",
+        "x-local-operation": "discardComponentOfflineUpload",
+        "x-forward-path": "/components/offline/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "x-query-keys": []
+      }
     }
   },
   "security": [

@@ -220,7 +220,11 @@ func (m *Manager) run(out Operation) {
 		in := out.Input.online()
 		in.TrustPath, in.TokenPath, in.Host, in.Receiver = m.TrustPath, m.TokenPath, m.host(), receiver()
 		var result releases.OnlineResult
-		result, err = releases.Online(ctx, in)
+		if out.Input.OfflineID != "" {
+			result, err = m.offline(ctx, out.Input)
+		} else {
+			result, err = releases.Online(ctx, in)
+		}
 		if err == nil {
 			_, err = panelSelection(result.Plan)
 		}

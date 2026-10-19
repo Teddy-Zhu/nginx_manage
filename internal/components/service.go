@@ -137,7 +137,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 			return out, e
 		}
 		r := checked.Release
-		if checked.Input.Action != "check" || r == nil || checked.State != "succeeded" || !checked.RuntimeReady || r.ExpiresAt <= now || in.Input.Tag != r.Tag || in.Input.Prerelease != checked.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
+		if checked.Input.Action != "check" || r == nil || checked.State != "succeeded" || !checked.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != checked.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != checked.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
 			return out, fault.Conflict("准备请求与检查结果不一致，或系统依赖尚未就绪；请重新检查")
 		}
 	}

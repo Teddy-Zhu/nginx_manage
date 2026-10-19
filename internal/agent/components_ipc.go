@@ -31,6 +31,7 @@ func componentReply(w http.ResponseWriter, data any, err error) {
 	}{Protocol, code, message, data})
 }
 func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
+	s.componentOfflineHandlers(mux, m)
 	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {
 		out := m.Overview()
 		out.Installation = s.Installation

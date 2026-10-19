@@ -1447,8 +1447,46 @@ type PanelUpdateTask struct {
 	Result             *PanelUpdateOperation `json:"result,omitempty"`
 }
 
+type ComponentOfflineInput struct {
+	Manifest   []byte   `json:"manifest"`
+	Signature  []byte   `json:"signature"`
+	Assets     []string `json:"assets"`
+	Components []string `json:"components"`
+	Prerelease bool     `json:"prerelease"`
+}
+type ComponentOfflineChunk struct {
+	Offset int64  `json:"offset"`
+	Data   []byte `json:"data"`
+}
+type ComponentOfflineAsset struct {
+	ID       string `json:"id"`
+	Archive  string `json:"archive"`
+	SHA256   string `json:"sha256"`
+	Size     int64  `json:"size"`
+	Received int64  `json:"received"`
+}
+type ComponentOfflineUpload struct {
+	ID          string                  `json:"id"`
+	RequestHash string                  `json:"request_hash"`
+	CreatedAt   int64                   `json:"created_at"`
+	ExpiresAt   int64                   `json:"expires_at"`
+	Prerelease  bool                    `json:"prerelease"`
+	Discarded   bool                    `json:"discarded"`
+	Complete    bool                    `json:"complete"`
+	Release     ComponentRelease        `json:"release"`
+	Assets      []ComponentOfflineAsset `json:"assets"`
+}
+type CreateComponentOfflineUploadParams = CreateComponentTaskParams
+type WriteComponentOfflineChunkParams struct {
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+type DiscardComponentOfflineUploadParams = WriteComponentOfflineChunkParams
+type CreateComponentOfflineUploadJSONRequestBody = ComponentOfflineInput
+type WriteComponentOfflineChunkJSONRequestBody = ComponentOfflineChunk
+
 // ComponentInput defines model for ComponentInput.
 type ComponentInput struct {
+	OfflineID      *string                     `json:"offline_id,omitempty"`
 	Action         ComponentInputAction        `json:"action"`
 	Assets         *[]string                   `json:"assets,omitempty"`
 	Components     *[]ComponentInputComponents `json:"components,omitempty"`
@@ -5420,6 +5458,10 @@ type ServerInterface interface {
 	ReplaceCertificate(w http.ResponseWriter, r *http.Request, id ID, params ReplaceCertificateParams)
 
 	// (GET /components)
+	ListComponentOfflineUploads(w http.ResponseWriter, r *http.Request)
+	CreateComponentOfflineUpload(w http.ResponseWriter, r *http.Request, params CreateComponentOfflineUploadParams)
+	WriteComponentOfflineChunk(w http.ResponseWriter, r *http.Request, id, asset string, params WriteComponentOfflineChunkParams)
+	DiscardComponentOfflineUpload(w http.ResponseWriter, r *http.Request, id string, params DiscardComponentOfflineUploadParams)
 	GetComponents(w http.ResponseWriter, r *http.Request)
 
 	// (GET /components/installations)
@@ -6870,6 +6912,47 @@ func (siw *ServerInterfaceWrapper) ReplaceCertificate(w http.ResponseWriter, r *
 	}
 
 	handler.ServeHTTP(w, r)
+}
+
+func (siw *ServerInterfaceWrapper) ListComponentOfflineUploads(w http.ResponseWriter, r *http.Request) {
+	siw.controlHandler(w, r, siw.Handler.ListComponentOfflineUploads)
+}
+func (siw *ServerInterfaceWrapper) CreateComponentOfflineUpload(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := CreateComponentOfflineUploadParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.CreateComponentOfflineUpload(w, r, params) })
+}
+func (siw *ServerInterfaceWrapper) WriteComponentOfflineChunk(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := WriteComponentOfflineChunkParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.WriteComponentOfflineChunk(w, r, r.PathValue("id"), r.PathValue("asset"), params)
+	})
+}
+func (siw *ServerInterfaceWrapper) DiscardComponentOfflineUpload(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r) {
+		return
+	}
+	params := DiscardComponentOfflineUploadParams{}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DiscardComponentOfflineUpload(w, r, r.PathValue("id"), params)
+	})
 }
 
 // GetComponents operation middleware
@@ -12790,6 +12873,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches/{id}/resume", wrapper.ResumeNginxSwitch)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations/{id}/cancel", wrapper.CancelNginxInstallation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches/{id}/rollback", wrapper.RollbackNginxSwitch)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/offline", wrapper.ListComponentOfflineUploads)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/offline", wrapper.CreateComponentOfflineUpload)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/offline/{id}/assets/{asset}", wrapper.WriteComponentOfflineChunk)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/components/offline/{id}", wrapper.DiscardComponentOfflineUpload)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components", wrapper.GetComponents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/tasks", wrapper.ListComponentTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/tasks", wrapper.CreateComponentTask)
