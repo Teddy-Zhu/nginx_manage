@@ -56,6 +56,15 @@ type StagedRelease struct {
 	Reused        bool          `json:"reused"`
 }
 
+// RequireCurrent is an activation guard. Signature staging deliberately accepts
+// a future Agent protocol; ordinary selection must still use the live contract.
+func (s StagedRelease) RequireCurrent() error {
+	if s.Release.AgentProtocol != protocol.Agent || s.Release.LauncherVersion != releases.LauncherVersion || s.Compatibility.MinimumAgentProtocol > protocol.Agent || s.Compatibility.MinimumLauncher > releases.LauncherVersion {
+		return errors.New("目标需要协调升级 Agent 或 launcher，不能单独切换面板程序")
+	}
+	return nil
+}
+
 func stageInput(in StageInput) error {
 	if !digest.MatchString(in.PlanID) || len(in.TrustPath) > 512 || !filepath.IsAbs(in.TrustPath) || filepath.Clean(in.TrustPath) != in.TrustPath {
 		return errors.New("面板暂存须指定准备计划及本机信任配置")
@@ -94,7 +103,7 @@ func readStageApproval(root, id string) (StageApproval, error) {
 
 func stageSource(ctx context.Context, in StageInput, prior *StageApproval) (releases.Result, error) {
 	host := platform.Detect()
-	input := releases.Input{TrustPath: in.TrustPath, Assets: []string{"panel-linux-" + runtime.GOARCH}, AllowedComponents: []string{"panel"}, AllowPrerelease: in.AllowPrerelease,
+	input := releases.Input{PanelStaging: true, TrustPath: in.TrustPath, Assets: []string{"panel-linux-" + runtime.GOARCH}, AllowedComponents: []string{"panel"}, AllowPrerelease: in.AllowPrerelease,
 		Host:     releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: host.OS, Version: host.Version},
 		Receiver: releases.Receiver{APIMajor: 1, AgentProtocol: protocol.Agent, Launcher: releases.LauncherVersion}}
 	var source releases.Result
@@ -124,8 +133,8 @@ func stageSource(ctx context.Context, in StageInput, prior *StageApproval) (rele
 func stageMatches(r Release, source releases.Result) error {
 	a := source.Plan.Assets[0]
 	m := source.Plan.Manifest
-	if r.Version != a.Version || r.DatabaseSchema != m.DatabaseSchema || r.AgentProtocol != protocol.Agent || r.LauncherVersion != releases.LauncherVersion || m.APIMajor != 1 || m.MinimumAgentProtocol > protocol.Agent || m.MinimumLauncher > releases.LauncherVersion {
-		return errors.New("面板版本或协议与当前 Agent/launcher 不匹配，须先升级基础组件")
+	if r.Version != a.Version || r.DatabaseSchema != m.DatabaseSchema || m.APIMajor != 1 || r.AgentProtocol < m.MinimumAgentProtocol || r.LauncherVersion < m.MinimumLauncher {
+		return errors.New("签名发行要求与目标程序的版本或协议不一致")
 	}
 	found := false
 	for _, file := range a.Files {

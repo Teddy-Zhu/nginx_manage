@@ -105,9 +105,9 @@ func (d Deployment) validate(data string) error {
 	}
 }
 func (r Release) validate() error {
-	// Host Agent compatibility is checked when approving a release. A frozen
-	// launcher does not speak the application's Agent wire protocol.
-	if r.Schema != Schema || !digest.MatchString(r.ID) || r.ID != releaseID(r) || r.Version == "" || len(r.Version) > 128 || r.DatabaseSchema <= 0 || r.AgentProtocol <= 0 || r.LauncherVersion != releases.LauncherVersion || !digest.MatchString(r.BinarySHA256) || len(r.Web) < 1 || len(r.Web) > FileCountLimit {
+	// This immutable inventory can describe a future release. Activation checks
+	// the installed Agent and launcher separately from signature staging.
+	if r.Schema != Schema || !digest.MatchString(r.ID) || r.ID != releaseID(r) || r.Version == "" || len(r.Version) > 128 || r.DatabaseSchema <= 0 || r.AgentProtocol <= 0 || r.LauncherVersion <= 0 || !digest.MatchString(r.BinarySHA256) || len(r.Web) < 1 || len(r.Web) > FileCountLimit {
 		return errors.New("面板发布清单身份或协议不匹配")
 	}
 	if _, ok := r.Web["index.html"]; !ok {

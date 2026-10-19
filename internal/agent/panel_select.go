@@ -181,6 +181,9 @@ func SelectPanelVersion(ctx context.Context, in panelruntime.StageInput, id, sna
 	if err != nil {
 		return out, err
 	}
+	if err = target.RequireCurrent(); err != nil {
+		return out, err
+	}
 	if fresh {
 		m := recovery.Receipt.Manifest
 		if target.Compatibility.DatabaseSchema < m.Database.SchemaVersion || target.Compatibility.DatabaseSchema < current.Release.DatabaseSchema {

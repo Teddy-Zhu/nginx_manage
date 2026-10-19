@@ -80,7 +80,7 @@ func (s *Service) validateImageParent(ctx context.Context, tx *sql.Tx, principal
 		return err
 	}
 	r := prepared.Release
-	if prepared.Input.Action != "prepare" || r == nil || prepared.Panel == nil || !prepared.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != prepared.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != prepared.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
+	if prepared.Input.Action != "prepare" || r == nil || prepared.Panel == nil || prepared.Panel.RequiresCoordination || r.StagingOnly || !prepared.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != prepared.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != prepared.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
 		return fault.Conflict("镜像拉取请求与本人签名面板准备结果不一致或已过期")
 	}
 	for _, image := range r.Images {

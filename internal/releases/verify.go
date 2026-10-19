@@ -350,9 +350,7 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 	if in.Receiver.APIMajor < 1 || in.Receiver.AgentProtocol < 1 || in.Receiver.Launcher < 1 {
 		return nil, errors.New("接收端协议尚未确认")
 	}
-	if issues := requirements.Incompatibilities(in.Receiver); len(issues) != 0 {
-		return nil, &receiverCompatibilityError{announcement: Announcement{Repository: m.Repository, Version: m.Version, Tag: "v" + m.Version, Channel: m.Channel, KeyID: sig.KeyID, ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), ExpiresAt: m.ExpiresAt, Notes: m.Notes, Requirements: requirements, Receiver: in.Receiver, ReceiverCompatible: false, Incompatibilities: issues}}
-	}
+	issues := requirements.Incompatibilities(in.Receiver)
 	selected, err := selectAssets(m, in.Host, in.Assets, in.Components)
 	if err != nil {
 		return nil, err
@@ -366,7 +364,11 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 			return nil, errors.New("所选资产不存在")
 		}
 	}
-	p := Plan{State: "manifest_verified", ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), KeyID: sig.KeyID, Manifest: m, Host: in.Host, Receiver: in.Receiver, Selected: selected, Assets: []Asset{}}
+	stagingOnly := len(issues) != 0
+	if stagingOnly && !(in.PanelStaging && m.APIMajor == in.Receiver.APIMajor && len(selected) == 1 && assets[selected[0]].Component == "panel" && assets[selected[0]].ABI == "static" && len(assets[selected[0]].Dependencies) == 0) {
+		return nil, &receiverCompatibilityError{announcement: Announcement{Repository: m.Repository, Version: m.Version, Tag: "v" + m.Version, Channel: m.Channel, KeyID: sig.KeyID, ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), ExpiresAt: m.ExpiresAt, Notes: m.Notes, Requirements: requirements, Receiver: in.Receiver, ReceiverCompatible: false, Incompatibilities: issues}}
+	}
+	p := Plan{StagingOnly: stagingOnly, State: "manifest_verified", ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), KeyID: sig.KeyID, Manifest: m, Host: in.Host, Receiver: in.Receiver, Selected: selected, Assets: []Asset{}}
 	added := map[string]bool{}
 	components := map[string]string{}
 	var include func(string) error

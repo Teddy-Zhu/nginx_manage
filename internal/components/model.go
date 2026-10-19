@@ -77,13 +77,16 @@ func (in Input) Validate() error {
 	return nil
 }
 func (in Input) online() releases.OnlineInput {
-	return releases.OnlineInput{Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
+	return releases.OnlineInput{PanelStaging: true, Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
 }
 
 type PanelPreparation struct {
-	ReleaseID         string `json:"release_id"`
-	DatabaseSchema    int64  `json:"database_schema"`
-	AutomaticRollback bool   `json:"automatic_rollback"`
+	AgentProtocol        int    `json:"agent_protocol"`
+	LauncherVersion      int    `json:"launcher_version"`
+	RequiresCoordination bool   `json:"requires_coordination"`
+	ReleaseID            string `json:"release_id"`
+	DatabaseSchema       int64  `json:"database_schema"`
+	AutomaticRollback    bool   `json:"automatic_rollback"`
 }
 type FrontendResult struct {
 	ReleaseID  string `json:"release_id"`
@@ -116,6 +119,7 @@ type Asset struct {
 	UnpackedBytes       int64    `json:"unpacked_bytes"`
 }
 type Release struct {
+	StagingOnly    bool                  `json:"staging_only"`
 	Images         []Image               `json:"images"`
 	Notes          string                `json:"notes"`
 	Requirements   releases.Requirements `json:"requirements"`
@@ -136,7 +140,7 @@ type Release struct {
 }
 
 func release(plan releases.Plan) Release {
-	out := Release{Notes: plan.Manifest.Notes, Requirements: releases.ManifestRequirements(plan.Manifest), Receiver: plan.Receiver, PlanID: plan.ID, ManifestSHA256: plan.ManifestSHA256, TrustSHA256: plan.TrustSHA256, Repository: plan.Manifest.Repository, Version: plan.Manifest.Version, Tag: "v" + plan.Manifest.Version, Channel: plan.Manifest.Channel, KeyID: plan.KeyID, ExpiresAt: plan.Manifest.ExpiresAt, Selected: slices.Clone(plan.Selected), Assets: []Asset{}, ArchiveBytes: plan.ArchiveBytes, UnpackedBytes: plan.UnpackedBytes}
+	out := Release{StagingOnly: plan.StagingOnly, Notes: plan.Manifest.Notes, Requirements: releases.ManifestRequirements(plan.Manifest), Receiver: plan.Receiver, PlanID: plan.ID, ManifestSHA256: plan.ManifestSHA256, TrustSHA256: plan.TrustSHA256, Repository: plan.Manifest.Repository, Version: plan.Manifest.Version, Tag: "v" + plan.Manifest.Version, Channel: plan.Manifest.Channel, KeyID: plan.KeyID, ExpiresAt: plan.Manifest.ExpiresAt, Selected: slices.Clone(plan.Selected), Assets: []Asset{}, ArchiveBytes: plan.ArchiveBytes, UnpackedBytes: plan.UnpackedBytes}
 	out.Images = images(plan)
 	for _, a := range plan.Assets {
 		out.Assets = append(out.Assets, Asset{ID: a.ID, Component: a.Component, Version: a.Version, Architecture: a.Architecture, Distribution: a.Distribution, DistributionVersion: a.DistributionVersion, ABI: a.ABI, SourceURL: a.SourceURL, License: a.License, Maintenance: a.Maintenance, Features: append([]string{}, a.Features...), Dependencies: append([]string{}, a.Dependencies...), RuntimeFiles: len(a.RuntimeFiles), ArchiveBytes: a.Size, UnpackedBytes: a.UnpackedBytes})

@@ -2562,6 +2562,9 @@ export interface components {
             bound_at: number;
         };
         ComponentPanelPreparation: {
+            agent_protocol: number;
+            launcher_version: number;
+            requires_coordination: boolean;
             release_id: string;
             database_schema: number;
             automatic_rollback: boolean;
@@ -2900,6 +2903,7 @@ export interface components {
             incompatibilities: string[];
         };
         ComponentRelease: {
+            staging_only: boolean;
             images: components["schemas"]["ComponentImage"][];
             notes: string;
             requirements: components["schemas"]["ComponentReleaseRequirements"];

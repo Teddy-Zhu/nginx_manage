@@ -53,7 +53,7 @@ func (out Operation) Validate(req Request) error {
 		return nil
 	}
 	r := out.Release
-	if r == nil || r.Requirements.Validate() != nil || !releases.ValidNotes(r.Notes) || r.Receiver != receiver() || len(r.Requirements.Incompatibilities(r.Receiver)) != 0 || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != "v"+r.Version || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) == 0 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
+	if r == nil || r.Requirements.Validate() != nil || !releases.ValidNotes(r.Notes) || r.Receiver != receiver() || r.StagingOnly != (len(r.Requirements.Incompatibilities(r.Receiver)) != 0) || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != "v"+r.Version || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) == 0 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
 		return errors.New("组件成功结果不完整")
 	}
 	if req.Input.Tag != "" && r.Tag != req.Input.Tag {
@@ -71,6 +71,9 @@ func (out Operation) Validate(req Request) error {
 	}
 	if found["panel"] != "" && len(found) != 1 {
 		return errors.New("面板须使用独立准备计划")
+	}
+	if r.StagingOnly && (found["panel"] == "" || len(r.Assets) != 1 || r.Assets[0].ABI != "static" || len(r.Assets[0].Dependencies) != 0 || r.Requirements.APIMajor != r.Receiver.APIMajor || req.Input.Action != "check" && req.Input.Action != "prepare") {
+		return errors.New("不满足接收端要求的发行仅允许独立面板验签暂存")
 	}
 	if found["web"] != "" && len(found) != 1 {
 		return errors.New("前端须使用独立准备计划")
@@ -96,7 +99,7 @@ func (out Operation) Validate(req Request) error {
 		return errors.New("此组件操作不应包含前端发布回执")
 	}
 	if req.Input.Action == "prepare" && found["panel"] != "" {
-		if out.Panel == nil || !digest(out.Panel.ReleaseID) || out.Panel.DatabaseSchema <= 0 {
+		if out.Panel == nil || !digest(out.Panel.ReleaseID) || out.Panel.DatabaseSchema != r.Requirements.DatabaseSchema || out.Panel.AgentProtocol < r.Requirements.MinimumAgentProtocol || out.Panel.LauncherVersion < r.Requirements.MinimumLauncher || out.Panel.RequiresCoordination != (out.Panel.AgentProtocol != protocol.Agent || out.Panel.LauncherVersion != releases.LauncherVersion) {
 			return errors.New("面板准备缺少持久版本暂存回执")
 		}
 	} else if out.Panel != nil {

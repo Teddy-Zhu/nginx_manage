@@ -103,7 +103,7 @@ func (w *panelUpdateWorker) approved(ctx context.Context) error {
 	if s.Release.ID != i.TargetID || selectionValueHash(s.Approval) != i.ApprovalSHA256 || s.Compatibility.DatabaseSchema != i.TargetSchema || !s.Compatibility.AutomaticRollback {
 		return errors.New("原更新签名批准、schema 或自动回滚声明已变化")
 	}
-	return nil
+	return s.RequireCurrent()
 }
 
 // UpdatePanel is a fixed independent root workflow. No serve process or request
@@ -245,6 +245,9 @@ func preparePanelUpdate(ctx context.Context, in PanelUpdateInput, id, epoch stri
 	}
 	target, err := panelruntime.Staged(ctx, in.Stage)
 	if err != nil {
+		return Record{}, err
+	}
+	if err = target.RequireCurrent(); err != nil {
 		return Record{}, err
 	}
 	if !target.Compatibility.AutomaticRollback {

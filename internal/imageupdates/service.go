@@ -191,6 +191,9 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key, 
 	if prepared.Action != "prepare" || prepared.State != "succeeded" || r == nil || r.Release == nil || !r.RuntimeReady || r.Panel == nil {
 		return zero, fault.Conflict("须选择已完成签名暂存的面板准备任务")
 	}
+	if r.Panel.RequiresCoordination {
+		return zero, fault.Conflict("此准备版本需要协调升级，不能创建独立镜像替换任务")
+	}
 	if err = r.Validate(components.Request{Protocol: r.Protocol, OperationID: r.ID, Input: r.Input}); err != nil {
 		return zero, err
 	}

@@ -179,6 +179,9 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	if prepared.Action != "prepare" || prepared.State != "succeeded" || r == nil || r.Release == nil || !r.RuntimeReady || r.Panel == nil {
 		return zero, fault.Conflict("须选择已完成签名暂存的面板准备任务")
 	}
+	if r.Panel.RequiresCoordination {
+		return zero, fault.Conflict("目标需要协调升级 Agent 或 launcher，不能创建独立更新任务")
+	}
 	if err = r.Validate(components.Request{Protocol: r.Protocol, OperationID: r.ID, Input: r.Input}); err != nil {
 		return zero, err
 	}

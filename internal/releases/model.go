@@ -95,14 +95,18 @@ type Receiver struct {
 }
 type Input struct {
 	TrustPath, ManifestPath, SignaturePath string
-	Assets                                 []string
-	Components                             []string
-	AllowedComponents                      []string
-	AllowPrerelease                        bool
-	Host                                   Host
-	Receiver                               Receiver
+	// PanelStaging permits only a standalone signed panel asset to be prepared
+	// ahead of the receiver. It never authorizes activation or component install.
+	PanelStaging      bool
+	Assets            []string
+	Components        []string
+	AllowedComponents []string
+	AllowPrerelease   bool
+	Host              Host
+	Receiver          Receiver
 }
 type Plan struct {
+	StagingOnly    bool     `json:"staging_only"`
 	State          string   `json:"state"`
 	ID             string   `json:"id"`
 	ManifestSHA256 string   `json:"manifest_sha256"`

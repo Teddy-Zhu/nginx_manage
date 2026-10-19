@@ -13,6 +13,7 @@ import (
 )
 
 type OnlineInput struct {
+	PanelStaging                                                bool
 	TrustPath, TokenPath, Tag                                   string
 	Assets                                                      []string
 	Components                                                  []string
@@ -224,7 +225,7 @@ func Online(ctx context.Context, in OnlineInput) (OnlineResult, error) {
 			return OnlineResult{}, err
 		}
 	}
-	verified, err := Verify(Input{TrustPath: in.TrustPath, ManifestPath: filepath.Join(stage, manifest.Name), SignaturePath: filepath.Join(stage, sig.Name), Assets: in.Assets, Components: in.Components, AllowedComponents: in.AllowedComponents, AllowPrerelease: in.AllowPrerelease, Host: in.Host, Receiver: in.Receiver})
+	verified, err := Verify(Input{TrustPath: in.TrustPath, ManifestPath: filepath.Join(stage, manifest.Name), SignaturePath: filepath.Join(stage, sig.Name), Assets: in.Assets, Components: in.Components, AllowedComponents: in.AllowedComponents, AllowPrerelease: in.AllowPrerelease, Host: in.Host, Receiver: in.Receiver, PanelStaging: in.PanelStaging})
 	if err != nil {
 		var incompatible *receiverCompatibilityError
 		if errors.As(err, &incompatible) {

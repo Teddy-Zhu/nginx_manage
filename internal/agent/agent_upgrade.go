@@ -110,6 +110,9 @@ func prepareAgentUpgrade(ctx context.Context, in AgentUpgradeInput, id, epoch st
 	if err != nil {
 		return zero, err
 	}
+	if err = target.RequireCurrent(); err != nil {
+		return zero, err
+	}
 	if target.Release.AgentProtocol != panel.Release.AgentProtocol || target.Release.DatabaseSchema != panel.Release.DatabaseSchema || target.Release.LauncherVersion != panel.Release.LauncherVersion {
 		return zero, errors.New("Agent 独立升级须与当前面板的协议、数据库及 launcher 合同一致；其他变更须使用协调部署流程")
 	}

@@ -1332,9 +1332,12 @@ type ComponentCreateInput struct {
 
 // ComponentPanelPreparation defines model for ComponentPanelPreparation.
 type ComponentPanelPreparation struct {
-	ReleaseId         string `json:"release_id"`
-	DatabaseSchema    int64  `json:"database_schema"`
-	AutomaticRollback bool   `json:"automatic_rollback"`
+	AgentProtocol        int    `json:"agent_protocol"`
+	LauncherVersion      int    `json:"launcher_version"`
+	RequiresCoordination bool   `json:"requires_coordination"`
+	ReleaseId            string `json:"release_id"`
+	DatabaseSchema       int64  `json:"database_schema"`
+	AutomaticRollback    bool   `json:"automatic_rollback"`
 }
 
 // NodeCreateInput defines the registered connection input. Tokens are write-only.
@@ -1825,6 +1828,7 @@ type ComponentReleaseAnnouncement struct {
 
 // ComponentRelease defines model for ComponentRelease.
 type ComponentRelease struct {
+	StagingOnly    bool                         `json:"staging_only"`
 	Images         []ComponentImage             `json:"images"`
 	Notes          string                       `json:"notes"`
 	Requirements   ComponentReleaseRequirements `json:"requirements"`

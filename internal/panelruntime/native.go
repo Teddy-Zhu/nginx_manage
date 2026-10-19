@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/protocol"
+	"nginxpanel/internal/releases"
 )
 
 type NativeInput struct {
@@ -38,8 +39,8 @@ func BindNative(ctx context.Context, in NativeInput) (Snapshot, error) {
 	if err != nil {
 		return out, err
 	}
-	if r.AgentProtocol != protocol.Agent {
-		return out, errors.New("初始程序与本机 Agent 协议不一致")
+	if r.AgentProtocol != protocol.Agent || r.LauncherVersion != releases.LauncherVersion {
+		return out, errors.New("初始程序与本机 Agent 或 launcher 协议不一致")
 	}
 	r.Web, err = inventory(web, false)
 	if err != nil {

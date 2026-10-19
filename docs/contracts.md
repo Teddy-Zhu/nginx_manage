@@ -288,3 +288,5 @@ Fail2ban 运行实例升级新增 `POST /fail2ban/upgrade` 与 `GET /fail2ban/up
 
 
 Nginx 容器镜像管理提供 `/nginx/images/upgrades` 列表/创建、`/{id}` 查询与 `/{id}/resume` 续办，远程节点逐项登记同一路由。创建引用 `maintenance_id`、`prepare_task_id`，并要求 `allow_downtime=true`；不接收镜像地址或任意文件路径。写操作要求 `components.manage`、`system.write`、重新认证与幂等键。两类镜像共用 `ImageUpgradeInput/Authorization/Operation/Task`，输入以 `component=panel-launcher|nginx` 固定资源，并绑定停机许可；查询按组件及所有者隔离。Nginx 的 `failed/rejected` 仅表示未触及服务且原运行已联合确认；未确认结果仍为 `recovery_required`。Nginx 切换重启 Agent，因此完成回执的 `ready_epoch` 可更新，但必须属于原维护会话；面板 launcher 替换继续要求原 epoch。root 连续授权最多 32 项且每项只消费一次，本机救援沿原意图记录 `local-root`。对外仍使用 `code/message/data/request_id/node_id` 封装。
+
+签名发布的准备与激活分开准入。组件检查/准备可以对同 API 主版本、无组件依赖的独立静态面板资产先行验签暂存；不满足当前接收端最低 Agent/launcher 要求时，`ComponentRelease.staging_only=true`，其状态参与准备计划身份。其他组件、独立前端及跨 API 主版本继续拒绝不满足接收端要求的发行。`ComponentPanelPreparation` 返回从已验签程序实际读取的 `agent_protocol`、`launcher_version` 和 `requires_coordination`；后者按目标协议与当前执行器合同计算。暂存只证明签名、文件及目标自身声明一致，不能作为切换许可。普通面板更新、Agent 独立更新、镜像替换和镜像拉取均拒绝需要协调部署的准备结果；root 的普通版本选择和首次绑定也核对当前协议。协调事务尚未接入，页面明确标识此类目标并从独立更新选择中排除。

@@ -215,7 +215,7 @@ func (m *Manager) interrupted(ctx context.Context, out *Operation) {
 	if out.Input.Action != "prepare" {
 		return
 	}
-	result, err := releases.Prepared(ctx, releases.Input{TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
+	result, err := releases.Prepared(ctx, releases.Input{PanelStaging: true, TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
 	if err == nil {
 		if result.Plan.ManifestSHA256 != out.Input.ManifestSHA256 || result.Plan.TrustSHA256 != out.Input.TrustSHA256 {
 			err = releases.ErrReleaseChanged

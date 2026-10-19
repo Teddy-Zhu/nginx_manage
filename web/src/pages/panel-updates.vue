@@ -23,7 +23,7 @@ let keyFor = useIdempotency();
 const preparations = ref<ComponentTask[]>([]), tasks = ref<PanelUpdateTask[]>([]), maintenance = ref<MaintenanceView | null>(null), selected = ref(""), error = ref("");
 const canWrite = computed(() => !!session.me?.scopes.includes("components.manage") && !!session.me?.scopes.includes("system.write"));
 const held = computed(() => maintenance.value?.phase === "held" && maintenance.value.agent.phase === "held" && maintenance.value.agent.id === maintenance.value.session?.task_id && maintenance.value.agent.epoch === maintenance.value.session?.root_epoch);
-const prepared = computed(() => preparations.value.filter((t) => t.action === "prepare" && t.state === "succeeded" && t.result?.runtime_ready && t.result.panel && t.result.release));
+const prepared = computed(() => preparations.value.filter((t) => t.action === "prepare" && t.state === "succeeded" && t.result?.runtime_ready && t.result.panel && !t.result.panel.requires_coordination && t.result.release));
 const chosen = computed(() => prepared.value.find((t) => t.id === selected.value));
 const active = computed(() => tasks.value.some((t) => t.stage !== "restore_isolated" && !["succeeded", "failed", "rolled_back", "cancelled"].includes(t.state)));
 const cleanupPending = computed(() => tasks.value.some((t) => t.result?.release_acknowledged && (t.result.cleanup.state !== "done" || t.result.active)));

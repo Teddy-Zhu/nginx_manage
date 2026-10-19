@@ -49,6 +49,6 @@ func (m *Manager) prepareRuntime(ctx context.Context, out *Operation, plan relea
 	if staged.Approval.ManifestSHA256 != out.Input.ManifestSHA256 || staged.Approval.TrustSHA256 != out.Input.TrustSHA256 {
 		return errors.New("面板暂存与原签名计划不一致")
 	}
-	out.Panel = &PanelPreparation{ReleaseID: staged.Release.ID, DatabaseSchema: staged.Compatibility.DatabaseSchema, AutomaticRollback: staged.Compatibility.AutomaticRollback}
+	out.Panel = &PanelPreparation{ReleaseID: staged.Release.ID, DatabaseSchema: staged.Compatibility.DatabaseSchema, AutomaticRollback: staged.Compatibility.AutomaticRollback, AgentProtocol: staged.Release.AgentProtocol, LauncherVersion: staged.Release.LauncherVersion, RequiresCoordination: staged.RequireCurrent() != nil}
 	return nil
 }

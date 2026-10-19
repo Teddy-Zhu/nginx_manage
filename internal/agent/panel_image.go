@@ -127,6 +127,9 @@ func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, 
 	if err != nil {
 		return zero, err
 	}
+	if err = staged.RequireCurrent(); err != nil {
+		return zero, err
+	}
 	approval, _, err := releases.AdmitImage(in.Signature, "panel-launcher", in.Image, nil)
 	if err != nil {
 		return zero, err
