@@ -71,7 +71,7 @@ func (m *Manager) CreateOffline(ctx context.Context, req OfflineRequest) (out Of
 	if err = offlineWrite(filepath.Join(dir, "signature.json"), req.Input.Signature); err != nil {
 		return out, err
 	}
-	v, err := releases.Verify(releases.Input{TrustPath: m.TrustPath, ManifestPath: filepath.Join(dir, "manifest.json"), SignaturePath: filepath.Join(dir, "signature.json"), Assets: req.Input.Assets, Components: req.Input.Components, AllowedComponents: []string{"nginx", "fail2ban", "panel"}, AllowPrerelease: req.Input.Prerelease, Host: m.host(), Receiver: receiver()})
+	v, err := releases.Verify(releases.Input{TrustPath: m.TrustPath, ManifestPath: filepath.Join(dir, "manifest.json"), SignaturePath: filepath.Join(dir, "signature.json"), Assets: req.Input.Assets, Components: req.Input.Components, AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, AllowPrerelease: req.Input.Prerelease, Host: m.host(), Receiver: receiver()})
 	if err != nil {
 		return out, fault.Invalid("离线清单未获本机信任或不适用于目标：" + bounded(err.Error()))
 	}

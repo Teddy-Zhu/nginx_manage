@@ -173,13 +173,15 @@ func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HT
 		return out, err
 	}
 	var version struct {
-		Version         string `json:"version"`
-		APIVersion      int    `json:"api_version"`
-		AgentProtocol   int    `json:"agent_protocol"`
-		LauncherVersion int    `json:"launcher_version"`
-		ParserVersion   string `json:"parser_version"`
-		PolicyVersion   string `json:"policy_version"`
-		Runtime         string `json:"runtime"`
+		FrontendID          string   `json:"frontend_id"`
+		FrontendEntrypoints []string `json:"frontend_entries"`
+		Version             string   `json:"version"`
+		APIVersion          int      `json:"api_version"`
+		AgentProtocol       int      `json:"agent_protocol"`
+		LauncherVersion     int      `json:"launcher_version"`
+		ParserVersion       string   `json:"parser_version"`
+		PolicyVersion       string   `json:"policy_version"`
+		Runtime             string   `json:"runtime"`
 	}
 	if err = apiData(raw, headers, nodeID, &version); err != nil {
 		return out, err
@@ -187,13 +189,21 @@ func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HT
 	if version.Version != s.Release.Version || version.APIVersion != 1 || version.AgentProtocol != s.Release.AgentProtocol || version.LauncherVersion != s.Release.LauncherVersion || version.Runtime != s.Deployment.Mode || version.ParserVersion == "" || version.PolicyVersion == "" {
 		return out, errors.New("实际 API 版本或运行模式与当前发布不一致")
 	}
-	files := make([]string, 0, len(s.Release.Web))
-	for name := range s.Release.Web {
+	frontend, _, err := panelruntime.Frontends(s.Deployment.DataDir, s.Release.ID)
+	if err != nil {
+		return out, err
+	}
+	if version.FrontendID != frontend.Source.ID {
+		return out, errors.New("实际前端身份与已批准选择不一致")
+	}
+	web := frontend.Files
+	files := make([]string, 0, len(web))
+	for name := range web {
 		files = append(files, name)
 	}
 	sort.Strings(files)
 	for _, name := range files {
-		f := s.Release.Web[name]
+		f := web[name]
 		raw, headers, err = readResponse(ctx, c, s.Deployment.Listen, "/"+name, f.Size)
 		if err != nil {
 			return out, err
@@ -220,16 +230,20 @@ func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HT
 		out.FrontendFiles++
 	}
 	// The browser entry route must resolve to this same signed index.
-	raw, headers, err = readResponse(ctx, c, s.Deployment.Listen, "/", s.Release.Web["index.html"].Size)
+	raw, headers, err = readResponse(ctx, c, s.Deployment.Listen, "/", web["index.html"].Size)
 	if err != nil {
 		return out, err
 	}
-	if secure.Hash(raw) != s.Release.Web["index.html"].SHA256 {
+	if secure.Hash(raw) != web["index.html"].SHA256 {
 		return out, errors.New("实际前端入口与受信发布不一致")
 	}
 	media, _, err := mime.ParseMediaType(headers.Get("Content-Type"))
 	if err != nil || media != "text/html" {
 		return out, errors.New("实际前端入口响应类型无效")
+	}
+	again, _, err := panelruntime.Frontends(s.Deployment.DataDir, s.Release.ID)
+	if err != nil || again.Source != frontend.Source {
+		return out, errors.New("就绪观察期间前端选择变化")
 	}
 	return out, nil
 }

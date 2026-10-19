@@ -4,6 +4,7 @@
  */
 
 export interface paths {
+ "/components/frontend/activate": { post: operations["createFrontendActivation"]; };
  "/components/offline": { get:operations["listComponentOfflineUploads"]; post:operations["createComponentOfflineUpload"]; };
  "/components/offline/{id}/assets/{asset}": { put:operations["writeComponentOfflineChunk"]; };
  "/components/offline/{id}": { delete:operations["discardComponentOfflineUpload"]; };
@@ -2101,6 +2102,8 @@ export interface components {
             updated_at: number;
         };
         SystemVersion: {
+            frontend_id: string;
+            frontend_entries: string[];
             version: string;
             /** Format: int64 */
             api_version: number;
@@ -2519,23 +2522,29 @@ export interface components {
         ComponentOfflineChunk: { offset:number;data:string; };
         ComponentOfflineAsset: { id:string;archive:string;sha256:string;size:number;received:number; };
         ComponentOfflineUpload: { id:string;request_hash:string;created_at:number;expires_at:number;prerelease:boolean;discarded:boolean;complete:boolean;release:components["schemas"]["ComponentRelease"];assets:components["schemas"]["ComponentOfflineAsset"][]; };
+        ComponentFrontendResult: { release_id:string;version:string;activated:boolean;base_id:string;previous_id:string; };
+        ComponentFrontendStatus: { available:boolean;reason:string;base_id:string;current_id:string;version:string;previous_id:string; };
         ComponentInput: {
+            frontend_base_id?: string;
+            expected_frontend_id?: string;
             offline_id?:string;
             /** @enum {string} */
-            action: "check" | "prepare";
+            action: "check" | "prepare" | "activate";
             tag: string;
             prerelease: boolean;
-            components?: ("nginx" | "fail2ban" | "panel")[];
+            components?: ("nginx" | "fail2ban" | "panel" | "web")[];
             assets?: string[];
             plan_id: string;
             manifest_sha256: string;
             trust_sha256: string;
         };
         ComponentCreateInput: {
+            prepare_task_id?: string;
             input: components["schemas"]["ComponentInput"];
             check_task_id: string;
         };
         ComponentOverview: {
+            frontend: components["schemas"]["ComponentFrontendStatus"];
             switch_available: boolean;
             switch_reason: string;
             available: boolean;
@@ -2589,6 +2598,7 @@ export interface components {
             unpacked_bytes: number;
         };
         ComponentOperation: {
+            frontend?: components["schemas"]["ComponentFrontendResult"];
             panel?: components["schemas"]["ComponentPanelPreparation"];
             /** Format: int64 */
             protocol: number;
@@ -3904,6 +3914,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+ createFrontendActivation: operations["createComponentTask"];
  listComponentOfflineUploads: { parameters:{query?:never;header?:never;path?:never;cookie?:never;};requestBody?:never;responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  createComponentOfflineUpload: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];"Idempotency-Key":components["parameters"]["Idempotency"];};path?:never;cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["ComponentOfflineInput"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };
  writeComponentOfflineChunk: { parameters:{query?:never;header:{"X-CSRF-Token"?:components["parameters"]["CSRF"];};path:{ id:string;asset:string; };cookie?:never;};requestBody:{content:{"application/json":components["schemas"]["ComponentOfflineChunk"];};};responses:{200:components["responses"]["JSON"];default:components["responses"]["JSON"];}; };

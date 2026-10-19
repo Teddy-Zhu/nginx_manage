@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/releases"
@@ -34,9 +35,15 @@ type Manager struct {
 
 func (m *Manager) Overview() Overview {
 	out := Overview{Scope: m.Scope, KeyIDs: []string{}}
+	out.Frontend.Reason = "须由宿主机 root Agent 读取持久版本"
 	if m.Dev || m.Scope != "host" {
 		out.Reason = "须由本机 root 确认宿主机组件范围"
 		return out
+	}
+	if frontend, err := panelruntime.CurrentFrontend(m.DataDir); err == nil {
+		out.Frontend = frontend
+	} else {
+		out.Frontend.Reason = bounded(err.Error())
 	}
 	trust, err := releases.InspectTrust(m.TrustPath)
 	if err != nil {
@@ -191,10 +198,15 @@ func bounded(message string) string {
 }
 func (m *Manager) interrupted(ctx context.Context, out *Operation) {
 	out.State, out.Stage, out.ErrorCode, out.Error = "failed", "interrupted", "COMPONENT_INTERRUPTED", "组件操作在确认完成前中断，未启用或切换运行版本"
+	if out.Input.Action == "activate" {
+		out.Error = "前端激活中断，最终选择尚未确认"
+		m.reconcileFrontend(out)
+		return
+	}
 	if out.Input.Action != "prepare" {
 		return
 	}
-	result, err := releases.Prepared(ctx, releases.Input{TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban", "panel"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
+	result, err := releases.Prepared(ctx, releases.Input{TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
 	if err == nil {
 		if result.Plan.ManifestSHA256 != out.Input.ManifestSHA256 || result.Plan.TrustSHA256 != out.Input.TrustSHA256 {
 			err = releases.ErrReleaseChanged
@@ -216,7 +228,9 @@ func (m *Manager) run(out Operation) {
 	defer cancel()
 	out.State, out.Stage = "running", "checking"
 	err := m.write(&out)
-	if err == nil {
+	if err == nil && out.Input.Action == "activate" {
+		err = m.activateFrontend(ctx, &out)
+	} else if err == nil {
 		in := out.Input.online()
 		in.TrustPath, in.TokenPath, in.Host, in.Receiver = m.TrustPath, m.TokenPath, m.host(), receiver()
 		var result releases.OnlineResult
@@ -227,6 +241,9 @@ func (m *Manager) run(out Operation) {
 		}
 		if err == nil {
 			_, err = panelSelection(result.Plan)
+		}
+		if err == nil {
+			err = m.frontendCompatible(result.Plan)
 		}
 		if err == nil && out.Input.Action == "prepare" {
 			err = m.prepareRuntime(ctx, &out, result.Plan)
@@ -250,6 +267,9 @@ func (m *Manager) run(out Operation) {
 		out.State, out.Stage, out.ErrorCode, out.Error = "failed", "failed", "COMPONENT_OPERATION_FAILED", bounded(err.Error())
 		if errors.Is(err, releases.ErrReleaseChanged) {
 			out.ErrorCode = "COMPONENT_SOURCE_CHANGED"
+		}
+		if out.Input.Action == "activate" {
+			m.reconcileFrontend(&out)
 		}
 		if out.Input.Action == "prepare" {
 			// A failed response is not evidence that the atomic publication failed.

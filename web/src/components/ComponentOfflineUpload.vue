@@ -15,7 +15,7 @@ const emit = defineEmits<{ changed: [] }>();
 const api = useNodeAPI(), session = useSession(), controller = new AbortController();
 const manifest = ref<File | null>(null), signature = ref<File | null>(null);
 const archives = ref<File[]>([]), uploads = ref<ComponentOfflineUpload[]>([]);
-const selected = ref(""), component = ref<"nginx" | "fail2ban" | "panel">("nginx");
+const selected = ref(""), component = ref<"nginx" | "fail2ban" | "panel" | "web">("nginx");
 const selection = ref("components"), assetIDs = ref("");
 const prerelease = ref(false), busy = ref(false), reading = ref(false), uploading = ref(false);
 const error = ref(""), notice = ref(""), paused = ref(false), clock = ref(Date.now());
@@ -206,7 +206,7 @@ onUnmounted(() => { closed = true; paused.value = true; controller.abort(); });
     </NFormItem>
     <NFormItem v-if="selection === 'components'" label="组件">
       <NSelect v-model:value="component" :options="[
-        { value: 'nginx', label: 'Nginx' }, { value: 'fail2ban', label: 'Fail2ban' }, { value: 'panel', label: '面板' },
+        { value: 'nginx', label: 'Nginx' }, { value: 'fail2ban', label: 'Fail2ban' }, { value: 'panel', label: '面板' }, { value: 'web', label: '独立前端' },
       ]" :disabled="busy || !!pendingStart" />
     </NFormItem>
     <NFormItem v-else label="资产 ID">

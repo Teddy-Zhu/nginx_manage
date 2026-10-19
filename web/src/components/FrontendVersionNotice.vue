@@ -1,0 +1,37 @@
+<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from "vue";
+import { NAlert, NButton, NPopconfirm } from "naive-ui";
+import { api, apiError } from "../api/client";
+import { loadedFrontendEntries } from "../frontend-version";
+
+const changed = ref(false), error = ref("");
+const controller = new AbortController();
+let reading = false, closed = false, timer: ReturnType<typeof setInterval> | undefined;
+async function check() {
+  if (closed || reading || document.hidden) return;
+  reading = true;
+  try {
+    const version = await api.systemVersion(controller.signal);
+    if (closed) return;
+    error.value = "";
+    if (version.frontend_id && loadedFrontendEntries.length) changed.value = JSON.stringify([...version.frontend_entries].sort()) !== JSON.stringify(loadedFrontendEntries);
+  } catch (e) { if (!closed) error.value = apiError(e).message; }
+  finally { reading = false; }
+}
+function visible() { if (!document.hidden) void check(); }
+function reload() { window.location.reload(); }
+onMounted(() => { void check(); timer = setInterval(() => void check(), 60_000); document.addEventListener("visibilitychange", visible); });
+onUnmounted(() => { closed = true; controller.abort(); if (timer) clearInterval(timer); document.removeEventListener("visibilitychange", visible); });
+</script>
+
+<template>
+  <NAlert v-if="changed" class="version-notice" type="info">
+    页面有新版本。保存当前修改后可重新载入。
+    <template #action><NPopconfirm @positive-click="reload"><template #trigger><NButton size="small">重新载入</NButton></template>重新载入会丢弃未保存的修改，是否继续？</NPopconfirm></template>
+  </NAlert>
+  <NAlert v-else-if="error" class="version-notice" type="warning">无法检查页面版本：{{ error }}<template #action><NButton size="small" @click="check">重试</NButton></template></NAlert>
+</template>
+
+<style scoped>
+.version-notice { margin: 12px; }
+</style>

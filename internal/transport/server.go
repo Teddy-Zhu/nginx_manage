@@ -37,35 +37,36 @@ import (
 )
 
 type Server struct {
-	History       *history.Service
-	Audit         *auditlog.Service
-	Fail2ban      *fail2ban.PolicyService
-	Maintenance   *maintenance.Service
-	DB            *sql.DB
-	Auth          *auth.Service
-	Config        *nginxconfig.Service
-	ACME          *acme.Service
-	Monitoring    *monitoring.Service
-	Notifications *notifications.Service
-	HostDNS       *hostdns.Service
-	Firewall      *firewall.Service
-	Components    *components.Service
-	Installations *nginxinstall.Service
-	Switches      *nginxswitch.Service
-	Updates       *panelupdates.Service
-	Migration     *migration.Service
-	Backups       *backup.Service
-	Nodes         *nodes.Service
-	Agent         *agent.Client
-	NodeID        string
-	Dev           bool
-	Version       string
-	PanelRuntime  string
-	logStreams    atomic.Int32
-	loginLogWarn  atomic.Int64
-	metricReads   atomic.Int32
-	firewallReads atomic.Int32
-	fail2banReads atomic.Int32
+	FrontendVersion func() (string, []string, error)
+	History         *history.Service
+	Audit           *auditlog.Service
+	Fail2ban        *fail2ban.PolicyService
+	Maintenance     *maintenance.Service
+	DB              *sql.DB
+	Auth            *auth.Service
+	Config          *nginxconfig.Service
+	ACME            *acme.Service
+	Monitoring      *monitoring.Service
+	Notifications   *notifications.Service
+	HostDNS         *hostdns.Service
+	Firewall        *firewall.Service
+	Components      *components.Service
+	Installations   *nginxinstall.Service
+	Switches        *nginxswitch.Service
+	Updates         *panelupdates.Service
+	Migration       *migration.Service
+	Backups         *backup.Service
+	Nodes           *nodes.Service
+	Agent           *agent.Client
+	NodeID          string
+	Dev             bool
+	Version         string
+	PanelRuntime    string
+	logStreams      atomic.Int32
+	loginLogWarn    atomic.Int64
+	metricReads     atomic.Int32
+	firewallReads   atomic.Int32
+	fail2banReads   atomic.Int32
 }
 
 var _ apigen.ServerInterface = (*Server)(nil)
@@ -87,7 +88,17 @@ func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, map[string]any{"status": "ok", "development": s.Dev})
 }
 func (s *Server) GetVersion(w http.ResponseWriter, r *http.Request) {
-	s.ok(w, r, apigen.SystemVersion{Version: s.Version, ApiVersion: 1, AgentProtocol: agent.Protocol, ParserVersion: nginxconfig.ParserVersion, PolicyVersion: nginxconfig.PolicyVersion, LauncherVersion: releases.LauncherVersion, Runtime: apigen.SystemVersionRuntime(s.PanelRuntime)})
+	frontendID, scripts := "", []string{}
+	if s.FrontendVersion != nil {
+		var err error
+		frontendID, scripts, err = s.FrontendVersion()
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	s.ok(w, r, apigen.SystemVersion{FrontendId: frontendID, FrontendEntries: scripts, Version: s.Version, ApiVersion: 1, AgentProtocol: agent.Protocol, ParserVersion: nginxconfig.ParserVersion, PolicyVersion: nginxconfig.PolicyVersion, LauncherVersion: releases.LauncherVersion, Runtime: apigen.SystemVersionRuntime(s.PanelRuntime)})
 }
 func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 	var count int

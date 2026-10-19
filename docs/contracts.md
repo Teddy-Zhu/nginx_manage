@@ -283,3 +283,5 @@ Fail2ban 运行实例升级新增 `POST /fail2ban/upgrade` 与 `GET /fail2ban/up
 
 
 组件离线接收新增 GET/POST /components/offline、PUT /components/offline/{id}/assets/{asset} 和 DELETE /components/offline/{id}，显式远程合同同步，JSON 继续统一封装。写入要求 components.manage、近期认证和浏览器 CSRF，列表额外要求 read；创建的幂等键必须是上传 UUID。原始清单与签名采用 base64，不接收新信任、公钥、仓库或路径；按固定本机信任与目标平台验签后，只写签名清单中指定归档。256 KiB 顺序分块及相同前缀重试，字节和目录同步后返回进度，不以接收完整代替归档认证。清除先发布不可变标识，再只删除原归档，保留签名、原材料和审计；32 项记录、512 项目录/文件、1 GiB 暂存、一天授权，均含中断遗留容量。原组件任务增加可选 offline_id，检查和准备绑定同一来源；准备继续引用本人检查和精确标签/选择/计划/清单/信任摘要，重新验签并沿用完整散列及严格解包，不回退在线源、不启动安装。当前 Agent 为 110，数据库/归档仍为 32/6；未执行生成器、构建或运行验证，待 P5 隔离环境。
+
+当前合同为 Agent 111、数据库 33、迁移归档 6。独立 web 资产纳入组件检查/准备；POST /components/frontend/activate 以本人 prepare_task_id、精确准备摘要和 frontend_base_id/expected_frontend_id 创建 component.activate 任务，要求 components.manage/system.write。操作 frontend 回执明确区分发布 release_id 与 activated，概览 frontend 只描述当前选择。GET /system/version 新增 frontend_id/frontend_entries，使用本机已批准入口资源识别页面版本；原生和容器就绪观察按实际批准前端核对。新增激活与检查/准备共用数据库互斥约束；显式远程端点同步检查两个写权限。

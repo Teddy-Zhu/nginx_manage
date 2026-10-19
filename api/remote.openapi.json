@@ -6667,6 +6667,55 @@
         "x-body-limit": 1024,
         "x-query-keys": []
       }
+    },
+    "/nodes/{connection}/components/frontend/activate": {
+      "post": {
+        "operationId": "remoteCreateFrontendActivation",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/ComponentCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "createFrontendActivation",
+        "x-forward-path": "/components/frontend/activate",
+        "x-response-kind": "json",
+        "x-body-limit": 16384,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
     }
   },
   "security": [

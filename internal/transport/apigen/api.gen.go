@@ -500,13 +500,16 @@ func (e CertificateVersionEnvironment) Valid() bool {
 
 // Defines values for ComponentInputAction.
 const (
-	Check   ComponentInputAction = "check"
-	Prepare ComponentInputAction = "prepare"
+	Activate ComponentInputAction = "activate"
+	Check    ComponentInputAction = "check"
+	Prepare  ComponentInputAction = "prepare"
 )
 
 // Valid indicates whether the value is a known member of the ComponentInputAction enum.
 func (e ComponentInputAction) Valid() bool {
 	switch e {
+	case Activate:
+		return true
 	case Check:
 		return true
 	case Prepare:
@@ -518,14 +521,17 @@ func (e ComponentInputAction) Valid() bool {
 
 // Defines values for ComponentInputComponents.
 const (
-	Fail2ban ComponentInputComponents = "fail2ban"
-	Nginx    ComponentInputComponents = "nginx"
-	Panel    ComponentInputComponents = "panel"
+	Fail2ban    ComponentInputComponents = "fail2ban"
+	Nginx       ComponentInputComponents = "nginx"
+	Panel       ComponentInputComponents = "panel"
+	WebFrontend ComponentInputComponents = "web"
 )
 
 // Valid indicates whether the value is a known member of the ComponentInputComponents enum.
 func (e ComponentInputComponents) Valid() bool {
 	switch e {
+	case WebFrontend:
+		return true
 	case Fail2ban:
 		return true
 	case Panel:
@@ -1316,8 +1322,9 @@ type ComponentAsset struct {
 
 // ComponentCreateInput defines model for ComponentCreateInput.
 type ComponentCreateInput struct {
-	CheckTaskId string         `json:"check_task_id"`
-	Input       ComponentInput `json:"input"`
+	PrepareTaskID *string        `json:"prepare_task_id,omitempty"`
+	CheckTaskId   string         `json:"check_task_id"`
+	Input         ComponentInput `json:"input"`
 }
 
 // ComponentPanelPreparation defines model for ComponentPanelPreparation.
@@ -1447,6 +1454,22 @@ type PanelUpdateTask struct {
 	Result             *PanelUpdateOperation `json:"result,omitempty"`
 }
 
+type ComponentFrontendResult struct {
+	ReleaseId  string `json:"release_id"`
+	Version    string `json:"version"`
+	Activated  bool   `json:"activated"`
+	BaseId     string `json:"base_id"`
+	PreviousId string `json:"previous_id"`
+}
+type ComponentFrontendStatus struct {
+	Available  bool   `json:"available"`
+	Reason     string `json:"reason"`
+	BaseID     string `json:"base_id"`
+	CurrentID  string `json:"current_id"`
+	Version    string `json:"version"`
+	PreviousID string `json:"previous_id"`
+}
+
 type ComponentOfflineInput struct {
 	Manifest   []byte   `json:"manifest"`
 	Signature  []byte   `json:"signature"`
@@ -1476,6 +1499,8 @@ type ComponentOfflineUpload struct {
 	Release     ComponentRelease        `json:"release"`
 	Assets      []ComponentOfflineAsset `json:"assets"`
 }
+type CreateFrontendActivationParams = CreateComponentTaskParams
+type CreateFrontendActivationJSONRequestBody = ComponentCreateInput
 type CreateComponentOfflineUploadParams = CreateComponentTaskParams
 type WriteComponentOfflineChunkParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
@@ -1486,15 +1511,17 @@ type WriteComponentOfflineChunkJSONRequestBody = ComponentOfflineChunk
 
 // ComponentInput defines model for ComponentInput.
 type ComponentInput struct {
-	OfflineID      *string                     `json:"offline_id,omitempty"`
-	Action         ComponentInputAction        `json:"action"`
-	Assets         *[]string                   `json:"assets,omitempty"`
-	Components     *[]ComponentInputComponents `json:"components,omitempty"`
-	ManifestSha256 string                      `json:"manifest_sha256"`
-	PlanId         string                      `json:"plan_id"`
-	Prerelease     bool                        `json:"prerelease"`
-	Tag            string                      `json:"tag"`
-	TrustSha256    string                      `json:"trust_sha256"`
+	FrontendBaseID     *string                     `json:"frontend_base_id,omitempty"`
+	ExpectedFrontendID *string                     `json:"expected_frontend_id,omitempty"`
+	OfflineID          *string                     `json:"offline_id,omitempty"`
+	Action             ComponentInputAction        `json:"action"`
+	Assets             *[]string                   `json:"assets,omitempty"`
+	Components         *[]ComponentInputComponents `json:"components,omitempty"`
+	ManifestSha256     string                      `json:"manifest_sha256"`
+	PlanId             string                      `json:"plan_id"`
+	Prerelease         bool                        `json:"prerelease"`
+	Tag                string                      `json:"tag"`
+	TrustSha256        string                      `json:"trust_sha256"`
 }
 
 // ComponentInputAction defines model for ComponentInput.Action.
@@ -1505,6 +1532,7 @@ type ComponentInputComponents string
 
 // ComponentOperation defines model for ComponentOperation.
 type ComponentOperation struct {
+	Frontend      *ComponentFrontendResult   `json:"frontend,omitempty"`
 	Panel         *ComponentPanelPreparation `json:"panel,omitempty"`
 	CreatedAt     int64                      `json:"created_at"`
 	Deadline      int64                      `json:"deadline"`
@@ -1571,19 +1599,20 @@ type ExportAuditJSONRequestBody = AuditFilter
 
 // ComponentOverview defines model for ComponentOverview.
 type ComponentOverview struct {
-	SwitchAvailable  bool               `json:"switch_available"`
-	SwitchReason     string             `json:"switch_reason"`
-	Available        bool               `json:"available"`
-	InstallAvailable bool               `json:"install_available"`
-	InstallReason    string             `json:"install_reason"`
-	Installation     *NginxInstallation `json:"installation,omitempty"`
-	KeyIds           []string           `json:"key_ids"`
-	Reason           string             `json:"reason"`
-	Repository       string             `json:"repository"`
-	Running          bool               `json:"running"`
-	RuntimeReason    string             `json:"runtime_reason"`
-	Scope            string             `json:"scope"`
-	TrustSha256      string             `json:"trust_sha256"`
+	Frontend         ComponentFrontendStatus `json:"frontend"`
+	SwitchAvailable  bool                    `json:"switch_available"`
+	SwitchReason     string                  `json:"switch_reason"`
+	Available        bool                    `json:"available"`
+	InstallAvailable bool                    `json:"install_available"`
+	InstallReason    string                  `json:"install_reason"`
+	Installation     *NginxInstallation      `json:"installation,omitempty"`
+	KeyIds           []string                `json:"key_ids"`
+	Reason           string                  `json:"reason"`
+	Repository       string                  `json:"repository"`
+	Running          bool                    `json:"running"`
+	RuntimeReason    string                  `json:"runtime_reason"`
+	Scope            string                  `json:"scope"`
+	TrustSha256      string                  `json:"trust_sha256"`
 }
 
 // ComponentRelease defines model for ComponentRelease.
@@ -4232,6 +4261,8 @@ type SaveResult struct {
 
 // SystemVersion defines model for SystemVersion.
 type SystemVersion struct {
+	FrontendId      string               `json:"frontend_id"`
+	FrontendEntries []string             `json:"frontend_entries"`
 	AgentProtocol   int64                `json:"agent_protocol"`
 	ApiVersion      int64                `json:"api_version"`
 	LauncherVersion int64                `json:"launcher_version"`
@@ -5458,6 +5489,7 @@ type ServerInterface interface {
 	ReplaceCertificate(w http.ResponseWriter, r *http.Request, id ID, params ReplaceCertificateParams)
 
 	// (GET /components)
+	CreateFrontendActivation(w http.ResponseWriter, r *http.Request, params CreateFrontendActivationParams)
 	ListComponentOfflineUploads(w http.ResponseWriter, r *http.Request)
 	CreateComponentOfflineUpload(w http.ResponseWriter, r *http.Request, params CreateComponentOfflineUploadParams)
 	WriteComponentOfflineChunk(w http.ResponseWriter, r *http.Request, id, asset string, params WriteComponentOfflineChunkParams)
@@ -6912,6 +6944,18 @@ func (siw *ServerInterfaceWrapper) ReplaceCertificate(w http.ResponseWriter, r *
 	}
 
 	handler.ServeHTTP(w, r)
+}
+
+func (siw *ServerInterfaceWrapper) CreateFrontendActivation(w http.ResponseWriter, r *http.Request) {
+	if !siw.controlHeaders(w, r, "Idempotency-Key") {
+		return
+	}
+	params := CreateFrontendActivationParams{IdempotencyKey: Idempotency(r.Header.Get("Idempotency-Key"))}
+	if value := r.Header.Get("X-CSRF-Token"); value != "" {
+		token := CSRF(value)
+		params.XCSRFToken = &token
+	}
+	siw.controlHandler(w, r, func(w http.ResponseWriter, r *http.Request) { siw.Handler.CreateFrontendActivation(w, r, params) })
 }
 
 func (siw *ServerInterfaceWrapper) ListComponentOfflineUploads(w http.ResponseWriter, r *http.Request) {
@@ -12873,6 +12917,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches/{id}/resume", wrapper.ResumeNginxSwitch)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations/{id}/cancel", wrapper.CancelNginxInstallation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/switches/{id}/rollback", wrapper.RollbackNginxSwitch)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/frontend/activate", wrapper.CreateFrontendActivation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/offline", wrapper.ListComponentOfflineUploads)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/offline", wrapper.CreateComponentOfflineUpload)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/offline/{id}/assets/{asset}", wrapper.WriteComponentOfflineChunk)

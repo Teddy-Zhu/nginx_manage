@@ -44,13 +44,26 @@ func (out Operation) Validate(req Request) error {
 	}
 	found := map[string]string{}
 	for _, a := range r.Assets {
-		if (a.Component != "nginx" && a.Component != "fail2ban" && a.Component != "panel") || found[a.Component] != "" || a.ID == "" || a.Version == "" {
+		if (a.Component != "nginx" && a.Component != "fail2ban" && a.Component != "panel" && a.Component != "web") || found[a.Component] != "" || a.ID == "" || a.Version == "" {
 			return errors.New("组件发行内容无效")
 		}
 		found[a.Component] = a.ID
 	}
 	if found["panel"] != "" && len(found) != 1 {
 		return errors.New("面板须使用独立准备计划")
+	}
+	if found["web"] != "" && len(found) != 1 {
+		return errors.New("前端须使用独立准备计划")
+	}
+	if req.Input.Action != "check" && found["web"] != "" {
+		if out.Frontend == nil || !digest(out.Frontend.ReleaseID) || out.Frontend.Version != r.Assets[0].Version || out.Frontend.Activated != (req.Input.Action == "activate") {
+			return errors.New("前端操作缺少持久发布回执")
+		}
+		if req.Input.Action == "prepare" && (out.Frontend.BaseID != "" || out.Frontend.PreviousID != "") {
+			return errors.New("前端准备不能包含激活目标")
+		}
+	} else if out.Frontend != nil {
+		return errors.New("此组件操作不应包含前端发布回执")
 	}
 	if req.Input.Action == "prepare" && found["panel"] != "" {
 		if out.Panel == nil || !digest(out.Panel.ReleaseID) || out.Panel.DatabaseSchema <= 0 {
@@ -75,8 +88,15 @@ func (out Operation) Validate(req Request) error {
 			return errors.New("组件发行缺少所选组件")
 		}
 	}
-	if req.Input.Action == "prepare" {
-		if out.Stage != "prepared" || !out.RuntimeReady || r.PlanID != req.Input.PlanID || r.ManifestSHA256 != req.Input.ManifestSHA256 || r.TrustSHA256 != req.Input.TrustSHA256 {
+	if req.Input.Action != "check" {
+		stage := "prepared"
+		if req.Input.Action == "activate" {
+			stage = "activated"
+			if found["web"] == "" || out.Frontend == nil || out.Frontend.BaseID != req.Input.FrontendBaseID || out.Frontend.PreviousID != req.Input.ExpectedFrontendID {
+				return errors.New("前端激活目标与原确认不一致")
+			}
+		}
+		if out.Stage != stage || !out.RuntimeReady || r.PlanID != req.Input.PlanID || r.ManifestSHA256 != req.Input.ManifestSHA256 || r.TrustSHA256 != req.Input.TrustSHA256 {
 			return errors.New("组件准备回执与计划不一致")
 		}
 	} else if out.Stage != "checked" {

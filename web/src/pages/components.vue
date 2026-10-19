@@ -41,7 +41,7 @@ const overview = ref<ComponentOverview | null>(null),
   error = ref("");
 const tag = ref(""),
   prerelease = ref(false),
-  components = ref<Array<"nginx" | "fail2ban" | "panel">>(["nginx"]),
+  components = ref<Array<"nginx" | "fail2ban" | "panel" | "web">>(["nginx"]),
   assets = ref(""),
   selection = ref("components");
 const checkID = ref(""),
@@ -79,12 +79,13 @@ const stateLabels: Record<string, string> = {
   failed: "失败",
   recovery_required: "待本机恢复",
 };
-function chooseComponents(value: Array<"nginx" | "fail2ban" | "panel">) {
-  components.value = value.includes("panel") && !components.value.includes("panel") ? ["panel"] : value.filter((item) => item !== "panel");
+function chooseComponents(value: Array<"nginx" | "fail2ban" | "panel" | "web">) {
+  const added = value.find((item) => (item === "panel" || item === "web") && !components.value.includes(item));
+  components.value = added ? [added] : value.filter((item) => item !== "panel" && item !== "web");
 }
 function taskLabel(t: ComponentTask) {
   if (t.state === "succeeded")
-    return t.action === "prepare" ? "准备完成" : "检查完成";
+    return t.action === "activate" ? "激活完成" : t.action === "prepare" ? "准备完成" : "检查完成";
   return stateLabels[t.state] ?? t.state;
 }
 function bytes(n: number) {
@@ -119,7 +120,7 @@ async function load() {
 }
 async function submit(input: ComponentCreateInput) {
   await run(async () => {
-    const task = await api.createComponentTask(input, keyFor(input));
+    const task = await (input.input.action === "activate" ? api.activateFrontend(input, keyFor(input)) : api.createComponentTask(input, keyFor(input)));
     tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
     keyFor = useIdempotency();
   }, "组件任务已排队");
@@ -159,6 +160,19 @@ async function prepare() {
     },
   });
 }
+function canActivate(t: ComponentTask) {
+  return permitted.value && !!session.me?.scopes.includes("system.write") && t.action === "prepare" && t.state === "succeeded" && !!t.result?.frontend &&
+    (t.result.release?.expires_at ?? 0) * 1000 > clock.value && overview.value?.frontend.available && overview.value.frontend.current_id !== t.result.frontend.release_id && !active.value && !busy.value;
+}
+async function activate(t: ComponentTask) {
+  const source = t.result, frontend = overview.value?.frontend;
+  if (!canActivate(t) || !source?.release || !frontend) return;
+  await submit({ check_task_id: "", prepare_task_id: t.id, input: {
+    action: "activate", offline_id: source.input.offline_id, tag: source.release.tag, assets: source.release.selected,
+    prerelease: source.input.prerelease, plan_id: source.release.plan_id, manifest_sha256: source.release.manifest_sha256,
+    trust_sha256: source.release.trust_sha256, frontend_base_id: frontend.base_id, expected_frontend_id: frontend.current_id,
+  } });
+}
 onMounted(async () => {
   await load();
   if (!closed)
@@ -181,6 +195,12 @@ onUnmounted(() => {
 <template>
   <div class="page-stack">
     <ComponentOfflineUpload :available="overview?.available === true" :blocked="active || busy" @changed="load" />
+    <section v-if="overview" class="panel page-stack">
+      <h2>节点前端版本</h2>
+      <p v-if="overview.frontend.available">{{ overview.frontend.version }} · {{ overview.frontend.current_id }}</p>
+      <NAlert v-else type="warning">{{ overview.frontend.reason }}</NAlert>
+      <p class="muted">独立前端准备完成后可单独激活。激活保留上一版资源，已打开页面可选择重新载入。</p>
+    </section>
     <section v-if="overview?.installation" class="panel page-stack">
       <div class="toolbar">
         <h2>
@@ -260,6 +280,7 @@ onUnmounted(() => {
               { label: 'Nginx', value: 'nginx' },
               { label: 'Fail2ban', value: 'fail2ban' },
               { label: '面板', value: 'panel' },
+              { label: '独立前端', value: 'web' },
             ]"
         /></NFormItem>
         <NFormItem v-else label="资产 ID"
@@ -370,7 +391,7 @@ onUnmounted(() => {
       <div v-for="task in tasks" :key="task.id" class="component-task">
         <div class="toolbar">
           <strong>{{
-            task.action === "check" ? "发行检查" : "组件准备"
+            task.action === "activate" ? "前端激活" : task.action === "check" ? "发行检查" : "组件准备"
           }}</strong
           ><NTag
             :type="
@@ -388,6 +409,13 @@ onUnmounted(() => {
           {{ task.result?.release?.tag || task.id }}
         </p>
         <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
+        <template v-if="task.action === 'prepare' && task.result?.frontend">
+          <p>独立前端 {{ task.result.frontend.version }} · {{ task.result.frontend.release_id }}</p>
+          <NPopconfirm :disabled="!canActivate(task)" @positive-click="activate(task)">
+            <template #trigger><NButton :disabled="!canActivate(task)">激活此前端</NButton></template>
+            确认将此节点的前端切换到 {{ task.result.frontend.version }}？现有页面将在重新载入后使用新版本。
+          </NPopconfirm>
+        </template>
       </div>
     </section>
   </div>

@@ -49,10 +49,36 @@ func (s *Server) CreateComponentTask(w http.ResponseWriter, r *http.Request, par
 		s.fail(w, r, err)
 		return
 	}
+	if in.Input.Action == "activate" {
+		s.fail(w, r, fault.Invalid("前端激活须使用独立确认入口"))
+		return
+	}
 	out, err := s.Components.Create(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, in)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	s.respond(w, r, http.StatusAccepted, "OK", "组件任务已排队", out)
+}
+
+func (s *Server) CreateFrontendActivation(w http.ResponseWriter, r *http.Request, params apigen.CreateFrontendActivationParams) {
+	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	if !ok || !s.componentsReady(w, r) {
+		return
+	}
+	var in components.CreateInput
+	if err := decodeLimit(w, r, &in, 16<<10); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if in.Input.Action != "activate" {
+		s.fail(w, r, fault.Invalid("此入口只接受独立前端激活"))
+		return
+	}
+	out, err := s.Components.Create(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.respond(w, r, http.StatusAccepted, "OK", "前端激活任务已排队", out)
 }

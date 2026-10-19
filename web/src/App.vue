@@ -8,6 +8,7 @@ import {
 } from "naive-ui";
 import { useRoute } from "vue-router";
 import ShellLayout from "./components/ShellLayout.vue";
+import FrontendVersionNotice from "./components/FrontendVersionNotice.vue";
 import { useNodes } from "./stores/node";
 
 const route = useRoute();
@@ -31,6 +32,7 @@ const themeOverrides = {
   >
     <n-dialog-provider>
       <n-message-provider>
+        <FrontendVersionNotice />
         <router-view v-if="route.meta.public" />
         <shell-layout v-else><router-view v-if="!nodes.switching" :key="`${nodes.generation}:${route.fullPath}`" /><p v-else class="muted">正在切换操作节点…</p></shell-layout>
       </n-message-provider>

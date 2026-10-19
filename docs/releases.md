@@ -305,3 +305,18 @@ sudo /opt/nginxpanel/current/nginxpanel component-switch \
 网页“组件切换”通过文件扫描路由接入，选择已完成的组件准备任务和 Nginx 资产，核对当前版本并明确允许停机。API 为 `GET/POST /components/switches`、`GET /components/switches/{id}` 及 `POST /components/switches/{id}/resume`、`POST /components/switches/{id}/rollback`；写操作须有 components.manage/system.write、原已持有维护会话、幂等键及浏览器近期认证。创建输入固定 expected_sha256、expected_revision、expected_deployment，空基线的两个发布标识也须显式传入空字符串。
 
 API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.service` 启动独立 worker，候选校验及服务控制不占用 Agent 请求。父记录固定唯一子操作；查询、服务重启和重复请求均不重用已领取授权。每次启动授权五分钟，原任务最多 32 次授权，记录总量最多 64 项；初次子操作仍使用十分钟前进及八分钟补偿期限，续办不延长前进期限。独立服务失败后，只有显式新授权才清除失败状态并启动；状态查询仅对账。补偿请求持久生效，后续续办继续补偿；尚未建立子操作时取消派发记为 failed/cancelled_before_switch，不虚构运行恢复证明。断连、记录缺失或执行状态不明时保留原任务与维护锁；完整备份恢复中的源切换任务隔离，不向新环境重放。页面/API、独立服务及故障恢复尚未实际执行，待 P5 集中验证。
+
+
+## 独立前端发布与激活
+
+组件页可单独选择 `web`，在线和离线来源均沿用原签名检查及准备任务。前端不能与面板或其他组件合并准备；清单 API 主版本、数据库合同必须适合当前受管后端，Agent/launcher 下限仍按发布验证。服务器不构建前端，也不执行 web 资产中的程序。准备只发布不可变目录，`frontend.release_id` 是静态发布身份，`activated=false` 不代表已切换。
+
+`POST /api/v1/components/frontend/activate` 接收 `ComponentCreateInput`：`input.action=activate`，`prepare_task_id` 引用本人成功准备，`check_task_id` 为空；保留原准备的标签、资产、离线来源和精确计划/清单/信任摘要，并从组件概览的 `frontend` 绑定 `frontend_base_id/expected_frontend_id`。要求 `components.manage`、`system.write`、近期认证、浏览器 CSRF 和幂等键。显式远程端点使用相同合同及两个权限；普通 `/components/tasks` 不接受激活动作。
+
+激活使用已有加密组件任务、独立 root 操作记录、审计和 10 分钟预算，提交意图先于 IPC。执行前重新认证已准备原资产与当前信任，核对后端身份及当前前端。原选择与目标写入 `runtime/frontend-operations/<UUID>.json`，随后原子发布 `runtime/frontend.json`，落盘并复核后才返回激活完成。失败恢复原选择；Agent 重启仅按原记录核对，批准的新文件不可读时在原后端与原资源均得到证明后恢复旧选择。未知指针或恢复无法核对时保留 `recovery_required`，不重放激活。历史任务的 `activated=true` 说明该次选择已完成，实时状态仍以概览为准。
+
+独立静态产物位于 `runtime/frontend/<发布ID>/web`，目录由 root 持有且为 0755、文件为 0444。每份最多 4096 个文件、总计 64 MiB、单文件 8 MiB、清单 1 MiB；最多保留 16 份发布或遗留暂存，以及 64 条激活意图。达到上限须本机维护，不删除原救援、审计或未知目录。现有原生 Agent 写范围与 Docker 只读 runtime 挂载已覆盖该目录，应用不获得发布目录写权限。
+
+生产静态服务仅从批准清单读取文件，并在返回前核对长度与 SHA-256。页面入口和无内容散列文件使用 `no-store`；内容散列资源使用不可变长缓存，当前目录缺失的同类资源可从上一前端读取。面板联合更新前另行保存前一程序来源；新后端默认使用自身配套前端，旧独立前端不会自动套用到不同后端。更新及补偿的 HTTPS 就绪观察核对实际批准选择及全部文件。
+
+`GET /api/v1/system/version` 返回 `frontend_id/frontend_entries`。页面对照实际加载的模块、样式及预加载入口资源，在版本变化时提供重新载入按钮，并确认未保存修改；不自动刷新。该检查始终针对提供页面的本机面板，节点业务操作仍使用显式选中节点。当前 Agent/数据库/归档为 111/33/6；接口声明与实现同步，生成器、构建、类型检查、lint、测试、浏览器及真实切换尚未执行，留待 P5 隔离环境集中验证。
