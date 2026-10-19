@@ -60,4 +60,4 @@ nginxpanel management-listener-disable --data-dir /srv/nginxpanel
 }
 ```
 
-实现和源码集成已完成；未运行生成器、服务、浏览器、构建、类型检查、测试或真实监听变更，待 P5 集中验证。
+实现和源码集成已完成。P5 已在两台隔离 Debian 12 虚拟机上完成双栈受控监听、外部新连接确认、回环/转发头伪造拒绝、direct nftables 管理入口保护及阻止改到被拒绝端口，并验证指定中断与正常整机重启后仍能通过原证书访问；具体范围和其余待验场景见 [验证记录](validation.md)。未进行 UI 自动化测试。
