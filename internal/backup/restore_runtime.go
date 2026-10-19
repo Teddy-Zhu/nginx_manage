@@ -65,6 +65,11 @@ func advanceRestorationRuntime(ctx context.Context, data, id string, in RestoreI
 	if reply.Status.Nginx != nil && (reply.Status.Nginx.OperationID != i.PlanID || reply.Status.Nginx.DisasterRestoreID != id || reply.Status.Nginx.RequestHash != i.NginxRequest.SHA256) {
 		return out, errors.New("恢复运行助手返回了其他 Nginx 子操作")
 	}
+	if !rollback {
+		if err = panelrecovery.CheckDisasterTarget(ctx, i, true); err != nil {
+			return out, err
+		}
+	}
 	return reply.Status, nil
 }
 

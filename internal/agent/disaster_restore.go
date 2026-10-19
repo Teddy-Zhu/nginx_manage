@@ -96,6 +96,23 @@ func checkDisasterRuntime(data string, i panelrecovery.DisasterIntent) error {
 	if err := checkDisasterProgram(data, i); err != nil {
 		return err
 	}
+	return checkDisasterHold(data, i)
+}
+
+// The independently installed Agent executes the root-approved runtime request;
+// only the local coordinator itself must execute the selected panel inode.
+func checkDisasterAgentRuntime(data string, i panelrecovery.DisasterIntent) error {
+	running, err := panelruntime.Read(data)
+	if err != nil {
+		return err
+	}
+	if err = checkDisasterBinding(data, i, running); err != nil {
+		return err
+	}
+	return checkDisasterHold(data, i)
+}
+
+func checkDisasterHold(data string, i panelrecovery.DisasterIntent) error {
 	hold, err := storage.ReadServiceHold(data)
 	if err != nil {
 		return err
@@ -122,6 +139,10 @@ func checkDisasterProgram(data string, i panelrecovery.DisasterIntent) error {
 	if !os.SameFile(live, expected) {
 		return errors.New("独立灾备恢复须使用当前批准的面板执行文件")
 	}
+	return checkDisasterBinding(data, i, running)
+}
+
+func checkDisasterBinding(data string, i panelrecovery.DisasterIntent, running panelruntime.Snapshot) error {
 	binding, err := json.Marshal(running.Deployment)
 	if err != nil {
 		return err

@@ -91,6 +91,11 @@ func writeActivatedDatabase(ctx context.Context, db *sql.DB, in RestoreActivateM
 		return err
 	}
 	defer tx.Rollback()
+	// Target maintenance coordination is added to an offline projection. Keep
+	// source log delivery and its sequence unchanged, as reconciliation does.
+	if _, err = tx.ExecContext(ctx, "UPDATE event_log_status SET paused=1 WHERE id=1"); err != nil {
+		return err
+	}
 	query := `UPDATE restore_barriers SET state='completed',report=:activation_report WHERE id=:restore_id AND state='reconciling'`
 	result, err := tx.ExecContext(ctx, query, activationArgs(query, in, report)...)
 	if err != nil {
@@ -122,6 +127,9 @@ func writeActivatedDatabase(ctx context.Context, db *sql.DB, in RestoreActivateM
 				return err
 			}
 		}
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE event_log_status SET paused=0 WHERE id=1"); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

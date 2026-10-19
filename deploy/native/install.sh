@@ -408,6 +408,8 @@ cat >"$work/nginxpanel.service" <<EOF
 Description=NginxPanel management API and Web
 Wants=nginxpanel-agent.service
 After=network.target nginxpanel-agent.service
+ConditionPathExists=!$data/run/panel-service-hold.json
+ConditionPathExists=!$data/run/panel-writer-fence.json
 
 [Service]
 Type=exec

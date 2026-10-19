@@ -54,5 +54,12 @@ func AuthorizeDisasterRuntime(ctx context.Context, data, id, epoch string, rollb
 	if err != nil || fence != i.Fence() {
 		return errors.Join(err, errors.New("恢复运行批准缺少原写入屏障"))
 	}
+	// Business files remain hidden from the Agent's mount namespace. The
+	// selected local coordinator verifies them before approving its fixed request.
+	if !rollback {
+		if err = panelrecovery.CheckDisasterTarget(ctx, i, true); err != nil {
+			return err
+		}
+	}
 	return panelrecovery.ApproveDisasterRuntime(i, epoch, rollback)
 }

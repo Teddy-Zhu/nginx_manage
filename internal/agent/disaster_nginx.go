@@ -207,7 +207,7 @@ func (s *Server) advanceDisasterRuntime(ctx context.Context, in DisasterRuntimeR
 	if err = installGrant(j, i.Stop.MaintenanceID, in.Epoch, true); err != nil {
 		return out, err
 	}
-	if err = checkDisasterRuntime(s.DataDir, i); err != nil {
+	if err = checkDisasterAgentRuntime(s.DataDir, i); err != nil {
 		return out, err
 	}
 	if err = checkDisasterRecords(j, i, true); err != nil {
@@ -286,9 +286,6 @@ func (s *Server) advanceDisasterRuntime(ctx context.Context, in DisasterRuntimeR
 		} else if !os.IsNotExist(e) {
 			return out, e
 		}
-		if err = panelrecovery.CheckDisasterTarget(ctx, i, true); err != nil {
-			return out, err
-		}
 		if err = stateMatches(i.NginxBeforeRevision, i.NginxBeforeDeployment); err != nil {
 			return out, err
 		}
@@ -324,9 +321,6 @@ func (s *Server) advanceDisasterRuntime(ctx context.Context, in DisasterRuntimeR
 	}
 	if out.Nginx.State == "succeeded" {
 		if err = stateMatches(i.PlanID, i.PlanID); err != nil {
-			return out, err
-		}
-		if err = panelrecovery.CheckDisasterTarget(ctx, i, true); err != nil {
 			return out, err
 		}
 		err = save("runtime_confirmed", i.PlanID)
