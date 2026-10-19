@@ -28,7 +28,8 @@ type NginxFeatures struct {
 
 	// These compile-time defaults become usable with a confirmed running
 	// dynamic Stream core. They are not independently loadable modules.
-	streamDefaults map[string]Feature
+	streamDefaults  map[string]Feature
+	httpTempModules []string
 }
 type boundedOutput struct {
 	value strings.Builder
@@ -166,6 +167,11 @@ func parseNginxFeatures(value string) NginxFeatures {
 		return major > ma || major == ma && (minor > mi || minor == mi && patch >= pa)
 	}
 	http := !flags["--without-http"]
+	for _, module := range []string{"fastcgi", "uwsgi", "scgi"} {
+		if http && !flags["--without-http_"+module+"_module"] {
+			out.httpTempModules = append(out.httpTempModules, module)
+		}
+	}
 	set := func(name string, available bool, reason string) {
 		if available {
 			reason = ""

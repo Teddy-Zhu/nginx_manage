@@ -271,10 +271,8 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 			if len(clientDeny) > 0 {
 				controls = "    include " + nginxQuote(n.clientDenyPath()) + ";\n" + runtimeClientDenyControls(clientDeny) + controls
 			}
-			if n.Container != nil {
-				for _, kind := range []string{"fastcgi", "uwsgi", "scgi"} {
-					controls += "    " + kind + "_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", kind)) + ";\n"
-				}
+			for _, kind := range n.tempModules {
+				controls += "    " + kind + "_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", kind)) + ";\n"
 			}
 			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Open + 1, End: httpBlock.Open + 1, Text: controls})
 			edits = append(edits, nginxconfig.Edit{Start: httpBlock.Close, End: httpBlock.Close, Text: probe})
@@ -416,10 +414,10 @@ func (n *Nginx) runtimeDirectories() error {
 	for _, name := range []string{"client", "proxy", "cache"} {
 		dirs = append(dirs, filepath.Join(n.DataDir, "nginx", "tmp", name))
 	}
+	for _, name := range n.tempModules {
+		dirs = append(dirs, filepath.Join(n.DataDir, "nginx", "tmp", name))
+	}
 	if n.Container != nil {
-		for _, name := range []string{"fastcgi", "uwsgi", "scgi"} {
-			dirs = append(dirs, filepath.Join(n.DataDir, "nginx", "tmp", name))
-		}
 		dirs = append(dirs, n.runPath(""))
 	}
 	for _, dir := range dirs {

@@ -1,10 +1,10 @@
 # P5 集中验证记录
 
-2026-10-19。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行，以及 Debian 12/amd64 仅面板原生安装与重启验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
+2026-10-19。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用和指定中断恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
 
 ## 隔离环境
 
-所有程序生成、编译、类型检查、lint 和业务测试均在 Docker 容器中执行。常规构建和接口验证使用普通用户、只读根文件系统、移除全部 capabilities、禁止提权。Nginx 运行验收使用独立网络、只读根文件系统及私有 `/srv` tmpfs；root 测试进程仅用于准备目录所有权、启动和回收子进程，实际 Nginx 使用 UID/GID 1000。启动器验收使用独立数据卷及与运行绑定一致的只读/可写挂载；启动后核对 PID 1 的身份和 capabilities。全部容器不映射宿主机端口、管理 Socket、系统目录或主机网络。工作目录用于源码及生成文件，依赖、测试数据库和构建产物放在容器卷中。未安装宿主机软件或修改宿主机服务、网络、防火墙及 Docker 配置。
+所有程序生成、编译、类型检查、lint 和业务测试均在 Docker 容器中执行。常规构建和接口验证使用普通用户、只读根文件系统、移除全部 capabilities、禁止提权。Nginx 运行验收使用独立网络、只读根文件系统及私有 `/srv` tmpfs；root 测试进程仅用于准备目录所有权、启动和回收子进程，实际 Nginx 使用 UID/GID 1000。启动器验收使用独立数据卷及与运行绑定一致的只读/可写挂载；启动后核对 PID 1 的身份和 capabilities。全部容器不映射宿主机端口、管理 Socket、系统目录或主机网络。工作目录用于源码及生成文件，依赖和测试数据库放在容器卷或私有 tmpfs 中，验证产物保存在工作区及专用卷中。未安装宿主机软件或修改宿主机服务、网络、防火墙及 Docker 配置。
 
 固定镜像：
 
@@ -56,19 +56,28 @@
 - WAF 路径拒绝 403、方法拒绝 405、请求体上限 413、速率与并发限制 429，以及豁免路径、ACL 拒绝。
 - HTTP 与两种 Stream 访问日志为有效 JSON，具备实际地址和状态；查询参数、Authorization 值及 Stream 载荷不出现在访问日志中。
 
-首次真实运行发现 UUID 命名的防护变量无法装入 Nginx 默认变量哈希桶，已在 HTTP 运行配置提供 `variables_hash_bucket_size 128`，相同范围复验通过（0.17 秒）。构建上下文通过 Dockerfile 专用忽略文件限制为所需配方、模块声明、二进制及许可文件。
+首次真实运行发现 UUID 命名的防护变量无法装入 Nginx 默认变量哈希桶，已在 HTTP 运行配置提供 `variables_hash_bucket_size 128`。原生临时目录修复后，使用更新的测试程序在相同镜像内复验上述范围通过（0.20 秒）。构建上下文通过 Dockerfile 专用忽略文件限制为所需配方、模块声明、二进制及许可文件。
 
 `internal/nginxcontainer` 的 `TestPrepareNginxLauncherFixture` 仅在显式环境变量下准备 root 所有的隔离登记夹具，随后直接运行镜像的实际入口。分别验证正常降权/低端口监听、无登记、启动器哈希不匹配及 Nginx 哈希不匹配。端口阈值只设置在 `--network none` 容器的网络命名空间中；未修改宿主机 sysctl。登记夹具的签名来源字段是合成数据，这组结果不能证明发行签名、Registry 来源或宿主机安装器准入已通过。验证容器和对应夹具卷已回收。
+
+### 原生 Nginx 静态构建
+
+在独立 Debian 构建容器内复用发布构建器的源码下载、解包及 UAPI 头文件准备函数，按当前 `nginx-source-lock.json` 的完整配置参数编译 amd64 Nginx。四份源码的长度和 SHA-256 全部匹配锁定值；产物实际执行 `nginx -V`，确认 Nginx 1.30.6 与 OpenSSL 3.5.9。ELF 无动态解释器及共享库依赖，36 个必需模块符号全部存在，二进制 SHA-256 为 `1e168f3239c9f650651d68797b97f986c7c21769c8a9db8ca0caa2fdf6b46f08`。
+
+首次编译暴露 OpenSSL 的 `linux/mman.h` 搜索路径缺失，现由构建器单独复制目标架构 Linux UAPI 头文件，配方显式供 OpenSSL 使用；CI 明确安装 `linux-libc-dev`。实际运行库证据收集也已通过，涵盖 musl-dev 1.2.3-1、libgcc-12-dev 12.2.0-14+deb12u1 的三个静态运行库及其真实许可文本。该本地构建未伪造 GitHub 工作流来源，不替代正式 CI、签名、发布或 arm64 验收。
 
 ### Debian 原生安装与重启
 
 在上述 Go 镜像内安装 QEMU `7.2.22`、ISO 工具，随后以 UID/GID 1000、只读根文件系统、移除全部 capabilities、禁止提权及 `--network none` 运行 QEMU TCG。虚拟机使用独立内核、命名卷中的磁盘和只读安装介质；QEMU 内部 DHCP 不连接宿主机网络，未使用 KVM、主机设备、端口映射或 binfmt 注册。安装器对账户、目录和 systemd 的实际修改均发生在虚拟机中。
 
-Debian 官方 `debian-12-genericcloud-amd64.qcow2` 已与同源 [SHA512SUMS](https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS) 核对，SHA-512 为 `dc0d7b526a3a9a9265142fe8e903984c03f8d605ac4ba6f14d15d27988a69581fb05fc06cd2a6d79f6eaf68ba9725f2eb38b5ddd64ad166faadad279af776c9e`。通过 [NoCloud 安装介质](https://docs.cloud-init.io/en/latest/reference/datasources/nocloud.html#source-2-drive-with-labeled-filesystem) 输入实际面板程序、锁定依赖构建的前端和当前原生安装器，由虚拟机 root 批准文件并执行 `--without-nginx --start`。
+Debian 官方 `debian-12-genericcloud-amd64.qcow2` 已与同源 [SHA512SUMS](https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS) 核对，SHA-512 为 `dc0d7b526a3a9a9265142fe8e903984c03f8d605ac4ba6f14d15d27988a69581fb05fc06cd2a6d79f6eaf68ba9725f2eb38b5ddd64ad166faadad279af776c9e`。通过 [NoCloud 安装介质](https://docs.cloud-init.io/en/latest/reference/datasources/nocloud.html#source-2-drive-with-labeled-filesystem) 输入实际面板程序、锁定依赖构建的前端和当前原生安装器，由虚拟机 root 批准文件，分别执行 `--without-nginx --start` 和 `--nginx-binary /opt/p5-approved/nginx --start`。
 
 | 系统/架构 | 内核 / systemd | 部署组合 | 验收结果 |
 | --- | --- | --- | --- |
 | Debian 12 / amd64 | `6.1.0-54-cloud-amd64` / `252.39-1~deb12u2` | 原生面板 + 宿主 Agent，Nginx 未安装 | 以下范围通过 |
+| Debian 12 / amd64 | 同上 | 原生面板 + 宿主 Agent + 本地批准的静态 Nginx | 以下范围通过 |
+
+`--without-nginx` 组合完成：
 
 - 首次安装实际创建专用账户、受保护目录、程序及前端运行绑定，并启用和启动 Web/Agent；Nginx 服务保持未启用、未运行。
 - Web 进程的四项 UID 均为专用账户，`CapEff=0`、`NoNewPrivs=1`；数据根为 root:0755，秘密目录为 Web:0700，写锁为 root:nginxpanel:0660。Web 用户无法读取 Agent 目录，Agent 挂载命名空间内不可见业务主密钥。
@@ -76,11 +85,19 @@ Debian 官方 `debian-12-genericcloud-amd64.qcow2` 已与同源 [SHA512SUMS](htt
 - 在 Web 运行时以相同参数重放安装成功；重启 Web/Agent 后原会话、永久节点编号、配置版本和修订均保留。
 - 真实系统重启后再次核对服务、权限及相同会话、节点和配置，最终输出 `P5_NATIVE_ALL_PASS` 后关机。
 
-这组验收修复了首次安装直接查询 systemd 模板导致误报冲突、运行中重放重复初始化触发写锁，以及重放校验拒绝模板文件名 `@` 的三个缺陷。整机重启核对分两段完成：修正验收夹具的依赖环后，沿用原磁盘继续检查持久化。当前结果不覆盖含 Nginx 的原生安装、生产签名资产、危险操作补偿或其他发行版/架构，也未执行 UI 自动化。
+`--nginx-binary` 使用上一节的本地静态 Nginx，完成：
+
+- 实际启用并运行 Nginx、Agent 和 Web。Nginx worker 使用专用账户且 `CapEff=0`，Nginx 挂载命名空间内不可见业务主密钥；Web 与 Agent 的上述隔离检查同样通过。
+- 经 HTTPS API 创建、应用 HTTP 代理资源，任务最终为 `succeeded/runtime_confirmed`，80 端口返回预期上游内容。
+- 额外候选端口被独立上游夹具占用后，应用任务最终为 `rolled_back/rollback_confirmed`；原运行修订及物理部署编号不变，轮询期间原站点请求成功。
+- 再次提交相同候选，观察配置指针切换后向 Agent 发送 SIGKILL；systemd 重启 Agent 后确认回滚，原修订及部署保持。删除冲突资源后再次应用新修订成功。
+- 运行中重放安装器、重启 Web/Agent 及整机后，原会话、永久节点编号、配置版本/修订、物理部署编号和 HTTP 转发均保持，最终输出 `P5_NATIVE_NGINX_ALL_PASS` 后关机。
+
+这些验收修复了首次安装直接查询 systemd 模板导致误报冲突、运行中重放重复初始化触发写锁、重放校验拒绝模板文件名 `@`，以及原生 Nginx 默认临时目录写入只读数据根的启动缺陷。临时目录现按实际编译模块生成并归入受管可写子目录，未放宽 systemd 写入范围。两组分别在修正夹具依赖环、上游目录权限后，沿用原安装磁盘分段完成。当前结果不覆盖生产签名资产、其他危险操作补偿或其他发行版/架构，也未执行 UI 自动化。
 
 ## 尚待验收
 
-- 含 Nginx 的原生安装、其他系统的账户与 systemd、各 DNS/防火墙所有者、Fail2ban、管理监听、Nginx 实际应用及危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；本轮 Debian 仅面板安装结果不替代这些检查。
+- 其他系统/架构及 Docker 面板组合的账户与 systemd、各 DNS/防火墙所有者、Fail2ban、管理监听，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；本轮结果仅证明表内组合与列明的 Nginx 故障场景。
 - 两种架构的正式原生资产、arm64 预置模块镜像、签名镜像来源准入、不可变镜像绑定、升级/回滚和备份恢复故障注入，仍需完成产物构建及运行验收；本轮 amd64 模块运行与固定启动器结果不替代这些检查。
 - 真实域名的 ACME/DNS、通知接收端及跨主机 API 一键迁移，尚未进行外部集成验收；容器内双节点迁移与授权结果见上节。
 - 正式 GitHub 仓库及发布凭据尚未配置，未运行真实发布 CI、推送或发布。项目 MIT 许可证已补齐，第三方组件保留各自许可。

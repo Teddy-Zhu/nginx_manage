@@ -65,7 +65,7 @@
     "--with-stream_realip_module",
     "--with-stream_ssl_preread_module",
     "--with-pcre-jit",
-    "--with-openssl-opt=no-tests no-module no-dso no-async --openssldir=/etc/ssl",
+    "--with-openssl-opt=no-tests no-module no-dso no-async --openssldir=/etc/ssl -I../linux-uapi",
     "--with-openssl=../openssl-3.5.9",
     "--with-pcre=../pcre2-10.49",
     "--with-zlib=../zlib-1.3.2"

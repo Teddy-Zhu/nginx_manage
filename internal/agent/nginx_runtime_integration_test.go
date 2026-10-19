@@ -216,7 +216,7 @@ func TestPrebuiltNginxRuntime(t *testing.T) {
 	}
 	accept(s.Save(ctx, p, "runtime", secure.ID(), nginxconfig.SaveRequest{BaseVersion: tree.Version, Files: files}))
 
-	n := &Nginx{DataDir: data, Binary: binary, Policy: s.Policy, Container: &nginxcontainer.Runtime{}, uid: 1000, gid: 1000}
+	n := &Nginx{DataDir: data, Binary: binary, Policy: s.Policy, Container: &nginxcontainer.Runtime{}, uid: 1000, gid: 1000, tempModules: features.httpTempModules}
 	if err := os.MkdirAll(filepath.Join(data, "run"), 0755); err != nil {
 		t.Fatal(err)
 	}

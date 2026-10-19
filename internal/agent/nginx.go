@@ -52,6 +52,7 @@ type Nginx struct {
 	gid                         int
 	uid                         int
 	workerGroup                 string
+	tempModules                 []string
 	http01                      *http01Store
 	logs                        *managedLogs
 }
@@ -167,9 +168,17 @@ func (n *Nginx) setup() error {
 		if !sameContainerBinding(binding, n.Container.Binding) || binding.UID != n.uid || binding.GID != n.gid {
 			return errors.New("Nginx 容器登记与宿主机专用身份不一致")
 		}
-		if _, err := containerFeatures(binding); err != nil {
+		features, err := containerFeatures(binding)
+		if err != nil {
 			return err
 		}
+		n.tempModules = features.httpTempModules
+	} else {
+		features := n.Features(context.Background())
+		if !features.Available {
+			return fmt.Errorf("无法确认 Nginx 临时目录所需的编译模块：%s", features.Reason)
+		}
+		n.tempModules = features.httpTempModules
 	}
 	if err := secure.RootDirectory(n.Journal.Dir, 0700); err != nil {
 		return err

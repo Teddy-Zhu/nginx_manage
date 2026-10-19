@@ -47,7 +47,7 @@ bin/nginxpanel-release bundle \
 
 [`nginx-source-lock.json`](../internal/releases/nginx-source-lock.json) 是构建器与签名工具共同使用的来源：Nginx 1.30.6、OpenSSL 3.5.9、PCRE2 10.49、zlib 1.3.2 均固定官方 HTTPS 源码、长度、SHA-256 与许可路径。上游分别为 [Nginx](https://nginx.org/en/download.html)、[OpenSSL](https://openssl-library.org/source/)、[PCRE2](https://github.com/PCRE2Project/pcre2/releases) 和 [zlib](https://zlib.net/)。升级须修改此配方并重新发布完整签名资产，不在目标机器编译源码或增装模块。
 
-工作流在 `ubuntu-24.04`、`ubuntu-24.04-arm` 各自的原生架构运行器构建，CI 安装 musl/GCC/Perl 构建工具，使用 musl-gcc 和固定参数静态链接上述依赖。HTTP/TLS/Real IP、Stream/TLS/Real IP/SSL Preread、限流和当前代理所需的内置模块直接进入二进制；另开启 HTTP/2 与 PCRE JIT。构建参数参考 [Nginx 官方配置说明](https://nginx.org/en/docs/configure.html)。源码下载、解包、构建和记录均有长度/时间限制，源码链接与特殊文件拒绝展开；不安装生成的 Nginx 服务。
+工作流在 `ubuntu-24.04`、`ubuntu-24.04-arm` 各自的原生架构运行器构建，CI 安装 musl/GCC/Perl 和 `linux-libc-dev`，使用 musl-gcc 和固定参数静态链接上述依赖。构建器将目标架构的 Linux UAPI 头文件复制到临时目录，仅将该目录加入 OpenSSL 的头文件搜索路径，避免混入 glibc 头文件；系统包版本仍纳入构建记录。HTTP/TLS/Real IP、Stream/TLS/Real IP/SSL Preread、限流和当前代理所需的内置模块直接进入二进制；另开启 HTTP/2 与 PCRE JIT。构建参数参考 [Nginx 官方配置说明](https://nginx.org/en/docs/configure.html)。源码下载、解包、构建和记录均有长度/时间限制，源码链接与特殊文件拒绝展开；不安装生成的 Nginx 服务。
 
 `scripts/release/nginx.py` 绑定批准的干净源码提交、规格和 runner 架构，保留未剥离符号的二进制，记录 `nginx -V`、编译器版本、runner 镜像版本、系统包版本以及 libc.a/libgcc.a/libgcc_eh.a 的实际包版本和 SHA-256。包内保存这三份运行库对应的真实 copyright、GCC 运行库例外和 GPL-3 原文；缺失即停止。源码配方、构建记录和系统包清单都由 provenance 散列绑定，并进入签名文件清单。
 

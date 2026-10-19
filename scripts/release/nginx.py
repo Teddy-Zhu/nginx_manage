@@ -104,6 +104,14 @@ def unpack(archive, parent, expected_root):
     return parent / expected_root
 
 
+def linux_headers(parent, architecture):
+    # musl-gcc excludes glibc's headers; OpenSSL still needs Linux UAPI.
+    multiarch = {"amd64": "x86_64-linux-gnu", "arm64": "aarch64-linux-gnu"}[architecture]
+    include = Path("/usr/include")
+    for name, source in (("linux", include / "linux"), ("asm-generic", include / "asm-generic"), ("asm", include / multiarch / "asm")):
+        shutil.copytree(source, parent / "linux-uapi" / name)
+
+
 def runtime_archives(destination):
     musl = [Path(p) for p in output(["dpkg-query", "-L", "musl-dev"]).splitlines() if p.endswith("/libc.a")]
     if len(musl) != 1:
@@ -185,6 +193,7 @@ def build(args):
         (destination / "build/toolchain-packages.txt").write_bytes(toolchain)
         (destination / "build/nginx-source-lock.json").write_bytes(lock_raw)
         with tempfile.TemporaryDirectory(prefix="nginxpanel-native-") as temp:
+            linux_headers(Path(temp), architecture)
             roots = {}
             for source in lock["sources"]:
                 archive = Path(temp) / (source["id"] + ".tar.gz")
