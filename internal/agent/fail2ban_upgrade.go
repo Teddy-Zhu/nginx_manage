@@ -144,6 +144,12 @@ func fail2banUpgradeIdle(j *Journal) error {
 // through fixed version, config-test and regex diagnostics. It never selects
 // code, changes grants, stops the engine or writes its configuration/database.
 func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fail2banUpgradePlan, error) {
+	return planFail2banUpgrade(parent, in, nil)
+}
+
+// Finalization runs under the same locks and authenticated selection as the
+// diagnostics. Preparation must not reassemble a target from unlocked reads.
+func planFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions, finalize func(context.Context, Fail2banUpgradePlan, fail2banUpgradeBasis) error) (Fail2banUpgradePlan, error) {
 	var out Fail2banUpgradePlan
 	if err := fail2banManagedRoot(in.DataDir, in.Scope); err != nil {
 		return out, err
@@ -298,6 +304,11 @@ func PlanFail2banUpgrade(parent context.Context, in Fail2banUpgradeOptions) (Fai
 	}
 	if bans == nil {
 		out.Impacts = append(out.Impacts, "当前实例已停止，不能因代码切换擅自启动；未观测运行封禁，状态库保留内容须在独立快照及后续授权启动时核对")
+	}
+	if finalize != nil {
+		if err = finalize(ctx, out, basis); err != nil {
+			return out, err
+		}
 	}
 	return out, nil
 }

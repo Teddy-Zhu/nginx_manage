@@ -597,7 +597,30 @@ nginxpanel fail2ban-upgrade-plan --data-dir /var/lib/nginxpanel \
 
 `scope_sha256` 只绑定配置和原批准范围，运行检查点摘要另列在 `host_checkpoint`。检查点核对原运行意图、事务和审计回执，持续同步还核对初始运行基础、父操作和未完成停用意图；已完成退役沿原退役回执核对。待定事务的 `rules_present` 为 `null`，不能当作规则已清空。输出不含封禁地址或保护来源明文；检查点证明限于原记录和回执，不代替内核规则及升级后实际动作核对。`scope_verified` 为真仅表示本次预检无范围或恢复依据阻塞；原批准和运行检查点须在升级持久操作中保留，不能改写原 ID 或仅替换引擎摘要后沿用。
 
-检查结果只用于诊断，尚无升级执行授权或版本切换入口。本机匹配版本状态快照及恢复暂存见下节；独立切换仍须接入快照、动作批准迁移、停止/切换/启动、官方未过期封禁恢复核对及失败补偿，不能用配置检查或封禁摘要替代这些步骤。Web/API 升级任务尚未接入；实现待 P5 集中验证，未执行真实候选检查或升级。
+检查结果只用于诊断，尚无升级执行授权或版本切换入口。本机匹配版本状态快照及恢复暂存见下文；独立切换仍须接入快照、动作批准迁移、停止/切换/启动、官方未过期封禁恢复核对及失败补偿，不能用配置检查或封禁摘要替代这些步骤。Web/API 升级任务尚未接入；实现待 P5 集中验证，未执行真实候选检查或升级。
+
+### 受管升级准备事务
+
+原候选检查无动作范围阻塞后，本机 root 可指定独立 UUID 和原 `target` 保存升级准备材料：
+
+```sh
+nginxpanel fail2ban-upgrade-prepare --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation UPGRADE_PREPARATION_UUID \
+  --fail2ban-upgrade-target UPGRADE_TARGET_SHA256 \
+  --release-plan PREPARED_PLAN_SHA256 --release-select FAIL2BAN_ASSET_ID \
+  --release-trust /etc/nginxpanel/release-trust.json
+
+nginxpanel fail2ban-upgrade-preparation --data-dir /var/lib/nginxpanel \
+  --fail2ban-scope host --fail2ban-operation UPGRADE_PREPARATION_UUID
+```
+
+准备事务在原候选认证及同一组锁内保存完整原安装、jail、Nginx/宿主机批准、运行检查点和审计回执，生成候选完整配置、服务单元及新事件材料。jail、Nginx 和宿主机来源使用新 ID；其他引擎批准及原保护范围保持不变。持续同步预留原会话停用、新会话及必要规则清除的独立 ID，新会话绑定候选来源与清除后的精确运行基础，并保留原开机恢复偏好；原启动恢复派生 ID 不赋给新批准。候选配置须通过候选官方客户端完整校验，发布前再次核对原范围、原检查点及签名代码。准备阶段保留当前运行选择、服务、状态库及所有活动批准。
+
+材料以 root 专用目录及文件权限 `0700/0600` 保存，完整目录原子发布并持久化完成回执，随后写独立准备审计。相同 UUID、相同请求重试读取原材料，不重新生成 ID 或覆盖原检查点；目录已发布但审计尚未写完时，仅经完整核对后补齐原审计。请求或原审计冲突则拒绝。`prepared_unacknowledged` 表示已发布材料尚无匹配审计，`preparation_unknown` 表示发布结果需沿原 UUID 查询；二者不声称准备事务已完整结束。
+
+结果只返回原/候选代码、预留 ID 及内容摘要。`scope_current` 核对当前选择、服务代次和批准范围，`checkpoint_current` 单独核对原运行及审计检查点；无法完整观测时字段保持 `null` 并返回错误。原状态变化不会改写已发布材料，需重新确认相应范围。状态查询验证暂存配置及单元的实际完整内容，不执行候选诊断，也不替代执行前的签名资产复核。最多保留 8 项准备目录，单项不超过 4 MiB，总预算 32 MiB，遗留临时目录计入配额；不自动删除原恢复依据或审计。
+
+准备材料不进入文件/API 逻辑迁移或业务备份。`prepared` 只证明准备事务完成；停止保护、匹配版本的状态快照、批准发布、代码切换、启动后封禁及动作核对、失败补偿仍须由后续持久升级执行流程完成，当前命令不会执行这些步骤。首版不保留旧准备格式兼容，Agent/数据库/迁移归档仍为 108/32/6；本实现及原生工具调用均待 P5 集中验证。
 
 ### 受管实例本机状态快照
 

@@ -100,7 +100,10 @@ func verifyFail2banJailConfig(r *fail2banManagedRecord, dir string, b *fail2banJ
 }
 
 func prepareFail2banJailConfig(r *fail2banManagedRecord, b *fail2banJailBundle) error {
-	dir := r.jailCandidate(b.ID)
+	return prepareFail2banJailConfigAt(r, b, r.jailCandidate(b.ID))
+}
+
+func prepareFail2banJailConfigAt(r *fail2banManagedRecord, b *fail2banJailBundle, dir string) error {
 	if _, err := os.Lstat(dir); err == nil {
 		return verifyFail2banJailConfig(r, dir, b)
 	} else if !os.IsNotExist(err) {

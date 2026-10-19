@@ -81,13 +81,9 @@ func fail2banUpgradeGrantHash(domain string, value any) string {
 
 func (p Fail2banUpgradeGrants) hash() string { return fail2banUpgradeGrantHash("plan", p) }
 
-// Caller holds host -> binding -> maintenance locks. Live runtime checkpoints
-// are hashed separately from the configuration scope: ordinary ban changes
-// must not redefine the approval being requested.
-func planFail2banUpgradeGrants(data string, b fail2banUpgradeBasis) (Fail2banUpgradeGrants, error) {
-	out := Fail2banUpgradeGrants{NginxRegistryID: b.Registry.ID, NginxRegistrySHA256: fail2banUpgradeGrantHash("nginx", b.Registry), NginxMoves: []Fail2banUpgradeNginxGrant{}, HostSourceJails: []string{}, Blockers: []string{}}
+func fail2banUpgradeGrantScopeHash(b fail2banUpgradeBasis) string {
 	from, to := fail2banNginxEngineKey(b.Current.binding()), fail2banNginxEngineKey(b.Candidate.binding())
-	out.ScopeSHA256 = fail2banUpgradeGrantHash("scope", struct {
+	return fail2banUpgradeGrantHash("scope", struct {
 		From, To     string
 		Bundle       *fail2banJailBundle
 		Registry     fail2banNginxRegistry
@@ -96,7 +92,50 @@ func planFail2banUpgradeGrants(data string, b fail2banUpgradeBasis) (Fail2banUpg
 		Sync         *fail2banHostSyncEvent
 		Registration *fail2banHostRegistration
 	}{from, to, b.Bundle, b.Registry, b.HostSources, b.HostProtection, b.HostSync, b.HostRegistration})
+}
+
+func fail2banUpgradeNginxScope(b fail2banUpgradeBasis) (moves []Fail2banUpgradeNginxGrant, retained int, blockers []string) {
+	moves, blockers = []Fail2banUpgradeNginxGrant{}, []string{}
+	from, to := fail2banNginxEngineKey(b.Current.binding()), fail2banNginxEngineKey(b.Candidate.binding())
 	expected := map[string]string{}
+	if b.Bundle != nil {
+		for _, jail := range b.Bundle.Policy.Jails {
+			if jail.Enabled && jail.Action == "nginx-client" {
+				expected[fail2banJailNameFor(jail.ID)] = jail.ResourceID
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, grant := range b.Registry.Grants {
+		resource, selected := expected[grant.Jail]
+		if grant.EngineKey != from {
+			retained++
+			if selected {
+				blockers = append(blockers, "Nginx jail 的批准属于其他引擎："+grant.Jail)
+			}
+			continue
+		}
+		if !selected || resource != grant.ResourceID {
+			blockers = append(blockers, "原引擎存在配置范围外或资源不匹配的 Nginx 批准："+grant.Jail)
+			continue
+		}
+		seen[grant.Jail] = true
+		moves = append(moves, Fail2banUpgradeNginxGrant{grant.Jail, grant.ResourceID, from, to})
+	}
+	for jail := range expected {
+		if !seen[jail] {
+			blockers = append(blockers, "缺少当前 jail 和资源对应的原引擎 Nginx 批准："+jail)
+		}
+	}
+	return moves, retained, blockers
+}
+
+// Caller holds host -> binding -> maintenance locks. Live runtime checkpoints
+// are hashed separately from the configuration scope: ordinary ban changes
+// must not redefine the approval being requested.
+func planFail2banUpgradeGrants(data string, b fail2banUpgradeBasis) (Fail2banUpgradeGrants, error) {
+	out := Fail2banUpgradeGrants{ScopeSHA256: fail2banUpgradeGrantScopeHash(b), NginxRegistryID: b.Registry.ID, NginxRegistrySHA256: fail2banUpgradeGrantHash("nginx", b.Registry), NginxMoves: []Fail2banUpgradeNginxGrant{}, HostSourceJails: []string{}, Blockers: []string{}}
+	from, to := fail2banNginxEngineKey(b.Current.binding()), fail2banNginxEngineKey(b.Candidate.binding())
 	hostJails := []string{}
 	if b.Bundle != nil {
 		projected := *b.Bundle
@@ -112,36 +151,13 @@ func planFail2banUpgradeGrants(data string, b fail2banUpgradeBasis) (Fail2banUpg
 				continue
 			}
 			name := fail2banJailNameFor(jail.ID)
-			if jail.Action == "nginx-client" {
-				expected[name] = jail.ResourceID
-			} else if jail.Action == "host-input" {
+			if jail.Action == "host-input" {
 				hostJails = append(hostJails, name)
 			}
 		}
 	}
 	sort.Strings(hostJails)
-	seen := map[string]bool{}
-	for _, grant := range b.Registry.Grants {
-		resource, selected := expected[grant.Jail]
-		if grant.EngineKey != from {
-			out.NginxRetained++
-			if selected {
-				out.Blockers = append(out.Blockers, "Nginx jail 的批准属于其他引擎："+grant.Jail)
-			}
-			continue
-		}
-		if !selected || resource != grant.ResourceID {
-			out.Blockers = append(out.Blockers, "原引擎存在配置范围外或资源不匹配的 Nginx 批准："+grant.Jail)
-			continue
-		}
-		seen[grant.Jail] = true
-		out.NginxMoves = append(out.NginxMoves, Fail2banUpgradeNginxGrant{grant.Jail, grant.ResourceID, from, to})
-	}
-	for jail := range expected {
-		if !seen[jail] {
-			out.Blockers = append(out.Blockers, "缺少当前 jail 和资源对应的原引擎 Nginx 批准："+jail)
-		}
-	}
+	out.NginxMoves, out.NginxRetained, out.Blockers = fail2banUpgradeNginxScope(b)
 	root := b.HostRegistration
 	registered := root != nil && root.State == "registered" && fail2banHostRegistrationReceipt(data, root)
 	if root != nil {
@@ -228,20 +244,61 @@ func readFail2banUpgradeReceipt(data, id string) (*Record, error) {
 	return &r, nil
 }
 
+// Frozen root recovery input, never returned by CLI/API results or included in
+// logical migration. Runtime contains original ban addresses.
+type fail2banUpgradeHostRecovery struct {
+	RegistrationReceipt *Record
+	Runtime             *fail2banHostRuntime
+	Receipt             *Record
+	Parent              *Record
+	Stopping            *fail2banHostSyncEvent
+}
+
+func readFail2banUpgradeHostRecovery(data string, b fail2banUpgradeBasis) (out fail2banUpgradeHostRecovery, err error) {
+	if b.HostRegistration != nil {
+		out.RegistrationReceipt, err = readFail2banUpgradeReceipt(data, b.HostRegistration.OperationID)
+		if err != nil {
+			return out, err
+		}
+	}
+	out.Runtime, err = loadFail2banHostRuntime(data)
+	if err != nil {
+		return out, err
+	}
+	if out.Runtime != nil {
+		id := out.Runtime.Intent.OperationID
+		if out.Runtime.Intent.ControllerID != "" {
+			id = out.Runtime.Intent.ControllerID
+		}
+		out.Receipt, err = readFail2banUpgradeReceipt(data, id)
+		if err != nil {
+			return out, err
+		}
+	}
+	if b.HostSync != nil {
+		out.Parent, err = readFail2banUpgradeReceipt(data, b.HostSync.SessionID)
+		if err != nil {
+			return out, err
+		}
+	}
+	out.Stopping, err = loadFail2banHostSyncStop(data, b.HostSync)
+	return out, err
+}
+
+func (r fail2banUpgradeHostRecovery) hash() string {
+	return fail2banUpgradeGrantHash("checkpoint-v2", r)
+}
+
 func readFail2banUpgradeHostCheckpoint(data string, b fail2banUpgradeBasis) (*Fail2banUpgradeHostCheckpoint, []string, error) {
-	runtime, err := loadFail2banHostRuntime(data)
+	recovery, err := readFail2banUpgradeHostRecovery(data, b)
 	if err != nil {
 		return nil, nil, err
 	}
-	stopping, err := loadFail2banHostSyncStop(data, b.HostSync)
-	if err != nil {
-		return nil, nil, err
-	}
+	runtime, stopping, parent := recovery.Runtime, recovery.Stopping, recovery.Parent
 	if runtime == nil && b.HostSync == nil && stopping == nil {
 		return nil, nil, nil
 	}
 	out, blockers := &Fail2banUpgradeHostCheckpoint{}, []string{}
-	var runtimeReceipt, parent *Record
 	if runtime != nil {
 		out.RuntimeID, out.RuntimeState, out.ControllerID = runtime.Intent.OperationID, runtime.State, runtime.Intent.ControllerID
 		out.IntentSHA256, out.TransactionSHA256 = runtime.Intent.hash(), runtime.Intent.TransactionHash
@@ -251,24 +308,12 @@ func readFail2banUpgradeHostCheckpoint(data string, b fail2banUpgradeBasis) (*Fa
 			out.RulesPresent = &present
 		}
 		out.ReceiptVerified = fail2banHostRuntimeReceipt(data, runtime)
-		id := runtime.Intent.OperationID
-		if out.ControllerID != "" {
-			id = out.ControllerID
-		}
-		runtimeReceipt, err = readFail2banUpgradeReceipt(data, id)
-		if err != nil {
-			return nil, nil, err
-		}
 		if !terminal || !out.ReceiptVerified || !fail2banHostRuntimeMatches(runtime, b.HostRegistration) {
 			blockers = append(blockers, "宿主机原运行事务、登记或审计回执尚未完成核对")
 		}
 	}
 	if sync := b.HostSync; sync != nil {
 		event, err := loadFail2banHostSyncEvent(data, sync.SessionID)
-		if err != nil {
-			return nil, nil, err
-		}
-		parent, err = readFail2banUpgradeReceipt(data, event.ID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -306,10 +351,6 @@ func readFail2banUpgradeHostCheckpoint(data string, b fail2banUpgradeBasis) (*Fa
 		out.Stopping = &Fail2banUpgradeGrantReference{stopping.ID, stopping.Action, fail2banUpgradeGrantHash("stopping", stopping)}
 		blockers = append(blockers, "持续同步仍有尚未完成的显式停用意图")
 	}
-	out.SHA256 = fail2banUpgradeGrantHash("checkpoint", struct {
-		Runtime         *fail2banHostRuntime
-		Receipt, Parent *Record
-		Stopping        *fail2banHostSyncEvent
-	}{runtime, runtimeReceipt, parent, stopping})
+	out.SHA256 = recovery.hash()
 	return out, blockers, nil
 }
