@@ -282,6 +282,31 @@ func (r *Runtime) Master(ctx context.Context) (int, error) {
 	return c.State.Pid, nil
 }
 
+// ObserveMaster performs no diagnostic reconciliation. A reader cannot finish
+// an old exec or remove its recovery evidence merely to obtain a live PID.
+func (r *Runtime) ObserveMaster(ctx context.Context) (int, error) {
+	if err := r.lock(ctx); err != nil {
+		return 0, err
+	}
+	defer r.unlock()
+	if _, err := r.readDiagnostic(); !errors.Is(err, os.ErrNotExist) {
+		return 0, errors.Join(errors.New("Nginx 容器仍有诊断恢复材料，仅读取不得清理或续办"), err)
+	}
+	d, err := newDocker()
+	if err != nil {
+		return 0, err
+	}
+	defer d.Close()
+	c, err := r.inspect(ctx, d)
+	if err != nil {
+		return 0, err
+	}
+	if _, err = r.readDiagnostic(); !errors.Is(err, os.ErrNotExist) {
+		return 0, errors.Join(errors.New("Nginx 容器观测期间出现诊断恢复材料"), err)
+	}
+	return c.State.Pid, ctx.Err()
+}
+
 // CheckProcess extends the verified master's identity to its direct workers.
 func (r *Runtime) CheckProcess(ctx context.Context, pid, master int) error {
 	if err := ctx.Err(); err != nil {

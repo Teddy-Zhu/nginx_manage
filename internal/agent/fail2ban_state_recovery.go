@@ -39,6 +39,17 @@ type fail2banStateRecoveryJail struct {
 	Duration int64  `json:"duration"`
 }
 
+// Kept inside the caller's host/binding/maintenance locks. Addresses and the
+// live Socket identity are never part of a public recovery result.
+type fail2banStateRecoveryObservation struct {
+	Receipt          fail2banStateReceipt
+	Manifest         fail2banStateManifest
+	Managed          *fail2banManagedRecord
+	Bundle           *fail2banJailBundle
+	Live             fail2banLiveService
+	Expected, Actual fail2banBanProof
+}
+
 func fail2banRecoveryBundle(b *fail2banJailBundle) []byte {
 	if b == nil {
 		return []byte("null")
@@ -191,6 +202,11 @@ func VerifyFail2banStateRecovery(parent context.Context, in Fail2banStateSnapsho
 		return out, err
 	}
 	defer access()
+	return verifyFail2banStateRecovery(ctx, in, j, nil)
+}
+
+func verifyFail2banStateRecovery(ctx context.Context, in Fail2banStateSnapshotOptions, j *Journal, complete func(Fail2banStateRecovery, fail2banStateRecoveryObservation) error) (out Fail2banStateRecovery, resultErr error) {
+	var err error
 	if err = fail2banUpgradeIdle(j); err != nil {
 		return out, err
 	}
@@ -279,5 +295,12 @@ func VerifyFail2banStateRecovery(parent context.Context, in Fail2banStateSnapsho
 	if err = ctx.Err(); err != nil {
 		return out, err
 	}
-	return Fail2banStateRecovery{State: "verified", SnapshotID: in.OperationID, ManifestSHA256: receipt.ManifestSHA256, InstallationID: r.OperationID, EventID: r.EventID, JailSelection: selection, Invocation: before.invocation, At: time.Now().Unix(), DatabaseSchema: 4, Source: receipt.Component, Current: fail2banUpgradeComponent(r), Expected: fail2banRecoveryBanSummary(expected, at), Actual: fail2banRecoveryBanSummary(actual, actualAt)}, nil
+	out = Fail2banStateRecovery{State: "verified", SnapshotID: in.OperationID, ManifestSHA256: receipt.ManifestSHA256, InstallationID: r.OperationID, EventID: r.EventID, JailSelection: selection, Invocation: before.invocation, At: time.Now().Unix(), DatabaseSchema: 4, Source: receipt.Component, Current: fail2banUpgradeComponent(r), Expected: fail2banRecoveryBanSummary(expected, at), Actual: fail2banRecoveryBanSummary(actual, actualAt)}
+	if complete != nil {
+		err = complete(out, fail2banStateRecoveryObservation{Receipt: receipt, Manifest: m, Managed: r, Bundle: bundle, Live: before, Expected: expected, Actual: actual})
+		if err != nil {
+			return Fail2banStateRecovery{}, err
+		}
+	}
+	return out, ctx.Err()
 }

@@ -118,10 +118,9 @@ func collectFail2banNginx(ctx context.Context, data string, registry fail2banNgi
 					return out, errors.New("Nginx 客户端动作仅支持单个 IP，jail 含不支持的网络封禁")
 				}
 				ip = ip.Unmap()
-				protected := ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast()
-				for _, value := range bindings[resource] {
-					prefix, _ := netip.ParsePrefix(value)
-					protected = protected || prefix.Contains(ip)
+				protected, err := fail2banNginxProtectedAddress(ip, bindings[resource])
+				if err != nil {
+					return out, err
 				}
 				if protected {
 					out.protected++
@@ -155,4 +154,16 @@ func collectFail2banNginx(ctx context.Context, data string, registry fail2banNgi
 		return out, err
 	}
 	return out, ctx.Err()
+}
+
+func fail2banNginxProtectedAddress(ip netip.Addr, prefixes []string) (bool, error) {
+	protected := ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast()
+	for _, value := range prefixes {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil || prefix.Masked().String() != value {
+			return false, errors.New("Nginx 客户端动作的代理保护范围无效")
+		}
+		protected = protected || prefix.Contains(ip)
+	}
+	return protected, nil
 }

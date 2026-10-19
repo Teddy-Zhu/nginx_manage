@@ -252,7 +252,10 @@ func checkFail2banJailNames(raw []byte, b *fail2banJailBundle) error {
 }
 
 func checkFail2banBanPreservation(before, after fail2banBanProof) error {
-	now := time.Now().Unix()
+	return checkFail2banBanPreservationAt(before, after, time.Now().Unix())
+}
+
+func checkFail2banBanPreservationAt(before, after fail2banBanProof, now int64) error {
 	for jail, current := range after {
 		for ip, old := range before[jail] {
 			if old.Expires > 0 && old.Expires <= now {

@@ -70,7 +70,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-upgrade-plan|fail2ban-upgrade-prepare|fail2ban-upgrade-preparation|fail2ban-upgrade-switch|fail2ban-upgrade-switch-resume|fail2ban-upgrade-switch-revert|fail2ban-upgrade-switch-status|fail2ban-state-capture|fail2ban-state-inspect|fail2ban-state-prepare|fail2ban-state-recovery-check|fail2ban-state-restore-plan|fail2ban-state-restore|fail2ban-state-restore-status|fail2ban-state-restore-revert|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|iptables-retire|iptables-retirement|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-upgrade-plan|fail2ban-upgrade-prepare|fail2ban-upgrade-preparation|fail2ban-upgrade-switch|fail2ban-upgrade-switch-resume|fail2ban-upgrade-switch-revert|fail2ban-upgrade-switch-status|fail2ban-upgrade-verify|fail2ban-upgrade-verification|fail2ban-state-capture|fail2ban-state-inspect|fail2ban-state-prepare|fail2ban-state-recovery-check|fail2ban-state-restore-plan|fail2ban-state-restore|fail2ban-state-restore-status|fail2ban-state-restore-revert|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|iptables-retire|iptables-retirement|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -127,6 +127,7 @@ func run() error {
 	fail2banUpgradeTarget := flags.String("fail2ban-upgrade-target", "", "exact managed Fail2ban upgrade preview digest")
 	fail2banUpgradePreparation := flags.String("fail2ban-upgrade-preparation", "", "exact root Fail2ban upgrade preparation UUID")
 	fail2banUpgradePreparedSHA256 := flags.String("fail2ban-upgrade-prepared-sha256", "", "exact Fail2ban upgrade preparation intent digest")
+	fail2banUpgradeSwitch := flags.String("fail2ban-upgrade-switch", "", "exact completed local Fail2ban upgrade switch UUID")
 	fail2banNginxBase := flags.String("fail2ban-nginx-base", "", "expected current Nginx action authorization UUID")
 	fail2banHostInputBase := flags.String("fail2ban-host-input-base", "", "expected current independent host input registration operation UUID")
 	fail2banHostProtectionBase := flags.String("fail2ban-host-protection-base", "", "expected current host input protection approval UUID")
@@ -244,6 +245,8 @@ func run() error {
 		"fail2ban-upgrade-switch-resume":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-upgrade-switch-revert":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-upgrade-switch-status":  {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-upgrade-verify":         {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true, "fail2ban-upgrade-switch": true, "nginx-binary": true, "nginx-user": true, "nginx-container": true},
+		"fail2ban-upgrade-verification":   {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-state-capture":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-state-inspect":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
 		"fail2ban-state-prepare":          {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
@@ -362,6 +365,10 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "fail2ban-upgrade-switch":
+			if command != "fail2ban-upgrade-verify" {
+				invalidFlag = f.Name
+			}
 		case "fail2ban-upgrade-preparation", "fail2ban-upgrade-prepared-sha256":
 			if command != "fail2ban-upgrade-switch" {
 				invalidFlag = f.Name
@@ -379,7 +386,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-operation":
-			if command != "fail2ban-install" && command != "fail2ban-upgrade-prepare" && command != "fail2ban-upgrade-preparation" && !strings.HasPrefix(command, "fail2ban-upgrade-switch") && !strings.HasPrefix(command, "fail2ban-state-") && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
+			if command != "fail2ban-install" && command != "fail2ban-upgrade-prepare" && command != "fail2ban-upgrade-preparation" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-verification" && !strings.HasPrefix(command, "fail2ban-upgrade-switch") && !strings.HasPrefix(command, "fail2ban-state-") && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-host-input-base":
@@ -539,7 +546,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "nginx-container":
-			if command != "agent" && command != "nginx-init" {
+			if command != "agent" && command != "nginx-init" && command != "fail2ban-upgrade-verify" {
 				invalidFlag = f.Name
 			}
 		case "panel-gid":
@@ -748,6 +755,18 @@ func run() error {
 			out, err = agent.RevertFail2banUpgradeSwitch(ctx, absDir, *fail2banScope, *fail2banOperation)
 		case "fail2ban-upgrade-switch-status":
 			out, err = agent.ReadFail2banUpgradeSwitchStatus(ctx, absDir, *fail2banScope, *fail2banOperation)
+		}
+		if out.ID == "" && err != nil {
+			return err
+		}
+		return errors.Join(err, json.NewEncoder(os.Stdout).Encode(out))
+	case "fail2ban-upgrade-verify", "fail2ban-upgrade-verification":
+		var out agent.Fail2banUpgradeVerification
+		var err error
+		if command == "fail2ban-upgrade-verify" {
+			out, err = agent.VerifyFail2banUpgrade(ctx, agent.Fail2banUpgradeVerificationOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, SwitchID: *fail2banUpgradeSwitch, NginxBinary: *nginxBinary, NginxWorker: *nginxUser, NginxContainer: *nginxContainer})
+		} else {
+			out, err = agent.ReadFail2banUpgradeVerification(ctx, absDir, *fail2banScope, *fail2banOperation)
 		}
 		if out.ID == "" && err != nil {
 			return err

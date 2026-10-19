@@ -227,20 +227,10 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 			return out, errors.New("多个 jail 合并的唯一封禁超过 1024 项")
 		}
 	}
-	for address := range union {
-		ip, _ := netip.ParseAddr(address)
-		excluded := !ip.IsGlobalUnicast()
-		for _, raw := range set.Protected {
-			prefix, _ := netip.ParsePrefix(raw)
-			excluded = excluded || prefix.Contains(ip)
-		}
-		if excluded {
-			out.view.ProtectedCount++
-		} else {
-			out.addresses = append(out.addresses, address)
-		}
+	out.addresses, out.view.ProtectedCount, err = filterFail2banHostUnion(union, set.Protected)
+	if err != nil {
+		return out, err
 	}
-	sort.Strings(out.addresses)
 	out.binding, out.live, out.program = b, before, program
 	if err = out.unchanged(ctx, dataDir); err != nil {
 		return out, err
@@ -262,4 +252,33 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 	out.view.SourceHash, out.view.BannedCount = secure.Hash(raw), len(out.addresses)
 	out.view.State, out.view.Reason = "ready", ""
 	return out, nil
+}
+
+func filterFail2banHostUnion(union map[string]bool, protected []string) ([]string, int, error) {
+	if len(union) > firewall.NFTBanLimit {
+		return nil, 0, errors.New("多个 jail 合并的唯一封禁超过 1024 项")
+	}
+	set, err := (firewall.NFTBanSet{Addresses: []string{}, Protected: protected}).Normalize()
+	if err != nil {
+		return nil, 0, err
+	}
+	addresses, excludedCount := []string{}, 0
+	for address := range union {
+		ip, err := netip.ParseAddr(address)
+		if err != nil || ip.Zone() != "" || ip.Unmap().String() != address {
+			return nil, 0, errors.New("宿主机封禁集合包含非规范 IP")
+		}
+		excluded := !ip.IsGlobalUnicast()
+		for _, raw := range set.Protected {
+			prefix, _ := netip.ParsePrefix(raw)
+			excluded = excluded || prefix.Contains(ip)
+		}
+		if excluded {
+			excludedCount++
+		} else {
+			addresses = append(addresses, address)
+		}
+	}
+	sort.Strings(addresses)
+	return addresses, excludedCount, nil
 }

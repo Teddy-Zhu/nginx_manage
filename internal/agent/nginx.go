@@ -46,6 +46,7 @@ type Nginx struct {
 	mu                          sync.Mutex
 	workers                     sync.WaitGroup
 	closed                      bool
+	observationOnly             bool
 	disasterBusy                string
 	unlock                      *os.File
 	gid                         int
@@ -921,6 +922,9 @@ func (n *Nginx) masterPID() (int, error) {
 	if n.Container != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
+		if n.observationOnly {
+			return n.Container.ObserveMaster(ctx)
+		}
 		return n.Container.Master(ctx)
 	}
 	name := filepath.Join(n.DataDir, "run", "nginx.pid")
