@@ -25,11 +25,12 @@ type PanelServiceInput struct {
 	SelectionID   string `json:"selection_id"`
 }
 type PanelServiceIntent struct {
-	Input         PanelServiceInput       `json:"input"`
-	ReleaseID     string                  `json:"release_id"`
-	BindingSHA256 string                  `json:"binding_sha256"`
-	StopSHA256    string                  `json:"stop_sha256"`
-	Before        PanelServiceObservation `json:"before"`
+	Input            PanelServiceInput       `json:"input"`
+	ReleaseID        string                  `json:"release_id"`
+	BindingSHA256    string                  `json:"binding_sha256"`
+	LauncherProtocol int                     `json:"launcher_protocol"`
+	StopSHA256       string                  `json:"stop_sha256"`
+	Before           PanelServiceObservation `json:"before"`
 }
 type PanelServiceOperation struct {
 	Intent     PanelServiceIntent       `json:"intent"`
@@ -60,6 +61,9 @@ func validPanelService(r Record) error {
 	}
 	p := r.PanelService
 	i := p.Intent
+	if i.Before.Mode == "docker" && i.LauncherProtocol <= 0 || i.Before.Mode == "native" && i.LauncherProtocol != 0 {
+		return errors.New("面板进程记录的 launcher 协议无效")
+	}
 	if _, err := panelruntime.Root(i.Input.DataDir); err != nil {
 		return err
 	}
@@ -78,7 +82,7 @@ func validPanelService(r Record) error {
 		return errors.New("面板进程动作无效")
 	}
 	for n, req := range p.Dispatches {
-		if i.Before.Mode != "docker" || req.Protocol != launcher.Protocol || req.OperationID != r.OperationID || !validID(req.BootID) || req.Action != i.Input.Action || req.ReleaseID != i.ReleaseID || req.Action == "start" && req.InstanceID != "" || req.Action == "stop" && req.InstanceID != i.Before.InstanceID {
+		if i.Before.Mode != "docker" || req.Protocol != i.LauncherProtocol || req.OperationID != r.OperationID || !validID(req.BootID) || req.Action != i.Input.Action || req.ReleaseID != i.ReleaseID || req.Action == "start" && req.InstanceID != "" || req.Action == "stop" && req.InstanceID != i.Before.InstanceID {
 			return errors.New("面板 launcher 派发身份无效")
 		}
 		for k := 0; k < n; k++ {
@@ -241,6 +245,16 @@ func ControlPanelService(ctx context.Context, in PanelServiceInput, id, epoch st
 			return out, errors.New("面板进程尚未处于可控制的稳定状态")
 		}
 		i := PanelServiceIntent{Input: in, ReleaseID: s.Release.ID, BindingSHA256: selectionValueHash(s.Deployment), Before: before}
+		if s.Deployment.Mode == "docker" {
+			l, e := panelruntime.LauncherRelease(in.DataDir)
+			if e != nil {
+				return out, e
+			}
+			if l.Deployment != s.Deployment {
+				return out, errors.New("面板 launcher 绑定在授权期间变化")
+			}
+			i.LauncherProtocol = l.Release.LauncherVersion
+		}
 		if in.Action == "start" {
 			i.StopSHA256 = stop.RequestHash
 		}
@@ -391,7 +405,7 @@ func runPanelService(ctx context.Context, save func(Record) error, r *Record, s 
 				if len(r.PanelService.Dispatches) >= 4 {
 					return o, errors.New("launcher 重启次数超过原操作续行上限，须本机处理")
 				}
-				request := launcher.Request{Protocol: launcher.Protocol, Action: i.Input.Action, OperationID: r.OperationID, BootID: o.BootID, ReleaseID: i.ReleaseID}
+				request := launcher.Request{Protocol: i.LauncherProtocol, Action: i.Input.Action, OperationID: r.OperationID, BootID: o.BootID, ReleaseID: i.ReleaseID}
 				if request.Action == "stop" {
 					request.InstanceID = i.Before.InstanceID
 				}

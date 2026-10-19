@@ -24,7 +24,7 @@ const preparations = ref<ComponentTask[]>([]), tasks = ref<PanelUpdateTask[]>([]
 const coordinateAgent = ref(false), allowDowntime = ref(false);
 const canWrite = computed(() => !!session.me?.scopes.includes("components.manage") && !!session.me?.scopes.includes("system.write"));
 const held = computed(() => maintenance.value?.phase === "held" && maintenance.value.agent.phase === "held" && maintenance.value.agent.id === maintenance.value.session?.task_id && maintenance.value.agent.epoch === maintenance.value.session?.root_epoch);
-const prepared = computed(() => preparations.value.filter((t) => t.action === "prepare" && t.state === "succeeded" && t.result?.runtime_ready && t.result.panel && t.result.release && t.result.panel.launcher_version === t.result.release.receiver.launcher));
+const prepared = computed(() => preparations.value.filter((t) => t.action === "prepare" && t.state === "succeeded" && t.result?.runtime_ready && t.result.panel && t.result.release));
 const chosen = computed(() => prepared.value.find((t) => t.id === selected.value));
 const needsCoordination = computed(() => !!chosen.value?.result?.panel?.requires_coordination);
 watch([selected, needsCoordination], () => { coordinateAgent.value = needsCoordination.value; allowDowntime.value = false; });

@@ -78,6 +78,9 @@ func run() error {
 	if strings.HasPrefix(command, "deployment-upgrade") {
 		return runDeploymentUpgrade(ctx, command, os.Args[2:])
 	}
+	if command == "launcher-bridge" {
+		return runLauncherBridge(ctx, os.Args[2:])
+	}
 	if command == "release-image-pull" {
 		return runReleaseImagePull(ctx, os.Args[2:])
 	}

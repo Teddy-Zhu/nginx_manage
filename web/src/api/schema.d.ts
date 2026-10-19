@@ -2615,6 +2615,7 @@ export interface components {
             prerelease: boolean;
         };
         PanelImageUpgradeCreateInput: {
+            allow_downtime?: boolean;
             maintenance_id: string;
             prepare_task_id: string;
         };

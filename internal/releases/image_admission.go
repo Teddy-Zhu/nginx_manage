@@ -14,6 +14,7 @@ type ImageInput struct {
 	TrustPath, ManifestPath, SignaturePath string
 	ExpectedManifestSHA256                 string
 	AllowPrerelease                        bool
+	PanelStaging                           bool
 }
 
 // ImageApproval belongs to an immutable, root-owned deployment binding. The
@@ -63,9 +64,10 @@ func AdmitImage(in ImageInput, component, reference string, prior *ImageApproval
 	// These images carry static Linux programs; host distribution libraries are
 	// not an admission dependency. The catalog must contain that static package.
 	input := Input{TrustPath: in.TrustPath, ManifestPath: in.ManifestPath, SignaturePath: in.SignaturePath, AllowPrerelease: in.AllowPrerelease,
-		Host:     Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: "any", Version: "any"},
-		Receiver: Receiver{APIMajor: 1, AgentProtocol: protocol.Agent, Launcher: LauncherVersion},
-		Assets:   []string{"panel-linux-" + runtime.GOARCH}, AllowedComponents: []string{"panel"}}
+		PanelStaging: in.PanelStaging && component == "panel-launcher",
+		Host:         Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: "any", Version: "any"},
+		Receiver:     Receiver{APIMajor: 1, AgentProtocol: protocol.Agent, Launcher: LauncherVersion},
+		Assets:       []string{"panel-linux-" + runtime.GOARCH}, AllowedComponents: []string{"panel"}}
 	v, err := verifyAt(input, at)
 	if err != nil {
 		return out, Asset{}, err

@@ -161,13 +161,13 @@ async function prepare() {
     },
   });
 }
-function canPull(t: ComponentTask) {
-  return permitted.value && !!session.me?.scopes.includes("system.write") && t.action === "prepare" && t.state === "succeeded" && !!t.result?.panel && !!t.result.runtime_ready && !t.result.panel.requires_coordination &&
+function canPull(t: ComponentTask, imageID: string) {
+  return permitted.value && !!session.me?.scopes.includes("system.write") && t.action === "prepare" && t.state === "succeeded" && !!t.result?.panel && !!t.result.runtime_ready && (!t.result.panel.requires_coordination || imageID === "panel-launcher") &&
     (t.result.release?.expires_at ?? 0) * 1000 > clock.value && !active.value && !busy.value;
 }
 async function pull(t: ComponentTask, imageID: string) {
   const source = t.result;
-  if (!canPull(t) || !source?.release || !source.release.images.some((image) => image.id === imageID)) return;
+  if (!canPull(t, imageID) || !source?.release || !source.release.images.some((image) => image.id === imageID)) return;
   await submit({ check_task_id: "", prepare_task_id: t.id, input: {
     action: "pull", image_id: imageID, offline_id: source.input.offline_id, tag: source.release.tag, assets: source.release.selected,
     prerelease: source.input.prerelease, plan_id: source.release.plan_id, manifest_sha256: source.release.manifest_sha256,
@@ -425,15 +425,15 @@ onUnmounted(() => {
         </p>
         <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
         <NAlert v-if="task.result?.release?.staging_only || task.result?.panel?.requires_coordination" type="warning" title="需要协调部署">
-          Agent 协议变化可在面板更新中选择协调更新；launcher 协议变化需要先更新基础部署。此准备结果不能用于独立更新。
+          Agent 协议变化可选择协调更新；launcher 协议变化需先拉取面板运行镜像并完成替换，再更新面板与 Agent。
         </NAlert>
         <p v-if="task.result?.panel" class="muted">目标 Agent 协议 {{ task.result.panel.agent_protocol }} · launcher 协议 {{ task.result.panel.launcher_version }}</p>
         <template v-if="task.action === 'prepare' && task.state === 'succeeded' && task.result?.release?.images.length">
           <div v-for="image in task.result.release.images" :key="image.id" class="page-stack">
             <strong>{{ image.id === 'nginx' ? 'Nginx 镜像' : '面板运行镜像' }} · {{ image.architecture }}</strong>
             <p class="muted" style="overflow-wrap: anywhere">{{ image.reference }}</p>
-            <NPopconfirm :disabled="!canPull(task)" @positive-click="pull(task, image.id)">
-              <template #trigger><NButton :disabled="!canPull(task)">拉取镜像</NButton></template>
+            <NPopconfirm :disabled="!canPull(task, image.id)" @positive-click="pull(task, image.id)">
+              <template #trigger><NButton :disabled="!canPull(task, image.id)">拉取镜像</NButton></template>
               确认下载此签名镜像？下载完成后可单独执行运行版本切换。
             </NPopconfirm>
           </div>

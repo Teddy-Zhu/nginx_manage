@@ -41,7 +41,7 @@ type Input struct {
 }
 
 func (in Input) Validate() error {
-	if Kind(in.Component) == "" || in.Component == Nginx && !in.AllowDowntime || in.Component == Panel && in.AllowDowntime || !components.ValidID(in.MaintenanceID) || !digest.MatchString(in.PlanID) {
+	if Kind(in.Component) == "" || in.Component == Nginx && !in.AllowDowntime || !components.ValidID(in.MaintenanceID) || !digest.MatchString(in.PlanID) {
 		return fault.Invalid("镜像替换须绑定原维护会话与签名暂存计划")
 	}
 	return nil

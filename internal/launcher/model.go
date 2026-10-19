@@ -27,15 +27,21 @@ type Operation struct {
 }
 
 func validRequest(r Request) bool {
-	if r.Protocol != Protocol || !idValue.MatchString(r.BootID) || !idValue.MatchString(r.OperationID) || !releaseValue.MatchString(r.ReleaseID) {
+	return validRequestAt(r, Protocol)
+}
+func validRequestAt(r Request, version int) bool {
+	if version <= 0 || r.Protocol != version || !idValue.MatchString(r.BootID) || !idValue.MatchString(r.OperationID) || !releaseValue.MatchString(r.ReleaseID) {
 		return false
 	}
 	return r.Action == "start" && r.InstanceID == "" || (r.Action == "stop" || r.Action == "restart") && idValue.MatchString(r.InstanceID)
 }
 
 func validOperation(op Operation) bool {
+	return validOperationAt(op, Protocol)
+}
+func validOperationAt(op Operation, version int) bool {
 	r := op.Request
-	if !validRequest(r) || len(op.Error) > 1024 {
+	if !validRequestAt(r, version) || len(op.Error) > 1024 {
 		return false
 	}
 	switch op.State {

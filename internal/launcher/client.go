@@ -20,7 +20,10 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-type Client struct{ DataDir string }
+type Client struct {
+	DataDir string
+	direct  bool
+}
 
 var ErrOperationNotFound = errors.New("当前 launcher 启动中没有原操作记录")
 
@@ -198,18 +201,43 @@ func (c Client) Status(ctx context.Context) (Status, error) {
 	return out, err
 }
 
-// StatusPeer also returns the authenticated launcher's host PID. It is local
-// evidence for checking its child, never a PID supplied in the response JSON.
+// StatusPeer returns the authenticated launcher's host PID for checking its
+// child. Launcher response data never substitutes for host peer evidence.
 func (c Client) StatusPeer(ctx context.Context) (Status, int, error) {
+	if !c.direct {
+		if s, use, err := c.bridgeProgram(); err != nil {
+			return Status{}, 0, err
+		} else if use {
+			r, err := c.bridge(ctx, s, bridgeRequest{Action: "status"})
+			if err != nil {
+				return Status{}, 0, err
+			}
+			return *r.Status, r.PeerPID, nil
+		}
+	}
 	var out Status
 	var peer int
 	err := c.callPeer(ctx, http.MethodGet, "/v1/status", nil, &out, &peer)
-	if err == nil && (out.Protocol != Protocol || !idValue.MatchString(out.BootID) || out.ReleaseID != "" && !releaseValue.MatchString(out.ReleaseID) || out.PID < 0 || out.PID > 0 && !idValue.MatchString(out.InstanceID) || out.PID == 0 && out.InstanceID != "" || out.Operation != nil && (!validOperation(*out.Operation) || out.Operation.Request.BootID != out.BootID)) {
+	if err == nil && !bridgeStatusValid(out, Protocol) {
 		err = errors.New("launcher 状态身份无效")
 	}
 	return out, peer, err
 }
 func (c Client) Control(ctx context.Context, in Request) (Operation, error) {
+	if !c.direct {
+		if s, use, err := c.bridgeProgram(); err != nil {
+			return Operation{}, err
+		} else if use {
+			if !validRequestAt(in, s.Release.LauncherVersion) {
+				return Operation{}, errors.New("launcher 桥接请求身份无效")
+			}
+			r, err := c.bridge(ctx, s, bridgeRequest{Action: "control", Request: &in})
+			if err != nil {
+				return Operation{}, err
+			}
+			return *r.Operation, nil
+		}
+	}
 	var out Operation
 	if !validRequest(in) {
 		return out, errors.New("launcher 控制请求无效")
@@ -221,6 +249,20 @@ func (c Client) Control(ctx context.Context, in Request) (Operation, error) {
 	return out, err
 }
 func (c Client) Operation(ctx context.Context, id string) (Operation, error) {
+	if !c.direct {
+		if s, use, err := c.bridgeProgram(); err != nil {
+			return Operation{}, err
+		} else if use {
+			if !idValue.MatchString(id) {
+				return Operation{}, errors.New("launcher 操作标识无效")
+			}
+			r, err := c.bridge(ctx, s, bridgeRequest{Action: "operation", OperationID: id})
+			if err != nil {
+				return Operation{}, err
+			}
+			return *r.Operation, nil
+		}
+	}
 	var out Operation
 	if !idValue.MatchString(id) {
 		return out, errors.New("launcher 操作标识无效")

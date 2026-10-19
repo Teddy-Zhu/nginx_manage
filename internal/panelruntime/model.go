@@ -42,18 +42,19 @@ type Release struct {
 	Web             map[string]File `json:"web"`
 }
 type Deployment struct {
-	Schema         int                    `json:"schema"`
-	Mode           string                 `json:"mode"`
-	DataDir        string                 `json:"data_dir"`
-	Listen         string                 `json:"listen"`
-	UID            int                    `json:"uid"`
-	GID            int                    `json:"gid"`
-	IPCGID         int                    `json:"ipc_gid"`
-	LauncherSHA256 string                 `json:"launcher_sha256"`
-	InitialRelease string                 `json:"initial_release"`
-	Image          string                 `json:"image"`
-	ImageID        string                 `json:"image_id"`
-	SignedImage    releases.ImageApproval `json:"signed_image"`
+	Schema          int                    `json:"schema"`
+	Mode            string                 `json:"mode"`
+	DataDir         string                 `json:"data_dir"`
+	Listen          string                 `json:"listen"`
+	UID             int                    `json:"uid"`
+	GID             int                    `json:"gid"`
+	IPCGID          int                    `json:"ipc_gid"`
+	LauncherSHA256  string                 `json:"launcher_sha256"`
+	LauncherRelease string                 `json:"launcher_release"`
+	InitialRelease  string                 `json:"initial_release"`
+	Image           string                 `json:"image"`
+	ImageID         string                 `json:"image_id"`
+	SignedImage     releases.ImageApproval `json:"signed_image"`
 }
 type BindInput struct {
 	DataDir, Binary, WebDir, LauncherBinary, Listen, Image string
@@ -91,12 +92,12 @@ func (d Deployment) validate(data string) error {
 	}
 	switch d.Mode {
 	case "native":
-		if d.LauncherSHA256 != "" || d.Image != "" || d.ImageID != "" || d.SignedImage != (releases.ImageApproval{}) {
+		if d.LauncherSHA256 != "" || d.LauncherRelease != "" || d.Image != "" || d.ImageID != "" || d.SignedImage != (releases.ImageApproval{}) {
 			return errors.New("原生面板绑定不能包含容器来源")
 		}
 		return nil
 	case "docker":
-		if !digest.MatchString(d.LauncherSHA256) || !imageValue.MatchString(d.Image) {
+		if !digest.MatchString(d.LauncherSHA256) || !digest.MatchString(d.LauncherRelease) || !imageValue.MatchString(d.Image) {
 			return errors.New("容器面板的固定镜像或 launcher 无效")
 		}
 		return d.SignedImage.Validate("panel-launcher", d.Image, d.ImageID, d.LauncherSHA256)

@@ -79,8 +79,20 @@ func validCoordinatedAgent(r Record) error {
 }
 
 func prepareCoordinatedAgent(ctx context.Context, in PanelUpdateInput, before panelruntime.Snapshot, target panelruntime.StagedRelease, id string) (*CoordinatedAgentIntent, error) {
-	if !in.AllowDowntime || before.Release.AgentProtocol != Protocol || target.Release.LauncherVersion != before.Release.LauncherVersion {
-		return nil, errors.New("协调升级须明确允许停机，并先满足当前 launcher 协议；跨 launcher 协议须先完成基础部署")
+	// Native deployment has no launcher process to replace.
+	launcherVersion := target.Release.LauncherVersion
+	if before.Deployment.Mode == "docker" {
+		l, err := panelruntime.LauncherRelease(in.Stage.DataDir)
+		if err != nil {
+			return nil, err
+		}
+		if l.Deployment != before.Deployment {
+			return nil, errors.New("协调升级的 launcher 绑定变化")
+		}
+		launcherVersion = l.Release.LauncherVersion
+	}
+	if !in.AllowDowntime || before.Release.AgentProtocol != Protocol || target.Release.LauncherVersion != launcherVersion {
+		return nil, errors.New("协调升级须明确允许停机，并先将运行镜像更新至目标 launcher 协议")
 	}
 	if _, err := installationExecutable(); err != nil {
 		return nil, err

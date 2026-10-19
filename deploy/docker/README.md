@@ -112,13 +112,13 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 
 实际容器主 PID 必须等于 Unix Socket 内核给出的对端 PID。客户端继续从宿主机核对进程完整 UID/GID、附加组、capabilities、禁止提权、PID 1、用户映射、命名空间、实际参数和签名程序散列。响应读取后再次核对容器 ID、启动时间、重启计数、进程及程序 inode/元数据；连接期间发生重启、重建、程序或运行绑定变化时拒绝响应，结果不明的动作继续按原操作查询。核对只读取容器和内核信息，不创建容器、不执行诊断进程或拉取镜像；Docker Socket 仍只供宿主机 root 使用。字段语义见 [Docker Engine API v1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)。
 
-固定 launcher 镜像支持宿主机 root 发起的独立替换事务。先持有原维护会话、完成同一签名发行的面板资源准备，并将新旧镜像按摘要保留在目标主机；命令不拉取镜像。替换只改变容器镜像和 launcher 批准，当前应用、前端选择、数据库、身份、数据目录及监听地址保持原值。该入口不用于跨应用/Agent 协议或 launcher 协议的协调升级，也不替换 Nginx 容器镜像。
+固定 launcher 镜像支持宿主机 root 发起的独立替换事务。先持有原维护会话、完成同一签名发行的面板资源准备，并将新旧镜像按摘要保留在目标主机；命令不拉取镜像。替换只改变容器镜像和 launcher 批准，当前应用、前端选择、数据库、身份、数据目录及监听地址保持原值。该事务可先更新 launcher 协议，原应用继续运行；需要更新应用和 Agent 时，再使用面板协调更新。Nginx 镜像由独立入口替换。
 
 ```sh
 # 以下命令只在实际部署的目标主机执行。UUID、epoch、准备计划和摘要均须使用实际值。
 /opt/nginxpanel/current/nginxpanel panel-image --data-dir /srv/nginxpanel \
   --panel-image <operation-uuid> --maintenance-id <maintenance-uuid> --maintenance-epoch <epoch> \
-  --release-plan <signed-panel-plan-sha256> \
+  --release-plan <signed-panel-plan-sha256> --allow-downtime \
   --image ghcr.io/<owner>/nginxpanel-runtime@sha256:<digest> \
   --image-manifest /root/offline/release-manifest.json \
   --image-signature /root/offline/release-manifest.sig \
@@ -165,7 +165,7 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 
 ## 面板与宿主 Agent 协调更新
 
-目标 Agent 协议变化时，可在面板更新页选择“同时更新 Agent”并确认停机；API 沿用 `POST /api/v1/panel/updates`，增加 `coordinate_agent: true` 和 `allow_downtime: true`。必须先完成签名面板准备、进入维护，并满足同一 launcher 协议及发布允许自动回滚的条件。镜像和 Nginx 不随此操作替换。
+目标 Agent 协议变化时，可在面板更新页选择“同时更新 Agent”并确认停机；API 沿用 `POST /api/v1/panel/updates`，增加 `coordinate_agent: true` 和 `allow_downtime: true`。必须先完成签名面板准备、进入维护，并满足已安装 launcher 与目标准备协议一致及发布允许自动回滚的条件。原生部署无需 launcher 镜像。镜像和 Nginx 不随此操作替换。
 
 本机 root 可使用同一独立 systemd 更新服务。初次受理指定新 UUID；恢复只引用原 UUID，不修改目标、不延长原前进期限。省略 epoch 时读取原维护记录的当前 epoch。服务结果不明时先查询，不重复初次命令。
 
@@ -179,4 +179,6 @@ sudo /opt/nginxpanel/current/nginxpanel deployment-upgrade-resume --data-dir /sr
   --operation-id <original-uuid>
 ```
 
-目标程序在停机前只读检查持久日志。切换后通过对应程序自身的非 root 辅助入口核对 Agent 协议、进程和原维护会话，再确认面板数据库、前端及 HTTPS；维护释放前失败沿原快照补偿。Agent 不可用或主机重启后可从本机续办；新 boot 代次的 root 救援只恢复原版本。服务定义、程序或进程身份偏离时保留恢复依据，要求本机核对。跨 launcher 协议的更新仍需先完成基础部署。此流程尚待 P5 隔离运行验收。
+目标程序在停机前只读检查持久日志。切换后通过对应程序自身的非 root 辅助入口核对 Agent 协议、进程和原维护会话，再确认面板数据库、前端及 HTTPS；维护释放前失败沿原快照补偿。Agent 不可用或主机重启后可从本机续办；新 boot 代次的 root 救援只恢复原版本。服务定义、程序或进程身份偏离时保留恢复依据，要求本机核对。跨 launcher 协议先完成上述运行镜像替换。此流程尚待 P5 隔离运行验收。
+
+运行镜像替换前会核对目标签名程序提供的固定桥接契约。新 launcher 就绪后，由对应的已批准程序处理其协议；原面板与原 Agent 无需提前切换。页面更换运行镜像时须确认管理服务中断，跨协议 API 请求须传入 `allow_downtime: true`。镜像事务独立确认原应用、配置及 HTTPS 后结束；随后应用/Agent 更新失败只恢复其原应用与 Agent，已确认的运行镜像保留。两步均完成后再释放原维护会话。

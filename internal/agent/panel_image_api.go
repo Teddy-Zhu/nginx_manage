@@ -80,7 +80,7 @@ func (s *Server) imageInput(ctx context.Context, req imageupdates.Request) (Pane
 		return out, err
 	}
 	a := staged.Approval
-	source, err := releases.Installed(ctx, releases.Input{TrustPath: s.ReleaseTrust, Assets: []string{"panel-linux-" + runtime.GOARCH}, AllowedComponents: []string{"panel"}, AllowPrerelease: req.Input.Prerelease, Host: a.Host, Receiver: a.Receiver}, req.Input.PlanID, a.ApprovedAt, a.TrustSHA256)
+	source, err := releases.Installed(ctx, releases.Input{TrustPath: s.ReleaseTrust, Assets: []string{"panel-linux-" + runtime.GOARCH}, AllowedComponents: []string{"panel"}, AllowPrerelease: req.Input.Prerelease, Host: a.Host, Receiver: a.Receiver, PanelStaging: req.Input.Component == imageupdates.Panel}, req.Input.PlanID, a.ApprovedAt, a.TrustSHA256)
 	if err != nil {
 		return out, err
 	}
@@ -93,7 +93,7 @@ func (s *Server) imageInput(ctx context.Context, req imageupdates.Request) (Pane
 	if image == "" {
 		return out, errors.New("签名准备任务未提供所选组件镜像")
 	}
-	return PanelImageInput{Stage: stage, MaintenanceID: req.Input.MaintenanceID, Image: image, Signature: releases.ImageInput{TrustPath: s.ReleaseTrust, ManifestPath: filepath.Join(source.Directory, "release-manifest.json"), SignaturePath: filepath.Join(source.Directory, "release-manifest.sig"), ExpectedManifestSHA256: a.ManifestSHA256, AllowPrerelease: req.Input.Prerelease}}, nil
+	return PanelImageInput{Stage: stage, MaintenanceID: req.Input.MaintenanceID, AllowDowntime: req.Input.AllowDowntime, Image: image, Signature: releases.ImageInput{TrustPath: s.ReleaseTrust, ManifestPath: filepath.Join(source.Directory, "release-manifest.json"), SignaturePath: filepath.Join(source.Directory, "release-manifest.sig"), ExpectedManifestSHA256: a.ManifestSHA256, AllowPrerelease: req.Input.Prerelease, PanelStaging: req.Input.Component == imageupdates.Panel}}, nil
 }
 
 func (s *Server) queuePanelImageUpgrade(ctx context.Context, req imageupdates.Request) (imageupdates.Operation, error) {

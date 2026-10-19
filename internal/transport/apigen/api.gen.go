@@ -1391,6 +1391,7 @@ type ImageUpgradeInput struct {
 
 // PanelImageUpgradeCreateInput defines model for PanelImageUpgradeCreateInput.
 type PanelImageUpgradeCreateInput struct {
+	AllowDowntime *bool  `json:"allow_downtime,omitempty"`
 	MaintenanceId string `json:"maintenance_id"`
 	PrepareTaskId string `json:"prepare_task_id"`
 }

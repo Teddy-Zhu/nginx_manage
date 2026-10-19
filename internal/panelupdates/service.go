@@ -189,9 +189,6 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	if r.Panel.RequiresCoordination && !in.CoordinateAgent {
 		return zero, fault.Conflict("目标需要协调升级 Agent 或 launcher，不能创建独立更新任务")
 	}
-	if in.CoordinateAgent && r.Panel.LauncherVersion != r.Release.Receiver.Launcher {
-		return zero, fault.Conflict("须先满足目标 launcher 协议，再协调更新面板与 Agent")
-	}
 	if err = r.Validate(components.Request{Protocol: r.Protocol, OperationID: r.ID, Input: r.Input}); err != nil {
 		return zero, err
 	}

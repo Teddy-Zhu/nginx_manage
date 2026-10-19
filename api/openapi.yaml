@@ -2704,7 +2704,7 @@ components:
     ImageUpgradeInput:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "plan_id", "prerelease", "component", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "plan_id": {"type": "string"}, "prerelease": {"type": "boolean"}, "component": {"type": "string", "enum": ["panel-launcher", "nginx"]}, "allow_downtime": {"type": "boolean"}}}
     PanelImageUpgradeCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id"], "properties": {"maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id"], "properties": {"allow_downtime": {"type": "boolean"}, "maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}}}
     NginxImageUpgradeCreateInput:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "allow_downtime": {"type": "boolean", "enum": [true]}}}
     ImageUpgradeAuthorization:

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"nginxpanel/internal/launcher"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelready"
 	"nginxpanel/internal/panelruntime"
@@ -237,7 +238,7 @@ func (w *panelImageWorker) ready(ctx context.Context, d panelruntime.Deployment,
 			break
 		}
 		// A fresh container may not yet have published its launcher socket.
-		if err != nil && !os.IsNotExist(err) && !errors.Is(err, syscall.ECONNREFUSED) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, panelready.ErrNotReady) {
+		if err != nil && !os.IsNotExist(err) && !errors.Is(err, syscall.ECONNREFUSED) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, panelready.ErrNotReady) && !errors.Is(err, launcher.ErrUnavailable) {
 			return zero, err
 		}
 		select {

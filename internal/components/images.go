@@ -80,7 +80,7 @@ func (s *Service) validateImageParent(ctx context.Context, tx *sql.Tx, principal
 		return err
 	}
 	r := prepared.Release
-	if prepared.Input.Action != "prepare" || r == nil || prepared.Panel == nil || prepared.Panel.RequiresCoordination || r.StagingOnly || !prepared.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != prepared.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != prepared.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
+	if prepared.Input.Action != "prepare" || r == nil || prepared.Panel == nil || (prepared.Panel.RequiresCoordination || r.StagingOnly) && in.Input.ImageID != "panel-launcher" || !prepared.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != prepared.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != prepared.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
 		return fault.Conflict("镜像拉取请求与本人签名面板准备结果不一致或已过期")
 	}
 	for _, image := range r.Images {
@@ -92,7 +92,7 @@ func (s *Service) validateImageParent(ctx context.Context, tx *sql.Tx, principal
 }
 func (m *Manager) imageSource(ctx context.Context, out *Operation, recover bool) (releases.Result, error) {
 	in := out.Input
-	sourceInput := releases.Input{TrustPath: m.TrustPath, Assets: in.Assets, AllowedComponents: []string{"panel"}, AllowPrerelease: in.Prerelease, Host: m.host(), Receiver: receiver()}
+	sourceInput := releases.Input{TrustPath: m.TrustPath, Assets: in.Assets, AllowedComponents: []string{"panel"}, AllowPrerelease: in.Prerelease, Host: m.host(), Receiver: receiver(), PanelStaging: in.ImageID == "panel-launcher"}
 	var source releases.Result
 	var err error
 	if recover {
@@ -126,7 +126,7 @@ func (m *Manager) pullImage(ctx context.Context, out *Operation) error {
 	if reference == "" {
 		return errors.New("准备发行没有所选平台镜像")
 	}
-	approval, _, err := releases.AdmitImage(releases.ImageInput{TrustPath: m.TrustPath, ManifestPath: filepath.Join(source.Directory, "release-manifest.json"), SignaturePath: filepath.Join(source.Directory, "release-manifest.sig"), ExpectedManifestSHA256: out.Input.ManifestSHA256, AllowPrerelease: out.Input.Prerelease}, out.Input.ImageID, reference, nil)
+	approval, _, err := releases.AdmitImage(releases.ImageInput{TrustPath: m.TrustPath, ManifestPath: filepath.Join(source.Directory, "release-manifest.json"), SignaturePath: filepath.Join(source.Directory, "release-manifest.sig"), ExpectedManifestSHA256: out.Input.ManifestSHA256, AllowPrerelease: out.Input.Prerelease, PanelStaging: out.Input.ImageID == "panel-launcher"}, out.Input.ImageID, reference, nil)
 	if err != nil {
 		return err
 	}

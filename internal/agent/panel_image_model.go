@@ -26,6 +26,7 @@ type PanelImageInput struct {
 	Signature     releases.ImageInput     `json:"signature"`
 	Image         string                  `json:"image"`
 	MaintenanceID string                  `json:"maintenance_id"`
+	AllowDowntime bool                    `json:"allow_downtime"`
 }
 
 type PanelImageIntent struct {
@@ -47,7 +48,7 @@ type PanelImageIntent struct {
 }
 
 func panelImageAPIInput(in PanelImageInput) imageupdates.Input {
-	return imageupdates.Input{Component: imageupdates.Panel, MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
+	return imageupdates.Input{Component: imageupdates.Panel, AllowDowntime: in.AllowDowntime, MaintenanceID: in.MaintenanceID, PlanID: in.Stage.PlanID, Prerelease: in.Stage.AllowPrerelease}
 }
 
 type PanelImageOperation struct {
@@ -78,6 +79,9 @@ func validPanelImage(r Record) error {
 		return errors.New("镜像替换记录身份无效")
 	}
 	i := p.Intent
+	if !i.Input.Signature.PanelStaging {
+		return errors.New("面板镜像意图缺少固定的暂存准入范围")
+	}
 	if err := validImageAuthorizations(p.Authorizations, r.OperationID, panelImageAPIInput(i.Input), i.Epoch, p.Epoch, panelImageTerminal(r)); err != nil {
 		return err
 	}

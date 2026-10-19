@@ -173,7 +173,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key, 
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return zero, err
 	}
-	if Kind(component) == "" || component == Nginx && !in.AllowDowntime || component == Panel && in.AllowDowntime || !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
+	if Kind(component) == "" || component == Nginx && !in.AllowDowntime || !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
 		return zero, fault.Invalid("镜像替换参数或幂等键无效")
 	}
 	hash := requestHash(Kind(component), in)
@@ -191,8 +191,8 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key, 
 	if prepared.Action != "prepare" || prepared.State != "succeeded" || r == nil || r.Release == nil || !r.RuntimeReady || r.Panel == nil {
 		return zero, fault.Conflict("须选择已完成签名暂存的面板准备任务")
 	}
-	if r.Panel.RequiresCoordination {
-		return zero, fault.Conflict("此准备版本需要协调升级，不能创建独立镜像替换任务")
+	if r.Panel.RequiresCoordination && (component != Panel || !in.AllowDowntime) {
+		return zero, fault.Conflict("此准备版本仅允许明确授权停机后替换面板运行镜像")
 	}
 	if err = r.Validate(components.Request{Protocol: r.Protocol, OperationID: r.ID, Input: r.Input}); err != nil {
 		return zero, err

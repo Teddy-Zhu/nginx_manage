@@ -11,6 +11,7 @@ import (
 
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/imageupdates"
+	"nginxpanel/internal/launcher"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/releases"
@@ -61,6 +62,7 @@ func QueuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string) 
 }
 func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, authorization *imageupdates.Request) (out Record, resultErr error) {
 	var zero Record
+	in.Signature.PanelStaging = true
 	if !validID(id) || !validID(in.MaintenanceID) || id == in.MaintenanceID || !validID(epoch) || !panelSelectionDigest.MatchString(in.Signature.ExpectedManifestSHA256) || in.Stage.TrustPath != "/etc/nginxpanel/release-trust.json" || in.Signature.TrustPath != in.Stage.TrustPath || in.Signature.AllowPrerelease != in.Stage.AllowPrerelease {
 		return zero, errors.New("镜像替换须使用独立操作 UUID、原维护身份、预期清单散列和固定发布信任")
 	}
@@ -127,7 +129,10 @@ func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, 
 	if err != nil {
 		return zero, err
 	}
-	if err = staged.RequireCurrent(); err != nil {
+	if staged.RequireCurrent() != nil && !in.AllowDowntime {
+		return zero, errors.New("跨协议运行镜像替换须明确允许停机")
+	}
+	if err = launcher.CheckBridgeProgram(ctx, staged); err != nil {
 		return zero, err
 	}
 	approval, _, err := releases.AdmitImage(in.Signature, "panel-launcher", in.Image, nil)
@@ -139,6 +144,7 @@ func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, 
 	}
 	target := before.Deployment
 	target.Image, target.ImageID, target.LauncherSHA256, target.SignedImage = in.Image, approval.Image.Platform.ConfigDigest, approval.Image.Platform.LauncherSHA256, approval
+	target.LauncherRelease = staged.Release.ID
 	if !panelruntime.SameDockerApplication(before.Deployment, target) || target.ImageID == before.Deployment.ImageID {
 		return zero, errors.New("镜像替换不能改变应用绑定或重复选择当前镜像")
 	}
@@ -399,6 +405,9 @@ func (w *panelImageWorker) guard(ctx context.Context, forward bool) error {
 		}
 		if selectionValueHash(staged.Approval) != i.ApprovalSHA256 {
 			return errors.New("原镜像关联的程序签名批准已变化")
+		}
+		if staged.Release.ID != i.Target.LauncherRelease || staged.Release.BinarySHA256 != i.Target.LauncherSHA256 {
+			return errors.New("原 launcher 目标程序已变化")
 		}
 		approved, _, err := releases.AdmitImage(i.Input.Signature, "panel-launcher", i.Target.Image, &i.Target.SignedImage)
 		if err != nil {

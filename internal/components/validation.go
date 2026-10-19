@@ -44,7 +44,7 @@ func (out Operation) Validate(req Request) error {
 		}
 	}
 	if a := out.Announcement; a != nil {
-		if a.Validate() != nil || a.Receiver != receiver() || a.ReceiverCompatible || out.State != "failed" || out.ErrorCode != "COMPONENT_RECEIVER_INCOMPATIBLE" || req.Input.Action == "activate" || req.Input.Action == "pull" || req.Input.OfflineID != "" || req.Input.Tag != "" && a.Tag != req.Input.Tag || a.Channel == "prerelease" && !req.Input.Prerelease || a.ExpiresAt <= out.CreatedAt || req.Input.ManifestSHA256 != "" && a.ManifestSHA256 != req.Input.ManifestSHA256 || req.Input.TrustSHA256 != "" && a.TrustSHA256 != req.Input.TrustSHA256 {
+		if a.Validate() != nil || a.Receiver.APIMajor != 1 || a.ReceiverCompatible || out.State != "failed" || out.ErrorCode != "COMPONENT_RECEIVER_INCOMPATIBLE" || req.Input.Action == "activate" || req.Input.Action == "pull" || req.Input.OfflineID != "" || req.Input.Tag != "" && a.Tag != req.Input.Tag || a.Channel == "prerelease" && !req.Input.Prerelease || a.ExpiresAt <= out.CreatedAt || req.Input.ManifestSHA256 != "" && a.ManifestSHA256 != req.Input.ManifestSHA256 || req.Input.TrustSHA256 != "" && a.TrustSHA256 != req.Input.TrustSHA256 {
 			return errors.New("组件失败结果的已验签说明不匹配")
 		}
 	}
@@ -71,8 +71,8 @@ func (out Operation) Validate(req Request) error {
 	if found["panel"] != "" && len(found) != 1 {
 		return errors.New("面板须使用独立准备计划")
 	}
-	if r.StagingOnly && (found["panel"] == "" || len(r.Assets) != 1 || r.Assets[0].ABI != "static" || len(r.Assets[0].Dependencies) != 0 || r.Requirements.APIMajor != r.Receiver.APIMajor || req.Input.Action != "check" && req.Input.Action != "prepare") {
-		return errors.New("不满足接收端要求的发行仅允许独立面板验签暂存")
+	if r.StagingOnly && (found["panel"] == "" || len(r.Assets) != 1 || r.Assets[0].ABI != "static" || len(r.Assets[0].Dependencies) != 0 || r.Requirements.APIMajor != r.Receiver.APIMajor || req.Input.Action != "check" && req.Input.Action != "prepare" && (req.Input.Action != "pull" || req.Input.ImageID != "panel-launcher")) {
+		return errors.New("不满足接收端要求的发行仅允许独立面板暂存及面板运行镜像准备")
 	}
 	if found["web"] != "" && len(found) != 1 {
 		return errors.New("前端须使用独立准备计划")

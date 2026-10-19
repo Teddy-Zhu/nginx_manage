@@ -21,6 +21,7 @@ func SameDockerApplication(before, after Deployment) bool {
 		return false
 	}
 	after.Image, after.ImageID, after.LauncherSHA256, after.SignedImage = before.Image, before.ImageID, before.LauncherSHA256, before.SignedImage
+	after.LauncherRelease = before.LauncherRelease
 	return before == after
 }
 

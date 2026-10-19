@@ -36,6 +36,7 @@ func runReleaseImagePull(ctx context.Context, args []string) error {
 	}
 	host := platform.Detect()
 	input := releases.Input{TrustPath: *trust, ManifestPath: *manifest, SignaturePath: *signature, AllowPrerelease: *prerelease, Host: releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: host.OS, Version: host.Version}, Receiver: releases.Receiver{APIMajor: 1, AgentProtocol: protocol.Agent, Launcher: releases.LauncherVersion}}
+	input.PanelStaging = *component == "panel-launcher"
 	verified, err := releases.VerifyImages(input)
 	if err != nil {
 		return err
@@ -49,7 +50,7 @@ func runReleaseImagePull(ctx context.Context, args []string) error {
 	if reference == "" {
 		return errors.New("签名清单不含本机平台镜像")
 	}
-	imageInput := releases.ImageInput{TrustPath: *trust, ManifestPath: *manifest, SignaturePath: *signature, ExpectedManifestSHA256: *expected, AllowPrerelease: *prerelease}
+	imageInput := releases.ImageInput{TrustPath: *trust, ManifestPath: *manifest, SignaturePath: *signature, ExpectedManifestSHA256: *expected, AllowPrerelease: *prerelease, PanelStaging: *component == "panel-launcher"}
 	approval, _, err := releases.AdmitImage(imageInput, *component, reference, nil)
 	if err != nil {
 		return err

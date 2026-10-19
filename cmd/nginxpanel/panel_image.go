@@ -15,7 +15,7 @@ import (
 
 func runPanelImage(ctx context.Context, command string, args []string) error {
 	allowed := map[string]map[string]bool{
-		"panel-image":        {"data-dir": true, "panel-image": true, "image": true, "release-plan": true, "release-prerelease": true, "image-manifest": true, "image-signature": true, "image-manifest-sha256": true, "maintenance-id": true, "maintenance-epoch": true},
+		"panel-image":        {"allow-downtime": true, "data-dir": true, "panel-image": true, "image": true, "release-plan": true, "release-prerelease": true, "image-manifest": true, "image-signature": true, "image-manifest-sha256": true, "maintenance-id": true, "maintenance-epoch": true},
 		"panel-image-rescue": {"data-dir": true, "panel-image": true, "maintenance-epoch": true},
 		"panel-image-resume": {"data-dir": true, "panel-image": true, "maintenance-epoch": true},
 		"panel-image-status": {"data-dir": true, "panel-image": true},
@@ -36,6 +36,7 @@ func runPanelImage(ctx context.Context, command string, args []string) error {
 	image := f.String("image", "", "locally available signed image repository@sha256")
 	plan := f.String("release-plan", "", "signed panel preparation plan")
 	prerelease := f.Bool("release-prerelease", false, "explicitly approve a prerelease")
+	downtime := f.Bool("allow-downtime", false, "authorize launcher protocol transition interruption")
 	manifest := f.String("image-manifest", "", "root-owned offline release manifest")
 	signature := f.String("image-signature", "", "root-owned detached manifest signature")
 	manifestHash := f.String("image-manifest-sha256", "", "expected signed release manifest digest")
@@ -71,7 +72,7 @@ func runPanelImage(ctx context.Context, command string, args []string) error {
 	switch command {
 	case "panel-image":
 		const trust = "/etc/nginxpanel/release-trust.json"
-		out, err = agent.QueuePanelImage(ctx, agent.PanelImageInput{Stage: panelruntime.StageInput{DataDir: abs, PlanID: *plan, TrustPath: trust, AllowPrerelease: *prerelease}, Signature: releases.ImageInput{TrustPath: trust, ManifestPath: *manifest, SignaturePath: *signature, ExpectedManifestSHA256: *manifestHash, AllowPrerelease: *prerelease}, Image: *image, MaintenanceID: *maintenanceID}, *id, *epoch)
+		out, err = agent.QueuePanelImage(ctx, agent.PanelImageInput{Stage: panelruntime.StageInput{DataDir: abs, PlanID: *plan, TrustPath: trust, AllowPrerelease: *prerelease}, Signature: releases.ImageInput{TrustPath: trust, ManifestPath: *manifest, SignaturePath: *signature, ExpectedManifestSHA256: *manifestHash, AllowPrerelease: *prerelease}, Image: *image, MaintenanceID: *maintenanceID, AllowDowntime: *downtime}, *id, *epoch)
 	case "panel-image-resume":
 		out, err = agent.ResumePanelImage(ctx, abs, *id, *epoch)
 	case "panel-image-rescue":
