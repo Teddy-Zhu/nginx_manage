@@ -38,11 +38,15 @@ func run() error {
 	keyID := f.String("key-id", "", "approved signing key ID (bundle)")
 	public := f.String("public-key", "", "independently approved Base64 public key (bundle)")
 	notesFile := f.String("notes-file", "", "approved UTF-8 release notes, at most 8 KiB (spec)")
+	policyFile := f.String("policy-file", "", "independently approved version-specific release policy (spec and bundle)")
 	if err := f.Parse(os.Args[2:]); err != nil {
 		return err
 	}
 	if f.NArg() != 0 || *output == "" {
 		return errors.New("须提供输出路径，不能使用额外位置参数")
+	}
+	if *policyFile == "" {
+		return errors.New("须提供 --policy-file，不能从构建产物推导回滚授权")
 	}
 	if os.Args[1] == "spec" {
 		if *notesFile == "" {
@@ -52,7 +56,11 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		spec, err := releases.NewPublication(*repo, *version, *commit, notes)
+		automaticRollback, err := releases.ReadPublicationPolicy(*policyFile, *version)
+		if err != nil {
+			return err
+		}
+		spec, err := releases.NewPublication(*repo, *version, *commit, notes, automaticRollback)
 		if err != nil {
 			return err
 		}
@@ -83,7 +91,7 @@ func run() error {
 	if *specFile == "" || *inputRoot == "" || *keyFile == "" {
 		return errors.New("bundle 须提供 --spec、--input-root 和 --key-file")
 	}
-	paths := []*string{output, specFile, inputRoot, keyFile}
+	paths := []*string{output, specFile, inputRoot, keyFile, policyFile}
 	if *images != "" {
 		paths = append(paths, images)
 	}
@@ -96,7 +104,7 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	result, err := releases.Publish(ctx, releases.PublishInput{InputRoot: *inputRoot, SpecPath: *specFile, Output: *output, KeyPath: *keyFile, KeyID: *keyID, PublicKey: *public, Repository: *repo, Version: *version, Commit: *commit, ImagesPath: *images})
+	result, err := releases.Publish(ctx, releases.PublishInput{InputRoot: *inputRoot, SpecPath: *specFile, Output: *output, KeyPath: *keyFile, KeyID: *keyID, PublicKey: *public, Repository: *repo, Version: *version, Commit: *commit, ImagesPath: *images, PolicyPath: *policyFile})
 	if err != nil {
 		return err
 	}

@@ -36,6 +36,7 @@ type PublishInput struct {
 	InputRoot, SpecPath, Output, KeyPath, KeyID, PublicKey string
 	Repository, Version, Commit                            string
 	ImagesPath                                             string
+	PolicyPath                                             string
 }
 type PublicationResult struct {
 	State          string `json:"state"`
@@ -69,7 +70,7 @@ func validCommit(commit string) bool {
 }
 
 // NewPublication describes matching panel/web and prebuilt native Nginx assets.
-func NewPublication(repo, version, commit, notes string) (PublicationSpec, error) {
+func NewPublication(repo, version, commit, notes string, automaticRollback bool) (PublicationSpec, error) {
 	if !repository.MatchString(repo) || !validVersion(version) || !validCommit(commit) {
 		return PublicationSpec{}, errors.New("发布身份或版本无效")
 	}
@@ -85,7 +86,7 @@ func NewPublication(repo, version, commit, notes string) (PublicationSpec, error
 	if strings.Contains(strings.Split(version, "+")[0], "-") {
 		channel = "prerelease"
 	}
-	spec := PublicationSpec{Commit: commit, Manifest: Manifest{Schema: Schema, Repository: repo, Version: version, Channel: channel, CreatedAt: now, ExpiresAt: now + 365*86400, APIMajor: 1, DatabaseSchema: databaseSchema, MinimumAgentProtocol: protocol.Agent, MinimumLauncher: LauncherVersion, FrontendVersion: version, Notes: notes}}
+	spec := PublicationSpec{Commit: commit, Manifest: Manifest{Schema: Schema, Repository: repo, Version: version, Channel: channel, CreatedAt: now, ExpiresAt: now + 365*86400, APIMajor: 1, DatabaseSchema: databaseSchema, MinimumAgentProtocol: protocol.Agent, MinimumLauncher: LauncherVersion, FrontendVersion: version, AutomaticRollback: automaticRollback, Notes: notes}}
 	for _, arch := range []string{"amd64", "arm64", "any"} {
 		id, component, archive := "panel-linux-"+arch, "panel", "nginxpanel_"+version+"_linux_"+arch+".tar.gz"
 		executable := []string{"nginxpanel"}
@@ -212,11 +213,17 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	if !filepath.IsAbs(in.KeyPath) || filepath.Clean(in.KeyPath) != in.KeyPath {
 		return PublicationResult{}, errors.New("发布私钥须为规范绝对路径")
 	}
+	if !filepath.IsAbs(in.PolicyPath) || filepath.Clean(in.PolicyPath) != in.PolicyPath {
+		return PublicationResult{}, errors.New("独立发布策略须为规范绝对路径")
+	}
 	inputTrees := []string{in.InputRoot, in.Output}
 	if in.ImagesPath != "" {
 		inputTrees = append(inputTrees, filepath.Dir(in.ImagesPath))
 	}
 	for _, root := range inputTrees {
+		if rel, err := filepath.Rel(root, in.PolicyPath); err != nil || rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return PublicationResult{}, errors.New("独立发布策略须位于构建输入与输出树之外")
+		}
 		if rel, err := filepath.Rel(root, in.KeyPath); err != nil || rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return PublicationResult{}, errors.New("发布私钥须位于输入与输出树之外")
 		}
@@ -235,11 +242,18 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 		return PublicationResult{}, err
 	}
 	m, now := spec.Manifest, time.Now().Unix()
+	automaticRollback, err := ReadPublicationPolicy(in.PolicyPath, in.Version)
+	if err != nil {
+		return PublicationResult{}, err
+	}
+	if m.AutomaticRollback != automaticRollback {
+		return PublicationResult{}, errors.New("发布清单的自动回滚声明与独立批准的版本策略不一致")
+	}
 	databaseSchema, err := migrations.LatestVersion()
 	if err != nil {
 		return PublicationResult{}, err
 	}
-	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || m.AutomaticRollback || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) == 0 || len(spec.Packages) > 16 {
+	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) == 0 || len(spec.Packages) > 16 {
 		return PublicationResult{}, errors.New("发布清单身份、有效期、协议或回滚条件不满足")
 	}
 	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {

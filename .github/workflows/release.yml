@@ -62,7 +62,7 @@ jobs:
           test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$commit"
           mkdir -p .release/input .release/binaries
           go build -trimpath -o "$RUNNER_TEMP/nginxpanel-release" ./cmd/nginxpanel-release
-          "$RUNNER_TEMP/nginxpanel-release" spec --repository "$RELEASE_REPOSITORY" --version "$version" --commit "$commit" --notes-file "deploy/release/notes/$version.md" --output .release/input/publication.json
+          "$RUNNER_TEMP/nginxpanel-release" spec --repository "$RELEASE_REPOSITORY" --version "$version" --commit "$commit" --notes-file "deploy/release/notes/$version.md" --policy-file "deploy/release/policies/$version.json" --output .release/input/publication.json
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
@@ -276,7 +276,7 @@ jobs:
           trap 'rm -rf -- "$keydir"' EXIT
           printf '%s\n' "$RELEASE_SEED" > "$keydir/seed"
           unset RELEASE_SEED
-          "$RUNNER_TEMP/nginxpanel-release" bundle --repository "$RELEASE_REPOSITORY" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --spec .release/input/publication.json --input-root .release/input --images .release/images/publication.json --key-file "$keydir/seed" --key-id "$RELEASE_KEY_ID" --public-key "$RELEASE_PUBLIC_KEY" --output .release/output
+          "$RUNNER_TEMP/nginxpanel-release" bundle --repository "$RELEASE_REPOSITORY" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --spec .release/input/publication.json --input-root .release/input --images .release/images/publication.json --policy-file "deploy/release/policies/$RELEASE_VERSION.json" --key-file "$keydir/seed" --key-id "$RELEASE_KEY_ID" --public-key "$RELEASE_PUBLIC_KEY" --output .release/output
       - name: Upload complete draft then publish
         env:
           GH_TOKEN: ${{ github.token }}

@@ -12,7 +12,7 @@
 
 归档按路径排序，固定 root UID/GID、0644/0755 模式、零时间戳及 USTAR 格式，使用单 gzip 流；不接收链接、特殊文件或自行携带的计算字段。逐文件扫描后在打包时重算散列并核对文件身份，使用与接收端相同的资产/依赖图校验。单文件/归档/展开/清单预算沿用接收合同，整次发布输入与输出最多 2 GiB。SHA-256 清单按文件名排序，包含所有公开记录和归档，不包含其自身。
 
-工具只生成新的输出目录，同文件系统暂存、同步后不覆盖发布；失败只清理自己的暂存。`state=signed` 仅表示本地签名产物已生成，不代表已上传、安装或通过系统矩阵验收。清单当前禁止声明自动回滚能力。
+工具只生成新的输出目录，同文件系统暂存、同步后不覆盖发布；失败只清理自己的暂存。`state=signed` 仅表示本地签名产物已生成，不代表已上传、安装或通过系统矩阵验收。自动回滚能力由本次版本独立批准的策略决定，并进入签名清单。
 
 ## 本机入口
 
@@ -22,16 +22,28 @@
 bin/nginxpanel-release spec \
   --repository owner/nginxpanel --version 1.2.3 \
   --commit <完整提交> --notes-file deploy/release/notes/1.2.3.md \
+  --policy-file deploy/release/policies/1.2.3.json \
   --output .release/input/publication.json
 
 bin/nginxpanel-release bundle \
   --repository owner/nginxpanel --version 1.2.3 --commit <完整提交> \
   --spec .release/input/publication.json --input-root .release/input \
+  --policy-file deploy/release/policies/1.2.3.json \
   --key-file /home/publisher/keys/release.seed --key-id release-2026 \
   --public-key <独立确认的Base64公钥> --output .release/output
 ```
 
 `spec` 必须通过 `--notes-file` 指定本次发布批准的非空 UTF-8 说明（LF 换行），最多 8 KiB、默认 JSON 编码后最多 16 KiB。说明进入 `manifest.notes`，与协议、数据库和 Agent/launcher 要求共同签名；`bundle` 只使用规格中的说明，不能另行覆盖。GitHub 流水线读取标签提交内的 `deploy/release/notes/<不带 v 的 SemVer>.md`，发标签前须提交该文件；缺失或无效时发布失败。GitHub release 正文使用同一说明，接收端只信任签名清单，不以可编辑正文判断接收条件。
+
+`spec` 与 `bundle` 均须通过 `--policy-file` 指定本次版本批准的 JSON 策略，最多 4 KiB。文件必须包含确切版本和显式布尔值，不接受缺失字段、null、未知字段或重复字段：
+
+```json
+{"version":"1.2.3","automatic_rollback":false}
+```
+
+维护者在确认本次版本能于维护窗口内恢复原程序和匹配快照后，才可将 `automatic_rollback` 批准为 `true`；它不承诺释放维护窗口后的旧快照恢复。`false` 仍可生成和准备签名发行，但当前面板升级入口会拒绝无自动补偿保证的版本。不可逆变更不能因打包成功而获得回滚授权。
+
+发标签前须同时提交 `deploy/release/policies/<不带 v 的 SemVer>.json`。构建任务用该策略生成规格；签名任务从同一批准提交的源码重新读取策略，并核对上传规格中的声明，不能用 artifact 内的策略代替。策略路径须在归档、镜像输入及输出树之外，目录和文件遵循发布账户归属、禁止其他账户写入及禁止链接的规则。缺失、版本不符或声明不一致时停止签名，不产生发行目录。
 
 包含镜像时，`bundle` 另外指定 `--images .release/images/publication.json`。输入清单与其同目录的 `panel-launcher.oci.json`、`nginx.oci.json` 来自下述镜像步骤；私钥须位于镜像输入树之外。原生归档发行可省略镜像输入，不能只登记一个镜像或一种架构。
 
