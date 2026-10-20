@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-20。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件、Debian 13 networkd/resolved、NetworkManager/resolved 及两种 netplan renderer 静态 DNS 的双栈解析与独立恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
+2026-10-20。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件、Debian 13 networkd/resolved、NetworkManager/resolved 及两种 netplan renderer 静态 DNS 的双栈解析与独立恢复验证，以及 CentOS Stream 10/amd64 Enforcing 和 Debian 13/amd64 的 v14 原生安装、重放与重启持久化验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
 
 ## 隔离环境
 
@@ -182,6 +182,26 @@ NetworkManager 及 netplan/NetworkManager 的验证见下节；动态 DHCP/RA、
 第 15/16 轮完成安装、保护、应用确认、管理器重启及解析失败回滚后，因夹具函数名被循环变量覆盖中断；第 17/18 轮从对应保留磁盘克隆，仅更新夹具，完成原解析失败任务的恢复核对及其余故障场景，不重装程序或修改业务数据库。第 17/18 轮均输出 `P5_DNS_MANAGED_TWO_VM_ALL_PASS`。证据为 `.validation/native-vm/dns-managed-round15.log` 至 `dns-managed-round18.log` 及对应 `dns-target-*.log`、`dns-client-*.log`；种子清单和程序散列同时保留。强制重置任务/root 操作分别为 `a89ab07e-4bbe-4ef2-b82b-6cd4a16f5903` / `d6f4cb33-2202-4622-956a-8e47feb293aa` 和 `1200afd1-3afb-4de7-9401-d39b24bd78f6` / `12e622d9-8521-44bc-bd24-7bb13ddc632c`。
 
 第 11 轮保留原程序的真实序列化失败及离线 journal；第 13/14 轮因夹具误取旧程序，不能评价本次修复，第 12 轮仅准备未启动。已纠正种子程序路径并强制校验上述 SHA-256，失败记录及磁盘均保留。验证虚拟机已关机，验证容器已退出。本轮不覆盖动态 DHCP/RA、Wi-Fi、NetworkManager 的 default 文件入口、实际 VPN 隧道、其他发行版/架构或 Docker 面板组合。
+
+### SELinux 文件标签与 v14 原生安装
+
+在无外部网络、无宿主端口映射的 Docker 容器中运行独立内核 QEMU/TCG 虚拟机，使用本地批准的面板与前端产物执行 `--without-nginx --data-dir /srv/nginxpanel.selinux --start`。CentOS 官方 [Stream 10 GenericCloud 镜像](https://composes.stream.centos.org/stream-10/production/latest-CentOS-Stream/compose/BaseOS/x86_64/images/CentOS-Stream-GenericCloud-10-20261019.0.x86_64.qcow2) 已与同源 SHA256SUM 核对，SHA-256 为 `61a925943be6f1352c5841d6d79e87f9864d265bb062495034408a83ea544b30`。目标保持 Enforcing，内核为 `6.12.0-277.el10.x86_64`，策略为 `selinux-policy-targeted-42.1.27-2.el10`，policycoreutils 为 `3.11-1.el10`，systemd 为 `257-34.el10`；未安装目标软件包或修改开发宿主机配置。
+
+已通过以下实际行为：
+
+- 原生 Web/Agent 首次启动、HTTPS 引导/登录、统一响应、配置保存及安装重放；节点身份、配置版本/修订和原会话保持。
+- 核对关键目录、程序和服务单元的 `security.selinux` 扩展属性及 `matchpathcon -V`；含点的数据路径不会匹配相邻的相似目录。安装意图绑定的规则散列一致，模块来源只包含文件上下文声明。
+- 修改策略存储中的同名模块、添加冲突的本地标签规则均使安装器明确拒绝；恢复规则后，同参数重放再次成功。
+- 新建程序目录及复制文件从父目录继承 `usr_t`，无需单独重标即可由专用非 root 账户在 `NoNewPrivileges=yes`、空 capabilities 下实际执行。
+- 整机重启后，原会话经正常密码重新认证，节点身份、配置版本/修订和安装意图保持；文件标签及 Enforcing 状态经重标和安装重放后再次核对，输出 `P5_NATIVE_SELINUX ALL_PASS enforcing` 并关机。
+
+首次 CentOS 安装因系统策略将 `/etc/systemd/system` 等价到 `/usr/lib/systemd/system`，服务单元仍匹配默认 Nginx 标签而被安装器拒绝；补齐两个位置的保留单元规则后，新虚拟机完成上述检查。第二轮重启后的配置读取被五分钟重新认证要求阻止，属于夹具遗漏正常密码重新认证；首次续验又抢在修正脚本载入前执行。沿用原安装磁盘，仅补正常重新认证并通过 [systemd 夹具启动延迟](https://www.freedesktop.org/software/systemd/man/257/systemd-debug-generator.html) 避免时序冲突，完成剩余重启检查；未改动产品认证规则，也未重跑已通过的策略故障检查。失败记录及原磁盘均保留。
+
+复用前述 Debian 13/amd64 镜像，内核 `6.12.113+deb13-cloud-amd64`，在 SELinux 未启用的原生组合中完成 v14 初装、实际 API、安装重放、整机重启及节点/配置/会话持久化，最终输出 `P5_NATIVE_SELINUX ALL_PASS no-selinux`。安装器之后仅补齐 SELinux 启用分支的服务单元等价路径，未重复执行这个组合。
+
+程序 SHA-256 为 `974f19a301475efbd6e005063668d5c4f32b26794811f545ef7969458a961795`；最终安装器为 `79f1a05310a505a099822c4b36a0a23928165e185d34b1dd1b362b35b917fe6d`，Debian 及 CentOS 首轮安装器为 `677a23ccdf1ce37c346efe5d397c11ae2fab70fdf63b36b87ad30b5da513ea9c`。集中检查通过安装脚本语法、Agent 现有测试（缓存结果）和主程序构建，日志为 `.validation/native-vm/selinux-go-round1.log`。VM 记录以 `.validation/native-vm/centos-native-v14-1/2`、`debian-native-v14-1` 及 `centos-native-v14-resume-2-1/2` 为前缀。成功续验输出 `P5_NATIVE_SELINUX_VM_RESUME_ALL_PASS`；两台虚拟机均已关机，验证容器退出。磁盘和种子介质保留在命名卷 `nginxpanel-p5-native-vm-20261019`。
+
+本轮不覆盖 SELinux 下的 Docker 面板、受管 Nginx、其他发行版/架构及升级事务；文件标签模块沿用系统既有进程域，不代表新增专用 SELinux 进程隔离。
 
 ## 尚待验收
 

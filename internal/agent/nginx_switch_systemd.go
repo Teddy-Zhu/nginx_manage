@@ -20,7 +20,7 @@ type nginxSwitchService struct {
 
 func switchUnitDigest(ctx context.Context, data, unit string) (string, error) {
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != "native-install-v13\n" {
+	if err != nil || string(ready) != "native-install-v14\n" {
 		return "", errors.New("原生安装尚未完成")
 	}
 	if err = nativeNginxUnit(ctx, unit, data, "nginxpanel-nginx", false); err != nil {

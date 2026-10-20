@@ -56,6 +56,12 @@ sudo bash deploy/native/install.sh \
 
 选择安装 Nginx 时，`nginx-init` 仅准备无站点基线，固定 worker、prefix 与配置入口；不会接管发行版 `nginx.service`。业务端口在后续保存并应用站点时才启用。动态模块默认批准清单为空；已有系统实例按本机 root 的受信清单接入，参见 [模块接入](../../docs/native-modules.md)。Docker 仍使用构建时预置模块策略。
 
+## SELinux 文件标签
+
+安装登记当前为 v14。SELinux 已启用（含 permissive）时，安装器要求目标已有 `semodule`、`restorecon`、`matchpathcon`，通过 `policycoreutils` 注册优先级 400 的 `nginxpanel_files` CIL 模块；只声明本应用固定目录与九个保留 unit 的文件上下文，不添加 allow 规则或调整防护状态、系统布尔值。unit 同时登记 `/etc` 及策略等价的 `/usr/lib` 路径，以覆盖 CentOS 的标签查询。规则来源及散列与安装意图一同持久保存，重放会从策略存储提取模块并核对，拒绝同名外部模块、内容变化、停用/优先级覆盖及关键路径的本地标签冲突。
+
+原生数据使用 `var_lib_t`，运行锁和日志分别使用 `var_run_t`、`var_log_t`，root 管理的程序副本使用 `usr_t`；后续版本从对应父目录继承可执行的文件类型。Docker 模式的数据目录使用共享的 `container_file_t:s0`，需要目标 Docker 配套的容器 SELinux 策略；不使用容器私有 MCS 标签重标整个共享目录。初始化节点前及发布 unit 后使用 `restorecon` 应用规则，限定在本应用路径并且不跨挂载点。独立服务沿用系统既有进程域，本模块不宣称新增专用进程沙箱。规则写法依据 [SELinux CIL 文件标签合同](https://github.com/SELinuxProject/selinux/blob/main/secilc/docs/cil_file_labeling_statements.md#filecon)。
+
 ## 服务与启动
 
 安装注册 `nginxpanel-nginx.service`、`nginxpanel-agent.service` 和 `nginxpanel.service`；是否安装组件、是否启用服务及实际运行状态分别核对。Agent 不依赖启动 Nginx，重启 Agent 不会顺带拉起已停止的代理实例。Nginx 独立前台运行，由 systemd 跟踪 master；退出使用 QUIT 和有限宽限期。面板、Agent 或其更新不会因服务依赖而停止正在代理流量的 Nginx。应用发布及运行确认仍由 Agent 完成。
@@ -74,7 +80,7 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 服务进入 active 只说明进程受 systemd 管理，不能代替 API、权限、Nginx 应用和故障恢复验收。首次管理员配置使用 `<DATA_DIR>/bootstrap/token` 并通过 SSH 访问回环入口。之后可显式启用受控远程监听，或继续使用已有 VPN/受保护代理。
 
-主机指标来源显式为 host；DNS 接管和日志轮转所有者默认 unconfirmed。启用主机 DNS 写入还须本机确认实际所有者、宿主机范围并调整 Agent unit 的固定写入目录，不能只在业务页面绕过系统沙箱。networkd 写入及其完整恢复仍待实现；其 `RevertDNS` 会清除其他 DNS 运行时覆盖，不能将回写服务器地址视为完整回滚，见 [systemd 源码](https://github.com/systemd/systemd/blob/v257/src/network/networkd-link-bus.c)。
+主机指标来源显式为 host，日志轮转所有者默认 unconfirmed。DNS 通过安装参数 `--dns-owner` 明确批准实际所有者与宿主机范围，并配置对应 Agent 写入目录；默认 unconfirmed，仅允许读取。普通文件、networkd/resolved、NetworkManager 及 netplan 的实现与已验证系统组合见[验证记录](../../docs/validation.md)，业务页面不能绕过本机所有权和系统沙箱授权。
 
 安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新、卸载清理及完整 Docker 接入仍在后续范围内。
 

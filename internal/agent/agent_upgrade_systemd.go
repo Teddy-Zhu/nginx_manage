@@ -55,7 +55,7 @@ func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []
 		return "", "", nil, err
 	}
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != "native-install-v13\n" || !strings.HasPrefix(string(intent), "native-install-v13\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") {
+	if err != nil || string(ready) != "native-install-v14\n" || !strings.HasPrefix(string(intent), "native-install-v14\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") {
 		return "", "", nil, errors.New("Agent 升级缺少已完成的本机安装登记")
 	}
 	args := []string{"/opt/nginxpanel/current/nginxpanel", "agent", "--data-dir", data, "--allowed-uid", strconv.Itoa(d.UID), "--nginx-binding", "--nginx-user", "nginxpanel-nginx", "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--metrics-scope", "host", "--component-scope", "host", "--maintenance-scope", "host"}

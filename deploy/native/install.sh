@@ -10,6 +10,7 @@ usage() {
 面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
 --dns-owner 明确批准宿主机 DNS 所有者并开放对应服务写入路径；默认 unconfirmed，仅允许读取。不会安装、启停或切换网络管理器。
+SELinux 启用时注册本应用的持久文件标签模块并应用标签，保留系统进程策略与当前防护状态。
 EOF
 }
 binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed
@@ -81,6 +82,13 @@ case "$machine" in x86_64|aarch64) ;; *) die '仅支持 linux/amd64 与 linux/ar
 port=${BASH_REMATCH[2]}
 ((10#$port >= 1024 && 10#$port <= 65535)) || die '管理端口须为 1024–65535'
 [[ $data =~ ^/(srv|var/lib)/[a-zA-Z0-9_-][a-zA-Z0-9_./-]*$ ]] || die '数据目录须位于 /srv 或 /var/lib，且不含空格及控制符'
+selinux_profile=disabled
+if [[ -e /sys/fs/selinux/enforce ]]; then
+  for tool in semodule restorecon matchpathcon; do
+    command -v "$tool" >/dev/null || die "SELinux 部署缺少已有系统工具：$tool（policycoreutils）"
+  done
+  selinux_profile=$panel_mode
+fi
 
 canonical() {
   [[ $1 == /* && $1 != */ && $1 != *//* && $1 != */./* && $1 != */../* && $1 != */. && $1 != */.. ]] || die "路径不是规范绝对路径：$1"
@@ -135,6 +143,59 @@ write_owned() {
     pending_file=
     sync -f "${destination%/*}"
   fi
+}
+selinux_context() {
+  local path=$1 type=$2 context
+  context=$(matchpathcon -n "$path") || die "无法确认 SELinux 默认标签：$path"
+  [[ $context == "system_u:object_r:$type:s0" ]] || die "SELinux 标签规则冲突：$path；期望 $type，实际 $context"
+}
+selinux_install() {
+  [[ $selinux_profile != disabled ]] || return 0
+  local modules priority name language extra present=no policy=/etc/nginxpanel/selinux/nginxpanel_files.cil
+  modules=$(semodule -lfull) || die '无法读取 SELinux 模块登记'
+  while read -r priority name language extra; do
+    if [[ $name == nginxpanel_files ]]; then
+      [[ $present == no && $priority == 400 && $language == cil && -z $extra ]] || die '已有冲突或已停用的 nginxpanel_files SELinux 模块'
+      present=yes
+    fi
+  done <<<"$modules"
+  if [[ $present == yes ]]; then
+    trusted_file "$policy" $((64 * 1024))
+    cmp -s "$work/nginxpanel_files.cil" "$policy" || die 'SELinux 模块来源与安装计划不一致'
+    mkdir "$work/selinux-current"
+    (cd "$work/selinux-current" && semodule -X 400 --cil --extract=nginxpanel_files) || die '无法复核已安装的 SELinux 模块'
+    cmp -s "$policy" "$work/selinux-current/nginxpanel_files.cil" || die '已安装的 SELinux 模块被外部修改'
+  else
+    ensure_dir /etc/nginxpanel/selinux 755 root root
+    write_owned "$work/nginxpanel_files.cil" "$policy"
+    semodule -X 400 --install="$policy" || die 'SELinux 文件标签模块安装失败，保留安装记录'
+  fi
+  selinux_context /opt/nginxpanel usr_t
+  selinux_context /etc/nginxpanel etc_t
+  selinux_context /run/nginxpanel-host var_run_t
+  selinux_context /run/nginxpanel-install var_run_t
+  local type=var_lib_t dir unit
+  if [[ $selinux_profile == docker ]]; then type=container_file_t; fi
+  selinux_context "$data" "$type"
+  for dir in app bootstrap secrets staging backups agent acme certificates modules nginx; do
+    selinux_context "$data/$dir" "$type"
+  done
+  if [[ $selinux_profile == native ]]; then
+    selinux_context "$data/logs" var_log_t
+    selinux_context "$data/run" var_run_t
+  else
+    selinux_context "$data/logs" "$type"
+    selinux_context "$data/run" "$type"
+  fi
+  if [[ $selinux_profile == native ]]; then type=usr_t; fi
+  selinux_context "$data/runtime" "$type"
+  selinux_context "$data/bin" "$type"
+  for unit in "${reserved_units[@]}"; do
+    selinux_context "/etc/systemd/system/$unit" systemd_unit_file_t
+  done
+  # File contexts persist across relabels; runtime/code descendants inherit an
+  # executable type when later versions are published. Never traverse mounts.
+  restorecon -RFx /opt/nginxpanel /etc/nginxpanel "$data" /run/nginxpanel-install || die 'SELinux 文件标签应用失败'
 }
 canonical "$data"
 binary=$(readlink -e "$binary")
@@ -230,19 +291,46 @@ inventory() {
   done
 }
 inventory "$web" 0
+reserved_units=(nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service nginxpanel-image@.service nginxpanel-nginx-image@.service)
+selinux_policy_hash=
+if [[ $selinux_profile != disabled ]]; then
+  data_pattern=${data//./\\.}
+  data_type=var_lib_t code_type=usr_t
+  if [[ $selinux_profile == docker ]]; then data_type=container_file_t; code_type=container_file_t; fi
+  cat >"$work/nginxpanel_files.cil" <<EOF
+(filecon "/opt/nginxpanel(/.*)?" any (system_u object_r usr_t ((s0)(s0))))
+(filecon "/etc/nginxpanel(/.*)?" any (system_u object_r etc_t ((s0)(s0))))
+(filecon "/run/nginxpanel-host(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))
+(filecon "/run/nginxpanel-install(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))
+(filecon "$data_pattern(/.*)?" any (system_u object_r $data_type ((s0)(s0))))
+(filecon "$data_pattern/runtime(/.*)?" any (system_u object_r $code_type ((s0)(s0))))
+(filecon "$data_pattern/bin(/.*)?" any (system_u object_r $code_type ((s0)(s0))))
+EOF
+  if [[ $selinux_profile == native ]]; then
+    printf '(filecon "%s/logs(/.*)?" any (system_u object_r var_log_t ((s0)(s0))))\n(filecon "%s/run(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))\n' "$data_pattern" "$data_pattern" >>"$work/nginxpanel_files.cil"
+  fi
+  for unit in "${reserved_units[@]}"; do
+    # CentOS policy aliases /etc/systemd/system to /usr/lib/systemd/system.
+    # Keep both exact spellings so the policy lookup covers our own units.
+    for unit_dir in /etc/systemd/system /usr/lib/systemd/system; do
+      printf '(filecon "%s/%s" any (system_u object_r systemd_unit_file_t ((s0)(s0))))\n' "$unit_dir" "${unit//./\\.}" >>"$work/nginxpanel_files.cil"
+    done
+  done
+  selinux_policy_hash=$(sha256sum "$work/nginxpanel_files.cil" | cut -d ' ' -f1)
+fi
 binary_hash=$(sha256sum "$binary" | cut -d ' ' -f1)
 web_hash=$(sha256sum "$manifest" | cut -d ' ' -f1)
 nginx_hash=
 if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v13\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" >"$work/intent"
+printf 'native-install-v14\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\nselinux_profile=%s\nselinux_policy_sha256=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" "$selinux_profile" "$selinux_policy_hash" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
 else
   [[ ! -e $data && ! -L $data || -d $data && ! -L $data && -z $(find "$data" -mindepth 1 -maxdepth 1 -print -quit) ]] || die '数据目录非空，禁止将首次安装覆盖到已有数据'
-  for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service nginxpanel-image@.service nginxpanel-nginx-image@.service; do
+  for unit in "${reserved_units[@]}"; do
     # systemctl show requires an instance when querying a template unit.
     probe_unit=${unit/@.service/@install-check.service}
     load_state=$(systemctl show --property=LoadState --value "$probe_unit") || die "无法检查服务状态：$unit"
@@ -292,6 +380,8 @@ ensure_dir "$data/bin" 755 root root
 ensure_dir "$data/bin/components" 755 root root
 ensure_dir "$data/nginx" 755 root root
 ensure_dir "$data/logs" 755 root root
+ensure_dir "$data/runtime" 755 root root
+selinux_install
 
 # Build the immutable release off to the side; partial copies never become live.
 if [[ ! -e $release_dir && ! -L $release_dir ]]; then
@@ -331,7 +421,7 @@ else
   "$release_dir/nginxpanel" panel-native-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" >"$work/panel-runtime.json"
 fi
 # Only unfinished installations run init; a live panel owns the writer lock.
-printf 'native-install-v13\n' >"$work/ready"
+printf 'native-install-v14\n' >"$work/ready"
 if [[ -e $state/ready || -L $state/ready ]]; then
   trusted_file "$state/ready" 64
   cmp -s "$work/ready" "$state/ready" || die '安装就绪记录不匹配'
@@ -630,6 +720,10 @@ if [[ $panel_mode == native ]]; then install_units+=(nginxpanel.service); fi
 for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
+if [[ $selinux_profile != disabled ]]; then
+  restorecon -RFx /opt/nginxpanel /etc/nginxpanel "$data" /run/nginxpanel-install || die 'SELinux 最终文件标签应用失败'
+  for unit in "${install_units[@]}"; do restorecon -F "/etc/systemd/system/$unit"; done
+fi
 systemctl daemon-reload
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
