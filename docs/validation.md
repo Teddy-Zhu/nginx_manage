@@ -391,6 +391,16 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 控制器前后比对确认 boot ID 改变，双栈第三方 legacy 链/规则、密钥、Nginx 活动指针及三项原生服务程序散列保持；未选择的 nft 视图始终为空且保持，不据此声明保护非空 nft 规则的覆盖。客户端输出 `RESTORED_A_BEFORE_WEB_START`、`WEB_STOP_RESTORED_CONFIRMED_A`、`REBOOT_RESTORED_CONFIRMED_A`、`CONFIRMED_REMOVE_AND_MODULE_DISABLED` 和 `ALL_PASS`，控制器输出 `P5_IPTABLES_LEGACY_UBUNTU24_TWO_VM_ALL_PASS`；两台虚拟机正常关机，退出码均为 0。证据保留于 `.validation/native-vm/iptables-legacy-ubuntu24-v3/` 和既有虚拟机卷。
 - 本次原生 legacy 范围限于上述 Ubuntu 24.04/amd64 组合及场景，不替代其他系统/架构、Docker、Agent SIGKILL、本机救援、硬断电或活动 legacy 策略下的升级中断验收。容器无外部网络及宿主端口映射，目标机执行真实规则修改；未修改开发宿主机环境，整体 P5 继续推进。
 
+## P5 Ubuntu 24.04 原生 UFW 生命周期（2026-10-21）
+
+- 补齐原生安装器的 `--firewall-owner` / `--firewall-ssh` 配套参数，默认仍为未确认的只读范围。明确选择 UFW 时生成宿主机所有者参数、`After=ufw.service` 和 `-/etc/ufw` 写路径，允许确认阶段原子保存用户规则；明确选择 firewalld 时仅增加对应启动顺序。安装器不安装、启停或切换管理器，不代办本机授权。脚本语法和 17 项参数/权限边界检查在隔离容器通过，涵盖五种所有者与两种 SSH 方式、默认无授权、无效或缺失配套参数。安装器源文件 SHA-256 为 `feaa470ef7fb4f631ff655c036a4a2126eb7159be4034e244160cc7f0484035c`。
+- 实际环境为 Ubuntu 24.04/amd64 目标（内核 `6.8.0-147-generic`、UFW `0.36.2-6`、iptables `1.8.10-3ubuntu2`、nftables `1.0.9-1ubuntu0.1`）与独立 Debian 12 客户端。沿用已验证的签名候选 `0.2.23-dev`，程序 SHA-256 `1b9a20e50c62c6019d89f9390e10503cfadb2b4aad4d5e40d8b210ce0db0f114`、清单 SHA-256 `4dcb5655f1e86628a6302183acb40b872f4efb611b471dca35ccab074396fdb2`；未重复构建 Go 或前端。目标经正常签名协调升级后，使用当前安装器模板生成的完整 Agent 服务配置和持久 UFW 锁完成本机授权登记；本轮未对已有数据目录重跑首次安装。
+- 第一轮在基线采证阶段因夹具把 IPv6 链误写为 IPv4 的 `ufw-user-input` 而中止，未进入业务规则应用；修正为 `ufw6-user-input` 后使用新原始安装克隆。第二轮已完成双栈管理入口确认、官方后台准备（16 条预演、32 条重载链、保留 4 条外部规则）、A 的实际双栈 TCP/UDP 允许/阻断、HTTPS/SSH 保护及新连接确认。随后直接准备 B 返回 503，未应用 B；原 A 及失败证据保留，不能据此宣布整轮通过。
+- 第三轮从第二轮已确认 A 的磁盘建立独立写时复制克隆，核对原 A 操作 `529f1158-8390-7235-396c-3243e4c6fe26`、版本 1 及启动后实际双栈流量。夹具停止在每次控制查询中调用官方 UFW 状态命令，避免额外争用管理器锁，并在新计划前读取运行状态；冷启动核对期间记录不可用原因，恢复 `available/can_plan` 后才提交一次计划，不重试写请求。沿同一准备 ID 查询固定动作、版本、期限和进度，原计划进入 ready 后才应用。
+- 第三轮应用未确认 B 后停止 Web，Web 仍 inactive 时 A 的实际流量已恢复；重新启动 Web 后，原 B 回执 rolled_back，原 A ID/版本及可计划状态保持。再次应用未确认 B 并正常整机重启后，原 B 回执回滚、原 A ID/版本、双栈流量及第三方规则均通过。最后对原 A 版本准备并确认移除，再停用模块，双栈业务流量恢复，UFW 仍 active 且开机 enabled。B 的替换准备执行 32 条官方预演，移除准备执行 16 条，全部保留双栈入口保护及受控来源核对。
+- 控制器前后比对确认 boot ID 改变；双栈第三方 UFW 原生 tuple 块及相对顺序、对应内核规则、其他 UFW 配置散列、密钥、Nginx 活动指针及三项服务程序散列保持。未选择的两个 legacy 导出均为空且保持，不据此声明保护非空 legacy 规则的覆盖。客户端输出 `PRESERVED_CONFIRMED_A_PERSISTED_AFTER_BOOT`、`RESTORED_A_BEFORE_WEB_START`、`WEB_STOP_RESTORED_CONFIRMED_A`、`REBOOT_RESTORED_CONFIRMED_A`、`CONFIRMED_REMOVE_AND_MODULE_DISABLED` 和 `ALL_PASS`；控制器输出 `P5_UFW_UBUNTU24_TWO_VM_ALL_PASS`。两台虚拟机均有正常 Power down 记录、退出码为 0。
+- 三轮磁盘、源模板配置及证据分别保留于既有虚拟机卷和 `.validation/native-vm/ufw-ubuntu24-v1/`、`ufw-ubuntu24-v2/`、`ufw-ubuntu24-v3/`。额外诊断克隆因源磁盘仍被运行中的第三轮占用而未启动，日志保留于 `ufw-diagnostic-v1/`，不计作运行验收。本轮范围限于上述 UFW/nftables 组合；不替代 UFW/legacy、其他系统/架构、Docker、Agent SIGKILL、本机救援、硬断电或活动 UFW 策略下升级中断验收。未执行 UI 测试，未修改开发宿主机环境，整体 P5 继续推进。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。

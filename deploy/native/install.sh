@@ -6,17 +6,18 @@ umask 077
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--start]
+用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh openssh|none] [--start]
 面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
 --dns-owner 明确批准宿主机 DNS 所有者并开放对应服务写入路径；默认 unconfirmed，仅允许读取。不会安装、启停或切换网络管理器。
+--firewall-owner 与 --firewall-ssh 配套确认宿主机防火墙后端及 SSH 保护方式；默认 unconfirmed，仅允许读取。UFW 额外开放 /etc/ufw 写入；不安装、启停或切换管理器，本机授权登记另行完成。
 SELinux 启用时注册本应用的持久文件标签模块并应用标签，保留系统进程策略与当前防护状态。
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed firewall_owner=unconfirmed firewall_ssh=unconfirmed
 while (($#)); do
   case "$1" in
-    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image|--dns-owner)
+    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image|--dns-owner|--firewall-owner|--firewall-ssh)
       (($# >= 2)) || die "参数缺少值：$1"
       case "$1" in
         --binary) binary=$2 ;; --web-dir) web=$2 ;; --nginx-binary) nginx=$2 ;;
@@ -25,6 +26,7 @@ while (($#)); do
         --panel-mode) panel_mode=$2 ;; --panel-image) panel_image=$2 ;;
         --nginx-image) nginx_image=$2 ;;
         --dns-owner) dns_owner=$2 ;;
+        --firewall-owner) firewall_owner=$2 ;; --firewall-ssh) firewall_ssh=$2 ;;
         --release-manifest) release_manifest=$2 ;; --release-signature) release_signature=$2 ;;
       esac
       shift 2 ;;
@@ -51,6 +53,25 @@ case "$dns_owner" in
     dns_write_paths='-/etc/netplan -/run/systemd/network -/run/NetworkManager/system-connections' ;;
   *) die 'dns-owner 仅允许 unconfirmed、regular-file、networkmanager、networkd 或 netplan' ;;
 esac
+firewall_agent_flags= firewall_write_paths= firewall_after=
+case "$firewall_owner" in
+  unconfirmed|direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy) ;;
+  *) die 'firewall-owner 仅允许 unconfirmed、direct-nftables、firewalld、ufw、iptables-nft 或 iptables-legacy' ;;
+esac
+case "$firewall_ssh" in
+  unconfirmed|openssh|none) ;;
+  *) die 'firewall-ssh 仅允许 unconfirmed、openssh 或 none' ;;
+esac
+if [[ $firewall_owner == unconfirmed ]]; then
+  [[ $firewall_ssh == unconfirmed ]] || die 'firewall-ssh 须与明确的 firewall-owner 配套使用'
+else
+  [[ $firewall_ssh != unconfirmed ]] || die '选择 firewall-owner 时须明确 firewall-ssh 为 openssh 或 none'
+  firewall_agent_flags="--firewall-scope host --firewall-owner $firewall_owner --firewall-ssh $firewall_ssh"
+  case "$firewall_owner" in
+    ufw) firewall_write_paths=-/etc/ufw; firewall_after=ufw.service ;;
+    firewalld) firewall_after=firewalld.service ;;
+  esac
+fi
 [[ $EUID == 0 ]] || die '安装需要本机 root'
 [[ -n $binary && -n $web ]] || { usage; exit 1; }
 case "$panel_mode" in
@@ -489,7 +510,7 @@ EOF
 cat >"$work/nginxpanel-agent.service" <<EOF
 [Unit]
 Description=NginxPanel local privileged agent
-After=nginxpanel-nginx.service systemd-tmpfiles-setup.service
+After=nginxpanel-nginx.service systemd-tmpfiles-setup.service $firewall_after
 Before=nginxpanel.service
 
 [Service]
@@ -498,7 +519,7 @@ User=root
 AmbientCapabilities=CAP_SETUID
 Group=nginxpanel-ipc
 UMask=0027
-ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host $dns_agent_flags
+ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host $dns_agent_flags $firewall_agent_flags
 Restart=on-failure
 RestartSec=3
 TimeoutStartSec=180
@@ -509,7 +530,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /run/ufw.lock /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases /etc/systemd/system $dns_write_paths
+ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /run/ufw.lock /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases /etc/systemd/system $dns_write_paths $firewall_write_paths
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes

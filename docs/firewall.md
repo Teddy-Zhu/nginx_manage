@@ -281,6 +281,8 @@ UFW 没有独立空 policy 对象，此登记只授权空规则命名空间，�
 
 完成本机授权后，root 明确设置 `--firewall-owner ufw --firewall-scope host --firewall-ssh openssh --maintenance-scope host` 后，运行状态返回 `backend=ufw`；`can_plan` 表示可尝试准备计划，`available` 还须重新核对当前本机授权、用户配置及运行状态。准备或恢复在途时 `available=false`。确无 SSH 保护需求时才选择 `--firewall-ssh none`。`POST /api/v1/firewall/plan` 可准备已保存策略的 apply 或原已确认版本的 remove 计划，须近期认证并直接使用目标已确认的管理 HTTPS 连接；apply 还须启用模块。移除不附带新策略，由 Agent 从原确认回执取回策略；运行状态只投影当前本机授权下、与 root 回执一致的已确认选择及原操作。采集实际连接、受控来源及 OpenSSH 监听，保护项先于业务项。重复保护合并；业务条目与保护匹配条件完全相同时由保护项覆盖，单独报告计数。既有 nftables/firewalld 恢复材料仍由原执行器处理，不因选择 UFW 撤销原恢复职责。
 
+原生安装器可通过 `--firewall-owner ufw --firewall-ssh openssh` 生成对应 Agent 参数、UFW 启动顺序及 `/etc/ufw` 最小写路径，支持确认时原子保存用户规则；其他所有者不开放该路径。两项参数须配套显式选择，默认只读；安装器不安装、启停或切换防火墙管理器，也不代办本机授权登记。已有部署由 root 按同一服务配置更新后重新加载 systemd；不直接对已有数据目录重跑首次安装。
+
 UFW 计划通过同一 POST 接口创建后台准备，立即返回 `preparation` 的固定 ID、动作/版本、进度和原期限；携带 `preparation_id` 查询原结果，附加 `cancel_preparation=true` 取消在途准备。创建和取消须近期认证，纯查询保留读取与安全写入权限检查，不因持续轮询而再次要求近期认证。准备不依赖原 HTTP 连接存活，不长期持有 DNS、管理监听或防火墙状态互斥锁；在途准备阻止新的可达性变更、应用及维护。完成后重新核对原监听版本、实际 SSH 监听及保护来源，计划另有 300 秒有效期，最多八份。页面可重新打开并查看进度及取消；Agent 重启保留失败原因，不恢复私有写入授权或自动应用。最新准备摘要保存在 root 私有 `ufw-preparation.json`；摘要损坏只阻止新受理，不阻止原业务恢复。停止、救援或控制通道丢失会取消准备。
 
 计划期间独占跨数据目录的宿主机登记锁，绑定原登记操作及宿主机占用；注释包含原随机所有者、计划 ID 和规则摘要，完整程序摘要随绑定更新。读取受信 UFW CLI 及固定 `/etc/ufw/{ufw.conf,user.rules,before.rules,after.rules,user6.rules,before6.rules,after6.rules,sysctl.conf,before.init,after.init}`、`/etc/default/ufw`，必需文件缺失或不受信则拒绝；IPv6 规则文件在 IPv6 启用时必需。每份最多 2 MiB、合计最多 4 MiB，摘要包括内容、存在性及文件身份/时间；`tool_hash` 单独标识 CLI 文件。
