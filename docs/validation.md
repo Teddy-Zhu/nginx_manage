@@ -292,6 +292,14 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 
 相关现有 Agent、transport 测试和完整程序构建通过，节点转发包编译通过（无测试文件）；记录为 `.validation/native-vm/fail2ban/deny-build.log`、`callers-build.log` 和 `fail2ban-rotation/build.log`。前端单 jail 请求设置已接入，UI 仍由用户人工验收。以上操作均在隔离 Docker 工具容器和独立内核虚拟机中执行，未调整开发主机的系统环境；磁盘、原始失败记录及本地测试密钥均保留。最终虚拟机已正常关机，归档记录为 `fail2ban-rotation/final-state.log` 和 `vm-run.log`。
 
+
+### 2026-10-20 独立面板 Fail2ban 宿主机动作（P5）
+
+- 范围：Debian 13/amd64、Python 3.13.5、nftables 1.1.3、官方 Fail2ban 1.1.1 源码及前节隔离签名资产。Docker 外层断网，虚拟机两核、2 GiB，使用原生安装器 `--without-nginx`；Nginx 程序未安装且其服务未运行。沿用已签名 Debian trixie 包安装最小 nftables 依赖，仅修改虚拟机。最终主程序 `0.2.11-dev` 由 Go 1.27.2、`CGO_ENABLED=0` 构建，SHA-256 为 `76ee40d874486874b4374f035aea22e12b8b27780b43a1b2f58d4c8701dfc714`。现有 Agent、transport 测试及静态构建通过；fail2ban 包无单元用例。Node 24 前端构建（含应用类型检查）通过，后续仅修改 Go 预览调度，未重复前端构建。
+- 实际行为：API 默认安装、启动及启用受管引擎；root 明确登记空表、管理来源、受管封禁来源及持续同步。冷预览通过，唯一的面板登录 jail 成功应用。虚拟机内独立网络命名空间通过 veth 以真实 IPv4、IPv6 地址各发起三次失败登录；日志只记录实际对端，伪造的转发头未改变来源，也未记录密码。官方引擎确认封禁后，已核对的宿主机对象阻断新 TCP 连接；通过官方 API 解封任务后，封禁集合归零且 HTTPS 访问恢复。IPv6 封禁期间 `SIGKILL` Agent，MainPID 从 3138 变为 4422，原同步会话重新采样达到 current，真实 TCP 仍被阻断，随后 API 解封恢复访问。
+- 失败与修正：首轮缺少 nft 工具时完整管理器检查拒绝同步；补齐目标依赖后原批准继续有效。旧采集/并发方式在两核 TCG 冷预览中超时并拒绝应用，保留各轮环境与日志；修复复用官方客户端、移除重复探测并限制预览并发。第 3 轮验证构建遗漏静态链接选项，被安装器拒绝，未进入业务验收，动态产物和失败盘保留。最终第 5 轮夹具误将 CLI 的 runtime 嵌套字段当作顶层字段，首次 IPv4 封禁后中止；修正字段读取后从原封禁状态续验，没有重复失败登录或重新批准。
+- 证据：`.validation/native-vm/fail2ban-host-input-v5/` 的 `build.log`、`host-prepare.log`、`flow.log`、`flow-resume.log`、`final-host-state.json`、`final-host-preview.json` 和 `final-runtime.json`；有效前端构建日志在 `fail2ban-host-input-v3/web-build.log`。此前 `fail2ban-host-input`、`-v2`、`-v3`、`-v4` 的源脚本、日志、原生安装及批准记录、二进制、密钥和虚拟磁盘均保留。没有创建或执行 UI 自动化测试。此轮未验收宿主机动作的整机重启恢复，不以 Agent 重启替代；其他后端、平台及外部场景仍按下节处理。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。

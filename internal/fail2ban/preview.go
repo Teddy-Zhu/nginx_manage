@@ -79,7 +79,7 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 	}
 	var instance Instance
 	if s.Agent != nil {
-		call, cancel := context.WithTimeout(ctx, 12*time.Second)
+		call, cancel := context.WithTimeout(ctx, 26*time.Second)
 		defer cancel()
 		var logErr, instanceErr, templateErr, runtimeErr, panelLogErr, hostInputErr error
 		var wg sync.WaitGroup
@@ -88,26 +88,26 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			wg.Add(1)
 			go func() { defer wg.Done(); sources, logErr = s.Agent.LogSources(call) }()
 		}
-		go func() { defer wg.Done(); out.Runtime, runtimeErr = s.Runtime(call) }()
-		go func() { defer wg.Done(); instance, instanceErr = s.Agent.ReadFail2banInstance(call) }()
-		if needsHostInput {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		// Each component proof starts isolated interpreters. Bound these reads
+		// to two concurrent proofs so they do not exhaust each other's budgets.
+		go func() {
+			defer wg.Done()
+			out.Runtime, runtimeErr = s.Runtime(call)
+			if needsHostInput {
 				value, err := s.HostInput(call)
 				out.HostInput, hostInputErr = &value, err
-			}()
-		}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			instance, instanceErr = s.Agent.ReadFail2banInstance(call)
+			if len(ids) > 0 {
+				out.TemplateChecks, templateErr = s.Agent.CheckFail2banTemplates(call, TemplateCheckInput{Templates: ids})
+			}
+		}()
 		if seen[PanelLoginTemplate] {
 			wg.Add(1)
 			go func() { defer wg.Done(); panelLogin, panelLogErr = s.PanelLogin(call) }()
-		}
-		if len(ids) > 0 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				out.TemplateChecks, templateErr = s.Agent.CheckFail2banTemplates(call, TemplateCheckInput{Templates: ids})
-			}()
 		}
 		wg.Wait()
 		if runtimeErr != nil {

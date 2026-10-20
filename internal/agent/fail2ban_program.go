@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -105,7 +106,7 @@ func (p fail2banProgram) authenticate(ctx context.Context) (fail2banProgram, err
 	}
 	if p.managed != nil {
 		if err := verifyFail2banManaged(ctx, p.managed, !p.unselected); err != nil {
-			return p, errors.New("受管组件、解释器或安装材料无法重新认证，须本机检查")
+			return p, fmt.Errorf("受管组件、解释器或安装材料无法重新认证，须本机检查：%w", err)
 		}
 		path := filepath.Join(p.managed.PackageRoot, "bin", p.kind)
 		hash, err := secure.HashRootFile(path, 4<<20)
@@ -165,6 +166,53 @@ func (p fail2banProgram) run(ctx context.Context, args []string, limit int) ([]b
 		return nil, errors.New("不支持的受管读取入口")
 	}
 	return fail2banManagedExec(ctx, p.managed.python(), argv, 2*time.Second, limit)
+}
+
+// readManagedFail2banBatch keeps the official CLI's ordered reads and formatting
+// while paying interpreter startup once. The caller supplies the output budget.
+func readManagedFail2banBatch(ctx context.Context, r *fail2banManagedRecord, queries [][]string, limit int) ([]string, error) {
+	input, err := json.Marshal(queries)
+	if err != nil {
+		return nil, err
+	}
+	budget := min(5*time.Second, time.Duration(len(queries))*2*time.Second)
+	raw, err := fail2banManagedExec(ctx, r.python(), []string{"-I", "-S", "-B", "-c", fail2banManagedClientBatch, r.PackageRoot, string(input)}, budget, limit)
+	if err != nil {
+		return nil, err
+	}
+	var values []string
+	if err = json.Unmarshal(raw, &values); err != nil || len(values) != len(queries) {
+		return nil, errors.New("官方 jail 只读查询结果不完整")
+	}
+	return values, nil
+}
+
+func (p fail2banProgram) readBatch(ctx context.Context, queries [][]string, limit int) ([]string, error) {
+	if p.unselected || p.kind != "fail2ban-client" || !p.tool.Trusted || p.hash == "" || len(queries) < 1 || len(queries) > 3 || limit <= 0 || limit > 128<<10 {
+		return nil, errors.New("官方只读查询批次无效或程序未经认证")
+	}
+	if p.managed == nil {
+		values := make([]string, len(queries))
+		for i, args := range queries {
+			raw, err := p.run(ctx, args, limit)
+			if err != nil {
+				return nil, err
+			}
+			values[i] = string(raw)
+		}
+		return values, nil
+	}
+	// JSON may expand each byte to a six-byte escape; retain the per-read bound.
+	values, err := readManagedFail2banBatch(ctx, p.managed, queries, 6*len(queries)*limit+1024)
+	if err != nil {
+		return nil, err
+	}
+	for _, value := range values {
+		if len(value) > limit {
+			return nil, errors.New("官方只读查询结果超过限制")
+		}
+	}
+	return values, nil
 }
 
 func fail2banManagedProcess(ctx context.Context, r *fail2banManagedRecord, pid int64) error {

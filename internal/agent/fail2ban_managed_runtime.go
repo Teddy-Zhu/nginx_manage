@@ -204,16 +204,14 @@ func verifyFail2banManaged(ctx context.Context, r *fail2banManagedRecord, files 
 	if err != nil {
 		return err
 	}
-	a, err := fail2banManagedRelease(p, r.AssetID)
+	_, err = fail2banManagedRelease(p, r.AssetID)
 	if err != nil {
 		return err
 	}
 	if p.Plan.ManifestSHA256 != r.ManifestSHA256 || filepath.Join(p.Directory, r.AssetID) != r.PackageRoot {
 		return errors.New("受管引擎组件身份发生变化")
 	}
-	if err = releases.RuntimeReadiness(ctx, []releases.Asset{a}); err != nil {
-		return err
-	}
+	// Installed already verifies every selected asset and its current runtime.
 	for name, hash := range map[string]string{r.PythonPath: r.PythonSHA256, r.ManagerPath: r.ManagerSHA256} {
 		actual, err := secure.HashRootFile(name, 256<<20)
 		if err != nil || actual != hash {

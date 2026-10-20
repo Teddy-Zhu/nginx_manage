@@ -137,7 +137,7 @@ func (s *Server) PreviewFail2ban(w http.ResponseWriter, r *http.Request, _ apige
 	if !s.fail2banReady(w, r) {
 		return
 	}
-	ctx, done, ok := s.fail2banReadContext(w, r)
+	ctx, done, ok := s.fail2banReadContextWithTimeout(w, r, 26*time.Second)
 	if !ok {
 		return
 	}

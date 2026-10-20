@@ -218,17 +218,9 @@ func readFail2banJailDetails(ctx context.Context, r *fail2banManagedRecord, b *f
 		append(fail2banReadArgs(fail2banManagedSocket, "get"), name, "ignoreip"),
 		append(fail2banReadArgs(fail2banManagedSocket, "get"), name, "banip", "--with-time"),
 	)
-	input, err := json.Marshal(queries)
+	values, err := readManagedFail2banBatch(ctx, r, queries, 256<<10)
 	if err != nil {
 		return nil, err
-	}
-	raw, err := fail2banManagedExec(ctx, r.python(), []string{"-I", "-S", "-B", "-c", fail2banManagedClientBatch, r.PackageRoot, string(input)}, 5*time.Second, 256<<10)
-	if err != nil {
-		return nil, err
-	}
-	var values []string
-	if err = json.Unmarshal(raw, &values); err != nil || len(values) != len(queries) {
-		return nil, errors.New("官方 jail 只读查询结果不完整")
 	}
 	for i, check := range checks {
 		if strings.TrimSpace(values[i]) != check.expected {

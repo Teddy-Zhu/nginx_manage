@@ -72,26 +72,23 @@ func parseFail2banHostBanTimes(raw []byte) (map[string]fail2banHostBanTime, erro
 }
 
 func readFail2banHostJail(ctx context.Context, program fail2banProgram, socket, name string) (map[string]fail2banHostBanTime, error) {
-	readTimes := func() (map[string]fail2banHostBanTime, error) {
-		raw, err := program.run(ctx, append(fail2banReadArgs(socket, "get"), name, "banip", "--with-time"), 128<<10)
-		if err != nil {
-			return nil, err
-		}
-		return parseFail2banHostBanTimes(raw)
-	}
-	before, err := readTimes()
+	values, err := program.readBatch(ctx, [][]string{
+		append(fail2banReadArgs(socket, "get"), name, "banip", "--with-time"),
+		append(fail2banReadArgs(socket, "status"), name),
+		append(fail2banReadArgs(socket, "get"), name, "banip", "--with-time"),
+	}, 128<<10)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := program.run(ctx, append(fail2banReadArgs(socket, "status"), name), 128<<10)
+	before, err := parseFail2banHostBanTimes([]byte(values[0]))
 	if err != nil {
 		return nil, err
 	}
 	status := fail2ban.Jail{Name: name, Banned: []string{}}
-	if err = parseFail2banJail(raw, &status); err != nil {
+	if err = parseFail2banJail([]byte(values[1]), &status); err != nil {
 		return nil, err
 	}
-	after, err := readTimes()
+	after, err := parseFail2banHostBanTimes([]byte(values[2]))
 	if err != nil {
 		return nil, err
 	}
@@ -165,25 +162,27 @@ func collectFail2banHost(ctx context.Context, dataDir string, event *fail2banHos
 	if err != nil || b.ClientVersion != "1.1.1" || strings.TrimSpace(string(client)) != "Fail2Ban v1.1.1" {
 		return out, errors.New("宿主机动作客户端须为已核对的 1.1.1")
 	}
-	server, err := program.run(ctx, fail2banReadArgs(b.Socket, "version"), 4096)
-	if err != nil || strings.TrimSpace(string(server)) != "1.1.1" {
-		return out, errors.New("宿主机动作服务端版本无法核对")
-	}
+	var bundle *fail2banJailBundle
+	queries := [][]string{fail2banReadArgs(b.Socket, "version")}
 	if event.Policy.Managed {
 		if b.managed == nil {
 			return out, errors.New("受管宿主机来源须绑定本应用的受管官方实例")
 		}
-		selected, bundle, e := selectedFail2banJails(b.managed)
-		if e != nil {
-			return out, e
+		var selected string
+		selected, bundle, err = selectedFail2banJails(b.managed)
+		if err != nil {
+			return out, err
 		}
 		out.managedSelection = &selected
-		raw, e := program.run(ctx, fail2banReadArgs(b.Socket, "status"), 128<<10)
-		if e != nil {
-			return out, e
-		}
-		if e = checkFail2banJailNames(raw, bundle); e != nil {
-			return out, e
+		queries = append(queries, fail2banReadArgs(b.Socket, "status"))
+	}
+	values, err := program.readBatch(ctx, queries, 128<<10)
+	if err != nil || len(values[0]) > 4096 || strings.TrimSpace(values[0]) != "1.1.1" {
+		return out, errors.New("宿主机动作服务端版本无法核对")
+	}
+	if event.Policy.Managed {
+		if err = checkFail2banJailNames([]byte(values[1]), bundle); err != nil {
+			return out, err
 		}
 		if bundle != nil {
 			for _, jail := range bundle.Policy.Jails {

@@ -757,7 +757,7 @@ function createAPI(scope: RequestScope) {
   fail2banPanelLogin: (signal?: AbortSignal) => request<Fail2banPanelLoginStatus>({url:"/fail2ban/panel-login",signal}),
   fail2banHostInput: (signal?: AbortSignal) => request<Fail2banHostInputPreview>({url:"/fail2ban/host-input",signal}),
   saveFail2banPolicy: (data:Fail2banPolicyInput,key:string) => request<Fail2banPolicyView>({url:"/fail2ban/policy",method:"PUT",data,headers:{"Idempotency-Key":key}}),
-  previewFail2ban: (version:number,signal?:AbortSignal) => request<Fail2banPolicyPreview>({url:"/fail2ban/preview",method:"POST",data:{version},signal}),
+  previewFail2ban: (version:number,signal?:AbortSignal) => request<Fail2banPolicyPreview>({url:"/fail2ban/preview",method:"POST",data:{version},signal,timeout:30_000}),
   fail2banPythonTasks: (signal?: AbortSignal) =>
     request<Fail2banPythonTaskStatus[]>({ url: "/fail2ban/python/tasks", signal }),
   changeFail2banPython: (data: Fail2banPythonTaskInput, key: string) =>
