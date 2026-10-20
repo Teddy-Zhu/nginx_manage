@@ -61,7 +61,7 @@ Agent 操作记录使用独立文件、原子 rename、文件与目录 fsync。�
 
 资源预算见 `internal/limits`。配置树最多 128 文件、单文件 256 KiB、总计 2 MiB、嵌套 32 层；WAF 最多 32 个策略，每类路径最多 128 项，每种限流共享区固定 1 MiB；证书最多 128 个资源、每个 32 个版本，单份材料合计 128 KiB、私钥 PEM 16 KiB、链长 16、DNS/IP SAN 合计 64，单次发布材料合计 1 MiB；最多 128 个发布目录，校验候选及保留的外部副本也计入，清理入口尚未交付，达到上限须本机维护；监听/TLS 确认各最多 256 项，证书文件引用最多 128；HTTP/IPC 请求最多 4 MiB，最终序列化请求超限则明确失败；ACME 账户最多 16 个、DNS 凭据最多 32 组、每组最多 2 个字段且单字段不超过 2 KiB；活跃签发配置最多 128，总保留配置/订单各最多 2048，每配置最多 32 个订单，DNS 恢复记录最多 8192，每条最多 16 个原有/创建记录 ID，提供商查询最多 20 页共 2000 条；任务排队最多 100，Nginx、ACME 账户和签发各一个 worker；普通分页每页最多 100。监控、日志、暂存、备份与 SSE 的初始预算已固定，启用对应功能时必须在实际入口执行，常量本身不代表该功能已经交付。
 
-DNS 管理器探测当前只提供来源线索，受管理组合保持只读；普通文件写入须本机显式确认所有权和宿主机范围，并具备独立恢复适配。实际系统组合仍待 P5 验收，不据实现开放宣称已通过能力矩阵。工具已安装、模块启用、服务运行、系统兼容性验收是独立事实；未知运行状态返回 null。未接入 Agent 时，Web 不展示容器/本进程环境为宿主机事实。
+DNS 管理器探测须追溯实际持久来源；写入须本机显式确认所有权和宿主机范围，并满足相应适配器及独立恢复条件。已验证系统组合和边界以[验证记录](validation.md)为准，不据接口开放宣称已通过完整能力矩阵。工具已安装、模块启用、服务运行、系统兼容性验收是独立事实；未知运行状态返回 null。未接入 Agent 时，Web 不展示容器/本进程环境为宿主机事实。
 
 
 受管 Nginx 日志只接受来源 ID（固定受管 live 路径的 SHA-256）和筛选条件，不接受文件路径。HTTP 和 Stream 使用预留 JSON 格式；HTTP 缺省访问日志注入不含 query 的结构化全局日志；缺省主错误日志固定至受管全局 error.log。允许的 live 文件仅限 nginx/<UUID>/access.log、error.log，stream/<UUID>/access.log、error.log、session.log 和 nginx-global/access.log、error.log，前缀均为 logs/。归档使用 Agent 生成的 UUID 后缀，用户原文不能引用归档或临时文件；活动文件预建为 0640、历史关闭后为 root 0600。原生文本和含此类历史的来源要求 config.secrets，浏览器再加五分钟内认证；展示与下载统一尽力脱敏，不提供原始内容绕过入口。Stream 仅返回会话状态、协议与收发字节等适用字段；原生文本仅支持时间及脱敏消息关键字。
@@ -97,14 +97,14 @@ DNS 使用 Plan → Apply → Confirm/Rollback。计划 5 分钟有效，绑定�
 
 Agent 的 `agent/reachability/reachability.json` 在任何 DNS 副作用前保存本次原文/属性、候选、期限与状态，最多 128 KiB，root 私有且不进入业务备份；普通操作日志只保存摘要。节点锁与宿主机全局 DNS 锁阻止重复所有者，DNS 与管理监听在 Agent 内按固定锁顺序排他；防火墙后续接入须复用该约束。确认期限 45–180 秒，进程内同时使用单调时钟；API 停机不确认也不取消该期限，Agent 停止/重启先尝试恢复未确认变更。自动恢复遇到外部内容或属性变化时不覆盖，保留 recovery_required 和快照，禁止后续写入；磁盘不足时仍尝试使用既有持久意图恢复，不能因记录新阶段失败就跳过恢复。仅清理该操作的受限临时文件。
 
-DNS 文件路由页面自动扫描，提供只读来源、显式接管、计划差异、确认倒计时、提交/取消/恢复和期望偏差；轮询不重叠，隐藏暂停，卸载取消读取，待确认时提高轮询频率。接口、数据库模型和路由代码已生成；未修改实际主机 DNS、启动服务或执行构建/类型检查/lint/测试，真实管理器组合与断电恢复留待 P5。
+DNS 文件路由页面自动扫描，提供只读来源、显式接管、计划差异、确认倒计时、提交/取消/恢复和期望偏差；轮询不重叠，隐藏暂停，卸载取消读取，待确认时提高轮询频率。接口、数据库模型和路由代码随当前合同生成；系统组合及恢复验证见[验证记录](validation.md)，未验证范围仍待 P5。
 
 
-NetworkManager 适配须本机设置 `--dns-scope=host --dns-owner=networkmanager`；固定本机 system bus，不接受远程 D-Bus 地址、对象路径或 nmcli 命令。当前写入条件为 NetworkManager ≥ 1.44、已激活且无待保存修改的直接以太网/Wi-Fi 连接、安全的 `/etc/NetworkManager/system-connections/*.nmconnection` 持久源及可用的连接版本接口，并核对 DnsManager 与解析器入口归属（default 文件/链接，或 systemd-resolved 的标准链接）。unmanaged 默认模式、dnsmasq/resolvconf/netconfig 等其他入口组合、生成/临时/外部连接、netplan 生成源、ifcfg、控制器从属设备、加密/特殊 DNS 地址、缺少接口或其他未知组合保持只读；具体系统组合尚待 P5 验收。
+NetworkManager 适配须本机设置 `--dns-scope=host --dns-owner=networkmanager`；固定本机 system bus，不接受远程 D-Bus 地址、对象路径或 nmcli 命令。当前写入条件为 NetworkManager ≥ 1.44、已激活且无待保存修改的直接以太网/Wi-Fi 连接、安全的 `/etc/NetworkManager/system-connections/*.nmconnection` 持久源及可用的连接版本接口，并核对 DnsManager 与解析器入口归属（default 文件/链接，或 systemd-resolved 的标准链接）。unmanaged 默认模式、dnsmasq/resolvconf/netconfig 等其他入口组合、生成/临时/外部连接、netplan 生成源、ifcfg、控制器从属设备、加密/特殊 DNS 地址、缺少接口或其他未知组合保持只读；具体系统组合及验收边界见[验证记录](validation.md)。
 
-连接以 UUID 与接口绑定目标，IPv4/IPv6 分别编辑服务器、搜索域及自动获取；入口、连接有效 DNS、运行设置与持久设置分开展示，读取不到保持未知。临时应用使用 `GetAppliedConnection` 版本检查和保留外部 IP 的 `Reapply`；确认前不保存 profile，确认后使用 `Update2(to-disk|no-reapply,version-id)`，再次核对运行和持久状态。仅修改 DNS 地址、非路由搜索域与 ignore-auto-dns，保留路由域、DNS 优先级/选项、IP/网关/路由及其他连接；不重连设备或重启整套网络。完整设置仅在 root 内存中用于带版本的更新，不调用 GetSecrets，不将 keyfile、密码或全量 profile 进入 Web/业务备份；读取帧、设备数、属性及文件大小均有上限。各目标期望配置分别加密保存，只有确认成功才更新。
+连接以 UUID 与接口绑定目标，IPv4/IPv6 分别编辑服务器、搜索域及自动获取；入口、连接有效 DNS、运行设置与持久设置分开展示，读取不到保持未知。临时应用使用 `GetAppliedConnection` 版本检查和保留外部 IP 的 `Reapply`；确认前不保存 profile，确认后使用 `Update2(to-disk|no-reapply,version-id)`，再次核对运行和持久状态。仅修改 DNS 地址、非路由搜索域与 ignore-auto-dns，保留路由域、DNS 优先级/选项、IP/网关/路由及其他连接；不重连设备或重启整套网络。完整设置保留 D-Bus variant 签名，IPv6 地址/路由元组使用相应结构类型回写；无法保真编码的复合属性阻止变更。完整设置仅在 root 内存中用于带版本的更新，不调用 GetSecrets，不将 keyfile、密码或全量 profile 进入 Web/业务备份；读取帧、设备数、属性及文件大小均有上限。各目标期望配置分别加密保存，只有确认成功才更新。
 
-独立 root 恢复记录分别保存原始运行/持久 DNS 属性和已授权的新值。期限到达、解析失败或未确认的 Agent 重启恢复两份原值；从最新设置合并 DNS 字段，不恢复整个旧网络 profile。未知 RPC 保留对应 daemon/对象/连接身份、版本及 boot ID/PID/start ticks。原进程已退出时才能直接解除迟到调用阻塞；仍存活时，恢复须通过版本推进阻止迟到写入：运行值尚未改变时，必要时短暂重用已授权的新 DNS 再恢复，以避免无变化 Reapply 不推进版本；只看到旧值不能宣称恢复完成。未证明原进程退出时跨 daemon、system bus 或连接身份变化，出现非快照 DNS，或无法确认版本推进时进入 recovery_required，保留快照并阻止后续冲突写入。此实现尚未启动服务或修改真实 DNS，恢复与系统矩阵验证留至 P5。
+独立 root 恢复记录分别保存原始运行/持久 DNS 属性和已授权的新值。期限到达、解析失败或未确认的 Agent 重启恢复两份原值；从最新设置合并 DNS 字段，不恢复整个旧网络 profile。未知 RPC 保留对应 daemon/对象/连接身份、版本及 boot ID/PID/start ticks。原进程已退出时才能直接解除迟到调用阻塞；仍存活时，恢复须通过版本推进阻止迟到写入：运行值尚未改变时，必要时短暂重用已授权的新 DNS 再恢复，以避免无变化 Reapply 不推进版本；只看到旧值不能宣称恢复完成。未证明原进程退出时跨 daemon、system bus 或连接身份变化，出现非快照 DNS，或无法确认版本推进时进入 recovery_required，保留快照并阻止后续冲突写入。已验证的恢复场景及其余系统矩阵缺口见[验证记录](validation.md)。
 
 D-Bus 语义依据 [NetworkManager Device](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Device.html)、[Settings.Connection](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Settings.Connection.html) 和 NetworkManager 官方实现；使用的 godbus 版本固定为 v5.2.4。
 

@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-20。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件、Debian 13 networkd/resolved 与 netplan/networkd 静态 DNS 的双栈解析与独立恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
+2026-10-20。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件、Debian 13 networkd/resolved、NetworkManager/resolved 及两种 netplan renderer 静态 DNS 的双栈解析与独立恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
 
 ## 隔离环境
 
@@ -164,7 +164,24 @@ Debian 官方 `debian-12-genericcloud-amd64.qcow2` 已与同源 [SHA512SUMS](htt
 
 networkd 第 9 轮和 netplan 第 10 轮均输出 `P5_DNS_MANAGED_TWO_VM_ALL_PASS`。记录分别为 `.validation/native-vm/dns-managed-round9.log`、`dns-target-9.log`、`dns-client-9.log` 及 `dns-managed-round10.log`、`dns-target-10.log`、`dns-client-10.log`。强制重置恢复的任务/root 操作分别为 `91dffbdd-d882-4c87-a7ee-4cbc83a211aa` / `fbca5139-2afb-4b48-adc9-9a69eee121df` 和 `2ec325a8-8cb8-48c2-a47a-89be314bcdc6` / `aaa4e441-fe02-40c0-857e-a6dc8d4d50f0`。第 7 轮的 dummy 分域夹具缺少独立 DNS 传输链路，已改用上述真实第二网卡；第 8 轮因夹具诊断命令路径错误停止，第 9 轮从其磁盘克隆，仅更新夹具后完成事务，不修改产品安装或业务数据库。相关磁盘及失败记录保留，两台虚拟机已关机，验证容器已退出，开发宿主机包、服务、网络和 Docker 配置未修改。
 
-本轮不覆盖 NetworkManager、netplan/NetworkManager、动态 DHCP/RA、多发行版/架构或真实 VPN 隧道；这些范围继续等待独立验收。
+NetworkManager 及 netplan/NetworkManager 的验证见下节；动态 DHCP/RA、多发行版/架构和真实 VPN 隧道继续等待独立验收。
+
+### Debian 13 NetworkManager/resolved 与 netplan/NetworkManager DNS
+
+2026-10-20，在上述官方 Debian 13/amd64 镜像的隔离虚拟机内准备 NetworkManager `1.52.1-1`，systemd/resolved、netplan 和内核版本不变。分别验证原生安装器的 `--dns-owner networkmanager` 和 `--dns-owner netplan`，使用直接以太网静态双栈配置及 systemd-resolved 入口；后者由真实 netplan `renderer: NetworkManager` 生成运行 keyfile。仍使用 v13 安装器，不安装 Nginx；开发宿主机环境未修改。
+
+实际 NetworkManager 拒绝了原实现的 Reapply 和回滚：godbus `Call.Store` 递归展开配置映射的 Variant，导致 IPv6 `addresses` 从 `a(ayuay)` 变为 `aav`。修复直接保留回复中的 Variant，并将旧式 IPv6 地址、路由元组恢复为可按原签名编码的具体结构；无法保持类型的复合属性禁止写入。新增实际 D-Bus 编解码回归用例覆盖非空/空元组、现代地址/路由属性及 DNS 修改后的非 DNS 保持。Agent 测试及主程序构建通过，记录为 `.validation/native-vm/dns-nm-go-round1.log`，程序 SHA-256 为 `bfcf4bcf02118015ea6bd16cca7e3845633e8c58813ed84b5b449f3732eb4be2`。
+
+两种后端均通过以下范围：
+
+- 持久源及 resolved 运行文件的拥有者保护、过期源散列拒绝和请求幂等；实际双栈 DNS 临时应用改变解析答案，确认前不改变持久配置或已确认期望，确认双栈和仅 IPv6 DNS 后持久生效。
+- 重启 NetworkManager 与 resolved 后，已确认配置和目标系统实际 `getaddrinfo` 解析保持。独立第二网卡的分域 DNS 答案保持；所选和独立连接的非 DNS 设置（排除连接更新时间戳）、地址、路由、MAC/MTU 逐次复核。
+- 解析失败、确认超时、Web 停止、Agent SIGKILL 和 QMP 强制 `system_reset` 后，恢复已确认 IPv6 DNS、持久源及期望，双栈管理入口可访问；强制重置后 boot ID 改变并沿用原 root 操作编号。此结果不等同于宿主掉电或磁盘缓存丢失。
+- 外部修改原生 keyfile DNS 或 netplan 上游 YAML 后，保留修改并进入 `recovery_required`，阻止新计划；本机处理冲突后显式续办同一操作，恢复基线和分域解析。原生 keyfile 按规范化键值核对并仅排除 NetworkManager 更新时间戳，不宣称保留其原注释/字节；netplan 上游 YAML 按原字节核对，权限、UID/GID、链接数及预置扩展属性保留，同时核对实际生成源与运行状态。
+
+第 15/16 轮完成安装、保护、应用确认、管理器重启及解析失败回滚后，因夹具函数名被循环变量覆盖中断；第 17/18 轮从对应保留磁盘克隆，仅更新夹具，完成原解析失败任务的恢复核对及其余故障场景，不重装程序或修改业务数据库。第 17/18 轮均输出 `P5_DNS_MANAGED_TWO_VM_ALL_PASS`。证据为 `.validation/native-vm/dns-managed-round15.log` 至 `dns-managed-round18.log` 及对应 `dns-target-*.log`、`dns-client-*.log`；种子清单和程序散列同时保留。强制重置任务/root 操作分别为 `a89ab07e-4bbe-4ef2-b82b-6cd4a16f5903` / `d6f4cb33-2202-4622-956a-8e47feb293aa` 和 `1200afd1-3afb-4de7-9401-d39b24bd78f6` / `12e622d9-8521-44bc-bd24-7bb13ddc632c`。
+
+第 11 轮保留原程序的真实序列化失败及离线 journal；第 13/14 轮因夹具误取旧程序，不能评价本次修复，第 12 轮仅准备未启动。已纠正种子程序路径并强制校验上述 SHA-256，失败记录及磁盘均保留。验证虚拟机已关机，验证容器已退出。本轮不覆盖动态 DHCP/RA、Wi-Fi、NetworkManager 的 default 文件入口、实际 VPN 隧道、其他发行版/架构或 Docker 面板组合。
 
 ## 尚待验收
 

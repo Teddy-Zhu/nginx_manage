@@ -132,7 +132,8 @@ func nmReadDeviceSource(b *dnsBus, path dbus.ObjectPath, netplan bool) (*nmTarge
 	}
 	t.ProfileVersion, e = dnsProperty[uint64](b, t.Profile, nmName+".Settings.Connection", "VersionId")
 	profileVersionErr := e
-	if e = b.call(t.Profile, nmName+".Settings.Connection.GetSettings").Store(&t.Persistent); e != nil {
+	settings := b.call(t.Profile, nmName+".Settings.Connection.GetSettings")
+	if e = nmReadSettings(settings, &t.Persistent); e != nil {
 		return nil, e
 	}
 	uuid := nmString(t.Persistent, "connection", "uuid")
@@ -141,7 +142,8 @@ func nmReadDeviceSource(b *dnsBus, path dbus.ObjectPath, netplan bool) (*nmTarge
 	if len(t.View.Name) > 256 || !hostdns.ValidTarget(t.View.Target) {
 		return nil, errors.New("invalid connection identity")
 	}
-	if e = b.call(path, nmName+".Device.GetAppliedConnection", uint32(0)).Store(&t.Applied, &t.AppliedVersion); e != nil {
+	settings = b.call(path, nmName+".Device.GetAppliedConnection", uint32(0))
+	if e = nmReadSettings(settings, &t.Applied, &t.AppliedVersion); e != nil {
 		return t, e
 	}
 	if nmString(t.Applied, "connection", "uuid") != uuid {
