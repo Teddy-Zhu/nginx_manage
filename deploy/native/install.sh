@@ -605,6 +605,7 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 EOF
+# Coordinated updates atomically select the host Agent under /opt/nginxpanel.
 cat >"$work/nginxpanel-update@.service" <<EOF
 [Unit]
 Description=NginxPanel independent panel update %i
@@ -625,7 +626,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/runtime $data/run $data/app $data/secrets
+ReadWritePaths=$data/agent $data/runtime $data/run $data/app $data/secrets /opt/nginxpanel
 InaccessiblePaths=$data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes

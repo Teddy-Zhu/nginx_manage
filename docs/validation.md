@@ -315,7 +315,16 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 9 个真实 Unix Socket/root 定点回归全部通过，没有跳过；`0.2.12-dev` 静态候选构建通过，SHA-256 为 `bfb7f90b2f4e7520e3b23899fdc6e9628d466e4a7884b38bcc0a11197bd473cc`。原失败现场通过 root 显式批准的候选启动器和临时独立服务验证：校验模式保留原 inode 262605，实际启动替换为 262552 并恢复真实 HTTP；再次启动拒绝清理已有内核引用的 Socket，原服务流量保持正常。停止临时服务后恢复原正式单元，原任务 `e723a67e-d987-43c8-a04c-30505384fb72` 在同一 UUID 下自动对账为回滚确认，原修订及部署身份保持不变。已安装的不可变程序及选择仍为 `0.2.11-dev`，此项不替代新候选正式升级后的开机恢复验收。
 - 清理脚本曾误判两个测试资源 ID，删除了正常测试站点，随后应用被正确回滚。通过实际监听与域名字段识别资源，使用正常 CRUD 重建测试站点并移除占用端口站点；修正后的应用任务 `903b8533-ec1b-4351-b977-60bfefefef10` 成功，业务恢复到单站点、期望版本 5。错误清理任务 `6689cdbe-25a6-4a8f-8113-4bd917270375` 的原失败和回滚记录保留。
 - 安装重放、Agent/Web 服务重启及后续计划内整机重启通过；使用单独保存的本次重启前 boot ID 核对新启动身份，原始 boot ID 继续保留。最终节点、期望版本 5、修订和部署身份保持一致，HTTP 实际流量正常；管理 TLS 指纹仍为 `26f9d9971d99deb5b0235f7afe8e25c1bc8bb3897064a2dcbf3b26677f837407`。首次失败任务、中断任务和错误清理任务均保持原 UUID 及回滚确认历史，最终成功任务保持成功。重启前后的账户隔离、worker 零能力和 AppArmor 观测均通过。
-- 证据位于 `.validation/native-vm/ubuntu24-native/`，包含原始 `initial.log`、`inspection.log`、Socket 诊断、`build.log`、`build-final.log`、`rescue.log`、`continue-api-cleanup-failure.log`、`cleanup-api.log`、`finish-resumed.log`、`finish-flow.log`、`final-api.log` 和 `artifacts/`；镜像来源与完整散列核对另见 `.validation/native-vm/ubuntu24-native/range-image.json` 和下载记录。没有修改开发宿主机环境，没有创建或执行 UI 自动化测试。虚拟机正常关机。Ubuntu 的 Docker 面板组合、其他架构、新候选正式升级后的残留 Socket 开机恢复和其他故障矩阵仍待独立验收。
+- 证据位于 `.validation/native-vm/ubuntu24-native/`，包含原始 `initial.log`、`inspection.log`、Socket 诊断、`build.log`、`build-final.log`、`rescue.log`、`continue-api-cleanup-failure.log`、`cleanup-api.log`、`finish-resumed.log`、`finish-flow.log`、`final-api.log` 和 `artifacts/`；镜像来源与完整散列核对另见 `.validation/native-vm/ubuntu24-native/range-image.json` 和下载记录。没有修改开发宿主机环境，没有创建或执行 UI 自动化测试。虚拟机正常关机。新候选经正式服务升级后的异常退出及开机恢复见下一项；Ubuntu 的 Docker 面板组合、其他架构及其他故障矩阵仍待独立验收。
+
+### 2026-10-20 Ubuntu 24.04 原生协调升级及异常重启（P5）
+
+- 沿用上述 Ubuntu 原盘、密钥、节点及已发布配置，以独立测试签发者为现有 `0.2.12-dev` 候选和实际前端生成单个 amd64 签名离线包。本机 root 首次安装该测试仓库的独立信任，通过离线上传、检查和准备 API 暂存；上传脚本过于频繁地重新认证触发限流，修正后从原上传记录的已接收偏移继续，原失败日志保留。候选程序及既有 9 项回归结果沿用，没有重复构建或运行。
+- 首个协调任务 `2a857638-3749-4145-a0e3-881eed911761` 因更新 worker 沙箱未开放 `/opt/nginxpanel` 写入，无法创建 Agent 临时选择指针，自动回滚并完成释放及清理。修正安装器的独立面板更新模板；在虚拟机由 root 安装从源码提取、仅展开数据路径的完整新模板，先核对原模板仅相差该写目录，再核对加载后的 `ProtectSystem=strict` 与写入范围。安装器 SHA-256 为 `748af915a49d7fb47a3d6031923b60c921a5c77e16d49d3aa2aabaadf77c6ee3`，隔离容器中的脚本语法检查通过；此轮未重放首次安装。
+- 新任务 `230b423a-0a65-4510-8352-fc11c70aa806` 使用已准备候选、独立维护会话及明确停机授权，完成 Agent 与 Web 协调升级，最终 `succeeded/committed`、已确认释放且清理完成。维护期间并发应用返回 `MAINTENANCE_ACTIVE`；升级前后 Nginx 主进程和活动发布指针保持一致，节点、期望版本 5、修订、部署身份、主密钥及节点 TLS 材料散列保持一致，真实 HTTP 代理正常。
+- 对正式 Nginx 服务以 pidfd 停住主进程并杀死同控制组的主进程及两个 worker，确认全部退出、固定 Socket 仍存在且内核表已无引用。systemd 自动重启通过已选择的新程序完成清理，Nginx 主进程代次改变并恢复真实流量，无人工删除 Socket 或临时启动服务。
+- 在探测 Socket 仍有内核引用时保存并同步材料，以虚拟机内 `/proc/sysrq-trigger` 的 `b` 立即重启内核，未先停止 Nginx。启动标识从 `d7494550-51d8-4a3b-8dd0-8ece2657ecf0` 变为 `dee0c7c3-53e2-48bb-a422-03e08fb89641`；正式单元自动启动、固定 Socket 身份更新、原配置及实际流量恢复。API 报告原生 `0.2.12-dev`，实际 Web/Agent 程序散列匹配上述候选，Nginx 程序散列保持原值。此前六个应用任务与本轮回滚、成功升级的终态均保持，维护窗口开放，密钥材料未变。AppArmor 保持启用，三个进程仍为 `unconfined`。
+- 证据位于 `.validation/native-vm/ubuntu24-upgrade/`，包含原始限流与升级回滚日志、修正后的升级日志、异常退出及突然重启记录、重启前后 journal、源模板和 `artifacts/final-proof.json`。突然重启遗留的测试 SSH 连接在新启动验收通过后按精确进程身份关闭；测试自启动单元已停用，虚拟机正常关机，原盘和全部审计保留。未修改开发宿主机配置，未创建或执行 UI 自动化测试。本次测试签发声明自动回滚；正式发布工具当前拒绝该声明，发布工具与更新入口的衔接缺口仍待补齐，此项不替代正式发布链和其他系统组合验收。
 
 ## 尚待验收
 

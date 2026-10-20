@@ -167,3 +167,5 @@ Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安
 安装器同时登记独立的 `nginxpanel-agent-upgrade@.service`。Agent 和 `/opt/nginxpanel/current` 中的宿主机工具使用[独立 Agent 升级](../../docs/releases.md#独立-agent-与宿主机工具升级)，要求已准备签名产物、同协议/数据库/launcher 合同及已排空维护会话；不通过重复首次安装覆盖版本。独立 worker 保留原程序，停止 Agent 后切换、启动并确认，失败补偿；原维护会话在事务确认前不能释放。此入口适用于原生与 Docker 面板的宿主机 Agent，容器 launcher 仍通过受信镜像替换。实现待 P5 隔离集中验证，未在开发主机执行安装或升级。
 
 Agent 升级支持网页「Agent 升级」及 `/api/v1/agent/upgrades` 持久任务入口，绑定已准备签名产物和原维护会话，断连只查询，停止事务须显式重新授权；API 创建的任务不能通过本机 resume 绕过原授权。安装器登记 tmpfiles 配置及必要目录写权限，适用于重启后的宿主机 Agent。详见上述升级文档。
+
+面板与 Agent 协调升级使用独立的 `nginxpanel-update@.service`。该 worker 的 `ProtectSystem=strict` 写入范围包含 `/opt/nginxpanel`，用于在停止 Agent 后原子切换宿主程序指针；候选核验、维护授权及失败补偿仍由原事务控制。Ubuntu 24.04/amd64 的签名测试升级和异常重启结果见[验证记录](../../docs/validation.md)。
