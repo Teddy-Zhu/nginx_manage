@@ -300,6 +300,13 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 失败与修正：首轮缺少 nft 工具时完整管理器检查拒绝同步；补齐目标依赖后原批准继续有效。旧采集/并发方式在两核 TCG 冷预览中超时并拒绝应用，保留各轮环境与日志；修复复用官方客户端、移除重复探测并限制预览并发。第 3 轮验证构建遗漏静态链接选项，被安装器拒绝，未进入业务验收，动态产物和失败盘保留。最终第 5 轮夹具误将 CLI 的 runtime 嵌套字段当作顶层字段，首次 IPv4 封禁后中止；修正字段读取后从原封禁状态续验，没有重复失败登录或重新批准。
 - 证据：`.validation/native-vm/fail2ban-host-input-v5/` 的 `build.log`、`host-prepare.log`、`flow.log`、`flow-resume.log`、`final-host-state.json`、`final-host-preview.json` 和 `final-runtime.json`；有效前端构建日志在 `fail2ban-host-input-v3/web-build.log`。此前 `fail2ban-host-input`、`-v2`、`-v3`、`-v4` 的源脚本、日志、原生安装及批准记录、二进制、密钥和虚拟磁盘均保留。没有创建或执行 UI 自动化测试。此轮未验收宿主机动作的整机重启恢复，不以 Agent 重启替代；其他后端、平台及外部场景仍按下节处理。
 
+### 2026-10-20 Fail2ban 同机整机重启与显式停用（P5）
+
+- 沿用上一节 `0.2.11-dev` 静态主程序及 Debian 13/amd64 原磁盘，复用两核、2 GiB、外层断网的隔离虚拟机；没有源码变更，未重复构建、类型检查或单元测试。连续三个新内核启动身份均实际变化，原节点 ID、策略版本和管理 TLS 指纹保持一致；原生程序、批准、密钥和磁盘继续保留。
+- 原盘首次重新启动，在明确的 `recover_on_boot` 批准下重建新授权范围，空封禁集恢复 current，双栈访问正常。随后通过 API 新增一个 900 秒封禁，核对官方记录、current、内核对象及真实 TCP 超时；停用 Web 的开机启动并整机重启。Web 仍停用、Nginx 未安装，Agent 和官方引擎运行；新持续会话重新达到 current，已核对内核对象包含当前封禁，真实 TCP 继续被阻断。恢复 Web 开机启动及服务后，官方封禁的绝对到期时间差为 0，原保护、来源及同步事件文件散列全部保持不变；API 解封任务完成后内核封禁数归零，IPv4/IPv6 访问正常。
+- 明确停用当前持续会话，规则清除完成后核对空表及无 INPUT 链，再次整机重启。Agent、官方引擎、Web 均运行，当前停用事件 ID 保持不变、`enabled=false`、`recover_on_boot=false`；完整内核视图证明目标表不存在。通知执行器并等待 35 秒覆盖后台轮询后，目标仍缺失，恢复事件清单及散列未变，未自动重建或重新授权；双栈 HTTPS 访问正常。
+- 证据保存在 `.validation/native-vm/fail2ban-host-reboot/`：`setup-network-setup.log`、`persistence-before.log`、`reboot.log`、`web-stopped.log`、`after.log`、`stop-before.log`、`stop-reboot.log`、`stop-after.log`、`agent-journal.log` 及 `artifacts/` 内各阶段原始状态。Web 开机开关已恢复，目标持续会话按显式停止意图保持停用，虚拟机正常关机。没有修改开发宿主机环境或创建 UI 自动化测试。身份/实例变化、准备及发布点中断、创建未知结果、恢复期间再次重启、维护和取消仍待验收；此节不证明这些场景完成。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
