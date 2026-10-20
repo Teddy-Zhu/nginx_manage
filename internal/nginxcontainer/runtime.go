@@ -128,10 +128,18 @@ func (r *Runtime) process(pid, master int, init bool) error {
 	return r.processIdentity(pid, master, init, !init)
 }
 func (r *Runtime) processIdentity(pid, master int, init, directChild bool) error {
+	return r.processProgram(pid, master, init, directChild, false)
+}
+
+func (r *Runtime) processProgram(pid, master int, init, directChild, bootstrap bool) error {
 	if pid <= 1 || master <= 1 {
 		return errors.New("容器宿主机 PID 无效")
 	}
 	b := r.Binding
+	uidWant, gidWant, binaryWant := b.UID, b.GID, b.BinarySHA256
+	if bootstrap {
+		uidWant, gidWant, binaryWant = 0, 0, b.BootstrapSHA256
+	}
 	raw, err := readProc(pid, "status", 32<<10)
 	if err != nil {
 		return err
@@ -147,12 +155,12 @@ func (r *Runtime) processIdentity(pid, master int, init, directChild bool) error
 		case "Uid:":
 			uid = len(f) == 5
 			for _, v := range f[1:] {
-				uid = uid && v == strconv.Itoa(b.UID)
+				uid = uid && v == strconv.Itoa(uidWant)
 			}
 		case "Gid:":
 			gid = len(f) == 5
 			for _, v := range f[1:] {
-				gid = gid && v == strconv.Itoa(b.GID)
+				gid = gid && v == strconv.Itoa(gidWant)
 			}
 		case "NSpid:":
 			nspid = len(f) == 3 && f[1] == strconv.Itoa(pid) && (!init || f[2] == "1")
@@ -162,16 +170,16 @@ func (r *Runtime) processIdentity(pid, master int, init, directChild bool) error
 			nnp = f[1] == "1"
 		case "Groups:":
 			for _, value := range f[1:] {
-				if value != strconv.Itoa(b.GID) {
+				if value != strconv.Itoa(gidWant) {
 					return errors.New("Nginx 进程持有额外的宿主机组")
 				}
 			}
 		case "CapInh:", "CapPrm:", "CapEff:", "CapBnd:", "CapAmb:":
 			allowed := uint64(1 << 10)
-			// Docker exec starts from the container's original OCI bounding set,
-			// not the reduced set of its PID 1. Diagnostics still must not hold
-			// transition capabilities in their effective/permitted/ambient sets.
-			if !init && !directChild && f[0] == "CapBnd:" {
+			// Docker exec keeps the original OCI bounding set. Only the verified
+			// bootstrap may hold transition capabilities in other sets; Nginx
+			// itself must have discarded them before executing diagnostics.
+			if bootstrap || !init && !directChild && f[0] == "CapBnd:" {
 				allowed |= 1<<unix.CAP_SETUID | 1<<unix.CAP_SETGID | 1<<unix.CAP_SETPCAP
 			}
 			value, parse := strconv.ParseUint(f[1], 16, 64)
@@ -233,7 +241,7 @@ func (r *Runtime) processIdentity(pid, master int, init, directChild bool) error
 	if err != nil {
 		return err
 	}
-	if n != info.Size() || !secure.RootFileUnchanged(f, info) || hex.EncodeToString(hash.Sum(nil)) != b.BinarySHA256 {
+	if n != info.Size() || !secure.RootFileUnchanged(f, info) || hex.EncodeToString(hash.Sum(nil)) != binaryWant {
 		return errors.New("Nginx 容器实际程序散列不匹配")
 	}
 	if init {
@@ -322,11 +330,9 @@ func checkPolicy(c containerInfo, b Binding, name string, revision *string) erro
 	signal, timeout, pids, restart := "SIGQUIT", 65, int64(2048), "unless-stopped"
 	caps := []string{"NET_BIND_SERVICE", "SETGID", "SETPCAP", "SETUID"}
 	if revision != nil {
-		user = strconv.Itoa(b.UID) + ":" + strconv.Itoa(b.GID)
-		entry = []string{Binary}
-		args = []string{"-t", "-q", "-p", b.DataDir + "/", "-c", filepath.Join(b.DataDir, "nginx", "revisions", *revision, "nginx.conf"), "-e", "stderr"}
+		launch := testLaunchArgs(b.DataDir, *revision)
+		entry, args = launch[:2], launch[2:]
 		signal, timeout, pids, restart = "SIGTERM", 5, 128, "no"
-		caps = []string{"NET_BIND_SERVICE"}
 	}
 	h := c.HostConfig
 	if !hashValue.MatchString(c.ID) || c.Name != "/"+name || c.Image != b.ImageID || c.Config.Image != b.Image || c.Config.User != user || c.Config.WorkingDir != b.DataDir || !reflect.DeepEqual(c.Config.Entrypoint, entry) || !reflect.DeepEqual(c.Config.Cmd, args) || !reflect.DeepEqual(c.Config.Env, b.Environment) || len(c.Config.Volumes) != 0 || c.Config.StopSignal != signal || c.Config.StopTimeout == nil || *c.Config.StopTimeout != timeout {

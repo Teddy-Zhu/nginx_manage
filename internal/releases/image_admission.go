@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"nginxpanel/internal/dockerapi"
 	"nginxpanel/internal/protocol"
 )
 
@@ -34,10 +35,10 @@ type ImageApproval struct {
 	Image          ImageChoice `json:"image"`
 }
 
-func (a ImageApproval) Validate(component, reference, config, launcher string) error {
+func (a ImageApproval) Validate(component, reference, imageID, launcher string) error {
 	p, f := a.Image.Platform, a.Image.Evidence
 	prefix := imageRepository(a.Repository, component) + "@"
-	if a.Schema != Schema || !repository.MatchString(a.Repository) || !validVersion(a.Version) || !validCommit(a.Commit) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || len(a.TrustPath) > 512 || !filepath.IsAbs(a.TrustPath) || filepath.Clean(a.TrustPath) != a.TrustPath || a.ApprovedAt <= 0 || a.ApprovedAt > time.Now().Unix()+300 || (component != "panel-launcher" && component != "nginx") || a.Image.ID != component || a.Image.Reference != reference || !strings.HasPrefix(reference, prefix) || !imageDigest(strings.TrimPrefix(reference, prefix)) || p.OS != "linux" || p.Architecture != runtime.GOARCH || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || p.ConfigDigest != config || !validHash(p.LauncherSHA256) || p.LauncherSHA256 != launcher || f.Path != component+".oci.json" || !validHash(f.SHA256) || f.Size <= 0 || f.Size > MaxImageEvidenceBytes || f.Mode != 0644 {
+	if a.Schema != Schema || !repository.MatchString(a.Repository) || !validVersion(a.Version) || !validCommit(a.Commit) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || len(a.TrustPath) > 512 || !filepath.IsAbs(a.TrustPath) || filepath.Clean(a.TrustPath) != a.TrustPath || a.ApprovedAt <= 0 || a.ApprovedAt > time.Now().Unix()+300 || (component != "panel-launcher" && component != "nginx") || a.Image.ID != component || a.Image.Reference != reference || !strings.HasPrefix(reference, prefix) || !imageDigest(strings.TrimPrefix(reference, prefix)) || p.OS != "linux" || p.Architecture != runtime.GOARCH || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || !dockerapi.MatchesImageID(reference, p.ConfigDigest, imageID) || !validHash(p.LauncherSHA256) || p.LauncherSHA256 != launcher || f.Path != component+".oci.json" || !validHash(f.SHA256) || f.Size <= 0 || f.Size > MaxImageEvidenceBytes || f.Mode != 0644 {
 		return errors.New("镜像签名批准记录与本机运行绑定不一致")
 	}
 	return nil

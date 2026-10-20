@@ -18,8 +18,26 @@ import (
 // the dedicated host UID with only NET_BIND_SERVICE, including on host networks
 // that retain the standard privileged-port threshold. No host sysctl is changed.
 func Launch(data string) error {
-	if os.Geteuid() != 0 || os.Getpid() != 1 {
-		return errors.New("Nginx 镜像启动器仅允许作为容器初始 PID 1")
+	return launch(data, "")
+}
+
+// LaunchTest uses the same bounded identity transition for Docker exec and
+// isolated candidate checks. Docker does not inherit PID 1's ambient capability
+// when exec starts directly as the non-root Nginx user.
+func LaunchTest(data, revision string) error {
+	if err := checkRevision(revision); err != nil {
+		return err
+	}
+	return launch(data, revision)
+}
+
+func testLaunchArgs(data, revision string) []string {
+	return []string{Bootstrap, "nginx-container-test", "--data-dir", data, "--nginx-test-revision", revision}
+}
+
+func launch(data, revision string) error {
+	if os.Geteuid() != 0 || revision == "" && os.Getpid() != 1 {
+		return errors.New("Nginx 镜像启动器需要容器 root，正式实例必须为 PID 1")
 	}
 	b, err := Read(data)
 	if err != nil {
@@ -83,5 +101,8 @@ func Launch(data string) error {
 		return err
 	}
 	args := []string{Binary, "-p", data + "/", "-c", filepath.Join(data, "nginx", "active", "nginx.conf"), "-e", "stderr", "-g", "daemon off;"}
+	if revision != "" {
+		args = append([]string{Binary}, testArguments(data, revision)...)
+	}
 	return syscall.Exec(Binary, args, []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "TZ=UTC"})
 }

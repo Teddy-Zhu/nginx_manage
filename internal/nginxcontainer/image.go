@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"nginxpanel/internal/dockerapi"
 	"nginxpanel/internal/secure"
 )
 
@@ -30,8 +31,8 @@ func localImage(ctx context.Context, d *dockerClient, reference, expected string
 			matched = true
 		}
 	}
-	if !matched || image.ID != expected || image.Os != "linux" || image.Architecture != runtime.GOARCH || len(image.Config.Volumes) != 0 {
-		return image, errors.New("本地镜像引用、平台或配置摘要不符合签名批准，或包含额外卷声明")
+	if !matched || !dockerapi.MatchesImageID(reference, expected, image.ID) || image.Os != "linux" || image.Architecture != runtime.GOARCH || len(image.Config.Volumes) != 0 {
+		return image, errors.New("本地镜像引用、平台或内容身份不符合签名批准，或包含额外卷声明")
 	}
 	return image, nil
 }
@@ -101,15 +102,30 @@ func imageBinary(ctx context.Context, d *dockerClient, imageID, path, expected s
 
 // InspectPanelImage reuses the host-only Docker endpoint and metadata reader;
 // the panel container itself is never given Docker access.
-func InspectPanelImage(ctx context.Context, reference, configDigest, launcherSHA256 string) error {
+func InspectPanelImage(ctx context.Context, reference, configDigest, launcherSHA256 string) (string, error) {
 	d, err := newDocker()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer d.Close()
 	image, err := localImage(ctx, d, reference, configDigest)
 	if err != nil {
+		return "", err
+	}
+	if err := imageBinary(ctx, d, image.ID, "/usr/local/bin/nginxpanel-launcher", launcherSHA256); err != nil {
+		return "", err
+	}
+	return image.ID, nil
+}
+
+// InspectPanelImageBinding also preserves an already frozen daemon identity.
+func InspectPanelImageBinding(ctx context.Context, reference, imageID, launcherSHA256 string) error {
+	actual, err := InspectPanelImage(ctx, reference, imageID, launcherSHA256)
+	if err != nil {
 		return err
 	}
-	return imageBinary(ctx, d, image.ID, "/usr/local/bin/nginxpanel-launcher", launcherSHA256)
+	if actual != imageID {
+		return errors.New("当前镜像内容身份与运行绑定不一致")
+	}
+	return nil
 }

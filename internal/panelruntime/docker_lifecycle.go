@@ -48,7 +48,7 @@ func DockerImageLabels(ctx context.Context, d Deployment) (map[string]string, er
 		return nil, err
 	}
 	if image.ID != d.ImageID {
-		return nil, errors.New("实际镜像元数据不属于签名配置摘要")
+		return nil, errors.New("实际镜像元数据不属于固定内容身份")
 	}
 	if err = ValidateDockerLabels(image.Config.Labels); err != nil {
 		return nil, err

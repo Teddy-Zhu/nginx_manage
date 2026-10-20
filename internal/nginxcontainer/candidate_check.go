@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strconv"
 	"time"
 
 	"nginxpanel/internal/dockerapi"
@@ -31,9 +29,9 @@ func checkRevision(revision string) error {
 	return nil
 }
 
-// Candidate checks run only the signed Nginx binary with its complete frozen
-// configuration. The unprivileged process has the production data mounts,
-// temporary storage and host DNS/network, and never runs the image entrypoint.
+// Candidate checks use the signed bootstrap to give the dedicated Nginx user
+// only NET_BIND_SERVICE, as in production. The fixed test command has the same
+// data mounts, temporary storage and host DNS/network as the serving instance.
 func ReadCandidateCheck(ctx context.Context, b Binding, revision, operation string) (CandidateCheck, error) {
 	var zero CandidateCheck
 	if os.Geteuid() != 0 {
@@ -104,12 +102,11 @@ func CreateCandidateCheck(ctx context.Context, b Binding, revision, operation st
 		return "", err
 	}
 	input := runtimeInput(b, labels)
-	input["User"] = strconv.Itoa(b.UID) + ":" + strconv.Itoa(b.GID)
-	input["Entrypoint"] = []string{Binary}
-	input["Cmd"] = []string{"-t", "-q", "-p", b.DataDir + "/", "-c", filepath.Join(b.DataDir, "nginx", "revisions", revision, "nginx.conf"), "-e", "stderr"}
+	launch := testLaunchArgs(b.DataDir, revision)
+	input["Entrypoint"], input["Cmd"] = launch[:2], launch[2:]
 	input["StopSignal"], input["StopTimeout"] = "SIGTERM", 5
 	h := input["HostConfig"].(map[string]any)
-	h["CapAdd"], h["PidsLimit"] = []string{"NET_BIND_SERVICE"}, 128
+	h["PidsLimit"] = 128
 	h["RestartPolicy"] = map[string]any{"Name": "no", "MaximumRetryCount": 0}
 	d, err := newDocker()
 	if err != nil {

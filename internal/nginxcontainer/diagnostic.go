@@ -16,12 +16,13 @@ import (
 )
 
 type diagnostic struct {
-	ExecID        string `json:"exec_id"`
-	ContainerID   string `json:"container_id"`
-	MasterPID     int    `json:"master_pid"`
-	BootID        string `json:"boot_id"`
-	MasterStart   uint64 `json:"master_start"`
-	CommandSHA256 string `json:"command_sha256"`
+	ExecID                string `json:"exec_id"`
+	ContainerID           string `json:"container_id"`
+	MasterPID             int    `json:"master_pid"`
+	BootID                string `json:"boot_id"`
+	MasterStart           uint64 `json:"master_start"`
+	CommandSHA256         string `json:"command_sha256"`
+	LauncherCommandSHA256 string `json:"launcher_command_sha256,omitempty"`
 }
 
 func diagnosticPath(data string) string {
@@ -77,6 +78,9 @@ func (r *Runtime) readDiagnostic() (diagnostic, error) {
 	d.DisallowUnknownFields()
 	if d.Decode(&p) != nil || !bytes.Equal(canonical(p), raw) || !hashValue.MatchString(p.ExecID) || !hashValue.MatchString(p.ContainerID) || !hashValue.MatchString(p.CommandSHA256) || p.MasterPID <= 1 || p.MasterStart == 0 || !revisionValue.MatchString(p.BootID) || p.BootID == "bootstrap" {
 		return p, errors.New("Nginx 原诊断回执无效，须本机恢复")
+	}
+	if p.LauncherCommandSHA256 != "" && !hashValue.MatchString(p.LauncherCommandSHA256) {
+		return p, errors.New("Nginx 原诊断启动器身份无效，须本机恢复")
 	}
 	return p, nil
 }
@@ -160,7 +164,7 @@ func (r *Runtime) reconcileDiagnostic(ctx context.Context, d *dockerClient) erro
 	if !gone {
 		var original containerInfo
 		original.ID, original.State.Pid = p.ContainerID, p.MasterPID
-		if err = r.finishExec(call, d, p.ExecID, original, p.CommandSHA256); err != nil {
+		if err = r.finishExec(call, d, p.ExecID, original, p.CommandSHA256, p.LauncherCommandSHA256); err != nil {
 			return err
 		}
 	}

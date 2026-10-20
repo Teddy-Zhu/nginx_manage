@@ -32,6 +32,7 @@ func signedWeb(files map[string]File, asset releases.Asset) error {
 
 type SourceVerification struct {
 	State       string                 `json:"state"`
+	ImageID     string                 `json:"image_id"`
 	Release     Release                `json:"release"`
 	SignedImage releases.ImageApproval `json:"signed_image"`
 }
@@ -104,8 +105,9 @@ func VerifySource(ctx context.Context, in BindInput) (SourceVerification, error)
 	if err = r.validate(); err != nil {
 		return out, err
 	}
-	if err = nginxcontainer.InspectPanelImage(ctx, in.Image, approval.Image.Platform.ConfigDigest, launcherHash); err != nil {
+	imageID, err := nginxcontainer.InspectPanelImage(ctx, in.Image, approval.Image.Platform.ConfigDigest, launcherHash)
+	if err != nil {
 		return out, err
 	}
-	return SourceVerification{State: "image_source_verified", Release: r, SignedImage: approval}, nil
+	return SourceVerification{State: "image_source_verified", ImageID: imageID, Release: r, SignedImage: approval}, nil
 }

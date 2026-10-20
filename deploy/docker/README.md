@@ -26,7 +26,7 @@ docker build -f deploy/docker/nginx.Dockerfile --build-arg TARGETARCH=amd64 -t n
 
 修改模块集合须重新构建并发布镜像；运行环境缺失模块时更换包含对应能力的受信镜像，重新生成迁移计划。镜像不携带源节点二进制、动态模块或业务秘密。
 
-amd64 镜像已通过实际构建、配置渲染、HTTP/TCP/UDP 与基础防护运行，以及固定启动器降权/哈希拒绝验证，范围见 [P5 验证记录](../../docs/validation.md)。arm64、正式签名来源、宿主机安装与升级恢复仍待验收。固定实例执行适配、镜像摘要/OCI 证据签名发布及安装验签已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)。本机管理员先使用上述签名镜像下载命令或按签名清单准备镜像；已有面板可从组件页显式拉取。安装器验证来源与本地内容，不隐式拉取镜像。
+amd64 镜像已通过实际构建、配置渲染、HTTP/TCP/UDP 与基础防护运行，以及固定启动器降权/哈希拒绝验证，范围见 [P5 验证记录](../../docs/validation.md)。Debian 13/amd64 默认 Docker 部署已通过安装、运行与故障恢复验收；arm64、正式发布来源、其他系统部署及镜像升级恢复仍待验收。固定实例执行适配、镜像摘要/OCI 证据签名发布及安装验签已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)。本机管理员先使用上述签名镜像下载命令或按签名清单准备镜像；已有面板可从组件页显式拉取。安装器验证来源与本地内容，不隐式拉取镜像。
 
 上游构建及模块参数参见 [Nginx 官方镜像源码](https://github.com/nginx/docker-nginx) 和 [Nginx 构建选项](https://nginx.org/en/docs/configure.html)。
 
@@ -68,9 +68,11 @@ sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
 
 Docker 安装必须提供 root 持有的发行清单和签名信封，以及独立配置的本机信任根。只接受签名清单中的完整 `repository@sha256:...` 引用，不接受标签别名或另一仓库中的相同摘要。预发布另需明确 `--release-prerelease`。
 
-安装器在写入安装意图、创建账户或复制程序前调用 `panel-runtime-verify` 和按需 `nginx-container-verify`。它们与绑定入口复用验签逻辑，核对当前架构的镜像 config 摘要、实际镜像启动器内容和本机程序散列；面板还逐项核对签名发行中的前端文件，拒绝遗漏和额外文件。镜像读取通过无主机挂载、无网络且从不启动的临时元数据容器进行，清理失败不会报告验证成功。预检执行已认证程序的固定 `version` 命令，不启动服务。
+安装器在写入安装意图、创建账户或复制程序前调用 `panel-runtime-verify` 和按需 `nginx-container-verify`。它们与绑定入口复用验签逻辑，核对签名摘要引用、当前架构、镜像内容身份、实际镜像启动器内容和本机程序散列；面板还逐项核对签名发行中的前端文件，拒绝遗漏和额外文件。镜像读取通过无主机挂载、无网络且从不启动的临时元数据容器进行，清理失败不会报告验证成功。预检执行已认证程序的固定 `version` 命令，不启动服务。
 
 安装意图 v9 固定发行清单散列，并通过 `--release-manifest-sha256` 绑定后续准入，防止预检与登记使用不同清单。`panel-runtime-bind`、`nginx-container-bind` 仍会重新核对实际材料并保存 root 只读的签名批准记录，包括仓库、版本、提交、签名 Key ID、清单/初始信任散列、平台摘要、程序散列和批准时间。普通 Web/API 不能提交镜像地址、信任根或批准时间。
+
+镜像内容身份允许经典存储返回的签名平台 config 摘要，或 containerd 存储返回的签名引用目标摘要；同时仍须核对精确仓库引用、平台和启动器内容。运行绑定保存 Docker 实际返回的镜像 ID，后续运行、替换及恢复均须精确匹配该固定 ID。
 
 新登记按当前时间检查清单有效期。已发布绑定的同计划续装按原批准时间重新验签，并使用当前本机公钥；增补无关公钥不改变原计划，撤销原签名公钥会阻止续装。未保存批准记录前已过期的材料不能作为新登记继续使用。续装仍需原始清单与签名，运行已有批准版本则不依赖离线输入文件或在线仓库。批准记录不替代实际启动、Nginx 生效确认和 P5 部署验收。
 
@@ -78,9 +80,9 @@ Docker 安装必须提供 root 持有的发行清单和签名信封，以及独�
 
 Nginx 镜像的短期 root 启动器仅为切换身份获得 SETUID/SETGID/SETPCAP 和 NET_BIND_SERVICE；exec 前删除 root 身份及转换权限，只保留 NET_BIND_SERVICE 的 bounding/permitted/effective/inheritable/ambient 集合。实际 master/worker 使用独立宿主机 Nginx UID/GID；不修改宿主机低端口 sysctl。面板容器仍删除全部 capabilities。Nginx 的配置和证书只读挂载；私钥仅向独立 Nginx 组开放只读，Web 用户不加入该组；日志、临时目录及 `run/nginx` 单独可写，未挂载业务数据库或 Web 秘密目录。
 
-宿主机 Agent 仅访问固定名称 `nginxpanel-nginx`，逐次核对镜像 ID、入口/参数、命名空间、挂载、只读根和权限；实际 master 必须为该容器 PID 1、专用非 root 身份、允许范围内的 capabilities 和已登记的 Nginx 程序散列。配置校验只在该实例执行固定 `nginx -t`，能力探测只执行 `nginx -V` 并与构建输出比较；中断诊断会尝试通过原 exec 回执、命名空间和 pidfd 确认结束。重载和日志 reopen 使用宿主机 pidfd，生效继续核对修订探针、监听归属及 TLS。容器在诊断期间重启或重建时校验失败；配置发布仍以完整的修订及监听/TLS 生效确认作为成功条件。Docker API 不暴露给 Web，两个容器都不挂载 Docker Socket。接口语义参见 [Docker Engine API v1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)。
+宿主机 Agent 仅访问固定名称 `nginxpanel-nginx`，逐次核对镜像 ID、入口/参数、命名空间、挂载、只读根和权限；实际 master 必须为该容器 PID 1、专用非 root 身份、允许范围内的 capabilities 和已登记的 Nginx 程序散列。配置校验只在该实例经固定 `nginx-container-test` 启动器完成身份和能力切换，再以专用非 root 用户及 NET_BIND_SERVICE 执行固定 `nginx -t`，能力探测只执行 `nginx -V` 并与构建输出比较；中断诊断会尝试通过原 exec 回执、命名空间和 pidfd 确认结束。重载和日志 reopen 使用宿主机 pidfd，生效继续核对修订探针、监听归属及 TLS。容器在诊断期间重启或重建时校验失败；配置发布仍以完整的修订及监听/TLS 生效确认作为成功条件。Docker API 不暴露给 Web，两个容器都不挂载 Docker Socket。接口语义参见 [Docker Engine API v1.47](https://docs.docker.com/reference/api/engine/version/v1.47/)。
 
-诊断前将原 exec ID、容器 ID、宿主机 boot ID 和 master 启动标识持久化到 `agent/nginx-container-exec.json`。恢复只查询/终止原诊断，不重新提交；只有原 exec 终结或原 PID 1 命名空间已结束才清理回执。未确认开始、断连后状态不明或原回执无法取得时保持阻塞，不能继续配置校验或确认旧日志可清理。必要时须由本机管理员显式停止并重建该受管容器，以结束原命名空间后恢复，不能手工将超时标成成功。
+诊断前将原 exec ID、容器 ID、宿主机 boot ID、master 启动标识、Nginx 命令及按需启动器命令散列持久化到 `agent/nginx-container-exec.json`。恢复只查询/终止原诊断，不重新提交；终止前按降权阶段核对原进程的程序散列、UID/GID、能力范围、命名空间及固定命令。只有原 exec 终结或原 PID 1 命名空间已结束才清理回执。未确认开始、断连后状态不明或原回执无法取得时保持阻塞，不能继续配置校验或确认旧日志可清理。必要时须由本机管理员显式停止并重建该受管容器，以结束原命名空间后恢复，不能手工将超时标成成功。
 
 持久卷内 `runtime/releases/<内容标识>/` 保存程序、前端逐文件清单及版本信息，`runtime/current` 指向已批准版本，`runtime/launcher.json` 固定镜像、launcher 散列、宿主机 UID/GID、IPC 组及初始监听。以上目录、清单和指针均由 root 持有；Web 仅写自己的业务目录及独立 launcher 运行目录。首次发布先完整复制、核对和同步，再发布指针；重试复核同一记录，不覆盖当前版本或改换部署意图。
 
@@ -154,7 +156,7 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
   --nginx-image-operation <operation-uuid> --maintenance-epoch <epoch>
 ```
 
-准备计划和 Nginx 镜像须属于同一签名发行，新旧镜像都须保留在本地；该命令不拉取镜像，不编译或增装模块。必须持有原维护会话并明确允许中断。独立任务先用候选镜像的非 root Nginx 程序对冻结的完整发布执行 `nginx -t`，通过后才停止 Agent 和原 Nginx。之后切换 root 只读 Compose 与 Nginx 绑定、按固定权限重建容器，并在重启 Agent 前释放 Nginx 执行锁。完成确认覆盖容器代次、实际 Nginx 程序、原配置/监听/TLS 探针、Agent 实际进程、组件镜像来源和原维护会话；应用、前端、数据目录和业务数据库保持原选择。
+准备计划和 Nginx 镜像须属于同一签名发行，新旧镜像都须保留在本地；该命令不拉取镜像，不编译或增装模块。必须持有原维护会话并明确允许中断。独立任务先由候选镜像的固定启动器完成同样的降权，再用非 root Nginx 程序对冻结的完整发布执行 `nginx -t`，通过后才停止 Agent 和原 Nginx。之后切换 root 只读 Compose 与 Nginx 绑定、按固定权限重建容器，并在重启 Agent 前释放 Nginx 执行锁。完成确认覆盖容器代次、实际 Nginx 程序、原配置/监听/TLS 探针、Agent 实际进程、组件镜像来源和原维护会话；应用、前端、数据目录和业务数据库保持原选择。
 
 前进期限自原授权起十分钟，失败先持久确定恢复方向，再核对并恢复保留的原镜像；恢复不依赖目标离线文件或目标公钥。候选配置未通过且尚未停机时，只清理本次校验容器并确认原服务。未知实例、外部修改、失联或未确认结果保留 `recovery_required` 并阻止维护释放，不能强制接管同名容器。创建和启动意图在 Docker 调用前持久保存，已派发但未确认的动作不重复执行；续办只能使用原 UUID、输入和期限。主机重启后的原容器新代次仅能通过显式续办登记，并永久转为原镜像恢复。Agent 运行时可用 `panel-image-probe` 核对原维护会话的当前 epoch；Agent 尚未恢复时沿用该事务最后持有的维护 epoch。只有成功或完整恢复并确认后，才由原维护流程释放会话。
 

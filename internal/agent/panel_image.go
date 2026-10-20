@@ -142,16 +142,18 @@ func queuePanelImage(ctx context.Context, in PanelImageInput, id, epoch string, 
 	if approval.ManifestSHA256 != staged.Approval.ManifestSHA256 || approval.Version != staged.Release.Version || approval.Image.Platform.LauncherSHA256 != staged.Release.BinarySHA256 {
 		return zero, errors.New("镜像和预备程序不属于同一签名发行")
 	}
+	targetImageID, err := nginxcontainer.InspectPanelImage(ctx, in.Image, approval.Image.Platform.ConfigDigest, approval.Image.Platform.LauncherSHA256)
+	if err != nil {
+		return zero, err
+	}
 	target := before.Deployment
-	target.Image, target.ImageID, target.LauncherSHA256, target.SignedImage = in.Image, approval.Image.Platform.ConfigDigest, approval.Image.Platform.LauncherSHA256, approval
+	target.Image, target.ImageID, target.LauncherSHA256, target.SignedImage = in.Image, targetImageID, approval.Image.Platform.LauncherSHA256, approval
 	target.LauncherRelease = staged.Release.ID
 	if !panelruntime.SameDockerApplication(before.Deployment, target) || target.ImageID == before.Deployment.ImageID {
 		return zero, errors.New("镜像替换不能改变应用绑定或重复选择当前镜像")
 	}
-	for _, d := range []panelruntime.Deployment{before.Deployment, target} {
-		if err = nginxcontainer.InspectPanelImage(ctx, d.Image, d.ImageID, d.LauncherSHA256); err != nil {
-			return zero, err
-		}
+	if err = nginxcontainer.InspectPanelImageBinding(ctx, before.Deployment.Image, before.Deployment.ImageID, before.Deployment.LauncherSHA256); err != nil {
+		return zero, err
 	}
 	targetLabels, err := panelruntime.DockerImageLabels(ctx, target)
 	if err != nil {

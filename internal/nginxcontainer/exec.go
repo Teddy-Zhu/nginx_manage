@@ -48,7 +48,7 @@ func streamOutput(body io.Reader) ([]byte, error) {
 		}
 	}
 }
-func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c containerInfo, commandSHA string) error {
+func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c containerInfo, commandSHA, launcherCommandSHA string) error {
 	var state execInfo
 	path := "/exec/" + id + "/json"
 	if err := d.JSON(ctx, "GET", path, nil, &state); err != nil {
@@ -87,7 +87,13 @@ func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c 
 	}
 	defer unix.Close(fd)
 	if err = r.processIdentity(state.Pid, c.State.Pid, false, false); err != nil {
-		return err
+		if launcherCommandSHA == "" {
+			return err
+		}
+		if launchErr := r.processProgram(state.Pid, c.State.Pid, false, false, true); launchErr != nil {
+			return errors.Join(err, launchErr)
+		}
+		commandSHA = launcherCommandSHA
 	}
 	command, err := readProc(state.Pid, "cmdline", 16<<10)
 	if err != nil {
@@ -126,7 +132,7 @@ func (r *Runtime) finishExec(ctx context.Context, d *dockerClient, id string, c 
 		}
 	}
 }
-func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runErr error) {
+func (r *Runtime) command(ctx context.Context, args, launch []string) (out []byte, runErr error) {
 	if err := r.lock(ctx); err != nil {
 		return nil, err
 	}
@@ -156,6 +162,9 @@ func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runEr
 	}
 	b := r.Binding
 	input := map[string]any{"AttachStdout": true, "AttachStderr": true, "AttachStdin": false, "Tty": false, "Privileged": false, "User": strconv.Itoa(b.UID) + ":" + strconv.Itoa(b.GID), "WorkingDir": b.DataDir, "Env": []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "TZ=UTC"}, "Cmd": append([]string{Binary}, args...)}
+	if len(launch) != 0 {
+		input["User"], input["Cmd"] = "0:0", launch
+	}
 	if err = d.JSON(ctx, "POST", "/containers/"+c.ID+"/exec", input, &created); err != nil {
 		return nil, err
 	}
@@ -166,6 +175,9 @@ func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runEr
 		return nil, err
 	}
 	pending := diagnostic{ExecID: created.ID, ContainerID: c.ID, MasterPID: c.State.Pid, BootID: boot, MasterStart: start, CommandSHA256: secure.Hash([]byte(strings.Join(append([]string{Binary}, args...), "\x00") + "\x00"))}
+	if len(launch) != 0 {
+		pending.LauncherCommandSHA256 = secure.Hash([]byte(strings.Join(launch, "\x00") + "\x00"))
+	}
 	if err = r.saveDiagnostic(pending); err != nil {
 		return nil, err
 	}
@@ -220,7 +232,7 @@ func (r *Runtime) command(ctx context.Context, args []string) (out []byte, runEr
 	return value, nil
 }
 func (r *Runtime) Version(ctx context.Context) (string, error) {
-	value, err := r.command(ctx, []string{"-V"})
+	value, err := r.command(ctx, []string{"-V"}, nil)
 	if err != nil {
 		return "", err
 	}
@@ -229,10 +241,14 @@ func (r *Runtime) Version(ctx context.Context) (string, error) {
 	}
 	return string(value), nil
 }
+func testArguments(data, revision string) []string {
+	return []string{"-t", "-q", "-p", data + "/", "-c", filepath.Join(data, "nginx", "revisions", revision, "nginx.conf"), "-e", "stderr"}
+}
+
 func (r *Runtime) Test(ctx context.Context, revision string) error {
 	if !revisionValue.MatchString(revision) {
 		return errors.New("Nginx 校验仅接受受管发布 ID")
 	}
-	_, err := r.command(ctx, []string{"-t", "-q", "-p", r.Binding.DataDir + "/", "-c", filepath.Join(r.Binding.DataDir, "nginx", "revisions", revision, "nginx.conf"), "-e", "stderr"})
+	_, err := r.command(ctx, testArguments(r.Binding.DataDir, revision), testLaunchArgs(r.Binding.DataDir, revision))
 	return err
 }

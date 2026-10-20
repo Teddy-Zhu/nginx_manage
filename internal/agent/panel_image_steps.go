@@ -303,10 +303,10 @@ func (w *panelImageWorker) forward(ctx context.Context) error {
 		}
 		switch w.r.Stage {
 		case "authorized":
-			if err := nginxcontainer.InspectPanelImage(ctx, i.Before.Image, i.Before.ImageID, i.Before.LauncherSHA256); err != nil {
+			if err := nginxcontainer.InspectPanelImageBinding(ctx, i.Before.Image, i.Before.ImageID, i.Before.LauncherSHA256); err != nil {
 				return err
 			}
-			if err := nginxcontainer.InspectPanelImage(ctx, i.Target.Image, i.Target.ImageID, i.Target.LauncherSHA256); err != nil {
+			if err := nginxcontainer.InspectPanelImageBinding(ctx, i.Target.Image, i.Target.ImageID, i.Target.LauncherSHA256); err != nil {
 				return err
 			}
 			if err := w.stage("stopping"); err != nil {
@@ -396,7 +396,7 @@ func (w *panelImageWorker) compensate(ctx context.Context) error {
 	}
 	// Restoration needs the retained original image, never the target signature
 	// or source files which may have caused the forward operation to fail.
-	if err := nginxcontainer.InspectPanelImage(ctx, i.Before.Image, i.Before.ImageID, i.Before.LauncherSHA256); err != nil {
+	if err := nginxcontainer.InspectPanelImageBinding(ctx, i.Before.Image, i.Before.ImageID, i.Before.LauncherSHA256); err != nil {
 		return err
 	}
 	for {

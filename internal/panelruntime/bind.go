@@ -175,7 +175,7 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 		return out, err
 	}
 	launcherHash := r.BinarySHA256
-	d := Deployment{Schema: Schema, Mode: "docker", DataDir: in.DataDir, Listen: in.Listen, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, LauncherSHA256: launcherHash, LauncherRelease: r.ID, InitialRelease: r.ID, Image: in.Image, ImageID: approval.Image.Platform.ConfigDigest, SignedImage: approval}
+	d := Deployment{Schema: Schema, Mode: "docker", DataDir: in.DataDir, Listen: in.Listen, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, LauncherSHA256: launcherHash, LauncherRelease: r.ID, InitialRelease: r.ID, Image: in.Image, ImageID: source.ImageID, SignedImage: approval}
 	if err = d.validate(in.DataDir); err != nil {
 		return out, err
 	}

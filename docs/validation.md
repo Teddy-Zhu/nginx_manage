@@ -223,10 +223,30 @@ NetworkManager 及 netplan/NetworkManager 的验证见下节；动态 DHCP/RA、
 
 本轮覆盖原生 Nginx 到本机上游的 HTTP 反代，不替代 TLS/Stream 业务、SELinux 下的 Docker 面板、防火墙、其他系统/架构及升级事务验收。
 
+### Debian 13 默认 Docker 部署
+
+使用前述 Debian 13/amd64 官方云镜像及独立内核 `6.12.113+deb13-cloud-amd64`，在隔离虚拟机内安装 Docker Engine 29.9.1、containerd 2.4.2、runc 1.5.2 和 Compose v2.40.3。采用默认 containerd 镜像存储、标准 Docker 网络、`docker-default` AppArmor 和内置 seccomp；宿主网络低端口阈值保持 1024。实际部署为宿主机 Agent 加面板/Nginx 容器，使用项目 Dockerfile 构建的 amd64 镜像，Nginx 模块在镜像中预置。准备阶段仅在虚拟机安装依赖；运行阶段关闭外网且不映射开发主机端口，未修改开发主机软件、服务或系统配置。
+
+首轮实际来源校验发现 Docker 返回的镜像 ID 为签名引用的索引摘要，原实现错误地要求它等于平台 config 摘要；这与 [Moby containerd 镜像检查实现](https://github.com/moby/moby/blob/master/daemon/containerd/image_inspect.go) 一致。准入现在只接受签名 config 或签名引用目标的身份，并继续核对精确仓库引用、平台及启动器内容；运行绑定保存实际 ID，已冻结的运行、替换和恢复检查仍须精确匹配。第二轮发现直接以非 root 用户执行的 `nginx -t` 缺少低端口绑定能力。普通配置校验及独立候选容器改为复用固定启动器，执行 Nginx 前降权且仅保留 NET_BIND_SERVICE；原 exec 回执增加启动器命令身份，恢复同时约束降权前后的程序、身份、权限及命名空间。
+
+已通过以下实际行为：
+
+- 本机明确信任的签名包安装准入，篡改清单及未受信任 Key 的拒绝；v14 默认 Docker 安装、生成的 Compose 启动和同参数安装重放。
+- 面板 UID 999、空有效/许可/ambient capabilities，Nginx master UID 995、允许范围内的 NET_BIND_SERVICE；两者禁止提权、只读根、独立 PID/挂载空间且不挂载 Docker Socket。Agent 挂载空间和 Nginx 容器均不可见主密钥。
+- HTTPS 引导、登录、正常密码重新认证及统一响应/请求头；80 端口真实 HTTP 反代取得 `P5_NATIVE_UPSTREAM`。占用 18089 的候选进入 `rolled_back`；候选切换后 SIGKILL Agent，原操作恢复并确认回滚，旧流量保持。删除失败候选后再次应用成功。
+- 在实际 Docker exec 启动器仍为 root 时将其 SIGSTOP，杀死诊断控制程序，再由独立调用沿原回执核对并通过 pidfd 终止该启动器；回执清理，原 Nginx master PID 和流量保持。独立候选校验容器在标准低端口策略下完成固定 `nginx -t` 并正常清理。
+- 强制重建两个容器，确认容器 ID 均改变；安装重放、Agent 重启和整机真实重启后，原会话、节点身份、配置版本 3、修订 `5afcd2ca-1c53-44d2-9e15-b9df1c699571`、发布记录及业务流量保持。重启后再次核对身份、权限与主密钥隔离。
+
+程序 SHA-256 为 `591ac1484b498d1abfa56a26e636573cd239a64e04c116f879a1e28d959b175d`，安装器沿用上节的 `75c8da170d3f4c8706ebca4a3126c4efdbcf238ac8afda284c7be2ecb77b750c`。新增的镜像身份准入用例接受经典 config 和 containerd 索引 ID，拒绝其他/空 ID；相关 releases、nginxcontainer、Agent 现有测试及完整程序构建通过。记录为 `.validation/native-vm/docker/image-identity-go-checks.log`、`diagnostic-launch-go-checks.log`、镜像构建日志及 `runtime-environment-3.json`。
+
+验证期间另修正夹具的启动等待条件、上游脚本读取权限和逐服务就绪检查；沿用已安装磁盘续验未完成的业务流程，未改动产品断言或重跑已通过的安装。原始失败记录、两轮原盘及最终盘均保留。主要记录为同目录的 `runtime-initial-1/2/3.log`、`runtime-resume-2/3.log`、`debian13-docker-runtime-3-console.log` 和 `debian13-docker-runtime-3-run.log`；重启后输出 `P5_DOCKER_RUNTIME_ALL_PASS`，驱动退出码为 0。虚拟机均已关机，验证容器退出；最终磁盘 `debian13-docker-runtime-3.qcow2` 保留在既有命名卷 `nginxpanel-p5-native-vm-20261019`。
+
+签名材料由隔离测试发行者产生，amd64 索引、配置及层来自实际镜像；未使用的 arm64 目录条目为明确标记的测试数据，不是可执行发行资产。本轮覆盖本机信任准入与默认部署，不替代正式发布工作流、多架构 OCI 证据、镜像升级事务、其他系统/架构和 SELinux 下 Docker 的验收。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
-- 两种架构的正式原生资产、arm64 预置模块镜像、签名镜像来源准入、不可变镜像绑定、升级/回滚和其他备份恢复故障注入，仍需完成产物构建及运行验收；本轮 amd64 模块运行、固定启动器及上述克隆恢复结果不替代这些检查。
+- 两种架构的正式原生资产、arm64 预置模块镜像、正式发布链的签名镜像来源与多架构证据、升级/回滚和其他备份恢复故障注入，仍需完成产物构建及运行验收；上文本机信任准入、amd64 运行绑定及克隆恢复结果不替代这些检查。
 - 真实域名的 ACME/DNS、通知接收端及跨主机 API 一键迁移，尚未进行外部集成验收；容器内双节点迁移与授权结果见上节。
 - 正式 GitHub 仓库及发布凭据尚未配置，未运行真实发布 CI、推送或发布。项目 MIT 许可证已补齐，第三方组件保留各自许可。
 - UI 由用户人工验收，未创建或执行 UI 自动化测试。
