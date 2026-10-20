@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-20。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件、Debian 13 networkd/resolved、NetworkManager/resolved 及两种 netplan renderer 静态 DNS 的双栈解析与独立恢复验证，以及 CentOS Stream 10/amd64 Enforcing 和 Debian 13/amd64 的 v14 原生安装、重放与重启持久化验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
+2026-10-20。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件、Debian 13 networkd/resolved、NetworkManager/resolved 及两种 netplan renderer 静态 DNS 的双栈解析与独立恢复验证，以及 CentOS Stream 10/amd64 Enforcing 和 Debian 13/amd64 的 v14 原生安装、重放与重启持久化，以及 CentOS 受管 Nginx 的 HTTP 应用、回滚和重启恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
 
 ## 隔离环境
 
@@ -201,7 +201,27 @@ NetworkManager 及 netplan/NetworkManager 的验证见下节；动态 DHCP/RA、
 
 程序 SHA-256 为 `974f19a301475efbd6e005063668d5c4f32b26794811f545ef7969458a961795`；最终安装器为 `79f1a05310a505a099822c4b36a0a23928165e185d34b1dd1b362b35b917fe6d`，Debian 及 CentOS 首轮安装器为 `677a23ccdf1ce37c346efe5d397c11ae2fab70fdf63b36b87ad30b5da513ea9c`。集中检查通过安装脚本语法、Agent 现有测试（缓存结果）和主程序构建，日志为 `.validation/native-vm/selinux-go-round1.log`。VM 记录以 `.validation/native-vm/centos-native-v14-1/2`、`debian-native-v14-1` 及 `centos-native-v14-resume-2-1/2` 为前缀。成功续验输出 `P5_NATIVE_SELINUX_VM_RESUME_ALL_PASS`；两台虚拟机均已关机，验证容器退出。磁盘和种子介质保留在命名卷 `nginxpanel-p5-native-vm-20261019`。
 
-本轮不覆盖 SELinux 下的 Docker 面板、受管 Nginx、其他发行版/架构及升级事务；文件标签模块沿用系统既有进程域，不代表新增专用 SELinux 进程隔离。
+上述 `--without-nginx` 轮次不覆盖受管 Nginx，后续验证见下节；文件标签模块沿用系统既有进程域，不代表新增专用 SELinux 进程隔离。
+
+### CentOS 原生 Nginx 与身份切换
+
+沿用上节 CentOS Stream 10/amd64 官方镜像、Enforcing 策略及面板程序，在无外网、无宿主端口映射的 Docker/QEMU 独立内核虚拟机中接入本地批准的静态 Nginx 1.30.6，SHA-256 为 `1e168f3239c9f650651d68797b97f986c7c21769c8a9db8ca0caa2fdf6b46f08`。未安装目标软件包或修改开发宿主机配置。
+
+首轮 Nginx master 活跃，但 worker 日志记录 `setuid(991) failed (1: Operation not permitted)` 并全部退出。实际进程缺少 `CAP_SETUID`；定点 systemd 单元重现显式 `User=root`、禁止提权及过滤设置下的能力丢失，添加 `AmbientCapabilities=CAP_SETUID` 后正常切换 UID，与 [systemd v257 执行器的能力处理](https://github.com/systemd/systemd/blob/v257/src/core/exec-invoke.c) 一致。安装器所有 root 服务模板显式保留这项身份切换能力，非 root Web 仍使用空 capabilities。审计还发现 SELinux 工具继承安装锁描述符产生拒绝记录；调用这些工具时关闭子进程的 FD 9，父安装器继续持有安装锁。
+
+已通过以下实际行为：
+
+- Web 专用 UID、空有效 capabilities、禁止提权和目录权限；Agent/Nginx 挂载命名空间不可见主密钥。Nginx worker 使用专用账户，`CapEff`、`CapPrm`、`CapAmb` 均为零。
+- 实际 HTTPS 引导、登录、正常密码重新认证和统一响应/请求头；创建 HTTP 反代后，通过本机 80 端口取得上游响应 `P5_NATIVE_UPSTREAM`。
+- 候选配置绑定已占用端口时，原任务进入 `rolled_back`，旧修订、发布记录与流量保持；候选切换后 SIGKILL Agent，原操作恢复并确认回滚。删除失败候选后再次应用成功。
+- 安装器同参数重放、Web/Agent 重启和整机真实重启后，原会话、节点身份、配置版本 3、修订、发布记录和业务流量保持；重新核对 worker 身份和 capabilities。
+- 初始业务检查及重启后均核对 Enforcing、安装意图与规则散列、关键路径扩展属性及 `matchpathcon -V`，当前启动期间未发现相关 AVC。三个主服务实际沿用 `unconfined_service_t`。
+
+关闭描述符的安装器 `4905cf1437f2d030871322610f5483bd6827fb5ac92f7ac23558a5dacced4f9f` 已完成文件标签模块移除后的重装；最终安装器 `75c8da170d3f4c8706ebca4a3126c4efdbcf238ac8afda284c7be2ecb77b750c` 在派生安装盘归档旧单元后重新生成服务，完成上述重放和运行验收。脚本语法及差异检查通过；面板 Go 程序未改动，复用上节产物。
+
+首次续验夹具误将 `/proc` 文件长度作为就绪条件，后续修正等待条件并通过虚拟机内部 SSH 读取实际进程和 Nginx 文件日志定位身份切换问题。失败记录、原盘及派生盘均保留。主要记录为 `.validation/native-vm/centos-native-nginx-1.log`、`centos-native-nginx-resume-1-console.log`、`centos-native-nginx-fixed-1-console.log`、`centos-native-nginx-live-repair-1.log` 和 `centos-native-nginx-live-1-console.log`；最终驱动记录 `centos-native-nginx-live-1-run.log` 输出 `P5_CENTOS_NATIVE_NGINX_VM_LIVE_ALL_PASS`，虚拟机已关机，验证容器退出。磁盘位于既有命名卷，最终盘为 `centos-native-nginx-live-1.qcow2`。
+
+本轮覆盖原生 Nginx 到本机上游的 HTTP 反代，不替代 TLS/Stream 业务、SELinux 下的 Docker 面板、防火墙、其他系统/架构及升级事务验收。
 
 ## 尚待验收
 

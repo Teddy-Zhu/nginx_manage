@@ -146,13 +146,13 @@ write_owned() {
 }
 selinux_context() {
   local path=$1 type=$2 context
-  context=$(matchpathcon -n "$path") || die "无法确认 SELinux 默认标签：$path"
+  context=$(matchpathcon -n "$path" 9>&-) || die "无法确认 SELinux 默认标签：$path"
   [[ $context == "system_u:object_r:$type:s0" ]] || die "SELinux 标签规则冲突：$path；期望 $type，实际 $context"
 }
 selinux_install() {
   [[ $selinux_profile != disabled ]] || return 0
   local modules priority name language extra present=no policy=/etc/nginxpanel/selinux/nginxpanel_files.cil
-  modules=$(semodule -lfull) || die '无法读取 SELinux 模块登记'
+  modules=$(semodule -lfull 9>&-) || die '无法读取 SELinux 模块登记'
   while read -r priority name language extra; do
     if [[ $name == nginxpanel_files ]]; then
       [[ $present == no && $priority == 400 && $language == cil && -z $extra ]] || die '已有冲突或已停用的 nginxpanel_files SELinux 模块'
@@ -163,12 +163,12 @@ selinux_install() {
     trusted_file "$policy" $((64 * 1024))
     cmp -s "$work/nginxpanel_files.cil" "$policy" || die 'SELinux 模块来源与安装计划不一致'
     mkdir "$work/selinux-current"
-    (cd "$work/selinux-current" && semodule -X 400 --cil --extract=nginxpanel_files) || die '无法复核已安装的 SELinux 模块'
+    (cd "$work/selinux-current" && semodule -X 400 --cil --extract=nginxpanel_files 9>&-) || die '无法复核已安装的 SELinux 模块'
     cmp -s "$policy" "$work/selinux-current/nginxpanel_files.cil" || die '已安装的 SELinux 模块被外部修改'
   else
     ensure_dir /etc/nginxpanel/selinux 755 root root
     write_owned "$work/nginxpanel_files.cil" "$policy"
-    semodule -X 400 --install="$policy" || die 'SELinux 文件标签模块安装失败，保留安装记录'
+    semodule -X 400 --install="$policy" 9>&- || die 'SELinux 文件标签模块安装失败，保留安装记录'
   fi
   selinux_context /opt/nginxpanel usr_t
   selinux_context /etc/nginxpanel etc_t
@@ -195,7 +195,7 @@ selinux_install() {
   done
   # File contexts persist across relabels; runtime/code descendants inherit an
   # executable type when later versions are published. Never traverse mounts.
-  restorecon -RFx /opt/nginxpanel /etc/nginxpanel "$data" /run/nginxpanel-install || die 'SELinux 文件标签应用失败'
+  restorecon -RFx /opt/nginxpanel /etc/nginxpanel "$data" /run/nginxpanel-install 9>&- || die 'SELinux 文件标签应用失败'
 }
 canonical "$data"
 binary=$(readlink -e "$binary")
@@ -247,6 +247,8 @@ fi
 ensure_dir /run/nginxpanel-install 700 root root
 exec 9>/run/nginxpanel-install/lock
 flock -n 9 || die '另一个安装操作正在执行'
+# SELinux tools close this inherited descriptor before changing domains; the
+# installer keeps the lock for the entire operation.
 ensure_dir /opt/nginxpanel 755 root root
 ensure_dir /opt/nginxpanel/releases 755 root root
 ensure_dir /opt/nginxpanel/agent-releases 755 root root
@@ -447,6 +449,8 @@ if [[ $panel_mode == docker ]]; then
   write_owned "$work/compose.yaml" /etc/nginxpanel/docker/compose.yaml 444
 fi
 
+# Root services must retain identity switching across systemd's SELinux/seccomp
+# setup; NoNewPrivileges still applies to them and their children.
 cat >"$work/nginxpanel-nginx.service" <<EOF
 [Unit]
 Description=NginxPanel dedicated Nginx instance
@@ -456,6 +460,7 @@ Before=nginxpanel-agent.service
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=root
 UMask=0027
 ExecCondition=/opt/nginxpanel/current/nginxpanel nginx-runtime-status --data-dir $data
@@ -489,6 +494,7 @@ Before=nginxpanel.service
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=nginxpanel-ipc
 UMask=0027
 ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host $dns_agent_flags
@@ -556,6 +562,7 @@ After=network.target
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=nginxpanel-ipc
 UMask=0027
 ExecStart=/opt/nginxpanel/current/nginxpanel nginx-install-worker --data-dir $data --install-operation %i
@@ -579,6 +586,7 @@ After=network.target
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=nginxpanel-ipc
 UMask=0077
 ExecStart=/opt/nginxpanel/current/nginxpanel nginx-switch-worker --data-dir $data --nginx-switch-operation %i
@@ -604,6 +612,7 @@ After=network.target
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=nginxpanel-ipc
 UMask=0077
 ExecStart=/opt/nginxpanel/current/nginxpanel panel-update-worker --data-dir $data --panel-update %i
@@ -629,6 +638,7 @@ After=network.target
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=root
 UMask=0077
 ExecStart=/opt/nginxpanel/current/nginxpanel agent-upgrade-worker --data-dir $data --agent-upgrade %i
@@ -657,6 +667,7 @@ After=network.target
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=root
 UMask=0077
 ExecStart=/opt/nginxpanel/current/nginxpanel panel-image-worker --data-dir $data --panel-image %i
@@ -685,6 +696,7 @@ After=network.target
 [Service]
 Type=exec
 User=root
+AmbientCapabilities=CAP_SETUID
 Group=root
 UMask=0077
 ExecStart=/opt/nginxpanel/current/nginxpanel nginx-image-worker --data-dir $data --nginx-image-operation %i
@@ -721,8 +733,8 @@ for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
 if [[ $selinux_profile != disabled ]]; then
-  restorecon -RFx /opt/nginxpanel /etc/nginxpanel "$data" /run/nginxpanel-install || die 'SELinux 最终文件标签应用失败'
-  for unit in "${install_units[@]}"; do restorecon -F "/etc/systemd/system/$unit"; done
+  restorecon -RFx /opt/nginxpanel /etc/nginxpanel "$data" /run/nginxpanel-install 9>&- || die 'SELinux 最终文件标签应用失败'
+  for unit in "${install_units[@]}"; do restorecon -F "/etc/systemd/system/$unit" 9>&-; done
 fi
 systemctl daemon-reload
 write_owned "$work/ready" "$state/ready" 600

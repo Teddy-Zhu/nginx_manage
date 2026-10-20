@@ -483,3 +483,5 @@ P4 接入本机 Agent 升级事务：复用签名面板准备/暂存，严格核
 2026-10-20：P5 修复 NetworkManager 配置读取丢失 D-Bus 元组签名导致真实 Reapply/回滚被拒绝的问题，保留 Variant 并恢复 IPv6 地址/路由的原编码类型，未知复合类型阻止写入。Agent 测试、编解码回归及主程序构建通过；Debian 13/amd64 的 NetworkManager/resolved 和 netplan/NetworkManager 完成双栈/IPv6-only 应用确认、真实解析、分域与非 DNS 网络设置保持、管理器重启、解析失败/超时/Web 停止/Agent SIGKILL/强制重置及外部修改后的原操作恢复。分阶段证据、夹具失败及未覆盖范围见验证记录，P5 仍在进行中。
 
 2026-10-20：P5 补齐原生安装的 SELinux 持久文件上下文，v14 安装意图绑定规则来源和散列并复核已装模块；保留系统进程策略与防护状态。修复 CentOS 单元目录策略等价路径的标签冲突。Agent 现有测试、主程序构建与脚本语法检查通过；CentOS Stream 10/amd64 Enforcing 验证初装、实际 API、重放、模块篡改/本地规则拒绝、新程序标签继承及原盘重启持久化，Debian 13/amd64 完成 SELinux 未启用的 v14 原生安装、重放和重启验证。夹具重新认证和续验时序问题及证据见验证记录；未修改开发宿主机配置，Docker 面板、受管 Nginx 的 SELinux 组合及其余 P5 门禁待验收。
+
+2026-10-20：P5 修复 CentOS 原生 Nginx worker 无法切换专用账户的问题，为安装器 root 服务模板保留 CAP_SETUID，并关闭 SELinux 子进程继承的安装锁描述符。CentOS Stream 10/amd64 Enforcing 隔离虚拟机通过实际 HTTP 反代、端口冲突回滚、候选切换后 Agent SIGKILL 恢复、安装重放、服务重启及整机重启后的原会话/配置/发布/流量持久化；worker 有效、许可及 ambient capabilities 均为零。脚本语法检查通过，产物和失败夹具记录见验证文档。未修改开发宿主机配置，Docker 面板、其他平台组合与其余 P5 门禁继续推进。
