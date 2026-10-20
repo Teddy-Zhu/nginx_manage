@@ -307,6 +307,16 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 明确停用当前持续会话，规则清除完成后核对空表及无 INPUT 链，再次整机重启。Agent、官方引擎、Web 均运行，当前停用事件 ID 保持不变、`enabled=false`、`recover_on_boot=false`；完整内核视图证明目标表不存在。通知执行器并等待 35 秒覆盖后台轮询后，目标仍缺失，恢复事件清单及散列未变，未自动重建或重新授权；双栈 HTTPS 访问正常。
 - 证据保存在 `.validation/native-vm/fail2ban-host-reboot/`：`setup-network-setup.log`、`persistence-before.log`、`reboot.log`、`web-stopped.log`、`after.log`、`stop-before.log`、`stop-reboot.log`、`stop-after.log`、`agent-journal.log` 及 `artifacts/` 内各阶段原始状态。Web 开机开关已恢复，目标持续会话按显式停止意图保持停用，虚拟机正常关机。没有修改开发宿主机环境或创建 UI 自动化测试。身份/实例变化、准备及发布点中断、创建未知结果、恢复期间再次重启、维护和取消仍待验收；此节不证明这些场景完成。
 
+### 2026-10-20 Ubuntu 24.04 原生部署及探测 Socket 恢复（P5）
+
+- 使用 Ubuntu 官方 Noble 云镜像，下载时核对官方 SHA256SUMS 及完整镜像散列；原盘系统为 Ubuntu 24.04.5 LTS/amd64、内核 6.8.0-147-generic。沿用两核、2 GiB、外层断网的独立内核虚拟机，原生主程序为上一轮 `0.2.11-dev`，静态 Nginx 及前端复用已批准资产。AppArmor 实际启用并加载 117 个系统配置；Web、Agent、Nginx 的实际标签为 `unconfined`，不将其记为产品专用 AppArmor 策略约束。
+- v14 原生安装、独立用户/权限/密钥隔离、Web 和 Nginx worker 降权及零有效能力通过；严格核对统一 API 封装。端口 80 的 HTTP 代理实际返回固定上游内容；占用 18089 导致的应用按原修订及部署身份回滚。另一次候选指针切换后，以 pidfd 仅向 Agent MainPID 发送 SIGKILL，原任务 `426e3d07-9735-4ea6-bd44-c89dca39e684` 自动恢复为 `rolled_back/rollback_confirmed`，原业务流量持续可用。
+- 初次中断脚本使用 systemd 全单元 kill，在主进程已被杀死后因辅助进程返回错误；原控制器退出失败，退出处理使虚拟机正常关机。原盘重新启动后暴露真实问题：固定探测 Socket 遗留在文件系统、内核已无引用，Nginx 因地址占用而无法启动，原任务停留在 `recovery_required`。相关失败日志、原盘和批准材料保留。启动入口现仅在同初始网络命名空间、root 保护目录及归属正确、完整内核表无引用、连接明确拒绝且 inode/ctime/模式复核未变时删除固定 Socket；校验模式不清理，活动、已绑定未监听及异常路径均拒绝清理。
+- 9 个真实 Unix Socket/root 定点回归全部通过，没有跳过；`0.2.12-dev` 静态候选构建通过，SHA-256 为 `bfb7f90b2f4e7520e3b23899fdc6e9628d466e4a7884b38bcc0a11197bd473cc`。原失败现场通过 root 显式批准的候选启动器和临时独立服务验证：校验模式保留原 inode 262605，实际启动替换为 262552 并恢复真实 HTTP；再次启动拒绝清理已有内核引用的 Socket，原服务流量保持正常。停止临时服务后恢复原正式单元，原任务 `e723a67e-d987-43c8-a04c-30505384fb72` 在同一 UUID 下自动对账为回滚确认，原修订及部署身份保持不变。已安装的不可变程序及选择仍为 `0.2.11-dev`，此项不替代新候选正式升级后的开机恢复验收。
+- 清理脚本曾误判两个测试资源 ID，删除了正常测试站点，随后应用被正确回滚。通过实际监听与域名字段识别资源，使用正常 CRUD 重建测试站点并移除占用端口站点；修正后的应用任务 `903b8533-ec1b-4351-b977-60bfefefef10` 成功，业务恢复到单站点、期望版本 5。错误清理任务 `6689cdbe-25a6-4a8f-8113-4bd917270375` 的原失败和回滚记录保留。
+- 安装重放、Agent/Web 服务重启及后续计划内整机重启通过；使用单独保存的本次重启前 boot ID 核对新启动身份，原始 boot ID 继续保留。最终节点、期望版本 5、修订和部署身份保持一致，HTTP 实际流量正常；管理 TLS 指纹仍为 `26f9d9971d99deb5b0235f7afe8e25c1bc8bb3897064a2dcbf3b26677f837407`。首次失败任务、中断任务和错误清理任务均保持原 UUID 及回滚确认历史，最终成功任务保持成功。重启前后的账户隔离、worker 零能力和 AppArmor 观测均通过。
+- 证据位于 `.validation/native-vm/ubuntu24-native/`，包含原始 `initial.log`、`inspection.log`、Socket 诊断、`build.log`、`build-final.log`、`rescue.log`、`continue-api-cleanup-failure.log`、`cleanup-api.log`、`finish-resumed.log`、`finish-flow.log`、`final-api.log` 和 `artifacts/`；镜像来源与完整散列核对另见 `.validation/native-vm/ubuntu24-native/range-image.json` 和下载记录。没有修改开发宿主机环境，没有创建或执行 UI 自动化测试。虚拟机正常关机。Ubuntu 的 Docker 面板组合、其他架构、新候选正式升级后的残留 Socket 开机恢复和其他故障矩阵仍待独立验收。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。

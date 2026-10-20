@@ -35,6 +35,9 @@ func Launch(ctx context.Context, data string, check bool) error {
 	if check {
 		args = append(args, "-t", "-q")
 	} else {
+		if err = clearStaleProbe(ctx, data); err != nil {
+			return err
+		}
 		args = append(args, "-g", "daemon off;")
 	}
 	return syscall.Exec(b.Binary, args, Environment())
