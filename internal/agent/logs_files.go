@@ -19,10 +19,9 @@ func (n *Nginx) prepareLogFiles(sources []logSource) error {
 		if err := secure.RootDirectory(base, 0755); err != nil {
 			return err
 		}
-		if n.Container != nil {
-			if err := os.Chmod(base, 0755); err != nil {
-				return err
-			}
+		// The Agent's private umask must not prevent workers from reopening logs.
+		if err := os.Chmod(base, 0755); err != nil {
+			return err
 		}
 		dir, err := os.Open(base)
 		if err != nil {
@@ -51,10 +50,8 @@ func (n *Nginx) prepareLogFiles(sources []logSource) error {
 		if err := secure.RootDirectory(filepath.Dir(name), 0755); err != nil {
 			return err
 		}
-		if n.Container != nil {
-			if err := os.Chmod(filepath.Dir(name), 0755); err != nil {
-				return err
-			}
+		if err := os.Chmod(filepath.Dir(name), 0755); err != nil {
+			return err
 		}
 		fd, err := unix.Open(name, unix.O_WRONLY|unix.O_APPEND|unix.O_CREAT|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0640)
 		if err != nil {

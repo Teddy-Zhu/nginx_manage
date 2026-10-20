@@ -23,6 +23,21 @@ type fail2banBanTime struct {
 }
 type fail2banBanProof map[string]map[string]fail2banBanTime
 
+// Reuse the official CLI in one interpreter so fixed jail reads do not pay
+// Python startup for every property. Commands and formatting remain official.
+const fail2banManagedClientBatch = `import contextlib,io,json,sys
+sys.path.insert(0,sys.argv[1])
+from fail2ban.client.fail2banclient import Fail2banClient
+results=[]
+for args in json.loads(sys.argv[2]):
+ output=io.StringIO()
+ with contextlib.redirect_stdout(output):
+  if not Fail2banClient().start(["fail2ban-client"]+args):
+   raise RuntimeError("official read command failed")
+ results.append(output.getvalue())
+print(json.dumps(results))
+`
+
 func managedFail2banRead(ctx context.Context, r *fail2banManagedRecord, args ...string) ([]byte, error) {
 	argv := fail2banReadArgs(fail2banManagedSocket, args[0])
 	argv = append(argv, args[1:]...)
@@ -194,17 +209,33 @@ func readFail2banJailDetails(ctx context.Context, r *fail2banManagedRecord, b *f
 		{[]string{"action", action, "actionban"}, command},
 		{[]string{"action", action, "actionunban"}, command},
 	}
+	queries := make([][]string, 0, len(checks)+2)
 	for _, check := range checks {
-		raw, err := managedFail2banRead(ctx, r, append([]string{"get", name}, check.args...)...)
-		if err != nil || strings.TrimSpace(string(raw)) != check.expected {
-			return nil, errors.New("实际 jail 参数无法核对：" + check.args[0])
-		}
+		args := append(fail2banReadArgs(fail2banManagedSocket, "get"), name)
+		queries = append(queries, append(args, check.args...))
 	}
-	raw, err := managedFail2banRead(ctx, r, "get", name, "ignoreip")
+	queries = append(queries,
+		append(fail2banReadArgs(fail2banManagedSocket, "get"), name, "ignoreip"),
+		append(fail2banReadArgs(fail2banManagedSocket, "get"), name, "banip", "--with-time"),
+	)
+	input, err := json.Marshal(queries)
 	if err != nil {
 		return nil, err
 	}
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	raw, err := fail2banManagedExec(ctx, r.python(), []string{"-I", "-S", "-B", "-c", fail2banManagedClientBatch, r.PackageRoot, string(input)}, 5*time.Second, 256<<10)
+	if err != nil {
+		return nil, err
+	}
+	var values []string
+	if err = json.Unmarshal(raw, &values); err != nil || len(values) != len(queries) {
+		return nil, errors.New("官方 jail 只读查询结果不完整")
+	}
+	for i, check := range checks {
+		if strings.TrimSpace(values[i]) != check.expected {
+			return nil, errors.New("实际 jail 参数无法核对：" + check.args[0])
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(values[len(checks)]), "\n")
 	if len(lines) < 2 || lines[0] != "These IP addresses/networks are ignored:" {
 		return nil, errors.New("实际忽略列表格式未知")
 	}
@@ -228,11 +259,7 @@ func readFail2banJailDetails(ctx context.Context, r *fail2banManagedRecord, b *f
 	if err != nil || strings.Join(actualSet, " ") != strings.Join(expectedSet, " ") {
 		return nil, errors.New("实际忽略列表与配置不一致")
 	}
-	raw, err = managedFail2banRead(ctx, r, "get", name, "banip", "--with-time")
-	if err != nil {
-		return nil, err
-	}
-	return parseFail2banBanTimes(raw)
+	return parseFail2banBanTimes([]byte(values[len(checks)+1]))
 }
 
 func checkFail2banJailNames(raw []byte, b *fail2banJailBundle) error {

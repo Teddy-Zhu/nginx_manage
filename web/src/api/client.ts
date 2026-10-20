@@ -836,7 +836,7 @@ function createAPI(scope: RequestScope) {
   fail2banTasks: (signal?:AbortSignal) => request<Fail2banApplyTaskStatus[]>({url:"/fail2ban/tasks",signal}),
   applyFail2ban: (data:Fail2banApplyInput,key:string) => request<Fail2banApplyTask>({url:"/fail2ban/apply",method:"POST",data,headers:{"Idempotency-Key":key}}),
   fail2banInstance: (signal?: AbortSignal) => request<Fail2banInstance>({ url: "/fail2ban/instance", signal }),
-  fail2banJail: (name: string, signal?: AbortSignal) => request<Fail2banJail>({ url: `/fail2ban/jails/${encodeURIComponent(name)}`, signal }),
+  fail2banJail: (name: string, signal?: AbortSignal) => request<Fail2banJail>({ url: `/fail2ban/jails/${encodeURIComponent(name)}`, signal, timeout: 30_000 }),
   fail2ban: (signal?: AbortSignal) =>
     request<Fail2banObservation>({ url: "/fail2ban", signal }),
   firewall: (signal?: AbortSignal) =>

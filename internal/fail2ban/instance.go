@@ -1,5 +1,11 @@
 package fail2ban
 
+import "time"
+
+// A cold jail read confirms the complete instance and then samples the jail.
+// Each worker keeps its own ten-second budget; IPC must cover both stages.
+const JailReadTimeout = 25 * time.Second
+
 type BindingView struct {
 	Engine         EngineIdentity `json:"engine"`
 	State          string         `json:"state"`

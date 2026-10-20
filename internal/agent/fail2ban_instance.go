@@ -241,7 +241,14 @@ func (s *Server) fail2banInstanceHandlers(mux *http.ServeMux, ctx context.Contex
 		dnsReply(w, value, err)
 	})
 	mux.HandleFunc("GET /v1/fail2ban/jails/{name}", func(w http.ResponseWriter, r *http.Request) {
-		value, err := f.readJail(r.Context(), r.PathValue("name"))
+		deadline := time.Now().Add(fail2ban.JailReadTimeout)
+		if err := http.NewResponseController(w).SetWriteDeadline(deadline); err != nil {
+			dnsReply(w, nil, fault.Unavailable("jail 读取连接无法设置响应时限"))
+			return
+		}
+		ctx, cancel := context.WithDeadline(r.Context(), deadline.Add(-time.Second))
+		defer cancel()
+		value, err := f.readJail(ctx, r.PathValue("name"))
 		dnsReply(w, value, err)
 	})
 }
@@ -266,7 +273,10 @@ func (c *Client) ReadFail2banJail(ctx context.Context, name string) (fail2ban.Ja
 	if !fail2banJailName.MatchString(name) {
 		return out, fault.Invalid("jail 名称无效")
 	}
-	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/jails/"+name, nil, &out)
+	client, httpClient := *c, *c.http
+	httpClient.Timeout = fail2ban.JailReadTimeout
+	client.http = &httpClient
+	err := client.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/jails/"+name, nil, &out)
 	if err == nil && (out.At <= 0 || out.Name != name || out.Writable || out.Managed && (!strings.HasPrefix(out.Name, "nginxpanel-") || !validID(strings.TrimPrefix(out.Name, "nginxpanel-"))) || out.Source != "host-agent" && out.Source != "development-agent" || len(out.Banned) > 1024 || out.Available && (!validID(out.BindingID) || !fail2banVersion.MatchString(out.ServerVersion) || out.CurrentFailed == nil || out.TotalFailed == nil || out.CurrentBanned == nil || out.TotalBanned == nil || *out.CurrentBanned != int64(len(out.Banned)))) {
 		err = errors.New("invalid Fail2ban jail observation")
 	}

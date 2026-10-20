@@ -274,9 +274,27 @@ NetworkManager 及 netplan/NetworkManager 的验证见下节；动态 DHCP/RA、
 
 安全路径回归覆盖祖先/最终链接、路径穿越、写入/创建标志拒绝，以及目录路径被替换后仍沿已固定 FD 读取；`internal/secure` 测试通过。实际 CLI 已核对 UMask 0027/0077 暂存成功、不安全目录拒绝，以及原准备 UUID 恢复。记录为 `.validation/native-vm/docker-upgrade/openpath-go-checks.log`、`permissions.log`、`reconcile.log`。Agent 现有测试（缓存结果）、app 现有测试、panelready 包编译、安装脚本语法及两种版本标签的完整程序构建通过，记录为 `.validation/native-vm/docker-upgrade-v8/go-checks.log`；imageupdates 包编译结果见第七轮日志；候选绑定修复后的 Agent、nginxcontainer 现有测试及完整程序构建通过，记录为 `docker-upgrade-v9/go-checks.log`、`final-build.log`。最终模板的安装器语法和完整程序构建通过，记录为 `docker-upgrade-v11/build.log`。第五轮业务记录为 `docker-upgrade-v5/agent.log`、`application.log` 及原失败日志。
 
+### Debian 13 Fail2ban 官方代码与受管服务
+
+2026-10-20：从干净提交 `397b65ef5687be1e03016963b4145f332d587217` 按锁定来源组装 Fail2ban 1.1.1 官方代码包，保留其 GPL、MIT 和 Async 许可；不打包解释器或发行版 site-packages。实际发布工具通过来源、文件清单和 SPDX 检查，并生成本地测试签名。归档包含 234 个文件，338816 字节，SHA-256 为 `f1a7f7208aa212bf609e6bafb5bb5b036e50cd85dd90a13775fe6a9e1a5c3f8b`；清单为 `92d2e88e04accd903866574f75ffe0fdb1c575cf1905681ccfa125491ac3c3cd`。规格使用 `p5-validation/nginxpanel`、`0.2.0-dev` 及本地测试 workflow 标识，不代表真实 CI、正式发布账户或生产信任根。组装和签名记录为 `.validation/native-vm/fail2ban/assembly.log`、`bundle.log`。
+
+实际 Debian 13/amd64 独立内核虚拟机使用发行版 Python 3.13.5。验收定位并修正：不存在的 Socket 单元不提供服务专属 MainPID，须用其实际单元状态确认缺席；开机启用/停用需要同步 systemd 加载状态并核对结果；Agent 须能在 `/etc/systemd/system` 原子创建、删除固定的独立服务单元；官方过滤器须放在私有配置目录的 `filter.d` 下；客户端拒绝集合的 UUID/IP 组合键要求至少 128 字节哈希桶，该设置须置于所有 `map` 前，并保留更大的显式设置；单 jail 冷读取串联两段采样，Agent/API、前端和节点转发的外层时限须覆盖它们。手动操作前的 12 项固定只读查询复用同一官方客户端进程，避免重复启动解释器耗尽原 12 秒外层时限，仍逐项核对参数、动作和封禁时间。原生 Nginx 日志目录显式恢复预期的遍历权限，避免 Agent 的私有 UMask 阻止降权工作进程在轮转时重新打开日志，文件仍为 0640。未伪造 PID、跳过实例冲突保护或扩大正则及采样工作进程预算。
+
+CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用、原安装 UUID 重试、显式启动/启用、停用及重新启用，最后 `NeedDaemonReload=no`。另一个新环境实际通过 API 默认安装、启动、启用、停用及重新启用，任务最终成功，实例版本 1.1.1、服务状态和加载状态一致。该范围记录为 `.validation/native-vm/fail2ban/enable-failure/managed.log`、`managed.log` 和 `.validation/native-vm/fail2ban-api/lifecycle-retry.log`、`confirm.log`；后者输出 `P5_FAIL2BAN_API_INSTALL_SERVICE_FINAL_PASS`。首轮测试夹具存在 stdin、HTTP 状态断言及保存 Cookie 变量错误；原失败记录保留，确认脚本只核对最终任务和实例，没有重放已成功操作。
+
+受管 `nginx-http-401` jail 使用 `nginx-client` 动作，可信本地代理分别传入 IPv4 `198.51.100.77` 和 IPv6 `2001:db8::77`：实际 401 日志达到阈值后，官方引擎出现封禁且 HTTP 返回 403；API 手动解封任务成功，官方封禁移除且 HTTP 恢复 200。该范围在 `0.2.7-dev` 程序上完成，SHA-256 为 `5b731ab6588f508cb30143dd16048bcdb15e2f7524755be5262e757aea1191b2`，记录为 `.validation/native-vm/fail2ban-acceptance/jails.log`；这是日志中的双栈来源地址验证。
+
+`0.2.8-dev` 程序修正原生目录权限后，实际重命名日志并对已确认的 Nginx 主进程发送 USR1，核对主进程及全部工作进程均打开新 inode；新文件中的 401 日志触发封禁且 HTTP 返回 403。随后 API 手动封禁另一地址，记录其原到期时间、节点身份和配置修订。程序 SHA-256 为 `62ccf9da0c6622c27b6adddbe6a3970c33c2e0afca89e3c52b73c6351a517868`，安装器为 `35dc58a87acd263f8b88257fe5ccc7c47b7c2a94c1c6ceeeea88a97f22c3b052`；记录为 `.validation/native-vm/fail2ban-rotation/persistence-before.log`。
+
+实际系统重启后 boot ID 已变化，节点身份、配置版本/修订和 jail 集合保持一致；官方引擎恢复原封禁，实际 HTTP 继续返回 403，API 解封后恢复 200。原到期读数 `1792496353`，恢复后为 `1792496354`：官方数据库以 `int(round(ticket.getTime()))` 保存起点，而 CLI 丢弃微秒，符合项目既有 ±1 秒核对约定，未按重启时间重新计满 900 秒。记录为 `.validation/native-vm/fail2ban-rotation/reboot.log`、`persistence-after.log`。初始夹具要求整秒完全相同，失败记录保存在 `persistence-after-exact-second-failure.log`；按上述既有契约修正夹具后，仅续验重启后的观察及尚未执行的解封，没有重启或重放已成功操作。
+
+故障定位记录保留：`.validation/native-vm/fail2ban-final/diagnosis-map.log` 确认默认哈希桶不足，`fail2ban-deny/diagnosis-nginx.log` 确认指令必须早于首个 map；`fail2ban-verified/diagnosis-address-time.log` 记录原读取在 12.06 秒取消，同环境 `diagnosis-client-batch.log` 的 12 项官方查询耗时 0.748 秒；`fail2ban-acceptance/diagnosis-rotation.log`、`diagnosis-reopen.log` 和 `diagnosis-log-permissions.log` 证明新文件为空、请求仍写入旧文件且工作进程因目录权限无法重开。双栈结果保留有效，目录修正后的新环境仅补验轮转与重启。
+
+相关现有 Agent、transport 测试和完整程序构建通过，节点转发包编译通过（无测试文件）；记录为 `.validation/native-vm/fail2ban/deny-build.log`、`callers-build.log` 和 `fail2ban-rotation/build.log`。前端单 jail 请求设置已接入，UI 仍由用户人工验收。以上操作均在隔离 Docker 工具容器和独立内核虚拟机中执行，未调整开发主机的系统环境；磁盘、原始失败记录及本地测试密钥均保留。最终虚拟机已正常关机，归档记录为 `fail2ban-rotation/final-state.log` 和 `vm-run.log`。
+
 ## 尚待验收
 
-- 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
+- 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
 - 两种架构的正式原生资产、arm64 预置模块镜像、正式发布链的签名镜像来源与多架构证据、其他升级/回滚和备份恢复故障注入，仍需完成产物构建及运行验收；上文本机信任准入、amd64 运行绑定及克隆恢复结果不替代这些检查。
 - 真实域名的 ACME/DNS、通知接收端及跨主机 API 一键迁移，尚未进行外部集成验收；容器内双节点迁移与授权结果见上节。
 - 正式 GitHub 仓库及发布凭据尚未配置，未运行真实发布 CI、推送或发布。项目 MIT 许可证已补齐，第三方组件保留各自许可。

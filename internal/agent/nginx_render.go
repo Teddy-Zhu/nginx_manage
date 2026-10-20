@@ -119,6 +119,21 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 	for _, node := range rootNodes {
 		hasRootErrorLog = hasRootErrorLog || node.Name == "error_log"
 	}
+	var mapHashNode *nginxconfig.Node
+	mapHashValue := "128"
+	httpNodes, err := p.ExpandNodes(httpBlock.Children, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, node := range httpNodes {
+		if node.Name == "map_hash_bucket_size" && len(node.Args) == 1 {
+			mapHashNode, mapHashValue = node, node.Args[0].Value
+			if size, err := strconv.ParseUint(mapHashValue, 10, 64); len(clientDeny) > 0 && err == nil && size < 128 {
+				mapHashValue = "128"
+			}
+			break
+		}
+	}
 	if inspection == nil {
 		m.Dependencies = map[string]string{}
 	}
@@ -213,6 +228,10 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 					continue
 				}
 				switch node.Name {
+				case "map_hash_bucket_size":
+					if node == mapHashNode {
+						edits = append(edits, nginxconfig.Edit{Start: node.Start, End: node.End, Text: ""})
+					}
 				case "server":
 					if _, ok := clientDeny[node.ResourceID]; ok {
 						prefix := nginxconfig.ClientDenyVariablePrefix
@@ -270,6 +289,11 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 			controls := runtimeAuthPresenceMap() + runtimeLogFormat("http", extras...) + defaults + "    client_body_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "client")) + ";\n    proxy_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", "proxy")) + ";\n"
 			if len(clientDeny) > 0 {
 				controls = "    include " + nginxQuote(n.clientDenyPath()) + ";\n" + runtimeClientDenyControls(clientDeny) + controls
+			}
+			if mapHashNode != nil || len(clientDeny) > 0 {
+				// Nginx fixes this setting when parsing its first map. UUID/IP keys
+				// need at least 128 bytes; retain any larger explicit setting.
+				controls = "    map_hash_bucket_size " + nginxQuote(mapHashValue) + ";\n" + controls
 			}
 			for _, kind := range n.tempModules {
 				controls += "    " + kind + "_temp_path " + nginxQuote(filepath.Join(n.DataDir, "nginx", "tmp", kind)) + ";\n"

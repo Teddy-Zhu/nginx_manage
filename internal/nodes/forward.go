@@ -13,6 +13,7 @@ import (
 
 	"nginxpanel/api"
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
@@ -106,6 +107,10 @@ func (s *Service) OpenForward(ctx context.Context, p auth.Principal, recent bool
 	if err != nil {
 		release()
 		return nil, err
+	}
+	if route.Method == http.MethodGet && route.Path == "/fail2ban/jails/{name}" {
+		// This transport is created above for this one forwarding request.
+		client.Transport.(*http.Transport).ResponseHeaderTimeout = fail2ban.JailReadTimeout + time.Second
 	}
 	if route.Kind == "sse" {
 		client.Timeout = 0

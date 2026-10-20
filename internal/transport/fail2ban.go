@@ -38,6 +38,10 @@ func (s *Server) GetFail2ban(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) fail2banReadContext(w http.ResponseWriter, r *http.Request) (context.Context, func(), bool) {
+	return s.fail2banReadContextWithTimeout(w, r, 14*time.Second)
+}
+
+func (s *Server) fail2banReadContextWithTimeout(w http.ResponseWriter, r *http.Request, timeout time.Duration) (context.Context, func(), bool) {
 	if _, ok := s.authorize(w, r, false, "read"); !ok {
 		return nil, nil, false
 	}
@@ -46,7 +50,7 @@ func (s *Server) fail2banReadContext(w http.ResponseWriter, r *http.Request) (co
 		s.fail(w, r, fault.New(429, "FAIL2BAN_READ_BUSY", "Fail2ban 读取请求较多，请稍后刷新"))
 		return nil, nil, false
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 14*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	return ctx, func() { cancel(); s.fail2banReads.Add(-1) }, true
 }
 func (s *Server) GetFail2banInstance(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +73,7 @@ func (s *Server) GetFail2banInstance(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetFail2banJail(w http.ResponseWriter, r *http.Request, name string) {
-	ctx, done, ok := s.fail2banReadContext(w, r)
+	ctx, done, ok := s.fail2banReadContextWithTimeout(w, r, fail2ban.JailReadTimeout)
 	if !ok {
 		return
 	}

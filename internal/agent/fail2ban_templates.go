@@ -123,6 +123,11 @@ func (f *fail2banTemplateReader) collect(ctx context.Context, in fail2ban.Templa
 			failAll("模板临时材料无法清理，须本机检查")
 		}
 	}()
+	// Official FilterReader resolves filters relative to config/filter.d.
+	filterDir := filepath.Join(work, "filter.d")
+	if err = os.Mkdir(filterDir, 0700); err != nil {
+		return failAll("模板过滤器目录无法准备")
+	}
 	for i, id := range in.Templates {
 		filter, filterErr := fail2ban.FilterConfig(id)
 		if filterErr != nil {
@@ -132,7 +137,7 @@ func (f *fail2banTemplateReader) collect(ctx context.Context, in fail2ban.Templa
 		for _, sample := range fail2ban.FilterSamples(id) {
 			lines = append(lines, sample.Line)
 		}
-		filterPath, logPath := filepath.Join(work, "filter.conf"), filepath.Join(work, "samples.log")
+		filterPath, logPath := filepath.Join(filterDir, "nginxpanel.conf"), filepath.Join(work, "samples.log")
 		if err = os.WriteFile(filterPath, []byte(filter), 0600); err != nil {
 			return failAll("模板材料无法准备")
 		}

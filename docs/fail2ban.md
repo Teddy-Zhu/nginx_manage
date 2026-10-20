@@ -1,5 +1,7 @@
 # Fail2ban 配置、诊断与实例接入
 
+官方代码组装和实际受管服务的已验收范围见[验证记录](validation.md#debian-13-fail2ban-官方代码与受管服务)，不代表完整系统矩阵已通过。
+
 `GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记操作；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用，可显式启用管理入口；启用不安装或启动引擎，不自动停止现有保护。诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
 
 仅 root Agent 在本机以 `--metrics-scope=host` 确认宿主机范围后执行采集。开发、容器、范围未确认或无 Agent 时返回不可用原因，不在面板容器内探测或补装程序。诊断的 `available` 仅表示宿主机读取获准；实例和 jail 的 `available` 表示该次完整采样成功，采样时间明确返回。单 jail 诊断保持 `writable=false`；明确登记且可读取的本应用 jail 返回 `managed=true`，手动写入须另行核对当前目标基准。

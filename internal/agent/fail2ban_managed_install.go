@@ -37,7 +37,13 @@ func fail2banManagedNoOther(ctx context.Context, data string, fresh bool) error 
 		if !fresh && state.ID == fail2banManagedService {
 			continue
 		}
-		if !state.Available || state.Load != "not-found" || state.MainPID == nil || *state.MainPID != 0 || state.Active != "inactive" {
+		// Socket units do not expose the service-only MainPID property. Their
+		// absence must be proved by the unit state rather than a fabricated PID.
+		pidAbsent := state.MainPID != nil && *state.MainPID == 0
+		if state.ID == "fail2ban.socket" {
+			pidAbsent = state.MainPID == nil
+		}
+		if !state.Available || state.Load != "not-found" || !pidAbsent || state.Active != "inactive" || state.Sub != "dead" {
 			return errors.New("发现已有 Fail2ban 服务或无法排除已有实例，请使用已有实例接入")
 		}
 	}
@@ -92,6 +98,22 @@ func fail2banManagedStopped(ctx context.Context) error {
 	}
 	return errors.New("独立服务停止状态缺失")
 }
+func fail2banManagedBootState(ctx context.Context, enabled bool) error {
+	if err := fail2banManagedEffective(ctx); err != nil {
+		return err
+	}
+	expected := "disabled"
+	if enabled {
+		expected = "enabled"
+	}
+	for _, service := range readFail2banServices(ctx) {
+		if service.ID == fail2banManagedService && service.Available && service.Load == "loaded" && service.UnitFile == expected {
+			return nil
+		}
+	}
+	return errors.New("无法确认受管引擎的开机启用状态")
+}
+
 func InstallFail2ban(ctx context.Context, in Fail2banInstallOptions) (fail2ban.Managed, error) {
 	return installFail2ban(ctx, in, "")
 }
@@ -214,7 +236,10 @@ func installFail2ban(ctx context.Context, in Fail2banInstallOptions, allowed str
 		return out, err
 	}
 	if r.Enable {
-		if err = fail2banManagedSystemctl(call, "enable", "--no-reload", fail2banManagedService); err != nil {
+		if err = fail2banManagedSystemctl(call, "enable", fail2banManagedService); err != nil {
+			return out, err
+		}
+		if err = fail2banManagedBootState(call, true); err != nil {
 			return out, err
 		}
 	}
@@ -399,16 +424,15 @@ func manageFail2banManaged(ctx context.Context, data, scope, action, allowed str
 			return out, err
 		}
 	}
-	args := []string{action}
-	if action == "enable" || action == "disable" {
-		args = append(args, "--no-reload")
-	}
-	args = append(args, fail2banManagedService)
+	args := []string{action, fail2banManagedService}
 	r.Action, r.ActionState = action, "pending"
 	if err = saveFail2banManaged(r, "installed", "独立服务操作待核对："+action); err != nil {
 		return out, err
 	}
 	err = fail2banManagedSystemctl(call, args...)
+	if err == nil && (action == "enable" || action == "disable") {
+		err = fail2banManagedBootState(call, action == "enable")
+	}
 	if err == nil && action == "start" {
 		err = waitFail2banManagedLive(call, r)
 	}
