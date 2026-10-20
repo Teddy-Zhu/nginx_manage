@@ -111,6 +111,8 @@ D-Bus 语义依据 [NetworkManager Device](https://networkmanager.dev/docs/api/l
 
 networkd/resolved 观测通过本机 network1 的 ListLinks/Describe 和 resolve1 的逐网卡 DNSEx/Domains 读取。须由本机确认 `--dns-scope=host --dns-owner=networkd`；开发、容器和未确认范围保留只读原因。接口分别返回已加载源路径、按当前磁盘优先级解析的源路径与散列、磁盘 DNS 字段、networkd 已加载的静态/运行时/DHCP/RA 值，以及 resolved 链路值；resolved 存在本身不能证明持久所有者。生成目录继续标记为 generated；netplan 来源关联线索见下文，不能据此宣称已证明实际所有权或生成一致性。
 
+resolved 的两个标准运行文件只用于观测：读取前通过本机系统总线取得 resolve1 唯一服务拥有者的 Unix UID，接受 root 或该服务账户持有的安全常规文件，并在读取后复核服务拥有者未变。权限、链接数、文本及扩展属性预算和读取一致性检查仍生效；持久配置及所有写入快照继续要求 root 持有，不接受 API 指定路径或任意非 root 所有者。
+
 磁盘投影覆盖固定系统目录中的同名 `.network` 及 `.network.d/*.conf` 优先级、空值重置、`/dev/null` 屏蔽、连续行、搜索/路由域及显式 DHCPv4/DHCPv6/RA 的 UseDNS、UseDNR 和 UseDomains 策略。未显式设置的策略保持 null；不填入公共 DNS 或臆测继承值。未知转义/语法、旧 DHCP 节继承规则、超限、非安全 root 文件/目录、符号链接及读取期间变化均保留未知状态与原因。仅散列和 DNS 投影进入 API，原始配置文本不进入 Web。接口按固定帧、网卡、文件、属性及总量预算读取。
 
 networkd 的 Plan/Apply/Confirm/Rollback 仅接管纯静态 DNS：配置须来自本机 `/etc/systemd/network`，合并后的 `[Match] Name=` 为唯一接口字面名称，最后生效源须为已有的安全本机文件，磁盘与已加载源路径一致，磁盘、networkd 与 resolved 的 DNS 值一致，且入口为 resolved 标准链接。DHCPv4/DHCPv6/RA 的 UseDNS 必须显式关闭，UseDomains 明确为 no；UseDNR 未设置时继承已关闭的 UseDNS，显式启用则只读。自动、共享、生成、厂商源及特殊端口/SNI/接口区域地址保持只读。目标使用观测返回的 `networkd:<接口名>`，配置使用 `servers/search`，不接受源路径或命令。

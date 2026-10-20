@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -31,6 +32,31 @@ func networkWritableSource(name string) bool {
 	return filepath.Dir(parent) == root && strings.HasSuffix(base, ".network") && networkSourcePath(name, base, true)
 }
 
+// Only these observed runtime files may belong to the resolved service user.
+// Persistent sources and every file accepted by a writer remain root-owned.
+func readObservedDNSFile(path string) (dnsFile, error) {
+	if path != "/run/systemd/resolve/stub-resolv.conf" && path != "/run/systemd/resolve/resolv.conf" {
+		return readDNSFile(path)
+	}
+	b, err := openDNSService(context.Background(), resolvedName)
+	if err != nil {
+		return dnsFile{}, err
+	}
+	defer b.close()
+	var owner uint32
+	if err = b.conn.BusObject().CallWithContext(b.ctx, "org.freedesktop.DBus.GetConnectionUnixUser", dbus.FlagNoAutoStart, b.owner).Store(&owner); err != nil {
+		return dnsFile{}, err
+	}
+	file, err := readProtectedTextFileForOwner(path, hostdns.SourceLimit, owner)
+	if err != nil {
+		return dnsFile{}, err
+	}
+	if err = b.unchangedOwner(); err != nil {
+		return dnsFile{}, err
+	}
+	return file, nil
+}
+
 func networkdResolverReason() string {
 	info, e := os.Lstat(dnsSource)
 	if e != nil || info.Mode()&os.ModeSymlink == 0 {
@@ -51,7 +77,7 @@ func networkdResolverReason() string {
 	if link != "/run/systemd/resolve/stub-resolv.conf" && link != "/run/systemd/resolve/resolv.conf" {
 		return "解析器入口未关联 resolved，当前保持只读"
 	}
-	if _, e = readDNSFile(link); e != nil {
+	if _, e = readObservedDNSFile(link); e != nil {
 		return "无法安全读取 resolved 解析器入口"
 	}
 	return ""

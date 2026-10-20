@@ -231,7 +231,7 @@ func (d *HostDNS) observeNetworkd(netplan *netplanSnapshot) hostdns.Observation 
 		}
 	}
 	if path != "" {
-		if file, e := readDNSFile(path); e == nil {
+		if file, e := readObservedDNSFile(path); e == nil {
 			out.Current = parseDNS(file.Data)
 		}
 	}

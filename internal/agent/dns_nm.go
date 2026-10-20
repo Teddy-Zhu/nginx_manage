@@ -296,7 +296,7 @@ func (d *HostDNS) observeNM(netplan *netplanSnapshot) hostdns.Observation {
 			path = filepath.Clean(link)
 		}
 		if path == "/run/NetworkManager/resolv.conf" || path == "/run/systemd/resolve/stub-resolv.conf" || path == "/run/systemd/resolve/resolv.conf" {
-			if f, e := readDNSFile(path); e == nil {
+			if f, e := readObservedDNSFile(path); e == nil {
 				out.Current = parseDNS(f.Data)
 			}
 		}
@@ -510,7 +510,7 @@ func nmResolverOwner(b *dnsBus) (string, error) {
 	if !allowed {
 		return "", errors.New("unconfirmed NetworkManager resolver owner")
 	}
-	source, e := readDNSFile(target)
+	source, e := readObservedDNSFile(target)
 	if e != nil || strings.Contains(string(source.Data), "no-reload") {
 		return "", errors.New("resolver entrance cannot be safely managed")
 	}

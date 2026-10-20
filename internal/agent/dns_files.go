@@ -41,6 +41,10 @@ func readDNSFile(path string) (dnsFile, error) {
 }
 
 func readProtectedTextFile(path string, limit int64) (dnsFile, error) {
+	return readProtectedTextFileForOwner(path, limit, 0)
+}
+
+func readProtectedTextFileForOwner(path string, limit int64, owner uint32) (dnsFile, error) {
 	var out dnsFile
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -53,7 +57,7 @@ func readProtectedTextFile(path string, limit int64) (dnsFile, error) {
 		return out, err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || st.Uid != 0 || st.Nlink != 1 || info.Mode().Perm()&0022 != 0 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() > limit {
+	if !ok || !info.Mode().IsRegular() || st.Uid != 0 && st.Uid != owner || st.Nlink != 1 || info.Mode().Perm()&0022 != 0 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() > limit {
 		return out, errors.New("Protected text source has unsafe attributes or exceeds budget")
 	}
 	out = dnsFile{Mode: uint32(info.Mode().Perm()), UID: st.Uid, GID: st.Gid, Dev: uint64(st.Dev), Ino: st.Ino, Mtime: info.ModTime().UnixNano(), Xattrs: map[string][]byte{}}

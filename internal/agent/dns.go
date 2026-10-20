@@ -236,7 +236,7 @@ func (d *HostDNS) observe() hostdns.Observation {
 			out.Owner = "regular-file"
 		}
 	}
-	f, err := readDNSFile(path)
+	f, err := readObservedDNSFile(path)
 	if err != nil {
 		out.Reason = "DNS 源不存在、权限不安全或无法完整读取"
 		return d.withPending(out)
