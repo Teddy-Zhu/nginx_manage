@@ -370,8 +370,16 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 上一阶段的 iptables 第十二轮曾拒绝手工追加防火墙参数的服务入口；代码核对确认同一固定比较也会拒绝安装器 `--dns-owner` 生成的合法 DNS 参数。本次只开放固定入口后的五个 DNS/防火墙键值选项及既定枚举，拒绝重复或未知选项；完整 root 服务文件散列、原参数顺序、实际 `/proc` 参数及 systemd 身份核对继续保留。
 - 集中验证的 `TestAgentUpgradeConfiguredEntry` 通过（0.007 秒），覆盖 native/container Nginx 入口、四种 DNS 所有者、五种防火墙所有者、撤销授权值和组合参数，以及 UID/路径/维护范围变更、重复/未知选项和 systemd 变量等拒绝边界，共 44 个参数变体。两份静态 amd64 主程序构建通过；前端未改动，测试包逐文件核对复用上一阶段已验证的前端构建，未重复构建或执行 UI 测试。
 - 隔离签名候选为 `0.2.20-dev`（程序 SHA-256 `1239f087525f9e73675eb124e2bf7db0faa6bec3a90950ef59b0fa7039928305`、清单 `e70db9abd4383923ff7cae4a91934327bbd75d1e6f1dae471e0e11970fb4c7e6`）与 `0.2.21-dev`（程序 `19d9cbafb42d566074b517ec94beb64e5d6b260a0ec03bc761e30cc5b0feb137`、清单 `a37642bc2cb18ab345e74ecef489e9f82501361001bfffa9051dfb7bde87843f`）。两者包含同一本次未提交实现，仅版本标记不同；仍用既有本机测试公钥签发，不作为正式发布或干净 CI 构建证据。
-- 在上一阶段 Ubuntu 24.04/amd64 成功磁盘的独立克隆中，先临时使用安装器默认 Agent 入口，通过正常签名协调更新引入 `0.2.20-dev` 修复；随后由目标机 root 恢复 iptables-nft/openssh 参数，并添加安装器对应的 networkd DNS 参数与固定写权限。配置后的 `0.2.20-dev` → `0.2.21-dev` 签名检查、准备、维护排空、快照、协调切换和提交成功，Web/Agent 实际进程 SHA-256 均匹配目标。完整 Agent 单元及实际启动参数保持；原已确认移除的 iptables 状态仍 available/can_plan，双栈第三方链/规则、密钥、Nginx 活动指针与进程程序散列保持。此场景未变更 DNS，也未覆盖保留活动过滤策略的升级或所有枚举的实机升级组合。
+- 在上一阶段 Ubuntu 24.04/amd64 成功磁盘的独立克隆中，先临时使用安装器默认 Agent 入口，通过正常签名协调更新引入 `0.2.20-dev` 修复；随后由目标机 root 恢复 iptables-nft/openssh 参数，并添加安装器对应的 networkd DNS 参数与固定写权限。配置后的 `0.2.20-dev` → `0.2.21-dev` 签名检查、准备、维护排空、快照、协调切换和提交成功，Web/Agent 实际进程 SHA-256 均匹配目标。完整 Agent 单元及实际启动参数保持；原已确认移除的 iptables 状态仍 available/can_plan，双栈第三方链/规则、密钥、Nginx 活动指针与进程程序散列保持。此轮未变更 DNS，保留活动过滤策略的升级验收见下节；其余枚举的实机升级组合仍未覆盖。
 - 首轮夹具的证据路径拼接和第三方链过滤名称存在错误，在业务步骤前主动中止，原磁盘和 `.validation/native-vm/agent-config-upgrade-v1/` 保留；修正夹具后沿用同一产物，第二轮证据位于 `.validation/native-vm/agent-config-upgrade-v2/`。第二轮输出 `P5_CONFIGURED_AGENT_SIGNED_UPGRADE_ALL_PASS`，完成证据归档并正常关机，退出码为 0。未修改开发宿主机环境，其他 P5 门禁继续推进。
+
+## 2026-10-21 活动 iptables 策略下的协调升级与独立恢复
+
+- 沿用上轮已配置 networkd DNS 与 iptables-nft/openssh 的 Ubuntu 24.04/amd64 成功盘，创建独立目标克隆；客户端使用独立 Debian 12/amd64 内核。仍通过无外部网络、无宿主端口映射的 QEMU socket LAN 执行双栈流量与受控 HTTPS API 验收，开发宿主机环境未修改。
+- 本轮无业务代码变更，使用提交 `843a09c` 的实现，仅将版本标记设为 `0.2.22-dev` 以触发真实程序切换；静态构建通过，未重复未受影响的参数回归或前端构建。签名候选程序 SHA-256 为 `86ec2bb80de006f6426ca409600cb6eeb180e71cbae210a1136d574853e1eb6b`，清单 SHA-256 为 `c252fa893d805b7cf22f7d0167a5c4a374eb3255c90e9b3031393af0048a392c`。沿用已批准的本机测试公钥和已验证前端，逐文件比对前端散列；测试签发仍不代表正式发布 CI。
+- 先以真实客户端应用并通过新连接确认策略 A，核对管理 HTTPS/SSH 来源保护、IPv4/IPv6 TCP/UDP 允许和阻断、双栈第三方规则保持；原登记接续及新计划/应用可用。随后在 A 活动时执行 `0.2.21-dev` → `0.2.22-dev` 的签名协调升级。客户端在升级运行期间完成 44 轮实际流量检查，A 的允许/阻断和 SSH 可达保持；升级后 Web/Agent 实际进程均匹配目标程序，已确认操作 ID、版本、策略散列和后端不变，原确认回执仍为 succeeded。完整 Agent 单元、密钥、Nginx 活动指针和主进程 PID/程序散列保持。
+- 在升级后的 Agent 上应用未确认策略 B，验证其实际双栈流量后停止 Web。Web 仍 inactive 时，独立 Agent 已恢复 A 的真实 TCP/UDP 流量和 SSH；恢复 Web 后，查询原 B 操作得到 rolled_back，运行状态指向原 A 操作/版本且 available/can_plan，双栈第三方链和规则保持。对应客户端标记为 `ACTIVE_POLICY_PRESERVED_DURING_UPGRADE_SAMPLES_44`、`UPGRADED_AGENT_RESTORED_A_WITH_WEB_STOPPED`、`ORIGINAL_RECEIPT_AND_CONFIRMED_A_RESTORED` 及 `ALL_PASS`。
+- 证据与独立磁盘保留于 `.validation/native-vm/active-firewall-upgrade-v1/` 及既有虚拟机卷。控制器完成前后证据比对，输出 `P5_ACTIVE_FIREWALL_UPGRADE_TWO_VM_ALL_PASS`；两台虚拟机正常关机，退出码均为 0。本次范围为原生 Ubuntu 24.04/amd64 的 iptables-nft，不替代其他后端、架构/发行版、Docker 面板或升级过程本身发生中断的验收。
 
 ## 尚待验收
 
