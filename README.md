@@ -1,6 +1,6 @@
 # NginxPanel
 
-基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前进入 P5 集中验证，尚未发布，真实系统能力矩阵仍待验收。
+基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前进入 P5 集中验证，尚未发布；已执行组合及其余缺口见[运行验收矩阵](docs/support-matrix.md)。
 
 当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单与基础 WAF 策略、手动证书版本与 HTTPS 绑定/跳转/HSTS、不可变修订、原文差异、外部快照/草稿捕获/受管恢复、并发保护和独立草稿；Unix Socket Agent 身份校验、Nginx 编译/受信动态模块能力、不可变发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
 
@@ -31,7 +31,7 @@ pnpm --dir web dev
 go run ./cmd/nginxpanel agent --dev --data-dir=.local
 ```
 
-实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。[原生安装入口](deploy/native/README.md) 已接入账户/目录分区、不可变产物及三个 systemd 服务，支持 `--without-nginx` 仅安装 Web/Agent，显式 `--start` 才按所选组件启用启动；不接管已有系统 Nginx。安装与实际服务尚未验证。开发 Agent 不开放实际执行。
+实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。[原生安装入口](deploy/native/README.md) 已接入账户/目录分区、不可变产物及三个 systemd 服务，支持 `--without-nginx` 仅安装 Web/Agent，显式 `--start` 才按所选组件启用启动；不接管已有系统 Nginx。实际安装与服务的验收范围见[运行验收矩阵](docs/support-matrix.md)。开发 Agent 不开放实际执行。
 
 未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；生产保留回环 HTTPS 救援入口，远程管理通过受控监听开放。部署方式见 [原生安装](deploy/native/README.md) 和 [Docker 部署](deploy/docker/README.md)。
 
