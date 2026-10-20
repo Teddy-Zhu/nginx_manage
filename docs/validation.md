@@ -365,6 +365,14 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 本阶段 native 内核结果限于 Ubuntu 24.04/amd64 的 iptables-nft，覆盖首次确认、管理入口保护、过期计划拒绝、Web 停止、Agent SIGKILL、确认超时、本机救援、正常整机重启以及确认移除/模块停用。有效结果分布于上述候选与独立磁盘，未重复未受后续修改影响的场景；其他平台/后端、Docker 路径及硬断电等未据此声明通过。
 - 静态主程序及前端构建通过；早期对相关 Go 包的指定测试筛选没有匹配用例，仅证明包可编译，未记作防火墙单元测试通过。未创建或执行 UI 自动化测试，未修改开发宿主机环境。定点诊断、第三和第四轮证据分别位于 `.validation/native-vm/iptables-diagnostic/`、`iptables-diagnostic-v2/`、`iptables-ubuntu24-v3/` 和 `iptables-ubuntu24-v4/`。
 
+## 2026-10-21 原生 Agent 已配置所有者的协调升级
+
+- 上一阶段的 iptables 第十二轮曾拒绝手工追加防火墙参数的服务入口；代码核对确认同一固定比较也会拒绝安装器 `--dns-owner` 生成的合法 DNS 参数。本次只开放固定入口后的五个 DNS/防火墙键值选项及既定枚举，拒绝重复或未知选项；完整 root 服务文件散列、原参数顺序、实际 `/proc` 参数及 systemd 身份核对继续保留。
+- 集中验证的 `TestAgentUpgradeConfiguredEntry` 通过（0.007 秒），覆盖 native/container Nginx 入口、四种 DNS 所有者、五种防火墙所有者、撤销授权值和组合参数，以及 UID/路径/维护范围变更、重复/未知选项和 systemd 变量等拒绝边界，共 44 个参数变体。两份静态 amd64 主程序构建通过；前端未改动，测试包逐文件核对复用上一阶段已验证的前端构建，未重复构建或执行 UI 测试。
+- 隔离签名候选为 `0.2.20-dev`（程序 SHA-256 `1239f087525f9e73675eb124e2bf7db0faa6bec3a90950ef59b0fa7039928305`、清单 `e70db9abd4383923ff7cae4a91934327bbd75d1e6f1dae471e0e11970fb4c7e6`）与 `0.2.21-dev`（程序 `19d9cbafb42d566074b517ec94beb64e5d6b260a0ec03bc761e30cc5b0feb137`、清单 `a37642bc2cb18ab345e74ecef489e9f82501361001bfffa9051dfb7bde87843f`）。两者包含同一本次未提交实现，仅版本标记不同；仍用既有本机测试公钥签发，不作为正式发布或干净 CI 构建证据。
+- 在上一阶段 Ubuntu 24.04/amd64 成功磁盘的独立克隆中，先临时使用安装器默认 Agent 入口，通过正常签名协调更新引入 `0.2.20-dev` 修复；随后由目标机 root 恢复 iptables-nft/openssh 参数，并添加安装器对应的 networkd DNS 参数与固定写权限。配置后的 `0.2.20-dev` → `0.2.21-dev` 签名检查、准备、维护排空、快照、协调切换和提交成功，Web/Agent 实际进程 SHA-256 均匹配目标。完整 Agent 单元及实际启动参数保持；原已确认移除的 iptables 状态仍 available/can_plan，双栈第三方链/规则、密钥、Nginx 活动指针与进程程序散列保持。此场景未变更 DNS，也未覆盖保留活动过滤策略的升级或所有枚举的实机升级组合。
+- 首轮夹具的证据路径拼接和第三方链过滤名称存在错误，在业务步骤前主动中止，原磁盘和 `.validation/native-vm/agent-config-upgrade-v1/` 保留；修正夹具后沿用同一产物，第二轮证据位于 `.validation/native-vm/agent-config-upgrade-v2/`。第二轮输出 `P5_CONFIGURED_AGENT_SIGNED_UPGRADE_ALL_PASS`，完成证据归档并正常关机，退出码为 0。未修改开发宿主机环境，其他 P5 门禁继续推进。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。

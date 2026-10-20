@@ -335,6 +335,8 @@ API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.s
 
 本机 root 可使用已经准备的单一签名静态面板资产升级 `/opt/nginxpanel/current` 中的 Agent 与固定宿主机工具。目标须与当前选中面板的 Agent 协议、数据库结构和 launcher 合同一致；不替换 `runtime/current`、容器 launcher 镜像、Nginx 或 Fail2ban，不迁移业务数据库。可使用本机命令，或通过网页/API 创建和续办持久任务。
 
+安装器的固定 Agent 入口允许追加本机 root 批准的 `--dns-scope/--dns-owner` 与 `--firewall-scope/--firewall-owner/--firewall-ssh` 键值参数；只接受既定枚举，每个选项最多一次。升级保留参数原顺序，并继续绑定完整服务文件散列和实际进程参数；程序、数据目录、允许 UID、Nginx 绑定及维护范围等固定字段变更，或未知、重复参数均拒绝升级。
+
 先通过原组件流程检查和准备面板资产，并在系统页取得已排空的维护会话及 Agent epoch，再提交新的操作 UUID：
 
 ```sh

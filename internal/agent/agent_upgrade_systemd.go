@@ -69,8 +69,62 @@ func verifySystemdWorker(ctx context.Context, unit string) error {
 	return errors.New("独立 worker 不在已登记 systemd 服务的控制组中")
 }
 
+func agentUpgradeArguments(actual, data string, uid int) ([]string, error) {
+	base := []string{"/opt/nginxpanel/current/nginxpanel", "agent", "--data-dir", data, "--allowed-uid", strconv.Itoa(uid), "--nginx-binding", "--nginx-user", "nginxpanel-nginx", "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--metrics-scope", "host", "--component-scope", "host", "--maintenance-scope", "host"}
+	args := strings.Split(actual, " ")
+	invalid := errors.New("Agent 服务参数不是已登记的固定入口")
+	if len(args) < len(base) || len(args) > len(base)+10 || (len(args)-len(base))%2 != 0 {
+		return nil, invalid
+	}
+	if args[6] == "--nginx-container" {
+		base[6] = "--nginx-container"
+	}
+	for i, expected := range base {
+		if args[i] != expected {
+			return nil, invalid
+		}
+	}
+	// Only these local owner selections may extend the installed entry point.
+	// Keep their exact order for /proc verification; the complete root-owned
+	// unit is also pinned in the upgrade intent before any service is stopped.
+	seen := make(map[string]bool)
+	for i := len(base); i < len(args); i += 2 {
+		key, value := args[i], args[i+1]
+		if seen[key] {
+			return nil, invalid
+		}
+		seen[key] = true
+		switch key {
+		case "--dns-scope", "--firewall-scope":
+			if value != "host" && value != "unconfirmed" {
+				return nil, invalid
+			}
+		case "--dns-owner":
+			switch value {
+			case "unconfirmed", "regular-file", "networkmanager", "networkd", "netplan":
+			default:
+				return nil, invalid
+			}
+		case "--firewall-owner":
+			switch value {
+			case "unconfirmed", "direct-nftables", "firewalld", "ufw", "iptables-nft", "iptables-legacy":
+			default:
+				return nil, invalid
+			}
+		case "--firewall-ssh":
+			if value != "unconfirmed" && value != "openssh" && value != "none" {
+				return nil, invalid
+			}
+		default:
+			return nil, invalid
+		}
+	}
+	return args, nil
+}
+
 func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []string, error) {
 	var agentHash, workerHash string
+	var args []string
 	d, err := panelruntime.ReadDeployment(data)
 	if err != nil {
 		return "", "", nil, err
@@ -83,7 +137,6 @@ func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []
 	if err != nil || string(ready) != "native-install-v14\n" || !strings.HasPrefix(string(intent), "native-install-v14\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") {
 		return "", "", nil, errors.New("Agent 升级缺少已完成的本机安装登记")
 	}
-	args := []string{"/opt/nginxpanel/current/nginxpanel", "agent", "--data-dir", data, "--allowed-uid", strconv.Itoa(d.UID), "--nginx-binding", "--nginx-user", "nginxpanel-nginx", "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--metrics-scope", "host", "--component-scope", "host", "--maintenance-scope", "host"}
 	for _, spec := range []struct{ template, unit, command, restart, kill, group string }{
 		{"nginxpanel-agent.service", "nginxpanel-agent.service", "", "on-failure", "control-group", "nginxpanel-ipc"},
 		{agentUpgradeTemplate, agentUpgradeUnit(id), "/opt/nginxpanel/current/nginxpanel agent-upgrade-worker --data-dir " + data + " --agent-upgrade %i", "no", "mixed", "root"},
@@ -105,11 +158,9 @@ func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []
 					return "", "", nil, errors.New("Agent 独立升级服务入口不匹配")
 				}
 			} else {
-				if actual != strings.Join(args, " ") {
-					args[6] = "--nginx-container"
-					if actual != strings.Join(args, " ") {
-						return "", "", nil, errors.New("Agent 服务参数不是已登记的固定入口")
-					}
+				args, err = agentUpgradeArguments(actual, data, d.UID)
+				if err != nil {
+					return "", "", nil, err
 				}
 			}
 		}
