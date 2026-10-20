@@ -8,6 +8,7 @@ type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
 type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
+const FIREWALL_REQUEST_TIMEOUT = 85_000;
 export type RuntimeHistoryFilter = components["schemas"]["RuntimeHistoryFilter"];
 export type RuntimeHistoryExecuteInput = components["schemas"]["RuntimeHistoryExecuteInput"];
 export type RuntimeHistoryPreview = components["schemas"]["RuntimeHistoryPreview"];
@@ -729,13 +730,14 @@ function createAPI(scope: RequestScope) {
   hostDNS: (signal?: AbortSignal) =>
     request<HostDNSOverview>({ url: "/host/dns", signal }),
   firewallRuntime: (signal?: AbortSignal) =>
-    request<FirewallRuntime>({ url: "/firewall/runtime", signal }),
+    request<FirewallRuntime>({ url: "/firewall/runtime", signal, timeout: FIREWALL_REQUEST_TIMEOUT }),
   firewallOperation: (id: string, signal?: AbortSignal) =>
-    request<FirewallOperation>({ url: `/firewall/operations/${id}`, signal }),
+    request<FirewallOperation>({ url: `/firewall/operations/${id}`, signal, timeout: FIREWALL_REQUEST_TIMEOUT }),
   planFirewall: (data: FirewallPlanInput, signal?: AbortSignal) =>
     request<FirewallPlan>({
       url: "/firewall/plan",
       method: "POST",
+      timeout: FIREWALL_REQUEST_TIMEOUT,
       data,
       signal,
     }),
@@ -743,6 +745,7 @@ function createAPI(scope: RequestScope) {
     request<FirewallOperation>({
       url: "/firewall/apply",
       method: "POST",
+      timeout: FIREWALL_REQUEST_TIMEOUT,
       data,
       headers: { "Idempotency-Key": key },
     }),
@@ -750,6 +753,7 @@ function createAPI(scope: RequestScope) {
     request<FirewallOperation>({
       url: `/firewall/operations/${id}/${action}`,
       method: "POST",
+      timeout: FIREWALL_REQUEST_TIMEOUT,
     }),
   checkFail2banTemplates: (data: Fail2banTemplateCheckInput, signal?: AbortSignal) => request<Fail2banTemplateCheck[]>({url:"/fail2ban/templates/check",method:"POST",data,signal}),
   fail2banPolicy: (signal?: AbortSignal) => request<Fail2banPolicyView>({url:"/fail2ban/policy",signal}),
@@ -1229,6 +1233,7 @@ function createAPI(scope: RequestScope) {
     request<null>({
       method: "PUT",
       url: `/system/modules/${encodeURIComponent(id)}`,
+      timeout: id === "firewall" ? FIREWALL_REQUEST_TIMEOUT : undefined,
       data: { enabled, ...options },
     }),
   };

@@ -458,7 +458,7 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return errors.New("无法连接本机 Agent")
+		return fmt.Errorf("无法连接本机 Agent：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 && strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {

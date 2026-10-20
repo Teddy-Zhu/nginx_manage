@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"nginxpanel/internal/firewall"
 )
 
 // A restart never resumes an unconfirmed candidate. Only the original parent's
@@ -217,14 +219,14 @@ func (f *hostFirewall) runIPTablesLocked(ctx context.Context, stopping bool, nex
 	if f.activeLocked() {
 		if stopping || f.expiredLocked() || f.iptablesState.Rollback || f.problem != "" || f.remote.web == nil || f.remote.problem != "" || f.remote.listener == nil {
 			if stopping || !time.Now().Before(f.retryAt) {
-				_ = f.rollbackIPTablesLocked()
+				_ = f.rollbackIPTablesWithTimeoutLocked(firewall.RecoveryOperationTimeout)
 			}
 		}
 		return
 	}
 	if stopping || !time.Now().Before(*nextInspect) {
 		*nextInspect = time.Now().Add(30 * time.Second)
-		call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		call, cancel := context.WithTimeout(context.Background(), firewall.RecoveryOperationTimeout)
 		_ = f.recoverIPTablesLocked(call)
 		cancel()
 	}
@@ -252,11 +254,13 @@ func (f *hostFirewall) rescueIPTablesLocked(ctx context.Context) error {
 	if request.ID == f.iptablesLastRescue {
 		return nil
 	}
+	call, cancel := context.WithTimeout(ctx, firewall.RecoveryOperationTimeout)
+	defer cancel()
 	if f.activeLocked() {
-		if err = f.rollbackIPTablesLocked(); err != nil {
+		if err = f.rollbackIPTablesWithTimeoutLocked(firewall.RecoveryOperationTimeout); err != nil {
 			return err
 		}
-	} else if err = f.recoverIPTablesLocked(ctx); err != nil {
+	} else if err = f.recoverIPTablesLocked(call); err != nil {
 		return err
 	}
 	unlock, err := (&Journal{Dir: "/run/nginxpanel-host"}).rootLock("iptables-business.lock")

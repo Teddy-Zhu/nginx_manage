@@ -438,7 +438,7 @@ func reconcileIPTablesConfirmedLocked(ctx context.Context, dataDir string, v *ip
 	for _, material := range repair.Materials {
 		current, err = inspectIPTablesSource(ctx, dataDir, source, true)
 		if err != nil {
-			return fail("iptables 已确认规则的当前完整状态无法核对")
+			return fail("iptables 已确认规则的当前完整状态无法核对：" + boundedIPTablesError(errors.Join(ctx.Err(), err)))
 		}
 		if current.States[material.Family] != "missing" {
 			continue

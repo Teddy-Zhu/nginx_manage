@@ -3,12 +3,26 @@ package firewall
 import (
 	"encoding/json"
 	"sort"
+	"time"
 
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/secure"
 )
 
 const ConfirmationSeconds = 120
+
+// Complete dual-stack tool and ruleset checks can span several bounded
+// subprocesses. Leave response time outside the execution deadline.
+const RuntimeReadTimeout = 20 * time.Second
+const ControlOperationTimeout = 45 * time.Second
+const ControlRequestTimeout = 50 * time.Second
+
+// Removal reads the confirmed scope before issuing its control request.
+const APIRequestTimeout = RuntimeReadTimeout + ControlRequestTimeout + 5*time.Second
+
+// Restoring both families can require several complete observations and
+// independent repairs. This budget belongs to durable background recovery.
+const RecoveryOperationTimeout = 150 * time.Second
 
 type Protection struct {
 	Service string   `json:"service"`

@@ -332,7 +332,12 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 		if !s.firewallReady(w, r) {
 			return
 		}
-		err = s.Firewall.SetManagement(r.Context(), p, *in.Enabled, in.FirewallRules, in.FirewallOperationID)
+		ctx, done, ok := s.firewallControlContext(w, r)
+		if !ok {
+			return
+		}
+		defer done()
+		err = s.Firewall.SetManagement(ctx, p, *in.Enabled, in.FirewallRules, in.FirewallOperationID)
 	} else {
 		if in.FirewallRules != "" || in.FirewallOperationID != "" {
 			s.fail(w, r, fault.Invalid("防火墙停用选项不适用于此模块"))

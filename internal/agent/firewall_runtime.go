@@ -225,8 +225,17 @@ func (f *hostFirewall) confirmedRecord() *firewallPolicyRecord {
 	}
 	return f.state.Confirmed
 }
-func (f *hostFirewall) pending() bool {
-	f.mu.Lock()
+func (f *hostFirewall) pending() bool { return f.pendingWithLock(true) }
+
+func (f *hostFirewall) pendingWithLock(waitForLock bool) bool {
+	// While admission is open, contention is conservatively busy rather than
+	// an unavailable status. An existing lease retains the exact pending proof
+	// required by its held/zero-busy contract.
+	if waitForLock {
+		f.mu.Lock()
+	} else if !f.mu.TryLock() {
+		return true
+	}
 	defer f.mu.Unlock()
 	return f.activeLocked() || f.ufwPreparingLocked() || f.problem != "" || f.firewalldState != nil && f.firewalldState.Call != nil || ufwRegistrationPending(f.dataDir) || iptablesRegistrationPending(f.dataDir) || dockerRegistrationPending(f.dataDir)
 }
@@ -430,13 +439,20 @@ func (f *hostFirewall) operationLocked(id string) (firewall.Operation, error) {
 	}
 	return *r.Firewall, nil
 }
+
+// Durable recovery may outlast a request. Contended reads fail closed rather
+// than queue behind its complete kernel proof.
 func (f *hostFirewall) Operation(id string) (firewall.Operation, error) {
-	f.mu.Lock()
+	if !f.mu.TryLock() {
+		return firewall.Operation{}, fault.Unavailable("防火墙操作正在核对，请稍后查询")
+	}
 	defer f.mu.Unlock()
 	return f.operationLocked(id)
 }
 func (f *hostFirewall) View() firewall.RuntimeView {
-	f.mu.Lock()
+	if !f.mu.TryLock() {
+		return firewall.RuntimeView{Backend: "unconfirmed", Reason: "防火墙状态正在核对", ConfirmedAction: "none", Protections: []firewall.Protection{}, ProtectionObservation: protectionObservation("unavailable", "", "防火墙状态正在核对")}
+	}
 	defer f.mu.Unlock()
 	if f.iptablesPlannerLocked() {
 		return f.iptablesViewLocked()

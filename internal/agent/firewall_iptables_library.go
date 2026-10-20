@@ -345,6 +345,14 @@ func compareIPTablesLibraryChain(image iptablesImage, name string, rows []string
 		if name == "INPUT" && !iptablesReservedArgument(prior) && !iptablesReservedArgument(args) {
 			continue
 		}
+		// Fixed hooks and anchor pointers carry authenticated custom jumps.
+		// Their complete tokens must agree with the verified native image.
+		if name == "INPUT" || name == firewall.IPTablesHostChain || name == firewall.IPTablesDockerChain {
+			if !slices.Equal(prior, args) {
+				return invalid
+			}
+			continue
+		}
 		if strings.HasPrefix(name, firewall.IPTablesDockerChain) {
 			before, err := dockerIPTablesRuleKey(name, image.Family, prior)
 			after, actualErr := dockerIPTablesRuleKey(name, image.Family, args)

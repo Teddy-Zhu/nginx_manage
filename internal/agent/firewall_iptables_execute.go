@@ -221,7 +221,11 @@ func (f *hostFirewall) confirmIPTablesLocked(ctx context.Context, id, connection
 }
 
 func (f *hostFirewall) rollbackIPTablesLocked() error {
-	call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	return f.rollbackIPTablesWithTimeoutLocked(30 * time.Second)
+}
+
+func (f *hostFirewall) rollbackIPTablesWithTimeoutLocked(timeout time.Duration) error {
+	call, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	f.proofListener, f.protectionObservedAt = nil, time.Time{}
 	return errors.Join(f.recoverIPTablesLocked(call), f.remote.reconcile())

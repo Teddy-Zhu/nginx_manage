@@ -48,7 +48,7 @@ func (f *hostFirewall) openIPTablesPlanner(v *iptablesChangeCheckpoint) error {
 		return errors.Join(errors.New("其他 iptables Agent 正在维护原操作"), err)
 	}
 	f.unlock, f.recovering, f.policyUncertain = unlock, true, false
-	call, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	call, cancel := context.WithTimeout(context.Background(), firewall.RecoveryOperationTimeout)
 	defer cancel()
 	_ = f.recoverIPTablesLocked(call)
 	if err = f.rescueIPTablesLocked(call); err != nil {
@@ -106,7 +106,7 @@ func (f *hostFirewall) iptablesViewLocked() firewall.RuntimeView {
 	if out.CanPlan {
 		// Readiness must prove the current scope, including an empty namespace
 		// after removal. A historical confirmation alone cannot allow shutdown.
-		call, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		call, cancel := context.WithTimeout(context.Background(), firewall.RuntimeReadTimeout)
 		defer cancel()
 		var current iptablesRegistrationSnapshot
 		program := &firewall.IPTablesRuntimeProgram{Backend: f.owner}
@@ -279,7 +279,10 @@ func (f *hostFirewall) planIPTablesLocked(ctx context.Context, in firewall.Runti
 	}
 	prior := iptablesPreviousProgram(transition)
 	after, err := inspectIPTablesBound(ctx, f.dataDir, f.owner, transition.ToolHash, tools, iptablesInspectionScope{Program: prior, Docker: iptablesPreviousDocker(transition)})
-	if err != nil || after.Hash != before.Hash {
+	if err != nil {
+		return empty, fault.Unavailable("iptables 计划后完整环境无法核对：" + boundedIPTablesError(errors.Join(ctx.Err(), err)))
+	}
+	if after.Hash != before.Hash {
 		return empty, fault.Conflict("iptables 工具、后端或完整规则在计划期间变化，请重新生成")
 	}
 	if err = after.admitTransitionReadback(transition); err != nil {

@@ -1,10 +1,12 @@
 package transport
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
 	"strings"
+	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"nginxpanel/internal/auth"
@@ -30,11 +32,27 @@ func (s *Server) firewallPrincipal(w http.ResponseWriter, r *http.Request, recen
 	}
 	return p, true
 }
+
+func (s *Server) firewallControlContext(w http.ResponseWriter, r *http.Request) (context.Context, context.CancelFunc, bool) {
+	ctx, cancel := context.WithTimeout(r.Context(), firewall.APIRequestTimeout)
+	deadline, _ := ctx.Deadline()
+	if err := http.NewResponseController(w).SetWriteDeadline(deadline.Add(5 * time.Second)); err != nil {
+		cancel()
+		s.fail(w, r, fault.Unavailable("防火墙连接无法设置响应时限"))
+		return nil, nil, false
+	}
+	return ctx, cancel, true
+}
 func (s *Server) GetFirewallRuntime(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.firewallPrincipal(w, r, false); !ok {
 		return
 	}
-	out, err := s.Agent.FirewallRuntime(r.Context())
+	ctx, done, ok := s.firewallControlContext(w, r)
+	if !ok {
+		return
+	}
+	defer done()
+	out, err := s.Agent.FirewallRuntime(ctx)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -45,7 +63,12 @@ func (s *Server) GetFirewallOperation(w http.ResponseWriter, r *http.Request, id
 	if _, ok := s.firewallPrincipal(w, r, false); !ok {
 		return
 	}
-	out, err := s.Agent.FirewallOperation(r.Context(), id.String())
+	ctx, done, ok := s.firewallControlContext(w, r)
+	if !ok {
+		return
+	}
+	defer done()
+	out, err := s.Agent.FirewallOperation(ctx, id.String())
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -57,6 +80,11 @@ func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.P
 	if !ok {
 		return
 	}
+	ctx, done, ok := s.firewallControlContext(w, r)
+	if !ok {
+		return
+	}
+	defer done()
 	var in firewall.PlanInput
 	if err := decodeLimit(w, r, &in, firewall.DockerTargetBytes+4096); err != nil {
 		s.fail(w, r, err)
@@ -66,7 +94,7 @@ func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.P
 		s.fail(w, r, fault.New(403, "REAUTHENTICATION_REQUIRED", "请重新验证密码后继续"))
 		return
 	}
-	out, err := s.Firewall.Plan(r.Context(), in, remotelisten.ConnectionID(r.Context()))
+	out, err := s.Firewall.Plan(ctx, in, remotelisten.ConnectionID(ctx))
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -89,6 +117,11 @@ func (s *Server) ApplyFirewall(w http.ResponseWriter, r *http.Request, params ap
 	if !ok {
 		return
 	}
+	ctx, done, ok := s.firewallControlContext(w, r)
+	if !ok {
+		return
+	}
+	defer done()
 	key := params.IdempotencyKey
 	if len(key) < 1 || len(key) > 128 || strings.ContainsAny(key, "\x00\r\n") {
 		s.fail(w, r, fault.Invalid("需要 1–128 字节 Idempotency-Key"))
@@ -110,7 +143,7 @@ func (s *Server) ApplyFirewall(w http.ResponseWriter, r *http.Request, params ap
 		s.fail(w, r, err)
 		return
 	}
-	out, err := s.Firewall.Apply(r.Context(), id, in, remotelisten.ConnectionID(r.Context()))
+	out, err := s.Firewall.Apply(ctx, id, in, remotelisten.ConnectionID(ctx))
 	outcome := "unknown"
 	if err == nil {
 		outcome = out.State
@@ -136,6 +169,11 @@ func (s *Server) decideFirewall(w http.ResponseWriter, r *http.Request, id, acti
 	if !ok {
 		return
 	}
+	ctx, done, ok := s.firewallControlContext(w, r)
+	if !ok {
+		return
+	}
+	defer done()
 	if action == "confirm" && (r.TLS == nil || remotelisten.ConnectionID(r.Context()) == "") {
 		s.fail(w, r, fault.Conflict("须通过规则生效后新建的目标管理 HTTPS 连接确认"))
 		return
@@ -144,7 +182,7 @@ func (s *Server) decideFirewall(w http.ResponseWriter, r *http.Request, id, acti
 		s.fail(w, r, err)
 		return
 	}
-	out, err := s.Agent.DecideFirewall(r.Context(), id, action, remotelisten.ConnectionID(r.Context()))
+	out, err := s.Agent.DecideFirewall(ctx, id, action, remotelisten.ConnectionID(ctx))
 	outcome := "unknown"
 	if err == nil {
 		outcome = out.State
