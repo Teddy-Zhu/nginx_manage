@@ -3,11 +3,9 @@ package agent
 import (
 	"context"
 	"errors"
-	"fmt"
 	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
-	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -96,24 +94,8 @@ func RunNginxImage(ctx context.Context, data, id string) (Record, error) {
 	if _, err = installationExecutable(); err != nil {
 		return r, err
 	}
-	raw, err := panelProcFile("/proc/self/cgroup", 8192)
-	if err != nil {
+	if err := verifySystemdWorker(ctx, nginxImageUnit(id)); err != nil {
 		return r, err
-	}
-	owned := false
-	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
-		fields := strings.SplitN(line, ":", 3)
-		owned = owned || len(fields) == 3 && fields[2] == "/system.slice/"+nginxImageUnit(id)
-	}
-	if !owned {
-		return r, errors.New("Nginx 镜像 worker 必须由独立 systemd 实例运行")
-	}
-	actual, err := agentUpgradeProperties(ctx, nginxImageUnit(id), "MainPID")
-	if err != nil {
-		return r, err
-	}
-	if actual["MainPID"] != fmt.Sprint(os.Getpid()) {
-		return r, errors.New("Nginx 镜像 worker 不是原服务主进程")
 	}
 	w := &nginxImageWorker{j: j, r: r}
 	if as := w.r.NginxImage.Authorizations; len(as) > 0 {

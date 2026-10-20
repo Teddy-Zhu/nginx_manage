@@ -77,9 +77,9 @@ func runtimeDir(name string) error {
 	if err != nil {
 		return err
 	}
-	// A crash may leave the newly created directory restricted by the installer's
-	// umask. This subtree contains public artifacts, never business secrets.
-	if info.Mode().Perm() == 0700 {
+	// Installer and Agent umasks can restrict a newly created directory. This
+	// subtree contains public artifacts, never business secrets.
+	if info.Mode().Perm() == 0700 || info.Mode().Perm() == 0750 {
 		return os.Chmod(name, 0755)
 	}
 	if info.Mode().Perm() != 0755 {

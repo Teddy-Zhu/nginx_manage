@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -123,24 +122,8 @@ func RunPanelImage(ctx context.Context, data, id string) (Record, error) {
 	if _, err = installationExecutable(); err != nil {
 		return r, err
 	}
-	raw, err := panelProcFile("/proc/self/cgroup", 8192)
-	if err != nil {
+	if err := verifySystemdWorker(ctx, panelImageUnit(id)); err != nil {
 		return r, err
-	}
-	owned := false
-	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
-		parts := strings.SplitN(line, ":", 3)
-		owned = owned || len(parts) == 3 && parts[2] == "/system.slice/"+panelImageUnit(id)
-	}
-	if !owned {
-		return r, errors.New("镜像替换 worker 必须由独立 systemd 实例运行")
-	}
-	actual, err := agentUpgradeProperties(ctx, panelImageUnit(id), "MainPID")
-	if err != nil {
-		return r, err
-	}
-	if actual["MainPID"] != fmt.Sprint(os.Getpid()) {
-		return r, errors.New("镜像替换 worker 不是独立服务主进程")
 	}
 	service, err := j.waitRootLock(ctx, ".panel-service.lock")
 	if err != nil {

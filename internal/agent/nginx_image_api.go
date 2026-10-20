@@ -119,7 +119,7 @@ func (s *Server) nginxImageHandlers(mux *http.ServeMux) {
 		o, err := s.readNginxImageUpgrade(r.Context(), r.PathValue("id"))
 		componentReply(w, o, err)
 	})
-	mux.HandleFunc("POST /v1/nginx/images/upgrades", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/nginx/images/upgrades", imageSubmissionHandler(func(w http.ResponseWriter, r *http.Request) {
 		var req imageupdates.Request
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		d.DisallowUnknownFields()
@@ -129,5 +129,5 @@ func (s *Server) nginxImageHandlers(mux *http.ServeMux) {
 		}
 		o, err := s.queueNginxImageUpgrade(r.Context(), req)
 		componentReply(w, o, err)
-	})
+	}))
 }

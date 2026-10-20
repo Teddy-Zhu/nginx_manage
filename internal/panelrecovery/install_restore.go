@@ -197,7 +197,7 @@ func preserve(ctx context.Context, src *os.File, info os.FileInfo, name string, 
 }
 
 func businessDirectory(data, relative string, uid, gid int, create bool) (*os.File, error) {
-	fd, err := unix.Openat2(unix.AT_FDCWD, data, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	fd, err := secure.OpenReadNoSymlinks(unix.AT_FDCWD, data, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC)
 	if err != nil {
 		return nil, err
 	}
@@ -207,12 +207,12 @@ func businessDirectory(data, relative string, uid, gid int, create bool) (*os.Fi
 			parent.Close()
 			return nil, errors.New("恢复资源目录无效")
 		}
-		childFD, err := unix.Openat2(int(parent.Fd()), part, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+		childFD, err := secure.OpenReadNoSymlinks(int(parent.Fd()), part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC)
 		created := false
 		if errors.Is(err, unix.ENOENT) && create {
 			if err = unix.Mkdirat(int(parent.Fd()), part, 0700); err == nil {
 				created = true
-				childFD, err = unix.Openat2(int(parent.Fd()), part, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+				childFD, err = secure.OpenReadNoSymlinks(int(parent.Fd()), part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC)
 			}
 		}
 		if err != nil {

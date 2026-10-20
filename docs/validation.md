@@ -243,10 +243,41 @@ NetworkManager 及 netplan/NetworkManager 的验证见下节；动态 DHCP/RA、
 
 签名材料由隔离测试发行者产生，amd64 索引、配置及层来自实际镜像；未使用的 arm64 目录条目为明确标记的测试数据，不是可执行发行资产。本轮覆盖本机信任准入与默认部署，不替代正式发布工作流、多架构 OCI 证据、镜像升级事务、其他系统/架构和 SELinux 下 Docker 的验收。
 
+### Debian 13 Docker 签名升级运行路径
+
+沿用上节 Debian 13/amd64、默认 Docker/containerd 和无外网的独立内核虚拟机，使用同一隔离测试发行者签发本地包与实际 amd64 镜像。前七轮安装器沿用上节；第八轮增加就绪运行目录及原生 Web 写权限，安装登记仍为 v14。开发主机配置未修改。首次真实升级发现并修正以下运行阻塞：
+
+- Agent 的 UMask 0027 会产生 0750 的公共暂存目录；接受并规范化该安全权限，仍拒绝组可写和符号链接。原 `recovery_required` 准备操作启动时沿原签名缓存重新对账，不重建回执或重新下载。
+- 受限 systemd 服务中的 `openat2` 返回 ENOSYS，与 [RestrictSUIDSGID 的系统调用限制](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RestrictSUIDSGID=) 一致。改用逐级固定目录 FD 的只读 `openat`，全路径拒绝链接，保留原文件身份、权限、大小与散列检查，以及该服务隔离设置。
+- v14 Agent 入口的尾部空白、systemd 实例服务自动生成的模板 slice，分别使原固定入口及直接控制组假设拒绝正常升级。现在规范化入口首尾空白，并同时绑定实际单元 ControlGroup 与 MainPID，三个独立 worker 共用此校验。
+- 应用更新遗漏子进程控制的 launcher 协议绑定；现在复用独立进程控制的现有校验。Web 与 Agent 两层维护准入分别补齐 Nginx 镜像创建/续办及两种镜像替换固定接口，普通配置写入仍被关闭。
+
+第五轮从干净 Docker 系统盘安装已修正的基线 `3bd8940f50a04d432bf785a0e95af566a92f68a9e5f4fea15b915dd195281658`，使用同源码不同版本标签的目标 `0.1.5-dev`（程序 `b6ad90d59ab65cdcc17177bf0b9716f400060b1504c98710ef0c3f3c8bdd6e2e`）。签名准备、独立 Agent 升级及普通应用更新均提交成功；Agent 升级只更换 Agent 进程，应用更新不重建容器或重启 Nginx master。真实快照、schema 37、节点、配置版本/修订、发布记录及 HTTP 反代流量均核对。应用更新任务为 `d9005733-767a-49f4-8a93-1071db4037fb`，root 操作为 `5056b1d8-6132-4edf-a20e-13850895a811`。
+
+应用更新完成后自动释放维护会话，夹具最初错误地继续沿用会话；修正为正常重新进入维护后，面板镜像任务在 Agent 准入处被拒绝，尚未发布 root 镜像操作。原失败任务 `8770a7ef-d117-4fe6-b106-103bac3fca54` 及磁盘保留；未删除任务或修改业务数据库。更早轮次的未确认准备、应用更新及升级失败盘同样保留，不将其计作成功升级。
+
+第六轮已完成新 Agent 升级，但面板镜像预检遭 15 秒 IPC 客户端/服务端时限中断，未留下 root 操作；原任务 `7e25caeb-fd0d-4e48-a568-2333dec715e9`、磁盘及日志保留。禁止发布 root 回执的预检诊断耗时 50.5 秒并完成意图校验，定位到普通 IPC 时限不足；诊断跳过执行器自身路径校验，不计作真实服务升级通过。镜像提交改用任务、客户端与响应一致的两分钟上限，服务端预检预留五秒失败响应时间，其余 IPC 时限保持。证据为 `docker-upgrade-v6/diagnose/result.log`、诊断源码及原请求日志。
+
+第七轮新时限下完成 Agent/应用更新，镜像预检在约 46 秒后明确拒绝：Agent 的挂载命名空间隐藏 `app`，无法连接其中的就绪 Socket。原失败任务 `e58063d8-1519-41d4-ac47-3c6b9ba1ce38`、原盘与拒绝证据保留。就绪 Socket 改放在面板账户独占的 `run/readiness`，启动时原子发布同目录的公开 TLS 证书；连接仍核对 root 对端和实际程序/PID，证书继续核对权限、身份、链接数及实际 HTTPS。数据库、私钥和主密钥保持隐藏，原生 Web 仅增加该运行目录写权限，Docker 固定挂载定义不变。
+
+第八轮从干净 Docker 系统盘安装修正后的基线，Agent、应用及面板镜像升级均提交成功。面板镜像任务 `4fb0b4bc-13f6-400e-94eb-7382fb9fdc66` 选择实际签名索引 `sha256:b10b39af9faab557e531ae0b619942f1706c93838347fe00c267d7ef477b1d17`；只有面板容器发生重建，Agent、Nginx 容器和 master PID 保持，原配置与流量核对通过。记录为 `docker-upgrade-v8/agent.log`、`application.log`、`panel.log`。
+
+随后 Nginx 候选校验在切换前退出 1，原运行实例保持。沿同一签名目标和配置定点复现，日志显示新启动器误读旧运行绑定，报“镜像程序与宿主机登记不一致”；诊断容器确认清理。候选校验现在只读覆盖本次批准的绑定，核对文件内容和固定挂载，旧运行选择保持；仅在确认校验容器不存在后清理临时绑定，绑定缺失不冒充容器不存在。原失败操作 `8df726a0-c881-4de3-9c72-9b3d13e42217`、原盘及 `docker-upgrade-v8/diagnose/result.log` 保留。
+
+第九轮在原节点通过签名接口部署候选绑定修复，Agent、应用更新提交成功，Nginx 候选完整配置校验通过。独立 worker 随后初始化 HTTP-01 存储时发现单元缺少 ACME 目录写权限；原操作 `2e69b8f2-a4d5-41aa-9530-01367ab9c856` 保留 `recovery_required`，目标容器尚未创建。模板补齐专用 ACME 目录；原冻结模板与回执不改写，原盘关机保留，修正后的安装模板另建独立盘验收。夹具曾指向旧版本目录，导致 Agent 正确拒绝重复升级；修正夹具后继续，失败任务和日志保留，未修改业务数据库。记录为 `docker-upgrade-v9/fixture-path-failure/`、`agent.log`、`application.log`、`final-state.log`。
+
+第十轮在修正模板上通过安装和签名 Agent 升级，Nginx 校验通过后又发现运行存储发布锁缺少写权限。模板同时补齐运行目录；原操作 `bf7d1854-3446-4790-8b00-339fb93050b4`、磁盘和 `docker-upgrade-v10/final-state.log` 保留，不改写已冻结单元。后续沿源码一致的基线及原签名目标另建安装盘，仅续验 Nginx 及持久化，复用前述有效的 Agent、应用、面板镜像升级结果。
+
+第十一轮使用源码一致的 `0.1.9-dev` 基线与已签发的 `0.1.10-dev` 目标，在最终模板的独立安装盘完成 Nginx 升级。任务 `7d1c08e2-8b55-42e5-b523-79ed0036c937`、root 操作 `ec20c1cc-bb18-4159-8330-ba3dfc4e8b60` 先通过完整配置校验并启动目标镜像，在 `confirming_agent` 阶段实际 SIGKILL 独立 worker，再通过原 API 续办；任务和操作 UUID 保持、授权序号增至 2，最终 `succeeded/committed`，维护会话正常释放。实际签名索引为 `sha256:27b283df118408899f9e9b1cf3a6457f07817faf83394a7e5645d12bd55711fb`，程序 SHA-256 为 `fb62094e4a63c20878ac4bfb6218b17ecce84c642e37931402d844fbf6a8b9b2`，清单为 `20fdee461d4ece1ba42a562f0699a0a0169fd45a18ac695f973d311b78514242`；未重复已通过的应用和面板镜像升级。
+
+随后强制重建两个容器，确认各容器 ID 改变；整机重启确认内核 boot ID 改变。两次均核对原节点、配置版本/修订、发布记录、两种镜像选择及实际 HTTP 反代流量。重启后核对就绪目录、Socket 和证书的专用身份/权限，公开证书指纹与原管理证书一致；Agent 命名空间仍不可见业务数据库和私密证书目录，可读取公开证书，临时候选绑定已清理。最终安装器 SHA-256 为 `32ee9d61f9afb122dc521af1ead9c955b776e99e98608d5df4430e48cadd6ec7`。记录为 `.validation/native-vm/docker-upgrade-v11/verify-chain.log`、`nginx.log`、`persistence.log`；分别输出 `P5_NGINX_UPGRADE_REMAINING_ALL_PASS` 和 `P5_UPGRADE_REBOOT_PERSISTENCE_PASS`。相关虚拟机均关机，验证容器退出，原盘与最终 `debian13-docker-upgrade-11.qcow2` 保留在既有命名卷；未修改开发主机配置。
+
+安全路径回归覆盖祖先/最终链接、路径穿越、写入/创建标志拒绝，以及目录路径被替换后仍沿已固定 FD 读取；`internal/secure` 测试通过。实际 CLI 已核对 UMask 0027/0077 暂存成功、不安全目录拒绝，以及原准备 UUID 恢复。记录为 `.validation/native-vm/docker-upgrade/openpath-go-checks.log`、`permissions.log`、`reconcile.log`。Agent 现有测试（缓存结果）、app 现有测试、panelready 包编译、安装脚本语法及两种版本标签的完整程序构建通过，记录为 `.validation/native-vm/docker-upgrade-v8/go-checks.log`；imageupdates 包编译结果见第七轮日志；候选绑定修复后的 Agent、nginxcontainer 现有测试及完整程序构建通过，记录为 `docker-upgrade-v9/go-checks.log`、`final-build.log`。最终模板的安装器语法和完整程序构建通过，记录为 `docker-upgrade-v11/build.log`。第五轮业务记录为 `docker-upgrade-v5/agent.log`、`application.log` 及原失败日志。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
-- 两种架构的正式原生资产、arm64 预置模块镜像、正式发布链的签名镜像来源与多架构证据、升级/回滚和其他备份恢复故障注入，仍需完成产物构建及运行验收；上文本机信任准入、amd64 运行绑定及克隆恢复结果不替代这些检查。
+- 两种架构的正式原生资产、arm64 预置模块镜像、正式发布链的签名镜像来源与多架构证据、其他升级/回滚和备份恢复故障注入，仍需完成产物构建及运行验收；上文本机信任准入、amd64 运行绑定及克隆恢复结果不替代这些检查。
 - 真实域名的 ACME/DNS、通知接收端及跨主机 API 一键迁移，尚未进行外部集成验收；容器内双节点迁移与授权结果见上节。
 - 正式 GitHub 仓库及发布凭据尚未配置，未运行真实发布 CI、推送或发布。项目 MIT 许可证已补齐，第三方组件保留各自许可。
 - UI 由用户人工验收，未创建或执行 UI 自动化测试。

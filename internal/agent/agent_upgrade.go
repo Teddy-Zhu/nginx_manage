@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"nginxpanel/internal/panelruntime"
@@ -481,24 +480,8 @@ func RunAgentUpgrade(ctx context.Context, data, id string) (Record, error) {
 	if err != nil || agentUpgradeTerminal(r) {
 		return r, err
 	}
-	worker, err := panelProcFile("/proc/self/cgroup", 8192)
-	if err != nil {
+	if err := verifySystemdWorker(ctx, agentUpgradeUnit(id)); err != nil {
 		return r, err
-	}
-	owned := false
-	for _, line := range strings.Split(strings.TrimSpace(string(worker)), "\n") {
-		parts := strings.SplitN(line, ":", 3)
-		owned = owned || len(parts) == 3 && parts[2] == "/system.slice/"+agentUpgradeUnit(id)
-	}
-	if !owned {
-		return r, errors.New("Agent 升级 worker 必须由独立 systemd 实例运行")
-	}
-	actual, err := agentUpgradeProperties(ctx, agentUpgradeUnit(id), "MainPID")
-	if err != nil {
-		return r, err
-	}
-	if actual["MainPID"] != fmt.Sprint(os.Getpid()) {
-		return r, errors.New("Agent 升级 worker 不是独立服务的主进程")
 	}
 	service, err := j.waitRootLock(ctx, ".panel-service.lock")
 	if err != nil {

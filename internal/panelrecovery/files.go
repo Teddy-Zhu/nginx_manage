@@ -137,7 +137,7 @@ func openBusinessFile(name string, uid, gid int, limit int64, allowEmpty bool) (
 	}
 	// A serve-owned ancestor may be renamed after the metadata checks. Enforce
 	// no symlinks for the whole lookup in the kernel, including intermediate dirs.
-	fd, err := unix.Openat2(unix.AT_FDCWD, name, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	fd, err := secure.OpenReadNoSymlinks(unix.AT_FDCWD, name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC)
 	if err != nil {
 		return nil, nil, err
 	}

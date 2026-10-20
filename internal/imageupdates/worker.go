@@ -22,7 +22,7 @@ func (s *Service) Run(ctx context.Context) error {
 			return nil
 		}
 		if s.Agent != nil {
-			call, cancel := context.WithTimeout(ctx, 30*time.Second)
+			call, cancel := context.WithTimeout(ctx, SubmitTimeout)
 			err := s.next(call)
 			cancel()
 			if err != nil && ctx.Err() == nil {

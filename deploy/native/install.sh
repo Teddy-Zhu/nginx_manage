@@ -372,6 +372,7 @@ panel_uid=$(id -u nginxpanel)
 ensure_dir "$data" 755 root root
 for dir in app bootstrap secrets staging backups; do ensure_dir "$data/$dir" 700 nginxpanel nginxpanel; done
 ensure_dir "$data/run" 755 root root
+ensure_dir "$data/run/readiness" 700 nginxpanel nginxpanel
 ensure_dir "$data/run/agent" 2750 root nginxpanel-ipc
 if [[ $panel_mode == docker ]]; then ensure_dir "$data/run/launcher" 700 nginxpanel nginxpanel; fi
 ensure_dir "$data/agent" 700 root root
@@ -544,7 +545,7 @@ ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectProc=invisible
-ReadWritePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups $data/run/panel-writer.lock
+ReadWritePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups $data/run/readiness $data/run/panel-writer.lock
 InaccessiblePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs
 RestrictSUIDSGID=yes
 LockPersonality=yes
@@ -711,7 +712,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/bin/components $data/nginx $data/run $data/logs /etc/nginxpanel/docker /run/nginxpanel-install
+ReadWritePaths=$data/agent $data/bin/components $data/acme $data/runtime $data/nginx $data/run $data/logs /etc/nginxpanel/docker /run/nginxpanel-install
 InaccessiblePaths=$data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes

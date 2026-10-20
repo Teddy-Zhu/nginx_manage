@@ -38,6 +38,20 @@ type PanelServiceOperation struct {
 	After      *PanelServiceObservation `json:"after,omitempty"`
 }
 
+func panelServiceProtocol(s panelruntime.Snapshot) (int, error) {
+	if s.Deployment.Mode != "docker" {
+		return 0, nil
+	}
+	l, err := panelruntime.LauncherRelease(s.Deployment.DataDir)
+	if err != nil {
+		return 0, err
+	}
+	if l.Deployment != s.Deployment {
+		return 0, errors.New("面板 launcher 绑定在授权期间变化")
+	}
+	return l.Release.LauncherVersion, nil
+}
+
 func panelServiceHash(id string, in PanelServiceIntent) string {
 	raw, _ := json.Marshal(struct {
 		Protocol int                `json:"protocol"`
@@ -245,15 +259,9 @@ func ControlPanelService(ctx context.Context, in PanelServiceInput, id, epoch st
 			return out, errors.New("面板进程尚未处于可控制的稳定状态")
 		}
 		i := PanelServiceIntent{Input: in, ReleaseID: s.Release.ID, BindingSHA256: selectionValueHash(s.Deployment), Before: before}
-		if s.Deployment.Mode == "docker" {
-			l, e := panelruntime.LauncherRelease(in.DataDir)
-			if e != nil {
-				return out, e
-			}
-			if l.Deployment != s.Deployment {
-				return out, errors.New("面板 launcher 绑定在授权期间变化")
-			}
-			i.LauncherProtocol = l.Release.LauncherVersion
+		i.LauncherProtocol, err = panelServiceProtocol(s)
+		if err != nil {
+			return out, err
 		}
 		if in.Action == "start" {
 			i.StopSHA256 = stop.RequestHash

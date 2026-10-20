@@ -34,7 +34,11 @@ type HTTPSResult struct {
 }
 
 func localCertificate(d panelruntime.Deployment) (*x509.Certificate, error) {
-	for _, relative := range []string{"secrets", "secrets/node-tls"} {
+	return readCertificate(d, []string{"run/readiness"})
+}
+
+func readCertificate(d panelruntime.Deployment, directories []string) (*x509.Certificate, error) {
+	for _, relative := range directories {
 		info, err := os.Lstat(filepath.Join(d.DataDir, relative))
 		if err != nil {
 			return nil, err
@@ -44,8 +48,8 @@ func localCertificate(d panelruntime.Deployment) (*x509.Certificate, error) {
 			return nil, errors.New("管理证书目录归属无效")
 		}
 	}
-	name := filepath.Join(d.DataDir, "secrets", "node-tls", "cert.pem")
-	fd, err := unix.Openat2(unix.AT_FDCWD, name, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	name := filepath.Join(d.DataDir, directories[len(directories)-1], "cert.pem")
+	fd, err := secure.OpenReadNoSymlinks(unix.AT_FDCWD, name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NONBLOCK)
 	if err != nil {
 		return nil, err
 	}

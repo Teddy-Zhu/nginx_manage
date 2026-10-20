@@ -95,7 +95,10 @@ func (m *Manager) Open(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if out.State != "queued" && out.State != "running" {
+		// Preparation can remain unconfirmed until a local repair restores its
+		// immutable cache or staging directories. Reconcile the same receipt on
+		// restart; interrupted only uses already authenticated, retained assets.
+		if out.State != "queued" && out.State != "running" && !(out.State == "recovery_required" && out.Input.Action == "prepare") {
 			continue
 		}
 		recoverCtx, stop := context.WithTimeout(ctx, 30*time.Second)

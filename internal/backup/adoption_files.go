@@ -268,7 +268,7 @@ func openAdoptionSource(data string, intent AdoptionIntent, index int) (*os.File
 		}
 	}
 	path := filepath.Join(preparationDir(data, p.OperationID), resources[index].local)
-	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	fd, err := secure.OpenReadNoSymlinks(unix.AT_FDCWD, path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC)
 	if err != nil {
 		return nil, nil, err
 	}

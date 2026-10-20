@@ -147,7 +147,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-service-operation \
 
 ## 面板就绪观察
 
-本机 root 的 `panel-readiness` 关联原维护会话、已完成的启动操作及原恢复快照，返回当次观察证据。生产 `serve` 在持有写锁后提供 `DATA/app/readiness.sock`；此 Socket 仅接受 root 对端，返回统一的 `code/message/data/request_id/node_id`。开发模式不提供此入口。
+本机 root 的 `panel-readiness` 关联原维护会话、已完成的启动操作及原恢复快照，返回当次观察证据。生产 `serve` 在持有写锁后提供 `DATA/run/readiness/readiness.sock`，并在同目录发布管理 TLS 的公开证书；此 Socket 仅接受 root 对端，返回统一的 `code/message/data/request_id/node_id`。Agent 可访问这项 IPC，业务目录和私钥仍被其挂载命名空间隐藏。开发模式不提供此入口。
 
 ```sh
 sudo /opt/nginxpanel/current/nginxpanel panel-readiness \

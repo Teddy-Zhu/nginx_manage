@@ -64,4 +64,4 @@ func (s Status) Validate() error {
 	return nil
 }
 
-func Socket(data string) string { return filepath.Join(data, "app", "readiness.sock") }
+func Socket(data string) string { return filepath.Join(data, "run", "readiness", "readiness.sock") }

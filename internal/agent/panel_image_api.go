@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/imageupdates"
@@ -155,12 +156,26 @@ func (s *Server) queuePanelImageUpgrade(ctx context.Context, req imageupdates.Re
 	return s.readPanelImageUpgrade(ctx, req.OperationID)
 }
 
+func imageSubmissionHandler(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		deadline := time.Now().Add(imageupdates.SubmitTimeout)
+		if err := http.NewResponseController(w).SetWriteDeadline(deadline); err != nil {
+			componentReply(w, nil, fault.Unavailable("镜像提交连接无法设置响应时限"))
+			return
+		}
+		// Leave time to report a bounded preflight failure before the write deadline.
+		ctx, cancel := context.WithDeadline(r.Context(), deadline.Add(-5*time.Second))
+		defer cancel()
+		next(w, r.WithContext(ctx))
+	}
+}
+
 func (s *Server) panelImageHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/panel/images/upgrades/{id}", func(w http.ResponseWriter, r *http.Request) {
 		o, err := s.readPanelImageUpgrade(r.Context(), r.PathValue("id"))
 		componentReply(w, o, err)
 	})
-	mux.HandleFunc("POST /v1/panel/images/upgrades", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/panel/images/upgrades", imageSubmissionHandler(func(w http.ResponseWriter, r *http.Request) {
 		var req imageupdates.Request
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		d.DisallowUnknownFields()
@@ -170,7 +185,7 @@ func (s *Server) panelImageHandlers(mux *http.ServeMux) {
 		}
 		o, err := s.queuePanelImageUpgrade(r.Context(), req)
 		componentReply(w, o, err)
-	})
+	}))
 }
 func imageUpgradePath(component string) (string, error) {
 	switch component {
@@ -209,7 +224,9 @@ func (c *Client) SubmitImageUpgrade(ctx context.Context, in imageupdates.Request
 	if err != nil {
 		return out, err
 	}
-	err = c.envelopeRequest(ctx, http.MethodPost, path, in, &out)
+	client := *c.http
+	client.Timeout = imageupdates.SubmitTimeout
+	err = (&Client{http: &client}).envelopeRequest(ctx, http.MethodPost, path, in, &out)
 	if err == nil {
 		err = out.Validate(in.OperationID, in.Input)
 	}

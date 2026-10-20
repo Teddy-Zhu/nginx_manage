@@ -320,7 +320,7 @@ func disasterBudget(root, current string, i DisasterIntent, additional int64) er
 }
 
 func disasterEntries(dir string, limit int) ([]os.DirEntry, error) {
-	fd, err := unix.Openat2(unix.AT_FDCWD, dir, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	fd, err := secure.OpenReadNoSymlinks(unix.AT_FDCWD, dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC)
 	if err != nil {
 		return nil, err
 	}

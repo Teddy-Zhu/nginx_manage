@@ -186,7 +186,7 @@ func openRestorationWorkFile(data, planID, local string, expected File, intent A
 		}
 	}
 	path := filepath.Join(restorePublicationWork(data, planID), local)
-	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	fd, err := secure.OpenReadNoSymlinks(unix.AT_FDCWD, path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC)
 	if err != nil {
 		return nil, nil, err
 	}

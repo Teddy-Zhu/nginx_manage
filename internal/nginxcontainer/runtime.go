@@ -342,6 +342,13 @@ func checkPolicy(c containerInfo, b Binding, name string, revision *string) erro
 		return errors.New("Nginx 容器的权限或命名空间不符合固定策略")
 	}
 	expected := b.Mounts()
+	if revision != nil {
+		mount, err := candidateBindingMount(b, strings.TrimPrefix(name, Name+"-check-"))
+		if err != nil {
+			return err
+		}
+		expected = append(expected, mount)
+	}
 	if len(c.Mounts) != len(expected) {
 		return errors.New("Nginx 容器挂载数量不匹配")
 	}

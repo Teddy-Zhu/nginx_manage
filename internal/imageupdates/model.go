@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
@@ -20,6 +21,10 @@ var imageReference = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0
 
 const Panel = "panel-launcher"
 const Nginx = "nginx"
+
+// SubmitTimeout covers signed artifact hashing and isolated image inspection
+// before the durable root transaction can be published.
+const SubmitTimeout = 2 * time.Minute
 
 func Kind(component string) string {
 	switch component {

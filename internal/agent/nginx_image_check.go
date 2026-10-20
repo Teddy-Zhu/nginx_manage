@@ -53,7 +53,7 @@ func (w *nginxImageWorker) removeCheck(ctx context.Context) error {
 	i := p.Intent
 	c, err := w.checkContainer(ctx)
 	if os.IsNotExist(err) {
-		return nil
+		return nginxcontainer.RemoveCandidateCheckBinding(ctx, i.Target, i.Directory, w.r.OperationID)
 	}
 	if err != nil {
 		return err
@@ -85,7 +85,7 @@ func (w *nginxImageWorker) removeCheck(ctx context.Context) error {
 		}
 		return errors.Join(requestErr, err)
 	}
-	return nil
+	return nginxcontainer.RemoveCandidateCheckBinding(ctx, i.Target, i.Directory, w.r.OperationID)
 }
 func (w *nginxImageWorker) candidate(ctx context.Context) error {
 	p := w.r.NginxImage

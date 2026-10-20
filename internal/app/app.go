@@ -70,7 +70,7 @@ func Init(ctx context.Context, dataDir string, development bool) (string, error)
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return "", err
 	}
-	for _, dir := range []string{"app", "bootstrap", "secrets", "staging", "backups", "run"} {
+	for _, dir := range []string{"app", "bootstrap", "secrets", "staging", "backups", "run", "run/readiness"} {
 		if err := os.MkdirAll(filepath.Join(dataDir, dir), 0700); err != nil {
 			return "", err
 		}

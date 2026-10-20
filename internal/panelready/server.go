@@ -3,6 +3,7 @@ package panelready
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"net"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 )
 
@@ -31,6 +33,50 @@ func credentials(c *net.UnixConn) (*unix.Ucred, error) {
 }
 
 type rootListener struct{ *net.UnixListener }
+
+// Publish only the public certificate next to the root-only readiness socket.
+// The Agent's mount namespace must keep business data and private keys hidden.
+func publishCertificate(data string) error {
+	d := panelruntime.Deployment{DataDir: data, UID: os.Geteuid(), GID: os.Getegid()}
+	cert, err := readCertificate(d, []string{"secrets", "secrets/node-tls"})
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(Socket(data))
+	name := filepath.Join(dir, "cert.pem")
+	if info, err := os.Lstat(name); err == nil {
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || st.Nlink != 1 || int(st.Uid) != d.UID || int(st.Gid) != d.GID {
+			return errors.New("readiness 公开证书文件身份无效")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".certificate-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if err = pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}); err != nil {
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(f.Name(), name); err != nil {
+		return err
+	}
+	parent, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	return parent.Sync()
+}
 
 func (l *rootListener) Accept() (net.Conn, error) {
 	for {
@@ -78,6 +124,9 @@ func Listen(data string) (net.Listener, error) {
 			return nil, err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if err := publishCertificate(data); err != nil {
 		return nil, err
 	}
 	l, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: name})

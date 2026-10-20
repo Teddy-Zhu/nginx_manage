@@ -33,6 +33,10 @@ func (w *panelUpdateWorker) service(ctx context.Context, slot **Record, id, acti
 			return errors.New("更新面板进程尚未处于可控制的稳定状态")
 		}
 		in := PanelServiceIntent{Input: PanelServiceInput{DataDir: i.Input.Stage.DataDir, Action: action, MaintenanceID: i.Input.MaintenanceID}, ReleaseID: s.Release.ID, BindingSHA256: i.BindingSHA256, Before: before}
+		in.LauncherProtocol, err = panelServiceProtocol(s)
+		if err != nil {
+			return err
+		}
 		if action == "start" {
 			if stop == nil || stop.State != "succeeded" {
 				return errors.New("更新启动缺少已完成的原停机记录")

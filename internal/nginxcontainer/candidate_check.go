@@ -3,6 +3,7 @@ package nginxcontainer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -63,6 +64,15 @@ func ReadCandidateCheck(ctx context.Context, b Binding, revision, operation stri
 	if err = checkPolicy(c, b, name, &revision); err != nil {
 		return zero, err
 	}
+	mount, err := candidateBindingMount(b, operation)
+	if err != nil {
+		return zero, err
+	}
+	if err = verifyCandidateBinding(b, mount); err != nil {
+		// ENOENT is reserved for Docker-confirmed container absence. A missing
+		// approval must retain the existing container for explicit recovery.
+		return zero, fmt.Errorf("候选校验绑定无法核对：%v", err)
+	}
 	if err = dockerapi.ValidateLabels(c.Config.Labels); err != nil {
 		return zero, err
 	}
@@ -101,11 +111,16 @@ func CreateCandidateCheck(ctx context.Context, b Binding, revision, operation st
 	if err != nil {
 		return "", err
 	}
+	mount, err := publishCandidateBinding(ctx, b, operation)
+	if err != nil {
+		return "", err
+	}
 	input := runtimeInput(b, labels)
 	launch := testLaunchArgs(b.DataDir, revision)
 	input["Entrypoint"], input["Cmd"] = launch[:2], launch[2:]
 	input["StopSignal"], input["StopTimeout"] = "SIGTERM", 5
 	h := input["HostConfig"].(map[string]any)
+	h["Mounts"] = append(h["Mounts"].([]map[string]any), map[string]any{"Type": "bind", "Source": mount.Source, "Target": mount.Target, "ReadOnly": true, "BindOptions": map[string]any{"Propagation": "rprivate", "CreateMountpoint": false}})
 	h["PidsLimit"] = 128
 	h["RestartPolicy"] = map[string]any{"Name": "no", "MaximumRetryCount": 0}
 	d, err := newDocker()

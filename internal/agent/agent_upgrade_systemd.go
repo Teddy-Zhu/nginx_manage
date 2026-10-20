@@ -44,6 +44,31 @@ func agentUpgradeProperties(ctx context.Context, unit, properties string) (map[s
 	return values, nil
 }
 
+func verifySystemdWorker(ctx context.Context, unit string) error {
+	actual, err := agentUpgradeProperties(ctx, unit, "MainPID,ControlGroup")
+	if err != nil {
+		return err
+	}
+	group := actual["ControlGroup"]
+	// Instantiated services normally live in a systemd-created template slice.
+	// Bind to the registered unit's actual cgroup and main process instead of
+	// assuming that every service is a direct child of system.slice.
+	if actual["MainPID"] != strconv.Itoa(os.Getpid()) || !strings.HasPrefix(group, "/system.slice/") || filepath.Clean(group) != group || filepath.Base(group) != unit {
+		return errors.New("独立 worker 不是已登记 systemd 服务的主进程")
+	}
+	raw, err := panelProcFile("/proc/self/cgroup", 8192)
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		fields := strings.SplitN(line, ":", 3)
+		if len(fields) == 3 && fields[2] == group {
+			return nil
+		}
+	}
+	return errors.New("独立 worker 不在已登记 systemd 服务的控制组中")
+}
+
 func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []string, error) {
 	var agentHash, workerHash string
 	d, err := panelruntime.ReadDeployment(data)
@@ -74,7 +99,7 @@ func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []
 				continue
 			}
 			count++
-			actual := strings.TrimPrefix(line, "ExecStart=")
+			actual := strings.TrimSpace(strings.TrimPrefix(line, "ExecStart="))
 			if spec.template == agentUpgradeTemplate {
 				if actual != spec.command {
 					return "", "", nil, errors.New("Agent 独立升级服务入口不匹配")
