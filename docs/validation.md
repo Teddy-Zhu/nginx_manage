@@ -381,6 +381,16 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 在升级后的 Agent 上应用未确认策略 B，验证其实际双栈流量后停止 Web。Web 仍 inactive 时，独立 Agent 已恢复 A 的真实 TCP/UDP 流量和 SSH；恢复 Web 后，查询原 B 操作得到 rolled_back，运行状态指向原 A 操作/版本且 available/can_plan，双栈第三方链和规则保持。对应客户端标记为 `ACTIVE_POLICY_PRESERVED_DURING_UPGRADE_SAMPLES_44`、`UPGRADED_AGENT_RESTORED_A_WITH_WEB_STOPPED`、`ORIGINAL_RECEIPT_AND_CONFIRMED_A_RESTORED` 及 `ALL_PASS`。
 - 证据与独立磁盘保留于 `.validation/native-vm/active-firewall-upgrade-v1/` 及既有虚拟机卷。控制器完成前后证据比对，输出 `P5_ACTIVE_FIREWALL_UPGRADE_TWO_VM_ALL_PASS`；两台虚拟机正常关机，退出码均为 0。本次范围为原生 Ubuntu 24.04/amd64 的 iptables-nft，不替代其他后端、架构/发行版、Docker 面板或升级过程本身发生中断的验收。
 
+## 2026-10-21 原生 iptables-legacy 应用与恢复
+
+- 首轮在 Ubuntu 24.04/amd64 初始化时被完整后端视图检查拒绝。失败盘的独立诊断克隆确认：官方 iptables 1.8.10 的两种 nft-save 均退出 0、导出空 nft 视图，但在 stderr 精确提示对应 legacy 表存在；legacy 双栈导出及 nft JSON 均正常。现在只允许这两条按命令、动作和地址族精确匹配的提示；独立五份内核视图、退出状态、输出预算和其他诊断拒绝条件保持，未知或不兼容表提示不放行。
+- 定点回归 `TestFirewallLegacyPresenceWarning` 通过（0.006 秒），覆盖两条真实提示及错误地址族、动作/工具不符、额外/重复诊断、不兼容表和缺失换行等 14 个边界；静态 amd64 主程序构建通过。前两次验证容器分别因缓存路径权限与 tmpfs 不可执行而未能启动用例，日志保留，未计作测试通过；修正验证环境后才取得上述结果。未改前端，候选逐文件核对复用已验证前端，未重复构建或执行 UI 测试。
+- 隔离候选为 `0.2.23-dev`，程序 SHA-256 `1b9a20e50c62c6019d89f9390e10503cfadb2b4aad4d5e40d8b210ce0db0f114`、清单 SHA-256 `4dcb5655f1e86628a6302183acb40b872f4efb611b471dca35ccab074396fdb2`。候选包含本次未提交的诊断识别修复，沿用本机测试公钥，不代表正式发布或干净 CI 产物。第二轮已通过签名协调部署、Web/Agent 实际程序核对、legacy 空命名空间授权和双栈管理入口确认；首次规则应用因保护来源变化返回 409，尚未安装业务规则。
+- 第二轮夹具在采证 SSH 退出前启动业务计划，存在 SSH 保护来源变化窗口；第三轮改为先完成基线采证、关闭采证连接，再启动业务夹具，并断言计划不包含采证 SSH 来源。首轮、诊断克隆与第二轮的磁盘和证据分别保留于既有虚拟机卷及 `.validation/native-vm/iptables-legacy-ubuntu24-v1/`、`iptables-legacy-diagnostic-v1/`、`iptables-legacy-ubuntu24-v2/`；第三轮继续复用同一候选，未重复未受影响的回归或构建。
+- 第三轮使用全新原始安装基线克隆的 Ubuntu 24.04/amd64 目标和独立 Debian 12/amd64 客户端，目标内核为 `6.8.0-147-generic`。真实双栈应用并新连接确认 A、HTTPS/SSH 来源保护、TCP/UDP 允许和阻断通过。应用未确认 B 后停止 Web，Web 仍 inactive 时 A 的实际流量已恢复；重启 Web 后，原 B 回执为 rolled_back，运行状态保持原 A ID/版本且 available/can_plan。随后再次应用未确认 B 并正常整机重启，原 B 回执回滚、原 A ID/版本、双栈流量及第三方规则均核对通过。最后确认移除原 A 并停用模块，双栈业务流量恢复、SSH 可达。
+- 控制器前后比对确认 boot ID 改变，双栈第三方 legacy 链/规则、密钥、Nginx 活动指针及三项原生服务程序散列保持；未选择的 nft 视图始终为空且保持，不据此声明保护非空 nft 规则的覆盖。客户端输出 `RESTORED_A_BEFORE_WEB_START`、`WEB_STOP_RESTORED_CONFIRMED_A`、`REBOOT_RESTORED_CONFIRMED_A`、`CONFIRMED_REMOVE_AND_MODULE_DISABLED` 和 `ALL_PASS`，控制器输出 `P5_IPTABLES_LEGACY_UBUNTU24_TWO_VM_ALL_PASS`；两台虚拟机正常关机，退出码均为 0。证据保留于 `.validation/native-vm/iptables-legacy-ubuntu24-v3/` 和既有虚拟机卷。
+- 本次原生 legacy 范围限于上述 Ubuntu 24.04/amd64 组合及场景，不替代其他系统/架构、Docker、Agent SIGKILL、本机救援、硬断电或活动 legacy 策略下的升级中断验收。容器无外部网络及宿主端口映射，目标机执行真实规则修改；未修改开发宿主机环境，整体 P5 继续推进。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。

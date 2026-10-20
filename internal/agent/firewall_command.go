@@ -89,8 +89,25 @@ func firewallRead(ctx context.Context, name, action string, limit int) ([]byte, 
 	if e := cmd.Run(); e != nil {
 		return nil, e
 	}
-	if out.exceeded || diagnostic.exceeded || diagnostic.data.Len() != 0 {
+	if out.exceeded || diagnostic.exceeded || diagnostic.data.Len() != 0 && !firewallReadWarningAllowed(name, action, diagnostic.data.Bytes()) {
 		return nil, errors.New("firewall read returned a warning or exceeded its output budget")
 	}
 	return out.data.Bytes(), nil
+}
+
+func firewallReadWarningAllowed(name, action string, diagnostic []byte) bool {
+	if action != "rules" {
+		return false
+	}
+	// nft-save reports the separate legacy backend even when its own export
+	// is complete. The observer independently requires both legacy views;
+	// incompatible-table warnings and all other diagnostics still fail closed.
+	switch name {
+	case "iptables-nft-save":
+		return bytes.Equal(diagnostic, []byte("# Warning: iptables-legacy tables present, use iptables-legacy-save to see them\n"))
+	case "ip6tables-nft-save":
+		return bytes.Equal(diagnostic, []byte("# Warning: ip6tables-legacy tables present, use ip6tables-legacy-save to see them\n"))
+	default:
+		return false
+	}
 }
