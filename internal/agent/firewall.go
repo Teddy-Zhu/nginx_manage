@@ -171,6 +171,7 @@ func (f *firewallObserver) collect(ctx context.Context) firewall.Observation {
 		}()
 	}
 	wg.Wait()
+	completeAbsentXtables(ctx, out.Rulesets)
 	classifyFirewall(&out)
 	dockerFirewallCapabilities(&out, dockerHooks)
 	if !f.skipIPTablesRegistration {

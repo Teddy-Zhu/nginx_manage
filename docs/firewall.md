@@ -13,6 +13,8 @@
 
 工具仅从固定系统目录选择 root 保护的文件，保留 xtables multi-call 的原调用名；不接受 API 提供的路径、参数、命令或环境。save 读取全部现有表，不指定单表；以固定受信 false 程序阻止 save 的 modprobe 回退。nft 使用 JSON/numeric/terse 输出。超时、未知格式、输出超限或 nft-save 不兼容表提示均令整个视图不可用，不将前缀作为完整结果。
 
+同一地址族的显式 xtables 命令和 save 均未安装时，只接受独立的空后端证明：iptables-nft 要求完整 nftables 视图中没有该族的任何 `ip` 或 `ip6` 表；legacy 要求从核对为 procfs 的当前网络命名空间读取[表登记](https://github.com/torvalds/linux/blob/v6.12/net/netfilter/x_tables.c)，确认文件不存在或清单为空。现存表、残缺或损坏的工具、读取错误均保留不可用状态，不自动安装工具或加载模块。该空视图不证明 iptables 工具可执行，也不授予其执行器写入权限。
+
 单次命令期限 2 秒、整个采集上下文期限 6 秒；每次采集只允许一份在途工作，缓存 30 秒，HTTP 请求取消不会另起相同采集。Web 每节点最多 4 个在途读取。nft 原始输出最多 4 MiB、每份 xtables 原始输出最多 1 MiB、stderr 最多 8 KiB；每个结构视图最多 16384 个对象和 384 KiB JSON 元数据。firewalld 最多 128 个 zone、各 zone 最多 256 个接口/来源且总值最多 32 KiB。超限明确失败，原始输出和错误不写入业务响应或日志。
 
 枚举显式 nft-save 时，仅允许官方命令按地址族报告对应 legacy 表存在的固定 stderr 提示；legacy 视图仍独立读取，五份内核视图均须完整。其他诊断、不兼容表提示、工具失败或超限仍视为不完整，不能据此获得写入授权。
@@ -212,6 +214,8 @@ Fail2ban 宿主机动作使用独立固定目标 `inet nginxpanel_fail2ban`。�
 ## firewalld 本机 root 空 policy 登记
 
 下列命令须在停止 Agent 后，由真实宿主机 root 明确指定范围。沿用固定宿主机登记锁（跨数据目录）及独立维护准入锁，不提供 HTTP/IPC 写入入口。
+
+原生安装器通过 tmpfiles 预建 root 专用的 `/run/nginxpanel-host`，该目录不随 Agent 停启删除。root 命令与 Agent 复用同一锁目录，避免停启期间替换仍被持有的锁 inode；整机重启后由 tmpfiles 重新创建。
 
 ```sh
 nginxpanel firewalld-init --data-dir /srv/nginxpanel --firewall-scope host

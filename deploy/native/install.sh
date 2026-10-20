@@ -524,8 +524,6 @@ Restart=on-failure
 RestartSec=3
 TimeoutStartSec=180
 TimeoutStopSec=45
-RuntimeDirectory=nginxpanel-host
-RuntimeDirectoryMode=0700
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -748,7 +746,8 @@ ensure_dir /etc/tmpfiles.d 755 root root
 # Even UFW status takes its official lock. Precreate one stable inode so the
 # Agent can use the lock without granting write access to the whole /run tree.
 if [[ -e /run/ufw.lock || -L /run/ufw.lock ]]; then trusted_file /run/ufw.lock 4096; fi
-printf 'd /run/nginxpanel-install 0700 root root -\nf /run/ufw.lock 0600 root root -\n' >"$work/nginxpanel.conf"
+# Host locks must retain their directory while the Agent is stopped for root CLI operations.
+printf 'd /run/nginxpanel-host 0700 root root -\nd /run/nginxpanel-install 0700 root root -\nf /run/ufw.lock 0600 root root -\n' >"$work/nginxpanel.conf"
 write_owned "$work/nginxpanel.conf" /etc/tmpfiles.d/nginxpanel.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/nginxpanel.conf
 install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service)

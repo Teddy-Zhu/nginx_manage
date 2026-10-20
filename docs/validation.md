@@ -401,6 +401,15 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 控制器前后比对确认 boot ID 改变；双栈第三方 UFW 原生 tuple 块及相对顺序、对应内核规则、其他 UFW 配置散列、密钥、Nginx 活动指针及三项服务程序散列保持。未选择的两个 legacy 导出均为空且保持，不据此声明保护非空 legacy 规则的覆盖。客户端输出 `PRESERVED_CONFIRMED_A_PERSISTED_AFTER_BOOT`、`RESTORED_A_BEFORE_WEB_START`、`WEB_STOP_RESTORED_CONFIRMED_A`、`REBOOT_RESTORED_CONFIRMED_A`、`CONFIRMED_REMOVE_AND_MODULE_DISABLED` 和 `ALL_PASS`；控制器输出 `P5_UFW_UBUNTU24_TWO_VM_ALL_PASS`。两台虚拟机均有正常 Power down 记录、退出码为 0。
 - 三轮磁盘、源模板配置及证据分别保留于既有虚拟机卷和 `.validation/native-vm/ufw-ubuntu24-v1/`、`ufw-ubuntu24-v2/`、`ufw-ubuntu24-v3/`。额外诊断克隆因源磁盘仍被运行中的第三轮占用而未启动，日志保留于 `ufw-diagnostic-v1/`，不计作运行验收。本轮范围限于上述 UFW/nftables 组合；不替代 UFW/legacy、其他系统/架构、Docker、Agent SIGKILL、本机救援、硬断电或活动 UFW 策略下升级中断验收。未执行 UI 测试，未修改开发宿主机环境，整体 P5 继续推进。
 
+## CentOS Stream 10/amd64 firewalld 原生生命周期（2026-10-21）
+
+- 使用官方 `CentOS-Stream-GenericCloud-10-20261019.0.x86_64.qcow2` 的独立写时复制磁盘和 Debian 12 客户端，两台 QEMU/TCG 虚拟机经专用以太网通信。目标保持 SELinux Enforcing，实际管理器为 firewalld `2.4.3-4.el10`、nftables `1.1.5-6.el10`，systemd `257-34.el10`。仅在目标虚拟机安装管理器软件；Nginx 沿用预编译静态程序。第三轮从空白系统执行当前原生安装器，明确指定 `--firewall-owner firewalld --firewall-ssh openssh --start`，未修改开发宿主机的软件、服务或防火墙。安装器 SHA-256 为 `0ffa1daa33d2dbe7b1c5dd79e29dbaf4541ad5f396d8b5740377911ac63debdf`。
+- 首轮因系统未安装显式 xtables 工具而被完整视图门禁拒绝，尚未创建自有 policy。核对完整 nftables 视图及当前网络命名空间的 legacy 表登记后，新增保守的空后端证明；现存表、残缺或损坏的工具和读取异常仍拒绝。Docker 隔离环境中的缺失证明定点测试和程序构建通过；第三轮程序为本机 root 批准的 `0.2.24-dev` 原生资产，SHA-256 `dd8e4c110d3cfb1242493752291e3896cf59f40a3b294102a2a62e7817069f3e`，前端沿用已核对清单的 v23 资产，不将本轮程序声明为正式签名发布包。
+- 第二轮空 policy 的 root 初始化、人工审核 reload 和 recover 已通过，但随后 Agent 首次启动报 `233/RUNTIME_DIRECTORY`，三秒后自动重启成功。安装器现通过 tmpfiles 维护共享宿主锁目录，不随 Agent 停启删除；脚本语法检查通过。第三轮完整安装及停止 Agent 后的 root 登记、重新启动均通过，锁目录前后均为同一设备/inode、root:root、0700。登记原操作为 `9f2d3c75-3212-4c60-942c-ef10174422b2`。
+- 第三轮实际完成双栈受控 HTTPS 监听确认、A 的 TCP/UDP 允许与阻断、SSH/HTTPS 入口保护、回环伪造确认拒绝和外部新连接确认；确认后 runtime/permanent rich rules 相同。firewalld 重启后原 A 及流量保持。未确认 B 在 Web 停止且尚未启动时恢复 A；再次应用未确认 B 并整机重启后，原 B 回执回滚，原 A ID、版本和流量保持。随后原 A 版本的移除经外部连接确认，模块停用返回成功，双栈业务流量恢复，firewalld 仍 active/enabled。
+- 原客户端和控制器在最后把官方空行输出解析为 `['']`，误判为空规则检查失败，原日志没有整轮 `ALL_PASS`。保留原始输出并修正夹具解析后，对冻结的前后证据集中复核通过：runtime/permanent 无 rich rules，永久 XML 仅有固定空 policy 设置，自有内核链只有指向空子链的跳转，移除 `df2d9e7e-f200-8033-b8ac-04f69f7bc367` 的 root 回执为 succeeded/rules_removed。boot ID 改变，第三方 zone/policy/XML、密钥、Nginx 指针及三项服务程序散列保持；全启动周期 AVC 查询无匹配，两台虚拟机均正常 Power down、退出码 0。补充结果标记为 `P5_FIREWALLD_CAPTURED_FINAL_EVIDENCE_PASS`，未重写原控制器失败状态，也未重复已完成的业务场景。
+- 三轮磁盘、夹具和日志保留于虚拟机卷及 `.validation/native-vm/firewalld-centos10-v1/`、`firewalld-centos10-v2/`、`firewalld-centos10-v3/`；修正后的采集夹具和独立证据复核报告位于 `firewalld-centos10-v3-review/`。本轮不覆盖 firewalld 的其他系统/架构、Docker、Agent SIGKILL、本机救援、硬断电或活动策略下升级中断。未执行 UI 测试，其余 P5 验收继续推进。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
