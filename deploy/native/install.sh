@@ -72,7 +72,7 @@ else
   [[ $nginx_plan =~ ^[0-9a-f]{64}$ && $nginx_asset =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$ ]] || die '须显式选择仅面板、本机 Nginx 或完整的签名计划与资产 ID'
 fi
 if [[ $without_nginx == no && -z $nginx_image ]]; then native_nginx=yes; fi
-for tool in stat readlink install sha256sum cmp sync flock getent groupadd useradd runuser systemctl mktemp find cut id uname dirname mv ln rm touch chmod od; do
+for tool in stat readlink install sha256sum cmp sync flock getent groupadd useradd runuser systemctl systemd-tmpfiles mktemp find cut id uname dirname mv ln rm touch chmod od; do
   command -v "$tool" >/dev/null || die "缺少已有系统工具：$tool"
 done
 [[ -d /run/systemd/system ]] || die '仅支持实际运行 systemd 的宿主机'
@@ -509,7 +509,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases /etc/systemd/system $dns_write_paths
+ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /run/ufw.lock /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases /etc/systemd/system $dns_write_paths
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes
@@ -724,8 +724,12 @@ root_chain /etc/systemd/system
 # the Agent's RuntimeDirectory prevents an Agent restart from replacing locks
 # still held by the independent upgrade worker or the installer.
 ensure_dir /etc/tmpfiles.d 755 root root
-printf 'd /run/nginxpanel-install 0700 root root -\n' >"$work/nginxpanel.conf"
+# Even UFW status takes its official lock. Precreate one stable inode so the
+# Agent can use the lock without granting write access to the whole /run tree.
+if [[ -e /run/ufw.lock || -L /run/ufw.lock ]]; then trusted_file /run/ufw.lock 4096; fi
+printf 'd /run/nginxpanel-install 0700 root root -\nf /run/ufw.lock 0600 root root -\n' >"$work/nginxpanel.conf"
 write_owned "$work/nginxpanel.conf" /etc/tmpfiles.d/nginxpanel.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/nginxpanel.conf
 install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service)
 if [[ $panel_mode == docker ]]; then install_units+=(nginxpanel-image@.service); fi
 if [[ -z $nginx_image ]]; then install_units+=(nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service); fi

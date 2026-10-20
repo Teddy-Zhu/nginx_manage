@@ -334,6 +334,14 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - OpenSSL 独立验证两份 Ed25519 签名，修改回滚声明后验签失败；两种方向的策略不匹配、构建树内策略、版本不符及缺少策略参数均拒绝生成发行目录。测试 seed 仅位于容器 tmpfs，导出公开验证材料；未使用生产信任或发布凭据。
 - 证据位于 `.validation/release-rollback-policy/` 的 `go.log`、`publisher.log`、`proof.json`、`signed-false/` 和 `signed-true/`，输出 `P5_RELEASE_POLICY_ALL_PASS`。本轮验证签名工具的策略与真实组件打包，不代表新生成了完整面板、多架构镜像或跑通真实 GitHub CI；正式标签仍须在批准提交中提供本版说明及策略，仓库、发布凭据和其余 P5 门禁仍待完成。未修改开发宿主机配置，未创建或执行 UI 自动化测试。
 
+### 2026-10-20 Ubuntu 24.04 原生 Agent 的 UFW 状态锁（P5）
+
+- 从既有 Ubuntu 24.04/amd64 原生部署创建独立叠加磁盘，以另一台 Debian 12 虚拟机提供真实双栈客户端。首轮 iptables-nft 计划因无法排除其他管理器而拒绝；定点诊断确认宿主机 `ufw status` 成功，Agent 挂载命名空间内则因 `/run/ufw.lock` 只读失败。UFW 即使查询停用状态也会获取官方锁，不能将该失败视为管理器未运行。
+- 安装器新增 `systemd-tmpfiles` 前置检查，验证已有锁文件并在安装及启动时预建 root 专用 `0600` 文件，Agent 的严格沙箱只新增该文件的写入范围。安装器 SHA-256 为 `4833f0ce8c395b2515f1a1f4dcb67624ea288e3d21276e6d81500d0eda6382e7`，隔离容器中 `bash -n` 通过。第二轮磁盘由 root 应用从该源码提取的写路径和 tmpfiles 内容，核对原单元仅增加此锁文件；此轮未重放完整首次安装。
+- 第二轮确认官方 UFW 查询保持锁 inode；iptables-nft 本机空命名空间授权核对通过，真实 IPv4/IPv6 HTTPS 新连接确认及基线 TCP/UDP、SSH 访问通过。随后第一个业务计划返回 `409 CONFLICT`，提示计划期间工具、后端或完整规则变化；原因尚待定位。终态规则导出仅有测试第三方链，未安装业务规则，应用、确认、移除和故障恢复场景均未进入。节点密钥、活动 Nginx 指针及三个正式进程的程序散列保持一致，两台虚拟机正常关机；不得将这轮记为完整 iptables 验收通过。
+- 对第二轮磁盘单独重启后，API 确认 UFW 已安装且未运行、管理器为 `direct-candidate`；宿主机与 Agent 挂载命名空间内的官方状态命令均成功，锁的设备号、inode、root 归属、`0600` 权限及单硬链接一致，查询未替换 inode。启动标识从 `e4609476-d40c-4bc7-8c4c-362d0f9973d0` 变为 `2f1dd446-e52f-47ee-8c03-cbbd9a35fb02`，输出 `P5_UFW_SANDBOX_REBOOT_PROBE_PASS`，随后正常关机。
+- 首轮失败与定点诊断位于 `.validation/native-vm/iptables-ubuntu24/`；修正后的完整尝试、前后证据、准确源码策略、重启诊断及控制台位于 `.validation/native-vm/iptables-ubuntu24-v2/`。保留两轮磁盘及失败记录；未修改开发宿主机环境，未创建或执行 UI 自动化测试。UFW 业务规则管理和其他后端组合仍待独立验收。
+
 ## 尚待验收
 
 - 其他系统/架构及 Docker 面板组合的账户与 systemd、其他 DNS 所有者、其他防火墙后端、Fail2ban 的其余实例/动作/升级及跨节点查询场景、管理监听的其余场景，以及其他危险操作在重启/断电/中断后的恢复，仍需独立 Linux 系统验收；已完成范围限于上文列明的组合及场景。
