@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 5/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
+2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 6/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
 
 ## 隔离环境
 
@@ -645,3 +645,22 @@ Web 和 Nginx 最终均降为登记的非 root UID，分别只保留零能力和
 正式 Docker 部署重启前后取得新鲜 `host-agent` 指标：boot ID 与来宾一致，`cpu0/cpu1`、物理网卡 `enp0s2` 和 2,062,163,968 字节内存均与宿主来宾实测值一致。Web/Nginx 保持非 root 身份、只读根、NoNewPrivileges 和既定能力范围，未挂载 Docker Socket；AppArmor 保持 enforce。控制器记录完整验收通过，来宾正常关机，外层容器退出 0、无 OOM。
 
 证据：`.validation/native-vm/docker-ubuntu24-amd64-v1/`，最终 `verdict.json` SHA-256 为 `68bff9b5100a6dd4c819f5e75d893f81b4f4c43317b4f0a8d5321a3e32b5a370`。默认 Docker 部署矩阵由 4/14 推进至 5/14；其他组合继续独立验收。
+
+## Ubuntu 24.04 与 26.04/amd64 Docker 托管部署（2026-10-22）
+
+Ubuntu 26.04/amd64 首轮使用 `0.2.34-dev` 时，首次发布止于 `failed/nginx_test_failed`，活动配置未改变。保留失败磁盘的副本诊断确认：Docker exec 启动器在 Go 的进程级组身份切换中超时，执行线程已清空附加组，其他线程仍保留原组；AppArmor 拒绝发给 `docker-default//&unconfined` 的运行时线程信号。诊断中一次手工校验使用了错误的候选目录，其文件不存在结果不计为配置验收。原始失败与诊断记录均保留。
+
+`733c5a8` 将组及 UID/GID 切换限定为马上执行 Nginx 的锁定线程，显式设置实际、有效和保存的 UID/GID，并由 exec 替换进程，其他运行时线程随之结束。短暂 root 引导范围、NoNewPrivileges、专用 Nginx 用户和仅保留 NET_BIND_SERVICE 的约束保持有效；未关闭 AppArmor 或调整宿主端口阈值。Go 1.27.2 隔离 SDK 中相关包测试、格式检查及 amd64/arm64 静态编译通过，双架构镜像均实际构建；ARM 构建在独立 Cortex-A53 来宾执行、导出并正常关机。SDK 记录的 `4cdbe60` 加源代码补丁与提交 `733c5a8` 等价，见构建目录的 `committed-source.json`。
+
+使用修正版 `0.2.35-dev` 本地隔离签名包，在两套干净来宾重新完整验收。两组均一次通过镜像导入、篡改及未知密钥拒绝、正式安装、HTTP 代理、端口预检拒绝、切换后端口占用回滚、Agent 强杀回滚、恢复发布、双容器强制重建、同参数安装重放、服务重启及整机重启。预检为 `failed/listener_unavailable`，两个故障任务均为 `rolled_back/rollback_confirmed`。
+
+| 来宾 | 实际内核 | 重启前后实测内存（字节） | 最终证据 SHA-256 |
+| --- | --- | --- | --- |
+| Ubuntu 24.04/amd64 | 6.8.0-147-generic | 2,062,163,968 | `810d7e8d43c724e1bbaa5b08ff9cff475bb52ab971812b30596ce92e5a121f3f` |
+| Ubuntu 26.04/amd64 | 7.0.0-38-generic | 2,056,724,480 | `a8cf2aeac7df8183973fe8c0ecbf9eb06553b0a2f2e62977aaf2703da5b90c90` |
+
+两组均使用 Docker Engine 29.9.1、Compose v2.40.3、默认 containerd/overlayfs。重建及重启后节点、版本、修订、部署身份一致；跨重启的秘密材料、活动配置及实际 Agent/Web 程序摘要一致。新鲜的 `host-agent` 指标与当前来宾 boot ID、`cpu0/cpu1`、物理网卡 `enp0s2` 和实际内存逐项匹配。Web/Nginx 的四项 UID 均为专用非 root 身份、能力及秘密隔离检查通过，AppArmor 保持 `docker-default (enforce)`；两套来宾均正常关机，外层容器退出 0、无 OOM。
+
+实际包清单 SHA-256：`855a46a768091ff9d98602080e3bb61dee8f6ba2ca9f7cb6f683fc896a8ea40f`；amd64 程序：`7df8c4312a481afac9ddf1cd091f364e556d5f04212acfb87ce7a971752517ff`；arm64 程序：`597980448ef079a9b412392ee8981b8ad434ca13c9b71d0236d4dee13366a5ad`。实际双架构索引为面板 `sha256:06cc6ea7b5325c70aaac9b92ae622e272dfba40f27efa18910ef9b8f521c201e`、Nginx `sha256:1654af6dbf9ce6c3c29232a049fbc05f3981bf55b6cf48ab56539c574e3a5f29`。镜像继续使用固定 Nginx 1.30.6 预置模块，不进行运行时模块编译。该签名包仅用于隔离验收，不替代正式发布。
+
+证据：`.validation/native-vm/docker-thread-credentials-build-v46/`、`docker-thread-credentials-images-v47/`，以及 `.validation/native-vm/docker-ubuntu24-amd64-v2/`、`docker-ubuntu26-amd64-v2/` 的最终判定和采证包；Ubuntu 26.04 原始失败位于 `docker-ubuntu26-amd64-v1/`，诊断位于 `docker-ubuntu26-amd64-diagnostic-v3/`、`v4/`。默认 Docker 安装矩阵由 5/14 推进至 6/14；其余八组、其他功能组合和修正版 ARM 启动事务仍待独立验收，构建通过不计为这些运行路径通过。开发主机配置未修改。

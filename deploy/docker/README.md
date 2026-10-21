@@ -88,7 +88,7 @@ Nginx 镜像的短期 root 启动器仅为切换身份获得 SETUID/SETGID/SETPC
 
 launcher 仅以非 root 的容器 PID 1 运行，要求删除全部 capabilities，继承禁止提权策略，并关闭同 UID 的进程调试。每次启动或重启前核对当前程序、静态 ELF、协议及全部前端文件；不回退到镜像中另一份业务程序。serve 退出时 launcher 结束，由容器重启策略处理；停止先发送 TERM、等待最多 45 秒，再以 KILL 确认回收，旧进程未确认结束时不启动第二个业务写者。PID 1 统一回收包含孤儿在内的子进程。`started` 仅表示子进程已启动，应用健康、数据库迁移及升级成功仍须独立确认。
 
-Compose 从程序内嵌的 `panel.compose.yaml` 模板生成，固定镜像摘要、host network、数字身份及 IPC 组，绑定整个数据目录和只读配置目录，不挂载 Docker Socket、不使用 privileged，也不单独绑定会被替换的 Socket inode。镜像根只读，临时目录有容量限制。当前要求 rootful Docker、保持宿主机 UID/GID 映射的独立 PID 命名空间；rootless 或用户命名空间重映射不满足本机 root 文件与对端身份合同。SELinux/AppArmor 组合仍待集中验收；模板不自动重标整个数据根或关闭安全策略。
+Compose 从程序内嵌的 `panel.compose.yaml` 模板生成，固定镜像摘要、host network、数字身份及 IPC 组，绑定整个数据目录和只读配置目录，不挂载 Docker Socket、不使用 privileged，也不单独绑定会被替换的 Socket inode。镜像根只读，临时目录有容量限制。当前要求 rootful Docker、保持宿主机 UID/GID 映射的独立 PID 命名空间；rootless 或用户命名空间重映射不满足本机 root 文件与对端身份合同。SELinux/AppArmor 的实际验收范围见[运行矩阵](../../docs/support-matrix.md)，其他组合仍待验收；模板不自动重标整个数据根或关闭安全策略。
 
 ## 宿主机固定控制接口
 
