@@ -30,6 +30,8 @@
 
 Fail2ban 固定使用 `abi=system-python`、Linux、architecture/distribution/distribution_version=any，并声明 `python={implementation:"cpython",minimum_minor:9,maximum_minor:14}`（边界均包含，主版本固定 3）。此 ABI 不携带 runtime_files；准备和复核通过固定受信 `/usr/bin/python3` 以 `-I -S -B` 探测标准库/SQLite 和标准 GIL 模式，不固定其他机器的 Python 文件散列。安装时另固定目标机实际解释器身份，后续漂移仍拒绝运行；详细边界见 [组件发布](publishing.md#fail2ban-官方代码组件)。
 
+[Fail2ban 体积与首组轮询 CPU/RSS 实测](validation.md#fail2ban-体积与轮询资源首组实测2026-10-21)记录了冻结组件包、解包占用、两种架构的基础面板镜像大小，以及已有 Python 场景的数据。数据仅适用于记录中的资产散列、解释器和负载，不据此推断其他运行时依赖或生产负载。
+
 文件清单每项为 `path/sha256/size/mode`，mode 使用 JSON 十进制 420（0644）或 493（0755）。路径为规范相对路径，只允许字母、数字、`_ . / + -`，最多 256 字节/16 层，禁止文件/目录冲突。许可文件必须实际包含且非空。ELF 主入口检查实际架构、直接动态依赖和固定 `$ORIGIN/lib`（Nginx 为 `$ORIGIN/../lib`）搜索路径；这些静态约束不代替后续 `nginx -t`、ABI 和运行确认。Fail2ban 只准备代码，拒绝包内 ELF，所需 Python 来自目标已有的受信解释器，不捆绑运行时或执行 pip。
 
 依赖闭包必须无循环、无悬空引用，同一组件不能选出不同资产。只准备明确选择项及其依赖，不因为清单里存在可选组件就全部安装。仅 maintained 资产可准备；superseded/end-of-life 不静默作为替代。Nginx features 为发布者声明，不能冒充实际模块探测；Docker 继续使用构建时预置模块的固定镜像，不调用运行时模块安装/编译。
