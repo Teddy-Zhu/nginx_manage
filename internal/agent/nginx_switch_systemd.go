@@ -115,9 +115,17 @@ func switchService(ctx context.Context, r Record, unit string) (nginxSwitchServi
 		if e != nil {
 			return out, e
 		}
-		args := []string{"/opt/nginxpanel/current/nginxpanel", "agent", "--data-dir", data, "--allowed-uid", identity.Uid, "--nginx-binding", "--nginx-user", "nginxpanel-nginx", "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--metrics-scope", "host", "--component-scope", "host", "--maintenance-scope", "host"}
+		uid, e := strconv.Atoi(identity.Uid)
+		if e != nil {
+			return out, e
+		}
 		cmdline, e := panelProcFile(base+"/cmdline", 8192)
-		if e != nil || !bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
+		if e != nil {
+			return out, e
+		}
+		configured := strings.TrimSuffix(strings.ReplaceAll(string(cmdline), "\x00", " "), " ")
+		args, e := agentUpgradeArguments(configured, data, uid)
+		if e != nil || args[6] != "--nginx-binding" || !bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
 			return out, errors.New("Agent 主进程参数已偏离原生安装")
 		}
 	}

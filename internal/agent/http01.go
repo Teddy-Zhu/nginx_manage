@@ -49,7 +49,7 @@ type HTTP01Result struct {
 
 func (n *Nginx) http01Socket() string { return filepath.Join(n.DataDir, "run", "acme-http01.sock") }
 
-func (n *Nginx) http01Server() (*http.Server, *net.UnixListener, error) {
+func (n *Nginx) http01Server(socketSELinuxContext string) (*http.Server, *net.UnixListener, error) {
 	name := n.http01Socket()
 	if info, err := os.Lstat(name); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
@@ -69,7 +69,7 @@ func (n *Nginx) http01Server() (*http.Server, *net.UnixListener, error) {
 	} else if !os.IsNotExist(err) {
 		return nil, nil, err
 	}
-	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: name, Net: "unix"})
+	l, err := listenAgentUnix("unix", name, socketSELinuxContext)
 	if err != nil {
 		return nil, nil, err
 	}

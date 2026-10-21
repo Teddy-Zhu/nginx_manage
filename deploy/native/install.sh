@@ -104,11 +104,16 @@ port=${BASH_REMATCH[2]}
 ((10#$port >= 1024 && 10#$port <= 65535)) || die '管理端口须为 1024–65535'
 [[ $data =~ ^/(srv|var/lib)/[a-zA-Z0-9_-][a-zA-Z0-9_./-]*$ ]] || die '数据目录须位于 /srv 或 /var/lib，且不含空格及控制符'
 selinux_profile=disabled
+agent_socket_flag=
 if [[ -e /sys/fs/selinux/enforce ]]; then
   for tool in semodule restorecon matchpathcon; do
     command -v "$tool" >/dev/null || die "SELinux 部署缺少已有系统工具：$tool（policycoreutils）"
   done
   selinux_profile=$panel_mode
+  if [[ $selinux_profile == docker ]]; then
+    agent_socket_type=nginxpanel_agent_socket_t
+    agent_socket_flag=" --socket-selinux-context system_u:system_r:$agent_socket_type:s0"
+  fi
 fi
 
 canonical() {
@@ -335,6 +340,16 @@ if [[ $selinux_profile != disabled ]]; then
 EOF
   if [[ $selinux_profile == native ]]; then
     printf '(filecon "%s/logs(/.*)?" any (system_u object_r var_log_t ((s0)(s0))))\n(filecon "%s/run(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))\n' "$data_pattern" "$data_pattern" >>"$work/nginxpanel_files.cil"
+  else
+    # File labels do not authorize a container to connect to a host process.
+    # Label only Agent listeners; the Agent keeps its existing process domain.
+    cat >>"$work/nginxpanel_files.cil" <<EOF
+(type $agent_socket_type)
+(typeattributeset domain ($agent_socket_type))
+(roletype system_r $agent_socket_type)
+(allow unconfined_service_t $agent_socket_type (unix_stream_socket (create ioctl read write getattr setattr lock append bind connect listen accept getopt setopt shutdown connectto)))
+(allow container_t $agent_socket_type (unix_stream_socket (connectto)))
+EOF
   fi
   for unit in "${reserved_units[@]}"; do
     # CentOS policy aliases /etc/systemd/system to /usr/lib/systemd/system.
@@ -523,7 +538,7 @@ User=root
 AmbientCapabilities=CAP_SETUID
 Group=nginxpanel-ipc
 UMask=0027
-ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host $dns_agent_flags $firewall_agent_flags
+ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host$agent_socket_flag $dns_agent_flags $firewall_agent_flags
 Restart=on-failure
 RestartSec=3
 TimeoutStartSec=180

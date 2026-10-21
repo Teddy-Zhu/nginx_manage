@@ -33,7 +33,7 @@ func (m *remoteListener) openBroker() error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	l, err := net.ListenUnix("unixpacket", &net.UnixAddr{Name: m.socket, Net: "unixpacket"})
+	l, err := listenAgentUnix("unixpacket", m.socket, m.socketSELinuxContext)
 	if err != nil {
 		return err
 	}

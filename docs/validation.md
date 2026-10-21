@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 6/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
+2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 8/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
 
 ## 隔离环境
 
@@ -664,3 +664,26 @@ Ubuntu 26.04/amd64 首轮使用 `0.2.34-dev` 时，首次发布止于 `failed/ng
 实际包清单 SHA-256：`855a46a768091ff9d98602080e3bb61dee8f6ba2ca9f7cb6f683fc896a8ea40f`；amd64 程序：`7df8c4312a481afac9ddf1cd091f364e556d5f04212acfb87ce7a971752517ff`；arm64 程序：`597980448ef079a9b412392ee8981b8ad434ca13c9b71d0236d4dee13366a5ad`。实际双架构索引为面板 `sha256:06cc6ea7b5325c70aaac9b92ae622e272dfba40f27efa18910ef9b8f521c201e`、Nginx `sha256:1654af6dbf9ce6c3c29232a049fbc05f3981bf55b6cf48ab56539c574e3a5f29`。镜像继续使用固定 Nginx 1.30.6 预置模块，不进行运行时模块编译。该签名包仅用于隔离验收，不替代正式发布。
 
 证据：`.validation/native-vm/docker-thread-credentials-build-v46/`、`docker-thread-credentials-images-v47/`，以及 `.validation/native-vm/docker-ubuntu24-amd64-v2/`、`docker-ubuntu26-amd64-v2/` 的最终判定和采证包；Ubuntu 26.04 原始失败位于 `docker-ubuntu26-amd64-v1/`，诊断位于 `docker-ubuntu26-amd64-diagnostic-v3/`、`v4/`。默认 Docker 安装矩阵由 5/14 推进至 6/14；其余八组、其他功能组合和修正版 ARM 启动事务仍待独立验收，构建通过不计为这些运行路径通过。开发主机配置未修改。
+
+
+## CentOS Stream 9/10/amd64 Docker 托管部署（2026-10-22）
+
+使用实际双架构镜像组成的本地签名 `0.2.37-dev` 夹具，在两套干净系统中完成全新安装、真实流量、两类运行回滚、容器重建、安装重放、服务重启及整机重启。两套系统均保持 SELinux Enforcing，Docker 29.9.1 通过 `--selinux-enabled` 运行，Compose 为 2.40.3。内核分别为 `5.14.0-758.el9.x86_64`、`6.12.0-277.el10.x86_64`。验证在普通隔离 Docker 容器内的独立内核 QEMU/TCG 虚拟机中执行，未修改开发主机配置；每台虚拟机配置 2 vCPU、3 GiB 内存，不据此声明最低 2 GiB 环境通过。
+
+首轮 `.35` 安装后的配置写入因 `MAINTENANCE_ACTIVE` 被拒绝。原始 audit 证明：共享文件标签及 DAC 正确，但容器 `container_t` 连接宿主 `unconfined_service_t` 的主控制 Unix socket 被拒绝。`.36` 修正主通道后，业务检查通过；采证夹具的 SO_PEERSEC 缓冲区及 MLS 断言修正后，原始 audit 又定位到管理入口 `agent.sock.remote` 的同类拒绝。最终实现将主控制、管理入口 broker、HTTP-01 应答三条面向容器的通道统一接入固定 socket 标签工厂，并用 `.37` 在干净系统完整复验。原失败日志、审计证据及磁盘均保留。
+
+安装器在 Docker/SELinux 配置中登记 `nginxpanel_agent_socket_t`，授予 `container_t` 对该类型的 `connectto` 权限，未放开对整个宿主服务域的连接权限。Agent 进程仍为 `system_u:system_r:unconfined_service_t:s0`；监听器在锁定的 OS 线程上创建并恢复原 socket 创建上下文，恢复失败则关闭监听器并终止该线程。固定上下文参数已接入安装单元、Agent 升级参数校验及原生 Nginx 切换的进程身份核验。未调整 SELinux 防护状态、系统布尔值、对端 UID 或 IPC 组限制。
+
+两套系统均通过以下检查：
+
+- 篡改 manifest、未知签名者被拒绝；Web/Nginx 使用登记的专用身份、只读根和禁止提权，Web 无 capabilities，Nginx 仅保留 `NET_BIND_SERVICE`，未挂载 Docker socket。
+- 发布真实站点并代理流量；端口占用预检为 `failed/listener_unavailable`，切换后抢占端口及 SIGKILL Agent 均恢复为 `rolled_back/rollback_confirmed`；清理候选后再次发布成功。
+- 强制重建两容器、同参重放安装及重启服务后，Node ID、配置版本、revision 和 deployment 保持一致。整机重启后 boot ID 改变，密钥散列、活动配置及实际运行程序散列保持不变。
+- 正式 Host Agent 监控在重启前后均为当前 boot 的非过期样本，匹配内核的 `cpu0/cpu1`、MemTotal 和物理网卡；Stream 9 为 2773880832 字节及 `eth0`，Stream 10 为 2772242432 字节及 `enp0s2`。
+- 容器进程实际处于 `container_t` 和私有 MCS 类别，共享数据及三条 socket 的文件标签为 `container_file_t:s0`；三条连接的 SO_PEERSEC 均为固定服务 user/role/type 加连接客户端的 MLS 范围。客户端范围复制遵循 [Linux SELinux Unix 连接实现](https://github.com/torvalds/linux/blob/v6.12/security/selinux/hooks.c#L4729)，未把 SSH 客户端范围错误地限定成 `s0`。所有存活 Agent 线程的 `sockcreate` 均已清空，重启前后相关原始 AVC 均为 0、audit lost 为 0。检查读取 `/var/log/audit/audit.log*`，不以 `ausearch -ts boot` 的空结果代替原始审计。
+
+API 认证/配置迁移集成测试、固定 Agent 升级入口用例、安装器语法检查及 linux/amd64、linux/arm64 编译通过；实际 ARM 镜像由 Cortex-A53 虚拟机内的 Docker 构建及导出，构建机和两台验收机均正常关机、QEMU 及外层容器退出码均为 0，无 OOM。未执行 UI 测试；HTTP-01 的本次范围是本地通道和标签，不包含外部 ACME 签发。
+
+程序 SHA-256：amd64 `de84cf5a7883ca683c26b9519192208e64074b0ef27b7c1e82b461e99639a590`，arm64 `7f4af341215aae2849d08b3db6ef595341a87c495b5de39bd8a173b6e6a0be3c`；manifest `5c204d5a83f1d8701daf568079269bb84988ed8bea60db1136215e140237c0f4`。面板 OCI index 为 `sha256:7714ee71f9c3a6a8053575dd4adcb6b2147b260232071e1ff128ca13bfd00b0c`，Nginx 为 `sha256:88df95018d3458870deed83bfa339d3d24359f170388aa05faf9b347d9ae84c5`。本地证据位于 `.validation/native-vm/docker-centos{9,10}-amd64-v5/`，最终 verdict SHA-256 分别为 `6a8d6e3b529ffede6c8408d5dea21616001ffd17a20d344b1c4a72c7ba300e66`、`cfbd0ef959a84e796f31567d66c3953740a6636d838c0b6ac3ba4d237751ecfa`；镜像和夹具位于 `docker-selinux-channels-images-v54/`。这些均为本地验证产物，未推送或正式发布。
+
+默认 Docker 矩阵累计 8/14，amd64 七组已补齐；其余六组 arm64、其他功能组合及外部集成仍待验收。

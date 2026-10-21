@@ -18,6 +18,8 @@ func TestAgentUpgradeConfiguredEntry(t *testing.T) {
 			selections = append(selections, " --firewall-owner "+owner+" --firewall-scope host --firewall-ssh openssh")
 		}
 		selections = append(selections, " --dns-scope host --dns-owner netplan --firewall-scope host --firewall-owner iptables-nft --firewall-ssh none")
+		selections = append(selections, " --socket-selinux-context "+agentSocketSELinuxContext,
+			" --socket-selinux-context "+agentSocketSELinuxContext+" --dns-scope host --dns-owner netplan --firewall-scope host --firewall-owner iptables-nft --firewall-ssh none")
 		for _, selection := range selections {
 			t.Run(mode+selection, func(t *testing.T) {
 				actual := base + selection
@@ -52,6 +54,8 @@ func TestAgentUpgradeConfiguredEntry(t *testing.T) {
 		"quoted-value":     entry + " --firewall-owner \"ufw\"",
 		"systemd-variable": entry + " --dns-owner ${OWNER}",
 		"double-space":     entry + "  --firewall-owner ufw",
+		"socket-context":   entry + " --socket-selinux-context system_u:system_r:unconfined_t:s0",
+		"duplicate-socket": entry + " --socket-selinux-context " + agentSocketSELinuxContext + " --socket-selinux-context " + agentSocketSELinuxContext,
 	} {
 		t.Run(name, func(t *testing.T) {
 			args, err := agentUpgradeArguments(actual, "/srv/nginxpanel", 998)

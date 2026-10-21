@@ -44,30 +44,31 @@ type CheckResult struct {
 	Diagnostics   []nginxconfig.Diagnostic `json:"diagnostics"`
 }
 type Server struct {
-	Socket           string
-	AllowedUID       uint32
-	Policy           nginxconfig.Policy
-	Journal          *Journal
-	Nginx            *Nginx
-	Dev              bool
-	MaintenanceScope string
-	MetricsScope     string
-	DataDir          string
-	DNSOwner         string
-	DNSScope         string
-	FirewallScope    string
-	FirewallOwner    string
-	FirewallSSH      string
-	ComponentScope   string
-	ReleaseTrust     string
-	ReleaseToken     string
-	Installation     *nginxruntime.Installation
-	historyReads     atomic.Int32
-	eventLogs        *eventLogStore
-	logReader        *logs.Reader
-	fail2banJails    *fail2banJailsExecutor
-	fail2banNginx    *fail2banNginxExecutor
-	fail2banHostSync *fail2banHostSyncExecutor
+	Socket               string
+	SocketSELinuxContext string
+	AllowedUID           uint32
+	Policy               nginxconfig.Policy
+	Journal              *Journal
+	Nginx                *Nginx
+	Dev                  bool
+	MaintenanceScope     string
+	MetricsScope         string
+	DataDir              string
+	DNSOwner             string
+	DNSScope             string
+	FirewallScope        string
+	FirewallOwner        string
+	FirewallSSH          string
+	ComponentScope       string
+	ReleaseTrust         string
+	ReleaseToken         string
+	Installation         *nginxruntime.Installation
+	historyReads         atomic.Int32
+	eventLogs            *eventLogStore
+	logReader            *logs.Reader
+	fail2banJails        *fail2banJailsExecutor
+	fail2banNginx        *fail2banNginxExecutor
+	fail2banHostSync     *fail2banHostSyncExecutor
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -78,6 +79,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	if !s.Dev && os.Geteuid() != 0 {
 		return errors.New("production agent must run as root")
+	}
+	if s.SocketSELinuxContext != "" && s.Dev {
+		return errors.New("SELinux socket labeling requires a production root Agent")
 	}
 	if !s.Dev {
 		if err := secure.RootDirectory(filepath.Dir(s.Socket), 0750); err != nil {
@@ -108,7 +112,7 @@ func (s *Server) Run(ctx context.Context) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: s.Socket, Net: "unix"})
+	l, err := listenAgentUnix("unix", s.Socket, s.SocketSELinuxContext)
 	if err != nil {
 		return err
 	}
@@ -160,7 +164,7 @@ func (s *Server) Run(ctx context.Context) error {
 	defer stopJails()
 	if s.Nginx != nil {
 		var challengeListener *net.UnixListener
-		challengeServer, challengeListener, err = s.Nginx.http01Server()
+		challengeServer, challengeListener, err = s.Nginx.http01Server(s.SocketSELinuxContext)
 		if err != nil {
 			return err
 		}
@@ -199,7 +203,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := dns.Open(); err != nil {
 		return err
 	}
-	remote := &remoteListener{dir: filepath.Join(s.DataDir, "agent", "management-listener"), socket: s.Socket + ".remote", uid: s.AllowedUID, available: !s.Dev && s.MaintenanceScope == "host", journal: s.Journal, dns: dns}
+	remote := &remoteListener{dir: filepath.Join(s.DataDir, "agent", "management-listener"), socket: s.Socket + ".remote", socketSELinuxContext: s.SocketSELinuxContext, uid: s.AllowedUID, available: !s.Dev && s.MaintenanceScope == "host", journal: s.Journal, dns: dns}
 	defer remote.close()
 	if err := remote.open(); err != nil {
 		return err

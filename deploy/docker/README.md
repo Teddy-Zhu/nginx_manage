@@ -90,6 +90,8 @@ launcher 仅以非 root 的容器 PID 1 运行，要求删除全部 capabilities
 
 Compose 从程序内嵌的 `panel.compose.yaml` 模板生成，固定镜像摘要、host network、数字身份及 IPC 组，绑定整个数据目录和只读配置目录，不挂载 Docker Socket、不使用 privileged，也不单独绑定会被替换的 Socket inode。镜像根只读，临时目录有容量限制。当前要求 rootful Docker、保持宿主机 UID/GID 映射的独立 PID 命名空间；rootless 或用户命名空间重映射不满足本机 root 文件与对端身份合同。SELinux/AppArmor 的实际验收范围见[运行矩阵](../../docs/support-matrix.md)，其他组合仍待验收；模板不自动重标整个数据根或关闭安全策略。
 
+SELinux 启用时，统一安装器登记共享数据的文件标签及 Agent 监听器的专用 socket 安全类型，使容器能够连接该监听器；策略来源、权限范围与重放检查见[SELinux 部署说明](../native/README.md#selinux-文件标签)。
+
 ## 宿主机固定控制接口
 
 launcher 只在 `DATA/run/launcher/launcher.sock` 提供状态查询、原操作查询及固定的停止、启动和重启控制；控制协议为 2，更新流程通过独立 root 进程记录和维护授权调用。只接受 UID 0 的 Unix 对端；宿主机客户端同时核对对端 UID、容器 PID 1 和执行文件散列。Web 无权调用控制接口；客户端不能选择可执行文件、前端目录、命令或进程号。

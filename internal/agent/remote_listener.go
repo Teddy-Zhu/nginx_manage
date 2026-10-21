@@ -42,25 +42,26 @@ type listenerSocket struct {
 	source   string
 }
 type remoteListener struct {
-	mu              sync.Mutex
-	dir, socket     string
-	uid             uint32
-	available       bool
-	journal         *Journal
-	dns             *HostDNS
-	firewallPending func() bool
-	firewallCheck   func(context.Context, remotelisten.Config) error
-	state           listenerCheckpoint
-	deadline        time.Time
-	problem         string
-	fileLock        *os.File
-	listener        *net.TCPListener
-	listenAddress   string
-	broker          *net.UnixListener
-	web             *net.UnixConn
-	connections     map[string]listenerSocket
-	wg              sync.WaitGroup
-	closed          bool
+	mu                   sync.Mutex
+	dir, socket          string
+	socketSELinuxContext string
+	uid                  uint32
+	available            bool
+	journal              *Journal
+	dns                  *HostDNS
+	firewallPending      func() bool
+	firewallCheck        func(context.Context, remotelisten.Config) error
+	state                listenerCheckpoint
+	deadline             time.Time
+	problem              string
+	fileLock             *os.File
+	listener             *net.TCPListener
+	listenAddress        string
+	broker               *net.UnixListener
+	web                  *net.UnixConn
+	connections          map[string]listenerSocket
+	wg                   sync.WaitGroup
+	closed               bool
 }
 
 func listenerWrite(path string, value any) error { return rootJSONWrite(path, value, 64<<10) }

@@ -179,6 +179,7 @@ func run() error {
 	metricsScope := flags.String("metrics-scope", "unconfirmed", "host metrics scope: host or unconfirmed")
 	componentScope := flags.String("component-scope", "unconfirmed", "native component scope: host or unconfirmed")
 	maintenanceScope := flags.String("maintenance-scope", "unconfirmed", "host configuration maintenance scope: host or unconfirmed")
+	socketSELinuxContext := flags.String("socket-selinux-context", "", "SELinux security context for the Agent Unix socket")
 	dnsOwner := flags.String("dns-owner", "unconfirmed", "locally confirmed DNS owner: regular-file, networkmanager, networkd, netplan or unconfirmed")
 	firewallScope := flags.String("firewall-scope", "unconfirmed", "firewall namespace: host or unconfirmed")
 	firewallBackend := flags.String("firewall-backend", "", "explicit initial iptables grant: iptables-nft or iptables-legacy")
@@ -1446,7 +1447,7 @@ func run() error {
 		if *nginxBinary != "" || containerRuntime != nil {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Container: containerRuntime, Journal: journal}
 		}
-		return (&agent.Server{Socket: path, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
+		return (&agent.Server{Socket: path, SocketSELinuxContext: *socketSELinuxContext, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

@@ -58,9 +58,11 @@ sudo bash deploy/native/install.sh \
 
 ## SELinux 文件标签
 
-安装登记当前为 v14。SELinux 已启用（含 permissive）时，安装器要求目标已有 `semodule`、`restorecon`、`matchpathcon`，通过 `policycoreutils` 注册优先级 400 的 `nginxpanel_files` CIL 模块；只声明本应用固定目录与九个保留 unit 的文件上下文，不添加 allow 规则或调整防护状态、系统布尔值。unit 同时登记 `/etc` 及策略等价的 `/usr/lib` 路径，以覆盖 CentOS 的标签查询。规则来源及散列与安装意图一同持久保存，重放会从策略存储提取模块并核对，拒绝同名外部模块、内容变化、停用/优先级覆盖及关键路径的本地标签冲突。
+安装登记当前为 v14。SELinux 已启用（含 permissive）时，安装器要求目标已有 `semodule`、`restorecon`、`matchpathcon`，通过 `policycoreutils` 注册优先级 400 的 `nginxpanel_files` CIL 模块，声明本应用固定目录与九个保留 unit 的文件上下文。unit 同时登记 `/etc` 及策略等价的 `/usr/lib` 路径，以覆盖 CentOS 的标签查询。规则来源及散列与安装意图一同持久保存，重放会从策略存储提取模块并核对，拒绝同名外部模块、内容变化、停用/优先级覆盖及关键路径的本地标签冲突。
 
 原生数据使用 `var_lib_t`，运行锁和日志分别使用 `var_run_t`、`var_log_t`，root 管理的程序副本使用 `usr_t`；后续版本从对应父目录继承可执行的文件类型。Docker 模式的数据目录使用共享的 `container_file_t:s0`，需要目标 Docker 配套的容器 SELinux 策略；不使用容器私有 MCS 标签重标整个共享目录。初始化节点前及发布 unit 后使用 `restorecon` 应用规则，限定在本应用路径并且不跨挂载点。独立服务沿用系统既有进程域，本模块不宣称新增专用进程沙箱。规则写法依据 [SELinux CIL 文件标签合同](https://github.com/SELinuxProject/selinux/blob/main/secilc/docs/cil_file_labeling_statements.md#filecon)。
+
+Docker 配置还声明专用的 `nginxpanel_agent_socket_t` 安全类型，授予 `container_t` 对该类型的 `connectto` 权限，并授权现有 Agent 服务域创建及使用它。主控制通道、管理入口 broker 与 HTTP-01 应答通道使用同一标签工厂；Agent 在锁定的 OS 线程上设置 socket 创建上下文，监听器建立后立即恢复原上下文，恢复失败则关闭监听器并退出该线程。socket 文件仍使用共享数据目录的文件标签，Agent 进程域、对端 UID 检查及 IPC 组权限继续生效。安装器不调整 SELinux 防护状态或系统布尔值。
 
 ## 服务与启动
 
