@@ -492,6 +492,14 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 原节点 `3da37803-b4a0-402f-9d17-dfaeba675fd8`、配置版本 3、修订 `71bd35a2-ac2c-4cd5-8975-a397cb29d912`、部署 `d34dad5d-0a83-439d-b2d9-d25bf5236a3c` 及 HTTPS 会话保持。前后 boot ID 不同，主密钥/TLS 文件、活动指针及实际程序散列一致；Web/Agent 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
 - AppArmor 启用、服务 active、106 个配置已加载，三个服务进程实际均为 `unconfined`。控制器记录 `P5_DEBIAN13_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`，正常关机、QEMU 退出 0，无强制终止。证据保留于 `.validation/native-vm/debian13-arm64-native-v1/`；Docker 尚未验收，没有改产品代码、重复无关验证或修改开发宿主机环境。
 
+### Ubuntu 26.04/arm64 原生部署（2026-10-21）
+
+- [Ubuntu 官方云镜像](https://cloud-images.ubuntu.com/releases/resolute/release/ubuntu-26.04-server-cloudimg-arm64.img)经官方 SHA256SUMS 校验，940,373,504 字节，SHA-256 `8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24`。Docker 内独立 QEMU/TCG、Cortex-A53、2 核 2 GiB 来宾实际为 Ubuntu 26.04.1 LTS、`7.0.0-38-generic`，两个虚拟 CPU 均不暴露 LSE atomics。复用已批准的 ARM64 `0.2.24-dev` 程序、前端及静态 Nginx 1.30.6，不计作正式发行包。
+- 程序散列 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 散列 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。首次真实安装、Web 非 root/零有效能力/NoNewPrivileges、worker 身份与零能力、目录权限及 Agent/Nginx 对主密钥的挂载隔离检查通过；验收脚本先等待实际 Nginx 可执行文件和子进程，再执行原有身份与权限断言。
+- 严格 HTTPS API、实际代理、端口占用失败回滚、切换后 Agent SIGKILL 回滚、恢复后再次应用、安装重放、服务重启和整机重启恢复通过。节点 `f48a61b0-9083-4944-8150-91319bb6ed03`，配置版本 `3`，修订 `3161d893-dbca-4b29-acdc-54358a796dc1`，部署 `020ff41c-57e8-4fd6-a784-127e6232ceae`。
+- boot ID 从 `d1b2e697-7c95-4ec2-9613-6b44d6d3a24d` 变为 `c7eee2a2-0669-4485-aedd-17e3f7095328`；节点、配置、主密钥、节点 TLS、active 指针及三个实际进程的可执行文件散列保持。AppArmor 在两个启动阶段均启用并加载 179 个 profile；Web、Agent、Nginx 实际标签均为 `unconfined`，不据此宣称应用受到 profile 约束。
+- 离线来宾首次启动的 networkd wait-online 超时后正常完成 cloud-init；应用验收在 SSH 和启动日志检查通过后开始。控制器 `nginxpanel-p5-ubuntu26-arm64-native-1` 退出 `0`，记录 `P5_UBUNTU26_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`、QEMU 退出 `0` 和正常关机。证据保留于 `.validation/native-vm/ubuntu26-arm64-native-v1/`；Docker 部署仍待验收，开发宿主机环境未修改。
+
 ### Docker 默认策略路由识别（2026-10-21）
 
 - Ubuntu 22.04/arm64、`5.15.0-198-generic` 独立内核来宾中，Docker 发布端口的 IPv4/IPv6、TCP/UDP 八条基础流量通过；绑定实际容器及网络后，计划被默认策略路由识别拒绝，尚未执行策略应用。失败现场保留于 `.validation/native-vm/docker-forward-iptables-nft-v3/`。该环境使用直接 iptables-nft；此前已确认停用且无用户规则的 UFW 仅在来宾中卸载，并核对完整双栈内核规则保持，不据此放宽管理器排除保护。
