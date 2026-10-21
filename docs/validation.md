@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 4/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
+2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 5/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
 
 ## 隔离环境
 
@@ -635,3 +635,13 @@ Web 和 Nginx 最终均降为登记的非 root UID，分别只保留零能力和
 首次安装和最终采证分轮进行。旧夹具按当前端口预检、资源字段投影、幂等及认证契约调整；历史失败、HTTP 409/429 及续办均保留。重启控制器曾将 shell 的 trap 定义误作失败，修正为匹配实际失败事件后，仅补验开机阶段，未重跑已通过的发布、回滚、重建及安装重放。最终两组均正常关机、外层容器退出 0、无 OOM，`verdict.json` 核对终态、隔离属性、指标和证据摘要。
 
 证据：Debian 12 的 `.validation/native-vm/docker-debian12-amd64-v1/` 至 `v4/`、最终 `.validation/native-vm/docker-debian12-amd64-finalize-v5/`；Ubuntu 22.04 的 `.validation/native-vm/docker-ubuntu22-amd64-v1/`、`v2/`、最终 `.validation/native-vm/docker-ubuntu22-amd64-finalize-v3/`。默认 Docker 部署矩阵由 2/14 推进至 4/14，其他十组仍待验收。
+
+## Ubuntu 24.04/amd64 Docker 托管部署（2026-10-22）
+
+使用前述实际双架构签名包 `0.2.34-dev`，在普通 Docker 内的干净 QEMU 来宾完成默认托管 Web/Nginx 安装。来宾内核为 `6.8.0-147-generic`，Docker Engine 29.9.1、Compose v2.40.3，使用默认 containerd/overlayfs；开发主机配置未修改。
+
+完整流程一次通过：实际镜像导入、篡改清单及未知密钥拒绝、首次安装、HTTP 代理、候选端口预检拒绝、切换后端口占用回滚、Agent 强杀回滚、恢复发布、Web/Nginx 强制重建、同参数安装重放、服务重启和整机重启。预检任务为 `failed/listener_unavailable`，两种切换后故障均为 `rolled_back/rollback_confirmed`。重建和重启后节点、版本、修订及部署身份不变，秘密材料、活动配置和实际 Agent/Web 程序摘要与重启前一致。
+
+正式 Docker 部署重启前后取得新鲜 `host-agent` 指标：boot ID 与来宾一致，`cpu0/cpu1`、物理网卡 `enp0s2` 和 2,062,163,968 字节内存均与宿主来宾实测值一致。Web/Nginx 保持非 root 身份、只读根、NoNewPrivileges 和既定能力范围，未挂载 Docker Socket；AppArmor 保持 enforce。控制器记录完整验收通过，来宾正常关机，外层容器退出 0、无 OOM。
+
+证据：`.validation/native-vm/docker-ubuntu24-amd64-v1/`，最终 `verdict.json` SHA-256 为 `68bff9b5100a6dd4c819f5e75d893f81b4f4c43317b4f0a8d5321a3e32b5a370`。默认 Docker 部署矩阵由 4/14 推进至 5/14；其他组合继续独立验收。
