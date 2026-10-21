@@ -85,6 +85,43 @@ func resolveDockerPolicyBindings(ctx context.Context, reader *dockerRouteReader,
 	return bindings, ctx.Err()
 }
 
+// Fresh path proofs must pass the compiler's bounds. Their snapshot hashes and
+// interface indexes are observations, not persistent rule identity: a reboot
+// can change them while the same selected endpoint and interfaces remain valid.
+// Recompile the frozen evidence separately to preserve its original generation.
+func verifyDockerRevalidatedProgram(policy firewall.Policy, record *dockerIPTablesPolicyRecord, bindings []firewall.DockerResolvedBinding) error {
+	invalid := errors.New("Docker 当前映射、接口或原完整代际不再匹配")
+	if record == nil || record.Program == nil || len(bindings) != len(record.Bindings) {
+		return invalid
+	}
+	if _, err := firewall.CompileDockerIPTablesRuntime(policy, record.Targets, bindings, record.Registration.Owner, record.Program.PlanID); err != nil {
+		return invalid
+	}
+	originals := make(map[firewall.DockerRuleBinding]firewall.DockerResolvedBinding, len(record.Bindings))
+	for _, original := range record.Bindings {
+		if _, duplicate := originals[original.Binding]; duplicate {
+			return invalid
+		}
+		originals[original.Binding] = original
+	}
+	for _, binding := range bindings {
+		original, exists := originals[binding.Binding]
+		if !exists {
+			return invalid
+		}
+		binding.Path = original.Path
+		if binding != original {
+			return invalid
+		}
+		delete(originals, binding.Binding)
+	}
+	program, err := firewall.CompileDockerIPTablesRuntime(policy, record.Targets, record.Bindings, record.Registration.Owner, record.Program.PlanID)
+	if err != nil || !sameIPTablesValue(program, record.Program) {
+		return invalid
+	}
+	return nil
+}
+
 // A removal may inspect owned objects while Docker is offline. Installing or
 // confirming a generation additionally requires these fresh environment proofs.
 func verifyDockerPolicyRuntime(ctx context.Context, dataDir string, policy firewall.Policy, record *dockerIPTablesPolicyRecord, current iptablesRegistrationSnapshot, tools *iptablesToolBinding) error {
@@ -140,9 +177,8 @@ func verifyDockerPolicyRuntime(ctx context.Context, dataDir string, policy firew
 	if err != nil {
 		return err
 	}
-	program, err := firewall.CompileDockerIPTablesRuntime(policy, record.Targets, bindings, record.Registration.Owner, record.Program.PlanID)
-	if err != nil || !sameIPTablesValue(program, record.Program) {
-		return errors.New("Docker 当前映射、接口、DNAT 或内核路由不再匹配原完整代际")
+	if err = verifyDockerRevalidatedProgram(policy, record, bindings); err != nil {
+		return err
 	}
 	afterRuntime, _ := readDockerFirewallState(ctx)
 	if !afterRuntime.Available || afterRuntime.EngineHash != runtime.EngineHash || afterRuntime.SnapshotHash != runtime.SnapshotHash {
