@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-20。当前完成软件构建、接口迁移、双节点 HTTPS 迁移与授权、amd64 预置 Nginx 镜像运行与原生静态构建，以及 Debian 12/amd64 原生安装、Nginx 应用、完整备份/克隆恢复、受控管理监听、direct nftables 指定中断恢复及普通文件、Debian 13 networkd/resolved、NetworkManager/resolved 及两种 netplan renderer 静态 DNS 的双栈解析与独立恢复验证，以及 CentOS Stream 10/amd64 Enforcing 和 Debian 13/amd64 的 v14 原生安装、重放与重启持久化，以及 CentOS 受管 Nginx 的 HTTP 应用、回滚和重启恢复验证，P5 尚未完成。以下结果仅覆盖列出的组合及行为，全部目标系统、内核操作和业务功能仍须分别验收。
+2026-10-21。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 2/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合、完整 Docker 转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
 
 ## 隔离环境
 
@@ -572,3 +572,22 @@ v10 核对原 Agent 主进程中断任务已回滚，恢复后真实代理应用
 CPU 由该引擎进程 `/proc` 计数差计算，RSS 为实际进程采样；不含测量驱动、Agent、封禁动作、宿主防火墙或其他架构开销。基线已安装 Python，前后完整 dpkg 清单一致，没有新增依赖包；这不能替代缺少 Python 的安装场景或完整运行时增量依赖核算。结果是该锁定场景的数据，不构成通用负载或资源上限保证。
 
 首轮测量因 client 未指定配置目录而未能就绪，v2 定点诊断确认其尝试读取不存在的 `/etc/fail2ban`；失败保留。v3 给 client 与 server 指定同一配置目录，全部 4,000 行匹配及有序轮转通过，正常停止，容器退出 0、无 OOM。`runtime-resources.json`、完整包清单、配置、原始日志及 `measurement-result.json` 位于 `.validation/p5-fail2ban-resources-v3/`。未安装主机依赖、未发送网络请求或修改开发宿主环境。
+
+## 同一宿主 Agent 的 Web 进程隔离指标对照（2026-10-21）
+
+Ubuntu 22.04/arm64、实际内核 `5.15.0-198-generic` 的隔离虚拟机中，保留同一原生部署绑定、程序、数据和非特权 UID 997，依次运行原生 Web、容器内 Web，再恢复原生 Web。冻结程序为 `0.2.29-dev`，SHA-256 `d00b4f0515559ffcc23daa5785bb5ebf17f311d3fe5c94354f31086618342b63`。Host Agent 全程保持原进程，宿主采集授权有效。
+
+容器使用已准备的 arm64 固定启动器基础镜像，覆盖入口执行同一批准程序；只读根文件系统、移除全部 capabilities、禁止提权、独立 PID/网络命名空间，CPU 限额 0.5 核、内存 512 MiB。容器网络仅有 `lo`，未挂入宿主 `/proc` 或 `/sys`。通过真实 HTTPS API 取得三个新样本，均在各阶段开始后采集、未过期，来源为 `host-agent`：
+
+| 检查项 | 原生 Web / 容器 Web / 恢复原生 Web |
+| --- | --- |
+| Host Agent | 同一进程，PID 669 |
+| boot ID | `28774724-d42a-47d6-b31b-bc8aa11f1c21` |
+| CPU 维度 | 三组均含 `cpu0`、`cpu1`，使用率可用 |
+| 内存总量 | 三组均为实际宿主的 4,097,085,440 字节 |
+| 网络维度 | 三组均含完整宿主网卡，包括 `p5-in`、`p5-docker`，而非只含容器的 `lo` |
+| 样本时间 | 依次递增，排除复用容器启动前缓存 |
+
+本组保持 `--panel-runtime native` 及其运行绑定，只验证 Web 执行隔离切换后的宿主指标来源；正式 Docker 安装、固定启动器入口及部署模式迁移仍按各自门禁验收，Docker 部署矩阵维持 2/14。
+
+首轮夹具误用基础镜像未提供的 `/bin/sh`，在容器指标读取前失败；记录保留。v2 改由来宾宿主只读检查容器根目录中的环境标记及 cgroup 文件，确认 `memory.max=536870912`、`cpu.max=50000 100000`，未向镜像增加工具。对照通过后容器正常停止、原生 Web 恢复；虚拟机正常关机，外层容器退出 0、无 OOM。证据、源码散列和验收结果位于 `.validation/native-vm/host-metrics-native-container-v2/`。未改变开发主机环境，未执行 UI 自动化。
