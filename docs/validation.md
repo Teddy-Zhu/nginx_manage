@@ -505,3 +505,14 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - Ubuntu 22.04/arm64、`5.15.0-198-generic` 独立内核来宾中，Docker 发布端口的 IPv4/IPv6、TCP/UDP 八条基础流量通过；绑定实际容器及网络后，计划被默认策略路由识别拒绝，尚未执行策略应用。失败现场保留于 `.validation/native-vm/docker-forward-iptables-nft-v3/`。该环境使用直接 iptables-nft；此前已确认停用且无用户规则的 UFW 仅在来宾中卸载，并核对完整双栈内核规则保持，不据此放宽管理器排除保护。
 - 在独立续盘只读采集原始 GETRULE：五条默认规则均含 `FRA_SUPPRESS_PREFIXLEN=0xffffffff`。该值表示禁用抑制，Linux 会在默认规则转储中发送它，见 [Linux 5.15 实现](https://github.com/torvalds/linux/blob/v5.15/net/core/fib_rules.c#L932)。原始报文及正常关机证据位于 `.validation/native-vm/docker-forward-route-diagnostic-v4/`；控制器记录采集通过、正常关机、QEMU 退出 0。
 - 解析器仅接受四字节的禁用值，仍拒绝有限抑制值、畸形长度和其他未支持条件。基于上述五条实际内核报文及有限/畸形抑制值的定点 Go 回归通过；隔离 Go 1.27.2 容器完成 `0.2.25-dev` 静态 ARM 候选构建，摘要为 `abe5fe8e1c711ab61156c730df181a488ffb409bf4a614f87041276cf82047d7`。本地源码、补丁、构建及测试证据位于 `.validation/native-vm/docker-forward-route-fix-v1/`。发布端口规则应用、RETURN 语义及中断/重启恢复继续验收，暂不标记支持矩阵通过；没有运行 UI 测试或修改开发宿主机配置。
+
+
+## 监控边界与 Stream 双栈权重（2026-10-21）
+
+修复同一分钟内采样中断后恢复时未立即标记历史空档的问题：采样时间差超过两个间隔加 5 秒时，该分钟保持空档标记。现有计数器连续性约束不变。真实 SQLite 验证通过：进行中与已持久化分钟不重复计数，重启读取保持结果，缺失分钟和 null 不补零，真实零参与统计，下采样保留空档；中断不能满足告警持续时间，缺失指标不能清除告警或计入恢复窗口；32 MiB 载荷配额淘汰最旧数据并保留最新数据，缩短至 1 小时保留期限后清除过期记录。
+
+Linux 指标边界使用 Docker 内独立 chroot 的普通 `/proc`、`/sys` 夹具文件运行实际采集器，不改真实内核计数器。首样本、CPU/网络计数器重置、接口同名重建、boot ID 变化、采样间断、CPU 热插拔、缺失/非法来源和 128 核维度上限通过；CPU guest 不重复累计，网络按 bit/s 计算，内存使用 MemAvailable，未配置 Swap 保持 null，挂载容量调用真实 statfs 并去重，容器标识阻止冒充宿主采集。该夹具不能替代原生/容器 Web 读取同一真实宿主 Agent 的对照验收。
+
+使用已有预置模块镜像 `nginxpanel-p5-nginx:20261021-dualarch-v1-amd64`，镜像 ID 为 `sha256:513bd336f4aee8c27cfaa97bedb045dd65eb84ccb507d65f6884ed81251f798b`。真实配置创建和常用字段修改经 Agent 渲染、实际 `nginx -t` 与降权进程启动；TCP/UDP 的 IPv4/IPv6 四种客户端各进行 12 次请求/响应，IPv4 与 IPv6 上游分别收到 3/9 次，符合 1:3 权重。普通 TCP 与独占外部 UDP 监听冲突产生实际 EADDRINUSE，候选进程退出后旧代理仍正常响应。未覆盖其他发行包、arm64 权重或 UDP 端口复用组合；UDP 发送未被当作健康证明。
+
+源码与集中验收证据保存在 `.validation/p5-metrics-stream-v1/` 至 `v4/`。v1 因临时目录 noexec 未能执行测试；调整容器参数后，v2 的监控与 Linux 来源检查通过，Stream 被公共可写 `/srv` 的安全检查拒绝；v3 收紧目录权限后四种权重检查通过，原冲突夹具误将 Nginx UDP 的 SO_REUSEADDR 共享当作独占冲突；v4 改用独占外部 UDP 监听，仅重新编译并复验受影响的冲突用例，通过，未重复已通过的监控和权重检查。最终源码散列及结果范围见 v4/result.json。使用锁定 Go 1.27.2 SDK、离线依赖缓存、无网络和受限容器能力；未运行 UI 测试或修改开发宿主机配置。

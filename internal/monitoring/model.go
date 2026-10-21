@@ -221,6 +221,9 @@ func newBucket(at, interval int64) *bucket {
 	return &bucket{Minute: at / 60 * 60, Interval: interval, Metrics: map[string]*aggregateMetric{}}
 }
 func (b *bucket) Add(sample Sample) {
+	if b.LastAt > 0 && sample.At-b.LastAt > 2*b.Interval+5 {
+		b.Gap = true
+	}
 	b.Attempts++
 	b.LastAt = sample.At
 	if sample.Reason != "" {
