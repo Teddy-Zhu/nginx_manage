@@ -597,3 +597,5 @@ Ubuntu 22.04/arm64、实际内核 `5.15.0-198-generic` 的隔离虚拟机中，�
 Ubuntu 22.04/arm64、Linux 5.15 隔离虚拟机发现并修复三项准入问题：合并 local/main FIB 的 IPv4 本地路由须以精确 local 清单核对；不同出入接口的 IPv6 转发源证明须扣除内核已禁止的 link-local 范围，以识别 Docker 默认 DNAT 排除条件；iptables-nft 合成的空 ACCEPT INPUT 须在实际创建前计入 nft 对象和字节预算。保留路由歧义、非永久选中路由、未知 DNAT 路径、同接口转发及矛盾规则视图的拒绝边界。
 
 相关定点用例通过，证据位于 `docker-forward-routing-fix-v3/v4/v5/v7/`。冻结的 `0.2.30-dev` ARM 程序在 `docker-forward-iptables-nft-v19/` 中通过安装、登记、八条 TCP/UDP IPv4/IPv6 基线流量及显式计划准入；实际 nft 回读确认两族 INPUT 创建。应用请求返回 504，未计为事务通过。保留原盘及后续诊断；`docker-forward-recovery-wait-v23/` 等到原任务 `rolled_back/confirmed_restored`，但运行态核对仍报 `context deadline exceeded`。完整确认、Agent 中断、重启及第三方规则保留流程尚未通过，本组不增加 Docker 部署矩阵。上述目录均位于 `.validation/native-vm/`，虚拟机正常关机；产品超时和严格核对边界未改动，开发宿主环境未修改。
+
+续查排除将诊断用 `-c` 计数器导出误当作产品采集格式的解析判断，实际接口的五个后端规则视图均可用。v25 仅在隔离来宾中对慢读取发送 SIGQUIT 取栈，12 秒处位于固定主程序的 ELF 绑定读取，服务随后自动恢复；该次中断产生的 500 属于主动诊断。v26 改用已准备的 QEMU 8.2.2、四核及同一冻结程序，运行态读取耗时 28.22 秒，仍返回超过 20 秒预算的校验失败；没有证明完整事务可用，也尚未判定该耗时是否影响真实 ARM 硬件。两轮均正常关机，记录分别位于 `docker-forward-runtime-stack-v25/`、`docker-forward-runtime-qemu82-v26/`。
