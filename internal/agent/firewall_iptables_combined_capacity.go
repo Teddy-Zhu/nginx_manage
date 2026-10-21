@@ -9,6 +9,11 @@ import (
 	"nginxpanel/internal/firewall"
 )
 
+// A materialized INPUT header has fixed names/type/hook/policy and bounded
+// numeric handles/counters. Reserve its complete schema-1 object separately
+// from the generation's two owned chains and entry rule.
+const iptablesNFTInputChainBytes = 1024
+
 func (snapshot iptablesRegistrationSnapshot) admitTransitionReadback(v *iptablesTransition) error {
 	if v == nil {
 		return errors.New("iptables 容量准入缺少原联合意图")
@@ -149,12 +154,16 @@ func (snapshot iptablesRegistrationSnapshot) admitCombinedReadback(next, previou
 			if reserved.Objects == 0 {
 				continue
 			}
-			maximum.Bytes = max(maximum.Bytes, reserved.Bytes)
-			maximum.Objects = max(maximum.Objects, reserved.Objects)
-			index, projected, err := projectIPTablesReadbackTable(metadata, capacity, images[family], host, docker, reserved.Chains)
+			index, projected, materializedInput, err := projectIPTablesReadbackTable(metadata, capacity, images[family], host, docker, reserved.Chains)
 			if err != nil {
 				return err
 			}
+			if materializedInput {
+				reserved.Bytes += iptablesNFTInputChainBytes
+				reserved.Objects++
+			}
+			maximum.Bytes = max(maximum.Bytes, reserved.Bytes)
+			maximum.Objects = max(maximum.Objects, reserved.Objects)
 			raw, err := json.Marshal(projected)
 			if err != nil {
 				return err
@@ -184,16 +193,17 @@ func iptablesNFTFamily(family string) string {
 
 // Metadata has a separate IPC limit. Select the largest complete per-family
 // table projection rather than independently mixing host and Docker versions.
-func projectIPTablesReadbackTable(metadata []firewall.Table, capacity nftReadbackBudget, image iptablesImage, host, docker *firewall.IPTablesGeneration, chains []firewall.Chain) (int, firewall.Table, error) {
+func projectIPTablesReadbackTable(metadata []firewall.Table, capacity nftReadbackBudget, image iptablesImage, host, docker *firewall.IPTablesGeneration, chains []firewall.Chain) (int, firewall.Table, bool, error) {
 	for index, table := range metadata {
 		if table.Family != iptablesNFTFamily(image.Family) || table.Name != "filter" {
 			continue
 		}
 		table.Chains = slices.Clone(table.Chains)
+		materializedInput := false
 		for _, chain := range table.Chains {
 			for _, candidate := range chains {
 				if chain.Name == candidate.Name {
-					return 0, firewall.Table{}, errors.New("nft JSON 候选链存在未核对的同名范围")
+					return 0, firewall.Table{}, false, errors.New("nft JSON 候选链存在未核对的同名范围")
 				}
 			}
 		}
@@ -206,22 +216,25 @@ func projectIPTablesReadbackTable(metadata []firewall.Table, capacity nftReadbac
 			}
 			actual := image.chain("filter", entry.name)
 			scope, exists := capacity.Scopes[nftReadbackKey(table.Family, "filter", entry.name)]
-			if actual == nil || !exists || scope.Rules != len(actual.Rules) || scope.Objects != len(actual.Rules)+1 {
-				return 0, firewall.Table{}, errors.New("nft JSON 与原生 INPUT/DOCKER-USER 入口在容量核对期间变化")
+			ci := slices.IndexFunc(table.Chains, func(chain firewall.Chain) bool { return chain.Name == entry.name })
+			// iptables-nft-save synthesizes an empty ACCEPT INPUT even when
+			// Docker has only materialized FORWARD in nft. Admit only this
+			// exact absence; the transaction must create and budget the base
+			// chain. DOCKER-USER and any populated or contradictory entry
+			// still require matching native and nft evidence.
+			if actual != nil && entry.name == "INPUT" && !exists && ci < 0 && actual.Policy == "ACCEPT" && len(actual.Rules) == 0 {
+				priority := int64(0)
+				table.Chains = append(table.Chains, firewall.Chain{Name: "INPUT", Type: "filter", Hook: "input", Priority: &priority, Policy: "accept", Rules: 1})
+				materializedInput = true
+				continue
 			}
-			found := false
-			for ci := range table.Chains {
-				if table.Chains[ci].Name == entry.name {
-					table.Chains[ci].Rules++
-					found = true
-				}
+			if actual == nil || !exists || ci < 0 || scope.Rules != len(actual.Rules) || scope.Objects != len(actual.Rules)+1 || table.Chains[ci].Rules != scope.Rules {
+				return 0, firewall.Table{}, false, errors.New("nft JSON 与原生 INPUT/DOCKER-USER 入口在容量核对期间变化")
 			}
-			if !found {
-				return 0, firewall.Table{}, errors.New("nft JSON 缺少候选地址族的 INPUT/DOCKER-USER 入口")
-			}
+			table.Chains[ci].Rules++
 		}
 		table.Chains = append(table.Chains, chains...)
-		return index, table, nil
+		return index, table, materializedInput, nil
 	}
-	return 0, firewall.Table{}, errors.New("nft JSON 缺少候选地址族的 filter 容量依据")
+	return 0, firewall.Table{}, false, errors.New("nft JSON 缺少候选地址族的 filter 容量依据")
 }

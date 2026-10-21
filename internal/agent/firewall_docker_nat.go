@@ -45,6 +45,29 @@ func dockerRuleSources(policy firewall.Policy, binding firewall.DockerRuleBindin
 	return out
 }
 
+func dockerIPv6ForwardSources(sources []netip.Prefix) []netip.Prefix {
+	// For distinct input/output interfaces Linux ip6_forward rejects link-local
+	// sources before the FORWARD hook. Docker's default DNAT exclusion therefore
+	// cannot hide an eligible forwarded packet. Keep all other source predicates.
+	linkLocal := netip.MustParsePrefix("fe80::/10")
+	out := []netip.Prefix{}
+	for _, source := range sources {
+		if !source.Overlaps(linkLocal) {
+			out = append(out, source)
+			continue
+		}
+		// A narrower overlapping prefix is entirely link-local. For a wider
+		// prefix, retain each sibling along the path to the excluded /10.
+		for bits := source.Bits() + 1; bits <= linkLocal.Bits(); bits++ {
+			address := netip.PrefixFrom(linkLocal.Addr(), bits).Masked().Addr().As16()
+			bit := bits - 1
+			address[bit/8] ^= 1 << (7 - bit%8)
+			out = append(out, netip.PrefixFrom(netip.AddrFrom16(address), bits))
+		}
+	}
+	return out
+}
+
 func dockerNATPrefix(value string, family string) (netip.Prefix, error) {
 	if value == "0/0" {
 		value = "::/0"
@@ -229,7 +252,13 @@ func dockerNATRule(args []string, binding firewall.DockerRuleBinding, sources []
 
 func proveDockerDNAT(ctx context.Context, image iptablesImage, resolved firewall.DockerResolvedBinding, sources []netip.Prefix, budget *int) (string, int, error) {
 	invalid := errors.New("实际 PREROUTING 路径不能证明所选 DOCKER DNAT 映射")
-	if image.Family != resolved.Binding.Family || len(sources) == 0 {
+	if image.Family != resolved.Binding.Family || resolved.OutputInterface == "" || resolved.OutputInterface == resolved.Binding.InputInterface {
+		return "", 0, invalid
+	}
+	if image.Family == "ipv6" {
+		sources = dockerIPv6ForwardSources(sources)
+	}
+	if len(sources) == 0 {
 		return "", 0, invalid
 	}
 	root := image.chain("nat", "PREROUTING")
@@ -310,13 +339,14 @@ func proveDockerDNAT(ctx context.Context, image iptablesImage, resolved firewall
 		}
 	}
 	raw, err := json.Marshal(struct {
-		NAT     string
-		Binding firewall.DockerRuleBinding
-		Sources []netip.Prefix
-		Trace   []step
-	}{nat.hash(), resolved.Binding, sources, trace})
+		NAT             string
+		Binding         firewall.DockerRuleBinding
+		OutputInterface string
+		Sources         []netip.Prefix
+		Trace           []step
+	}{nat.hash(), resolved.Binding, resolved.OutputInterface, sources, trace})
 	if err != nil {
 		return "", 0, err
 	}
-	return secure.Hash(append([]byte("docker:dnat-path:v2:\x00"), raw...)), len(trace), nil
+	return secure.Hash(append([]byte("docker:dnat-path:v3:\x00"), raw...)), len(trace), nil
 }

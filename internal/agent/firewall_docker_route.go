@@ -27,6 +27,7 @@ const (
 	dockerRouteCache            = 12
 	dockerRouteTable            = 15
 	dockerRoutePreference       = 20
+	dockerRouteExpires          = 23
 	dockerRoutePadding          = 24
 	dockerRulePriority          = 6
 	dockerRuleSuppressPrefixLen = 14
@@ -92,7 +93,13 @@ func (r *dockerRouteReader) query(ctx context.Context, family byte, rules bool, 
 		}
 		flags = netlink.Request
 		data[1] = byte(destination.BitLen())
-		binary.NativeEndian.PutUint32(data[8:12], unix.RTM_F_FIB_MATCH)
+		routeFlags := uint32(unix.RTM_F_FIB_MATCH)
+		if family == unix.AF_INET {
+			// Ask for the selected table when exposed. Merged local/main FIBs
+			// still require the inventory proof below for local destinations.
+			routeFlags |= unix.RTM_F_LOOKUP_TABLE
+		}
+		binary.NativeEndian.PutUint32(data[8:12], routeFlags)
 		value := destination.AsSlice()
 		attribute := make([]byte, 4+len(value))
 		binary.NativeEndian.PutUint16(attribute[:2], uint16(len(attribute)))
@@ -287,7 +294,15 @@ func (r *dockerRouteReader) snapshot(ctx context.Context, families []string) (do
 	}
 	items := []string{}
 	add := func(rules bool, record dockerRouteRecord) error {
-		raw, err := json.Marshal(item{rules, record})
+		digestRecord := record
+		if !rules {
+			var err error
+			digestRecord, err = dockerRoutingEnvironmentRecord(record)
+			if err != nil {
+				return err
+			}
+		}
+		raw, err := json.Marshal(item{rules, digestRecord})
 		if err != nil {
 			return err
 		}
@@ -329,7 +344,7 @@ func (r *dockerRouteReader) snapshot(ctx context.Context, families []string) (do
 				for _, attribute := range record.Attributes {
 					switch attribute.Type {
 					case dockerRouteDST, dockerRouteOIF, dockerRoutePriority, dockerRoutePreferredSource, dockerRouteCache, dockerRouteTable, dockerRoutePreference, dockerRoutePadding:
-					case 5, 8, 9, 11, 21, 22, 23, 26, 30:
+					case 5, 8, 9, 11, 21, 22, dockerRouteExpires, 26, 30:
 						// Gateway, metrics, multipath, realm, encapsulation, expiry,
 						// TTL propagation and nexthop ID are retained in inventory.
 						// They remain unsupported on the selected direct route.
@@ -353,10 +368,82 @@ func (r *dockerRouteReader) snapshot(ctx context.Context, families []string) (do
 	return out, nil
 }
 
+func dockerRoutingEnvironmentRecord(record dockerRouteRecord) (dockerRouteRecord, error) {
+	record.Attributes = slices.Clone(record.Attributes)
+	for i, attribute := range record.Attributes {
+		var offset int
+		switch attribute.Type {
+		case dockerRouteCache:
+			if len(attribute.Value) != 32 {
+				return record, errors.New("Docker 路由缓存编码无效")
+			}
+			offset = 8
+		case dockerRouteExpires:
+			if len(attribute.Value) != 4 {
+				return record, errors.New("Docker 路由有效期编码无效")
+			}
+		default:
+			continue
+		}
+		// Unrelated RA routes count down between plan and apply. Keep lifetime
+		// state and errors in the digest; the selected route still must be permanent.
+		value := slices.Clone(attribute.Value)
+		expires := binary.NativeEndian.Uint32(value[offset : offset+4])
+		if expires != 0 {
+			normalized := uint32(1)
+			if attribute.Type == dockerRouteCache && int32(expires) < 0 {
+				normalized = ^uint32(0)
+			}
+			binary.NativeEndian.PutUint32(value[offset:offset+4], normalized)
+		}
+		record.Attributes[i].Value = value
+	}
+	return record, nil
+}
+
 func dockerRouteIdentity(value dockerRouteRecord) string {
 	value.Attributes = slices.DeleteFunc(slices.Clone(value.Attributes), func(a dockerRouteAttribute) bool { return a.Type == dockerRouteCache || a.Type == dockerRoutePadding })
 	raw, _ := json.Marshal(value)
 	return string(raw)
+}
+
+func dockerRouteInventoryIdentity(record dockerRouteRecord, snapshot dockerRoutingSnapshot, local bool) string {
+	table, err := record.table(dockerRouteTable)
+	if err != nil {
+		return ""
+	}
+	want := uint32(unix.RT_TABLE_MAIN)
+	if local {
+		want = unix.RT_TABLE_LOCAL
+	}
+	identity := dockerRouteIdentity(record)
+	if table == want {
+		if snapshot.Routes[identity] {
+			return identity
+		}
+		return ""
+	}
+	// Linux can merge the IPv4 local trie into main and report main for a
+	// FIB_MATCH local result. Under the already verified default lookup rules,
+	// require the otherwise identical local inventory entry and no matching
+	// main entry. Preserve the observed reply; bind both identities into proof.
+	if !local || record.Header[0] != unix.AF_INET || record.Header[1] != 32 || record.Header[7] != unix.RTN_LOCAL || table != unix.RT_TABLE_MAIN || snapshot.Routes[identity] {
+		return ""
+	}
+	canonical := record
+	canonical.Header[4] = unix.RT_TABLE_LOCAL
+	canonical.Attributes = slices.Clone(record.Attributes)
+	for i, attribute := range canonical.Attributes {
+		if attribute.Type == dockerRouteTable {
+			canonical.Attributes[i].Value = slices.Clone(attribute.Value)
+			binary.NativeEndian.PutUint32(canonical.Attributes[i].Value, unix.RT_TABLE_LOCAL)
+		}
+	}
+	identity = dockerRouteIdentity(canonical)
+	if snapshot.Routes[identity] {
+		return identity
+	}
+	return ""
 }
 
 func (r *dockerRouteReader) prove(ctx context.Context, snapshot dockerRoutingSnapshot, resolved firewall.DockerResolvedBinding, inputIndex, outputIndex int) (firewall.DockerPathProof, error) {
@@ -373,9 +460,9 @@ func (r *dockerRouteReader) prove(ctx context.Context, snapshot dockerRoutingSna
 
 func (r *dockerRouteReader) selectedRoute(ctx context.Context, snapshot dockerRoutingSnapshot, resolved firewall.DockerResolvedBinding, destination netip.Addr, outputIndex int, local bool) (string, string, error) {
 	invalid := errors.New("内核 FIB 未选择所选 bridge 的永久直连容器路由")
-	tableNumber, routeType := uint32(254), byte(1)
+	routeType := byte(unix.RTN_UNICAST)
 	if local {
-		tableNumber, routeType = 255, 2
+		routeType = unix.RTN_LOCAL
 		invalid = errors.New("原始目的地址缺少所选入口的内核本地路由")
 	}
 	if !destination.IsValid() || outputIndex < 1 {
@@ -384,12 +471,11 @@ func (r *dockerRouteReader) selectedRoute(ctx context.Context, snapshot dockerRo
 	var selectedPrefix, selectedHash string
 	err := r.query(ctx, dockerRouteFamily(resolved.Binding.Family), false, destination, func(record dockerRouteRecord) error {
 		h := record.Header
-		table, err := record.table(dockerRouteTable)
 		validScope := h[6] == 0 || h[6] == 253
 		if local {
 			validScope = h[6] == 0 || h[6] == 254
 		}
-		if err != nil || table != tableNumber || h[2] != 0 || h[3] != 0 || h[5] != unix.RTPROT_KERNEL || !validScope || h[7] != routeType || binary.NativeEndian.Uint32(h[8:12]) != 0 || int(h[1]) > destination.BitLen() || local && int(h[1]) != destination.BitLen() {
+		if h[2] != 0 || h[3] != 0 || h[5] != unix.RTPROT_KERNEL || !validScope || h[7] != routeType || binary.NativeEndian.Uint32(h[8:12]) != 0 || int(h[1]) > destination.BitLen() || local && int(h[1]) != destination.BitLen() {
 			return invalid
 		}
 		var prefix netip.Prefix
@@ -443,7 +529,8 @@ func (r *dockerRouteReader) selectedRoute(ctx context.Context, snapshot dockerRo
 		}
 		// FIB_MATCH must be an actual inventory entry, not a cached route with
 		// an artificial host prefix. Padding/cache metadata may differ.
-		if !snapshot.Routes[dockerRouteIdentity(record)] {
+		inventory := dockerRouteInventoryIdentity(record, snapshot, local)
+		if inventory == "" {
 			return invalid
 		}
 		selectedPrefix = prefix.String()
@@ -451,12 +538,13 @@ func (r *dockerRouteReader) selectedRoute(ctx context.Context, snapshot dockerRo
 			Binding          firewall.DockerRuleBinding
 			Endpoint, Bridge string
 			Route            dockerRouteRecord
+			Inventory        string
 			Index            int
-		}{resolved.Binding, resolved.ContainerAddress, resolved.OutputInterface, record, outputIndex})
+		}{resolved.Binding, resolved.ContainerAddress, resolved.OutputInterface, record, inventory, outputIndex})
 		if err != nil {
 			return err
 		}
-		selectedHash = secure.Hash(append([]byte("docker:fib-route:v1:\x00"), raw...))
+		selectedHash = secure.Hash(append([]byte("docker:fib-route:v2:\x00"), raw...))
 		return nil
 	})
 	return selectedPrefix, selectedHash, err

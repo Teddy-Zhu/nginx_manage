@@ -591,3 +591,9 @@ Ubuntu 22.04/arm64、实际内核 `5.15.0-198-generic` 的隔离虚拟机中，�
 本组保持 `--panel-runtime native` 及其运行绑定，只验证 Web 执行隔离切换后的宿主指标来源；正式 Docker 安装、固定启动器入口及部署模式迁移仍按各自门禁验收，Docker 部署矩阵维持 2/14。
 
 首轮夹具误用基础镜像未提供的 `/bin/sh`，在容器指标读取前失败；记录保留。v2 改由来宾宿主只读检查容器根目录中的环境标记及 cgroup 文件，确认 `memory.max=536870912`、`cpu.max=50000 100000`，未向镜像增加工具。对照通过后容器正常停止、原生 Web 恢复；虚拟机正常关机，外层容器退出 0、无 OOM。证据、源码散列和验收结果位于 `.validation/native-vm/host-metrics-native-container-v2/`。未改变开发主机环境，未执行 UI 自动化。
+
+## Docker FORWARD 实际内核准入续验（2026-10-21）
+
+Ubuntu 22.04/arm64、Linux 5.15 隔离虚拟机发现并修复三项准入问题：合并 local/main FIB 的 IPv4 本地路由须以精确 local 清单核对；不同出入接口的 IPv6 转发源证明须扣除内核已禁止的 link-local 范围，以识别 Docker 默认 DNAT 排除条件；iptables-nft 合成的空 ACCEPT INPUT 须在实际创建前计入 nft 对象和字节预算。保留路由歧义、非永久选中路由、未知 DNAT 路径、同接口转发及矛盾规则视图的拒绝边界。
+
+相关定点用例通过，证据位于 `docker-forward-routing-fix-v3/v4/v5/v7/`。冻结的 `0.2.30-dev` ARM 程序在 `docker-forward-iptables-nft-v19/` 中通过安装、登记、八条 TCP/UDP IPv4/IPv6 基线流量及显式计划准入；实际 nft 回读确认两族 INPUT 创建。应用请求返回 504，未计为事务通过。保留原盘及后续诊断；`docker-forward-recovery-wait-v23/` 等到原任务 `rolled_back/confirmed_restored`，但运行态核对仍报 `context deadline exceeded`。完整确认、Agent 中断、重启及第三方规则保留流程尚未通过，本组不增加 Docker 部署矩阵。上述目录均位于 `.validation/native-vm/`，虚拟机正常关机；产品超时和严格核对边界未改动，开发宿主环境未修改。
