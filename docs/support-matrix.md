@@ -15,7 +15,7 @@
 | Ubuntu 22.04 | amd64 | 5.15.0-198-generic | 含 Nginx 安装、权限、代理及重启通过；首轮即时断言失败未复现 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2204amd64-原生部署2026-10-21) |
 | Ubuntu 22.04 | arm64 | 5.15.0-198-generic | 含/不含 Nginx 安装、权限、代理、回滚及重启通过；静态 Nginx 在 Cortex-A53 验收 | 托管 Web/Nginx 安装、代理、回滚、容器重建及整机重启通过，首次安装与续办分轮记录 | 原生静态及 Docker 1.30.6 | [Web/Agent](validation.md#ubuntu-2204arm64-原生-webagent-部署2026-10-21)、[静态 Nginx](validation.md#ubuntu-2204arm64-原生静态-nginx-部署2026-10-21)、[Docker](validation.md#ubuntu-2204arm64-docker-托管部署2026-10-21) |
 | Ubuntu 24.04 | amd64 | 6.8.0-147-generic | 含 Nginx 安装、重启及指定升级恢复通过 | 未验收 | 静态 1.30.6 | [部署](validation.md#2026-10-20-ubuntu-2404-原生部署及探测-socket-恢复p5)、[升级](validation.md#2026-10-20-ubuntu-2404-原生协调升级及异常重启p5) |
-| Ubuntu 24.04 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
+| Ubuntu 24.04 | arm64 | 6.8.0-147-generic | 含 Nginx 的分阶段安装、权限、代理、回滚、重放及重启通过 | 未验收 | 静态 1.30.6，ARMv8.0 | [记录](validation.md#ubuntu-2404arm64-原生部署续验2026-10-21) |
 | Ubuntu 26.04 | amd64 | 7.0.0-38-generic | 含 Nginx 的安装、权限、代理、回滚及重启业务检查与证据复核通过；采证首连失败保留 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2604amd64-原生部署2026-10-21) |
 | Ubuntu 26.04 | arm64 | 7.0.0-38-generic | 含 Nginx 的安装、权限、代理、两类回滚、安装重放及重启恢复通过；AppArmor 启用，应用进程 unconfined | 未验收 | 静态 1.30.6，ARMv8.0 | [记录](validation.md#ubuntu-2604arm64-原生部署2026-10-21) |
 | CentOS Stream 9 | amd64 | 5.14.0-758.el9.x86_64 | 含 Nginx 安装、权限及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#centos-stream-9amd64-原生部署与-selinux-续验2026-10-21) |

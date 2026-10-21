@@ -546,3 +546,13 @@ Ubuntu 24.04/arm64 的 `ubuntu24-arm64-native-v8` 在 QEMU 7.2.22/TCG、Cortex-A
 证据位于本地 `centos9-arm64-native-v2`、`centos10-arm64-native-v2`。来宾的 postboot 单元已成功退出并写入完成文件，但输出未出现在控制器捕获的串口，控制器停留在标记等待；中断等待后，其 finally 阶段完成采证和正常关机，保留 KeyboardInterrupt 原日志。另行核对原始 journal 的通过标记、前后证明及 Enforcing，结果和证据散列写入 `acceptance-result.json`，未重跑已通过的业务步骤，也未将控制器退出宣称为成功。
 
 两轮使用已批准的 arm64 `v0.2.24-dev`（SHA-256 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`）、静态 Nginx `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27` 和安装器 `334d1fa1bcd817ef1510b34e8f5ed82cd53597d1d76df35f15b8e30579690d23`。不据此覆盖后续监听检查代码、Docker 或其他功能；开发宿主机环境未修改。
+
+### Ubuntu 24.04/arm64 原生部署续验（2026-10-21）
+
+官方镜像中的 Ubuntu 24.04.5、6.8.0-147-generic，Cortex-A53 单核、2 GiB 内存，在隔离 Docker 内以 QEMU 8.2.2/TCG 运行。程序为冻结的 `0.2.24-dev` ARMv8.0 静态资产，SHA-256 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`；预置 36 项模块的静态 Nginx 1.30.6 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
+
+首次安装、身份权限、真实 HTTPS 代理及端口冲突回滚由前序 v6 执行。首次中断驱动误将辅助进程也纳入 kill，v7 又在续办前读取不存在的 cookie 文件；两轮原始失败保留。v8 的旧版 QEMU 在 SSH 就绪前出现内核 soft lockup；升级工具仅在 Docker 中进行，v9 因缺少可选 PXE ROM 在内核启动前退出。v10 明确关闭网卡 PXE ROM，沿用正常关机的 v7 基盘，仅续办未完成阶段，没有使用未正常关机的 v8 磁盘。
+
+v10 核对原 Agent 主进程中断任务已回滚，恢复后真实代理应用通过；安装器幂等重放、服务重启、整机重启及重启后权限、API、代理和配置核对通过。重启前后 boot ID 不同，Web、Agent、Nginx 的实际可执行文件散列、密钥和活动配置保持。AppArmor 启用并加载 117 项配置，三个应用进程实际标签为 `unconfined`；此记录不声明已有专用 AppArmor 策略。控制器和原始 journal 均有完成标记，虚拟机正常关机，容器退出 0。期间一次 SSH 诊断超时，未据此改写原始记录或重跑已经通过的业务。
+
+证据位于 `.validation/native-vm/ubuntu24-arm64-native-v6` 至 `v10`；v10 的 `acceptance-result.json` 记录最终证明与原始日志、前后权限和配置证明的散列。本轮仅完成该原生组合，不覆盖 Docker 部署、防火墙后端、其他 Nginx ABI 或正式发行资产。
