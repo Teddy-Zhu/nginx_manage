@@ -11,7 +11,7 @@
 | Debian 12 | amd64 | 6.1.0-54-cloud-amd64 | 含/不含 Nginx 安装、权限及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#debian-原生安装与重启) |
 | Debian 12 | arm64 | 6.1.0-54-cloud-arm64 | 含 Nginx 安装、权限、代理、回滚及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#debian-12arm64-原生静态-nginx-部署2026-10-21) |
 | Debian 13 | amd64 | 6.12.113+deb13-cloud-amd64 | 不含 Nginx 的安装及重启通过 | 含 Nginx 的安装、重建、重启及指定更新恢复通过 | 容器预置 1.30.6 | [原生](validation.md#selinux-文件标签与-v14-原生安装)、[Docker](validation.md#debian-13-默认-docker-部署)、[更新](validation.md#debian-13-docker-签名升级运行路径) |
-| Debian 13 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
+| Debian 13 | arm64 | 6.12.113+deb13-cloud-arm64 | 含 Nginx 安装、权限、代理、回滚及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#debian-13arm64-原生静态-nginx-部署2026-10-21) |
 | Ubuntu 22.04 | amd64 | 5.15.0-198-generic | 含 Nginx 安装、权限、代理及重启通过；首轮即时断言失败未复现 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2204amd64-原生部署2026-10-21) |
 | Ubuntu 22.04 | arm64 | 5.15.0-198-generic | 含/不含 Nginx 安装、权限、代理、回滚及重启通过；静态 Nginx 在 Cortex-A53 验收 | 托管 Web/Nginx 安装、代理、回滚、容器重建及整机重启通过，首次安装与续办分轮记录 | 原生静态及 Docker 1.30.6 | [Web/Agent](validation.md#ubuntu-2204arm64-原生-webagent-部署2026-10-21)、[静态 Nginx](validation.md#ubuntu-2204arm64-原生静态-nginx-部署2026-10-21)、[Docker](validation.md#ubuntu-2204arm64-docker-托管部署2026-10-21) |
 | Ubuntu 24.04 | amd64 | 6.8.0-147-generic | 含 Nginx 安装、重启及指定升级恢复通过 | 未验收 | 静态 1.30.6 | [部署](validation.md#2026-10-20-ubuntu-2404-原生部署及探测-socket-恢复p5)、[升级](validation.md#2026-10-20-ubuntu-2404-原生协调升级及异常重启p5) |

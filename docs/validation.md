@@ -484,3 +484,10 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 当前安装器在空白系统安装同一已批准 `0.2.24-dev` ARM 程序、现有前端及静态 Nginx。即时身份/权限及主密钥隔离、HTTPS 引导与统一 API、真实 HTTP 代理、端口冲突和候选切换后 Agent SIGKILL 回滚、恢复应用、安装重放、服务及整机重启全部通过。
 - 节点为 `815ee55a-6518-4cf6-a24e-ecefe9854e42`、配置版本 3、修订 `64b0063c-74ef-4fca-81b9-13de7e9356c1`、部署 `48a8614e-1aca-44f6-abf9-f7805e540cfe`；重启前后身份及代理保持，boot ID 不同，主密钥/TLS 文件、活动指针及实际程序散列一致。Web/Agent 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
 - AppArmor 实际启用、服务 active、11 个配置已加载，三个服务进程均为 `unconfined`。控制器记录 `P5_DEBIAN12_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`，正常关机、QEMU 退出 0，无强制终止。证据位于 `.validation/native-vm/debian12-arm64-native-v1/`，包括官方镜像信息、初次及重启输出、LSM/能力/进程证明和来宾归档。此结果只覆盖原生组合，Docker 仍待验收；没有改产品代码、重复无关测试或修改开发宿主机环境。
+
+### Debian 13/arm64 原生静态 Nginx 部署（2026-10-21）
+
+- 使用 [Debian 官方 Trixie arm64 云镜像](https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-arm64.qcow2)，完整传输后按同源 SHA512SUMS 校验；镜像 SHA-256 为 `9631b921171ce9b4bb4c2743f07f757e9996a0f2fc5f1fd5c9c486688d51856c`，336,592,896 字节。实际系统为 Debian 13.7、内核 `6.12.113+deb13-cloud-arm64`；QEMU/TCG Cortex-A53、2 核、2 GiB、独立新盘，外层控制器断网、无特权及宿主端口。
+- 当前安装器在空白系统安装同一已批准的 `0.2.24-dev` ARM 程序、现有前端及静态 Nginx。即时 Web/worker 身份与权限、主密钥隔离、HTTPS 引导和统一 API、真实代理、端口冲突及候选切换后 Agent SIGKILL 回滚、恢复应用、安装重放、服务及整机重启全部通过。
+- 原节点 `3da37803-b4a0-402f-9d17-dfaeba675fd8`、配置版本 3、修订 `71bd35a2-ac2c-4cd5-8975-a397cb29d912`、部署 `d34dad5d-0a83-439d-b2d9-d25bf5236a3c` 及 HTTPS 会话保持。前后 boot ID 不同，主密钥/TLS 文件、活动指针及实际程序散列一致；Web/Agent 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
+- AppArmor 启用、服务 active、106 个配置已加载，三个服务进程实际均为 `unconfined`。控制器记录 `P5_DEBIAN13_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`，正常关机、QEMU 退出 0，无强制终止。证据保留于 `.validation/native-vm/debian13-arm64-native-v1/`；Docker 尚未验收，没有改产品代码、重复无关验证或修改开发宿主机环境。
