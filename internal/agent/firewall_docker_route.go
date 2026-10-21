@@ -17,21 +17,22 @@ import (
 // Linux rtnetlink/fib_rules UAPI attribute numbers. This reader sends only
 // GETRULE/GETROUTE, without multicast membership or a route mutation method.
 const (
-	dockerRouteBytes           = 2 << 20
-	dockerRouteObjects         = 8192
-	dockerRouteDST             = 1
-	dockerRouteSRC             = 2
-	dockerRouteOIF             = 4
-	dockerRoutePriority        = 6
-	dockerRoutePreferredSource = 7
-	dockerRouteCache           = 12
-	dockerRouteTable           = 15
-	dockerRoutePreference      = 20
-	dockerRoutePadding         = 24
-	dockerRulePriority         = 6
-	dockerRuleTable            = 15
-	dockerRulePadding          = 18
-	dockerRuleProtocol         = 21
+	dockerRouteBytes            = 2 << 20
+	dockerRouteObjects          = 8192
+	dockerRouteDST              = 1
+	dockerRouteSRC              = 2
+	dockerRouteOIF              = 4
+	dockerRoutePriority         = 6
+	dockerRoutePreferredSource  = 7
+	dockerRouteCache            = 12
+	dockerRouteTable            = 15
+	dockerRoutePreference       = 20
+	dockerRoutePadding          = 24
+	dockerRulePriority          = 6
+	dockerRuleSuppressPrefixLen = 14
+	dockerRuleTable             = 15
+	dockerRulePadding           = 18
+	dockerRuleProtocol          = 21
 )
 
 type dockerRouteAttribute struct {
@@ -253,6 +254,12 @@ func dockerDefaultRoutingRule(record dockerRouteRecord) (uint32, error) {
 		case dockerRuleProtocol:
 			// FRA_PROTOCOL identifies the rule's installer, not packet protocol.
 			if len(attribute.Value) != 1 {
+				return 0, invalid
+			}
+		case dockerRuleSuppressPrefixLen:
+			// Kernel dumps include UINT32_MAX for disabled prefix suppression.
+			// Finite suppressors change lookup behavior and remain unsupported.
+			if len(attribute.Value) != 4 || binary.NativeEndian.Uint32(attribute.Value) != ^uint32(0) {
 				return 0, invalid
 			}
 		case dockerRulePadding:

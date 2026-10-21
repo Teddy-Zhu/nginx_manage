@@ -491,3 +491,9 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 当前安装器在空白系统安装同一已批准的 `0.2.24-dev` ARM 程序、现有前端及静态 Nginx。即时 Web/worker 身份与权限、主密钥隔离、HTTPS 引导和统一 API、真实代理、端口冲突及候选切换后 Agent SIGKILL 回滚、恢复应用、安装重放、服务及整机重启全部通过。
 - 原节点 `3da37803-b4a0-402f-9d17-dfaeba675fd8`、配置版本 3、修订 `71bd35a2-ac2c-4cd5-8975-a397cb29d912`、部署 `d34dad5d-0a83-439d-b2d9-d25bf5236a3c` 及 HTTPS 会话保持。前后 boot ID 不同，主密钥/TLS 文件、活动指针及实际程序散列一致；Web/Agent 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
 - AppArmor 启用、服务 active、106 个配置已加载，三个服务进程实际均为 `unconfined`。控制器记录 `P5_DEBIAN13_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`，正常关机、QEMU 退出 0，无强制终止。证据保留于 `.validation/native-vm/debian13-arm64-native-v1/`；Docker 尚未验收，没有改产品代码、重复无关验证或修改开发宿主机环境。
+
+### Docker 默认策略路由识别（2026-10-21）
+
+- Ubuntu 22.04/arm64、`5.15.0-198-generic` 独立内核来宾中，Docker 发布端口的 IPv4/IPv6、TCP/UDP 八条基础流量通过；绑定实际容器及网络后，计划被默认策略路由识别拒绝，尚未执行策略应用。失败现场保留于 `.validation/native-vm/docker-forward-iptables-nft-v3/`。该环境使用直接 iptables-nft；此前已确认停用且无用户规则的 UFW 仅在来宾中卸载，并核对完整双栈内核规则保持，不据此放宽管理器排除保护。
+- 在独立续盘只读采集原始 GETRULE：五条默认规则均含 `FRA_SUPPRESS_PREFIXLEN=0xffffffff`。该值表示禁用抑制，Linux 会在默认规则转储中发送它，见 [Linux 5.15 实现](https://github.com/torvalds/linux/blob/v5.15/net/core/fib_rules.c#L932)。原始报文及正常关机证据位于 `.validation/native-vm/docker-forward-route-diagnostic-v4/`；控制器记录采集通过、正常关机、QEMU 退出 0。
+- 解析器仅接受四字节的禁用值，仍拒绝有限抑制值、畸形长度和其他未支持条件。基于上述五条实际内核报文及有限/畸形抑制值的定点 Go 回归通过；隔离 Go 1.27.2 容器完成 `0.2.25-dev` 静态 ARM 候选构建，摘要为 `abe5fe8e1c711ab61156c730df181a488ffb409bf4a614f87041276cf82047d7`。本地源码、补丁、构建及测试证据位于 `.validation/native-vm/docker-forward-route-fix-v1/`。发布端口规则应用、RETURN 语义及中断/重启恢复继续验收，暂不标记支持矩阵通过；没有运行 UI 测试或修改开发宿主机配置。
