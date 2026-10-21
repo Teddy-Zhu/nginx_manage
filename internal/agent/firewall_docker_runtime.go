@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/netip"
 	"os"
@@ -164,6 +165,51 @@ func (snapshot *dockerFirewallSnapshot) rootless() bool {
 	return false
 }
 
+// Docker recreates its default bridge at daemon startup. Its transient ID
+// must not invalidate an otherwise unchanged report of a selected custom
+// network. Only this report projection uses the alias: endpoint resolution and
+// frozen execution bindings continue to require the actual network IDs.
+func (snapshot *dockerFirewallSnapshot) reportHash() (string, error) {
+	report := *snapshot
+	report.Networks = slices.Clone(snapshot.Networks)
+	aliases := map[string]string{}
+	for index, network := range report.Networks {
+		if network.Name != "bridge" || network.Driver != "bridge" || network.Scope != "local" || network.Internal || network.Ingress || network.Options["com.docker.network.bridge.default_bridge"] != "true" {
+			continue
+		}
+		if len(aliases) != 0 {
+			return "", errors.New("Docker 默认桥网络身份不唯一")
+		}
+		aliases[network.ID] = "builtin:bridge"
+		report.Networks[index].ID = "builtin:bridge"
+	}
+	if len(aliases) != 0 {
+		// Sort again after projection, since the raw IDs determine input order.
+		slices.SortFunc(report.Networks, func(a, b dockerFirewallNetwork) int { return strings.Compare(a.ID, b.ID) })
+		report.Containers = slices.Clone(snapshot.Containers)
+		for index := range report.Containers {
+			container := &report.Containers[index]
+			if alias, ok := aliases[container.HostConfig.NetworkMode]; ok {
+				container.HostConfig.NetworkMode = alias
+			}
+			settings := *container.NetworkSettings
+			settings.Networks = maps.Clone(settings.Networks)
+			for name, endpoint := range settings.Networks {
+				if alias, ok := aliases[endpoint.NetworkID]; ok {
+					endpoint.NetworkID = alias
+					settings.Networks[name] = endpoint
+				}
+			}
+			container.NetworkSettings = &settings
+		}
+	}
+	raw, err := json.Marshal(report)
+	if err != nil {
+		return "", err
+	}
+	return secure.Hash(append([]byte("docker:firewall-report:v2:\x00"), raw...)), nil
+}
+
 func dockerFirewallPortPath(snapshot *dockerFirewallSnapshot, container dockerFirewallContainer, port firewall.DockerPublishedPort) (string, string) {
 	if snapshot.rootless() || snapshot.Info.Swarm.LocalNodeState != "inactive" {
 		return "unconfirmed", "rootless 或 Swarm 流量不按本机 bridge 入站路径处理"
@@ -262,7 +308,11 @@ func readDockerFirewallState(ctx context.Context) (firewall.DockerRuntime, *dock
 	if err != nil || !bytes.Equal(first, last) {
 		return fail("Docker 实例、网络或端口映射在读取期间变化，请重新读取")
 	}
-	out := firewall.DockerRuntime{Available: true, EngineHash: secure.Hash([]byte("docker:engine:v1:\x00" + before.Info.ID)), Version: before.Info.ServerVersion, APIVersion: dockerapi.Version, SnapshotHash: secure.Hash(append([]byte("docker:firewall-report:v1:\x00"), first...)), ObservedAt: time.Now().Unix(), Rootless: before.rootless(), Swarm: before.Info.Swarm.LocalNodeState, Networks: len(before.Networks), Containers: len(before.Containers), Ports: []firewall.DockerPublishedPort{}, Reason: "前后 Docker 报告一致；不是原子内核快照、规则授权或外部可达性证明"}
+	reportHash, err := before.reportHash()
+	if err != nil {
+		return fail("Docker 实例及端口映射摘要无法核对：" + err.Error())
+	}
+	out := firewall.DockerRuntime{Available: true, EngineHash: secure.Hash([]byte("docker:engine:v1:\x00" + before.Info.ID)), Version: before.Info.ServerVersion, APIVersion: dockerapi.Version, SnapshotHash: reportHash, ObservedAt: time.Now().Unix(), Rootless: before.rootless(), Swarm: before.Info.Swarm.LocalNodeState, Networks: len(before.Networks), Containers: len(before.Containers), Ports: []firewall.DockerPublishedPort{}, Reason: "前后 Docker 报告一致；不是原子内核快照、规则授权或外部可达性证明"}
 	for _, container := range before.Containers {
 		networks := []string{}
 		for _, endpoint := range container.NetworkSettings.Networks {

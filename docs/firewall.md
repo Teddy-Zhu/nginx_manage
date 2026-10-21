@@ -27,6 +27,8 @@
 
 单次采集按固定顺序读取两组 `/info`、`/networks`、`/containers/json?all=false&size=false`，四秒总期限，每份响应最多 256 KiB。两组选择字段规范化后必须完全一致；不重试漂移，不把跨接口读取当作原子快照。最多 128 个网络、128 个运行容器、每容器 16 个网络和合计 1024 项端口记录。完整数量和摘要包含所有项，页面仅显示前 128 个主机映射并明确截断；未发布到主机的 exposed-only 端口不计入，routed 模式的完整发布范围不能从该清单推断。读取失败、字段不完整、漂移或超限时整个运行子报告不可用，内核标记诊断独立保留。Docker 整体公共子报告最多 320 KiB，沿用 30 秒诊断缓存；普通主机入站执行的私有核对不额外读取 Docker API。
 
+报告指纹仅对本地 Docker 默认 bridge（名称、驱动、范围及 `default_bridge=true` 标记均匹配）的瞬时网络 ID 使用固定语义标识，并同步映射报告内对该 ID 的引用；其余网络身份、网络属性、实例、端点及端口记录继续参与完整摘要。前后采集仍比较原始 ID，公开映射和实际目标解析保留真实 ID；已冻结代际不会自动认领发生变化的选中网络。该投影处理的是 [Docker 常规启动重建默认 bridge](https://github.com/moby/moby/blob/master/daemon/daemon_unix.go) 对未选中网络报告的影响。
+
 每项分别展示主机地址/端口和容器端口，不用 DNAT 后容器端口替代外部发布端口。`0.0.0.0`、`::` 只是通配绑定，不自动选择原始目的地址；缺失主机端口保留为 0。仅将唯一 local bridge、nat 网关模式、运行容器和同地址族端点列为 `bridge_nat_candidate`；rootless、Swarm、非 nat、其他驱动、多个网络、回环路径、SCTP 及 IPv6 发布到仅 IPv4 端点等明确未确认，不将用户态代理视为同族转发。候选仍须核对实际 DNAT、入站及转发出口，不证明已受保护或外部可达。
 
 `docker.capabilities` 按五种策略后端与 IPv4/IPv6 返回十项能力。显式 iptables 的 `observed` 要求完整宿主机视图、管理器和后端一致、实际实例以及同次原生导出中的普通 `DOCKER-USER` 链、FORWARD 首条无条件跳转和 filter 中无其他引用；链名或任意条件跳转不足以证明挂接。观察到受支持的显式 iptables 路径时 `supported=true`，独立父子授权有效且没有未完成操作或修复时才可报告 `docker.writable=true`；完整绑定、DNAT/路由核对及联合持久执行见下节。规则页面按报告禁用不支持的 Docker 范围和重新启用操作，展示具体原因；已导入期望可查看、停用或删除，不能据 INPUT 应用声称 Docker 已保护。原生 nftables 继续作为显式实验适配，不自动修改 Docker 后端。
