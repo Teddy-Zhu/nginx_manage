@@ -31,6 +31,7 @@
 
 | 系统及部署 | 管理器/后端 | 实际流量路径 | 已执行范围 | 证据 |
 | --- | --- | --- | --- | --- |
+| Debian 12 Docker → Debian 13 原生 | 已预装受管 Nginx | API 配置迁入及映射后的 HTTP | 正常应用、Agent 中断补偿、版本冲突拒绝、目标重启及源端保持 | [迁移](validation.md#docker-到原生节点的配置迁移2026-10-22) |
 | Debian 12 原生 | direct nftables | 主机 INPUT，IPv4/IPv6 | 受控管理监听、规则应用/确认及指定独立恢复 | [记录](validation.md#debian-双节点管理监听与-direct-nftables) |
 | Ubuntu 24.04 原生 | iptables-nft | 主机 INPUT，IPv4/IPv6 | 应用/确认、独立恢复、移除及活动策略下协调升级 | [规则](validation.md#2026-10-21-iptables-检查时限与首次规则应用p5)、[升级](validation.md#2026-10-21-活动-iptables-策略下的协调升级与独立恢复) |
 | Ubuntu 24.04 原生 | iptables-legacy | 主机 INPUT，IPv4/IPv6 | 应用/确认、Web 停止及整机重启恢复、移除 | [记录](validation.md#2026-10-21-原生-iptables-legacy-应用与恢复) |
