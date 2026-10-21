@@ -18,7 +18,7 @@
 | Ubuntu 24.04 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
 | Ubuntu 26.04 | amd64 | 7.0.0-38-generic | 含 Nginx 的安装、权限、代理、回滚及重启业务检查与证据复核通过；采证首连失败保留 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2604amd64-原生部署2026-10-21) |
 | Ubuntu 26.04 | arm64 | 7.0.0-38-generic | 含 Nginx 的安装、权限、代理、两类回滚、安装重放及重启恢复通过；AppArmor 启用，应用进程 unconfined | 未验收 | 静态 1.30.6，ARMv8.0 | [记录](validation.md#ubuntu-2604arm64-原生部署2026-10-21) |
-| CentOS Stream 9 | amd64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
+| CentOS Stream 9 | amd64 | 5.14.0-758.el9.x86_64 | 含 Nginx 安装、权限及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#centos-stream-9amd64-原生部署与-selinux-续验2026-10-21) |
 | CentOS Stream 9 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
 | CentOS Stream 10 | amd64 | 6.12.0-277.el10.x86_64 | 含/不含 Nginx 安装、标签及重启通过，SELinux Enforcing | 未验收 | 静态 1.30.6 | [安装](validation.md#selinux-文件标签与-v14-原生安装)、[Nginx](validation.md#centos-原生-nginx-与身份切换)、[当前安装器](validation.md#centos-stream-10amd64-firewalld-原生生命周期2026-10-21) |
 | CentOS Stream 10 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |

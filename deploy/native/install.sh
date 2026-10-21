@@ -320,11 +320,15 @@ if [[ $selinux_profile != disabled ]]; then
   data_pattern=${data//./\\.}
   data_type=var_lib_t code_type=usr_t
   if [[ $selinux_profile == docker ]]; then data_type=container_file_t; code_type=container_file_t; fi
+  # CentOS 9 resolves /run through the /var/run SELinux path substitution.
+  # Cover both spellings of our dedicated runtime directories.
   cat >"$work/nginxpanel_files.cil" <<EOF
 (filecon "/opt/nginxpanel(/.*)?" any (system_u object_r usr_t ((s0)(s0))))
 (filecon "/etc/nginxpanel(/.*)?" any (system_u object_r etc_t ((s0)(s0))))
 (filecon "/run/nginxpanel-host(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))
 (filecon "/run/nginxpanel-install(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))
+(filecon "/var/run/nginxpanel-host(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))
+(filecon "/var/run/nginxpanel-install(/.*)?" any (system_u object_r var_run_t ((s0)(s0))))
 (filecon "$data_pattern(/.*)?" any (system_u object_r $data_type ((s0)(s0))))
 (filecon "$data_pattern/runtime(/.*)?" any (system_u object_r $code_type ((s0)(s0))))
 (filecon "$data_pattern/bin(/.*)?" any (system_u object_r $code_type ((s0)(s0))))

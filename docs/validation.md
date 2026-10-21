@@ -516,3 +516,14 @@ Linux 指标边界使用 Docker 内独立 chroot 的普通 `/proc`、`/sys` 夹�
 使用已有预置模块镜像 `nginxpanel-p5-nginx:20261021-dualarch-v1-amd64`，镜像 ID 为 `sha256:513bd336f4aee8c27cfaa97bedb045dd65eb84ccb507d65f6884ed81251f798b`。真实配置创建和常用字段修改经 Agent 渲染、实际 `nginx -t` 与降权进程启动；TCP/UDP 的 IPv4/IPv6 四种客户端各进行 12 次请求/响应，IPv4 与 IPv6 上游分别收到 3/9 次，符合 1:3 权重。普通 TCP 与独占外部 UDP 监听冲突产生实际 EADDRINUSE，候选进程退出后旧代理仍正常响应。未覆盖其他发行包、arm64 权重或 UDP 端口复用组合；UDP 发送未被当作健康证明。
 
 源码与集中验收证据保存在 `.validation/p5-metrics-stream-v1/` 至 `v4/`。v1 因临时目录 noexec 未能执行测试；调整容器参数后，v2 的监控与 Linux 来源检查通过，Stream 被公共可写 `/srv` 的安全检查拒绝；v3 收紧目录权限后四种权重检查通过，原冲突夹具误将 Nginx UDP 的 SO_REUSEADDR 共享当作独占冲突；v4 改用独占外部 UDP 监听，仅重新编译并复验受影响的冲突用例，通过，未重复已通过的监控和权重检查。最终源码散列及结果范围见 v4/result.json。使用锁定 Go 1.27.2 SDK、离线依赖缓存、无网络和受限容器能力；未运行 UI 测试或修改开发宿主机配置。
+
+
+### CentOS Stream 9/amd64 原生部署与 SELinux 续验（2026-10-21）
+
+隔离 QEMU 的官方 CentOS Stream 9 镜像、实际 `5.14.0-758.el9.x86_64` 内核已完成原生 Web/Agent 与静态 Nginx 1.30.6 验收。首次安装、HTTPS 代理、监听冲突回滚、切换后 Agent 中断回滚及恢复应用的原始证据保留在本地 `centos9-amd64-native-v3`；从其后续覆盖盘完成安装重放、服务重启和整机重启，`centos9-amd64-native-v5` 控制器退出 0，虚拟机正常关机。前后 boot ID 不同，密钥与活动 Nginx 证明保持一致；两次 SELinux 均为 Enforcing。
+
+安装器补充 `/var/run/nginxpanel-host`、`/var/run/nginxpanel-install` 的 CIL 路径声明，与 `/run` 别名一致，解决该系统的等价路径冲突。实际受管目录保持 `system_u` 和预期类型，`matchpathcon -V` 验证通过。外部已批准程序保留系统允许的 `unconfined_u:object_r:usr_t:s0`，没有改写其标签或关闭 Enforcing；原夹具把其 SELinux user 强制等同于受管目录，已修正该断言。一次续验误重放已完成的幂等请求得到正确的 409，后续仅续办待验收步骤；全部失败日志保留。
+
+本轮安装器 SHA-256 为 `334d1fa1bcd817ef1510b34e8f5ed82cd53597d1d76df35f15b8e30579690d23`；运行程序为原批准的 amd64 `v0.2.24-dev`（SHA-256 `dd8e4c110d3cfb1242493752291e3896cf59f40a3b294102a2a62e7817069f3e`）。该记录只更新此原生系统组合，不表示后续监听检查代码、Docker 或其他功能已重跑。
+
+Ubuntu 24.04/arm64 的 `ubuntu24-arm64-native-v8` 在 QEMU 7.2.22/TCG、Cortex-A53、单核下再次于 SSH 就绪前出现 6.8 内核软锁死，未进入应用验收。已停止失败覆盖盘，保留控制台与停止原因，不再重复同参数运行；该组合等待能稳定执行该内核的 ARM 隔离环境。开发宿主机的包、服务、网络、SELinux 及 binfmt 配置均未修改。
