@@ -1,17 +1,14 @@
 package agent
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -66,36 +63,12 @@ func (n *Nginx) observe(ctx context.Context, m manifest) error {
 	if err != nil {
 		return err
 	}
-	sockets, err := networkSockets()
+	sockets, err := networkSockets(ctx)
 	if err != nil {
 		return err
 	}
-	for _, want := range m.Listeners {
-		found := false
-		for _, socket := range sockets {
-			if socket.listener.Network == want.Network && socket.listener.IP == want.IP && socket.listener.Port == want.Port && owned[socket.inode] {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errors.New("Nginx listener ownership is unconfirmed")
-		}
-	}
-	for _, socket := range sockets {
-		if !owned[socket.inode] {
-			continue
-		}
-		found := false
-		for _, want := range m.Listeners {
-			if socket.listener.Network == want.Network && socket.listener.IP == want.IP && socket.listener.Port == want.Port {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errors.New("unexpected Nginx listener remains active")
-		}
+	if err := confirmNginxListeners(m.Listeners, owned, sockets); err != nil {
+		return err
 	}
 	for _, probe := range m.TLS {
 		// The certificate is pinned to the immutable revision. Public-CA trust
@@ -124,63 +97,6 @@ func processSockets(pid int) (map[string]bool, error) {
 		target, err := os.Readlink(fmt.Sprintf("/proc/%d/fd/%s", pid, entry.Name()))
 		if err == nil && strings.HasPrefix(target, "socket:[") && strings.HasSuffix(target, "]") {
 			out[strings.TrimSuffix(strings.TrimPrefix(target, "socket:["), "]")] = true
-		}
-	}
-	return out, nil
-}
-
-type networkSocket struct {
-	listener listener
-	inode    string
-}
-
-func networkSockets() ([]networkSocket, error) {
-	out := []networkSocket{}
-	for _, network := range []string{"tcp4", "tcp6", "udp4", "udp6"} {
-		name := strings.TrimSuffix(network, "4")
-		f, err := os.Open("/proc/net/" + name)
-		if os.IsNotExist(err) && strings.HasSuffix(network, "6") {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		scanner := bufio.NewScanner(f)
-		scanner.Scan()
-		for scanner.Scan() {
-			fields := strings.Fields(scanner.Text())
-			if len(fields) < 10 {
-				f.Close()
-				return nil, errors.New("invalid kernel socket table")
-			}
-			if strings.HasPrefix(network, "tcp") && fields[3] != "0A" {
-				continue
-			}
-			if strings.HasPrefix(network, "udp") && fields[3] != "07" {
-				continue
-			}
-			ipHex, portHex, ok := strings.Cut(fields[1], ":")
-			if !ok {
-				continue
-			}
-			bytes, err := hex.DecodeString(ipHex)
-			if err != nil {
-				continue
-			}
-			for start := 0; start+4 <= len(bytes); start += 4 {
-				bytes[start], bytes[start+3] = bytes[start+3], bytes[start]
-				bytes[start+1], bytes[start+2] = bytes[start+2], bytes[start+1]
-			}
-			port, err := strconv.ParseInt(portHex, 16, 32)
-			if err != nil {
-				continue
-			}
-			out = append(out, networkSocket{listener: listener{Network: network, IP: net.IP(bytes).String(), Port: int(port)}, inode: fields[9]})
-		}
-		err = scanner.Err()
-		f.Close()
-		if err != nil {
-			return nil, err
 		}
 	}
 	return out, nil

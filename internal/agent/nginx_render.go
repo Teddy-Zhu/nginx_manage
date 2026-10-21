@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path"
 	"path/filepath"
@@ -352,11 +353,19 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 					return nil, err
 				}
 				key := fmt.Sprintf("%s/%s/%d", l.Network, l.IP, l.Port)
-				if kind, ok := seen[key]; ok {
-					if kind != "http" || block.Name != "http" {
-						return nil, errors.New("conflicting HTTP/Stream listeners")
+				for _, previous := range m.Listeners {
+					if !listenersOverlap(previous, l) {
+						continue
 					}
-				} else {
+					previousKey := fmt.Sprintf("%s/%s/%d", previous.Network, previous.IP, previous.Port)
+					// HTTP virtual servers may share or coalesce a socket within
+					// one address family. Separate contexts and dual-stack/IPv4
+					// sockets cannot safely share an overlapping endpoint.
+					if seen[previousKey] != "http" || block.Name != "http" || previous.Network != l.Network || previous.IP == l.IP && previous.DualStack != l.DualStack {
+						return nil, errors.New("conflicting listeners across contexts, IPv6 modes or address families")
+					}
+				}
+				if _, ok := seen[key]; !ok {
 					m.Listeners = append(m.Listeners, l)
 					seen[key] = block.Name
 				}
@@ -483,13 +492,13 @@ func parseListener(args []nginxconfig.Token, kind string) (listener, bool, error
 	if host == "" || host == "*" {
 		host = "0.0.0.0"
 	}
-	ip := net.ParseIP(host)
+	ip, ipErr := netip.ParseAddr(host)
 	number, err := strconv.Atoi(port)
-	if ip == nil || err != nil || number < 1 || number > 65535 {
+	if ipErr != nil || ip.Zone() != "" || err != nil || number < 1 || number > 65535 {
 		return listener{}, false, errors.New("invalid listener address or port")
 	}
 	l := listener{Network: "tcp4", IP: ip.String(), Port: number}
-	if strings.Contains(host, ":") {
+	if ip.Is6() {
 		l.Network = "tcp6"
 	}
 	ssl := false
@@ -507,9 +516,15 @@ func parseListener(args []nginxconfig.Token, kind string) (listener, bool, error
 			ssl = true
 		case "quic":
 			return l, false, errors.New("QUIC listeners are unsupported")
-		case "ipv6only=off":
-			l.DualStack = true
+		case "ipv6only=off", "ipv6only=on":
+			if !ip.Is6() {
+				return l, false, errors.New("ipv6only requires an IPv6 listener")
+			}
+			l.DualStack = arg.Value == "ipv6only=off"
 		}
+	}
+	if ip.Is4In6() && !l.DualStack {
+		return l, false, errors.New("IPv4-mapped IPv6 listener requires ipv6only=off")
 	}
 	return l, ssl, nil
 }

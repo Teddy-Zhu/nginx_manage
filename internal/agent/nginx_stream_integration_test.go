@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/nginxconfig"
@@ -201,6 +202,12 @@ func TestPrebuiltStreamDualStackWeights(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer log.Close()
+	t.Cleanup(func() {
+		if t.Failed() {
+			output, _ := os.ReadFile(log.Name())
+			t.Logf("Nginx runtime log:\n%s", output)
+		}
+	})
 	process := command("-g", "daemon off;")
 	process.Stdout, process.Stderr = log, log
 	if err := process.Start(); err != nil {
@@ -260,6 +267,195 @@ func TestPrebuiltStreamDualStackWeights(t *testing.T) {
 			t.Logf("IPv4 upstream=%d, IPv6 upstream=%d", counts['A'], counts['B'])
 		})
 	}
+	t.Run("shared-udp-ownership", func(t *testing.T) {
+		requireNginxSocketFixture(t)
+		owned, err := processSockets(process.Process.Pid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot := func() []networkSocket {
+			t.Helper()
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+			sockets, err := networkSockets(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return sockets
+		}
+		if err := confirmNginxListeners(m.Listeners, owned, snapshot()); err != nil {
+			t.Fatal(err)
+		}
+		lc := net.ListenConfig{Control: func(_, _ string, raw syscall.RawConn) error {
+			var optionErr error
+			if err := raw.Control(func(fd uintptr) { optionErr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1) }); err != nil {
+				return err
+			}
+			return optionErr
+		}}
+		foreign, err := lc.ListenPacket(t.Context(), "udp4", udp4)
+		if err != nil {
+			t.Fatalf("fixture did not reproduce shared UDP binding: %v", err)
+		}
+		if err := confirmNginxListeners(m.Listeners, owned, snapshot()); err == nil {
+			foreign.Close()
+			t.Fatal("Nginx was confirmed despite a foreign UDP socket on the same endpoint")
+		}
+		if err := checkListenerOccupancy(m.Listeners, owned, snapshot()); err == nil {
+			foreign.Close()
+			t.Fatal("preflight accepted a shared foreign UDP socket")
+		}
+		foreign.Close()
+		if err := confirmNginxListeners(m.Listeners, owned, snapshot()); err != nil {
+			t.Fatalf("Nginx ownership did not recover after closing only the foreign fixture: %v", err)
+		}
+	})
+	t.Run("reuseport-two-workers", func(t *testing.T) {
+		requireNginxSocketFixture(t)
+		backend4 := udpBackend("udp4", "127.0.0.1:0", 'R')
+		backendTCP6 := tcpBackend("tcp6", "[::1]:0", 'R')
+		backendUDP6 := udpBackend("udp6", "[::1]:0", 'R')
+		tcp4Lease, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tcp4Lease.Close()
+		udp4Lease, err := net.ListenPacket("udp4", tcp4Lease.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer udp4Lease.Close()
+		tcp6Lease, err := net.Listen("tcp6", "[::1]:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tcp6Lease.Close()
+		udp6Lease, err := net.ListenPacket("udp6", tcp6Lease.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer udp6Lease.Close()
+		address4, address6 := tcp4Lease.Addr().String(), tcp6Lease.Addr().String()
+		_, port4, _ := net.SplitHostPort(address4)
+		wildcard := "0.0.0.0:" + port4
+		content := fmt.Sprintf("worker_processes 2;\npid run/nginx.pid;\nevents { worker_connections 64; }\nhttp { access_log off; server { listen %s reuseport; return 200 wildcard; } server { listen %s; return 200 specific; } }\nstream { server { listen %s udp reuseport; proxy_pass %s; } server { listen %s reuseport; proxy_pass %s; } server { listen %s udp reuseport; proxy_pass %s; } }\n", wildcard, address4, address4, backend4, address6, backendTCP6, address6, backendUDP6)
+		parsed, err := nginxconfig.Parse([]nginxconfig.File{{ID: "main", Path: "nginx.conf", Content: content}}, s.Policy)
+		if err != nil || len(parsed.Tree.Diagnostics) != 0 {
+			t.Fatalf("invalid reuseport fixture: %v", err)
+		}
+		private := t.TempDir()
+		for path := private; path != os.TempDir(); path = filepath.Dir(path) {
+			if err := os.Chmod(path, 0755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		runtime := &Nginx{DataDir: private, Binary: binary, Policy: s.Policy, Container: &nginxcontainer.Runtime{}, uid: 1000, gid: 1000, tempModules: features.httpTempModules}
+		if err := os.MkdirAll(filepath.Join(private, "run"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := runtime.runtimeDirectories(); err != nil {
+			t.Fatal(err)
+		}
+		manifest := &manifest{DeploymentID: secure.ID(), Probe: "reuseport-matrix", Modules: map[string]ModuleDependency{}}
+		contents, err := runtime.render(parsed, manifest, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		file := runtime.configPath(manifest.DeploymentID)
+		for name, content := range contents {
+			path := filepath.Join(filepath.Dir(file), name)
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		wants := manifest.Listeners
+		tcp4Lease.Close()
+		udp4Lease.Close()
+		tcp6Lease.Close()
+		udp6Lease.Close()
+		cmd := exec.Command(binary, "-p", private+"/", "-c", file, "-e", "stderr", "-g", "daemon off;")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1000, Gid: 1000}}
+		cmd.Stdout, cmd.Stderr = log, log
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			cmd.Process.Signal(syscall.SIGTERM)
+			done := make(chan error, 1)
+			go func() { done <- cmd.Wait() }()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Errorf("reuseport Nginx exit: %v", err)
+				}
+			case <-time.After(5 * time.Second):
+				cmd.Process.Kill()
+				<-done
+				t.Error("reuseport Nginx shutdown timed out")
+			}
+		}()
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		for {
+			owned, err := processSockets(cmd.Process.Pid)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sockets, err := networkSockets(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = confirmNginxListeners(wants, owned, sockets)
+			if err == nil {
+				for _, want := range []listener{wants[0], wants[2], wants[3], wants[4]} {
+					count := 0
+					for _, socket := range sockets {
+						if socket.passive && owned[socket.inode] && listenerCovers(socket.listener, want) {
+							count++
+						}
+					}
+					if count != 2 {
+						t.Fatalf("expected two worker reuseport sockets for %+v, got %d", want, count)
+					}
+				}
+				break
+			}
+			if ctx.Err() != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		for _, endpoint := range []struct{ network, address string }{{"udp4", address4}, {"tcp6", address6}, {"udp6", address6}} {
+			connection, err := net.DialTimeout(endpoint.network, endpoint.address, time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			connection.SetDeadline(time.Now().Add(2 * time.Second))
+			_, err = connection.Write([]byte{'x'})
+			var response [1]byte
+			if err == nil {
+				_, err = io.ReadFull(connection, response[:])
+			}
+			connection.Close()
+			if err != nil || response[0] != 'R' {
+				t.Fatalf("reuseport %s proxy failed: %q, %v", endpoint.network, response, err)
+			}
+		}
+		connection, err := net.DialTimeout("tcp4", address4, time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer connection.Close()
+		connection.SetDeadline(time.Now().Add(2 * time.Second))
+		fmt.Fprint(connection, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+		response, err := io.ReadAll(connection)
+		if err != nil || !bytes.HasSuffix(response, []byte("specific")) {
+			t.Fatalf("coalesced HTTP listener failed: %q, %v", response, err)
+		}
+	})
 	t.Run("listen-conflict", func(t *testing.T) {
 		// Nginx UDP sockets allow SO_REUSEADDR; use an exclusive external
 		// listener so the negative case really exercises a UDP bind conflict.

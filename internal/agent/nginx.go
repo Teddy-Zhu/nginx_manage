@@ -537,6 +537,13 @@ func (n *Nginx) execute(record Record) {
 		_ = n.persist(record)
 		return
 	}
+	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
+	err = n.checkListenerAvailability(ctx, candidate)
+	cancel()
+	if err != nil {
+		fail("listener_unavailable", "发布前监听端口检查未通过，原发布指针未改变："+err.Error())
+		return
+	}
 	// Persist intent before the pointer changes. Recovery treats every later
 	// stage as potentially applied, even if a crash occurred before rename.
 	record.Stage = "switch_pending"

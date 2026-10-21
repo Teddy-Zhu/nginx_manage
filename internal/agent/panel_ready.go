@@ -69,7 +69,7 @@ func panelReadinessParent(ctx context.Context, s panelruntime.Snapshot, expected
 	return peer, nil
 }
 
-func panelReadinessListener(pid int, address string) error {
+func panelReadinessListener(ctx context.Context, pid int, address string) error {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return err
@@ -82,13 +82,13 @@ func panelReadinessListener(pid int, address string) error {
 	if err != nil {
 		return err
 	}
-	sockets, err := networkSockets()
-	if err != nil {
-		return err
-	}
 	network := "tcp4"
 	if net.ParseIP(host).To4() == nil {
 		network = "tcp6"
+	}
+	sockets, err := networkSockets(ctx, network)
+	if err != nil {
+		return err
 	}
 	for _, socket := range sockets {
 		if socket.listener.Network == network && socket.listener.IP == host && socket.listener.Port == p && owned[socket.inode] {
@@ -239,7 +239,7 @@ func observePanelReadinessSource(ctx context.Context, current panelruntime.Snaps
 	if err = material(ctx); err != nil {
 		return out, err
 	}
-	if err = panelReadinessListener(hostPID, current.Deployment.Listen); err != nil {
+	if err = panelReadinessListener(ctx, hostPID, current.Deployment.Listen); err != nil {
 		return out, err
 	}
 	https, err := panelready.CheckHTTPS(ctx, current, status.NodeID)
@@ -253,7 +253,7 @@ func observePanelReadinessSource(ctx context.Context, current panelruntime.Snaps
 	if last != status || lastPID != hostPID {
 		return out, errors.New("就绪检查期间应用、配置或进程状态发生变化")
 	}
-	if err = panelReadinessListener(hostPID, current.Deployment.Listen); err != nil {
+	if err = panelReadinessListener(ctx, hostPID, current.Deployment.Listen); err != nil {
 		return out, err
 	}
 	observed, err := observePanelService(ctx, current)

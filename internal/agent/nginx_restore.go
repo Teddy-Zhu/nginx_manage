@@ -74,6 +74,17 @@ func (n *Nginx) executeRestore(record Record) {
 			}
 			return
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err = n.checkListenerAvailability(ctx, candidate)
+		cancel()
+		if err != nil {
+			if beforeSwitch {
+				fail("listener_unavailable", "恢复前监听端口检查未通过，原发布指针未改变："+err.Error())
+			} else {
+				uncertain()
+			}
+			return
+		}
 		record.Stage = "restore_switch_pending"
 		if n.persist(record) != nil {
 			return
