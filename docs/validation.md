@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 8/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
+2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 14/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他转发管理器/后端组合及未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
 
 ## 隔离环境
 
@@ -687,3 +687,30 @@ API 认证/配置迁移集成测试、固定 Agent 升级入口用例、安装�
 程序 SHA-256：amd64 `de84cf5a7883ca683c26b9519192208e64074b0ef27b7c1e82b461e99639a590`，arm64 `7f4af341215aae2849d08b3db6ef595341a87c495b5de39bd8a173b6e6a0be3c`；manifest `5c204d5a83f1d8701daf568079269bb84988ed8bea60db1136215e140237c0f4`。面板 OCI index 为 `sha256:7714ee71f9c3a6a8053575dd4adcb6b2147b260232071e1ff128ca13bfd00b0c`，Nginx 为 `sha256:88df95018d3458870deed83bfa339d3d24359f170388aa05faf9b347d9ae84c5`。本地证据位于 `.validation/native-vm/docker-centos{9,10}-amd64-v5/`，最终 verdict SHA-256 分别为 `6a8d6e3b529ffede6c8408d5dea21616001ffd17a20d344b1c4a72c7ba300e66`、`cfbd0ef959a84e796f31567d66c3953740a6636d838c0b6ac3ba4d237751ecfa`；镜像和夹具位于 `docker-selinux-channels-images-v54/`。这些均为本地验证产物，未推送或正式发布。
 
 默认 Docker 矩阵累计 8/14，amd64 七组已补齐；其余六组 arm64、其他功能组合及外部集成仍待验收。
+
+## ARM64 默认 Docker 部署（2026-10-22）
+
+Debian 12/13、Ubuntu 24.04/26.04、CentOS Stream 9/10 的 ARM64 托管 Docker 部署及重启已通过，默认 Docker 矩阵累计 14/14。Ubuntu 26.04 使用修正版 `.38`，其他五组使用 `.37`；均采用实际双架构程序、签名验证包及预置模块镜像，`.37` 摘要沿用上一节。结果不代表所有历史组合均重跑最新程序。
+
+来宾均为 Cortex-A53、4 vCPU、3 GiB，外层普通 Docker 限额为 3 CPU/5 GiB，无宿主端口、控制 Socket、主机网络或特权模式。表中 MemTotal 为重启后的内核值，正式 Host Agent 在每次启动独立匹配四个 CPU、MemTotal、物理网卡及当前 boot ID，样本非过期；未据此声明已验收 2 GiB 配置。
+
+| 系统 | 实际内核 | MemTotal（字节） | 物理网卡 | verdict SHA-256 |
+| --- | --- | --- | --- | --- |
+| Debian 12 | `6.1.0-54-cloud-arm64` | 3126906880 | `enp0s1` | `9a135149f7b026c42106365b7633071e6e95d237646e9ab497eb7e58370eeabf` |
+| Debian 13 | `6.12.113+deb13-cloud-arm64` | 3116199936 | `enp0s1` | `c5e9809f30969bde7ddbe53cf8e1cb870e19329400e287502fed5e7dfb032773` |
+| Ubuntu 24.04 | `6.8.0-147-generic` | 3097776128 | `enp0s1` | `f45dc8cfb3bf795f60bf3db480dbadaf73059efc729c36b3b419722bb1b209fb` |
+| Ubuntu 26.04 | `7.0.0-38-generic` | 3088400384 | `enp0s1` | `38e812a3bbf9674d9d7341711fca00fe4edcd6426756dad8ee3ae0abb4393b50` |
+| CentOS Stream 9 | `5.14.0-758.el9.aarch64` | 2828451840 | `eth0` | `0352f945db3b1f5b90e2cb1da5434667efb123c26fcc7a4665f8e8b9b7fe837e` |
+| CentOS Stream 10 | `6.12.0-277.el10.aarch64` | 2825166848 | `enp0s1` | `ca46f3905ba939eab1b5256ace2b5980e324bfcc764c8515af3436fd94f1d2fc` |
+
+共同验收覆盖实际 OCI 导入与架构/摘要绑定、篡改及未知签名拒绝、HTTPS API 和真实反代、占用端口预检、切换后抢占端口与 SIGKILL Agent 的独立回滚、再次发布、强制重建两容器、安装重放、服务重启及整机重启。重启后节点、修订、deployment、密钥及实际程序散列保持，boot ID 改变。容器保持专用身份、只读根、禁止提权和既定 capabilities，不挂载 Docker Socket。Ubuntu 的实际 AppArmor 标签为 Agent `unconfined`、Web/Nginx `docker-default (enforce)`，相关拒绝为 0；CentOS 在 Enforcing 下检查实际容器 MCS、三条 SO_PEERSEC、线程创建上下文恢复、原始相关 AVC 为 0 及 audit lost 为 0。
+
+Debian 首轮业务成功后的采证误把 `name=apparmor,profile=default` 当成未启用 AppArmor；修正为逗号前的选项名称后，从正常关机磁盘续办采证及重启，没有重跑安装和故障流程。Ubuntu 24.04 的首次重启后 SSH 完成文件检查返回临时 255，后续已采回成功单元、真实完成标记及全套前后快照。CentOS 两组的单元成功日志未转发到串口，原驱动因等待串口标记超时；在同一运行中虚拟机直接核对了当前 boot ID、完成文件、单元 `Result=success/ExecMainStatus=0`、InvocationID 和 journal。三组原外层退出 1 和失败记录均保留，最终判定来自完整业务及采证复核；所有来宾均正常关机、QEMU 退出 0，无 OOM。
+
+CentOS 10 准备环境时，官方 AppStream metalink 返回的 repomd 校验不一致；仅在来宾改用官方 HTTPS 直连，保留 RPM GPG 校验。随后修正续办时未重新挂载原 cidata 的夹具遗漏，复用已成功安装的软件包，离线完成 Docker 工具准备；原失败及两次正常关机磁盘均保留。开发宿主的软件包、服务、网络、防火墙和 Docker 配置未修改。
+
+Ubuntu 26.04 首轮 `.37` 的业务虽完成，内核仍有 26 条相关 AppArmor SIGURG 拒绝，因此未计为通过。现象对应[上游叠加标签问题](https://github.com/containerd/containerd/issues/12886)。产品仅为有超时及进程核验的 Go 校验启动器设置 `GODEBUG=asyncpreemptoff=1`；Agent、Web 和 Nginx 主入口不设置该项，LaunchTest 对最终原生 Nginx 显式传入清洁环境，不放宽 AppArmor 策略。有效配置的隔离定点诊断退出 0、无新增相关拒绝；双架构编译及实际双架构镜像构建通过。新的 `.38` 从仅准备 Docker 的干净基盘完成上述全部业务及重启流程，两次启动的相关拒绝均为 0，实际 Nginx 主进程环境不含 `GODEBUG`。最终记录 `P5_ARM64_DOCKER_ACCEPTANCE_PASS`，正常关机、QEMU 和外层容器均退出 0，无 OOM。
+
+`.38` 程序 SHA-256：amd64 `d8f322531287276d49d68615d9f1e67ea9abb59f43b2eb1bc0c602fdc2cd097c`，arm64 `00263dea3ae0d83ce73d69f2dc5a0b5da2f9deadc77bf7cd4f0266939b297ffd`；manifest `888e1d69fc96c3cdf8444bb4e83390dc9cf9d36b694084f8f29ebee1907a8ff4`。面板 OCI index 为 `sha256:6023ddff67fb55b974cbe19b9044cf6cfed136f1e537b36c4cad53a2ebc898ee`，Nginx 为 `sha256:a464537157665679162e8da0c4784c4be8f0d119af7be9dad46866a241be139e`；均为本地验证产物，不替代正式发布。
+
+本地证据：`docker-arm64-matrix-v55/record-verdict.py`、`docker-debian{12,13}-arm64-v1/v2/`、`docker-ubuntu24-arm64-v1/`、`docker-centos{9,10}-arm64-v1/`；Ubuntu 26.04 原失败及诊断分别在 `docker-ubuntu26-arm64-v1/` 与 `docker-ubuntu26-arm64-preemption-diagnostic-v2/v3/`，修正版为 `docker-ubuntu26-arm64-v2/`。新程序、实际镜像和验证签发器位于 `docker-scoped-preemption-build-v56/` 与 `docker-scoped-preemption-images-v57/`，均在 `.validation/native-vm/` 下；没有 UI 自动化或正式发布。

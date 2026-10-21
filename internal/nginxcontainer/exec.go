@@ -164,6 +164,10 @@ func (r *Runtime) command(ctx context.Context, args, launch []string) (out []byt
 	input := map[string]any{"AttachStdout": true, "AttachStderr": true, "AttachStdin": false, "Tty": false, "Privileged": false, "User": strconv.Itoa(b.UID) + ":" + strconv.Itoa(b.GID), "WorkingDir": b.DataDir, "Env": []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "TZ=UTC"}, "Cmd": append([]string{Binary}, args...)}
 	if len(launch) != 0 {
 		input["User"], input["Cmd"] = "0:0", launch
+		// Stacked AppArmor labels can deny Go's SIGURG self-preemption in
+		// Docker exec. The bounded diagnostic bootstrap uses cooperative
+		// scheduling; LaunchTest execs Nginx with a clean environment.
+		input["Env"] = append(input["Env"].([]string), "GODEBUG=asyncpreemptoff=1")
 	}
 	if err = d.JSON(ctx, "POST", "/containers/"+c.ID+"/exec", input, &created); err != nil {
 		return nil, err
