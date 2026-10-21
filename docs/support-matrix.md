@@ -38,7 +38,7 @@
 | CentOS Stream 10 原生 | firewalld/nftables | 主机 INPUT，IPv4/IPv6 | 应用/确认、管理器重启、Web 停止及整机重启恢复、移除；原控制器末尾夹具误判，业务证据补充复核通过 | [记录](validation.md#centos-stream-10amd64-firewalld-原生生命周期2026-10-21) |
 | Debian 12 原生 | 普通 resolv.conf | IPv4/IPv6/IPv6-only 实际 DNS | 解析、所有权、外部修改及指定独立恢复 | [记录](validation.md#debian-双节点普通文件-dns-与独立恢复) |
 | Debian 13 原生 | networkd/resolved、NetworkManager/resolved、两种 netplan renderer | IPv4/IPv6/IPv6-only 实际 DNS | 静态源、分域保持及指定独立恢复 | [networkd](validation.md#debian-13-networkdresolved-与-netplannetworkd-dns)、[NetworkManager](validation.md#debian-13-networkmanagerresolved-与-netplannetworkmanager-dns) |
-| Debian 13 原生 | 受管 Fail2ban，固定宿主机动作 | 双栈来源日志与主机封禁 | 官方代码安装、封禁/解封、轮转及指定重启恢复 | [服务](validation.md#debian-13-fail2ban-官方代码与受管服务)、[动作](validation.md#2026-10-20-独立面板-fail2ban-宿主机动作p5)、[重启](validation.md#2026-10-20-fail2ban-同机整机重启与显式停用p5) |
+| Debian 13 原生 | 受管 Fail2ban，固定宿主机动作 | 双栈来源日志与主机封禁 | 官方代码安装、封禁/解封、轮转及指定重启恢复；amd64/Python 3.13/1.1.1 同版本签名资产升级、中断续办、失败补偿和补偿后重启 | [服务](validation.md#debian-13-fail2ban-官方代码与受管服务)、[动作](validation.md#2026-10-20-独立面板-fail2ban-宿主机动作p5)、[重启](validation.md#2026-10-20-fail2ban-同机整机重启与显式停用p5)、[升级](validation.md#fail2ban-升级的启动恢复批准) |
 
 Ubuntu 22.04/arm64 的自定义 Docker bridge、iptables-nft 发布端口及联合规则范围已完成真实双栈 TCP/UDP、Agent 异常退出、整机重启恢复、外部 DOCKER-USER 规则保持和受管规则移除验收，见[记录](validation.md#docker-forward-实际内核准入续验2026-10-21)。结果限于该组合；主机 INPUT 结果不代表覆盖其他容器 FORWARD/DNAT 路径。Docker 原生 nftables 实验组合、其他系统、架构、管理器和故障点仍待验收，未经验收的 DNS 组合保持只读。
 

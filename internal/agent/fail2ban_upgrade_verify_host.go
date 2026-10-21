@@ -81,7 +81,10 @@ func validateFail2banUpgradeHostVerification(i fail2banUpgradeSelection, proof f
 	b := i.Bundle
 	sources, sync := i.Sources, i.Sync
 	root := i.Registration
-	if root == nil || root.State != "registered" || sources == nil || sources.Action != "approve" || sync == nil || sync.Action != "enable" || sources.EngineKey != fail2banNginxEngineKey(i.Managed.binding()) || sync.SourcesID != sources.ID || sync.EngineKey != sources.EngineKey || sync.ProtectionID != b.HostProtectionID {
+	// Preparation authenticates the bundle's original approval through boot
+	// recovery. Live and historical proofs use that frozen approval afterward.
+	protection := i.Protection
+	if root == nil || root.State != "registered" || protection == nil || protection.Action != "approve" || sources == nil || sources.Action != "approve" || sync == nil || sync.Action != "enable" || sources.EngineKey != fail2banNginxEngineKey(i.Managed.binding()) || sync.SourcesID != sources.ID || sync.EngineKey != sources.EngineKey || sync.ProtectionID != protection.ID {
 		return errors.New("升级宿主机动作缺少候选来源、持续会话或原保护批准")
 	}
 	if !sameFail2banHostJails(h.Protected, b.HostProtected) {

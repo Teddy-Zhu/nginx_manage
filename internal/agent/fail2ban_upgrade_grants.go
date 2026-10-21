@@ -219,7 +219,15 @@ func planFail2banUpgradeGrants(data string, b fail2banUpgradeBasis) (Fail2banUpg
 			}
 		}
 	}
-	if len(hostJails) != 0 && (!out.MigrateHostSync || !out.MigrateHostSources || !sources.Policy.Managed || !out.RetainHostProtection || b.Bundle.HostProtectionID != protection.ID) {
+	protectionMatches := false
+	if len(hostJails) != 0 && out.RetainHostProtection {
+		var err error
+		protectionMatches, err = fail2banHostBootProtectionMatches(data, b.Bundle.HostProtectionID, protection)
+		if err != nil {
+			return out, err
+		}
+	}
+	if len(hostJails) != 0 && (!out.MigrateHostSync || !out.MigrateHostSources || !sources.Policy.Managed || !out.RetainHostProtection || !protectionMatches) {
 		out.Blockers = append(out.Blockers, "当前宿主机 jail 缺少同范围的受管来源、保护或持续同步批准")
 	}
 	checkpoint, blockers, err := readFail2banUpgradeHostCheckpoint(data, b)

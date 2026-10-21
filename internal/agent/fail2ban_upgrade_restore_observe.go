@@ -184,7 +184,9 @@ func (i fail2banUpgradeRestoreIntent) observe(ctx context.Context, s fail2banUpg
 		if err = verifyFail2banManaged(ctx, record, false); err != nil {
 			return err
 		}
-		_, bundle, e := selectedFail2banJails(record)
+		// Authenticate each frozen bundle without requiring both selection events
+		// to occupy the live pointer, already constrained above.
+		bundle, e := loadFail2banJailBundle(record, record.JailSelection)
 		if e != nil {
 			return e
 		}

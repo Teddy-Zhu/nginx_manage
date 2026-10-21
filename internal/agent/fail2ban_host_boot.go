@@ -204,6 +204,47 @@ func fail2banHostBootSyncAuthority(dataDir string, event *fail2banHostSyncEvent)
 	return nil
 }
 
+// Immutable jail bundles retain the original protection reference across boots.
+// Only completed recovery projections may connect it to the current approval.
+func fail2banHostBootProtectionMatches(dataDir, originalID string, current *fail2banHostProtectionEvent) (bool, error) {
+	if current.ID == originalID {
+		return true, nil
+	}
+	r, err := loadFail2banHostBootRecovery(dataDir)
+	if err != nil {
+		return false, err
+	}
+	seen := map[string]bool{}
+	for r != nil {
+		if seen[r.ID] {
+			return false, errors.New("宿主机保护批准的启动恢复链出现循环")
+		}
+		seen[r.ID] = true
+		if current.RequestHash != r.protection().RequestHash {
+			return false, nil
+		}
+		record, err := r.record(dataDir)
+		if err != nil {
+			return false, err
+		}
+		if record.State != "succeeded" {
+			return false, nil
+		}
+		if r.Protection.ID == originalID {
+			return true, nil
+		}
+		if r.PreviousID == "" {
+			return false, nil
+		}
+		current = &r.Protection
+		r, err = loadFail2banHostBootRecoveryEvent(dataDir, r.PreviousID)
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
 func (f *fail2banHostSyncExecutor) advanceBootRecovery(ctx context.Context, r *fail2banHostBootRecovery) error {
 	dataDir := f.server.DataDir
 	old, err := r.retirement(dataDir)
