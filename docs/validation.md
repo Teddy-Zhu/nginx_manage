@@ -462,3 +462,11 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - v3 的真实代理、占用端口回滚、候选切换后 Agent SIGKILL 回滚、恢复应用、Compose 强制重建、安装重放、Agent 重启和整机重启全部通过。容器重建实际更换容器 ID，原 HTTPS 会话、节点和配置保持；节点为 `ca2a872c-716b-4e23-8d42-f79345348d52`，配置版本 3，活动部署 `9f315758-0eda-4573-a779-f308e440c2c4`。
 - 两个容器实际以独立非 root 身份运行；Web 零有效能力，Nginx 仅保留绑定端口能力，NoNewPrivileges 和受限挂载/密钥隔离检查通过。容器 AppArmor 标签为 `docker-default (enforce)`，宿主 Agent 为 `unconfined`。前后启动 ID 不同，主密钥、TLS 文件、活动 Nginx 指针和实际进程散列相同；Agent/Web 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，镜像内 Nginx 为 `933fa45f91eb5da9e3029817d725aa5c29872d6104eb59a311e6dcfc749db7a8`。
 - 控制器记录 `P5_ARM64_DOCKER_ACCEPTANCE_PASS`、正常关机及 QEMU 退出 0。完整证据在 `.validation/native-vm/arm64-docker-native-v1/`、`arm64-docker-native-v2/`、`arm64-docker-native-v3/`，包括原始失败、首次安装、续办与重启输出、容器实际状态、前后进程/密钥证明和来宾归档；原盘及种子保留。本组合通过不代表 Docker 发布端口的防火墙转发路径、其他操作系统或正式签名发行已验收。开发宿主机环境未修改，没有执行 UI 自动化。
+
+### arm64 原生静态 Nginx 构建（2026-10-21）
+
+- 首次真实 ARM 构建在 `libgcc.a(lse-init.o)` 引用未解析的 `__getauxval` 时失败。原始构建日志和正常关机原盘保留于 `.validation/native-vm/arm64-nginx-build-v1/`。在锁定配方中增加按架构选择的 C 编译选项：arm64 将 `-mno-outline-atomics` 同时用于 Nginx 和 OpenSSL，amd64 保持空值；Python 构建器和 Go 发布证据校验从同一配方生成实际参数。该选项的 ARMv8.0 原子指令行为见 [GCC AArch64 文档](https://gcc.gnu.org/onlinedocs/gcc/AArch64-Options.html)。
+- v2 复用已核对源归档及来宾工具链，在新的工作目录完整解包、配置和编译，未复用失败目标文件。实际 Ubuntu 22.04.5/arm64、5.15.0-198、GCC 11.4.0/musl 1.2.2 来宾完成静态 Nginx 1.30.6、OpenSSL 3.5.9 构建；实际编译命令和回执均包含两个项目所需的架构参数。ELF 为 AArch64，缺少解释器及动态依赖，36 项必需模块符号、实际版本和依赖归档/许可证明通过。
+- 二进制为 13,088,112 字节，SHA-256 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`；锁定配方 SHA-256 `b91578fd9cabe375b3f20fe18107a0d353d40c7d0248523154ac22a0c93d03bd`。控制器记录 `P5_ARM64_NATIVE_NGINX_BUILD_ARTIFACT_PASS`，虚拟机正常关机、QEMU 退出 0。发布模块现有 Go 测试在隔离 SDK 容器内通过，未扩大到无关回归或 UI 测试。
+- 完整证据和原生产物位于 `.validation/native-vm/arm64-nginx-build-v2/`。构建回执明确记录本地验证用途、基础提交 `fb11dd3`、实际工作区补丁及构建器散列，未冒充正式 CI 或正式签名发行；Cortex-A53 基线 CPU 上的原生安装、故障恢复和重启验收另行推进。
+- 余下 7 个待验收系统/架构组合的官方基础镜像已完成散列校验，记录位于 `.validation/native-vm/remaining-images-v1/` 和 `remaining-images-debian-v2/`；各组合安装及内核行为验收继续。

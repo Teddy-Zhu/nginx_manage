@@ -28,12 +28,13 @@ type nginxSource struct {
 	LicenseFiles []string `json:"license_files"`
 }
 type nginxRecipe struct {
-	Schema                int           `json:"schema"`
-	Version               string        `json:"version"`
-	Sources               []nginxSource `json:"sources"`
-	ConfigureArgs         []string      `json:"configure_args"`
-	Features              []string      `json:"features"`
-	RequiredModuleSymbols []string      `json:"required_module_symbols"`
+	Schema                int               `json:"schema"`
+	Version               string            `json:"version"`
+	Sources               []nginxSource     `json:"sources"`
+	ConfigureArgs         []string          `json:"configure_args"`
+	ArchitectureCFlags    map[string]string `json:"architecture_cflags"`
+	Features              []string          `json:"features"`
+	RequiredModuleSymbols []string          `json:"required_module_symbols"`
 }
 type NginxRuntimeArchive struct {
 	Name        string `json:"name"`
@@ -62,6 +63,15 @@ func nginxBuildRecipe() (nginxRecipe, error) {
 	if recipe.Schema != 1 || !validVersion(recipe.Version) || len(recipe.Sources) != 4 || len(recipe.ConfigureArgs) == 0 || len(recipe.Features) == 0 || len(recipe.RequiredModuleSymbols) == 0 {
 		return recipe, errors.New("内嵌 Nginx 源码锁定清单无效")
 	}
+	if len(recipe.ArchitectureCFlags) != 2 {
+		return recipe, errors.New("内嵌 Nginx 架构编译参数无效")
+	}
+	for _, architecture := range []string{"amd64", "arm64"} {
+		flags, ok := recipe.ArchitectureCFlags[architecture]
+		if !ok || len(flags) > 256 || strings.TrimSpace(flags) != flags || strings.ContainsAny(flags, "\x00\r\n") {
+			return recipe, errors.New("内嵌 Nginx 架构编译参数无效")
+		}
+	}
 	for i, source := range recipe.Sources {
 		if source.ID != []string{"nginx", "openssl", "pcre2", "zlib"}[i] || !validHash(source.SHA256) || source.Size <= 0 || source.Size > 64<<20 || !safePath(source.Root) || strings.Contains(source.Root, "/") || len(source.LicenseFiles) == 0 {
 			return recipe, errors.New("内嵌 Nginx 源码身份或许可无效")
@@ -73,6 +83,32 @@ func nginxBuildRecipe() (nginxRecipe, error) {
 		}
 	}
 	return recipe, nil
+}
+
+func (recipe nginxRecipe) configureArgs(architecture string) ([]string, error) {
+	flags, ok := recipe.ArchitectureCFlags[architecture]
+	if !ok {
+		return nil, errors.New("原生 Nginx 构建架构无效")
+	}
+	args := slices.Clone(recipe.ConfigureArgs)
+	for _, prefix := range []string{"--with-cc-opt=", "--with-openssl-opt="} {
+		index := -1
+		for i, arg := range args {
+			if strings.HasPrefix(arg, prefix) {
+				if index != -1 {
+					return nil, errors.New("内嵌 Nginx 编译参数重复")
+				}
+				index = i
+			}
+		}
+		if index == -1 {
+			return nil, errors.New("内嵌 Nginx 编译参数不完整")
+		}
+		if flags != "" {
+			args[index] += " " + flags
+		}
+	}
+	return args, nil
 }
 
 func nginxPublicationPackage(architecture, releaseVersion string) (PackageSource, error) {
@@ -118,7 +154,11 @@ func nginxPublicationEvidence(directory string, asset Asset, spec PublicationSpe
 		return errors.New("Nginx 资产与内嵌源码、许可或静态模块配方不一致")
 	}
 	n := p.NativeNginx
-	if n == nil || p.Fail2ban != nil || p.Scope != "native-nginx-source-and-static-runtime" || p.GoVersion != "" || p.NodeVersion != "" || p.PNPMVersion != "" || p.GoSumSHA256 != "" || p.WebLockSHA256 != "" || n.LockSHA256 != hash(nginxSourceLock) || !slices.Equal(n.ConfigureArgs, recipe.ConfigureArgs) || n.Compiler != "musl-gcc" || !text(n.CompilerVersion, 4096) || !text(n.RunnerImage, 256) || len(n.RuntimeArchives) != 3 {
+	configureArgs, err := recipe.configureArgs(asset.Architecture)
+	if err != nil {
+		return err
+	}
+	if n == nil || p.Fail2ban != nil || p.Scope != "native-nginx-source-and-static-runtime" || p.GoVersion != "" || p.NodeVersion != "" || p.PNPMVersion != "" || p.GoSumSHA256 != "" || p.WebLockSHA256 != "" || n.LockSHA256 != hash(nginxSourceLock) || !slices.Equal(n.ConfigureArgs, configureArgs) || n.Compiler != "musl-gcc" || !text(n.CompilerVersion, 4096) || !text(n.RunnerImage, 256) || len(n.RuntimeArchives) != 3 {
 		return errors.New("Nginx 构建来源未绑定原生工具链和固定源码配方")
 	}
 	fileHashes := map[string]string{}

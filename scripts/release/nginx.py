@@ -40,6 +40,20 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
 
+def configure_args(lock, architecture):
+    flags = lock["architecture_cflags"]
+    if set(flags) != {"amd64", "arm64"} or any(not isinstance(value, str) or len(value) > 256 or value.strip() != value or any(c in value for c in "\x00\r\n") for value in flags.values()) or architecture not in flags:
+        raise ValueError("invalid native architecture compiler flags")
+    result = list(lock["configure_args"])
+    # glibc-built libgcc outline helpers require __getauxval; musl needs
+    # inline ARMv8.0 atomics in both Nginx and its OpenSSL dependency.
+    for prefix in ("--with-cc-opt=", "--with-openssl-opt="):
+        index, = [i for i, value in enumerate(result) if value.startswith(prefix)]
+        if flags[architecture]:
+            result[index] += " " + flags[architecture]
+    return result
+
+
 class SourceRedirect(urllib.request.HTTPRedirectHandler):
     def __init__(self, hosts):
         self.hosts = hosts
@@ -165,6 +179,7 @@ def build(args):
         raise ValueError("Nginx build must use the approved clean source commit")
     if lock["schema"] != 1 or [s["id"] for s in lock["sources"]] != ["nginx", "openssl", "pcre2", "zlib"]:
         raise ValueError("unsupported native source lock")
+    configured_args = configure_args(lock, architecture)
     identifier = "nginx-linux-" + architecture
     packages = [p for p in spec["packages"] if p["asset"]["id"] == identifier]
     if len(packages) != 1:
@@ -206,7 +221,7 @@ def build(args):
                     if not raw:
                         raise ValueError("upstream license text is empty")
                     target.write_bytes(raw)
-            subprocess.run(["./configure", *lock["configure_args"]], cwd=roots["nginx"], env=env, check=True, timeout=180)
+            subprocess.run(["./configure", *configured_args], cwd=roots["nginx"], env=env, check=True, timeout=180)
             subprocess.run(["make", "-j", str(min(os.cpu_count() or 1, 8))], cwd=roots["nginx"], env=env, check=True, timeout=1500)
             binary = roots["nginx"] / "objs/nginx"
             shutil.copyfile(binary, destination / "bin/nginx")
@@ -221,7 +236,7 @@ def build(args):
                       "version": spec["manifest"]["version"], "commit": commit, "asset": identifier,
                       "scope": "native-nginx-source-and-static-runtime", "binary_sha256": binary_hash,
                       "workflow_run": workflow, "native_nginx": {
-                          "lock_sha256": digest(lock_raw), "configure_args": lock["configure_args"],
+                          "lock_sha256": digest(lock_raw), "configure_args": configured_args,
                           "compiler": "musl-gcc", "compiler_version": compiler,
                           "build_info_sha256": digest(build_info), "toolchain_sha256": digest(toolchain),
                           "runtime_archives": runtime, "runner_image": runner}}

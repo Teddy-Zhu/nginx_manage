@@ -52,6 +52,10 @@
       ]
     }
   ],
+  "architecture_cflags": {
+    "amd64": "",
+    "arm64": "-mno-outline-atomics"
+  },
   "configure_args": [
     "--prefix=/usr/local/nginx",
     "--with-cc=musl-gcc",
