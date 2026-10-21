@@ -52,8 +52,10 @@ func launch(data, revision string) error {
 			return errors.New("Nginx 镜像程序与宿主机登记不一致")
 		}
 	}
-	// Capabilities and prctl state are thread-local. This thread immediately
-	// execs Nginx after the process-wide UID/GID transition.
+	// Capabilities, prctl state and credentials belong to the locked thread
+	// that execs Nginx. Broadcast Set* calls need runtime signals that AppArmor
+	// can deny between Docker exec threads with stacked labels. The other
+	// runtime threads disappear on exec; failures return to the terminating CLI.
 	runtime.LockOSThread()
 	if err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
@@ -76,14 +78,14 @@ func launch(data, revision string) error {
 			}
 		}
 	}
-	if err = syscall.Setgroups([]int{}); err != nil {
-		return err
+	if _, _, errno := syscall.RawSyscall(unix.SYS_SETGROUPS, 0, 0, 0); errno != 0 {
+		return errno
 	}
-	if err = syscall.Setgid(b.GID); err != nil {
-		return err
+	if _, _, errno := syscall.RawSyscall(unix.SYS_SETRESGID, uintptr(b.GID), uintptr(b.GID), uintptr(b.GID)); errno != 0 {
+		return errno
 	}
-	if err = syscall.Setuid(b.UID); err != nil {
-		return err
+	if _, _, errno := syscall.RawSyscall(unix.SYS_SETRESUID, uintptr(b.UID), uintptr(b.UID), uintptr(b.UID)); errno != 0 {
+		return errno
 	}
 	cap := uint32(1) << unix.CAP_NET_BIND_SERVICE
 	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
