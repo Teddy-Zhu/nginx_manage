@@ -538,3 +538,11 @@ Ubuntu 24.04/arm64 的 `ubuntu24-arm64-native-v8` 在 QEMU 7.2.22/TCG、Cortex-A
 本地 `p5-listener-ownership-v2` 至 `v5` 保存检查结果及失败夹具。最终通过 7 项实际渲染地址组合、IPv6 双栈/仅 IPv6 的真实内核读取、管理监听归属、已连接 UDP、外部 `SO_REUSEADDR` 抢占检测，以及两工作进程 TCP/UDP 双栈 `reuseport`（每端点两个受管套接字和真实代理流量）。HTTP 通配/具体 IP 合并后的归属和实际响应也通过；TCP/UDP 双栈 1:3 权重仍各为 3/9。已通过且未受后续夹具调整影响的结果复用，没有重跑无关检查。配置用例补齐受信任运行目录，复用用例改用实际配置渲染；原失败日志保留，属性尾部截断接收已修正并复验。
 
 运行镜像为预置模块 amd64 镜像 `sha256:513bd336f4aee8c27cfaa97bedb045dd65eb84ccb507d65f6884ed81251f798b`，使用私有 PID/网络、只读根文件系统和私有 `/srv` tmpfs，无宿主 PID/端口或 Docker socket；套接字诊断模块在检查前已存在，未修改开发宿主机配置。程序与测试散列、结果复用映射见本地 `p5-listener-ownership-v5/result.json`。该记录不替代完整原生发布事务、其他内核/架构或其他发行包的验收，未执行 UI 自动化。
+
+### CentOS Stream 9/10/arm64 原生部署（2026-10-21）
+
+官方 CentOS Stream 9、10 的独立 Cortex-A53 来宾分别运行 `5.14.0-758.el9.aarch64`、`6.12.0-277.el10.aarch64`。首次安装、身份/权限与密钥隔离、HTTPS 代理、端口冲突及 Agent 中断回滚、恢复应用、安装重放、服务重启和整机重启均通过；两阶段 SELinux 均为 Enforcing，受管标签及 `matchpathcon -V` 检查通过。重启前后 boot ID 不同，密钥、活动 Nginx 与实际程序散列保持。原生安装/重启矩阵现覆盖 13/14 个系统架构组合，仍不表示各组合的全部功能已验收。
+
+证据位于本地 `centos9-arm64-native-v2`、`centos10-arm64-native-v2`。来宾的 postboot 单元已成功退出并写入完成文件，但输出未出现在控制器捕获的串口，控制器停留在标记等待；中断等待后，其 finally 阶段完成采证和正常关机，保留 KeyboardInterrupt 原日志。另行核对原始 journal 的通过标记、前后证明及 Enforcing，结果和证据散列写入 `acceptance-result.json`，未重跑已通过的业务步骤，也未将控制器退出宣称为成功。
+
+两轮使用已批准的 arm64 `v0.2.24-dev`（SHA-256 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`）、静态 Nginx `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27` 和安装器 `334d1fa1bcd817ef1510b34e8f5ed82cd53597d1d76df35f15b8e30579690d23`。不据此覆盖后续监听检查代码、Docker 或其他功能；开发宿主机环境未修改。
