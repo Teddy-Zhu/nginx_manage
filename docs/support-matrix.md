@@ -16,7 +16,7 @@
 | Ubuntu 22.04 | arm64 | 5.15.0-198-generic | 不含 Nginx 的 Web/Agent 安装、权限及重启通过 | 未验收 | 未安装 | [记录](validation.md#ubuntu-2204arm64-原生-webagent-部署2026-10-21) |
 | Ubuntu 24.04 | amd64 | 6.8.0-147-generic | 含 Nginx 安装、重启及指定升级恢复通过 | 未验收 | 静态 1.30.6 | [部署](validation.md#2026-10-20-ubuntu-2404-原生部署及探测-socket-恢复p5)、[升级](validation.md#2026-10-20-ubuntu-2404-原生协调升级及异常重启p5) |
 | Ubuntu 24.04 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
-| Ubuntu 26.04 | amd64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
+| Ubuntu 26.04 | amd64 | 7.0.0-38-generic | 含 Nginx 的安装、权限、代理、回滚及重启业务检查与证据复核通过；采证首连失败保留 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2604amd64-原生部署2026-10-21) |
 | Ubuntu 26.04 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
 | CentOS Stream 9 | amd64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
 | CentOS Stream 9 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |

@@ -446,3 +446,11 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 两个真实 ARM 容器均以只读根文件系统、无网络、删除全部 capabilities 和 NoNewPrivileges 执行程序版本命令；均返回 `0.2.24-dev`、Agent 协议 122、数据库 37、launcher 2。Nginx 与 launcher 的镜像内散列核对通过。导出镜像跨控制器传输后的 SHA-256 再次匹配，控制器输出 `P5_ARM64_DOCKER_BUILD_ARTIFACT_PASS`，随后虚拟机正常关机、QEMU 退出 0。程序执行不代表托管容器部署、代理或重启已通过。
 - 本地隔离签发器使用两种实际程序、四个实际镜像配置和完整层生成双架构 OCI 索引，逐层验证 diff ID，并逐镜像核对 launcher 实际内容；两个平台均有真实清单及配置证据。测试清单 SHA-256 为 `995634fd807065257a436eff5a6100fe4194e3bb99fcd76efbd3c5dfff4a5eb6`；面板索引为 `sha256:6c7ae80842a25412b1aba314d69b8843982ba5ce535cdb3058a19181684e5fb1`，Nginx 索引为 `sha256:a69461c9ba249b0796b292ba92a40b20a66ca9be1bebab7a92e0ec61406df23d`。本轮目录不使用旧夹具的不可执行 ARM 占位项；没有据此改写旧记录或宣称正式 CI 已运行。
 - 产物和证据位于 `.validation/native-vm/arm64-images-v1/`、`arm64-docker-build-v1/`、`dualarch-images-v1/` 及既有虚拟机卷；签名密钥仅用于隔离验证，没有推送或发布。托管 ARM Docker 安装、回滚及重启验收另行记录，arm64 原生静态 Nginx 构建继续。没有运行 UI 自动化或重复无关回归，完整 P5 继续推进。
+
+### Ubuntu 26.04/amd64 原生部署（2026-10-21）
+
+- [Ubuntu 官方云镜像](https://cloud-images.ubuntu.com/releases/resolute/release/ubuntu-26.04-server-cloudimg-amd64.img)以官方 SHA256SUMS 和分段 ETag 完整校验，859,090,944 字节，SHA-256 `5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5`。Docker 内独立 QEMU/TCG 来宾实际为 Ubuntu 26.04.1 LTS、`7.0.0-38-generic`；复用已批准的 `0.2.24-dev` amd64 程序、前端及静态 Nginx，不计作正式发行包。
+- 当前原生安装器完成首次安装；原即时 UID、能力、权限和密钥隔离断言通过。HTTPS 引导及统一 API、真实代理、占用端口回滚和切换候选后 Agent SIGKILL 回滚通过；安装重放和服务重启后原会话、节点及配置保持。配置版本为 3，节点 `fb3a525a-fcfa-4be6-9d1b-f74ede8a5b5c`。
+- 整机重启后再次完成身份、实际代理、API 和 AppArmor 检查。AppArmor 启用且加载 179 个配置，三个实际服务标签均为 `unconfined`；不声明专用进程策略。前后启动 ID 不同，主密钥、TLS 文件、活动 Nginx 指针和三个实际进程散列相同；Web/Agent 为 `dd8e4c110d3cfb1242493752291e3896cf59f40a3b294102a2a62e7817069f3e`，Nginx 为 `1e168f3239c9f650651d68797b97f986c7c21769c8a9db8ca0caa2fdf6b46f08`。
+- 来宾已输出全部业务通过标记后，控制器首次读取完成文件的 SSH 连接返回 255。随后异常收尾采集成功取得原始完成文件、状态、前后 JSON 及完整归档，虚拟机正常关机、QEMU 退出 0；未伪改控制器退出结果，也未重跑已通过的业务。独立复核原始证据后记录 `P5_UBUNTU26_NATIVE_EVIDENCE_REVIEW_PASS`，原连接失败及复核散列均保留。隔离网络下的 networkd 等待失败不计作 DNS 功能验收。
+- 证据位于 `.validation/native-vm/ubuntu26-native-v1/`，包括下载校验、初次及重启输出、来宾归档、前后进程/密钥证明和 `evidence-review.json`；原盘和种子保留。此结果仅覆盖该系统/架构的原生组合，Docker 和其他功能组合仍待验收；没有执行 UI 自动化或修改开发宿主机环境。
