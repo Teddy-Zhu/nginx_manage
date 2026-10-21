@@ -110,6 +110,7 @@ const states: Record<string, string> = {
   cancelled: "已取消",
 };
 const stages: Record<string, string> = {
+  waiting_for_admission: "等待宿主机操作结束",
   candidate_checked: "候选检查完成", upgrade_prepared: "升级材料已准备",
   protection_verified: "新版本保护已确认", original_protection_verified: "升级未完成，原版本保护已恢复",
   queued: "等待执行", executing: "正在执行", child_unconfirmed: "等待原操作恢复确认",

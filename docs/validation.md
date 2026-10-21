@@ -714,3 +714,17 @@ Ubuntu 26.04 首轮 `.37` 的业务虽完成，内核仍有 26 条相关 AppArmo
 `.38` 程序 SHA-256：amd64 `d8f322531287276d49d68615d9f1e67ea9abb59f43b2eb1bc0c602fdc2cd097c`，arm64 `00263dea3ae0d83ce73d69f2dc5a0b5da2f9deadc77bf7cd4f0266939b297ffd`；manifest `888e1d69fc96c3cdf8444bb4e83390dc9cf9d36b694084f8f29ebee1907a8ff4`。面板 OCI index 为 `sha256:6023ddff67fb55b974cbe19b9044cf6cfed136f1e537b36c4cad53a2ebc898ee`，Nginx 为 `sha256:a464537157665679162e8da0c4784c4be8f0d119af7be9dad46866a241be139e`；均为本地验证产物，不替代正式发布。
 
 本地证据：`docker-arm64-matrix-v55/record-verdict.py`、`docker-debian{12,13}-arm64-v1/v2/`、`docker-ubuntu24-arm64-v1/`、`docker-centos{9,10}-arm64-v1/`；Ubuntu 26.04 原失败及诊断分别在 `docker-ubuntu26-arm64-v1/` 与 `docker-ubuntu26-arm64-preemption-diagnostic-v2/v3/`，修正版为 `docker-ubuntu26-arm64-v2/`。新程序、实际镜像和验证签发器位于 `docker-scoped-preemption-build-v56/` 与 `docker-scoped-preemption-images-v57/`，均在 `.validation/native-vm/` 下；没有 UI 自动化或正式发布。
+
+### Fail2ban 升级请求的排队期限与锁冲突
+
+2026-10-22，在离线 Docker/QEMU 的 Debian 13 amd64、Python 3.13.5 环境中，用官方 Fail2ban 1.1.1 和两个未过期的 IPv4/IPv6 封禁验证升级请求队列。先前 `fail2ban-upgrade-v61` 遇到实际临时锁冲突后直接失败；修正版对尚未创建子事务的占用保留原任务，显示 `waiting_for_admission`。以下范围通过：
+
+- 任务登记后占用真实宿主机操作锁，按真实五分钟期限等待。截止时间不变，到期返回 `failed/authorization_expired`，没有创建子事务材料。
+- 再次在任务登记后占锁，确认等待状态后释放；原任务完成候选诊断，操作/子任务 UUID、请求散列及截止时间均保持不变。同键重放仍返回原任务。
+- 完整虚拟机重启及五分钟锁等待后，两个地址继续被实际 TCP 连接阻断，封禁到期时间误差不超过一秒；节点身份、秘密文件散列及外部 nft 表保持一致。
+
+Go 双架构构建、前端类型检查、改动组件的 lint 及生产构建通过，没有 UI 自动化。`.39` 程序 SHA-256：amd64 `8aa39e6111a172d5e755c364ca9a2987b2e0bb3403b686df7d3764bfe095d2f8`，arm64 `aea4b9e757b098824ca72579eddd098c55213913b1dce0e7ba28343370f02a54`。
+
+完整升级场景尚未通过：重启恢复生成新的宿主机保护批准，而 jail 材料仍引用旧批准，候选检查因此报告范围阻塞，未提交升级运行。本轮 QEMU 正常关机、退出 0，无 OOM；外层容器因后续范围断言失败退出 1，未将整体场景记为成功。Web/Agent 中断、候选启动失败补偿和 Python 身份漂移仍待继续验证。
+
+证据均在 `.validation/native-vm/`：构建为 `fail2ban-upgrade-build-v62/` 和 `fail2ban-upgrade-web-v63/`；`fail2ban-upgrade-v64/` 保留过早占锁阻止登记的失败现场及已通过的安装/双栈保护，`fail2ban-upgrade-v65/` 复用其正常关机基盘。后者的限定范围结论 `admission-verdict.json` SHA-256 为 `fb94a9d79354667eb33baa2bf45c4ee5cf8bf84b4f3cb2355e6892919b799ff2`，完整材料 `evidence.tar.gz` 为 `adc2c1446975ee8a0e8b2495e11ee8becf9a9e2a62fa8296b42c2411e883a646`。此前 `v58` 至 `v61` 的失败、诊断及有效子范围均保留，不覆盖原记录。

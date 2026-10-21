@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sys/unix"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/secure"
@@ -213,12 +214,12 @@ func (u *fail2banUpgradeTasks) next(parent context.Context) error {
 	}
 	r := pending
 	i := r.Fail2banUpgrade
-	if !i.Sent {
+	if !i.Sent || r.Stage == "waiting_for_admission" {
 		if time.Now().Unix() > r.Deadline {
 			r.State, r.Stage, r.Error = "failed", "authorization_expired", "升级排队超过五分钟，请重新检查"
 			return u.server.Journal.Put(*r)
 		}
-		i.Sent, r.Stage = true, "executing"
+		i.Sent, r.Stage, r.Error = true, "executing", ""
 		if err = u.server.Journal.Put(*r); err != nil {
 			return err
 		}
@@ -268,6 +269,12 @@ func (u *fail2banUpgradeTasks) next(parent context.Context) error {
 		r.State, r.Stage = "recovery_required", "child_unconfirmed"
 		if in.Action == "check" || os.IsNotExist(statErr) {
 			r.State, r.Stage = "failed", "request_rejected"
+			// Background host synchronization shares the admission locks. A
+			// transient conflict before child publication keeps the original
+			// request queued, without renewing its five-minute authorization.
+			if errors.Is(callErr, ErrBusy) || errors.Is(callErr, unix.EWOULDBLOCK) {
+				r.State, r.Stage = "running", "waiting_for_admission"
+			}
 		}
 		i.Run = nil
 		message := []rune(callErr.Error())
@@ -275,6 +282,9 @@ func (u *fail2banUpgradeTasks) next(parent context.Context) error {
 			message = message[:240]
 		}
 		r.Error = string(message)
+		if r.Stage == "waiting_for_admission" {
+			r.Error = ""
+		}
 	}
 	if err = validFail2banUpgradeTask(*r); err != nil {
 		return errors.Join(callErr, err)
