@@ -454,3 +454,11 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 整机重启后再次完成身份、实际代理、API 和 AppArmor 检查。AppArmor 启用且加载 179 个配置，三个实际服务标签均为 `unconfined`；不声明专用进程策略。前后启动 ID 不同，主密钥、TLS 文件、活动 Nginx 指针和三个实际进程散列相同；Web/Agent 为 `dd8e4c110d3cfb1242493752291e3896cf59f40a3b294102a2a62e7817069f3e`，Nginx 为 `1e168f3239c9f650651d68797b97f986c7c21769c8a9db8ca0caa2fdf6b46f08`。
 - 来宾已输出全部业务通过标记后，控制器首次读取完成文件的 SSH 连接返回 255。随后异常收尾采集成功取得原始完成文件、状态、前后 JSON 及完整归档，虚拟机正常关机、QEMU 退出 0；未伪改控制器退出结果，也未重跑已通过的业务。独立复核原始证据后记录 `P5_UBUNTU26_NATIVE_EVIDENCE_REVIEW_PASS`，原连接失败及复核散列均保留。隔离网络下的 networkd 等待失败不计作 DNS 功能验收。
 - 证据位于 `.validation/native-vm/ubuntu26-native-v1/`，包括下载校验、初次及重启输出、来宾归档、前后进程/密钥证明和 `evidence-review.json`；原盘和种子保留。此结果仅覆盖该系统/架构的原生组合，Docker 和其他功能组合仍待验收；没有执行 UI 自动化或修改开发宿主机环境。
+
+### Ubuntu 22.04/arm64 Docker 托管部署（2026-10-21）
+
+- 使用上述实际 Ubuntu 22.04.5/arm64、5.15.0-198-generic 镜像、Docker 29.9.1、Compose 2.40.3 和真实双架构 OCI 验证包。首次 v1 的来宾 Docker 启动超过夹具默认 90 秒期限，未进入产品安装；v2 仅将来宾 Docker 服务启动期限设为 300 秒，不调整产品期限，实际镜像导入、选择 ARM 平台、篡改清单/未信任签名拒绝和托管首次安装通过。
+- v2 的身份和初次配置应用通过，首次代理请求返回 502；原始日志确认测试上游文件为 root:600，服务用户 `nobody` 无法读取。v3 从保留原盘新建覆盖盘，继续同一次安装，仅将上游夹具改为 644、逐个核对服务状态；保留 v1/v2 原始失败，不将它们标为通过，也未重跑首次安装。
+- v3 的真实代理、占用端口回滚、候选切换后 Agent SIGKILL 回滚、恢复应用、Compose 强制重建、安装重放、Agent 重启和整机重启全部通过。容器重建实际更换容器 ID，原 HTTPS 会话、节点和配置保持；节点为 `ca2a872c-716b-4e23-8d42-f79345348d52`，配置版本 3，活动部署 `9f315758-0eda-4573-a779-f308e440c2c4`。
+- 两个容器实际以独立非 root 身份运行；Web 零有效能力，Nginx 仅保留绑定端口能力，NoNewPrivileges 和受限挂载/密钥隔离检查通过。容器 AppArmor 标签为 `docker-default (enforce)`，宿主 Agent 为 `unconfined`。前后启动 ID 不同，主密钥、TLS 文件、活动 Nginx 指针和实际进程散列相同；Agent/Web 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，镜像内 Nginx 为 `933fa45f91eb5da9e3029817d725aa5c29872d6104eb59a311e6dcfc749db7a8`。
+- 控制器记录 `P5_ARM64_DOCKER_ACCEPTANCE_PASS`、正常关机及 QEMU 退出 0。完整证据在 `.validation/native-vm/arm64-docker-native-v1/`、`arm64-docker-native-v2/`、`arm64-docker-native-v3/`，包括原始失败、首次安装、续办与重启输出、容器实际状态、前后进程/密钥证明和来宾归档；原盘及种子保留。本组合通过不代表 Docker 发布端口的防火墙转发路径、其他操作系统或正式签名发行已验收。开发宿主机环境未修改，没有执行 UI 自动化。

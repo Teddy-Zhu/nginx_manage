@@ -13,7 +13,7 @@
 | Debian 13 | amd64 | 6.12.113+deb13-cloud-amd64 | 不含 Nginx 的安装及重启通过 | 含 Nginx 的安装、重建、重启及指定更新恢复通过 | 容器预置 1.30.6 | [原生](validation.md#selinux-文件标签与-v14-原生安装)、[Docker](validation.md#debian-13-默认-docker-部署)、[更新](validation.md#debian-13-docker-签名升级运行路径) |
 | Debian 13 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
 | Ubuntu 22.04 | amd64 | 5.15.0-198-generic | 含 Nginx 安装、权限、代理及重启通过；首轮即时断言失败未复现 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2204amd64-原生部署2026-10-21) |
-| Ubuntu 22.04 | arm64 | 5.15.0-198-generic | 不含 Nginx 的 Web/Agent 安装、权限及重启通过 | 未验收 | 未安装 | [记录](validation.md#ubuntu-2204arm64-原生-webagent-部署2026-10-21) |
+| Ubuntu 22.04 | arm64 | 5.15.0-198-generic | 不含 Nginx 的 Web/Agent 安装、权限及重启通过 | 托管 Web/Nginx 安装、代理、回滚、容器重建及整机重启通过，首次安装与续办分轮记录 | Docker 1.30.6；原生静态待验收 | [原生](validation.md#ubuntu-2204arm64-原生-webagent-部署2026-10-21)、[Docker](validation.md#ubuntu-2204arm64-docker-托管部署2026-10-21) |
 | Ubuntu 24.04 | amd64 | 6.8.0-147-generic | 含 Nginx 安装、重启及指定升级恢复通过 | 未验收 | 静态 1.30.6 | [部署](validation.md#2026-10-20-ubuntu-2404-原生部署及探测-socket-恢复p5)、[升级](validation.md#2026-10-20-ubuntu-2404-原生协调升级及异常重启p5) |
 | Ubuntu 24.04 | arm64 | 未验收 | 未验收 | 未验收 | 未验收 | — |
 | Ubuntu 26.04 | amd64 | 7.0.0-38-generic | 含 Nginx 的安装、权限、代理、回滚及重启业务检查与证据复核通过；采证首连失败保留 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2604amd64-原生部署2026-10-21) |
@@ -44,7 +44,7 @@ Docker iptables 发布端口及联合规则范围、Docker 原生 nftables 实�
 
 ## 发布边界
 
-- 本地批准资产和隔离测试发行者的签名不替代正式 GitHub 发布链；实际仓库、发布密钥及正式 CI 尚未配置。arm64 预置模块镜像已构建，实际 ARM 容器中的程序版本、模块声明和摘要核对通过；[真实双架构验证包](validation.md#双架构镜像产物与-arm-执行2026-10-21)已生成，托管部署仍待验收。arm64 原生静态 Nginx 仍在构建，原始程序和本地验证包不替代正式双架构发行。
+- 本地批准资产和隔离测试发行者的签名不替代正式 GitHub 发布链；实际仓库、发布密钥及正式 CI 尚未配置。arm64 预置模块镜像与[真实双架构验证包](validation.md#双架构镜像产物与-arm-执行2026-10-21)已生成，Ubuntu 22.04/arm64 的托管部署、恢复和重启通过，其他发行版的 ARM Docker 组合仍待验收。arm64 原生静态 Nginx 仍在构建，原始程序和本地验证包不替代正式双架构发行。
 - 真实域名 ACME/DNS、通知接收端及跨主机 API 迁移仍待外部集成验收；已有容器内双节点结果见[验证记录](validation.md#双节点-https-迁移与授权)。
 - UI 由用户人工验收，未创建或运行 UI 自动化测试。
 - 各轮使用的程序、安装器、镜像及证据散列见[验证记录](validation.md)。历史组合通过不代表后续版本已重跑，也不据此扩大已验证范围。
