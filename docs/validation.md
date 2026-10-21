@@ -468,5 +468,12 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 首次真实 ARM 构建在 `libgcc.a(lse-init.o)` 引用未解析的 `__getauxval` 时失败。原始构建日志和正常关机原盘保留于 `.validation/native-vm/arm64-nginx-build-v1/`。在锁定配方中增加按架构选择的 C 编译选项：arm64 将 `-mno-outline-atomics` 同时用于 Nginx 和 OpenSSL，amd64 保持空值；Python 构建器和 Go 发布证据校验从同一配方生成实际参数。该选项的 ARMv8.0 原子指令行为见 [GCC AArch64 文档](https://gcc.gnu.org/onlinedocs/gcc/AArch64-Options.html)。
 - v2 复用已核对源归档及来宾工具链，在新的工作目录完整解包、配置和编译，未复用失败目标文件。实际 Ubuntu 22.04.5/arm64、5.15.0-198、GCC 11.4.0/musl 1.2.2 来宾完成静态 Nginx 1.30.6、OpenSSL 3.5.9 构建；实际编译命令和回执均包含两个项目所需的架构参数。ELF 为 AArch64，缺少解释器及动态依赖，36 项必需模块符号、实际版本和依赖归档/许可证明通过。
 - 二进制为 13,088,112 字节，SHA-256 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`；锁定配方 SHA-256 `b91578fd9cabe375b3f20fe18107a0d353d40c7d0248523154ac22a0c93d03bd`。控制器记录 `P5_ARM64_NATIVE_NGINX_BUILD_ARTIFACT_PASS`，虚拟机正常关机、QEMU 退出 0。发布模块现有 Go 测试在隔离 SDK 容器内通过，未扩大到无关回归或 UI 测试。
-- 完整证据和原生产物位于 `.validation/native-vm/arm64-nginx-build-v2/`。构建回执明确记录本地验证用途、基础提交 `fb11dd3`、实际工作区补丁及构建器散列，未冒充正式 CI 或正式签名发行；Cortex-A53 基线 CPU 上的原生安装、故障恢复和重启验收另行推进。
+- 完整证据和原生产物位于 `.validation/native-vm/arm64-nginx-build-v2/`。构建回执明确记录本地验证用途、基础提交 `fb11dd3`、实际工作区补丁及构建器散列，未冒充正式 CI 或正式签名发行；Cortex-A53 基线 CPU 上的原生安装、故障恢复和重启结果见下一项。
 - 余下 7 个待验收系统/架构组合的官方基础镜像已完成散列校验，记录位于 `.validation/native-vm/remaining-images-v1/` 和 `remaining-images-debian-v2/`；各组合安装及内核行为验收继续。
+
+### Ubuntu 22.04/arm64 原生静态 Nginx 部署（2026-10-21）
+
+- 使用已核对的 Ubuntu 22.04.5/arm64 官方镜像、5.15.0-198-generic 内核及新的独立覆盖盘。QEMU 明确选择 Cortex-A53、2 核、2 GiB；实际 `/proc/cpuinfo` 两核均无 `atomics`，覆盖不提供 LSE 的 ARMv8.0 基线。外层控制器断网、无特权及宿主端口，没有注册开发宿主机 binfmt。
+- 当前原生安装器在空白系统安装已批准的 `0.2.24-dev` ARM 程序、现有前端和上述静态 Nginx；未安装或编译运行时模块。原即时 Web/worker UID、零有效能力、NoNewPrivileges、目录权限、Agent/Nginx 主密钥不可见断言通过。HTTPS 引导、统一 API、真实代理、端口占用回滚、候选切换后 Agent SIGKILL 回滚、恢复应用、安装重放和服务重启通过。
+- 正常整机重启后再次核对身份、权限、HTTPS 会话及代理；节点 `3e916394-5acb-41ac-9ceb-ca4c1adc9246`、配置版本 3、修订 `ec71accc-168e-4cfe-8938-de6fd8e30480` 和部署 `839f76c2-edfc-4975-8a5b-b70dbd7e45f2` 保持。前后 boot ID 不同，主密钥/TLS 文件、活动指针及实际进程散列相同：Web/Agent 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
+- AppArmor 启用且加载 37 个配置，三个服务实际标签均为 `unconfined`，不声明专用进程策略。控制器记录 `P5_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`，正常关机、QEMU 退出 0，无强制终止。证据位于 `.validation/native-vm/arm64-nginx-native-v1/`，包含 CPU 特征、初次及重启日志、来宾归档和前后证明；未重跑已通过的发布模块测试或 UI 自动化，没有修改开发宿主机环境。
