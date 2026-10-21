@@ -1,6 +1,6 @@
 # P5 集中验证记录
 
-2026-10-21。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 2/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合、完整 Docker 转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
+2026-10-22。P5 进行中：原生安装/重启矩阵已完成 14/14，Docker 部署完成 4/14；构建、接口、迁移、Nginx、备份恢复、防火墙、DNS、监控与 Fail2ban 的结果分别按以下证据范围记录。其他 Docker 组合及转发事务、未覆盖故障点和功能组合、正式签名来源及外部集成仍需验收。
 
 ## 隔离环境
 
@@ -612,3 +612,26 @@ Docker 常规启动会重建默认 bridge。报告摘要现在仅为具有名称
 `docker-confirmed-recovery-diagnostic-v40/` 使用同一已批准程序、先正常停止来宾 Agent，再运行现有 `iptables-recover`，9.41 秒取得具体拒绝原因：当前映射、接口、DNAT 或内核路由无法与原完整代际一致。Docker 引擎及报告核对已通过，失败位于路径重新解析后的整程序比较。原比较将当次路径摘要和接口序号一并纳入持久代际身份，重启后新的有效证据会改变编译摘要。修复后，当前证据仍须通过完整解析及编译约束，原目标、端点和接口须逐项一致，原冻结代际须单独重新编译一致；不覆盖冻结证据，不修改目标或授权。
 
 `docker-path-revalidation-build-v41/` 的两组定点用例通过，覆盖有效路径证据变化、不修改新旧记录，以及容器、网络、端口、地址、入口/出口接口、无效证明和冻结程序篡改的拒绝；ARM 构建通过。`0.2.34-dev` 的 SHA-256 为 `e9d15e177d80fc1c0a79d980048d8520ced0db3d783374d77fe3ce5af850589b`。未重复未受影响的 ELF 和报告指纹用例。`docker-forward-iptables-nft-v42/` 已通过运行态、八条基线流量、原始目的端口阻断确认、Agent 强制中断回滚及整机重启回滚；重启回滚任务 `a6a6c54c-5b0e-946d-f901-bca84c838840` 的独立记录为 `rolled_back/confirmed_restored`。随后添加夹具第三方规则时，下一次只读计划被恢复准入状态以 503 拒绝，未创建新事务。正常关机，无 OOM，完整流程尚未计为通过；`docker-forward-finalize-v43/` 随后以相同批准程序续验第三方规则保留、允许 RETURN、移除及模块停用；允许在原恢复未完成期间有界重试这一明确的只读计划。续验全部通过，确认源仍为 `192.0.2.11`；原两条回滚任务均为 `rolled_back/confirmed_restored`，允许策略和移除任务分别确认成功。移除保留四条夹具第三方 DROP 规则，停用模块后仅清理这些夹具规则，八条发布端口流量恢复。各应用/移除阶段的 NAT 核对均未因面板操作变化；Docker 重启自身可重建 NAT，不将跨重启的完整 NAT 摘要相等作为结论。来宾正常关机，外层容器退出 0、无 OOM，`verdict.json` 保存程序摘要、终态及证据散列。该结果关闭 Ubuntu 22.04 ARM64、iptables-nft、自定义 Docker bridge 的本组事务验收；保留 v42 的 503 和夹具续验记录，不增加默认 Docker 安装矩阵（仍为 2/14），不代表其他发行版、架构或默认 bridge 目标已通过。
+
+## 当前代码的双架构 Docker 验收包（2026-10-21）
+
+为继续部署矩阵，针对 `a5da814` 对应代码生成 `0.2.34-dev` 隔离验收包。amd64 程序在固定 Go 1.27.2 SDK 容器中构建，静态 ELF 摘要为 `c0bfcf8b4914cc802c847b98eaa3ea36851d264878eacc2fcc68796be1a544dc`；arm64 复用上一组已经验收的静态程序 `e9d15e177d80fc1c0a79d980048d8520ced0db3d783374d77fe3ce5af850589b`，核对其编译源码补丁与当前已提交实现相同，九个相关源码文件摘要全部一致。Web 源码自原双架构包的 `b30b43b` 后没有变化，复用已核对的相同文件内容。
+
+两架构均重新构建固定启动器镜像和预置模块 Nginx 镜像；arm64 在已有 Docker 的独立内核 ARM 来宾中构建，没有设置开发宿主机 binfmt 或运行特权容器。首次 ARM 构建因无法在线解析未缓存的 `docker/dockerfile:1` 前端而失败，保留 v44 原始记录；v45 仅移除构建副本中的 syntax 指令，使用 Docker Engine 自带前端，其他 Dockerfile 构建指令及固定基础镜像不变。Nginx 构建时完成必需模块及程序摘要检查，没有安装或编译新模块。ARM 构建、镜像导出及正常关机通过，外层容器退出 0、无 OOM。
+
+新的双架构 OCI 索引与发行清单由隔离测试密钥签发，清单摘要为 `aa31bc9c462bfd465aa33cf021811e2a9c65ac314e9458c6ccfd3eaf7c5c30e6`。证据位于 `.validation/native-vm/docker-release-refresh-v44/` 和 `.validation/native-vm/docker-release-refresh-arm64-v45/`，包含来源、程序审批、构建日志、实际镜像和签名包。该产物用于后续真实部署验收，不增加已通过的系统组合，不替代正式仓库、签名来源或发布 CI。
+
+
+## Debian 12 与 Ubuntu 22.04/amd64 Docker 托管部署（2026-10-22）
+
+使用上节实际双架构签名包的 `0.2.34-dev` amd64 程序及预置模块镜像，新增 Debian 12/amd64（`6.1.0-54-cloud-amd64`）、Ubuntu 22.04/amd64（`5.15.0-198-generic`）默认 Docker 部署验收。两组均在普通 Docker 内的独立内核 QEMU 来宾中运行，目标来宾安装 Docker Engine 29.9.1、Compose v2.40.3，使用默认 containerd 镜像存储及 overlayfs。构建和目标依赖安装均位于隔离环境中。
+
+两组均完成真实安装、签名篡改/未知密钥拒绝、HTTP 代理发布、占用端口切换前拒绝、切换后注入端口占用的真实回滚、切换后强杀 Agent 的恢复、删除故障候选后重新发布、容器强制重建、同参数安装重放、服务重启和整机重启验收。端口预检拒绝保持原发布指针；两个切换后故障均为 `rolled_back/rollback_confirmed`，原代理流量持续可用。容器重建产生新容器 ID，节点、配置版本和运行部署身份保持一致；重启前后 boot ID 不同，实际程序、活动配置及主密钥/节点 TLS 文件摘要保持一致。接口同时核对统一返回格式及请求/节点响应头。
+
+Web 和 Nginx 最终均降为登记的非 root UID，分别只保留零能力和 `NET_BIND_SERVICE`；验证 `NoNewPrivs`、只读根目录、独立 PID/mount 隔离、无容器 Docker Socket、Agent/Nginx 无主密钥访问。两容器实际 AppArmor 为 `docker-default (enforce)`，Docker 报告启用内置 seccomp；安装前目标非特权端口阈值为 1024。
+
+正式 Docker 安装下的基础指标在重启前后均取得新的 `host-agent` 样本，boot ID 与当前来宾一致，CPU `cpu0/cpu1`、物理网卡 `enp0s2` 和内存与来宾实际值逐项一致。Debian 12 内存为 2,074,624,000 字节，Ubuntu 22.04 为 2,057,912,320 字节；没有据此扩大其他 Docker 组合或部署模式迁移的验收范围。
+
+首次安装和最终采证分轮进行。旧夹具按当前端口预检、资源字段投影、幂等及认证契约调整；历史失败、HTTP 409/429 及续办均保留。重启控制器曾将 shell 的 trap 定义误作失败，修正为匹配实际失败事件后，仅补验开机阶段，未重跑已通过的发布、回滚、重建及安装重放。最终两组均正常关机、外层容器退出 0、无 OOM，`verdict.json` 核对终态、隔离属性、指标和证据摘要。
+
+证据：Debian 12 的 `.validation/native-vm/docker-debian12-amd64-v1/` 至 `v4/`、最终 `.validation/native-vm/docker-debian12-amd64-finalize-v5/`；Ubuntu 22.04 的 `.validation/native-vm/docker-ubuntu22-amd64-v1/`、`v2/`、最终 `.validation/native-vm/docker-ubuntu22-amd64-finalize-v3/`。默认 Docker 部署矩阵由 2/14 推进至 4/14，其他十组仍待验收。

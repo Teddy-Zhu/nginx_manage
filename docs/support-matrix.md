@@ -1,6 +1,6 @@
 # 运行验收矩阵
 
-截至 2026-10-21，项目仍处于 P5，尚未正式发布。下表记录实际完成的范围，未验收项继续属于首版交付目标。安装、组件能力探测和单项功能通过分别记录，不据此声明整个系统的全部功能已通过。
+截至 2026-10-22，项目仍处于 P5，尚未正式发布。下表记录实际完成的范围，未验收项继续属于首版交付目标。安装、组件能力探测和单项功能通过分别记录，不据此声明整个系统的全部功能已通过。
 
 ## 系统与部署
 
@@ -8,11 +8,11 @@
 
 | 系统 | 架构 | 实际内核 | 原生 | Docker | 已运行 Nginx | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Debian 12 | amd64 | 6.1.0-54-cloud-amd64 | 含/不含 Nginx 安装、权限及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#debian-原生安装与重启) |
+| Debian 12 | amd64 | 6.1.0-54-cloud-amd64 | 含/不含 Nginx 安装、权限及重启通过 | 托管 Web/Nginx 安装、预检、回滚、重建及重启通过 | 原生静态及 Docker 1.30.6 | [原生](validation.md#debian-原生安装与重启)、[Docker](validation.md#debian-12-与-ubuntu-2204amd64-docker-托管部署2026-10-22) |
 | Debian 12 | arm64 | 6.1.0-54-cloud-arm64 | 含 Nginx 安装、权限、代理、回滚及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#debian-12arm64-原生静态-nginx-部署2026-10-21) |
 | Debian 13 | amd64 | 6.12.113+deb13-cloud-amd64 | 不含 Nginx 的安装及重启通过 | 含 Nginx 的安装、重建、重启及指定更新恢复通过 | 容器预置 1.30.6 | [原生](validation.md#selinux-文件标签与-v14-原生安装)、[Docker](validation.md#debian-13-默认-docker-部署)、[更新](validation.md#debian-13-docker-签名升级运行路径) |
 | Debian 13 | arm64 | 6.12.113+deb13-cloud-arm64 | 含 Nginx 安装、权限、代理、回滚及重启通过 | 未验收 | 静态 1.30.6 | [记录](validation.md#debian-13arm64-原生静态-nginx-部署2026-10-21) |
-| Ubuntu 22.04 | amd64 | 5.15.0-198-generic | 含 Nginx 安装、权限、代理及重启通过；首轮即时断言失败未复现 | 未验收 | 静态 1.30.6 | [记录](validation.md#ubuntu-2204amd64-原生部署2026-10-21) |
+| Ubuntu 22.04 | amd64 | 5.15.0-198-generic | 含 Nginx 安装、权限、代理及重启通过；首轮即时断言失败未复现 | 托管 Web/Nginx 安装、预检、回滚、重建及重启通过 | 原生静态及 Docker 1.30.6 | [原生](validation.md#ubuntu-2204amd64-原生部署2026-10-21)、[Docker](validation.md#debian-12-与-ubuntu-2204amd64-docker-托管部署2026-10-22) |
 | Ubuntu 22.04 | arm64 | 5.15.0-198-generic | 含/不含 Nginx 安装、权限、代理、回滚及重启通过；静态 Nginx 在 Cortex-A53 验收 | 托管 Web/Nginx 安装、代理、回滚、容器重建及整机重启通过，首次安装与续办分轮记录 | 原生静态及 Docker 1.30.6 | [Web/Agent](validation.md#ubuntu-2204arm64-原生-webagent-部署2026-10-21)、[静态 Nginx](validation.md#ubuntu-2204arm64-原生静态-nginx-部署2026-10-21)、[Docker](validation.md#ubuntu-2204arm64-docker-托管部署2026-10-21) |
 | Ubuntu 24.04 | amd64 | 6.8.0-147-generic | 含 Nginx 安装、重启及指定升级恢复通过 | 未验收 | 静态 1.30.6 | [部署](validation.md#2026-10-20-ubuntu-2404-原生部署及探测-socket-恢复p5)、[升级](validation.md#2026-10-20-ubuntu-2404-原生协调升级及异常重启p5) |
 | Ubuntu 24.04 | arm64 | 6.8.0-147-generic | 含 Nginx 的分阶段安装、权限、代理、回滚、重放及重启通过 | 未验收 | 静态 1.30.6，ARMv8.0 | [记录](validation.md#ubuntu-2404arm64-原生部署续验2026-10-21) |
@@ -40,11 +40,11 @@
 | Debian 13 原生 | networkd/resolved、NetworkManager/resolved、两种 netplan renderer | IPv4/IPv6/IPv6-only 实际 DNS | 静态源、分域保持及指定独立恢复 | [networkd](validation.md#debian-13-networkdresolved-与-netplannetworkd-dns)、[NetworkManager](validation.md#debian-13-networkmanagerresolved-与-netplannetworkmanager-dns) |
 | Debian 13 原生 | 受管 Fail2ban，固定宿主机动作 | 双栈来源日志与主机封禁 | 官方代码安装、封禁/解封、轮转及指定重启恢复 | [服务](validation.md#debian-13-fail2ban-官方代码与受管服务)、[动作](validation.md#2026-10-20-独立面板-fail2ban-宿主机动作p5)、[重启](validation.md#2026-10-20-fail2ban-同机整机重启与显式停用p5) |
 
-Docker iptables 发布端口及联合规则范围、Docker 原生 nftables 实验组合尚未完成实际运行验收；上述主机 INPUT 结果不代表覆盖容器 FORWARD/DNAT 路径。其他系统、架构、管理器和故障点仍待验收，未经验收的 DNS 组合保持只读。
+Ubuntu 22.04/arm64 的自定义 Docker bridge、iptables-nft 发布端口及联合规则范围已完成真实双栈 TCP/UDP、Agent 异常退出、整机重启恢复、外部 DOCKER-USER 规则保持和受管规则移除验收，见[记录](validation.md#docker-forward-实际内核准入续验2026-10-21)。结果限于该组合；主机 INPUT 结果不代表覆盖其他容器 FORWARD/DNAT 路径。Docker 原生 nftables 实验组合、其他系统、架构、管理器和故障点仍待验收，未经验收的 DNS 组合保持只读。
 
 ## 发布边界
 
-基础监控的计数器重置、接口重建、启动/热插拔/采样中断、缺失值、维度上限及 SQLite 历史保留/容量配额已完成隔离边界验证；已在同一原生运行绑定下完成原生 Web、容器 Web、恢复原生 Web 的真实宿主 Agent 指标对照；正式 Docker 安装及部署模式迁移继续独立验收，见[对照记录](validation.md#同一宿主-agent-的-web-进程隔离指标对照2026-10-21)。预置模块镜像 amd64 已通过 TCP/UDP 双栈加权多上游、共享 UDP 检测、实际 IPv6 模式和双工作进程双栈 `reuseport`/HTTP 监听合并；其他发行包、架构、内核和完整原生发布事务不据此标记通过。见[监控记录](validation.md#监控边界与-stream-双栈权重2026-10-21)和[监听记录](validation.md#nginx-监听冲突ipv6-归属与端口复用2026-10-21)。
+基础监控的计数器重置、接口重建、启动/热插拔/采样中断、缺失值、维度上限及 SQLite 历史保留/容量配额已完成隔离边界验证；已在同一原生运行绑定下完成原生 Web、容器 Web、恢复原生 Web 的真实宿主 Agent 指标对照；Debian 12 与 Ubuntu 22.04/amd64 的正式 Docker 安装已完成重启前后宿主 Agent 指标验收，见[Docker](validation.md#debian-12-与-ubuntu-2204amd64-docker-托管部署2026-10-22)；其他组合和部署模式迁移继续独立验收。原生绑定下的 Web 隔离见[对照记录](validation.md#同一宿主-agent-的-web-进程隔离指标对照2026-10-21)。预置模块镜像 amd64 已通过 TCP/UDP 双栈加权多上游、共享 UDP 检测、实际 IPv6 模式和双工作进程双栈 `reuseport`/HTTP 监听合并；其他发行包、架构、内核和完整原生发布事务不据此标记通过。见[监控记录](validation.md#监控边界与-stream-双栈权重2026-10-21)和[监听记录](validation.md#nginx-监听冲突ipv6-归属与端口复用2026-10-21)。
 
 - 本地批准资产和隔离测试发行者的签名不替代正式 GitHub 发布链；实际仓库、发布密钥及正式 CI 尚未配置。arm64 预置模块镜像与[真实双架构验证包](validation.md#双架构镜像产物与-arm-执行2026-10-21)已生成，Ubuntu 22.04/arm64 的托管部署、恢复和重启通过，其他发行版的 ARM Docker 组合仍待验收。[arm64 原生静态 Nginx](validation.md#arm64-原生静态-nginx-构建2026-10-21)构建及 ELF/模块检查、Ubuntu 22.04 Cortex-A53 上的原生部署通过；原始程序和本地验证包不替代正式双架构发行。
 - 真实域名 ACME/DNS、通知接收端及跨主机 API 迁移仍待外部集成验收；已有容器内双节点结果见[验证记录](validation.md#双节点-https-迁移与授权)。
