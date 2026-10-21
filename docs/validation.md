@@ -477,3 +477,10 @@ CLI 实际验收覆盖已存在 Socket 的拒绝、默认不启动及不启用�
 - 当前原生安装器在空白系统安装已批准的 `0.2.24-dev` ARM 程序、现有前端和上述静态 Nginx；未安装或编译运行时模块。原即时 Web/worker UID、零有效能力、NoNewPrivileges、目录权限、Agent/Nginx 主密钥不可见断言通过。HTTPS 引导、统一 API、真实代理、端口占用回滚、候选切换后 Agent SIGKILL 回滚、恢复应用、安装重放和服务重启通过。
 - 正常整机重启后再次核对身份、权限、HTTPS 会话及代理；节点 `3e916394-5acb-41ac-9ceb-ca4c1adc9246`、配置版本 3、修订 `ec71accc-168e-4cfe-8938-de6fd8e30480` 和部署 `839f76c2-edfc-4975-8a5b-b70dbd7e45f2` 保持。前后 boot ID 不同，主密钥/TLS 文件、活动指针及实际进程散列相同：Web/Agent 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
 - AppArmor 启用且加载 37 个配置，三个服务实际标签均为 `unconfined`，不声明专用进程策略。控制器记录 `P5_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`，正常关机、QEMU 退出 0，无强制终止。证据位于 `.validation/native-vm/arm64-nginx-native-v1/`，包含 CPU 特征、初次及重启日志、来宾归档和前后证明；未重跑已通过的发布模块测试或 UI 自动化，没有修改开发宿主机环境。
+
+### Debian 12/arm64 原生静态 Nginx 部署（2026-10-21）
+
+- 使用 [Debian 官方 Bookworm arm64 云镜像](https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2)，完整传输后核对同源 SHA512SUMS；镜像 SHA-256 为 `c11b0165ca40653616dbbdfc14e24024b3cc8a3941cd67dceac9d93703730e2a`，341,245,952 字节。实际内核为 `6.1.0-54-cloud-arm64`，QEMU/TCG 2 核、2 GiB、独立新盘，外层控制器断网、无特权及宿主端口，没有注册宿主机 binfmt。
+- 当前安装器在空白系统安装同一已批准 `0.2.24-dev` ARM 程序、现有前端及静态 Nginx。即时身份/权限及主密钥隔离、HTTPS 引导与统一 API、真实 HTTP 代理、端口冲突和候选切换后 Agent SIGKILL 回滚、恢复应用、安装重放、服务及整机重启全部通过。
+- 节点为 `815ee55a-6518-4cf6-a24e-ecefe9854e42`、配置版本 3、修订 `64b0063c-74ef-4fca-81b9-13de7e9356c1`、部署 `48a8614e-1aca-44f6-abf9-f7805e540cfe`；重启前后身份及代理保持，boot ID 不同，主密钥/TLS 文件、活动指针及实际程序散列一致。Web/Agent 为 `591740c0df09e9cbedf6a661a16e7164deabe59310ab89709f7cf6f3a061154f`，Nginx 为 `c04c861d413d27772c7103dc872c11e82dbc29d879ff81a71d99ef63eb663c27`。
+- AppArmor 实际启用、服务 active、11 个配置已加载，三个服务进程均为 `unconfined`。控制器记录 `P5_DEBIAN12_ARM64_NATIVE_NGINX_ACCEPTANCE_PASS`，正常关机、QEMU 退出 0，无强制终止。证据位于 `.validation/native-vm/debian12-arm64-native-v1/`，包括官方镜像信息、初次及重启输出、LSM/能力/进程证明和来宾归档。此结果只覆盖原生组合，Docker 仍待验收；没有改产品代码、重复无关测试或修改开发宿主机环境。
