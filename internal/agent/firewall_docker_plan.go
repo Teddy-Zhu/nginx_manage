@@ -324,10 +324,23 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 		if err = validateDockerIPTablesPolicy(transition.Docker, *record, transition.Owner, transition.MachineHash, transition.RegistrationOperationID, transition.RegistrationRequestHash); err != nil {
 			return out, err
 		}
+		// Previous-generation proof and candidate preflight only read the host.
+		// The full before/after equality checks below still bracket both; no
+		// observation is cached or substituted for a fresh tool/kernel read.
+		previousContext, cancelPrevious := context.WithCancel(ctx)
+		var previousCheck sync.WaitGroup
+		var previousErr error
+		previousCheck.Add(1)
+		go func() {
+			defer previousCheck.Done()
+			previousErr = verifyIPTablesPreviousDockerRuntime(previousContext, f.dataDir, transition, before)
+		}()
+		defer func() { cancelPrevious(); previousCheck.Wait() }()
 		detail.Transition, hostSummary, err = prepareIPTablesTransition(ctx, before, transition)
 		if err != nil {
 			return out, fault.Unavailable(boundedIPTablesError(err))
 		}
+		previousCheck.Wait()
 		detail.Reason = "目标路径及联合规则预演已核对，应用后须通过新连接确认"
 		// Bracket the proof with fresh native, routing and Docker observations.
 		// Keep the existing plan deadline: timeout rejects rather than returning
@@ -360,11 +373,11 @@ func (f *hostFirewall) planDockerLocked(ctx context.Context, in firewall.Runtime
 			return out, fault.Unavailable(boundedIPTablesError(err))
 		}
 		canApply = true
-		if err = verifyIPTablesPreviousDockerRuntime(ctx, f.dataDir, transition, after); err != nil {
+		if previousErr != nil {
 			canApply = false
 			detail.Reason = "原 Docker 恢复目标无法核对，此计划仅可预览"
 			hostSummary.Reason = detail.Reason
-			detail.Warnings = append(detail.Warnings, boundedIPTablesError(err))
+			detail.Warnings = append(detail.Warnings, boundedIPTablesError(previousErr))
 		}
 	}
 	afterHost, err := readDockerTargetHost(ctx)

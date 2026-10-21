@@ -133,6 +133,14 @@ type ufwToolBinding struct {
 }
 
 func readUFWBoundFile(role, path string, executable bool, limit int64) (ufwBoundFile, error) {
+	return loadUFWBoundFile(role, path, executable, limit, true)
+}
+
+func hashUFWBoundFile(role, path string, executable bool, limit int64) (ufwBoundFile, error) {
+	return loadUFWBoundFile(role, path, executable, limit, false)
+}
+
+func loadUFWBoundFile(role, path string, executable bool, limit int64, retain bool) (ufwBoundFile, error) {
 	out := ufwBoundFile{Role: role, Invoked: path, Executable: executable}
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
 		return out, errors.New("UFW 工具路径无效")
@@ -145,7 +153,16 @@ func readUFWBoundFile(role, path string, executable bool, limit int64) (ufwBound
 	if err != nil {
 		return out, err
 	}
-	raw, err := nginxmodules.ReadTrusted(resolved, limit)
+	var raw []byte
+	var hash string
+	if retain {
+		raw, err = nginxmodules.ReadTrusted(resolved, limit)
+		if err == nil {
+			hash = secure.Hash(raw)
+		}
+	} else {
+		hash, err = nginxmodules.HashTrusted(resolved, limit)
+	}
 	if err != nil {
 		return out, err
 	}
@@ -159,7 +176,7 @@ func readUFWBoundFile(role, path string, executable bool, limit int64) (ufwBound
 	if !firstOK || !lastOK || first.Ctim != last.Ctim || resolveErr != nil || current != resolved {
 		return out, errors.New("UFW 工具文件身份在读取期间变化")
 	}
-	out.File = ufwFileSnapshot{Path: resolved, Present: true, Hash: secure.Hash(raw), Bytes: int64(len(raw)), Device: uint64(last.Dev), Inode: last.Ino, Mode: uint32(after.Mode()), Modified: after.ModTime().UnixNano(), Changed: last.Ctim.Sec*1e9 + last.Ctim.Nsec}
+	out.File = ufwFileSnapshot{Path: resolved, Present: true, Hash: hash, Bytes: after.Size(), Device: uint64(last.Dev), Inode: last.Ino, Mode: uint32(after.Mode()), Modified: after.ModTime().UnixNano(), Changed: last.Ctim.Sec*1e9 + last.Ctim.Nsec}
 	out.Raw = raw
 	return out, nil
 }

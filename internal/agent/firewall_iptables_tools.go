@@ -70,11 +70,10 @@ func bindIPTablesTools(ctx context.Context, backend string) (*iptablesToolBindin
 	if err != nil {
 		return nil, err
 	}
-	binding.Helper, err = readUFWBoundFile("nginxpanel", self, true, iptablesHelperBytes)
+	binding.Helper, err = hashUFWBoundFile("nginxpanel", self, true, iptablesHelperBytes)
 	if err != nil {
 		return nil, errors.New("iptables 固定子进程入口无法核对")
 	}
-	binding.Helper.Raw = nil
 	file, err := openFirewallELF(binding.Helper, iptablesHelperBytes)
 	if err != nil {
 		return nil, err
@@ -89,7 +88,7 @@ func bindIPTablesTools(ctx context.Context, backend string) (*iptablesToolBindin
 		if err != nil {
 			return nil, errors.New("iptables 固定系统工具路径无法核对：" + role)
 		}
-		tool, err := readUFWBoundFile(role, path, true, 16<<20)
+		tool, err := hashUFWBoundFile(role, path, true, 16<<20)
 		if err != nil {
 			return nil, errors.New("iptables 工具文件身份无法核对：" + role)
 		}
@@ -97,7 +96,6 @@ func bindIPTablesTools(ctx context.Context, backend string) (*iptablesToolBindin
 		if total > 64<<20 {
 			return nil, errors.New("iptables 工具合计超过 64 MiB")
 		}
-		tool.Raw = nil
 		// Require the same ELF and permission constraints even for tools that
 		// are currently only bound for later native rule reads.
 		file, err := openUFWRestoreELF(tool)
@@ -200,7 +198,8 @@ func (binding *iptablesToolBinding) verify(ctx context.Context) error {
 				return errors.New("iptables 系统工具选择已变化")
 			}
 		}
-		after, err := readUFWBoundFile(before.Role, before.Invoked, true, limit)
+		// Verify fresh bytes without retaining another ELF buffer.
+		after, err := hashUFWBoundFile(before.Role, before.Invoked, true, limit)
 		if err != nil || after.File != before.File {
 			return errors.New("iptables 固定工具文件已变化，请重新生成计划")
 		}

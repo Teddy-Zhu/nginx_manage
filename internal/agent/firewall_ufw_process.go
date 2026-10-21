@@ -230,8 +230,8 @@ func openUFWRestoreELF(tool ufwBoundFile) (*os.File, error) {
 }
 
 func openFirewallELF(tool ufwBoundFile, limit int64) (*os.File, error) {
-	current, err := readUFWBoundFile(tool.Role, tool.Invoked, true, limit)
-	if err != nil || current.File != tool.File || len(current.Raw) < 4 || !bytes.Equal(current.Raw[:4], []byte{0x7f, 'E', 'L', 'F'}) || os.FileMode(current.File.Mode)&(os.ModeSetuid|os.ModeSetgid) != 0 {
+	current, err := hashUFWBoundFile(tool.Role, tool.Invoked, true, limit)
+	if err != nil || current.File != tool.File || os.FileMode(current.File.Mode)&(os.ModeSetuid|os.ModeSetgid) != 0 {
 		return nil, errors.New("防火墙子进程工具必须是未漂移的普通受信 ELF")
 	}
 	fd, err := unix.Open(tool.File.Path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
@@ -248,6 +248,11 @@ func openFirewallELF(tool ufwBoundFile, limit int64) (*os.File, error) {
 	if !ok || uint64(stat.Dev) != tool.File.Device || stat.Ino != tool.File.Inode || info.Size() != tool.File.Bytes || uint32(info.Mode()) != tool.File.Mode || info.ModTime().UnixNano() != tool.File.Modified || stat.Ctim.Sec*1e9+stat.Ctim.Nsec != tool.File.Changed {
 		f.Close()
 		return nil, errors.New("防火墙子进程工具在固定描述符时变化")
+	}
+	var header [4]byte
+	if _, err = f.ReadAt(header[:], 0); err != nil || !bytes.Equal(header[:], []byte{0x7f, 'E', 'L', 'F'}) {
+		f.Close()
+		return nil, errors.New("防火墙子进程工具必须是普通受信 ELF")
 	}
 	if _, err = unix.Fgetxattr(fd, "security.capability", nil); !errors.Is(err, unix.ENODATA) && !errors.Is(err, unix.ENOTSUP) {
 		f.Close()
