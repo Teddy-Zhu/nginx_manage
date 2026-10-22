@@ -183,7 +183,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。仅预览本应用的独立实例，冻结实际服务、安装、配置和签名资产基准并显示影响，不执行安装或服务控制。 */
+        /** @description 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。engine_owner=managed 选择本应用独立实例；existing 仅选择本机 root 已授予服务控制的已有全局实例，限 start/stop/enable/disable。冻结实际服务和原接入或安装基准，显示对全部 jail 的影响，不执行安装或服务控制。 */
         post: operations["previewFail2banLifecycle"];
         delete?: never;
         options?: never;
@@ -200,7 +200,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。派发后中断不自动重放，须核对并重新预览续办或撤回；不控制系统全局实例。 */
+        /** @description 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。existing 的 base_id 固定本机 root 的当前服务控制授权，启动前复核原客户端和单元；启停影响原实例全部 jail，enable/disable 不改变当前运行状态，不改写原 jail 配置。派发后中断只核对原操作，不自动重新派发。 */
         post: operations["changeFail2banLifecycle"];
         delete?: never;
         options?: never;
@@ -6945,7 +6945,7 @@ export interface components {
             comment: string;
         };
         FirewallPolicy: {
-            /** @description 目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；五种后端均提供主机入站编译；Docker 目标编译仅支持显式 iptables 后端，执行尚未开放。 */
+            /** @description 目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；五种后端均支持主机入站编译；Docker 发布端口编译与联合应用仅支持经本机授权的显式 iptables 后端，能否执行以实时能力和完整计划的 can_apply 为准。 */
             backend: string;
             rules: components["schemas"]["FirewallRule"][];
         };

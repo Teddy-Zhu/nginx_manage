@@ -266,7 +266,7 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 				}
 				info.Warnings = append(info.Warnings, state.Candidate.Backend+" 编译受阻："+known.Message)
 			}
-			info.Warnings = append(info.Warnings, "目标须重新核对 iptables 本机空命名空间授权；限时应用与业务规则独立恢复尚未接入，迁移只保存期望，不切换系统后端或写入内核")
+			info.Warnings = append(info.Warnings, "目标须重新核对所选 iptables 后端的本机授权和入口保护；迁入期望不写入内核，须单独生成限时应用计划并用新连接确认")
 		} else if _, err = firewall.CompileNFT(state.Candidate); err != nil {
 			info.Warnings = append(info.Warnings, "目标所选后端或规则路径尚不能由当前执行器应用；可保存期望，生效须完成目标适配")
 		}

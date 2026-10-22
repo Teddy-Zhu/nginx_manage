@@ -5839,7 +5839,7 @@ type FirewallPlanPreparationState string
 
 // FirewallPolicy defines model for FirewallPolicy.
 type FirewallPolicy struct {
-	// Backend 目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；五种后端均提供主机入站编译；Docker 目标编译仅支持显式 iptables 后端，执行尚未开放。
+	// Backend 目标绑定：direct-nftables、iptables-nft、iptables-legacy、firewalld 或 ufw；五种后端均支持主机入站编译；Docker 发布端口编译与联合应用仅支持经本机授权的显式 iptables 后端，能否执行以实时能力和完整计划的 can_apply 为准。
 	Backend string         `json:"backend"`
 	Rules   []FirewallRule `json:"rules"`
 }
