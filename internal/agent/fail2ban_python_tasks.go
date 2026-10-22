@@ -115,6 +115,9 @@ func (p *fail2banPythonTasks) submit(ctx context.Context, in fail2ban.PythonTask
 			return out, err
 		}
 	}
+	if err := fail2banPythonWorkerUnit(ctx, p.server.DataDir, in.OperationID); err != nil {
+		return out, fault.Conflict("Python 独立宿主执行服务未通过安装登记核对：" + err.Error())
+	}
 	leave, ok := p.gate.enter(false)
 	if !ok {
 		return out, ErrBusy
@@ -180,7 +183,7 @@ func (p *fail2banPythonTasks) run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		call, cancel := context.WithTimeout(ctx, 45*time.Minute)
+		call, cancel := context.WithTimeout(ctx, 15*time.Second)
 		err := p.advance(call)
 		cancel()
 		if err != nil && !errors.Is(err, ErrBusy) && ctx.Err() == nil {
@@ -227,25 +230,10 @@ func (p *fail2banPythonTasks) advance(ctx context.Context) error {
 	if id == "" {
 		return nil
 	}
-	unlock, err := (&fail2banLifecycle{server: p.server}).nginxLock()
-	if err != nil {
+	if _, err := p.record(id); err != nil {
 		return err
 	}
-	bindingUnlock, err := (&Journal{Dir: fail2banBindingDir(p.server.DataDir)}).rootLock("binding.lock")
-	unlock()
-	if err != nil {
-		return err
-	}
-	defer bindingUnlock()
-	r, err := p.record(id)
-	if err != nil {
-		return err
-	}
-	if r.Kind == fail2banPythonKind {
-		_, err = runFail2banPython(ctx, p.server.DataDir, &r)
-		return err
-	}
-	return p.runPlan(ctx, &r)
+	return startFail2banPythonWorker(ctx, p.server.DataDir, id)
 }
 
 type fail2banPythonPlanResult struct {

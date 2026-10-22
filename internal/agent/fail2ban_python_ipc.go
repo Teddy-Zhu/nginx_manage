@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"syscall"
 	"time"
 
 	"nginxpanel/internal/fail2ban"
@@ -27,7 +28,9 @@ func (p *fail2banPythonTasks) handlers(mux *http.ServeMux) {
 		defer cancel()
 		out, err := p.submit(call, in)
 		var known *fault.Error
-		if err != nil && !errors.As(err, &known) && !errors.Is(err, ErrBusy) && !errors.Is(err, ErrRuntimeUnavailable) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, ErrBusy) || errors.Is(err, syscall.EWOULDBLOCK) {
+			err = fault.New(http.StatusServiceUnavailable, fail2ban.PythonTaskBusyCode, "宿主机操作暂被占用，尚未接受依赖请求")
+		} else if err != nil && !errors.As(err, &known) && !errors.Is(err, ErrRuntimeUnavailable) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			err = fault.New(409, "FAIL2BAN_PYTHON_REJECTED", err.Error())
 		}
 		fail2banNginxReply(w, out, err)

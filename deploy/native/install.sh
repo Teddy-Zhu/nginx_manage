@@ -556,6 +556,29 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 [Install]
 WantedBy=multi-user.target
 EOF
+cat >"$work/nginxpanel-fail2ban-python@.service" <<EOF
+[Unit]
+Description=NginxPanel approved system Python dependency operation %i
+After=network.target
+
+[Service]
+Type=exec
+User=root
+Group=root
+UMask=0077
+ExecStart=/opt/nginxpanel/current/nginxpanel fail2ban-python-worker --data-dir $data --fail2ban-operation %i
+Restart=no
+KillMode=mixed
+RuntimeMaxSec=45min
+TimeoutStopSec=15
+NoNewPrivileges=yes
+ProtectSystem=no
+ProtectHome=yes
+PrivateTmp=yes
+InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+EOF
 cat >"$work/nginxpanel.service" <<EOF
 [Unit]
 Description=NginxPanel management API and Web
@@ -769,7 +792,7 @@ if [[ -e /run/ufw.lock || -L /run/ufw.lock ]]; then trusted_file /run/ufw.lock 4
 printf 'd /run/nginxpanel-host 0700 root root -\nd /run/nginxpanel-install 0700 root root -\nf /run/ufw.lock 0600 root root -\n' >"$work/nginxpanel.conf"
 write_owned "$work/nginxpanel.conf" /etc/tmpfiles.d/nginxpanel.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/nginxpanel.conf
-install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service)
+install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service nginxpanel-fail2ban-python@.service)
 if [[ $panel_mode == docker ]]; then install_units+=(nginxpanel-image@.service); fi
 if [[ -z $nginx_image ]]; then install_units+=(nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service); fi
 if [[ -n $nginx_image ]]; then install_units+=(nginxpanel-nginx-image@.service); fi

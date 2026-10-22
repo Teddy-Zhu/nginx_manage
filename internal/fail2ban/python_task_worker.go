@@ -30,8 +30,9 @@ func (s *PolicyService) nextPythonTask(ctx context.Context, executor PythonTaskE
 		if task.AgentAccepted != 0 {
 			return s.jailTaskUpdate(ctx, task, "recovery_required", "operation_missing", "已接受的 Python 依赖操作记录缺失，停止重新执行", false)
 		}
-		if task.SubmitStarted == 0 {
-			if time.Now().Unix()-task.CreatedAt > 300 {
+		knownUnsent := task.SubmitStarted == 0
+		if knownUnsent {
+			if time.Now().Unix() < task.CreatedAt || time.Now().Unix()-task.CreatedAt > 300 {
 				return s.jailTaskUpdate(ctx, task, "failed", "authorization_expired", "Python 依赖操作排队超过五分钟，请重新生成依赖计划", false)
 			}
 			if err = s.moduleEnabled(ctx, s.DB); err != nil {
@@ -53,6 +54,9 @@ func (s *PolicyService) nextPythonTask(ctx context.Context, executor PythonTaskE
 			operation, err = executor.Fail2banPythonOperation(ctx, task.OperationID)
 			if errors.As(err, &remote) && remote.Code == "FAIL2BAN_PYTHON_OPERATION_MISSING" {
 				var rejected *fault.Error
+				if knownUnsent && errors.As(submitErr, &rejected) && rejected.Status == 503 && rejected.Code == PythonTaskBusyCode {
+					return s.pythonWaitForAdmission(ctx, task, sealed)
+				}
 				if errors.As(submitErr, &rejected) && (rejected.Status == 400 || rejected.Status == 403 || rejected.Status == 409) {
 					return s.jailTaskUpdate(ctx, task, "failed", "agent_rejected", rejected.Message, false)
 				}
@@ -75,4 +79,20 @@ func (s *PolicyService) nextPythonTask(ctx context.Context, executor PythonTaskE
 		next = nil
 	}
 	return s.fail2banTaskUpdate(ctx, task, operation.State, operation.Stage, operation.Error, true, next)
+}
+
+// Clear admission only for an explicit pre-acceptance refusal and an absent
+// root record. Unknown submissions keep their marker and original identity.
+func (s *PolicyService) pythonWaitForAdmission(ctx context.Context, task dbgen.Task, sealed []byte) error {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
+	result, err := s.DB.ExecContext(ctx, "UPDATE tasks SET state='queued',stage='waiting_for_admission',last_error='宿主机操作暂被占用，等待准入',submit_started=0,updated_at=? WHERE id=? AND agent_accepted=0 AND submit_started=1 AND stage!='restore_isolated' AND state IN ('queued','running','recovery_required') AND EXISTS(SELECT 1 FROM fail2ban_operations WHERE task_id=tasks.id AND payload=?)", time.Now().Unix(), task.ID, sealed)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err == nil && changed != 1 {
+		err = errors.New("Python 依赖准入等待状态或请求材料变化")
+	}
+	return err
 }

@@ -10,6 +10,8 @@ import (
 	"nginxpanel/internal/secure"
 )
 
+const PythonTaskBusyCode = "FAIL2BAN_PYTHON_BUSY"
+
 type PythonTaskInput struct {
 	Action  string `json:"action"`
 	PlanID  string `json:"plan_id"`

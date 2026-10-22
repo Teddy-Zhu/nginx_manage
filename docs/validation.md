@@ -796,3 +796,22 @@ v90/v92 的签名夹具错误均在离线材料校验时拒绝，未执行更新
 `v120` 正常关机，QEMU 与外层容器退出 0，无 OOM，全部采证命令退出 0。`v113/v115/v117` 的业务失败与 `v119` 的夹具失败原记录均保留，未改写为整轮成功。合并限定结论 `v120/verdict.json` SHA-256 为 `2d7342f2b0f7dd638afe23157ebd603e44b33902c6a04dba86bc6c9445f65277`，该轮证据归档为 `26a934b230b49aa5d388d1323edff0ceedccd37fc026bb5048e8f8585a37bb53`。所有路径均位于 `.validation/native-vm/`。
 
 固定 Go 1.27.2 SDK 离线容器中的现有 Agent 检查、Fail2ban 包编译、改动格式及安装脚本语法检查通过；没有新增单元测试框架。`fail2ban-existing-build-v118/` 的 `.52` amd64/arm64 程序散列分别为 `c30e4c433f962a7cbc5c312c6a94458bc14613dc623d515e582f74b4c5468830`、`7244e82c5d5d0dbdb2266108fb887a17dce4774852a66b6c62ce4547063868c7`。结论限于上述固定 profile 代表链；手动地址、停用/取消、CDN 动作及 Python 缺依赖执行等剩余项见 [当前进度](progress.md)。没有 UI 自动化，没有修改开发宿主的软件、服务、网络或防火墙。
+
+
+### 缺 Python 的 API 独立宿主安装与恢复（2026-10-22）
+
+缺依赖的 API 计划和安装现由固定 `nginxpanel-fail2ban-python@.service` 执行。入口只接受已批准 UUID，核对安装登记、固定命令、实际 systemd 属性及 MainPID/控制组；Agent 保持 `ProtectSystem=strict`，不在长期只读进程中运行包管理器。安装器登记这一模板，实际安装前重新核对操作及计划期限。明确未接受的暂时锁冲突仅在 root 记录缺席时沿原任务等待，未知提交不清除派发标记。
+
+所有运行操作均位于既有 Docker/QEMU 环境内的 Debian 12/amd64 独立内核 VM。夹具通过原生包管理器实际移除 Python 包，并撤除已有 Fail2ban 接入和固定工具，确认系统包状态完整、系统解释器确实不存在。Debian 云镜像原 `mirror+file` 来源被产品明确拒绝；后续安装夹具由 VM 管理员改为官方直接 HTTPS 来源，产品未加入源自动改写或间接来源支持。原夹具下载限速已撤除，不把由限速引起的三分钟索引超时视为成功。
+
+第 125 轮发现 systemctl 即使使用 `--all` 也省略空执行数组，导致新服务被误拒绝；现将这些数组与必需标量分开核对，任何非空附加命令仍拒绝。第 126 轮通过脱离真实单元的 CLI 调用拒绝、无批准记录的服务执行拒绝，以及真实 `binding.lock` 占用时的原任务等待：公共任务 `76349f3e-a5a6-462a-a501-98cabb213fd0` 未生成 root 请求，同键保持原任务，解锁后同 UUID 进入计划；该计划随后因间接来源拒绝而失败，未改写为整轮安装通过。
+
+第 130 轮的直接 HTTPS 计划成功且包状态未变，但实际安装返回 100。第 131 轮定点诊断确认 APT 在 `--no-download` 下未使用已验证归档目录，传给 dpkg 的文件名不是绝对路径。使用 APT 的 dpkg 调试模式仅打印调用参数，确认包状态摘要不变；指定私有归档缓存后参数正确。最终实现保留空来源/索引及禁止下载、升级、删除的约束，额外指定该已批准归档目录为 `Dir::Cache::archives`。该原因也对应 [APT 2.6.1 归档路径解析](https://github.com/Debian/apt/blob/2.6.1/apt-pkg/acquire-item.cc)；诊断本身不计实际安装成功。
+
+第 131 轮随后使用 `.55` 原生程序执行新批准的真实 API 计划与安装。计划 `a1a5c326-dddf-4bc8-896e-e6961cc3820c` 成功，确认仅计划未安装、dpkg 状态摘要不变；安装操作 `d1d72ade-3f54-4603-bcc3-c36a3471d8b0` 派发后，暂停该工作服务，停止 Agent，再继续原服务。Agent 仍停止时 root 记录已为 `succeeded/python_confirmed`，Python 确已安装。重启 Agent 后公共原任务成功、`submission=acknowledged`，同幂等键返回同任务；解释器可信、归属可读、标准库及 SQLite 探针通过。原失败安装记录仍保留为失败，未重放原安装。节点、TLS、配置树及 Nginx 运行完整性核对通过，Agent 进程视图的 `/usr`、`/var/lib/dpkg`、`/var/lib/apt/lists` 均保持只读。
+
+该轮通过受控夹具刷新原生程序到 `.55`，Docker Web 保持 `.53`；验证的是当前 Python API/执行合同，不计新的签名协调更新。`.53` 的正常签名更新另有第 122 轮记录。前期连接、启动准备和来源/限速夹具失败，以及第 125/130 轮真实业务失败均保留在 `.validation/native-vm/fail2ban-python-v122/` 至 `v131/`，不删改原审计，不将各轮合并声称全部成功。
+
+`v131/terminal.json` 确认业务通过，日志/归档采集全部退出 0，QEMU 与容器退出 0、无 OOM。`success-proof.json` SHA-256 为 `7859e026bcaff936edcef020901b3fdba19e7481a615f78395dee43f16f2dcd8`，`source-evidence.tar.gz` 为 `52e5442dfa56ac7ad8dddb08e51a6be0c32beee8c99f57bae95eca571bca4858`；原始材料包含私有运行信息，保留于忽略目录，不进入 Git。
+
+固定 Go 1.27.2 离线 SDK 容器的现有 Agent 检查、Fail2ban 包编译、改动格式和安装脚本语法检查，以及 amd64/arm64 静态构建均通过。`fail2ban-python-build-v132/` 的 `.55` 程序 SHA-256 分别为 `37130df272ce12116b82c4de5924ff5bb6450a272159e6e325f0f86ca5a43cf0`、`e7fd3fce2d85e8c30ccd232063afffd11900892916dbb3b520cf501b67a70c6c`。未重复已有效的完整安装矩阵，未执行 UI 自动化，未修改开发宿主的软件、服务、网络或防火墙。DNF 与其余关键边界仍见[当前进度](progress.md)，上述 APT 代表结果不覆盖它们。

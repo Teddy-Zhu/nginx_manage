@@ -296,6 +296,7 @@ func run() error {
 		"fail2ban-python-plan":               {"data-dir": true, "fail2ban-scope": true, "fail2ban-python-refresh": true},
 		"fail2ban-python-install":            {"data-dir": true, "fail2ban-scope": true, "fail2ban-python-plan": true, "fail2ban-python-confirm": true, "fail2ban-operation": true},
 		"fail2ban-python-status":             {"data-dir": true, "fail2ban-scope": true, "fail2ban-operation": true},
+		"fail2ban-python-worker":             {"data-dir": true, "fail2ban-operation": true},
 		"fail2ban-managed":                   {"data-dir": true, "fail2ban-scope": true},
 		"fail2ban-managed-check":             {"data-dir": true, "fail2ban-scope": true},
 		"fail2ban-managed-start":             {"data-dir": true, "fail2ban-scope": true},
@@ -433,7 +434,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-operation":
-			if command != "fail2ban-install" && command != "fail2ban-upgrade-prepare" && command != "fail2ban-upgrade-preparation" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-verification" && command != "fail2ban-upgrade-activate" && !strings.HasPrefix(command, "fail2ban-upgrade-restore") && !strings.HasPrefix(command, "fail2ban-upgrade-activation") && !strings.HasPrefix(command, "fail2ban-upgrade-quiesce") && !strings.HasPrefix(command, "fail2ban-upgrade-run") && !strings.HasPrefix(command, "fail2ban-upgrade-switch") && !strings.HasPrefix(command, "fail2ban-state-") && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
+			if command != "fail2ban-install" && command != "fail2ban-upgrade-prepare" && command != "fail2ban-upgrade-preparation" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-verification" && command != "fail2ban-upgrade-activate" && !strings.HasPrefix(command, "fail2ban-upgrade-restore") && !strings.HasPrefix(command, "fail2ban-upgrade-activation") && !strings.HasPrefix(command, "fail2ban-upgrade-quiesce") && !strings.HasPrefix(command, "fail2ban-upgrade-run") && !strings.HasPrefix(command, "fail2ban-upgrade-switch") && !strings.HasPrefix(command, "fail2ban-state-") && command != "fail2ban-python-install" && command != "fail2ban-python-status" && command != "fail2ban-python-worker" && command != "fail2ban-nginx-bind" && command != "fail2ban-nginx-unbind" && command != "fail2ban-jails-apply" && command != "fail2ban-jails-status" && command != "fail2ban-host-input-init" && command != "fail2ban-host-input-recover" && command != "fail2ban-host-input-remove" && command != "fail2ban-host-input-retire" && command != "fail2ban-host-input-retirement" && command != "fail2ban-host-protection-approve" && command != "fail2ban-host-protection-revoke" && command != "fail2ban-host-sources-approve" && command != "fail2ban-host-sources-revoke" && command != "fail2ban-host-runtime-apply" && command != "fail2ban-host-runtime-clear" && command != "fail2ban-host-runtime-recover" && command != "fail2ban-host-recovery-status" && command != "fail2ban-host-recovery-cancel" && command != "fail2ban-host-sync-enable" && command != "fail2ban-host-sync-disable" && !strings.HasPrefix(command, "fail2ban-existing-jail-") {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-host-input-base":
@@ -716,6 +717,8 @@ func run() error {
 			return errors.Join(err, e)
 		}
 		return err
+	case "fail2ban-python-worker":
+		return agent.RunFail2banPythonWorker(ctx, absDir, *fail2banOperation)
 	case "fail2ban-python-install":
 		out, err := agent.InstallFail2banPython(ctx, agent.Fail2banPythonOptions{DataDir: absDir, Scope: *fail2banScope, OperationID: *fail2banOperation, PlanID: *fail2banPythonPlan, Confirm: *fail2banPythonConfirm})
 		if e := json.NewEncoder(os.Stdout).Encode(out); e != nil {

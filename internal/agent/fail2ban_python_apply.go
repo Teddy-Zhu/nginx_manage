@@ -280,8 +280,8 @@ func runFail2banPython(ctx context.Context, data string, r *Record) (fail2ban.Py
 	if err = fail2banPythonDiskPlan(data, p); err != nil {
 		return fail("resources_unavailable", err)
 	}
-	if p.Plan.ExpiresAt <= time.Now().Unix() {
-		return fail("authorization_expired", errors.New("Python 依赖计划已过期，请重新生成计划"))
+	if r.Deadline <= time.Now().Unix() || p.Plan.ExpiresAt <= time.Now().Unix() {
+		return fail("authorization_expired", errors.New("Python 依赖操作或计划已过期，请重新生成计划"))
 	}
 	if err = ctx.Err(); err != nil {
 		return fail2banPythonView(*r), err

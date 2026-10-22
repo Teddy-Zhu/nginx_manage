@@ -218,11 +218,13 @@ func installFail2banAPT(ctx context.Context, data, operation string, p fail2banP
 	// Only the approved local archives enter the resolver. Empty source lists
 	// and private empty package lists prevent it adding a cached, unapproved
 	// repository dependency if the host changed after the final preview.
+	// With downloads disabled, APT needs these verified files in its archive
+	// cache to pass absolute filenames to dpkg instead of unresolved basenames.
 	lists := filepath.Join(work, "lists")
 	if err := secure.RootDirectory(filepath.Join(lists, "partial"), 0700); err != nil {
 		return err
 	}
-	args = append(fail2banAPTArgs(), "-o", "Dir::Etc::sourcelist=/dev/null", "-o", "Dir::Etc::sourceparts=-", "-o", "Dir::State::lists="+lists, "-o", "Dir::Cache::pkgcache=", "-o", "Dir::Cache::srcpkgcache=", "--no-download", "--no-install-recommends", "--no-remove", "--no-upgrade", "--yes", "install")
+	args = append(fail2banAPTArgs(), "-o", "Dir::Etc::sourcelist=/dev/null", "-o", "Dir::Etc::sourceparts=-", "-o", "Dir::State::lists="+lists, "-o", "Dir::Cache::archives="+work, "-o", "Dir::Cache::pkgcache=", "-o", "Dir::Cache::srcpkgcache=", "--no-download", "--no-install-recommends", "--no-remove", "--no-upgrade", "--yes", "install")
 	for _, pkg := range p.Plan.Packages {
 		args = append(args, filepath.Join(work, pkg.Filename))
 	}

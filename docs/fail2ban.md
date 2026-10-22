@@ -343,7 +343,7 @@ root 协调器在 Agent 中独立运行，可用于未配置专用 Nginx 的宿�
 
 ## 缺失系统 Python 的本机依赖计划与安装
 
-缺失 Python 时，本机 root 可先生成最小系统包计划，再明确安装。当前接入 Debian 12/13、Ubuntu 22.04/24.04/26.04 的 APT，以及 CentOS Stream 9/10 的 DNF 4 原生 API，目标为 amd64/arm64；这些适配尚待 P5 真实系统验证，不作为已验证支持矩阵。只请求 `python3` 及原生解析出的必要依赖，不安装推荐/弱依赖。已有或无法完整核对的 Python、已有 Fail2ban 实例、系统包损坏或需要升级/降级/替换/删除已有包时拒绝此入口，复用或修复已有系统环境分别处理。
+缺失 Python 时，本机 root 可先生成最小系统包计划，再明确安装。当前接入 Debian 12/13、Ubuntu 22.04/24.04/26.04 的 APT，以及 CentOS Stream 9/10 的 DNF 4 原生 API，目标为 amd64/arm64；Debian 12/amd64 的 API 计划、实际 APT 安装及 Agent 中断结果恢复已通过代表验收，其他适配不作为已验证支持矩阵。只请求 `python3` 及原生解析出的必要依赖，不安装推荐/弱依赖。已有或无法完整核对的 Python、已有 Fail2ban 实例、系统包损坏或需要升级/降级/替换/删除已有包时拒绝此入口，复用或修复已有系统环境分别处理。
 
 ```sh
 nginxpanel fail2ban-python-plan --data-dir=/var/lib/nginxpanel --fail2ban-scope=host
@@ -354,17 +354,17 @@ nginxpanel fail2ban-python-status --data-dir=/var/lib/nginxpanel --fail2ban-scop
 
 默认只读取已有软件仓库索引；显式 `--fail2ban-python-refresh` 才允许访问已配置来源并刷新原生元数据缓存，不安装软件包，也不新增仓库、导入信任密钥或运行远程脚本。计划显示每个新增包的准确版本/架构、来源主机、SHA-256、下载及安装占用，并提示维护脚本/既有系统包钩子可能运行。计划保存一小时，最多 256 份；冻结主机、原生工具/解释器身份、软件仓库配置、已安装清单及完整求解结果，安装前重新解析并比较。计划不接受任意包名、程序路径、脚本、仓库或包 URL。
 
-APT 保留来源验证，拒绝源文件中关闭信任/有效期检查的配置；下载后再次逐项核对大小与 SHA-256。实际安装仅提供批准的本地归档及空的来源/索引集合，禁止下载、推荐包、升级和删除，防止重解依赖引入未批准包。DNF 使用系统私有 platform Python 或现有系统 Python 的固定隔离入口，禁用插件及弱依赖，只接受 `PKG_INSTALL`；下载后核对摘要与现有 RPM 信任密钥，签名不能确认则失败，不自动导入密钥。原生事务将批准的集合交给 RPM，保留事务检查与原生锁。依据见 [APT 手册](https://manpages.debian.org/testing/apt/apt-get.8.en.html)、[APT 安装实现](https://github.com/Debian/apt/blob/2.6.1/apt-private/private-install.cc)、[DNF Base API](https://dnf.readthedocs.io/en/latest/api_base.html)、[DNF 事务 API](https://dnf.readthedocs.io/en/latest/api_transaction.html) 和 [DNF RPM 事务实现](https://github.com/rpm-software-management/dnf/blob/4.20.0/dnf/db/group.py)。
+APT 保留来源验证，拒绝源文件中关闭信任/有效期检查的配置；仅接受直接 HTTP(S) 包地址，`mirror+file` 等间接来源明确拒绝，不自动改写系统软件源。下载后再次逐项核对大小与 SHA-256。实际安装仅提供批准的本地归档及空的来源/索引集合，禁止下载、推荐包、升级和删除，防止重解依赖引入未批准包。DNF 使用系统私有 platform Python 或现有系统 Python 的固定隔离入口，禁用插件及弱依赖，只接受 `PKG_INSTALL`；下载后核对摘要与现有 RPM 信任密钥，签名不能确认则失败，不自动导入密钥。原生事务将批准的集合交给 RPM，保留事务检查与原生锁。依据见 [APT 手册](https://manpages.debian.org/testing/apt/apt-get.8.en.html)、[APT 安装实现](https://github.com/Debian/apt/blob/2.6.1/apt-private/private-install.cc)、[DNF Base API](https://dnf.readthedocs.io/en/latest/api_base.html)、[DNF 事务 API](https://dnf.readthedocs.io/en/latest/api_transaction.html) 和 [DNF RPM 事务实现](https://github.com/rpm-software-management/dnf/blob/4.20.0/dnf/db/group.py)。
 
 操作先写入 root 独立 journal，再派发原生安装；尚未派发的原请求可在五分钟授权期和计划有效期内继续，派发标记保存后同一 ID 仅核对结果。网页与本机命令共用安装记录及执行器。中断或超时可能留下待恢复的原生包状态，不自动执行 `dpkg --configure -a`、DNF 重装或逆向卸载。锁仍被占用或状态无法核对时保留恢复阻塞；查询确认包管理器空闲、原版本包完整安装、系统解释器归属和必要标准库/SQLite 读写后才记录成功，回执未知单独标注。稳定但未达目标的操作记录失败，新的明确计划仍须通过原生完整性检查；损坏环境由管理员通过原生包管理器恢复。新增系统包不随 Fail2ban 撤回自动卸载。
 
 网页/API 已接入 `POST /fail2ban/python` 与 `GET /fail2ban/python/tasks` 及对应显式远程资源。提交要求 `components.manage`、管理模块启用、浏览器近期认证及幂等键。`action=plan` 生成持久任务，`plan_id` 为空，`refresh` 明确是否刷新已有索引；HTTP 202 不代表计划已完成。成功任务返回保存的计划，页面展示版本、来源、摘要、空间与影响后再单独确认 `action=install`，提交原 `plan_id` 且 `refresh=false`。任务历史保存最近 16 条加密结果快照，Agent 离线时仍可查看。安装系统依赖后仍须单独准备并安装签名 Fail2ban，不自动启动服务。
 
-计划生成和安装均由独立 root 协调器推进，耗时原生调用不占用 HTTP 请求或 Nginx 内存锁；维护门禁、共享 root 操作记录及安装锁防止冲突。索引刷新派发前保存标记，成功结果先保存计划及操作引用，再写终态；重启只恢复已保存结果，缺失结果且原生包管理器已空闲时终止该计划，不自动重复刷新。网页未知提交只继续原幂等请求，已接受记录丢失或无法核对时保留恢复状态。任务共用加密材料、审计、容量限制及完整备份隔离，不重放恢复包中的旧任务。
+API 计划生成和安装由安装器登记的 `nginxpanel-fail2ban-python@.service` 独立宿主进程推进，Agent 只派发已持久接受的原始 UUID；固定入口核对安装目录、服务文件、实际 systemd 属性、主进程与控制组后读取批准记录，不接受命令或包参数。包管理器获得所需宿主写入视图，Agent 继续使用 `ProtectSystem=strict`。独立任务不会随 Agent 重启取消；耗时原生调用不占用 HTTP 请求或 Nginx 内存锁，维护门禁、共享 root 操作记录及按宿主、绑定顺序取得的锁防止冲突。未登记或被覆盖的执行服务拒绝新请求。索引刷新派发前保存标记，成功结果先保存计划及操作引用，再写终态；重启只恢复已保存结果，缺失结果且原生包管理器已空闲时终止该计划，不自动重复刷新。网页未知提交只继续原幂等请求；明确未接受的暂时锁冲突在原五分钟排队期限内等待准入，未知提交不重置派发标记。安装重做原生预检后再次核对请求及计划有效期；已接受记录丢失或无法核对时保留恢复状态。任务共用加密材料、审计、容量限制及完整备份隔离，不重放恢复包中的旧任务。
 
-现有网页/API 的 install/resume/start/enable 统一要求管理模块启用，停用、取消开机启用及撤回仍可明确处理已有保护。面板镜像继续不包含 Python/Fail2ban，Nginx Docker 模块继续由镜像预置；未加入动态编译或运行时模块安装。当前 Agent 为 47、数据库为 26、迁移 schema 为 5，root 计划、下载归档及系统包事务不进入业务迁移。
+现有网页/API 的 install/resume/start/enable 统一要求管理模块启用，停用、取消开机启用及撤回仍可明确处理已有保护。面板镜像继续不包含 Python/Fail2ban，Nginx Docker 模块继续由镜像预置；未加入动态编译或运行时模块安装。root 计划、下载归档及系统包事务不进入业务迁移。
 
-实现与源码集成审阅完成；未运行项目生成器、构建、类型检查、lint、测试、浏览器、Python、APT/DNF/RPM、镜像或真实宿主机操作，统一留待 P5。集中验证需覆盖支持矩阵、索引缺失/刷新/签名/密钥、纯新增限制、包/源/工具漂移、下载与磁盘边界、原生锁、取消/重启/回执未知、CLI 与 API 同一安装记录、近期认证/幂等/权限交集、模块关闭/维护/备份隔离及原生包恢复；不新增 UI 测试，界面由用户验收。系统依赖与官方组件的实际兼容性随后由受管安装再核对。
+集中验证已覆盖 Debian 12/amd64 真正缺少 Python 时的默认停用和不隐式安装、API 计划与显式 APT 安装、锁等待后的原任务准入、固定执行器批准记录/进程约束、安装期间停止 Agent 后独立完成及原任务结果恢复；同键幂等、解释器/标准库核对和 Agent 严格只读挂载保持。该结论限于直接官方 HTTPS 来源及所列代表环境，详见[验证记录](validation.md#缺-python-的-api-独立宿主安装与恢复2026-10-22)。DNF 实际路径、其余必要的来源/漂移/资源、取消/重启/未知回执及原生包恢复边界仍需按缺口收口，不扩展为全部系统组合已经验收。系统依赖与官方组件的实际兼容性由受管安装另行核对；界面由用户验收，不新增 UI 自动化。
 
 
 ## 面板密码失败日志与模板
