@@ -902,3 +902,20 @@ CDN 补充范围使用真实 `CF-Connecting-IP` 流量与官方客户端手动�
 `v184` 通过重启后旧游标失效及缺口提示；在 guest ext4 实际预留空间，使可用空间降至 3%，日志策略出现 5% 告警。真实 `disk.low` 事件与 HTTPS 投递各一次；再经过一次收集周期未新增事件或投递。释放预留后，`disk.recovered` 事件和投递各一次，日志告警清除；两次接收均核对认证、签名和幂等身份。恢复验收调整的策略并停用通知，节点/TLS、Nginx 配置树、修订和部署身份与 v183 起始状态保持，真实代理流量正常；Web/Agent 日志未出现该接收端随机认证材料。
 
 `v184` 业务、采证、QEMU、外层容器均退出 0，无 OOM；806 份相关源码摘要与当前产物一致。限定结论 `logs-webhook-v184/verdict.json` SHA-256 为 `143b1ad63a78479814b938a81db7569a5c0780c8f36d4a06f98d250b5f8d6dde`，最终归档为 `423a673e65515a37ce6003f95b411cf62f37b5b52e991213b441a8e6f7deec07`。R12 按基本代表场景关闭，R16 的 Webhook 部分完成，Telegram 仍缺实际凭据和目标会话。Agent/数据库/迁移格式保持 122/37/6，未执行 UI 自动化或重跑部署矩阵，未修改开发宿主环境。
+
+
+### 动态 NetworkManager DNS 与已有 WireGuard/分域解析保留（2026-10-23）
+
+范围为 Debian 13/amd64、NetworkManager 1.52.1、systemd-resolved 257.13、内核 `6.12.113+deb13-cloud-amd64`。复用此前静态 DNS 事务、外部源变更保护和故障恢复的有效证据，仅补实际 DHCPv4/IPv6 RA、已有 WireGuard 隧道及分域 DNS 的必要保留场景，不扩充通用网络编排或 VPN 管理能力。
+
+- `dns-dynamic-v187/` 使用 `0.2.63-dev`（SHA-256 `085e322c5c73a198dc1fe213ce2f07bb54da724757acd003a9882060d8acd387`），通过实际 DHCPv4 租约和 IPv6 SLAAC、双栈 DNS 临时应用及确认；IP 方法保持 `auto`。持久源仅改变 DNS，其他规范化键值、地址、全部 IPv4/IPv6 路由、MAC/MTU、文件属性和既有 WireGuard 配置保持；真实隧道承载的独立分域查询仍返回原 A/AAAA 答案。随后超时回退的即时路由比较失败，因此该轮整体未通过，保留其已经完成的双栈提交子范围。
+- `v188` 定位到所选网卡三个 IPv6 本地路由在任务已经 `rolled_back` 时暂缺。`v189` 保留同一旧程序，以 0、1、3 秒的有限采样证明对应地址仍处于 `tentative`，随后地址和路由自行收敛，所有非 DNS 快照最终一致。问题是回退完成时机过早；不删除路由断言或把该现象计为已修复。
+- 实现仅调整 NetworkManager 的恢复完成条件：DNS 补偿之后，在原有 25 秒上下文内等待所选网卡的 IPv6 重复地址检测结束；重复地址、读取失败或超时不宣告恢复成功。等待期间关闭原五秒 D-Bus 会话，之后重新核对连接、来源和前态 DNS，沿用原恢复快照与失败处理，不新增持久状态、协议或依赖。
+- `dns-ready-v190/` 集中执行相关既有 NetworkManager Variant 保留检查、必要的地址状态回归检查及静态 amd64 构建，容器退出 0、无 OOM。程序 `0.2.64-dev` SHA-256 为 `c4fe29b6a8f44a3cc7817a8520e21849f036183f22da05db23d9df91c7d24158`。
+- `dns-dynamic-v191/` 从原始隔离基盘干净安装当前程序，安装意图明确选择 NetworkManager，完成真实 Nginx 代理流量和 DHCPv4/RA/WireGuard 准备；只复验受影响的 IPv6-only DNS 临时应用及未确认超时回退。任务返回 `rolled_back` 后立即核对地址，均无 `tentative`/`dadfailed`；原 DNS 答案恢复，地址、全部路由、非 DNS 设置、源文件属性、WireGuard 文件摘要及真实分域解析与基线完全一致。节点身份、管理 TLS、配置树、修订与发布记录保持，输出 `DNS_DYNAMIC_ALL_PASS`。
+
+`v191` 采证、QEMU 和外层容器均退出 0、无 OOM。`source.json` 的 808 个源码摘要与当前实现匹配；相对 `v187` 仅增加地址状态实现/回归文件并调整恢复入口，其余双栈提交实现未改变，未重复运行已通过范围。公开业务 verdict SHA-256 为 `21fce2755eb68177b6500bddd3a2136ccf6dc3af364fce4caa8fb9ae904ecbb5`，`evidence.tar.gz` 为 `d6dee164df2ec4d2a9daf8f69801d1d47fd6457aeba2616f47a92427478b7b51`，整合记录见 `.validation/native-vm/dns-dynamic-v191/integration-verdict.json`。
+
+前期 `v185` DNS 测试服务在 IPv6 地址完成重复检测前绑定，失败为 `EADDRNOTAVAIL`；`v186` 夹具假定三层 WireGuard 接口存在 MAC。两轮均在业务写入前终止；修正准备时序及三层接口观测后继续，原失败记录和磁盘保留。`v187`/`v188` 的业务回退时机缺陷及 `v189` 定点诊断记录同样保留，不改写为整轮通过。
+
+R10 在上述必要代表范围内关闭，不据此宣称实际 DHCPv6、Wi-Fi、所有 VPN 类型或所有发行版/部署组合均已验收。Agent/数据库/迁移包版本仍为 122/37/6。全部网络与系统配置写入只发生在完整内核虚拟机内，开发主机环境未修改；未执行 UI 自动化。

@@ -414,6 +414,18 @@ func (d *HostDNS) nmRollback() (string, error) {
 	if e != nil {
 		return "", e
 	}
+	if n.Method6 == "auto" || n.Method6 == "dhcp" || n.Method6 == "manual" {
+		b.close()
+		if e = nmWaitIPv6Addresses(ctx, t.View.Interface); e != nil {
+			return "", e
+		}
+		// Do not hold a five-second D-Bus session over address convergence.
+		// Revalidate the connection and source before declaring restoration.
+		b, t, e = d.nmSession(ctx)
+		if e != nil {
+			return "", e
+		}
+	}
 	defer b.close()
 	a, e := nmCapture(t.Applied)
 	if e != nil || !nmSame(a, n.BeforeApplied) {
