@@ -212,6 +212,10 @@ func (s *Server) forwardEvents(w http.ResponseWriter, r *http.Request, reader io
 				event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			case strings.HasPrefix(line, "data:"):
 				data = append(data, strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
+			case strings.HasPrefix(line, "id:"):
+				if strings.ContainsRune(strings.TrimPrefix(line, "id:"), '\x00') {
+					return errors.New("invalid SSE event ID")
+				}
 			default:
 				return errors.New("unexpected SSE field")
 			}

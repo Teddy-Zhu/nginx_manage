@@ -48,6 +48,7 @@ Ubuntu 22.04/arm64 的自定义 Docker bridge、iptables-nft 发布端口及联�
 基础监控的计数器重置、接口重建、启动/热插拔/采样中断、缺失值、维度上限及 SQLite 历史保留/容量配额已完成隔离边界验证；已在同一原生运行绑定下完成原生 Web、容器 Web、恢复原生 Web 的真实宿主 Agent 指标对照；Debian 12 与 Ubuntu 22.04/amd64 的正式 Docker 安装已完成重启前后宿主 Agent 指标验收，见[Docker](validation.md#debian-12-与-ubuntu-2204amd64-docker-托管部署2026-10-22)；Ubuntu 24.04 与 26.04/amd64 也已完成修正版的正式 Docker 指标对照，见[记录](validation.md#ubuntu-2404-与-2604amd64-docker-托管部署2026-10-22)；默认 Docker 矩阵已完成 14/14，见[ARM64 补验](validation.md#arm64-默认-docker-部署2026-10-22)；部署模式迁移和其他功能组合继续独立验收。原生绑定下的 Web 隔离见[对照记录](validation.md#同一宿主-agent-的-web-进程隔离指标对照2026-10-21)。预置模块镜像 amd64 已通过 TCP/UDP 双栈加权多上游、共享 UDP 检测、实际 IPv6 模式和双工作进程双栈 `reuseport`/HTTP 监听合并；其他发行包、架构、内核和完整原生发布事务不据此标记通过。见[监控记录](validation.md#监控边界与-stream-双栈权重2026-10-21)和[监听记录](validation.md#nginx-监听冲突ipv6-归属与端口复用2026-10-21)。
 
 - 本地批准资产和隔离测试发行者的签名不替代正式 GitHub 发布链；实际仓库、发布密钥及正式 CI 尚未配置。arm64 预置模块镜像与[真实双架构验证包](validation.md#双架构镜像产物与-arm-执行2026-10-21)已生成，Ubuntu 22.04/arm64 的托管部署、恢复和重启通过，其余六组 ARM Docker 均已完成[部署及重启验收](validation.md#arm64-默认-docker-部署2026-10-22)。[arm64 原生静态 Nginx](validation.md#arm64-原生静态-nginx-构建2026-10-21)构建及 ELF/模块检查、Ubuntu 22.04 Cortex-A53 上的原生部署通过；原始程序和本地验证包不替代正式双架构发行。
-- 真实域名 ACME/DNS、通知接收端及跨主机 API 迁移仍待外部集成验收；已有容器内双节点结果见[验证记录](validation.md#双节点-https-迁移与授权)。
+- Docker 到原生节点的 API 配置迁移已在两个独立内核节点完成实际应用、故障补偿和目标重启验收，范围见[迁移记录](validation.md#docker-到原生节点的配置迁移2026-10-22)。真实云端网络、其他迁移方向、缺失组件在线安装、真实域名 ACME/DNS 及通知接收端仍待相应环境和凭据。
+- Debian 12/amd64 Docker 控制端到 Debian 13/amd64 原生目标的配对、只读权限、远程日志 SSE 游标和凭据撤销已通过；控制端签名 Web/Agent 更新及维护释放通过。跨整机重启的原回滚续办仍待补齐新进程回执，见[更新与节点验证](validation.md#双节点配对远程日志和独立更新2026-10-22)。
 - UI 由用户人工验收，未创建或运行 UI 自动化测试。
 - 各轮使用的程序、安装器、镜像及证据散列见[验证记录](validation.md)。历史组合通过不代表后续版本已重跑，也不据此扩大已验证范围。

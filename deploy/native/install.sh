@@ -615,7 +615,7 @@ ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/ngi
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 EOF
 cat >"$work/nginxpanel-switch@.service" <<EOF
 [Unit]
@@ -641,7 +641,7 @@ ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/ngi
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 EOF
 # Coordinated updates atomically select the host Agent under /opt/nginxpanel.
 cat >"$work/nginxpanel-update@.service" <<EOF
@@ -668,7 +668,7 @@ ReadWritePaths=$data/agent $data/runtime $data/run $data/app $data/secrets /opt/
 InaccessiblePaths=$data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 EOF
 cat >"$work/nginxpanel-agent-upgrade@.service" <<EOF
 [Unit]
@@ -726,7 +726,7 @@ ReadWritePaths=$data/agent $data/runtime $data/run /etc/nginxpanel/docker /run/n
 InaccessiblePaths=$data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 EOF
 cat >"$work/nginxpanel-nginx-image@.service" <<EOF
 [Unit]
@@ -755,7 +755,7 @@ ReadWritePaths=$data/agent $data/bin/components $data/acme $data/runtime $data/n
 InaccessiblePaths=$data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 EOF
 root_chain /etc/systemd/system
 # tmpfiles creates the shared root lock directory on boot. Keeping it outside
