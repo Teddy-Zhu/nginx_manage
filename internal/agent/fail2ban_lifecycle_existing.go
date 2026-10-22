@@ -181,7 +181,14 @@ func fail2banExistingStopped(b *fail2banBinding, service fail2ban.Service) error
 	}
 	for _, line := range strings.Split(string(raw), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) >= 8 && fields[7] == b.Socket {
+		if len(fields) < 8 {
+			continue
+		}
+		matches, err := fail2banSocketKernelPathMatches(fields[7], b.Socket)
+		if err != nil {
+			return err
+		}
+		if matches {
 			return errors.New("原 Socket 仍存在内核引用，停止结果未确认")
 		}
 	}
@@ -274,6 +281,37 @@ func (l *fail2banLifecycle) dispatchExisting(ctx context.Context, request fail2b
 	return err
 }
 
+// Type=simple services become active before the official Python server binds
+// its socket. Observe only this dispatched process; never start it again.
+func waitFail2banExistingSocket(ctx context.Context, b *fail2banBinding, service fail2ban.Service, invocation string) error {
+	if service.Active != "active" || service.Sub != "running" || service.MainPID == nil || *service.MainPID <= 1 || !fail2banInvocation.MatchString(invocation) || invocation == strings.Repeat("0", 32) {
+		return errors.New("已有实例启动后服务进程尚未确认")
+	}
+	call, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	for {
+		current, currentInvocation, err := lifecycleServiceFor(call, b.Service)
+		if err != nil {
+			return err
+		}
+		if invocation != currentInvocation || !sameFail2banLifecycleService(service, current) {
+			return errors.New("已有实例等待启动就绪期间服务代次或状态变化")
+		}
+		if _, _, err = fail2banSocketOwner(b.Socket, *service.MainPID); err == nil {
+			return nil
+		} else if !errors.Is(err, errFail2banSocketNotReady) {
+			return err
+		}
+		timer := time.NewTimer(200 * time.Millisecond)
+		select {
+		case <-call.Done():
+			timer.Stop()
+			return errors.New("已有实例启动后未在期限内建立已批准的 Socket 监听")
+		case <-timer.C:
+		}
+	}
+}
+
 func (l *fail2banLifecycle) proveExisting(ctx context.Context, input fail2ban.LifecycleInput) (fail2ban.Service, error) {
 	b, err := fail2banExistingControlBinding(ctx, l.server.DataDir, input.BaseID)
 	if err != nil {
@@ -288,6 +326,9 @@ func (l *fail2banLifecycle) proveExisting(ctx context.Context, input fail2ban.Li
 	}
 	switch input.Action {
 	case "start":
+		if err = waitFail2banExistingSocket(ctx, b, service, invocation); err != nil {
+			return service, err
+		}
 		var raw []byte
 		_, service, raw, err = readFail2banBound(ctx, l.server.DataDir, b, true, "")
 		if err == nil {

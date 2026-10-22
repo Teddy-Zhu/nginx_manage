@@ -4,6 +4,8 @@ import (
 	"nginxpanel/internal/protocol"
 )
 
+const ExistingPolicyBusyCode = "FAIL2BAN_EXISTING_BUSY"
+
 type ExistingPolicyInput struct {
 	Action      string             `json:"action"`
 	AdoptionID  string             `json:"adoption_id"`

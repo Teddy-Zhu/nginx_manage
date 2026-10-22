@@ -1,5 +1,7 @@
 # 实施计划与当前进度
 
+当前未完成项、进度及阻塞以[当前进度与未完成清单](progress.md)为准；下文保留各阶段实施历史。
+
 依据 `Linux_Nginx_Manager_Design.md` 实施，完整首版范围保持 P0–P5。
 
 首版正式发布前不维护旧接口、旧数据或旧需求的兼容分支；有变更直接更新当前合同。前后端 JSON 统一使用 `code/message/data/request_id/node_id`，HTTP 状态码保持原有语义。

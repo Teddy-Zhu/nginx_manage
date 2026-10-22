@@ -14,6 +14,11 @@ import (
 	"nginxpanel/internal/secure"
 )
 
+// A policy transaction observes the complete official runtime before writing,
+// before reload, and after reload. Give those bounded reads their own budget;
+// the five-minute plan authorization is still rechecked before sending.
+const fail2banExistingPolicyBudget = 5 * time.Minute
+
 func ManageFail2banExistingPolicy(ctx context.Context, data, scope, action, operation, adoption, target, inputFile string, confirmStop bool) (Fail2banExistingPolicyOperation, error) {
 	var out Fail2banExistingPolicyOperation
 	if err := fail2banManagedRoot(data, scope); err != nil {
@@ -37,7 +42,7 @@ func ManageFail2banExistingPolicy(ctx context.Context, data, scope, action, oper
 		}
 		return fail2banExistingPolicyOperation(r, c), nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, fail2banExistingPolicyBudget)
 	defer cancel()
 	unlock, err := fail2banHostSyncLocks(data)
 	if err != nil {
@@ -446,6 +451,9 @@ func advanceFail2banExistingPolicy(ctx context.Context, data string, j *Journal,
 			if err = checkFail2banExistingPolicyPreview(j, job.Request); err != nil {
 				return fail(err)
 			}
+		}
+		if now := time.Now().Unix(); now < c.Plan.At || now-c.Plan.At > 300 {
+			return fail(errors.New("发送前参数计划已过期，须取消后重新预检"))
 		}
 		i.Bans, i.Pending, i.Sent, i.Submission = view.Bans, &process, true, "pending"
 		r.Stage, r.Error = "reload_pending", ""

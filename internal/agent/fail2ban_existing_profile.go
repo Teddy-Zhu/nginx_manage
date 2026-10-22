@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -223,6 +224,29 @@ func fail2banExistingStableDump(commands [][]any, profile bool) ([][]any, error)
 			case "addlogpath", "addjournalmatch", "logencoding", "usedns", "prefregex", "addfailregex", "addignoreregex", "datepattern", "maxlines", "addaction", "action":
 			default:
 				return nil, errors.New("目标 jail 包含尚未接纳的配置参数：" + field)
+			}
+			if verb == "multi-set" && field == "action" {
+				properties, err := fail2banExistingActionProperties([][]any{command})
+				if err != nil {
+					return nil, err
+				}
+				keys := make([]string, 0, len(properties))
+				for key := range properties {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				pairs := make([]any, 0, len(keys))
+				for _, key := range keys {
+					value := properties[key]
+					// Official jail.conf passes this inheritance marker; the
+					// audited action expands it to f2b-chain in its commands.
+					// Only profile comparison admits the equivalent spelling.
+					if profile && key == "chain" && value == "<known/chain>" {
+						value = "f2b-chain"
+					}
+					pairs = append(pairs, []any{key, value})
+				}
+				command = []any{command[0], command[1], command[2], command[3], pairs}
 			}
 		}
 		out = append(out, command)

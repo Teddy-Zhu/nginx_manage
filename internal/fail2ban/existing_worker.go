@@ -45,6 +45,7 @@ func (s *PolicyService) nextExistingTask(ctx context.Context, executor ExistingP
 				return update("failed", "migration_pending", err.Error(), false)
 			}
 		}
+		knownUnsent := task.SubmitStarted == 0
 		started, latest, beginErr := s.existingBeginSubmit(ctx, task, payload)
 		if beginErr != nil {
 			return beginErr
@@ -63,6 +64,9 @@ func (s *PolicyService) nextExistingTask(ctx context.Context, executor ExistingP
 			operation, err = executor.Fail2banExistingPolicyOperation(ctx, task.OperationID)
 			if existingMissing(err) {
 				var rejected *fault.Error
+				if knownUnsent && errors.As(submitErr, &rejected) && rejected.Status == 503 && rejected.Code == ExistingPolicyBusyCode {
+					return s.existingWaitForAdmission(ctx, task, payload)
+				}
 				if errors.As(submitErr, &rejected) && (rejected.Status == 400 || rejected.Status == 403 || rejected.Status == 409) {
 					return update("failed", "agent_rejected", rejected.Message, false)
 				}
@@ -112,6 +116,31 @@ func (s *PolicyService) nextExistingTask(ctx context.Context, executor ExistingP
 		}
 	}
 	return s.existingTaskUpdate(ctx, task, payload, &operation, operation.State, operation.Stage, operation.Error, true)
+}
+
+// Only an explicit busy reply to a previously unsent request, followed by an
+// absent root operation, clears dispatch admission. Unknown submissions retain
+// their marker; cancellation and the original five-minute queue bound still
+// apply to requests known not to have been accepted.
+func (s *PolicyService) existingWaitForAdmission(ctx context.Context, task dbgen.Task, original existingTaskPayload) error {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
+	item, latest, err := s.existingTask(ctx, s.DB, task.ID)
+	if err != nil {
+		return err
+	}
+	if latest.Request.Hash() != original.Request.Hash() || latest.Result != nil || item.Stage == "restore_isolated" {
+		return errors.New("已有 jail 请求或准入状态变化")
+	}
+	result, err := s.DB.ExecContext(ctx, "UPDATE tasks SET state='queued',stage='waiting_for_admission',last_error='宿主机操作暂被占用，等待准入',submit_started=0,updated_at=? WHERE id=? AND agent_accepted=0 AND submit_started=1 AND state IN ('queued','running','recovery_required')", time.Now().Unix(), task.ID)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err == nil && changed != 1 {
+		err = errors.New("已有 jail 准入等待状态无法保存")
+	}
+	return err
 }
 
 // Persist dispatch admission under the cancellation lock. A cancellation saved

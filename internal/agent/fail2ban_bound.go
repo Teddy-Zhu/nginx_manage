@@ -18,6 +18,7 @@ import (
 
 var fail2banVersion = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}[a-zA-Z0-9.+_-]{0,32}$`)
 var fail2banInvocation = regexp.MustCompile(`^[a-f0-9]{32}$`)
+var errFail2banSocketNotReady = errors.New("已接入 Socket 尚未建立内核监听")
 
 type fail2banLiveService struct {
 	view       fail2ban.Service
@@ -68,12 +69,55 @@ func fail2banReadLimited(path string, limit int64) ([]byte, error) {
 	}
 	return raw, nil
 }
+
+// The official default binds /var/run, whose spelling is retained in procfs
+// even when it names the same socket as the approved canonical /run path.
+func fail2banSocketKernelPathMatches(observed, approved string) (bool, error) {
+	if observed == approved {
+		return true, nil
+	}
+	if !strings.HasPrefix(observed, "/var/run/") || "/run/"+strings.TrimPrefix(observed, "/var/run/") != approved {
+		return false, nil
+	}
+	if err := existingRootDirectory("/var"); err != nil {
+		return false, errors.New("Socket 的 /var/run 别名目录未通过 root 保护核对")
+	}
+	info, err := os.Lstat("/var/run")
+	if err != nil {
+		return false, errors.New("Socket 的 /var/run 别名无法读取")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || info.Mode()&os.ModeSymlink == 0 {
+		return false, errors.New("Socket 的 /var/run 须为 root 持有的标准链接")
+	}
+	target, err := os.Readlink("/var/run")
+	if err != nil {
+		return false, errors.New("Socket 的 /var/run 链接目标无法读取")
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join("/var", target)
+	}
+	if filepath.Clean(target) != "/run" {
+		return false, errors.New("Socket 的 /var/run 未指向已批准的 /run")
+	}
+	if err := existingRootDirectory("/run"); err != nil {
+		return false, errors.New("Socket 的 /run 目录未通过 root 保护核对")
+	}
+	return true, nil
+}
+
 func fail2banSocketOwner(path string, pid int64) (string, os.FileInfo, error) {
 	if err := existingRootDirectory(filepath.Dir(path)); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, errFail2banSocketNotReady
+		}
 		return "", nil, errors.New("已接入 Socket 目录未通过 root 保护核对")
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, errFail2banSocketNotReady
+		}
 		return "", nil, errors.New("已接入 Socket 不存在或无法读取")
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
@@ -87,10 +131,29 @@ func fail2banSocketOwner(path string, pid int64) (string, os.FileInfo, error) {
 	inode := ""
 	for _, line := range strings.Split(string(raw), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 8 || fields[7] != path {
+		if len(fields) < 8 {
 			continue
 		}
-		if inode != "" || len(fields) != 8 || fields[3] != "00010000" || fields[4] != "0001" || fields[5] != "01" {
+		matches, err := fail2banSocketKernelPathMatches(fields[7], path)
+		if err != nil {
+			return "", nil, err
+		}
+		if !matches {
+			continue
+		}
+		if len(fields) != 8 {
+			return "", nil, errors.New("Socket 内核记录格式未知")
+		}
+		flags, err := strconv.ParseUint(fields[3], 16, 32)
+		if err != nil {
+			return "", nil, errors.New("Socket 内核标志格式未知")
+		}
+		// Accepted connections retain the listener's pathname. Only sockets
+		// accepting new connections can establish the listening identity.
+		if flags&0x00010000 == 0 {
+			continue
+		}
+		if inode != "" || flags != 0x00010000 || fields[4] != "0001" || fields[5] != "01" {
 			return "", nil, errors.New("Socket 监听状态或归属存在歧义")
 		}
 		value, err := strconv.ParseUint(fields[6], 10, 64)
@@ -100,7 +163,7 @@ func fail2banSocketOwner(path string, pid int64) (string, os.FileInfo, error) {
 		inode = fields[6]
 	}
 	if inode == "" {
-		return "", nil, errors.New("未发现已接入 Socket 的内核监听")
+		return "", nil, errFail2banSocketNotReady
 	}
 	dir := "/proc/" + strconv.FormatInt(pid, 10) + "/fd"
 	fdInfo, err := os.Stat(dir)

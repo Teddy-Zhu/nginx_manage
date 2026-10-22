@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fault"
 )
@@ -37,7 +39,9 @@ func (f *fail2banJailsExecutor) existingPolicyHandlers(mux *http.ServeMux) {
 		defer cancel()
 		out, err := f.submitExistingPolicy(call, in)
 		var known *fault.Error
-		if err != nil && !errors.As(err, &known) && !errors.Is(err, ErrBusy) && !errors.Is(err, ErrRuntimeUnavailable) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, ErrBusy) || errors.Is(err, unix.EWOULDBLOCK) {
+			err = fault.New(http.StatusServiceUnavailable, fail2ban.ExistingPolicyBusyCode, "宿主机操作暂被占用，尚未接受参数请求")
+		} else if err != nil && !errors.As(err, &known) && !errors.Is(err, ErrRuntimeUnavailable) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			err = fault.New(409, "FAIL2BAN_EXISTING_REJECTED", err.Error())
 		}
 		fail2banNginxReply(w, out, err)

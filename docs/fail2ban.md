@@ -26,6 +26,8 @@ nginxpanel fail2ban-unbind --data-dir /srv/nginxpanel --fail2ban-scope host
 
 接入固定规范 `/run` Socket、systemd 服务及受信系统客户端；初次接入须完整核对版本和 jail 列表。客户端路径、解析路径、文件 SHA-256 与版本进入 root 私有批准记录。重复接入同一有效实例返回原登记；程序升级或路径变化后须重新明确接入，不自动接受漂移。系统程序仍归原包管理器管理，不另起第二个实例。
 
+官方默认配置可能以 `/var/run` 创建 Socket，内核会保留该路径拼写。仅在 `/var/run` 为 root 持有、指向 `/run` 的标准链接，且两侧目录通过保护核对时，将该内核路径与已批准的 `/run` 路径对应；监听类型、唯一性、文件身份及主进程文件描述符仍须核对。健康读取区分监听与同路径的已接收连接，后者不作为第二个监听。停止确认检查该路径的全部残留内核引用，不接受其他路径别名。
+
 记录位于 `DATA/agent/fail2ban/current.json` 和 `bindings/<UUID>.json`，目录 0700、文件 0600。每次批准或撤销先保存独立记录，再原子发布当前指针，保留前序 ID 和历史文件；中断不允许凭未发布记录连接。撤销不要求服务健康，不停止服务、解除封禁或删除旧记录。每个读取请求与采集收尾重查当前批准，旧缓存不能绕过撤销。此机器专属授权不进入可移植配置，不随导入自动接管目标实例。
 
 ## 已有 SSH jail 接管预检
@@ -103,6 +105,12 @@ nginxpanel fail2ban-existing-jail-runtime --data-dir /srv/nginxpanel --fail2ban-
 受管 jail 的实际表达式核对同样使用已认证官方库展开固定 `<HOST>` 模板，再与引擎返回值比较。依据 [官方过滤器 getter](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/filter.py)、[官方表达式展开](https://github.com/fail2ban/fail2ban/blob/1.1.1/fail2ban/server/failregex.py)及 [systemd 时间格式](https://github.com/systemd/systemd/blob/v252/man/systemctl.xml)。本入口只读，应用参数使用下述独立操作；官方工具、时区及发行版运行验收仍待 P5。
 
 ## 已接管 SSH jail 的参数应用与停用
+
+Agent 安装单元仅为已有实例的 `/etc/fail2ban/jail.d` 开放可选写入路径；其余配置仍受 systemd 文件系统隔离及原配置校验约束。路径不存在时不创建或安装 Fail2ban；若系统管理员在 Agent 启动后才安装已有实例，须重启 Agent 以建立该目录的写入挂载。参数预检从实际执行进程的挂载视图检查只读状态；只读时拒绝生成可应用计划，不修改覆盖文件。写入仍要求有效的本机 jail 所有权、完整配置快照及独立参数计划，仅替换本应用的覆盖文件。
+
+参数事务在写入前、发送前和发送后分别核对完整官方运行证明，独立执行预算为五分钟；所有权交接与受管 jail 任务分别计时，不共用已经消耗的期限。发送 reload 前再次检查原参数计划和网页预览的授权期限，超期不发送；读取失败保留原错误，不冒充已证明的过滤器或动作内容变化。
+
+首次提交遇到宿主操作锁占用时，Agent 明确返回临时忙碌。网页任务确认原 root 操作尚未建立后，保留原任务及幂等标识排队等待，仍受原五分钟准入期限约束；未知提交不清除派发标记，也不因此宣称可以直接取消。
 
 本机 root 可复用原 profile/policy JSON 修改 `enabled/ban_time/find_time/max_retry/ignore_ips`；profile、来源和端口必须保持原接管值。每次先计划，再引用计划摘要和新的操作 UUID 应用：
 
@@ -576,7 +584,9 @@ nginxpanel fail2ban-bind --data-dir /srv/nginxpanel --fail2ban-scope host --fail
 
 执行仅调用受信 systemctl 的固定 start/stop/enable/disable，派发前持久标记；取消、超时或 Agent 中断后只观察原目标，绝不重发。启动成功须完整核对官方实例、版本、Socket/主进程归属及 jail 列表；停止成功须服务无 PID、inactive/failed，且 Socket 文件与内核引用都不存在。enable/disable 只核对开机设置，不声称当前保护生效；未知结果与成功回执分别显示。服务控制不改写已有 jail、配置、状态库或动作集合；服务停止也不代表动作集合已清空。离线实例仍可返回 systemd 状态，jail 数据保持不可用，不返回虚构空列表成功。
 
-授权事件、单元摘要和实例任务沿用 root 隔离规则，不随文件/API 逻辑迁移或完整备份授予目标控制权。目标须由本机 root 重新接入并授权。Agent 为 59，数据库/归档仍为 26/6，首版不兼容旧合同。实现及集成源码审阅后统一整理格式和差异；生成器、构建、类型检查、lint、测试、浏览器、官方工具与真实服务操作留待 P5，届时集中覆盖只读拒绝、身份/单元变化、全局停止、离线重启、开机设置、中断及维护互斥，不新增 UI 测试。已有 jail 接管、其他动作/防火墙后端及其余 P0–P5 缺口继续实施。
+`Type=simple` 的 systemd 启动完成可能早于 Python 服务建立 Socket。已有实例启动后最多等待 20 秒，只观察该次已确认的 PID、服务代次和内核监听；进程或服务状态变化、权限或监听归属异常立即失败，不重复启动。监听就绪后仍须完成客户端、版本与全部 jail 核对，等待本身不表示启动成功。
+
+授权事件、单元摘要和实例任务沿用 root 隔离规则，不随文件/API 逻辑迁移或完整备份授予目标控制权。目标须由本机 root 重新接入并授权。已完成的限定运行验收见 [验证记录](validation.md)，其余专项以 [当前进度](progress.md) 为准。
 
 ### 受管代码升级候选检查
 

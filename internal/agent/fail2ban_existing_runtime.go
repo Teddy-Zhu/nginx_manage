@@ -140,7 +140,10 @@ func readFail2banExistingNativeProfile(ctx context.Context, program fail2banProg
 	}
 	const action = "nftables-multiport"
 	value, err := get("actions", "actions")
-	if err != nil || value != "The jail "+profile.Name+" has the following actions:\n"+action {
+	if err != nil {
+		return "", err
+	}
+	if value != "The jail "+profile.Name+" has the following actions:\n"+action {
 		return "", errors.New("已有 jail 的实际动作名单变化")
 	}
 	keys := make([]string, 0, len(properties))
@@ -326,11 +329,17 @@ func readFail2banExistingRuntimeLocked(ctx context.Context, data, adoption strin
 	}
 	if basis.Policy.Enabled {
 		currentPolicy, err := readFail2banExistingTuning(ctx, program, b, c.Plan.Profile.Name)
-		if err != nil || !equalFail2banExistingPolicy(currentPolicy, out.Policy) {
+		if err != nil {
+			return out, errors.Join(errors.New("再次核对实际参数失败"), err)
+		}
+		if !equalFail2banExistingPolicy(currentPolicy, out.Policy) {
 			return out, errors.New("读取运行证明期间实际参数变化")
 		}
 		currentProfile, err := readFail2banExistingNativeProfile(ctx, program, b, c.Plan.Profile, commands)
-		if err != nil || currentProfile != out.ProfileProof {
+		if err != nil {
+			return out, errors.Join(errors.New("再次核对实际过滤器或动作失败"), err)
+		}
+		if currentProfile != out.ProfileProof {
 			return out, errors.New("读取运行证明期间实际过滤器或动作变化")
 		}
 	}

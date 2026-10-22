@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sys/unix"
 	"nginxpanel/internal/secure"
 )
 
@@ -125,6 +126,9 @@ func planFail2banExistingPolicyLocked(ctx context.Context, data, adoption string
 	if string(evidence.Config.Files[overlay]) != fail2banExistingOverlay(original.Plan.Profile, before.Policy) {
 		return nil, errors.New("当前参数覆盖文件与已确认选择不同")
 	}
+	if err = checkFail2banExistingPolicyWritable(); err != nil {
+		return nil, err
+	}
 	// Even while disabled, prove the exact configuration that would be started.
 	// An empty disabled dump cannot hide a changed filter/action or backend.
 	forcedBefore := before.Policy
@@ -213,6 +217,28 @@ func planFail2banExistingPolicyLocked(ctx context.Context, data, adoption string
 		return nil, errors.New("启用后的完整 jail 名单超出限制")
 	}
 	return &fail2banExistingPolicyCapture{Schema: 1, Plan: plan, BaseTarget: runtime.Target, Unit: unit, Server: server, Invocation: live.invocation, Socket: live.inode, ClockProof: runtime.ClockProof, StopBanProof: stopProof, Snapshot: evidence.Config, BeforeJails: runtime.Jails, AfterJails: existingPolicyJails(runtime.Jails, name, after.Enabled), Before: before, After: next}, ctx.Err()
+}
+
+// Inspect the executing process's mount, not the host's view. Root CLI access
+// does not prove that the Agent's systemd namespace can replace the overlay.
+func checkFail2banExistingPolicyWritable() error {
+	dir := filepath.Join(fail2banExistingConfig, "jail.d")
+	if err := existingRootDirectory(dir); err != nil {
+		return err
+	}
+	fd, err := secure.OpenReadNoSymlinks(unix.AT_FDCWD, dir, unix.O_DIRECTORY)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	var fs unix.Statfs_t
+	if err = unix.Fstatfs(fd, &fs); err != nil {
+		return err
+	}
+	if fs.Flags&unix.ST_RDONLY != 0 {
+		return errors.New("已有 Fail2ban jail.d 在当前执行环境只读，须由本机管理员核对 Agent 目录写入授权及挂载状态")
+	}
+	return nil
 }
 
 func sameExistingPolicyJails(a, b []string) bool {
