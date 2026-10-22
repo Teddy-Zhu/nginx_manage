@@ -10,7 +10,7 @@ func nativeAgentArguments(actual, data string, uid int) ([]string, error) {
 	base := []string{"/opt/nginxpanel/current/nginxpanel", "agent", "--data-dir", data, "--allowed-uid", strconv.Itoa(uid), "--nginx-binding", "--nginx-user", "nginxpanel-nginx", "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--metrics-scope", "host", "--component-scope", "host", "--maintenance-scope", "host"}
 	args := strings.Split(actual, " ")
 	invalid := errors.New("Agent 服务参数不是已登记的固定入口")
-	if len(args) < len(base) || len(args) > len(base)+12 || (len(args)-len(base))%2 != 0 {
+	if len(args) < len(base) || len(args) > len(base)+14 || (len(args)-len(base))%2 != 0 {
 		return nil, invalid
 	}
 	if args[6] == "--nginx-container" {
@@ -31,6 +31,10 @@ func nativeAgentArguments(actual, data string, uid int) ([]string, error) {
 		}
 		seen[key] = true
 		switch key {
+		case "--nginx-log-owner":
+			if value != "unconfirmed" && value != "agent" && value != "external" {
+				return nil, invalid
+			}
 		case "--socket-selinux-context":
 			if value != agentSocketSELinuxContext {
 				return nil, invalid

@@ -6,18 +6,19 @@ umask 077
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh openssh|none] [--start]
+用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--nginx-log-owner agent|external|unconfirmed] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh openssh|none] [--start]
 面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
 --dns-owner 明确批准宿主机 DNS 所有者并开放对应服务写入路径；默认 unconfirmed，仅允许读取。不会安装、启停或切换网络管理器。
 --firewall-owner 与 --firewall-ssh 配套确认宿主机防火墙后端及 SSH 保护方式；默认 unconfirmed，仅允许读取。UFW 额外开放 /etc/ufw 写入；不安装、启停或切换管理器，本机授权登记另行完成。
+--nginx-log-owner 明确 Nginx 日志的唯一轮转所有者；默认 unconfirmed，仅允许读取。选择 agent 前须排除外部轮转规则竞争，不迁出或修改外部规则。
 SELinux 启用时注册本应用的持久文件标签模块并应用标签，保留系统进程策略与当前防护状态。
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed firewall_owner=unconfirmed firewall_ssh=unconfirmed
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed firewall_owner=unconfirmed firewall_ssh=unconfirmed nginx_log_owner=unconfirmed
 while (($#)); do
   case "$1" in
-    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image|--dns-owner|--firewall-owner|--firewall-ssh)
+    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image|--dns-owner|--firewall-owner|--firewall-ssh|--nginx-log-owner)
       (($# >= 2)) || die "参数缺少值：$1"
       case "$1" in
         --binary) binary=$2 ;; --web-dir) web=$2 ;; --nginx-binary) nginx=$2 ;;
@@ -27,6 +28,7 @@ while (($#)); do
         --nginx-image) nginx_image=$2 ;;
         --dns-owner) dns_owner=$2 ;;
         --firewall-owner) firewall_owner=$2 ;; --firewall-ssh) firewall_ssh=$2 ;;
+        --nginx-log-owner) nginx_log_owner=$2 ;;
         --release-manifest) release_manifest=$2 ;; --release-signature) release_signature=$2 ;;
       esac
       shift 2 ;;
@@ -37,6 +39,12 @@ while (($#)); do
     *) usage; die "未知参数：$1" ;;
   esac
 done
+case "$nginx_log_owner" in
+  unconfirmed|agent|external) ;;
+  *) die 'nginx-log-owner 仅允许 agent、external 或 unconfirmed' ;;
+esac
+log_agent_flags=
+if [[ $nginx_log_owner != unconfirmed ]]; then log_agent_flags="--nginx-log-owner $nginx_log_owner"; fi
 dns_agent_flags= dns_write_paths=
 case "$dns_owner" in
   unconfirmed) ;;
@@ -366,7 +374,7 @@ nginx_hash=
 if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
-printf 'native-install-v14\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\nselinux_profile=%s\nselinux_policy_sha256=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" "$selinux_profile" "$selinux_policy_hash" >"$work/intent"
+printf 'native-install-v14\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\nnginx_log_owner=%s\nselinux_profile=%s\nselinux_policy_sha256=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" "$nginx_log_owner" "$selinux_profile" "$selinux_policy_hash" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -538,7 +546,7 @@ User=root
 AmbientCapabilities=CAP_SETUID
 Group=nginxpanel-ipc
 UMask=0027
-ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host$agent_socket_flag${dns_agent_flags:+ $dns_agent_flags}${firewall_agent_flags:+ $firewall_agent_flags}
+ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir $data --allowed-uid $panel_uid $nginx_agent_flag --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host$agent_socket_flag${log_agent_flags:+ $log_agent_flags}${dns_agent_flags:+ $dns_agent_flags}${firewall_agent_flags:+ $firewall_agent_flags}
 Restart=on-failure
 RestartSec=3
 TimeoutStartSec=180

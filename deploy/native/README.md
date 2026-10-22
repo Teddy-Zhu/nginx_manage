@@ -84,7 +84,7 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 安装器通过 systemd-tmpfiles 在安装和启动时预建 root 专用的 `/run/ufw.lock`，Agent 沙箱只开放该锁文件，以便 UFW 状态查询使用官方管理锁；规则修改仍须完成对应后端的本机授权。
 
-主机指标来源显式为 host，日志轮转所有者默认 unconfirmed。DNS 通过安装参数 `--dns-owner` 明确批准实际所有者与宿主机范围，并配置对应 Agent 写入目录；默认 unconfirmed，仅允许读取。普通文件、networkd/resolved、NetworkManager 及 netplan 的实现与已验证系统组合见[验证记录](../../docs/validation.md)，业务页面不能绕过本机所有权和系统沙箱授权。
+主机指标来源显式为 host。Nginx 日志轮转通过安装参数 `--nginx-log-owner agent|external|unconfirmed` 选择唯一所有者，并保存在本机安装意图中；默认 unconfirmed，轮转策略只读。确认本项目日志未被外部 logrotate 等规则管理后可选择 agent；选择 external 时继续由外部管理，不迁出或修改外部规则。DNS 通过安装参数 `--dns-owner` 明确批准实际所有者与宿主机范围，并配置对应 Agent 写入目录；默认 unconfirmed，仅允许读取。普通文件、networkd/resolved、NetworkManager 及 netplan 的实现与已验证系统组合见[验证记录](../../docs/validation.md)，业务页面不能绕过本机所有权和系统沙箱授权。
 
 安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新、卸载清理及完整 Docker 接入仍在后续范围内。
 

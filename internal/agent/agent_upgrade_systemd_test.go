@@ -17,9 +17,12 @@ func TestNativeAgentConfiguredEntry(t *testing.T) {
 		for _, owner := range []string{"direct-nftables", "firewalld", "ufw", "iptables-nft", "iptables-legacy"} {
 			selections = append(selections, " --firewall-owner "+owner+" --firewall-scope host --firewall-ssh openssh")
 		}
+		for _, owner := range []string{"agent", "external", "unconfirmed"} {
+			selections = append(selections, " --nginx-log-owner "+owner)
+		}
 		selections = append(selections, " --dns-scope host --dns-owner netplan --firewall-scope host --firewall-owner iptables-nft --firewall-ssh none")
 		selections = append(selections, " --socket-selinux-context "+agentSocketSELinuxContext,
-			" --socket-selinux-context "+agentSocketSELinuxContext+" --dns-scope host --dns-owner netplan --firewall-scope host --firewall-owner iptables-nft --firewall-ssh none")
+			" --socket-selinux-context "+agentSocketSELinuxContext+" --nginx-log-owner agent --dns-scope host --dns-owner netplan --firewall-scope host --firewall-owner iptables-nft --firewall-ssh none")
 		for _, selection := range selections {
 			t.Run(mode+selection, func(t *testing.T) {
 				actual := base + selection
@@ -49,6 +52,8 @@ func TestNativeAgentConfiguredEntry(t *testing.T) {
 		"missing-value":    entry + " --firewall-owner",
 		"unknown-owner":    entry + " --firewall-owner shell",
 		"unknown-dns":      entry + " --dns-owner shell",
+		"unknown-log":      entry + " --nginx-log-owner shell",
+		"duplicate-log":    entry + " --nginx-log-owner agent --nginx-log-owner external",
 		"unknown-scope":    entry + " --firewall-scope container",
 		"unknown-ssh":      entry + " --firewall-ssh auto",
 		"quoted-value":     entry + " --firewall-owner \"ufw\"",
