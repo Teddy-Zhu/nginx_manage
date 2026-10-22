@@ -1,6 +1,8 @@
 # 签名发行资产与准备
 
-已接入离线 `release-verify/release-prepare` 和在线 `release-check/release-fetch` 本机命令。验证入口只验签、检查清单及解析依赖闭包，返回 `state=manifest_verified`；准备入口继续核对归档、宿主机运行依赖并发布不可变副本，返回 `state=prepared`。准备不等于安装、启用或运行；不执行包内程序、脚本或包管理器，也不迁移数据库或切换当前版本。构建、测试、命令运行及真实系统矩阵仍待 P5 集中验证。
+初次安装见[部署指南](deployment.md)，日常组件更新顺序见[运维文档](operations.md#组件准备与更新)。本文提供签名材料及各独立维护入口的合同；当前状态和已运行范围分别以[进度清单](progress.md)、[验证记录](validation.md)为准。
+
+已接入离线 `release-verify/release-prepare` 和在线 `release-check/release-fetch` 本机命令。验证入口只验签、检查清单及解析依赖闭包，返回 `state=manifest_verified`；准备入口继续核对归档、宿主机运行依赖并发布不可变副本，返回 `state=prepared`。准备不等于安装、启用或运行；不执行包内程序、脚本或包管理器，也不迁移数据库或切换当前版本。
 
 ## 信任与签名
 

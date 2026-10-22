@@ -1,6 +1,21 @@
 # NginxPanel
 
-基于 Go、Vue 和 SQLite 的 Linux Nginx 管理面板。完整范围与实施顺序见 [设计文档](Linux_Nginx_Manager_Design.md) 和 [实施进度](docs/implementation.md)。当前进入 P5 集中验证，尚未发布；已执行组合及其余缺口见[运行验收矩阵](docs/support-matrix.md)。
+基于 Go、Vue 和 SQLite 的轻量 Linux Nginx 管理面板，提供代理与 HTTPS、配置发布回滚、主机管理、节点连接、迁移备份及签名更新。
+
+## 部署与使用
+
+首次使用从[部署指南](docs/deployment.md)开始，安装后按[使用手册](docs/user-guide.md)创建第一个代理。
+
+| 文档 | 内容 |
+| --- | --- |
+| [完整文档导航](docs/README.md) | 从安装到日常使用的阅读顺序及专题索引 |
+| [部署指南](docs/deployment.md) | 材料准备、源码构建、原生/Docker 安装、首次登录、管理入口 |
+| [使用手册](docs/user-guide.md) | 代理、证书、主机功能、API、节点、迁移与备份 |
+| [运维与故障处理](docs/operations.md) | 服务管理、更新、恢复、常见问题与停用边界 |
+
+当前实现状态及暂缓验收项见[进度清单](docs/progress.md)，已执行的系统组合见[运行矩阵](docs/support-matrix.md)。设计背景和阶段历史分别见[设计文档](Linux_Nginx_Manager_Design.md)、[实施记录](docs/implementation.md)。
+
+## 功能概览
 
 当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单与基础 WAF 策略、手动证书版本与 HTTPS 绑定/跳转/HSTS、不可变修订、原文差异、外部快照/草稿捕获/受管恢复、并发保护和独立草稿；Unix Socket Agent 身份校验、Nginx 编译/受信动态模块能力、不可变发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
 

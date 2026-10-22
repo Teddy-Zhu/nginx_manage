@@ -1,5 +1,7 @@
 # Docker 部署产物
 
+完整安装步骤见[部署指南](../../docs/deployment.md#5b-docker-安装)，首次登录与业务操作见[使用手册](../../docs/user-guide.md)，日常服务和恢复见[运维文档](../../docs/operations.md)。本文保留镜像、来源和维护事务的详细约束；当前完成状态及暂缓事项以[进度清单](../../docs/progress.md)为准。
+
 ## 签名镜像下载
 
 首次部署可由目标主机 root 使用已批准程序、固定发行信任和独立核对的清单 SHA-256 下载镜像：
@@ -26,7 +28,7 @@ docker build -f deploy/docker/nginx.Dockerfile --build-arg TARGETARCH=amd64 -t n
 
 修改模块集合须重新构建并发布镜像；运行环境缺失模块时更换包含对应能力的受信镜像，重新生成迁移计划。镜像不携带源节点二进制、动态模块或业务秘密。
 
-amd64 镜像已通过实际构建、配置渲染、HTTP/TCP/UDP 与基础防护运行，以及固定启动器降权/哈希拒绝验证，范围见 [P5 验证记录](../../docs/validation.md)。Debian 13/amd64 默认 Docker 部署已通过安装、运行与故障恢复验收；arm64、正式发布来源、其他系统部署及镜像升级恢复仍待验收。固定实例执行适配、镜像摘要/OCI 证据签名发布及安装验签已接入源码，流程见 [固定镜像发行](../../docs/publishing.md#固定镜像发行)。本机管理员先使用上述签名镜像下载命令或按签名清单准备镜像；已有面板可从组件页显式拉取。安装器验证来源与本地内容，不隐式拉取镜像。
+镜像构建、代理、防护、固定启动器及各系统部署的已运行范围见[运行矩阵](../../docs/support-matrix.md)和[验证记录](../../docs/validation.md)。固定实例执行适配、镜像摘要/OCI 证据签名发布及安装验签的流程见[固定镜像发行](../../docs/publishing.md#固定镜像发行)。本机管理员先使用上述签名镜像下载命令或按签名清单准备镜像；已有面板可从组件页显式拉取。安装器验证来源与本地内容，不隐式拉取镜像。
 
 上游构建及模块参数参见 [Nginx 官方镜像源码](https://github.com/nginx/docker-nginx) 和 [Nginx 构建选项](https://nginx.org/en/docs/configure.html)。
 
@@ -106,9 +108,9 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
   --launcher-operation <original-uuid>
 ```
 
-一次启动保留最多 64 个操作回执，同一操作 ID 的不同请求被拒绝。同一 boot ID 内重试返回原记录，容器重建改变 boot ID，原请求不能原样派发到新启动；独立进程维护记录先查询实际状态，再记录新的启动身份，并保留最多四次派发。运行实例另有 UUID，停止或重启须匹配观测的实例。root 持久停机标记存在时 launcher 保持控制入口在线并不启动 serve，容器重建也保留停机状态。标记及维护释放由独立 root 事务核对，生命周期入口见 [发行说明](../../docs/releases.md#面板进程维护)。控制客户端需要宿主机 root 的进程检查权限。持久版本选择、面板进程维护、独立更新/回滚 worker、readiness、维护释放与恢复材料清理及网页/API 更新任务已接入源码，仍待 P5 集中验证。
+一次启动保留最多 64 个操作回执，同一操作 ID 的不同请求被拒绝。同一 boot ID 内重试返回原记录，容器重建改变 boot ID，原请求不能原样派发到新启动；独立进程维护记录先查询实际状态，再记录新的启动身份，并保留最多四次派发。运行实例另有 UUID，停止或重启须匹配观测的实例。root 持久停机标记存在时 launcher 保持控制入口在线并不启动 serve，容器重建也保留停机状态。标记及维护释放由独立 root 事务核对，生命周期入口见 [发行说明](../../docs/releases.md#面板进程维护)。控制客户端需要宿主机 root 的进程检查权限。持久版本选择、面板进程维护、独立更新/回滚 worker、readiness、维护释放与恢复材料清理及网页/API 更新任务均通过对应维护入口执行。
 
-本阶段只实施并审阅源码和配置，尚未运行镜像构建、安装器、launcher、Compose、服务、类型检查、lint 或测试，统一留待 P5 集中验证。
+已运行的镜像、部署和维护事务范围以[验证记录](../../docs/validation.md)为准，未覆盖组合及暂缓事项以[进度清单](../../docs/progress.md)为准。
 
 ## 面板容器与 launcher 对端核对
 

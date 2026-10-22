@@ -1,5 +1,7 @@
 # 受控管理监听
 
+首次访问、SSH 转发和启用步骤见[部署指南](deployment.md#7-配置管理入口)，失联后的本机救援见[运维文档](operations.md#管理入口失联)。本文说明监听变更的详细合同。
+
 主 `serve --listen` 始终使用部署绑定中的回环地址，默认 `127.0.0.1:9443`，其证书和独立恢复入口保持原有绑定。首次登录继续使用 SSH 转发。可选远程监听通过自动扫描的“管理入口”页面或同版 API 管理；需要直接连接本节点、`read/system.write` 与浏览器近期认证，不接受节点递归转发。
 
 ## 配置与确认
@@ -24,7 +26,7 @@
 
 root Agent 持有可选 TCP 监听及每个连接的原始描述符，经过本机 UID 核验的 `unixpacket` 通道向非 root 应用交付描述符与 TLS 材料。应用完成 HTTPS、认证、会话、API 和前端处理，保留真实 TCP 来源。Agent 使用 `shutdown(SHUT_RDWR)` 撤销已交付的描述符，恢复不依赖 Web 定时器；通道丢失时应用关闭继承连接，再重新连接 Agent。最多保留 128 个连接，应用接收队列为 16 个，帧最多 48 KiB。
 
-持久记录位于 `DATA/agent/management-listener/state.json`，包含 root 私有 TLS 材料，目录 `0700`、文件 `0600`。通道为主 Agent Socket 加 `.remote` 后缀，沿用部署中的 IPC 组与 Web UID；只有同版生产 Agent 且维护范围为 `host` 时启用；当前 Agent 协议为 40。原生与持久 Docker 面板复用此机制，远程端口由宿主机 Agent 监听，无需把容器内入口改成公网监听。
+持久记录位于 `DATA/agent/management-listener/state.json`，包含 root 私有 TLS 材料，目录 `0700`、文件 `0600`。通道为主 Agent Socket 加 `.remote` 后缀，沿用部署中的 IPC 组与 Web UID；只有同版生产 Agent 且维护范围为 `host` 时启用，当前版本要求见[进度清单](progress.md)。原生与持久 Docker 面板复用此机制，远程端口由宿主机 Agent 监听，无需把容器内入口改成公网监听。
 
 本机 root 可独立提交停用救援请求：
 

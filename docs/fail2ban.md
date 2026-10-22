@@ -1,5 +1,7 @@
 # Fail2ban 配置、诊断与实例接入
 
+面向日常操作的顺序见[使用手册](user-guide.md#fail2ban)。本文提供本机授权、实例接入、jail 和恢复的详细合同；已有实例服务控制见[专门章节](#已有实例的全局服务控制)。当前实现状态以[进度清单](progress.md)为准，历史阶段的“待验证”描述不作为当前能力判断。
+
 官方代码组装和实际受管服务的已验收范围见[验证记录](validation.md#debian-13-fail2ban-官方代码与受管服务)，不代表完整系统矩阵已通过。
 
 `GET /fail2ban` 返回 `Fail2banObservation`，要求 `read` 权限，沿用统一 JSON 外壳。显式远程资源仅转发登记操作；页面 `/fail2ban` 由 `src/pages` 自动扫描接入。模块默认停用，可显式启用管理入口；启用不安装或启动引擎，不自动停止现有保护。诊断和已授权实例的只读观察不改变模块开关或 jail 所有权。
@@ -332,7 +334,7 @@ root 在固定官方客户端调用前持久记录已派发；进程中断、超
 
 权限按动作明确检查：install 要求 `components.manage`；start/stop/enable/disable 要求 `security.write`；resume/rollback 要求两者。预览另需 `read`，写操作要求近期认证和幂等键，OpenAPI 与显式远程合同用 `x-action-scopes` 逐项声明，转发不扩大调用者范围。`POST /fail2ban/lifecycle` 提交预览返回的完整 `input`，HTTP 202 返回持久任务；`GET /fail2ban/lifecycle/tasks` 返回最近 16 条任务及保存的结果快照。资料、任务、幂等响应与排队审计同事务提交，沿用模块操作共享的 256 份容量及备份隔离规则。
 
-首次安装只注册独立服务及私有配置/状态目录，不启动、不设开机启用。启动和开机启用分别预览、确认；install/resume/start/enable 均要求 Fail2ban 管理模块启用；续办是否启动或开机启用仍沿用并显示原意图。stop/disable/rollback 可在关闭管理模块后明确执行；模块开关本身仍不停止服务。续办固定原资产、解释器和原 Start/Enable 意图，后两项在预览中明确显示；不借续办替换新版本。已有系统实例仍只读接入，不由这些入口停止或接管。
+首次安装只注册独立服务及私有配置/状态目录，不启动、不设开机启用。启动和开机启用分别预览、确认；install/resume/start/enable 均要求 Fail2ban 管理模块启用；续办是否启动或开机启用仍沿用并显示原意图。stop/disable/rollback 可在关闭管理模块后明确执行；模块开关本身仍不停止服务。续办固定原资产、解释器和原 Start/Enable 意图，后两项在预览中明确显示；不借续办替换新版本。已有系统实例默认只读，本机 root 明确授予服务控制后，可选择该实例执行 start/stop/enable/disable；该授权不授予任意 jail 接管权。
 
 root 协调器在 Agent 中独立运行，可用于未配置专用 Nginx 的宿主机；宿主机、维护及组件范围按操作核对。与已有 Nginx 执行、jail 配置、手动封禁、维护和本机服务操作互斥。预览摘要固定安装事件、Python/代码/管理程序身份、服务 PID/运行代次/开机设置、所选 jail 和动作授权；提交与执行前重新核对，漂移必须重新预览。首次排队超过五分钟未派发会过期，派发前持久标记；Agent 中断后只观察原操作，不重放安装或服务控制，也不自动执行相反动作。服务仍在 activating/deactivating/reloading 或存在排队中的 systemd 作业时继续观察，状态无法读取时保留恢复阻塞；不以调用超时或稳定的 ActiveState 推定服务作业已经停止。作业字段按 [systemd v249 的 systemctl 实现](https://github.com/systemd/systemd/blob/v249/src/systemctl/systemctl-show.c#L1011) 读取：无作业为空，有作业为 uint32 编号。服务稳定且原操作仍未确认时先看实际快照，再显式预览续办、撤回或服务操作。
 

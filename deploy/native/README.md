@@ -1,10 +1,12 @@
 # 原生 systemd 安装
 
-此入口面向使用 systemd、GNU coreutils 和 shadow 账户工具的 Linux 宿主机，目标架构为 amd64/arm64。Debian 12/amd64 的 `--without-nginx` 和 `--nginx-binary` 首次安装、运行中重放、权限隔离及重启持久化已通过独立虚拟机验收；含 Nginx 组合另完成配置应用、端口冲突回滚和切换后 Agent 中断恢复。其他系统组合及完整故障恢复仍待 P5，详见[验证记录](../../docs/validation.md)。当前输入为本机批准的开发产物，尚不是正式签名发行包。
+完整的安装到首次登录流程见[部署指南](../../docs/deployment.md)，安装后的操作见[使用手册](../../docs/user-guide.md)，服务与恢复见[运维文档](../../docs/operations.md)。本文提供原生安装的参数、权限和执行约束。
+
+此入口面向使用 systemd、GNU coreutils 和 shadow 账户工具的 Linux 宿主机，目标架构为 amd64/arm64。安装输入为本机管理员批准的程序与前端；可选择可信本机 Nginx 或已准备的签名组件。已运行的系统组合见[运行矩阵](../../docs/support-matrix.md)，当前实现与暂缓事项以[进度清单](../../docs/progress.md)为准。
 
 将配套后端二进制、构建后的前端，以及选择同时安装时所需的本机批准 Nginx 放在 root 所有、上层目录不可被普通账户写入的目录。源文件必须是无硬链接的普通文件；Nginx 程序可通过系统路径的符号链接指定，安装时解析并固定实际路径。安装器检查 ELF 架构并对复制内容计算/复核散列。它只接收本机批准的产物，不下载、编译或自动安装系统包；面板产物自身仍须本机批准；签名 Nginx 可直接通过下述计划/资产入口安装，散列本身不证明发布者身份。
 
-已签名资产可先通过 [离线发行准备](../../docs/releases.md) 验证本机固定公钥、依赖闭包及归档，再将准备目录里的 panel 程序和 web 目录作为本安装入口的输入。验证工具本身仍需本机批准，不能先执行未知下载程序来建立其自身信任；在线检查/准备见同一发行文档，运行中组件升级与面板更新继续实施。
+已签名资产可先通过 [离线发行准备](../../docs/releases.md) 验证本机固定公钥、依赖闭包及归档，再将准备目录里的 panel 程序和 web 目录作为本安装入口的输入。验证工具本身仍需本机批准，不能先执行未知下载程序来建立其自身信任；在线检查/准备、运行中组件升级与面板更新见同一发行文档。
 
 ```sh
 sudo bash deploy/native/install.sh \
@@ -52,7 +54,7 @@ sudo bash deploy/native/install.sh \
 
 安装意图 v13 在业务初始化前由 root 登记 `run/panel-writer.lock`，文件为 root 持有、面板专用组可读写的 0660 常规文件，上层目录不可被面板账户替换。正式 `init/serve` 共用此锁，恢复启动标记存在时保持关闭；开发模式使用独立写锁。Web 服务仅额外开放该锁文件的写权限。完整安装重放核对 root 所有的就绪记录，跳过重复数据库初始化；未完成的安装继续执行初始化。
 
-原生面板的初始程序及前端也复制到 root 持有的 `DATA/runtime/releases/<内容散列>`，运行绑定固定原生模式、身份和监听，`runtime/current` 选择完整版本。systemd 通过固定 `panel-native-serve` 入口启动所选程序；`/opt/nginxpanel/current` 继续用于宿主机 Agent 和安装工具。正式启动在写锁内核对实际程序与前端，初始安装重放保留当前选择，指针丢失时不会重置为旧代码。root 版本选择入口及尚未完成的更新编排见 [发行说明](../../docs/releases.md#面板程序版本选择)。
+原生面板的初始程序及前端也复制到 root 持有的 `DATA/runtime/releases/<内容散列>`，运行绑定固定原生模式、身份和监听，`runtime/current` 选择完整版本。systemd 通过固定 `panel-native-serve` 入口启动所选程序；`/opt/nginxpanel/current` 继续用于宿主机 Agent 和安装工具。正式启动在写锁内核对实际程序与前端，初始安装重放保留当前选择，指针丢失时不会重置为旧代码。root 版本选择及更新编排见[发行说明](../../docs/releases.md#面板程序版本选择)。
 
 选择安装 Nginx 时，`nginx-init` 仅准备无站点基线，固定 worker、prefix 与配置入口；不会接管发行版 `nginx.service`。业务端口在后续保存并应用站点时才启用。动态模块默认批准清单为空；已有系统实例按本机 root 的受信清单接入，参见 [模块接入](../../docs/native-modules.md)。Docker 仍使用构建时预置模块策略。
 
@@ -86,9 +88,9 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 主机指标来源显式为 host。Nginx 日志轮转通过安装参数 `--nginx-log-owner agent|external|unconfirmed` 选择唯一所有者，并保存在本机安装意图中；默认 unconfirmed，轮转策略只读。确认本项目日志未被外部 logrotate 等规则管理后可选择 agent；选择 external 时继续由外部管理，不迁出或修改外部规则。DNS 通过安装参数 `--dns-owner` 明确批准实际所有者与宿主机范围，并配置对应 Agent 写入目录；默认 unconfirmed，仅允许读取。普通文件、networkd/resolved、NetworkManager 及 netplan 的实现与已验证系统组合见[验证记录](../../docs/validation.md)，业务页面不能绕过本机所有权和系统沙箱授权。
 
-安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新、卸载清理及完整 Docker 接入仍在后续范围内。
+安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新使用各独立维护入口，Docker 使用下述容器模式；当前无通用一键卸载流程，停用边界见[运维文档](../../docs/operations.md#容量清理与停用)。
 
-组件准备由原生 Agent 的 `--component-scope host` 启用，发行信任须由本机 root 配置，见 [发行准备](../../docs/releases.md)。安装器预建 `/opt/nginxpanel/prepared`（0755）及 `/opt/nginxpanel/release-downloads`（0700），并仅向 Agent unit 开放这两个额外写目录。缺少有效信任时页面报告不可用，不创建默认发布者。原生首次安装通过下述绑定接入，Web 首次安装见下节，运行中版本切换仍待后续流程。
+组件准备由原生 Agent 的 `--component-scope host` 启用，发行信任须由本机 root 配置，见 [发行准备](../../docs/releases.md)。安装器预建 `/opt/nginxpanel/prepared`（0755）及 `/opt/nginxpanel/release-downloads`（0700），并仅向 Agent unit 开放这两个额外写目录。缺少有效信任时页面报告不可用，不创建默认发布者。原生首次安装通过下述绑定接入，Web 首次安装见下节，运行中版本切换见[组件维护切换](../../docs/releases.md#原生-nginx-运行组件维护切换)。
 
 ## 使用签名 Nginx 组件首次安装
 
@@ -107,11 +109,11 @@ sudo bash deploy/native/install.sh \
 
 Nginx 的两个 unit 入口改用 `nginx-runtime`，校验配置后通过 exec 进入 Nginx，保持 systemd 跟踪的 master PID；Agent 使用 `--nginx-binding` 解析同一记录。签名组件每次启动都在无网络、无缓存写入的路径重新核验产物及运行依赖；当前公钥仍须信任签名，文件改动/缺失/运行文件漂移会拒绝启动，不回退系统程序。清单过期限制新安装，已批准安装按本机批准时间复核；新增无关公钥不破坏既有有效回执，撤销签名公钥或修改仓库则阻止后续启动。
 
-安装、启动及运行确认仍分开：默认不启用服务，`--start` 才启动；组件页面展示已登记来源、版本、散列及实际运行确认。首次安装不会切换正在运行的实例；运行中切换与恢复使用独立组件切换流程。此入口及服务沙箱尚未实际运行，待 P5 集中验证。
+安装、启动及运行确认仍分开：默认不启用服务，`--start` 才启动；组件页面展示已登记来源、版本、散列及实际运行确认。首次安装不会切换正在运行的实例；运行中切换与恢复使用独立组件切换流程。已有运行范围见[进度清单](../../docs/progress.md)与[验证记录](../../docs/validation.md)。
 
 安装的 Agent 同时以 `--maintenance-scope host` 确认配置维护范围。面板“配置维护”关闭新写入、等待既有任务结束并取得独立 root 锁；手动进入维护后须显式恢复写入，Web 或 Agent 重启不会把锁当作已释放。状态不可核实时保持写入关闭。组件切换和备份使用各自的独立任务，复用此维护准入。
 
-仅面板安装使用 `component-bind --nginx-uninstalled` 保存同一 root 只读记录，其中所有运行文件和签名字段必须为空。Agent 的 `--nginx-binding` 接受这一明确状态并报告执行能力缺失；记录不存在或既有资产丢失仍拒绝启动。`nginx-init` 和 `nginx-runtime` 要求真正的安装绑定，未安装登记不能绕过此检查。`nginx-runtime-status` 是 systemd 的只读条件入口，不执行 Nginx、下载或初始化。该部署方式尚未运行安装器、语法/构建检查、服务或测试，待 P5 集中验证。
+仅面板安装使用 `component-bind --nginx-uninstalled` 保存同一 root 只读记录，其中所有运行文件和签名字段必须为空。Agent 的 `--nginx-binding` 接受这一明确状态并报告执行能力缺失；记录不存在或既有资产丢失仍拒绝启动。`nginx-init` 和 `nginx-runtime` 要求真正的安装绑定，未安装登记不能绕过此检查。`nginx-runtime-status` 是 systemd 的只读条件入口，不执行 Nginx、下载或初始化。
 
 ## 为已部署的面板首次安装 Nginx
 
@@ -137,7 +139,7 @@ sudo /opt/nginxpanel/current/nginxpanel component-install \
 
 中断或失败保留原记录并阻止释放维护锁。核对记录阶段及 systemd 日志后，等待原维护会话再次为 `held`，以**相同安装 UUID、维护 UUID、资产和全部原选项**，更新当前 epoch 并增加 `--resume-install` 续办；不能换新操作或资产掩盖未完成安装。绑定尚未发布时，也可保留上述全部原选项并增加 `--abort-install` 显式取消，已生成的受管空基线和审计记录保留。绑定发布后仅允许续办确认，不按未安装状态取消。成功或有效取消后，再从面板显式结束维护。
 
-Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安装；运行中版本切换见下文；命令、服务操作和故障恢复均未实际执行，待 P5 集中验证。
+Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安装；运行中版本切换见下文，已运行及未覆盖范围见[进度清单](../../docs/progress.md)。
 
 ## 页面与 API 首次安装
 
@@ -163,7 +165,7 @@ Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安
 
 配合 `--nginx-image <已在本机准备的镜像@sha256:摘要>` 可同时接入预置模块 Nginx 容器，使用同一镜像发行清单验签；与原生程序、签名组件和 `--without-nginx` 选择互斥。此分支只登记宿主机 Agent，生成双服务 Compose；不登记原生 Nginx、原生首次安装或组件切换 unit。Docker Socket 仅由宿主机 root Agent 访问，不挂入容器。首次安装意图为 v7，首版发布前不保留旧意图兼容路径。
 
-运行中的原生 Nginx 可通过独立 root 命令在已持有维护会话中切换至签名准备组件，支持原记录续办、补偿和只读查询；要求明确允许停机，保留当前发布及原组件。详见 [组件维护切换](../../docs/releases.md#原生-nginx-运行组件维护切换)。网页“组件切换”和 `/components/switches` API 使用同一切换核心，由安装器登记的 `nginxpanel-switch@.service` 独立执行。每次五分钟启动授权只领取一次，失败后须在原任务显式续办或恢复原组件；源环境恢复任务不自动重放。此入口及服务尚未执行验证，待 P5 集中验证。
+运行中的原生 Nginx 可通过独立 root 命令在已持有维护会话中切换至签名准备组件，支持原记录续办、补偿和只读查询；要求明确允许停机，保留当前发布及原组件。详见 [组件维护切换](../../docs/releases.md#原生-nginx-运行组件维护切换)。网页“组件切换”和 `/components/switches` API 使用同一切换核心，由安装器登记的 `nginxpanel-switch@.service` 独立执行。每次五分钟启动授权只领取一次，失败后须在原任务显式续办或恢复原组件；源环境恢复任务不自动重放。
 
 
 ## 宿主机 Agent 升级
