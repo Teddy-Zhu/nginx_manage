@@ -341,6 +341,10 @@ func ActivateDisaster(ctx context.Context, data, id, epoch string, prepare func(
 				return errors.New("激活前面板不处于原停机边界")
 			}
 			intent := PanelServiceIntent{Input: PanelServiceInput{DataDir: data, Action: "start", MaintenanceID: i.Stop.MaintenanceID, StopID: i.Stop.OperationID}, ReleaseID: i.ReleaseID, BindingSHA256: i.Stop.BindingSHA256, StopSHA256: i.Stop.RequestSHA256, Before: before}
+			intent.LauncherProtocol, e = panelServiceProtocol(s)
+			if e != nil {
+				return e
+			}
 			child := Record{OperationID: a.StartID, Kind: panelServiceKind, State: "running", Stage: "controlling", RequestHash: panelServiceHash(a.StartID, intent), MaintenanceEpoch: epoch, Deadline: time.Now().Add(3 * time.Minute).Unix(), PanelService: &PanelServiceOperation{Intent: intent}}
 			out.DisasterActivation.Start = &child
 			out.Stage, out.MaintenanceEpoch = "activation_starting", epoch
