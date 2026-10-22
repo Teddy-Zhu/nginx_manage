@@ -197,6 +197,7 @@ type BackupRecord struct {
 	ExpiresAt          int64          `json:"expires_at"`
 	DeleteStarted      int64          `json:"delete_started"`
 	DeletedAt          sql.NullInt64  `json:"deleted_at"`
+	ArchivedAt         int64          `json:"archived_at"`
 }
 
 type BackupRequest struct {

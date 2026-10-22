@@ -14,12 +14,54 @@ import (
 
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 )
 
 const runtimeHistoryKind = "nginx.history.cleanup"
 const historyEntryMax = 512
 const historyBytesMax = 16 << 20
+
+// Only the material category selects a filesystem root; requests cannot supply
+// arbitrary paths. Agent binaries are streamed and use a separate byte budget.
+type runtimeHistoryFiles struct {
+	root       string
+	fileLimit  int64
+	bytesLimit int64
+	program    bool
+}
+
+func historyFileLimit(kind string) int64 {
+	if kind == "agent_program" {
+		return panelruntime.BinaryLimit
+	}
+	return 512 << 10
+}
+
+func historyBytesLimit(kind string) int64 {
+	if kind == "agent_program" {
+		return panelruntime.BinaryLimit
+	}
+	return historyBytesMax
+}
+
+func (n *Nginx) historyFiles(kind string) runtimeHistoryFiles {
+	f := runtimeHistoryFiles{root: n.DataDir, fileLimit: historyFileLimit(kind), bytesLimit: historyBytesLimit(kind), program: kind == "agent_program"}
+	if f.program {
+		f.root = agentBootstrapRoot
+	}
+	return f
+}
+
+func validAgentHistoryEntry(e runtimeHistoryEntry, target string) bool {
+	if e.Mode&0022 != 0 {
+		return false
+	}
+	if e.Directory {
+		return e.Path == target && os.FileMode(e.Mode).IsDir()
+	}
+	return e.Path == target+"/nginxpanel" && os.FileMode(e.Mode).IsRegular() && e.Size > 0 && e.SHA256 == strings.TrimPrefix(target, "agent-releases/")
+}
 
 type runtimeHistoryEntry struct {
 	Path      string `json:"path"`
@@ -126,12 +168,12 @@ func historyPath(target, path string) bool {
 	return path == target || strings.HasPrefix(path, target+"/")
 }
 
-func (n *Nginx) historyEntry(ctx context.Context, relative string) (runtimeHistoryEntry, error) {
+func (f runtimeHistoryFiles) historyEntry(ctx context.Context, relative string) (runtimeHistoryEntry, error) {
 	e := runtimeHistoryEntry{Path: relative}
 	if !fs.ValidPath(relative) || len(relative) > 512 {
 		return e, ErrExternalChange
 	}
-	name := filepath.Join(n.DataDir, filepath.FromSlash(relative))
+	name := filepath.Join(f.root, filepath.FromSlash(relative))
 	info, err := os.Lstat(name)
 	if err != nil {
 		return e, err
@@ -146,13 +188,13 @@ func (n *Nginx) historyEntry(ctx context.Context, relative string) (runtimeHisto
 	e.GID = st.Gid
 	e.Mode = uint32(info.Mode())
 	if !e.Directory {
-		if info.Size() < 0 || info.Size() > 512<<10 {
+		if info.Size() < 0 || info.Size() > f.fileLimit {
 			return e, ErrExternalChange
 		}
 		if err = ctx.Err(); err != nil {
 			return e, err
 		}
-		raw, err := nginxmodules.ReadTrusted(name, 512<<10)
+		hash, err := nginxmodules.HashTrusted(name, f.fileLimit)
 		if err != nil {
 			return e, err
 		}
@@ -167,35 +209,35 @@ func (n *Nginx) historyEntry(ctx context.Context, relative string) (runtimeHisto
 		e.Size = info.Size()
 		e.Modified = st.Mtim.Nano()
 		e.Changed = st.Ctim.Nano()
-		e.SHA256 = secure.Hash(raw)
-		if int64(len(raw)) != e.Size {
-			return e, ErrExternalChange
-		}
+		e.SHA256 = hash
 	}
 	return e, nil
 }
 
-func (n *Nginx) inventoryHistory(ctx context.Context, target string, wanted map[string]string) ([]runtimeHistoryEntry, int64, error) {
+func (f runtimeHistoryFiles) inventoryHistory(ctx context.Context, target string, wanted map[string]string) ([]runtimeHistoryEntry, int64, error) {
 	entries := []runtimeHistoryEntry{}
 	var size int64
 	seen := 0
-	err := filepath.WalkDir(filepath.Join(n.DataDir, filepath.FromSlash(target)), func(name string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(filepath.Join(f.root, filepath.FromSlash(target)), func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if err = ctx.Err(); err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(n.DataDir, name)
+		rel, err := filepath.Rel(f.root, name)
 		if err != nil {
 			return err
 		}
-		e, err := n.historyEntry(ctx, filepath.ToSlash(rel))
+		e, err := f.historyEntry(ctx, filepath.ToSlash(rel))
 		if err != nil {
 			return err
+		}
+		if f.program && !validAgentHistoryEntry(e, target) {
+			return ErrExternalChange
 		}
 		if !e.Directory {
-			local, err := filepath.Rel(filepath.Join(n.DataDir, filepath.FromSlash(target)), name)
+			local, err := filepath.Rel(filepath.Join(f.root, filepath.FromSlash(target)), name)
 			if err != nil || wanted[filepath.ToSlash(local)] != e.SHA256 {
 				return ErrExternalChange
 			}
@@ -203,7 +245,7 @@ func (n *Nginx) inventoryHistory(ctx context.Context, target string, wanted map[
 			size += e.Size
 		}
 		entries = append(entries, e)
-		if len(entries) > historyEntryMax || size > historyBytesMax {
+		if len(entries) > historyEntryMax || size > f.bytesLimit {
 			return errors.New("运行材料超出单批清理预算")
 		}
 		return nil
@@ -217,19 +259,20 @@ func (n *Nginx) inventoryHistory(ctx context.Context, target string, wanted map[
 // Validate the entire remaining inventory before unlinking. Parent directory
 // timestamps change during deletion; its original device/inode/mode must not.
 func (n *Nginx) removeHistory(ctx context.Context, p runtimeHistoryPlan) error {
+	f := n.historyFiles(p.Preview.Filter.Kind)
 	expected := map[string]runtimeHistoryEntry{}
 	for _, e := range p.Entries {
 		expected[e.Path] = e
 	}
 	for _, target := range p.Preview.Targets {
-		err := filepath.WalkDir(filepath.Join(n.DataDir, filepath.FromSlash(target)), func(name string, d fs.DirEntry, err error) error {
-			if os.IsNotExist(err) && name == filepath.Join(n.DataDir, filepath.FromSlash(target)) {
+		err := filepath.WalkDir(filepath.Join(f.root, filepath.FromSlash(target)), func(name string, d fs.DirEntry, err error) error {
+			if os.IsNotExist(err) && name == filepath.Join(f.root, filepath.FromSlash(target)) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-			rel, e := filepath.Rel(n.DataDir, name)
+			rel, e := filepath.Rel(f.root, name)
 			if e != nil {
 				return e
 			}
@@ -237,7 +280,7 @@ func (n *Nginx) removeHistory(ctx context.Context, p runtimeHistoryPlan) error {
 			if !ok {
 				return ErrExternalChange
 			}
-			current, e := n.historyEntry(ctx, old.Path)
+			current, e := f.historyEntry(ctx, old.Path)
 			if e != nil {
 				return e
 			}
@@ -259,7 +302,7 @@ func (n *Nginx) removeHistory(ctx context.Context, p runtimeHistoryPlan) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		current, err := n.historyEntry(ctx, old.Path)
+		current, err := f.historyEntry(ctx, old.Path)
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -269,7 +312,7 @@ func (n *Nginx) removeHistory(ctx context.Context, p runtimeHistoryPlan) error {
 		if current != old {
 			return ErrExternalChange
 		}
-		name := filepath.Join(n.DataDir, filepath.FromSlash(old.Path))
+		name := filepath.Join(f.root, filepath.FromSlash(old.Path))
 		if err = os.Remove(name); err != nil {
 			return err
 		}
@@ -280,7 +323,7 @@ func (n *Nginx) removeHistory(ctx context.Context, p runtimeHistoryPlan) error {
 	// A previous attempt may have unlinked the last directory before its
 	// parent fsync failed. Reconfirm that unlink even when the path is absent.
 	for _, target := range p.Preview.Targets {
-		parent := filepath.Dir(filepath.Join(n.DataDir, filepath.FromSlash(target)))
+		parent := filepath.Dir(filepath.Join(f.root, filepath.FromSlash(target)))
 		if err := existingRootDirectory(parent); err != nil {
 			return err
 		}

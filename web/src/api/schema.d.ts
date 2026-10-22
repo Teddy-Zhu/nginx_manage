@@ -2562,7 +2562,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目、16 MiB；保留当前、回滚及恢复引用。 */
+        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目，发布/证书最多 16 MiB，Agent 程序最多 192 MiB；保留当前、回滚及恢复引用。 */
         post: operations["previewRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -2579,7 +2579,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有的发布树或未引用证书副本，不清理 root 操作记录及灾备材料。 */
+        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有且无当前或未结束事务引用的发布树、证书副本或旧 Agent 程序；Agent 程序额外要求 components.manage。不清理 root 操作记录及灾备材料。 */
         post: operations["executeRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -2596,7 +2596,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。migration_keep=0 不清理迁移材料，2–100 按操作者保留；启用时额外要求 backup.restore/backup.secrets，非 auth.manage 仅清理自己的计划。maintenance_keep=0 不归档，2–63 保留近期会话；已结束会话及任务回执仍可查询。 */
+        /** @description 返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。migration_keep=0 不清理迁移材料，2–100 按操作者保留；启用时额外要求 backup.restore/backup.secrets，非 auth.manage 仅清理自己的计划。maintenance_keep=0 不归档，2–63 保留近期会话；已结束会话及任务回执仍可查询。backup_keep=0 不归档，2–128 保留近期备份记录，额外要求 backup.export；非 auth.manage 仅归档自己的已删除备份历史。 */
         post: operations["previewHistory"];
         delete?: never;
         options?: never;
@@ -3014,9 +3014,11 @@ export interface components {
     schemas: {
         RuntimeHistoryFilter: {
             maintenance_id: string;
+            /** @description publication、certificate 或 agent_program；Agent 程序额外要求 components.manage */
             kind: string;
             /** Format: int64 */
             before: number;
+            /** @description 至少保留数量；agent_program 上限为 8，其余为 32 */
             keep: number;
         };
         RuntimeHistoryExecuteInput: {
@@ -3053,6 +3055,8 @@ export interface components {
             migration_keep: number;
             /** @description 0 不归档；启用时保留 2–63 个近期会话，只归档自身及关联任务均已结束的会话，原查询和回执保留 */
             maintenance_keep: number;
+            /** @description 0 不归档；启用时保留 2–128 个近期备份记录，额外要求 backup.export；非 auth.manage 仅归档自己的已删除备份历史 */
+            backup_keep: number;
         };
         HistoryItem: {
             kind: string;
@@ -4389,6 +4393,8 @@ export interface components {
             expires_at: number;
             /** Format: int64 */
             deleted_at: number;
+            /** Format: int64 */
+            archived_at: number;
             available: boolean;
             database: components["schemas"]["BackupDatabase"] | null;
         };

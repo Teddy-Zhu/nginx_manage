@@ -26,7 +26,8 @@ func (s *Server) ListRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) PreviewRuntimeHistory(w http.ResponseWriter, r *http.Request, _ apigen.PreviewRuntimeHistoryParams) {
-	if _, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets"); !ok {
+	p, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets")
+	if !ok {
 		return
 	}
 	var filter history.RuntimeFilter
@@ -37,6 +38,12 @@ func (s *Server) PreviewRuntimeHistory(w http.ResponseWriter, r *http.Request, _
 	if err := filter.Validate(); err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	if filter.Kind == "agent_program" {
+		if err := p.Require("components.manage"); err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	}
 	if s.Agent == nil {
 		s.fail(w, r, fault.Unavailable("运行材料 Agent 未配置"))
@@ -65,6 +72,12 @@ func (s *Server) ExecuteRuntimeHistory(w http.ResponseWriter, r *http.Request, p
 	if err := decodeLimit(w, r, &in, 4096); err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	if in.Filter.Kind == "agent_program" {
+		if err := p.Require("components.manage"); err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	}
 	if in.OperationID == "" || params.IdempotencyKey != in.OperationID {
 		s.fail(w, r, fault.Invalid("幂等键必须使用本次运行清理的操作 UUID"))

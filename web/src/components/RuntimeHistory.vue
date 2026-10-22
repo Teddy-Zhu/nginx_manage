@@ -46,7 +46,13 @@ const savedPending = computed(() =>
 const options = [
   { label: "Nginx 发布目录", value: "publication" },
   { label: "证书运行副本", value: "certificate" },
+  { label: "旧 Agent 程序", value: "agent_program" },
 ];
+const labels: Record<string, string> = {
+  publication: "发布目录",
+  certificate: "证书副本",
+  agent_program: "Agent 程序",
+};
 const states: Record<string, string> = {
   running: "清理中",
   recovery_required: "待续办",
@@ -57,8 +63,7 @@ const columns: DataTableColumns<RuntimeHistoryStatus> = [
   {
     title: "材料",
     key: "preview.filter.kind",
-    render: (r) =>
-      r.preview.filter.kind === "publication" ? "发布目录" : "证书副本",
+    render: (r) => labels[r.preview.filter.kind],
   },
   { title: "状态", key: "state", render: (r) => states[r.state] },
   {
@@ -94,6 +99,10 @@ const columns: DataTableColumns<RuntimeHistoryStatus> = [
 ];
 watch([kind, keep, before], () => {
   preview.value = null;
+});
+watch(kind, (value) => {
+  if (value === "agent_program" && keep.value !== null && keep.value > 8)
+    keep.value = 2;
 });
 async function refresh() {
   maintenance.value = await api.maintenance();
@@ -168,9 +177,9 @@ onMounted(load);
 <template>
   <div class="page-stack">
     <NAlert type="info" :bordered="false">
-      仅回收不再引用的发布目录与证书运行副本，保留当前发布、回滚锚点及灾备引用。操作记录与数据库材料保留。
-      先清理发布目录，再预览证书副本；每批最多 8 个目录、512 个条目、16
-      MiB。清理中断后须按原清单续办，完成前不能退出维护。
+      回收不再引用的发布目录、证书副本或旧 Agent 程序，保留当前运行与未结束事务的恢复引用。操作记录与数据库材料保留。
+      发布目录和证书副本每批最多 16 MiB，Agent 程序每批最多 192 MiB；每批最多 8 个目录、512 个条目。
+      清理中断后须按原清单续办，完成前不能退出维护。
     </NAlert>
     <div class="toolbar">
       <span>{{
@@ -197,12 +206,14 @@ onMounted(load);
           :label="
             kind === 'certificate'
               ? '每张证书至少保留副本数'
-              : '至少保留发布目录数'
+              : kind === 'agent_program'
+                ? '至少保留 Agent 程序数'
+                : '至少保留发布目录数'
           "
           ><NInputNumber
             v-model:value="keep"
             :min="2"
-            :max="32"
+            :max="kind === 'agent_program' ? 8 : 32"
             :precision="0"
             :clearable="false"
             :disabled="busy || !!savedPending"

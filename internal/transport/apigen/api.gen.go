@@ -3684,6 +3684,7 @@ type BackupPolicyInput struct {
 type BackupRecord struct {
 	ArchiveSha256 string                 `json:"archive_sha256"`
 	ArchiveSize   int64                  `json:"archive_size"`
+	ArchivedAt    int64                  `json:"archived_at"`
 	Available     bool                   `json:"available"`
 	CapturedAt    int64                  `json:"captured_at"`
 	CreatedAt     int64                  `json:"created_at"`
@@ -6134,6 +6135,9 @@ type HistoryExecuteInput struct {
 
 // HistoryFilter defines model for HistoryFilter.
 type HistoryFilter struct {
+	// BackupKeep 0 不归档；启用时保留 2–128 个近期备份记录，额外要求 backup.export；非 auth.manage 仅归档自己的已删除备份历史
+	BackupKeep int `json:"backup_keep"`
+
 	Before          int64 `json:"before"`
 	CertificateKeep int   `json:"certificate_keep"`
 
@@ -7807,7 +7811,9 @@ type RuntimeHistoryExecuteInput struct {
 // RuntimeHistoryFilter defines model for RuntimeHistoryFilter.
 type RuntimeHistoryFilter struct {
 	Before        int64  `json:"before"`
+	// Keep 至少保留数量；agent_program 上限为 8，其余为 32
 	Keep          int    `json:"keep"`
+	// Kind publication、certificate 或 agent_program；Agent 程序额外要求 components.manage
 	Kind          string `json:"kind"`
 	MaintenanceId string `json:"maintenance_id"`
 }

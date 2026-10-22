@@ -13,6 +13,7 @@ type Filter struct {
 	OrderKeep       int   `json:"order_keep"`
 	MigrationKeep   int   `json:"migration_keep"`
 	MaintenanceKeep int   `json:"maintenance_keep"`
+	BackupKeep      int   `json:"backup_keep"`
 }
 
 func (f Filter) Validate() error {
@@ -21,6 +22,9 @@ func (f Filter) Validate() error {
 	}
 	if f.MaintenanceKeep != 0 && (f.MaintenanceKeep < 2 || f.MaintenanceKeep > 63) {
 		return fault.Invalid("维护会话保留数设为 0 不归档，启用时须为 2–63")
+	}
+	if f.BackupKeep != 0 && (f.BackupKeep < 2 || f.BackupKeep > 128) {
+		return fault.Invalid("备份历史保留数设为 0 不归档，启用时须为 2–128")
 	}
 	return nil
 }

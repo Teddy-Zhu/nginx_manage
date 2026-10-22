@@ -52,13 +52,13 @@ func validRuntimeHistory(r Record) error {
 		return errors.New("运行材料清理记录无效")
 	}
 	f, p := i.Input.Filter, i.Plan.Preview
-	if f.Kind != "publication" && f.Kind != "certificate" || f.Before < 1 || f.Keep < 2 || f.Keep > 32 || p.Active != "bootstrap" && !validID(p.Active) {
+	if f.ValidateStored() != nil || f.Kind != "agent_program" && p.Active != "bootstrap" && !validID(p.Active) || f.Kind == "agent_program" && !agentProgramLinkValid(p.Active) {
 		return errors.New("运行清理筛选条件无效")
 	}
 	if r.RequestHash != historyRequestHash(i.Input) || p.Filter != f || p.SHA256 != i.Input.SHA256 || historyPlanHash(i.Plan) != i.Input.SHA256 {
 		return errors.New("运行清理摘要不一致")
 	}
-	if len(p.Targets) < 1 || len(p.Targets) > 8 || len(i.Plan.Entries) > historyEntryMax || len(i.Plan.Entries) != p.Entries || p.Bytes < 0 || p.Bytes > historyBytesMax {
+	if len(p.Targets) < 1 || len(p.Targets) > 8 || len(i.Plan.Entries) > historyEntryMax || len(i.Plan.Entries) != p.Entries || p.Bytes < 0 || p.Bytes > historyBytesLimit(f.Kind) {
 		return errors.New("运行清理清单超出预算")
 	}
 	if !(r.State == "succeeded" && r.Stage == "cleaned" || r.State == "running" && r.Stage == "approved" || r.State == "recovery_required" && r.Stage == "cleanup_paused") {
@@ -67,10 +67,10 @@ func validRuntimeHistory(r Record) error {
 	targets := map[string]bool{}
 	for _, target := range p.Targets {
 		parts := strings.Split(target, "/")
-		if len(parts) != 3 || targets[target] {
+		if targets[target] || !fs.ValidPath(target) {
 			return errors.New("运行清理目标无效")
 		}
-		if f.Kind == "publication" && (parts[0] != "nginx" || parts[1] != "revisions" || !validID(parts[2])) || f.Kind == "certificate" && (parts[0] != "certificates" || !validID(parts[1]) || !validID(parts[2])) {
+		if f.Kind == "publication" && (len(parts) != 3 || parts[0] != "nginx" || parts[1] != "revisions" || !validID(parts[2])) || f.Kind == "certificate" && (len(parts) != 3 || parts[0] != "certificates" || !validID(parts[1]) || !validID(parts[2])) || f.Kind == "agent_program" && (len(parts) != 2 || parts[0] != "agent-releases" || !validSwitchDigest(parts[1])) {
 			return errors.New("运行清理目标无效")
 		}
 		targets[target] = true
@@ -79,10 +79,13 @@ func validRuntimeHistory(r Record) error {
 	var bytes int64
 	for _, e := range i.Plan.Entries {
 		found := false
+		owner := ""
 		for target := range targets {
-			found = found || historyPath(target, e.Path)
+			if historyPath(target, e.Path) {
+				found, owner = true, target
+			}
 		}
-		if !found || !fs.ValidPath(e.Path) || len(e.Path) > 512 || seen[e.Path] || e.Inode == 0 || e.Size < 0 || e.Size > 512<<10 {
+		if !found || !fs.ValidPath(e.Path) || len(e.Path) > 512 || seen[e.Path] || e.Inode == 0 || e.Size < 0 || e.Size > historyFileLimit(f.Kind) {
 			return errors.New("运行清理清单无效")
 		}
 		if e.Directory {
@@ -92,12 +95,18 @@ func validRuntimeHistory(r Record) error {
 		} else if targets[e.Path] || !validSwitchDigest(e.SHA256) {
 			return errors.New("运行清理文件身份无效")
 		}
+		if f.Kind == "agent_program" && !validAgentHistoryEntry(e, owner) {
+			return errors.New("Agent 程序清理清单无效")
+		}
 		seen[e.Path] = true
 		bytes += e.Size
 	}
 	for target := range targets {
 		if !seen[target] {
 			return errors.New("运行清理缺少目标目录")
+		}
+		if f.Kind == "agent_program" && !seen[target+"/nginxpanel"] {
+			return errors.New("Agent 程序清理缺少原二进制身份")
 		}
 	}
 	if bytes != p.Bytes {
@@ -108,15 +117,24 @@ func validRuntimeHistory(r Record) error {
 
 // The held maintenance lock and Nginx mutex fence all normal admission; root
 // maintenance admission uses the same durable lock across independent workers.
-func (s *Server) historyLock(ctx context.Context, id, epoch string) (func(), []Record, error) {
+func (s *Server) historyLock(ctx context.Context, id, epoch, kind string) (func(), []Record, error) {
 	if s.Dev || s.Nginx == nil || s.Nginx.DataDir != s.DataDir || s.Nginx.maintenance == nil {
 		return nil, nil, fault.Unavailable("运行材料清理需要已接入的生产 Nginx Agent")
 	}
+	programUnlock := func() {}
+	if kind == "agent_program" {
+		_, release, err := agentUpgradeLocks(ctx, s.DataDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		programUnlock = release
+	}
 	g := s.Nginx.maintenance
 	if !g.mu.TryLock() {
+		programUnlock()
 		return nil, nil, fault.New(429, "HISTORY_BUSY", "运行材料维护正在执行")
 	}
-	fail := func(err error) (func(), []Record, error) { g.mu.Unlock(); return nil, nil, err }
+	fail := func(err error) (func(), []Record, error) { g.mu.Unlock(); programUnlock(); return nil, nil, err }
 	if g.scope != "host" || g.poisoned || g.id != id || g.phase != "held" || g.active != 0 || g.epoch != epoch {
 		return fail(fault.Conflict("须重新取得已排空的宿主机维护会话"))
 	}
@@ -158,7 +176,7 @@ func (s *Server) historyLock(ctx context.Context, id, epoch string) (func(), []R
 		unlock()
 		return fail(ErrBusy)
 	}
-	return func() { s.Nginx.mu.Unlock(); unlock(); g.mu.Unlock() }, records, nil
+	return func() { s.Nginx.mu.Unlock(); unlock(); g.mu.Unlock(); programUnlock() }, records, nil
 }
 
 type historyCandidate struct {
@@ -227,12 +245,19 @@ func (n *Nginx) historyReferences(records []Record, removed map[string]bool) (st
 
 func (n *Nginx) collectRuntimeHistory(ctx context.Context, f history.RuntimeFilter, records []Record) (runtimeHistoryPlan, error) {
 	p := runtimeHistoryPlan{Preview: history.RuntimePreview{Filter: f, Targets: []string{}}, Entries: []runtimeHistoryEntry{}}
-	active, pinned, deps, err := n.historyReferences(records, nil)
+	var active string
+	var pinned, deps map[string]bool
+	var candidates []historyCandidate
+	var err error
+	if f.Kind == "agent_program" {
+		active, pinned, candidates, err = n.agentProgramHistory(ctx, f.MaintenanceID, records)
+	} else {
+		active, pinned, deps, err = n.historyReferences(records, nil)
+	}
 	if err != nil {
 		return p, err
 	}
 	p.Preview.Active = active
-	candidates := []historyCandidate{}
 	if f.Kind == "publication" {
 		owners := map[string]Record{}
 		for _, r := range records {
@@ -258,7 +283,7 @@ func (n *Nginx) collectRuntimeHistory(ctx context.Context, f history.RuntimeFilt
 			}
 			candidates = append(candidates, historyCandidate{target: "nginx/revisions/" + e.Name(), at: r.UpdatedAt, manifest: m})
 		}
-	} else {
+	} else if f.Kind == "certificate" {
 		root := filepath.Join(n.DataDir, "certificates")
 		parents, err := os.ReadDir(root)
 		if err != nil {
@@ -319,15 +344,17 @@ func (n *Nginx) collectRuntimeHistory(ctx context.Context, f history.RuntimeFilt
 		}
 		c := eligible[i]
 		wanted := map[string]string{}
-		if f.Kind == "publication" {
+		if f.Kind == "publication" || f.Kind == "agent_program" {
 			for path, hash := range c.manifest.Files {
 				wanted[path] = hash
 			}
-			metadata, err := nginxHistoryMetadata(n, c.target)
-			if err != nil {
-				return p, err
+			if f.Kind == "publication" {
+				metadata, err := nginxHistoryMetadata(n, c.target)
+				if err != nil {
+					return p, err
+				}
+				wanted[".nginxpanel.json"] = metadata
 			}
-			wanted[".nginxpanel.json"] = metadata
 		} else {
 			parts := strings.Split(c.target, "/")
 			for _, kind := range []string{"fullchain", "privatekey"} {
@@ -342,11 +369,12 @@ func (n *Nginx) collectRuntimeHistory(ctx context.Context, f history.RuntimeFilt
 				wanted[name] = secure.Hash(b)
 			}
 		}
-		entries, size, err := n.inventoryHistory(ctx, c.target, wanted)
+		files := n.historyFiles(f.Kind)
+		entries, size, err := files.inventoryHistory(ctx, c.target, wanted)
 		if err != nil {
 			return p, err
 		}
-		if len(p.Entries)+len(entries) > historyEntryMax || p.Preview.Bytes+size > historyBytesMax {
+		if len(p.Entries)+len(entries) > historyEntryMax || p.Preview.Bytes+size > files.bytesLimit {
 			p.Preview.More = true
 			break
 		}
@@ -378,7 +406,7 @@ func (s *Server) previewRuntimeHistory(ctx context.Context, in history.RuntimeRe
 	if err := in.Input.Filter.Validate(); err != nil {
 		return history.RuntimePreview{}, err
 	}
-	unlock, records, err := s.historyLock(ctx, in.Input.Filter.MaintenanceID, in.Epoch)
+	unlock, records, err := s.historyLock(ctx, in.Input.Filter.MaintenanceID, in.Epoch, in.Input.Filter.Kind)
 	if err != nil {
 		return history.RuntimePreview{}, err
 	}
@@ -404,7 +432,7 @@ func (s *Server) executeRuntimeHistory(ctx context.Context, in history.RuntimeRe
 	} else if err != nil && !os.IsNotExist(err) {
 		return history.RuntimeStatus{}, err
 	}
-	unlock, records, err := s.historyLock(ctx, in.Input.Filter.MaintenanceID, in.Epoch)
+	unlock, records, err := s.historyLock(ctx, in.Input.Filter.MaintenanceID, in.Epoch, in.Input.Filter.Kind)
 	if err != nil {
 		return history.RuntimeStatus{}, err
 	}
@@ -439,6 +467,9 @@ func (s *Server) executeRuntimeHistory(ctx context.Context, in history.RuntimeRe
 			return history.RuntimeStatus{}, fault.Conflict("预览已变化或没有可清理的运行材料")
 		}
 		r = Record{OperationID: in.Input.OperationID, RequestHash: historyRequestHash(in.Input), Kind: runtimeHistoryKind, State: "running", Stage: "approved", MaintenanceEpoch: in.Epoch, RuntimeHistory: &runtimeHistoryIntent{Input: in.Input, Plan: p}}
+		if err = validRuntimeHistory(r); err != nil {
+			return history.RuntimeStatus{}, err
+		}
 		if err = s.Journal.Put(r); err != nil {
 			return history.RuntimeStatus{}, err
 		}
@@ -448,7 +479,12 @@ func (s *Server) executeRuntimeHistory(ctx context.Context, in history.RuntimeRe
 	for _, target := range r.RuntimeHistory.Plan.Preview.Targets {
 		removed[target] = true
 	}
-	_, pinned, deps, err := s.Nginx.historyReferences(records, removed)
+	var pinned, deps map[string]bool
+	if in.Input.Filter.Kind == "agent_program" {
+		_, pinned, _, err = s.Nginx.agentProgramHistory(ctx, in.Input.Filter.MaintenanceID, records)
+	} else {
+		_, pinned, deps, err = s.Nginx.historyReferences(records, removed)
+	}
 	if err == nil {
 		for _, target := range r.RuntimeHistory.Plan.Preview.Targets {
 			if pinned[target] || deps[target] {

@@ -60,6 +60,11 @@ func (s *Service) Preview(ctx context.Context, p auth.Principal, f Filter) (Prev
 			return Preview{}, err
 		}
 	}
+	if f.BackupKeep != 0 {
+		if err := p.Require("backup.export"); err != nil {
+			return Preview{}, err
+		}
+	}
 	done, err := s.enter()
 	if err != nil {
 		return Preview{}, err
@@ -150,6 +155,10 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key 
 			for _, scope := range out.Scopes {
 				if scope.Kind == "migration" {
 					e = p.Require("backup.restore", "backup.secrets")
+				} else if scope.Kind == "backup" {
+					e = p.Require("backup.export")
+				}
+				if e != nil {
 					break
 				}
 			}
@@ -168,6 +177,11 @@ func (s *Service) Execute(ctx context.Context, p auth.Principal, requestID, key 
 	}
 	if g.Filter.MigrationKeep != 0 {
 		if err := p.Require("backup.restore", "backup.secrets"); err != nil {
+			return Result{}, err
+		}
+	}
+	if g.Filter.BackupKeep != 0 {
+		if err := p.Require("backup.export"); err != nil {
 			return Result{}, err
 		}
 	}
@@ -225,6 +239,8 @@ func prune(ctx context.Context, tx *sql.Tx, item Item, now int64) error {
 		query = "UPDATE migration_plans SET pruned_at=?,payload=zeroblob(0),state=CASE WHEN state='planned' THEN 'failed' ELSE state END,last_error=CASE WHEN state='planned' THEN '计划已过期，历史材料已清理' ELSE last_error END WHERE id=? AND pruned_at=0"
 	case "maintenance":
 		query = "UPDATE maintenance_sessions SET archived_at=? WHERE task_id=? AND archived_at=0 AND phase IN('released','failed')"
+	case "backup":
+		query = "UPDATE backup_records SET archived_at=? WHERE task_id=? AND archived_at=0 AND deleted_at IS NOT NULL AND delete_started=0"
 	default:
 		return errors.New("invalid history material kind")
 	}

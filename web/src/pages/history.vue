@@ -47,6 +47,7 @@ const filter = reactive({
   order_keep: 10,
   migration_keep: 0,
   maintenance_keep: 20,
+  backup_keep: 0,
 });
 const preview = ref<HistoryPreview | null>(null);
 const result = ref<HistoryResult | null>(null);
@@ -58,6 +59,7 @@ const names: Record<string, string> = {
   order: "ACME 订单",
   migration: "迁移计划载荷",
   maintenance: "维护会话",
+  backup: "已删除备份历史",
 };
 function bytes(value: number) {
   return `${(value / 1024).toFixed(1)} KiB`;
@@ -137,7 +139,7 @@ async function execute() {
       <div class="page-stack">
         <NAlert type="info" :bordered="false">
           仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。迁移材料仅在依赖、安装、维护与自动迁入均结束后可清理，计划摘要及原操作回执保留。
-          已结束且相关任务均已完成的维护会话可归档，归档后保留原查询及回执。修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
+          已结束且相关任务均已完成的维护会话，以及文件已清理且维护已结束的备份历史可归档，归档后保留原查询及回执。修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
         </NAlert>
         <section class="surface">
           <div class="grid-2">
@@ -200,6 +202,16 @@ async function execute() {
                 :disabled="busy || !!pending"
               />
             </NFormItem>
+            <NFormItem label="保留近期备份记录数（0 不归档，启用时至少 2 份）">
+              <NInputNumber
+                v-model:value="filter.backup_keep"
+                :min="0"
+                :max="128"
+                :precision="0"
+                :clearable="false"
+                :disabled="busy || !!pending"
+              />
+            </NFormItem>
           </div>
           <NButton :loading="busy" :disabled="!!pending" @click="inspect"
             >预览维护范围</NButton
@@ -218,7 +230,7 @@ async function execute() {
                   >执行本批维护</NButton
                 >
               </template>
-              确认处理本批 {{ total }} 项记录？维护会话归档后保留查询，其余材料清理后无法再加载。
+              确认处理本批 {{ total }} 项记录？维护会话与备份历史归档后保留查询，其余材料清理后无法再加载。
             </NPopconfirm>
           </div>
           <NDataTable

@@ -15,8 +15,19 @@ type RuntimeFilter struct {
 }
 
 func (f RuntimeFilter) Validate() error {
-	if f.Kind != "publication" && f.Kind != "certificate" || f.Before < 1 || f.Before > time.Now().Unix() || f.Keep < 2 || f.Keep > 32 {
-		return fault.Invalid("运行材料须选择发布或证书类别、过去的截止时间及 2–32 份保留数量")
+	if err := f.ValidateStored(); err != nil {
+		return err
+	}
+	if f.Before > time.Now().Unix() {
+		return fault.Invalid("运行材料清理须选择过去的截止时间")
+	}
+	return nil
+}
+
+// Durable approvals retain their original cutoff if the system clock moves.
+func (f RuntimeFilter) ValidateStored() error {
+	if f.Kind != "publication" && f.Kind != "certificate" && f.Kind != "agent_program" || f.Before < 1 || f.Keep < 2 || f.Keep > 32 || f.Kind == "agent_program" && f.Keep > 8 {
+		return fault.Invalid("运行材料须选择发布、证书或 Agent 程序、过去的截止时间及保留数量；发布和证书保留 2–32 份，Agent 程序保留 2–8 份")
 	}
 	return nil
 }
