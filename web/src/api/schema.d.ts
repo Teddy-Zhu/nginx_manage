@@ -2543,7 +2543,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 返回最近 16 条 RuntimeHistoryStatus。root 清理中断须按原操作续办，记录不删除。 */
+        /** @description 返回最近 16 条未归档 RuntimeHistoryStatus。运行维护中断须按原操作续办；归档回执不删除，Agent 原 UUID 查询和重复请求结果保留。 */
         get: operations["listRuntimeHistory"];
         put?: never;
         post?: never;
@@ -2562,7 +2562,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目，发布/证书最多 16 MiB，Agent 程序最多 192 MiB；保留当前、回滚及恢复引用。 */
+        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目标、512 个条目，Agent 程序最多 192 MiB，其余最多 16 MiB；保留当前、回滚及恢复引用。root_receipt 仅归档已完成清理及前后发布目录均已退役的普通 Nginx 回执，预检私有归档配额。 */
         post: operations["previewRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -2579,7 +2579,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有且无当前或未结束事务引用的发布树、证书副本或旧 Agent 程序；Agent 程序额外要求 components.manage。不清理 root 操作记录及灾备材料。 */
+        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项处理，中断按原参数与标识续办，阻止维护释放及新组件操作。发布树、证书副本及旧 Agent 程序仅在明确拥有且无当前或未结束事务引用时删除；Agent 程序额外要求 components.manage。root_receipt 原子归档完整回执，保留原 UUID 查询及重放屏障，不删除回执、灾备材料或权威检查点。 */
         post: operations["executeRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -3014,11 +3014,11 @@ export interface components {
     schemas: {
         RuntimeHistoryFilter: {
             maintenance_id: string;
-            /** @description publication、certificate 或 agent_program；Agent 程序额外要求 components.manage */
+            /** @description publication、certificate、agent_program 或 root_receipt；Agent 程序额外要求 components.manage；root_receipt 为完整回执归档 */
             kind: string;
             /** Format: int64 */
             before: number;
-            /** @description 至少保留数量；agent_program 上限为 8，其余为 32 */
+            /** @description 至少保留数量；agent_program 上限为 8，其余为 32；root_receipt 仅统计可退役且未归档回执 */
             keep: number;
         };
         RuntimeHistoryExecuteInput: {

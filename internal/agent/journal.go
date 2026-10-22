@@ -11,6 +11,7 @@ import (
 
 	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/logs"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/remotelisten"
 	"nginxpanel/internal/secure"
 )
@@ -83,13 +84,17 @@ type Journal struct {
 	mu  sync.Mutex
 }
 
+const journalLiveEntriesMax = 2048
+const journalMaintenanceEntriesMax = journalLiveEntriesMax + 2
+
 func (j *Journal) Get(id string) (Record, error) {
 	if !validID(id) {
 		return Record{}, errors.New("invalid operation ID")
 	}
 	b, err := os.ReadFile(filepath.Join(j.Dir, id+".json"))
 	if os.IsNotExist(err) {
-		return j.archivedMaintenance(id)
+		r, _, archiveErr := j.archivedOperation(id)
+		return r, archiveErr
 	}
 	if err != nil {
 		return Record{}, err
@@ -104,12 +109,12 @@ func (j *Journal) Put(r Record) error {
 	if !validID(r.OperationID) {
 		return errors.New("invalid operation ID")
 	}
-	prior, archiveErr := j.archivedMaintenance(r.OperationID)
+	prior, archivePath, archiveErr := j.archivedOperation(r.OperationID)
 	if archiveErr == nil {
-		if !releasedMaintenance(r) || r.RequestHash != prior.RequestHash {
-			return errors.New("archived maintenance operation ID cannot be reused")
+		if !sameJournalReceipt(r, prior) {
+			return errors.New("archived operation ID cannot be reused or changed")
 		}
-		return syncMaintenanceArchive(j.Dir, filepath.Dir(j.maintenanceArchivePath(r.OperationID)))
+		return syncMaintenanceArchive(j.Dir, filepath.Dir(archivePath))
 	}
 	if !os.IsNotExist(archiveErr) {
 		return archiveErr
@@ -121,9 +126,18 @@ func (j *Journal) Put(r Record) error {
 	if err != nil {
 		return err
 	}
-	if liveJournalEntries(entries) >= 2048 {
+	if liveJournalEntries(entries) >= journalLiveEntriesMax {
 		if _, err := os.Stat(filepath.Join(j.Dir, r.OperationID+".json")); err != nil {
-			return errors.New("agent journal capacity reached; local maintenance required")
+			if !os.IsNotExist(err) {
+				return err
+			}
+			// Reserve a lease and its archive intent so maintenance can still
+			// start after normal operations have filled the live directory.
+			lease := r.Kind == "maintenance.lock" && r.State == "running" && r.Stage == "closing" && validID(r.MaintenanceEpoch) && r.RequestHash == maintenanceHash(maintenance.RootRequest{OperationID: r.OperationID})
+			archive := r.RuntimeHistory != nil && r.RuntimeHistory.Input.Filter.Kind == "root_receipt" && r.State == "running" && validRuntimeHistory(r) == nil
+			if liveJournalEntries(entries) >= journalMaintenanceEntriesMax || !lease && !archive {
+				return errors.New("agent journal capacity reached; archive retired root receipts in history maintenance")
+			}
 		}
 	}
 	r.UpdatedAt = time.Now().Unix()
@@ -167,7 +181,7 @@ func (j *Journal) Put(r Record) error {
 func liveJournalEntries(entries []os.DirEntry) int {
 	count := len(entries)
 	for _, entry := range entries {
-		if entry.Name() == maintenanceArchiveDir && entry.IsDir() {
+		if (entry.Name() == maintenanceArchiveDir || entry.Name() == journalArchiveDir) && entry.IsDir() {
 			count--
 		}
 	}

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/maintenance"
+	"nginxpanel/internal/secure"
 )
 
 const maintenanceArchiveDir = "maintenance-archive"
@@ -55,6 +57,14 @@ func (j *Journal) archivedMaintenance(id string) (Record, error) {
 }
 
 func readMaintenanceReceipt(path, id string) (Record, error) {
+	r, err := readPrivateJournalReceipt(path, id, 8192)
+	if err == nil && !releasedMaintenance(r) {
+		err = errors.New("invalid maintenance archive receipt")
+	}
+	return r, err
+}
+
+func readPrivateJournalReceipt(path, id string, limit int64) (Record, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return Record{}, err
@@ -65,16 +75,25 @@ func readMaintenanceReceipt(path, id string) (Record, error) {
 		return Record{}, err
 	}
 	stat, ok := st.Sys().(*syscall.Stat_t)
-	if !ok || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 || stat.Uid != uint32(os.Geteuid()) || stat.Nlink != 1 || st.Size() > 8192 {
-		return Record{}, errors.New("untrusted maintenance archive receipt")
+	if !ok || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 || stat.Uid != uint32(os.Geteuid()) || stat.Nlink != 1 || st.Size() <= 0 || st.Size() > limit {
+		return Record{}, errors.New("untrusted private journal receipt")
 	}
-	raw, err := io.ReadAll(io.LimitReader(f, 8193))
+	raw, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
 		return Record{}, err
 	}
+	if int64(len(raw)) != st.Size() || int64(len(raw)) > limit || !secure.RootFileUnchanged(f, st) {
+		return Record{}, errors.New("private journal receipt changed while reading")
+	}
+	return decodePrivateJournalReceipt(raw, id)
+}
+
+func decodePrivateJournalReceipt(raw []byte, id string) (Record, error) {
 	var r Record
-	if len(raw) > 8192 || json.Unmarshal(raw, &r) != nil || r.OperationID != id || r.UpdatedAt <= 0 || !releasedMaintenance(r) {
-		return Record{}, errors.New("invalid maintenance archive receipt")
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if d.Decode(&r) != nil || d.Decode(new(any)) != io.EOF || r.OperationID != id || r.UpdatedAt <= 0 {
+		return Record{}, errors.New("invalid private journal receipt")
 	}
 	return r, nil
 }

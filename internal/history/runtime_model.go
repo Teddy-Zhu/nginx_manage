@@ -26,8 +26,8 @@ func (f RuntimeFilter) Validate() error {
 
 // Durable approvals retain their original cutoff if the system clock moves.
 func (f RuntimeFilter) ValidateStored() error {
-	if f.Kind != "publication" && f.Kind != "certificate" && f.Kind != "agent_program" || f.Before < 1 || f.Keep < 2 || f.Keep > 32 || f.Kind == "agent_program" && f.Keep > 8 {
-		return fault.Invalid("运行材料须选择发布、证书或 Agent 程序、过去的截止时间及保留数量；发布和证书保留 2–32 份，Agent 程序保留 2–8 份")
+	if f.Kind != "publication" && f.Kind != "certificate" && f.Kind != "agent_program" && f.Kind != "root_receipt" || f.Before < 1 || f.Keep < 2 || f.Keep > 32 || f.Kind == "agent_program" && f.Keep > 8 {
+		return fault.Invalid("运行材料须选择发布、证书、Agent 程序或 root 回执、过去的截止时间及保留数量；Agent 程序保留 2–8 份，其余保留 2–32 份")
 	}
 	return nil
 }

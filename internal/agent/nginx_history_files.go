@@ -35,6 +35,9 @@ func historyFileLimit(kind string) int64 {
 	if kind == "agent_program" {
 		return panelruntime.BinaryLimit
 	}
+	if kind == "root_receipt" {
+		return journalArchiveFileLimit
+	}
 	return 512 << 10
 }
 
@@ -259,6 +262,9 @@ func (f runtimeHistoryFiles) inventoryHistory(ctx context.Context, target string
 // Validate the entire remaining inventory before unlinking. Parent directory
 // timestamps change during deletion; its original device/inode/mode must not.
 func (n *Nginx) removeHistory(ctx context.Context, p runtimeHistoryPlan) error {
+	if p.Preview.Filter.Kind == "root_receipt" {
+		return errors.New("root 回执必须归档保留，不能删除")
+	}
 	f := n.historyFiles(p.Preview.Filter.Kind)
 	expected := map[string]runtimeHistoryEntry{}
 	for _, e := range p.Entries {
