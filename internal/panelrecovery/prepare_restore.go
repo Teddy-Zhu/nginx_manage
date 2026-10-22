@@ -35,9 +35,15 @@ func ReceiptFor(data, id string) (Receipt, error) {
 		return Receipt{}, err
 	}
 	if err = checkPrivateDir(filepath.Join(store, id)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return RetirementReceipt(data, id)
+		}
 		return Receipt{}, err
 	}
 	r, err := readReceipt(store, id)
+	if errors.Is(err, os.ErrNotExist) {
+		return RetirementReceipt(data, id)
+	}
 	if err == nil {
 		err = r.Validate(data, id)
 	}
@@ -136,6 +142,9 @@ func PrepareApprovedRestore(ctx context.Context, r Receipt, operation string) (P
 		return out, err
 	}
 	data, snapshot := r.Manifest.DataDir, r.Manifest.OperationID
+	if err := CheckRetirement(data, snapshot); err != nil {
+		return out, err
+	}
 	dir, err := restoreDirectory(r, operation)
 	if err != nil {
 		return out, err

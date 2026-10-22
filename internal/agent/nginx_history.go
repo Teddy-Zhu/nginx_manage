@@ -18,12 +18,14 @@ import (
 	"nginxpanel/internal/history"
 	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/secure"
 )
 
 type runtimeHistoryPlan struct {
-	Preview history.RuntimePreview `json:"preview"`
-	Entries []runtimeHistoryEntry  `json:"entries"`
+	Preview   history.RuntimePreview  `json:"preview"`
+	Entries   []runtimeHistoryEntry   `json:"entries"`
+	Snapshots []snapshotHistoryTarget `json:"snapshots,omitempty"`
 }
 type runtimeHistoryIntent struct {
 	Input history.RuntimeExecuteInput `json:"input"`
@@ -39,6 +41,13 @@ func historyRequestHash(in history.RuntimeExecuteInput) string {
 }
 func historyPlanHash(p runtimeHistoryPlan) string {
 	p.Preview.SHA256 = ""
+	// Inventory timestamps and bytes are frozen; the time the cleanup plan
+	// was assembled does not change a user's approval of that same inventory.
+	p.Snapshots = append([]snapshotHistoryTarget(nil), p.Snapshots...)
+	for i := range p.Snapshots {
+		p.Snapshots[i].Cleanup.CreatedAt = 0
+		p.Snapshots[i].Cleanup.SHA256 = ""
+	}
 	raw, _ := json.Marshal(p)
 	return secure.Hash(raw)
 }
@@ -52,6 +61,8 @@ func historyActiveValid(kind, active string) bool {
 		return agentProgramLinkValid(active)
 	case "root_receipt":
 		return active == "journal"
+	case "recovery_snapshot":
+		return active == "recovery"
 	default:
 		return active == "bootstrap" || validID(active)
 	}
@@ -88,6 +99,9 @@ func validRuntimeHistory(r Record) error {
 			if _, ok := journalReceiptID(target); !ok {
 				return errors.New("root 回执归档目标无效")
 			}
+		}
+		if f.Kind == "recovery_snapshot" && (len(parts) != 3 || parts[0] != "agent" || parts[1] != "panel-recovery" || !validID(parts[2])) {
+			return errors.New("快照退役目标无效")
 		}
 		targets[target] = true
 	}
@@ -131,7 +145,7 @@ func validRuntimeHistory(r Record) error {
 	if bytes != p.Bytes {
 		return errors.New("运行清理大小不一致")
 	}
-	return nil
+	return validSnapshotHistoryPlan(i.Plan)
 }
 
 // The held maintenance lock and Nginx mutex fence all normal admission; root
@@ -141,13 +155,13 @@ func (s *Server) historyLock(ctx context.Context, id, epoch, kind string) (func(
 		return nil, nil, fault.Unavailable("运行材料清理需要已接入的生产 Nginx Agent")
 	}
 	programUnlock := func() {}
-	if kind == "agent_program" || kind == "root_receipt" {
+	if kind == "agent_program" || kind == "root_receipt" || kind == "recovery_snapshot" {
 		_, release, err := agentUpgradeLocks(ctx, s.DataDir)
 		if err != nil {
 			return nil, nil, err
 		}
 		programUnlock = release
-		if kind == "root_receipt" {
+		if kind == "root_receipt" || kind == "recovery_snapshot" {
 			// Owners take their locks before the maintenance gate. Try-lock
 			// every admitted workflow rather than waiting while holding the
 			// installer lock, since image workers acquire these in reverse order.
@@ -214,7 +228,21 @@ func (s *Server) historyLock(ctx context.Context, id, epoch, kind string) (func(
 		unlock()
 		return fail(ErrBusy)
 	}
-	return func() { s.Nginx.mu.Unlock(); unlock(); g.mu.Unlock(); programUnlock() }, records, nil
+	snapshotUnlock := func() {}
+	if kind == "recovery_snapshot" {
+		release, e := panelrecovery.LockCleanup(s.DataDir)
+		if errors.Is(e, os.ErrNotExist) {
+			// An empty store has no capture to race. A future capture still
+			// needs the maintenance admission lock held by this operation.
+		} else if e != nil {
+			s.Nginx.mu.Unlock()
+			unlock()
+			return fail(e)
+		} else {
+			snapshotUnlock = release
+		}
+	}
+	return func() { snapshotUnlock(); s.Nginx.mu.Unlock(); unlock(); g.mu.Unlock(); programUnlock() }, records, nil
 }
 
 type historyCandidate struct {
@@ -282,6 +310,9 @@ func (n *Nginx) historyReferences(records []Record, removed map[string]bool) (st
 }
 
 func (n *Nginx) collectRuntimeHistory(ctx context.Context, f history.RuntimeFilter, records []Record) (runtimeHistoryPlan, error) {
+	if f.Kind == "recovery_snapshot" {
+		return n.collectSnapshotHistory(ctx, f, records)
+	}
 	p := runtimeHistoryPlan{Preview: history.RuntimePreview{Filter: f, Targets: []string{}}, Entries: []runtimeHistoryEntry{}}
 	var active string
 	var pinned, deps map[string]bool
@@ -541,7 +572,7 @@ func (s *Server) executeRuntimeHistory(ctx context.Context, in history.RuntimeRe
 	var pinned, deps map[string]bool
 	if in.Input.Filter.Kind == "agent_program" {
 		_, pinned, _, err = s.Nginx.agentProgramHistory(ctx, in.Input.Filter.MaintenanceID, records)
-	} else if in.Input.Filter.Kind != "root_receipt" {
+	} else if in.Input.Filter.Kind != "root_receipt" && in.Input.Filter.Kind != "recovery_snapshot" {
 		_, pinned, deps, err = s.Nginx.historyReferences(records, removed)
 	}
 	if err == nil {
@@ -562,6 +593,8 @@ func (s *Server) executeRuntimeHistory(ctx context.Context, in history.RuntimeRe
 	if err == nil {
 		if in.Input.Filter.Kind == "root_receipt" {
 			err = s.Nginx.archiveJournalHistory(ctx, r.RuntimeHistory.Plan)
+		} else if in.Input.Filter.Kind == "recovery_snapshot" {
+			err = s.Nginx.removeSnapshotHistory(ctx, r.RuntimeHistory.Plan, records)
 		} else {
 			err = s.Nginx.removeHistory(ctx, r.RuntimeHistory.Plan)
 		}
@@ -624,7 +657,15 @@ func (s *Server) runtimeHistoryHandlers(mux *http.ServeMux) {
 				maintenanceReply(w, nil, fault.Invalid("运行清理请求无效"))
 				return
 			}
-			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			duration := 10 * time.Second
+			if in.Input.Filter.Kind == "recovery_snapshot" {
+				duration = history.SnapshotRequestTimeout
+				if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(duration + 5*time.Second)); err != nil {
+					maintenanceReply(w, nil, fault.Unavailable("快照维护连接无法设置响应时限"))
+					return
+				}
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), duration)
 			defer cancel()
 			if action == "preview" {
 				out, err := s.previewRuntimeHistory(ctx, in)
@@ -669,13 +710,23 @@ func (s *Server) runtimeHistoryHandlers(mux *http.ServeMux) {
 }
 func (c *Client) PreviewRuntimeHistory(ctx context.Context, in history.RuntimeRequest) (history.RuntimePreview, error) {
 	var out history.RuntimePreview
-	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/history/runtime/preview", in, &out)
+	err := c.runtimeHistoryRequest(ctx, "/v1/history/runtime/preview", in, &out)
 	return out, err
 }
 func (c *Client) ExecuteRuntimeHistory(ctx context.Context, in history.RuntimeRequest) (history.RuntimeStatus, error) {
 	var out history.RuntimeStatus
-	err := c.envelopeRequest(ctx, http.MethodPost, "/v1/history/runtime/execute", in, &out)
+	err := c.runtimeHistoryRequest(ctx, "/v1/history/runtime/execute", in, &out)
 	return out, err
+}
+
+func (c *Client) runtimeHistoryRequest(ctx context.Context, path string, in history.RuntimeRequest, out any) error {
+	client := c
+	if in.Input.Filter.Kind == "recovery_snapshot" {
+		transport := *c.http
+		transport.Timeout = history.SnapshotRequestTimeout + 5*time.Second
+		client = &Client{http: &transport}
+	}
+	return client.envelopeRequest(ctx, http.MethodPost, path, in, out)
 }
 func (c *Client) RuntimeHistory(ctx context.Context) ([]history.RuntimeStatus, error) {
 	var out []history.RuntimeStatus

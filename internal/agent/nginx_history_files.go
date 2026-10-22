@@ -14,6 +14,7 @@ import (
 
 	"nginxpanel/internal/certificates"
 	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 )
@@ -32,6 +33,9 @@ type runtimeHistoryFiles struct {
 }
 
 func historyFileLimit(kind string) int64 {
+	if kind == "recovery_snapshot" {
+		return 2 * panelrecovery.DatabaseMax
+	}
 	if kind == "agent_program" {
 		return panelruntime.BinaryLimit
 	}
@@ -42,6 +46,9 @@ func historyFileLimit(kind string) int64 {
 }
 
 func historyBytesLimit(kind string) int64 {
+	if kind == "recovery_snapshot" {
+		return 4 * panelrecovery.StoreMax
+	}
 	if kind == "agent_program" {
 		return panelruntime.BinaryLimit
 	}
@@ -262,8 +269,8 @@ func (f runtimeHistoryFiles) inventoryHistory(ctx context.Context, target string
 // Validate the entire remaining inventory before unlinking. Parent directory
 // timestamps change during deletion; its original device/inode/mode must not.
 func (n *Nginx) removeHistory(ctx context.Context, p runtimeHistoryPlan) error {
-	if p.Preview.Filter.Kind == "root_receipt" {
-		return errors.New("root 回执必须归档保留，不能删除")
+	if p.Preview.Filter.Kind == "root_receipt" || p.Preview.Filter.Kind == "recovery_snapshot" {
+		return errors.New("回执及快照必须使用原批准的专用维护流程")
 	}
 	f := n.historyFiles(p.Preview.Filter.Kind)
 	expected := map[string]runtimeHistoryEntry{}

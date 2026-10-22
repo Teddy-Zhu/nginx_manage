@@ -2562,7 +2562,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目标、512 个条目，Agent 程序最多 192 MiB，其余最多 16 MiB；保留当前、回滚及恢复引用。root_receipt 归档成功运行维护、前后发布目录均已退役的普通 Nginx 回执，以及已释放原维护的面板/Agent/镜像更新、面板进程控制和材料已清理的版本选择/文件恢复；面板更新须确认恢复材料实际已清理，独立或协调 Agent 更新须先回收目标程序。预检私有归档配额，保留当前程序的所有权回执。 */
+        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话。发布、证书及回执每批最多 8 个目标、512 个条目、16 MiB；Agent 程序最多 192 MiB。recovery_snapshot 每批一份、128 个条目、8 GiB，须过期且原维护已释放，额外要求 backup.restore；更新与灾备仍引用的快照继续保留。root_receipt 归档成功运行维护、前后发布目录均已退役的普通 Nginx 回执，以及已释放原维护的面板/Agent/镜像更新、面板进程控制和材料已清理的版本选择/文件恢复；面板更新须确认恢复材料实际已清理，独立或协调 Agent 更新须先回收目标程序。预检私有归档配额，保留当前程序的所有权回执。 */
         post: operations["previewRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -2579,7 +2579,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项处理，中断按原参数与标识续办，阻止维护释放及新组件操作。发布树、证书副本及旧 Agent 程序仅在明确拥有且无当前或未结束事务引用时删除；Agent 程序额外要求 components.manage。root_receipt 原子归档完整回执，保留原 UUID 查询及重放屏障，不删除回执、灾备材料或权威检查点。 */
+        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项处理，中断按原参数与标识续办，阻止维护释放及新组件操作。发布树、证书副本及旧 Agent 程序仅在明确拥有且无当前或未结束事务引用时删除；Agent 程序额外要求 components.manage。root_receipt 原子归档完整回执，保留原 UUID 查询及重放屏障。recovery_snapshot 额外要求 backup.restore；持有原工作流、安装及快照锁，持久保存退役意图后按原批准逐项回收过期且无引用的恢复材料。退役意图阻止原标识再次捕获或恢复，不作为回收成功证明。 */
         post: operations["executeRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -3014,11 +3014,11 @@ export interface components {
     schemas: {
         RuntimeHistoryFilter: {
             maintenance_id: string;
-            /** @description publication、certificate、agent_program 或 root_receipt；Agent 程序额外要求 components.manage；root_receipt 为完整回执归档 */
+            /** @description publication、certificate、agent_program、root_receipt 或 recovery_snapshot；Agent 程序额外要求 components.manage，快照额外要求 backup.restore；回执完整归档，快照须过期且原维护已释放 */
             kind: string;
             /** Format: int64 */
             before: number;
-            /** @description 至少保留数量；agent_program 上限为 8，其余为 32；root_receipt 仅统计可退役且未归档回执 */
+            /** @description 至少保留数量；agent_program 和 recovery_snapshot 上限为 8，其余为 32；root_receipt 仅统计可退役且未归档回执；快照按全部本机快照保留最新部分 */
             keep: number;
         };
         RuntimeHistoryExecuteInput: {

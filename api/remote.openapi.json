@@ -6494,7 +6494,7 @@
             "$ref": "./openapi.yaml#/components/responses/JSON"
           }
         },
-        "description": "返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目、16 MiB；保留当前、回滚及恢复引用。",
+        "description": "返回 RuntimeHistoryPreview。要求 held 宿主机维护会话。发布、证书及回执每批最多 8 个目标、512 个条目、16 MiB；Agent 程序最多 192 MiB。recovery_snapshot 每批一份、128 个条目、8 GiB，须过期且原维护已释放，额外要求 backup.restore；更新与灾备仍引用的快照继续保留。root_receipt 归档成功运行维护、前后发布目录均已退役的普通 Nginx 回执，以及已释放原维护的面板/Agent/镜像更新、面板进程控制和材料已清理的版本选择/文件恢复；面板更新须确认恢复材料实际已清理，独立或协调 Agent 更新须先回收目标程序。预检私有归档配额，保留当前程序的所有权回执。",
         "x-local-operation": "previewRuntimeHistory",
         "x-forward-path": "/history/runtime/preview",
         "x-response-kind": "json",
@@ -6545,7 +6545,7 @@
             "$ref": "./openapi.yaml#/components/responses/JSON"
           }
         },
-        "description": "返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有的发布树或未引用证书副本，不清理 root 操作记录及灾备材料。",
+        "description": "返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项处理，中断按原参数与标识续办，阻止维护释放及新组件操作。发布树、证书副本及旧 Agent 程序仅在明确拥有且无当前或未结束事务引用时删除；Agent 程序额外要求 components.manage。root_receipt 原子归档完整回执，保留原 UUID 查询及重放屏障。recovery_snapshot 额外要求 backup.restore；持有原工作流、安装及快照锁，持久保存退役意图后按原批准逐项回收过期且无引用的恢复材料。退役意图阻止原标识再次捕获或恢复，不作为回收成功证明。",
         "x-local-operation": "executeRuntimeHistory",
         "x-forward-path": "/history/runtime/execute",
         "x-response-kind": "json",

@@ -48,12 +48,14 @@ const options = [
   { label: "证书运行副本", value: "certificate" },
   { label: "旧 Agent 程序", value: "agent_program" },
   { label: "已退役操作回执", value: "root_receipt" },
+  { label: "过期恢复快照", value: "recovery_snapshot" },
 ];
 const labels: Record<string, string> = {
   publication: "发布目录",
   certificate: "证书副本",
   agent_program: "Agent 程序",
   root_receipt: "操作回执",
+  recovery_snapshot: "恢复快照",
 };
 const states: Record<string, string> = {
   running: "处理中",
@@ -103,7 +105,7 @@ watch([kind, keep, before], () => {
   preview.value = null;
 });
 watch(kind, (value) => {
-  if (value === "agent_program" && keep.value !== null && keep.value > 8)
+  if ((value === "agent_program" || value === "recovery_snapshot") && keep.value !== null && keep.value > 8)
     keep.value = 2;
 });
 async function refresh() {
@@ -179,8 +181,8 @@ onMounted(load);
 <template>
   <div class="page-stack">
     <NAlert type="info" :bordered="false">
-      回收不再引用的发布目录、证书副本或旧 Agent 程序，或归档已完成维护及材料已退役的发布回执。当前运行与恢复引用受到保护，原回执及查询保留。
-      Agent 程序每批最多 192 MiB，其余最多 16 MiB；每批最多 8 个目标、512 个条目。
+      回收不再引用的发布目录、证书副本、旧 Agent 程序，或归档已退役的操作回执。恢复快照须已过期且原维护已结束，更新与灾备仍引用的快照继续保留。
+      Agent 程序每批最多 192 MiB；快照每批一份、128 个条目、8 GiB；其余每批最多 16 MiB、8 个目标、512 个条目。
       操作中断后须按原清单续办，完成前不能退出维护。
     </NAlert>
     <div class="toolbar">
@@ -210,14 +212,16 @@ onMounted(load);
               ? '每张证书至少保留副本数'
               : kind === 'agent_program'
                 ? '至少保留 Agent 程序数'
-                : kind === 'root_receipt'
-                  ? '至少保留未归档回执数'
-                  : '至少保留发布目录数'
+                : kind === 'recovery_snapshot'
+                  ? '至少保留快照数'
+                  : kind === 'root_receipt'
+                    ? '至少保留未归档回执数'
+                    : '至少保留发布目录数'
           "
           ><NInputNumber
             v-model:value="keep"
             :min="2"
-            :max="kind === 'agent_program' ? 8 : 32"
+            :max="kind === 'agent_program' || kind === 'recovery_snapshot' ? 8 : 32"
             :precision="0"
             :clearable="false"
             :disabled="busy || !!savedPending"
@@ -259,7 +263,9 @@ onMounted(load);
           {{
             preview.filter.kind === "root_receipt"
               ? "确认归档本批操作回执？原回执及原标识查询继续保留。"
-              : "确认删除本批运行文件？运行副本不可撤销，数据库历史材料仍按独立保留策略管理。"
+              : preview.filter.kind === "recovery_snapshot"
+                ? "确认回收本批过期快照及恢复副本？退役后不能再用于恢复，操作中断须按原清单续办。"
+                : "确认删除本批运行文件？运行副本不可撤销，数据库历史材料仍按独立保留策略管理。"
           }}
         </NPopconfirm>
       </div>

@@ -18,6 +18,11 @@ import (
 
 const cleanupEntryMax = 128
 
+// AllRestores is reserved for explicit retirement of an expired snapshot after
+// its original maintenance grant has been released. An update's own cleanup
+// still validates against its single original restore UUID.
+const AllRestores = "*"
+
 // CleanupPlan is an immutable inventory, published by the owning root update
 // before any unlink. It names only one approved snapshot and its own restore.
 type CleanupPlan struct {
@@ -82,7 +87,7 @@ func cleanupPath(name, restore string) (directory bool, limit int64, err error) 
 	if len(parts) == 1 {
 		return true, 0, nil
 	}
-	if parts[1] != restore {
+	if restore == AllRestores && !idValue.MatchString(parts[1]) || restore != AllRestores && parts[1] != restore {
 		return false, 0, errors.New("清理清单包含其他恢复操作")
 	}
 	if len(parts) == 2 {
@@ -122,7 +127,7 @@ func (p CleanupPlan) Validate(r Receipt, restore string) error {
 		return err
 	}
 	raw, _ := json.Marshal(r)
-	if restore != "" && !idValue.MatchString(restore) || p.SnapshotID != r.Manifest.OperationID || p.RestoreID != restore || p.ReceiptSHA256 != secure.Hash(raw) || p.CreatedAt <= 0 || p.CreatedAt > time.Now().Unix()+300 || len(p.Entries) == 0 || len(p.Entries) > cleanupEntryMax || p.SHA256 != cleanupHash(p) {
+	if restore != "" && restore != AllRestores && !idValue.MatchString(restore) || p.SnapshotID != r.Manifest.OperationID || p.RestoreID != restore || p.ReceiptSHA256 != secure.Hash(raw) || p.CreatedAt <= 0 || p.CreatedAt > time.Now().Unix()+300 || len(p.Entries) == 0 || len(p.Entries) > cleanupEntryMax || p.SHA256 != cleanupHash(p) {
 		return errors.New("清理批准与原快照或恢复操作不一致")
 	}
 	var total int64
@@ -232,7 +237,8 @@ func MaterialPresent(data, id string) (bool, error) {
 }
 
 // PrepareCleanup authenticates the approved archive and inventories root-only
-// recovery material. Caller holds both the owning update lock and LockCleanup.
+// recovery material. Caller holds the owning transaction locks and LockCleanup;
+// AllRestores additionally requires explicit expired-snapshot retirement.
 func PrepareCleanup(ctx context.Context, r Receipt, restore string) (CleanupPlan, error) {
 	p := CleanupPlan{SnapshotID: r.Manifest.OperationID, RestoreID: restore, CreatedAt: time.Now().Unix()}
 	if os.Geteuid() != 0 {
@@ -310,7 +316,7 @@ func PrepareCleanup(ctx context.Context, r Receipt, restore string) (CleanupPlan
 
 // RemoveApproved is replayable only with the original durable inventory. Every
 // surviving entry must match it, and directories are removed without recursion.
-// Caller holds the owning update lock and LockCleanup throughout deletion.
+// Caller holds the owning transaction locks and LockCleanup throughout deletion.
 func RemoveApproved(ctx context.Context, r Receipt, p CleanupPlan) error {
 	if os.Geteuid() != 0 {
 		return errors.New("恢复材料清理需要 root")

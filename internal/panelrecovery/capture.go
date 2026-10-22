@@ -147,6 +147,9 @@ func Capture(ctx context.Context, in Input) (out Result, retErr error) {
 		return out, err
 	}
 	defer unlock()
+	if err = CheckRetirement(in.DataDir, in.OperationID); err != nil {
+		return out, err
+	}
 	if _, err = os.Lstat(filepath.Join(store, in.OperationID)); err == nil {
 		out, err = Inspect(ctx, in.DataDir, in.OperationID)
 		if err == nil {

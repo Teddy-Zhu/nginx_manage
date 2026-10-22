@@ -7811,9 +7811,9 @@ type RuntimeHistoryExecuteInput struct {
 // RuntimeHistoryFilter defines model for RuntimeHistoryFilter.
 type RuntimeHistoryFilter struct {
 	Before        int64  `json:"before"`
-	// Keep 至少保留数量；agent_program 上限为 8，其余为 32；root_receipt 仅统计可退役且未归档回执
+	// Keep 至少保留数量；agent_program 和 recovery_snapshot 上限为 8，其余为 32；root_receipt 仅统计可退役且未归档回执；快照按全部本机快照保留最新部分
 	Keep          int    `json:"keep"`
-	// Kind publication、certificate、agent_program 或 root_receipt；Agent 程序额外要求 components.manage；root_receipt 为完整回执归档
+	// Kind publication、certificate、agent_program、root_receipt 或 recovery_snapshot；Agent 程序额外要求 components.manage，快照额外要求 backup.restore；回执完整归档，快照须过期且原维护已释放
 	Kind          string `json:"kind"`
 	MaintenanceId string `json:"maintenance_id"`
 }
