@@ -286,7 +286,7 @@ func validPanelUpdate(r Record) error {
 
 func panelUpdateRecord(data, id string) (Record, error) {
 	var r Record
-	raw, err := secure.ReadRootFile(filepath.Join(data, "agent", "operations", id+".json"), 128<<10)
+	raw, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).readOperationBytes(id, 128<<10)
 	if err != nil {
 		return r, err
 	}

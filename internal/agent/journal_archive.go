@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/secure"
 )
 
@@ -34,6 +36,16 @@ func retirableJournalReceipt(r Record) bool {
 			return false
 		}
 		base.MaintenanceEpoch, base.RuntimeHistory = r.MaintenanceEpoch, r.RuntimeHistory
+	case panelUpdateKind:
+		if validPanelUpdate(r) != nil || !panelUpdateTerminal(r) || r.PanelUpdate.Cleanup == nil || r.PanelUpdate.Cleanup.Status.State != "done" {
+			return false
+		}
+		base.MaintenanceEpoch, base.Deadline, base.PanelUpdate = r.MaintenanceEpoch, r.Deadline, r.PanelUpdate
+	case agentUpgradeKind:
+		if validAgentUpgrade(r) != nil || !agentUpgradeTerminal(r) {
+			return false
+		}
+		base.AgentUpgrade = r.AgentUpgrade
 	case "nginx.apply", "nginx.validate":
 		if !historyTerminal(r) || r.AfterDir != r.OperationID || r.BeforeDir != "bootstrap" && !validID(r.BeforeDir) || !validID(r.AfterRevision) || r.BeforeRevision != "" && !validID(r.BeforeRevision) {
 			return false
@@ -95,6 +107,28 @@ func (j *Journal) archivedOperation(id string) (Record, string, error) {
 	return r, j.receiptArchivePath(id), nil
 }
 
+// Typed readers retain their own size and node-binding checks. Archived records
+// have already been checked against their original canonical bytes, so encoding
+// the immutable value returns exactly the original document.
+func (j *Journal) readOperationBytes(id string, limit int64) ([]byte, error) {
+	if !validID(id) {
+		return nil, errors.New("invalid operation ID")
+	}
+	raw, err := secure.ReadRootFile(filepath.Join(j.Dir, id+".json"), limit)
+	if !os.IsNotExist(err) {
+		return raw, err
+	}
+	r, err := j.archivedJournalReceipt(id)
+	if err != nil {
+		return nil, err
+	}
+	raw, err = json.Marshal(r)
+	if err == nil && int64(len(raw)) > limit {
+		err = errors.New("archived operation exceeds its original size limit")
+	}
+	return raw, err
+}
+
 func sameJournalReceipt(a, b Record) bool {
 	a.UpdatedAt, b.UpdatedAt = 0, 0
 	return reflect.DeepEqual(a, b)
@@ -154,6 +188,9 @@ func (n *Nginx) journalReceiptEligible(r Record) (bool, error) {
 	if r.Kind == runtimeHistoryKind {
 		return true, nil
 	}
+	if r.Kind == panelUpdateKind || r.Kind == agentUpgradeKind {
+		return n.updateReceiptEligible(r)
+	}
 	// Both publication identities must already have been retired. The initial
 	// bootstrap and disaster/restore anchors never enter this allowlist.
 	for _, dir := range []string{r.BeforeDir, r.AfterDir} {
@@ -162,6 +199,54 @@ func (n *Nginx) journalReceiptEligible(r Record) (bool, error) {
 			return false, nil
 		}
 		if !os.IsNotExist(err) {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (n *Nginx) updateReceiptEligible(r Record) (bool, error) {
+	var maintenanceID string
+	var target *AgentProgram
+	if r.Kind == panelUpdateKind {
+		i := r.PanelUpdate.Intent
+		if i.Input.Stage.DataDir != n.DataDir {
+			return false, ErrExternalChange
+		}
+		present, err := panelrecovery.MaterialPresent(n.DataDir, i.SnapshotID)
+		if err != nil || present {
+			return false, err
+		}
+		maintenanceID = i.Input.MaintenanceID
+		if i.Agent != nil {
+			target = &i.Agent.Target
+		}
+	} else {
+		i := r.AgentUpgrade.Intent
+		if i.Input.Stage.DataDir != n.DataDir {
+			return false, ErrExternalChange
+		}
+		maintenanceID, target = i.Input.MaintenanceID, &i.Target
+	}
+	grant, err := n.Journal.Get(maintenanceID)
+	if err != nil {
+		return false, err
+	}
+	if !releasedMaintenance(grant) {
+		return false, nil
+	}
+	if target != nil {
+		// These hot receipts are the ownership register used by program
+		// reclamation. Keep them until the target directory is gone, including
+		// after compensation, and never retire the currently selected program.
+		current, err := readAgentLink()
+		if err != nil {
+			return false, err
+		}
+		if current == target.Link {
+			return false, nil
+		}
+		if _, err = os.Lstat(filepath.Join(agentBootstrapRoot, target.Link)); !os.IsNotExist(err) {
 			return false, err
 		}
 	}

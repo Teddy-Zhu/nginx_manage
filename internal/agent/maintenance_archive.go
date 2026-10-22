@@ -95,6 +95,10 @@ func decodePrivateJournalReceipt(raw []byte, id string) (Record, error) {
 	if d.Decode(&r) != nil || d.Decode(new(any)) != io.EOF || r.OperationID != id || r.UpdatedAt <= 0 {
 		return Record{}, errors.New("invalid private journal receipt")
 	}
+	canonical, err := json.Marshal(r)
+	if err != nil || !bytes.Equal(raw, canonical) {
+		return Record{}, errors.New("private journal receipt is not its original canonical document")
+	}
 	return r, nil
 }
 

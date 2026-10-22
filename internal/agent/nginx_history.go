@@ -141,12 +141,29 @@ func (s *Server) historyLock(ctx context.Context, id, epoch, kind string) (func(
 		return nil, nil, fault.Unavailable("运行材料清理需要已接入的生产 Nginx Agent")
 	}
 	programUnlock := func() {}
-	if kind == "agent_program" {
+	if kind == "agent_program" || kind == "root_receipt" {
 		_, release, err := agentUpgradeLocks(ctx, s.DataDir)
 		if err != nil {
 			return nil, nil, err
 		}
 		programUnlock = release
+		if kind == "root_receipt" {
+			// Independent update workers acquire their own locks before the
+			// maintenance gate. Try-lock in the same order to avoid waiting on a
+			// worker that is finishing a terminal save or cleanup.
+			update, err := s.Journal.rootLock(".panel-update.lock")
+			if err != nil {
+				release()
+				return nil, nil, err
+			}
+			service, err := s.Journal.rootLock(".panel-service.lock")
+			if err != nil {
+				update()
+				release()
+				return nil, nil, err
+			}
+			programUnlock = func() { service(); update(); release() }
+		}
 	}
 	g := s.Nginx.maintenance
 	if !g.mu.TryLock() {

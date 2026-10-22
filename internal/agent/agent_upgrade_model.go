@@ -141,7 +141,7 @@ func AgentUpgradeStatus(data, id string) (Record, error) {
 	if _, err := panelruntime.Root(data); err != nil {
 		return r, err
 	}
-	raw, err := secure.ReadRootFile(filepath.Join(data, "agent", "operations", id+".json"), 64<<10)
+	raw, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).readOperationBytes(id, 64<<10)
 	if err != nil {
 		return r, err
 	}
