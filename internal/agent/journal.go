@@ -88,6 +88,9 @@ func (j *Journal) Get(id string) (Record, error) {
 		return Record{}, errors.New("invalid operation ID")
 	}
 	b, err := os.ReadFile(filepath.Join(j.Dir, id+".json"))
+	if os.IsNotExist(err) {
+		return j.archivedMaintenance(id)
+	}
 	if err != nil {
 		return Record{}, err
 	}
@@ -101,6 +104,16 @@ func (j *Journal) Put(r Record) error {
 	if !validID(r.OperationID) {
 		return errors.New("invalid operation ID")
 	}
+	prior, archiveErr := j.archivedMaintenance(r.OperationID)
+	if archiveErr == nil {
+		if !releasedMaintenance(r) || r.RequestHash != prior.RequestHash {
+			return errors.New("archived maintenance operation ID cannot be reused")
+		}
+		return syncMaintenanceArchive(j.Dir, filepath.Dir(j.maintenanceArchivePath(r.OperationID)))
+	}
+	if !os.IsNotExist(archiveErr) {
+		return archiveErr
+	}
 	if err := os.MkdirAll(j.Dir, 0700); err != nil {
 		return err
 	}
@@ -108,7 +121,7 @@ func (j *Journal) Put(r Record) error {
 	if err != nil {
 		return err
 	}
-	if len(entries) >= 2048 {
+	if liveJournalEntries(entries) >= 2048 {
 		if _, err := os.Stat(filepath.Join(j.Dir, r.OperationID+".json")); err != nil {
 			return errors.New("agent journal capacity reached; local maintenance required")
 		}
@@ -142,7 +155,23 @@ func (j *Journal) Put(r Record) error {
 		return err
 	}
 	defer dir.Close()
-	return dir.Sync()
+	if err = dir.Sync(); err != nil {
+		return err
+	}
+	if releasedMaintenance(r) {
+		return j.archiveMaintenanceLocked(r)
+	}
+	return nil
+}
+
+func liveJournalEntries(entries []os.DirEntry) int {
+	count := len(entries)
+	for _, entry := range entries {
+		if entry.Name() == maintenanceArchiveDir && entry.IsDir() {
+			count--
+		}
+	}
+	return count
 }
 
 func validID(id string) bool {

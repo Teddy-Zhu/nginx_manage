@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/secure"
 )
 
@@ -83,8 +84,12 @@ func collect(ctx context.Context, tx *sql.Tx, node string, f Filter, owner auth.
 		{"certificate", certificateCandidates, "SELECT COUNT(*) FROM certificate_versions WHERE pruned_at=0", nil, nil},
 		{"order", orderCandidates, "SELECT COUNT(*) FROM acme_orders WHERE pruned_at=0", []any{f.Before, f.OrderKeep}, nil},
 		{"migration", migrationCandidates, "SELECT COUNT(*) FROM migration_plans WHERE pruned_at=0 AND (principal=? OR ?)", []any{f.Before, f.Before, f.MigrationKeep, owner.ID, owner.Has("auth.manage")}, []any{owner.ID, owner.Has("auth.manage")}},
+		{"maintenance", maintenance.ArchiveCandidatesSQL, "SELECT COUNT(*) FROM maintenance_sessions WHERE archived_at=0", []any{f.Before, f.MaintenanceKeep}, nil},
 	} {
 		if q.kind == "migration" && f.MigrationKeep == 0 {
+			continue
+		}
+		if q.kind == "maintenance" && f.MaintenanceKeep == 0 {
 			continue
 		}
 		args := q.args

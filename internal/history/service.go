@@ -223,6 +223,8 @@ func prune(ctx context.Context, tx *sql.Tx, item Item, now int64) error {
 			return err
 		}
 		query = "UPDATE migration_plans SET pruned_at=?,payload=zeroblob(0),state=CASE WHEN state='planned' THEN 'failed' ELSE state END,last_error=CASE WHEN state='planned' THEN '计划已过期，历史材料已清理' ELSE last_error END WHERE id=? AND pruned_at=0"
+	case "maintenance":
+		query = "UPDATE maintenance_sessions SET archived_at=? WHERE task_id=? AND archived_at=0 AND phase IN('released','failed')"
 	default:
 		return errors.New("invalid history material kind")
 	}

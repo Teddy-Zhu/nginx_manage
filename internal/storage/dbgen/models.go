@@ -347,6 +347,7 @@ type MaintenanceSession struct {
 	CreatedAt     int64          `json:"created_at"`
 	UpdatedAt     int64          `json:"updated_at"`
 	OwnerTaskID   sql.NullString `json:"owner_task_id"`
+	ArchivedAt    int64          `json:"archived_at"`
 }
 
 type MetricSample struct {

@@ -183,7 +183,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。仅预览本应用的独立实例，冻结实际服务、安装、配置和签名资产基准并显示影响，不执行安装或服务控制。 */
+        /** @description 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。engine_owner=managed 选择本应用独立实例；existing 仅选择本机 root 已授予服务控制的已有全局实例，限 start/stop/enable/disable。冻结实际服务和原接入或安装基准，显示对全部 jail 的影响，不执行安装或服务控制。 */
         post: operations["previewFail2banLifecycle"];
         delete?: never;
         options?: never;
@@ -200,7 +200,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。派发后中断不自动重放，须核对并重新预览续办或撤回；不控制系统全局实例。 */
+        /** @description 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。existing 的 base_id 固定本机 root 的当前服务控制授权，启动前复核原客户端和单元；启停影响原实例全部 jail，enable/disable 不改变当前运行状态，不改写原 jail 配置。派发后中断只核对原操作，不自动重新派发。 */
         post: operations["changeFail2banLifecycle"];
         delete?: never;
         options?: never;
@@ -2596,7 +2596,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。migration_keep=0 不清理迁移材料，2–100 按操作者保留；启用时额外要求 backup.restore/backup.secrets，非 auth.manage 仅清理自己的计划。 */
+        /** @description 返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。migration_keep=0 不清理迁移材料，2–100 按操作者保留；启用时额外要求 backup.restore/backup.secrets，非 auth.manage 仅清理自己的计划。maintenance_keep=0 不归档，2–63 保留近期会话；已结束会话及任务回执仍可查询。 */
         post: operations["previewHistory"];
         delete?: never;
         options?: never;
@@ -3051,6 +3051,8 @@ export interface components {
             order_keep: number;
             /** @description 0 不清理；启用时每个操作者至少保留 2 份，额外要求 backup.restore/backup.secrets；非 auth.manage 仅清理自己的计划 */
             migration_keep: number;
+            /** @description 0 不归档；启用时保留 2–63 个近期会话，只归档自身及关联任务均已结束的会话，原查询和回执保留 */
+            maintenance_keep: number;
         };
         HistoryItem: {
             kind: string;
@@ -4567,6 +4569,8 @@ export interface components {
             /** Format: int64 */
             updated_at: number;
             owner_task_id: string;
+            /** Format: int64 */
+            archived_at: number;
         };
         MaintenanceView: {
             phase: string;

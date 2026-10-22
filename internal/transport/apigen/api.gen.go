@@ -6137,6 +6137,9 @@ type HistoryFilter struct {
 	Before          int64 `json:"before"`
 	CertificateKeep int   `json:"certificate_keep"`
 
+	// MaintenanceKeep 0 不归档；启用时保留 2–63 个近期会话，只归档自身及关联任务均已结束的会话，原查询和回执保留
+	MaintenanceKeep int `json:"maintenance_keep"`
+
 	// MigrationKeep 0 不清理；启用时每个操作者至少保留 2 份，额外要求 backup.restore/backup.secrets；非 auth.manage 仅清理自己的计划
 	MigrationKeep int `json:"migration_keep"`
 	OrderKeep     int `json:"order_keep"`
@@ -6586,6 +6589,7 @@ type MaintenanceRootStatus struct {
 
 // MaintenanceSession defines model for MaintenanceSession.
 type MaintenanceSession struct {
+	ArchivedAt    int64  `json:"archived_at"`
 	CreatedAt     int64  `json:"created_at"`
 	Deadline      int64  `json:"deadline"`
 	Error         string `json:"error"`

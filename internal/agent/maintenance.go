@@ -57,6 +57,9 @@ func (g *maintenanceGate) open() error {
 			return errors.New("独立维护记录无效，须本机恢复")
 		}
 		if r.State == "succeeded" {
+			if err = g.journal.archiveMaintenance(r); err != nil {
+				return err
+			}
 			continue
 		}
 		if g.id != "" {
@@ -75,7 +78,7 @@ func (g *maintenanceGate) rawRecords() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(entries) > 2048 {
+	if liveJournalEntries(entries) > 2048 {
 		return nil, errors.New("Agent 记录超出维护扫描预算")
 	}
 	records := []Record{}
