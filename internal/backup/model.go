@@ -171,7 +171,6 @@ type Record struct {
 	FinishedAt                  int64     `json:"finished_at"`
 	ExpiresAt                   int64     `json:"expires_at"`
 	DeletedAt                   int64     `json:"deleted_at"`
-	ArchivedAt                  int64     `json:"archived_at"`
 	Available                   bool      `json:"available"`
 	Database                    *Database `json:"database"`
 	principal                   string

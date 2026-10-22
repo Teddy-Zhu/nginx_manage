@@ -44,16 +44,10 @@ func validHeader(h *tar.Header, name string, size int64) bool {
 	return h != nil && h.Name == name && h.Typeflag == tar.TypeReg && h.Mode == 0600 && h.Size == size && h.Uid == 0 && h.Gid == 0 && h.Linkname == "" && len(h.PAXRecords) == 0 && len(h.Xattrs) == 0
 }
 
-// Inspect authenticates live ciphertext, encrypted inventory and every file.
-// A retired ID returns only its original receipt and retirement_requested;
-// this metadata is never a verified recovery source or a deletion success.
+// Inspect fully authenticates ciphertext, encrypted inventory and every file.
+// Expiry is reported, never used to delete the only surviving recovery evidence.
 // It creates no files and does not open the business database or business key.
 func Inspect(ctx context.Context, data, id string) (Result, error) {
-	if r, err := RetirementReceipt(data, id); err == nil {
-		return Result{State: "retirement_requested", Receipt: r, Expired: time.Now().Unix() >= r.Manifest.ExpiresAt}, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Result{}, err
-	}
 	return inspect(ctx, data, id, nil)
 }
 
@@ -61,9 +55,6 @@ func inspect(ctx context.Context, data, id string, visit func(File, io.Reader) (
 	var out Result
 	if os.Geteuid() != 0 || !idValue.MatchString(id) {
 		return out, errors.New("本机恢复快照检查需要 root 和原操作标识")
-	}
-	if err := CheckRetirement(data, id); err != nil {
-		return out, err
 	}
 	store, err := root(data)
 	if err != nil {

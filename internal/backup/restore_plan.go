@@ -6,11 +6,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/panelrecovery"
 	"nginxpanel/internal/panelruntime"
+	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 )
 
@@ -98,18 +100,7 @@ func readRestorePlan(data, id string) (out RestorePlan, err error) {
 	if err != nil {
 		return out, err
 	}
-	path := filepath.Join(root, id+".json")
-	cold, archived, err := recoveryHistoryPath(root, recoveryPlanHistory, id)
-	if err != nil {
-		return out, err
-	}
-	if archived {
-		if _, e := os.Lstat(path); !os.IsNotExist(e) {
-			return out, errors.Join(e, errors.New("恢复计划同时存在热区和归档记录"))
-		}
-		path = cold
-	}
-	if err = readAdoptionJSON(path, &out); err != nil {
+	if err = readAdoptionJSON(filepath.Join(root, id+".json"), &out); err != nil {
 		return out, err
 	}
 	if out.ID != id {
@@ -206,26 +197,6 @@ func CreateRestorePlan(ctx context.Context, data, id string, in RestorePlanInput
 		if !sameAdoptionValue(before, i.Before) {
 			return errors.New("目标已偏离原接入依据，不能生成新的恢复计划")
 		}
-		root, e := restorePlanRoot(data, true)
-		if e != nil {
-			return e
-		}
-		if e = archiveRecoveryHistory(call, data, root, recoveryPlanHistory); e != nil {
-			return e
-		}
-		items, e := recoveryLiveEntries(root, AdoptionRecordMax+1)
-		if e != nil {
-			return e
-		}
-		count := 0
-		for _, item := range items {
-			if item.Name() != ".json-copy" {
-				count++
-			}
-		}
-		if count >= AdoptionRecordMax {
-			return errors.New("恢复计划热区达到 128 项上限，没有足够可归档的过期且已清理计划；原审批继续保留")
-		}
 		dir, _ := adoptionDirectory(data, id, false)
 		var preview RestorePreview
 		input := RestorePreviewInput{PlanID: in.PlanID, Preparation: i.Preparation, ExpectedApplied: i.Rollback.Manifest.Database.AppliedRevision, Mappings: in.Mappings}
@@ -279,6 +250,43 @@ func CreateRestorePlan(ctx context.Context, data, id string, in RestorePlanInput
 		}
 		if currentHold != hold || !sameAdoptionValue(current, running) {
 			return errors.New("恢复计划生成期间批准程序或原停机发生变化")
+		}
+		root, e := restorePlanRoot(data, true)
+		if e != nil {
+			return e
+		}
+		items, e := boundedEntries(root, 129)
+		if e != nil {
+			return e
+		}
+		count := 0
+		for _, item := range items {
+			if item.Name() == ".json-copy" {
+				f, info, e := secure.OpenRootFile(filepath.Join(root, item.Name()), adoptionRecordMax)
+				if e != nil {
+					return e
+				}
+				f.Close()
+				if info.Mode().Perm() != 0600 && info.Mode().Perm() != 0400 {
+					return errors.New("恢复计划暂存权限无效")
+				}
+				continue
+			}
+			if !strings.HasSuffix(item.Name(), ".json") || !validID.MatchString(strings.TrimSuffix(item.Name(), ".json")) {
+				return errors.New("恢复计划存储存在未知文件")
+			}
+			f, info, e := secure.OpenRootFile(filepath.Join(root, item.Name()), adoptionRecordMax)
+			if e != nil {
+				return e
+			}
+			f.Close()
+			if info.Mode().Perm() != 0400 {
+				return errors.New("恢复计划须为 root 只读记录")
+			}
+			count++
+		}
+		if count >= 128 {
+			return errors.New("恢复计划达到 128 项保留上限，未删除已有审批")
 		}
 		if e = writeAdoptionJSON(filepath.Join(root, p.ID+".json"), p); e != nil {
 			return e

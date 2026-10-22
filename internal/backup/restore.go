@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -112,12 +113,26 @@ func RestoreAdoption(ctx context.Context, data, id string, in RestoreInput, roll
 // An interrupted install may have durable approval before its fence exists.
 // Keep its source until the original independent compensation is complete.
 func adoptionRestoreSettled(data, id string) error {
-	settled, err := recoveryHistorySettled(data, id)
-	if err != nil {
-		return err
+	if _, err := panelrecovery.ReadDisasterIntent(data, id); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if _, e := os.Lstat(filepath.Join(data, "agent", "operations", id+".json")); os.IsNotExist(e) {
+			return nil
+		} else if e != nil {
+			return e
+		}
+		return errors.New("原独立恢复记录的安装意图缺失，保留材料供本机恢复")
 	}
-	if !settled {
-		return errors.New("原恢复安装尚未结束或缺少完整安装意图，保留材料供本机恢复")
+	r, err := agent.DisasterRestoreStatus(data, id)
+	if err != nil {
+		return errors.Join(errors.New("已有独立安装意图，须先完成原恢复补偿"), err)
+	}
+	if r.State == "succeeded" && r.Stage == "committed" && r.DisasterActivation != nil && r.DisasterActivation.ReleaseAcknowledged {
+		return nil
+	}
+	if r.State != "rolled_back" || r.Stage != "files_compensated" {
+		return errors.New("原恢复安装尚未补偿，不能删除固定材料")
 	}
 	return nil
 }

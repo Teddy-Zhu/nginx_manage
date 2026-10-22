@@ -77,9 +77,6 @@ func accessPanelSnapshot(ctx context.Context, data, id, maintenanceID, epoch str
 		if err != nil {
 			return out, err
 		}
-		if out.State != "verified" {
-			return panelrecovery.Result{}, errors.New("原快照已提交退役，不能用于恢复协调")
-		}
 		m := out.Receipt.Manifest
 		if m.MaintenanceID != maintenanceID || m.UID != uid || m.GID != gid {
 			return panelrecovery.Result{}, errors.New("本机快照与原维护会话或当前面板账户不一致")

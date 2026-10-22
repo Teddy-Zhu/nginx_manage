@@ -183,7 +183,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。engine_owner=managed 选择本应用独立实例；existing 仅选择本机 root 已授予服务控制的已有全局实例，限 start/stop/enable/disable。冻结实际服务和原接入或安装基准，显示对全部 jail 的影响，不执行安装或服务控制。 */
+        /** @description 返回 Fail2banLifecyclePlan。按 action 额外检查安装 components.manage、启停及开机设置 security.write、续办与撤回两者皆需。仅预览本应用的独立实例，冻结实际服务、安装、配置和签名资产基准并显示影响，不执行安装或服务控制。 */
         post: operations["previewFail2banLifecycle"];
         delete?: never;
         options?: never;
@@ -200,7 +200,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。existing 的 base_id 固定本机 root 的当前服务控制授权，启动前复核原客户端和单元；启停影响原实例全部 jail，enable/disable 不改变当前运行状态，不改写原 jail 配置。派发后中断只核对原操作，不自动重新派发。 */
+        /** @description 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。派发后中断不自动重放，须核对并重新预览续办或撤回；不控制系统全局实例。 */
         post: operations["changeFail2banLifecycle"];
         delete?: never;
         options?: never;
@@ -2543,7 +2543,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 返回最近 16 条未归档 RuntimeHistoryStatus。运行维护中断须按原操作续办；归档回执不删除，Agent 原 UUID 查询和重复请求结果保留。 */
+        /** @description 返回最近 16 条 RuntimeHistoryStatus。root 清理中断须按原操作续办，记录不删除。 */
         get: operations["listRuntimeHistory"];
         put?: never;
         post?: never;
@@ -2562,7 +2562,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话。发布、证书及回执每批最多 8 个目标、512 个条目、16 MiB；Agent 程序最多 192 MiB。recovery_snapshot 每批一份、128 个条目、8 GiB，须过期且原维护已释放，额外要求 backup.restore；更新与灾备仍引用的快照继续保留。root_receipt 归档成功运行维护、前后发布目录均已退役的普通 Nginx 回执，以及已释放原维护的面板/Agent/镜像更新、面板进程控制和材料已清理的版本选择/文件恢复；面板更新须确认恢复材料实际已清理，独立或协调 Agent 更新须先回收目标程序。预检私有归档配额，保留当前程序的所有权回执。 */
+        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目录、512 个条目、16 MiB；保留当前、回滚及恢复引用。 */
         post: operations["previewRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -2579,7 +2579,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项处理，中断按原参数与标识续办，阻止维护释放及新组件操作。发布树、证书副本及旧 Agent 程序仅在明确拥有且无当前或未结束事务引用时删除；Agent 程序额外要求 components.manage。root_receipt 原子归档完整回执，保留原 UUID 查询及重放屏障。recovery_snapshot 额外要求 backup.restore；持有原工作流、安装及快照锁，持久保存退役意图后按原批准逐项回收过期且无引用的恢复材料。退役意图阻止原标识再次捕获或恢复，不作为回收成功证明。 */
+        /** @description 返回 RuntimeHistoryStatus。Idempotency-Key 必须等于 operation_id UUID。冻结原预览摘要和文件身份后逐项删除，中断按原参数与标识续办，阻止维护释放及新组件操作。仅删除明确拥有的发布树或未引用证书副本，不清理 root 操作记录及灾备材料。 */
         post: operations["executeRuntimeHistory"];
         delete?: never;
         options?: never;
@@ -2596,7 +2596,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。migration_keep=0 不清理迁移材料，2–100 按操作者保留；启用时额外要求 backup.restore/backup.secrets，非 auth.manage 仅清理自己的计划。maintenance_keep=0 不归档，2–63 保留近期会话；已结束会话及任务回执仍可查询。backup_keep=0 不归档，2–128 保留近期备份记录，额外要求 backup.export；非 auth.manage 仅归档自己的已删除备份历史。 */
+        /** @description 返回 HistoryPreview。十分钟内有效，仅含摘要；每类最多 100 项，未完成任务、当前配置、证书最新版本和外部清理引用不可清理。migration_keep=0 不清理迁移材料，2–100 按操作者保留；启用时额外要求 backup.restore/backup.secrets，非 auth.manage 仅清理自己的计划。 */
         post: operations["previewHistory"];
         delete?: never;
         options?: never;
@@ -3014,11 +3014,9 @@ export interface components {
     schemas: {
         RuntimeHistoryFilter: {
             maintenance_id: string;
-            /** @description publication、certificate、agent_program、root_receipt 或 recovery_snapshot；Agent 程序额外要求 components.manage，快照额外要求 backup.restore；回执完整归档，快照须过期且原维护已释放 */
             kind: string;
             /** Format: int64 */
             before: number;
-            /** @description 至少保留数量；agent_program 和 recovery_snapshot 上限为 8，其余为 32；root_receipt 仅统计可退役且未归档回执；快照按全部本机快照保留最新部分 */
             keep: number;
         };
         RuntimeHistoryExecuteInput: {
@@ -3053,10 +3051,6 @@ export interface components {
             order_keep: number;
             /** @description 0 不清理；启用时每个操作者至少保留 2 份，额外要求 backup.restore/backup.secrets；非 auth.manage 仅清理自己的计划 */
             migration_keep: number;
-            /** @description 0 不归档；启用时保留 2–63 个近期会话，只归档自身及关联任务均已结束的会话，原查询和回执保留 */
-            maintenance_keep: number;
-            /** @description 0 不归档；启用时保留 2–128 个近期备份记录，额外要求 backup.export；非 auth.manage 仅归档自己的已删除备份历史 */
-            backup_keep: number;
         };
         HistoryItem: {
             kind: string;
@@ -4393,8 +4387,6 @@ export interface components {
             expires_at: number;
             /** Format: int64 */
             deleted_at: number;
-            /** Format: int64 */
-            archived_at: number;
             available: boolean;
             database: components["schemas"]["BackupDatabase"] | null;
         };
@@ -4575,8 +4567,6 @@ export interface components {
             /** Format: int64 */
             updated_at: number;
             owner_task_id: string;
-            /** Format: int64 */
-            archived_at: number;
         };
         MaintenanceView: {
             phase: string;

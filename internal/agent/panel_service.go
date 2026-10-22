@@ -334,7 +334,7 @@ func ControlPanelService(ctx context.Context, in PanelServiceInput, id, epoch st
 
 func panelServiceRecord(data, id string) (Record, error) {
 	var out Record
-	raw, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).readOperationBytes(id, 64<<10)
+	raw, err := secure.ReadRootFile(filepath.Join(data, "agent", "operations", id+".json"), 64<<10)
 	if err != nil {
 		return out, err
 	}

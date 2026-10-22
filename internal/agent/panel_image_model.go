@@ -165,7 +165,7 @@ func PanelImageStatus(data, id string) (Record, error) {
 	if _, err := panelruntime.Root(data); err != nil {
 		return r, err
 	}
-	raw, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).readOperationBytes(id, panelImageRecordLimit)
+	raw, err := secure.ReadRootFile(filepath.Join(data, "agent", "operations", id+".json"), panelImageRecordLimit)
 	if err != nil {
 		return r, err
 	}

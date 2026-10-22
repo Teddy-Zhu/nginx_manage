@@ -113,7 +113,7 @@ func publishAgentProgram(ctx context.Context, source string, expected string) (A
 		return p, err
 	}
 	if len(entries) >= 8 {
-		return p, errors.New("Agent 发布目录达到 8 项上限，请在历史维护中回收未引用的旧 Agent 程序")
+		return p, errors.New("Agent 发布目录达到 8 项上限，须本机维护")
 	}
 	f, info, err := secure.OpenRootFile(source, panelruntime.BinaryLimit)
 	if err != nil {

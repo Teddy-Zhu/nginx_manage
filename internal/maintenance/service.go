@@ -15,11 +15,11 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const columns = "task_id,phase,deadline,root_requested,root_epoch,last_error,created_at,updated_at,COALESCE(owner_task_id,''),archived_at"
+const columns = "task_id,phase,deadline,root_requested,root_epoch,last_error,created_at,updated_at,COALESCE(owner_task_id,'')"
 
 func readSession(row interface{ Scan(...any) error }) (*Session, error) {
 	var s Session
-	err := row.Scan(&s.TaskID, &s.Phase, &s.Deadline, &s.RootRequested, &s.RootEpoch, &s.Error, &s.CreatedAt, &s.UpdatedAt, &s.OwnerTaskID, &s.ArchivedAt)
+	err := row.Scan(&s.TaskID, &s.Phase, &s.Deadline, &s.RootRequested, &s.RootEpoch, &s.Error, &s.CreatedAt, &s.UpdatedAt, &s.OwnerTaskID)
 	return &s, err
 }
 func (s *Service) publish(session *Session, phase, reason string) {
@@ -129,19 +129,11 @@ func (s *Service) start(ctx context.Context, p auth.Principal, requestID, key st
 		}
 	}()
 	var count int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM maintenance_sessions WHERE archived_at=0").Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM maintenance_sessions").Scan(&count); err != nil {
 		return out, err
 	}
 	if count >= 64 {
-		if err = archiveAtCapacity(ctx, tx, p, requestID); err != nil {
-			return out, err
-		}
-		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM maintenance_sessions WHERE archived_at=0").Scan(&count); err != nil {
-			return out, err
-		}
-	}
-	if count >= 64 {
-		return out, fault.Conflict("维护记录达到 64 项保留上限，请先在历史维护中归档已结束的会话")
+		return out, fault.Conflict("维护记录达到 64 项保留上限，须本机维护")
 	}
 	now := time.Now().Unix()
 	out = Session{TaskID: secure.ID(), OwnerTaskID: ownerTaskID, Phase: "draining", Deadline: now + in.DrainSeconds, CreatedAt: now, UpdatedAt: now}

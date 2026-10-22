@@ -258,9 +258,6 @@ func Install(ctx context.Context, p Prepared, before []Original) error {
 	if os.Geteuid() != 0 || p.dir == "" {
 		return errors.New("资源恢复需要 root 和已认证暂存")
 	}
-	if err := CheckRetirement(p.Receipt.Manifest.DataDir, p.Receipt.Manifest.OperationID); err != nil {
-		return err
-	}
 	if err := ValidateOriginals(before); err != nil {
 		return err
 	}

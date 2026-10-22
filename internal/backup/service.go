@@ -18,13 +18,13 @@ type queryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-const recordColumns = "t.id,b.name,t.state,t.stage,t.last_error,b.encryption,b.recipient,b.policy_version,COALESCE(b.maintenance_id,''),b.archive_size,b.archive_sha256,b.captured_at,t.created_at,b.finished_at,b.expires_at,COALESCE(b.deleted_at,0),b.principal,b.issuer_machine,b.issuer_epoch,b.authorization_until,b.request_id,b.manifest,b.delete_started,b.archived_at"
+const recordColumns = "t.id,b.name,t.state,t.stage,t.last_error,b.encryption,b.recipient,b.policy_version,COALESCE(b.maintenance_id,''),b.archive_size,b.archive_sha256,b.captured_at,t.created_at,b.finished_at,b.expires_at,COALESCE(b.deleted_at,0),b.principal,b.issuer_machine,b.issuer_epoch,b.authorization_until,b.request_id,b.manifest,b.delete_started"
 const recordJoin = " FROM backup_records b JOIN tasks t ON t.id=b.task_id "
 
 func (s *Service) read(row scanner) (Record, error) {
 	var r Record
 	var raw []byte
-	err := row.Scan(&r.ID, &r.Name, &r.State, &r.Stage, &r.Error, &r.Encryption, &r.Recipient, &r.policyVersion, &r.MaintenanceID, &r.ArchiveSize, &r.ArchiveSHA256, &r.CapturedAt, &r.CreatedAt, &r.FinishedAt, &r.ExpiresAt, &r.DeletedAt, &r.principal, &r.machine, &r.epoch, &r.until, &r.requestID, &raw, &r.deleting, &r.ArchivedAt)
+	err := row.Scan(&r.ID, &r.Name, &r.State, &r.Stage, &r.Error, &r.Encryption, &r.Recipient, &r.policyVersion, &r.MaintenanceID, &r.ArchiveSize, &r.ArchiveSHA256, &r.CapturedAt, &r.CreatedAt, &r.FinishedAt, &r.ExpiresAt, &r.DeletedAt, &r.principal, &r.machine, &r.epoch, &r.until, &r.requestID, &raw, &r.deleting)
 	if err != nil {
 		return r, err
 	}
@@ -207,22 +207,14 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, trace, key strin
 }
 func (s *Service) insert(ctx context.Context, tx *sql.Tx, id, actor string, machine bool, epoch int64, trace, name, encryption, recipient string, until, policyVersion, retentionDays int64) error {
 	var count, active int
-	if err := tx.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM backup_records WHERE archived_at=0),(SELECT COUNT(*) FROM tasks WHERE kind='backup.create' AND state NOT IN('succeeded','failed','rolled_back','cancelled'))").Scan(&count, &active); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(t.state NOT IN('succeeded','failed','rolled_back','cancelled')),0)"+recordJoin).Scan(&count, &active); err != nil {
 		return err
+	}
+	if count >= MaxRecords {
+		return fault.Conflict("备份记录达到 512 项上限，须进行历史维护")
 	}
 	if active != 0 {
 		return fault.Conflict("已有备份正在处理")
-	}
-	if count >= MaxRecords {
-		if err := s.archiveHistoryAtCapacity(ctx, tx, actor, trace); err != nil {
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM backup_records WHERE archived_at=0").Scan(&count); err != nil {
-			return err
-		}
-	}
-	if count >= MaxRecords {
-		return fault.Conflict("备份历史达到 512 项上限，请先清理旧备份文件或恢复未结束的维护任务")
 	}
 	now := time.Now().Unix()
 	if _, err := tx.ExecContext(ctx, "INSERT INTO tasks(id,kind,resource_id,state,stage,operation_id,created_at,updated_at) VALUES(?,'backup.create',?,'queued','queued',?,?,?)", id, id, id, now, now); err != nil {

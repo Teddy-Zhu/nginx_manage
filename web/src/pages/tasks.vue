@@ -331,11 +331,11 @@ onMounted(loadTasks);
               >查询</NButton
             >
             <NButton :disabled="busy" @click="exportAudit"
-              >下载审计归档</NButton
+              >导出审计记录</NButton
             >
           </div>
           <p class="muted">
-            归档包含节点、查询范围、记录总数与完整记录摘要，源记录保留。单次最多扫描一万条、输出
+            导出包含节点、查询范围、记录总数与完整记录摘要，源记录保留。单次最多扫描一万条、输出
             8 MiB，超出时请缩小时间范围。
           </p>
           <NAlert v-if="audits?.notice" type="info">{{ audits.notice }}</NAlert>

@@ -50,13 +50,6 @@ func readAdoptionStatus(ctx context.Context, data, id string) (out AdoptionStatu
 	}
 	root := filepath.Dir(final)
 	paths := []string{final, filepath.Join(root, ".adopting-"+id), filepath.Join(root, ".cleaning-"+id), filepath.Join(root, ".cleaned-"+id)}
-	cold, archived, err := recoveryHistoryPath(root, recoveryAdoptionHistory, id)
-	if err != nil {
-		return out, err
-	}
-	if archived {
-		paths = append(paths, cold)
-	}
 	found := -1
 	for index, path := range paths {
 		if _, e := os.Lstat(path); e == nil {
@@ -77,8 +70,6 @@ func readAdoptionStatus(ctx context.Context, data, id string) (out AdoptionStatu
 		return readAdoptionHistory(data, id, paths[2], false)
 	case 3:
 		return readAdoptionHistory(data, id, paths[3], true)
-	case 4:
-		return readAdoptionHistory(data, id, paths[4], true)
 	}
 	partial := paths[1]
 	items, _, err := adoptionEntries(partial)
@@ -142,7 +133,7 @@ func CleanupAdoption(ctx context.Context, data, id string) error {
 		return err
 	}
 	if status.State == "absent" || status.State == "cleaned" {
-		return errors.Join(syncRecoveryHistory(root), syncDir(root))
+		return syncDir(root)
 	}
 	if err = adoptionRestoreSettled(data, id); err != nil {
 		return err

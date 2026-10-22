@@ -4,10 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"time"
 
 	"nginxpanel/internal/auth"
-	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/secure"
 )
 
@@ -71,19 +69,6 @@ const migrationCandidates = `SELECT m.id,'',0,m.created_at,length(m.payload)+
  OR (d.maintenance_task_id<>'' AND NOT EXISTS(SELECT 1 FROM maintenance_sessions s JOIN tasks t ON t.id=s.task_id WHERE s.task_id=d.maintenance_task_id AND s.phase IN('released','failed') AND t.state IN ` + terminalTasks + `))))
  ORDER BY m.updated_at,m.id LIMIT 101`
 
-// BackupCandidatesSQL is shared by manual and capacity-triggered archival.
-// Files must already be deleted, with no unsettled task/lease or live ticket.
-// The receipt itself remains intact, including its original authorization.
-const BackupCandidatesSQL = `SELECT b.task_id,'',0,t.created_at,0
- FROM backup_records b JOIN tasks t ON t.id=b.task_id
- WHERE b.archived_at=0 AND b.deleted_at IS NOT NULL AND b.deleted_at<? AND b.delete_started=0
- AND t.state IN('succeeded','failed','rolled_back','cancelled')
- AND (b.principal=? OR ?)
- AND b.task_id NOT IN(SELECT b2.task_id FROM backup_records b2 JOIN tasks t2 ON t2.id=b2.task_id WHERE b2.archived_at=0 AND (b2.principal=? OR ?) ORDER BY t2.created_at DESC,t2.id DESC LIMIT ?)
- AND (b.maintenance_id IS NULL OR EXISTS(SELECT 1 FROM maintenance_sessions s JOIN tasks m ON m.id=s.task_id WHERE s.task_id=b.maintenance_id AND s.phase IN('released','failed') AND m.state IN('succeeded','failed','rolled_back','cancelled')))
- AND NOT EXISTS(SELECT 1 FROM backup_downloads d WHERE d.task_id=b.task_id AND d.used_at IS NULL AND d.expires_at>?)
- ORDER BY b.deleted_at,b.task_id LIMIT 101`
-
 func collect(ctx context.Context, tx *sql.Tx, node string, f Filter, owner auth.Principal) (Preview, error) {
 	p := Preview{NodeID: node, Filter: f, Items: []Item{}, Scopes: []Scope{}}
 	if err := tx.QueryRowContext(ctx, "SELECT version FROM config_head WHERE id=1").Scan(&p.BaseVersion); err != nil {
@@ -98,16 +83,8 @@ func collect(ctx context.Context, tx *sql.Tx, node string, f Filter, owner auth.
 		{"certificate", certificateCandidates, "SELECT COUNT(*) FROM certificate_versions WHERE pruned_at=0", nil, nil},
 		{"order", orderCandidates, "SELECT COUNT(*) FROM acme_orders WHERE pruned_at=0", []any{f.Before, f.OrderKeep}, nil},
 		{"migration", migrationCandidates, "SELECT COUNT(*) FROM migration_plans WHERE pruned_at=0 AND (principal=? OR ?)", []any{f.Before, f.Before, f.MigrationKeep, owner.ID, owner.Has("auth.manage")}, []any{owner.ID, owner.Has("auth.manage")}},
-		{"maintenance", maintenance.ArchiveCandidatesSQL, "SELECT COUNT(*) FROM maintenance_sessions WHERE archived_at=0", []any{f.Before, f.MaintenanceKeep}, nil},
-		{"backup", BackupCandidatesSQL, "SELECT COUNT(*) FROM backup_records WHERE archived_at=0 AND (principal=? OR ?)", []any{f.Before, owner.ID, owner.Has("auth.manage"), owner.ID, owner.Has("auth.manage"), f.BackupKeep, time.Now().Unix()}, []any{owner.ID, owner.Has("auth.manage")}},
 	} {
 		if q.kind == "migration" && f.MigrationKeep == 0 {
-			continue
-		}
-		if q.kind == "maintenance" && f.MaintenanceKeep == 0 {
-			continue
-		}
-		if q.kind == "backup" && f.BackupKeep == 0 {
 			continue
 		}
 		args := q.args

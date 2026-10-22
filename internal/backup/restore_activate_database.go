@@ -68,7 +68,7 @@ func activationAdditions() map[string][]map[string]string {
 	return map[string][]map[string]string{
 		"audit_logs":           {reconciliationAudit(), {"id": ":activation_audit_id", "request_id": ":restore_id", "principal": "'restore:'||:restore_id", "action": "'backup.restore.activate'", "resource_id": ":revision", "outcome": "'prepared'", "created_at": ":activation_at"}},
 		"tasks":                {{"id": ":maintenance_id", "kind": "'maintenance.enter'", "resource_id": "'host'", "revision_id": "NULL", "expected_revision": "''", "observed_revision": "''", "submit_started": "0", "agent_accepted": "0", "state": "'running'", "stage": "'held'", "operation_id": ":maintenance_id", "attempts": "0", "lease_until": "NULL", "last_error": "''", "created_at": ":activation_at", "updated_at": ":activation_at", "restore_snapshot": "''"}},
-		"maintenance_sessions": {{"task_id": ":maintenance_id", "principal": "'restore:'||:restore_id", "phase": "'held'", "deadline": ":activation_at", "root_requested": "1", "root_epoch": ":activation_epoch", "last_error": "''", "created_at": ":activation_at", "updated_at": ":activation_at", "owner_task_id": "NULL", "archived_at": "0"}},
+		"maintenance_sessions": {{"task_id": ":maintenance_id", "principal": "'restore:'||:restore_id", "phase": "'held'", "deadline": ":activation_at", "root_requested": "1", "root_epoch": ":activation_epoch", "last_error": "''", "created_at": ":activation_at", "updated_at": ":activation_at", "owner_task_id": "NULL"}},
 	}
 }
 

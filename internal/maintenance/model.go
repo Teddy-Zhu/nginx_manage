@@ -49,7 +49,6 @@ type Session struct {
 	Error         string `json:"error"`
 	CreatedAt     int64  `json:"created_at"`
 	UpdatedAt     int64  `json:"updated_at"`
-	ArchivedAt    int64  `json:"archived_at"`
 }
 type View struct {
 	Phase   string     `json:"phase"`

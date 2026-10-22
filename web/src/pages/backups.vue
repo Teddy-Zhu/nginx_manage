@@ -96,7 +96,6 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.passphr
         <article v-for="record in view.records" :key="record.id" class="backup-record page-stack">
           <div class="toolbar"><strong>{{ record.name }}</strong><NTag :type="record.available ? 'success' : record.error ? 'warning' : 'default'">{{ stages[record.stage] || record.stage }}</NTag></div>
           <p>{{ record.scheduled ? '定期备份' : '手动备份' }} · {{ date(record.created_at) }} · {{ record.archive_size ? bytes(record.archive_size) : '尚无归档' }} · 到期 {{ date(record.expires_at) }}</p>
-          <p v-if="record.archived_at">历史已归档 · {{ date(record.archived_at) }}</p>
           <p class="digest">{{ record.id }}<template v-if="record.archive_sha256"><br />SHA-256 {{ record.archive_sha256 }}</template></p>
           <NAlert v-if="record.error" type="warning">{{ record.error }}</NAlert>
           <p v-if="record.database">数据库版本 {{ record.database.schema_version }} · 配置版本 {{ record.database.head_version }}</p>

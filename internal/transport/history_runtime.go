@@ -1,29 +1,13 @@
 package transport
 
 import (
-	"context"
 	"net/http"
-	"time"
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/history"
 	"nginxpanel/internal/transport/apigen"
 )
-
-func (s *Server) runtimeHistoryContext(w http.ResponseWriter, r *http.Request, kind string) (context.Context, context.CancelFunc, bool) {
-	if kind != "recovery_snapshot" {
-		return r.Context(), func() {}, true
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), history.SnapshotRequestTimeout+10*time.Second)
-	deadline, _ := ctx.Deadline()
-	if err := http.NewResponseController(w).SetWriteDeadline(deadline.Add(5 * time.Second)); err != nil {
-		cancel()
-		s.fail(w, r, fault.Unavailable("快照维护连接无法设置响应时限"))
-		return nil, nil, false
-	}
-	return ctx, cancel, true
-}
 
 func (s *Server) ListRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authorize(w, r, false, "read", "system.write", "config.secrets"); !ok {
@@ -42,8 +26,7 @@ func (s *Server) ListRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) PreviewRuntimeHistory(w http.ResponseWriter, r *http.Request, _ apigen.PreviewRuntimeHistoryParams) {
-	p, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets")
-	if !ok {
+	if _, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets"); !ok {
 		return
 	}
 	var filter history.RuntimeFilter
@@ -55,17 +38,6 @@ func (s *Server) PreviewRuntimeHistory(w http.ResponseWriter, r *http.Request, _
 		s.fail(w, r, err)
 		return
 	}
-	if filter.Kind == "agent_program" {
-		if err := p.Require("components.manage"); err != nil {
-			s.fail(w, r, err)
-			return
-		}
-	} else if filter.Kind == "recovery_snapshot" {
-		if err := p.Require("backup.restore"); err != nil {
-			s.fail(w, r, err)
-			return
-		}
-	}
 	if s.Agent == nil {
 		s.fail(w, r, fault.Unavailable("运行材料 Agent 未配置"))
 		return
@@ -76,12 +48,7 @@ func (s *Server) PreviewRuntimeHistory(w http.ResponseWriter, r *http.Request, _
 		return
 	}
 	defer done()
-	ctx, cancel, ok := s.runtimeHistoryContext(w, r, filter.Kind)
-	if !ok {
-		return
-	}
-	defer cancel()
-	out, err := s.Agent.PreviewRuntimeHistory(ctx, history.RuntimeRequest{Protocol: agent.Protocol, Epoch: root.Epoch, Input: history.RuntimeExecuteInput{Filter: filter}})
+	out, err := s.Agent.PreviewRuntimeHistory(r.Context(), history.RuntimeRequest{Protocol: agent.Protocol, Epoch: root.Epoch, Input: history.RuntimeExecuteInput{Filter: filter}})
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -98,17 +65,6 @@ func (s *Server) ExecuteRuntimeHistory(w http.ResponseWriter, r *http.Request, p
 	if err := decodeLimit(w, r, &in, 4096); err != nil {
 		s.fail(w, r, err)
 		return
-	}
-	if in.Filter.Kind == "agent_program" {
-		if err := p.Require("components.manage"); err != nil {
-			s.fail(w, r, err)
-			return
-		}
-	} else if in.Filter.Kind == "recovery_snapshot" {
-		if err := p.Require("backup.restore"); err != nil {
-			s.fail(w, r, err)
-			return
-		}
 	}
 	if in.OperationID == "" || params.IdempotencyKey != in.OperationID {
 		s.fail(w, r, fault.Invalid("幂等键必须使用本次运行清理的操作 UUID"))
@@ -133,16 +89,11 @@ func (s *Server) ExecuteRuntimeHistory(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	defer done()
-	ctx, cancel, ok := s.runtimeHistoryContext(w, r, in.Filter.Kind)
-	if !ok {
-		return
-	}
-	defer cancel()
 	if err = s.audit(r, p.ID, "history.runtime.cleanup", in.OperationID, "prepared"); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	out, err := s.Agent.ExecuteRuntimeHistory(ctx, history.RuntimeRequest{Protocol: agent.Protocol, Epoch: root.Epoch, Input: in})
+	out, err := s.Agent.ExecuteRuntimeHistory(r.Context(), history.RuntimeRequest{Protocol: agent.Protocol, Epoch: root.Epoch, Input: in})
 	if err != nil {
 		s.fail(w, r, err)
 		return

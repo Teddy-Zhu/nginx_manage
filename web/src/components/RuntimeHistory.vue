@@ -46,32 +46,23 @@ const savedPending = computed(() =>
 const options = [
   { label: "Nginx 发布目录", value: "publication" },
   { label: "证书运行副本", value: "certificate" },
-  { label: "旧 Agent 程序", value: "agent_program" },
-  { label: "已退役操作回执", value: "root_receipt" },
-  { label: "过期恢复快照", value: "recovery_snapshot" },
 ];
-const labels: Record<string, string> = {
-  publication: "发布目录",
-  certificate: "证书副本",
-  agent_program: "Agent 程序",
-  root_receipt: "操作回执",
-  recovery_snapshot: "恢复快照",
-};
 const states: Record<string, string> = {
-  running: "处理中",
+  running: "清理中",
   recovery_required: "待续办",
-  succeeded: "已完成",
+  succeeded: "已清理",
 };
 const columns: DataTableColumns<RuntimeHistoryStatus> = [
   { title: "操作标识", key: "operation_id", ellipsis: { tooltip: true } },
   {
     title: "材料",
     key: "preview.filter.kind",
-    render: (r) => labels[r.preview.filter.kind],
+    render: (r) =>
+      r.preview.filter.kind === "publication" ? "发布目录" : "证书副本",
   },
   { title: "状态", key: "state", render: (r) => states[r.state] },
   {
-    title: "目标数",
+    title: "目录数",
     key: "preview.targets",
     render: (r) => r.preview.targets.length,
   },
@@ -103,10 +94,6 @@ const columns: DataTableColumns<RuntimeHistoryStatus> = [
 ];
 watch([kind, keep, before], () => {
   preview.value = null;
-});
-watch(kind, (value) => {
-  if ((value === "agent_program" || value === "recovery_snapshot") && keep.value !== null && keep.value > 8)
-    keep.value = 2;
 });
 async function refresh() {
   maintenance.value = await api.maintenance();
@@ -173,7 +160,7 @@ async function execute(record?: RuntimeHistoryStatus) {
     } finally {
       await refresh();
     }
-  }, "运行材料维护已完成");
+  }, "运行材料清理已确认");
 }
 onMounted(load);
 </script>
@@ -181,9 +168,9 @@ onMounted(load);
 <template>
   <div class="page-stack">
     <NAlert type="info" :bordered="false">
-      回收不再引用的发布目录、证书副本、旧 Agent 程序，或归档已退役的操作回执。恢复快照须已过期且原维护已结束，更新与灾备仍引用的快照继续保留。
-      Agent 程序每批最多 192 MiB；快照每批一份、128 个条目、8 GiB；其余每批最多 16 MiB、8 个目标、512 个条目。
-      操作中断后须按原清单续办，完成前不能退出维护。
+      仅回收不再引用的发布目录与证书运行副本，保留当前发布、回滚锚点及灾备引用。操作记录与数据库材料保留。
+      先清理发布目录，再预览证书副本；每批最多 8 个目录、512 个条目、16
+      MiB。清理中断后须按原清单续办，完成前不能退出维护。
     </NAlert>
     <div class="toolbar">
       <span>{{
@@ -210,18 +197,12 @@ onMounted(load);
           :label="
             kind === 'certificate'
               ? '每张证书至少保留副本数'
-              : kind === 'agent_program'
-                ? '至少保留 Agent 程序数'
-                : kind === 'recovery_snapshot'
-                  ? '至少保留快照数'
-                  : kind === 'root_receipt'
-                    ? '至少保留未归档回执数'
-                    : '至少保留发布目录数'
+              : '至少保留发布目录数'
           "
           ><NInputNumber
             v-model:value="keep"
             :min="2"
-            :max="kind === 'agent_program' || kind === 'recovery_snapshot' ? 8 : 32"
+            :max="32"
             :precision="0"
             :clearable="false"
             :disabled="busy || !!savedPending"
@@ -231,7 +212,7 @@ onMounted(load);
         :loading="busy"
         :disabled="!held || !!savedPending"
         @click="inspect"
-        >预览维护范围</NButton
+        >预览回收范围</NButton
       >
     </section>
     <NAlert v-if="pending" type="warning" :bordered="false">
@@ -243,7 +224,7 @@ onMounted(load);
     <section v-if="preview" class="surface page-stack">
       <div class="toolbar">
         <span
-          >{{ preview.targets.length }} 个目标，{{ preview.entries }} 个条目，{{
+          >{{ preview.targets.length }} 个目录，{{ preview.entries }} 个条目，{{
             (preview.bytes / 1024).toFixed(1)
           }}
           KiB{{ preview.more ? "；还有后续批次" : "" }}</span
@@ -253,20 +234,10 @@ onMounted(load);
             ><NButton
               type="error"
               :disabled="busy || !held || !preview.targets.length"
-              >{{
-                preview.filter.kind === "root_receipt"
-                  ? "归档本批回执"
-                  : "回收本批运行材料"
-              }}</NButton
+              >回收本批运行材料</NButton
             ></template
           >
-          {{
-            preview.filter.kind === "root_receipt"
-              ? "确认归档本批操作回执？原回执及原标识查询继续保留。"
-              : preview.filter.kind === "recovery_snapshot"
-                ? "确认回收本批过期快照及恢复副本？退役后不能再用于恢复，操作中断须按原清单续办。"
-                : "确认删除本批运行文件？运行副本不可撤销，数据库历史材料仍按独立保留策略管理。"
-          }}
+          确认删除本批运行文件？运行副本不可撤销，数据库历史材料仍按独立保留策略管理。
         </NPopconfirm>
       </div>
       <div v-for="target in preview.targets" :key="target">
@@ -274,7 +245,7 @@ onMounted(load);
       </div>
     </section>
     <section class="surface page-stack">
-      <h3>最近未归档的维护记录</h3>
+      <h3>最近 16 次运行材料维护</h3>
       <NDataTable
         :columns="columns"
         :data="records"

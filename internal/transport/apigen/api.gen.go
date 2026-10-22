@@ -3684,7 +3684,6 @@ type BackupPolicyInput struct {
 type BackupRecord struct {
 	ArchiveSha256 string                 `json:"archive_sha256"`
 	ArchiveSize   int64                  `json:"archive_size"`
-	ArchivedAt    int64                  `json:"archived_at"`
 	Available     bool                   `json:"available"`
 	CapturedAt    int64                  `json:"captured_at"`
 	CreatedAt     int64                  `json:"created_at"`
@@ -6135,14 +6134,8 @@ type HistoryExecuteInput struct {
 
 // HistoryFilter defines model for HistoryFilter.
 type HistoryFilter struct {
-	// BackupKeep 0 不归档；启用时保留 2–128 个近期备份记录，额外要求 backup.export；非 auth.manage 仅归档自己的已删除备份历史
-	BackupKeep int `json:"backup_keep"`
-
 	Before          int64 `json:"before"`
 	CertificateKeep int   `json:"certificate_keep"`
-
-	// MaintenanceKeep 0 不归档；启用时保留 2–63 个近期会话，只归档自身及关联任务均已结束的会话，原查询和回执保留
-	MaintenanceKeep int `json:"maintenance_keep"`
 
 	// MigrationKeep 0 不清理；启用时每个操作者至少保留 2 份，额外要求 backup.restore/backup.secrets；非 auth.manage 仅清理自己的计划
 	MigrationKeep int `json:"migration_keep"`
@@ -6593,7 +6586,6 @@ type MaintenanceRootStatus struct {
 
 // MaintenanceSession defines model for MaintenanceSession.
 type MaintenanceSession struct {
-	ArchivedAt    int64  `json:"archived_at"`
 	CreatedAt     int64  `json:"created_at"`
 	Deadline      int64  `json:"deadline"`
 	Error         string `json:"error"`
@@ -7811,9 +7803,7 @@ type RuntimeHistoryExecuteInput struct {
 // RuntimeHistoryFilter defines model for RuntimeHistoryFilter.
 type RuntimeHistoryFilter struct {
 	Before        int64  `json:"before"`
-	// Keep 至少保留数量；agent_program 和 recovery_snapshot 上限为 8，其余为 32；root_receipt 仅统计可退役且未归档回执；快照按全部本机快照保留最新部分
 	Keep          int    `json:"keep"`
-	// Kind publication、certificate、agent_program、root_receipt 或 recovery_snapshot；Agent 程序额外要求 components.manage，快照额外要求 backup.restore；回执完整归档，快照须过期且原维护已释放
 	Kind          string `json:"kind"`
 	MaintenanceId string `json:"maintenance_id"`
 }

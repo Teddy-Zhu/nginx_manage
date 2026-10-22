@@ -32,14 +32,6 @@ func AdoptPreparation(ctx context.Context, data, id string, in AdoptInput) (out 
 	defer unlock()
 	call, cancel := context.WithTimeout(ctx, 8*time.Minute)
 	defer cancel()
-	if cold, archived, e := recoveryHistoryPath(root, recoveryAdoptionHistory, id); e != nil {
-		return out, e
-	} else if archived {
-		if _, e = readAdoptionHistory(data, id, cold, true); e != nil {
-			return out, e
-		}
-		return out, errors.New("原恢复材料已清理归档，须使用新的恢复准备标识")
-	}
 	if _, e := os.Lstat(filepath.Join(root, ".cleaning-"+id)); e == nil {
 		return out, errors.New("原恢复接入尚在清理，须继续原清理操作")
 	} else if !os.IsNotExist(e) {
@@ -137,7 +129,7 @@ func AdoptPreparation(ctx context.Context, data, id string, in AdoptInput) (out 
 			if e = matchAdoptionInput(intent, in, hold, running, snapshot.Receipt); e != nil {
 				return e
 			}
-			if e = adoptionBudget(call, data, root); e != nil {
+			if e = adoptionBudget(root); e != nil {
 				return e
 			}
 			if e = os.Mkdir(work, 0700); e != nil {

@@ -57,9 +57,6 @@ func (g *maintenanceGate) open() error {
 			return errors.New("独立维护记录无效，须本机恢复")
 		}
 		if r.State == "succeeded" {
-			if err = g.journal.archiveMaintenance(r); err != nil {
-				return err
-			}
 			continue
 		}
 		if g.id != "" {
@@ -78,7 +75,7 @@ func (g *maintenanceGate) rawRecords() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	if liveJournalEntries(entries) > journalMaintenanceEntriesMax {
+	if len(entries) > 2048 {
 		return nil, errors.New("Agent 记录超出维护扫描预算")
 	}
 	records := []Record{}
@@ -669,13 +666,7 @@ func (g *maintenanceGate) release(ctx context.Context, in maintenance.RootReques
 	}
 	// A release tombstone also fences an acquire whose response was lost or which
 	// arrives after cancellation. Reusing the identifier can never reopen the gate.
-	receipt := Record{OperationID: in.OperationID, RequestHash: maintenanceHash(in), Kind: "maintenance.lock", State: "succeeded", Stage: "released", MaintenanceEpoch: g.epoch}
-	if err == nil && releasedMaintenance(prior) {
-		// A replay after restart must preserve the archived lease's original
-		// epoch; the current epoch belongs only to the response and new leases.
-		receipt = prior
-	}
-	if err = g.journal.Put(receipt); err != nil {
+	if err = g.journal.Put(Record{OperationID: in.OperationID, RequestHash: maintenanceHash(in), Kind: "maintenance.lock", State: "succeeded", Stage: "released", MaintenanceEpoch: g.epoch}); err != nil {
 		g.poisoned = true
 		return maintenance.RootStatus{}, err
 	}

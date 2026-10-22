@@ -219,7 +219,7 @@ func NginxImageStatus(data, id string) (Record, error) {
 	if _, err := panelruntime.Root(data); err != nil {
 		return out, err
 	}
-	raw, err := (&Journal{Dir: filepath.Join(data, "agent", "operations")}).readOperationBytes(id, nginxImageRecordLimit)
+	raw, err := secure.ReadRootFile(filepath.Join(data, "agent", "operations", id+".json"), nginxImageRecordLimit)
 	if err != nil {
 		return out, err
 	}
@@ -228,13 +228,7 @@ func NginxImageStatus(data, id string) (Record, error) {
 	if d.Decode(&out) != nil || d.Decode(new(any)) != io.EOF {
 		return out, errors.New("Nginx 镜像记录格式无效")
 	}
-	if err := validNginxImage(out); err != nil {
-		return out, err
-	}
-	if out.OperationID != id || out.NginxImage.Intent.Input.Stage.DataDir != data {
-		return Record{}, errors.New("Nginx 镜像记录不属于当前节点或原操作")
-	}
-	return out, nil
+	return out, validNginxImage(out)
 }
 
 func nginxImageAPIInput(in NginxImageInput) imageupdates.Input {

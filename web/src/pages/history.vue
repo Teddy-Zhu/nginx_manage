@@ -46,8 +46,6 @@ const filter = reactive({
   certificate_keep: 3,
   order_keep: 10,
   migration_keep: 0,
-  maintenance_keep: 20,
-  backup_keep: 0,
 });
 const preview = ref<HistoryPreview | null>(null);
 const result = ref<HistoryResult | null>(null);
@@ -58,16 +56,14 @@ const names: Record<string, string> = {
   certificate: "证书版本",
   order: "ACME 订单",
   migration: "迁移计划载荷",
-  maintenance: "维护会话",
-  backup: "已删除备份历史",
 };
 function bytes(value: number) {
   return `${(value / 1024).toFixed(1)} KiB`;
 }
 const scopeColumns: DataTableColumns<HistoryScope> = [
   { title: "材料类别", key: "kind", render: (r) => names[r.kind] },
-  { title: "本批处理", key: "selected" },
-  { title: "处理后保留", key: "retained" },
+  { title: "本批清理", key: "selected" },
+  { title: "清理后保留", key: "retained" },
   { title: "本批材料大小", key: "bytes", render: (r) => bytes(r.bytes) },
   { title: "后续批次", key: "more", render: (r) => (r.more ? "有" : "无") },
 ];
@@ -93,7 +89,7 @@ watch(filter, () => {
 
 async function inspect() {
   await run(async () => {
-    if (pending.value) throw new Error("请先核对上次维护结果");
+    if (pending.value) throw new Error("请先核对上次清理结果");
     preview.value = null;
     const before = new Date(filter.before).getTime() / 1000;
     if (!Number.isFinite(before) || before < 1 || before > Date.now() / 1000)
@@ -107,7 +103,7 @@ async function execute() {
   await run(async () => {
     if (!pending.value) {
       if (!preview.value || !total.value)
-        throw new Error("请先预览可处理的历史记录");
+        throw new Error("请先预览可清理的历史材料");
       pending.value = { token: preview.value.token, key: crypto.randomUUID() };
     }
     try {
@@ -129,7 +125,7 @@ async function execute() {
       }
       throw error;
     }
-  }, "历史维护已完成");
+  }, "历史材料已清理");
 }
 </script>
 
@@ -139,7 +135,7 @@ async function execute() {
       <div class="page-stack">
         <NAlert type="info" :bordered="false">
           仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。迁移材料仅在依赖、安装、维护与自动迁入均结束后可清理，计划摘要及原操作回执保留。
-          已结束且相关任务均已完成的维护会话，以及文件已清理且维护已结束的备份历史可归档，归档后保留原查询及回执。修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
+          修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
         </NAlert>
         <section class="surface">
           <div class="grid-2">
@@ -192,33 +188,13 @@ async function execute() {
                 :disabled="busy || !!pending"
               />
             </NFormItem>
-            <NFormItem label="保留维护会话数（0 不归档，启用时至少 2 份）">
-              <NInputNumber
-                v-model:value="filter.maintenance_keep"
-                :min="0"
-                :max="63"
-                :precision="0"
-                :clearable="false"
-                :disabled="busy || !!pending"
-              />
-            </NFormItem>
-            <NFormItem label="保留近期备份记录数（0 不归档，启用时至少 2 份）">
-              <NInputNumber
-                v-model:value="filter.backup_keep"
-                :min="0"
-                :max="128"
-                :precision="0"
-                :clearable="false"
-                :disabled="busy || !!pending"
-              />
-            </NFormItem>
           </div>
           <NButton :loading="busy" :disabled="!!pending" @click="inspect"
-            >预览维护范围</NButton
+            >预览清理范围</NButton
           >
         </section>
         <NAlert v-if="pending" type="warning" :bordered="false">
-          上次维护结果待确认。请使用原请求核对结果。
+          上次清理结果待确认。请使用原请求核对结果。
           <NButton :loading="busy" @click="execute">核对原操作结果</NButton>
         </NAlert>
         <section v-if="preview" class="surface page-stack">
@@ -227,10 +203,10 @@ async function execute() {
             <NPopconfirm v-if="!pending" @positive-click="execute">
               <template #trigger>
                 <NButton type="error" :loading="busy" :disabled="!total"
-                  >执行本批维护</NButton
+                  >清理本批材料</NButton
                 >
               </template>
-              确认处理本批 {{ total }} 项记录？维护会话与备份历史归档后保留查询，其余材料清理后无法再加载。
+              确认清理本批 {{ total }} 项历史材料？清理后无法再加载。
             </NPopconfirm>
           </div>
           <NDataTable
@@ -255,7 +231,7 @@ async function execute() {
         </section>
         <section v-if="result" class="surface page-stack">
           <NAlert type="success" :bordered="false"
-            >已完成维护，记录标识：{{ result.id }}</NAlert
+            >已完成清理，记录标识：{{ result.id }}</NAlert
           >
           <NDataTable
             :columns="scopeColumns"

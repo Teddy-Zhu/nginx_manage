@@ -16,7 +16,6 @@ import (
 	"nginxpanel/api"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
-	"nginxpanel/internal/history"
 	"nginxpanel/internal/remoteapi"
 )
 
@@ -101,13 +100,6 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 	duration := 30 * time.Second
 	if route.Kind == "sse" {
 		duration = 10 * time.Minute
-	}
-	if route.Method == http.MethodPost && history.SnapshotRequest(route.Path, body) {
-		duration = history.SnapshotRequestTimeout + time.Minute
-		if err = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(duration + 5*time.Second)); err != nil {
-			s.fail(w, r, fault.Unavailable("远程快照维护连接无法设置响应时限"))
-			return
-		}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), duration)
 	defer cancel()

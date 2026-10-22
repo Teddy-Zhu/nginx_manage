@@ -197,7 +197,6 @@ type BackupRecord struct {
 	ExpiresAt          int64          `json:"expires_at"`
 	DeleteStarted      int64          `json:"delete_started"`
 	DeletedAt          sql.NullInt64  `json:"deleted_at"`
-	ArchivedAt         int64          `json:"archived_at"`
 }
 
 type BackupRequest struct {
@@ -348,7 +347,6 @@ type MaintenanceSession struct {
 	CreatedAt     int64          `json:"created_at"`
 	UpdatedAt     int64          `json:"updated_at"`
 	OwnerTaskID   sql.NullString `json:"owner_task_id"`
-	ArchivedAt    int64          `json:"archived_at"`
 }
 
 type MetricSample struct {
