@@ -263,6 +263,12 @@ func ClientIP(r *http.Request) string {
 	return host
 }
 
+func (s *Service) BootstrapRequired(ctx context.Context) (bool, error) {
+	var count int
+	err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+	return count == 0, err
+}
+
 func (s *Service) Bootstrap(ctx context.Context, token, username, password string) error {
 	if len(username) < 1 || len(username) > 64 || strings.TrimSpace(username) != username || strings.ContainsAny(username, "\r\n\t\x00") {
 		return fault.Invalid("用户名须为 1–64 个字符且不含控制字符")
@@ -398,4 +404,17 @@ func (s *Service) ChangePassword(ctx context.Context, password string) error {
 		return err
 	}
 	return s.Sessions.Destroy(ctx)
+}
+
+func (s *Service) RevokeSessions(ctx context.Context, p Principal) error {
+	if err := p.Require("auth.manage"); err != nil {
+		return err
+	}
+	if _, err := s.DB.ExecContext(ctx, "UPDATE users SET session_epoch=session_epoch+1 WHERE id=1"); err != nil {
+		return err
+	}
+	if !p.Machine {
+		return s.Sessions.Destroy(ctx)
+	}
+	return nil
 }

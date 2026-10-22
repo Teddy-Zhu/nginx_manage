@@ -198,6 +198,14 @@ func (n *Nginx) Initialize() error {
 		return err
 	}
 	for _, dir := range []string{n.DataDir, filepath.Join(n.DataDir, "nginx"), filepath.Join(n.DataDir, "nginx", "revisions"), filepath.Join(n.DataDir, "run"), filepath.Join(n.DataDir, "logs"), filepath.Join(n.DataDir, "logs", "nginx-global")} {
+		info, err := os.Lstat(dir)
+		if err != nil {
+			return err
+		}
+		// Correctly initialized parents can be read-only in the worker sandbox.
+		if info.Mode() == os.ModeDir|0755 {
+			continue
+		}
 		if err := os.Chmod(dir, 0755); err != nil {
 			return err
 		}

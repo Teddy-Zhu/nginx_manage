@@ -69,63 +69,6 @@ func verifySystemdWorker(ctx context.Context, unit string) error {
 	return errors.New("独立 worker 不在已登记 systemd 服务的控制组中")
 }
 
-func agentUpgradeArguments(actual, data string, uid int) ([]string, error) {
-	base := []string{"/opt/nginxpanel/current/nginxpanel", "agent", "--data-dir", data, "--allowed-uid", strconv.Itoa(uid), "--nginx-binding", "--nginx-user", "nginxpanel-nginx", "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--metrics-scope", "host", "--component-scope", "host", "--maintenance-scope", "host"}
-	args := strings.Split(actual, " ")
-	invalid := errors.New("Agent 服务参数不是已登记的固定入口")
-	if len(args) < len(base) || len(args) > len(base)+12 || (len(args)-len(base))%2 != 0 {
-		return nil, invalid
-	}
-	if args[6] == "--nginx-container" {
-		base[6] = "--nginx-container"
-	}
-	for i, expected := range base {
-		if args[i] != expected {
-			return nil, invalid
-		}
-	}
-	// Only the fixed socket context and local owner selections may extend it.
-	// Keep their exact order for /proc verification; the complete root-owned
-	// unit is also pinned in the upgrade intent before any service is stopped.
-	seen := make(map[string]bool)
-	for i := len(base); i < len(args); i += 2 {
-		key, value := args[i], args[i+1]
-		if seen[key] {
-			return nil, invalid
-		}
-		seen[key] = true
-		switch key {
-		case "--socket-selinux-context":
-			if value != agentSocketSELinuxContext {
-				return nil, invalid
-			}
-		case "--dns-scope", "--firewall-scope":
-			if value != "host" && value != "unconfirmed" {
-				return nil, invalid
-			}
-		case "--dns-owner":
-			switch value {
-			case "unconfirmed", "regular-file", "networkmanager", "networkd", "netplan":
-			default:
-				return nil, invalid
-			}
-		case "--firewall-owner":
-			switch value {
-			case "unconfirmed", "direct-nftables", "firewalld", "ufw", "iptables-nft", "iptables-legacy":
-			default:
-				return nil, invalid
-			}
-		case "--firewall-ssh":
-			if value != "unconfirmed" && value != "openssh" && value != "none" {
-				return nil, invalid
-			}
-		default:
-			return nil, invalid
-		}
-	}
-	return args, nil
-}
-
 func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []string, error) {
 	var agentHash, workerHash string
 	var args []string
@@ -162,7 +105,7 @@ func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []
 					return "", "", nil, errors.New("Agent 独立升级服务入口不匹配")
 				}
 			} else {
-				args, err = agentUpgradeArguments(actual, data, d.UID)
+				args, err = nativeAgentArguments(actual, data, d.UID)
 				if err != nil {
 					return "", "", nil, err
 				}

@@ -107,12 +107,12 @@ func (s *Server) GetVersion(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, apigen.SystemVersion{FrontendId: frontendID, FrontendEntries: scripts, Version: s.Version, ApiVersion: 1, AgentProtocol: agent.Protocol, ParserVersion: nginxconfig.ParserVersion, PolicyVersion: nginxconfig.PolicyVersion, LauncherVersion: releases.LauncherVersion, Runtime: apigen.SystemVersionRuntime(s.PanelRuntime)})
 }
 func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
-	var count int
-	if err := s.DB.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+	required, err := s.Auth.BootstrapRequired(r.Context())
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	data := apigen.Me{Authenticated: false, BootstrapRequired: count == 0, Csrf: s.Auth.CSRF(r.Context()), Username: "", Scopes: []string{}}
+	data := apigen.Me{Authenticated: false, BootstrapRequired: required, Csrf: s.Auth.CSRF(r.Context()), Username: "", Scopes: []string{}}
 	p, err := s.Auth.Authenticate(r)
 	if err == nil {
 		data.Authenticated = true
@@ -224,15 +224,9 @@ func (s *Server) RevokeSessions(w http.ResponseWriter, r *http.Request, _ apigen
 	if !ok {
 		return
 	}
-	if _, err := s.DB.ExecContext(r.Context(), "UPDATE users SET session_epoch=session_epoch+1 WHERE id=1"); err != nil {
+	if err := s.Auth.RevokeSessions(r.Context(), p); err != nil {
 		s.fail(w, r, err)
 		return
-	}
-	if !p.Machine {
-		if err := s.Auth.Sessions.Destroy(r.Context()); err != nil {
-			s.fail(w, r, err)
-			return
-		}
 	}
 	if err := s.audit(r, p.ID, "auth.revoke_sessions", "administrator", "succeeded"); err != nil {
 		s.fail(w, r, err)

@@ -22,7 +22,8 @@ const pageScanLimit = 5000
 const exportScanLimit = 10000
 const archiveByteLimit = 8 << 20
 
-var auditID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+// Recovery events retain a phase-qualified ID derived from their operation.
+var auditID = regexp.MustCompile(`^(restore\.(reconcile|activate):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type Service struct {
 	db       *sql.DB

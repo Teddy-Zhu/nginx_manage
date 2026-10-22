@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestAgentUpgradeConfiguredEntry(t *testing.T) {
+func TestNativeAgentConfiguredEntry(t *testing.T) {
 	const entry = "/opt/nginxpanel/current/nginxpanel agent --data-dir /srv/nginxpanel --allowed-uid 998 --nginx-binding --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host"
 	for _, mode := range []string{"--nginx-binding", "--nginx-container"} {
 		base := strings.Replace(entry, "--nginx-binding", mode, 1)
@@ -23,7 +23,7 @@ func TestAgentUpgradeConfiguredEntry(t *testing.T) {
 		for _, selection := range selections {
 			t.Run(mode+selection, func(t *testing.T) {
 				actual := base + selection
-				args, err := agentUpgradeArguments(actual, "/srv/nginxpanel", 998)
+				args, err := nativeAgentArguments(actual, "/srv/nginxpanel", 998)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -58,7 +58,7 @@ func TestAgentUpgradeConfiguredEntry(t *testing.T) {
 		"duplicate-socket": entry + " --socket-selinux-context " + agentSocketSELinuxContext + " --socket-selinux-context " + agentSocketSELinuxContext,
 	} {
 		t.Run(name, func(t *testing.T) {
-			args, err := agentUpgradeArguments(actual, "/srv/nginxpanel", 998)
+			args, err := nativeAgentArguments(actual, "/srv/nginxpanel", 998)
 			if err == nil || args != nil {
 				t.Fatal("unapproved entry accepted")
 			}

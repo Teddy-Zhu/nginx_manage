@@ -73,18 +73,28 @@ func nativeNginxUnit(ctx context.Context, unit, data, worker string, firstInstal
 		return err
 	}
 	expected := "ExecStart=/opt/nginxpanel/current/nginxpanel nginx-runtime --data-dir " + data
+	var uid int
 	if unit == "nginxpanel-agent.service" {
 		identity, e := user.Lookup("nginxpanel")
 		if e != nil {
 			return e
 		}
-		expected = "ExecStart=/opt/nginxpanel/current/nginxpanel agent --data-dir " + data + " --allowed-uid " + identity.Uid + " --nginx-binding --nginx-user " + worker + " --nginx-modules /etc/nginxpanel/nginx-modules.json --metrics-scope host --component-scope host --maintenance-scope host"
+		uid, e = strconv.Atoi(identity.Uid)
+		if e != nil {
+			return e
+		}
 	}
 	count := 0
 	for _, line := range strings.Split(string(raw), "\n") {
 		if strings.HasPrefix(line, "ExecStart=") {
 			count++
-			if line != expected {
+			if unit == "nginxpanel-agent.service" {
+				actual := strings.TrimSpace(strings.TrimPrefix(line, "ExecStart="))
+				args, e := nativeAgentArguments(actual, data, uid)
+				if e != nil || args[6] != "--nginx-binding" {
+					return errors.New("本机原生 Agent 服务执行入口与安装意图不一致")
+				}
+			} else if line != expected {
 				return errors.New("本机原生服务执行入口与安装意图不一致")
 			}
 		}

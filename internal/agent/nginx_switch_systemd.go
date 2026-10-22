@@ -124,7 +124,7 @@ func switchService(ctx context.Context, r Record, unit string) (nginxSwitchServi
 			return out, e
 		}
 		configured := strings.TrimSuffix(strings.ReplaceAll(string(cmdline), "\x00", " "), " ")
-		args, e := agentUpgradeArguments(configured, data, uid)
+		args, e := nativeAgentArguments(configured, data, uid)
 		if e != nil || args[6] != "--nginx-binding" || !bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
 			return out, errors.New("Agent 主进程参数已偏离原生安装")
 		}

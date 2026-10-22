@@ -2,7 +2,6 @@ package transport
 
 import (
 	"net/http"
-	"time"
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/auth"
@@ -10,7 +9,6 @@ import (
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/nodes"
 	"nginxpanel/internal/remoteapi"
-	"nginxpanel/internal/secure"
 	"nginxpanel/internal/transport/apigen"
 	"nginxpanel/migrations"
 )
@@ -109,8 +107,8 @@ func (s *Server) GetRemoteIdentity(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	var expires int64
-	if err = s.DB.QueryRowContext(r.Context(), "SELECT expires_at FROM api_credentials WHERE id=? AND revoked_at IS NULL", p.ID).Scan(&expires); err != nil {
+	expires, err := s.Auth.CredentialExpiry(r.Context(), p)
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -130,27 +128,7 @@ func (s *Server) RevokeRemoteAuthorization(w http.ResponseWriter, r *http.Reques
 		s.fail(w, r, auth.ErrForbidden)
 		return
 	}
-	tx, err := s.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	defer tx.Rollback()
-	changed, err := tx.ExecContext(r.Context(), "UPDATE api_credentials SET revoked_at=COALESCE(revoked_at,?) WHERE id=?", time.Now().Unix(), p.ID)
-	if err == nil {
-		var count int64
-		count, err = changed.RowsAffected()
-		if err == nil && count != 1 {
-			err = fault.NotFound("当前凭据不存在")
-		}
-	}
-	if err == nil {
-		_, err = tx.ExecContext(r.Context(), "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,'revoked',?)", secure.ID(), r.Context().Value(requestIDKey).(string), p.ID, "auth.revoke_self", p.ID, time.Now().Unix())
-	}
-	if err == nil {
-		err = tx.Commit()
-	}
-	if err != nil {
+	if err := s.Auth.RevokeOwnCredential(r.Context(), p, r.Context().Value(requestIDKey).(string)); err != nil {
 		s.fail(w, r, err)
 		return
 	}
