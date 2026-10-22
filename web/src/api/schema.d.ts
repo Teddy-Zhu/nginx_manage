@@ -2562,7 +2562,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目标、512 个条目，Agent 程序最多 192 MiB，其余最多 16 MiB；保留当前、回滚及恢复引用。root_receipt 归档成功运行维护、前后发布目录均已退役的普通 Nginx 回执，以及已释放原维护且恢复材料实际已清理的面板更新；独立或协调 Agent 更新须先回收目标程序。预检私有归档配额，保留当前程序的所有权回执。 */
+        /** @description 返回 RuntimeHistoryPreview。要求 held 宿主机维护会话；最多 8 个目标、512 个条目，Agent 程序最多 192 MiB，其余最多 16 MiB；保留当前、回滚及恢复引用。root_receipt 归档成功运行维护、前后发布目录均已退役的普通 Nginx 回执，以及已释放原维护的面板/Agent/镜像更新、面板进程控制和材料已清理的版本选择/文件恢复；面板更新须确认恢复材料实际已清理，独立或协调 Agent 更新须先回收目标程序。预检私有归档配额，保留当前程序的所有权回执。 */
         post: operations["previewRuntimeHistory"];
         delete?: never;
         options?: never;

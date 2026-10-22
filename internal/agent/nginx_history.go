@@ -148,21 +148,23 @@ func (s *Server) historyLock(ctx context.Context, id, epoch, kind string) (func(
 		}
 		programUnlock = release
 		if kind == "root_receipt" {
-			// Independent update workers acquire their own locks before the
-			// maintenance gate. Try-lock in the same order to avoid waiting on a
-			// worker that is finishing a terminal save or cleanup.
-			update, err := s.Journal.rootLock(".panel-update.lock")
-			if err != nil {
-				release()
-				return nil, nil, err
+			// Owners take their locks before the maintenance gate. Try-lock
+			// every admitted workflow rather than waiting while holding the
+			// installer lock, since image workers acquire these in reverse order.
+			releases := []func(){release}
+			programUnlock = func() {
+				for i := len(releases) - 1; i >= 0; i-- {
+					releases[i]()
+				}
 			}
-			service, err := s.Journal.rootLock(".panel-service.lock")
-			if err != nil {
-				update()
-				release()
-				return nil, nil, err
+			for _, name := range []string{".panel-update.lock", ".panel-service.lock", ".panel-image.lock", ".nginx-image.lock", ".panel-select.lock", ".panel-restore.lock"} {
+				unlock, err := s.Journal.rootLock(name)
+				if err != nil {
+					programUnlock()
+					return nil, nil, err
+				}
+				releases = append(releases, unlock)
 			}
-			programUnlock = func() { service(); update(); release() }
 		}
 	}
 	g := s.Nginx.maintenance

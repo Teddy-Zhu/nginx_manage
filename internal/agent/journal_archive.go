@@ -46,6 +46,31 @@ func retirableJournalReceipt(r Record) bool {
 			return false
 		}
 		base.AgentUpgrade = r.AgentUpgrade
+	case panelImageKind:
+		if validPanelImage(r) != nil || !panelImageTerminal(r) {
+			return false
+		}
+		base.PanelImage = r.PanelImage
+	case nginxImageKind:
+		if validNginxImage(r) != nil || !nginxImageTerminal(r) {
+			return false
+		}
+		base.NginxImage, base.MaintenanceEpoch, base.Deadline = r.NginxImage, r.MaintenanceEpoch, r.Deadline
+	case panelServiceKind:
+		if validPanelService(r) != nil || r.State != "succeeded" {
+			return false
+		}
+		base.PanelService, base.MaintenanceEpoch, base.Deadline = r.PanelService, r.MaintenanceEpoch, r.Deadline
+	case panelSelectKind:
+		if validPanelSelection(r) != nil || r.State != "succeeded" {
+			return false
+		}
+		base.PanelSelection, base.MaintenanceEpoch, base.Deadline = r.PanelSelection, r.MaintenanceEpoch, r.Deadline
+	case panelRestoreKind:
+		if validPanelRestoreRecord(r) != nil || r.State != "succeeded" {
+			return false
+		}
+		base.PanelRestore, base.MaintenanceEpoch, base.Deadline = r.PanelRestore, r.MaintenanceEpoch, r.Deadline
 	case "nginx.apply", "nginx.validate":
 		if !historyTerminal(r) || r.AfterDir != r.OperationID || r.BeforeDir != "bootstrap" && !validID(r.BeforeDir) || !validID(r.AfterRevision) || r.BeforeRevision != "" && !validID(r.BeforeRevision) {
 			return false
@@ -188,8 +213,8 @@ func (n *Nginx) journalReceiptEligible(r Record) (bool, error) {
 	if r.Kind == runtimeHistoryKind {
 		return true, nil
 	}
-	if r.Kind == panelUpdateKind || r.Kind == agentUpgradeKind {
-		return n.updateReceiptEligible(r)
+	if r.Kind != "nginx.apply" && r.Kind != "nginx.validate" {
+		return n.controlReceiptEligible(r)
 	}
 	// Both publication identities must already have been retired. The initial
 	// bootstrap and disaster/restore anchors never enter this allowlist.
@@ -205,28 +230,39 @@ func (n *Nginx) journalReceiptEligible(r Record) (bool, error) {
 	return true, nil
 }
 
-func (n *Nginx) updateReceiptEligible(r Record) (bool, error) {
-	var maintenanceID string
+func (n *Nginx) controlReceiptEligible(r Record) (bool, error) {
+	var data, maintenanceID, snapshotID string
 	var target *AgentProgram
-	if r.Kind == panelUpdateKind {
+	switch r.Kind {
+	case panelUpdateKind:
 		i := r.PanelUpdate.Intent
-		if i.Input.Stage.DataDir != n.DataDir {
-			return false, ErrExternalChange
-		}
-		present, err := panelrecovery.MaterialPresent(n.DataDir, i.SnapshotID)
-		if err != nil || present {
-			return false, err
-		}
-		maintenanceID = i.Input.MaintenanceID
+		data, maintenanceID, snapshotID = i.Input.Stage.DataDir, i.Input.MaintenanceID, i.SnapshotID
 		if i.Agent != nil {
 			target = &i.Agent.Target
 		}
-	} else {
+	case agentUpgradeKind:
 		i := r.AgentUpgrade.Intent
-		if i.Input.Stage.DataDir != n.DataDir {
-			return false, ErrExternalChange
-		}
-		maintenanceID, target = i.Input.MaintenanceID, &i.Target
+		data, maintenanceID, target = i.Input.Stage.DataDir, i.Input.MaintenanceID, &i.Target
+	case panelImageKind:
+		i := r.PanelImage.Intent
+		data, maintenanceID = i.Input.Stage.DataDir, i.Input.MaintenanceID
+	case nginxImageKind:
+		i := r.NginxImage.Intent
+		data, maintenanceID = i.Input.Stage.DataDir, i.Input.MaintenanceID
+	case panelServiceKind:
+		i := r.PanelService.Intent
+		data, maintenanceID = i.Input.DataDir, i.Input.MaintenanceID
+	case panelSelectKind:
+		i := r.PanelSelection
+		data, maintenanceID, snapshotID = i.Stage.DataDir, i.MaintenanceID, i.Snapshot.Manifest.OperationID
+	case panelRestoreKind:
+		m := r.PanelRestore.Receipt.Manifest
+		data, maintenanceID, snapshotID = m.DataDir, m.MaintenanceID, m.OperationID
+	default:
+		return false, ErrExternalChange
+	}
+	if data != n.DataDir {
+		return false, ErrExternalChange
 	}
 	grant, err := n.Journal.Get(maintenanceID)
 	if err != nil {
@@ -234,6 +270,12 @@ func (n *Nginx) updateReceiptEligible(r Record) (bool, error) {
 	}
 	if !releasedMaintenance(grant) {
 		return false, nil
+	}
+	if snapshotID != "" {
+		present, err := panelrecovery.MaterialPresent(n.DataDir, snapshotID)
+		if err != nil || present {
+			return false, err
+		}
 	}
 	if target != nil {
 		// These hot receipts are the ownership register used by program
