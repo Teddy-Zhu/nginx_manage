@@ -285,7 +285,7 @@ Agent/数据库/归档为 110/32/6，无首版前兼容路径。源码实现与�
 
 ## 原生 Nginx 运行组件维护切换
 
-本机 root 可使用 `component-switch` 将已运行的专用原生 Nginx 换成已准备的签名资产。入口要求原生安装 v12 已完成、Nginx 与 Agent 正常运行、独立维护会话已持有，以及明确允许重启停机。Docker 继续使用固定镜像及构建时预置模块，本入口不编译或增装模块。Web/API 已接入同一切换核心，其他组件的运行版本切换仍待接入。
+本机 root 可使用 `component-switch` 将已运行的专用原生 Nginx 换成已准备的签名资产。入口要求原生安装 v14 已完成、Nginx 与 Agent 正常运行、独立维护会话已持有，以及明确允许重启停机。Docker 继续使用固定镜像及构建时预置模块，本入口不编译或增装模块。Web/API 已接入同一切换核心，其他组件的运行版本切换仍待接入。
 
 ```sh
 sudo /opt/nginxpanel/current/nginxpanel component-switch \

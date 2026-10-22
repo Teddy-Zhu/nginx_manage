@@ -8,15 +8,19 @@ import (
 	"os/user"
 	"strconv"
 	"strings"
+	"time"
 
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
 )
 
 type nginxSwitchService struct {
-	Running bool
-	PID     int
+	Running        bool
+	PID            int
+	RestartPending bool
 }
+
+var errSwitchServicePending = errors.New("原生服务启动或停止尚未完成")
 
 func switchUnitDigest(ctx context.Context, data, unit string) (string, error) {
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
@@ -30,6 +34,24 @@ func switchUnitDigest(ctx context.Context, data, unit string) (string, error) {
 }
 
 func switchService(ctx context.Context, r Record, unit string) (nginxSwitchService, error) {
+	call, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	for {
+		state, err := inspectSwitchService(call, r, unit)
+		if !errors.Is(err, errSwitchServicePending) {
+			return state, err
+		}
+		timer := time.NewTimer(200 * time.Millisecond)
+		select {
+		case <-call.Done():
+			timer.Stop()
+			return state, errors.Join(err, call.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func inspectSwitchService(ctx context.Context, r Record, unit string) (nginxSwitchService, error) {
 	var out nginxSwitchService
 	i := r.NginxSwitch
 	data := i.Input.Source.DataDir
@@ -59,12 +81,29 @@ func switchService(ctx context.Context, r Record, unit string) (nginxSwitchServi
 	if unit == "nginxpanel-agent.service" {
 		group = "nginxpanel-ipc"
 	}
-	if len(values) != 11 || values["LoadState"] != "loaded" || values["FragmentPath"] != "/etc/systemd/system/"+unit || values["DropInPaths"] != "" || values["NeedDaemonReload"] != "no" || values["User"] != "root" || values["Group"] != group || values["Type"] != "exec" || values["ControlPID"] != "0" {
+	if len(values) != 11 || values["LoadState"] != "loaded" || values["FragmentPath"] != "/etc/systemd/system/"+unit || values["DropInPaths"] != "" || values["NeedDaemonReload"] != "no" || values["User"] != "root" || values["Group"] != group || values["Type"] != "exec" {
 		return out, errors.New("systemd 实际加载的服务与切换登记不一致")
 	}
 	out.PID, err = strconv.Atoi(values["MainPID"])
 	if err != nil || out.PID < 0 || out.PID == 1 {
 		return out, errors.New("原生服务主进程标识无效")
+	}
+	control, err := strconv.Atoi(values["ControlPID"])
+	if err != nil || control < 0 || control == 1 {
+		return out, errors.New("原生服务控制进程标识无效")
+	}
+	active, sub := values["ActiveState"], values["SubState"]
+	if active == "activating" && sub == "auto-restart" && out.PID == 0 && control == 0 {
+		out.RestartPending = true
+		return out, nil
+	}
+	// Observe documented transitions without sending another service command.
+	// Running processes still require the full identity proof below.
+	if active == "activating" && (sub == "start-pre" || sub == "start" || sub == "start-post") || active == "deactivating" && (sub == "stop" || sub == "stop-sigterm" || sub == "stop-sigkill" || sub == "stop-post" || sub == "final-sigterm" || sub == "final-sigkill") {
+		return out, errSwitchServicePending
+	}
+	if control != 0 {
+		return out, errors.New("原生服务存在未确认的控制进程")
 	}
 	if (values["ActiveState"] == "inactive" && values["SubState"] == "dead" || values["ActiveState"] == "failed" && values["SubState"] == "failed") && out.PID == 0 {
 		return out, nil
@@ -96,6 +135,27 @@ func switchService(ctx context.Context, r Record, unit string) (nginxSwitchServi
 			}
 		}
 		if !matched {
+			// Type=exec confirms the fixed launcher before it verifies and execs
+			// Nginx. Wait for the full master proof without accepting it as ready.
+			cmdline, e := panelProcFile(base+"/cmdline", 8192)
+			if e != nil {
+				return out, e
+			}
+			actual, e := os.Readlink(base + "/exe")
+			if e != nil {
+				return out, e
+			}
+			if actual == i.Before.Binary || actual == i.Candidate.Binary {
+				return out, errSwitchServicePending
+			}
+			executable, e := installationExecutable()
+			if e != nil {
+				return out, e
+			}
+			args := []string{"/opt/nginxpanel/current/nginxpanel", "nginx-runtime", "--data-dir", data}
+			if actual == executable && bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
+				return out, errSwitchServicePending
+			}
 			return out, errors.New("服务进程不是原 Nginx 或本次候选程序")
 		}
 	} else {
@@ -141,7 +201,10 @@ func switchControl(ctx context.Context, j *Journal, r *Record, unit, action, sta
 	if err = nginxSwitchStage(ctx, j, r, stage); err != nil {
 		return err
 	}
-	if state.Running == (action == "start") {
+	if state.RestartPending && action == "start" {
+		return errors.New("原生服务正在等待失败后的自动重启，须先停止并核对")
+	}
+	if !state.RestartPending && state.Running == (action == "start") {
 		return nil
 	}
 	if _, err = installationSystemctl(ctx, action, unit); err != nil {
@@ -151,7 +214,7 @@ func switchControl(ctx context.Context, j *Journal, r *Record, unit, action, sta
 	if err != nil {
 		return err
 	}
-	if state.Running != (action == "start") {
+	if state.RestartPending || state.Running != (action == "start") {
 		return errors.New("原生服务控制后未确认目标状态")
 	}
 	return nil
