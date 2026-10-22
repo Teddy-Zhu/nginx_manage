@@ -174,11 +174,11 @@ Agent 内部接口已接入 `POST /v1/fail2ban/existing/submit`、`GET /v1/fail2
 
 ## 当前边界
 
-公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前 Agent 协议为 64、数据库为 26，root 防火墙记录仍为 3，Fail2ban 接入记录为 1。首版不提供旧协议兼容。
+公开 OpenAPI、Go/TypeScript 声明和显式远程资源同步更新；当前协议和数据版本见[进度清单](progress.md)。首版不提供旧协议兼容。
 
-已有实例默认只读，可由本机 root 另行授予全局服务控制，或接管固定 SSH jail 并执行上述参数应用/停用。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 SSH jail 的参数、启用及停用已接入网页/API；该类 jail 的手动地址操作、Docker 转发动作及 CDN 来源处理仍待完成。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
+已有实例默认只读，可由本机 root 另行授予全局服务控制，或接管固定 SSH jail 并执行上述参数应用/停用。独立受管实例的安装/服务控制、Nginx 客户端 jail 应用和手动 ban/unban 见下文；已有 SSH jail 的参数、启用、停用及手动地址操作已接入网页/API，地址操作沿用固定 profile 的完整运行证明，内核效果独立核对。Nginx 客户端拒绝与宿主机动作按下文分别授权。面板和 Nginx 镜像不增加 Python/Fail2ban，不增加运行时 Nginx 模块安装能力。
 
-实现与集成源码审阅已完成，未运行生成器、构建、类型检查、lint、测试、浏览器、服务或真实宿主机探测/接入命令；发行版、Python、systemd、Fail2ban 与日志后端组合留待 P5 集中验证。
+当前实现的代表场景及运行证据见[验证记录](validation.md)。未覆盖的发行版、Python、systemd、Fail2ban 与日志后端组合不据此推定通过。
 
 ## jail 期望配置与迁移
 

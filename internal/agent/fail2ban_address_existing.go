@@ -125,17 +125,7 @@ func (current fail2banAddressContext) matches(i *fail2banAddressIntent) bool {
 	return current.installation == i.Installation && current.selection == i.Selection && current.engine == i.Engine && current.target == i.Request.Input.Target && (!checkLive || current.live.invocation == i.Invocation && current.live.inode == i.SocketInode)
 }
 
-func (f *fail2banJailsExecutor) addressProof(ctx context.Context, current fail2banAddressContext, i *fail2banAddressIntent) (map[string]fail2banBanTime, error) {
-	if current.existing != nil {
-		after, err := f.addressContext(ctx, i.Request.Input.Query())
-		if err != nil {
-			return nil, err
-		}
-		if !after.matches(i) {
-			return nil, errors.New("读取后原接管、参数、服务或动作来源变化")
-		}
-		return after.bans, nil
-	}
+func (f *fail2banJailsExecutor) managedAddressProof(ctx context.Context, current fail2banAddressContext) (map[string]fail2banBanTime, error) {
 	proof, err := readFail2banJailDetails(ctx, current.r, current.bundle, current.jail)
 	if err == nil {
 		err = verifyFail2banManaged(ctx, current.r, true)

@@ -62,6 +62,15 @@ func fail2banExistingPolicyClientArgs(p fail2banProgram, c *fail2banExistingPoli
 	return args
 }
 
+func parseFail2banExistingPolicyDump(raw []byte, name string, enabled bool) ([][]any, error) {
+	// The scoped official client emits no commands for a disabled jail.
+	// Only an explicitly disabled, valid target permits an empty stream.
+	if !enabled && len(raw) == 0 && fail2banJailName.MatchString(name) {
+		return [][]any{}, nil
+	}
+	return parseFail2banDump(raw, name)
+}
+
 func prepareFail2banExistingPolicyClient(ctx context.Context, data string, c *fail2banExistingPolicyCapture, evidence fail2banExistingRuntimeEvidence) (fail2ban.Tool, string, error) {
 	var empty fail2ban.Tool
 	started, err := fail2banExistingStarted(ctx, &evidence.Capture.Binding, evidence.Live)
@@ -100,7 +109,7 @@ func prepareFail2banExistingPolicyClient(ctx context.Context, data string, c *fa
 	if err != nil {
 		return empty, "", errors.New("官方客户端无法编译受限单 jail 配置流")
 	}
-	commands, err := parseFail2banDump(raw, c.Plan.Name)
+	commands, err := parseFail2banExistingPolicyDump(raw, c.Plan.Name, c.After.Policy.Enabled)
 	if err != nil || fail2banDumpHash(commands) != c.After.DumpHash {
 		return empty, "", errors.New("受限官方配置流与参数计划不一致")
 	}

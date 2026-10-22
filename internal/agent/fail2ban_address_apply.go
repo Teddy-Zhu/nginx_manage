@@ -108,11 +108,19 @@ func (f *fail2banJailsExecutor) advanceAddress(ctx context.Context) error {
 		if err = f.persist(record); err != nil {
 			return err
 		}
+		if current.existing != nil {
+			// Each full existing-engine proof has its own bounded worker pass.
+			// The durable sent marker prevents the next pass from resending.
+			return ErrBusy
+		}
 	}
 	f.refreshAddressAction(current.backend)
 	// An interrupted invocation may have changed the engine, but its intent is
 	// never inverted or replayed. Confirm current state independently of receipt.
-	proof, err := f.addressProof(ctx, current, i)
+	proof := current.bans
+	if current.existing == nil {
+		proof, err = f.managedAddressProof(ctx, current)
+	}
 	if err != nil {
 		return finish("state_unconfirmed", "官方客户端可能已执行，当前引擎状态无法确认；原操作不会重发")
 	}

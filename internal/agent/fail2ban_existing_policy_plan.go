@@ -15,7 +15,7 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-func compileFail2banExistingPolicyFiles(ctx context.Context, data string, p fail2banProgram, b *fail2banBinding, files map[string][]byte, name string) (commands [][]any, resultErr error) {
+func compileFail2banExistingPolicyFiles(ctx context.Context, data string, p fail2banProgram, b *fail2banBinding, files map[string][]byte, name string, enabled bool) (commands [][]any, resultErr error) {
 	base := filepath.Join(fail2banExistingDir(data), "policy-previews")
 	if err := secure.RootDirectory(base, 0700); err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func compileFail2banExistingPolicyFiles(ctx context.Context, data string, p fail
 	if err != nil {
 		return nil, errors.New("官方单 jail 配置编译失败，或 include 超出冻结配置目录")
 	}
-	return parseFail2banDump(raw, name)
+	return parseFail2banExistingPolicyDump(raw, name, enabled)
 }
 
 func existingPolicyJails(names []string, name string, enabled bool) []string {
@@ -135,7 +135,7 @@ func planFail2banExistingPolicyLocked(ctx context.Context, data, adoption string
 	forcedBefore.Enabled = true
 	files := maps.Clone(evidence.Config.Files)
 	files[overlay] = []byte(fail2banExistingOverlay(original.Plan.Profile, forcedBefore))
-	beforeCommands, err := compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, files, name)
+	beforeCommands, err := compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, files, name, true)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func planFail2banExistingPolicyLocked(ctx context.Context, data, adoption string
 	forcedAfter := after
 	forcedAfter.Enabled = true
 	files[overlay] = []byte(fail2banExistingOverlay(original.Plan.Profile, forcedAfter))
-	enabledCommands, err := compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, files, name)
+	enabledCommands, err := compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, files, name, true)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func planFail2banExistingPolicyLocked(ctx context.Context, data, adoption string
 	if err != nil {
 		return nil, err
 	}
-	referenceCommands, err := compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, reference, name)
+	referenceCommands, err := compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, reference, name, true)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func planFail2banExistingPolicyLocked(ctx context.Context, data, adoption string
 	afterCommands := enabledCommands
 	if !after.Enabled {
 		files[overlay] = []byte(fail2banExistingOverlay(original.Plan.Profile, after))
-		afterCommands, err = compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, files, name)
+		afterCommands, err = compileFail2banExistingPolicyFiles(ctx, data, evidence.Program, &original.Binding, files, name, false)
 		if err != nil {
 			return nil, err
 		}

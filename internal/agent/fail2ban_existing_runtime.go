@@ -289,7 +289,7 @@ func readFail2banExistingRuntimeLocked(ctx context.Context, data, adoption strin
 	if basis.Policy.Enabled && expected != nil {
 		files := maps.Clone(config.Files)
 		files[fail2banExistingOverlayName(c.Plan.Profile.Name)] = []byte(fail2banExistingOverlay(c.Plan.Profile, basis.Policy))
-		commands, err = compileFail2banExistingPolicyFiles(ctx, data, program, b, files, c.Plan.Profile.Name)
+		commands, err = compileFail2banExistingPolicyFiles(ctx, data, program, b, files, c.Plan.Profile.Name, true)
 		if err != nil {
 			return out, err
 		}
