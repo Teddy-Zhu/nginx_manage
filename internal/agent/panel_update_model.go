@@ -55,6 +55,7 @@ type PanelUpdateAuthorization struct {
 }
 
 type PanelUpdateOperation struct {
+	Reboots             []PanelUpdateReboot        `json:"reboots,omitempty"`
 	Agent               *CoordinatedAgentState     `json:"agent,omitempty"`
 	Authorizations      []PanelUpdateAuthorization `json:"authorizations,omitempty"`
 	Intent              PanelUpdateIntent          `json:"intent"`
@@ -182,10 +183,15 @@ func validPanelUpdate(r Record) error {
 			return errors.New("面板更新快照与原授权不一致")
 		}
 	}
-	for _, child := range []struct {
+	type serviceChild struct {
 		r                   *Record
 		id, action, release string
-	}{{p.Stop, i.StopID, "stop", i.BeforeID}, {p.Start, i.StartID, "start", i.TargetID}, {p.RollbackStop, i.RollbackStopID, "stop", ""}, {p.RollbackStart, i.RollbackStartID, "start", i.BeforeID}} {
+	}
+	children := []serviceChild{{p.Stop, i.StopID, "stop", i.BeforeID}, {p.Start, i.StartID, "start", i.TargetID}, {p.RollbackStop, i.RollbackStopID, "stop", ""}, {p.RollbackStart, i.RollbackStartID, "start", i.BeforeID}}
+	for _, reboot := range p.Reboots {
+		children = append(children, serviceChild{reboot.Stop, reboot.StopID, "stop", i.BeforeID}, serviceChild{reboot.Start, reboot.StartID, "start", i.BeforeID})
+	}
+	for _, child := range children {
 		if child.r == nil {
 			continue
 		}
@@ -225,13 +231,16 @@ func validPanelUpdate(r Record) error {
 			return errors.New("补偿启动与匹配程序、数据和停机不一致")
 		}
 	}
+	if err := validPanelUpdateReboots(r, ids); err != nil {
+		return err
+	}
 	if p.Ready != nil {
 		if err := validUpdateReadiness(p.Ready, p.Start, p.Snapshot, i, i.TargetSchema); err != nil {
 			return err
 		}
 	}
 	if p.RollbackReady != nil {
-		if err := validUpdateReadiness(p.RollbackReady, p.RollbackStart, p.Snapshot, i, i.BeforeSchema); err != nil {
+		if err := validUpdateReadiness(p.RollbackReady, p.rollbackStarted(), p.Snapshot, i, i.BeforeSchema); err != nil {
 			return err
 		}
 	}
@@ -265,6 +274,9 @@ func validPanelUpdate(r Record) error {
 	}
 	if p.ReleaseAcknowledged && (!panelUpdateFinalized(r) || r.State != panelUpdateOutcome(r)) || !p.ReleaseAcknowledged && panelUpdateFinalized(r) && r.State != "waiting_confirmation" {
 		return errors.New("更新结果与维护释放回执不一致")
+	}
+	if raw, err := json.Marshal(r); err != nil || len(raw) > 128<<10 {
+		return errors.Join(err, errors.New("面板更新独立记录超过读取容量"))
 	}
 	if err := validPanelUpdateCleanup(r); err != nil {
 		return err

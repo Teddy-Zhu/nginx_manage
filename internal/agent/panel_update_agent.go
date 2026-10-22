@@ -38,10 +38,11 @@ type CoordinatedAgentLeg struct {
 }
 
 type CoordinatedAgentState struct {
-	Forward  CoordinatedAgentLeg     `json:"forward"`
-	Rollback CoordinatedAgentLeg     `json:"rollback"`
-	Epoch    string                  `json:"epoch"`
-	Rescue   *CoordinatedAgentRescue `json:"rescue,omitempty"`
+	RescueHistory []CoordinatedAgentRescue `json:"rescue_history,omitempty"`
+	Forward       CoordinatedAgentLeg      `json:"forward"`
+	Rollback      CoordinatedAgentLeg      `json:"rollback"`
+	Epoch         string                   `json:"epoch"`
+	Rescue        *CoordinatedAgentRescue  `json:"rescue,omitempty"`
 }
 
 type CoordinatedAgentRescue struct {
@@ -70,6 +71,14 @@ func validCoordinatedAgent(r Record) error {
 	if rescue := p.Agent.Rescue; rescue != nil {
 		if rescue.Program != a.Before && rescue.Program != a.Target || !agentProcessValid(rescue.Process) || rescue.Process.BootID == a.BeforeProcess.BootID || rescue.AuthorizedAt <= 0 || rescue.AuthorizedAt > time.Now().Unix()+300 || p.Failure == "" {
 			return errors.New("协调更新的本机重启救援依据无效")
+		}
+	}
+	if len(p.Agent.RescueHistory) > 8 || len(p.Agent.RescueHistory) > 0 && p.Agent.Rescue == nil {
+		return errors.New("协调更新的本机救援历史超过上限或缺少当前批准")
+	}
+	for n, rescue := range p.Agent.RescueHistory {
+		if !validCoordinatedRescue(rescue, a) || rescue.AuthorizedAt > p.Agent.Rescue.AuthorizedAt || n > 0 && rescue.AuthorizedAt < p.Agent.RescueHistory[n-1].AuthorizedAt {
+			return errors.New("协调更新的本机救援历史无效")
 		}
 	}
 	if r.Stage == "committed" && !p.Agent.Forward.Ready || r.Stage == "compensated" && !p.Agent.Rollback.Ready {
@@ -426,12 +435,21 @@ func registerCoordinatedBootRescue(ctx context.Context, data string, r *Record) 
 	if process.State != "running" || process.BootID == a.BeforeProcess.BootID || p.Agent.Rescue != nil && p.Agent.Rescue.Program == current && p.Agent.Rescue.Process == process {
 		return nil
 	}
+	if p.Agent.Rescue != nil {
+		if len(p.Agent.RescueHistory) >= 8 {
+			return errors.New("本机救援历史已达容量上限，须本机维护")
+		}
+		p.Agent.RescueHistory = append(p.Agent.RescueHistory, *p.Agent.Rescue)
+	}
 	p.Agent.Rescue = &CoordinatedAgentRescue{Program: current, Process: process, AuthorizedAt: time.Now().Unix()}
 	if p.Failure == "" {
 		p.Failure = "本机重启后的协调部署只允许恢复原程序与数据"
 	}
 	if p.Snapshot != nil {
 		r.State, r.Stage = "compensating", "rollback_stopping"
+		if p.RollbackSelected && p.Restore != nil && p.Restore.State == "succeeded" && p.RollbackStart != nil && p.RollbackStart.State == "succeeded" {
+			r.Stage = "rollback_checking"
+		}
 	}
 	return nil
 }

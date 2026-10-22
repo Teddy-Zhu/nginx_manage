@@ -3,15 +3,42 @@ package agent
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
+	"syscall"
 	"time"
 
+	"nginxpanel/internal/launcher"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/storage"
 )
 
 func (w *panelUpdateWorker) childSaver(slot **Record) func(Record) error {
 	return func(r Record) error { r.UpdatedAt = time.Now().Unix(); *slot = &r; return w.save() }
+}
+
+// An unexpected Web exit restarts the Docker launcher too. Only a missing or
+// not-yet-listening control socket and transitional states are retried; peer and
+// receipt checks still fail.
+func observeUpdatePanelService(ctx context.Context, s panelruntime.Snapshot) (PanelServiceObservation, error) {
+	call, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for {
+		observed, err := observePanelService(call, s)
+		var dial *net.OpError
+		transitional := err == nil && (observed.State == "starting" || observed.State == "stopping")
+		unavailable := errors.As(err, &dial) && dial.Op == "dial" && dial.Net == "unix" && dial.Addr != nil && dial.Addr.String() == launcher.Socket(s.Deployment.DataDir) && (errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED))
+		if s.Deployment.Mode != "docker" || !transitional && !unavailable {
+			return observed, err
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-call.Done():
+			timer.Stop()
+			return observed, errors.Join(err, call.Err(), errors.New("等待更新面板控制通道就绪超时"))
+		case <-timer.C:
+		}
+	}
 }
 
 func (w *panelUpdateWorker) service(ctx context.Context, slot **Record, id, action string, s panelruntime.Snapshot, stop *Record) error {
@@ -25,7 +52,7 @@ func (w *panelUpdateWorker) service(ctx context.Context, slot **Record, id, acti
 	i := w.r.PanelUpdate.Intent
 	fresh := *slot == nil
 	if fresh {
-		before, err := observePanelService(call, s)
+		before, err := observeUpdatePanelService(call, s)
 		if err != nil {
 			return err
 		}
@@ -51,7 +78,7 @@ func (w *panelUpdateWorker) service(ctx context.Context, slot **Record, id, acti
 	}
 	child := **slot
 	if child.State == "succeeded" {
-		observed, err := observePanelService(call, s)
+		observed, err := observeUpdatePanelService(call, s)
 		if err != nil {
 			return err
 		}
@@ -129,6 +156,9 @@ func (w *panelUpdateWorker) service(ctx context.Context, slot **Record, id, acti
 }
 
 func (w *panelUpdateWorker) holdStop() *Record {
+	if reboots := w.r.PanelUpdate.Reboots; len(reboots) > 0 && reboots[len(reboots)-1].Stop != nil {
+		return reboots[len(reboots)-1].Stop
+	}
 	if w.r.PanelUpdate.RollbackStop != nil {
 		return w.r.PanelUpdate.RollbackStop
 	}
@@ -392,7 +422,11 @@ func (w *panelUpdateWorker) compensate(ctx context.Context) (Record, error) {
 			if err != nil {
 				return w.pending(err)
 			}
-			ready, err := observePanelReadiness(call, w.j, s, *p.RollbackStart, *p.Snapshot, w.epoch)
+			started, err := w.rollbackReadinessStart(call, s)
+			if err != nil {
+				return w.pending(err)
+			}
+			ready, err := observePanelReadiness(call, w.j, s, *started, *p.Snapshot, w.epoch)
 			if err != nil {
 				return w.pending(err)
 			}
