@@ -815,3 +815,14 @@ v90/v92 的签名夹具错误均在离线材料校验时拒绝，未执行更新
 `v131/terminal.json` 确认业务通过，日志/归档采集全部退出 0，QEMU 与容器退出 0、无 OOM。`success-proof.json` SHA-256 为 `7859e026bcaff936edcef020901b3fdba19e7481a615f78395dee43f16f2dcd8`，`source-evidence.tar.gz` 为 `52e5442dfa56ac7ad8dddb08e51a6be0c32beee8c99f57bae95eca571bca4858`；原始材料包含私有运行信息，保留于忽略目录，不进入 Git。
 
 固定 Go 1.27.2 离线 SDK 容器的现有 Agent 检查、Fail2ban 包编译、改动格式和安装脚本语法检查，以及 amd64/arm64 静态构建均通过。`fail2ban-python-build-v132/` 的 `.55` 程序 SHA-256 分别为 `37130df272ce12116b82c4de5924ff5bb6450a272159e6e325f0f86ca5a43cf0`、`e7fd3fce2d85e8c30ccd232063afffd11900892916dbb3b520cf501b67a70c6c`。未重复已有效的完整安装矩阵，未执行 UI 自动化，未修改开发宿主的软件、服务、网络或防火墙。DNF 与其余关键边界仍见[当前进度](progress.md)，上述 APT 代表结果不覆盖它们。
+
+
+### DNF 运行前提与已有 Python 的安装拒绝（2026-10-22）
+
+复用既有 CentOS Stream 9/amd64 正常关机基线，在 Docker/QEMU 克隆 VM 中核对原生包关系。第 134 轮确认 `dnf-4.14.0-37.el9` 依赖 `python3-dnf`，后者明确依赖 `/usr/bin/python3.9`；`/usr/libexec/platform-python` 与 `/usr/bin/python3` 都解析到 `/usr/bin/python3.9`，同属 `python3-3.9.25-10.el9`。`rpm -V python3` 无差异，官方 DNF 模块可读取。该默认环境没有两套独立的 Python，不应通过移除 DNF 自身依赖来伪造可支持的纯新增安装前提；这一结论仅覆盖实测环境，不推定其他布局。
+
+第 135 轮直接使用当前 `fail2banDNFProgram` 原文，以固定隔离参数和 `mode=prove` 核对现有 Python 的准确 RPM 版本，得到空错误及完整包状态摘要。此模式不读取可用仓库、不求解或安装软件包。随后用已验收 `.55` 程序执行本机 `fail2ban-python-plan`，明确拒绝已有 Python 的新增安装计划，未替换或修复解释器。前后原生 RPM 清单 SHA-256 相同，为 `38ca188bdf1c9bba5b736e053b607064b804fcecd93da78c8c8208e05504cb52`。
+
+第 134/135 轮 QEMU 和容器均正常退出 0，无 OOM。限定结论 `fail2ban-python-dnf-v135/verdict.json` 的 SHA-256 为 `138963226b793531fdc27d832bffafe06696d5a205a030f461bc6da490e3ffb4`，绑定当前提交、内置 DNF 程序、`.55` 二进制和实际输出摘要。第 133 轮因外层容器默认 UID 缺 passwd 记录及引用了不存在的旧夹具服务而失败，未得到包关系证据；原记录保留，VM 正常关机。后续修正使用 root 且移除无关夹具服务操作，没有修改产品代码。
+
+以上证明 DNF 在所列健康环境中的包状态读取及已有解释器拒绝行为，**不证明 DNF 的缺 Python 实际安装、安装中断恢复或 CentOS Stream 10 已通过**。R03 继续保留这些验收缺口，不能用本轮结果替代 APT 的真实缺依赖安装证据。没有重复 SDK 构建或已通过的 APT 安装，没有执行 UI 自动化，没有修改开发宿主的软件、服务或网络。
