@@ -213,8 +213,11 @@ func checkAdoptionWork(dir string) error {
 	return nil
 }
 
-func adoptionBudget(root string) error {
-	items, err := boundedEntries(root, AdoptionRecordMax+1)
+func adoptionBudget(ctx context.Context, data, root string) error {
+	if err := archiveRecoveryHistory(ctx, data, root, recoveryAdoptionHistory); err != nil {
+		return err
+	}
+	items, err := recoveryLiveEntries(root, AdoptionRecordMax+1)
 	if err != nil {
 		return err
 	}
@@ -240,7 +243,7 @@ func adoptionBudget(root string) error {
 		}
 	}
 	if total >= AdoptionRecordMax {
-		return errors.New("恢复接入历史达到 128 项上限，须先完成受控历史归档；未删除原回执")
+		return errors.New("恢复接入热区达到 128 项上限，没有足够可归档的已清理历史；原回执继续保留")
 	}
 	if count >= AdoptionMax || used+2*DatabaseMax+(2<<20) > StoreMax {
 		return errors.New("恢复接入达到数量或容量上限，不自动删除既有依据")

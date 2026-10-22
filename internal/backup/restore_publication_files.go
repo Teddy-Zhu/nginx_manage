@@ -70,7 +70,15 @@ func freezeRestorationPublication(ctx context.Context, data string, p RestorePub
 	if err := privateAdoptionDirectory(root, true); err != nil {
 		return err
 	}
-	items, err := boundedEntries(root, AdoptionRecordMax)
+	if _, archived, err := recoveryHistoryPath(root, recoveryPublicationHistory, p.RevisionID); err != nil {
+		return err
+	} else if archived {
+		return errors.New("原恢复计划副本已清理归档，须使用新计划标识")
+	}
+	if err := archiveRecoveryHistory(ctx, data, root, recoveryPublicationHistory); err != nil {
+		return err
+	}
+	items, err := recoveryLiveEntries(root, AdoptionRecordMax)
 	if err != nil {
 		return err
 	}
@@ -245,10 +253,18 @@ func CleanupRestorePlan(ctx context.Context, data, id string) error {
 	if err = privateAdoptionDirectory(root, true); err != nil {
 		return err
 	}
+	cold, archived, err := recoveryHistoryPath(root, recoveryPublicationHistory, id)
+	if err != nil {
+		return err
+	}
 	dir := filepath.Join(root, id)
 	cleaning, cleaned := filepath.Join(root, ".cleaning-"+id), filepath.Join(root, ".cleaned-"+id)
 	phases := 0
-	for _, path := range []string{dir, cleaning, cleaned} {
+	paths := []string{dir, cleaning, cleaned}
+	if archived {
+		paths = append(paths, cold)
+	}
+	for _, path := range paths {
 		if _, e := os.Lstat(path); e == nil {
 			phases++
 		} else if !os.IsNotExist(e) {
@@ -258,6 +274,9 @@ func CleanupRestorePlan(ctx context.Context, data, id string) error {
 	if phases > 1 {
 		return errors.New("恢复发布副本存在冲突的清理阶段")
 	}
+	if archived {
+		cleaned = cold
+	}
 	if _, e := os.Lstat(cleaned); e == nil {
 		items, _, e := publicationEntries(cleaned)
 		if e != nil {
@@ -266,7 +285,7 @@ func CleanupRestorePlan(ctx context.Context, data, id string) error {
 		if len(items) != 1 || items[0].Name() != "publication.json" {
 			return errors.New("已清理恢复副本仍含额外材料")
 		}
-		return cleanupRestorationHelper(ctx, data, id)
+		return errors.Join(syncRecoveryHistory(root), syncDir(root), cleanupRestorationHelper(ctx, data, id))
 	} else if !os.IsNotExist(e) {
 		return e
 	}
