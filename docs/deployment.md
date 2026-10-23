@@ -79,6 +79,8 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 原安装命令保存在 `/opt/nginxpanel/install-command.sh`。失败后保留材料，重新运行向导可核对并明确重试原命令；它沿用原参数，不能用于变更版本、数据目录或既定授权。安装及容器启动步骤完成后记录 `/opt/nginxpanel/install-complete`，再次执行引导入口只显示当前信息，保留后来修改的端口和配置。已有非引导安装使用原参数续装。使用向导时，由向导完成材料批准和后续安装；下节说明手动参数安装方式。
 
+管理菜单支持保留数据卸载、完全卸载和重新安装，命令分别为 `manage.sh uninstall --keep-data`、`manage.sh uninstall --purge`、`manage.sh reinstall`。保留数据卸载后，安装入口会识别卸载记录并恢复原版本、配置和服务状态；完全卸载后可全新安装。清理范围、前置处理及中断续办见[运维说明](operations.md#卸载与重新安装)。
+
 ### 离线构建与手动安装材料
 
 仅需构建、不在构建机安装时，运行 `bash scripts/build.sh` 或 `make build`。Docker 在构建机架构上交叉编译，无需模拟器；构建机与部署目标架构不同才需指定 `--arch arm64`。

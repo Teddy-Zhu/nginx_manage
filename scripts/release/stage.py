@@ -158,7 +158,7 @@ def main():
             provenance["binary_sha256"] = hashlib.sha256(read(binary, 192 << 20)).hexdigest()
             copy_web(Path("web/dist"), destination / "web")
             # 安装入口随面板进入同一签名文件清单，不另造一份二进制安装包。
-            for name in ("install.sh", "manage.sh", "deploy/native/install.sh"):
+            for name in ("install.sh", "manage.sh", "deploy/native/install.sh", "deploy/native/lifecycle.sh"):
                 target = destination / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(read(name, 256 << 10))

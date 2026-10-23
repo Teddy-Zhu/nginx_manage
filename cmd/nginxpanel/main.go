@@ -353,6 +353,7 @@ func run() error {
 		"panel-access-urls":                  {"data-dir": true},
 		"panel-listen-default":               {"port": true, "listen": true},
 		"panel-listen-set":                   {"data-dir": true, "listen": true},
+		"installation-removal-check":         {"data-dir": true},
 		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
 		"panel-native-serve":                 {"data-dir": true},
 		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
@@ -1134,6 +1135,8 @@ func run() error {
 		return nil
 	case "panel-listen-set":
 		return agent.SetPanelListen(absDir, *listen)
+	case "installation-removal-check":
+		return agent.CheckInstallationRemoval(ctx, absDir)
 	case "panel-native-bind":
 		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
 		if err != nil {

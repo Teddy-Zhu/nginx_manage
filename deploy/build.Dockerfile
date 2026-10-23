@@ -43,6 +43,7 @@ COPY --from=panel-build --chmod=0555 /out/nginxpanel /nginxpanel
 COPY --from=frontend /src/web/dist/ /web/
 COPY --chmod=0555 install.sh manage.sh /
 COPY --chmod=0555 deploy/native/install.sh /deploy/native/install.sh
+COPY --chmod=0555 deploy/native/lifecycle.sh /deploy/native/lifecycle.sh
 COPY deploy/native/README.md /deploy/native/README.md
 COPY deploy/docker/README.md /deploy/docker/README.md
 COPY docs /docs

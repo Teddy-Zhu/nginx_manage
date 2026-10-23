@@ -20,9 +20,13 @@ usage() {
   fingerprint                  显示主入口证书 SHA-256
   set-port 端口                修改主入口端口，运行中的面板自动重启
   disable-remote               请求停用附加管理入口（不关闭主入口）
+  uninstall                    卸载程序和服务，保留数据及原版本重装材料
+  uninstall --keep-data        明确保留数据卸载（默认方式）
+  uninstall --purge            完全卸载，删除本系统数据、配置、密钥和证书
+  reinstall                    重新安装原版本，保留配置和服务启停状态
 
 选项：
-  --yes                        明确确认服务变更、端口修改或附加入口停用
+  --yes                        明确确认变更；用于完全卸载时确认永久删除数据
   --lines N                    日志行数，默认 100，最多 10000
   --follow                     持续跟随服务日志
 
@@ -32,10 +36,12 @@ EOF
 action=${1:-menu}
 if (($#)); then shift; fi
 case "$action" in -h|--help|help) usage; exit 0 ;; esac
-component= yes=no lines=100 follow=no requested_port=
+component= yes=no lines=100 follow=no requested_port= purge=no keep_data=no
 while (($#)); do
   case "$1" in
     --yes) yes=yes; shift ;;
+    --purge) purge=yes; shift ;;
+    --keep-data) keep_data=yes; shift ;;
     --follow) follow=yes; shift ;;
     --lines) (($# >= 2)) || die '--lines 缺少行数'; lines=$2; shift 2 ;;
     [0-9]*)
@@ -45,7 +51,9 @@ while (($#)); do
     *) usage; die "未知参数：$1" ;;
   esac
 done
-case "$action" in menu|info|status|start|stop|restart|logs|bootstrap|fingerprint|disable-remote|set-port) ;; *) usage; die "未知命令：$action" ;; esac
+case "$action" in menu|info|status|start|stop|restart|logs|bootstrap|fingerprint|disable-remote|set-port|uninstall|reinstall) ;; *) usage; die "未知命令：$action" ;; esac
+[[ $purge == no || $action == uninstall ]] || die '--purge 只能用于 uninstall'
+[[ $keep_data == no || $action == uninstall && $purge == no ]] || die '--keep-data 只能用于保留数据卸载，不能与 --purge 混用'
 if [[ $action != logs ]]; then [[ $follow == no && $lines == 100 ]] || die '日志选项只能用于 logs'; fi
 case "$action" in status) component=${component:-all} ;; start|stop|restart|logs) component=${component:-panel} ;; *) [[ -z $component ]] || die '此命令不接受组件参数' ;; esac
 [[ $action != logs || $component != all ]] || die '请分别选择 panel、agent 或 nginx 的服务日志'
@@ -239,12 +247,31 @@ logs_action() {
     journalctl --no-pager -u "$unit" -n "$lines" "${args[@]}"
   fi
 }
+lifecycle_helper=$(cd -- "$(dirname -- "$0")" && pwd -P)/lifecycle.sh
+if [[ ! -f $lifecycle_helper ]]; then lifecycle_helper=$(cd -- "$(dirname -- "$0")" && pwd -P)/deploy/native/lifecycle.sh; fi
+if [[ -e /etc/nginxpanel/install/lifecycle || -L /etc/nginxpanel/install/lifecycle || $action == uninstall || $action == reinstall ]]; then
+  trusted_file "$lifecycle_helper"
+  source "$lifecycle_helper"
+  if [[ -n $lifecycle_state ]]; then
+    case "$action" in
+      info|status)
+        printf '安装状态：%s\n数据目录：%s\n' "$lifecycle_state" "$data"
+        case "$lifecycle_state" in
+          purging|purge-uninstalling) printf '%s\n' '继续完全卸载：sudo bash /opt/nginxpanel/manage.sh uninstall --purge' ;;
+          *) printf '%s\n' '重新安装：sudo bash /opt/nginxpanel/manage.sh reinstall' ;;
+        esac
+        exit 0 ;;
+      menu|uninstall|reinstall) ;;
+      *) die '系统处于卸载或重装状态；请使用 reinstall 恢复，或续办 uninstall --purge' ;;
+    esac
+  fi
+fi
 if [[ $action == menu ]]; then
   [[ -t 0 && -t 1 ]] || die '管理菜单需要交互终端，请使用明确命令'
   self=$(readlink -e -- "$0")
   while :; do
     printf '\nNginxPanel 管理（%s，%s）\n' "$panel_mode" "$data"
-    printf '%s\n' '  1) 部署信息' '  2) 全部服务状态' '  3) 启动服务' '  4) 停止服务' '  5) 重启服务' '  6) 服务日志' '  7) 初始化令牌' '  8) 证书指纹' '  9) 停用附加管理入口' '  10) 修改主入口端口' '  0) 退出'
+    printf '%s\n' '  1) 部署信息' '  2) 全部服务状态' '  3) 启动服务' '  4) 停止服务' '  5) 重启服务' '  6) 服务日志' '  7) 初始化令牌' '  8) 证书指纹' '  9) 停用附加管理入口' '  10) 修改主入口端口' '  11) 卸载（保留数据）' '  12) 完全卸载' '  13) 重新安装' '  0) 退出'
     read -r -p '请选择 [0]: ' selection || exit 0
     selected=
     case "$selection" in
@@ -264,16 +291,20 @@ if [[ $action == menu ]]; then
       10)
         command=set-port
         read -r -p '新管理端口（1024–65535）: ' selected || exit 0 ;;
+      11) command=uninstall ;; 12) command=uninstall; selected=--purge ;; 13) command=reinstall ;;
       ''|0) exit 0 ;; *) printf '%s\n' '请输入列表中的编号'; continue ;;
     esac
     arguments=("$command")
     if [[ -n $selected ]]; then arguments+=("$selected"); fi
-    if /bin/bash "$self" "${arguments[@]}"; then :; else printf '%s\n' '命令未成功完成，请根据上方错误处理' >&2; fi
+    if /bin/bash "$self" "${arguments[@]}"; then
+      case "$command" in uninstall|reinstall) exit 0 ;; esac
+    else printf '%s\n' '命令未成功完成，请根据上方错误处理' >&2; fi
   done
 fi
 case "$action" in
   info) show_info ;;
   set-port) set_port ;;
+  uninstall|reinstall) lifecycle_action ;;
   status|start|stop|restart) service_action ;;
   logs) logs_action ;;
   bootstrap)

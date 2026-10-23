@@ -82,6 +82,7 @@ else
   esac
 fi
 [[ $EUID == 0 ]] || die '安装需要本机 root'
+[[ ! -e /etc/nginxpanel/install/lifecycle && ! -L /etc/nginxpanel/install/lifecycle ]] || die '已有卸载或重装记录，请使用 manage.sh reinstall 或续办完全卸载'
 [[ -n $binary && -n $web ]] || { usage; exit 1; }
 case "$panel_mode" in
   native) [[ -z $panel_image && -z $release_manifest && -z $release_signature ]] || die '原生面板模式不能指定容器镜像或镜像签名文件' ;;

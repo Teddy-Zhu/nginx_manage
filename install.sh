@@ -40,7 +40,7 @@ fi
 if [[ $auto_confirm == no || $advanced == yes ]]; then
   [[ -t 0 && -t 1 ]] || die '交互安装需要终端；使用 --yes 按推荐配置直接安装'
 fi
-[[ -f $root/deploy/native/install.sh && -f $root/manage.sh ]] || die '安装材料不完整，缺少标准安装器或管理脚本'
+[[ -f $root/deploy/native/install.sh && -f $root/deploy/native/lifecycle.sh && -f $root/manage.sh ]] || die '安装材料不完整，缺少标准安装器或管理脚本'
 
 ask() {
   local destination=$1 prompt=$2 default=$3 answer
@@ -132,6 +132,15 @@ finish() {
   /bin/bash /opt/nginxpanel/manage.sh info
 }
 plan=/opt/nginxpanel/install-command.sh
+if [[ -e /etc/nginxpanel/install/lifecycle || -L /etc/nginxpanel/install/lifecycle ]]; then
+  trusted_file /etc/nginxpanel/install/lifecycle
+  trusted_file /opt/nginxpanel/manage.sh
+  [[ -z $requested_port ]] || die '重装保留当前端口；重装后使用 manage.sh set-port 修改'
+  printf '%s\n' '发现卸载记录，将恢复卸载前版本和配置；版本更新使用面板维护入口。'
+  reinstall_args=(reinstall)
+  if [[ $auto_confirm == yes ]]; then reinstall_args+=(--yes); fi
+  exec /bin/bash /opt/nginxpanel/manage.sh "${reinstall_args[@]}"
+fi
 if [[ -e $plan || -L $plan ]]; then
   trusted_file "$plan"
   [[ $(stat -c %s "$plan") -le 16384 ]] || die '原安装命令超出读取限制'
@@ -338,6 +347,7 @@ stage=$(mktemp -d /opt/nginxpanel/installer-inputs.XXXXXXXX)
 install -d -m 0755 "$stage/web" "$stage/deploy/native"
 install -m 0555 "$binary" "$stage/nginxpanel"
 install -m 0555 "$root/deploy/native/install.sh" "$stage/deploy/native/install.sh"
+install -m 0555 "$root/deploy/native/lifecycle.sh" "$stage/deploy/native/lifecycle.sh"
 install -m 0555 "$root/manage.sh" "$stage/manage.sh"
 cp -R -- "$web/." "$stage/web/"
 chmod -R u=rwX,go=rX "$stage/web"
@@ -346,6 +356,12 @@ if [[ -e /opt/nginxpanel/manage.sh || -L /opt/nginxpanel/manage.sh ]]; then
   cmp -s "$stage/manage.sh" /opt/nginxpanel/manage.sh || die '已有不同管理脚本，停止覆盖'
 else
   install -m 0555 "$stage/manage.sh" /opt/nginxpanel/manage.sh
+fi
+if [[ -e /opt/nginxpanel/lifecycle.sh || -L /opt/nginxpanel/lifecycle.sh ]]; then
+  trusted_file /opt/nginxpanel/lifecycle.sh
+  cmp -s "$stage/deploy/native/lifecycle.sh" /opt/nginxpanel/lifecycle.sh || die '已有不同卸载管理脚本，停止覆盖'
+else
+  install -m 0555 "$stage/deploy/native/lifecycle.sh" /opt/nginxpanel/lifecycle.sh
 fi
 pending=$(mktemp /opt/nginxpanel/.install-command.XXXXXXXX)
 {

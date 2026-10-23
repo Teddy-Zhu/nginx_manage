@@ -88,7 +88,7 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 主机指标来源显式为 host。Nginx 日志轮转通过安装参数 `--nginx-log-owner agent|external|unconfirmed` 选择唯一所有者，并保存在本机安装意图中；默认 unconfirmed，轮转策略只读。确认本项目日志未被外部 logrotate 等规则管理后可选择 agent；选择 external 时继续由外部管理，不迁出或修改外部规则。DNS 通过安装参数 `--dns-owner` 明确批准实际所有者与宿主机范围，并配置对应 Agent 写入目录；默认 unconfirmed，仅允许读取。普通文件、networkd/resolved、NetworkManager 及 netplan 的实现与已验证系统组合见[验证记录](../../docs/validation.md)，业务页面不能绕过本机所有权和系统沙箱授权。
 
-安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新使用各独立维护入口，Docker 使用下述容器模式；当前无通用一键卸载流程，停用边界见[运维文档](../../docs/operations.md#容量清理与停用)。
+安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新使用各独立维护入口，Docker 使用下述容器模式。管理脚本提供 `uninstall --keep-data`、`uninstall --purge` 和 `reinstall`；保留数据卸载使用本机材料恢复原版本及服务状态，不能替代跨主机迁移或版本更新。清理范围及阻塞处理见[运维文档](../../docs/operations.md#卸载与重新安装)。
 
 组件准备由原生 Agent 的 `--component-scope host` 启用，发行信任须由本机 root 配置，见 [发行准备](../../docs/releases.md)。安装器预建 `/opt/nginxpanel/prepared`（0755）及 `/opt/nginxpanel/release-downloads`（0700），并仅向 Agent unit 开放这两个额外写目录。缺少有效信任时页面报告不可用，不创建默认发布者。原生首次安装通过下述绑定接入，Web 首次安装见下节，运行中版本切换见[组件维护切换](../../docs/releases.md#原生-nginx-运行组件维护切换)。
 

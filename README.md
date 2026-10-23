@@ -31,6 +31,8 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 | [使用手册](docs/user-guide.md) | 代理、证书、主机功能、API、节点、迁移与备份 |
 | [运维与故障处理](docs/operations.md) | 服务管理、更新、恢复、常见问题与停用边界 |
 
+管理脚本支持 `uninstall --keep-data` 保留数据卸载、`uninstall --purge` 完全卸载和 `reinstall` 恢复原版本；也可从菜单操作。详细范围见[卸载与重新安装](docs/operations.md#卸载与重新安装)。
+
 当前实现状态及暂缓验收项见[进度清单](docs/progress.md)，已执行的系统组合见[运行矩阵](docs/support-matrix.md)。设计背景和阶段历史分别见[设计文档](Linux_Nginx_Manager_Design.md)、[实施记录](docs/implementation.md)。
 
 ## 功能概览
