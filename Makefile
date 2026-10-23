@@ -10,12 +10,10 @@ generate:
 	pnpm --dir web generate:routes
 
 build:
-	pnpm --dir web build
-	go build -trimpath -o bin/nginxpanel ./cmd/nginxpanel
+	bash scripts/build.sh $(if $(ARCH),--arch "$(ARCH)")
 
 release-tool:
-	mkdir -p bin
-	go build -trimpath -o bin/nginxpanel-release ./cmd/nginxpanel-release
+	bash scripts/build.sh --release-tool $(if $(ARCH),--arch "$(ARCH)")
 
 # 仅在本次实现及集成稳定后集中执行。
 verify:

@@ -29,51 +29,52 @@ Docker 模式仍会在目标宿主机创建账户、目录、Agent 服务及必�
 
 ### 使用已有安装材料
 
-从受信来源取得与目标架构一致的 `nginxpanel`、前端 `web/` 目录、`deploy/native/install.sh`。前端根目录须含 `index.html` 及配套资源。
+从受信来源取得与目标架构一致的程序、前端和安装脚本。使用本项目的 Docker 构建包时，包内已包含 `nginxpanel`、`web/`、引导入口 `install.sh`、管理入口 `manage.sh` 和标准安装器；前端根目录含 `index.html` 及配套资源。
 
 签名发行还应取得原始 `release-manifest.json`、`release-manifest.sig` 和所需资产。发布者公钥通过独立渠道核对，按[发行信任说明](releases.md#信任与签名)放入目标 `/etc/nginxpanel/release-trust.json`。离线准备和在线获取均使用该信任。
 
 ### 从源码构建原生产物
 
-项目固定工具版本见 `go.mod` 和 `web/package.json`：当前为 Go 1.27.2、Node.js 24、pnpm 10.33.0。以下示例在已有 Docker 的构建环境、项目根目录执行，工具只安装到临时构建容器。
-
-构建前端：
+在已有 Docker、支持 BuildKit 输出的构建机，从项目根执行。脚本读取 `go.mod` 和 `web/package.json` 中的固定版本，Go、Node.js、pnpm 及依赖均在容器内使用；源码通过构建上下文复制，宿主机仅接收输出产物。
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" \
-  --mount type=bind,src="$(pwd)",dst=/src \
-  -w /src -e npm_config_cache=/tmp/npm-cache \
-  node:24-bookworm-slim sh -eu -c '
-    npm install --prefix /tmp/nginxpanel-build-tools pnpm@10.33.0
-    /tmp/nginxpanel-build-tools/node_modules/.bin/pnpm --dir web install --frozen-lockfile --store-dir /tmp/pnpm-store
-    /tmp/nginxpanel-build-tools/node_modules/.bin/pnpm --dir web build
-  '
+bash scripts/build.sh --arch amd64
+# arm64 目标使用：
+bash scripts/build.sh --arch arm64
 ```
 
-构建目标 Linux 程序；arm64 目标将变量改为 `arm64`：
+`make build` 调用同一脚本，默认按构建机架构选择；也可使用 `make build ARCH=arm64`。跨架构编译在构建机原生容器内完成，无需在宿主机配置模拟器。
+
+产物为 `dist/nginxpanel-linux-amd64.tar` 或 `dist/nginxpanel-linux-arm64.tar`。可使用 `--output-dir` 指定输出目录、`--version` 注入本机批准的版本标识；首次构建需要下载工具镜像和依赖，缓存由 Docker 管理。本地构建包用于本机批准的原生安装，属于源码构建材料；Docker 部署仍需同版签名发行、批准镜像及其信任材料。
+
+### 启动安装向导
+
+将对应架构安装包传到目标主机并解压，例如：
 
 ```sh
-NGINXPANEL_ARCH=amd64
-mkdir -p bin
-docker run --rm --user "$(id -u):$(id -g)" \
-  --mount type=bind,src="$(pwd)",dst=/src \
-  -w /src -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH="$NGINXPANEL_ARCH" \
-  -e GOPATH=/tmp/gopath -e GOMODCACHE=/tmp/go-mod -e GOCACHE=/tmp/go-build \
-  -e GOTOOLCHAIN=local \
-  golang:1.27.2 go build -trimpath -o bin/nginxpanel ./cmd/nginxpanel
+mkdir -p ~/nginxpanel-install
+tar -xf /传输目录/nginxpanel-linux-amd64.tar -C ~/nginxpanel-install
+cd ~/nginxpanel-install
+sudo bash install.sh
 ```
 
-得到 `bin/nginxpanel` 与 `web/dist/`。将它们和安装脚本通过受信通道传送到目标主机。不同架构的产物分别保存，防止传错。上述本地构建流程用于原生安装；Docker 分支还需要下一节要求的签名镜像及其发行材料。
+向导依次选择原生/Docker、程序与前端、数据目录、回环管理地址、Nginx 来源，以及可选 DNS/防火墙/日志授权。首次只使用代理时可保留主机授权的只读默认值。
+
+最后核对摘要和实际参数，输入 `INSTALL` 执行。向导将所选材料复制到 root 保护目录，复用标准安装器的账户、路径、签名、架构及服务检查。Docker 所需镜像必须已准备到目标，不在目标编译或动态增装 Nginx 模块。
+
+选择立即启动时，原生启用并启动对应服务；Docker 在启用并启动宿主机服务后执行生成 Compose 的 `up -d --pull never`。未选择立即启动时，安装后可用管理脚本执行 `start all`；它只启动服务，systemd 开机启用状态由管理员另行设置。完成后用 `sudo bash /opt/nginxpanel/manage.sh` 打开管理菜单，再按第 6 节首次登录。
+
+原安装命令保存在 `/opt/nginxpanel/install-command.sh`。失败后保留材料，重新运行向导可核对并明确重试原命令；它沿用原参数，不能用于变更版本、数据目录或既定授权。已有非引导安装使用原参数续装。使用向导时，由向导完成材料批准和后续安装；下节说明手动参数安装方式。
 
 ### 在目标主机批准安装材料
 
-以下假定目标当前目录已具有 `bin/nginxpanel`、`web/dist/` 和 `deploy/native/install.sh`，且来源及传输完整性已经核对。首次创建批准目录：
+以下假定当前目录为安装包解压目录，具有 `nginxpanel`、`web/` 和 `deploy/native/install.sh`，且来源及传输完整性已经核对。首次创建批准目录：
 
 ```sh
 sudo install -d -m 0755 /opt/approved/nginxpanel
-sudo install -m 0555 bin/nginxpanel /opt/approved/nginxpanel/nginxpanel
+sudo install -m 0555 nginxpanel /opt/approved/nginxpanel/nginxpanel
 sudo install -m 0555 deploy/native/install.sh /opt/approved/nginxpanel/install.sh
-sudo cp -R web/dist /opt/approved/nginxpanel/web
+sudo cp -R web /opt/approved/nginxpanel/web
 sudo chown -R root:root /opt/approved/nginxpanel
 sudo chmod -R go-w /opt/approved/nginxpanel
 ```
@@ -159,7 +160,7 @@ sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
 
 仅装容器面板时，以 `--without-nginx` 替换 `--nginx-image …`。也可按参考文档选择宿主机专用 Nginx。
 
-Docker 模式的 `--start` 只启动宿主机服务，容器由生成的 Compose 启动。查询：
+标准安装器 Docker 模式的 `--start` 只启动宿主机服务，手动安装再由生成的 Compose 启动容器；引导安装在选中立即启动后会完成这一步。查询：
 
 ```sh
 sudo systemctl status nginxpanel-agent.service

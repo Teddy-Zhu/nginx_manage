@@ -6,6 +6,8 @@
 
 首次使用从[部署指南](docs/deployment.md)开始，安装后按[使用手册](docs/user-guide.md)创建第一个代理。
 
+在已有 Docker 的构建机运行 `bash scripts/build.sh --arch amd64`，得到 `dist/nginxpanel-linux-amd64.tar`；arm64 使用 `--arch arm64`。将安装包解压到实际目标后运行 `sudo bash install.sh`，按向导确认安装。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务。
+
 | 文档 | 内容 |
 | --- | --- |
 | [完整文档导航](docs/README.md) | 从安装到日常使用的阅读顺序及专题索引 |
@@ -54,7 +56,7 @@ go run ./cmd/nginxpanel agent --dev --data-dir=.local
 
 项目采用 [MIT 许可](LICENSE)。面板/web 的 [发布工具与 GitHub 工作流](docs/publishing.md) 已接入打包、实际许可文件、依赖 SBOM、构建来源及 Ed25519 签名，先上传完整草稿再公开。正式发布仍需配置仓库和发布密钥。
 
-生成代码：`make generate`。构建：`make build`。验证：`make verify`，仅在业务实现和集成稳定后的集中验证阶段执行；不包含 UI 自动化。开发验证须在隔离环境执行，已执行范围及待验收项见 [验证记录](docs/validation.md)。
+生成代码：`make generate`。构建：`make build`，调用 Docker 构建并输出安装包；`make release-tool` 同样通过 Docker 构建发行工具。构建入口不调用本机 Go、Node.js 或 pnpm。验证：`make verify`，仅在业务实现和集成稳定后的集中验证阶段执行；不包含 UI 自动化。开发验证须在隔离环境执行，已执行范围及待验收项见 [验证记录](docs/validation.md)。
 
 ## 接口与约束
 

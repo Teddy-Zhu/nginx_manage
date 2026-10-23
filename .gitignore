@@ -1,5 +1,6 @@
 .local/
 bin/
+/dist/
 .release/
 .validation/
 web/node_modules/

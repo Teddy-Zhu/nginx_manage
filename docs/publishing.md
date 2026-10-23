@@ -16,7 +16,7 @@
 
 ## 本机入口
 
-`make release-tool` 构建工具。准备目录沿用工作流布局：`panel-linux-amd64/`、`panel-linux-arm64/`、`web/`、`nginx-linux-amd64/`、`nginx-linux-arm64/`、`fail2ban/`，各目录包含对应入口、实际许可原文及同 ID 的两份 JSON 证据。Nginx 和 Fail2ban 资产须符合发布工具内嵌的各自源码锁定配方。
+`make release-tool` 通过 Docker 构建本机架构的 Linux 工具到 `bin/nginxpanel-release`，不依赖本机 Go；构建脚本的 `--release-tool` 分支不构建前端。准备目录沿用工作流布局：`panel-linux-amd64/`、`panel-linux-arm64/`、`web/`、`nginx-linux-amd64/`、`nginx-linux-arm64/`、`fail2ban/`，各目录包含对应入口、实际许可原文及同 ID 的两份 JSON 证据。Nginx 和 Fail2ban 资产须符合发布工具内嵌的各自源码锁定配方。
 
 ```sh
 bin/nginxpanel-release spec \

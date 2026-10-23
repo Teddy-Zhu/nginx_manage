@@ -22,6 +22,33 @@
 
 ## 日常服务操作
 
+### 管理脚本
+
+引导安装后使用：
+
+```sh
+sudo bash /opt/nginxpanel/manage.sh
+```
+
+菜单支持部署信息、服务状态、启停/重启、服务日志、初始化令牌、主入口证书指纹和远程管理入口救援。非引导安装也可从可信安装包运行 `sudo bash manage.sh`，脚本读取现有 root 安装记录，不执行其中的文本。
+
+```sh
+sudo bash /opt/nginxpanel/manage.sh info
+sudo bash /opt/nginxpanel/manage.sh status
+sudo bash /opt/nginxpanel/manage.sh restart panel
+sudo bash /opt/nginxpanel/manage.sh logs agent --lines 200
+sudo bash /opt/nginxpanel/manage.sh logs panel --follow
+sudo bash /opt/nginxpanel/manage.sh fingerprint
+```
+
+`start/stop/restart` 默认仅操作 panel，可选择 `agent`、`nginx` 或 `all`；`all` 跳过明确未安装的 Nginx。非交互变更须加 `--yes`，交互变更先确认影响。原生使用 systemd，容器服务使用已生成的 Compose，宿主机 Agent 始终使用 systemd。
+
+Docker 状态同时显示容器及面板实际进程，容器停止时后者不可查询；容器已运行不等于业务已就绪。宿主机工具版本由 `info` 展示，当前面板程序版本仍按网页核对。
+
+脚本遇到持久停机或恢复屏障时拒绝常规启动/重启面板。维护、更新和完整恢复继续沿原任务处理；日常服务停止不替代持久停机准备。
+
+`bootstrap` 只读取原一次性引导令牌，不能重置已有管理员。需停用可选远程入口时，执行 `disable-remote` 并核对返回状态与 Agent 处理结果。
+
 ### 原生部署
 
 ```sh
