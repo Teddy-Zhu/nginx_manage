@@ -1,3 +1,4 @@
+import { sha256Hex } from "../utils/crypto";
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import type { components, operations } from "./schema";
 import { onScopeDispose } from "vue";
@@ -9,6 +10,12 @@ type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
 };
 type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
 const FIREWALL_REQUEST_TIMEOUT = 85_000;
+export type GeoIPSource = components["schemas"]["GeoIPSource"];
+export type GeoIPState = components["schemas"]["GeoIPState"];
+export type GeoIPSourceInput = components["schemas"]["GeoIPSourceInput"];
+export type GeoIPUpdateInput = components["schemas"]["GeoIPUpdateInput"];
+export type GeoIPResolveInput = components["schemas"]["GeoIPResolveInput"];
+export type GeoIPResolved = components["schemas"]["GeoIPResolved"];
 export type RuntimeHistoryFilter = components["schemas"]["RuntimeHistoryFilter"];
 export type RuntimeHistoryExecuteInput = components["schemas"]["RuntimeHistoryExecuteInput"];
 export type RuntimeHistoryPreview = components["schemas"]["RuntimeHistoryPreview"];
@@ -415,8 +422,7 @@ async function exportAuditFor(data: AuditFilter, scope: RequestScope) {
   const expected = String(result.headers["x-archive-sha256"] ?? "");
   if (result.data.size > 8 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(expected))
     throw new ApiError("INVALID_RESPONSE", "审计归档大小或摘要无效", result.status);
-  const digest = await crypto.subtle.digest("SHA-256", await result.data.arrayBuffer());
-  const actual = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  const actual = sha256Hex(new Uint8Array(await result.data.arrayBuffer()));
   assertScope(scope);
   if (actual !== expected)
     throw new ApiError("INVALID_RESPONSE", "审计归档摘要不匹配，请重新下载", result.status);
@@ -845,6 +851,10 @@ function createAPI(scope: RequestScope) {
     request<Fail2banObservation>({ url: "/fail2ban", signal }),
   firewall: (signal?: AbortSignal) =>
     request<FirewallObservation>({ url: "/firewall", signal }),
+  firewallGeoIP: (signal?: AbortSignal) => request<GeoIPState>({url:"/firewall/geoip",signal}),
+  saveFirewallGeoIP: (data: GeoIPSourceInput,key:string) => request<GeoIPState>({url:"/firewall/geoip",method:"PUT",data,headers:{"Idempotency-Key":key}}),
+  updateFirewallGeoIP: (data: GeoIPUpdateInput,key:string) => request<GeoIPState>({url:"/firewall/geoip/update",method:"POST",data,headers:{"Idempotency-Key":key},timeout:125_000}),
+  resolveFirewallGeoIP: (data:GeoIPResolveInput) => request<GeoIPResolved>({url:"/firewall/geoip/resolve",method:"POST",data,timeout:30_000}),
   firewallPolicy: (signal?: AbortSignal) =>
     request<FirewallPolicyView>({ url: "/firewall/policy", signal }),
   saveFirewallPolicy: (data: FirewallPolicyInput, key: string) =>

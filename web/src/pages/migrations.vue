@@ -12,6 +12,8 @@
 </route>
 
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { RouterLink } from "vue-router";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
@@ -414,7 +416,7 @@ async function pull(execute: boolean) {
     if (!pendingPull || pendingPull.digest !== digest) {
       pendingPull = {
         digest,
-        key: crypto.randomUUID(),
+        key: randomUUID(),
         input: remoteInput(execute, await currentVersion()),
       };
     }

@@ -10,6 +10,7 @@
 </route>
 
 <script setup lang="ts">
+import { sha256Hex } from "../utils/crypto";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
@@ -272,13 +273,7 @@ async function saveCredential() {
         .map((field) => [field.key, secrets.value[field.key]!]),
     );
   await run(async () => {
-    const bytes = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(JSON.stringify(input)),
-    );
-    const digest = Array.from(new Uint8Array(bytes), (value) =>
-      value.toString(16).padStart(2, "0"),
-    ).join("");
+    const digest = sha256Hex(new TextEncoder().encode(JSON.stringify(input)));
     const out = await api.saveDNSCredential(
       id,
       input,

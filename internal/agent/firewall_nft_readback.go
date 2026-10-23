@@ -3,7 +3,7 @@ package agent
 // The full nft JSON view has a separate budget from native iptables-save and
 // the direct nftables target-table netlink dump. Evidence stays in private root
 // inspections and never enters public IPC responses or migration materials.
-const nftRulesetReadBytes = 4 << 20
+const nftRulesetReadBytes = 32 << 20
 
 type nftReadbackScope struct {
 	Bytes, NumberGrowth, Objects, Rules int

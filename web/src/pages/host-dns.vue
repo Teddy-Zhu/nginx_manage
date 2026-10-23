@@ -11,6 +11,8 @@
 }
 </route>
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
@@ -455,12 +457,12 @@ async function preview() {
   };
   const digest = JSON.stringify(input);
   if (!previewAttempt || previewAttempt.digest !== digest)
-    previewAttempt = { digest, key: crypto.randomUUID() };
+    previewAttempt = { digest, key: randomUUID() };
   const key = previewAttempt.key;
   await run(async () => {
     plan.value = await api.planHostDNS(input, key);
     previewAttempt = undefined;
-    applyKey = crypto.randomUUID();
+    applyKey = randomUUID();
   });
 }
 async function apply() {
@@ -469,7 +471,7 @@ async function apply() {
   if (!window.confirm("临时应用主机 DNS？确认期限内未确认将自动恢复原设置。"))
     return;
   await run(async () => {
-    await api.applyHostDNS(p.id, applyKey || (applyKey = crypto.randomUUID()));
+    await api.applyHostDNS(p.id, applyKey || (applyKey = randomUUID()));
     plan.value = null;
     editing.value = false;
     await read();
@@ -489,7 +491,7 @@ async function decide(action: "confirm" | "rollback") {
   const cacheKey = `${t.id}:${action}`;
   let key = decisionKeys.get(cacheKey);
   if (!key) {
-    key = crypto.randomUUID();
+    key = randomUUID();
     decisionKeys.set(cacheKey, key);
   }
   const requestKey = key;

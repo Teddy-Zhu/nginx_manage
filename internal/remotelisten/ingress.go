@@ -75,12 +75,13 @@ type ingressSession struct {
 }
 
 type ingressListener struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	queue   chan *ingressConn
-	mu      sync.Mutex
-	session *ingressSession
-	done    chan struct{}
+	ctx      context.Context
+	cancel   context.CancelFunc
+	queue    chan *ingressConn
+	httpMode bool
+	mu       sync.Mutex
+	session  *ingressSession
+	done     chan struct{}
 }
 type ingressAddr struct{}
 
@@ -95,6 +96,9 @@ func (l *ingressListener) Accept() (net.Conn, error) {
 		case c := <-l.queue:
 			if c.closed.Load() {
 				continue
+			}
+			if l.httpMode {
+				return c, nil
 			}
 			return tls.Server(c, &tls.Config{Certificates: []tls.Certificate{c.cert}, MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}}), nil
 		}
@@ -232,14 +236,18 @@ func (l *ingressListener) receivePackets(s *ingressSession) {
 	}
 }
 
-// Serve terminates TLS in the application, preserving the real socket peer.
+// Serve preserves the root broker connection identity for both HTTP and HTTPS.
 // Loss of the root broker closes all inherited connections before reconnecting.
-func Serve(ctx context.Context, socket string, handler http.Handler) error {
+func Serve(ctx context.Context, socket string, handler http.Handler, httpMode bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	l := &ingressListener{ctx: ctx, cancel: cancel, queue: make(chan *ingressConn, 16), done: make(chan struct{})}
+	l.httpMode = httpMode
 	go l.receive(socket)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+		if ic, ok := c.(*ingressConn); ok {
+			return context.WithValue(ctx, connectionKey{}, ic.id)
+		}
 		if tc, ok := c.(*tls.Conn); ok {
 			if ic, ok := tc.NetConn().(*ingressConn); ok {
 				return context.WithValue(ctx, connectionKey{}, ic.id)

@@ -69,6 +69,17 @@ func snapshotNFTTargetProgram(ctx context.Context, target firewall.NFTTarget, pr
 		return firewall.KernelView{}, errors.New("受管表编译目标与读取目标不匹配")
 	}
 	chains, rules := 0, 0
+	sets := map[string]firewall.NFTAddressSet{}
+	seenSets := map[string]bool{}
+	remaining := map[string]bool{}
+	if program != nil {
+		for _, set := range program.Sets {
+			sets[set.Name] = set
+			for _, element := range set.Elements {
+				remaining[firewall.NFTSetElementKey(set.Name, element.Key, element.End)] = true
+			}
+		}
+	}
 	handles := map[uint64]bool{}
 	var previous uint64
 	expectedRules := 0
@@ -80,7 +91,7 @@ func snapshotNFTTargetProgram(ctx context.Context, target firewall.NFTTarget, pr
 		case unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWTABLE:
 			use := uint32(0)
 			if program != nil {
-				use = 1
+				use = uint32(1 + len(program.Sets))
 			}
 			_, validHandle := nftHandle(attrs, nftaTableHandle)
 			if len(attrs) != 5 || !validHandle || !nftBytes(attrs, unix.NFTA_TABLE_NAME, []byte(layout.Table+"\x00")) || !nftUint32(attrs, unix.NFTA_TABLE_FLAGS, 0) || !nftUint32(attrs, unix.NFTA_TABLE_USE, use) || !nftBytes(attrs, 6, []byte(marker)) {
@@ -117,6 +128,35 @@ func snapshotNFTTargetProgram(ctx context.Context, target firewall.NFTTarget, pr
 			if len(attrs) != count {
 				return errors.New("受管基础链包含未知属性")
 			}
+		case unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWSET:
+			name, err := nftString(attrs[unix.NFTA_SET_NAME])
+			if err != nil {
+				return err
+			}
+			set, ok := sets[name]
+			if !ok || seenSets[name] {
+				return errors.New("受管表包含未预期或重复的地址集合")
+			}
+			if err = firewall.VerifyNFTSet(set, attrs); err != nil {
+				return err
+			}
+			seenSets[name] = true
+		case unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWSETELEM:
+			name, err := nftString(attrs[unix.NFTA_SET_ELEM_LIST_SET])
+			if err != nil {
+				return err
+			}
+			set, ok := sets[name]
+			if !ok || !seenSets[name] || len(attrs) != 3 {
+				return errors.New("地址集合成员结构无效")
+			}
+			elements, ok := attrs[unix.NFTA_SET_ELEM_LIST_ELEMENTS]
+			if !ok || elements.Type&^uint16(netlink.Nested) != unix.NFTA_SET_ELEM_LIST_ELEMENTS {
+				return errors.New("地址集合成员缺失")
+			}
+			if err = firewall.VerifyNFTSetElements(set, elements.Data, remaining); err != nil {
+				return err
+			}
 		case unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWRULE:
 			if program == nil || rules >= expectedRules || chains != 1 {
 				return errors.New("受管表包含未预期的规则")
@@ -146,7 +186,7 @@ func snapshotNFTTargetProgram(ctx context.Context, target firewall.NFTTarget, pr
 		}
 		return nil
 	})
-	if err == nil && view.TableExists && (rules != expectedRules || program != nil && chains != 1 || program == nil && chains != 0) {
+	if err == nil && view.TableExists && (rules != expectedRules || len(remaining) != 0 || len(seenSets) != len(sets) || program != nil && chains != 1 || program == nil && chains != 0) {
 		err = errors.New("受管表对象不完整")
 	}
 	return view, err

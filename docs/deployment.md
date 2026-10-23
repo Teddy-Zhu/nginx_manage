@@ -268,3 +268,11 @@ sudo cat /srv/nginxpanel/bootstrap/token
 进入“概览”，核对当前节点、Agent、Nginx 状态及期望/已应用修订。面板能登录只说明管理服务可用；代理服务还需要创建业务配置并应用。
 
 接着按[使用手册的第一个 HTTP 代理](user-guide.md#创建第一个-http-代理)操作。安装失败、Agent 不可用、端口冲突和服务恢复见[运维与故障处理](operations.md)。
+
+## 访问协议与开机启动
+
+新装默认使用 HTTPS。需要 HTTP 时，源码安装可执行 `sudo bash install.sh --protocol http`，Release 安装在原命令中增加 `--protocol http`。外部监听地址和随机端口的默认推荐不变。
+
+已安装系统使用 `sudo bash manage.sh set-protocol http` 或 `set-protocol https` 切换协议；使用 `set-port 端口` 修改端口。脚本停止面板、保存入口配置并恢复原运行状态。浏览器管理入口统一使用所选协议。
+
+安装器默认启用 Agent、原生面板和随安装 Nginx 的 systemd 开机启动；Docker 面板使用 Compose 的 `restart: unless-stopped`。`--start` 控制本次是否立即启动；原生 systemd 服务仍会登记开机启动。执行 `systemctl is-enabled nginxpanel-agent nginxpanel nginxpanel-nginx` 可查看原生服务状态。

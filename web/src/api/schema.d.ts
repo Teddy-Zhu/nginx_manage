@@ -583,6 +583,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/firewall/geoip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFirewallGeoIP"];
+        put: operations["setFirewallGeoIP"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/geoip/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["updateFirewallGeoIP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/firewall/geoip/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolveFirewallGeoIP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/firewall/policy": {
         parameters: {
             query?: never;
@@ -592,7 +640,7 @@ export interface paths {
         };
         /** @description 返回 FirewallPolicyView。未保存时 version 为 0；仅表示期望策略，不代表内核生效。 */
         get: operations["getFirewallPolicy"];
-        /** @description 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须近期认证。最多 1000 条规则及 256 KiB 规范策略，来源须匹配地址族。 */
+        /** @description 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须近期认证。最多 1000 条规则及 16 MiB 规范策略；新增的规则冲突须明确确认。 */
         put: operations["setFirewallPolicy"];
         post?: never;
         delete?: never;
@@ -6924,19 +6972,65 @@ export interface components {
             from: number;
             to: number;
         };
+        GeoIPSource: {
+            name: string;
+            /** @enum {string} */
+            format: "mmdb" | "cidr";
+            url: string;
+            ipv6_url: string;
+            allow_private_network: boolean;
+        };
+        GeoIPState: {
+            /** Format: int64 */
+            version: number;
+            source: components["schemas"]["GeoIPSource"];
+            ready: boolean;
+            /** Format: int64 */
+            updated_at: number;
+            sha256: string;
+            countries: {
+                [key: string]: number;
+            };
+        };
+        GeoIPSourceInput: {
+            /** Format: int64 */
+            base_version: number;
+            source: components["schemas"]["GeoIPSource"];
+        };
+        GeoIPUpdateInput: {
+            /** Format: int64 */
+            version: number;
+            countries: string[];
+        };
+        GeoIPResolveInput: {
+            /** Format: int64 */
+            version: number;
+            countries: string[];
+        };
+        GeoIPResolved: {
+            /** Format: int64 */
+            version: number;
+            countries: string[];
+            sources: string[];
+            /** Format: int64 */
+            updated_at: number;
+        };
         FirewallRule: {
             id: string;
             name: string;
             enabled: boolean;
             /** @description host_input 或 docker_published；Docker 原始目的与实际映射由独立应用计划绑定，不属于可迁移期望规则；普通逻辑预览不编译 Docker 转发 */
             scope: string;
-            /** @description ipv4、ipv6 或 both；非空来源须覆盖所选地址族 */
+            /** @description ipv4、ipv6 或 both；仅匹配集合中存在的地址族 */
             family: string;
-            /** @description tcp 或 udp */
+            /** @description tcp、udp；主机地址集合支持 any，表示全部协议与端口 */
             protocol: string;
             ports: components["schemas"]["FirewallPortRange"][];
-            /** @description IP 或网络起点 CIDR；空数组表示任意来源；规范化后不得重复 */
+            /** @description IP 或网络起点 CIDR；空数组表示任意来源；nftables 使用地址集合匹配 */
             sources: string[];
+            countries?: string[];
+            /** Format: int64 */
+            geoip_updated_at?: number;
             /** @description allow、deny 或 reject */
             action: string;
             priority: number;
@@ -6960,6 +7054,8 @@ export interface components {
             /** Format: int64 */
             base_version: number;
             policy: components["schemas"]["FirewallPolicy"];
+            /** @default false */
+            confirm_conflicts: boolean;
         };
         FirewallPreviewInput: {
             /** Format: int64 */
@@ -7650,6 +7746,81 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFirewallGeoIP: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setFirewallGeoIP: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeoIPSourceInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    updateFirewallGeoIP: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+                "Idempotency-Key": components["parameters"]["Idempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeoIPUpdateInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    resolveFirewallGeoIP: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeoIPResolveInput"];
+            };
+        };
         responses: {
             200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];

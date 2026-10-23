@@ -13,6 +13,7 @@ import (
 
 type NativeInput struct {
 	DataDir, Binary, WebDir, Listen string
+	HTTP                            bool
 	UID, GID, IPCGID                int
 }
 
@@ -50,7 +51,7 @@ func BindNative(ctx context.Context, in NativeInput) (Snapshot, error) {
 	if err = r.validate(); err != nil {
 		return out, err
 	}
-	d := Deployment{Schema: Schema, Mode: "native", DataDir: in.DataDir, Listen: in.Listen, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, InitialRelease: r.ID}
+	d := Deployment{Schema: Schema, Mode: "native", DataDir: in.DataDir, Listen: in.Listen, HTTP: in.HTTP, UID: in.UID, GID: in.GID, IPCGID: in.IPCGID, InitialRelease: r.ID}
 	if err = d.validate(in.DataDir); err != nil {
 		return out, err
 	}

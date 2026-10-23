@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "防火墙",
-    "subtitle": "管理服务器端口和访问规则",
+    "subtitle": "管理端口和 IP 黑白名单",
     "nav": true,
     "order": 5,
     "symbol": "≡",
@@ -10,52 +10,60 @@
   }
 }
 </route>
-
 <script setup lang="ts">
-import AdvancedDetails from "../components/AdvancedDetails.vue";
-import { computed, h, onMounted, onUnmounted, ref, toRaw, watch } from "vue";
+import { computed, h, onMounted, onUnmounted, ref, toRaw } from "vue";
 import {
   NAlert,
   NButton,
   NDataTable,
+  NForm,
   NFormItem,
   NInput,
-  NInputNumber,
   NModal,
   NSelect,
   NSpace,
   NSwitch,
+  NTabPane,
+  NTabs,
   NTag,
   useDialog,
   type DataTableColumns,
 } from "naive-ui";
+import AdvancedDetails from "../components/AdvancedDetails.vue";
+import GeoIPSourcePanel from "../components/GeoIPSourcePanel.vue";
 import {
   useNodeAPI,
   apiError,
-  type FirewallObservation,
   type FirewallRule,
   type FirewallPolicy,
   type FirewallPolicyView,
+  type FirewallObservation,
   type FirewallPreview,
+  type GeoIPState,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
-
+import { randomUUID } from "../utils/crypto";
+import { countryOptions, countryName } from "../utils/countries";
 const api = useNodeAPI(),
   session = useSession(),
   dialog = useDialog();
-const { run, busy } = useAction(),
-  idempotency = useIdempotency();
+const { run, busy, message } = useAction(),
+  keyFor = useIdempotency();
 const stored = ref<FirewallPolicyView | null>(null),
   policy = ref<FirewallPolicy>({ backend: "direct-nftables", rules: [] });
-const preview = ref<FirewallPreview | null>(null),
-  editing = ref<FirewallRule | null>(null);
-const docker = ref<FirewallObservation["docker"] | null>(null),
-  dockerError = ref("");
-const portsText = ref(""),
+const geoip = ref<GeoIPState | null>(null),
+  observation = ref<FirewallObservation | null>(null),
+  preview = ref<FirewallPreview | null>(null);
+const activeTab = ref("rules"),
+  editing = ref<FirewallRule | null>(null),
+  kind = ref("port"),
+  portsText = ref("80,443"),
   sourcesText = ref(""),
   formError = ref("");
+const formBusy = ref(false);
 const controller = new AbortController();
+onUnmounted(() => controller.abort());
 const canWrite = computed(
   () => session.me?.scopes.includes("security.write") ?? false,
 );
@@ -64,249 +72,258 @@ const dirty = computed(
     !!stored.value &&
     JSON.stringify(policy.value) !== JSON.stringify(stored.value.policy),
 );
-const orderedRules = computed(() =>
-  [...policy.value.rules].sort(
-    (a, b) =>
-      a.priority - b.priority || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-  ),
-);
+const countries = computed(() => [
+  ...new Set(policy.value.rules.flatMap((rule) => rule.countries || [])),
+]);
+const kinds = [
+  { label: "端口规则", value: "port" },
+  { label: "IP 黑白名单", value: "address" },
+  { label: "国家和地区名单", value: "country" },
+];
 const backends = [
-  { label: "直接 nftables", value: "direct-nftables" },
-  { label: "iptables-nft", value: "iptables-nft" },
-  { label: "iptables-legacy", value: "iptables-legacy" },
+  { label: "nftables", value: "direct-nftables" },
+  { label: "iptables (nft)", value: "iptables-nft" },
+  { label: "iptables (legacy)", value: "iptables-legacy" },
   { label: "firewalld", value: "firewalld" },
   { label: "UFW", value: "ufw" },
 ];
-const families = [
-  { label: "IPv4", value: "ipv4" },
-  { label: "IPv6", value: "ipv6" },
-  { label: "IPv4 与 IPv6", value: "both" },
-];
-function dockerSupported(family: string) {
-  const families = family === "both" ? ["ipv4", "ipv6"] : [family];
-  return (
-    !!docker.value?.writable &&
-    families.every((value) =>
-      docker.value?.capabilities.some(
-        (capability) =>
-          capability.backend === policy.value.backend &&
-          capability.family === value &&
-          capability.supported,
-      ),
-    )
-  );
-}
-const dockerReason = computed(() => {
-  if (dockerSupported(editing.value?.family ?? "both")) return "";
-  if (dockerError.value) return dockerError.value;
-  const family = editing.value?.family ?? "both";
-  const reasons =
-    docker.value?.capabilities
-      .filter(
-        (capability) =>
-          capability.backend === policy.value.backend &&
-          (family === "both" || capability.family === family),
-      )
-      .map((capability) => capability.reason) ?? [];
-  return (
-    [...new Set(reasons)].join("；") ||
-    docker.value?.reason ||
-    "尚未取得目标节点 Docker 发布端口能力报告"
-  );
-});
-const scopes = computed(() => [
-  { label: "主机入站", value: "host_input" },
-  {
-    label: "Docker 发布端口",
-    value: "docker_published",
-    disabled: !dockerSupported(editing.value?.family ?? "both"),
-  },
+const protocols = computed(() => [
+  { label: "TCP", value: "tcp" },
+  { label: "UDP", value: "udp" },
+  ...(kind.value !== "port" && policy.value.backend === "direct-nftables"
+    ? [{ label: "全部协议和端口", value: "any" }]
+    : []),
 ]);
 const actions = [
-  { label: "允许", value: "allow" },
-  { label: "丢弃", value: "deny" },
-  { label: "拒绝", value: "reject" },
+  { label: "放行（白名单）", value: "allow" },
+  { label: "屏蔽（黑名单）", value: "deny" },
+  { label: "拒绝连接", value: "reject" },
 ];
-const familyName = (value: string) =>
-  families.find((item) => item.value === value)?.label ?? value;
-const actionName = (value: string) =>
-  actions.find((item) => item.value === value)?.label ?? value;
-const scopeName = (value: string) =>
-  scopes.value.find((item) => item.value === value)?.label ?? value;
-function ports(rule: FirewallRule) {
-  return rule.ports
-    .map((port) =>
-      port.from === port.to ? String(port.from) : `${port.from}-${port.to}`,
-    )
-    .join(", ");
-}
-function localEdit(rule: FirewallRule) {
-  editing.value = structuredClone(toRaw(rule));
-  portsText.value = ports(rule);
-  sourcesText.value = rule.sources.join("\n");
-  formError.value = "";
+const ruleKind = (rule: FirewallRule) =>
+  rule.countries?.length
+    ? "country"
+    : rule.sources.length || rule.protocol === "any"
+      ? "address"
+      : "port";
+const familySources = (sources: string[], family: string) =>
+  family === "both"
+    ? sources
+    : sources.filter((source) => source.includes(":") === (family === "ipv6"));
+const portsLabel = (rule: FirewallRule) =>
+  rule.protocol === "any"
+    ? "全部端口"
+    : `${rule.protocol.toUpperCase()} ${rule.ports.map((p) => (p.from === p.to ? p.from : `${p.from}-${p.to}`)).join(", ")}`;
+function reorder(rules: FirewallRule[]) {
+  rules.forEach((rule, index) => {
+    rule.priority = index * 10;
+  });
+  policy.value.rules = rules;
+  preview.value = null;
 }
 function add() {
-  localEdit({
-    id: crypto.randomUUID(),
+  kind.value = "port";
+  portsText.value = "80,443";
+  sourcesText.value = "";
+  formError.value = "";
+  editing.value = {
+    id: randomUUID(),
     name: "",
     enabled: true,
     scope: "host_input",
     family: "both",
     protocol: "tcp",
-    ports: [{ from: 443, to: 443 }],
+    ports: [{ from: 80, to: 80 }],
     sources: [],
     action: "allow",
-    priority: Math.min(
-      1_000_000,
-      Math.max(0, ...policy.value.rules.map((r) => r.priority)) + 10,
-    ),
+    priority: 0,
     interface: "",
     comment: "",
-  });
+    countries: [],
+  };
 }
-function commitRule() {
-  if (!editing.value || !canWrite.value) return;
+function edit(rule: FirewallRule) {
+  editing.value = structuredClone(toRaw(rule));
+  kind.value = ruleKind(rule);
+  portsText.value = rule.ports
+    .map((p) => (p.from === p.to ? String(p.from) : `${p.from}-${p.to}`))
+    .join(",");
+  sourcesText.value = kind.value === "country" ? "" : rule.sources.join("\n");
+  formError.value = "";
+}
+function changeKind(value: string) {
+  kind.value = value;
+  if (!editing.value) return;
+  editing.value.countries = [];
+  editing.value.sources = [];
+  editing.value.geoip_updated_at = undefined;
+  editing.value.protocol =
+    value === "port" || policy.value.backend !== "direct-nftables"
+      ? "tcp"
+      : "any";
+}
+async function commitRule() {
+  if (!editing.value || formBusy.value) return;
   const value = structuredClone(toRaw(editing.value));
+  formError.value = "";
   if (!value.name.trim()) {
     formError.value = "请填写规则名称";
     return;
   }
-  if (
-    value.enabled &&
-    value.scope === "docker_published" &&
-    !dockerSupported(value.family)
-  ) {
-    formError.value = dockerReason.value;
-    return;
-  }
-  const parts = portsText.value
-    .trim()
-    .split(/[,，\s]+/)
-    .filter(Boolean);
-  if (parts.length < 1 || parts.length > 16) {
-    formError.value = "请填写 1–16 个端口或端口范围";
-    return;
-  }
-  value.ports = [];
-  for (const part of parts) {
-    const match = /^([0-9]{1,5})(?:-([0-9]{1,5}))?$/.exec(part);
-    if (!match) {
-      formError.value = "端口格式无效，例如 80,443,8000-8010";
+  if (value.protocol === "any") value.ports = [{ from: 1, to: 65535 }];
+  else {
+    const parts = portsText.value
+      .trim()
+      .split(/[,，\s]+/)
+      .filter(Boolean);
+    if (!parts.length || parts.length > 16) {
+      formError.value = "请填写 1–16 个端口或端口范围";
       return;
     }
-    const from = Number(match[1]),
-      to = Number(match[2] ?? match[1]);
-    if (from < 1 || to > 65535 || to < from) {
-      formError.value = "端口须处于 1–65535，范围起点不能大于终点";
+    const ports = parts.map((part) => {
+      const match = /^(\d{1,5})(?:-(\d{1,5}))?$/.exec(part);
+      return match
+        ? { from: Number(match[1]), to: Number(match[2] || match[1]) }
+        : { from: 0, to: 0 };
+    });
+    if (ports.some((p) => p.from < 1 || p.to > 65535 || p.to < p.from)) {
+      formError.value = "端口须为 1–65535，例如 80,443,8000-8010";
       return;
     }
-    value.ports.push({ from, to });
+    value.ports = ports;
   }
-  value.sources = sourcesText.value
-    .trim()
-    .split(/[,，\s]+/)
-    .filter(Boolean);
-  if (value.sources.length > 32) {
-    formError.value = "每条规则最多 32 个来源";
-    return;
-  }
-  const index = policy.value.rules.findIndex((r) => r.id === value.id);
-  if (index < 0) {
-    if (policy.value.rules.length >= 1000) {
-      formError.value = "最多保存 1000 条规则";
+  if (kind.value === "country") {
+    if (value.scope !== "host_input") {
+      formError.value = "国家名单仅支持服务器入站访问";
       return;
     }
-    policy.value.rules.push(value);
-  } else policy.value.rules[index] = value;
+    if (!value.countries?.length) {
+      formError.value = "请选择国家或地区";
+      return;
+    }
+    if (policy.value.backend !== "direct-nftables") {
+      formError.value = "当前环境暂不支持国家地址集合";
+      return;
+    }
+    const old = policy.value.rules.find((rule) => rule.id === value.id);
+    if (
+      !old?.sources.length ||
+      JSON.stringify([...(old.countries || [])].sort()) !==
+        JSON.stringify([...value.countries].sort())
+    ) {
+      if (!geoip.value?.ready) {
+        formError.value = "请先在 GeoIP 数据中更新数据源";
+        return;
+      }
+      formBusy.value = true;
+      try {
+        const result = await api.resolveFirewallGeoIP({
+          version: geoip.value.version,
+          countries: value.countries,
+        });
+        value.sources = result.sources;
+        value.geoip_updated_at = result.updated_at;
+      } catch (error) {
+        formError.value = apiError(error).message;
+        return;
+      } finally {
+        formBusy.value = false;
+      }
+    }
+    value.sources = familySources(value.sources, value.family);
+    if (!value.sources.length) {
+      formError.value = "所选国家没有当前地址类型的数据";
+      return;
+    }
+  } else {
+    value.countries = [];
+    value.geoip_updated_at = undefined;
+    value.sources =
+      kind.value === "address"
+        ? [...new Set(sourcesText.value.split(/[,，\s]+/).filter(Boolean))]
+        : [];
+    if (kind.value === "address" && !value.sources.length) {
+      formError.value = "请输入 IP 地址或网段，每行一个";
+      return;
+    }
+  }
+  reorder([
+    value,
+    ...policy.value.rules.filter((rule) => rule.id !== value.id),
+  ]);
   editing.value = null;
 }
 function remove(rule: FirewallRule) {
   dialog.warning({
-    title: "删除期望规则",
-    content: `移除“${rule.name}”后仍需保存策略。删除不会停止服务，也不代表端口允许或阻止。`,
+    title: "删除规则",
+    content: `删除“${rule.name}”？保存并应用后生效。`,
     positiveText: "删除",
     negativeText: "取消",
-    onPositiveClick: () => {
-      policy.value.rules = policy.value.rules.filter((r) => r.id !== rule.id);
-    },
+    onPositiveClick: () =>
+      reorder(policy.value.rules.filter((item) => item.id !== rule.id)),
   });
 }
 const columns: DataTableColumns<FirewallRule> = [
+  { title: "名称", key: "name", minWidth: 150, ellipsis: { tooltip: true } },
+  {
+    title: "访问范围",
+    key: "sources",
+    minWidth: 230,
+    ellipsis: { tooltip: true },
+    render: (rule) =>
+      rule.countries?.length
+        ? `${rule.countries.map(countryName).join("、")}（${rule.sources.length} 个网段）`
+        : rule.sources.length
+          ? `${rule.sources.slice(0, 2).join("、")}${rule.sources.length > 2 ? ` 等 ${rule.sources.length} 个地址` : ""}`
+          : "所有来源",
+  },
+  { title: "端口", key: "ports", minWidth: 160, render: portsLabel },
+  {
+    title: "处理方式",
+    key: "action",
+    width: 110,
+    render: (rule) =>
+      h(
+        NTag,
+        {
+          type: rule.action === "allow" ? "success" : "error",
+          bordered: false,
+        },
+        { default: () => (rule.action === "allow" ? "放行" : "屏蔽") },
+      ),
+  },
   {
     title: "启用",
     key: "enabled",
     width: 80,
-    render: (r) =>
+    render: (rule) =>
       h(NSwitch, {
-        value: r.enabled,
-        disabled:
-          !canWrite.value ||
-          busy.value ||
-          (!r.enabled &&
-            r.scope === "docker_published" &&
-            !dockerSupported(r.family)),
+        value: rule.enabled,
+        disabled: busy.value || !canWrite.value,
         "onUpdate:value": (value: boolean) => {
-          r.enabled = value;
+          rule.enabled = value;
+          preview.value = null;
         },
       }),
   },
-  { title: "名称", key: "name", minWidth: 130, ellipsis: { tooltip: true } },
-  { title: "顺序", key: "priority", width: 80 },
-  {
-    title: "范围",
-    key: "scope",
-    render: (r) => scopeName(r.scope),
-    width: 150,
-  },
-  {
-    title: "地址族",
-    key: "family",
-    render: (r) => familyName(r.family),
-    width: 140,
-  },
-  {
-    title: "协议 / 端口",
-    key: "ports",
-    render: (r) => `${r.protocol.toUpperCase()} / ${ports(r)}`,
-    minWidth: 160,
-    ellipsis: { tooltip: true },
-  },
-  {
-    title: "来源",
-    key: "sources",
-    render: (r) => r.sources.join(", ") || "任意来源",
-    minWidth: 180,
-    ellipsis: { tooltip: true },
-  },
-  {
-    title: "入站接口",
-    key: "interface",
-    render: (r) => r.interface || "任意接口",
-    width: 120,
-  },
-  {
-    title: "动作",
-    key: "action",
-    render: (r) => actionName(r.action),
-    width: 90,
-  },
   {
     title: "操作",
-    key: "actions",
-    width: 150,
-    render: (r) =>
+    key: "operations",
+    width: 160,
+    fixed: "right",
+    render: (rule) =>
       h(
         NSpace,
-        { size: "small" },
+        { size: 14, wrap: false },
         {
           default: () => [
             h(
               NButton,
               {
                 size: "small",
+                text: true,
                 disabled: busy.value || !canWrite.value,
-                onClick: () => localEdit(r),
+                type: "primary",
+                onClick: () => edit(rule),
               },
               { default: () => "编辑" },
             ),
@@ -314,8 +331,27 @@ const columns: DataTableColumns<FirewallRule> = [
               NButton,
               {
                 size: "small",
+                text: true,
+                disabled:
+                  busy.value ||
+                  !canWrite.value ||
+                  policy.value.rules[0]?.id === rule.id,
+                onClick: () =>
+                  reorder([
+                    rule,
+                    ...policy.value.rules.filter((item) => item.id !== rule.id),
+                  ]),
+              },
+              { default: () => "置顶" },
+            ),
+            h(
+              NButton,
+              {
+                size: "small",
+                text: true,
                 disabled: busy.value || !canWrite.value,
-                onClick: () => remove(r),
+                type: "error",
+                onClick: () => remove(rule),
               },
               { default: () => "删除" },
             ),
@@ -324,93 +360,29 @@ const columns: DataTableColumns<FirewallRule> = [
       ),
   },
 ];
-const previewColumns: DataTableColumns<FirewallPreview["entries"][number]> = [
-  { title: "策略优先级", key: "priority", width: 120 },
-  {
-    title: "规则 ID",
-    key: "rule_id",
-    minWidth: 190,
-    ellipsis: { tooltip: true },
-  },
-  {
-    title: "地址族",
-    key: "family",
-    width: 100,
-    render: (r) => familyName(r.family),
-  },
-  {
-    title: "协议",
-    key: "protocol",
-    width: 80,
-    render: (r) => r.protocol.toUpperCase(),
-  },
-  {
-    title: "来源",
-    key: "source",
-    minWidth: 170,
-    render: (r) => r.source || "任意来源",
-  },
-  {
-    title: "端口",
-    key: "ports",
-    width: 120,
-    render: (r) =>
-      r.ports.from === r.ports.to
-        ? String(r.ports.from)
-        : `${r.ports.from}-${r.ports.to}`,
-  },
-  {
-    title: "接口",
-    key: "interface",
-    width: 100,
-    render: (r) => r.interface || "任意接口",
-  },
-  {
-    title: "动作",
-    key: "action",
-    width: 90,
-    render: (r) => actionName(r.action),
-  },
-];
-const firewalldPreviewColumns: DataTableColumns<
-  FirewallPreview["entries"][number]
-> = [
-  ...previewColumns,
-  { title: "后端优先级", key: "backend_priority", width: 120 },
-  {
-    title: "Rich rule",
-    key: "expression",
-    minWidth: 400,
-    ellipsis: { tooltip: true },
-  },
-];
-const commandPreviewColumns: DataTableColumns<FirewallPreview["entries"][number]> = [
-  ...previewColumns,
-  {
-    title: "生成命令预览",
-    key: "expression",
-    minWidth: 440,
-    ellipsis: { tooltip: true },
-  },
-];
 async function load() {
   await run(async () => {
-    docker.value = null;
-    dockerError.value = "";
-    const [saved, observed, runtime] = await Promise.allSettled([
+    const [saved, observed, runtime, data] = await Promise.allSettled([
       api.firewallPolicy(controller.signal),
       api.firewall(controller.signal),
       api.firewallRuntime(controller.signal),
+      canWrite.value
+        ? api.firewallGeoIP(controller.signal)
+        : Promise.resolve(null),
     ]);
-    if (observed.status === "fulfilled") docker.value = observed.value.docker;
-    else
-      dockerError.value = `Docker 能力报告无法读取：${apiError(observed.reason).message}`;
     if (saved.status === "rejected") throw saved.reason;
     stored.value = saved.value;
     policy.value = structuredClone(saved.value.policy);
-    if (saved.value.version === 0 && runtime.status === "fulfilled" && backends.some((item) => item.value === runtime.value.backend)) {
+    if (observed.status === "fulfilled") observation.value = observed.value;
+    if (
+      !saved.value.version &&
+      runtime.status === "fulfilled" &&
+      backends.some((backend) => backend.value === runtime.value.backend)
+    )
       policy.value.backend = runtime.value.backend;
-    }
+    if (data.status === "fulfilled") geoip.value = data.value;
+    else if (canWrite.value)
+      message.error(`GeoIP 配置读取失败：${apiError(data.reason).message}`);
     preview.value = null;
   });
 }
@@ -418,394 +390,345 @@ function refresh() {
   if (dirty.value)
     dialog.warning({
       title: "放弃未保存修改",
-      content: "将重新读取已保存的期望策略。",
+      content: "重新读取会放弃当前修改。",
       positiveText: "重新读取",
       negativeText: "取消",
       onPositiveClick: () => void load(),
     });
   else void load();
 }
-async function save() {
-  if (!stored.value || !canWrite.value) return;
-  const input = {
-    base_version: stored.value.version,
-    policy: structuredClone(toRaw(policy.value)),
-  };
+async function save(confirmConflicts = false) {
   await run(async () => {
-    const result = await api.saveFirewallPolicy(input, idempotency(input));
-    stored.value = result;
-    policy.value = structuredClone(result.policy);
-    preview.value = null;
-  }, "规则已保存，尚未生效");
-}
-async function generate() {
-  if (!stored.value || dirty.value) return;
-  await run(async () => {
-    preview.value = await api.previewFirewall(
-      stored.value!.version,
-      controller.signal,
-    );
+    const data = {
+      base_version: stored.value?.version || 0,
+      policy: policy.value,
+      confirm_conflicts: confirmConflicts,
+    };
+    try {
+      const saved = await api.saveFirewallPolicy(data, keyFor(data));
+      stored.value = saved;
+      policy.value = structuredClone(saved.policy);
+      preview.value = null;
+      message.success("规则已保存，应用变更后生效");
+    } catch (error) {
+      const failure = apiError(error);
+      if (!confirmConflicts && failure.code === "FIREWALL_RULE_CONFLICT") {
+        dialog.warning({
+          title: "确认规则覆盖",
+          content: failure.message,
+          positiveText: "确认覆盖",
+          negativeText: "取消",
+          onPositiveClick: () => void save(true),
+        });
+        return;
+      }
+      throw error;
+    }
   });
 }
-watch(
-  policy,
-  () => {
+async function updateCountryRules() {
+  if (!geoip.value?.ready) return;
+  await run(async () => {
+    const results = new Map<
+      string,
+      Awaited<ReturnType<typeof api.resolveFirewallGeoIP>>
+    >();
+    for (const rule of policy.value.rules) {
+      if (!rule.countries?.length) continue;
+      const key = [...rule.countries].sort().join(",");
+      let result = results.get(key);
+      if (!result) {
+        result = await api.resolveFirewallGeoIP({
+          version: geoip.value!.version,
+          countries: rule.countries,
+        });
+        results.set(key, result);
+      }
+    }
+    for (const rule of policy.value.rules) {
+      if (!rule.countries?.length) continue;
+      const result = results.get([...rule.countries].sort().join(","))!;
+      const sources = familySources(result.sources, rule.family);
+      if (!sources.length)
+        throw new Error(`“${rule.name}”没有当前地址类型的数据`);
+    }
+    for (const rule of policy.value.rules) {
+      if (!rule.countries?.length) continue;
+      const result = results.get([...rule.countries].sort().join(","))!;
+      rule.sources = familySources(result.sources, rule.family);
+      rule.geoip_updated_at = result.updated_at;
+    }
     preview.value = null;
-  },
-  { deep: true },
-);
-onMounted(() => void load());
-onUnmounted(() => controller.abort());
+    if (results.size) message.success("国家名单已更新，请保存并应用变更");
+  });
+}
+async function check() {
+  if (stored.value?.version)
+    await run(async () => {
+      preview.value = await api.previewFirewall(
+        stored.value!.version,
+        controller.signal,
+      );
+    });
+}
+onMounted(load);
 </script>
-
 <template>
-  <div class="page-toolbar">
-    <h2>防火墙规则</h2>
-    <n-space
-      ><n-button :disabled="busy" @click="refresh">重新读取</n-button
-      ><n-button
-        :disabled="busy || !stored || !canWrite || !dirty"
-        @click="save"
-        >保存规则</n-button
-      ><n-button :disabled="busy || !stored?.version || dirty" @click="generate"
-        >检查规则</n-button
-      ></n-space
-    >
-  </div>
-  <n-alert type="info" :bordered="false" class="notice"
-    >保存后点击“应用规则”使设置生效。修改后需确认连接正常，超时将自动恢复。</n-alert
-  >
-  <section v-if="stored" class="panel">
-    <div class="page-toolbar">
-      <h3>访问规则</h3>
-      <n-tag :type="dirty ? 'warning' : 'default'">{{
-        dirty
-          ? "有未保存修改"
-          : stored.version
-            ? `已保存 · 版本 ${stored.version}`
-            : "尚未保存"
-      }}</n-tag>
-    </div>
-    <AdvancedDetails title="高级网络选项">
-    <n-form-item label="目标后端"
-      ><n-select
-        v-model:value="policy.backend"
-        :options="backends"
-        :disabled="busy || !canWrite"
-        style="max-width: 320px"
-    /></n-form-item>
-    <p class="muted">
-      按顺序升序匹配；顺序相同按规则 ID
-      排序。允许结果受目标后端和其他系统策略影响；未匹配流量交回其余系统策略。选择后端不会切换系统
-      alternatives 或停止现有管理器。
-    </p>
-    <p v-if="policy.backend === 'firewalld'" class="muted">
-      firewalld 预览使用独立的 ANY → HOST
-      policy。当前仅支持不绑定接口的主机入站规则；允许动作采用 accept，可能先于后续
-      zone 或 policy 结束匹配。
-    </p>
-    <p v-if="policy.backend === 'ufw'" class="muted">
-      UFW 仅承接主机入站，重复匹配条件须先合并；允许动作可能提前结束后续 UFW
-      规则。命令预览尚未确定与既有规则的插入关系。
-    </p>
-    <p v-if="['iptables-nft', 'iptables-legacy'].includes(policy.backend)" class="muted">
-      主机入站规则按地址族独立编译。允许采用 ACCEPT，可能结束后续 INPUT 判断；
-      未匹配流量返回调用链，保留系统默认策略。Docker 发布端口须单独核对转发路径。
-    </p>
-    </AdvancedDetails>
-    <n-alert
-      v-if="dockerReason && policy.rules.some((rule) => rule.scope === 'docker_published')"
-      type="warning"
-      :bordered="false"
-      class="notice"
-    >{{ dockerReason }}</n-alert>
-    <div class="page-toolbar">
-      <span>{{ policy.rules.length }} / 1000 条规则</span
-      ><n-button
-        :disabled="!canWrite || busy || policy.rules.length >= 1000"
-        @click="add"
-        >新增规则</n-button
+  <Teleport defer to="#page-heading-actions">
+    <n-space align="center" :size="12">
+      <n-button quaternary :disabled="busy" @click="refresh">刷新</n-button>
+      <n-button
+        v-if="activeTab === 'rules'"
+        :disabled="busy || !canWrite || !dirty"
+        @click="save()"
+        >保存修改</n-button
       >
-    </div>
-    <n-data-table
-      :columns="columns"
-      :data="orderedRules"
-      :row-key="(row: FirewallRule) => row.id"
-      :pagination="{ pageSize: 20 }"
-      :scroll-x="1400"
-    />
-  </section>
-  <section v-if="preview" class="panel">
-    <p class="muted"><RouterLink to="/firewall-apply">应用规则</RouterLink> · <RouterLink to="/firewall">查看诊断</RouterLink></p>
-    <div class="page-toolbar">
-      <h3>版本 {{ preview.version }} 检查规则</h3>
-      <n-tag :type="preview.compiled ? 'info' : 'warning'">{{
-        preview.compiled ? "检查通过 · 尚未生效" : "检查未通过"
-      }}</n-tag>
-    </div>
-    <n-alert
-      v-for="(item, index) in preview.errors"
-      :key="`error-${index}`"
-      type="error"
-      :bordered="false"
-      class="notice"
-      >{{ item }}</n-alert
-    >
-    <n-alert
-      v-for="(item, index) in preview.warnings"
-      :key="`warning-${index}`"
-      type="warning"
-      :bordered="false"
-      class="notice"
-      >{{ item }}</n-alert
-    >
-    <template v-if="preview.compiled">
-      <dl>
-        <template v-if="preview.firewalld">
-          <dt>目标 policy</dt>
-          <dd>{{ preview.firewalld.policy }}</dd>
-          <dt>流量范围</dt>
-          <dd>
-            {{ preview.firewalld.ingress_zones.join("、") }} →
-            {{ preview.firewalld.egress_zones.join("、") }}
-          </dd>
-          <dt>优先级 / 默认目标</dt>
-          <dd>
-            {{ preview.firewalld.priority }} / {{ preview.firewalld.target }}
-          </dd>
-          <dt>完整配置规模</dt>
-          <dd>
-            {{ preview.firewalld.settings_bytes }} 字节，未写入运行或永久配置
-          </dd>
-        </template>
-        <template v-else-if="preview.backend === 'ufw'">
-          <dt>目标范围</dt>
-          <dd>UFW 主机入站；保留默认策略</dd>
-          <dt>规则顺序</dt>
-          <dd>按期望策略顺序编译，尚未确定与既有规则的插入关系</dd>
-        </template>
-        <template v-else-if="preview.iptables">
-          <dt>目标表 / 自有链</dt>
-          <dd>{{ preview.table }} / {{ preview.chain }}</dd>
-          <dt>挂接范围</dt>
-          <dd>INPUT；实际跳转位置须在执行计划中核对</dd>
-          <dt>默认目标</dt>
-          <dd>RETURN；交回其余系统规则，不修改全局默认策略</dd>
-          <dt>地址族与显式工具</dt>
-          <dd v-for="family in preview.iptables.families" :key="family.family">
-            {{ familyName(family.family) }} · {{ family.binary }} ·
-            {{ family.generated_rules }} 条生成规则
-          </dd>
-          <dd v-if="!preview.iptables.families.length">无启用规则，未生成地址族规则</dd>
-          <dt>完整参数规模</dt>
-          <dd>{{ preview.iptables.program_bytes }} 字节，未执行命令</dd>
-        </template>
-        <template v-else>
-          <dt>目标表 / 链</dt>
-          <dd>{{ preview.table }} / {{ preview.chain }}</dd>
-          <dt>挂接点</dt>
-          <dd>
-            {{ preview.hook }}，优先级 {{ preview.priority }}，默认
-            {{ preview.default_policy }}
-          </dd>
-        </template>
-        <dt>规则数量</dt>
-        <dd>
-          {{ preview.logical_rules }} 条启用策略 →
-          <template v-if="preview.firewalld"
-            >{{ preview.generated_rules }} 条 rich rules</template
+      <RouterLink v-if="activeTab === 'rules' && canWrite" to="/firewall-apply">
+        <n-button type="primary" :disabled="busy || !stored?.version || dirty"
+          >应用变更</n-button
+        >
+      </RouterLink>
+    </n-space>
+  </Teleport>
+  <n-alert v-if="dirty" type="warning" :show-icon="false"
+    >有未保存的规则修改，保存并应用后生效。<n-button
+      v-if="activeTab !== 'rules'"
+      text
+      type="primary"
+      style="margin-left: 12px"
+      @click="activeTab = 'rules'"
+      >前往规则管理</n-button
+    ></n-alert
+  >
+  <div class="firewall-card">
+    <n-tabs v-model:value="activeTab" type="line" animated>
+      <n-tab-pane name="rules" tab="规则管理">
+        <div class="section-toolbar">
+          <div>
+            <div class="section-title">
+              <h2>访问规则</h2>
+              <n-tag size="small" :bordered="false"
+                >{{ policy.rules.length }} 条</n-tag
+              >
+            </div>
+            <p class="muted">从上到下依次匹配，首条命中的规则生效。</p>
+          </div>
+          <n-button
+            type="primary"
+            secondary
+            :disabled="busy || !canWrite"
+            @click="add"
+            >添加规则</n-button
           >
-          <template v-else-if="preview.backend === 'ufw'"
-            >{{ preview.generated_rules }} 条 UFW 命令</template
+        </div>
+        <n-data-table
+          :columns="columns"
+          :data="policy.rules"
+          :row-key="(rule: FirewallRule) => rule.id"
+          :scroll-x="900"
+        >
+          <template #empty>
+            <div class="rules-empty">
+              <span class="empty-symbol" aria-hidden="true">≡</span>
+              <strong>还没有防火墙规则</strong>
+              <p>点击“添加规则”，设置端口或 IP 黑白名单。</p>
+            </div>
+          </template>
+        </n-data-table>
+        <AdvancedDetails title="高级设置">
+          <n-form-item label="防火墙管理方式"
+            ><n-select
+              v-model:value="policy.backend"
+              :options="backends"
+              :disabled="busy || !canWrite || !!stored?.version"
+          /></n-form-item>
+          <p class="muted">
+            本工具管理的规则与系统已有规则共同生效。其他防火墙或云安全组中的限制需要在对应位置调整。
+          </p>
+          <n-space align="center" class="advanced-actions"
+            ><RouterLink to="/firewall">查看系统已有规则</RouterLink>
+            <n-button
+              :disabled="busy || dirty || !stored?.version"
+              @click="check"
+              >检查已保存规则</n-button
+            >
+          </n-space>
+          <n-alert
+            v-for="error in preview?.errors || []"
+            :key="error"
+            type="error"
+            >{{ error }}</n-alert
           >
-          <template v-else-if="preview.iptables"
-            >{{ preview.generated_rules }} 条生成规则，包含
-            {{ preview.iptables.base_rules }} 条会话/回环返回规则</template
-          >
-          <template v-else
-            >{{ preview.generated_rules }} 条内核规则，包含 2
-            条会话/回环保护规则</template
-          >
-        </dd>
-        <dt>编译摘要</dt>
-        <dd>
-          <code>{{ preview.program_hash }}</code>
-        </dd>
-        <template v-if="preview.backend === 'direct-nftables'">
-          <dt>内核代次</dt>
-          <dd>
-            {{ preview.kernel.available ? preview.kernel.generation : "未知" }}
-          </dd>
-          <dt>目标表快照</dt>
-          <dd>
-            <code>{{
-              preview.kernel.fingerprint || preview.kernel.reason || "未取得"
-            }}</code>
-          </dd>
-        </template>
-        <template v-if="preview.transaction_hash">
-          <dt>新建事务摘要</dt>
-          <dd>
-            <code>{{ preview.transaction_hash }}</code>
-          </dd>
-          <dt>事务规模</dt>
-          <dd>
-            {{ preview.transaction_messages }} 条消息 /
-            {{ preview.transaction_bytes }} 字节，已编码、未提交
-          </dd>
-        </template>
-        <dt>环境观测时间</dt>
-        <dd>
-          {{
-            preview.observed_at
-              ? new Date(preview.observed_at * 1000).toLocaleString()
-              : "未知"
-          }}
-        </dd>
-      </dl>
-      <p v-if="preview.truncated" class="muted">
-        仅展示前 128 条展开结果，全部规则已参与编译和数量检查。
-      </p>
-      <n-data-table
-        :columns="
-          preview.firewalld
-            ? firewalldPreviewColumns
-            : preview.backend === 'ufw' || preview.iptables
-              ? commandPreviewColumns
-              : previewColumns
-        "
-        :data="preview.entries"
-        :pagination="{ pageSize: 20 }"
-        :scroll-x="preview.firewalld || preview.backend === 'ufw' ? 1600 : 1000"
-      />
-    </template>
-  </section>
+          <p v-if="preview">
+            {{ preview.compiled ? "规则检查通过" : "规则检查未通过" }}
+          </p>
+          <p v-if="observation && !observation.writable">
+            {{ observation.reason }}
+          </p>
+        </AdvancedDetails>
+      </n-tab-pane>
+      <n-tab-pane v-if="canWrite" name="geoip" tab="GeoIP 数据源"
+        ><GeoIPSourcePanel
+          :state="geoip"
+          :writable="canWrite"
+          :countries="countries"
+          @changed="geoip = $event"
+          @updated="updateCountryRules"
+      /></n-tab-pane>
+    </n-tabs>
+  </div>
   <n-modal
     :show="!!editing"
-    :mask-closable="false"
     preset="card"
-    title="期望规则"
-    style="width: min(720px, 94vw)"
+    title="防火墙规则"
+    style="width: min(680px, 94vw)"
+    :mask-closable="false"
+    :closable="!formBusy"
     @update:show="
-      (show: boolean) => {
-        if (!show) editing = null;
+      (value: boolean) => {
+        if (!value) editing = null;
       }
     "
   >
-    <template v-if="editing">
-      <n-alert v-if="formError" type="error" :bordered="false" class="notice">{{
-        formError
-      }}</n-alert>
+    <n-form v-if="editing" :disabled="formBusy">
+      <n-alert v-if="formError" type="error">{{ formError }}</n-alert>
+      <n-form-item label="规则类型"
+        ><n-select
+          :value="kind"
+          :options="kinds"
+          :disabled="busy"
+          @update:value="changeKind"
+      /></n-form-item>
       <n-form-item label="名称"
-        ><n-input v-model:value="editing.name" maxlength="128"
+        ><n-input
+          v-model:value="editing.name"
+          maxlength="128"
+          placeholder="例如：网站访问、办公网络、地区屏蔽"
       /></n-form-item>
-      <div class="grid">
-        <n-form-item label="范围"
-          ><n-select
-            v-model:value="editing.scope"
-            :options="scopes" /></n-form-item
-        ><n-form-item label="地址族"
-          ><n-select v-model:value="editing.family" :options="families"
-        /></n-form-item>
-      </div>
-      <p v-if="dockerReason" class="muted">{{ dockerReason }}</p>
-      <div class="grid">
-        <n-form-item label="协议"
-          ><n-select
-            v-model:value="editing.protocol"
-            :options="[
-              { label: 'TCP', value: 'tcp' },
-              { label: 'UDP', value: 'udp' },
-            ]" /></n-form-item
-        ><n-form-item label="动作"
-          ><n-select v-model:value="editing.action" :options="actions"
-        /></n-form-item>
-      </div>
-      <n-form-item label="端口 / 范围"
-        ><n-input v-model:value="portsText" placeholder="80,443,8000-8010"
+      <n-form-item label="处理方式"
+        ><n-select v-model:value="editing.action" :options="actions"
       /></n-form-item>
-      <n-form-item label="来源 IP / CIDR（留空表示任意来源）"
+      <n-form-item v-if="kind === 'country'" label="国家和地区"
+        ><n-select
+          v-model:value="editing.countries"
+          multiple
+          filterable
+          :options="countryOptions"
+      /></n-form-item>
+      <n-alert v-if="kind === 'country' && !geoip?.ready" type="info"
+        >请先在“GeoIP 数据”中更新国家地址数据。</n-alert
+      >
+      <n-form-item v-if="kind === 'address'" label="IP 地址或网段"
         ><n-input
           v-model:value="sourcesText"
           type="textarea"
-          :rows="3"
-          placeholder="每行一个地址或网络起点 CIDR；双栈规则需同时填写两种地址族"
+          :autosize="{ minRows: 4, maxRows: 12 }"
+          placeholder="每行一个 IP 或 CIDR，例如 192.168.1.10、192.168.1.0/24"
       /></n-form-item>
-      <div class="grid">
-        <n-form-item label="匹配顺序"
-          ><n-input-number
-            :value="editing.priority"
-            :min="0"
-            :max="1000000"
-            :precision="0"
-            :clearable="false"
-            @update:value="
-              (value: number | null) => {
-                if (editing && value !== null) editing.priority = value;
-              }
-            " /></n-form-item
-        ><n-form-item label="入站接口（可选）"
+      <n-form-item label="协议"
+        ><n-select v-model:value="editing.protocol" :options="protocols"
+      /></n-form-item>
+      <n-form-item v-if="editing.protocol !== 'any'" label="端口"
+        ><n-input v-model:value="portsText" placeholder="例如 80,443,8000-8010"
+      /></n-form-item>
+      <AdvancedDetails title="更多设置">
+        <n-form-item label="地址类型"
+          ><n-select
+            v-model:value="editing.family"
+            :options="[
+              { label: 'IPv4 和 IPv6', value: 'both' },
+              { label: 'IPv4', value: 'ipv4' },
+              { label: 'IPv6', value: 'ipv6' },
+            ]"
+        /></n-form-item>
+        <n-form-item label="流量范围"
+          ><n-select
+            v-model:value="editing.scope"
+            :options="[
+              { label: '服务器入站', value: 'host_input' },
+              { label: 'Docker 发布端口', value: 'docker_published' },
+            ]"
+        /></n-form-item>
+        <n-form-item label="网卡（可选）"
           ><n-input
             v-model:value="editing.interface"
             maxlength="15"
-            placeholder="例如 eth0，留空表示任意接口"
+            placeholder="所有网卡"
         /></n-form-item>
-      </div>
-      <n-form-item label="备注"
-        ><n-input v-model:value="editing.comment" maxlength="512"
-      /></n-form-item>
-      <n-form-item label="启用"
-        ><n-switch v-model:value="editing.enabled"
-      /></n-form-item>
+        <n-form-item label="备注"
+          ><n-input v-model:value="editing.comment" maxlength="512"
+        /></n-form-item>
+      </AdvancedDetails>
       <n-space justify="end"
-        ><n-button @click="editing = null">取消</n-button
-        ><n-button type="primary" :disabled="!canWrite" @click="commitRule"
-          >更新期望规则</n-button
+        ><n-button :disabled="busy || formBusy" @click="editing = null"
+          >取消</n-button
+        ><n-button
+          type="primary"
+          :loading="formBusy"
+          :disabled="busy || formBusy"
+          @click="commitRule"
+          >确定</n-button
         ></n-space
       >
-    </template>
+    </n-form>
   </n-modal>
 </template>
-
 <style scoped>
-.notice {
-  margin: 16px 0;
-}
-.panel {
-  padding: 20px;
-  margin-top: 16px;
-  border: 1px solid var(--border, #e5eae7);
+.firewall-card {
+  padding: 8px 24px 24px;
+  border: 1px solid #e5eae7;
   border-radius: 12px;
-  background: white;
-  min-width: 0;
+  background: #fff;
 }
-.panel h3 {
-  margin-top: 0;
-}
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
+  margin: 16px 0 20px;
 }
-dl {
-  display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
+.section-title {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  margin-bottom: 6px;
 }
-dt {
-  color: #6d7772;
+.rules-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 36px 16px;
+  color: #7b8680;
 }
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
+.rules-empty strong {
+  color: #4d5f54;
+  font-size: 14px;
+  font-weight: 500;
 }
-@media (max-width: 650px) {
-  .grid {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-  dl {
-    grid-template-columns: 100px minmax(0, 1fr);
+.rules-empty p {
+  font-size: 13px;
+}
+.empty-symbol {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: #f0f6f2;
+  color: #88a697;
+  font-size: 28px;
+}
+.advanced-actions {
+  margin-top: 16px;
+}
+:deep(.n-alert) {
+  margin-bottom: 16px;
+}
+@media (max-width: 600px) {
+  .firewall-card {
+    padding: 4px 14px 16px;
   }
 }
 </style>

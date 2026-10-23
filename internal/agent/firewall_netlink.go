@@ -21,9 +21,9 @@ import (
 	"nginxpanel/internal/secure"
 )
 
-const nftReadBytes = 8 << 20
+const nftReadBytes = 32 << 20
 const nftDatagramBytes = 64 << 10
-const nftReadObjects = firewall.MaxEntries + 256
+const nftReadObjects = firewall.MaxEntries + 4*firewall.MaxRules + 8192
 
 // The send method only implements GET operations. In particular, a successful
 // read does not grant ownership of any object or authorize a transaction.
@@ -31,6 +31,7 @@ const nftReadObjects = firewall.MaxEntries + 256
 // unbounded multipart dump in netlink.Conn.Receive.
 type nftReadSocket struct {
 	table          string
+	set            string
 	fd             int
 	pid, sequence  uint32
 	bytes, objects int
@@ -100,6 +101,7 @@ func (s *nftReadSocket) send(ctx context.Context, message netlink.Message) error
 		unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETCHAIN,
 		unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETRULE,
 		unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETSET,
+		unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETSETELEM,
 		unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETOBJ,
 		unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETFLOWTABLE:
 	default:
@@ -150,7 +152,7 @@ func (s *nftReadSocket) receive(ctx context.Context, sequence uint32, fn func(ne
 		}
 		s.bytes += n
 		if s.bytes > nftReadBytes {
-			return false, fault.Unavailable("目标表内核快照超过 8 MiB 读取预算")
+			return false, fault.Unavailable("目标表内核快照超过 32 MiB 读取预算")
 		}
 		raw := s.buffer[:n]
 		done := false
@@ -228,6 +230,16 @@ func (s *nftReadSocket) query(ctx context.Context, kind, reply uint16, dump bool
 			return e
 		}
 		data = append(data, attributes...)
+		if kind == unix.NFT_MSG_GETSETELEM {
+			if s.set == "" || len(s.set) > 256 {
+				return errors.New("invalid address set read target")
+			}
+			attrs, e := netlink.MarshalAttributes([]netlink.Attribute{{Type: unix.NFTA_SET_ELEM_LIST_SET, Data: []byte(s.set + "\x00")}})
+			if e != nil {
+				return e
+			}
+			data = append(data, attrs...)
+		}
 	}
 	flags := netlink.Request
 	if dump {
@@ -262,7 +274,7 @@ func nftAttributes(m netlink.Message) (map[uint16]netlink.Attribute, error) {
 		kind := a.Type & ^uint16(netlink.Nested|netlink.NetByteOrder)
 		// Repeated padding has no semantic content; every other duplicate is
 		// ambiguous and must not produce a fingerprint of a partial object.
-		padding := m.Header.Type == netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWTABLE) && kind == 5 || m.Header.Type == netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWCHAIN) && kind == unix.NFTA_CHAIN_PAD || m.Header.Type == netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWRULE) && kind == unix.NFTA_RULE_PAD
+		padding := m.Header.Type == netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWTABLE) && kind == 5 || m.Header.Type == netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWCHAIN) && kind == unix.NFTA_CHAIN_PAD || m.Header.Type == netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWRULE) && kind == unix.NFTA_RULE_PAD || m.Header.Type == netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWSET) && kind == unix.NFTA_SET_PAD
 		if padding {
 			if len(bytes.Trim(a.Data, "\x00")) != 0 {
 				return nil, errors.New("invalid nftables padding")
@@ -439,6 +451,7 @@ func snapshotNFTTargetInspect(ctx context.Context, target firewall.NFTTarget, in
 		return out, errors.New("ambiguous nftables table presence")
 	}
 	out.TableExists = count == 1
+	setNames := []string{}
 	if out.TableExists {
 		// Some supported kernels dump every inet chain even when TABLE was
 		// supplied. Consume the full bounded dump, filter locally and retain
@@ -465,8 +478,14 @@ func snapshotNFTTargetInspect(ctx context.Context, target firewall.NFTTarget, in
 					out.Chains++
 				case "rule":
 					out.Rules++
+				case "set":
+					name, e := nftString(attrs[unix.NFTA_SET_NAME])
+					if e != nil || name == "" || len(setNames) >= 2*firewall.MaxRules {
+						return errors.New("invalid or excessive address sets")
+					}
+					setNames = append(setNames, name)
 				default:
-					return fault.Unavailable("目标表包含集合、状态对象或 flowtable，当前无法完整核对")
+					return fault.Unavailable("目标表包含不支持的状态对象或 flowtable")
 				}
 				if out.Chains > 128 || out.Rules > firewall.MaxEntries {
 					return fault.Unavailable("目标表链或规则数超过读取预算")
@@ -482,6 +501,34 @@ func snapshotNFTTargetInspect(ctx context.Context, target firewall.NFTTarget, in
 			if e != nil {
 				return out, e
 			}
+		}
+	}
+	for _, name := range setNames {
+		s.set = name
+		e = s.query(ctx, unix.NFT_MSG_GETSETELEM, unix.NFT_MSG_NEWSETELEM, true, true, func(m netlink.Message) error {
+			attrs, e := nftAttributes(m)
+			if e != nil {
+				return e
+			}
+			table, e := nftString(attrs[unix.NFTA_SET_ELEM_LIST_TABLE])
+			if e != nil || table != layout.Table {
+				return errors.New("unexpected address set table")
+			}
+			set, e := nftString(attrs[unix.NFTA_SET_ELEM_LIST_SET])
+			if e != nil || set != name {
+				return errors.New("unexpected address set name")
+			}
+			if inspect != nil {
+				if e = inspect(uint16(m.Header.Type), attrs); e != nil {
+					return e
+				}
+			}
+			nftObjectHash(h, m, attrs)
+			return nil
+		})
+		s.set = ""
+		if e != nil {
+			return out, e
 		}
 	}
 	current, e := s.generation(ctx)

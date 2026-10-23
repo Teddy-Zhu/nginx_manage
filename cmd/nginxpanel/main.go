@@ -102,7 +102,8 @@ func run() error {
 		defaultDir = ".local"
 	}
 	dataDir := flags.String("data-dir", defaultDir, "node data directory")
-	listen := flags.String("listen", "", "management HTTPS listener IP:port")
+	listen := flags.String("listen", "", "management listener IP:port")
+	protocol := flags.String("protocol", "", "management protocol: http or https (default https)")
 	listenPort := flags.Int("port", 0, "management port (zero selects an unused port during installation)")
 	socket := flags.String("agent-socket", "", "local agent Unix socket")
 	webDir := flags.String("web-dir", "web/dist", "built frontend directory")
@@ -352,13 +353,13 @@ func run() error {
 		"panel-listen":                       {"data-dir": true},
 		"panel-access-urls":                  {"data-dir": true},
 		"panel-listen-default":               {"port": true, "listen": true},
-		"panel-listen-set":                   {"data-dir": true, "listen": true},
+		"panel-listen-set":                   {"data-dir": true, "listen": true, "protocol": true},
 		"installation-removal-check":         {"data-dir": true},
 		"installation-removal-prepare":       {"data-dir": true},
 		"installation-defaults":              {"data-dir": true},
-		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
 		"panel-native-serve":                 {"data-dir": true},
-		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-verify":               {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-status":               {"data-dir": true},
 		"panel-runtime-stage":                {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
@@ -1124,7 +1125,7 @@ func run() error {
 			return err
 		}
 		if command == "panel-access-urls" {
-			urls, err := panelruntime.AccessURLs(d.Listen)
+			urls, err := d.AccessURLs()
 			if err != nil {
 				return err
 			}
@@ -1136,7 +1137,7 @@ func run() error {
 		}
 		return nil
 	case "panel-listen-set":
-		return agent.SetPanelListen(absDir, *listen)
+		return agent.SetPanelAccess(absDir, *listen, *protocol)
 	case "installation-removal-check":
 		return agent.CheckInstallationRemoval(ctx, absDir)
 	case "installation-removal-prepare":
@@ -1152,13 +1153,19 @@ func run() error {
 		_, err = fmt.Fprintf(os.Stdout, "dns_owner=%s\nfirewall_owner=%s\nfirewall_ssh=%s\n", out.DNSOwner, out.FirewallOwner, out.FirewallSSH)
 		return err
 	case "panel-native-bind":
-		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
+		if *protocol != "" && *protocol != "http" && *protocol != "https" {
+			return errors.New("管理协议须为 http 或 https")
+		}
+		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, Listen: *listen, HTTP: *protocol == "http", UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
 		if err != nil {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
 	case "panel-runtime-bind", "panel-runtime-verify":
-		input := panelruntime.BindInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, LauncherBinary: *launcherBinary, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID, Image: *panelImage,
+		if *protocol != "" && *protocol != "http" && *protocol != "https" {
+			return errors.New("管理协议须为 http 或 https")
+		}
+		input := panelruntime.BindInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, LauncherBinary: *launcherBinary, Listen: *listen, HTTP: *protocol == "http", UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID, Image: *panelImage,
 			Signature: releases.ImageInput{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}}
 		if command == "panel-runtime-verify" {
 			out, err := panelruntime.VerifySource(ctx, input)

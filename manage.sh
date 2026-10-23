@@ -19,6 +19,7 @@ usage() {
   bootstrap                    显示一次性初始化令牌（不能重置已有账户）
   fingerprint                  显示主入口证书 SHA-256
   set-port 端口                修改主入口端口，运行中的面板自动重启
+  set-protocol http|https      切换访问协议，运行中的面板自动重启
   disable-remote               请求停用附加管理入口（不关闭主入口）
   uninstall                    卸载程序和服务，保留数据及原版本重装材料
   uninstall --keep-data        明确保留数据卸载（默认方式）
@@ -37,7 +38,7 @@ EOF
 action=${1:-menu}
 if (($#)); then shift; fi
 case "$action" in -h|--help|help) usage; exit 0 ;; esac
-component= yes=no lines=100 follow=no requested_port= purge=no keep_data=no checker_binary=
+component= yes=no lines=100 follow=no requested_port= requested_protocol= purge=no keep_data=no checker_binary=
 while (($#)); do
   case "$1" in
     --yes) yes=yes; shift ;;
@@ -46,6 +47,7 @@ while (($#)); do
     --checker-binary) (($# >= 2)) && [[ $2 == /* ]] || die '--checker-binary 需要绝对路径'; checker_binary=$2; shift 2 ;;
     --follow) follow=yes; shift ;;
     --lines) (($# >= 2)) || die '--lines 缺少行数'; lines=$2; shift 2 ;;
+    http|https) [[ $action == set-protocol && -z $requested_protocol ]] || die "只有 set-protocol 接受协议参数"; requested_protocol=$1; shift ;;
     [0-9]*)
       [[ $action == set-port && -z $requested_port ]] || die '只有 set-port 接受一个端口参数'
       requested_port=$1; shift ;;
@@ -53,7 +55,7 @@ while (($#)); do
     *) usage; die "未知参数：$1" ;;
   esac
 done
-case "$action" in menu|info|status|start|stop|restart|logs|bootstrap|fingerprint|disable-remote|set-port|uninstall|reinstall) ;; *) usage; die "未知命令：$action" ;; esac
+case "$action" in menu|info|status|start|stop|restart|logs|bootstrap|fingerprint|disable-remote|set-port|set-protocol|uninstall|reinstall) ;; *) usage; die "未知命令：$action" ;; esac
 [[ $purge == no || $action == uninstall ]] || die '--purge 只能用于 uninstall'
 [[ $keep_data == no || $action == uninstall && $purge == no ]] || die '--keep-data 只能用于保留数据卸载，不能与 --purge 混用'
 [[ -z $checker_binary || $action == uninstall ]] || die '--checker-binary 只能用于 uninstall'
@@ -61,6 +63,7 @@ if [[ $action != logs ]]; then [[ $follow == no && $lines == 100 ]] || die '日�
 case "$action" in status) component=${component:-all} ;; start|stop|restart|logs) component=${component:-panel} ;; *) [[ -z $component ]] || die '此命令不接受组件参数' ;; esac
 [[ $action != logs || $component != all ]] || die '请分别选择 panel、agent 或 nginx 的服务日志'
 [[ $lines =~ ^[1-9][0-9]{0,4}$ ]] && ((10#$lines <= 10000)) || die '日志行数须为 1–10000'
+if [[ $action == set-protocol ]]; then [[ -n $requested_protocol ]] || die "请指定 http 或 https"; fi
 if [[ $action == set-port ]]; then
   [[ $requested_port =~ ^[1-9][0-9]{3,4}$ ]] && ((requested_port >= 1024 && requested_port <= 65535)) || die '用法：manage.sh set-port 1024–65535 [--yes]'
 fi
@@ -196,23 +199,25 @@ show_info() {
   printf '初始化令牌：%s/bootstrap/token\n主入口证书：%s/secrets/node-tls/cert.pem\n' "$data" "$data"
   printf '%s\n' '版本输出为宿主机工具版本；面板当前选中版本与业务运行结果请在网页核对。'
 }
-set_port() {
+set_access() {
   local target was_running=no state running_id result
   load_listen
-  target=${listen%:*}:$requested_port
-  if [[ $target == "$listen" ]]; then printf '%s\n' '端口未变化'; return; fi
+  target=$listen
+  if [[ $action == set-port ]]; then target=${listen%:*}:$requested_port; fi
+  if [[ $action == set-port && $target == "$listen" ]]; then printf '%s\n' '端口未变化'; return; fi
   trusted_file /etc/nginxpanel/install/ready
   [[ ! -e $data/run/panel-service-hold.json && ! -L $data/run/panel-service-hold.json && ! -e $data/run/panel-writer-fence.json && ! -L $data/run/panel-writer-fence.json ]] || die '存在持久停机或恢复屏障，请沿原任务处理'
-  confirm_change "管理地址由 $listen 改为 $target；运行中的面板将重启，请确保新端口可访问。"
+  confirm_change "管理入口将改为 ${requested_protocol:-当前协议}://$target；运行中的面板将重启，请使用新地址访问。"
   # Share the installer's host lock so two local configuration operations cannot
   # stop/restart each other's panel or race a pending installation.
   root_chain /run/nginxpanel-install
   if [[ -e /run/nginxpanel-install/lock || -L /run/nginxpanel-install/lock ]]; then trusted_file /run/nginxpanel-install/lock; fi
   exec 9>/run/nginxpanel-install/lock
-  flock -n 9 || die '另一个安装或端口修改操作正在执行'
+  flock -n 9 || die '另一个安装或管理入口修改操作正在执行'
   load_listen
-  target=${listen%:*}:$requested_port
-  if [[ $target == "$listen" ]]; then printf '%s\n' '端口未变化'; return; fi
+  target=$listen
+  if [[ $action == set-port ]]; then target=${listen%:*}:$requested_port; fi
+  if [[ $action == set-port && $target == "$listen" ]]; then printf '%s\n' '端口未变化'; return; fi
   if [[ $panel_mode == docker ]]; then
     running_id=$(compose_command ps --status running -q panel) || die '无法查询面板容器状态'
     if [[ -n $running_id ]]; then was_running=yes; fi
@@ -220,21 +225,23 @@ set_port() {
     state=$(systemctl show --property=ActiveState --value nginxpanel.service) || die '无法查询面板服务状态'
     case "$state" in active) was_running=yes ;; inactive|failed) ;; *) die "面板状态为 $state，请等待服务操作结束后重试" ;; esac
   fi
-  service_command stop panel || die '无法停止面板，未修改端口'
-  if "$binary" panel-listen-set --data-dir "$data" --listen "$target"; then :; else
+  service_command stop panel || die '无法停止面板，未修改管理入口'
+  local -a protocol_args=()
+  if [[ -n $requested_protocol ]]; then protocol_args+=(--protocol "$requested_protocol"); fi
+  if "$binary" panel-listen-set --data-dir "$data" --listen "$target" "${protocol_args[@]}"; then :; else
     result=$?
     if [[ $was_running == yes ]]; then
-      service_command start panel || die '端口修改未确认且面板重启失败；请用 info 核对当前配置并检查服务日志'
+      service_command start panel || die '管理入口修改未确认且面板重启失败；请用 info 核对当前配置并检查服务日志'
     fi
-    printf '%s\n' '端口修改未完成，请根据上方错误处理；用 info 查看当前配置。' >&2
+    printf '%s\n' '管理入口修改未完成，请根据上方错误处理；用 info 查看当前配置。' >&2
     return "$result"
   fi
   load_listen
   if [[ $was_running == yes ]]; then
-    service_command start panel || die '新端口已保存，但面板启动失败；请检查服务日志或改回原端口'
+    service_command start panel || die '管理入口已保存，但面板启动失败；请检查服务日志或改回原端口'
   fi
   show_info
-  if [[ $was_running == no ]]; then printf '%s\n' '端口已保存；面板保持停止状态，下次启动使用新端口。'; fi
+  if [[ $was_running == no ]]; then printf '%s\n' '管理入口已保存；面板保持停止状态，下次启动使用新端口。'; fi
 }
 logs_action() {
   local unit=nginxpanel.service service=panel
@@ -274,7 +281,7 @@ if [[ $action == menu ]]; then
   self=$(readlink -e -- "$0")
   while :; do
     printf '\nNginxPanel 管理（%s，%s）\n' "$panel_mode" "$data"
-    printf '%s\n' '  1) 部署信息' '  2) 全部服务状态' '  3) 启动服务' '  4) 停止服务' '  5) 重启服务' '  6) 服务日志' '  7) 初始化令牌' '  8) 证书指纹' '  9) 停用附加管理入口' '  10) 修改主入口端口' '  11) 卸载（保留数据）' '  12) 完全卸载' '  13) 重新安装' '  0) 退出'
+    printf '%s\n' '  1) 部署信息' '  2) 全部服务状态' '  3) 启动服务' '  4) 停止服务' '  5) 重启服务' '  6) 服务日志' '  7) 初始化令牌' '  8) 证书指纹' '  9) 停用附加管理入口' '  10) 修改主入口端口' '  11) 卸载（保留数据）' '  12) 完全卸载' '  13) 重新安装' '  14) 切换 HTTP / HTTPS' '  0) 退出'
     read -r -p '请选择 [0]: ' selection || exit 0
     selected=
     case "$selection" in
@@ -295,6 +302,7 @@ if [[ $action == menu ]]; then
         command=set-port
         read -r -p '新管理端口（1024–65535）: ' selected || exit 0 ;;
       11) command=uninstall ;; 12) command=uninstall; selected=--purge ;; 13) command=reinstall ;;
+      14) command=set-protocol; read -r -p '管理协议（http/https）: ' selected || exit 0 ;;
       ''|0) exit 0 ;; *) printf '%s\n' '请输入列表中的编号'; continue ;;
     esac
     arguments=("$command")
@@ -306,7 +314,7 @@ if [[ $action == menu ]]; then
 fi
 case "$action" in
   info) show_info ;;
-  set-port) set_port ;;
+  set-port|set-protocol) set_access ;;
   uninstall|reinstall) lifecycle_action ;;
   status|start|stop|restart) service_action ;;
   logs) logs_action ;;

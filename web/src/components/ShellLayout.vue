@@ -125,6 +125,7 @@ onUnmounted(() => {
             <h1>{{ title }}</h1>
             <p>{{ route.meta.subtitle }}</p>
           </div>
+          <div id="page-heading-actions" />
         </div>
         <n-alert v-if="nodes.error && !route.meta.localOnly" type="error" style="margin-bottom: 16px">
           {{ nodes.error }}

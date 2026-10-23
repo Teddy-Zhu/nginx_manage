@@ -13,13 +13,19 @@ import (
 // Transfer contains desired neutral rules. Execution ownership, kernel objects,
 // protections, deadlines and module state belong to the receiving host only.
 type Transfer struct {
-	SourceBackend string `json:"source_backend"`
-	Rules         []Rule `json:"rules"`
+	SourceBackend string       `json:"source_backend"`
+	GeoIPSource   *GeoIPSource `json:"geoip_source,omitempty"`
+	Rules         []Rule       `json:"rules"`
 }
 
 func ValidateTransfer(value *Transfer) error {
 	if value == nil {
 		return nil
+	}
+	if value.GeoIPSource != nil {
+		if err := value.GeoIPSource.validate(); err != nil {
+			return err
+		}
 	}
 	if value.Rules == nil {
 		return fault.Invalid("防火墙迁移规则必须是数组")
@@ -32,7 +38,11 @@ func (s *Service) Export(ctx context.Context, q PolicyReader) (*Transfer, error)
 	if err != nil {
 		return nil, err
 	}
-	return &Transfer{SourceBackend: view.Policy.Backend, Rules: view.Policy.Rules}, nil
+	config, err := s.ReadGeoIPConfig(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return &Transfer{SourceBackend: view.Policy.Backend, Rules: view.Policy.Rules, GeoIPSource: &config.Source}, nil
 }
 
 // StorePolicy participates in the caller's configuration transaction. The new

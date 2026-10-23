@@ -36,7 +36,7 @@ var RemoteRoutes = sync.OnceValue(func() []RemoteRoute {
 	result := []RemoteRoute{}
 	for pattern, methods := range contract.Paths {
 		for method, op := range methods {
-			if pattern != "/nodes/connections/{connection}"+op.Path || op.Operation == "" || op.BodyLimit <= 0 || op.BodyLimit > 12<<20 || (op.Kind != "json" && op.Kind != "sse" && op.Kind != "ndjson") {
+			if pattern != "/nodes/connections/{connection}"+op.Path || op.Operation == "" || op.BodyLimit <= 0 || op.BodyLimit > 20<<20 || (op.Kind != "json" && op.Kind != "sse" && op.Kind != "ndjson") {
 				panic(fmt.Errorf("invalid remote contract: %s %s", method, pattern))
 			}
 			result = append(result, RemoteRoute{Pattern: pattern, Path: op.Path, Method: strings.ToUpper(method), Operation: op.Operation, Kind: op.Kind, Scopes: op.Scopes, Query: op.Query, BodyLimit: op.BodyLimit})

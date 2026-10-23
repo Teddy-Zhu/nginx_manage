@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, h, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import {
@@ -148,7 +150,7 @@ async function execute(record?: RuntimeHistoryStatus) {
     if (!pending.value) {
       if (!preview.value?.targets.length) throw new Error("请先预览运行材料");
       pending.value = {
-        operation_id: crypto.randomUUID(),
+        operation_id: randomUUID(),
         filter: preview.value.filter,
         sha256: preview.value.sha256,
       };

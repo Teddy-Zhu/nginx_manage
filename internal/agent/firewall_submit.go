@@ -35,11 +35,11 @@ func submitNFTBatch(ctx context.Context, wire []byte) error {
 		seq := binary.NativeEndian.Uint32(raw[8:12])
 		kind := binary.NativeEndian.Uint16(raw[4:6])
 		flags := netlink.HeaderFlags(binary.NativeEndian.Uint16(raw[6:8]))
-		if seq != uint32(len(headers)+1) || flags&netlink.Request == 0 || binary.NativeEndian.Uint32(raw[12:16]) != 0 || len(headers) >= firewall.MaxEntries+5 {
+		if seq != uint32(len(headers)+1) || flags&netlink.Request == 0 || binary.NativeEndian.Uint32(raw[12:16]) != 0 || len(headers) >= firewall.NFTBatchMessages {
 			return errors.New("防火墙事务序列无效")
 		}
 		switch kind {
-		case unix.NFNL_MSG_BATCH_BEGIN, unix.NFNL_MSG_BATCH_END, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWTABLE, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_DELTABLE, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWCHAIN, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWRULE:
+		case unix.NFNL_MSG_BATCH_BEGIN, unix.NFNL_MSG_BATCH_END, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWTABLE, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_DELTABLE, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWCHAIN, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWRULE, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWSET, unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_NEWSETELEM:
 		default:
 			return errors.New("防火墙事务包含未授权消息类型")
 		}

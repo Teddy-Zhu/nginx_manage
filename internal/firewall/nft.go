@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"net"
-	"net/netip"
 	"strconv"
 
 	"github.com/google/nftables"
@@ -23,6 +21,7 @@ const NFTHostPriority = 10
 // NFTProgram contains concrete expressions but never opens a netlink socket.
 // Execution must separately prove ownership and establish independent recovery.
 type NFTProgram struct {
+	Sets    []NFTAddressSet
 	Table   *nftables.Table
 	Chain   *nftables.Chain
 	Rules   []*nftables.Rule
@@ -72,13 +71,15 @@ func CompileNFT(policy Policy) (*NFTProgram, error) {
 				continue
 			}
 			sources := []string{""}
+			var addressSet *NFTAddressSet
 			if len(r.Sources) > 0 {
-				sources = []string{}
-				for _, source := range r.Sources {
-					prefix, _ := netip.ParsePrefix(source)
-					if prefix.Addr().Is4() == (family == "ipv4") {
-						sources = append(sources, source)
-					}
+				var present bool
+				addressSet, present = program.sourceSet(r.Sources, family)
+				if !present {
+					continue
+				}
+				if addressSet != nil {
+					sources = []string{"@" + addressSet.Name}
 				}
 			}
 			for _, source := range sources {
@@ -95,25 +96,24 @@ func CompileNFT(policy Policy) (*NFTProgram, error) {
 					if r.Interface != "" {
 						expressions = append(expressions, matchInterface(r.Interface)...)
 					}
-					if source != "" {
-						prefix, _ := netip.ParsePrefix(source)
-						address := prefix.Addr().AsSlice()
-						length := uint32(len(address))
+					if addressSet != nil {
 						offset := uint32(12)
 						if family == "ipv6" {
 							offset = 8
 						}
-						expressions = append(expressions, &expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: offset, Len: length}, &expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: length, Mask: net.CIDRMask(prefix.Bits(), prefix.Addr().BitLen()), Xor: make([]byte, length)}, &expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: address})
+						expressions = append(expressions, &expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: offset, Len: addressSet.KeyLen}, &expr.Lookup{SourceRegister: 1, SetName: addressSet.Name, SetID: addressSet.ID})
 					}
 					proto := byte(unix.IPPROTO_TCP)
 					if r.Protocol == "udp" {
 						proto = unix.IPPROTO_UDP
 					}
-					expressions = append(expressions, &expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1}, &expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{proto}}, &expr.Payload{DestRegister: 1, Base: expr.PayloadBaseTransportHeader, Offset: 2, Len: 2})
-					if port.From == port.To {
-						expressions = append(expressions, &expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: binaryutil.BigEndian.PutUint16(uint16(port.From))})
-					} else {
-						expressions = append(expressions, &expr.Range{Op: expr.CmpOpEq, Register: 1, FromData: binaryutil.BigEndian.PutUint16(uint16(port.From)), ToData: binaryutil.BigEndian.PutUint16(uint16(port.To))})
+					if r.Protocol != "any" {
+						expressions = append(expressions, &expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1}, &expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{proto}}, &expr.Payload{DestRegister: 1, Base: expr.PayloadBaseTransportHeader, Offset: 2, Len: 2})
+						if port.From == port.To {
+							expressions = append(expressions, &expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: binaryutil.BigEndian.PutUint16(uint16(port.From))})
+						} else {
+							expressions = append(expressions, &expr.Range{Op: expr.CmpOpEq, Register: 1, FromData: binaryutil.BigEndian.PutUint16(uint16(port.From)), ToData: binaryutil.BigEndian.PutUint16(uint16(port.To))})
+						}
 					}
 					switch r.Action {
 					case "allow":
@@ -141,6 +141,19 @@ func finishNFT(program *NFTProgram) (*NFTProgram, error) {
 	hash := sha256.New()
 	frame := func(raw []byte) { hash.Write(binary.BigEndian.AppendUint32(nil, uint32(len(raw)))); hash.Write(raw) }
 	frame([]byte("inet/" + program.Table.Name + "/" + program.Chain.Name + "/input/" + strconv.Itoa(int(*program.Chain.Priority)) + "/accept"))
+	for _, set := range program.Sets {
+		frame([]byte(set.Name))
+		frame(binary.BigEndian.AppendUint32(nil, set.ID))
+		frame(binary.BigEndian.AppendUint32(nil, set.KeyLen))
+		for _, element := range set.Elements {
+			frame(element.Key)
+			if element.End {
+				frame([]byte{1})
+			} else {
+				frame([]byte{0})
+			}
+		}
+	}
 	for _, r := range program.Rules {
 		frame(r.UserData)
 		frame(binary.BigEndian.AppendUint32(nil, uint32(len(r.Exprs))))

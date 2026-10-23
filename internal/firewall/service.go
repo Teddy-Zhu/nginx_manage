@@ -26,6 +26,7 @@ type Service struct {
 	Vault      *secure.Vault
 	Agent      Observer
 	previewing atomic.Bool
+	geoIPBusy  atomic.Bool
 	runtimeMu  sync.Mutex
 }
 
@@ -106,6 +107,16 @@ func (s *Service) Save(ctx context.Context, p auth.Principal, requestID, key str
 	}
 	if e = s.migrationIdle(ctx, tx); e != nil {
 		return out, e
+	}
+	current, e := s.ReadPolicy(ctx, tx)
+	if e != nil {
+		return out, e
+	}
+	if current.Version != in.BaseVersion {
+		return out, fault.Conflict("防火墙策略版本已变化，请重新读取")
+	}
+	if conflicts := policyConflicts(normalized, current.Policy); len(conflicts) > 0 && !in.ConfirmConflicts {
+		return out, fault.New(409, "FIREWALL_RULE_CONFLICT", conflictMessage(conflicts))
 	}
 	out, e = s.StorePolicy(ctx, tx, in.BaseVersion, in.Policy)
 	if e != nil {

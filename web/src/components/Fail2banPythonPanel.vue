@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import AdvancedDetails from "./AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
@@ -163,7 +165,7 @@ async function submit(input?: Fail2banPythonTaskInput) {
       error.value = "依赖计划已过期，请重新生成计划";
       return;
     }
-    pending.value = { input: { ...input }, key: crypto.randomUUID() };
+    pending.value = { input: { ...input }, key: randomUUID() };
   }
   busy.value = true;
   error.value = "";

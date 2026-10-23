@@ -13,7 +13,8 @@ import (
 	"nginxpanel/internal/fault"
 )
 
-const NFTBatchBytes = 8 << 20
+const NFTBatchBytes = 32 << 20
+const NFTBatchMessages = 2 * MaxEntries
 
 // NFTCreateBatch is a serialization result, never an execution authority. The
 // executor must first durably record its independent intent/recovery material,
@@ -59,6 +60,9 @@ func prepareNFTTransaction(target NFTTarget, program *NFTProgram, baseline Kerne
 		return out, errors.New("invalid fixed nftables program")
 	}
 	appendMessage := func(kind uint16, flags netlink.HeaderFlags, family byte, resource uint16, attrs []netlink.Attribute) error {
+		if out.Messages >= NFTBatchMessages {
+			return fault.Invalid("防火墙事务消息数超过限制")
+		}
 		data, e := netlink.MarshalAttributes(attrs)
 		if e != nil {
 			return e
@@ -71,7 +75,7 @@ func prepareNFTTransaction(target NFTTarget, program *NFTProgram, baseline Kerne
 			return e
 		}
 		if len(out.Wire)+len(raw) > NFTBatchBytes {
-			return fault.Invalid("防火墙事务序列化超过 8 MiB")
+			return fault.Invalid("防火墙事务序列化超过 32 MiB")
 		}
 		out.Wire = append(out.Wire, raw...)
 		out.Messages++
@@ -94,6 +98,56 @@ func prepareNFTTransaction(target NFTTarget, program *NFTProgram, baseline Kerne
 		return NFTCreateBatch{}, e
 	}
 	if program != nil {
+		if len(program.Sets) > 2*MaxRules {
+			return out, errors.New("too many address sets")
+		}
+		names := map[string]bool{}
+		ids := map[uint32]bool{}
+		elements := 0
+		for _, set := range program.Sets {
+			if names[set.Name] || ids[set.ID] {
+				return out, errors.New("duplicate address set")
+			}
+			names[set.Name] = true
+			ids[set.ID] = true
+			elements += len(set.Elements)
+			if elements > 2*MaxPolicyPrefixes+256 {
+				return out, errors.New("address set element limit exceeded")
+			}
+			attrs, e := nftSetAttrs(layout.Table, set)
+			if e != nil {
+				return out, e
+			}
+			if e = appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWSET, request, unix.NFPROTO_INET, 0, attrs); e != nil {
+				return out, e
+			}
+			for offset := 0; offset < len(set.Elements); offset += 512 {
+				stop := offset + 512
+				if stop > len(set.Elements) {
+					stop = len(set.Elements)
+				}
+				list := []netlink.Attribute{}
+				for _, element := range set.Elements[offset:stop] {
+					fields, e := nftSetElementAttrs(element, set.KeyLen)
+					if e != nil {
+						return out, e
+					}
+					raw, e := netlink.MarshalAttributes(fields)
+					if e != nil {
+						return out, e
+					}
+					list = append(list, netlink.Attribute{Type: unix.NFTA_LIST_ELEM | netlink.Nested, Data: raw})
+				}
+				raw, e := netlink.MarshalAttributes(list)
+				if e != nil {
+					return out, e
+				}
+				attrs = []netlink.Attribute{{Type: unix.NFTA_SET_ELEM_LIST_TABLE, Data: []byte(layout.Table + "\x00")}, {Type: unix.NFTA_SET_ELEM_LIST_SET, Data: []byte(set.Name + "\x00")}, {Type: unix.NFTA_SET_ELEM_LIST_ELEMENTS | netlink.Nested, Data: raw}, {Type: unix.NFTA_SET_ELEM_LIST_SET_ID, Data: binary.BigEndian.AppendUint32(nil, set.ID)}}
+				if e = appendMessage(unix.NFNL_SUBSYS_NFTABLES<<8|unix.NFT_MSG_NEWSETELEM, request, unix.NFPROTO_INET, 0, attrs); e != nil {
+					return out, e
+				}
+			}
+		}
 		hook, e := netlink.MarshalAttributes([]netlink.Attribute{{Type: unix.NFTA_HOOK_HOOKNUM, Data: binary.BigEndian.AppendUint32(nil, unix.NF_INET_LOCAL_IN)}, {Type: unix.NFTA_HOOK_PRIORITY, Data: binary.BigEndian.AppendUint32(nil, uint32(int32(layout.Priority)))}})
 		if e != nil {
 			return NFTCreateBatch{}, e

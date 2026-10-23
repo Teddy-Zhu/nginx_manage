@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import Fail2banTemplateCatalog from "./Fail2banTemplateCatalog.vue";
 import Fail2banApplyPanel from "./Fail2banApplyPanel.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -116,7 +118,7 @@ async function load() {
 function add() {
   const template = templates.value[0];
   if (!template || busy.value || jails.value.length >= 32) return;
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const common = {
     id,
     name: template.name,
@@ -164,7 +166,7 @@ async function save() {
     };
     const digest = JSON.stringify(input);
     if (!pending || pending.digest !== digest)
-      pending = { digest, key: crypto.randomUUID() };
+      pending = { digest, key: randomUUID() };
     const result = await api.saveFail2banPolicy(input, pending.key);
     if (closed) return;
     accept(result);

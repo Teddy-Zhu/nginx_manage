@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/crypto";
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import { api, ApiError, type NodeConnection } from "../api/client";
@@ -32,7 +33,7 @@ export const useNodes = defineStore("nodes", () => {
     invalidateNodeScope();
     try {
       if (!id) { selectedTarget.value = null; return; }
-      const value = await api.refreshNode(id, crypto.randomUUID());
+      const value = await api.refreshNode(id, randomUUID());
       connections.value = [value, ...connections.value.filter((item) => item.id !== id)];
       if (value.state !== "connected" || value.removed_at) throw new ApiError("REMOTE_CONNECTION_UNAVAILABLE", value.error || "目标连接未就绪", 409);
       selectedTarget.value = { connection: value.id, nodeId: value.node_id, name: value.name, scopes: [...value.scopes] };

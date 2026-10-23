@@ -44,6 +44,7 @@ type Deployment struct {
 	Mode            string                 `json:"mode"`
 	DataDir         string                 `json:"data_dir"`
 	Listen          string                 `json:"listen"`
+	HTTP            bool                   `json:"http,omitempty"`
 	UID             int                    `json:"uid"`
 	GID             int                    `json:"gid"`
 	IPCGID          int                    `json:"ipc_gid"`
@@ -56,6 +57,7 @@ type Deployment struct {
 }
 type BindInput struct {
 	DataDir, Binary, WebDir, LauncherBinary, Listen, Image string
+	HTTP                                                   bool
 	UID, GID, IPCGID                                       int
 	Signature                                              releases.ImageInput
 }

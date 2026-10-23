@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { NAlert, NButton, NPopconfirm } from "naive-ui";
 import {
@@ -80,7 +82,7 @@ async function apply() {
         base_id: preview.runtime.selected_id,
         target: preview.runtime.target,
       },
-      key: crypto.randomUUID(),
+      key: randomUUID(),
     };
   }
   busy.value = true;

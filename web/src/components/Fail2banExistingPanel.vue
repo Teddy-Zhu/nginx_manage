@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   NAlert,
@@ -309,7 +311,7 @@ async function submit(action: "preview" | "apply") {
       return;
     const value = action === "apply" ? plan.value : undefined;
     pending.value = {
-      key: crypto.randomUUID(),
+      key: randomUUID(),
       fingerprint: fingerprint.value,
       input: {
         action,
@@ -363,7 +365,7 @@ async function submit(action: "preview" | "apply") {
 async function cancel(id: string) {
   if (closed || busy.value || !canWrite.value) return;
   if (!pendingCancel.value)
-    pendingCancel.value = { id, key: crypto.randomUUID() };
+    pendingCancel.value = { id, key: randomUUID() };
   busy.value = true;
   error.value = "";
   try {

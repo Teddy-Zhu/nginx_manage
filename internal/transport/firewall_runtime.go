@@ -174,8 +174,8 @@ func (s *Server) decideFirewall(w http.ResponseWriter, r *http.Request, id, acti
 		return
 	}
 	defer done()
-	if action == "confirm" && (r.TLS == nil || remotelisten.ConnectionID(r.Context()) == "") {
-		s.fail(w, r, fault.Conflict("须通过规则生效后新建的目标管理 HTTPS 连接确认"))
+	if action == "confirm" && remotelisten.ConnectionID(r.Context()) == "" {
+		s.fail(w, r, fault.Conflict("须通过规则生效后新建的目标管理连接确认"))
 		return
 	}
 	if err := s.audit(r, p.ID, "firewall."+action, id, "sending"); err != nil {

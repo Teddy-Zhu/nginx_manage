@@ -2440,6 +2440,24 @@ func (e FirewallUFWPlanReloadBackend) Valid() bool {
 	}
 }
 
+// Defines values for GeoIPSourceFormat.
+const (
+	Cidr GeoIPSourceFormat = "cidr"
+	Mmdb GeoIPSourceFormat = "mmdb"
+)
+
+// Valid indicates whether the value is a known member of the GeoIPSourceFormat enum.
+func (e GeoIPSourceFormat) Valid() bool {
+	switch e {
+	case Cidr:
+		return true
+	case Mmdb:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HostNetplanSourceState.
 const (
 	Associated HostNetplanSourceState = "associated"
@@ -5846,8 +5864,9 @@ type FirewallPolicy struct {
 
 // FirewallPolicyInput defines model for FirewallPolicyInput.
 type FirewallPolicyInput struct {
-	BaseVersion int64          `json:"base_version"`
-	Policy      FirewallPolicy `json:"policy"`
+	BaseVersion      int64          `json:"base_version"`
+	ConfirmConflicts *bool          `json:"confirm_conflicts,omitempty"`
+	Policy           FirewallPolicy `json:"policy"`
 }
 
 // FirewallPolicyView defines model for FirewallPolicyView.
@@ -5970,13 +5989,15 @@ type FirewallRegistrationViewState string
 // FirewallRule defines model for FirewallRule.
 type FirewallRule struct {
 	// Action allow、deny 或 reject
-	Action  string `json:"action"`
-	Comment string `json:"comment"`
-	Enabled bool   `json:"enabled"`
+	Action    string    `json:"action"`
+	Comment   string    `json:"comment"`
+	Countries *[]string `json:"countries,omitempty"`
+	Enabled   bool      `json:"enabled"`
 
-	// Family ipv4、ipv6 或 both；非空来源须覆盖所选地址族
-	Family string `json:"family"`
-	Id     string `json:"id"`
+	// Family ipv4、ipv6 或 both；仅匹配集合中存在的地址族
+	Family         string `json:"family"`
+	GeoipUpdatedAt *int64 `json:"geoip_updated_at,omitempty"`
+	Id             string `json:"id"`
 
 	// Interface 目标入站接口；空字符串表示任意接口
 	Interface string              `json:"interface"`
@@ -5984,13 +6005,13 @@ type FirewallRule struct {
 	Ports     []FirewallPortRange `json:"ports"`
 	Priority  int                 `json:"priority"`
 
-	// Protocol tcp 或 udp
+	// Protocol tcp、udp；主机地址集合支持 any，表示全部协议与端口
 	Protocol string `json:"protocol"`
 
 	// Scope host_input 或 docker_published；Docker 原始目的与实际映射由独立应用计划绑定，不属于可迁移期望规则；普通逻辑预览不编译 Docker 转发
 	Scope string `json:"scope"`
 
-	// Sources IP 或网络起点 CIDR；空数组表示任意来源；规范化后不得重复
+	// Sources IP 或网络起点 CIDR；空数组表示任意来源；nftables 使用地址集合匹配
 	Sources []string `json:"sources"`
 }
 
@@ -6125,6 +6146,54 @@ type FirewallZone struct {
 	Interfaces []string `json:"interfaces"`
 	Name       string   `json:"name"`
 	Sources    []string `json:"sources"`
+}
+
+// GeoIPResolveInput defines model for GeoIPResolveInput.
+type GeoIPResolveInput struct {
+	Countries []string `json:"countries"`
+	Version   int64    `json:"version"`
+}
+
+// GeoIPResolved defines model for GeoIPResolved.
+type GeoIPResolved struct {
+	Countries []string `json:"countries"`
+	Sources   []string `json:"sources"`
+	UpdatedAt int64    `json:"updated_at"`
+	Version   int64    `json:"version"`
+}
+
+// GeoIPSource defines model for GeoIPSource.
+type GeoIPSource struct {
+	AllowPrivateNetwork bool              `json:"allow_private_network"`
+	Format              GeoIPSourceFormat `json:"format"`
+	Ipv6Url             string            `json:"ipv6_url"`
+	Name                string            `json:"name"`
+	Url                 string            `json:"url"`
+}
+
+// GeoIPSourceFormat defines model for GeoIPSource.Format.
+type GeoIPSourceFormat string
+
+// GeoIPSourceInput defines model for GeoIPSourceInput.
+type GeoIPSourceInput struct {
+	BaseVersion int64       `json:"base_version"`
+	Source      GeoIPSource `json:"source"`
+}
+
+// GeoIPState defines model for GeoIPState.
+type GeoIPState struct {
+	Countries map[string]int `json:"countries"`
+	Ready     bool           `json:"ready"`
+	Sha256    string         `json:"sha256"`
+	Source    GeoIPSource    `json:"source"`
+	UpdatedAt int64          `json:"updated_at"`
+	Version   int64          `json:"version"`
+}
+
+// GeoIPUpdateInput defines model for GeoIPUpdateInput.
+type GeoIPUpdateInput struct {
+	Countries []string `json:"countries"`
+	Version   int64    `json:"version"`
 }
 
 // HistoryExecuteInput defines model for HistoryExecuteInput.
@@ -8375,6 +8444,26 @@ type ApplyFirewallParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
+// SetFirewallGeoIPParams defines parameters for SetFirewallGeoIP.
+type SetFirewallGeoIPParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// ResolveFirewallGeoIPParams defines parameters for ResolveFirewallGeoIP.
+type ResolveFirewallGeoIPParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// UpdateFirewallGeoIPParams defines parameters for UpdateFirewallGeoIP.
+type UpdateFirewallGeoIPParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
+	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
 // ConfirmFirewallParams defines parameters for ConfirmFirewall.
 type ConfirmFirewallParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -9106,6 +9195,15 @@ type ChangeFail2banUpgradeJSONRequestBody = Fail2banUpgradeInput
 // ApplyFirewallJSONRequestBody defines body for ApplyFirewall for application/json ContentType.
 type ApplyFirewallJSONRequestBody = FirewallApplyInput
 
+// SetFirewallGeoIPJSONRequestBody defines body for SetFirewallGeoIP for application/json ContentType.
+type SetFirewallGeoIPJSONRequestBody = GeoIPSourceInput
+
+// ResolveFirewallGeoIPJSONRequestBody defines body for ResolveFirewallGeoIP for application/json ContentType.
+type ResolveFirewallGeoIPJSONRequestBody = GeoIPResolveInput
+
+// UpdateFirewallGeoIPJSONRequestBody defines body for UpdateFirewallGeoIP for application/json ContentType.
+type UpdateFirewallGeoIPJSONRequestBody = GeoIPUpdateInput
+
 // PlanFirewallJSONRequestBody defines body for PlanFirewall for application/json ContentType.
 type PlanFirewallJSONRequestBody = FirewallPlanInput
 
@@ -9760,6 +9858,18 @@ type ServerInterface interface {
 
 	// (POST /firewall/apply)
 	ApplyFirewall(w http.ResponseWriter, r *http.Request, params ApplyFirewallParams)
+
+	// (GET /firewall/geoip)
+	GetFirewallGeoIP(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /firewall/geoip)
+	SetFirewallGeoIP(w http.ResponseWriter, r *http.Request, params SetFirewallGeoIPParams)
+
+	// (POST /firewall/geoip/resolve)
+	ResolveFirewallGeoIP(w http.ResponseWriter, r *http.Request, params ResolveFirewallGeoIPParams)
+
+	// (POST /firewall/geoip/update)
+	UpdateFirewallGeoIP(w http.ResponseWriter, r *http.Request, params UpdateFirewallGeoIPParams)
 
 	// (GET /firewall/operations/{id})
 	GetFirewallOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -14144,6 +14254,189 @@ func (siw *ServerInterfaceWrapper) ApplyFirewall(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ApplyFirewall(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFirewallGeoIP operation middleware
+func (siw *ServerInterfaceWrapper) GetFirewallGeoIP(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFirewallGeoIP(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetFirewallGeoIP operation middleware
+func (siw *ServerInterfaceWrapper) SetFirewallGeoIP(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetFirewallGeoIPParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetFirewallGeoIP(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResolveFirewallGeoIP operation middleware
+func (siw *ServerInterfaceWrapper) ResolveFirewallGeoIP(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResolveFirewallGeoIPParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResolveFirewallGeoIP(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateFirewallGeoIP operation middleware
+func (siw *ServerInterfaceWrapper) UpdateFirewallGeoIP(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateFirewallGeoIPParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey Idempotency
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateFirewallGeoIP(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19986,6 +20279,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/operations/{id}", wrapper.GetFirewallOperation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/confirm", wrapper.ConfirmFirewall)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/operations/{id}/rollback", wrapper.RollbackFirewall)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/geoip", wrapper.GetFirewallGeoIP)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/firewall/geoip", wrapper.SetFirewallGeoIP)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/geoip/update", wrapper.UpdateFirewallGeoIP)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/geoip/resolve", wrapper.ResolveFirewallGeoIP)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/policy", wrapper.GetFirewallPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/firewall/policy", wrapper.SetFirewallPolicy)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/preview", wrapper.PreviewFirewall)

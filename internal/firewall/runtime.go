@@ -224,6 +224,7 @@ func CompileNFTProtected(policy Policy, protections []Protection) (*NFTProgram, 
 	if err != nil {
 		return nil, err
 	}
+	mergeNFTSets(base, protected)
 	rules := append(base.Rules[:2:2], protected.Rules[2:]...)
 	for _, rule := range rules[2:] {
 		rule.Table, rule.Chain = base.Table, base.Chain

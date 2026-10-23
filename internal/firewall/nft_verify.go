@@ -98,6 +98,19 @@ func nftExpressionEqual(expected, actual []byte) bool {
 	dataValue := nftShape{}
 	var shape nftShape
 	switch string(name.Data) {
+	case "lookup\x00":
+		delete(wantFields, unix.NFTA_LOOKUP_SET_ID)
+		// The kernel emits an explicit zero for a non-inverted lookup.
+		if flags, ok := gotFields[unix.NFTA_LOOKUP_FLAGS]; ok && flags.Type == unix.NFTA_LOOKUP_FLAGS && len(flags.Data) == 4 && binary.BigEndian.Uint32(flags.Data) == 0 {
+			delete(gotFields, unix.NFTA_LOOKUP_FLAGS)
+		}
+		if id, ok := gotFields[unix.NFTA_LOOKUP_SET_ID]; ok {
+			if id.Type != unix.NFTA_LOOKUP_SET_ID || len(id.Data) != 4 || binary.BigEndian.Uint32(id.Data) == 0 {
+				return false
+			}
+			delete(gotFields, unix.NFTA_LOOKUP_SET_ID)
+		}
+		shape = nftShape{}
 	case "meta\x00", "ct\x00", "payload\x00":
 		shape = nftShape{}
 	case "cmp\x00":

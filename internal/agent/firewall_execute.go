@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -178,6 +179,7 @@ func (f *hostFirewall) Apply(ctx context.Context, id, planID string, version int
 		generation = 1
 	}
 	if err != nil || postErr != nil || !post.TableExists || post.NamespaceID != current.NamespaceID || post.Generation != generation {
+		slog.Error("firewall candidate verification failed", "submit_error", err, "proof_error", postErr, "generation", post.Generation, "expected_generation", generation)
 		rollbackErr := f.rollbackLocked("候选提交结果未能完整证明，恢复最后确认策略")
 		return *f.state.Operation, rollbackErr
 	}

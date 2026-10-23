@@ -138,7 +138,7 @@ const protections: DataTableColumns<FirewallPlan["protections"][number]> = [
   {
     title: "保护入口",
     key: "service",
-    render: (r) => (r.service === "ssh" ? "SSH" : "管理 HTTPS"),
+    render: (r) => (r.service === "ssh" ? "SSH" : "管理入口"),
   },
   {
     title: "地址族",

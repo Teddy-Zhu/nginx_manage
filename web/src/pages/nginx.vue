@@ -13,6 +13,8 @@
 </route>
 
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
@@ -627,7 +629,7 @@ function addFile() {
     message.error("文件路径已存在");
     return;
   }
-  const file = { id: crypto.randomUUID(), path, content: "", sha256: "" };
+  const file = { id: randomUUID(), path, content: "", sha256: "" };
   files.value.push(file);
   selected.value = file.id;
   newPath.value = "";

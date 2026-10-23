@@ -12,6 +12,8 @@
 </route>
 
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   NAlert,
@@ -364,7 +366,7 @@ async function saveChannel() {
 async function testChannel(c: NotificationChannel) {
   let pending = testKeys.get(c.id);
   if (!pending || pending.version !== c.version) {
-    pending = { version: c.version, key: crypto.randomUUID() };
+    pending = { version: c.version, key: randomUUID() };
     testKeys.set(c.id, pending);
   }
   const key = pending.key;

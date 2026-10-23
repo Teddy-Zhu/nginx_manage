@@ -5198,7 +5198,7 @@
         "x-local-operation": "setFirewallPolicy",
         "x-forward-path": "/firewall/policy",
         "x-response-kind": "json",
-        "x-body-limit": 266240,
+        "x-body-limit": 16781312,
         "x-query-keys": []
       }
     },
@@ -7239,6 +7239,177 @@
           "components.manage",
           "system.write"
         ]
+      }
+    },
+    "/nodes/connections/{connection}/firewall/geoip": {
+      "get": {
+        "operationId": "remoteGetFirewallGeoIP",
+        "x-scopes": [
+          "security.write"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFirewallGeoIP",
+        "x-forward-path": "/firewall/geoip",
+        "x-response-kind": "json",
+        "x-body-limit": 8192,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": []
+      },
+      "put": {
+        "operationId": "remoteSetFirewallGeoIP",
+        "x-scopes": [
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/GeoIPSourceInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setFirewallGeoIP",
+        "x-forward-path": "/firewall/geoip",
+        "x-response-kind": "json",
+        "x-body-limit": 8192,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/connections/{connection}/firewall/geoip/update": {
+      "post": {
+        "operationId": "remoteUpdateFirewallGeoIP",
+        "x-scopes": [
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/Idempotency"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/GeoIPUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "updateFirewallGeoIP",
+        "x-forward-path": "/firewall/geoip/update",
+        "x-response-kind": "json",
+        "x-body-limit": 8192,
+        "x-query-keys": []
+      }
+    },
+    "/nodes/connections/{connection}/firewall/geoip/resolve": {
+      "post": {
+        "operationId": "remoteResolveFirewallGeoIP",
+        "x-scopes": [
+          "security.write"
+        ],
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/GeoIPResolveInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "resolveFirewallGeoIP",
+        "x-forward-path": "/firewall/geoip/resolve",
+        "x-response-kind": "json",
+        "x-body-limit": 8192,
+        "x-query-keys": []
       }
     }
   },

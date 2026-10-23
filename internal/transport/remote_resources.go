@@ -101,6 +101,13 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 	if route.Kind == "sse" {
 		duration = 10 * time.Minute
 	}
+	if route.Path == "/firewall/geoip/update" {
+		duration = 125 * time.Second
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(130 * time.Second)); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), duration)
 	defer cancel()
 	r = r.WithContext(ctx)

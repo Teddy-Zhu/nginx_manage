@@ -9,12 +9,11 @@ import (
 	"nginxpanel/internal/storage"
 )
 
-func SetPanelListen(data, address string) error {
+func SetPanelListen(data, address string) error { return SetPanelAccess(data, address, "") }
+
+func SetPanelAccess(data, address, protocol string) error {
 	if os.Geteuid() != 0 {
 		return errors.New("修改管理地址需要本机 root")
-	}
-	if err := panelruntime.ValidateListen(address); err != nil {
-		return err
 	}
 	d, err := panelruntime.ReadDeployment(data)
 	if err != nil {
@@ -41,5 +40,5 @@ func SetPanelListen(data, address string) error {
 		return err
 	}
 	defer release()
-	return panelruntime.SetListen(data, address)
+	return panelruntime.SetAccess(data, address, protocol)
 }

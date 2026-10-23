@@ -46,11 +46,13 @@ type FirewallPlan struct {
 	Warnings       []string            `json:"warnings"`
 }
 type firewallImportState struct {
-	Input           FirewallInput       `json:"input"`
-	Before          firewall.PolicyView `json:"before"`
-	Candidate       firewall.Policy     `json:"candidate"`
-	Resolved        bool                `json:"resolved"`
-	ImportedVersion int64               `json:"imported_version"`
+	Input                FirewallInput         `json:"input"`
+	Before               firewall.PolicyView   `json:"before"`
+	Candidate            firewall.Policy       `json:"candidate"`
+	Resolved             bool                  `json:"resolved"`
+	ImportedVersion      int64                 `json:"imported_version"`
+	BeforeGeoIP          *firewall.GeoIPConfig `json:"before_geoip,omitempty"`
+	ImportedGeoIPVersion int64                 `json:"imported_geoip_version"`
 }
 
 func (in FirewallInput) validate() error {
@@ -109,6 +111,13 @@ func (s *Service) prepareFirewall(ctx context.Context, st *storedPlan, in Firewa
 	base := before.Version
 	in.BaseVersion = &base
 	st.Firewall = &firewallImportState{Input: in, Before: before, Resolved: true}
+	if st.Payload.Firewall.GeoIPSource != nil {
+		config, e := s.Firewall.ReadGeoIPConfig(ctx, s.DB)
+		if e != nil {
+			return e
+		}
+		st.Firewall.BeforeGeoIP = &config
+	}
 	sourcePolicy, err := (firewall.Policy{Backend: st.Payload.Firewall.SourceBackend, Rules: st.Payload.Firewall.Rules}).Normalize()
 	if err != nil {
 		return err
@@ -160,6 +169,15 @@ func (s *Service) checkFirewallBase(ctx context.Context, q firewall.PolicyReader
 	if st.Firewall == nil {
 		return nil
 	}
+	if before := st.Firewall.BeforeGeoIP; before != nil {
+		current, e := s.Firewall.ReadGeoIPConfig(ctx, q)
+		if e != nil {
+			return e
+		}
+		if current.Version != before.Version || current.Source != before.Source {
+			return fault.Conflict("目标 GeoIP 数据源已变化，请重新准备迁移")
+		}
+	}
 	current, err := s.Firewall.ReadPolicy(ctx, q)
 	if err != nil {
 		return err
@@ -199,6 +217,9 @@ func (s *Service) inspectFirewall(ctx context.Context, st *storedPlan, add func(
 	}
 	sort.Strings(ordered)
 	if state := st.Firewall; state != nil {
+		if source.GeoIPSource != nil {
+			info.Warnings = append(info.Warnings, "同时迁入 GeoIP 数据源配置；国家规则携带地址快照，后续可在目标更新数据")
+		}
 		info.Mode, info.State, info.TargetBackend, info.BaseVersion, info.SavedVersion = state.Input.Mode, "pending_import", state.Candidate.Backend, state.Before.Version, state.ImportedVersion
 		info.TotalRules = len(state.Candidate.Rules)
 		if state.Input.Mode == "merge" {
@@ -353,6 +374,13 @@ func (s *Service) importFirewall(ctx context.Context, tx *sql.Tx, st *storedPlan
 		return err
 	}
 	st.Firewall.ImportedVersion = view.Version
+	if before := st.Firewall.BeforeGeoIP; before != nil {
+		config, e := s.Firewall.StoreGeoIPSource(ctx, tx, before.Version, *st.Payload.Firewall.GeoIPSource)
+		if e != nil {
+			return e
+		}
+		st.Firewall.ImportedGeoIPVersion = config.Version
+	}
 	st.Plan.Firewall.SavedVersion, st.Plan.Firewall.State = view.Version, "saved_unapplied"
 	return pushAudit(ctx, tx, principal, requestID, st.Plan.ID, "migration.firewall.import", "saved_unapplied")
 }
@@ -377,6 +405,18 @@ func (s *Service) compensateFirewall(ctx context.Context, tx *sql.Tx, st *stored
 	}
 	if current.Version != st.Firewall.ImportedVersion || currentHash != candidateHash {
 		return fault.Conflict("防火墙期望策略已有其他变更，禁止覆盖")
+	}
+	if before := st.Firewall.BeforeGeoIP; before != nil {
+		config, e := s.Firewall.ReadGeoIPConfig(ctx, tx)
+		if e != nil {
+			return e
+		}
+		if config.Version != st.Firewall.ImportedGeoIPVersion || config.Source != *st.Payload.Firewall.GeoIPSource {
+			return fault.Conflict("GeoIP 数据源已有其他变更，禁止覆盖")
+		}
+		if _, e = s.Firewall.StoreGeoIPSource(ctx, tx, config.Version, before.Source); e != nil {
+			return e
+		}
 	}
 	if _, err = s.Firewall.StorePolicy(ctx, tx, current.Version, st.Firewall.Before.Policy); err != nil {
 		return err

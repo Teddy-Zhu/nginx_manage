@@ -12,6 +12,8 @@
 }
 </route>
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { NAlert, NButton, NCheckbox, NFormItem, NInput, NPopconfirm, NTag } from "naive-ui";
 import { useNodeAPI, apiError, type NodeConnection } from "../api/client";
@@ -58,7 +60,7 @@ async function check(ids: string[]) {
   async function worker() {
     while (queue.length && !closed) {
       const id = queue.shift()!;
-      try { const value = await api.refreshNode(id, crypto.randomUUID()); if (!closed) replace(value); }
+      try { const value = await api.refreshNode(id, randomUUID()); if (!closed) replace(value); }
       catch (cause) { failures.push(`${nodes.value.find((n) => n.id === id)?.name ?? id}：${apiError(cause).message}`); }
     }
   }

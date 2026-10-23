@@ -60,6 +60,7 @@ type Options struct {
 	DataDir, Listen, Socket, WebDir, TLSCert, TLSKey, Version string
 	PanelRuntime                                              string
 	Dev                                                       bool
+	HTTP                                                      bool
 	Policy                                                    nginxconfig.Policy
 }
 
@@ -247,6 +248,7 @@ func Run(ctx context.Context, o Options) error {
 		if err != nil {
 			return err
 		}
+		o.HTTP = running.Deployment.HTTP
 	}
 	vault, err := secure.LoadKey(filepath.Join(o.DataDir, "secrets", "master.key"))
 	if err != nil {
@@ -307,7 +309,13 @@ func Run(ctx context.Context, o Options) error {
 	migrationService := &migration.Service{HostDNS: dnsService, Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
 	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
 	static := &frontendHandler{data: o.DataDir, baseID: running.Release.ID, development: spa(o.WebDir), dev: o.Dev}
-	api := (&transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: auth.New(db, o.Dev), Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, AgentUpgrades: agentUpgradeService, ImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
+	authentication := auth.New(db, o.Dev)
+	authentication.Sessions.Cookie.Secure = !o.Dev && !o.HTTP
+	// Browsers prevent HTTP from replacing an existing Secure cookie of the same name.
+	if o.HTTP {
+		authentication.Sessions.Cookie.Name = "nginxpanel_http_session"
+	}
+	api := (&transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: authentication, Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, AgentUpgrades: agentUpgradeService, ImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}).Handler()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			api.ServeHTTP(w, r)
@@ -340,7 +348,10 @@ func Run(ctx context.Context, o Options) error {
 		}
 		defer readyListener.Close()
 		workers.Add(2)
-		go func() { defer workers.Done(); result <- remotelisten.Serve(runCtx, o.Socket+".remote", handler) }()
+		go func() {
+			defer workers.Done()
+			result <- remotelisten.Serve(runCtx, o.Socket+".remote", handler, o.HTTP)
+		}()
 		go func() {
 			defer workers.Done()
 			result <- panelready.Serve(runCtx, readyListener, nodeID, func(ctx context.Context) (panelready.Status, error) {
@@ -352,7 +363,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	go func() {
 		defer workers.Done()
-		if o.Dev {
+		if o.Dev || o.HTTP {
 			result <- server.Serve(listener)
 		} else {
 			result <- server.ServeTLS(listener, o.TLSCert, o.TLSKey)

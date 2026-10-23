@@ -136,9 +136,9 @@ func (s *Server) protect(next http.Handler) http.Handler {
 				origin := r.Header.Get("Origin")
 				if origin != "" {
 					u, err := url.Parse(origin)
-					scheme := "https"
-					if s.Dev {
-						scheme = "http"
+					scheme := "http"
+					if r.TLS != nil {
+						scheme = "https"
 					}
 					if err != nil || u.Scheme != scheme || !strings.EqualFold(u.Host, r.Host) {
 						s.respond(w, r, 403, "ORIGIN_REJECTED", "请求来源未获授权", nil)

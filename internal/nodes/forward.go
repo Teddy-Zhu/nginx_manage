@@ -112,6 +112,10 @@ func (s *Service) OpenForward(ctx context.Context, p auth.Principal, recent bool
 		// This transport is created above for this one forwarding request.
 		client.Transport.(*http.Transport).ResponseHeaderTimeout = fail2ban.JailReadTimeout + time.Second
 	}
+	if route.Path == "/firewall/geoip/update" {
+		client.Timeout = 125 * time.Second
+		client.Transport.(*http.Transport).ResponseHeaderTimeout = 124 * time.Second
+	}
 	if route.Kind == "sse" {
 		client.Timeout = 0
 	}

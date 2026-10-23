@@ -67,13 +67,24 @@ func LocalListen(address string) string {
 	return net.JoinHostPort(host, fmt.Sprint(a.Port()))
 }
 
-func AccessURLs(address string) ([]string, error) {
+func (d Deployment) Protocol() string {
+	if d.HTTP {
+		return "http"
+	}
+	return "https"
+}
+
+func (d Deployment) AccessURLs() ([]string, error) { return accessURLs(d.Listen, d.Protocol()) }
+
+func AccessURLs(address string) ([]string, error) { return accessURLs(address, "https") }
+
+func accessURLs(address, protocol string) ([]string, error) {
 	if err := ValidateListen(address); err != nil {
 		return nil, err
 	}
 	a, _ := netip.ParseAddrPort(address)
 	if !a.Addr().IsUnspecified() {
-		return []string{"https://" + address}, nil
+		return []string{protocol + "://" + address}, nil
 	}
 	interfaces, err := net.InterfaceAddrs()
 	if err != nil {
@@ -85,7 +96,7 @@ func AccessURLs(address string) ([]string, error) {
 		if err != nil || !ip.IsGlobalUnicast() || a.Addr().Is4() && ip.To4() == nil {
 			continue
 		}
-		seen["https://"+net.JoinHostPort(ip.String(), fmt.Sprint(a.Port()))] = true
+		seen[protocol+"://"+net.JoinHostPort(ip.String(), fmt.Sprint(a.Port()))] = true
 	}
 	urls := make([]string, 0, len(seen))
 	for u := range seen {
@@ -96,13 +107,15 @@ func AccessURLs(address string) ([]string, error) {
 }
 
 // SetListen requires the caller to exclude maintenance and hold the stopped
-// application's writer lock. Only the root-approved listen field may change.
-func SetListen(data, address string) error {
+// application's writer lock.
+func SetListen(data, address string) error { return SetAccess(data, address, "") }
+
+func SetAccess(data, address, protocol string) error {
 	if os.Geteuid() != 0 {
 		return errors.New("修改管理地址需要本机 root")
 	}
-	if err := ValidateListen(address); err != nil {
-		return err
+	if protocol != "" && protocol != "http" && protocol != "https" {
+		return errors.New("管理协议须为 http 或 https")
 	}
 	root, err := Root(data)
 	if err != nil {
@@ -117,7 +130,16 @@ func SetListen(data, address string) error {
 	if err != nil {
 		return err
 	}
-	if d.Listen == address {
+	if address == "" {
+		address = d.Listen
+	}
+	if err := ValidateListen(address); err != nil {
+		return err
+	}
+	if protocol == "" {
+		protocol = d.Protocol()
+	}
+	if d.Listen == address && d.Protocol() == protocol {
 		return nil
 	}
 	l, err := Listen(address)
@@ -130,6 +152,7 @@ func SetListen(data, address string) error {
 		return err
 	}
 	d.Listen = address
+	d.HTTP = protocol == "http"
 	after, err := json.Marshal(d)
 	if err != nil {
 		return err

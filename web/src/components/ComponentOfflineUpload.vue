@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { NAlert, NButton, NCheckbox, NFormItem, NInput, NPopconfirm, NSelect } from "naive-ui";
 import {
@@ -94,7 +96,7 @@ async function start() {
         prerelease: prerelease.value,
       };
       if (closed) return;
-      pendingStart.value = { input, key: crypto.randomUUID() };
+      pendingStart.value = { input, key: randomUUID() };
     }
     const result = await api.createComponentOfflineUpload(pendingStart.value.input, pendingStart.value.key);
     if (closed) return;
@@ -157,7 +159,7 @@ async function check() {
   if (!pendingCheck.value) {
     const source = chosen.value;
     if (!sourceReady.value || !source?.complete) return;
-    pendingCheck.value = { key: crypto.randomUUID(), input: {
+    pendingCheck.value = { key: randomUUID(), input: {
       check_task_id: "",
       input: { action: "check", offline_id: source.id, tag: source.release.tag,
         assets: source.release.selected, prerelease: source.prerelease,

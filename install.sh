@@ -20,10 +20,11 @@ usage() {
 
 带参数时转交标准安装器，例如：
 sudo bash install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web --without-nginx --start
+  --protocol http|https     访问协议，默认 https
 完整参数：bash deploy/native/install.sh --help
 EOF
 }
-auto_confirm=no advanced=no requested_port= fresh=no uninstall=no purge=no keep_data=no
+auto_confirm=no advanced=no requested_port= requested_protocol= fresh=no uninstall=no purge=no keep_data=no
 while (($#)); do
   case "$1" in
     --yes) auto_confirm=yes; shift ;;
@@ -32,17 +33,18 @@ while (($#)); do
     --uninstall) uninstall=yes; shift ;;
     --purge) purge=yes; shift ;;
     --keep-data) keep_data=yes; shift ;;
+    --protocol) (($# >= 2)) || die "--protocol 缺少协议"; requested_protocol=$2; [[ $2 == http || $2 == https ]] || die "管理协议须为 http 或 https"; shift 2 ;;
     --port) (($# >= 2)) && [[ -n $2 ]] || die '--port 缺少端口'; requested_port=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
-      [[ $auto_confirm == no && $advanced == no && -z $requested_port && $fresh == no && $uninstall == no && $purge == no && $keep_data == no ]] || die '引导入口选项不能与标准安装器参数混用'
+      [[ $auto_confirm == no && $advanced == no && -z $requested_port && -z $requested_protocol && $fresh == no && $uninstall == no && $purge == no && $keep_data == no ]] || die '引导入口选项不能与标准安装器参数混用'
       exec /bin/bash "$root/deploy/native/install.sh" "$@" ;;
   esac
 done
 [[ $fresh == no || $uninstall == no ]] || die '--fresh 和 --uninstall 不能混用'
 [[ $purge == no || $uninstall == yes ]] || die '--purge 只能与 --uninstall 一起使用'
 [[ $keep_data == no || $uninstall == yes && $purge == no ]] || die '--keep-data 只能与 --uninstall 一起使用，不能与 --purge 混用'
-[[ $uninstall == no || $advanced == no && -z $requested_port ]] || die '卸载不接受 --advanced 或 --port'
+[[ $uninstall == no || $advanced == no && -z $requested_port && -z $requested_protocol ]] || die '卸载不接受 --advanced 或 --port'
 if [[ -n $requested_port ]]; then
   [[ $requested_port =~ ^[1-9][0-9]{3,4}$ ]] && ((requested_port >= 1024 && requested_port <= 65535)) || die '端口须为 1024–65535'
 fi
@@ -155,6 +157,7 @@ install_from_source() {
   if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
   if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
   if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
+  if [[ -n $requested_protocol ]]; then next_args+=(--protocol "$requested_protocol"); fi
   if [[ $fresh == yes ]]; then next_args+=(--fresh); fi
   if [[ $uninstall == yes ]]; then next_args+=(--uninstall); fi
   if [[ $purge == yes ]]; then next_args+=(--purge); fi
@@ -203,6 +206,7 @@ if [[ $fresh == yes || $uninstall == yes ]]; then
     if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
     if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
     if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
+  if [[ -n $requested_protocol ]]; then next_args+=(--protocol "$requested_protocol"); fi
     /bin/bash "$installer_lifecycle_stage/install.sh" "${next_args[@]}"
     exit 0
   elif [[ -e /opt/nginxpanel/install-command.sh || -L /opt/nginxpanel/install-command.sh ]]; then
@@ -213,6 +217,7 @@ plan=/opt/nginxpanel/install-command.sh
 if [[ -e /etc/nginxpanel/install/lifecycle || -L /etc/nginxpanel/install/lifecycle ]]; then
   trusted_file /etc/nginxpanel/install/lifecycle
   trusted_file /opt/nginxpanel/manage.sh
+  [[ -z $requested_protocol ]] || die "已有安装记录；请使用 manage.sh set-protocol 修改协议"
   [[ -z $requested_port ]] || die '重装保留当前端口；重装后使用 manage.sh set-port 修改'
   printf '%s\n' '发现卸载记录，将恢复卸载前版本和配置；版本更新使用面板维护入口。'
   reinstall_args=(reinstall)
@@ -222,6 +227,7 @@ fi
 if [[ -e $plan || -L $plan ]]; then
   trusted_file "$plan"
   [[ $(stat -c %s "$plan") -le 16384 ]] || die '原安装命令超出读取限制'
+  [[ -z $requested_protocol ]] || die "已有安装记录；请使用 manage.sh set-protocol 修改协议"
   [[ -z $requested_port ]] || die '已有安装计划；安装完成后使用 manage.sh set-port 修改端口'
   if [[ -e /opt/nginxpanel/install-complete || -L /opt/nginxpanel/install-complete ]]; then
     trusted_file /opt/nginxpanel/install-complete
@@ -346,7 +352,8 @@ port=${BASH_REMATCH[2]}
 root_chain "${data%/*}"
 [[ ! -e $data && ! -L $data ]] || empty_directory "$data" || die '数据目录不可用或非空，不能首次安装覆盖'
 
-args=(--data-dir "$data" --listen "$listen" --panel-mode "$panel_mode")
+protocol=${requested_protocol:-https}
+args=(--data-dir "$data" --listen "$listen" --protocol "$protocol" --panel-mode "$panel_mode")
 signed=no
 if [[ $panel_mode == docker ]]; then
   [[ $docker_ready == yes ]] || die '本机 Docker 不满足基本部署条件，请先配置 rootful Docker 和 Compose，或选择原生部署'
@@ -403,7 +410,7 @@ args+=(--dns-owner "$dns_owner" --nginx-log-owner "$log_owner" --firewall-owner 
 start=yes
 if [[ $custom == yes ]] && ! yes_no '安装完成后启用并启动所选服务？Docker 模式同时启动容器' yes; then start=no; fi
 if [[ $start == yes ]]; then args+=(--start); fi
-printf '\n安装确认\n  部署：%s\n  程序：%s\n  前端：%s\n  数据：%s\n  管理：https://%s\n  Nginx：%s\n  DNS：%s\n  防火墙：%s / SSH：%s\n  日志轮转：%s\n  立即启动：%s\n' "$panel_mode" "$binary" "$web" "$data" "$listen" "$nginx_kind" "$dns_owner" "$firewall_owner" "$firewall_ssh" "$log_owner" "$start"
+printf '\n安装确认\n  部署：%s\n  程序：%s\n  前端：%s\n  数据：%s\n  管理：%s://%s\n  Nginx：%s\n  DNS：%s\n  防火墙：%s / SSH：%s\n  日志轮转：%s\n  立即启动：%s\n' "$panel_mode" "$binary" "$web" "$data" "$protocol" "$listen" "$nginx_kind" "$dns_owner" "$firewall_owner" "$firewall_ssh" "$log_owner" "$start"
 printf '%s\n' '请确认材料来源。将复制为本机 root 批准材料，调用标准安装器；不修改云安全组或接管其他 Nginx 服务。'
 printf '安装参数：'; printf '%q ' "${args[@]}"; printf '\n'
 confirm_install

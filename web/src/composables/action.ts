@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/crypto";
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { ApiError } from "../api/client";
@@ -32,7 +33,7 @@ export function useIdempotency() {
     const digest = JSON.stringify(payload);
     if (digest !== previous || !key) {
       previous = digest;
-      key = crypto.randomUUID();
+      key = randomUUID();
     }
     return key;
   };

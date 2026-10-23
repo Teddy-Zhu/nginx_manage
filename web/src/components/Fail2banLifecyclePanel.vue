@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import AdvancedDetails from "./AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
@@ -324,7 +326,7 @@ async function submit() {
     if (!canSubmit.value || !plan.value) return;
     pending.value = {
       input: { ...plan.value.input },
-      key: crypto.randomUUID(),
+      key: randomUUID(),
     };
   }
   busy.value = true;

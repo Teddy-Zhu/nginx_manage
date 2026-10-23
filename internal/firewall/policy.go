@@ -18,25 +18,27 @@ import (
 
 const MaxRules = 1000
 const MaxEntries = 8192
-const PolicyBytes = 256 << 10
+const PolicyBytes = 16 << 20
 
 type PortRange struct {
 	From int `json:"from"`
 	To   int `json:"to"`
 }
 type Rule struct {
-	ID        string      `json:"id"`
-	Name      string      `json:"name"`
-	Enabled   bool        `json:"enabled"`
-	Scope     string      `json:"scope"`
-	Family    string      `json:"family"`
-	Protocol  string      `json:"protocol"`
-	Ports     []PortRange `json:"ports"`
-	Sources   []string    `json:"sources"`
-	Action    string      `json:"action"`
-	Priority  int         `json:"priority"`
-	Interface string      `json:"interface"`
-	Comment   string      `json:"comment"`
+	ID             string      `json:"id"`
+	Name           string      `json:"name"`
+	Enabled        bool        `json:"enabled"`
+	Scope          string      `json:"scope"`
+	Family         string      `json:"family"`
+	Protocol       string      `json:"protocol"`
+	Ports          []PortRange `json:"ports"`
+	Sources        []string    `json:"sources"`
+	Countries      []string    `json:"countries,omitempty"`
+	GeoIPUpdatedAt int64       `json:"geoip_updated_at,omitempty"`
+	Action         string      `json:"action"`
+	Priority       int         `json:"priority"`
+	Interface      string      `json:"interface"`
+	Comment        string      `json:"comment"`
 }
 
 // Backend is a target binding. Rules contain no tool paths or executable text.
@@ -51,8 +53,9 @@ type PolicyView struct {
 	UpdatedAt int64  `json:"updated_at"`
 }
 type PolicyInput struct {
-	BaseVersion int64  `json:"base_version"`
-	Policy      Policy `json:"policy"`
+	BaseVersion      int64  `json:"base_version"`
+	Policy           Policy `json:"policy"`
+	ConfirmConflicts bool   `json:"confirm_conflicts,omitempty"`
 }
 type PreviewInput struct {
 	Version int64 `json:"version"`
@@ -180,6 +183,7 @@ func (p Policy) Normalize() (Policy, error) {
 	}
 	out := Policy{Backend: p.Backend, Rules: make([]Rule, 0, len(p.Rules))}
 	seen := map[string]bool{}
+	totalSources := 0
 	for index, r := range p.Rules {
 		invalid := func(message string) (Policy, error) {
 			return Policy{}, fault.Invalid(fmt.Sprintf("第 %d 条规则：%s", index+1, message))
@@ -192,14 +196,38 @@ func (p Policy) Normalize() (Policy, error) {
 		if r.Name == "" || !policyText(r.Name, 512) || utf8.RuneCountInString(r.Name) > 128 || !policyText(r.Comment, 2048) || utf8.RuneCountInString(r.Comment) > 512 {
 			return invalid("名称最多 128 字，备注最多 512 字，且不能包含控制字符")
 		}
-		if !slices.Contains([]string{"host_input", "docker_published"}, r.Scope) || !slices.Contains([]string{"ipv4", "ipv6", "both"}, r.Family) || !slices.Contains([]string{"tcp", "udp"}, r.Protocol) || !slices.Contains([]string{"allow", "deny", "reject"}, r.Action) || r.Priority < 0 || r.Priority > 1000000 {
+		if !slices.Contains([]string{"host_input", "docker_published"}, r.Scope) || !slices.Contains([]string{"ipv4", "ipv6", "both"}, r.Family) || !slices.Contains([]string{"tcp", "udp", "any"}, r.Protocol) || !slices.Contains([]string{"allow", "deny", "reject"}, r.Action) || r.Priority < 0 || r.Priority > 1000000 {
 			return invalid("流量范围、地址族、协议、动作或顺序无效")
 		}
 		if r.Interface != "" && (!interfacePattern.MatchString(r.Interface) || r.Interface == "." || r.Interface == "..") {
 			return invalid("接口名须为 1–15 字节的实际接口名")
 		}
-		if len(r.Ports) < 1 || len(r.Ports) > 16 || r.Sources == nil || len(r.Sources) > 32 {
-			return invalid("需提供 1–16 个端口区间及最多 32 个来源；空来源列表表示任意来源")
+		if len(r.Ports) < 1 || len(r.Ports) > 16 || r.Sources == nil || len(r.Sources) > MaxSourcePrefixes {
+			return invalid("需提供 1–16 个端口区间；来源数量超过限制或未提供来源列表")
+		}
+		totalSources += len(r.Sources)
+		if totalSources > MaxPolicyPrefixes {
+			return invalid("策略地址总数超过限制")
+		}
+		if p.Backend != "direct-nftables" && len(r.Sources) > 32 {
+			return invalid("当前管理方式最多支持 32 个来源，国家名单需要地址集合支持")
+		}
+		if r.Protocol == "any" && (p.Backend != "direct-nftables" || r.Scope != "host_input" || len(r.Ports) != 1 || r.Ports[0].From != 1 || r.Ports[0].To != 65535) {
+			return invalid("全协议名单须使用主机地址集合且端口范围为全部")
+		}
+		if len(r.Countries) > 250 || r.GeoIPUpdatedAt < 0 {
+			return invalid("国家名单信息无效")
+		}
+		r.Countries = slices.Clone(r.Countries)
+		for _, code := range r.Countries {
+			if !validCountry(code) {
+				return invalid("国家代码无效")
+			}
+		}
+		sort.Strings(r.Countries)
+		r.Countries = slices.Compact(r.Countries)
+		if len(r.Countries) > 0 && (p.Backend != "direct-nftables" || len(r.Sources) == 0 || r.GeoIPUpdatedAt == 0) {
+			return invalid("国家名单需要有效的地址集合与数据更新时间")
 		}
 		ports := slices.Clone(r.Ports)
 		for _, port := range ports {
@@ -242,7 +270,7 @@ func (p Policy) Normalize() (Policy, error) {
 			sources[canonical] = true
 			r.Sources = append(r.Sources, canonical)
 		}
-		if r.Family == "ipv4" && v6 || r.Family == "ipv6" && v4 || r.Family == "both" && len(r.Sources) > 0 && (!v4 || !v6) {
+		if r.Family == "ipv4" && v6 || r.Family == "ipv6" && v4 || p.Backend != "direct-nftables" && r.Family == "both" && len(r.Sources) > 0 && (!v4 || !v6) {
 			return invalid("来源须覆盖所选地址族；双栈规则需同时提供 IPv4 和 IPv6 来源或使用空列表")
 		}
 		sort.Strings(r.Sources)

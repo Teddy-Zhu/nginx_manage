@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { NAlert, NButton, NFormItem, NPopconfirm, NSelect } from "naive-ui";
@@ -174,7 +176,7 @@ async function submit(input?: Fail2banUpgradeInput) {
   if (closed || busy.value || reading.value) return;
   if (!pending.value) {
     if (!available.value || !input) return;
-    pending.value = { input: { ...input }, key: crypto.randomUUID() };
+    pending.value = { input: { ...input }, key: randomUUID() };
   }
   if (timer) clearTimeout(timer);
   busy.value = true;

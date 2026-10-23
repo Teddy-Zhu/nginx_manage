@@ -271,15 +271,27 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 	if err != nil {
 		return out, err
 	}
-	if runtime != nil {
-		return out, errors.New("登记已交给独立运行执行器；请使用运行状态与原策略回滚入口")
-	}
 	value, err := loadNFTRegistration(dataDir)
 	if err != nil {
 		return out, err
 	}
+	if runtime != nil {
+		if action != "remove" && action != "recover" || value == nil || runtime.Owner != value.Owner || runtime.Candidate != nil || runtime.RestoreIntent != nil || runtime.Rollback || runtime.Confirmed != nil && runtime.Confirmed.Action != "remove" {
+			return out, errors.New("防火墙仍有受管策略或恢复任务，请先撤回规则并完成恢复")
+		}
+		if action == "recover" && (value.Action != "remove" || value.State != "removing" && value.State != "released" || runtime.CurrentKernel.NamespaceID != value.Baseline.NamespaceID || runtime.CurrentKernel.Fingerprint != value.Baseline.Fingerprint) {
+			return out, errors.New("空策略运行回执与登记移除意图不一致")
+		}
+	}
 	if action == "recover" {
-		return recoverNFTRegistration(dataDir, value)
+		out, err = recoverNFTRegistration(dataDir, value)
+		if err == nil && runtime != nil && value.State == "released" {
+			err = clearInactiveFirewallRuntime(dataDir)
+			if err == nil {
+				out.Registration = nftRegistrationView(dataDir, out.Kernel)
+			}
+		}
+		return out, err
 	}
 	// Admission shares the root maintenance lock: an updater/importer cannot
 	// acquire maintenance between this check and the durable result record.
@@ -311,6 +323,15 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 	cancel()
 	if err != nil {
 		return out, err
+	}
+	if runtime != nil {
+		view := nftRegistrationView(dataDir, kernel)
+		if !view.Verified || view.State != "registered" {
+			return out, errors.New("空策略运行回执未通过核对，禁止移除登记")
+		}
+		// The empty table may have a new handle after a confirmed removal or rollback.
+		// Keep runtime evidence until the durable registration removal has completed.
+		value.Confirmed = kernel
 	}
 	if action == "init" {
 		if value != nil && value.State == "registered" {
@@ -370,6 +391,11 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 		value.OperationState, value.Error = "succeeded", ""
 		if err = saveNFTRegistration(dataDir, value); err != nil {
 			return out, err
+		}
+		if runtime != nil && action == "remove" {
+			if err = clearInactiveFirewallRuntime(dataDir); err != nil {
+				return out, err
+			}
 		}
 		return FirewallRegistrationStatus{Kernel: post, Registration: nftRegistrationView(dataDir, post)}, nil
 	}
@@ -459,4 +485,18 @@ func detachNFTRegistration(previous *nftRegistrationCheckpoint, kernel firewall.
 	value := &nftRegistrationCheckpoint{Schema: 1, Owner: previous.Owner, PreviousOperationID: previous.OperationID, OperationID: secure.ID(), Action: "detach", State: "released", OperationState: "succeeded", Baseline: kernel, Confirmed: previous.Confirmed, Error: reason}
 	value.TransactionHash = nftDetachHash(value)
 	return value
+}
+
+// Completed operation journals remain intact; only the retired current state is removed.
+func clearInactiveFirewallRuntime(dataDir string) error {
+	path := firewallStatePath(dataDir)
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }

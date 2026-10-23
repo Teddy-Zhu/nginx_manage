@@ -19,6 +19,7 @@ import { apiError, useNodeAPI, type ManagementListenerInput, type ManagementList
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 
+const protocol = window.location.protocol, httpMode = protocol === "http:";
 const api = useNodeAPI(), session = useSession(), { run, busy } = useAction();
 const view = ref<ManagementListenerView | null>(null), error = ref(""), uncertain = ref(false), publicURL = ref(""), version = ref(-1);
 const canManage = computed(() => ["read", "system.write"].every((scope) => session.localMe?.scopes.includes(scope)));
@@ -34,7 +35,7 @@ const pending = computed(() => operation.value?.state === "waiting_confirmation"
 const remaining = ref(0);
 const states = { waiting_confirmation: "等待新连接确认", succeeded: "已完成", rolled_back: "已恢复", recovery_required: "需要本机恢复" };
 const confirmURL = computed(() => {
-  try { const url = new URL(publicURL.value); if (url.protocol !== "https:" || url.username || url.password) return ""; url.pathname = "/management-listener"; url.search = ""; url.hash = ""; return url.toString(); } catch { return ""; }
+  try { const url = new URL(publicURL.value); if (url.protocol !== window.location.protocol || url.username || url.password) return ""; url.pathname = "/management-listener"; url.search = ""; url.hash = ""; return url.toString(); } catch { return ""; }
 });
 function date(value: number) { return value ? new Date(value * 1000).toLocaleString() : "—"; }
 function resetForm() {
@@ -95,19 +96,19 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
           <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
           <p><NTag :type="view.confirmed.enabled && view.serving && view.attached ? 'success' : 'default'">{{ !view.confirmed.enabled ? '未开启' : view.serving && view.attached ? '已开启' : '连接异常' }}</NTag></p>
           <p v-if="view.confirmed.enabled">已确认地址 {{ view.confirmed.listen }} · 来源 {{ view.confirmed.allowed_sources.join('、') }}</p>
-          <AdvancedDetails title="证书详情"><p v-if="view.confirmed.enabled" class="fingerprint">SHA-256 {{ view.confirmed.tls_fingerprint }}<br />证书到期 {{ date(view.confirmed.certificate_expires_at) }}</p></AdvancedDetails>
+          <AdvancedDetails v-if="!httpMode" title="证书详情"><p v-if="view.confirmed.enabled" class="fingerprint">SHA-256 {{ view.confirmed.tls_fingerprint }}<br />证书到期 {{ date(view.confirmed.certificate_expires_at) }}</p></AdvancedDetails>
         </template>
       </section>
       <section v-if="operation" class="panel page-stack">
         <div class="toolbar"><h2>最近操作</h2><NTag :type="operation.state === 'succeeded' ? 'success' : 'warning'">{{ states[operation.state] }}</NTag></div>
         <AdvancedDetails title="操作详情"><p>操作编号 {{ operation.id }}</p></AdvancedDetails>
         <p v-if="operation.config.enabled">候选地址 {{ operation.config.listen }} · 来源 {{ operation.config.allowed_sources.join('、') }}</p>
-        <AdvancedDetails v-if="operation.config.enabled" title="新入口证书"><p class="fingerprint">SHA-256 {{ operation.config.tls_fingerprint }}</p></AdvancedDetails>
+        <AdvancedDetails v-if="operation.config.enabled && !httpMode" title="新入口证书"><p class="fingerprint">SHA-256 {{ operation.config.tls_fingerprint }}</p></AdvancedDetails>
         <NAlert v-if="operation.error" type="warning">{{ operation.error }}</NAlert>
         <p v-if="operation.confirmed_source">已确认来源 {{ operation.confirmed_source }}。此结果仅证明该来源到当前入口的连接可达。</p>
         <template v-if="pending">
-          <NAlert type="warning">请在 {{ date(operation.deadline) }} 前通过新入口确认（约 {{ remaining }} 秒）。超时或应用通道断开后自动恢复。如使用自签证书，请展开证书详情核对指纹。</NAlert>
-          <NFormItem label="新入口 HTTPS 地址"><NInput v-model:value="publicURL" placeholder="https://node.example.com:9444" /></NFormItem>
+          <NAlert type="warning">请在 {{ date(operation.deadline) }} 前通过新入口确认（约 {{ remaining }} 秒）。超时或应用通道断开后自动恢复。</NAlert>
+          <NFormItem label="新入口地址"><NInput v-model:value="publicURL" :placeholder="`${protocol}//node.example.com:9444`" /></NFormItem>
           <p v-if="confirmURL"><a :href="confirmURL" target="_blank" rel="noopener noreferrer">打开新入口确认页面</a></p>
           <div class="toolbar">
             <NButton type="primary" :disabled="busy" @click="decide('confirm')">确认当前新连接</NButton>
@@ -126,7 +127,7 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
         <NFormItem label="证书 PEM"><NInput v-model:value="form.certificate" type="textarea" :disabled="busy || pending" :maxlength="16384" placeholder="留空沿用已确认的证书；首次启用生成自签证书" /></NFormItem>
         <NFormItem label="私钥 PEM"><NInput v-model:value="form.key" type="textarea" :disabled="busy || pending" :maxlength="8192" autocomplete="off" /></NFormItem>
         <NCheckbox v-model:checked="form.rotate" :disabled="busy || pending || !!form.certificate || !!form.key">生成新的自签证书</NCheckbox>
-        </AdvancedDetails><p class="muted">自签证书须独立核对指纹；更换证书后，现有控制节点需要显式更新信任。</p>
+        </AdvancedDetails><p v-if="!httpMode" class="muted">自签证书须独立核对指纹；更换证书后，现有控制节点需要显式更新信任。</p>
         <div class="toolbar">
           <NButton type="primary" :loading="busy" :disabled="pending || version !== view.version || !view.attached || !form.sources.trim()" @click="apply(true)">暂用并等待确认</NButton>
           <NPopconfirm positive-text="停用" @positive-click="apply(false)"><template #trigger><NButton :disabled="busy || pending || !view.confirmed.enabled || version !== view.version">停用远程入口</NButton></template>停用须通过主入口执行，不会关闭主入口。</NPopconfirm>

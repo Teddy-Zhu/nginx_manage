@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { NAlert, NButton, NFormItem, NInput, NPopconfirm } from "naive-ui";
 import {
@@ -178,7 +180,7 @@ async function change(action: "ban" | "unban") {
         action,
         target: status.value.target,
       },
-      key: crypto.randomUUID(),
+      key: randomUUID(),
     };
   }
   busy.value = true;

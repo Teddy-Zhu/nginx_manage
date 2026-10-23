@@ -12,6 +12,8 @@
 </route>
 
 <script setup lang="ts">
+import { randomUUID } from "../utils/crypto";
+
 import { computed, reactive, ref, watch } from "vue";
 import {
   NAlert,
@@ -105,7 +107,7 @@ async function execute() {
     if (!pending.value) {
       if (!preview.value || !total.value)
         throw new Error("请先预览可清理的历史材料");
-      pending.value = { token: preview.value.token, key: crypto.randomUUID() };
+      pending.value = { token: preview.value.token, key: randomUUID() };
     }
     try {
       result.value = await api.executeHistory(

@@ -268,6 +268,31 @@ paths:
       description: 返回 FirewallOperation。近期认证，按原操作恢复最后确认策略或初始空表；模块停用及维护收尾期间仍允许恢复。
       parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/CSRF"}]
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /firewall/geoip:
+    get:
+      operationId: getFirewallGeoIP
+      x-scopes: [security.write]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+    put:
+      operationId: setFirewallGeoIP
+      x-scopes: [security.write]
+      parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
+      requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/GeoIPSourceInput"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /firewall/geoip/update:
+    post:
+      operationId: updateFirewallGeoIP
+      x-scopes: [security.write]
+      parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
+      requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/GeoIPUpdateInput"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /firewall/geoip/resolve:
+    post:
+      operationId: resolveFirewallGeoIP
+      x-scopes: [security.write]
+      parameters: [{"$ref": "#/components/parameters/CSRF"}]
+      requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/GeoIPResolveInput"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/policy:
     get:
       operationId: getFirewallPolicy
@@ -277,7 +302,7 @@ paths:
     put:
       operationId: setFirewallPolicy
       x-scopes: [security.write]
-      description: 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须近期认证。最多 1000 条规则及 256 KiB 规范策略，来源须匹配地址族。
+      description: 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须近期认证。最多 1000 条规则及 16 MiB 规范策略；新增的规则冲突须明确确认。
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPolicyInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -5045,6 +5070,55 @@ components:
       properties:
         from: {"type": "integer", "minimum": 1, "maximum": 65535}
         to: {"type": "integer", "minimum": 1, "maximum": 65535}
+    GeoIPSource:
+      type: object
+      additionalProperties: false
+      required: [name, format, url, ipv6_url, allow_private_network]
+      properties:
+        name: {type: string, maxLength: 256}
+        format: {type: string, enum: [mmdb, cidr]}
+        url: {type: string, maxLength: 2048}
+        ipv6_url: {type: string, maxLength: 2048}
+        allow_private_network: {type: boolean}
+    GeoIPState:
+      type: object
+      required: [version, source, ready, updated_at, sha256, countries]
+      properties:
+        version: {type: integer, format: int64}
+        source: {$ref: '#/components/schemas/GeoIPSource'}
+        ready: {type: boolean}
+        updated_at: {type: integer, format: int64}
+        sha256: {type: string}
+        countries: {type: object, additionalProperties: {type: integer}}
+    GeoIPSourceInput:
+      type: object
+      additionalProperties: false
+      required: [base_version, source]
+      properties:
+        base_version: {type: integer, format: int64}
+        source: {$ref: '#/components/schemas/GeoIPSource'}
+    GeoIPUpdateInput:
+      type: object
+      additionalProperties: false
+      required: [version, countries]
+      properties:
+        version: {type: integer, format: int64}
+        countries: {type: array, items: {type: string}, maxItems: 250}
+    GeoIPResolveInput:
+      type: object
+      additionalProperties: false
+      required: [version, countries]
+      properties:
+        version: {type: integer, format: int64}
+        countries: {type: array, items: {type: string}, minItems: 1, maxItems: 250}
+    GeoIPResolved:
+      type: object
+      required: [version, countries, sources, updated_at]
+      properties:
+        version: {type: integer, format: int64}
+        countries: {type: array, items: {type: string}}
+        sources: {type: array, items: {type: string}}
+        updated_at: {type: integer, format: int64}
     FirewallRule:
       type: object
       additionalProperties: false
@@ -5054,10 +5128,12 @@ components:
         name: {"type": "string", "minLength": 1, "maxLength": 128}
         enabled: {"type": "boolean"}
         scope: {"type": "string", "description": "host_input 或 docker_published；Docker 原始目的与实际映射由独立应用计划绑定，不属于可迁移期望规则；普通逻辑预览不编译 Docker 转发"}
-        family: {"type": "string", "description": "ipv4、ipv6 或 both；非空来源须覆盖所选地址族"}
-        protocol: {"type": "string", "description": "tcp 或 udp"}
+        family: {"type": "string", "description": "ipv4、ipv6 或 both；仅匹配集合中存在的地址族"}
+        protocol: {"type": "string", "description": "tcp、udp；主机地址集合支持 any，表示全部协议与端口"}
         ports: {"type": "array", "items": {"$ref": "#/components/schemas/FirewallPortRange"}, "minItems": 1, "maxItems": 16}
-        sources: {"type": "array", "items": {"type": "string", "maxLength": 64}, "maxItems": 32, "description": "IP 或网络起点 CIDR；空数组表示任意来源；规范化后不得重复"}
+        sources: {"type": "array", "items": {"type": "string", "maxLength": 64}, "maxItems": 262144, "description": "IP 或网络起点 CIDR；空数组表示任意来源；nftables 使用地址集合匹配"}
+        countries: {type: array, items: {type: string, pattern: '^[A-Z]{2}$'}, maxItems: 250}
+        geoip_updated_at: {type: integer, format: int64, minimum: 0}
         action: {"type": "string", "description": "allow、deny 或 reject"}
         priority: {"type": "integer", "minimum": 0, "maximum": 1000000}
         interface: {"type": "string", "maxLength": 15, "description": "目标入站接口；空字符串表示任意接口"}
@@ -5084,6 +5160,7 @@ components:
       properties:
         base_version: {"type": "integer", "format": "int64"}
         policy: {"$ref": "#/components/schemas/FirewallPolicy"}
+        confirm_conflicts: {type: boolean, default: false}
     FirewallPreviewInput:
       type: object
       additionalProperties: false

@@ -97,8 +97,8 @@ func (s *Server) decideManagementListener(w http.ResponseWriter, r *http.Request
 		s.fail(w, r, fault.Invalid("监听操作 ID 无效"))
 		return
 	}
-	if action == "confirm" && (r.TLS == nil || remotelisten.ConnectionID(r.Context()) == "") {
-		s.fail(w, r, fault.Conflict("请通过新远程入口建立 HTTPS 连接后确认"))
+	if action == "confirm" && remotelisten.ConnectionID(r.Context()) == "" {
+		s.fail(w, r, fault.Conflict("请通过新远程入口建立连接后确认"))
 		return
 	}
 	if err := s.audit(r, p.ID, "management.listener."+action, id, "sending"); err != nil {
