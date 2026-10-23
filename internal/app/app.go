@@ -173,6 +173,16 @@ func createLocalTLS(dir string) error {
 		return err
 	}
 	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "NginxPanel local management"}, NotBefore: time.Now().Add(-5 * time.Minute), NotAfter: time.Now().Add(365 * 24 * time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}}
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		return err
+	}
+	for _, address := range addresses {
+		ip, _, err := net.ParseCIDR(address.String())
+		if err == nil && ip.IsGlobalUnicast() {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		}
+	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
 		return err
@@ -219,8 +229,12 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return errors.New("主恢复入口必须使用回环地址；远程入口通过受控监听配置")
+	if o.Dev {
+		if ip == nil || !ip.IsLoopback() {
+			return errors.New("开发入口必须使用回环地址")
+		}
+	} else if err = panelruntime.ValidateListen(o.Listen); err != nil {
+		return err
 	}
 	unlock, err := Lock(o.DataDir, o.Dev)
 	if err != nil {
@@ -306,7 +320,7 @@ func Run(ctx context.Context, o Options) error {
 	defer cancel()
 	// Shutdown may wait for every worker without receiving another result.
 	result := make(chan error, 18)
-	listener, err := net.Listen("tcp", o.Listen)
+	listener, err := panelruntime.Listen(o.Listen)
 	if err != nil {
 		return err
 	}
@@ -421,7 +435,7 @@ func spa(dir string) http.Handler {
 
 func SocketPath(dataDir string) string { return filepath.Join(dataDir, "run", "agent", "agent.sock") }
 func Defaults(dataDir string, dev bool) Options {
-	listen := "127.0.0.1:9443"
+	listen := ""
 	if dev {
 		listen = "127.0.0.1:8080"
 	}

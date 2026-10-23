@@ -127,7 +127,7 @@ func (m *remoteListener) acceptTCP(l *net.TCPListener) {
 				if m.pendingLocked() {
 					_ = m.rollback("候选监听中断，恢复已确认入口")
 				} else {
-					m.problem = "远程监听已中断；请通过回环入口检查并重启 Agent"
+					m.problem = "远程监听已中断；请通过主入口检查并重启 Agent"
 				}
 			}
 			m.mu.Unlock()

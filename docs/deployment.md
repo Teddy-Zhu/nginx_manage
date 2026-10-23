@@ -2,7 +2,7 @@
 
 [文档首页](README.md) · [使用手册](user-guide.md) · [运维与故障处理](operations.md)
 
-常规部署直接使用[一键安装](#3-一键安装)，自动选择本机架构和默认配置；第 4、5 节是手动高级安装参考。示例数据目录为 `/srv/nginxpanel`，管理地址为 `127.0.0.1:9443`；实际选择以安装摘要及管理脚本 `info` 输出为准。安装命令均在实际部署目标执行。
+常规部署直接使用[一键安装](#3-一键安装)，自动选择本机架构和默认配置；第 4、5 节是手动高级安装参考。示例数据目录为 `/srv/nginxpanel`，管理端口默认随机分配，允许通过机器公网或内网 IP 访问；实际选择以安装摘要及管理脚本 `info` 输出为准。安装命令均在实际部署目标执行。
 
 ## 1. 选择部署方式
 
@@ -59,7 +59,7 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 ### 默认配置与高级设置
 
-`--yes` 采用推荐配置并直接安装；去掉后仅需核对最终摘要。需要调整路径、部署方式或宿主机授权时使用 `--advanced`，例如 `sudo bash install.sh --advanced`。高级设置需要交互终端。
+`--port 23456` 可在源码或 Release 安装时指定管理端口（1024–65535）；省略时由操作系统选择随机空闲端口，首次保存后续装和重启保持。`--yes` 采用推荐配置并直接安装；去掉后仅需核对最终摘要。需要调整路径、部署方式或宿主机授权时使用 `--advanced`，例如 `sudo bash install.sh --advanced`。高级设置需要交互终端。
 
 | 检测项 | 默认推荐 |
 | --- | --- |
@@ -68,7 +68,7 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 | 部署方式 | 本机 rootful Docker/Compose 可用、发现唯一匹配程序摘要的面板镜像且发行材料齐全时推荐 Docker；其余推荐原生 |
 | Nginx | Docker 方案优先匹配的固定模块镜像，其次使用检测到的可信本机程序；没有可用来源时先装面板，登录后补齐组件 |
 | 数据目录 | 优先 `/srv/nginxpanel`；不可用时尝试 `/var/lib/nginxpanel`，已有数据不覆盖 |
-| 管理端口 | 优先 `127.0.0.1:9443`，已占用时从 9444–9463 选择空闲 TCP 端口 |
+| 管理入口 | 默认 `[::]:随机空闲端口`，支持 IPv4/IPv6；内核不支持 IPv6 时使用 `0.0.0.0:随机空闲端口`，允许外部访问 |
 | 启动与主机授权 | 默认启用并启动服务；DNS、防火墙及日志轮转默认只读 |
 
 高级设置沿用检测结果作为默认值；缺少或有多个候选的镜像引用需要明确选择。检测只发现材料和基本能力，最终签名、镜像内容及运行能力仍由标准安装器校验。只访问目标本机 Docker，不沿用指向其他主机的 Docker context。没有可用 Nginx 时先装面板，代理流量须待 Nginx 组件安装并应用配置后才可用。
@@ -77,7 +77,7 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 默认立即启动：原生启用并启动对应服务；Docker 在启用并启动宿主机服务后执行生成 Compose 的 `up -d --pull never`。高级设置可关闭立即启动，之后可用管理脚本执行 `start all`；它只启动服务，systemd 开机启用状态由管理员另行设置。完成后用 `sudo bash /opt/nginxpanel/manage.sh` 打开管理菜单，再按第 6 节首次登录。
 
-原安装命令保存在 `/opt/nginxpanel/install-command.sh`。失败后保留材料，重新运行向导可核对并明确重试原命令；它沿用原参数，不能用于变更版本、数据目录或既定授权。已有非引导安装使用原参数续装。使用向导时，由向导完成材料批准和后续安装；下节说明手动参数安装方式。
+原安装命令保存在 `/opt/nginxpanel/install-command.sh`。失败后保留材料，重新运行向导可核对并明确重试原命令；它沿用原参数，不能用于变更版本、数据目录或既定授权。安装及容器启动步骤完成后记录 `/opt/nginxpanel/install-complete`，再次执行引导入口只显示当前信息，保留后来修改的端口和配置。已有非引导安装使用原参数续装。使用向导时，由向导完成材料批准和后续安装；下节说明手动参数安装方式。
 
 ### 离线构建与手动安装材料
 
@@ -124,7 +124,6 @@ sudo bash /opt/approved/nginxpanel/install.sh \
   --web-dir /opt/approved/nginxpanel/web \
   --nginx-binary /usr/sbin/nginx \
   --data-dir /srv/nginxpanel \
-  --listen 127.0.0.1:9443 \
   --start
 ```
 
@@ -138,7 +137,6 @@ sudo bash /opt/approved/nginxpanel/install.sh \
   --web-dir /opt/approved/nginxpanel/web \
   --without-nginx \
   --data-dir /srv/nginxpanel \
-  --listen 127.0.0.1:9443 \
   --start
 ```
 
@@ -171,7 +169,6 @@ sudo bash /opt/approved/nginxpanel/install.sh \
   --release-manifest /opt/nginxpanel/offline/release-manifest.json \
   --release-signature /opt/nginxpanel/offline/release-manifest.sig \
   --data-dir /srv/nginxpanel \
-  --listen 127.0.0.1:9443 \
   --start
 
 sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
@@ -190,15 +187,25 @@ sudo docker compose -f /etc/nginxpanel/docker/compose.yaml ps
 
 ## 6. 首次访问与管理员初始化
 
-引导安装先在目标执行 `sudo bash /opt/nginxpanel/manage.sh info`，取得实际 SSH 转发命令、令牌与证书路径。向导可能避让已占用端口或改用 `/var/lib/nginxpanel`，以下默认示例需按该输出替换。
-
-在自己的电脑建立 SSH 转发，将下例用户名和主机替换为实际值，保持该 SSH 会话：
+在目标执行：
 
 ```sh
-ssh -N -L 9443:127.0.0.1:9443 admin@部署主机
+sudo bash /opt/nginxpanel/manage.sh info
 ```
 
-浏览器访问 `https://127.0.0.1:9443`。本地端口已占用时，例如改成 `-L 19443:127.0.0.1:9443` 并访问 19443。
+手动参数安装时，可在可信安装包目录运行 `sudo bash manage.sh info`。输出当前生效的监听地址、机器实际 IP 对应的 HTTPS 地址、可选 SSH 转发命令及令牌/证书路径。浏览器直接打开其中管理电脑可达的公网或内网地址；IPv6 使用 `https://[机器IPv6]:端口`。`0.0.0.0` 和 `::` 表示全部网卡，不能作为浏览器目标地址。公网 IP 在 NAT 网关上时，使用其公网 IP 与映射端口。
+
+云安全组、主机或外部防火墙需允许该 TCP 端口。安装器不会自动改写已有防火墙策略；不能直接访问时，可使用 `info` 输出的 SSH 转发命令。数据目录可能选择 `/var/lib/nginxpanel`，以实际输出为准。
+
+安装后修改主入口端口：
+
+```sh
+sudo bash /opt/nginxpanel/manage.sh set-port 23456
+# 非交互执行：
+sudo bash /opt/nginxpanel/manage.sh set-port 23456 --yes
+```
+
+也可在管理菜单选择“修改主入口端口”。先确保新端口已允许访问；脚本检查端口范围与实际绑定占用，持久保存运行绑定，只重启原本正在运行的面板，停止状态保持。存在维护任务、持久停机或恢复屏障时拒绝修改；端口绑定失败保留原配置，其他写入或启动错误按提示核对当前配置并处理。后续 `info` 显示新端口。
 
 主入口初始使用本节点生成的自签名证书。通过已认证 SSH 在目标查看证书指纹，核对浏览器展示的同一证书后建立信任：
 
@@ -218,13 +225,13 @@ sudo cat /srv/nginxpanel/bootstrap/token
 
 ## 7. 配置管理入口
 
-可持续使用 SSH 转发。需要直接远程管理时，在当前节点的“管理入口”：
+主入口默认已支持外部访问。“管理入口”页面管理额外的独立监听，其允许来源与证书仅作用于附加入口，不限制主入口。需要只通过受控入口远程访问时，首次安装用 `--advanced` 将主入口绑定 `127.0.0.1:端口` 或 `[::1]:端口`，保留 SSH 转发，再配置附加入口：
 
 1. 填写目标实际监听 IP、1024–65535 端口和允许来源 CIDR。
 2. 选择沿用/生成独立管理证书，或上传匹配的证书与私钥。
 3. 先处理云安全组和外部防火墙；有本应用防火墙策略时，先应用并确认对应允许规则。
 4. 提交候选后，通过新地址建立新的 HTTPS 连接，核对证书、登录，并在页面期限内确认。
-5. 保留 SSH 与回环入口用于恢复。候选未确认到期时自动恢复原配置。
+5. 保留 SSH 与主入口用于恢复。候选未确认到期时自动恢复原配置。
 
 来源限制使用实际 TCP 对端地址。经过反向代理时，面板看到的是代理来源，应另在代理上限制外部访问。详细确认与本机停用命令见[管理入口](management-listener.md)。
 

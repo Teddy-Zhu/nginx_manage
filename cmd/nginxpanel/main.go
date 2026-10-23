@@ -70,7 +70,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-upgrade-plan|fail2ban-upgrade-prepare|fail2ban-upgrade-preparation|fail2ban-upgrade-run|fail2ban-upgrade-run-resume|fail2ban-upgrade-run-cancel|fail2ban-upgrade-run-status|fail2ban-upgrade-quiesce|fail2ban-upgrade-quiesce-resume|fail2ban-upgrade-quiesce-cancel|fail2ban-upgrade-quiesce-status|fail2ban-upgrade-switch|fail2ban-upgrade-switch-resume|fail2ban-upgrade-switch-revert|fail2ban-upgrade-switch-status|fail2ban-upgrade-activate|fail2ban-upgrade-activation-resume|fail2ban-upgrade-activation-stop|fail2ban-upgrade-activation|fail2ban-upgrade-restore|fail2ban-upgrade-restore-resume|fail2ban-upgrade-restore-cancel|fail2ban-upgrade-restore-status|fail2ban-upgrade-verify|fail2ban-upgrade-verification|fail2ban-state-capture|fail2ban-state-inspect|fail2ban-state-prepare|fail2ban-state-recovery-check|fail2ban-state-restore-plan|fail2ban-state-restore|fail2ban-state-restore-status|fail2ban-state-restore-revert|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|iptables-retire|iptables-retirement|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|agent-upgrade|agent-upgrade-resume|agent-upgrade-status|agent-upgrade-worker|agent-upgrade-probe|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-image|nginx-image-resume|nginx-image-status|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-container-test|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
+		return errors.New("usage: nginxpanel <dev|init|serve|backup-inspect|backup-prepare|backup-preparation|backup-preparation-cleanup|backup-adopt|backup-adoption|backup-adoption-cleanup|backup-restore|backup-restore-rollback|backup-restore-status|backup-restore-plan|backup-restore-plan-status|backup-restore-plan-cleanup|backup-restore-apply|backup-restore-runtime-status|backup-restore-reconcile|backup-restore-activate|agent|management-listener-disable|fail2ban-bind|fail2ban-binding|fail2ban-unbind|fail2ban-nginx-bind|fail2ban-nginx-unbind|fail2ban-nginx-status|fail2ban-nginx-refresh|fail2ban-jails-apply|fail2ban-jails-status|fail2ban-existing-jail-plan|fail2ban-existing-jail-adopt|fail2ban-existing-jail-release|fail2ban-existing-jail-status|fail2ban-existing-jail-runtime|fail2ban-existing-jail-cancel|fail2ban-existing-jail-policy-plan|fail2ban-existing-jail-policy-apply|fail2ban-existing-jail-policy-status|fail2ban-existing-jail-policy-cancel|fail2ban-host-input-init|fail2ban-host-input-status|fail2ban-host-input-recover|fail2ban-host-input-remove|fail2ban-host-input-retire|fail2ban-host-input-retirement|fail2ban-host-protection-approve|fail2ban-host-protection-revoke|fail2ban-host-protection-status|fail2ban-host-sources-approve|fail2ban-host-sources-revoke|fail2ban-host-sources-status|fail2ban-host-runtime-apply|fail2ban-host-runtime-clear|fail2ban-host-runtime-recover|fail2ban-host-runtime-status|fail2ban-host-recovery-status|fail2ban-host-recovery-cancel|fail2ban-host-sync-enable|fail2ban-host-sync-disable|fail2ban-host-sync-status|fail2ban-host-sync-refresh|fail2ban-install|fail2ban-upgrade-plan|fail2ban-upgrade-prepare|fail2ban-upgrade-preparation|fail2ban-upgrade-run|fail2ban-upgrade-run-resume|fail2ban-upgrade-run-cancel|fail2ban-upgrade-run-status|fail2ban-upgrade-quiesce|fail2ban-upgrade-quiesce-resume|fail2ban-upgrade-quiesce-cancel|fail2ban-upgrade-quiesce-status|fail2ban-upgrade-switch|fail2ban-upgrade-switch-resume|fail2ban-upgrade-switch-revert|fail2ban-upgrade-switch-status|fail2ban-upgrade-activate|fail2ban-upgrade-activation-resume|fail2ban-upgrade-activation-stop|fail2ban-upgrade-activation|fail2ban-upgrade-restore|fail2ban-upgrade-restore-resume|fail2ban-upgrade-restore-cancel|fail2ban-upgrade-restore-status|fail2ban-upgrade-verify|fail2ban-upgrade-verification|fail2ban-state-capture|fail2ban-state-inspect|fail2ban-state-prepare|fail2ban-state-recovery-check|fail2ban-state-restore-plan|fail2ban-state-restore|fail2ban-state-restore-status|fail2ban-state-restore-revert|fail2ban-python-plan|fail2ban-python-install|fail2ban-python-status|fail2ban-managed|fail2ban-managed-check|fail2ban-managed-start|fail2ban-managed-stop|fail2ban-managed-enable|fail2ban-managed-disable|fail2ban-managed-rollback|firewall-init|firewall-registration|firewall-recover|firewall-remove|firewalld-init|firewalld-registration|firewalld-recover|firewalld-remove|ufw-init|ufw-registration|ufw-recover|ufw-remove|iptables-init|iptables-registration|iptables-recover|iptables-remove|iptables-retire|iptables-retirement|docker-firewall-init|docker-firewall-registration|docker-firewall-recover|docker-firewall-remove|firewall-rollback|launcher|panel-listen|panel-access-urls|panel-listen-default|panel-listen-set|panel-native-bind|panel-native-serve|panel-runtime-bind|panel-runtime-verify|panel-runtime-status|panel-runtime-stage|panel-runtime-staged|panel-runtime-select|panel-selection-status|panel-service-status|panel-service-operation|panel-service-control|panel-readiness|update-worker|panel-update-worker|panel-update-status|agent-upgrade|agent-upgrade-resume|agent-upgrade-status|agent-upgrade-worker|agent-upgrade-probe|panel-runtime-compose|panel-writer-bind|panel-snapshot-capture|panel-snapshot-check|panel-snapshot-restore|panel-restore-status|launcher-status|launcher-operation|launcher-restart|nginx-image|nginx-image-resume|nginx-image-status|nginx-container-bind|nginx-container-verify|nginx-container-status|nginx-container-launch|nginx-container-test|nginx-init|nginx-runtime|nginx-runtime-status|component-path|component-bind|component-install|component-switch|component-switch-resume|component-switch-rollback|component-switch-status|nginx-switch-worker|nginx-install-worker|nginx-install-probe|doctor|version|release-verify|release-prepare|release-check|release-fetch|release-images>")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -102,7 +102,8 @@ func run() error {
 		defaultDir = ".local"
 	}
 	dataDir := flags.String("data-dir", defaultDir, "node data directory")
-	listen := flags.String("listen", "", "management listener (loopback only)")
+	listen := flags.String("listen", "", "management HTTPS listener IP:port")
+	listenPort := flags.Int("port", 0, "management port (zero selects an unused port during installation)")
 	socket := flags.String("agent-socket", "", "local agent Unix socket")
 	webDir := flags.String("web-dir", "web/dist", "built frontend directory")
 	panelBinary := flags.String("panel-binary", "", "locally root-approved panel binary for persistent bootstrap")
@@ -348,6 +349,10 @@ func run() error {
 		"backup-restore-plan-status":         {"data-dir": true, "restore-operation": true},
 		"backup-restore-plan-data":           {"data-dir": true, "restore-operation": true},
 		"launcher":                           {"data-dir": true},
+		"panel-listen":                       {"data-dir": true},
+		"panel-access-urls":                  {"data-dir": true},
+		"panel-listen-default":               {"port": true, "listen": true},
+		"panel-listen-set":                   {"data-dir": true, "listen": true},
 		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
 		"panel-native-serve":                 {"data-dir": true},
 		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
@@ -405,6 +410,10 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "port":
+			if command != "panel-listen-default" {
+				invalidFlag = f.Name
+			}
 		case "fail2ban-upgrade-activation":
 			if command != "fail2ban-upgrade-restore" {
 				invalidFlag = f.Name
@@ -1089,6 +1098,42 @@ func run() error {
 		return launcher.Run(ctx, absDir)
 	case "panel-native-serve":
 		return panelruntime.ExecNative(absDir)
+	case "panel-listen-default":
+		if *listen != "" {
+			if *listenPort != 0 {
+				return errors.New("listen 与 port 不能同时指定")
+			}
+			if err := panelruntime.ValidateListen(*listen); err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stdout, *listen)
+			return nil
+		}
+		address, err := panelruntime.RecommendListen(*listenPort)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stdout, address)
+		return nil
+	case "panel-listen", "panel-access-urls":
+		d, err := panelruntime.ReadDeployment(absDir)
+		if err != nil {
+			return err
+		}
+		if command == "panel-access-urls" {
+			urls, err := panelruntime.AccessURLs(d.Listen)
+			if err != nil {
+				return err
+			}
+			for _, u := range urls {
+				fmt.Fprintln(os.Stdout, u)
+			}
+		} else {
+			fmt.Fprintln(os.Stdout, d.Listen)
+		}
+		return nil
+	case "panel-listen-set":
+		return agent.SetPanelListen(absDir, *listen)
 	case "panel-native-bind":
 		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
 		if err != nil {
@@ -1400,6 +1445,13 @@ func run() error {
 			return errors.New("panel-runtime must be native or docker")
 		}
 		o := app.Defaults(absDir, false)
+		if *listen == "" {
+			d, err := panelruntime.ReadDeployment(absDir)
+			if err != nil {
+				return err
+			}
+			o.Listen = d.Listen
+		}
 		o.PanelRuntime = *panelRuntime
 		o.Policy = policy
 		o.Version = version

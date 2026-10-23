@@ -75,8 +75,8 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <NAlert v-if="uncertain" type="warning">请求回执尚未确认。请刷新原操作状态，避免重复变更。</NAlert>
       <section class="panel page-stack">
-        <div class="toolbar"><h2>当前入口</h2><NButton :disabled="busy" @click="load">刷新状态</NButton></div>
-        <p>本机回环恢复入口持续保留。可选远程入口仅接受允许来源的 HTTPS 连接。</p>
+        <div class="toolbar"><h2>附加入口</h2><NButton :disabled="busy" @click="load">刷新状态</NButton></div>
+        <p>此处配置附加管理入口，其允许来源限制仅作用于该入口。主入口地址由部署配置管理。</p>
         <template v-if="view">
           <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
           <p><NTag :type="view.confirmed.enabled ? 'success' : 'default'">{{ view.confirmed.enabled ? '已启用' : '未启用' }}</NTag> · {{ view.serving ? '远程端口已监听' : '远程端口未监听' }} · {{ view.attached ? '应用通道已连接' : '应用通道未连接' }}</p>
@@ -114,7 +114,7 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
         <p class="muted">自签证书须独立核对指纹；更换证书后，现有控制节点需要显式更新信任。</p>
         <div class="toolbar">
           <NButton type="primary" :loading="busy" :disabled="pending || version !== view.version || !view.attached || !form.sources.trim()" @click="apply(true)">暂用并等待确认</NButton>
-          <NPopconfirm positive-text="停用" @positive-click="apply(false)"><template #trigger><NButton :disabled="busy || pending || !view.confirmed.enabled || version !== view.version">停用远程入口</NButton></template>停用须从本机回环恢复入口执行。</NPopconfirm>
+          <NPopconfirm positive-text="停用" @positive-click="apply(false)"><template #trigger><NButton :disabled="busy || pending || !view.confirmed.enabled || version !== view.version">停用远程入口</NButton></template>停用须通过主入口执行，不会关闭主入口。</NPopconfirm>
         </div>
       </section>
     </template>

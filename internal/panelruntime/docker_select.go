@@ -40,13 +40,13 @@ func SelectNginxImage(before, after nginxcontainer.Binding, beforeCompose, after
 		return err
 	}
 	defer unlock()
-	if err = replaceDockerFile(DockerComposePath, beforeCompose, afterCompose, DockerComposeLimit); err != nil {
+	if err = replaceDeploymentFile(DockerComposePath, beforeCompose, afterCompose, DockerComposeLimit); err != nil {
 		return err
 	}
 	return nginxcontainer.SelectBinding(before, after)
 }
 
-func replaceDockerFile(name string, before, after []byte, limit int64) error {
+func replaceDeploymentFile(name string, before, after []byte, limit int64) error {
 	f, info, err := secure.OpenRootFile(name, limit)
 	if err != nil {
 		return err
@@ -57,15 +57,15 @@ func replaceDockerFile(name string, before, after []byte, limit int64) error {
 		return err
 	}
 	if info.Mode().Perm() != 0444 || !secure.RootFileUnchanged(f, info) {
-		return errors.New("容器部署文件归属或读取代次变化")
+		return errors.New("部署文件归属或读取代次变化")
 	}
 	if bytes.Equal(raw, after) {
 		return syncDir(filepath.Dir(name))
 	}
 	if !bytes.Equal(raw, before) {
-		return errors.New("容器部署文件已偏离原事务，禁止覆盖")
+		return errors.New("部署文件已偏离原事务，禁止覆盖")
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(name), ".image-select-")
+	tmp, err := os.CreateTemp(filepath.Dir(name), ".deployment-")
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func replaceDockerFile(name string, before, after []byte, limit int64) error {
 		return err
 	}
 	if !os.SameFile(live, info) || !secure.RootFileUnchanged(f, info) {
-		return errors.New("容器部署文件在切换前变化")
+		return errors.New("部署文件在切换前变化")
 	}
 	if err = os.Rename(tmp.Name(), name); err != nil {
 		return err
@@ -110,10 +110,10 @@ func SelectDockerImage(before, after Deployment, beforeCompose, afterCompose []b
 		return err
 	}
 	defer unlock()
-	if err = replaceDockerFile(DockerComposePath, beforeCompose, afterCompose, DockerComposeLimit); err != nil {
+	if err = replaceDeploymentFile(DockerComposePath, beforeCompose, afterCompose, DockerComposeLimit); err != nil {
 		return err
 	}
 	oldRaw, _ := json.Marshal(before)
 	newRaw, _ := json.Marshal(after)
-	return replaceDockerFile(filepath.Join(root, "launcher.json"), oldRaw, newRaw, DeploymentLimit)
+	return replaceDeploymentFile(filepath.Join(root, "launcher.json"), oldRaw, newRaw, DeploymentLimit)
 }

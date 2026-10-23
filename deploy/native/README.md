@@ -14,7 +14,7 @@ sudo bash deploy/native/install.sh \
   --web-dir /opt/approved/nginxpanel/web \
   --nginx-binary /usr/sbin/nginx \
   --data-dir /srv/nginxpanel \
-  --listen 127.0.0.1:9443
+  --listen 0.0.0.0:23456
 ```
 
 也可显式选择仅安装面板和 Agent，用于先部署目标节点再导入配置及准备组件：
@@ -70,7 +70,7 @@ Docker 配置还声明专用的 `nginxpanel_agent_socket_t` 安全类型，授�
 
 安装注册 `nginxpanel-nginx.service`、`nginxpanel-agent.service` 和 `nginxpanel.service`；是否安装组件、是否启用服务及实际运行状态分别核对。Agent 不依赖启动 Nginx，重启 Agent 不会顺带拉起已停止的代理实例。Nginx 独立前台运行，由 systemd 跟踪 master；退出使用 QUIT 和有限宽限期。面板、Agent 或其更新不会因服务依赖而停止正在代理流量的 Nginx。应用发布及运行确认仍由 Agent 完成。
 
-Web 无 Linux capabilities，只能写四个业务目录；root Agent 可写固定执行目录，无法读取业务主密钥目录。各服务使用只读系统挂载与独立临时目录，Web 保持主回环 HTTPS；可选[受控远程监听](../../docs/management-listener.md)由 Agent 持有 TCP 描述符、Web 完成 TLS，独立执行确认期限与恢复。Agent 管理命令仍仅通过本地 Unix Socket 并核对 Web UID。初始化输出 TLS 指纹和引导令牌文件位置，不输出令牌内容。
+Web 无 Linux capabilities，只能写四个业务目录；root Agent 可写固定执行目录，无法读取业务主密钥目录。各服务使用只读系统挂载与独立临时目录，Web 默认通过主 HTTPS 入口对外监听；可选[受控远程监听](../../docs/management-listener.md)由 Agent 持有 TCP 描述符、Web 完成 TLS，独立执行确认期限与恢复。Agent 管理命令仍仅通过本地 Unix Socket 并核对 Web UID。初始化输出 TLS 指纹和引导令牌文件位置，不输出令牌内容。
 
 默认只准备文件并执行 `daemon-reload`。本机管理员可在安装命令中加 `--start`：仅面板模式只启用并启动 Web 与 Agent；选择 Nginx 时同时启用并启动其专用服务。已选择 Nginx 的部署也可在检查配置后执行：
 
@@ -82,7 +82,7 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 仅面板部署手动启用时只选择 `nginxpanel-agent.service nginxpanel.service`。Nginx unit 的 `ExecCondition` 读取同一安装记录：明确未安装时跳过，记录缺失、损坏或已装文件校验失败时报告 unit 失败；不会把损坏状态当作未安装。退出状态遵循 [systemd 官方条件启动语义](https://github.com/systemd/systemd/blob/main/man/systemd.service.xml)。
 
-服务进入 active 只说明进程受 systemd 管理，不能代替 API、权限、Nginx 应用和故障恢复验收。首次管理员配置使用 `<DATA_DIR>/bootstrap/token` 并通过 SSH 访问回环入口。之后可显式启用受控远程监听，或继续使用已有 VPN/受保护代理。
+服务进入 active 只说明进程受 systemd 管理，不能代替 API、权限、Nginx 应用和故障恢复验收。首次管理员配置使用 `<DATA_DIR>/bootstrap/token`，直接访问机器 IP 与实际管理端口。省略 `--listen` 时自动选择随机空闲端口并监听全部网卡；安装摘要给出具体端口。需要仅本机访问时显式指定回环地址。引导安装后的 `manage.sh info` 显示实际访问地址，`manage.sh set-port 23456` 可修改端口；也可使用 SSH 转发或附加受控入口。
 
 安装器通过 systemd-tmpfiles 在安装和启动时预建 root 专用的 `/run/ufw.lock`，Agent 沙箱只开放该锁文件，以便 UFW 状态查询使用官方管理锁；规则修改仍须完成对应后端的本机授权。
 

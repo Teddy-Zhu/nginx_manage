@@ -215,7 +215,7 @@ func (m *remoteListener) open() error {
 		return err
 	}
 	if err = m.reconcile(); err != nil {
-		m.problem = "已确认监听无法恢复；请从回环入口或本机救援处理"
+		m.problem = "已确认监听无法恢复；请从主入口或本机救援处理"
 		if op := m.state.Operation; op != nil && op.State == "rolled_back" {
 			op.State = "recovery_required"
 			op.Stage = "restore_failed"
@@ -272,7 +272,7 @@ func (m *remoteListener) rollback(reason string) error {
 	}
 	if err := m.reconcile(); err != nil {
 		m.stopListening()
-		m.problem = "原监听地址无法恢复；请使用回环入口或本机救援"
+		m.problem = "原监听地址无法恢复；请使用主入口或本机救援"
 		m.state.Operation.State = "recovery_required"
 		m.state.Operation.Stage = "restore_failed"
 		m.state.Operation.Error = m.problem
@@ -367,7 +367,7 @@ func (m *remoteListener) apply(ctx context.Context, id, hash string, in remoteli
 		return remotelisten.Operation{}, fault.Unavailable("应用尚未连接受控监听通道")
 	}
 	if !in.Enabled && connection != "" {
-		return remotelisten.Operation{}, fault.Conflict("停用远程入口须从回环恢复入口执行")
+		return remotelisten.Operation{}, fault.Conflict("停用远程入口须从主入口执行")
 	}
 	config := remotelisten.Config{Enabled: in.Enabled, Listen: in.Listen, AllowedSources: in.AllowedSources, CertificatePEM: in.CertificatePEM, KeyPEM: in.KeyPEM}
 	if config.Enabled && config.CertificatePEM == "" && config.KeyPEM == "" {

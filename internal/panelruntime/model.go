@@ -5,10 +5,8 @@ package panelruntime
 import (
 	"encoding/json"
 	"errors"
-	"net"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"nginxpanel/internal/releases"
@@ -82,9 +80,7 @@ func releaseID(r Release) string {
 	return secure.Hash(raw)
 }
 func (d Deployment) validate(data string) error {
-	host, port, err := net.SplitHostPort(d.Listen)
-	n, parse := strconv.Atoi(port)
-	if err != nil || parse != nil || (host != "127.0.0.1" && host != "::1") || n < 1024 || n > 65535 || d.Schema != Schema || d.DataDir != data || d.UID <= 0 || d.GID <= 0 || d.IPCGID <= 0 || !digest.MatchString(d.InitialRelease) {
+	if ValidateListen(d.Listen) != nil || d.Schema != Schema || d.DataDir != data || d.UID <= 0 || d.GID <= 0 || d.IPCGID <= 0 || !digest.MatchString(d.InitialRelease) {
 		return errors.New("面板运行绑定无效")
 	}
 	if raw, err := json.Marshal(d); err != nil || len(raw) > DeploymentLimit {

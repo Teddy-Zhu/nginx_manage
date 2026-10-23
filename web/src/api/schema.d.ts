@@ -558,7 +558,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 返回 FirewallOperation。近期认证且通过生效后重建的目标管理监听新 TCP/TLS 连接确认；旧连接、回环入口、转发及请求头均不能提供连接证明。应用确认前重新采集 SSH/保护来源并证明候选对象；依据变化返回已恢复的原操作，未知读取不确认，原期限不延长。确认范围为该目标管理监听，不代表云安全组或全部业务端口。 */
+        /** @description 返回 FirewallOperation。近期认证且通过生效后重建的目标管理监听新 TCP/TLS 连接确认；旧连接、主入口、转发及请求头均不能提供连接证明。应用确认前重新采集 SSH/保护来源并证明候选对象；依据变化返回已恢复的原操作，未知读取不确认，原期限不延长。确认范围为该目标管理监听，不代表云安全组或全部业务端口。 */
         post: operations["confirmFirewall"];
         delete?: never;
         options?: never;
@@ -714,7 +714,7 @@ export interface paths {
         };
         get: operations["getManagementListener"];
         put?: never;
-        /** @description 直接连接本节点并近期认证后暂用新监听。提交前证明当前受管防火墙对象并按已确认策略核对候选端口和完整允许来源，冲突时保留原入口。Agent 独立持久保存旧配置与 120 秒期限；新 TCP/TLS 连接确认后生效。相同幂等键只重放原操作。停用须从回环入口执行。拒绝递归转发，不返回私钥。 */
+        /** @description 直接连接本节点并近期认证后暂用新监听。提交前证明当前受管防火墙对象并按已确认策略核对候选端口和完整允许来源，冲突时保留原入口。Agent 独立持久保存旧配置与 120 秒期限；新 TCP/TLS 连接确认后生效。相同幂等键只重放原操作。停用须从主入口执行。拒绝递归转发，不返回私钥。 */
         post: operations["applyManagementListener"];
         delete?: never;
         options?: never;
@@ -747,7 +747,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 须直接通过当前候选监听建立的新 TCP/TLS 连接确认，再次核对当前已确认防火墙对象及完整候选允许来源；核对期间超时仍恢复原入口。只证明当前观察来源到该节点的可达性，不推断其他公网来源。禁止使用回环入口或变更前已有连接确认。 */
+        /** @description 须直接通过当前候选监听建立的新 TCP/TLS 连接确认，再次核对当前已确认防火墙对象及完整候选允许来源；核对期间超时仍恢复原入口。只证明当前观察来源到该节点的可达性，不推断其他公网来源。禁止使用主入口或变更前已有连接确认。 */
         post: operations["confirmManagementListener"];
         delete?: never;
         options?: never;

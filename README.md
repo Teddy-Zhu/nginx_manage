@@ -22,7 +22,7 @@ sudo bash install.sh --yes
 curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o nginxpanel-setup.sh && bash nginxpanel-setup.sh --yes
 ```
 
-两种方式都会自动检测环境、安装并启动服务，最后输出首次访问方法。去掉 `--yes` 可先核对摘要；加 `--advanced` 才进入自定义设置。也可对下载的脚本加 `--source`，一次完成拉取源码、容器编译和安装。Release 入口需仓库已发布包含安装脚本的新发行。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务。
+两种方式都会自动检测环境、安装并启动服务，最后输出首次访问方法。去掉 `--yes` 可先核对摘要；加 `--advanced` 才进入自定义设置。也可对下载的脚本加 `--source`，一次完成拉取源码、容器编译和安装。Release 入口需仓库已发布包含安装脚本的新发行。默认监听全部网卡并随机选择空闲管理端口，保存后重启不变；安装后可直接用机器公网或内网 IP 访问。首次指定端口可加 `--port 23456`。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务，或用 `sudo bash /opt/nginxpanel/manage.sh set-port 23456` 修改端口。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -66,7 +66,7 @@ go run ./cmd/nginxpanel agent --dev --data-dir=.local
 
 实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。[原生安装入口](deploy/native/README.md) 已接入账户/目录分区、不可变产物及三个 systemd 服务，支持 `--without-nginx` 仅安装 Web/Agent，显式 `--start` 才按所选组件启用启动；不接管已有系统 Nginx。实际安装与服务的验收范围见[运行验收矩阵](docs/support-matrix.md)。开发 Agent 不开放实际执行。
 
-未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；生产保留回环 HTTPS 救援入口，远程管理通过受控监听开放。部署方式见 [原生安装](deploy/native/README.md) 和 [Docker 部署](deploy/docker/README.md)。
+未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；生产默认开放 HTTPS 主入口，另可配置附加受控监听。部署方式见 [原生安装](deploy/native/README.md) 和 [Docker 部署](deploy/docker/README.md)。
 
 本机 `release-verify/release-prepare` 与 `release-check/release-fetch` 已接入固定发布公钥、离线签名清单、固定 GitHub 仓库的受限下载和有界资产准备，见 [发行资产合同](docs/releases.md)。准备好的 panel 可交给原生安装器；组件激活、在线更新及迁移依赖安装通过各自的维护流程执行。
 

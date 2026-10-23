@@ -30,7 +30,7 @@
 sudo bash /opt/nginxpanel/manage.sh
 ```
 
-菜单支持部署信息、服务状态、启停/重启、服务日志、初始化令牌、主入口证书指纹和远程管理入口救援。非引导安装也可从可信安装包运行 `sudo bash manage.sh`，脚本读取现有 root 安装记录，不执行其中的文本。
+菜单支持部署信息、服务状态、启停/重启、服务日志、初始化令牌、主入口证书指纹、监听端口修改和附加管理入口救援。非引导安装也可从可信安装包运行 `sudo bash manage.sh`，脚本读取现有 root 安装记录，不执行其中的文本。
 
 ```sh
 sudo bash /opt/nginxpanel/manage.sh info
@@ -39,6 +39,7 @@ sudo bash /opt/nginxpanel/manage.sh restart panel
 sudo bash /opt/nginxpanel/manage.sh logs agent --lines 200
 sudo bash /opt/nginxpanel/manage.sh logs panel --follow
 sudo bash /opt/nginxpanel/manage.sh fingerprint
+sudo bash /opt/nginxpanel/manage.sh set-port 23456
 ```
 
 `start/stop/restart` 默认仅操作 panel，可选择 `agent`、`nginx` 或 `all`；`all` 跳过明确未安装的 Nginx。非交互变更须加 `--yes`，交互变更先确认影响。原生使用 systemd，容器服务使用已生成的 Compose，宿主机 Agent 始终使用 systemd。Docker 操作固定使用本机 `/run/docker.sock`，不沿用远程 Docker context。
@@ -46,6 +47,8 @@ sudo bash /opt/nginxpanel/manage.sh fingerprint
 Docker 状态同时显示容器及面板实际进程，容器停止时后者不可查询；容器已运行不等于业务已就绪。宿主机工具版本由 `info` 展示，当前面板程序版本仍按网页核对。
 
 脚本遇到持久停机或恢复屏障时拒绝常规启动/重启面板。维护、更新和完整恢复继续沿原任务处理；日常服务停止不替代持久停机准备。
+
+`set-port` 允许 1024–65535，支持 `--yes`；运行中的面板自动停止、保存并启动，已停止的面板保持停止。新端口绑定失败保留原配置，维护与恢复屏障下拒绝修改。`info` 从当前运行绑定读取端口；初始安装意图用于记录首次安装参数，不表示当前端口。修改前放行新端口对应的云安全组和防火墙规则。
 
 `bootstrap` 只读取原一次性引导令牌，不能重置已有管理员。需停用可选远程入口时，执行 `disable-remote` 并核对返回状态与 Agent 处理结果。
 
@@ -134,7 +137,7 @@ Compose 同时包含 Nginx 时，停止整个项目会影响代理流量。镜�
 
 ### 管理入口失联
 
-先恢复 SSH 转发到主回环入口。用新的浏览器连接查看原监听操作，候选未确认时等待其期限或请求回滚。
+运行管理脚本 `info` 查看当前主入口，并使用输出的 SSH 转发命令恢复访问。用新的浏览器连接查看原监听操作，候选未确认时等待其期限或请求回滚。
 
 需要从本机停用所有可选远程入口时：
 
@@ -143,7 +146,7 @@ sudo /opt/nginxpanel/current/nginxpanel management-listener-disable \
   --data-dir /srv/nginxpanel
 ```
 
-返回 `requested` 表示救援标记已保存；Agent 运行时处理，未运行则在下次恢复监听前处理。主回环 TLS 与管理员身份保持原有配置。详细行为见[管理入口参考](management-listener.md)。
+返回 `requested` 表示救援标记已保存；Agent 运行时处理，未运行则在下次恢复监听前处理。主入口的地址、TLS 与管理员身份保持原有配置；此命令只关闭附加监听，不关闭默认主入口。详细行为见[管理入口参考](management-listener.md)。
 
 ### DNS 或防火墙未确认
 
@@ -175,7 +178,7 @@ sudo /opt/nginxpanel/current/nginxpanel management-listener-disable \
 
 | 现象 | 先检查 | 处理方向 |
 | --- | --- | --- |
-| 无法打开 9443 | SSH 转发是否运行、目标 Web 服务/容器是否正常、本地端口是否占用 | 初始入口仅监听目标回环；远程使用 SSH 转发或已确认管理入口 |
+| 无法打开管理入口 | `manage.sh info` 的实际端口、目标服务状态、端口占用及安全组/防火墙 | 默认端口随机并对外监听；使用可达的机器 IP，必要时使用输出的 SSH 转发命令 |
 | 浏览器提示证书不可信 | 地址、证书有效期、通过可信 SSH 取得的指纹 | 核对本节点证书后建立信任；管理入口换证书后更新相应节点信任 |
 | 显示初始化页面 | 是否连接预期节点、管理员是否尚未创建 | 从目标 `DATA/bootstrap/token` 取得一次性令牌 |
 | 忘记管理员密码 | 是否仍有可重新认证的会话、是否有完整备份 | 系统无默认密码和通用的一键重置入口；保留数据与密钥，按可用恢复材料处理 |

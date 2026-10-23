@@ -9,9 +9,10 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 root=$(cd -- "$(dirname -- "$0")" && pwd -P)
 usage() {
   cat <<'EOF'
-用法：sudo bash install.sh [--yes] [--advanced]
+用法：sudo bash install.sh [--yes] [--advanced] [--port 端口]
 自动检测本机系统、架构、安装材料、Docker、Nginx 和管理端口，确认推荐方案后安装。
 源码目录自动使用 Docker 编译并接续安装，无需手动构建或解包。
+--port 指定管理端口；不指定时自动选择随机空闲端口，默认允许外部访问。
 --yes 使用推荐配置直接安装；--advanced 才逐项调整路径、部署方式和主机授权。
 不会安装宿主机编译工具、自动安装 Docker 或接管已有系统 Nginx。
 
@@ -20,17 +21,21 @@ sudo bash install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/w
 完整参数：bash deploy/native/install.sh --help
 EOF
 }
-auto_confirm=no advanced=no
+auto_confirm=no advanced=no requested_port=
 while (($#)); do
   case "$1" in
     --yes) auto_confirm=yes; shift ;;
     --advanced) advanced=yes; shift ;;
+    --port) (($# >= 2)) && [[ -n $2 ]] || die '--port 缺少端口'; requested_port=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
-      [[ $auto_confirm == no && $advanced == no ]] || die '--yes/--advanced 不能与标准安装器参数混用'
+      [[ $auto_confirm == no && $advanced == no && -z $requested_port ]] || die '--yes/--advanced/--port 不能与标准安装器参数混用'
       exec /bin/bash "$root/deploy/native/install.sh" "$@" ;;
   esac
 done
+if [[ -n $requested_port ]]; then
+  [[ $requested_port =~ ^[1-9][0-9]{3,4}$ ]] && ((requested_port >= 1024 && requested_port <= 65535)) || die '端口须为 1024–65535'
+fi
 [[ $EUID == 0 ]] || die '请在实际部署目标使用 sudo bash install.sh'
 if [[ $auto_confirm == no || $advanced == yes ]]; then
   [[ -t 0 && -t 1 ]] || die '交互安装需要终端；使用 --yes 按推荐配置直接安装'
@@ -93,17 +98,7 @@ elf_arch() {
   [[ $high == 0 ]] || return 1
   case "$low" in 62) printf amd64 ;; 183) printf arm64 ;; *) return 1 ;; esac
 }
-port_in_use() {
-  local hex table slot address peer state rest
-  printf -v hex '%04X' "$1"
-  for table in /proc/net/tcp /proc/net/tcp6; do
-    [[ -r $table ]] || continue
-    while read -r slot address peer state rest; do
-      if [[ $state == 0A && $address == *:"$hex" ]]; then return 0; fi
-    done <"$table"
-  done
-  return 1
-}
+
 empty_directory() {
   local entry
   [[ -d $1 && ! -L $1 ]] || return 1
@@ -140,6 +135,14 @@ plan=/opt/nginxpanel/install-command.sh
 if [[ -e $plan || -L $plan ]]; then
   trusted_file "$plan"
   [[ $(stat -c %s "$plan") -le 16384 ]] || die '原安装命令超出读取限制'
+  [[ -z $requested_port ]] || die '已有安装计划；安装完成后使用 manage.sh set-port 修改端口'
+  if [[ -e /opt/nginxpanel/install-complete || -L /opt/nginxpanel/install-complete ]]; then
+    trusted_file /opt/nginxpanel/install-complete
+    trusted_file /etc/nginxpanel/install/ready
+    printf '%s\n' '已安装，保留当前配置；日常操作使用管理脚本，版本更新使用面板维护入口。'
+    finish
+    exit 0
+  fi
   printf '%s\n' '发现已保存的原安装命令。重复执行保留原参数和节点数据；版本更新请使用面板维护入口。'
   cat -- "$plan"
   confirm_install
@@ -167,6 +170,7 @@ if [[ -f $root/scripts/build.sh && -f $root/go.mod && -f $root/web/package.json 
   next_args=()
   if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
   if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
+  if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
   /bin/bash "$build_work/package/install.sh" "${next_args[@]}"
   exit 0
 fi
@@ -222,17 +226,16 @@ for candidate in /srv/nginxpanel /var/lib/nginxpanel; do
     data=$candidate; data_ready=yes; break
   fi
 done
-[[ -r /proc/net/tcp ]] || die '无法读取目标 TCP 监听状态'
-port=9443
-while port_in_use "$port"; do
-  port=$((port + 1))
-  ((port <= 9463)) || die '推荐端口 9443–9463 已被占用，请通过标准安装参数选择空闲端口'
-done
-listen=127.0.0.1:$port
+listen_args=()
+if [[ -n $requested_port ]]; then listen_args+=(--port "$requested_port"); fi
+listen=
+if [[ -f $binary && -x $binary && $(elf_arch "$binary") == "$arch" ]]; then
+  listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择管理地址或端口，请检查端口占用和网络配置'
+fi
 nginx_kind=none
 if [[ -n $nginx ]]; then nginx_kind=native; fi
 if [[ $panel_mode == docker && -n $nginx_image ]]; then nginx_kind=image; fi
-printf '\nNginxPanel 环境检测\n  系统：%s\n  架构：%s\n  本机 Docker：%s\n  Nginx 程序：%s\n  推荐部署：%s\n  推荐依据：%s\n  程序：%s\n  前端：%s\n  数据：%s\n  回环入口：https://%s\n  Nginx 来源：%s\n' "$os_name" "$arch" "$docker_state" "${nginx:-未检测到}" "$panel_mode" "$mode_reason" "$binary" "$web" "$data" "$listen" "$nginx_kind"
+printf '\nNginxPanel 环境检测\n  系统：%s\n  架构：%s\n  本机 Docker：%s\n  Nginx 程序：%s\n  推荐部署：%s\n  推荐依据：%s\n  程序：%s\n  前端：%s\n  数据：%s\n  管理监听：%s\n  Nginx 来源：%s\n' "$os_name" "$arch" "$docker_state" "${nginx:-未检测到}" "$panel_mode" "$mode_reason" "$binary" "$web" "$data" "${listen:-安装时自动选择}" "$nginx_kind"
 printf '%s\n' '主机管理默认只读；安装完成后默认启用并启动服务。'
 custom=$advanced
 if [[ ! -f $binary || ! -f $web/index.html ]]; then
@@ -245,17 +248,21 @@ if [[ $custom == yes ]]; then
   ask binary '面板程序路径' "$binary"
   ask web '构建后的前端目录' "$web"
   ask data '数据目录' "$data"
-  ask listen '回环管理地址' "$listen"
 fi
 binary=$(readlink -e -- "$binary") || die '程序路径不存在；请先使用 Docker 构建并传输安装包'
 web=$(readlink -e -- "$web") || die '前端目录不存在；请使用构建后的 web 目录'
 [[ -f $binary && -x $binary && -d $web && -f $web/index.html ]] || die '程序不可执行或前端缺少 index.html'
 [[ $(elf_arch "$binary") == "$arch" ]] || die "面板程序与目标 linux/$arch 架构不匹配，请传输正确的安装包"
+if [[ -z $listen ]]; then
+  listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择空闲管理端口'
+fi
+if [[ $custom == yes ]]; then ask listen '管理监听 IP:端口（IPv6 使用 [地址]:端口）' "$listen"; fi
 [[ -z $(find "$web" -mindepth 1 ! -type d ! -type f -print -quit) ]] || die '前端目录只能包含普通文件和目录'
 [[ $data =~ ^/(srv|var/lib)/[a-zA-Z0-9_-][a-zA-Z0-9_./-]*$ && $data != */ && $data != *//* && $data != */./* && $data != */../* && $data != */. && $data != */.. ]] || die '数据目录须为 /srv 或 /var/lib 下的规范路径'
-[[ $listen =~ ^(127\.0\.0\.1|\[::1\]):([0-9]{2,5})$ ]] || die '管理地址仅允许回环 HTTPS'
+[[ $listen =~ ^(\[[0-9a-f:]+\]|[0-9.]+):([0-9]{4,5})$ ]] || die '管理地址须为 IPv4:端口或 [IPv6]:端口'
 port=${BASH_REMATCH[2]}
 ((10#$port >= 1024 && 10#$port <= 65535)) || die '端口须为 1024–65535'
+"$binary" panel-listen-default --listen "$listen" >/dev/null || die '管理地址无效'
 root_chain "${data%/*}"
 [[ ! -e $data && ! -L $data ]] || empty_directory "$data" || die '数据目录不可用或非空，不能首次安装覆盖'
 
@@ -348,6 +355,7 @@ pending=$(mktemp /opt/nginxpanel/.install-command.XXXXXXXX)
   if [[ $panel_mode == docker && $start == yes ]]; then
     printf '%s\n' 'docker compose -f /etc/nginxpanel/docker/compose.yaml up -d --pull never'
   fi
+  printf '%s\n' 'install -m 0400 /dev/null /opt/nginxpanel/install-complete' 'sync -f /opt/nginxpanel/install-complete' 'sync -f /opt/nginxpanel'
 } >"$pending"
 chmod 0500 "$pending"
 sync -f "$pending"

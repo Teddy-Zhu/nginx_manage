@@ -66,6 +66,8 @@ sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
 
 `--without-nginx` 可替换为原生安装器支持的本机程序或签名资产选择，以管理宿主机专用 Nginx。使用配套 Nginx 容器时，替换为 `--nginx-image 'ghcr.io/<owner>/<repo>/nginx@sha256:<image-digest>'`；镜像须由本机 root 预先准备到 Docker，不在安装器或普通运行中拉取。该分支生成同时包含 panel/nginx 的完整 Compose 和容器专用 Agent 参数，不登记原生 Nginx 或原生首次安装服务。没有安装 Nginx 时，迁移按原预检及显式授权首次安装流程处理。
 
+管理入口默认监听全部网卡并随机选择空闲端口，使用机器公网或内网 IP 访问。`manage.sh info` 显示当前地址，`manage.sh set-port 23456` 修改并保存端口；运行中的面板容器会重启，已停止的保持停止，宿主机 Agent 与 Nginx 不重启。端口直接属于 host network，无需修改 Compose 端口映射。云安全组和防火墙需允许对应 TCP 端口。
+
 ## 安装来源与批准记录
 
 Docker 安装必须提供 root 持有的发行清单和签名信封，以及独立配置的本机信任根。只接受签名清单中的完整 `repository@sha256:...` 引用，不接受标签别名或另一仓库中的相同摘要。预发布另需明确 `--release-prerelease`。

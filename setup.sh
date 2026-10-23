@@ -9,7 +9,7 @@ default_version="latest"
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：bash setup.sh [--source] [--repo owner/repo] [--yes] [--advanced]
+用法：bash setup.sh [--source] [--repo owner/repo] [--yes] [--advanced] [--port 端口]
 默认下载 GitHub Release，自动匹配本机架构，校验 SHA-256 后安装。
 --source          拉取源码，通过 Docker 编译并自动安装
 --repo owner/repo 源码脚本未内置仓库时指定；本地仓库可自动读取 origin
@@ -17,6 +17,7 @@ usage() {
 --ref 分支或标签  源码模式指定分支或标签，默认仓库默认分支
 --yes             使用推荐配置直接安装，无需交互
 --advanced        安装时打开高级设置
+--port 端口       指定管理端口，默认随机选择空闲端口并允许外部访问
 Release 安装不需要 Docker/Go/Node.js；源码安装需要 Git 和 Docker。
 需要 root 权限时调用 sudo。私有 Release 可使用已认证的 GitHub CLI。
 EOF
@@ -31,6 +32,9 @@ while (($#)); do
       (($# >= 2)) && [[ -n $2 ]] || die "参数缺少值：$1"
       case "$1" in --repo) repository=$2 ;; --version) version=$2; version_override=yes ;; --ref) ref=$2 ;; esac
       shift 2 ;;
+    --port)
+      (($# >= 2)) && [[ $2 =~ ^[1-9][0-9]{3,4}$ ]] && ((10#$2 >= 1024 && 10#$2 <= 65535)) || die '端口须为 1024–65535'
+      install_args+=(--port "$2"); shift 2 ;;
     --yes|--advanced) install_args+=("$1"); shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "未知参数：$1" ;;

@@ -6,8 +6,9 @@ umask 077
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen 127.0.0.1:9443] [--nginx-log-owner agent|external|unconfirmed] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh openssh|none] [--start]
+用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen IP:端口] [--nginx-log-owner agent|external|unconfirmed] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh openssh|none] [--start]
 面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
+默认在全部网卡监听 HTTPS 并随机选择空闲端口；--listen 可指定监听地址和端口。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
 --dns-owner 明确批准宿主机 DNS 所有者并开放对应服务写入路径；默认 unconfirmed，仅允许读取。不会安装、启停或切换网络管理器。
 --firewall-owner 与 --firewall-ssh 配套确认宿主机防火墙后端及 SSH 保护方式；默认 unconfirmed，仅允许读取。UFW 额外开放 /etc/ufw 写入；不安装、启停或切换管理器，本机授权登记另行完成。
@@ -15,7 +16,7 @@ usage() {
 SELinux 启用时注册本应用的持久文件标签模块并应用标签，保留系统进程策略与当前防护状态。
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen=127.0.0.1:9443 start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed firewall_owner=unconfirmed firewall_ssh=unconfirmed nginx_log_owner=unconfirmed
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen= start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed firewall_owner=unconfirmed firewall_ssh=unconfirmed nginx_log_owner=unconfirmed
 while (($#)); do
   case "$1" in
     --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image|--dns-owner|--firewall-owner|--firewall-ssh|--nginx-log-owner)
@@ -107,9 +108,6 @@ done
 [[ -d /run/systemd/system ]] || die '仅支持实际运行 systemd 的宿主机'
 machine=$(uname -m)
 case "$machine" in x86_64|aarch64) ;; *) die '仅支持 linux/amd64 与 linux/arm64' ;; esac
-[[ $listen =~ ^(127\.0\.0\.1|\[::1\]):([0-9]{2,5})$ ]] || die '管理地址仅允许回环 HTTPS'
-port=${BASH_REMATCH[2]}
-((10#$port >= 1024 && 10#$port <= 65535)) || die '管理端口须为 1024–65535'
 [[ $data =~ ^/(srv|var/lib)/[a-zA-Z0-9_-][a-zA-Z0-9_./-]*$ ]] || die '数据目录须位于 /srv 或 /var/lib，且不含空格及控制符'
 selinux_profile=disabled
 agent_socket_flag=
@@ -374,6 +372,24 @@ nginx_hash=
 if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
+if [[ -z $listen ]]; then
+  if [[ -e $state/intent || -L $state/intent ]]; then
+    trusted_file "$state/intent" 4096
+    while IFS='=' read -r key value; do
+      if [[ $key == listen ]]; then
+        [[ -z $listen ]] || die '安装记录存在重复管理地址'
+        listen=$value
+      fi
+    done <"$state/intent"
+    [[ -n $listen ]] || die '原安装记录缺少管理地址'
+  else
+    listen=$("$binary" panel-listen-default) || die '无法选择空闲管理端口'
+  fi
+fi
+[[ $listen =~ ^(\[[0-9a-f:]+\]|[0-9.]+):([0-9]{4,5})$ ]] || die '管理地址须为 IPv4:端口或 [IPv6]:端口'
+port=${BASH_REMATCH[2]}
+((10#$port >= 1024 && 10#$port <= 65535)) || die '管理端口须为 1024–65535'
+"$binary" panel-listen-default --listen "$listen" >/dev/null || die '管理地址无效'
 printf 'native-install-v14\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\nnginx_log_owner=%s\nselinux_profile=%s\nselinux_policy_sha256=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" "$nginx_log_owner" "$selinux_profile" "$selinux_policy_hash" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
@@ -832,6 +848,7 @@ if [[ $start == yes ]]; then
   done
 fi
 printf '已准备宿主机部署：%s\n面板运行模式：%s\n管理地址：https://%s\n' "$data" "$panel_mode" "$listen"
+printf '%s\n' '使用机器公网或内网 IP 及上述端口访问；通配监听地址不是浏览器访问地址。云安全组和外部防火墙需允许该 TCP 端口。'
 if [[ $panel_mode == docker ]]; then printf '%s\n' '面板 Compose：/etc/nginxpanel/docker/compose.yaml；使用 docker compose -f /etc/nginxpanel/docker/compose.yaml up -d 启动。'; fi
 if [[ $without_nginx == yes ]]; then printf '%s\n' 'Nginx 未安装；配置导入可预检并准备可信资产，安装与运行接入仍须明确完成。'; fi
 if [[ -f $data/bootstrap/token ]]; then printf '一次性引导文件：%s/bootstrap/token\n' "$data"; fi
