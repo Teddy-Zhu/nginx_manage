@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C
+export DOCKER_HOST=unix:///run/docker.sock
+unset DOCKER_CONTEXT DOCKER_TLS DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_API_VERSION
 umask 077
 
 die() { printf '%s\n' "$*" >&2; exit 1; }

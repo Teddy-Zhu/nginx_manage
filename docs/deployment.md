@@ -2,7 +2,7 @@
 
 [文档首页](README.md) · [使用手册](user-guide.md) · [运维与故障处理](operations.md)
 
-本文从准备安装材料开始，到首次登录并具备创建代理的条件。示例数据目录为 `/srv/nginxpanel`，管理地址为 `127.0.0.1:9443`。安装命令均在实际部署目标执行。
+本文从准备安装材料开始，到首次登录并具备创建代理的条件。示例数据目录为 `/srv/nginxpanel`，管理地址为 `127.0.0.1:9443`；自动安装的实际选择以向导摘要及管理脚本 `info` 输出为准。安装命令均在实际部署目标执行。
 
 ## 1. 选择部署方式
 
@@ -38,31 +38,41 @@ Docker 模式仍会在目标宿主机创建账户、目录、Agent 服务及必�
 在已有 Docker、支持 BuildKit 输出的构建机，从项目根执行。脚本读取 `go.mod` 和 `web/package.json` 中的固定版本，Go、Node.js、pnpm 及依赖均在容器内使用；源码通过构建上下文复制，宿主机仅接收输出产物。
 
 ```sh
-bash scripts/build.sh --arch amd64
-# arm64 目标使用：
-bash scripts/build.sh --arch arm64
+bash scripts/build.sh
 ```
 
-`make build` 调用同一脚本，默认按构建机架构选择；也可使用 `make build ARCH=arm64`。跨架构编译在构建机原生容器内完成，无需在宿主机配置模拟器。
+`make build` 调用同一脚本，默认自动检测构建机架构，无需指定 `--arch`。只有构建机与部署目标架构不同，才使用 `bash scripts/build.sh --arch arm64` 或 `make build ARCH=arm64` 指定目标。跨架构编译在构建机原生容器内完成，无需在宿主机配置模拟器。
 
 产物为 `dist/nginxpanel-linux-amd64.tar` 或 `dist/nginxpanel-linux-arm64.tar`。可使用 `--output-dir` 指定输出目录、`--version` 注入本机批准的版本标识；首次构建需要下载工具镜像和依赖，缓存由 Docker 管理。本地构建包用于本机批准的原生安装，属于源码构建材料；Docker 部署仍需同版签名发行、批准镜像及其信任材料。
 
 ### 启动安装向导
 
-将对应架构安装包传到目标主机并解压，例如：
+将生成的安装包传到目标主机并解压。以下假定传输目录只包含本次安装包：
 
 ```sh
 mkdir -p ~/nginxpanel-install
-tar -xf /传输目录/nginxpanel-linux-amd64.tar -C ~/nginxpanel-install
+tar -xf /传输目录/nginxpanel-linux-*.tar -C ~/nginxpanel-install
 cd ~/nginxpanel-install
 sudo bash install.sh
 ```
 
-向导依次选择原生/Docker、程序与前端、数据目录、回环管理地址、Nginx 来源，以及可选 DNS/防火墙/日志授权。首次只使用代理时可保留主机授权的只读默认值。
+无需指定系统、架构、程序路径或部署参数。向导先检测本机环境，展示推荐方案；在“调整推荐配置或主机授权”处直接回车即可沿用。
+
+| 检测项 | 默认推荐 |
+| --- | --- |
+| 系统与 CPU | 识别运行 systemd 的 Linux 和 amd64/arm64，并核对程序 ELF 架构；错架构包明确拒绝 |
+| 安装材料 | 自动识别解压包的程序和前端目录 |
+| 部署方式 | 本机 rootful Docker/Compose 可用、发现唯一匹配程序摘要的面板镜像且发行材料齐全时推荐 Docker；其余推荐原生 |
+| Nginx | Docker 方案优先匹配的固定模块镜像，其次使用检测到的可信本机程序；没有可用来源时先装面板，登录后补齐组件 |
+| 数据目录 | 优先 `/srv/nginxpanel`；不可用时尝试 `/var/lib/nginxpanel`，已有数据不覆盖 |
+| 管理端口 | 优先 `127.0.0.1:9443`，已占用时从 9444–9463 选择空闲 TCP 端口 |
+| 启动与主机授权 | 默认启用并启动服务；DNS、防火墙及日志轮转默认只读 |
+
+需要自定义时进入高级设置，检测结果仍作为默认值；缺少或有多个候选的镜像引用需要明确选择。检测只发现材料和基本能力，最终签名、镜像内容及运行能力仍由标准安装器校验。只访问目标本机 Docker，不沿用指向其他主机的 Docker context。
 
 最后核对摘要和实际参数，输入 `INSTALL` 执行。向导将所选材料复制到 root 保护目录，复用标准安装器的账户、路径、签名、架构及服务检查。Docker 所需镜像必须已准备到目标，不在目标编译或动态增装 Nginx 模块。
 
-选择立即启动时，原生启用并启动对应服务；Docker 在启用并启动宿主机服务后执行生成 Compose 的 `up -d --pull never`。未选择立即启动时，安装后可用管理脚本执行 `start all`；它只启动服务，systemd 开机启用状态由管理员另行设置。完成后用 `sudo bash /opt/nginxpanel/manage.sh` 打开管理菜单，再按第 6 节首次登录。
+默认立即启动：原生启用并启动对应服务；Docker 在启用并启动宿主机服务后执行生成 Compose 的 `up -d --pull never`。高级设置可关闭立即启动，之后可用管理脚本执行 `start all`；它只启动服务，systemd 开机启用状态由管理员另行设置。完成后用 `sudo bash /opt/nginxpanel/manage.sh` 打开管理菜单，再按第 6 节首次登录。
 
 原安装命令保存在 `/opt/nginxpanel/install-command.sh`。失败后保留材料，重新运行向导可核对并明确重试原命令；它沿用原参数，不能用于变更版本、数据目录或既定授权。已有非引导安装使用原参数续装。使用向导时，由向导完成材料批准和后续安装；下节说明手动参数安装方式。
 
@@ -170,6 +180,8 @@ sudo docker compose -f /etc/nginxpanel/docker/compose.yaml ps
 生成配置使用 host network，业务端口直接属于宿主机网络。保留安装器生成的用户、权限、挂载和容器身份约束；运行镜像通过面板维护流程更换。详见[Docker 部署参考](../deploy/docker/README.md)。
 
 ## 6. 首次访问与管理员初始化
+
+引导安装先在目标执行 `sudo bash /opt/nginxpanel/manage.sh info`，取得实际 SSH 转发命令、令牌与证书路径。向导可能避让已占用端口或改用 `/var/lib/nginxpanel`，以下默认示例需按该输出替换。
 
 在自己的电脑建立 SSH 转发，将下例用户名和主机替换为实际值，保持该 SSH 会话：
 

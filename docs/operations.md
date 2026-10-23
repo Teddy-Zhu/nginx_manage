@@ -41,7 +41,7 @@ sudo bash /opt/nginxpanel/manage.sh logs panel --follow
 sudo bash /opt/nginxpanel/manage.sh fingerprint
 ```
 
-`start/stop/restart` 默认仅操作 panel，可选择 `agent`、`nginx` 或 `all`；`all` 跳过明确未安装的 Nginx。非交互变更须加 `--yes`，交互变更先确认影响。原生使用 systemd，容器服务使用已生成的 Compose，宿主机 Agent 始终使用 systemd。
+`start/stop/restart` 默认仅操作 panel，可选择 `agent`、`nginx` 或 `all`；`all` 跳过明确未安装的 Nginx。非交互变更须加 `--yes`，交互变更先确认影响。原生使用 systemd，容器服务使用已生成的 Compose，宿主机 Agent 始终使用 systemd。Docker 操作固定使用本机 `/run/docker.sock`，不沿用远程 Docker context。
 
 Docker 状态同时显示容器及面板实际进程，容器停止时后者不可查询；容器已运行不等于业务已就绪。宿主机工具版本由 `info` 展示，当前面板程序版本仍按网页核对。
 
