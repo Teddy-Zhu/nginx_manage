@@ -3448,7 +3448,7 @@ components:
       properties:
         id: { type: string, minLength: 1, maxLength: 64 }
         path: { type: string, maxLength: 256 }
-        content: { type: string, maxLength: 262144 }
+        content: { type: string, maxLength: 8388608 }
         sha256: { type: string }
     Diagnostic:
       type: object
@@ -3489,7 +3489,7 @@ components:
         files: { type: array, items: { $ref: '#/components/schemas/File' } }
         access_lists: { type: array, items: { $ref: '#/components/schemas/AccessList' } }
         waf_policies: { type: array, items: { $ref: '#/components/schemas/WAFPolicy' } }
-        module_paths: { type: array, maxItems: 20000, description: 原文中的模块选择，草稿可能含重复或未批准路径，诊断会明确指出。, items: { type: string } }
+        module_paths: { type: array, maxItems: 524288, description: 原文中的模块选择，草稿可能含重复或未批准路径，诊断会明确指出。, items: { type: string } }
         resources: { type: array, items: { $ref: '#/components/schemas/Resource' } }
         diagnostics: { type: array, items: { $ref: '#/components/schemas/Diagnostic' } }
     ResourceMetadata:
@@ -3508,7 +3508,7 @@ components:
         name: { type: string, maxLength: 128 }
     AccessList:
       type: object
-      required: [id, file_id, name, notes, mode, entries, editable, reason]
+      required: [id, file_id, name, notes, mode, entries, countries, geoip_updated_at, editable, reason]
       properties:
         id: { type: string }
         file_id: { type: string }
@@ -3516,6 +3516,8 @@ components:
         notes: { type: string }
         mode: { type: string }
         entries: { type: array, items: { type: string } }
+        countries: { type: array, items: { type: string } }
+        geoip_updated_at: { type: integer, format: int64 }
         editable: { type: boolean }
         reason: { type: string }
     AccessListInput:
@@ -3527,6 +3529,7 @@ components:
         notes: { type: string, maxLength: 2048 }
         mode: { type: string, enum: [allowlist, denylist] }
         entries: { type: array, maxItems: 128, items: { type: string } }
+        countries: { type: array, maxItems: 250, items: { type: string, pattern: '^[A-Za-z]{2}$' } }
     DiffRequest:
       type: object
       required: [base_revision, files]
@@ -3989,6 +3992,7 @@ components:
         domains: { type: array, items: { type: string } }
         upstream: { type: string }
         upstream_servers: { type: array, maxItems: 128, items: { type: string } }
+        preserve_host: { type: boolean, default: false, description: 保留访问域名作为 Host；默认使用目标网站域名。 }
         metadata: { $ref: '#/components/schemas/ResourceMetadata' }
     SaveRequest:
       type: object

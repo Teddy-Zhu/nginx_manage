@@ -58,7 +58,7 @@ func inspectPath(name string) bool {
 
 func inspectFileInfo(info fs.FileInfo) bool {
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && info.Mode().IsRegular() && stat.Uid == 0 && stat.Nlink == 1 && info.Mode().Perm()&0022 == 0 && info.Size() <= 512<<10
+	return ok && info.Mode().IsRegular() && stat.Uid == 0 && stat.Nlink == 1 && info.Mode().Perm()&0022 == 0 && info.Size() <= limits.NginxRuntimeFileBytes
 }
 
 // Only regular, singly linked files beneath trusted directories are readable.
@@ -88,9 +88,9 @@ func inspectText(root, name string) (string, string, string) {
 	if err != nil || !os.SameFile(info, opened) || !inspectFileInfo(opened) {
 		return "", "unreadable", "读取时文件已变化"
 	}
-	data, err := io.ReadAll(io.LimitReader(f, (512<<10)+1))
+	data, err := io.ReadAll(io.LimitReader(f, limits.NginxRuntimeFileBytes+1))
 	after, statErr := f.Stat()
-	if err != nil || statErr != nil || !inspectFileInfo(after) || len(data) > 512<<10 || after.Size() != opened.Size() || !after.ModTime().Equal(opened.ModTime()) || !utf8.Valid(data) {
+	if err != nil || statErr != nil || !inspectFileInfo(after) || len(data) > limits.NginxRuntimeFileBytes || after.Size() != opened.Size() || !after.ModTime().Equal(opened.ModTime()) || !utf8.Valid(data) {
 		return "", "unreadable", "内容过大、不是 UTF-8 或读取时已变化"
 	}
 	return string(data), "readable", ""

@@ -20,8 +20,26 @@ func (p *Parsed) PortableFiles() ([]File, []string) {
 		files = append(files, File{ID: id, Path: name, Content: content, SHA256: secure.Hash([]byte(content))})
 	}
 	acls, wafs := map[string]bool{}, map[string]bool{}
+	geoACLs := false
 	for _, list := range p.Tree.AccessLists {
 		if !list.Editable {
+			continue
+		}
+		if len(list.Countries) > 0 {
+			for _, file := range p.Tree.Files {
+				if file.Path != accessGeoPath(list.ID) {
+					continue
+				}
+				nodes, _ := sourceNodes(file.Content)
+				sources := []string{}
+				for _, node := range nodes[0].Children[1:] {
+					sources = append(sources, node.Name)
+				}
+				geo, server := accessGeoSource(list.ID, accessMetadata{Name: list.ID, Mode: list.Mode, Entries: list.Entries, Countries: list.Countries, GeoIPUpdatedAt: list.GeoIPUpdatedAt}, sources)
+				add("acl-geo-"+list.ID, accessGeoPath(list.ID), geo)
+				add("acl-"+list.ID, accessListPath(list.ID), server)
+				acls[list.ID], geoACLs = true, true
+			}
 			continue
 		}
 		var body strings.Builder
@@ -74,8 +92,11 @@ func (p *Parsed) PortableFiles() ([]File, []string) {
 	}
 	main := InitialFiles()[0].Content
 	httpBody := ""
+	if geoACLs {
+		httpBody = "    include security/acl/*/http.conf;\n"
+	}
 	if len(wafs) > 0 {
-		httpBody = "    include security/waf/*/http.conf;\n"
+		httpBody += "    include security/waf/*/http.conf;\n"
 	}
 	if httpSites.Len() > 0 {
 		httpBody += "    " + strings.ReplaceAll(strings.TrimSuffix(httpSites.String(), "\n"), "\n", "\n    ") + "\n"

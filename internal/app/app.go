@@ -306,6 +306,14 @@ func Run(ctx context.Context, o Options) error {
 		fail2banService.Agent = agentClient
 	}
 	firewallService := &firewall.Service{DB: db, Vault: vault, Agent: agentClient}
+	config.ResolveCountries = func(ctx context.Context, countries []string) ([]string, int64, error) {
+		state, err := firewallService.GeoIP(ctx)
+		if err != nil {
+			return nil, 0, err
+		}
+		resolved, err := firewallService.ResolveGeoIP(ctx, firewall.GeoIPResolveInput{Version: state.Version, Countries: countries})
+		return resolved.Sources, resolved.UpdatedAt, err
+	}
 	migrationService := &migration.Service{HostDNS: dnsService, Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
 	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
 	static := &frontendHandler{data: o.DataDir, baseID: running.Release.ID, development: spa(o.WebDir), dev: o.Dev}

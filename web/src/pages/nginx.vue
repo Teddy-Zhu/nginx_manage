@@ -51,6 +51,7 @@ import { useAction, useIdempotency } from "../composables/action";
 import ConfigurationChanges from "../components/ConfigurationChanges.vue";
 import NginxExternal from "../components/NginxExternal.vue";
 import NginxModules from "../components/NginxModules.vue";
+import UpstreamMembers from "../components/UpstreamMembers.vue";
 const api = useNodeAPI();
 const { request } = api;
 
@@ -94,17 +95,31 @@ const createVisible = ref(false),
 const createName = ref(""),
   createNotes = ref(""),
   createMembers = ref("");
-const metadata = ref<ResourceMetadata>({ name: "", notes: "", enabled: true, client_deny: false });
+const metadata = ref<ResourceMetadata>({
+  name: "",
+  notes: "",
+  enabled: true,
+  client_deny: false,
+});
 const createKind = ref<"http" | "stream">("http"),
   createListen = ref("8080"),
   createDomains = ref(""),
   createUpstream = ref("");
+const createTargetMode = ref<"direct" | "group">("direct");
+const createHostMode = ref("target");
 const resource = ref<Resource | null>(null),
   fieldInputs = ref<Record<string, string>>({});
+const enablingGroup = ref(false);
 const regularFields = computed(() =>
   Object.fromEntries(
     Object.entries(resource.value?.fields ?? {}).filter(
-      ([name]) => name !== "certificate" && name !== "certificate_key",
+      ([name, field]) =>
+        name !== "certificate" &&
+        name !== "certificate_key" &&
+        (name !== "upstream_servers" ||
+          enablingGroup.value ||
+          field.editable ||
+          field.values.length > 0),
     ),
   ),
 );
@@ -228,8 +243,9 @@ const sourceJSON = computed(() =>
 const formDirty = computed(
   () =>
     resource.value &&
-    (JSON.stringify(metadata.value) !==
-      JSON.stringify(resource.value.metadata) ||
+    ((enablingGroup.value && !!fieldInputs.value.upstream_servers?.trim()) ||
+      JSON.stringify(metadata.value) !==
+        JSON.stringify(resource.value.metadata) ||
       Object.entries(resource.value.fields).some(
         ([name, field]) =>
           field.editable &&
@@ -346,7 +362,7 @@ function fieldOptions(name: string) {
       ...(tree.value?.access_lists
         .filter((item) => item.editable)
         .map((item) => ({
-          label: item.name || item.id.slice(0, 8),
+          label: `${item.name || item.id.slice(0, 8)} · ${item.mode === "allowlist" ? "白名单" : "黑名单"}`,
           value: item.id,
         })) ?? []),
     ];
@@ -356,7 +372,11 @@ function canPreset(kind: "websocket" | "streaming" | "http") {
   const fields =
     kind === "streaming"
       ? ["buffering", "request_buffering", "cache", "read_timeout"]
-      : ["request_headers", "http_version"];
+      : [
+          "request_headers",
+          "http_version",
+          ...(kind === "websocket" ? ["read_timeout"] : []),
+        ];
   return fields.every((field) => resource.value?.fields[field]?.editable);
 }
 function preset(kind: "websocket" | "streaming" | "http") {
@@ -385,6 +405,7 @@ function preset(kind: "websocket" | "streaming" | "http") {
       .filter((line) => !/^(Upgrade|Connection)\s/i.test(line.trim()));
     if (kind === "websocket")
       headers.push("Upgrade $http_upgrade", "Connection upgrade");
+    if (kind === "websocket") fieldInputs.value.read_timeout = "3600s";
     fieldInputs.value.request_headers = headers.filter(Boolean).join("\n");
     fieldInputs.value.http_version = "1.1";
   }
@@ -546,6 +567,7 @@ function selectResource(value: Resource) {
   if (formDirty.value && !window.confirm("字段修改尚未保存，确认切换？"))
     return;
   resource.value = value;
+  enablingGroup.value = false;
   metadata.value = { ...value.metadata };
   fieldInputs.value = Object.fromEntries(
     Object.entries(value.fields).map(([key, field]) => [key, fieldText(field)]),
@@ -564,7 +586,11 @@ async function saveFields() {
   const changes: Record<string, string[]> = {};
   for (const [name, field] of Object.entries(resource.value.fields)) {
     const value = fieldInputs.value[name] ?? "";
-    if (field.editable && value !== fieldText(field))
+    if (
+      (field.editable ||
+        (name === "upstream_servers" && enablingGroup.value)) &&
+      value !== fieldText(field)
+    )
       changes[name] = value.trim()
         ? field.format === "tokens"
           ? value.trim().split(/\s+/)
@@ -652,7 +678,10 @@ async function createResource() {
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean),
-    upstream_servers: createMembers.value
+    upstream_servers: (createTargetMode.value === "group"
+      ? createMembers.value
+      : ""
+    )
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean),
@@ -667,7 +696,15 @@ async function createResource() {
         ? createDomains.value.trim().split(/\s+/)
         : [],
     upstream: createUpstream.value.trim(),
+    preserve_host: createHostMode.value === "incoming",
   };
+  if (
+    createTargetMode.value === "group" &&
+    input.upstream_servers.length === 0
+  ) {
+    message.warning("请至少添加一个后端地址");
+    return;
+  }
   await run(async () => {
     const result = await api.createResource(input, keyFor(input));
     setTree(result.tree);
@@ -750,16 +787,16 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     </div>
     <div class="inline-gap">
       <AdvancedDetails title="更多操作">
-      <n-button :disabled="busy || !!formDirty" @click="changesVisible = true"
-        >配置差异</n-button
-      >
-      <n-button :disabled="busy || dirty" @click="externalVisible = true"
-        >外部修改</n-button
-      >
-      <n-button :disabled="busy || dirty" @click="modulesVisible = true"
-        >模块管理</n-button
-      >
-      <n-button :disabled="busy" @click="showHistory">修改记录</n-button>
+        <n-button :disabled="busy || !!formDirty" @click="changesVisible = true"
+          >配置差异</n-button
+        >
+        <n-button :disabled="busy || dirty" @click="externalVisible = true"
+          >外部修改</n-button
+        >
+        <n-button :disabled="busy || dirty" @click="modulesVisible = true"
+          >模块管理</n-button
+        >
+        <n-button :disabled="busy" @click="showHistory">修改记录</n-button>
       </AdvancedDetails>
       <n-button :disabled="busy" @click="load">刷新</n-button
       ><n-button
@@ -924,7 +961,6 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           <template v-if="resource"
             ><div class="section-heading">
               <h2>{{ resource.kind.toUpperCase() }} 代理</h2>
-
             </div>
             <div class="toolbar">
               <n-button
@@ -958,6 +994,18 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   v-model:value="metadata.enabled"
                   :disabled="busy || differsFromDesired"
               /></n-form-item>
+              <n-button
+                v-if="
+                  !resource.fields.upstream_servers?.editable && !enablingGroup
+                "
+                :disabled="
+                  busy ||
+                  differsFromDesired ||
+                  !resource.fields.upstream?.editable
+                "
+                @click="enablingGroup = true"
+                >配置 Upstream 上游组</n-button
+              >
               <template v-if="resource.kind === 'http'">
                 <n-form-item label="动态 IP 封禁">
                   <n-switch
@@ -972,7 +1020,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                       busy || differsFromDesired || !canPreset('websocket')
                     "
                     @click="preset('websocket')"
-                    >WebSocket</n-button
+                    >启用 WebSocket</n-button
                   ><n-button
                     :disabled="
                       busy || differsFromDesired || !canPreset('streaming')
@@ -1081,8 +1129,15 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                 :key="name"
                 :label="fieldLabels[name] ?? name"
                 :feedback="field.reason || fieldFeatureReason(name)"
-                ><n-select
-                  v-if="fieldOptions(name)"
+                ><upstream-members
+                  v-if="
+                    name === 'upstream_servers' &&
+                    (field.editable || enablingGroup)
+                  "
+                  v-model:value="fieldInputs[name]"
+                  :disabled="busy || differsFromDesired"
+                /><n-select
+                  v-else-if="fieldOptions(name)"
                   v-model:value="fieldInputs[name]"
                   :options="fieldOptions(name) ?? []"
                   :disabled="
@@ -1090,7 +1145,8 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                     !field.editable ||
                     differsFromDesired ||
                     !!fieldFeatureReason(name)
-                  " />
+                  "
+                />
                 <n-input
                   v-else
                   v-model:value="fieldInputs[name]"
@@ -1101,7 +1157,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                     differsFromDesired ||
                     !!fieldFeatureReason(name)
                   "
-                  placeholder="未设置" /></n-form-item
+                  placeholder="未设置"
+                />
+                <router-link v-if="name === 'access_list'" to="/access-lists"
+                  >管理 IP 与国家黑白名单</router-link
+                ></n-form-item
               ><n-button
                 type="primary"
                 :loading="busy"
@@ -1143,7 +1203,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     v-model:show="createVisible"
     preset="card"
     title="新建代理配置"
-    style="width: 480px; max-width: 94vw"
+    style="width: 860px; max-width: 94vw"
     ><n-form :disabled="busy" @submit.prevent="createResource">
       <n-form-item label="名称"
         ><n-input v-model:value="createName" :maxlength="128"
@@ -1167,21 +1227,38 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         ><n-input
           v-model:value="createDomains"
           placeholder="多个域名使用空格分隔" /></n-form-item
-      ><n-form-item label="上游地址"
+      ><n-form-item label="转发目标"
+        ><n-select
+          v-model:value="createTargetMode"
+          :options="[
+            { label: '网站或单一后端', value: 'direct' },
+            { label: 'Upstream 上游组', value: 'group' },
+          ]"
+      /></n-form-item>
+      <n-form-item
+        :label="
+          createKind === 'http'
+            ? createTargetMode === 'group'
+              ? '后端网站地址（协议、域名和路径）'
+              : '目标网站地址'
+            : '上游地址'
+        "
         ><n-input
           v-model:value="createUpstream"
           :placeholder="
             createKind === 'http' ? 'http://127.0.0.1:3000' : '127.0.0.1:5432'
           " /></n-form-item
-      ><n-form-item label="可选上游组成员"
-        ><n-input
-          v-model:value="createMembers"
-          type="textarea"
-          placeholder="127.0.0.1:3000 weight=2&#10;127.0.0.1:3001 weight=1"
+      ><n-form-item v-if="createTargetMode === 'group'" label="上游组成员"
+        ><upstream-members v-model:value="createMembers"
       /></n-form-item>
-      <p class="muted">
-        上游组成员留空时使用单一地址。HTTPS 上游地址的主机名用于 TLS 校验。
-      </p>
+      <n-form-item v-if="createKind === 'http'" label="转发 Host 请求头"
+        ><n-select
+          v-model:value="createHostMode"
+          :options="[
+            { label: '目标网站域名', value: 'target' },
+            { label: '保留访问域名', value: 'incoming' },
+          ]"
+      /></n-form-item>
       <n-button block type="primary" attr-type="submit" :loading="busy"
         >保存配置</n-button
       ></n-form

@@ -224,6 +224,7 @@ func Parse(files []File, policy Policy) (*Parsed, error) {
 		return nil, errors.New("配置树必须包含 1–128 个文件")
 	}
 	p := &Parsed{Tree: Tree{Files: append([]File(nil), files...), Resources: []Resource{}, Diagnostics: []Diagnostic{}, AccessLists: []AccessList{}, WAFPolicies: []WAFPolicy{}}, Documents: map[string]*Document{}}
+	p.policy = policy
 	paths := map[string]File{}
 	size := 0
 	directives := 0

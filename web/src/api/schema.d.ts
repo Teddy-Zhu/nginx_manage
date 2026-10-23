@@ -5830,6 +5830,9 @@ export interface components {
             notes: string;
             mode: string;
             entries: string[];
+            countries: string[];
+            /** Format: int64 */
+            geoip_updated_at: number;
             editable: boolean;
             reason: string;
         };
@@ -5841,6 +5844,7 @@ export interface components {
             /** @enum {string} */
             mode: "allowlist" | "denylist";
             entries: string[];
+            countries?: string[];
         };
         DiffRequest: {
             /** @description 空值表示无站点初始配置。 */
@@ -6323,6 +6327,11 @@ export interface components {
             domains: string[];
             upstream: string;
             upstream_servers?: string[];
+            /**
+             * @description 保留访问域名作为 Host；默认使用目标网站域名。
+             * @default false
+             */
+            preserve_host: boolean;
             metadata?: components["schemas"]["ResourceMetadata"];
         };
         SaveRequest: {

@@ -20,11 +20,12 @@ var ErrInvalid = errors.New("配置未通过校验；可保存为独立草稿")
 var ErrNotFound = errors.New("资源不存在")
 
 type Service struct {
-	DB              *sql.DB
-	Vault           *secure.Vault
-	Policy          Policy
-	RequireFeatures func(context.Context, []string) error
-	Certificates    *certificates.Service
+	DB               *sql.DB
+	Vault            *secure.Vault
+	Policy           Policy
+	RequireFeatures  func(context.Context, []string) error
+	Certificates     *certificates.Service
+	ResolveCountries func(context.Context, []string) ([]string, int64, error)
 }
 type SaveRequest struct {
 	BaseVersion int64  `json:"base_version"`

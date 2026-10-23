@@ -17,14 +17,16 @@ const accessListPrefix = "# nginxpanel:access-list "
 func accessListPath(id string) string { return "security/acl/" + id + ".conf" }
 
 type AccessList struct {
-	ID       string   `json:"id"`
-	FileID   string   `json:"file_id"`
-	Name     string   `json:"name"`
-	Notes    string   `json:"notes"`
-	Mode     string   `json:"mode"`
-	Entries  []string `json:"entries"`
-	Editable bool     `json:"editable"`
-	Reason   string   `json:"reason"`
+	ID             string   `json:"id"`
+	FileID         string   `json:"file_id"`
+	Name           string   `json:"name"`
+	Notes          string   `json:"notes"`
+	Mode           string   `json:"mode"`
+	Entries        []string `json:"entries"`
+	Countries      []string `json:"countries"`
+	GeoIPUpdatedAt int64    `json:"geoip_updated_at"`
+	Editable       bool     `json:"editable"`
+	Reason         string   `json:"reason"`
 }
 type AccessListRequest struct {
 	BaseVersion int64    `json:"base_version"`
@@ -32,19 +34,25 @@ type AccessListRequest struct {
 	Notes       string   `json:"notes"`
 	Mode        string   `json:"mode"`
 	Entries     []string `json:"entries"`
+	Countries   []string `json:"countries"`
 }
 type accessMetadata struct {
-	Name  string `json:"name"`
-	Notes string `json:"notes"`
+	Name           string   `json:"name"`
+	Notes          string   `json:"notes"`
+	Mode           string   `json:"mode,omitempty"`
+	Entries        []string `json:"entries,omitempty"`
+	Countries      []string `json:"countries,omitempty"`
+	GeoIPUpdatedAt int64    `json:"geoip_updated_at,omitempty"`
 }
 
 func accessHeader(in accessMetadata) string {
 	b, _ := json.Marshal(in)
 	return accessListPrefix + string(b)
 }
-func accessDocument(file File) (AccessList, []*Node, int, int) {
+func accessDocument(file File, geoFile File) (AccessList, []*Node, int, int) {
 	id := strings.TrimSuffix(strings.TrimPrefix(file.Path, "security/acl/"), ".conf")
-	r := AccessList{ID: id, FileID: file.ID, Name: id, Entries: []string{}, Editable: true}
+	r := AccessList{ID: id, FileID: file.ID, Name: id, Entries: []string{}, Countries: []string{}, Editable: true}
+	var metadata accessMetadata
 	start, end := -1, -1
 	l := lexer{source: file.Content, line: 1}
 	for {
@@ -58,7 +66,6 @@ func accessDocument(file File) (AccessList, []*Node, int, int) {
 			return r, nil, start, end
 		}
 		if token.Kind == "comment" && strings.HasPrefix(token.Value, accessListPrefix) {
-			var metadata accessMetadata
 			d := json.NewDecoder(strings.NewReader(strings.TrimPrefix(token.Value, accessListPrefix)))
 			d.DisallowUnknownFields()
 			if start >= 0 || d.Decode(&metadata) != nil || d.Decode(new(any)) != io.EOF || validateMetadata(ResourceMetadata{Name: metadata.Name, Notes: metadata.Notes}) != nil {
@@ -74,6 +81,9 @@ func accessDocument(file File) (AccessList, []*Node, int, int) {
 		r.Editable = false
 		r.Reason = "文件未登记为受管访问列表"
 		return r, nil, start, end
+	}
+	if len(metadata.Countries) > 0 {
+		return accessGeoDocument(r, metadata, file, geoFile), nil, start, end
 	}
 	l = lexer{source: file.Content, line: 1}
 	nodes, _, err := l.nodes(0)
@@ -108,6 +118,10 @@ func accessDocument(file File) (AccessList, []*Node, int, int) {
 }
 func accessLists(files []File) []AccessList {
 	out := []AccessList{}
+	byPath := map[string]File{}
+	for _, file := range files {
+		byPath[file.Path] = file
+	}
 	for _, file := range files {
 		if !strings.HasPrefix(file.Path, "security/acl/") || !strings.HasSuffix(file.Path, ".conf") {
 			continue
@@ -116,7 +130,7 @@ func accessLists(files []File) []AccessList {
 		if !resourceID.MatchString(id) {
 			continue
 		}
-		r, _, _, _ := accessDocument(file)
+		r, _, _, _ := accessDocument(file, byPath[accessGeoPath(id)])
 		out = append(out, r)
 	}
 	return out
@@ -183,6 +197,9 @@ func (s *Service) AccessList(ctx context.Context, p auth.Principal, requestID, k
 	} else if !resourceID.MatchString(id) || index < 0 {
 		return SaveResult{}, ErrNotFound
 	}
+	if action == "delete" && hasGeoAccessList(tree, id) {
+		return s.saveGeoAccessList(ctx, p, requestID, key, id, action, in, tree, index, digest)
+	}
 	if action == "delete" {
 		parsed, err := Parse(files, s.Policy)
 		if err != nil {
@@ -207,6 +224,17 @@ func (s *Service) AccessList(ctx context.Context, p auth.Principal, requestID, k
 		}
 		files = append(files[:index], files[index+1:]...)
 	} else {
+		return s.saveAccessList(ctx, p, requestID, key, id, action, in, tree, index, digest)
+	}
+	return s.save(ctx, p, requestID, key, SaveRequest{BaseVersion: in.BaseVersion, Files: files}, digest)
+}
+
+func (s *Service) saveAccessList(ctx context.Context, p auth.Principal, requestID, key, id, action string, in AccessListRequest, tree Tree, index int, digest string) (SaveResult, error) {
+	files := append([]File(nil), tree.Files...)
+	if len(in.Countries) > 0 || index >= 0 && hasGeoAccessList(tree, id) {
+		return s.saveGeoAccessList(ctx, p, requestID, key, id, action, in, tree, index, digest)
+	}
+	{
 		rule, last := "deny", "allow"
 		if in.Mode == "allowlist" {
 			rule, last = "allow", "deny"
@@ -220,7 +248,7 @@ func (s *Service) AccessList(ctx context.Context, p auth.Principal, requestID, k
 		if action == "create" {
 			files = append(files, File{ID: secure.ID(), Path: accessListPath(id), Content: header + "\n" + strings.Join(rows, "\n") + "\n"})
 		} else {
-			list, nodes, start, end := accessDocument(files[index])
+			list, nodes, start, end := accessDocument(files[index], File{})
 			if !list.Editable {
 				return SaveResult{}, fault.Conflict(list.Reason)
 			}

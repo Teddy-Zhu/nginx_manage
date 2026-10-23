@@ -82,7 +82,7 @@ func validRuntimeHistory(r Record) error {
 		for target := range targets {
 			found = found || historyPath(target, e.Path)
 		}
-		if !found || !fs.ValidPath(e.Path) || len(e.Path) > 512 || seen[e.Path] || e.Inode == 0 || e.Size < 0 || e.Size > 512<<10 {
+		if !found || !fs.ValidPath(e.Path) || len(e.Path) > 512 || seen[e.Path] || e.Inode == 0 || e.Size < 0 || e.Size > limits.NginxRuntimeFileBytes {
 			return errors.New("运行清理清单无效")
 		}
 		if e.Directory {

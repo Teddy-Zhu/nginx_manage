@@ -3498,19 +3498,22 @@ type ACMERenewalSource string
 
 // AccessList defines model for AccessList.
 type AccessList struct {
-	Editable bool     `json:"editable"`
-	Entries  []string `json:"entries"`
-	FileId   string   `json:"file_id"`
-	Id       string   `json:"id"`
-	Mode     string   `json:"mode"`
-	Name     string   `json:"name"`
-	Notes    string   `json:"notes"`
-	Reason   string   `json:"reason"`
+	Countries      []string `json:"countries"`
+	Editable       bool     `json:"editable"`
+	Entries        []string `json:"entries"`
+	FileId         string   `json:"file_id"`
+	GeoipUpdatedAt int64    `json:"geoip_updated_at"`
+	Id             string   `json:"id"`
+	Mode           string   `json:"mode"`
+	Name           string   `json:"name"`
+	Notes          string   `json:"notes"`
+	Reason         string   `json:"reason"`
 }
 
 // AccessListInput defines model for AccessListInput.
 type AccessListInput struct {
 	BaseVersion int64               `json:"base_version"`
+	Countries   *[]string           `json:"countries,omitempty"`
 	Entries     []string            `json:"entries"`
 	Mode        AccessListInputMode `json:"mode"`
 	Name        string              `json:"name"`
@@ -4126,10 +4129,13 @@ type CreateResource struct {
 	Kind        CreateResourceKind `json:"kind"`
 
 	// Listen 每项为一条监听的地址及选项。
-	Listen          []string          `json:"listen"`
-	Metadata        *ResourceMetadata `json:"metadata,omitempty"`
-	Upstream        string            `json:"upstream"`
-	UpstreamServers *[]string         `json:"upstream_servers,omitempty"`
+	Listen   []string          `json:"listen"`
+	Metadata *ResourceMetadata `json:"metadata,omitempty"`
+
+	// PreserveHost 保留访问域名作为 Host；默认使用目标网站域名。
+	PreserveHost    *bool     `json:"preserve_host,omitempty"`
+	Upstream        string    `json:"upstream"`
+	UpstreamServers *[]string `json:"upstream_servers,omitempty"`
 }
 
 // CreateResourceKind defines model for CreateResource.Kind.

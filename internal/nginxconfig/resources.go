@@ -18,6 +18,7 @@ type CreateRequest struct {
 	Domains         []string          `json:"domains"`
 	Upstream        string            `json:"upstream"`
 	UpstreamServers []string          `json:"upstream_servers"`
+	PreserveHost    bool              `json:"preserve_host"`
 	Metadata        *ResourceMetadata `json:"metadata,omitempty"`
 }
 
@@ -112,8 +113,15 @@ func (s *Service) CreateResource(ctx context.Context, p auth.Principal, requestI
 		block.WriteString("        listen " + argsText(args) + ";\n")
 	}
 	if in.Kind == "http" {
-		block.WriteString("        server_name " + argsText(in.Domains) + ";\n        access_log logs/nginx/" + id + "/access.log nginxpanel_http;\n        error_log logs/nginx/" + id + "/error.log warn;\n        location / {\n            proxy_pass " + quote(upstream) + ";\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n            proxy_set_header X-Forwarded-Proto $scheme;\n            proxy_connect_timeout 10s;\n            proxy_read_timeout 60s;\n")
 		u, _ := url.Parse(in.Upstream)
+		host := "$proxy_host"
+		if group != "" {
+			host = u.Host
+		}
+		if in.PreserveHost {
+			host = "$host"
+		}
+		block.WriteString("        server_name " + argsText(in.Domains) + ";\n        access_log logs/nginx/" + id + "/access.log nginxpanel_http;\n        error_log logs/nginx/" + id + "/error.log warn;\n        location / {\n            proxy_pass " + quote(upstream) + ";\n            proxy_http_version 1.1;\n            proxy_set_header Host " + host + ";\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n            proxy_set_header X-Forwarded-Proto $scheme;\n            proxy_connect_timeout 10s;\n            proxy_read_timeout 60s;\n")
 		if u.Scheme == "https" {
 			name := "$proxy_host"
 			if group != "" {

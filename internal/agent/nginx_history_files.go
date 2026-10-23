@@ -13,13 +13,14 @@ import (
 	"syscall"
 
 	"nginxpanel/internal/certificates"
+	"nginxpanel/internal/limits"
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/secure"
 )
 
 const runtimeHistoryKind = "nginx.history.cleanup"
 const historyEntryMax = 512
-const historyBytesMax = 16 << 20
+const historyBytesMax = limits.TreeBytes * 4
 
 type runtimeHistoryEntry struct {
 	Path      string `json:"path"`
@@ -146,13 +147,13 @@ func (n *Nginx) historyEntry(ctx context.Context, relative string) (runtimeHisto
 	e.GID = st.Gid
 	e.Mode = uint32(info.Mode())
 	if !e.Directory {
-		if info.Size() < 0 || info.Size() > 512<<10 {
+		if info.Size() < 0 || info.Size() > limits.NginxRuntimeFileBytes {
 			return e, ErrExternalChange
 		}
 		if err = ctx.Err(); err != nil {
 			return e, err
 		}
-		raw, err := nginxmodules.ReadTrusted(name, 512<<10)
+		raw, err := nginxmodules.ReadTrusted(name, limits.NginxRuntimeFileBytes)
 		if err != nil {
 			return e, err
 		}

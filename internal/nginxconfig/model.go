@@ -3,7 +3,7 @@ package nginxconfig
 import "fmt"
 
 const ParserVersion = "crossplane-0.4.89+spans-4"
-const PolicyVersion = "nginxpanel-8"
+const PolicyVersion = "nginxpanel-9"
 
 type File struct {
 	ID      string `json:"id"`
@@ -84,6 +84,7 @@ type Parsed struct {
 	Documents       map[string]*Document
 	RequiredScopes  []string
 	runtimeExcluded map[string]bool
+	policy          Policy
 }
 
 type PatchRequest struct {

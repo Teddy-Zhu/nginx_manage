@@ -2,9 +2,10 @@
 package limits
 
 const (
-	RequestBytes             = 4 << 20
-	TreeBytes                = 2 << 20
-	FileBytes                = 256 << 10
+	RequestBytes             = 64 << 20
+	TreeBytes                = 16 << 20
+	FileBytes                = 8 << 20
+	NginxRuntimeFileBytes    = FileBytes * 2
 	Files                    = 128
 	PublishedRevisions       = 128
 	NginxListeners           = 256
@@ -27,7 +28,7 @@ const (
 	CertificateBundleBytes   = 1 << 20
 	WAFPolicies              = 32
 	WAFPaths                 = 128
-	Directives               = 20000
+	Directives               = 524288
 	Depth                    = 32
 	PageSize                 = 100
 	QueuedTasks              = 100

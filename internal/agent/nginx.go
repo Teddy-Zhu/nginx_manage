@@ -756,7 +756,7 @@ func (n *Nginx) readManifest(dir string) (manifest, error) {
 			return nil
 		}
 		want, ok := m.Files[rel]
-		if !ok || info.Size() > 512<<10 {
+		if !ok || info.Size() > limits.NginxRuntimeFileBytes {
 			return ErrExternalChange
 		}
 		data, err := os.ReadFile(name)

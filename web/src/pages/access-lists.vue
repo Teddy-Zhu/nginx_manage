@@ -1,8 +1,8 @@
 <route lang="json">
 {
   "meta": {
-    "title": "IP 访问控制",
-    "subtitle": "管理网站的 IP 黑白名单",
+    "title": "网站访问控制",
+    "subtitle": "管理网站的 IP 与国家黑白名单",
     "nav": true,
     "order": 3,
     "symbol": "◈",
@@ -26,8 +26,15 @@ import {
   NSelect,
   type DataTableColumns,
 } from "naive-ui";
-import { useNodeAPI, type AccessList, type Tree } from "../api/client";
+import {
+  useNodeAPI,
+  type AccessList,
+  type Tree,
+  type GeoIPState,
+} from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
+import GeoIPSourcePanel from "../components/GeoIPSourcePanel.vue";
+import { countryOptions } from "../utils/countries";
 const api = useNodeAPI();
 
 const { run, busy } = useAction(),
@@ -39,6 +46,23 @@ const name = ref(""),
   notes = ref(""),
   mode = ref<"allowlist" | "denylist">("denylist"),
   entries = ref("");
+const countries = ref<string[]>([]);
+const geoIP = ref<GeoIPState | null>(null);
+const geoError = ref("");
+const sourceOpen = ref(false);
+const usedCountries = computed(() => [
+  ...new Set([
+    ...(tree.value?.access_lists.flatMap((list) => list.countries) ?? []),
+    ...countries.value,
+  ]),
+]);
+const countryNames = (codes: string[]) =>
+  codes
+    .map(
+      (code) =>
+        countryOptions.find((option) => option.value === code)?.label ?? code,
+    )
+    .join("、");
 const baseline = ref("");
 const formJSON = computed(() =>
   JSON.stringify({
@@ -46,6 +70,7 @@ const formJSON = computed(() =>
     notes: notes.value,
     mode: mode.value,
     entries: entries.value,
+    countries: countries.value,
   }),
 );
 const dirty = computed(
@@ -75,6 +100,12 @@ const columns: DataTableColumns<AccessList> = [
   },
   { title: "地址数", key: "entries", render: (row) => row.entries.length },
   {
+    title: "国家和地区",
+    key: "countries",
+    render: (row) =>
+      row.countries.length ? countryNames(row.countries) : "未限制",
+  },
+  {
     title: "状态",
     key: "editable",
     render: (row) => (row.editable ? "可编辑" : "通过高级配置编辑"),
@@ -88,6 +119,7 @@ function open(row: AccessList | null) {
   notes.value = row?.notes ?? "";
   mode.value = row?.mode === "allowlist" ? "allowlist" : "denylist";
   entries.value = row?.entries.join("\n") ?? "";
+  countries.value = [...(row?.countries ?? [])];
   baseline.value = formJSON.value;
 }
 async function load() {
@@ -96,6 +128,13 @@ async function load() {
     tree.value = await api.tree();
     selected.value = null;
     editing.value = false;
+    try {
+      geoIP.value = await api.firewallGeoIP();
+      geoError.value = "";
+    } catch (error) {
+      geoError.value =
+        error instanceof Error ? error.message : "国家 IP 数据加载失败";
+    }
   });
 }
 async function save() {
@@ -107,6 +146,7 @@ async function save() {
     name: name.value,
     notes: notes.value,
     mode: mode.value,
+    countries: countries.value,
     entries: entries.value
       .split("\n")
       .map((line) => line.trim())
@@ -166,9 +206,34 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     </div>
   </div>
   <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >访问列表绑定后才控制对应代理。白名单允许所列地址并拒绝其余地址，黑名单拒绝所列地址并允许其余地址。修改保存后需在
-    <router-link to="/nginx">Nginx 配置</router-link> 中应用。</n-alert
+    >白名单仅允许所选 IP 或国家访问，黑名单阻止所选 IP 或国家访问。保存后，在
+    <router-link to="/nginx">网站与代理</router-link> 中绑定并应用。</n-alert
   >
+  <section class="surface" style="margin-bottom: 20px">
+    <div class="section-heading">
+      <h2>国家 IP 数据</h2>
+      <n-button @click="sourceOpen = !sourceOpen">{{
+        sourceOpen ? "收起" : "管理数据源"
+      }}</n-button>
+    </div>
+    <n-alert v-if="geoError" type="warning" :bordered="false">{{
+      geoError
+    }}</n-alert>
+    <GeoIPSourcePanel
+      v-if="sourceOpen"
+      :state="geoIP"
+      :writable="!busy"
+      :countries="usedCountries"
+      @changed="geoIP = $event"
+    />
+    <p v-else class="muted">
+      {{
+        geoIP?.ready
+          ? `${geoIP.source.name} · 最近更新 ${new Date(geoIP.updated_at * 1000).toLocaleString()}`
+          : "添加国家规则前，请先更新国家 IP 数据。"
+      }}
+    </p>
+  </section>
   <div class="two-columns">
     <section class="surface">
       <div class="section-heading"><h2>访问列表</h2></div>
@@ -236,7 +301,30 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               placeholder="192.0.2.1&#10;2001:db8::/32"
               :disabled="busy || selected?.editable === false"
           /></n-form-item>
-          <p v-if="mode === 'allowlist' && !entries.trim()" class="muted">
+          <n-form-item label="国家和地区"
+            ><n-select
+              v-model:value="countries"
+              multiple
+              filterable
+              :options="countryOptions"
+              :disabled="busy || selected?.editable === false"
+              placeholder="选择国家和地区，可与 IP 地址一起使用"
+          /></n-form-item>
+          <n-alert
+            v-if="countries.length && !geoIP?.ready"
+            type="warning"
+            :bordered="false"
+            >请先在“管理数据源”中更新国家 IP 数据。</n-alert
+          >
+          <p v-if="selected?.geoip_updated_at" class="muted">
+            当前规则的国家数据：{{
+              new Date(selected.geoip_updated_at * 1000).toLocaleString()
+            }}。更新数据后，重新保存并应用规则以同步。
+          </p>
+          <p
+            v-if="mode === 'allowlist' && !entries.trim() && !countries.length"
+            class="muted"
+          >
             空白名单会拒绝全部地址。
           </p>
           <p class="muted">
@@ -251,7 +339,16 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             attr-type="submit"
             :loading="busy"
             :disabled="
-              busy || selected?.editable === false || (!!selected && !dirty)
+              busy ||
+              selected?.editable === false ||
+              (countries.length > 0 && !geoIP?.ready) ||
+              (!!selected &&
+                !dirty &&
+                !(
+                  countries.length &&
+                  geoIP &&
+                  geoIP.updated_at !== selected.geoip_updated_at
+                ))
             "
             >保存规则</n-button
           >

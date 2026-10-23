@@ -119,6 +119,9 @@ func (p *Parsed) Patch(id string, changes map[string][]string, metadata *Resourc
 	if err != nil {
 		return nil, err
 	}
+	if members, changed := changes["upstream_servers"]; changed && len(members) > 0 && !resource.Fields["upstream_servers"].Editable {
+		return p.patchNewUpstream(id, changes, metadata)
+	}
 	if resource.Kind == "http" && len(changes["upstream"]) == 1 && strings.HasPrefix(changes["upstream"][0], "https://") {
 		expanded := map[string][]string{}
 		for name, values := range changes {
