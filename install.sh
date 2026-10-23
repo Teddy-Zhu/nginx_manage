@@ -9,11 +9,13 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 root=$(cd -- "$(dirname -- "$0")" && pwd -P)
 usage() {
   cat <<'EOF'
-用法：sudo bash install.sh [--yes] [--advanced] [--port 端口]
+用法：sudo bash install.sh [--yes] [--advanced] [--port 端口] [--fresh | --uninstall [--keep-data | --purge]]
 自动检测本机系统、架构、安装材料、Docker、Nginx 和管理端口，确认推荐方案后安装。
 源码目录自动使用 Docker 编译并接续安装，无需手动构建或解包。
 --port 指定管理端口；不指定时自动选择随机空闲端口，默认允许外部访问。
---yes 使用推荐配置直接安装；--advanced 才逐项调整路径、部署方式和主机授权。
+--yes 直接确认所选操作（包括完全卸载的数据删除）；--advanced 才逐项调整安装配置。
+--fresh 完全卸载旧安装后安装当前源码/安装包，永久删除原数据；适用于尚未使用的环境。
+--uninstall 使用当前源码/安装包中的程序检查并卸载旧安装，默认保留数据，--purge 完全卸载。
 不会安装宿主机编译工具、自动安装 Docker 或接管已有系统 Nginx。
 
 带参数时转交标准安装器，例如：
@@ -21,18 +23,26 @@ sudo bash install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/w
 完整参数：bash deploy/native/install.sh --help
 EOF
 }
-auto_confirm=no advanced=no requested_port=
+auto_confirm=no advanced=no requested_port= fresh=no uninstall=no purge=no keep_data=no
 while (($#)); do
   case "$1" in
     --yes) auto_confirm=yes; shift ;;
     --advanced) advanced=yes; shift ;;
+    --fresh) fresh=yes; shift ;;
+    --uninstall) uninstall=yes; shift ;;
+    --purge) purge=yes; shift ;;
+    --keep-data) keep_data=yes; shift ;;
     --port) (($# >= 2)) && [[ -n $2 ]] || die '--port 缺少端口'; requested_port=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
-      [[ $auto_confirm == no && $advanced == no && -z $requested_port ]] || die '--yes/--advanced/--port 不能与标准安装器参数混用'
+      [[ $auto_confirm == no && $advanced == no && -z $requested_port && $fresh == no && $uninstall == no && $purge == no && $keep_data == no ]] || die '引导入口选项不能与标准安装器参数混用'
       exec /bin/bash "$root/deploy/native/install.sh" "$@" ;;
   esac
 done
+[[ $fresh == no || $uninstall == no ]] || die '--fresh 和 --uninstall 不能混用'
+[[ $purge == no || $uninstall == yes ]] || die '--purge 只能与 --uninstall 一起使用'
+[[ $keep_data == no || $uninstall == yes && $purge == no ]] || die '--keep-data 只能与 --uninstall 一起使用，不能与 --purge 混用'
+[[ $uninstall == no || $advanced == no && -z $requested_port ]] || die '卸载不接受 --advanced 或 --port'
 if [[ -n $requested_port ]]; then
   [[ $requested_port =~ ^[1-9][0-9]{3,4}$ ]] && ((requested_port >= 1024 && requested_port <= 65535)) || die '端口须为 1024–65535'
 fi
@@ -131,6 +141,74 @@ finish() {
   printf '\n管理入口：sudo bash /opt/nginxpanel/manage.sh\n'
   /bin/bash /opt/nginxpanel/manage.sh info
 }
+install_from_source() {
+  command -v docker >/dev/null || die '源码入口需要已有 Docker；无需编译时请使用 setup.sh 下载 Release'
+  case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
+  build_work=$(mktemp -d /tmp/nginxpanel-build.XXXXXXXX)
+  trap 'rm -rf -- "$build_work"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  /bin/bash "$root/scripts/build.sh" --output-dir "$build_work"
+  install -d -m 0700 "$build_work/package"
+  tar -xf "$build_work/nginxpanel-linux-$arch.tar" -C "$build_work/package"
+  next_args=()
+  if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
+  if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
+  if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
+  if [[ $fresh == yes ]]; then next_args+=(--fresh); fi
+  if [[ $uninstall == yes ]]; then next_args+=(--uninstall); fi
+  if [[ $purge == yes ]]; then next_args+=(--purge); fi
+  if [[ $keep_data == yes ]]; then next_args+=(--keep-data); fi
+  /bin/bash "$build_work/package/install.sh" "${next_args[@]}"
+  exit 0
+}
+source_tree=no
+if [[ -f $root/scripts/build.sh && -f $root/go.mod && -f $root/web/package.json ]]; then source_tree=yes; fi
+if [[ $fresh == yes || $uninstall == yes ]]; then
+  [[ $(uname -s) == Linux && -d /run/systemd/system ]] || die '安装目标需要运行 systemd 的 Linux 主机'
+  if [[ $uninstall == yes ]]; then
+    [[ -e /etc/nginxpanel/install/intent || -L /etc/nginxpanel/install/intent ]] || die '未发现本系统安装记录，无需卸载'
+  fi
+  # Build/download the new tools before touching the old installation. Normal
+  # installation still returns early for an already completed installation.
+  if [[ $source_tree == yes ]]; then install_from_source; fi
+  if [[ -e /etc/nginxpanel/install/intent || -L /etc/nginxpanel/install/intent ]]; then
+    trusted_file /etc/nginxpanel/install/intent
+    root_chain /opt
+    installer_lifecycle_stage=$(mktemp -d /opt/.nginxpanel-lifecycle.XXXXXXXX)
+    trap 'rm -rf -- "$installer_lifecycle_stage"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # A sibling directory survives full removal even when the input package was
+    # unpacked under the application's program or data directory.
+    cp -R -- "$root/." "$installer_lifecycle_stage/"
+    chmod -R u=rwX,go= "$installer_lifecycle_stage"
+    for control in install.sh manage.sh deploy/native/install.sh deploy/native/lifecycle.sh; do
+      trusted_file "$installer_lifecycle_stage/$control"
+    done
+    candidate=$installer_lifecycle_stage/nginxpanel
+    candidate_web=$installer_lifecycle_stage/web
+    if [[ ! -f $candidate ]]; then candidate=$installer_lifecycle_stage/bin/nginxpanel; candidate_web=$installer_lifecycle_stage/web/dist; fi
+    trusted_file "$candidate"
+    [[ -x $candidate ]] || die '安装包缺少可执行程序'
+    if [[ $fresh == yes ]]; then trusted_file "$candidate_web/index.html"; fi
+    case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
+    [[ $(elf_arch "$candidate") == "$arch" ]] || die '安装包程序与本机架构不匹配'
+    removal_args=(uninstall --checker-binary "$candidate")
+    if [[ $fresh == yes || $purge == yes ]]; then removal_args+=(--purge); fi
+    if [[ $auto_confirm == yes ]]; then removal_args+=(--yes); fi
+    /bin/bash "$installer_lifecycle_stage/manage.sh" "${removal_args[@]}"
+    if [[ $uninstall == yes ]]; then exit 0; fi
+    next_args=()
+    if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
+    if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
+    if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
+    /bin/bash "$installer_lifecycle_stage/install.sh" "${next_args[@]}"
+    exit 0
+  elif [[ -e /opt/nginxpanel/install-command.sh || -L /opt/nginxpanel/install-command.sh ]]; then
+    die '初次安装尚未建立可信安装记录，请先使用原命令完成安装；不能自动清理无绑定的安装材料'
+  fi
+fi
 plan=/opt/nginxpanel/install-command.sh
 if [[ -e /etc/nginxpanel/install/lifecycle || -L /etc/nginxpanel/install/lifecycle ]]; then
   trusted_file /etc/nginxpanel/install/lifecycle
@@ -148,7 +226,7 @@ if [[ -e $plan || -L $plan ]]; then
   if [[ -e /opt/nginxpanel/install-complete || -L /opt/nginxpanel/install-complete ]]; then
     trusted_file /opt/nginxpanel/install-complete
     trusted_file /etc/nginxpanel/install/ready
-    printf '%s\n' '已安装，保留当前配置；日常操作使用管理脚本，版本更新使用面板维护入口。'
+    printf '%s\n' '已安装，未更新程序。保留数据升级使用面板维护入口；尚未使用且允许清空数据时，执行最新源码或安装包中的 install.sh --fresh。'
     finish
     exit 0
   fi
@@ -167,22 +245,7 @@ for tool in stat readlink od find sha256sum timeout systemctl tar mktemp; do
 done
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
 # 源码入口与发行包入口最终使用同一个安装器，构建产物不写回源码树。
-if [[ -f $root/scripts/build.sh && -f $root/go.mod && -f $root/web/package.json ]]; then
-  command -v docker >/dev/null || die '源码安装需要已有 Docker；无需编译时请使用 setup.sh 下载 Release'
-  build_work=$(mktemp -d /tmp/nginxpanel-build.XXXXXXXX)
-  trap 'rm -rf -- "$build_work"' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-  /bin/bash "$root/scripts/build.sh" --output-dir "$build_work"
-  install -d -m 0700 "$build_work/package"
-  tar -xf "$build_work/nginxpanel-linux-$arch.tar" -C "$build_work/package"
-  next_args=()
-  if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
-  if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
-  if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
-  /bin/bash "$build_work/package/install.sh" "${next_args[@]}"
-  exit 0
-fi
+if [[ $source_tree == yes ]]; then install_from_source; fi
 os_name=Linux
 if [[ -r /etc/os-release ]]; then
   while IFS='=' read -r key value; do

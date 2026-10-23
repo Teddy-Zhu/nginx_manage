@@ -81,6 +81,29 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 管理菜单支持保留数据卸载、完全卸载和重新安装，命令分别为 `manage.sh uninstall --keep-data`、`manage.sh uninstall --purge`、`manage.sh reinstall`。保留数据卸载后，安装入口会识别卸载记录并恢复原版本、配置和服务状态；完全卸载后可全新安装。清理范围、前置处理及中断续办见[运维说明](operations.md#卸载与重新安装)。
 
+### 旧版本卸载与未使用环境更新
+
+源码目录的更新只更新源码，已安装程序仍由运行绑定选择；重复运行普通 `install.sh` 不更新程序。尚未使用、允许删除原数据时，在部署机同步最新源码后执行：
+
+```sh
+git pull --ff-only
+sudo bash install.sh --fresh
+```
+
+`--fresh` 先在 Docker 中编译当前源码，再以新工具检查旧安装、完全卸载并安装新版本。旧账号、配置、密钥、证书和备份全部删除，重新生成初始化信息及随机管理端口；指定端口可加 `--port 23456`。交互时先确认完全卸载，再核对新安装摘要；`--yes` 明确确认整个过程。已有业务数据时使用面板及 Agent 的[维护更新流程](operations.md#组件准备与更新)。
+
+旧程序缺少 `installation-removal-check` 时，也可只卸载：
+
+```sh
+sudo bash install.sh --uninstall --keep-data
+# 或完全卸载
+sudo bash install.sh --uninstall --purge
+```
+
+以上命令从最新源码或完整安装包执行，使用包内新程序做检查；源码入口自动用 Docker 编译，安装包无需编译。保留数据卸载仍保存旧版本的重装材料，`reinstall` 恢复原版本。任务、主机规则、绑定或权限不满足时明确停止，保留具体错误。
+
+使用已发布的新 Release 时，对新版 `setup.sh` 执行 `bash setup.sh --version latest --fresh`，或 `bash setup.sh --version latest --uninstall --purge`。也可加 `--source` 拉取默认分支后容器编译；该模式用 `--ref` 选择源码版本，不与 `--version` 混用。发行尚未包含这些入口时使用最新源码。
+
 ### 离线构建与手动安装材料
 
 仅需构建、不在构建机安装时，运行 `bash scripts/build.sh` 或 `make build`。Docker 在构建机架构上交叉编译，无需模拟器；构建机与部署目标架构不同才需指定 `--arch arm64`。

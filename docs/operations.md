@@ -213,6 +213,8 @@ sudo bash /opt/nginxpanel/manage.sh uninstall --purge
 
 三种操作均先确认影响；非交互执行需加 `--yes`。卸载会停止代理流量。
 
+若提示 `unknown subcommand "installation-removal-check"`，说明管理脚本与已安装宿主程序版本不同，该检查发生在删除之前。从最新源码或完整安装包执行 `sudo bash install.sh --uninstall --keep-data` 或 `sudo bash install.sh --uninstall --purge`，入口会使用新工具检查旧安装；源码仅在 Docker 中编译。尚未使用、希望清空原数据并安装当前版本时使用 `sudo bash install.sh --fresh`。具体步骤见[旧版本处理](deployment.md#旧版本卸载与未使用环境更新)。
+
 | 操作 | 清理与保留范围 |
 | --- | --- |
 | 保留数据卸载 | 停止并移除本应用原生服务或容器，移除部署程序、服务 unit、对应 drop-in 和 tmpfiles 配置；原数据根保持不动，保留账号数据、密钥、证书、配置、日志、备份及执行记录。`DATA/.installation/` 保存原版本和主机安装配置的重装材料；保留两个小型管理脚本、最小安装记录、专用账户及数据所需的 SELinux 标签规则 |

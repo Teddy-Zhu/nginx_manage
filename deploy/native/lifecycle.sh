@@ -114,6 +114,21 @@ lifecycle_capture_running() {
     done
   fi
 }
+lifecycle_check_removal() {
+  local checker=$1 output result
+  trusted_file "$checker"
+  [[ -x $checker ]] || die '卸载检查程序不可执行'
+  if output=$("$checker" installation-removal-check --data-dir "$data" 2>&1); then
+    if [[ -n $output ]]; then printf '%s\n' "$output"; fi
+  else
+    result=$?
+    printf '%s\n' "$output" >&2
+    if [[ $output == *'unknown subcommand'* && $output == *'installation-removal-check'* ]]; then
+      printf '%s\n' '已安装程序缺少卸载检查命令。请从最新源码或完整安装包执行 sudo bash install.sh --uninstall（默认保留数据），完全卸载加 --purge；未使用环境全新安装加 --fresh。' >&2
+    fi
+    return "$result"
+  fi
+}
 lifecycle_validate_materials() {
   local digest expected name extra
   root_chain "$lifecycle_dir"
@@ -177,7 +192,7 @@ lifecycle_snapshot() {
     : >"$snapshot/containers"
     if ((${#lifecycle_running_units[@]})); then printf '%s\n' "${lifecycle_running_units[@]}" >"$snapshot/running"; fi
     if ((${#lifecycle_running_containers[@]})); then printf '%s\n' "${lifecycle_running_containers[@]}" >"$snapshot/containers"; fi
-    install -m 0555 "$binary" "$snapshot/nginxpanel"
+    install -m 0555 "$removal_checker" "$snapshot/nginxpanel"
     sync -f "$snapshot/system.tar"
   fi
   if [[ -e /etc/nginxpanel/selinux/nginxpanel_files.cil || -L /etc/nginxpanel/selinux/nginxpanel_files.cil ]]; then
@@ -224,11 +239,11 @@ lifecycle_remove_program() {
   done
 }
 lifecycle_uninstall() {
-  local mode=$1 stopped=no
+  local mode=$1 stopped=no removal_checker
   if [[ -z $lifecycle_state ]]; then
-    load_binary
+    if [[ -n $checker_binary ]]; then removal_checker=$checker_binary; else load_binary; removal_checker=$binary; fi
     lifecycle_check_workers
-    "$binary" installation-removal-check --data-dir "$data" || die '卸载检查未通过，未删除安装文件'
+    lifecycle_check_removal "$removal_checker" || die '卸载检查未通过，未删除安装文件'
     lifecycle_check_mounts /opt/nginxpanel
     lifecycle_check_mounts /etc/nginxpanel
     if [[ $mode == purge ]]; then lifecycle_check_mounts "$data"; fi
@@ -236,7 +251,7 @@ lifecycle_uninstall() {
     lifecycle_capture_running
     lifecycle_stop
     lifecycle_writer_lock
-    "$binary" installation-removal-check --data-dir "$data" || die '停机后卸载检查未通过；程序和数据未删除，请先处理原任务'
+    lifecycle_check_removal "$removal_checker" || die '停机后卸载检查未通过；程序和数据未删除，请先处理原任务'
     lifecycle_check_workers
     lifecycle_snapshot "$mode"
     if [[ -f $lifecycle_dir/purge-only ]]; then lifecycle_write_state purge-uninstalling; else lifecycle_write_state uninstalling; fi
@@ -251,8 +266,7 @@ lifecycle_uninstall() {
       lifecycle_stop
       lifecycle_writer_lock
       if [[ $lifecycle_state != purge-uninstalling ]]; then
-        trusted_file "$lifecycle_dir/nginxpanel"
-        "$lifecycle_dir/nginxpanel" installation-removal-check --data-dir "$data" || die '停机后卸载检查未通过；安装文件保留，请处理原任务后重试'
+        lifecycle_check_removal "${checker_binary:-$lifecycle_dir/nginxpanel}" || die '停机后卸载检查未通过；安装文件保留，请处理原任务后重试'
       fi
       lifecycle_check_workers
     fi
@@ -267,16 +281,25 @@ lifecycle_uninstall() {
   fi
 }
 lifecycle_prepare_control() {
-  local self target
+  local self target source pending
   self=$(readlink -e -- "$0") || die '无法读取管理脚本路径'
   trusted_file "$self"
   for target in /opt/nginxpanel/manage.sh /opt/nginxpanel/lifecycle.sh; do
-    if [[ -e $target || -L $target ]]; then trusted_file "$target"; continue; fi
     case "$target" in
-      /opt/nginxpanel/manage.sh) install -m 0555 "$self" "$target" ;;
-      /opt/nginxpanel/lifecycle.sh) install -m 0555 "$lifecycle_helper" "$target" ;;
+      /opt/nginxpanel/manage.sh) source=$self ;;
+      /opt/nginxpanel/lifecycle.sh) source=$lifecycle_helper ;;
     esac
+    trusted_file "$source"
+    if [[ -e $target || -L $target ]]; then
+      trusted_file "$target"
+      if cmp -s "$source" "$target"; then continue; fi
+    fi
+    pending=$(mktemp /opt/nginxpanel/.lifecycle-control.XXXXXXXX)
+    install -m 0555 "$source" "$pending"
+    sync -f "$pending"
+    mv -T -- "$pending" "$target"
   done
+  sync -f /opt/nginxpanel
 }
 lifecycle_purge() {
   local policy=$lifecycle_dir/selinux.cil modules priority name language extra current present=no
@@ -289,8 +312,7 @@ lifecycle_purge() {
   lifecycle_check_mounts /run/nginxpanel-fail2ban
   if [[ $lifecycle_state != purging ]]; then
     if [[ $lifecycle_writer_held != yes ]]; then lifecycle_writer_lock; fi
-    trusted_file "$lifecycle_dir/nginxpanel"
-    "$lifecycle_dir/nginxpanel" installation-removal-check --data-dir "$data" || die '完全卸载前检查未通过，保留数据'
+    lifecycle_check_removal "${checker_binary:-$lifecycle_dir/nginxpanel}" || die '完全卸载前检查未通过，保留数据'
     lifecycle_check_workers
   fi
   lifecycle_write_state purging

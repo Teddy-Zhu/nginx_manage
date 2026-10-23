@@ -29,6 +29,7 @@ usage() {
   --yes                        明确确认变更；用于完全卸载时确认永久删除数据
   --lines N                    日志行数，默认 100，最多 10000
   --follow                     持续跟随服务日志
+  --checker-binary 路径        使用 root 批准的程序执行卸载检查（仅 uninstall）
 
 更新、备份恢复与限时网络变更使用面板中的原维护流程。
 EOF
@@ -36,12 +37,13 @@ EOF
 action=${1:-menu}
 if (($#)); then shift; fi
 case "$action" in -h|--help|help) usage; exit 0 ;; esac
-component= yes=no lines=100 follow=no requested_port= purge=no keep_data=no
+component= yes=no lines=100 follow=no requested_port= purge=no keep_data=no checker_binary=
 while (($#)); do
   case "$1" in
     --yes) yes=yes; shift ;;
     --purge) purge=yes; shift ;;
     --keep-data) keep_data=yes; shift ;;
+    --checker-binary) (($# >= 2)) && [[ $2 == /* ]] || die '--checker-binary 需要绝对路径'; checker_binary=$2; shift 2 ;;
     --follow) follow=yes; shift ;;
     --lines) (($# >= 2)) || die '--lines 缺少行数'; lines=$2; shift 2 ;;
     [0-9]*)
@@ -54,6 +56,7 @@ done
 case "$action" in menu|info|status|start|stop|restart|logs|bootstrap|fingerprint|disable-remote|set-port|uninstall|reinstall) ;; *) usage; die "未知命令：$action" ;; esac
 [[ $purge == no || $action == uninstall ]] || die '--purge 只能用于 uninstall'
 [[ $keep_data == no || $action == uninstall && $purge == no ]] || die '--keep-data 只能用于保留数据卸载，不能与 --purge 混用'
+[[ -z $checker_binary || $action == uninstall ]] || die '--checker-binary 只能用于 uninstall'
 if [[ $action != logs ]]; then [[ $follow == no && $lines == 100 ]] || die '日志选项只能用于 logs'; fi
 case "$action" in status) component=${component:-all} ;; start|stop|restart|logs) component=${component:-panel} ;; *) [[ -z $component ]] || die '此命令不接受组件参数' ;; esac
 [[ $action != logs || $component != all ]] || die '请分别选择 panel、agent 或 nginx 的服务日志'

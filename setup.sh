@@ -9,20 +9,24 @@ default_version="latest"
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：bash setup.sh [--source] [--repo owner/repo] [--yes] [--advanced] [--port 端口]
+用法：bash setup.sh [--source] [--repo owner/repo] [--yes] [--advanced] [--port 端口] [--fresh | --uninstall [--keep-data | --purge]]
 默认下载 GitHub Release，自动匹配本机架构，校验 SHA-256 后安装。
 --source          拉取源码，通过 Docker 编译并自动安装
 --repo owner/repo 源码脚本未内置仓库时指定；本地仓库可自动读取 origin
 --version v1.2.3  安装指定 Release，默认使用脚本所属发行版本
 --ref 分支或标签  源码模式指定分支或标签，默认仓库默认分支
---yes             使用推荐配置直接安装，无需交互
+--yes             无需交互，确认所选操作（包括完全卸载的数据删除）
 --advanced        安装时打开高级设置
 --port 端口       指定管理端口，默认随机选择空闲端口并允许外部访问
+--fresh           完全卸载旧安装并安装所选源码/Release，永久删除原数据
+--uninstall       使用所选源码/Release 的新工具卸载旧安装，默认保留数据
+--keep-data       明确保留数据卸载；--purge 完全卸载，仅与 --uninstall 一起使用
 Release 安装不需要 Docker/Go/Node.js；源码安装需要 Git 和 Docker。
 需要 root 权限时调用 sudo。私有 Release 可使用已认证的 GitHub CLI。
 EOF
 }
 mode=release repository=$default_repository version=$default_version ref= version_override=no
+fresh=no uninstall=no purge=no keep_data=no advanced=no requested_port=
 install_args=()
 while (($#)); do
   case "$1" in
@@ -34,12 +38,21 @@ while (($#)); do
       shift 2 ;;
     --port)
       (($# >= 2)) && [[ $2 =~ ^[1-9][0-9]{3,4}$ ]] && ((10#$2 >= 1024 && 10#$2 <= 65535)) || die '端口须为 1024–65535'
-      install_args+=(--port "$2"); shift 2 ;;
-    --yes|--advanced) install_args+=("$1"); shift ;;
+      requested_port=$2; install_args+=(--port "$2"); shift 2 ;;
+    --fresh) fresh=yes; install_args+=(--fresh); shift ;;
+    --uninstall) uninstall=yes; install_args+=(--uninstall); shift ;;
+    --purge) purge=yes; install_args+=(--purge); shift ;;
+    --keep-data) keep_data=yes; install_args+=(--keep-data); shift ;;
+    --advanced) advanced=yes; install_args+=(--advanced); shift ;;
+    --yes) install_args+=(--yes); shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "未知参数：$1" ;;
   esac
 done
+[[ $fresh == no || $uninstall == no ]] || die '--fresh 和 --uninstall 不能混用'
+[[ $purge == no || $uninstall == yes ]] || die '--purge 只能与 --uninstall 一起使用'
+[[ $keep_data == no || $uninstall == yes && $purge == no ]] || die '--keep-data 只能与 --uninstall 一起使用，不能与 --purge 混用'
+[[ $uninstall == no || $advanced == no && -z $requested_port ]] || die '卸载不接受 --advanced 或 --port'
 [[ $(uname -s) == Linux && -d /run/systemd/system ]] || die '请在运行 systemd 的实际 Linux 部署目标执行'
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
 for tool in tar sha256sum mktemp stat; do command -v "$tool" >/dev/null || die "缺少系统工具：$tool"; done

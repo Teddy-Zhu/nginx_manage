@@ -33,6 +33,8 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 管理脚本支持 `uninstall --keep-data` 保留数据卸载、`uninstall --purge` 完全卸载和 `reinstall` 恢复原版本；也可从菜单操作。详细范围见[卸载与重新安装](docs/operations.md#卸载与重新安装)。
 
+旧程序缺少卸载命令时，在最新源码或安装包中执行 `sudo bash install.sh --uninstall`；需要完全卸载加 `--purge`。尚未使用且允许清空旧数据时，`sudo bash install.sh --fresh` 会先准备新程序，再完全卸载并安装当前版本。重复普通安装和 `reinstall` 均不更新版本，详见[旧版本处理](docs/deployment.md#旧版本卸载与未使用环境更新)。
+
 当前实现状态及暂缓验收项见[进度清单](docs/progress.md)，已执行的系统组合见[运行矩阵](docs/support-matrix.md)。设计背景和阶段历史分别见[设计文档](Linux_Nginx_Manager_Design.md)、[实施记录](docs/implementation.md)。
 
 ## 功能概览
