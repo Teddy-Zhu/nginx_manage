@@ -75,7 +75,7 @@ func TestPrebuiltStreamDualStackWeights(t *testing.T) {
 		}
 		return nil
 	}}
-	p := auth.Principal{ID: secure.ID(), Scopes: auth.AllScopes, Recent: true}
+	p := auth.Principal{ID: secure.ID(), Scopes: auth.AllScopes}
 	tcpBackend := func(network, address string, value byte) string {
 		t.Helper()
 		listener, err := net.Listen(network, address)

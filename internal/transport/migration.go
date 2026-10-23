@@ -16,7 +16,7 @@ func (s *Server) migrationReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) ExportMigration(w http.ResponseWriter, r *http.Request, _ apigen.ExportMigrationParams) {
-	p, ok := s.authorize(w, r, true, "backup.export")
+	p, ok := s.authorize(w, r, "backup.export")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}
@@ -33,7 +33,7 @@ func (s *Server) ExportMigration(w http.ResponseWriter, r *http.Request, _ apige
 	s.ok(w, r, out)
 }
 func (s *Server) PrepareMigration(w http.ResponseWriter, r *http.Request, _ apigen.PrepareMigrationParams) {
-	p, ok := s.authorize(w, r, true, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write")
+	p, ok := s.authorize(w, r, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}
@@ -50,7 +50,7 @@ func (s *Server) PrepareMigration(w http.ResponseWriter, r *http.Request, _ apig
 	s.ok(w, r, out)
 }
 func (s *Server) ExecuteMigration(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.ExecuteMigrationParams) {
-	p, ok := s.authorize(w, r, true, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write")
+	p, ok := s.authorize(w, r, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}
@@ -67,7 +67,7 @@ func (s *Server) ExecuteMigration(w http.ResponseWriter, r *http.Request, id api
 	s.ok(w, r, out)
 }
 func (s *Server) PullMigration(w http.ResponseWriter, r *http.Request, params apigen.PullMigrationParams) {
-	p, ok := s.authorize(w, r, true, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write", "nodes.manage")
+	p, ok := s.authorize(w, r, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write", "nodes.manage")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}
@@ -84,7 +84,7 @@ func (s *Server) PullMigration(w http.ResponseWriter, r *http.Request, params ap
 	s.ok(w, r, out)
 }
 func (s *Server) ListMigrations(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "backup.restore", "backup.secrets")
+	p, ok := s.authorize(w, r, "backup.restore", "backup.secrets")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}
@@ -96,7 +96,7 @@ func (s *Server) ListMigrations(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetMigration(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.authorize(w, r, false, "backup.restore", "backup.secrets")
+	p, ok := s.authorize(w, r, "backup.restore", "backup.secrets")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}

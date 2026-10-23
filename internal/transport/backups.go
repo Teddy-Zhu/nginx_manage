@@ -28,7 +28,7 @@ func (s *Server) backupsReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) ListBackups(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "backup.export")
+	p, ok := s.authorize(w, r, "backup.export")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Server) ListBackups(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) CreateBackup(w http.ResponseWriter, r *http.Request, params apigen.CreateBackupParams) {
-	p, ok := s.authorize(w, r, true, "backup.export", "backup.secrets", "system.write")
+	p, ok := s.authorize(w, r, "backup.export", "backup.secrets", "system.write")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -57,7 +57,7 @@ func (s *Server) CreateBackup(w http.ResponseWriter, r *http.Request, params api
 	s.respond(w, r, http.StatusAccepted, "OK", "备份任务已登记", out)
 }
 func (s *Server) GetBackup(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.authorize(w, r, false, "backup.export")
+	p, ok := s.authorize(w, r, "backup.export")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -69,7 +69,7 @@ func (s *Server) GetBackup(w http.ResponseWriter, r *http.Request, id apigen.ID)
 	s.ok(w, r, out)
 }
 func (s *Server) DeleteBackup(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.DeleteBackupParams) {
-	p, ok := s.authorize(w, r, true, "backup.export", "system.write")
+	p, ok := s.authorize(w, r, "backup.export", "system.write")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -81,7 +81,7 @@ func (s *Server) DeleteBackup(w http.ResponseWriter, r *http.Request, id apigen.
 	s.ok(w, r, out)
 }
 func (s *Server) GetBackupPolicy(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "backup.export")
+	p, ok := s.authorize(w, r, "backup.export")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -93,7 +93,7 @@ func (s *Server) GetBackupPolicy(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) SetBackupPolicy(w http.ResponseWriter, r *http.Request, _ apigen.SetBackupPolicyParams) {
-	p, ok := s.authorize(w, r, true, "backup.export", "backup.secrets", "system.write")
+	p, ok := s.authorize(w, r, "backup.export", "backup.secrets", "system.write")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -110,7 +110,7 @@ func (s *Server) SetBackupPolicy(w http.ResponseWriter, r *http.Request, _ apige
 	s.ok(w, r, out)
 }
 func (s *Server) CreateBackupDownload(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.CreateBackupDownloadParams) {
-	p, ok := s.authorize(w, r, true, "backup.export", "backup.secrets")
+	p, ok := s.authorize(w, r, "backup.export", "backup.secrets")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -122,7 +122,7 @@ func (s *Server) CreateBackupDownload(w http.ResponseWriter, r *http.Request, id
 	s.ok(w, r, out)
 }
 func (s *Server) DownloadBackup(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DownloadBackupParams) {
-	p, ok := s.authorize(w, r, true, "backup.export", "backup.secrets")
+	p, ok := s.authorize(w, r, "backup.export", "backup.secrets")
 	if !ok || !s.backupsReady(w, r) {
 		return
 	}
@@ -151,7 +151,7 @@ func (s *Server) DownloadBackup(w http.ResponseWriter, r *http.Request, id apige
 		if err != nil {
 			return err
 		}
-		if live.ID != p.ID || !s.recentAuthentication(r, live) {
+		if live.ID != p.ID || live.Machine != p.Machine {
 			return auth.ErrForbidden
 		}
 		if err = live.Require("backup.export", "backup.secrets"); err != nil {

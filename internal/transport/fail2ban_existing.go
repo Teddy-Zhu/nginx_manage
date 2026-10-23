@@ -42,7 +42,7 @@ func (s *Server) GetFail2banExistingResource(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) ChangeFail2banExistingPolicy(w http.ResponseWriter, r *http.Request, params apigen.ChangeFail2banExistingPolicyParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Server) ChangeFail2banExistingPolicy(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) GetFail2banExistingTasks(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.fail2banReady(w, r) {
 		return
 	}
 	out, err := s.Fail2ban.ExistingTasks(r.Context())
@@ -72,7 +72,7 @@ func (s *Server) GetFail2banExistingTasks(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) GetFail2banExistingTask(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.fail2banReady(w, r) {
 		return
 	}
 	out, err := s.Fail2ban.ExistingTask(r.Context(), id)
@@ -84,7 +84,7 @@ func (s *Server) GetFail2banExistingTask(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *Server) CancelFail2banExistingPolicy(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.CancelFail2banExistingPolicyParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}

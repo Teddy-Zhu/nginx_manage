@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) ListComponentOfflineUploads(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
@@ -19,7 +19,7 @@ func (s *Server) ListComponentOfflineUploads(w http.ResponseWriter, r *http.Requ
 	s.ok(w, r, out)
 }
 func (s *Server) CreateComponentOfflineUpload(w http.ResponseWriter, r *http.Request, params apigen.CreateComponentOfflineUploadParams) {
-	p, ok := s.authorize(w, r, true, "components.manage")
+	p, ok := s.authorize(w, r, "components.manage")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
@@ -36,7 +36,7 @@ func (s *Server) CreateComponentOfflineUpload(w http.ResponseWriter, r *http.Req
 	s.ok(w, r, out)
 }
 func (s *Server) WriteComponentOfflineChunk(w http.ResponseWriter, r *http.Request, id, asset string, params apigen.WriteComponentOfflineChunkParams) {
-	p, ok := s.authorize(w, r, true, "components.manage")
+	p, ok := s.authorize(w, r, "components.manage")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
@@ -53,7 +53,7 @@ func (s *Server) WriteComponentOfflineChunk(w http.ResponseWriter, r *http.Reque
 	s.ok(w, r, out)
 }
 func (s *Server) DiscardComponentOfflineUpload(w http.ResponseWriter, r *http.Request, id string, params apigen.DiscardComponentOfflineUploadParams) {
-	p, ok := s.authorize(w, r, true, "components.manage")
+	p, ok := s.authorize(w, r, "components.manage")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}

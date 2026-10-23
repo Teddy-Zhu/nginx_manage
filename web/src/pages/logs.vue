@@ -199,7 +199,7 @@ function follow() {
     if (!current || current.mode !== "recent" || current.until)
       throw new Error("请先查询无结束时间的最近日志");
     if (following.value) return;
-    // Preflight uses the shared API error handling, including reauthentication.
+    // Check access before opening the log stream.
     const token = generation;
     const page = await api.queryLogs({ ...current });
     if (token !== generation) {

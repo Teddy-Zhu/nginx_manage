@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) ListCertificates(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.Config.Certificates.List(r.Context())
@@ -20,7 +20,7 @@ func (s *Server) ListCertificates(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetCertificate(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.Config.Certificates.Get(r.Context(), id)
@@ -31,7 +31,7 @@ func (s *Server) GetCertificate(w http.ResponseWriter, r *http.Request, id apige
 	s.ok(w, r, out)
 }
 func (s *Server) PreviewCertificateDeploy(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.authorize(w, r, false, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -43,7 +43,7 @@ func (s *Server) PreviewCertificateDeploy(w http.ResponseWriter, r *http.Request
 	s.ok(w, r, out)
 }
 func (s *Server) ListCertificateDeployments(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.Config.CertificateDeployments(r.Context(), id)
@@ -54,7 +54,7 @@ func (s *Server) ListCertificateDeployments(w http.ResponseWriter, r *http.Reque
 	s.ok(w, r, out)
 }
 func (s *Server) DeployCertificate(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DeployCertificateParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -80,7 +80,7 @@ func (s *Server) DeleteCertificate(w http.ResponseWriter, r *http.Request, id ap
 	s.writeCertificate(w, r, id, "delete", params.IdempotencyKey)
 }
 func (s *Server) writeCertificate(w http.ResponseWriter, r *http.Request, id, action, key string) {
-	principal, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	principal, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}

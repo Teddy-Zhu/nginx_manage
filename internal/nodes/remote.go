@@ -45,7 +45,6 @@ func call(ctx context.Context, in remoteapi.Endpoint, expected, method, path str
 	req.Header.Set(RemoteHopHeader, "1")
 	req.Header.Set(remoteapi.ProtocolHeader, "1")
 	req.Header.Set(remoteapi.ScopesHeader, `["read"]`)
-	req.Header.Set(remoteapi.RecentHeader, "false")
 	if expected != "" {
 		req.Header.Set(TargetNodeHeader, expected)
 	}

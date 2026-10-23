@@ -73,7 +73,7 @@ func validRemoteEnvelope(raw []byte, node string, status int) bool {
 }
 
 func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.RemoteRoute) {
-	p, ok := s.nodePrincipal(w, r, false)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -111,8 +111,7 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 	ctx, cancel := context.WithTimeout(r.Context(), duration)
 	defer cancel()
 	r = r.WithContext(ctx)
-	recent := s.recentAuthentication(r, p)
-	forwarded, err := s.Nodes.OpenForward(ctx, p, recent, r.Context().Value(requestIDKey).(string), r.PathValue("connection"), route, path, r.Header, body)
+	forwarded, err := s.Nodes.OpenForward(ctx, p, r.Context().Value(requestIDKey).(string), r.PathValue("connection"), route, path, r.Header, body)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -134,7 +133,7 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 		w.Header().Set("X-Node-ID", forwarded.NodeID)
 		w.Header().Set("X-Accel-Buffering", "no")
 		w.WriteHeader(http.StatusOK)
-		err = s.forwardEvents(w, r, response.Body, forwarded.NodeID, p, recent)
+		err = s.forwardEvents(w, r, response.Body, forwarded.NodeID, p)
 		if err == nil {
 			outcome = "stream_closed"
 		}
@@ -167,7 +166,7 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 	}
 }
 
-func (s *Server) forwardEvents(w http.ResponseWriter, r *http.Request, reader io.Reader, node string, principal auth.Principal, recent bool) error {
+func (s *Server) forwardEvents(w http.ResponseWriter, r *http.Request, reader io.Reader, node string, principal auth.Principal) error {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 4096), remoteResponseLimit)
 	var frame bytes.Buffer
@@ -202,11 +201,6 @@ func (s *Server) forwardEvents(w http.ResponseWriter, r *http.Request, reader io
 			s.streamFailure(w, r, s.NodeID, code, message)
 			reported = true
 			return err
-		}
-		if recent && !s.recentAuthentication(r, current) {
-			s.streamFailure(w, r, s.NodeID, "REAUTHENTICATION_REQUIRED", "身份确认已过期，请重新验证密码后查询")
-			reported = true
-			return errors.New("source recent authentication expired")
 		}
 		event := ""
 		data := []string{}

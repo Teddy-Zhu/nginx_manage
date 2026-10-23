@@ -29,7 +29,7 @@ paths:
     post:
       operationId: changeFail2banExistingPolicy
       x-scopes: [security.write]
-      description: 返回 Fail2banExistingPolicyTask。preview/apply 均持久排队并要求模块启用、近期认证及幂等键。apply 的 preview_id 是五分钟内成功预览的 operation_id，参数、target 与独立停用确认必须一致。不能授予接管权、改变来源或执行任意命令；HTTP 202 不表示运行生效。
+      description: 返回 Fail2banExistingPolicyTask。preview/apply 均持久排队并要求模块启用、有效登录会话及幂等键。apply 的 preview_id 是五分钟内成功预览的 operation_id，参数、target 与独立停用确认必须一致。不能授予接管权、改变来源或执行任意命令；HTTP 202 不表示运行生效。
       parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banExistingPolicyInput'}}}}
       responses: {"202": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
@@ -57,7 +57,7 @@ paths:
     post:
       operationId: changeFail2banPython
       x-scopes: [components.manage]
-      description: 返回 Fail2banPythonTask。action=plan 异步生成最小系统 Python 依赖计划，refresh=true 明确允许刷新现有仓库索引；不安装包。action=install 只接受原计划 plan_id 且 refresh=false，独立确认安装，不安装或启动 Fail2ban。均要求模块启用、components.manage、近期认证及幂等键；HTTP 202 仅表示持久排队。派发后不自动重复刷新索引或重放安装，来源、包或工具变化须重新规划。
+      description: 返回 Fail2banPythonTask。action=plan 异步生成最小系统 Python 依赖计划，refresh=true 明确允许刷新现有仓库索引；不安装包。action=install 只接受原计划 plan_id 且 refresh=false，独立确认安装，不安装或启动 Fail2ban。均要求模块启用、components.manage、有效登录会话及幂等键；HTTP 202 仅表示持久排队。派发后不自动重复刷新索引或重放安装，来源、包或工具变化须重新规划。
       parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPythonTaskInput'}}}}
       responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -71,7 +71,7 @@ paths:
     post:
       operationId: changeFail2banUpgrade
       x-scopes: [components.manage, security.write]
-      description: 返回 Fail2banUpgradeTask。check 异步检查单个已准备签名资产；prepare 使用 check 的 target 固定运行实例与恢复材料；run 只接受准备完成的 preparation_id 及 intent_sha256 作为 target。仅管理运行中的独立受管实例。准备不停止服务，run 独立确认停止、状态捕获、切换、保护核对及候选失败后的原版本恢复。均要求模块启用、近期认证和幂等键；HTTP 202 只表示持久排队，不表示升级或保护已完成。不接受主机路径、服务名称、命令或新的信任来源。
+      description: 返回 Fail2banUpgradeTask。check 异步检查单个已准备签名资产；prepare 使用 check 的 target 固定运行实例与恢复材料；run 只接受准备完成的 preparation_id 及 intent_sha256 作为 target。仅管理运行中的独立受管实例。准备不停止服务，run 独立确认停止、状态捕获、切换、保护核对及候选失败后的原版本恢复。均要求模块启用、有效登录会话和幂等键；HTTP 202 只表示持久排队，不表示升级或保护已完成。不接受主机路径、服务名称、命令或新的信任来源。
       parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banUpgradeInput'}}}}
       responses: {"202": {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/JSON'}}
@@ -95,7 +95,7 @@ paths:
       operationId: changeFail2banLifecycle
       x-scopes: []
       x-action-scopes: {"install": ["components.manage"], "resume": ["components.manage", "security.write"], "rollback": ["components.manage", "security.write"], "start": ["security.write"], "stop": ["security.write"], "enable": ["security.write"], "disable": ["security.write"]}
-      description: 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求近期认证及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。existing 的 base_id 固定本机 root 的当前服务控制授权，启动前复核原客户端和单元；启停影响原实例全部 jail，enable/disable 不改变当前运行状态，不改写原 jail 配置。派发后中断只核对原操作，不自动重新派发。
+      description: 返回 Fail2banLifecycleTask，HTTP 202 只表示持久排队。逐 action 检查上述显式权限，浏览器要求有效登录会话及幂等键；提交完整预览 input。安装不启动或开机启用；install/resume/start/enable 要求模块启用；续办启动及开机设置仍沿用原安装意图。stop/disable/rollback 可在管理停用后显式处理已有保护。existing 的 base_id 固定本机 root 的当前服务控制授权，启动前复核原客户端和单元；启停影响原实例全部 jail，enable/disable 不改变当前运行状态，不改写原 jail 配置。派发后中断只核对原操作，不自动重新派发。
       parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banLifecycleInput'}}}}
       responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -120,7 +120,7 @@ paths:
     post:
       operationId: changeFail2banAddress
       x-scopes: [security.write]
-      description: 返回 Fail2banAddressTask，浏览器要求近期认证。通过官方客户端执行单 jail 的 ban/unban，不接受全局解封、命令或时长覆盖；ban 使用当前 jail 时长，已封禁地址不续期。已记录派发后不重复客户端调用，回执不明仅核对当前引擎状态；任务成功仅证明官方引擎状态，Nginx 集合或宿主机规则仍需分别核对。
+      description: 返回 Fail2banAddressTask，浏览器要求有效登录会话。通过官方客户端执行单 jail 的 ban/unban，不接受全局解封、命令或时长覆盖；ban 使用当前 jail 时长，已封禁地址不续期。已记录派发后不重复客户端调用，回执不明仅核对当前引擎状态；任务成功仅证明官方引擎状态，Nginx 集合或宿主机规则仍需分别核对。
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
         - {$ref: '#/components/parameters/Idempotency'}
@@ -148,7 +148,7 @@ paths:
     post:
       operationId: applyFail2ban
       x-scopes: [security.write]
-      description: 显式应用保存版本到本机独立受管实例，浏览器须近期认证。固定预览摘要及目标，创建持久任务并通过原 Agent 执行器核对；只支持 nginx-client，安装和启动独立授权。返回 Fail2banApplyTask，进度沿用 /tasks/{id}；提交不表示生效。
+      description: 显式应用保存版本到本机独立受管实例，浏览器须有效登录会话。固定预览摘要及目标，创建持久任务并通过原 Agent 执行器核对；只支持 nginx-client，安装和启动独立授权。返回 Fail2banApplyTask，进度沿用 /tasks/{id}；提交不表示生效。
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
         - {$ref: '#/components/parameters/Idempotency'}
@@ -175,7 +175,7 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
         - {$ref: '#/components/parameters/Idempotency'}
-      description: 保存类型化 jail 期望配置，要求近期认证、幂等键与基础版本；不安装、启用或修改实例。
+      description: 保存类型化 jail 期望配置，要求有效登录会话、幂等键与基础版本；不安装、启用或修改实例。
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Fail2banPolicyInput'}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /fail2ban/host-input:
@@ -235,7 +235,7 @@ paths:
     post:
       operationId: planFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallPlan。含启用 Docker 规则时，显式 iptables 后端可先读取目标候选，再提交 docker_targets 生成联合执行计划；完整父子授权、固定工具、目标路径、官方预演和原恢复目标均可核对时 can_apply=true。未绑定或原恢复目标失效时仅可预览。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须近期认证及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 支持 apply/remove 保护计划：核对宿主机占用、原本机登记与独立回执，注释绑定随机所有者和计划，再核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW 准备完成后才可应用，确认后持久化。iptables-nft/legacy 支持首次应用、已确认策略更新及移除计划，固定原确认来源、本机授权、完整受管范围与入口保护，返回正反受管批次的摘要及计数；候选与正反向批次须通过固定官方 restore 的 --test，前后完整规则保持一致；初始执行、子进程回执、新连接确认及已确认规则修复已接入，完整 nft JSON 候选及恢复容量已准入；官方 go-iptables 链读取与原生完整导出交叉核对通过后，主机入站计划可应用；Docker 完整绑定通过后，INPUT 与 Docker 同族合并提交，沿同一持久操作和独立子进程回执执行、确认或恢复；原目标变化会阻止不安全的撤回重装并保留待恢复状态。计划 300 秒有效，不写运行规则或管理器源配置。
+      description: 返回 FirewallPlan。含启用 Docker 规则时，显式 iptables 后端可先读取目标候选，再提交 docker_targets 生成联合执行计划；完整父子授权、固定工具、目标路径、官方预演和原恢复目标均可核对时 can_apply=true。未绑定或原恢复目标失效时仅可预览。action=apply 须启用模块；remove 可在模块停用后清理已确认规则。均须有效登录会话及目标实际管理连接；root 核对登记/原程序、管理器、SSH 监听和来源；直接 nftables 绑定内核代次，firewalld 计划绑定已确认 policy 的 runtime/permanent 完整摘要及原登记操作；接口能力和保护来源均核对后 can_apply=true。UFW 支持 apply/remove 保护计划：核对宿主机占用、原本机登记与独立回执，注释绑定随机所有者和计划，再核对固定配置与工具前后基线，最多 64 条包含入口保护的生成命令逐条执行官方 dry-run prepend；完整候选输出、首条 tuple、生成注释及结果均须匹配，既有匹配冲突、警告或预算超限拒绝整个计划。UFW 准备完成后才可应用，确认后持久化。iptables-nft/legacy 支持首次应用、已确认策略更新及移除计划，固定原确认来源、本机授权、完整受管范围与入口保护，返回正反受管批次的摘要及计数；候选与正反向批次须通过固定官方 restore 的 --test，前后完整规则保持一致；初始执行、子进程回执、新连接确认及已确认规则修复已接入，完整 nft JSON 候选及恢复容量已准入；官方 go-iptables 链读取与原生完整导出交叉核对通过后，主机入站计划可应用；Docker 完整绑定通过后，INPUT 与 Docker 同族合并提交，沿同一持久操作和独立子进程回执执行、确认或恢复；原目标变化会阻止不安全的撤回重装并保留待恢复状态。计划 300 秒有效，不写运行规则或管理器源配置。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallPlanInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -243,7 +243,7 @@ paths:
     post:
       operationId: applyFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须近期认证；仅执行 can_apply=true 的计划。绑定原动作、计划、版本及幂等键，先保存独立意图；直接 nftables 单批原子替换受管表，firewalld 只写原登记 policy 的 rich_rules，运行配置核对及新连接确认后才写永久配置；部分或未知结果独立恢复，禁止重放仍可能迟到的 D-Bus 请求。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
+      description: 返回 FirewallOperation，202。apply 须启用模块，remove 可在停用后执行。均须有效登录会话；仅执行 can_apply=true 的计划。绑定原动作、计划、版本及幂等键，先保存独立意图；直接 nftables 单批原子替换受管表，firewalld 只写原登记 policy 的 rich_rules，运行配置核对及新连接确认后才写永久配置；部分或未知结果独立恢复，禁止重放仍可能迟到的 D-Bus 请求。响应关闭连接；120 秒内须用规则生效后新 TCP/TLS 连接确认，否则独立恢复。
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FirewallApplyInput"}}}}
       responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -258,14 +258,14 @@ paths:
     post:
       operationId: confirmFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallOperation。近期认证且通过生效后重建的目标管理监听新 TCP/TLS 连接确认；旧连接、主入口、转发及请求头均不能提供连接证明。应用确认前重新采集 SSH/保护来源并证明候选对象；依据变化返回已恢复的原操作，未知读取不确认，原期限不延长。确认范围为该目标管理监听，不代表云安全组或全部业务端口。
+      description: 返回 FirewallOperation。有效登录会话且通过生效后重建的目标管理监听新 TCP/TLS 连接确认；旧连接、主入口、转发及请求头均不能提供连接证明。应用确认前重新采集 SSH/保护来源并证明候选对象；依据变化返回已恢复的原操作，未知读取不确认，原期限不延长。确认范围为该目标管理监听，不代表云安全组或全部业务端口。
       parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/CSRF"}]
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/operations/{id}/rollback:
     post:
       operationId: rollbackFirewall
       x-scopes: [read, security.write]
-      description: 返回 FirewallOperation。近期认证，按原操作恢复最后确认策略或初始空表；模块停用及维护收尾期间仍允许恢复。
+      description: 返回 FirewallOperation。有效登录会话，按原操作恢复最后确认策略或初始空表；模块停用及维护收尾期间仍允许恢复。
       parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/CSRF"}]
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/geoip:
@@ -302,7 +302,7 @@ paths:
     put:
       operationId: setFirewallPolicy
       x-scopes: [security.write]
-      description: 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须近期认证。最多 1000 条规则及 16 MiB 规范策略；新增的规则冲突须明确确认。
+      description: 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须有效登录会话。最多 1000 条规则及 16 MiB 规范策略；新增的规则冲突须明确确认。
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/FirewallPolicyInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -324,12 +324,12 @@ paths:
     get:
       operationId: listBackups
       x-scopes: [backup.export]
-      description: 本机完整备份概览及最近 128 条记录；包包含全部业务秘密，下载额外要求 backup.secrets 和近期认证。拒绝递归转发。
+      description: 本机完整备份概览及最近 128 条记录；包包含全部业务秘密，下载额外要求 backup.secrets 和有效登录会话。拒绝递归转发。
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
     post:
       operationId: createBackup
       x-scopes: [backup.export, backup.secrets, system.write]
-      description: 幂等创建完整加密备份。口令仅驻当前进程内存；一致性捕获使用共同维护边界，释放维护后流式加密，完成前不可下载。须近期认证及直接连接本节点。
+      description: 幂等创建完整加密备份。口令仅驻当前进程内存；一致性捕获使用共同维护边界，释放维护后流式加密，完成前不可下载。须有效登录会话及直接连接本节点。
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/BackupInput"}}}}
       responses: {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -341,7 +341,7 @@ paths:
     put:
       operationId: setBackupPolicy
       x-scopes: [backup.export, backup.secrets, system.write]
-      description: 版本比较后保存公钥、离线密钥确认、授权期限、周期及保留策略；定期任务复查原授权主体、会话代次、Token 权限及期限。须近期认证。
+      description: 版本比较后保存公钥、离线密钥确认、授权期限、周期及保留策略；定期任务复查原授权主体、会话代次、Token 权限及期限。须有效登录会话。
       parameters: [{"$ref": "#/components/parameters/CSRF"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/BackupPolicyInput"}}}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
@@ -354,20 +354,20 @@ paths:
     delete:
       operationId: deleteBackup
       x-scopes: [backup.export, system.write]
-      description: 删除已结束的本主体备份；auth.manage 可管理其他主体。持久化删除意图，下载期间拒绝清理，保留原任务与审计。cleanup_failed 可显式续办清理。须近期认证。
+      description: 删除已结束的本主体备份；auth.manage 可管理其他主体。持久化删除意图，下载期间拒绝清理，保留原任务与审计。cleanup_failed 可显式续办清理。须有效登录会话。
       parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /backups/{id}/download:
     post:
       operationId: createBackupDownload
       x-scopes: [backup.export, backup.secrets]
-      description: 浏览器近期认证后签发绑定当前会话的 60 秒单次下载凭据；返回 BackupDownloadTicket，不返回备份或解密密钥。机器凭据直接调用 GET。
+      description: 浏览器有效登录会话后签发绑定当前会话的 60 秒单次下载凭据；返回 BackupDownloadTicket，不返回备份或解密密钥。机器凭据直接调用 GET。
       parameters: [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}]
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
     get:
       operationId: downloadBackup
       x-scopes: [backup.export, backup.secrets]
-      description: 机器 Bearer 直接下载；浏览器须当前会话、近期认证及单次票据。流式返回 age 加密 tar，最多并发 2 个、5 分钟，持续复查授权，不支持 Range。错误采用统一 JSON 外壳。
+      description: 机器 Bearer 直接下载；浏览器须当前会话、有效登录会话及单次票据。流式返回 age 加密 tar，最多并发 2 个、5 分钟，持续复查授权，不支持 Range。错误采用统一 JSON 外壳。
       parameters:
         - {"$ref": "#/components/parameters/ID"}
         - {name: ticket, in: query, required: false, schema: {type: string, maxLength: 43}}
@@ -386,7 +386,7 @@ paths:
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
     post:
       operationId: applyManagementListener
-      description: 直接连接本节点并近期认证后暂用新监听。提交前证明当前受管防火墙对象并按已确认策略核对候选端口和完整允许来源，冲突时保留原入口。Agent 独立持久保存旧配置与 120 秒期限；新 TCP/TLS 连接确认后生效。相同幂等键只重放原操作。停用须从主入口执行。拒绝递归转发，不返回私钥。
+      description: 直接连接本节点并有效登录会话后暂用新监听。提交前证明当前受管防火墙对象并按已确认策略核对候选端口和完整允许来源，冲突时保留原入口。Agent 独立持久保存旧配置与 120 秒期限；新 TCP/TLS 连接确认后生效。相同幂等键只重放原操作。停用须从主入口执行。拒绝递归转发，不返回私钥。
       x-scopes: [read, system.write]
       parameters: [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}]
       requestBody: {required: true, content: {application/json: {schema: {"$ref": "#/components/schemas/ManagementListenerInput"}}}}
@@ -559,7 +559,7 @@ paths:
   /migrations:
     {"get": {"operationId": "listMigrations", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /migrations/export:
-    {"post": {"operationId": "exportMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationExportInput"}}}}, "x-scopes": ["backup.export"], "description": "mode=portable 导出普通 .tar，仅重建明确允许的受管字段、ACL 和基础 WAF；站点停用并报告省略，不含完整原文及可选材料。mode=encrypted 导出完整原文与所选材料的 .tar.age，额外要求 backup.secrets/config.secrets。均要求浏览器近期认证。"}}
+    {"post": {"operationId": "exportMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationExportInput"}}}}, "x-scopes": ["backup.export"], "description": "mode=portable 导出普通 .tar，仅重建明确允许的受管字段、ACL 和基础 WAF；站点停用并报告省略，不含完整原文及可选材料。mode=encrypted 导出完整原文与所选材料的 .tar.age，额外要求 backup.secrets/config.secrets。均要求浏览器有效登录会话。"}}
   /migrations/plan:
     {"post": {"operationId": "prepareMigration", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationImportInput"}}}}, "description": "接收当前 schema 6 的普通 portable 归档或 age 加密配置包。普通归档口令为空，且重新核对规范化字段与站点停用；加密包须提供口令。共用映射、依赖检测及导入执行器。"}}
   /migrations/pull:
@@ -631,23 +631,6 @@ paths:
     delete:
       operationId: logout
       parameters: [{ $ref: '#/components/parameters/CSRF' }]
-      responses:
-        '200': { $ref: '#/components/responses/JSON' }
-        default: { $ref: '#/components/responses/JSON' }
-  /session/reauthenticate:
-    post:
-      operationId: reauthenticate
-      parameters: [{ $ref: '#/components/parameters/CSRF' }]
-      description: 仅浏览器会话使用，更新五分钟的近期认证时间。
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [password]
-              properties:
-                password: { type: string }
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
@@ -793,7 +776,7 @@ paths:
     post:
       operationId: diffConfigTree
       x-scopes: [config.secrets]
-      description: 比较指定修订与请求中的完整原文树；原文差异包含秘密，浏览器需重新认证。
+      description: 比较指定修订与请求中的完整原文树；原文差异包含秘密，浏览器须已登录。
       parameters: [{ $ref: '#/components/parameters/CSRF' }]
       requestBody:
         required: true
@@ -833,7 +816,7 @@ paths:
     post:
       operationId: restoreNginxExternal
       x-scopes: [config.write, config.secrets, security.write]
-      description: 重新核对外部快照，将当前已保存期望修订部署到新受管目录并确认运行结果；保留原外部目录，切换后不向外部内容回滚。浏览器需重新认证。
+      description: 重新核对外部快照，将当前已保存期望修订部署到新受管目录并确认运行结果；保留原外部目录，切换后不向外部内容回滚。浏览器须已登录。
       parameters:
         - { $ref: '#/components/parameters/Idempotency' }
         - { $ref: '#/components/parameters/CSRF' }

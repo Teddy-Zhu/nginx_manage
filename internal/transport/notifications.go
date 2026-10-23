@@ -15,7 +15,7 @@ func (s *Server) notificationsReady(w http.ResponseWriter, r *http.Request) bool
 	return true
 }
 func (s *Server) GetNotifications(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.notificationsReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.notificationsReady(w, r) {
 		return
 	}
 	out, err := s.Notifications.Overview(r.Context())
@@ -26,7 +26,7 @@ func (s *Server) GetNotifications(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) SetNotificationPolicy(w http.ResponseWriter, r *http.Request, params apigen.SetNotificationPolicyParams) {
-	p, ok := s.authorize(w, r, true, "notifications.write")
+	p, ok := s.authorize(w, r, "notifications.write")
 	if !ok || !s.notificationsReady(w, r) {
 		return
 	}
@@ -49,7 +49,7 @@ func (s *Server) UpdateNotificationChannel(w http.ResponseWriter, r *http.Reques
 	s.saveNotificationChannel(w, r, id, params.IdempotencyKey)
 }
 func (s *Server) saveNotificationChannel(w http.ResponseWriter, r *http.Request, id, key string) {
-	p, ok := s.authorize(w, r, true, "notifications.write")
+	p, ok := s.authorize(w, r, "notifications.write")
 	if !ok || !s.notificationsReady(w, r) {
 		return
 	}
@@ -72,7 +72,7 @@ func (s *Server) TestNotificationChannel(w http.ResponseWriter, r *http.Request,
 	s.notificationChannelAction(w, r, id, params.IdempotencyKey, true)
 }
 func (s *Server) notificationChannelAction(w http.ResponseWriter, r *http.Request, id, key string, test bool) {
-	p, ok := s.authorize(w, r, true, "notifications.write")
+	p, ok := s.authorize(w, r, "notifications.write")
 	if !ok || !s.notificationsReady(w, r) {
 		return
 	}
@@ -111,7 +111,7 @@ func notificationPage(limit, offset *int) (int, int) {
 	return size, start
 }
 func (s *Server) ListNotificationEvents(w http.ResponseWriter, r *http.Request, params apigen.ListNotificationEventsParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.notificationsReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.notificationsReady(w, r) {
 		return
 	}
 	limit, offset := notificationPage(params.Limit, params.Offset)
@@ -123,7 +123,7 @@ func (s *Server) ListNotificationEvents(w http.ResponseWriter, r *http.Request, 
 	s.ok(w, r, out)
 }
 func (s *Server) ListNotificationDeliveries(w http.ResponseWriter, r *http.Request, params apigen.ListNotificationDeliveriesParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.notificationsReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.notificationsReady(w, r) {
 		return
 	}
 	limit, offset := notificationPage(params.Limit, params.Offset)
@@ -139,7 +139,7 @@ func (s *Server) ListNotificationDeliveries(w http.ResponseWriter, r *http.Reque
 	s.ok(w, r, out)
 }
 func (s *Server) RetryNotificationDelivery(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.RetryNotificationDeliveryParams) {
-	p, ok := s.authorize(w, r, true, "notifications.write")
+	p, ok := s.authorize(w, r, "notifications.write")
 	if !ok || !s.notificationsReady(w, r) {
 		return
 	}

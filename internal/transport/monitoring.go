@@ -18,7 +18,7 @@ func (s *Server) monitoringReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) GetMonitoringLatest(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.monitoringReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.monitoringReady(w, r) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -31,7 +31,7 @@ func (s *Server) GetMonitoringLatest(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetMonitoringSettings(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.monitoringReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.monitoringReady(w, r) {
 		return
 	}
 	out, err := s.Monitoring.Settings(r.Context())
@@ -42,7 +42,7 @@ func (s *Server) GetMonitoringSettings(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) SetMonitoringSettings(w http.ResponseWriter, r *http.Request, params apigen.SetMonitoringSettingsParams) {
-	p, ok := s.authorize(w, r, true, "monitoring.write")
+	p, ok := s.authorize(w, r, "monitoring.write")
 	if !ok || !s.monitoringReady(w, r) {
 		return
 	}
@@ -59,7 +59,7 @@ func (s *Server) SetMonitoringSettings(w http.ResponseWriter, r *http.Request, p
 	s.ok(w, r, out)
 }
 func (s *Server) GetMonitoringHistory(w http.ResponseWriter, r *http.Request, params apigen.GetMonitoringHistoryParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.monitoringReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.monitoringReady(w, r) {
 		return
 	}
 	if s.metricReads.Add(1) > 2 {

@@ -13,16 +13,16 @@ import (
 	"nginxpanel/migrations"
 )
 
-func (s *Server) nodePrincipal(w http.ResponseWriter, r *http.Request, recent bool) (auth.Principal, bool) {
+func (s *Server) nodePrincipal(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
 	if r.Header.Get(nodes.RemoteHopHeader) != "" {
 		s.fail(w, r, fault.New(http.StatusForbidden, "REMOTE_FORWARDING_REJECTED", "不允许递归转发节点管理请求"))
 		return auth.Principal{}, false
 	}
-	return s.authorize(w, r, recent, "nodes.manage", "read")
+	return s.authorize(w, r, "nodes.manage", "read")
 }
 
 func (s *Server) ListNodes(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.nodePrincipal(w, r, false)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -35,7 +35,7 @@ func (s *Server) ListNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GetNode(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.nodePrincipal(w, r, false)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -48,7 +48,7 @@ func (s *Server) GetNode(w http.ResponseWriter, r *http.Request, id apigen.ID) {
 }
 
 func (s *Server) CreateNode(w http.ResponseWriter, r *http.Request, params apigen.CreateNodeParams) {
-	p, ok := s.nodePrincipal(w, r, true)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -66,7 +66,7 @@ func (s *Server) CreateNode(w http.ResponseWriter, r *http.Request, params apige
 }
 
 func (s *Server) RefreshNode(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.RefreshNodeParams) {
-	p, ok := s.nodePrincipal(w, r, false)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -79,7 +79,7 @@ func (s *Server) RefreshNode(w http.ResponseWriter, r *http.Request, id apigen.I
 }
 
 func (s *Server) DeleteNode(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DeleteNodeParams) {
-	p, ok := s.nodePrincipal(w, r, true)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -94,7 +94,7 @@ func (s *Server) DeleteNode(w http.ResponseWriter, r *http.Request, id apigen.ID
 // These two endpoints identify and revoke only the presented machine Token.
 // They do not require auth.manage and cannot enumerate other credentials.
 func (s *Server) GetRemoteIdentity(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read")
+	p, ok := s.authorize(w, r, "read")
 	if !ok {
 		return
 	}
@@ -120,7 +120,7 @@ func (s *Server) RevokeRemoteAuthorization(w http.ResponseWriter, r *http.Reques
 		s.fail(w, r, fault.New(http.StatusConflict, "NODE_IDENTITY_CHANGED", "目标永久节点身份不匹配"))
 		return
 	}
-	p, ok := s.authorize(w, r, false)
+	p, ok := s.authorize(w, r)
 	if !ok {
 		return
 	}

@@ -367,8 +367,6 @@ export function apiError(error: unknown): ApiError {
   if ((normalized.status === 401 || normalized.code === "UNAUTHENTICATED") && (!normalized.originNodeId || normalized.originNodeId === sourceNodeId.value)) window.dispatchEvent(new Event("session-expired"));
   const targetUnauthorized = !!selectedTarget.value && normalized.originNodeId === selectedTarget.value.nodeId && (normalized.status === 401 || normalized.code === "UNAUTHENTICATED");
   if (selectedTarget.value && normalized.code !== "CANCELLED" && (normalized.code.startsWith("REMOTE_") || normalized.code === "NODE_IDENTITY_CHANGED" || targetUnauthorized)) nodeRequestError.value = targetUnauthorized ? "目标节点授权不可用，请检查节点连接" : normalized.message;
-  if (normalized.code === "REAUTHENTICATION_REQUIRED")
-    window.dispatchEvent(new Event("reauthentication-required"));
   return normalized;
 }
 
@@ -1072,12 +1070,6 @@ function createAPI(scope: RequestScope) {
       data: { token, username, password },
     }),
   logout: () => request<null>({ method: "DELETE", url: "/session" }),
-  reauthenticate: (password: string) =>
-    request<null>({
-      method: "POST",
-      url: "/session/reauthenticate",
-      data: { password },
-    }),
   tree: () => request<Tree>({ url: "/nginx/config-tree" }),
   preview: (data: SaveRequest) =>
     request<Tree>({ method: "POST", url: "/nginx/config-tree/preview", data }),

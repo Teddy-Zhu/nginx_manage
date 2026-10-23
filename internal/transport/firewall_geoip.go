@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) GetFirewallGeoIP(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "security.write"); !ok || !s.firewallReady(w, r) {
+	if _, ok := s.authorize(w, r, "security.write"); !ok || !s.firewallReady(w, r) {
 		return
 	}
 	out, err := s.Firewall.GeoIP(r.Context())
@@ -20,7 +20,7 @@ func (s *Server) GetFirewallGeoIP(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) SetFirewallGeoIP(w http.ResponseWriter, r *http.Request, params apigen.SetFirewallGeoIPParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.firewallReady(w, r) {
 		return
 	}
@@ -37,7 +37,7 @@ func (s *Server) SetFirewallGeoIP(w http.ResponseWriter, r *http.Request, params
 	s.ok(w, r, out)
 }
 func (s *Server) UpdateFirewallGeoIP(w http.ResponseWriter, r *http.Request, params apigen.UpdateFirewallGeoIPParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.firewallReady(w, r) {
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Server) UpdateFirewallGeoIP(w http.ResponseWriter, r *http.Request, par
 	s.ok(w, r, out)
 }
 func (s *Server) ResolveFirewallGeoIP(w http.ResponseWriter, r *http.Request, _ apigen.ResolveFirewallGeoIPParams) {
-	if _, ok := s.authorize(w, r, false, "security.write"); !ok || !s.firewallReady(w, r) {
+	if _, ok := s.authorize(w, r, "security.write"); !ok || !s.firewallReady(w, r) {
 		return
 	}
 	var in firewall.GeoIPResolveInput

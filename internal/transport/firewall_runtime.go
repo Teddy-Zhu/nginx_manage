@@ -17,12 +17,12 @@ import (
 	"nginxpanel/internal/transport/apigen"
 )
 
-func (s *Server) firewallPrincipal(w http.ResponseWriter, r *http.Request, recent bool) (auth.Principal, bool) {
+func (s *Server) firewallPrincipal(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
 	if r.Header.Get(remoteapi.HopHeader) != "" {
 		s.fail(w, r, fault.New(403, "REMOTE_FORWARDING_REJECTED", "防火墙执行管理须直接连接目标节点"))
 		return auth.Principal{}, false
 	}
-	p, ok := s.authorize(w, r, recent, "read", "security.write")
+	p, ok := s.authorize(w, r, "read", "security.write")
 	if !ok || !s.firewallReady(w, r) {
 		return p, false
 	}
@@ -44,7 +44,7 @@ func (s *Server) firewallControlContext(w http.ResponseWriter, r *http.Request) 
 	return ctx, cancel, true
 }
 func (s *Server) GetFirewallRuntime(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.firewallPrincipal(w, r, false); !ok {
+	if _, ok := s.firewallPrincipal(w, r); !ok {
 		return
 	}
 	ctx, done, ok := s.firewallControlContext(w, r)
@@ -60,7 +60,7 @@ func (s *Server) GetFirewallRuntime(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetFirewallOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	if _, ok := s.firewallPrincipal(w, r, false); !ok {
+	if _, ok := s.firewallPrincipal(w, r); !ok {
 		return
 	}
 	ctx, done, ok := s.firewallControlContext(w, r)
@@ -76,7 +76,7 @@ func (s *Server) GetFirewallOperation(w http.ResponseWriter, r *http.Request, id
 	s.ok(w, r, out)
 }
 func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.PlanFirewallParams) {
-	p, ok := s.firewallPrincipal(w, r, false)
+	p, ok := s.firewallPrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -88,10 +88,6 @@ func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.P
 	var in firewall.PlanInput
 	if err := decodeLimit(w, r, &in, firewall.DockerTargetBytes+4096); err != nil {
 		s.fail(w, r, err)
-		return
-	}
-	if (in.PreparationID == "" || in.CancelPreparation) && !s.recentAuthentication(r, p) {
-		s.fail(w, r, fault.New(403, "REAUTHENTICATION_REQUIRED", "请重新验证密码后继续"))
 		return
 	}
 	out, err := s.Firewall.Plan(ctx, in, remotelisten.ConnectionID(ctx))
@@ -113,7 +109,7 @@ func (s *Server) PlanFirewall(w http.ResponseWriter, r *http.Request, _ apigen.P
 }
 func (s *Server) ApplyFirewall(w http.ResponseWriter, r *http.Request, params apigen.ApplyFirewallParams) {
 	w.Header().Set("Connection", "close")
-	p, ok := s.firewallPrincipal(w, r, true)
+	p, ok := s.firewallPrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -165,7 +161,7 @@ func (s *Server) RollbackFirewall(w http.ResponseWriter, r *http.Request, id ope
 	s.decideFirewall(w, r, id.String(), "rollback")
 }
 func (s *Server) decideFirewall(w http.ResponseWriter, r *http.Request, id, action string) {
-	p, ok := s.firewallPrincipal(w, r, true)
+	p, ok := s.firewallPrincipal(w, r)
 	if !ok {
 		return
 	}

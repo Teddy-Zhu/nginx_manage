@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) PreviewFail2banLifecycle(w http.ResponseWriter, r *http.Request, _ apigen.PreviewFail2banLifecycleParams) {
-	p, ok := s.authorize(w, r, false, "read")
+	p, ok := s.authorize(w, r, "read")
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}
@@ -31,7 +31,7 @@ func (s *Server) PreviewFail2banLifecycle(w http.ResponseWriter, r *http.Request
 	s.ok(w, r, out)
 }
 func (s *Server) ChangeFail2banLifecycle(w http.ResponseWriter, r *http.Request, params apigen.ChangeFail2banLifecycleParams) {
-	p, ok := s.authorize(w, r, true)
+	p, ok := s.authorize(w, r)
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}
@@ -48,7 +48,7 @@ func (s *Server) ChangeFail2banLifecycle(w http.ResponseWriter, r *http.Request,
 	s.respond(w, r, http.StatusAccepted, "OK", "Fail2ban 实例操作任务已创建", out)
 }
 func (s *Server) GetFail2banLifecycleTasks(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.fail2banReady(w, r) {
 		return
 	}
 	out, err := s.Fail2ban.LifecycleTasks(r.Context())

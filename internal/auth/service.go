@@ -30,7 +30,6 @@ type Principal struct {
 	Scopes       []string `json:"scopes"`
 	Machine      bool     `json:"machine"`
 	Delegated    bool     `json:"-"`
-	Recent       bool     `json:"-"`
 	GrantScopes  []string `json:"-"`
 	SessionEpoch int64    `json:"-"`
 }
@@ -91,12 +90,6 @@ func (s *Service) CheckCSRF(r *http.Request) bool {
 	got := r.Header.Get("X-CSRF-Token")
 	return want != "" && subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
 }
-func (s *Service) Recent(ctx context.Context) bool {
-	then := s.Sessions.GetInt64(ctx, "reauth")
-	now := time.Now().Unix()
-	return then > 0 && then <= now && now-then < int64((5*time.Minute)/time.Second)
-}
-
 func (s *Service) rate(ip string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -155,18 +148,9 @@ func (s *Service) Login(ctx context.Context, ip, username, password string) erro
 	}
 	s.Sessions.Put(ctx, "user", u.Username)
 	s.Sessions.Put(ctx, "epoch", u.SessionEpoch)
-	s.Sessions.Put(ctx, "reauth", time.Now().Unix())
 	s.Sessions.Put(ctx, "csrf", secure.Token())
 	return nil
 }
-func (s *Service) Reauthenticate(ctx context.Context, ip, password string) error {
-	_, err := s.check(ctx, ip, s.Sessions.GetString(ctx, "user"), password)
-	if err == nil {
-		s.Sessions.Put(ctx, "reauth", time.Now().Unix())
-	}
-	return err
-}
-
 func (s *Service) Authenticate(r *http.Request) (Principal, error) {
 	if header := r.Header.Get("Authorization"); header != "" {
 		if !strings.HasPrefix(header, "Bearer ") || len(header) > 200 {
@@ -234,7 +218,6 @@ func (s *Service) Authenticate(r *http.Request) (Principal, error) {
 				}
 			}
 			p.Delegated = true
-			p.Recent = r.Header.Get(remoteapi.RecentHeader) == "true"
 		}
 		if _, err := s.DB.ExecContext(r.Context(), "UPDATE api_credentials SET last_used_at=? WHERE id=? AND (last_used_at IS NULL OR last_used_at<?)", time.Now().Unix(), id, time.Now().Add(-time.Minute).Unix()); err != nil {
 			return Principal{}, err

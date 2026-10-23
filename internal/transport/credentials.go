@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) ListCredentials(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "auth.manage")
+	p, ok := s.authorize(w, r, "auth.manage")
 	if !ok {
 		return
 	}
@@ -21,7 +21,7 @@ func (s *Server) ListCredentials(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) CreateCredential(w http.ResponseWriter, r *http.Request, _ apigen.CreateCredentialParams) {
-	p, ok := s.authorize(w, r, true, "auth.manage")
+	p, ok := s.authorize(w, r, "auth.manage")
 	if !ok {
 		return
 	}
@@ -42,7 +42,7 @@ func (s *Server) CreateCredential(w http.ResponseWriter, r *http.Request, _ apig
 	s.respond(w, r, 201, "OK", "凭据仅展示一次，请妥善保存", map[string]string{"id": id, "token": token})
 }
 func (s *Server) RevokeCredential(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.RevokeCredentialParams) {
-	p, ok := s.authorize(w, r, true, "auth.manage")
+	p, ok := s.authorize(w, r, "auth.manage")
 	if !ok {
 		return
 	}

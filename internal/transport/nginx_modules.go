@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) SetNginxNativeModules(w http.ResponseWriter, r *http.Request, params apigen.SetNginxNativeModulesParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets", "security.write")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets", "security.write")
 	if !ok {
 		return
 	}

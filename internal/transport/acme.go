@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) ListACMEAccounts(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.ACME.Accounts(r.Context())
@@ -21,7 +21,7 @@ func (s *Server) ListACMEAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) CreateACMEAccount(w http.ResponseWriter, r *http.Request, params apigen.CreateACMEAccountParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -39,7 +39,7 @@ func (s *Server) CreateACMEAccount(w http.ResponseWriter, r *http.Request, param
 }
 
 func (s *Server) RegisterACMEAccount(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.RegisterACMEAccountParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -57,7 +57,7 @@ func (s *Server) RegisterACMEAccount(w http.ResponseWriter, r *http.Request, id 
 }
 
 func (s *Server) DeleteACMEAccount(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.DeleteACMEAccountParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -75,14 +75,14 @@ func (s *Server) DeleteACMEAccount(w http.ResponseWriter, r *http.Request, id ap
 }
 
 func (s *Server) ListDNSProviders(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	s.ok(w, r, acme.DNSProviders())
 }
 
 func (s *Server) ListDNSCredentials(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.ACME.Credentials(r.Context())
@@ -106,7 +106,7 @@ func (s *Server) DeleteDNSCredential(w http.ResponseWriter, r *http.Request, id 
 }
 
 func (s *Server) writeDNSCredential(w http.ResponseWriter, r *http.Request, id, action, key string) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}

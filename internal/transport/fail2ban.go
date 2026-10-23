@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Server) GetFail2ban(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	if s.Agent == nil {
@@ -42,7 +42,7 @@ func (s *Server) fail2banReadContext(w http.ResponseWriter, r *http.Request) (co
 }
 
 func (s *Server) fail2banReadContextWithTimeout(w http.ResponseWriter, r *http.Request, timeout time.Duration) (context.Context, func(), bool) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return nil, nil, false
 	}
 	if s.fail2banReads.Add(1) > 4 {
@@ -106,7 +106,7 @@ func (s *Server) fail2banReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) GetFail2banPolicy(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.fail2banReady(w, r) {
 		return
 	}
 	out, e := s.Fail2ban.Policy(r.Context())
@@ -117,7 +117,7 @@ func (s *Server) GetFail2banPolicy(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) SetFail2banPolicy(w http.ResponseWriter, r *http.Request, params apigen.SetFail2banPolicyParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}
@@ -155,7 +155,7 @@ func (s *Server) PreviewFail2ban(w http.ResponseWriter, r *http.Request, _ apige
 	s.ok(w, r, out)
 }
 func (s *Server) GetFail2banTemplates(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	s.ok(w, r, fail2ban.Templates())
@@ -202,7 +202,7 @@ func (s *Server) GetFail2banRuntime(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ApplyFail2ban(w http.ResponseWriter, r *http.Request, params apigen.ApplyFail2banParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}
@@ -220,7 +220,7 @@ func (s *Server) ApplyFail2ban(w http.ResponseWriter, r *http.Request, params ap
 }
 
 func (s *Server) GetFail2banTasks(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.fail2banReady(w, r) {
 		return
 	}
 	out, err := s.Fail2ban.ApplyTasks(r.Context())

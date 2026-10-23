@@ -98,7 +98,7 @@ func TestPrebuiltNginxRuntime(t *testing.T) {
 		}
 		return nil
 	}}
-	p := auth.Principal{ID: secure.ID(), Scopes: auth.AllScopes, Recent: true}
+	p := auth.Principal{ID: secure.ID(), Scopes: auth.AllScopes}
 	var tree nginxconfig.Tree
 	accept := func(result nginxconfig.SaveResult, err error) {
 		t.Helper()

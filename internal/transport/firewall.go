@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Server) GetFirewall(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	if s.Agent == nil {
@@ -44,7 +44,7 @@ func (s *Server) firewallReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) GetFirewallPolicy(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.firewallReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.firewallReady(w, r) {
 		return
 	}
 	out, e := s.Firewall.Policy(r.Context())
@@ -55,7 +55,7 @@ func (s *Server) GetFirewallPolicy(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) SetFirewallPolicy(w http.ResponseWriter, r *http.Request, params apigen.SetFirewallPolicyParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.firewallReady(w, r) {
 		return
 	}
@@ -72,7 +72,7 @@ func (s *Server) SetFirewallPolicy(w http.ResponseWriter, r *http.Request, param
 	s.ok(w, r, out)
 }
 func (s *Server) PreviewFirewall(w http.ResponseWriter, r *http.Request, _ apigen.PreviewFirewallParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.firewallReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.firewallReady(w, r) {
 		return
 	}
 	var in firewall.PreviewInput

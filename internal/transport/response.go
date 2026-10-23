@@ -165,7 +165,7 @@ func (s *Server) protect(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) authorize(w http.ResponseWriter, r *http.Request, recent bool, scopes ...string) (auth.Principal, bool) {
+func (s *Server) authorize(w http.ResponseWriter, r *http.Request, scopes ...string) (auth.Principal, bool) {
 	p, err := s.Auth.Authenticate(r)
 	if err == nil {
 		err = p.Require(scopes...)
@@ -174,16 +174,5 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, recent bool, 
 		s.fail(w, r, err)
 		return p, false
 	}
-	if recent && !s.recentAuthentication(r, p) {
-		s.respond(w, r, 403, "REAUTHENTICATION_REQUIRED", "请重新验证密码后继续", nil)
-		return p, false
-	}
 	return p, true
-}
-
-func (s *Server) recentAuthentication(r *http.Request, p auth.Principal) bool {
-	if p.Delegated {
-		return p.Recent
-	}
-	return p.Machine || s.Auth.Recent(r.Context())
 }

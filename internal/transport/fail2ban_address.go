@@ -39,7 +39,7 @@ func (s *Server) GetFail2banAddress(w http.ResponseWriter, r *http.Request, para
 }
 
 func (s *Server) ChangeFail2banAddress(w http.ResponseWriter, r *http.Request, params apigen.ChangeFail2banAddressParams) {
-	p, ok := s.authorize(w, r, true, "security.write")
+	p, ok := s.authorize(w, r, "security.write")
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}
@@ -57,7 +57,7 @@ func (s *Server) ChangeFail2banAddress(w http.ResponseWriter, r *http.Request, p
 }
 
 func (s *Server) GetFail2banAddressTasks(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.fail2banReady(w, r) {
 		return
 	}
 	out, err := s.Fail2ban.AddressTasks(r.Context())

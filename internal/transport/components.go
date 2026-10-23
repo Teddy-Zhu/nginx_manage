@@ -16,7 +16,7 @@ func (s *Server) componentsReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) GetComponents(w http.ResponseWriter, r *http.Request) {
-	_, ok := s.authorize(w, r, false, "read", "components.manage")
+	_, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
@@ -28,7 +28,7 @@ func (s *Server) GetComponents(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) ListComponentTasks(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Server) ListComponentTasks(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) CreateComponentTask(w http.ResponseWriter, r *http.Request, params apigen.CreateComponentTaskParams) {
-	p, ok := s.authorize(w, r, true, "components.manage")
+	p, ok := s.authorize(w, r, "components.manage")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
@@ -62,7 +62,7 @@ func (s *Server) CreateComponentTask(w http.ResponseWriter, r *http.Request, par
 }
 
 func (s *Server) CreateFrontendActivation(w http.ResponseWriter, r *http.Request, params apigen.CreateFrontendActivationParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
@@ -84,7 +84,7 @@ func (s *Server) CreateFrontendActivation(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) CreateComponentImagePull(w http.ResponseWriter, r *http.Request, params apigen.CreateComponentImagePullParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}

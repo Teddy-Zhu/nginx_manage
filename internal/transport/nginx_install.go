@@ -16,7 +16,7 @@ func (s *Server) installationsReady(w http.ResponseWriter, r *http.Request) bool
 	return true
 }
 func (s *Server) ListNginxInstallations(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.installationsReady(w, r) {
 		return
 	}
@@ -28,7 +28,7 @@ func (s *Server) ListNginxInstallations(w http.ResponseWriter, r *http.Request) 
 	s.ok(w, r, out)
 }
 func (s *Server) GetNginxInstallation(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.installationsReady(w, r) {
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Server) GetNginxInstallation(w http.ResponseWriter, r *http.Request, id
 	s.ok(w, r, out)
 }
 func (s *Server) CreateNginxInstallation(w http.ResponseWriter, r *http.Request, params apigen.CreateNginxInstallationParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.installationsReady(w, r) {
 		return
 	}
@@ -67,7 +67,7 @@ func (s *Server) CreateNginxInstallation(w http.ResponseWriter, r *http.Request,
 	s.respond(w, r, http.StatusAccepted, "OK", "首次安装任务已受理", out)
 }
 func (s *Server) installationControl(w http.ResponseWriter, r *http.Request, id, key, command string) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.installationsReady(w, r) {
 		return
 	}

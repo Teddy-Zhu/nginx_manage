@@ -165,7 +165,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request, _ apigen.LoginPar
 	s.GetMe(w, r)
 }
 func (s *Server) Logout(w http.ResponseWriter, r *http.Request, _ apigen.LogoutParams) {
-	p, ok := s.authorize(w, r, false)
+	p, ok := s.authorize(w, r)
 	if !ok {
 		return
 	}
@@ -179,28 +179,8 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request, _ apigen.LogoutP
 	}
 	s.ok(w, r, nil)
 }
-func (s *Server) Reauthenticate(w http.ResponseWriter, r *http.Request, _ apigen.ReauthenticateParams) {
-	p, ok := s.authorize(w, r, false)
-	if !ok {
-		return
-	}
-	if p.Machine {
-		s.fail(w, r, fault.Invalid("机器凭据无需浏览器重新认证"))
-		return
-	}
-	var in apigen.ReauthenticateJSONBody
-	if err := decode(w, r, &in); err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	if err := s.Auth.Reauthenticate(r.Context(), auth.ClientIP(r), in.Password); err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	s.ok(w, r, nil)
-}
 func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request, _ apigen.ChangePasswordParams) {
-	p, ok := s.authorize(w, r, true, "auth.manage")
+	p, ok := s.authorize(w, r, "auth.manage")
 	if !ok {
 		return
 	}
@@ -220,7 +200,7 @@ func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request, _ apigen
 	s.ok(w, r, nil)
 }
 func (s *Server) RevokeSessions(w http.ResponseWriter, r *http.Request, _ apigen.RevokeSessionsParams) {
-	p, ok := s.authorize(w, r, true, "auth.manage")
+	p, ok := s.authorize(w, r, "auth.manage")
 	if !ok {
 		return
 	}
@@ -235,7 +215,7 @@ func (s *Server) RevokeSessions(w http.ResponseWriter, r *http.Request, _ apigen
 	s.ok(w, r, nil)
 }
 func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read")
+	p, ok := s.authorize(w, r, "read")
 	if !ok {
 		return
 	}
@@ -293,7 +273,7 @@ func (s *Server) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, map[string]any{"mode": mode, "reason": reason, "host": host, "desired_revision": desired, "applied_revision": applied, "version": head.Version, "api_version": 1, "database_schema": schema, "remote_protocol": remoteapi.Protocol, "authorization": map[string]any{"scopes": p.Scopes, "machine": p.Machine, "delegated": p.Delegated}, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "policy_version": s.Config.Policy.Version, "operations": operations, "nginx": runtime, "nginx_features": features})
 }
 func (s *Server) GetModules(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	data, err := modules.List(r.Context(), s.DB)
@@ -304,7 +284,7 @@ func (s *Server) GetModules(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, data)
 }
 func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.SetModuleParams) {
-	p, ok := s.authorize(w, r, true, "system.write")
+	p, ok := s.authorize(w, r, "system.write")
 	if !ok {
 		return
 	}
@@ -364,7 +344,7 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 	s.ok(w, r, nil)
 }
 func (s *Server) GetConfigTree(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, true, "config.secrets"); !ok {
+	if _, ok := s.authorize(w, r, "config.secrets"); !ok {
 		return
 	}
 	data, err := s.Config.Current(r.Context())
@@ -375,7 +355,7 @@ func (s *Server) GetConfigTree(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, data)
 }
 func (s *Server) SaveConfigTree(w http.ResponseWriter, r *http.Request, params apigen.SaveConfigTreeParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -400,7 +380,7 @@ func (s *Server) SaveConfigTree(w http.ResponseWriter, r *http.Request, params a
 	s.respond(w, r, status, "OK", "配置已保存", data)
 }
 func (s *Server) PreviewConfigTree(w http.ResponseWriter, r *http.Request, _ apigen.PreviewConfigTreeParams) {
-	if _, ok := s.authorize(w, r, true, "config.write", "config.secrets"); !ok {
+	if _, ok := s.authorize(w, r, "config.write", "config.secrets"); !ok {
 		return
 	}
 	var in nginxconfig.SaveRequest
@@ -418,7 +398,7 @@ func (s *Server) PreviewConfigTree(w http.ResponseWriter, r *http.Request, _ api
 	s.ok(w, r, parsed.Tree)
 }
 func (s *Server) PatchResource(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.PatchResourceParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -435,7 +415,7 @@ func (s *Server) PatchResource(w http.ResponseWriter, r *http.Request, id apigen
 	s.respond(w, r, 201, "OK", "字段已保存至新修订", data)
 }
 func (s *Server) CreateResource(w http.ResponseWriter, r *http.Request, params apigen.CreateResourceParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -452,7 +432,7 @@ func (s *Server) CreateResource(w http.ResponseWriter, r *http.Request, params a
 	s.respond(w, r, 201, "OK", "代理配置已保存", data)
 }
 func (s *Server) GetRevision(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	if _, ok := s.authorize(w, r, true, "config.secrets"); !ok {
+	if _, ok := s.authorize(w, r, "config.secrets"); !ok {
 		return
 	}
 	data, err := s.Config.Get(r.Context(), id)
@@ -477,7 +457,7 @@ func pagination(limit, offset *int) (int64, int64, error) {
 	return int64(l), int64(o), nil
 }
 func (s *Server) ListRevisions(w http.ResponseWriter, r *http.Request, params apigen.ListRevisionsParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	l, o, err := pagination(params.Limit, params.Offset)
@@ -493,7 +473,7 @@ func (s *Server) ListRevisions(w http.ResponseWriter, r *http.Request, params ap
 	s.ok(w, r, data)
 }
 func (s *Server) ListTasks(w http.ResponseWriter, r *http.Request, params apigen.ListTasksParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	l, o, err := pagination(params.Limit, params.Offset)
@@ -513,7 +493,7 @@ func (s *Server) ListTasks(w http.ResponseWriter, r *http.Request, params apigen
 	s.ok(w, r, data)
 }
 func (s *Server) GetTask(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	data, err := dbgen.New(s.DB).GetTask(r.Context(), id)
@@ -532,7 +512,7 @@ func (s *Server) audit(r *http.Request, principal, action, resource, outcome str
 }
 
 func (s *Server) ApplyConfig(w http.ResponseWriter, r *http.Request, params apigen.ApplyConfigParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -549,7 +529,7 @@ func (s *Server) ApplyConfig(w http.ResponseWriter, r *http.Request, params apig
 	s.respond(w, r, 202, "OK", "配置已加入应用队列", out)
 }
 func (s *Server) GetNginxRuntime(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.Agent.NginxState(r.Context())
@@ -567,7 +547,7 @@ func (s *Server) DeleteResource(w http.ResponseWriter, r *http.Request, id apige
 	s.resourceAction(w, r, id, "delete", params.IdempotencyKey)
 }
 func (s *Server) resourceAction(w http.ResponseWriter, r *http.Request, id, action, key string) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -599,7 +579,7 @@ func (s *Server) DeleteAccessList(w http.ResponseWriter, r *http.Request, id api
 	s.accessList(w, r, id, "delete", params.IdempotencyKey)
 }
 func (s *Server) accessList(w http.ResponseWriter, r *http.Request, id, action, key string) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets", "security.write")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets", "security.write")
 	if !ok {
 		return
 	}
@@ -628,7 +608,7 @@ func (s *Server) accessList(w http.ResponseWriter, r *http.Request, id, action, 
 }
 
 func (s *Server) GetNginxFeatures(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.Agent.NginxFeatures(r.Context())
@@ -648,7 +628,7 @@ func (s *Server) DeleteWAFPolicy(w http.ResponseWriter, r *http.Request, id apig
 	s.wafPolicy(w, r, id, "delete", params.IdempotencyKey)
 }
 func (s *Server) wafPolicy(w http.ResponseWriter, r *http.Request, id, action, key string) {
-	principal, ok := s.authorize(w, r, true, "config.write", "config.secrets", "security.write")
+	principal, ok := s.authorize(w, r, "config.write", "config.secrets", "security.write")
 	if !ok {
 		return
 	}

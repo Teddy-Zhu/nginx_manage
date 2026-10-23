@@ -12,15 +12,15 @@ import (
 	"nginxpanel/internal/transport/apigen"
 )
 
-func (s *Server) listenerPrincipal(w http.ResponseWriter, r *http.Request, recent bool) (auth.Principal, bool) {
+func (s *Server) listenerPrincipal(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
 	if r.Header.Get(remoteapi.HopHeader) != "" {
 		s.fail(w, r, fault.New(403, "REMOTE_FORWARDING_REJECTED", "监听管理须直接连接目标节点"))
 		return auth.Principal{}, false
 	}
-	return s.authorize(w, r, recent, "read", "system.write")
+	return s.authorize(w, r, "read", "system.write")
 }
 func (s *Server) GetManagementListener(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.listenerPrincipal(w, r, false); !ok {
+	if _, ok := s.listenerPrincipal(w, r); !ok {
 		return
 	}
 	out, err := s.Agent.ManagementListener(r.Context())
@@ -31,7 +31,7 @@ func (s *Server) GetManagementListener(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetManagementListenerOperation(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	if _, ok := s.listenerPrincipal(w, r, false); !ok {
+	if _, ok := s.listenerPrincipal(w, r); !ok {
 		return
 	}
 	out, err := s.Agent.ListenerOperation(r.Context(), id)
@@ -45,7 +45,7 @@ func (s *Server) ApplyManagementListener(w http.ResponseWriter, r *http.Request,
 	if remotelisten.ConnectionID(r.Context()) != "" {
 		w.Header().Set("Connection", "close")
 	}
-	p, ok := s.listenerPrincipal(w, r, true)
+	p, ok := s.listenerPrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -87,7 +87,7 @@ func (s *Server) RollbackManagementListener(w http.ResponseWriter, r *http.Reque
 	s.decideManagementListener(w, r, id, "rollback")
 }
 func (s *Server) decideManagementListener(w http.ResponseWriter, r *http.Request, id, action string) {
-	p, ok := s.listenerPrincipal(w, r, true)
+	p, ok := s.listenerPrincipal(w, r)
 	if !ok {
 		return
 	}

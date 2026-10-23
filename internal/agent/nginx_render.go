@@ -247,6 +247,11 @@ func (n *Nginx) render(p *nginxconfig.Parsed, m *manifest, inspection map[string
 					}
 				case "stream":
 					edits = append(edits, nginxconfig.Edit{Start: node.Open + 1, End: node.Open + 1, Text: "\n" + runtimeLogFormat("stream")})
+				case "ssl_certificate", "ssl_certificate_key", "ssl_trusted_certificate", "proxy_ssl_trusted_certificate":
+					// Nginx resolves TLS files relative to the configuration directory,
+					// while managed certificate material belongs to the data directory.
+					arg := node.Args[0]
+					edits = append(edits, nginxconfig.Edit{Start: arg.Start, End: arg.End, Text: nginxQuote(filepath.Join(n.DataDir, arg.Value))})
 				case "include":
 					if len(node.Args) != 1 {
 						return errors.New("invalid include")
@@ -654,7 +659,7 @@ func (n *Nginx) httpDefaults(p *nginxconfig.Parsed, httpBlock *nginxconfig.Node,
 			if name == "" {
 				return "", errors.New("recorded CA snapshot is missing")
 			}
-			out.WriteString("    proxy_ssl_trusted_certificate " + nginxQuote(name) + ";\n")
+			out.WriteString("    proxy_ssl_trusted_certificate " + nginxQuote(filepath.Join(n.DataDir, name)) + ";\n")
 		} else {
 			name, err := n.systemCA()
 			if err != nil {
@@ -668,7 +673,7 @@ func (n *Nginx) httpDefaults(p *nginxconfig.Parsed, httpBlock *nginxconfig.Node,
 				return "", errors.New("certificate reference limit reached")
 			}
 			m.Dependencies[name] = secure.Hash(b)
-			out.WriteString("    proxy_ssl_trusted_certificate " + nginxQuote(name) + ";\n")
+			out.WriteString("    proxy_ssl_trusted_certificate " + nginxQuote(filepath.Join(n.DataDir, name)) + ";\n")
 		}
 	}
 	if cacheEnabled {

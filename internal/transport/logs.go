@@ -32,7 +32,7 @@ func logAgentError(err error) error {
 	return fault.Unavailable("日志 Agent 不可用，请确认专用实例与本机 Agent 状态")
 }
 func (s *Server) ListLogSources(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	if s.Agent == nil {
@@ -47,7 +47,7 @@ func (s *Server) ListLogSources(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetLogPolicy(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	if s.Agent == nil {
@@ -62,7 +62,7 @@ func (s *Server) GetLogPolicy(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) SetLogPolicy(w http.ResponseWriter, r *http.Request, params apigen.SetLogPolicyParams) {
-	p, ok := s.authorize(w, r, true, "system.write")
+	p, ok := s.authorize(w, r, "system.write")
 	if !ok {
 		return
 	}
@@ -133,12 +133,9 @@ func (s *Server) logPrincipal(r *http.Request, q logs.Query) (auth.Principal, bo
 	}
 	for _, source := range sources {
 		if source.ID == q.SourceID {
-			allow := p.Has("config.secrets") && s.recentAuthentication(r, p)
+			allow := p.Has("config.secrets")
 			if source.Sensitive && !p.Has("config.secrets") {
 				return p, false, auth.ErrForbidden
-			}
-			if source.Sensitive && !allow {
-				return p, false, fault.New(403, "REAUTHENTICATION_REQUIRED", "原生日志可能包含敏感数据，请重新验证密码后继续")
 			}
 			return p, allow, nil
 		}
@@ -168,7 +165,7 @@ func (s *Server) QueryLogs(w http.ResponseWriter, r *http.Request, _ apigen.Quer
 	s.ok(w, r, out)
 }
 func (s *Server) ReleaseLogCursor(w http.ResponseWriter, r *http.Request, _ apigen.ReleaseLogCursorParams) {
-	p, ok := s.authorize(w, r, false, "read")
+	p, ok := s.authorize(w, r, "read")
 	if !ok {
 		return
 	}
@@ -334,7 +331,7 @@ func (s *Server) StreamLogs(w http.ResponseWriter, r *http.Request, params apige
 				return logs.Page{}, auth.ErrUnauthorized
 			}
 		}
-		canRead := current.Has("config.secrets") && s.recentAuthentication(r, current)
+		canRead := current.Has("config.secrets")
 		page, err := s.Agent.QueryLogs(ctx, agent.LogReadRequest{Subject: subject, AllowSensitive: canRead, Query: q})
 		if errors.Is(err, logs.ErrCursor) || isLogCursorExpired(err) {
 			q.Cursor = ""
@@ -344,12 +341,6 @@ func (s *Server) StreamLogs(w http.ResponseWriter, r *http.Request, params apige
 		}
 		if err == nil {
 			q.Cursor = page.Cursor
-		}
-		if !canRead && current.Has("config.secrets") {
-			var denied *fault.Error
-			if errors.As(err, &denied) && denied.Code == "FORBIDDEN" {
-				err = fault.New(403, "REAUTHENTICATION_REQUIRED", "原生日志身份确认已过期，请重新验证密码后继续")
-			}
 		}
 		return page, err
 	}

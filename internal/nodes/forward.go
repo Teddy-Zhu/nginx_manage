@@ -36,7 +36,7 @@ func (s *Service) invalidate(ctx context.Context, c Connection, state, message s
 
 // OpenForward only dispatches a current request. No retry or offline queue can
 // turn a transport timeout into another business operation.
-func (s *Service) OpenForward(ctx context.Context, p auth.Principal, recent bool, trace, id string, route api.RemoteRoute, path string, headers http.Header, body []byte) (*Forward, error) {
+func (s *Service) OpenForward(ctx context.Context, p auth.Principal, trace, id string, route api.RemoteRoute, path string, headers http.Header, body []byte) (*Forward, error) {
 	if err := p.Require(append([]string{"nodes.manage", "read"}, route.Scopes...)...); err != nil {
 		return nil, err
 	}
@@ -130,7 +130,6 @@ func (s *Service) OpenForward(ctx context.Context, p auth.Principal, recent bool
 	req.Header.Set(remoteapi.ProtocolHeader, "1")
 	scopes, _ := json.Marshal(p.Scopes)
 	req.Header.Set(remoteapi.ScopesHeader, string(scopes))
-	req.Header.Set(remoteapi.RecentHeader, strconv.FormatBool(recent))
 	for _, name := range []string{"Accept", "Content-Type"} {
 		if v := headers.Get(name); v != "" {
 			req.Header.Set(name, v)

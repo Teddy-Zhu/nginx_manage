@@ -21,7 +21,7 @@ func auditReadError(err error) error {
 }
 
 func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request, params apigen.ListAuditParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	if s.Audit == nil {
@@ -48,7 +48,7 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request, params apigen
 }
 
 func (s *Server) ExportAudit(w http.ResponseWriter, r *http.Request, _ apigen.ExportAuditParams) {
-	p, ok := s.authorize(w, r, true, "read")
+	p, ok := s.authorize(w, r, "read")
 	if !ok {
 		return
 	}

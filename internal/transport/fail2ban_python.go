@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) ChangeFail2banPython(w http.ResponseWriter, r *http.Request, params apigen.ChangeFail2banPythonParams) {
-	p, ok := s.authorize(w, r, true, "components.manage")
+	p, ok := s.authorize(w, r, "components.manage")
 	if !ok || !s.fail2banReady(w, r) {
 		return
 	}
@@ -25,7 +25,7 @@ func (s *Server) ChangeFail2banPython(w http.ResponseWriter, r *http.Request, pa
 	s.respond(w, r, http.StatusAccepted, "OK", "Python 依赖任务已创建", out)
 }
 func (s *Server) GetFail2banPythonTasks(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.fail2banReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.fail2banReady(w, r) {
 		return
 	}
 	out, err := s.Fail2ban.PythonTasks(r.Context())

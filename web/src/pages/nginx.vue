@@ -237,7 +237,9 @@ const formDirty = computed(
       )),
 );
 const dirty = computed(
-  () => sourceJSON.value !== persisted.value || !!formDirty.value,
+  () =>
+    tree.value !== null &&
+    (sourceJSON.value !== persisted.value || !!formDirty.value),
 );
 const differsFromDesired = computed(
   () =>

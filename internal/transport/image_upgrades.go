@@ -15,7 +15,7 @@ func (s *Server) imageUpgradesReady(w http.ResponseWriter, r *http.Request) bool
 	return true
 }
 func (s *Server) listImageUpgrades(w http.ResponseWriter, r *http.Request, component string) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.imageUpgradesReady(w, r) {
 		return
 	}
@@ -27,7 +27,7 @@ func (s *Server) listImageUpgrades(w http.ResponseWriter, r *http.Request, compo
 	s.ok(w, r, out)
 }
 func (s *Server) getImageUpgrade(w http.ResponseWriter, r *http.Request, component, id string) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.imageUpgradesReady(w, r) {
 		return
 	}
@@ -39,7 +39,7 @@ func (s *Server) getImageUpgrade(w http.ResponseWriter, r *http.Request, compone
 	s.ok(w, r, out)
 }
 func (s *Server) createImageUpgrade(w http.ResponseWriter, r *http.Request, component, key string) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.imageUpgradesReady(w, r) {
 		return
 	}
@@ -64,7 +64,7 @@ func (s *Server) createImageUpgrade(w http.ResponseWriter, r *http.Request, comp
 	s.respond(w, r, http.StatusAccepted, "OK", "镜像替换任务已受理", out)
 }
 func (s *Server) resumeImageUpgrade(w http.ResponseWriter, r *http.Request, component, id, key string) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.imageUpgradesReady(w, r) {
 		return
 	}

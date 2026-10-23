@@ -18,8 +18,8 @@ func pairingExchangeRequest(r *http.Request) bool {
 	return r.Method == http.MethodPost && len(parts) == 7 && parts[1] == "api" && parts[2] == "v1" && parts[3] == "remote" && parts[4] == "pairings" && parts[5] != "" && parts[6] == "exchange"
 }
 
-func (s *Server) pairingAdministrator(w http.ResponseWriter, r *http.Request, recent bool) (auth.Principal, bool) {
-	p, ok := s.nodePrincipal(w, r, recent)
+func (s *Server) pairingAdministrator(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return p, false
 	}
@@ -31,7 +31,7 @@ func (s *Server) pairingAdministrator(w http.ResponseWriter, r *http.Request, re
 }
 
 func (s *Server) ListPairings(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.pairingAdministrator(w, r, false)
+	p, ok := s.pairingAdministrator(w, r)
 	if !ok {
 		return
 	}
@@ -43,7 +43,7 @@ func (s *Server) ListPairings(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, result)
 }
 func (s *Server) CreatePairing(w http.ResponseWriter, r *http.Request, params apigen.CreatePairingParams) {
-	p, ok := s.pairingAdministrator(w, r, true)
+	p, ok := s.pairingAdministrator(w, r)
 	if !ok {
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Server) CreatePairing(w http.ResponseWriter, r *http.Request, params ap
 	s.respond(w, r, http.StatusCreated, "OK", "配对授权已登记", result)
 }
 func (s *Server) RevokePairing(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.RevokePairingParams) {
-	p, ok := s.pairingAdministrator(w, r, true)
+	p, ok := s.pairingAdministrator(w, r)
 	if !ok {
 		return
 	}
@@ -102,7 +102,7 @@ func (s *Server) ConfirmPairing(w http.ResponseWriter, r *http.Request, id apige
 		s.fail(w, r, auth.ErrForbidden)
 		return
 	}
-	p, ok := s.authorize(w, r, false, "read")
+	p, ok := s.authorize(w, r, "read")
 	if !ok {
 		return
 	}
@@ -123,7 +123,7 @@ func (s *Server) ConfirmPairing(w http.ResponseWriter, r *http.Request, id apige
 	s.ok(w, r, result)
 }
 func (s *Server) ListPairingJobs(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.nodePrincipal(w, r, false)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -135,7 +135,7 @@ func (s *Server) ListPairingJobs(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, result)
 }
 func (s *Server) GetPairingJob(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.nodePrincipal(w, r, false)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -147,7 +147,7 @@ func (s *Server) GetPairingJob(w http.ResponseWriter, r *http.Request, id apigen
 	s.ok(w, r, result)
 }
 func (s *Server) StartPairing(w http.ResponseWriter, r *http.Request, params apigen.StartPairingParams) {
-	p, ok := s.nodePrincipal(w, r, true)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -164,7 +164,7 @@ func (s *Server) StartPairing(w http.ResponseWriter, r *http.Request, params api
 	s.respond(w, r, http.StatusAccepted, "OK", "配对任务已受理", result)
 }
 func (s *Server) ResumePairing(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.ResumePairingParams) {
-	p, ok := s.nodePrincipal(w, r, true)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -176,7 +176,7 @@ func (s *Server) ResumePairing(w http.ResponseWriter, r *http.Request, id apigen
 	s.respond(w, r, http.StatusAccepted, "OK", "原配对已核对", result)
 }
 func (s *Server) AbandonPairing(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.AbandonPairingParams) {
-	p, ok := s.nodePrincipal(w, r, true)
+	p, ok := s.nodePrincipal(w, r)
 	if !ok {
 		return
 	}

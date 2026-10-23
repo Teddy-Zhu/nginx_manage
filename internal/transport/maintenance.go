@@ -25,12 +25,12 @@ func (s *Server) maintenanceAdmission(next http.Handler) http.Handler {
 		imageUpgrade := r.Method == http.MethodPost && len(parts) >= 3 && (parts[0] == "panel" || parts[0] == "nginx") && parts[1] == "images" && parts[2] == "upgrades" && (len(parts) == 3 || len(parts) == 5 && parts[4] == "resume")
 		runtimeHistory := r.Method == http.MethodPost && (path == "history/runtime/preview" || path == "history/runtime/execute")
 		backupCleanup := r.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "backups"
-		if path == "session" || path == "session/reauthenticate" || path == "bootstrap" || path == "maintenance" || release || installation || switchComponent || update || agentUpgrade || imageUpgrade || backupCleanup || runtimeHistory {
+		if path == "session" || path == "bootstrap" || path == "maintenance" || release || installation || switchComponent || update || agentUpgrade || imageUpgrade || backupCleanup || runtimeHistory {
 			next.ServeHTTP(w, r)
 			return
 		}
 		if !pairingExchangeRequest(r) {
-			if _, ok := s.authorize(w, r, false); !ok {
+			if _, ok := s.authorize(w, r); !ok {
 				return
 			}
 		}
@@ -62,13 +62,13 @@ func (s *Server) maintenanceReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) GetMaintenance(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read", "system.write"); !ok || !s.maintenanceReady(w, r) {
+	if _, ok := s.authorize(w, r, "read", "system.write"); !ok || !s.maintenanceReady(w, r) {
 		return
 	}
 	s.ok(w, r, s.Maintenance.View())
 }
 func (s *Server) EnterMaintenance(w http.ResponseWriter, r *http.Request, params apigen.EnterMaintenanceParams) {
-	p, ok := s.authorize(w, r, true, "system.write")
+	p, ok := s.authorize(w, r, "system.write")
 	if !ok || !s.maintenanceReady(w, r) {
 		return
 	}
@@ -85,7 +85,7 @@ func (s *Server) EnterMaintenance(w http.ResponseWriter, r *http.Request, params
 	s.respond(w, r, http.StatusAccepted, "OK", "维护请求已受理", out)
 }
 func (s *Server) ReleaseMaintenance(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.ReleaseMaintenanceParams) {
-	p, ok := s.authorize(w, r, true, "system.write")
+	p, ok := s.authorize(w, r, "system.write")
 	if !ok || !s.maintenanceReady(w, r) {
 		return
 	}

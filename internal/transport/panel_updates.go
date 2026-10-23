@@ -17,7 +17,7 @@ func (s *Server) updatesReady(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (s *Server) ListPanelUpdates(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.updatesReady(w, r) {
 		return
 	}
@@ -30,7 +30,7 @@ func (s *Server) ListPanelUpdates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GetPanelUpdate(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.updatesReady(w, r) {
 		return
 	}
@@ -43,7 +43,7 @@ func (s *Server) GetPanelUpdate(w http.ResponseWriter, r *http.Request, id apige
 }
 
 func (s *Server) CreatePanelUpdate(w http.ResponseWriter, r *http.Request, params apigen.CreatePanelUpdateParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.updatesReady(w, r) {
 		return
 	}
@@ -61,7 +61,7 @@ func (s *Server) CreatePanelUpdate(w http.ResponseWriter, r *http.Request, param
 }
 
 func (s *Server) ResumePanelUpdate(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.ResumePanelUpdateParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.updatesReady(w, r) {
 		return
 	}

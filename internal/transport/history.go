@@ -18,7 +18,7 @@ func historyError(err error) error {
 }
 
 func (s *Server) PreviewHistory(w http.ResponseWriter, r *http.Request, _ apigen.PreviewHistoryParams) {
-	p, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "system.write", "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Server) PreviewHistory(w http.ResponseWriter, r *http.Request, _ apigen
 }
 
 func (s *Server) ExecuteHistory(w http.ResponseWriter, r *http.Request, params apigen.ExecuteHistoryParams) {
-	p, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "system.write", "config.write", "config.secrets")
 	if !ok {
 		return
 	}

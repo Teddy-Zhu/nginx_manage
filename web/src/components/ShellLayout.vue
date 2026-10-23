@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NAlert, NButton, NTag, NModal, NInput, NForm, NFormItem, NSelect, useDialog } from "naive-ui";
+import { NAlert, NButton, NTag, NSelect, useDialog } from "naive-ui";
 import { useSession } from "../stores/session";
-import { api } from "../api/client";
 import { useAction } from "../composables/action";
 import { useNodes } from "../stores/node";
 
@@ -18,8 +17,6 @@ const nodeOptions = computed(() => [
   { label: "本机", value: "" },
   ...nodes.connections.filter((node) => !node.removed_at || node.id === nodes.selected?.connection).map((node) => ({ label: node.name, value: node.id, disabled: !!node.removed_at || node.state === "removing" })),
 ]);
-const reauth = ref(false),
-  password = ref("");
 const title = computed(() => route.meta.title ?? "NginxPanel");
 const links = computed(() =>
   router
@@ -37,16 +34,6 @@ const groups = computed(() => {
   }
   return [...result].map(([name, items]) => ({ name, items }));
 });
-function requestReauth() {
-  reauth.value = true;
-}
-async function verify() {
-  await run(async () => {
-    await api.reauthenticate(password.value);
-    password.value = "";
-    reauth.value = false;
-  }, "身份已确认，请重试刚才的操作");
-}
 async function logout() {
   await run(async () => {
     await session.logout();
@@ -65,19 +52,15 @@ function selectNode(id: string) {
     negativeText: "取消",
     onPositiveClick: async () => {
       dialog.destroyAll();
-      reauth.value = false;
-      password.value = "";
       await run(() => nodes.select(id));
     },
   });
 }
 onMounted(() => {
-  window.addEventListener("reauthentication-required", requestReauth);
   window.addEventListener("node-connections-changed", loadNodes);
   void loadNodes();
 });
 onUnmounted(() => {
-  window.removeEventListener("reauthentication-required", requestReauth);
   window.removeEventListener("node-connections-changed", loadNodes);
 });
 </script>
@@ -137,26 +120,5 @@ onUnmounted(() => {
         NginxPanel
       </footer>
     </div>
-    <n-modal
-      v-model:show="reauth"
-      preset="card"
-      title="验证身份"
-      style="width: 400px; max-width: 92vw"
-      @after-leave="password = ''"
-    >
-      <p class="muted">此操作涉及敏感配置，请确认当前管理员密码。</p>
-      <n-form @submit.prevent="verify"
-        ><n-form-item label="密码"
-          ><n-input
-            v-model:value="password"
-            type="password"
-            autofocus
-            show-password-on="click"
-            autocomplete="current-password" /></n-form-item
-        ><n-button type="primary" attr-type="submit" block :loading="busy"
-          >确认身份</n-button
-        ></n-form
-      >
-    </n-modal>
   </div>
 </template>

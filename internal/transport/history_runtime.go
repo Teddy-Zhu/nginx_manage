@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Server) ListRuntimeHistory(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read", "system.write", "config.secrets"); !ok {
+	if _, ok := s.authorize(w, r, "read", "system.write", "config.secrets"); !ok {
 		return
 	}
 	if s.Agent == nil {
@@ -26,7 +26,7 @@ func (s *Server) ListRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) PreviewRuntimeHistory(w http.ResponseWriter, r *http.Request, _ apigen.PreviewRuntimeHistoryParams) {
-	if _, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets"); !ok {
+	if _, ok := s.authorize(w, r, "system.write", "config.write", "config.secrets"); !ok {
 		return
 	}
 	var filter history.RuntimeFilter
@@ -57,7 +57,7 @@ func (s *Server) PreviewRuntimeHistory(w http.ResponseWriter, r *http.Request, _
 }
 
 func (s *Server) ExecuteRuntimeHistory(w http.ResponseWriter, r *http.Request, params apigen.ExecuteRuntimeHistoryParams) {
-	p, ok := s.authorize(w, r, true, "system.write", "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "system.write", "config.write", "config.secrets")
 	if !ok {
 		return
 	}

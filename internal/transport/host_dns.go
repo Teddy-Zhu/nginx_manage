@@ -15,7 +15,7 @@ func (s *Server) dnsReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) GetHostDNS(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok || !s.dnsReady(w, r) {
+	if _, ok := s.authorize(w, r, "read"); !ok || !s.dnsReady(w, r) {
 		return
 	}
 	out, err := s.HostDNS.Overview(r.Context())
@@ -26,7 +26,7 @@ func (s *Server) GetHostDNS(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) CreateHostDNSPlan(w http.ResponseWriter, r *http.Request, params apigen.CreateHostDNSPlanParams) {
-	p, ok := s.authorize(w, r, true, "host.dns.write")
+	p, ok := s.authorize(w, r, "host.dns.write")
 	if !ok || !s.dnsReady(w, r) {
 		return
 	}
@@ -43,7 +43,7 @@ func (s *Server) CreateHostDNSPlan(w http.ResponseWriter, r *http.Request, param
 	s.ok(w, r, out)
 }
 func (s *Server) ApplyHostDNS(w http.ResponseWriter, r *http.Request, params apigen.ApplyHostDNSParams) {
-	p, ok := s.authorize(w, r, true, "host.dns.write")
+	p, ok := s.authorize(w, r, "host.dns.write")
 	if !ok || !s.dnsReady(w, r) {
 		return
 	}
@@ -68,7 +68,7 @@ func (s *Server) RollbackHostDNS(w http.ResponseWriter, r *http.Request, id apig
 	s.decideHostDNS(w, r, id, params.IdempotencyKey, "rollback")
 }
 func (s *Server) decideHostDNS(w http.ResponseWriter, r *http.Request, id, key, action string) {
-	p, ok := s.authorize(w, r, true, "host.dns.write")
+	p, ok := s.authorize(w, r, "host.dns.write")
 	if !ok || !s.dnsReady(w, r) {
 		return
 	}

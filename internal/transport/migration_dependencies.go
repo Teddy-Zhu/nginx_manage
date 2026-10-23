@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) PrepareMigrationDependencies(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.PrepareMigrationDependenciesParams) {
-	p, ok := s.authorize(w, r, true, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write", "components.manage")
+	p, ok := s.authorize(w, r, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write", "components.manage")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}

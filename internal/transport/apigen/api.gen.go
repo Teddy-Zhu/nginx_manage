@@ -9039,17 +9039,6 @@ type LoginParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
-// ReauthenticateJSONBody defines parameters for Reauthenticate.
-type ReauthenticateJSONBody struct {
-	Password string `json:"password"`
-}
-
-// ReauthenticateParams defines parameters for Reauthenticate.
-type ReauthenticateParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
-}
-
 // RevokeSessionsParams defines parameters for RevokeSessions.
 type RevokeSessionsParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -9368,9 +9357,6 @@ type ExchangePairingJSONRequestBody = PairingClaim
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody LoginJSONBody
-
-// ReauthenticateJSONRequestBody defines body for Reauthenticate for application/json ContentType.
-type ReauthenticateJSONRequestBody ReauthenticateJSONBody
 
 // SetModuleJSONRequestBody defines body for SetModule for application/json ContentType.
 type SetModuleJSONRequestBody SetModuleJSONBody
@@ -10215,9 +10201,6 @@ type ServerInterface interface {
 
 	// (POST /session)
 	Login(w http.ResponseWriter, r *http.Request, params LoginParams)
-
-	// (POST /session/reauthenticate)
-	Reauthenticate(w http.ResponseWriter, r *http.Request, params ReauthenticateParams)
 
 	// (POST /sessions/revoke-all)
 	RevokeSessions(w http.ResponseWriter, r *http.Request, params RevokeSessionsParams)
@@ -19864,47 +19847,6 @@ func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
-// Reauthenticate operation middleware
-func (siw *ServerInterfaceWrapper) Reauthenticate(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ReauthenticateParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.Reauthenticate(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // RevokeSessions operation middleware
 func (siw *ServerInterfaceWrapper) RevokeSessions(w http.ResponseWriter, r *http.Request) {
 
@@ -20375,7 +20317,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/bootstrap", wrapper.Bootstrap)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/session", wrapper.Logout)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/session", wrapper.Login)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/session/reauthenticate", wrapper.Reauthenticate)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/account/password", wrapper.ChangePassword)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/sessions/revoke-all", wrapper.RevokeSessions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/credentials", wrapper.ListCredentials)

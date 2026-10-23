@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) PreflightMigration(w http.ResponseWriter, r *http.Request, id apigen.ID, _ apigen.PreflightMigrationParams) {
-	p, ok := s.authorize(w, r, true, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write")
+	p, ok := s.authorize(w, r, "backup.restore", "backup.secrets", "config.write", "config.secrets", "security.write")
 	if !ok || !s.migrationReady(w, r) {
 		return
 	}

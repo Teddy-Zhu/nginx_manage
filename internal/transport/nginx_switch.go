@@ -16,7 +16,7 @@ func (s *Server) switchesReady(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) ListNginxSwitches(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.switchesReady(w, r) {
 		return
 	}
@@ -28,7 +28,7 @@ func (s *Server) ListNginxSwitches(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 func (s *Server) GetNginxSwitch(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.switchesReady(w, r) {
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Server) GetNginxSwitch(w http.ResponseWriter, r *http.Request, id apige
 	s.ok(w, r, out)
 }
 func (s *Server) CreateNginxSwitch(w http.ResponseWriter, r *http.Request, params apigen.CreateNginxSwitchParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.switchesReady(w, r) {
 		return
 	}
@@ -69,7 +69,7 @@ func (s *Server) CreateNginxSwitch(w http.ResponseWriter, r *http.Request, param
 	s.respond(w, r, http.StatusAccepted, "OK", "组件切换任务已受理", out)
 }
 func (s *Server) nginxSwitchControl(w http.ResponseWriter, r *http.Request, id, key, command string) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.switchesReady(w, r) {
 		return
 	}

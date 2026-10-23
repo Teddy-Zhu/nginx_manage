@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) ListACMEProfiles(w http.ResponseWriter, r *http.Request, params apigen.ListACMEProfilesParams) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	limit, offset, err := pagination(params.Limit, params.Offset)
@@ -24,7 +24,7 @@ func (s *Server) ListACMEProfiles(w http.ResponseWriter, r *http.Request, params
 	s.ok(w, r, out)
 }
 func (s *Server) ListACMEOrders(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	if _, ok := s.authorize(w, r, false, "read"); !ok {
+	if _, ok := s.authorize(w, r, "read"); !ok {
 		return
 	}
 	out, err := s.ACME.Orders(r.Context(), id)
@@ -35,7 +35,7 @@ func (s *Server) ListACMEOrders(w http.ResponseWriter, r *http.Request, id apige
 	s.ok(w, r, out)
 }
 func (s *Server) CreateACMEProfile(w http.ResponseWriter, r *http.Request, params apigen.CreateACMEProfileParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -52,7 +52,7 @@ func (s *Server) CreateACMEProfile(w http.ResponseWriter, r *http.Request, param
 	s.respond(w, r, 201, "OK", "签发配置已创建", out)
 }
 func (s *Server) IssueACMEProfile(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.IssueACMEProfileParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -69,7 +69,7 @@ func (s *Server) IssueACMEProfile(w http.ResponseWriter, r *http.Request, id api
 	s.respond(w, r, 202, "OK", "签发任务已排队", out)
 }
 func (s *Server) ArchiveACMEProfile(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.ArchiveACMEProfileParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -87,7 +87,7 @@ func (s *Server) ArchiveACMEProfile(w http.ResponseWriter, r *http.Request, id a
 }
 
 func (s *Server) UpdateACMEPolicy(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.UpdateACMEPolicyParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}

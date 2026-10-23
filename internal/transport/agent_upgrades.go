@@ -17,7 +17,7 @@ func (s *Server) agentUpgradesReady(w http.ResponseWriter, r *http.Request) bool
 }
 
 func (s *Server) ListAgentUpgrades(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.agentUpgradesReady(w, r) {
 		return
 	}
@@ -30,7 +30,7 @@ func (s *Server) ListAgentUpgrades(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GetAgentUpgrade(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	p, ok := s.authorize(w, r, false, "read", "components.manage")
+	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.agentUpgradesReady(w, r) {
 		return
 	}
@@ -43,7 +43,7 @@ func (s *Server) GetAgentUpgrade(w http.ResponseWriter, r *http.Request, id apig
 }
 
 func (s *Server) CreateAgentUpgrade(w http.ResponseWriter, r *http.Request, params apigen.CreateAgentUpgradeParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.agentUpgradesReady(w, r) {
 		return
 	}
@@ -61,7 +61,7 @@ func (s *Server) CreateAgentUpgrade(w http.ResponseWriter, r *http.Request, para
 }
 
 func (s *Server) ResumeAgentUpgrade(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.ResumeAgentUpgradeParams) {
-	p, ok := s.authorize(w, r, true, "components.manage", "system.write")
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
 	if !ok || !s.agentUpgradesReady(w, r) {
 		return
 	}

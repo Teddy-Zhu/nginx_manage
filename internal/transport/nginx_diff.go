@@ -13,7 +13,7 @@ import (
 )
 
 func (s *Server) DiffConfigTree(w http.ResponseWriter, r *http.Request, _ apigen.DiffConfigTreeParams) {
-	if _, ok := s.authorize(w, r, true, "config.secrets"); !ok {
+	if _, ok := s.authorize(w, r, "config.secrets"); !ok {
 		return
 	}
 	var in nginxconfig.DiffRequest
@@ -55,7 +55,7 @@ func (s *Server) externalSnapshot(r *http.Request, filePath string) (agent.Exter
 	return out, tree, err
 }
 func (s *Server) InspectNginxExternal(w http.ResponseWriter, r *http.Request, params apigen.InspectNginxExternalParams) {
-	if _, ok := s.authorize(w, r, true, "config.secrets"); !ok {
+	if _, ok := s.authorize(w, r, "config.secrets"); !ok {
 		return
 	}
 	filePath := ""
@@ -70,7 +70,7 @@ func (s *Server) InspectNginxExternal(w http.ResponseWriter, r *http.Request, pa
 	s.ok(w, r, out)
 }
 func (s *Server) CaptureNginxExternal(w http.ResponseWriter, r *http.Request, params apigen.CaptureNginxExternalParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
 	if !ok {
 		return
 	}
@@ -114,7 +114,7 @@ func (s *Server) CaptureNginxExternal(w http.ResponseWriter, r *http.Request, pa
 }
 
 func (s *Server) RestoreNginxExternal(w http.ResponseWriter, r *http.Request, params apigen.RestoreNginxExternalParams) {
-	p, ok := s.authorize(w, r, true, "config.write", "config.secrets", "security.write")
+	p, ok := s.authorize(w, r, "config.write", "config.secrets", "security.write")
 	if !ok {
 		return
 	}

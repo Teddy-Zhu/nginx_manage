@@ -284,7 +284,7 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 		}
 	}
 	if action == "recover" {
-		out, err = recoverNFTRegistration(dataDir, value)
+		out, err = recoverNFTRegistration(dataDir, value, runtime)
 		if err == nil && runtime != nil && value.State == "released" {
 			err = clearInactiveFirewallRuntime(dataDir)
 			if err == nil {
@@ -315,7 +315,11 @@ func ManageFirewallRegistration(ctx context.Context, dataDir, scope, action stri
 	}
 	call, cancel := context.WithTimeout(ctx, 3*time.Second)
 	var kernel firewall.KernelView
-	if value != nil && value.State == "registered" {
+	if runtime != nil {
+		// A confirmed policy removal retains its own marker on the empty table.
+		// Prove that exact root record before releasing the registration.
+		kernel, err = (&hostFirewall{state: *runtime}).snapshotContext(call, runtime.Confirmed)
+	} else if value != nil && value.State == "registered" {
 		kernel, err = snapshotNFTRegistration(call, value.Owner)
 	} else {
 		kernel, err = snapshotNFTKernel(call)
@@ -414,12 +418,18 @@ func registrationSnapshotDetached(owner string) (firewall.KernelView, error) {
 
 // Recovery only observes and updates the original root record. It never sends
 // a new transaction, adopts an existing unrelated table or restores a snapshot.
-func recoverNFTRegistration(dataDir string, value *nftRegistrationCheckpoint) (FirewallRegistrationStatus, error) {
+func recoverNFTRegistration(dataDir string, value *nftRegistrationCheckpoint, runtime *firewallCheckpoint) (FirewallRegistrationStatus, error) {
 	var out FirewallRegistrationStatus
 	if value == nil {
 		return out, errors.New("不存在可恢复的防火墙登记")
 	}
-	kernel, err := registrationSnapshotDetached(value.Owner)
+	var kernel firewall.KernelView
+	var err error
+	if runtime != nil {
+		kernel, err = (&hostFirewall{state: *runtime}).snapshot(runtime.Confirmed)
+	} else {
+		kernel, err = registrationSnapshotDetached(value.Owner)
+	}
 	if err != nil {
 		return out, err
 	}
