@@ -6,7 +6,23 @@
 
 首次使用从[部署指南](docs/deployment.md)开始，安装后按[使用手册](docs/user-guide.md)创建第一个代理。
 
-在已有 Docker 的构建机运行 `bash scripts/build.sh`，自动检测架构并将安装包输出到 `dist/`。将安装包解压到实际目标后运行 `sudo bash install.sh`，自动检测目标环境并推荐配置，核对摘要后确认安装；自定义选项位于高级设置。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务。
+将下例的 `OWNER/REPO` 替换为实际 GitHub 仓库，在部署目标选择一种方式：
+
+**源码安装**（需要 Git、Docker，编译工具全部在容器内）：
+
+```sh
+git clone https://github.com/OWNER/REPO.git nginxpanel
+cd nginxpanel
+sudo bash install.sh --yes
+```
+
+**Release 安装**（自动下载本机架构的已编译包，无需 Docker、Go 或 Node.js）：
+
+```sh
+curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o nginxpanel-setup.sh && bash nginxpanel-setup.sh --yes
+```
+
+两种方式都会自动检测环境、安装并启动服务，最后输出首次访问方法。去掉 `--yes` 可先核对摘要；加 `--advanced` 才进入自定义设置。也可对下载的脚本加 `--source`，一次完成拉取源码、容器编译和安装。Release 入口需仓库已发布包含安装脚本的新发行。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务。
 
 | 文档 | 内容 |
 | --- | --- |

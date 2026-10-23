@@ -9,23 +9,32 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 root=$(cd -- "$(dirname -- "$0")" && pwd -P)
 usage() {
   cat <<'EOF'
-用法：sudo bash install.sh
+用法：sudo bash install.sh [--yes] [--advanced]
 自动检测本机系统、架构、安装材料、Docker、Nginx 和管理端口，确认推荐方案后安装。
-需要更改部署方式、路径或主机授权时进入高级设置，无需预先指定环境参数。
-先在构建机执行 bash scripts/build.sh，将生成的 tar 解压到部署目标。
-不会在目标编译、安装 Docker、下载 Nginx 或接管已有系统 Nginx。
+源码目录自动使用 Docker 编译并接续安装，无需手动构建或解包。
+--yes 使用推荐配置直接安装；--advanced 才逐项调整路径、部署方式和主机授权。
+不会安装宿主机编译工具、自动安装 Docker 或接管已有系统 Nginx。
 
 带参数时转交标准安装器，例如：
 sudo bash install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web --without-nginx --start
 完整参数：bash deploy/native/install.sh --help
 EOF
 }
-if (($#)); then
-  case "$1" in -h|--help) usage; exit 0 ;; esac
-  exec /bin/bash "$root/deploy/native/install.sh" "$@"
-fi
+auto_confirm=no advanced=no
+while (($#)); do
+  case "$1" in
+    --yes) auto_confirm=yes; shift ;;
+    --advanced) advanced=yes; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      [[ $auto_confirm == no && $advanced == no ]] || die '--yes/--advanced 不能与标准安装器参数混用'
+      exec /bin/bash "$root/deploy/native/install.sh" "$@" ;;
+  esac
+done
 [[ $EUID == 0 ]] || die '请在实际部署目标使用 sudo bash install.sh'
-[[ -t 0 && -t 1 ]] || die '引导安装需要交互终端；自动化安装请传入标准安装参数'
+if [[ $auto_confirm == no || $advanced == yes ]]; then
+  [[ -t 0 && -t 1 ]] || die '交互安装需要终端；使用 --yes 按推荐配置直接安装'
+fi
 [[ -f $root/deploy/native/install.sh && -f $root/manage.sh ]] || die '安装材料不完整，缺少标准安装器或管理脚本'
 
 ask() {
@@ -119,6 +128,7 @@ detect_image() {
 }
 confirm_install() {
   local answer
+  if [[ $auto_confirm == yes ]]; then return; fi
   read -r -p '输入 INSTALL 执行，其他输入取消: ' answer || die '输入已结束，安装取消'
   [[ $answer == INSTALL ]] || { printf '%s\n' '安装已取消'; exit 0; }
 }
@@ -140,10 +150,26 @@ fi
 [[ ! -e /etc/nginxpanel/install/intent && ! -L /etc/nginxpanel/install/intent ]] || die '已有标准安装记录但没有引导安装命令；请用原参数续装，日常管理可运行本目录的 manage.sh'
 
 [[ $(uname -s) == Linux && -d /run/systemd/system ]] || die '安装目标需要运行 systemd 的 Linux 主机'
-for tool in stat readlink od find sha256sum timeout systemctl; do
+for tool in stat readlink od find sha256sum timeout systemctl tar mktemp; do
   command -v "$tool" >/dev/null || die "环境检测缺少系统工具：$tool"
 done
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
+# 源码入口与发行包入口最终使用同一个安装器，构建产物不写回源码树。
+if [[ -f $root/scripts/build.sh && -f $root/go.mod && -f $root/web/package.json ]]; then
+  command -v docker >/dev/null || die '源码安装需要已有 Docker；无需编译时请使用 setup.sh 下载 Release'
+  build_work=$(mktemp -d /tmp/nginxpanel-build.XXXXXXXX)
+  trap 'rm -rf -- "$build_work"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  /bin/bash "$root/scripts/build.sh" --output-dir "$build_work"
+  install -d -m 0700 "$build_work/package"
+  tar -xf "$build_work/nginxpanel-linux-$arch.tar" -C "$build_work/package"
+  next_args=()
+  if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
+  if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
+  /bin/bash "$build_work/package/install.sh" "${next_args[@]}"
+  exit 0
+fi
 os_name=Linux
 if [[ -r /etc/os-release ]]; then
   while IFS='=' read -r key value; do
@@ -208,15 +234,11 @@ if [[ -n $nginx ]]; then nginx_kind=native; fi
 if [[ $panel_mode == docker && -n $nginx_image ]]; then nginx_kind=image; fi
 printf '\nNginxPanel 环境检测\n  系统：%s\n  架构：%s\n  本机 Docker：%s\n  Nginx 程序：%s\n  推荐部署：%s\n  推荐依据：%s\n  程序：%s\n  前端：%s\n  数据：%s\n  回环入口：https://%s\n  Nginx 来源：%s\n' "$os_name" "$arch" "$docker_state" "${nginx:-未检测到}" "$panel_mode" "$mode_reason" "$binary" "$web" "$data" "$listen" "$nginx_kind"
 printf '%s\n' '主机管理默认只读；安装完成后默认启用并启动服务。'
-custom=no
+custom=$advanced
 if [[ ! -f $binary || ! -f $web/index.html ]]; then
-  printf '%s\n' '未找到完整的程序与前端，需要在高级设置中补充已构建材料路径。'
-  custom=yes
+  [[ $custom == yes ]] || die '安装包缺少程序或前端；请使用完整 Release 或在源码目录运行 install.sh'
 elif [[ $data_ready == no ]]; then
-  printf '%s\n' '默认数据目录均不可用，需要在高级设置中选择新的空目录。'
-  custom=yes
-elif yes_no '调整推荐配置或主机授权？'; then
-  custom=yes
+  [[ $custom == yes ]] || die '默认数据目录均不可用；使用 --advanced 选择新的空目录'
 fi
 if [[ $custom == yes ]]; then
   choose panel_mode '面板部署方式' "$mode_default" native:原生服务 docker:Docker容器

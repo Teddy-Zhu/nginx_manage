@@ -2,7 +2,7 @@
 
 [文档首页](README.md) · [使用手册](user-guide.md) · [运维与故障处理](operations.md)
 
-本文从准备安装材料开始，到首次登录并具备创建代理的条件。示例数据目录为 `/srv/nginxpanel`，管理地址为 `127.0.0.1:9443`；自动安装的实际选择以向导摘要及管理脚本 `info` 输出为准。安装命令均在实际部署目标执行。
+常规部署直接使用[一键安装](#3-一键安装)，自动选择本机架构和默认配置；第 4、5 节是手动高级安装参考。示例数据目录为 `/srv/nginxpanel`，管理地址为 `127.0.0.1:9443`；实际选择以安装摘要及管理脚本 `info` 输出为准。安装命令均在实际部署目标执行。
 
 ## 1. 选择部署方式
 
@@ -25,38 +25,41 @@ Docker 模式仍会在目标宿主机创建账户、目录、Agent 服务及必�
 - SELinux 启用时，目标需具备 `semodule`、`restorecon`、`matchpathcon` 及对应策略工具；Docker 模式还需容器策略。安装器登记本应用标签，保留现有防护状态。
 - Go、Node.js、pnpm 只在构建环境使用。运行面板无需 Node.js 或独立数据库；启用 Fail2ban 时才需要受支持的宿主机 Python 等依赖。
 
-## 3. 准备程序与前端
+## 3. 一键安装
 
-### 使用已有安装材料
+以下 `OWNER/REPO` 为实际 GitHub 仓库。安装脚本不自动安装 Docker 或宿主机编译工具。
 
-从受信来源取得与目标架构一致的程序、前端和安装脚本。使用本项目的 Docker 构建包时，包内已包含 `nginxpanel`、`web/`、引导入口 `install.sh`、管理入口 `manage.sh` 和标准安装器；前端根目录含 `index.html` 及配套资源。
+### 从源码安装
 
-签名发行还应取得原始 `release-manifest.json`、`release-manifest.sig` 和所需资产。发布者公钥通过独立渠道核对，按[发行信任说明](releases.md#信任与签名)放入目标 `/etc/nginxpanel/release-trust.json`。离线准备和在线获取均使用该信任。
-
-### 从源码构建原生产物
-
-在已有 Docker、支持 BuildKit 输出的构建机，从项目根执行。脚本读取 `go.mod` 和 `web/package.json` 中的固定版本，Go、Node.js、pnpm 及依赖均在容器内使用；源码通过构建上下文复制，宿主机仅接收输出产物。
+目标已有 Git、Docker 和支持 BuildKit 输出的构建能力时：
 
 ```sh
-bash scripts/build.sh
+git clone https://github.com/OWNER/REPO.git nginxpanel
+cd nginxpanel
+sudo bash install.sh --yes
 ```
 
-`make build` 调用同一脚本，默认自动检测构建机架构，无需指定 `--arch`。只有构建机与部署目标架构不同，才使用 `bash scripts/build.sh --arch arm64` 或 `make build ARCH=arm64` 指定目标。跨架构编译在构建机原生容器内完成，无需在宿主机配置模拟器。
+安装入口自动识别源码目录，在 Docker 内按本机架构构建前后端、解包并接续标准安装器。Go、Node.js、pnpm 版本读取项目配置，无需在宿主机安装；产物使用临时目录，失败即停止，不把编译结果写回源码树。
 
-产物为 `dist/nginxpanel-linux-amd64.tar` 或 `dist/nginxpanel-linux-arm64.tar`。可使用 `--output-dir` 指定输出目录、`--version` 注入本机批准的版本标识；首次构建需要下载工具镜像和依赖，缓存由 Docker 管理。本地构建包用于本机批准的原生安装，属于源码构建材料；Docker 部署仍需同版签名发行、批准镜像及其信任材料。
+也可从下面的 Release 下载 `setup.sh` 后运行 `bash nginxpanel-setup.sh --source --yes`，自动拉取仓库默认分支后编译安装；需要指定分支或标签时加 `--ref`。首次发布前可从源码取得 `setup.sh`，使用 `bash setup.sh --source --repo OWNER/REPO --yes`。
 
-### 启动安装向导
+### 从 GitHub Release 安装
 
-将生成的安装包传到目标主机并解压。以下假定传输目录只包含本次安装包：
+目标不需要 Docker 或编译工具，只需 curl（或已认证的 GitHub CLI）、tar/gzip 和常规系统工具：
 
 ```sh
-mkdir -p ~/nginxpanel-install
-tar -xf /传输目录/nginxpanel-linux-*.tar -C ~/nginxpanel-install
-cd ~/nginxpanel-install
-sudo bash install.sh
+curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o nginxpanel-setup.sh && bash nginxpanel-setup.sh --yes
 ```
 
-无需指定系统、架构、程序路径或部署参数。向导先检测本机环境，展示推荐方案；在“调整推荐配置或主机授权”处直接回车即可沿用。
+发布脚本自动把仓库与所属标签写入 `setup.sh`，无需重复填写。脚本自动选择 amd64/arm64，固定同一发行标签，下载 `nginxpanel_<版本>_linux_<架构>.tar.gz` 和 `checksums.txt`，核对 SHA-256、归档路径及类型，再解包安装。安装后清理临时下载文件。指定历史发行可加 `--version v1.2.3`；源码目录内执行 `bash setup.sh --yes` 会自动读取 GitHub origin 并取得最新稳定发行。
+
+公开 Release 使用 HTTPS 下载。私有 Release 使用已认证的 `gh`，脚本自动识别现有登录或 `GH_TOKEN` / `GITHUB_TOKEN`，不把令牌写入项目或安装记录；可先用 `gh release download --repo OWNER/REPO --pattern setup.sh --dir .` 取得入口脚本，再运行 `bash setup.sh --yes`。
+
+此入口用于首次安装，首次信任来自所选 GitHub 仓库与下载脚本；SHA-256 用于传输完整性核对。面板包里的安装器、管理脚本和程序同时进入原发行签名清单；需要独立公钥验签时使用[发行准备流程](releases.md#信任与签名)。后续组件与在线更新仍使用既有固定公钥及签名准入。尚未发布新版完整安装包时会明确失败，不使用旧包或转为源码编译。
+
+### 默认配置与高级设置
+
+`--yes` 采用推荐配置并直接安装；去掉后仅需核对最终摘要。需要调整路径、部署方式或宿主机授权时使用 `--advanced`，例如 `sudo bash install.sh --advanced`。高级设置需要交互终端。
 
 | 检测项 | 默认推荐 |
 | --- | --- |
@@ -68,13 +71,19 @@ sudo bash install.sh
 | 管理端口 | 优先 `127.0.0.1:9443`，已占用时从 9444–9463 选择空闲 TCP 端口 |
 | 启动与主机授权 | 默认启用并启动服务；DNS、防火墙及日志轮转默认只读 |
 
-需要自定义时进入高级设置，检测结果仍作为默认值；缺少或有多个候选的镜像引用需要明确选择。检测只发现材料和基本能力，最终签名、镜像内容及运行能力仍由标准安装器校验。只访问目标本机 Docker，不沿用指向其他主机的 Docker context。
+高级设置沿用检测结果作为默认值；缺少或有多个候选的镜像引用需要明确选择。检测只发现材料和基本能力，最终签名、镜像内容及运行能力仍由标准安装器校验。只访问目标本机 Docker，不沿用指向其他主机的 Docker context。没有可用 Nginx 时先装面板，代理流量须待 Nginx 组件安装并应用配置后才可用。
 
-最后核对摘要和实际参数，输入 `INSTALL` 执行。向导将所选材料复制到 root 保护目录，复用标准安装器的账户、路径、签名、架构及服务检查。Docker 所需镜像必须已准备到目标，不在目标编译或动态增装 Nginx 模块。
+交互模式最后输入 `INSTALL` 执行；`--yes` 跳过该确认。安装器将材料复制到 root 保护目录，复用标准安装器的账户、路径、签名、架构及服务检查。Docker 所需镜像必须已准备到目标，运行和部署时不动态编译或增装 Nginx 模块。
 
 默认立即启动：原生启用并启动对应服务；Docker 在启用并启动宿主机服务后执行生成 Compose 的 `up -d --pull never`。高级设置可关闭立即启动，之后可用管理脚本执行 `start all`；它只启动服务，systemd 开机启用状态由管理员另行设置。完成后用 `sudo bash /opt/nginxpanel/manage.sh` 打开管理菜单，再按第 6 节首次登录。
 
 原安装命令保存在 `/opt/nginxpanel/install-command.sh`。失败后保留材料，重新运行向导可核对并明确重试原命令；它沿用原参数，不能用于变更版本、数据目录或既定授权。已有非引导安装使用原参数续装。使用向导时，由向导完成材料批准和后续安装；下节说明手动参数安装方式。
+
+### 离线构建与手动安装材料
+
+仅需构建、不在构建机安装时，运行 `bash scripts/build.sh` 或 `make build`。Docker 在构建机架构上交叉编译，无需模拟器；构建机与部署目标架构不同才需指定 `--arch arm64`。
+
+将生成的 `dist/nginxpanel-linux-<架构>.tar` 传到目标并解包，运行包内的 `sudo bash install.sh --yes` 即可。包内包含程序、前端、引导入口和管理脚本。手动签名准备还需原始清单、签名及独立核对公钥的本机信任配置，详见[发行信任说明](releases.md#信任与签名)。
 
 ### 在目标主机批准安装材料
 

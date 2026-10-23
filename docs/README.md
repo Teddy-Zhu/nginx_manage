@@ -18,7 +18,7 @@ NginxPanel 用于管理专用 Nginx 实例及相关主机功能。安装和宿�
 | --- | --- |
 | 原生安装参数、账户、目录和 systemd | [原生安装参考](../deploy/native/README.md) |
 | Docker 镜像、Compose 和容器维护 | [Docker 部署参考](../deploy/docker/README.md) |
-| Docker 编译与引导安装 | [构建安装包](deployment.md#从源码构建原生产物) · [启动向导](deployment.md#启动安装向导) |
+| 一键安装与 Docker 编译 | [源码安装](deployment.md#从源码安装) · [Release 安装](deployment.md#从-github-release-安装) · [离线构建](deployment.md#离线构建与手动安装材料) |
 | 菜单管理、服务启停与日志 | [管理脚本](operations.md#管理脚本) |
 | 创建代理、上游组及 TCP/UDP 转发 | [创建第一个代理](user-guide.md#创建第一个-http-代理) |
 | 导入证书、ACME 签发与自动部署 | [配置 HTTPS](user-guide.md#配置-https) |

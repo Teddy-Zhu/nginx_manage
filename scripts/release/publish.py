@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -15,6 +16,27 @@ def api(endpoint, body=None):
         command += ["--method", "PATCH", "--input", "-"]
         data = json.dumps(body).encode()
     return json.loads(subprocess.check_output(command, input=data))
+
+
+def stage_bootstrap(directory, repository, tag):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*", repository):
+        raise ValueError("invalid bootstrap repository")
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.+-]+)?", tag):
+        raise ValueError("invalid bootstrap release tag")
+    source = Path("setup.sh").read_text(encoding="utf-8")
+    if source.count('default_repository=""') != 1 or source.count('default_version="latest"') != 1:
+        raise ValueError("bootstrap identity placeholders are missing or duplicated")
+    source = source.replace('default_repository=""', f'default_repository="{repository}"')
+    source = source.replace('default_version="latest"', f'default_version="{tag}"')
+    with (directory / "setup.sh").open("x", encoding="utf-8") as output:
+        output.write(source)
+    # 首次安装脚本通过 GitHub HTTPS 获取；面板归档仍由原签名清单绑定。
+    checksums = directory / "checksums.txt"
+    lines = checksums.read_text(encoding="utf-8").splitlines()
+    if any(line.endswith("  setup.sh") for line in lines):
+        raise ValueError("bootstrap checksum already exists")
+    lines.append(hashlib.sha256(source.encode()).hexdigest() + "  setup.sh")
+    checksums.write_text("\n".join(sorted(lines, key=lambda line: line.split("  ", 1)[1])) + "\n", encoding="utf-8")
 
 
 def main():
@@ -43,6 +65,7 @@ def main():
         raise ValueError("release or recovery draft already exists; refusing overwrite")
     if "(HTTP 404)" not in prior.stderr:
         raise RuntimeError("cannot determine whether release already exists: " + prior.stderr)
+    stage_bootstrap(args.directory, args.repository, args.tag)
     files = sorted(args.directory.iterdir())
     if not files or len(files) > 64 or any(not f.is_file() or f.is_symlink() or f.stat().st_size > 128 << 20 for f in files):
         raise ValueError("invalid signed release directory")

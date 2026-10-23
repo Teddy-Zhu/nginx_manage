@@ -4,7 +4,7 @@
 
 ## 产物和证据
 
-默认发布规格包含 Linux amd64/arm64 面板包、独立 web 包、两种架构的静态 Nginx 包及架构无关的 Fail2ban 官方代码包。面板包包含静态 Go 二进制、同版前端、项目许可、第三方许可原文、SPDX 和构建来源；web 包包含构建后的 HTML/CSS/JS 和对应记录，不包含 node_modules 或服务端构建工具。Nginx 包包含固定入口 `bin/nginx`、源码和静态运行库许可、锁定配方、构建记录及独立证据。
+默认发布规格包含 Linux amd64/arm64 面板包、独立 web 包、两种架构的静态 Nginx 包及架构无关的 Fail2ban 官方代码包。面板包包含静态 Go 二进制、同版前端、项目许可、第三方许可原文、SPDX 和构建来源；同时包含 `install.sh`、`manage.sh` 和 `deploy/native/install.sh`，三份安装管理脚本随程序进入原签名文件清单。web 包包含构建后的 HTML/CSS/JS 和对应记录，不包含 node_modules 或服务端构建工具。Nginx 包包含固定入口 `bin/nginx`、源码和静态运行库许可、锁定配方、构建记录及独立证据。
 
 每个包的 `<asset-id>.spdx.json` 和 `<asset-id>.provenance.json` 同时放在归档与发行根目录。外部副本逐字节匹配签名清单中的文件长度/散列，因此也可以用已验签的文件清单核对。面板/web 的 SPDX 2.3 由固定 Syft 生成，范围明确为源码和构建依赖，包括声明的开发依赖，不宣称每项都存在于运行时 JavaScript。许可文件来自实际使用的 Go 模块、Go 标准库及前端生产依赖；缺少许可原文时停止，不能用任意许可证补齐。Nginx 的 SPDX 由原生构建器按锁定源码、实际静态运行库和二进制生成；全量已安装构建包另存有界版本清单，不冒充全部包均被链接进程序。
 
@@ -50,6 +50,10 @@ bin/nginxpanel-release bundle \
 私钥文件为规范 Base64 的 32 字节 Ed25519 seed，可带一个尾随 LF，权限必须 0600。其目录及上层由发布账户或 root 持有且不可被其他账户写入，不允许链接；私钥位于输入和输出树之外。公钥须独立配置并与 seed 派生结果完全一致，不从包内选择信任根。签名采用接收端相同域前缀与完整 manifest 字节，生成后用配置公钥复核。私钥不进入规格、产物、输出和校验清单。
 
 ## GitHub Actions
+
+上传前 `scripts/release/publish.py` 从同一批准提交的 `setup.sh` 生成独立下载入口，自动内置实际仓库和本次标签，并将其 SHA-256 增补至 `checksums.txt`，与已有归档一起上传草稿、完整核对后公开。它直接复用 `nginxpanel_<版本>_linux_<架构>.tar.gz`，无需另建一套安装包或重复编译。最新入口可使用 [GitHub 的 latest 资产下载链接](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases)。
+
+`setup.sh` 负责首次从所选 GitHub 仓库获取并校验传输完整性，脚本本身不宣称独立公钥验签。其所属标签固定后，程序与校验清单使用同一发行；面板归档继续受原签名清单约束。首次安装操作见[部署指南](deployment.md#3-一键安装)，后续签名更新和组件准备的信任规则保持原有实现。
 
 [release.yml](../.github/workflows/release.yml) 在 v 标签推送或指定已有标签的手工触发时运行。所有 action 使用固定 commit，Go 读取 go.mod/toolchain，Node 使用 24.x，pnpm 来自 packageManager；依赖冻结安装。构建任务只授予 contents:read，执行现有 make verify 一轮，然后构建前端和两种静态二进制，生成依赖记录、许可原文和 SBOM。前端直接调用 Vite，复用前序类型检查结果，不重复执行 build 脚本中的同一检查。
 
