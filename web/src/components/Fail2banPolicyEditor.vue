@@ -152,6 +152,17 @@ async function save() {
   error.value = "";
   notice.value = "";
   try {
+    // A changed source or action is a replacement jail; existing bans belong
+    // to the original target and must not move to another one.
+    for (const jail of jails.value) {
+      const saved = view.value.policy.jails.find((item) => item.id === jail.id);
+      if (saved && (saved.template !== jail.template || saved.resource_id !== jail.resource_id || saved.action !== jail.action)) {
+        const oldID = jail.id;
+        jail.id = randomUUID();
+        ignoreText.value[jail.id] = ignoreText.value[oldID] || "";
+        delete ignoreText.value[oldID];
+      }
+    }
     const input = {
       base_version: view.value.version,
       policy: {

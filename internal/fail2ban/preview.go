@@ -144,6 +144,11 @@ func (s *PolicyService) Preview(ctx context.Context, version int64) (PolicyPrevi
 			out.Entries = append(out.Entries, e)
 			continue
 		}
+		for _, active := range out.Runtime.Policy.Jails {
+			if active.Enabled && active.ID == j.ID && (active.ResourceID != j.ResourceID || active.Template != j.Template || active.Action != j.Action) {
+				e.Errors = append(e.Errors, "更换模板、站点或封禁方式须创建新规则")
+			}
+		}
 		if j.Template == PanelLoginTemplate {
 			e.SourceID = PanelLoginSource
 			e.SourceReady = panelLogin.Available

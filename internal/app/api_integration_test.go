@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 
 	"nginxpanel/internal/agent"
 	"nginxpanel/internal/app"
+	"nginxpanel/internal/firewall"
 	"nginxpanel/internal/migration"
 	"nginxpanel/internal/nginxconfig"
 	"nginxpanel/internal/secure"
@@ -198,6 +200,31 @@ func (n *apiNode) initialize(t *testing.T) {
 	n.request(t, "POST", "/bootstrap", credentials, nil, 201, "OK")
 	delete(credentials, "token")
 	n.request(t, "POST", "/session", credentials, nil, 200, "OK")
+}
+
+func TestAPILargeFirewallPolicyPersistence(t *testing.T) {
+	n := startAPINode(t)
+	n.initialize(t)
+	sources := make([]string, 20000)
+	for i := range sources {
+		sources[i] = fmt.Sprintf("2001:db8:%x::/48", i)
+	}
+	in := firewall.PolicyInput{Policy: firewall.Policy{Backend: "direct-nftables", Rules: []firewall.Rule{{
+		ID: secure.ID(), Name: "Country address set", Enabled: true, Scope: "host_input", Family: "ipv6", Protocol: "tcp",
+		Ports: []firewall.PortRange{{From: 8080, To: 8080}}, Sources: sources, Countries: []string{"CN"},
+		GeoIPUpdatedAt: time.Now().Unix(), Action: "deny", Priority: 10,
+	}}}}
+	raw, err := json.Marshal(in.Policy)
+	if err != nil || len(raw) <= 256<<10 {
+		t.Fatal("fixture must exceed the former storage limit", err)
+	}
+	headers := map[string]string{"Idempotency-Key": "large-country-policy"}
+	saved := readAPIData[firewall.PolicyView](t, n.request(t, "PUT", "/firewall/policy", in, headers, 200, "OK"))
+	read := readAPIData[firewall.PolicyView](t, n.request(t, "GET", "/firewall/policy", nil, nil, 200, "OK"))
+	replay := readAPIData[firewall.PolicyView](t, n.request(t, "PUT", "/firewall/policy", in, headers, 200, "OK"))
+	if saved.Version != 1 || read.Version != saved.Version || replay.Version != saved.Version || read.Policy.Hash() != saved.Policy.Hash() || replay.Policy.Hash() != saved.Policy.Hash() || len(read.Policy.Rules[0].Sources) != len(sources) {
+		t.Fatal("large country policy was not persisted or replayed intact")
+	}
 }
 
 func TestAPIAuthenticationAndConfigurationMigration(t *testing.T) {

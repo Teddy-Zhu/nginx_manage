@@ -284,7 +284,7 @@ func (p Policy) Normalize() (Policy, error) {
 	})
 	raw, e := json.Marshal(out)
 	if e != nil || len(raw) > PolicyBytes {
-		return Policy{}, fault.Invalid("防火墙策略超过 256 KiB")
+		return Policy{}, fault.Invalid("防火墙策略超过 16 MiB")
 	}
 	return out, nil
 }
