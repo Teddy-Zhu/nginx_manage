@@ -206,12 +206,41 @@ const networkColumns: DataTableColumns<HostMetric> = [
   { title: "累计发送", key: "sent", render: (r) => bytes(r.values.sent_bytes) },
   { title: "状态", key: "reason" },
 ];
+const serviceNames: Record<string, string> = {
+  "nginxpanel.service": "管理面板",
+  "nginxpanel-agent.service": "系统管理服务",
+  "nginxpanel-nginx.service": "Nginx",
+  "nginxpanel-fail2ban.service": "Fail2ban 登录防护",
+};
+const serviceStates: Record<string, string> = {
+  active: "运行中",
+  inactive: "已停止",
+  failed: "运行异常",
+  activating: "启动中",
+  deactivating: "停止中",
+  reloading: "重新加载中",
+};
 const serviceColumns: DataTableColumns<MonitoredService> = [
-  { title: "服务", key: "id" },
-  { title: "加载", key: "load" },
-  { title: "运行", key: "active" },
-  { title: "子状态", key: "sub" },
-  { title: "状态", key: "reason" },
+  { title: "服务", key: "id", render: (r) => serviceNames[r.id] ?? r.id },
+  {
+    title: "运行状态",
+    key: "active",
+    render: (r) =>
+      r.load === "not-found"
+        ? "未安装"
+        : r.active === "active" && r.sub === "exited"
+          ? "已完成"
+          : (serviceStates[r.active] ?? "状态未知"),
+  },
+  {
+    title: "说明",
+    key: "reason",
+    render: (r) =>
+      r.reason ||
+      (serviceStates[r.active] || r.load === "not-found"
+        ? "—"
+        : `${r.load} / ${r.active} / ${r.sub}`),
+  },
 ];
 const thresholdKinds = [
   { key: "cpu", label: "CPU" },

@@ -19,6 +19,7 @@ import {
   NTabs,
   NFormItem,
   NInput,
+  NSelect,
   NTabPane,
   NAlert,
   type DataTableColumns,
@@ -110,12 +111,34 @@ const taskColumns: DataTableColumns<Task> = [
     render: (r) => new Date(r.created_at * 1000).toLocaleString(),
   },
 ];
+const auditActions: Record<string, string> = {
+  ...taskKinds,
+  "auth.login": "登录面板",
+  "auth.bootstrap": "初始化管理员",
+  "modules.set": "修改功能开关",
+  "nginx.save.desired": "保存代理配置",
+  "logs.policy": "保存日志策略",
+};
+const auditOutcomes: Record<string, string> = {
+  ...taskStates,
+  requested: "已请求",
+  queued: "已提交",
+  saved: "已保存",
+};
 const auditColumns: DataTableColumns<AuditRow> = [
-  { title: "操作", key: "action" },
+  {
+    title: "操作",
+    key: "action",
+    render: (r) => auditActions[r.action] ?? r.action,
+  },
   { title: "请求标识", key: "request_id" },
   { title: "操作者", key: "principal" },
   { title: "资源", key: "resource_id" },
-  { title: "结果", key: "outcome" },
+  {
+    title: "结果",
+    key: "outcome",
+    render: (r) => auditOutcomes[r.outcome] ?? r.outcome,
+  },
   {
     title: "时间",
     key: "created_at",
@@ -185,9 +208,6 @@ onMounted(loadTasks);
     <span class="muted">每页最多 30 条记录</span
     ><n-button :loading="busy" @click="load">刷新</n-button>
   </div>
-  <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >配置校验不改变运行修订。配置应用通过运行确认后才标记完成，失败时显示回滚或恢复状态。</n-alert
-  >
   <section class="surface">
     <n-tabs type="line" :value="tab" @update:value="changeTab"
       ><n-tab-pane name="tasks" tab="执行任务"
@@ -212,10 +232,19 @@ onMounted(loadTasks);
                 :maxlength="128"
             /></NFormItem>
             <NFormItem label="操作"
-              ><NInput
-                v-model:value="filter.action"
-                placeholder="如 nginx.apply"
-                :maxlength="128"
+              ><NSelect
+                :value="filter.action || null"
+                @update:value="filter.action = String($event ?? '')"
+                :options="
+                  Object.entries(auditActions).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))
+                "
+                filterable
+                clearable
+                tag
+                placeholder="选择操作"
             /></NFormItem>
             <NFormItem label="资源标识"
               ><NInput
@@ -224,10 +253,19 @@ onMounted(loadTasks);
                 :maxlength="128"
             /></NFormItem>
             <NFormItem label="执行结果"
-              ><NInput
-                v-model:value="filter.outcome"
-                placeholder="如 succeeded"
-                :maxlength="128"
+              ><NSelect
+                :value="filter.outcome || null"
+                @update:value="filter.outcome = String($event ?? '')"
+                :options="
+                  Object.entries(auditOutcomes).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))
+                "
+                filterable
+                clearable
+                tag
+                placeholder="选择结果"
             /></NFormItem>
             <NFormItem label="请求标识"
               ><NInput
@@ -245,8 +283,7 @@ onMounted(loadTasks);
             >
           </div>
           <p class="muted">
-            导出包含节点、查询范围、记录总数与完整记录摘要，源记录保留。单次最多扫描一万条、输出
-            8 MiB，超出时请缩小时间范围。
+            导出当前查询范围内的操作记录；记录较多时，请缩小时间范围。
           </p>
           <NAlert v-if="audits?.notice" type="info">{{ audits.notice }}</NAlert>
           <n-data-table

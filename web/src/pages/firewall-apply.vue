@@ -378,7 +378,6 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-toolbar">
-    <h2>防火墙应用</h2>
     <n-space
       ><n-button :disabled="busy || !canManage" @click="load">刷新状态</n-button
       ><n-button
@@ -426,22 +425,13 @@ onUnmounted(() => {
   >
   <section v-if="view" class="panel">
     <h3>当前规则状态</h3>
-    <p>
-      已保存版本 {{ stored?.version ?? 0 }} ·
-      {{
-        view.confirmed_action === "remove"
-          ? "本系统管理的规则已移除，已保存的配置保留，其他来源规则继续生效。"
-          : "尚未通过面板添加规则。"
-      }}
-      {{ view.confirmed_version }} ·
-      {{
-        view.confirmed_action === "apply"
-          ? "规则已确认"
-          : view.confirmed_action === "remove"
-            ? "规则已移除"
-            : "尚未应用规则"
-      }}
+    <p v-if="stored?.version">
+      已保存版本 {{ stored.version }} ·
+      <template v-if="view.confirmed_action === 'apply'">已应用版本 {{ view.confirmed_version }}</template>
+      <template v-else-if="view.confirmed_action === 'remove'">规则已移除</template>
+      <template v-else>尚未应用</template>
     </p>
+    <p v-else class="muted">尚未添加规则。<RouterLink to="/firewall-rules">添加规则</RouterLink></p>
     <n-data-table
       v-if="view.protections.length"
       :columns="protections"
@@ -460,18 +450,8 @@ onUnmounted(() => {
       >停用防火墙管理</n-button
     >
     <p v-if="managementDisabled" class="muted">防火墙管理已停用。</p>
-    <p v-if="view.confirmed_action !== 'apply'" class="muted">
-      {{
-        view.confirmed_action === "remove"
-          ? view.backend === "firewalld"
-            ? "本应用运行和永久 policy 规则已清空，保留空 policy 登记；已保存的规则保留，其余系统策略继续生效。"
-            : view.backend === "ufw"
-              ? "本应用 UFW 用户规则及入口保护已移除，授权和已保存的规则保留，其他来源规则继续生效。"
-              : view.backend === "iptables-nft" || view.backend === "iptables-legacy"
-                ? "本应用代际链、入口保护及 INPUT 跳转已移除，本机授权和已保存的规则保留，其他来源规则继续生效。"
-                : "本应用链和规则已移除，仅保留空表登记；已保存的规则保留，其余系统策略继续生效。"
-          : "尚未通过面板添加规则。"
-      }}
+    <p v-if="view.confirmed_action === 'remove'" class="muted">
+      本面板添加的规则已移除，已保存的配置保留。其他来源的防火墙规则继续生效。
     </p>
   </section>
   <AdvancedDetails title="连接保护详情">

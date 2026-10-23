@@ -123,6 +123,70 @@ const regularFields = computed(() =>
     ),
   ),
 );
+const groupedUpstream = computed(
+  () =>
+    enablingGroup.value ||
+    (resource.value?.fields.upstream_servers?.editable === true &&
+      resource.value.fields.upstream_servers.values.length > 0),
+);
+const groupedHTTP = computed(
+  () =>
+    groupedUpstream.value &&
+    resource.value?.kind === "http" &&
+    /^https?:\/\//.test(fieldInputs.value.upstream ?? ""),
+);
+const upstreamProtocol = computed({
+  get: () => fieldInputs.value.upstream?.match(/^(https?):\/\//)?.[1] ?? null,
+  set: (value: string | null) => {
+    if (value === "http" || value === "https")
+      fieldInputs.value.upstream = (fieldInputs.value.upstream ?? "").replace(
+        /^https?:/,
+        `${value}:`,
+      );
+  },
+});
+const basicFields = [
+  "listeners",
+  "domains",
+  "location_prefix",
+  "upstream",
+  "upstream_servers",
+  "access_list",
+  "waf_policy",
+];
+const httpsFields = ["https_redirect", "hsts", "tls_protocols", "http01"];
+const fieldGroups = computed(() =>
+  [
+    { key: "basic", title: "代理设置", advanced: false, names: basicFields },
+    ...(resource.value?.kind === "http"
+      ? [
+          {
+            key: "https",
+            title: "HTTPS 与证书",
+            advanced: true,
+            names: httpsFields,
+          },
+        ]
+      : []),
+    {
+      key: "advanced",
+      title: "更多设置",
+      advanced: true,
+      names: Object.keys(regularFields.value).filter(
+        (name) =>
+          !basicFields.includes(name) &&
+          !(resource.value?.kind === "http" && httpsFields.includes(name)),
+      ),
+    },
+  ].map((group) => ({
+    ...group,
+    fields: Object.fromEntries(
+      group.names
+        .filter((name) => name in regularFields.value)
+        .map((name) => [name, regularFields.value[name]]),
+    ),
+  })),
+);
 const certificateEditable = computed(
   () =>
     !busy.value &&
@@ -276,7 +340,7 @@ const fieldLabels: Record<string, string> = {
   listeners: "监听（每行一项）",
   domains: "域名",
   upstream: "上游地址",
-  upstream_servers: "上游组成员（每行一项，支持 weight=权重）",
+  upstream_servers: "上游组成员",
   location_prefix: "匹配路径前缀",
   body_size: "最大请求体",
   connect_timeout: "连接超时",
@@ -304,8 +368,8 @@ const fieldLabels: Record<string, string> = {
   trusted_sources: "可信代理来源（每行一个 IP/CIDR）",
   real_ip_header: "真实 IP 头",
   real_ip_recursive: "递归解析真实 IP",
-  access_list: "访问列表",
-  waf_policy: "基础 WAF 策略",
+  access_list: "IP 与国家访问控制",
+  waf_policy: "网站防护策略",
 };
 const toggleFields = new Set([
   "buffering",
@@ -615,7 +679,7 @@ async function saveFields() {
     setTree(result.tree);
     const updated = result.tree.resources.find((r) => r.id === id);
     if (updated) selectResource(updated);
-  }, "常用字段已保存");
+  }, "代理配置已保存，尚未应用");
 }
 async function resourceAction(action: "copy" | "delete") {
   if (!resource.value || !tree.value || dirty.value) return;
@@ -939,7 +1003,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       >
       <div v-if="tree?.resources.length" class="editor-layout surface">
         <aside class="file-tree">
-          <div class="section-heading"><h2>网站与代理</h2></div>
+          <div class="section-heading"><h2>代理列表</h2></div>
           <button
             v-for="item in tree.resources"
             :key="item.id"
@@ -994,183 +1058,234 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   v-model:value="metadata.enabled"
                   :disabled="busy || differsFromDesired"
               /></n-form-item>
-              <n-button
-                v-if="
-                  !resource.fields.upstream_servers?.editable && !enablingGroup
-                "
-                :disabled="
-                  busy ||
-                  differsFromDesired ||
-                  !resource.fields.upstream?.editable
-                "
-                @click="enablingGroup = true"
-                >配置 Upstream 上游组</n-button
+              <component
+                v-for="group in fieldGroups"
+                :key="group.key"
+                :is="group.advanced ? AdvancedDetails : 'section'"
+                v-bind="group.advanced ? { title: group.title } : {}"
+                class="proxy-settings"
               >
-              <template v-if="resource.kind === 'http'">
-                <n-form-item label="动态 IP 封禁">
-                  <n-switch
-                    :value="metadata.client_deny === true"
-                    @update:value="metadata.client_deny = $event === true"
-                    :disabled="busy || differsFromDesired"
-                  />
-                </n-form-item>
-                <div class="toolbar">
+                <h3 v-if="!group.advanced">{{ group.title }}</h3>
+                <template v-if="group.key === 'basic'">
+                  <n-button
+                    v-if="
+                      !resource.fields.upstream_servers?.editable &&
+                      !enablingGroup
+                    "
+                    :disabled="
+                      busy ||
+                      differsFromDesired ||
+                      !resource.fields.upstream?.editable
+                    "
+                    @click="enablingGroup = true"
+                    >配置 Upstream 上游组</n-button
+                  >
+                </template>
+                <template v-if="group.key === 'https'">
+                  <n-alert
+                    v-if="!tlsAvailable"
+                    type="warning"
+                    :bordered="false"
+                    style="margin-bottom: 16px"
+                    >{{ tlsReason }}</n-alert
+                  >
+                  <n-alert
+                    v-if="certificateError"
+                    type="warning"
+                    :bordered="false"
+                    style="margin-bottom: 16px"
+                    >{{ certificateError }}</n-alert
+                  >
+                  <n-form-item
+                    label="证书"
+                    :feedback="
+                      resource.fields.certificate?.reason ||
+                      resource.fields.certificate_key?.reason
+                    "
+                    ><n-select
+                      :value="certificateChoice"
+                      :options="certificateOptions"
+                      :disabled="
+                        !certificateEditable ||
+                        !tlsAvailable ||
+                        certificateLoading
+                      "
+                      @update:value="chooseCertificate"
+                  /></n-form-item>
+                  <n-form-item v-if="certificateChoice" label="证书版本"
+                    ><n-select
+                      :value="fieldInputs.certificate || null"
+                      :options="certificateVersionOptions"
+                      :loading="certificateLoading"
+                      :disabled="
+                        !certificateEditable ||
+                        !tlsAvailable ||
+                        certificateLoading
+                      "
+                      @update:value="chooseCertificateVersion"
+                  /></n-form-item>
+                  <p v-if="boundCertificateVersion" class="muted">
+                    SAN：{{
+                      [
+                        ...boundCertificateVersion.summary.dns_names,
+                        ...boundCertificateVersion.summary.ip_addresses,
+                      ].join("、")
+                    }}
+                  </p>
                   <n-button
                     :disabled="
-                      busy || differsFromDesired || !canPreset('websocket')
+                      busy ||
+                      differsFromDesired ||
+                      !tlsAvailable ||
+                      !resource.fields.listeners?.editable ||
+                      !fieldInputs.certificate
                     "
-                    @click="preset('websocket')"
-                    >启用 WebSocket</n-button
-                  ><n-button
-                    :disabled="
-                      busy || differsFromDesired || !canPreset('streaming')
+                    @click="addHTTPSListener"
+                    >添加 443 HTTPS 监听</n-button
+                  >
+                  <p class="muted">
+                    更换证书后需应用配置。移除证书前，请先关闭 HTTPS 监听。
+                    启用包含子域名的 HSTS 前，请确认所有子域名均支持
+                    HTTPS。<router-link to="/certificates"
+                      >管理证书</router-link
+                    >
+                  </p>
+                </template>
+                <div class="proxy-field-grid">
+                  <n-form-item
+                    v-for="(field, name) in group.fields"
+                    :key="name"
+                    :class="{
+                      'wide-field':
+                        field.format === 'lines' || name === 'upstream_servers',
+                    }"
+                    :label="
+                      name === 'upstream' && groupedHTTP
+                        ? '后端协议'
+                        : (fieldLabels[name] ?? name)
                     "
-                    @click="preset('streaming')"
-                    >SSE / 流式响应</n-button
-                  ><n-button
-                    :disabled="busy || differsFromDesired || !canPreset('http')"
-                    @click="preset('http')"
-                    >普通 HTTP</n-button
+                    :feedback="field.reason || fieldFeatureReason(name)"
+                    ><n-select
+                      v-if="name === 'upstream' && groupedHTTP"
+                      v-model:value="upstreamProtocol"
+                      :options="[
+                        { label: 'HTTP', value: 'http' },
+                        { label: 'HTTPS', value: 'https' },
+                      ]"
+                      :disabled="busy || differsFromDesired || !field.editable"
+                    /><n-tag
+                      v-else-if="
+                        name === 'upstream' &&
+                        groupedUpstream &&
+                        resource.kind === 'stream'
+                      "
+                      >Upstream 上游组</n-tag
+                    >
+                    <upstream-members
+                      v-else-if="
+                        name === 'upstream_servers' &&
+                        (field.editable || enablingGroup)
+                      "
+                      v-model:value="fieldInputs[name]"
+                      :disabled="busy || differsFromDesired"
+                    /><n-select
+                      v-else-if="fieldOptions(name)"
+                      v-model:value="fieldInputs[name]"
+                      :options="fieldOptions(name) ?? []"
+                      :disabled="
+                        busy ||
+                        !field.editable ||
+                        differsFromDesired ||
+                        !!fieldFeatureReason(name)
+                      "
+                    />
+                    <n-input
+                      v-else
+                      v-model:value="fieldInputs[name]"
+                      :type="field.format === 'lines' ? 'textarea' : 'text'"
+                      :autosize="
+                        field.format === 'lines'
+                          ? { minRows: 1, maxRows: 10 }
+                          : false
+                      "
+                      :disabled="
+                        busy ||
+                        !field.editable ||
+                        differsFromDesired ||
+                        !!fieldFeatureReason(name)
+                      "
+                      placeholder="未设置"
+                    />
+                    <router-link
+                      v-if="name === 'access_list'"
+                      class="access-list-link"
+                      to="/access-lists"
+                      >管理访问名单</router-link
+                    ></n-form-item
                   >
                 </div>
-                <n-form-item label="替换匹配前缀"
-                  ><n-switch
-                    v-model:value="rewritePrefix"
-                    :disabled="
-                      busy ||
-                      differsFromDesired ||
-                      !resource.fields.upstream?.editable
-                    "
-                /></n-form-item>
-                <n-form-item v-if="rewritePrefix" label="转发到上游子路径"
-                  ><n-input
-                    v-model:value="upstreamURI"
-                    :disabled="
-                      busy ||
-                      differsFromDesired ||
-                      !resource.fields.upstream?.editable
-                    "
-                    placeholder="/"
-                /></n-form-item>
-                <p class="muted">路径示例：{{ pathExample }}</p>
-                <h3>HTTPS 证书</h3>
-                <n-alert
-                  v-if="!tlsAvailable"
-                  type="warning"
-                  :bordered="false"
-                  style="margin-bottom: 16px"
-                  >{{ tlsReason }}</n-alert
+                <template
+                  v-if="group.key === 'basic' && resource.kind === 'http'"
                 >
-                <n-alert
-                  v-if="certificateError"
-                  type="warning"
-                  :bordered="false"
-                  style="margin-bottom: 16px"
-                  >{{ certificateError }}</n-alert
-                >
-                <n-form-item
-                  label="证书"
-                  :feedback="
-                    resource.fields.certificate?.reason ||
-                    resource.fields.certificate_key?.reason
-                  "
-                  ><n-select
-                    :value="certificateChoice"
-                    :options="certificateOptions"
-                    :disabled="
-                      !certificateEditable ||
-                      !tlsAvailable ||
-                      certificateLoading
-                    "
-                    @update:value="chooseCertificate"
-                /></n-form-item>
-                <n-form-item v-if="certificateChoice" label="证书版本"
-                  ><n-select
-                    :value="fieldInputs.certificate || null"
-                    :options="certificateVersionOptions"
-                    :loading="certificateLoading"
-                    :disabled="
-                      !certificateEditable ||
-                      !tlsAvailable ||
-                      certificateLoading
-                    "
-                    @update:value="chooseCertificateVersion"
-                /></n-form-item>
-                <p v-if="boundCertificateVersion" class="muted">
-                  SAN：{{
-                    [
-                      ...boundCertificateVersion.summary.dns_names,
-                      ...boundCertificateVersion.summary.ip_addresses,
-                    ].join("、")
-                  }}
-                </p>
-                <n-button
-                  :disabled="
-                    busy ||
-                    differsFromDesired ||
-                    !tlsAvailable ||
-                    !resource.fields.listeners?.editable ||
-                    !fieldInputs.certificate
-                  "
-                  @click="addHTTPSListener"
-                  >添加 443 HTTPS 监听</n-button
-                >
-                <p class="muted">
-                  证书链与私钥成对保存。更换版本后须应用配置；移除证书前先移除
-                  SSL 监听。HSTS 仅对 HTTPS 客户端生效；包含子域名或 preload
-                  前须确认相应域名都支持 HTTPS。preload
-                  标记不会自动提交预加载名单。<router-link to="/certificates"
-                    >管理证书</router-link
-                  >
-                </p>
-              </template>
-              <n-form-item
-                v-for="(field, name) in regularFields"
-                :key="name"
-                :label="fieldLabels[name] ?? name"
-                :feedback="field.reason || fieldFeatureReason(name)"
-                ><upstream-members
-                  v-if="
-                    name === 'upstream_servers' &&
-                    (field.editable || enablingGroup)
-                  "
-                  v-model:value="fieldInputs[name]"
-                  :disabled="busy || differsFromDesired"
-                /><n-select
-                  v-else-if="fieldOptions(name)"
-                  v-model:value="fieldInputs[name]"
-                  :options="fieldOptions(name) ?? []"
-                  :disabled="
-                    busy ||
-                    !field.editable ||
-                    differsFromDesired ||
-                    !!fieldFeatureReason(name)
-                  "
-                />
-                <n-input
-                  v-else
-                  v-model:value="fieldInputs[name]"
-                  :type="field.format === 'lines' ? 'textarea' : 'text'"
-                  :disabled="
-                    busy ||
-                    !field.editable ||
-                    differsFromDesired ||
-                    !!fieldFeatureReason(name)
-                  "
-                  placeholder="未设置"
-                />
-                <router-link v-if="name === 'access_list'" to="/access-lists"
-                  >管理 IP 与国家黑白名单</router-link
-                ></n-form-item
-              ><n-button
+                  <n-form-item label="动态 IP 封禁">
+                    <n-switch
+                      :value="metadata.client_deny === true"
+                      @update:value="metadata.client_deny = $event === true"
+                      :disabled="busy || differsFromDesired"
+                    />
+                  </n-form-item>
+                  <div class="toolbar">
+                    <n-button
+                      :disabled="
+                        busy || differsFromDesired || !canPreset('websocket')
+                      "
+                      @click="preset('websocket')"
+                      >启用 WebSocket</n-button
+                    ><n-button
+                      :disabled="
+                        busy || differsFromDesired || !canPreset('streaming')
+                      "
+                      @click="preset('streaming')"
+                      >SSE / 流式响应</n-button
+                    ><n-button
+                      :disabled="
+                        busy || differsFromDesired || !canPreset('http')
+                      "
+                      @click="preset('http')"
+                      >普通 HTTP</n-button
+                    >
+                  </div>
+                  <n-form-item label="替换匹配前缀"
+                    ><n-switch
+                      v-model:value="rewritePrefix"
+                      :disabled="
+                        busy ||
+                        differsFromDesired ||
+                        !resource.fields.upstream?.editable
+                      "
+                  /></n-form-item>
+                  <n-form-item v-if="rewritePrefix" label="转发到上游子路径"
+                    ><n-input
+                      v-model:value="upstreamURI"
+                      :disabled="
+                        busy ||
+                        differsFromDesired ||
+                        !resource.fields.upstream?.editable
+                      "
+                      placeholder="/"
+                  /></n-form-item>
+                  <p class="muted">路径示例：{{ pathExample }}</p>
+                </template>
+              </component>
+              <n-button
                 type="primary"
                 :loading="busy"
                 :disabled="busy || differsFromDesired || !formDirty"
                 @click="saveFields"
-                >保存字段</n-button
+                >保存配置</n-button
               ></n-form
             ></template
-          ><n-empty v-else description="选择一个资源查看常用字段" />
+          ><n-empty v-else description="请选择一个代理进行编辑" />
         </div>
       </div>
       <n-empty v-else description="暂无受管代理配置"
@@ -1297,3 +1412,36 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       :bordered="false"
   /></n-modal>
 </template>
+
+<style scoped>
+.resource-form {
+  max-width: none;
+}
+.resource-form :deep(.n-form) {
+  max-width: 880px;
+}
+.proxy-settings {
+  margin-top: 20px;
+}
+.proxy-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+}
+.proxy-field-grid > * {
+  min-width: 0;
+}
+.proxy-field-grid .wide-field {
+  grid-column: 1 / -1;
+}
+.access-list-link {
+  margin-left: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@media (max-width: 900px) {
+  .proxy-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

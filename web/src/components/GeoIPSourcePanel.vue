@@ -119,6 +119,7 @@ async function update() {
         <p class="muted">为国家和地区黑白名单提供 IP 地址数据。</p>
       </div>
       <n-space :size="12">
+        <slot name="actions" />
         <n-button :disabled="busy || !writable || !state" @click="openSettings"
           >修改数据源</n-button
         >

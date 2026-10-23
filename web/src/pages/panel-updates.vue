@@ -75,10 +75,10 @@ onUnmounted(() => { closed = true; controller?.abort(); if (timer) clearInterval
       <NFormItem label="已准备面板"><NSelect v-model:value="selected" :options="prepared.map((t) => ({ label: `${t.result?.release?.version} · ${date(t.created_at)}`, value: t.id }))" placeholder="选择面板准备任务" :disabled="!canWrite || busy" /></NFormItem>
       <p v-if="chosen?.result?.panel">版本 {{ chosen.result.release?.version }} · 数据库版本 {{ chosen.result.panel.database_schema }}</p>
       <NAlert v-if="chosen?.result?.panel && !chosen.result.panel.automatic_rollback" type="warning">此发布未开放自动回滚，无法使用自动更新。</NAlert>
-      <NCheckbox v-if="canWrite" v-model:checked="coordinateAgent" :disabled="needsCoordination || busy">同时更新 Agent</NCheckbox>
+      <NCheckbox v-if="canWrite" v-model:checked="coordinateAgent" :disabled="needsCoordination || busy">同时更新系统管理服务</NCheckbox>
       <NAlert v-if="coordinateAgent" type="warning">协调更新会停止面板并重启 Agent。失败时恢复原 Agent、面板程序与匹配的数据快照；现有 Nginx 流量继续运行。</NAlert>
       <NCheckbox v-if="coordinateAgent" v-model:checked="allowDowntime" :disabled="busy">允许本次面板与 Agent 暂时中断</NCheckbox>
-      <div v-if="canWrite"><NPopconfirm :disabled="!canCreate" positive-text="开始更新" @positive-click="update"><template #trigger><NButton type="primary" :disabled="!canCreate" :loading="busy">开始更新</NButton></template>确认更新到 {{ chosen?.result?.release?.version }}？{{ coordinateAgent ? "将同时更新 Agent，面板与 Agent 暂时不可用。" : "更新期间面板暂时不可用。" }}</NPopconfirm></div>
+      <div v-if="canWrite"><NPopconfirm :disabled="!canCreate" positive-text="开始更新" @positive-click="update"><template #trigger><NButton type="primary" :disabled="!canCreate" :loading="busy">开始更新</NButton></template>确认更新到 {{ chosen?.result?.release?.version }}？{{ coordinateAgent ? "将同时更新系统管理服务，期间面板与管理操作暂时不可用。" : "更新期间面板暂时不可用。" }}</NPopconfirm></div>
     </section>
     <section class="panel page-stack">
       <h2>更新任务</h2>

@@ -87,14 +87,14 @@ watch(
   <n-modal
     v-model:show="show"
     preset="card"
-    title="受信 Nginx 模块"
+    title="Nginx 可选模块"
     style="width: 820px; max-width: 94vw"
     :mask-closable="!busy"
     :closable="!busy"
     :close-on-esc="!busy"
   >
     <n-alert type="info" :bordered="false"
-      >模块须由本机管理员安装并批准。选择只保存配置；应用时校验兼容性并确认运行结果。取消模块前，请先移除依赖它的配置。</n-alert
+      >内置模块自动可用，无需选择。此处管理已安装并批准的可选动态模块，保存后需应用配置。取消模块前，请先移除依赖它的配置。</n-alert
     >
     <div class="toolbar" style="margin-top: 16px">
       <span class="muted">Nginx {{ report?.version || "版本未知" }}</span

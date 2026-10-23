@@ -13,12 +13,12 @@ import {
 import { useSession } from "../stores/session";
 import ComponentReleaseDetails from "./ComponentReleaseDetails.vue";
 
-const props = defineProps<{ available: boolean; blocked: boolean }>();
+const props = defineProps<{ available: boolean; blocked: boolean; initialComponent?: "nginx" | "fail2ban" | "panel" | "web" }>();
 const emit = defineEmits<{ changed: [] }>();
 const api = useNodeAPI(), session = useSession(), controller = new AbortController();
 const manifest = ref<File | null>(null), signature = ref<File | null>(null);
 const archives = ref<File[]>([]), uploads = ref<ComponentOfflineUpload[]>([]);
-const selected = ref(""), component = ref<"nginx" | "fail2ban" | "panel" | "web">("nginx");
+const selected = ref(""), component = ref<"nginx" | "fail2ban" | "panel" | "web">(props.initialComponent ?? "nginx");
 const selection = ref("components"), assetIDs = ref("");
 const prerelease = ref(false), busy = ref(false), reading = ref(false), uploading = ref(false);
 const error = ref(""), notice = ref(""), paused = ref(false), clock = ref(Date.now());

@@ -62,7 +62,7 @@ onUnmounted(() => { closed = true; controller?.abort(); if (timer) clearInterval
   <div class="page-stack">
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">
-      <div class="toolbar"><h2>升级 Agent</h2><NButton @click="load">刷新</NButton></div>
+      <div class="toolbar"><h2>更新管理服务</h2><NButton @click="load">刷新</NButton></div>
       <p>在<RouterLink to="/components">组件准备</RouterLink>完成面板准备，并在<RouterLink to="/maintenance">配置维护</RouterLink>进入维护后开始升级。</p>
       <NAlert type="info">升级期间宿主机管理操作暂时不可用。失败时恢复原版本。</NAlert>
       <p class="muted">升级版本须与当前面板的通信协议、数据库版本及启动器要求一致。</p>

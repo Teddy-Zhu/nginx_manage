@@ -298,7 +298,7 @@ onUnmounted(() => {
     </template>
     <AdvancedDetails title="离线安装与高级选项">
 
-    <ComponentOfflineUpload :available="overview?.available === true" :blocked="active || busy" @changed="load" />
+    <ComponentOfflineUpload :available="overview?.available === true" :blocked="active || busy" :initial-component="software || 'nginx'" @changed="load" />
     <section v-if="overview" class="panel page-stack">
       <h2>节点前端版本</h2>
       <p v-if="overview.frontend.available">{{ overview.frontend.version }} · {{ overview.frontend.current_id }}</p>

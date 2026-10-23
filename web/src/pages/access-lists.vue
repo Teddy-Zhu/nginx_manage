@@ -210,11 +210,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     <router-link to="/nginx">网站与代理</router-link> 中绑定并应用。</n-alert
   >
   <section class="surface" style="margin-bottom: 20px">
-    <div class="section-heading">
+    <div v-if="!sourceOpen" class="section-heading">
       <h2>国家 IP 数据</h2>
-      <n-button @click="sourceOpen = !sourceOpen">{{
-        sourceOpen ? "收起" : "管理数据源"
-      }}</n-button>
+      <n-button @click="sourceOpen = true">管理数据源</n-button>
     </div>
     <n-alert v-if="geoError" type="warning" :bordered="false">{{
       geoError
@@ -225,7 +223,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       :writable="!busy"
       :countries="usedCountries"
       @changed="geoIP = $event"
-    />
+    >
+      <template #actions
+        ><n-button @click="sourceOpen = false">收起</n-button></template
+      >
+    </GeoIPSourcePanel>
     <p v-else class="muted">
       {{
         geoIP?.ready

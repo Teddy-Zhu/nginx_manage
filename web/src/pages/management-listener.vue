@@ -90,7 +90,7 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <NAlert v-if="uncertain" type="warning">暂未收到操作结果，请刷新查看进度。</NAlert>
       <section class="panel page-stack">
-        <div class="toolbar"><h2>安全管理入口</h2><NButton :disabled="busy" @click="load">刷新状态</NButton></div>
+        <div class="toolbar"><h2>入口状态</h2><NButton :disabled="busy" @click="load">刷新状态</NButton></div>
         <p>用于确认防火墙等网络变更后的连接状态。启用后，请通过新地址访问面板；未按时确认会自动恢复。</p>
         <template v-if="view">
           <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>

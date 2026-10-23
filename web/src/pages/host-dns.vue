@@ -538,7 +538,6 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-toolbar">
-    <h2>DNS 设置</h2>
     <div class="actions">
       <span>启用管理</span
       ><n-switch
