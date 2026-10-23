@@ -268,7 +268,7 @@ onUnmounted(() => {
             :disabled="waiting || active"
             :options="
               prepared.map((t) => ({
-                label: t.result?.release?.tag ?? "已下载版本",
+                label: t.result?.release?.tag ?? '已下载版本',
                 value: t.id,
               }))
             "

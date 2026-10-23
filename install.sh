@@ -254,8 +254,16 @@ if [[ -r /etc/os-release ]]; then
 fi
 if [[ -f $root/nginxpanel ]]; then binary=$root/nginxpanel; web=$root/web; else binary=$root/bin/nginxpanel; web=$root/web/dist; fi
 detected_binary=$(readlink -e -- "$binary") || detected_binary=
-nginx=
+nginx= bundled_nginx=
+if [[ -e $root/nginx || -L $root/nginx ]]; then
+  bundled_nginx=$root/nginx/bin/nginx
+  [[ -d $root/nginx && ! -L $root/nginx && -f $bundled_nginx && ! -L $bundled_nginx && -x $bundled_nginx ]] || die '随包 Nginx 材料不完整'
+  [[ $(stat -c %s "$bundled_nginx") -le $((64 * 1024 * 1024)) && $(elf_arch "$bundled_nginx") == "$arch" ]] || die '随包 Nginx 大小或架构不匹配'
+  [[ -z $(find "$root/nginx" -mindepth 1 ! -type d ! -type f -print -quit) ]] || die '随包 Nginx 只能包含普通文件和目录'
+  nginx=$bundled_nginx
+fi
 for candidate in /usr/sbin/nginx /usr/local/sbin/nginx /usr/local/nginx/sbin/nginx; do
+  [[ -z $nginx ]] || break
   [[ -f $candidate && -x $candidate ]] || continue
   candidate=$(readlink -e -- "$candidate") || continue
   if (trusted_file "$candidate") 2>/dev/null && [[ $(stat -c %s "$candidate") -le $((64 * 1024 * 1024)) && $(elf_arch "$candidate") == "$arch" ]]; then nginx=$candidate; break; fi
@@ -415,6 +423,15 @@ install -m 0555 "$root/deploy/native/lifecycle.sh" "$stage/deploy/native/lifecyc
 install -m 0555 "$root/manage.sh" "$stage/manage.sh"
 cp -R -- "$web/." "$stage/web/"
 chmod -R u=rwX,go=rX "$stage/web"
+if [[ $nginx_kind == native && -n $bundled_nginx && $nginx == "$bundled_nginx" ]]; then
+  cp -R -- "$root/nginx" "$stage/nginx"
+  chmod 0755 "$stage"
+  chmod -R u=rwX,go=rX "$stage/nginx"
+  chmod 0555 "$stage/nginx/bin/nginx"
+  for index in "${!args[@]}"; do
+    if [[ ${args[index]} == --nginx-binary ]]; then args[index+1]=$stage/nginx/bin/nginx; fi
+  done
+fi
 if [[ -e /opt/nginxpanel/manage.sh || -L /opt/nginxpanel/manage.sh ]]; then
   trusted_file /opt/nginxpanel/manage.sh
   cmp -s "$stage/manage.sh" /opt/nginxpanel/manage.sh || die '已有不同管理脚本，停止覆盖'

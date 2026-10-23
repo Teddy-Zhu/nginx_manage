@@ -33,7 +33,7 @@ func fail2banPythonWorkerUnit(ctx context.Context, data, id string) error {
 		return err
 	}
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != "native-install-v14\n" || !strings.HasPrefix(string(intent), "native-install-v14\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") {
+	if err != nil || string(ready) != nativeInstallationStamp || !strings.HasPrefix(string(intent), nativeInstallationStamp) || !strings.Contains(string(intent), "\ndata="+data+"\n") {
 		return errors.New("Python 依赖执行器缺少当前数据目录的安装登记")
 	}
 	name := "/etc/systemd/system/" + fail2banPythonWorkerTemplate

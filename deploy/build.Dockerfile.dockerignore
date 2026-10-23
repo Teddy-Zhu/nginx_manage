@@ -9,6 +9,11 @@
 !api/**
 !migrations/
 !migrations/**
+!scripts/
+!scripts/build-nginx.py
+!scripts/release/
+!scripts/release/nginx.py
+!scripts/release/stage.py
 !deploy/
 !deploy/build.Dockerfile
 !deploy/build.Dockerfile.dockerignore

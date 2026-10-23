@@ -5,7 +5,8 @@ usage() {
   cat <<'EOF'
 用法：bash scripts/build.sh [--arch amd64|arm64] [--output-dir 目录] [--version 版本] [--release-tool]
 默认自动检测构建机架构，通过 Docker 构建 Linux 安装包，输出 dist/nginxpanel-linux-<架构>.tar。
-只有为其他架构机器交叉构建时才需使用 --arch。
+只有为其他架构机器构建时才需使用 --arch；Docker 须已具备该架构的执行能力。
+安装包包含固定模块的静态 Nginx，全部编译在容器内完成。
 --release-tool 仅构建发行工具，默认输出 bin/nginxpanel-release。
 不调用宿主机 Go、Node.js 或 pnpm，不安装宿主机软件。
 EOF

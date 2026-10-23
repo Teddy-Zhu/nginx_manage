@@ -81,7 +81,7 @@ func agentUpgradeUnits(ctx context.Context, data, id string) (string, string, []
 		return "", "", nil, err
 	}
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != "native-install-v14\n" || !strings.HasPrefix(string(intent), "native-install-v14\n") || !strings.Contains(string(intent), "\ndata="+data+"\n") {
+	if err != nil || string(ready) != nativeInstallationStamp || !strings.HasPrefix(string(intent), nativeInstallationStamp) || !strings.Contains(string(intent), "\ndata="+data+"\n") {
 		return "", "", nil, errors.New("Agent 升级缺少已完成的本机安装登记")
 	}
 	for _, spec := range []struct{ template, unit, command, restart, kill, group string }{

@@ -114,6 +114,18 @@ lifecycle_capture_running() {
     done
   fi
 }
+lifecycle_resume_running() {
+  local unit
+  # A rejected removal must leave the original installation usable.
+  exec 7>&-
+  lifecycle_writer_held=no
+  for unit in "${lifecycle_running_units[@]}"; do
+    systemctl start "$unit" || die "卸载检查未通过，恢复 $unit 失败；程序和数据未删除"
+  done
+  if ((${#lifecycle_running_containers[@]})); then
+    compose_command up -d "${lifecycle_running_containers[@]}" || die '卸载检查未通过，恢复原容器失败；程序和数据未删除'
+  fi
+}
 lifecycle_check_removal() {
   local checker=$1 output
   trusted_file "$checker"
@@ -250,7 +262,6 @@ lifecycle_uninstall() {
   if [[ -z $lifecycle_state ]]; then
     if [[ -n $checker_binary ]]; then removal_checker=$checker_binary; else load_binary; removal_checker=$binary; fi
     lifecycle_check_workers
-    lifecycle_check_removal "$removal_checker" || die '卸载检查未通过，未删除安装文件'
     lifecycle_check_mounts /opt/nginxpanel
     lifecycle_check_mounts /etc/nginxpanel
     if [[ $mode == purge ]]; then lifecycle_check_mounts "$data"; fi
@@ -258,7 +269,12 @@ lifecycle_uninstall() {
     lifecycle_capture_running
     lifecycle_stop
     lifecycle_writer_lock
-    lifecycle_check_removal "$removal_checker" || die '停机后卸载检查未通过；程序和数据未删除，请先处理原任务'
+    # The running Agent holds the host registration lock. Release its process
+    # before preparing empty registrations, then recheck under the writer lock.
+    if ! lifecycle_check_removal "$removal_checker"; then
+      lifecycle_resume_running
+      die '卸载检查未通过，已恢复原服务；程序和数据未删除，请先处理原任务'
+    fi
     lifecycle_check_workers
     lifecycle_snapshot "$mode"
     if [[ -f $lifecycle_dir/purge-only ]]; then lifecycle_write_state purge-uninstalling; else lifecycle_write_state uninstalling; fi

@@ -39,7 +39,7 @@ cd nginxpanel
 sudo bash install.sh --yes
 ```
 
-安装入口自动识别源码目录，在 Docker 内按本机架构构建前后端、解包并接续标准安装器。Go、Node.js、pnpm 版本读取项目配置，无需在宿主机安装；产物使用临时目录，失败即停止，不把编译结果写回源码树。
+安装入口自动识别源码目录，在 Docker 内按本机架构构建前后端和固定模块的静态 Nginx、解包并接续标准安装器，默认安装并启动面板及专用 Nginx。复用发行构建的 Nginx 版本、源归档校验和模块配方，不在宿主机编译或动态增装模块。Go、Node.js、pnpm 版本读取项目配置，无需在宿主机安装；产物使用临时目录，失败即停止，不把编译结果写回源码树。首次构建需能访问 Docker 镜像仓库、Debian 软件源及配方中的上游源码地址；为其他架构构建时，Docker 须已具备对应目标架构的执行能力。
 
 也可从下面的 Release 下载 `setup.sh` 后运行 `bash nginxpanel-setup.sh --source --yes`，自动拉取仓库默认分支后编译安装；需要指定分支或标签时加 `--ref`。首次发布前可从源码取得 `setup.sh`，使用 `bash setup.sh --source --repo OWNER/REPO --yes`。
 
@@ -66,7 +66,7 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 | 系统与 CPU | 识别运行 systemd 的 Linux 和 amd64/arm64，并核对程序 ELF 架构；错架构包明确拒绝 |
 | 安装材料 | 自动识别解压包的程序和前端目录 |
 | 部署方式 | 本机 rootful Docker/Compose 可用、发现唯一匹配程序摘要的面板镜像且发行材料齐全时推荐 Docker；其余推荐原生 |
-| Nginx | Docker 方案优先匹配的固定模块镜像，其次使用检测到的可信本机程序；没有可用来源时先装面板，登录后补齐组件 |
+| Nginx | Docker 方案优先匹配的固定模块镜像；原生方案优先使用源码构建包随附的静态 Nginx，其次使用可信本机程序；没有可用来源时先装面板，补齐组件需可用发行材料 |
 | 数据目录 | 优先 `/srv/nginxpanel`；不可用时尝试 `/var/lib/nginxpanel`，已有数据不覆盖 |
 | 管理入口 | 默认 `[::]:随机空闲端口`，支持 IPv4/IPv6；内核不支持 IPv6 时使用 `0.0.0.0:随机空闲端口`，允许外部访问 |
 | 启动与主机管理 | 默认启动服务并开启监控、DNS 和防火墙功能；自动识别受支持的网络配置，完成空防火墙区域登记；应用专用 Nginx 日志由本系统轮转 |

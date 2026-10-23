@@ -167,6 +167,34 @@ def sbom_package(identifier, name, version, location, sha, license_id):
             "copyrightText": "NOASSERTION"}
 
 
+def build_runtime(lock, architecture, destination, env):
+    configured_args = configure_args(lock, architecture)
+    with tempfile.TemporaryDirectory(prefix="nginxpanel-native-") as temp:
+        linux_headers(Path(temp), architecture)
+        roots = {}
+        for source in lock["sources"]:
+            archive = Path(temp) / (source["id"] + ".tar.gz")
+            download(source, archive)
+            roots[source["id"]] = unpack(archive, Path(temp), source["root"])
+            for name in source["license_files"]:
+                target = destination / "licenses" / source["id"] / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                raw = read(roots[source["id"]] / name, 2 << 20)
+                if not raw:
+                    raise ValueError("upstream license text is empty")
+                target.write_bytes(raw)
+        subprocess.run(["./configure", *configured_args], cwd=roots["nginx"], env=env, check=True, timeout=180)
+        subprocess.run(["make", "-j", str(min(os.cpu_count() or 1, 8))], cwd=roots["nginx"], env=env, check=True, timeout=1500)
+        binary = roots["nginx"] / "objs/nginx"
+        shutil.copyfile(binary, destination / "bin/nginx")
+        # Build containers run their own output; the signer only reads ELF.
+        version = subprocess.run([str(binary), "-V"], env=env, check=True, capture_output=True, timeout=15)
+        build_info = version.stdout + version.stderr
+        if len(build_info) > 64 << 10 or f"nginx version: nginx/{lock['version']}\n".encode() not in build_info or f"built with OpenSSL {lock['sources'][1]['version']} ".encode() not in build_info:
+            raise ValueError("built Nginx/OpenSSL versions do not match source lock")
+    return build_info
+
+
 def build(args):
     spec = json.loads(read(args.spec, 4 << 20))
     lock_raw = read(LOCK, 64 << 10)
@@ -207,29 +235,7 @@ def build(args):
         toolchain = (output(["dpkg-query", "-W", "-f=${binary:Package}\t${Version}\t${Architecture}\n"]) + "\n").encode()
         (destination / "build/toolchain-packages.txt").write_bytes(toolchain)
         (destination / "build/nginx-source-lock.json").write_bytes(lock_raw)
-        with tempfile.TemporaryDirectory(prefix="nginxpanel-native-") as temp:
-            linux_headers(Path(temp), architecture)
-            roots = {}
-            for source in lock["sources"]:
-                archive = Path(temp) / (source["id"] + ".tar.gz")
-                download(source, archive)
-                roots[source["id"]] = unpack(archive, Path(temp), source["root"])
-                for name in source["license_files"]:
-                    target = destination / "licenses" / source["id"] / name
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    raw = read(roots[source["id"]] / name, 2 << 20)
-                    if not raw:
-                        raise ValueError("upstream license text is empty")
-                    target.write_bytes(raw)
-            subprocess.run(["./configure", *configured_args], cwd=roots["nginx"], env=env, check=True, timeout=180)
-            subprocess.run(["make", "-j", str(min(os.cpu_count() or 1, 8))], cwd=roots["nginx"], env=env, check=True, timeout=1500)
-            binary = roots["nginx"] / "objs/nginx"
-            shutil.copyfile(binary, destination / "bin/nginx")
-            # Only the native build job runs its own output; the signer reads ELF.
-            version = subprocess.run([str(binary), "-V"], env=env, check=True, capture_output=True, timeout=15)
-            build_info = version.stdout + version.stderr
-            if len(build_info) > 64 << 10 or f"nginx version: nginx/{lock['version']}\n".encode() not in build_info or f"built with OpenSSL {lock['sources'][1]['version']} ".encode() not in build_info:
-                raise ValueError("built Nginx/OpenSSL versions do not match source lock")
+        build_info = build_runtime(lock, architecture, destination, env)
         binary_hash = digest(read(destination / "bin/nginx", 128 << 20))
         (destination / "build/nginx-V.txt").write_bytes(build_info)
         provenance = {"schema": 1, "repository": spec["manifest"]["repository"],
