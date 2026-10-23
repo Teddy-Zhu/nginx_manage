@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "防火墙",
-    "subtitle": "宿主机后端与转发路径诊断",
-    "nav": true,
+    "title": "防火墙诊断",
+    "subtitle": "查看防火墙的详细运行信息",
+    "nav": false,
     "order": 0.7,
-    "symbol": "◇"
+    "symbol": "◇",
+    "parent": "/firewall-rules"
   }
 }
 </route>

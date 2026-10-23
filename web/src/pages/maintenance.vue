@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "配置维护",
-    "subtitle": "配置写入与任务准入",
-    "nav": true,
+    "title": "维护模式",
+    "subtitle": "暂停配置修改，进行系统维护",
+    "nav": false,
     "order": 7.3,
-    "symbol": "◈"
+    "symbol": "◈",
+    "parent": "/settings"
   }
 }
 </route>

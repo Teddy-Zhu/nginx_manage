@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "功能模块",
-    "subtitle": "当前节点的面板管理能力",
-    "nav": true,
+    "title": "功能开关",
+    "subtitle": "开启或关闭可选功能",
+    "nav": false,
     "order": 6.1,
-    "symbol": "◈"
+    "symbol": "◈",
+    "parent": "/settings"
   }
 }
 </route>

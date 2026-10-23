@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "运行镜像",
-    "subtitle": "面板运行环境与镜像恢复",
-    "nav": true,
+    "title": "运行环境更新",
+    "subtitle": "更新面板运行环境",
+    "nav": false,
     "order": 7.24,
-    "symbol": "◇"
+    "symbol": "◇",
+    "parent": "/settings"
   }
 }
 </route>

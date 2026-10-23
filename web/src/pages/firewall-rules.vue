@@ -1,16 +1,18 @@
 <route lang="json">
 {
   "meta": {
-    "title": "防火墙规则",
-    "subtitle": "期望策略与编译预览",
+    "title": "防火墙",
+    "subtitle": "管理服务器端口和访问规则",
     "nav": true,
-    "order": 0.71,
-    "symbol": "≡"
+    "order": 5,
+    "symbol": "≡",
+    "group": "网站与安全"
   }
 }
 </route>
 
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, h, onMounted, onUnmounted, ref, toRaw, watch } from "vue";
 import {
   NAlert,
@@ -395,9 +397,10 @@ async function load() {
   await run(async () => {
     docker.value = null;
     dockerError.value = "";
-    const [saved, observed] = await Promise.allSettled([
+    const [saved, observed, runtime] = await Promise.allSettled([
       api.firewallPolicy(controller.signal),
       api.firewall(controller.signal),
+      api.firewallRuntime(controller.signal),
     ]);
     if (observed.status === "fulfilled") docker.value = observed.value.docker;
     else
@@ -405,6 +408,9 @@ async function load() {
     if (saved.status === "rejected") throw saved.reason;
     stored.value = saved.value;
     policy.value = structuredClone(saved.value.policy);
+    if (saved.value.version === 0 && runtime.status === "fulfilled" && backends.some((item) => item.value === runtime.value.backend)) {
+      policy.value.backend = runtime.value.backend;
+    }
     preview.value = null;
   });
 }
@@ -430,7 +436,7 @@ async function save() {
     stored.value = result;
     policy.value = structuredClone(result.policy);
     preview.value = null;
-  }, "期望策略已保存，尚未应用");
+  }, "规则已保存，尚未生效");
 }
 async function generate() {
   if (!stored.value || dirty.value) return;
@@ -460,18 +466,18 @@ onUnmounted(() => controller.abort());
       ><n-button
         :disabled="busy || !stored || !canWrite || !dirty"
         @click="save"
-        >保存期望策略</n-button
+        >保存规则</n-button
       ><n-button :disabled="busy || !stored?.version || dirty" @click="generate"
-        >编译预览</n-button
+        >检查规则</n-button
       ></n-space
     >
   </div>
   <n-alert type="info" :bordered="false" class="notice"
-    >保存仅更新期望策略。通过“防火墙应用”生成执行计划；监听状态、本机规则和外部可达性需分别确认。</n-alert
+    >保存后点击“应用规则”使设置生效。修改后需确认连接正常，超时将自动恢复。</n-alert
   >
   <section v-if="stored" class="panel">
     <div class="page-toolbar">
-      <h3>期望策略</h3>
+      <h3>访问规则</h3>
       <n-tag :type="dirty ? 'warning' : 'default'">{{
         dirty
           ? "有未保存修改"
@@ -480,6 +486,7 @@ onUnmounted(() => controller.abort());
             : "尚未保存"
       }}</n-tag>
     </div>
+    <AdvancedDetails title="高级网络选项">
     <n-form-item label="目标后端"
       ><n-select
         v-model:value="policy.backend"
@@ -505,6 +512,7 @@ onUnmounted(() => controller.abort());
       主机入站规则按地址族独立编译。允许采用 ACCEPT，可能结束后续 INPUT 判断；
       未匹配流量返回调用链，保留系统默认策略。Docker 发布端口须单独核对转发路径。
     </p>
+    </AdvancedDetails>
     <n-alert
       v-if="dockerReason && policy.rules.some((rule) => rule.scope === 'docker_published')"
       type="warning"
@@ -528,10 +536,11 @@ onUnmounted(() => controller.abort());
     />
   </section>
   <section v-if="preview" class="panel">
+    <p class="muted"><RouterLink to="/firewall-apply">应用规则</RouterLink> · <RouterLink to="/firewall">查看诊断</RouterLink></p>
     <div class="page-toolbar">
-      <h3>版本 {{ preview.version }} 编译预览</h3>
+      <h3>版本 {{ preview.version }} 检查规则</h3>
       <n-tag :type="preview.compiled ? 'info' : 'warning'">{{
-        preview.compiled ? "编译完成 · 未应用" : "无法编译"
+        preview.compiled ? "检查通过 · 尚未生效" : "检查未通过"
       }}</n-tag>
     </div>
     <n-alert

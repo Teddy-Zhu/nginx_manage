@@ -1,11 +1,13 @@
 <route lang="json">
 {
   "meta": {
-    "title": "访问列表",
-    "subtitle": "复用 IPv4、IPv6 与 CIDR 访问规则",
+    "title": "IP 访问控制",
+    "subtitle": "管理网站的 IP 黑白名单",
     "nav": true,
-    "order": 2,
-    "symbol": "◈"
+    "order": 3,
+    "symbol": "◈",
+    "group": "网站与安全",
+    "software": "nginx"
   }
 }
 </route>
@@ -69,13 +71,13 @@ const columns: DataTableColumns<AccessList> = [
         ? "白名单"
         : row.mode === "denylist"
           ? "黑名单"
-          : "原生规则",
+          : "自定义规则",
   },
   { title: "地址数", key: "entries", render: (row) => row.entries.length },
   {
     title: "状态",
     key: "editable",
-    render: (row) => (row.editable ? "可编辑" : "仅原生编辑"),
+    render: (row) => (row.editable ? "可编辑" : "通过高级配置编辑"),
   },
 ];
 function open(row: AccessList | null) {
@@ -154,7 +156,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 <template>
   <div class="toolbar">
     <span class="muted"
-      >期望修订 {{ tree?.version ? `#${tree.version}` : "尚未保存" }}</span
+      >配置版本 {{ tree?.version ? `#${tree.version}` : "尚未保存" }}</span
     >
     <div class="inline-gap">
       <n-button :loading="busy" @click="load">刷新</n-button

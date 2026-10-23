@@ -1,9 +1,10 @@
 <route lang="json">
 {
   "meta": {
-    "title": "ACME 签发",
-    "subtitle": "证书申请、自动续期与订单恢复",
-    "nav": false
+    "title": "申请证书",
+    "subtitle": "申请、续期与签发记录",
+    "nav": false,
+    "parent": "/certificates"
   }
 }
 </route>

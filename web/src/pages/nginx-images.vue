@@ -1,11 +1,13 @@
 <route lang="json">
 {
   "meta": {
-    "title": "Nginx 镜像",
-    "subtitle": "运行版本与镜像恢复",
-    "nav": true,
+    "title": "更新 Nginx",
+    "subtitle": "更换版本或恢复上一版本",
+    "nav": false,
     "order": 7.25,
-    "symbol": "◇"
+    "symbol": "◇",
+    "parent": "/components",
+    "software": "nginx"
   }
 }
 </route>

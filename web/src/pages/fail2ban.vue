@@ -1,15 +1,19 @@
 <route lang="json">
 {
   "meta": {
-    "title": "Fail2ban",
-    "subtitle": "jail 配置与宿主机状态",
+    "title": "登录防护",
+    "subtitle": "自动封禁多次认证失败的 IP",
     "nav": true,
-    "order": 0.75,
-    "symbol": "◈"
+    "order": 6,
+    "symbol": "◈",
+    "group": "网站与安全",
+    "software": "fail2ban"
   }
 }
 </route>
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
+import { RouterLink } from "vue-router";
 import Fail2banPythonPanel from "../components/Fail2banPythonPanel.vue";
 import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
 import Fail2banUpgradePanel from "../components/Fail2banUpgradePanel.vue";
@@ -63,7 +67,7 @@ function setAdoptedJails(names: string[]) {
   adoptedJails.value = new Set(names);
 }
 const jailRows: DataTableColumns<Fail2banInstance["jails"][number]> = [
-  { title: "Jail", key: "name" },
+  { title: "防护规则", key: "name" },
   {
     title: "归属",
     key: "managed",
@@ -72,7 +76,7 @@ const jailRows: DataTableColumns<Fail2banInstance["jails"][number]> = [
         ? "本应用管理"
         : adoptedJails.value.has(row.name)
           ? "本机接管登记"
-          : "原实例管理 · 只读",
+          : "其他防护规则",
   },
   {
     title: "状态",
@@ -96,7 +100,7 @@ const bannedRows = computed(
   () => jail.value?.banned.map((ip) => ({ ip })) ?? [],
 );
 const bannedColumns: DataTableColumns<{ ip: string }> = [
-  { title: "引擎记录的封禁地址", key: "ip" },
+  { title: "已封禁的 IP", key: "ip" },
 ];
 const status = (value: boolean | null) =>
   value === null ? "未知" : value ? "是" : "否";
@@ -221,9 +225,67 @@ onUnmounted(() => {
 <template>
   <div class="page-stack">
     <div class="page-toolbar">
-      <h2>Fail2ban</h2>
-      <NButton :loading="reading" @click="load">刷新状态</NButton>
+      <h2>登录防护</h2>
+      <div class="inline-gap"><RouterLink :to="{ path: '/components', query: { software: 'fail2ban' } }">软件设置</RouterLink><NButton :loading="reading" @click="load">刷新</NButton></div>
     </div>
+    <div class="stat-grid"><div class="stat-card"><span class="stat-label">防护服务</span><strong>{{ instance?.available ? '运行中' : instanceError || instance ? '连接异常' : '正在读取' }}</strong></div><div class="stat-card"><span class="stat-label">运行规则</span><strong>{{ instance?.available ? instance.jails.length : '—' }}</strong></div><div class="stat-card"><span class="stat-label">软件版本</span><strong>{{ instance?.server_version || view?.managed.version || '—' }}</strong></div></div>
+    <Fail2banPolicyEditor />
+    <NAlert v-if="error" type="error">{{ error }}</NAlert>
+    <NAlert v-if="instanceError" type="error">{{ instanceError }}</NAlert>
+    <section v-if="instance" class="panel page-stack">
+      <div class="toolbar"><h3>防护规则</h3><NTag :type="instance.available ? 'success' : 'warning'">{{ instance.available ? '已连接' : '连接异常' }}</NTag></div>
+      <p v-if="instance.available && !instance.jails.length" class="muted">还没有防护规则，请先添加规则。</p>
+      <NAlert v-if="instance.reason" type="warning">暂时无法读取部分防护状态。<AdvancedDetails title="查看原因"><p>{{ instance.reason }}</p></AdvancedDetails></NAlert>
+      <NDataTable
+        v-if="instance.available"
+        :columns="jailRows"
+        :data="instance.jails"
+        :row-key="(row: Fail2banInstance['jails'][number]) => row.name"
+        :pagination="{ pageSize: 10 }"
+      />
+    </section>
+    <section v-if="selectedJail" class="panel page-stack">
+      <div class="toolbar">
+        <h3>{{ selectedJail }}</h3>
+        <NButton
+          :loading="jailReading"
+          :disabled="reading"
+          @click="loadJail(selectedJail)"
+          >刷新状态</NButton
+        >
+      </div>
+      <NAlert v-if="jailError" type="error">{{ jailError }}</NAlert>
+      <template v-if="jail">
+        <NAlert :type="jail.available ? 'info' : 'warning'">{{
+          jail.reason
+        }}</NAlert>
+        <template v-if="jail.available">
+          <p>
+            采样 {{ new Date(jail.at * 1000).toLocaleString() }} · 服务端
+            {{ jail.server_version }}
+          </p>
+          <p>
+            当前失败 {{ jail.current_failed }} · 累计失败
+            {{ jail.total_failed }} · 当前封禁 {{ jail.current_banned }} ·
+            累计封禁 {{ jail.total_banned }}
+          </p>
+          <NDataTable
+            :columns="bannedColumns"
+            :data="bannedRows"
+            :pagination="{ pageSize: 25 }"
+          />
+        </template>
+        <Fail2banAddressPanel
+          v-if="jail.managed"
+          :key="jail.name"
+          engine-owner="managed"
+          adoption-id=""
+          :jail="jail.name"
+          :module-enabled="moduleEnabled === true"
+        />
+      </template>
+    </section>
+    <AdvancedDetails title="高级防护设置">
     <Fail2banPythonPanel
       :module-enabled="moduleEnabled === true"
       :python="view?.python ?? null"
@@ -254,8 +316,8 @@ onUnmounted(() => {
     />
     <Fail2banLoginLogPanel />
     <Fail2banHostInputPanel />
-    <Fail2banPolicyEditor />
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
+    </AdvancedDetails>
+    <AdvancedDetails title="诊断详情">
     <section class="panel page-stack">
       <div class="toolbar">
         <h3>管理状态</h3>
@@ -309,94 +371,6 @@ onUnmounted(() => {
       </template>
       <p v-if="view.managed.reason">{{ view.managed.reason }}</p>
       <p class="muted">安装登记、实际服务运行和 jail 保护状态分别核对。</p>
-    </section>
-    <NAlert v-if="instanceError" type="error">{{ instanceError }}</NAlert>
-    <section v-if="instance" class="panel page-stack">
-      <div class="toolbar">
-        <h3>
-          {{
-            instance.binding.engine.owner === "managed"
-              ? "受管实例"
-              : instance.binding.engine.owner === "existing"
-                ? "已接入实例"
-                : "实例状态"
-          }}
-        </h3>
-        <NTag :type="instance.available ? 'success' : 'default'">{{
-          instance.available
-            ? "已读取运行状态"
-            : instance.binding.state === "bound"
-              ? "接入状态待核对"
-              : instance.binding.state === "unavailable"
-                ? "接入状态未知"
-                : "实例未接入"
-        }}</NTag>
-      </div>
-      <p v-if="instance.binding.state === 'bound'">
-        {{ instance.binding.service }} · {{ instance.binding.socket }}
-      </p>
-      <p v-if="instance.binding.engine.owner === 'managed'" class="muted">
-        签名组件 {{ instance.binding.engine.asset_id }} · Python
-        {{ instance.binding.engine.python_path }}
-      </p>
-      <p v-if="instance.available">
-        服务端 {{ instance.server_version }} · 主进程
-        {{ instance.service.main_pid }} · 采样
-        {{ new Date(instance.at * 1000).toLocaleString() }}
-      </p>
-      <NAlert
-        v-if="instance.reason"
-        :type="instance.available ? 'info' : 'warning'"
-        >{{ instance.reason }}</NAlert
-      >
-      <NDataTable
-        v-if="instance.available"
-        :columns="jailRows"
-        :data="instance.jails"
-        :row-key="(row: Fail2banInstance['jails'][number]) => row.name"
-        :pagination="{ pageSize: 10 }"
-      />
-    </section>
-    <section v-if="selectedJail" class="panel page-stack">
-      <div class="toolbar">
-        <h3>{{ selectedJail }}</h3>
-        <NButton
-          :loading="jailReading"
-          :disabled="reading"
-          @click="loadJail(selectedJail)"
-          >刷新 jail</NButton
-        >
-      </div>
-      <NAlert v-if="jailError" type="error">{{ jailError }}</NAlert>
-      <template v-if="jail">
-        <NAlert :type="jail.available ? 'info' : 'warning'">{{
-          jail.reason
-        }}</NAlert>
-        <template v-if="jail.available">
-          <p>
-            采样 {{ new Date(jail.at * 1000).toLocaleString() }} · 服务端
-            {{ jail.server_version }}
-          </p>
-          <p>
-            当前失败 {{ jail.current_failed }} · 累计失败
-            {{ jail.total_failed }} · 当前封禁 {{ jail.current_banned }} ·
-            累计封禁 {{ jail.total_banned }}
-          </p>
-          <NDataTable
-            :columns="bannedColumns"
-            :data="bannedRows"
-            :pagination="{ pageSize: 25 }"
-          />
-        </template>
-        <Fail2banAddressPanel
-          v-if="jail.managed"
-          :key="jail.name"
-          engine-owner="managed"
-          adoption-id=""
-          :jail="jail.name"
-          :module-enabled="moduleEnabled === true"
-        />
-      </template>
     </section>
     <template v-if="view?.available">
       <section class="panel page-stack">
@@ -455,5 +429,6 @@ onUnmounted(() => {
         warning
       }}</NAlert>
     </template>
+    </AdvancedDetails>
   </div>
 </template>

@@ -20,9 +20,9 @@ type Definition struct {
 
 var definitions = []Definition{
 	{ID: "nginx-config", Name: "Nginx 配置", Available: true, Enabled: true, Dependencies: []string{}},
-	{ID: "firewall", Name: "防火墙", Available: true, Dependencies: []string{}},
-	{ID: "host-dns", Name: "主机 DNS", Available: true, Dependencies: []string{}},
-	{ID: "monitoring", Name: "基础监控", Available: true, Dependencies: []string{}},
+	{ID: "firewall", Name: "防火墙", Available: true, Enabled: true, Dependencies: []string{}},
+	{ID: "host-dns", Name: "主机 DNS", Available: true, Enabled: true, Dependencies: []string{}},
+	{ID: "monitoring", Name: "基础监控", Available: true, Enabled: true, Dependencies: []string{}},
 	{ID: "fail2ban", Name: "Fail2ban", Available: true, Dependencies: []string{}},
 	{ID: "notifications", Name: "外部通知", Available: true, Dependencies: []string{}},
 	{ID: "automatic-backups", Name: "定期备份", Available: true, Dependencies: []string{}},

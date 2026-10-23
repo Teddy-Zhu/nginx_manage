@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "历史维护",
-    "subtitle": "预览并清理不再使用的历史材料",
-    "nav": true,
+    "title": "清理存储",
+    "subtitle": "清理不再使用的历史文件",
+    "nav": false,
     "order": 5.2,
-    "symbol": "◷"
+    "symbol": "◷",
+    "parent": "/settings"
   }
 }
 </route>

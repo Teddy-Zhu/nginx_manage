@@ -1,16 +1,18 @@
 <route lang="json">
 {
   "meta": {
-    "title": "防火墙应用",
-    "subtitle": "入口保护与限时确认",
-    "nav": true,
+    "title": "应用防火墙规则",
+    "subtitle": "应用变更并确认连接正常",
+    "nav": false,
     "localOnly": true,
     "order": 0.72,
-    "symbol": "↪"
+    "symbol": "↪",
+    "parent": "/firewall-rules"
   }
 }
 </route>
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -44,7 +46,7 @@ const action = ref<FirewallPlanInput["action"]>(
   ),
   managementDisabled = ref<boolean | null>(null);
 const actions = [
-  { label: "应用期望策略", value: "apply" },
+  { label: "应用规则", value: "apply" },
   { label: "移除本应用规则", value: "remove" },
 ];
 const api = useNodeAPI(),
@@ -306,7 +308,7 @@ async function disableManagement() {
       ...(operationID ? { firewall_operation_id: operationID } : {}),
     });
     managementDisabled.value = true;
-  }, "防火墙管理已停用，期望草稿保留");
+  }, "防火墙管理已停用，已保存的规则保留");
 }
 async function submit() {
   const current = plan.value;
@@ -338,16 +340,9 @@ function apply() {
       plan.value?.action === "remove"
         ? "移除本应用防火墙规则"
         : "应用防火墙策略",
-    content:
-      plan.value?.action === "remove"
-        ? plan.value.backend === "firewalld"
-          ? "将清空本应用 policy 的业务规则和入口保护，保留空 policy 登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，确认后才清空永久规则，未确认将恢复原配置。"
-          : plan.value.backend === "ufw"
-            ? "将移除本应用 UFW 用户规则及入口保护，保留 UFW 授权和其他来源规则。120 秒内需通过新的管理 HTTPS 连接确认，确认后才保存配置，未确认将恢复原规则。"
-            : plan.value.iptables
-              ? "将移除本应用代际链、入口保护及 INPUT 跳转，保留本机授权和其他来源规则。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
-              : "将移除本应用的业务规则、入口保护和基础链，仅保留空表登记；其余系统策略继续生效。120 秒内需通过新的管理 HTTPS 连接确认，未确认将恢复原规则。"
-        : "将应用所列入口保护和已保存策略。120 秒内需通过新的管理 HTTPS 连接确认；连接中断或超时会恢复最后确认策略。",
+    content: plan.value?.action === "remove"
+      ? "将移除本系统管理的防火墙规则及入口保护，保留已保存配置，其他来源规则继续生效。请在 120 秒内通过新的管理连接确认，超时将恢复原规则。"
+      : "将应用已保存规则并保护管理与 SSH 入口。请在 120 秒内通过新的管理连接确认，连接中断或超时将恢复原规则。",
     positiveText: "执行",
     negativeText: "取消",
     onPositiveClick: submit,
@@ -421,22 +416,22 @@ onUnmounted(() => {
     type="warning"
     :bordered="false"
     class="notice"
-    >{{ view.reason }}</n-alert
+    >暂时无法应用规则。<RouterLink to="/management-listener">检查安全访问设置</RouterLink><AdvancedDetails title="查看原因"><p>{{ view.reason }}</p></AdvancedDetails></n-alert
   >
   <n-alert
     type="info"
     :bordered="false"
     class="notice"
-    >应用期望策略前须启用防火墙模块，移除已确认规则可在模块停用后执行。两种操作均须直接访问目标已确认的管理
-    HTTPS
-    入口并通过新连接确认。确认仅证明本次管理连接可达，业务端口和云安全组需另行核对。</n-alert
+    >修改后需在 120 秒内确认连接正常，超时自动恢复。请通过<RouterLink to="/management-listener">安全管理入口</RouterLink>访问面板后应用规则。云服务器还需放行对应的安全组端口。</n-alert
   >
   <section v-if="view" class="panel">
-    <h3>已确认状态</h3>
+    <h3>当前规则状态</h3>
     <p>
-      已保存期望版本 {{ stored?.version ?? 0 }} ·
+      已保存版本 {{ stored?.version ?? 0 }} ·
       {{
-        view.confirmed_action === "remove" ? "移除前规则版本" : "已确认运行版本"
+        view.confirmed_action === "remove"
+          ? "本系统管理的规则已移除，已保存的配置保留，其他来源规则继续生效。"
+          : "尚未通过面板添加规则。"
       }}
       {{ view.confirmed_version }} ·
       {{
@@ -444,7 +439,7 @@ onUnmounted(() => {
           ? "规则已确认"
           : view.confirmed_action === "remove"
             ? "规则已移除"
-            : "尚无确认策略"
+            : "尚未应用规则"
       }}
     </p>
     <n-data-table
@@ -469,16 +464,17 @@ onUnmounted(() => {
       {{
         view.confirmed_action === "remove"
           ? view.backend === "firewalld"
-            ? "本应用运行和永久 policy 规则已清空，保留空 policy 登记；期望草稿保留，其余系统策略继续生效。"
+            ? "本应用运行和永久 policy 规则已清空，保留空 policy 登记；已保存的规则保留，其余系统策略继续生效。"
             : view.backend === "ufw"
-              ? "本应用 UFW 用户规则及入口保护已移除，授权和期望草稿保留，其他来源规则继续生效。"
+              ? "本应用 UFW 用户规则及入口保护已移除，授权和已保存的规则保留，其他来源规则继续生效。"
               : view.backend === "iptables-nft" || view.backend === "iptables-legacy"
-                ? "本应用代际链、入口保护及 INPUT 跳转已移除，本机授权和期望草稿保留，其他来源规则继续生效。"
-                : "本应用链和规则已移除，仅保留空表登记；期望草稿保留，其余系统策略继续生效。"
-          : "尚无已确认的业务过滤策略。"
+                ? "本应用代际链、入口保护及 INPUT 跳转已移除，本机授权和已保存的规则保留，其他来源规则继续生效。"
+                : "本应用链和规则已移除，仅保留空表登记；已保存的规则保留，其余系统策略继续生效。"
+          : "尚未通过面板添加规则。"
       }}
     </p>
   </section>
+  <AdvancedDetails title="连接保护详情">
   <section v-if="observedProtections" class="panel">
     <div class="page-toolbar">
       <h3>保护依据核对</h3>
@@ -536,9 +532,10 @@ onUnmounted(() => {
       </p>
     </template>
   </section>
+  </AdvancedDetails>
   <section v-if="preparation" class="panel">
     <div class="page-toolbar">
-      <h3>UFW 计划准备</h3>
+      <h3>检查防火墙规则</h3>
       <n-tag
         :type="preparation.state === 'ready' ? 'success' : preparation.state === 'failed' ? 'error' : 'info'"
       >
@@ -568,21 +565,7 @@ onUnmounted(() => {
         版本 {{ plan.version }}
         {{ plan.action === "remove" ? "移除" : "应用" }}计划
       </h3>
-      <n-tag type="info">{{
-        plan.action === "remove"
-          ? plan.backend === "firewalld"
-            ? "清空本应用 policy 规则"
-            : plan.backend === "ufw"
-              ? "移除本应用 UFW 用户规则"
-              : plan.iptables
-                ? "移除本应用 iptables 链及跳转"
-                : `移除 ${plan.baseline.rules} 条规则`
-          : plan.docker
-            ? plan.can_apply
-              ? "Docker 联合应用计划"
-              : "Docker 目标绑定预览"
-            : `${plan.generated_rules} 条${plan.backend === "firewalld" ? " rich rules" : plan.backend === "ufw" ? " UFW 命令" : plan.iptables ? "生成规则" : "内核规则"}`
-      }}</n-tag>
+      <n-tag type="info">{{ plan.action === "remove" ? "移除本系统规则" : `${plan.generated_rules} 条规则` }}</n-tag>
     </div>
     <dl>
       <dt>管理监听</dt>
@@ -609,6 +592,7 @@ onUnmounted(() => {
       @change="bindDocker"
       @reload="reloadDocker"
     />
+    <AdvancedDetails title="防火墙诊断">
     <FirewalldPlanDetails
       v-if="plan.firewalld"
       :plan="plan.firewalld"
@@ -624,27 +608,14 @@ onUnmounted(() => {
       :plan="plan.iptables"
       :program-hash="plan.program_hash"
     />
+    </AdvancedDetails>
     <n-data-table
       :columns="protections"
       :data="plan.protections"
       :pagination="{ pageSize: 10 }"
       :scroll-x="650"
     />
-    <p class="muted">
-      {{
-        plan.action === "remove"
-          ? "所列入口仅用于本次连接核对，移除后不再保留本应用保护条目；删除不等同于允许端口，其余系统策略仍可能阻止连接。"
-          : plan.docker
-            ? "主机入站与 Docker 转发联合应用，须通过新连接确认；计划通过不表示规则已安装或端口可达。"
-            : plan.backend === "firewalld"
-            ? "入口保护先于业务规则匹配。accept 可能结束后续 firewalld 过滤，其他内核规则或云安全组仍可阻止连接。"
-            : plan.backend === "ufw"
-              ? "计划优先保留入口保护；与保护条件完全相同的业务项已由保护项覆盖。逐条预演通过不代表规则已经应用或端口可达。"
-              : plan.iptables
-                ? "入口保护先于业务规则匹配。ACCEPT 可能结束后续 INPUT 判断，其他过滤路径及云安全组仍可阻止连接。"
-                : "入口保护先于业务规则匹配。允许仅结束本应用链的判断，其余系统规则仍可阻止连接。"
-      }}
-    </p>
+    <p class="muted">请核对以上连接保护。执行后需通过新连接确认；云安全组和其他系统规则仍可能影响访问。</p>
     <n-button
       type="warning"
       :disabled="
@@ -705,7 +676,7 @@ onUnmounted(() => {
       type="info"
       :bordered="false"
       class="notice"
-      >本应用规则已确认移除。期望草稿保留，重新应用需生成新计划。</n-alert
+      >本应用规则已确认移除。已保存的规则保留，重新应用需生成新计划。</n-alert
     >
     <p v-if="operation.state === 'succeeded'" class="muted">
       确认来源：{{ operation.confirmed_source }} · 确认范围：目标管理监听

@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "Agent 升级",
-    "subtitle": "宿主机管理程序与升级恢复",
-    "nav": true,
+    "title": "管理服务更新",
+    "subtitle": "更新服务器管理服务",
+    "nav": false,
     "order": 7.23,
-    "symbol": "◇"
+    "symbol": "◇",
+    "parent": "/settings"
   }
 }
 </route>

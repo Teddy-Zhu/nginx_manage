@@ -2,10 +2,11 @@
 {
   "meta": {
     "title": "日志",
-    "subtitle": "应用、安全、任务与 Nginx 日志",
+    "subtitle": "查询网站访问、系统与操作日志",
     "nav": true,
-    "order": 4.5,
-    "symbol": "▤"
+    "order": 12,
+    "symbol": "▤",
+    "group": "服务器管理"
   }
 }
 </route>
@@ -249,7 +250,7 @@ async function savePolicy() {
     await api.setLogPolicy(policyInput.value, policyKey(policyInput.value));
     policies.value = await api.logPolicies();
     policyOpen.value = false;
-    message.success("日志策略已保存，Agent 将独立执行");
+    message.success("日志设置已保存");
   });
 }
 const policyFields: {
@@ -365,7 +366,7 @@ onUnmounted(reset);
   }}</n-alert>
   <n-empty
     v-if="!sources.length"
-    description="暂无可用日志来源，请检查 Agent 状态"
+    description="暂无可用日志，请检查服务器管理服务"
   />
   <template v-else>
     <n-form
@@ -494,21 +495,11 @@ onUnmounted(reset);
     style="width: 620px; max-width: 94vw"
   >
     <template v-if="policy && policyInput">
-      <n-alert type="info" :bordered="false"
-        >所有者：{{
-          policy.owner === "agent"
-            ? "Agent"
-            : policy.owner === "external"
-              ? "外部管理"
-              : "尚未确认"
-        }}。大小与时间按定时检查触发，属于软阈值；只清理已确认关闭的历史文件，活动文件或
-        reopen 失败时可能超过配额。配额须满足：轮转大小 ≤ 单来源 ≤
-        总计。</n-alert
-      >
+      <n-alert type="info" :bordered="false">按大小或保留时间自动整理日志。只清理已结束写入的历史日志，当前日志可能暂时超过限额。</n-alert>
       <n-alert v-if="!policy.editable" type="warning" :bordered="false">{{
         policy.scope === "system"
-          ? "系统日志存储尚未就绪，请在本机核对 Agent 状态。"
-          : "需在本机确认唯一轮转所有者，排除外部规则竞争后才能启用 Agent 管理。"
+          ? "系统日志暂不可用，请检查服务器管理服务。"
+          : "日志当前由其他工具管理，暂不支持在面板中修改轮转设置。"
       }}</n-alert>
       <n-form
         label-placement="top"

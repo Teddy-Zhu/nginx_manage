@@ -1,17 +1,19 @@
 <route lang="json">
 {
   "meta": {
-    "title": "组件安装",
-    "subtitle": "原生 Nginx 首次安装与恢复",
-    "nav": true,
+    "title": "安装 Nginx",
+    "subtitle": "安装进度与软件设置",
+    "nav": false,
     "order": 7.21,
-    "symbol": "◇"
+    "symbol": "◇",
+    "parent": "/components"
   }
 }
 </route>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import {
   NAlert,
   NButton,
@@ -31,7 +33,9 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
-const api = useNodeAPI();
+const api = useNodeAPI(), route = useRoute();
+const waiting = ref(false), ownedSession = ref(""), ownTask = ref("");
+const installInput = ref<{ prepare_task_id: string; asset_id: string; start: boolean; enable: boolean } | null>(null);
 
 const session = useSession(),
   { run, busy } = useAction();
@@ -41,10 +45,10 @@ const overview = ref<ComponentOverview | null>(null),
   preparations = ref<ComponentTask[]>([]),
   tasks = ref<NginxInstallTask[]>([]),
   error = ref("");
-const selected = ref(""),
+const selected = ref(typeof route.query.prepare === "string" ? route.query.prepare : ""),
   asset = ref(""),
-  start = ref(false),
-  enable = ref(false),
+  start = ref(true),
+  enable = ref(true),
   clock = ref(Date.now());
 const canWrite = computed(
   () =>
@@ -64,7 +68,7 @@ const prepared = computed(() =>
       t.action === "prepare" &&
       t.state === "succeeded" &&
       t.result?.runtime_ready &&
-      t.result.release &&
+      t.result.release?.assets.some((item) => item.component === "nginx" && t.result!.release!.selected.includes(item.id)) &&
       t.result.release.expires_at * 1000 > clock.value,
   ),
 );
@@ -87,7 +91,9 @@ const active = computed(() =>
 const canCreate = computed(
   () =>
     canWrite.value &&
-    held.value &&
+    !!maintenance.value &&
+    (maintenance.value.phase === "open" || held.value) &&
+    !waiting.value &&
     overview.value?.install_available &&
     chosen.value &&
     assets.value.some((a) => a.id === asset.value) &&
@@ -112,7 +118,7 @@ const stages: Record<string, string> = {
   restarting_agent: "接入管理",
   confirming: "确认安装",
   installed: "安装完成",
-  running: "运行已确认",
+  running: "运行中",
   cancelled_before_binding: "已取消安装",
   control_pending: "等待控制确认",
   authorization_expired: "授权已过期",
@@ -171,6 +177,16 @@ async function load() {
   } finally {
     reading = false;
   }
+  if (!closed && waiting.value && maintenance.value && ["failed", "recovery_required", "unavailable"].includes(maintenance.value.phase)) {
+    waiting.value = false;
+    error.value = "安装准备未完成，请前往设置中的系统维护查看并恢复。";
+  }
+  if (!closed && waiting.value && held.value && !busy.value) await submitInstall();
+  if (!closed && ownedSession.value && ownTask.value && !active.value && !busy.value && tasks.value.some((task) => task.id === ownTask.value && task.state === "succeeded")) {
+    const id = ownedSession.value;
+    ownedSession.value = "";
+    await run(async () => { await api.releaseMaintenance(id); });
+  }
 }
 function choose(id: string) {
   selected.value = id;
@@ -178,18 +194,33 @@ function choose(id: string) {
 }
 async function install() {
   if (!canCreate.value || !maintenance.value) return;
-  const input = {
-    maintenance_id: maintenance.value.agent.id,
-    prepare_task_id: selected.value,
-    asset_id: asset.value,
-    start: start.value,
-    enable: enable.value,
-  };
+  installInput.value = { prepare_task_id: selected.value, asset_id: asset.value, start: start.value, enable: enable.value };
   await run(async () => {
-    const t = await api.createNginxInstallation(input, keyFor(input));
-    tasks.value = [t, ...tasks.value.filter((v) => v.id !== t.id)];
+    if (maintenance.value?.phase === "open") {
+      const input = { drain_seconds: 120 };
+      const session = await api.enterMaintenance(input, keyFor(input));
+      ownedSession.value = session.task_id;
+    }
+    waiting.value = true;
+  });
+  await load();
+}
+async function submitInstall() {
+  if (!waiting.value || !held.value || !installInput.value || !maintenance.value || busy.value) return;
+  const input = { ...installInput.value, maintenance_id: maintenance.value.agent.id };
+  // A failed or uncertain submission requires an explicit retry with the same
+  // idempotency key; polling must never keep submitting installation requests.
+  waiting.value = false;
+  await run(async () => {
+    const task = await api.createNginxInstallation(input, keyFor(input));
+    ownTask.value = task.id;
+    tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)];
     keyFor = useIdempotency();
-  }, "首次安装任务已受理");
+  }, "已开始安装 Nginx");
+}
+async function finish() {
+  if (!maintenance.value?.session || active.value || waiting.value) return;
+  await run(async () => { await api.releaseMaintenance(maintenance.value!.session!.task_id); });
   await load();
 }
 async function control(t: NginxInstallTask, command: "resume" | "cancel") {
@@ -209,7 +240,7 @@ onMounted(async () => {
   if (!closed)
     timer = setInterval(() => {
       clock.value = Date.now();
-      if (active.value || maintenance.value?.phase !== "open") void load();
+      if (active.value || waiting.value || maintenance.value?.phase !== "open") void load();
     }, 3000);
 });
 onUnmounted(() => {
@@ -226,63 +257,58 @@ onUnmounted(() => {
         <h2>首次安装 Nginx</h2>
         <NButton @click="load">刷新</NButton>
       </div>
-      <NAlert v-if="overview && !overview.install_available" type="info">{{
-        overview.install_reason
-      }}</NAlert>
-      <p>
-        选择已准备的签名组件，并在<RouterLink to="/maintenance"
-          >配置维护</RouterLink
-        >进入维护后安装。安装完成后可继续导入和应用业务配置。
-      </p>
-      <NAlert v-if="canWrite && !held" type="warning"
-        >尚未进入配置维护，请先确认维护状态。</NAlert
-      >
+      <NAlert v-if="overview?.installation" type="success">Nginx 已安装。<RouterLink to="/nginx">管理网站与代理</RouterLink></NAlert>
+      <NAlert v-else-if="overview && !overview.install_available" type="warning" title="当前无法安装">请检查软件安装条件。<AdvancedDetails title="查看原因"><p>{{ overview.install_reason }}</p></AdvancedDetails></NAlert>
+      <p v-if="!overview?.installation" class="muted">安装期间会暂时停止配置修改，现有服务继续运行。</p>
+      <NAlert v-if="waiting" type="info">正在等待当前任务结束，随后开始安装。请保持此页面打开。</NAlert>
       <div v-if="canWrite" class="grid-2">
-        <NFormItem label="已准备组件"
+        <NFormItem label="安装版本"
           ><NSelect
             :value="selected"
+            :disabled="waiting || active"
             :options="
               prepared.map((t) => ({
-                label: `${t.result?.release?.version} · ${date(t.created_at)}`,
+                label: t.result?.release?.tag ?? "已下载版本",
                 value: t.id,
               }))
             "
             @update:value="choose"
         /></NFormItem>
-        <NFormItem label="Nginx 资产"
+        <NFormItem v-if="assets.length > 1" label="安装版本"
           ><NSelect
             v-model:value="asset"
+            :disabled="waiting || active"
             :options="
               assets.map((a) => ({
-                label: `${a.version} · ${a.id}`,
+                label: a.version,
                 value: a.id,
               }))
             "
         /></NFormItem>
-        <NCheckbox v-model:checked="enable">设置开机启动</NCheckbox
-        ><NCheckbox v-model:checked="start">立即启动专用 Nginx</NCheckbox>
+        <AdvancedDetails title="安装选项"><NCheckbox v-model:checked="enable" :disabled="waiting || active">开机启动</NCheckbox><NCheckbox v-model:checked="start" :disabled="waiting || active">安装后立即启动</NCheckbox></AdvancedDetails>
       </div>
       <p v-if="!prepared.length" class="muted">
-        暂无有效准备结果，请先完成<RouterLink to="/components"
-          >组件准备</RouterLink
+        请先前往<RouterLink :to="{ path: '/components', query: { software: 'nginx' } }"
+          >软件商店下载安装包</RouterLink
         >。
       </p>
       <div v-if="canWrite" class="toolbar">
         <NPopconfirm @positive-click="install"
           ><template #trigger
             ><NButton type="primary" :disabled="!canCreate" :loading="busy"
-              >首次安装</NButton
+              >{{ waiting ? "准备安装中…" : "开始安装" }}</NButton
             ></template
-          >确认安装所选 Nginx 组件？</NPopconfirm
+          >确认安装 Nginx？安装期间将暂停配置修改。</NPopconfirm
         >
       </div>
+      <NButton v-if="held && !active && !waiting" :loading="busy" @click="finish">结束安装维护，恢复配置修改</NButton>
     </section>
     <section class="panel page-stack">
-      <h2>安装任务</h2>
+      <h2>安装记录</h2>
       <p v-if="!tasks.length" class="muted">暂无安装任务</p>
       <article v-for="t in tasks" :key="t.id" class="page-stack">
         <div class="toolbar">
-          <h3>{{ t.input.asset_id }}</h3>
+          <h3>Nginx 安装</h3>
           <NTag
             :type="
               t.state === 'succeeded'
@@ -296,19 +322,19 @@ onUnmounted(() => {
         </div>
         <p>
           {{ stages[t.stage] ?? "等待结果确认" }} · {{ date(t.updated_at) }} ·
-          {{ t.input.start ? "请求立即启动" : "仅安装"
+          {{ t.input.start ? "安装后启动" : "仅安装"
           }}{{ t.input.enable ? " · 开机启动" : "" }}
         </p>
         <p v-if="t.result?.installation">
           版本：{{ t.result.installation.version }} ·
-          {{ t.result.running ? "运行已确认" : "运行未确认" }}
+          {{ t.result.running ? "运行中" : "未运行" }}
         </p>
         <NAlert v-if="t.error" type="warning">{{ t.error }}</NAlert>
         <div v-if="canControl(t)" class="toolbar">
           <NPopconfirm @positive-click="control(t, 'resume')"
             ><template #trigger
-              ><NButton :disabled="busy">续办原安装</NButton></template
-            >确认按原资产和选项续办安装？</NPopconfirm
+              ><NButton :disabled="busy">继续安装</NButton></template
+            >确认继续上次安装？</NPopconfirm
           >
           <NPopconfirm @positive-click="control(t, 'cancel')"
             ><template #trigger

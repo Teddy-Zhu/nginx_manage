@@ -2,18 +2,20 @@
 {
   "meta": {
     "title": "设置",
-    "subtitle": "账户与机器凭据",
+    "subtitle": "管理账户、访问入口与系统维护",
     "nav": true,
     "localOnly": true,
-    "order": 6,
-    "symbol": "⚙"
+    "order": 25,
+    "symbol": "⚙",
+    "group": "数据与设置"
   }
 }
 </route>
 
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
+import { RouterLink, useRouter } from "vue-router";
 import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
 import {
   NButton,
   NInput,
@@ -45,11 +47,7 @@ const { run, busy, message } = useAction(),
   router = useRouter();
 const credentials = ref<Credential[]>([]);
 const systemVersion = ref<SystemVersion | null>(null);
-const runtimeNames: Record<SystemVersion["runtime"], string> = {
-  native: "原生服务",
-  docker: "Docker · 持久应用版本",
-  development: "开发环境",
-};
+
 const credentialVisible = ref(false),
   tokenVisible = ref(false),
   name = ref(""),
@@ -146,13 +144,23 @@ onMounted(load);
 <template>
   <section v-if="systemVersion" class="surface">
     <div class="section-heading">
-      <h2>运行环境</h2>
-      <NTag>{{ runtimeNames[systemVersion.runtime] }}</NTag>
+      <h2>系统信息</h2>
+      <RouterLink to="/panel-updates">检查更新</RouterLink>
     </div>
     <dl class="detail-list">
       <dt>应用版本</dt>
       <dd>{{ systemVersion.version }}</dd>
     </dl>
+  </section>
+  <section class="surface" style="margin: 20px 0">
+    <h2>管理设置</h2>
+    <div class="shortcut-grid" style="margin-top: 16px">
+      <RouterLink to="/management-listener"><strong>安全管理入口</strong><span class="muted">连接确认和访问限制</span></RouterLink>
+      <RouterLink to="/modules"><strong>功能开关</strong><span class="muted">管理可选功能</span></RouterLink>
+      <RouterLink to="/panel-updates"><strong>系统更新</strong><span class="muted">检查版本与更新记录</span></RouterLink>
+      <RouterLink to="/history"><strong>清理存储</strong><span class="muted">清理不再使用的历史文件</span></RouterLink>
+    </div>
+    <AdvancedDetails title="高级维护"><div class="inline-gap"><RouterLink to="/maintenance">维护模式</RouterLink><RouterLink to="/agent-upgrades">管理服务更新</RouterLink><RouterLink to="/panel-images">运行环境更新</RouterLink><RouterLink to="/firewall">网络诊断</RouterLink></div></AdvancedDetails>
   </section>
   <div class="two-columns">
     <section class="surface">

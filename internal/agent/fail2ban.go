@@ -126,7 +126,16 @@ func (s *Server) fail2banHandlers(mux *http.ServeMux, ctx context.Context) {
 	f := &fail2banObserver{ctx: ctx, data: s.DataDir, scope: s.MetricsScope, dev: s.Dev}
 	s.fail2banInstanceHandlers(mux, ctx)
 	s.fail2banTemplateHandlers(mux, ctx)
-	mux.HandleFunc("GET /v1/fail2ban", func(w http.ResponseWriter, r *http.Request) { out, err := f.read(r.Context()); dnsReply(w, out, err) })
+	mux.HandleFunc("GET /v1/fail2ban", func(w http.ResponseWriter, r *http.Request) {
+		out, err := f.read(r.Context())
+		if err == nil && out.Available {
+			// Installation and binding receipts change independently of the
+			// cached system-tool inventory. Navigation must see them immediately.
+			out.Managed = readFail2banManaged(s.DataDir)
+			out.Binding = fail2banBindingView(s.DataDir)
+		}
+		dnsReply(w, out, err)
+	})
 }
 func (c *Client) ReadFail2ban(ctx context.Context) (fail2ban.Observation, error) {
 	var out fail2ban.Observation

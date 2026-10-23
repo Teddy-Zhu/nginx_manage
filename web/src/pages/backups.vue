@@ -1,12 +1,13 @@
 <route lang="json">
 {
   "meta": {
-    "title": "完整备份",
-    "subtitle": "加密归档与离线保管",
+    "title": "备份恢复",
+    "subtitle": "备份系统数据，或从备份恢复",
     "nav": true,
     "localOnly": true,
-    "order": 9.5,
-    "symbol": "▣"
+    "order": 20,
+    "symbol": "▣",
+    "group": "数据与设置"
   }
 }
 </route>
@@ -80,7 +81,7 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.passphr
       <NAlert type="info">完整备份包含业务数据库、凭据和证书。请将加密文件与恢复私钥或口令分开离线保管；跨环境业务配置迁移请使用“配置迁移”。</NAlert>
       <section v-if="canWrite" class="panel page-stack">
         <h2>创建备份</h2>
-        <NAlert v-if="uncertain" type="warning">请求回执尚未确认。可重试原请求查询同一任务。</NAlert>
+        <NAlert v-if="uncertain" type="warning">暂未收到任务结果，请重试查询。重复查询不会创建新任务。</NAlert>
         <NFormItem label="备份名称"><NInput v-model:value="form.name" :disabled="busy || uncertain" maxlength="100" /></NFormItem>
         <NFormItem label="加密方式"><NRadioGroup v-model:value="form.encryption" :disabled="busy || uncertain"><NRadioButton value="recipient">离线恢复公钥</NRadioButton><NRadioButton value="passphrase">临时口令</NRadioButton></NRadioGroup></NFormItem>
         <NFormItem v-if="form.encryption === 'recipient'" label="age X25519 公钥"><NInput v-model:value="form.recipient" :disabled="busy || uncertain" placeholder="age1…" /></NFormItem>

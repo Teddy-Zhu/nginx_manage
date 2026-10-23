@@ -308,7 +308,7 @@ nginx_kind=none
 if [[ -n $nginx ]]; then nginx_kind=native; fi
 if [[ $panel_mode == docker && -n $nginx_image ]]; then nginx_kind=image; fi
 printf '\nNginxPanel 环境检测\n  系统：%s\n  架构：%s\n  本机 Docker：%s\n  Nginx 程序：%s\n  推荐部署：%s\n  推荐依据：%s\n  程序：%s\n  前端：%s\n  数据：%s\n  管理监听：%s\n  Nginx 来源：%s\n' "$os_name" "$arch" "$docker_state" "${nginx:-未检测到}" "$panel_mode" "$mode_reason" "$binary" "$web" "$data" "${listen:-安装时自动选择}" "$nginx_kind"
-printf '%s\n' '主机管理默认只读；安装完成后默认启用并启动服务。'
+printf '%s\n' '默认自动识别主机网络环境并启用基础管理，安装完成后启动服务。'
 custom=$advanced
 if [[ ! -f $binary || ! -f $web/index.html ]]; then
   [[ $custom == yes ]] || die '安装包缺少程序或前端；请使用完整 Release 或在源码目录运行 install.sh'
@@ -380,17 +380,18 @@ case "$nginx_kind" in
     args+=(--nginx-image "$nginx_image") ;;
 esac
 if [[ $custom == yes && $signed == yes ]] && yes_no '允许已签名的预发行版本？'; then args+=(--release-prerelease); fi
-dns_owner=unconfirmed firewall_owner=unconfirmed firewall_ssh=unconfirmed log_owner=unconfirmed
-if [[ $custom == yes ]] && yes_no '配置主机 DNS、防火墙或日志轮转授权？'; then
-  choose dns_owner '主机 DNS 的实际所有者' 1 unconfirmed:未确认，仅查看 regular-file:普通resolv.conf文件 networkmanager:NetworkManager networkd:systemd-networkd netplan:Netplan
-  choose firewall_owner '主机防火墙的实际后端（本机规则登记另行完成）' 1 unconfirmed:未确认，仅查看 direct-nftables:直接nftables firewalld:firewalld ufw:UFW iptables-nft:iptables-nft iptables-legacy:iptables-legacy
-  if [[ $firewall_owner != unconfirmed ]]; then
+dns_owner=auto firewall_owner=auto firewall_ssh=auto log_owner=agent
+if [[ $custom == yes ]] && yes_no '手动调整主机网络管理或日志设置？'; then
+  choose dns_owner '主机 DNS 的实际所有者' 1 auto:自动识别 unconfirmed:仅查看 regular-file:普通resolv.conf文件 networkmanager:NetworkManager networkd:systemd-networkd netplan:Netplan
+  firewall_ssh=unconfirmed
+  choose firewall_owner '防火墙管理方式' 1 auto:自动识别 unconfirmed:仅查看 direct-nftables:直接nftables firewalld:firewalld ufw:UFW iptables-nft:iptables-nft iptables-legacy:iptables-legacy
+  if [[ $firewall_owner != unconfirmed && $firewall_owner != auto ]]; then
     choose firewall_ssh '目标 SSH 服务保护' 1 openssh:保护现有OpenSSH none:已确认没有SSH服务
-    args+=(--firewall-owner "$firewall_owner" --firewall-ssh "$firewall_ssh")
   fi
-  choose log_owner '本应用 Nginx 日志轮转的唯一所有者' 1 unconfirmed:未确认，仅查看 external:已有外部工具 agent:已排除外部轮转，由Agent管理
+  choose log_owner '网站日志轮转' 1 agent:由本系统管理 external:由已有外部工具管理 unconfirmed:仅查看
 fi
-args+=(--dns-owner "$dns_owner" --nginx-log-owner "$log_owner")
+if [[ $firewall_owner == auto ]]; then firewall_ssh=auto; fi
+args+=(--dns-owner "$dns_owner" --nginx-log-owner "$log_owner" --firewall-owner "$firewall_owner" --firewall-ssh "$firewall_ssh")
 start=yes
 if [[ $custom == yes ]] && ! yes_no '安装完成后启用并启动所选服务？Docker 模式同时启动容器' yes; then start=no; fi
 if [[ $start == yes ]]; then args+=(--start); fi

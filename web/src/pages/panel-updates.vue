@@ -3,9 +3,10 @@
   "meta": {
     "title": "面板更新",
     "subtitle": "版本更新与任务恢复",
-    "nav": true,
+    "nav": false,
     "order": 7.22,
-    "symbol": "◇"
+    "symbol": "◇",
+    "parent": "/settings"
   }
 }
 </route>

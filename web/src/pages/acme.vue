@@ -1,9 +1,10 @@
 <route lang="json">
 {
   "meta": {
-    "title": "ACME 设置",
-    "subtitle": "账户注册与 DNS 验证凭据",
-    "nav": false
+    "title": "证书申请设置",
+    "subtitle": "管理签发账户和 DNS 验证信息",
+    "nav": false,
+    "parent": "/certificates"
   }
 }
 </route>

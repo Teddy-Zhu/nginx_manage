@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdvancedDetails from "./AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { NAlert, NButton, NFormItem, NPopconfirm, NSelect } from "naive-ui";
@@ -31,10 +32,10 @@ const api = useNodeAPI(),
   controller = new AbortController();
 type Action = Fail2banLifecyclePreviewInput["action"];
 type EngineOwner = Fail2banLifecyclePreviewInput["engine_owner"];
-const owner = ref<EngineOwner>("managed");
+const owner = ref<EngineOwner>(props.binding?.engine.owner === "existing" ? "existing" : "managed");
 const ownerOptions = [
-  { value: "managed", label: "独立受管实例" },
-  { value: "existing", label: "已接入的全局实例" },
+  { value: "managed", label: "本系统安装的软件" },
+  { value: "existing", label: "已有软件" },
 ];
 const existingAuthorized = computed(
   () =>
@@ -48,10 +49,14 @@ const existingInstance = computed(() =>
     ? props.instance
     : null,
 );
+function serviceState(state: string) {
+  const labels: Record<string, string> = { active: "运行中", inactive: "已停止", failed: "启动失败", activating: "正在启动", deactivating: "正在停止", reloading: "正在重载" };
+  return labels[state] ?? "状态不可用";
+}
 const names: Record<Action, string> = {
-  install: "安装独立实例",
-  resume: "续办原安装",
-  rollback: "撤回独立实例",
+  install: "安装 Fail2ban",
+  resume: "继续安装",
+  rollback: "撤销安装",
   start: "启动服务",
   stop: "停止服务",
   enable: "开机启用",
@@ -62,16 +67,16 @@ const states: Record<string, string> = {
   running: "处理中",
   compensating: "恢复中",
   recovery_required: "等待恢复确认",
-  succeeded: "目标状态已确认",
+  succeeded: "已完成",
   failed: "未完成",
   cancelled: "已取消",
 };
 const managedStates: Record<string, string> = {
-  absent: "未登记",
+  absent: "未安装",
   unavailable: "未知",
   reserved: "待安装",
   ready: "已准备",
-  installed: "已登记",
+  installed: "已安装",
   interrupted: "安装未完成",
   "rolling-back": "撤回中",
   "rolled-back": "已撤回",
@@ -138,7 +143,7 @@ const assets = computed(() =>
       )
       .map((asset) => ({
         value: task.id,
-        label: `${release.tag} · ${asset.id}`,
+        label: release.tag,
         task,
         asset,
       }));
@@ -325,14 +330,14 @@ async function submit() {
   busy.value = true;
   error.value = "";
   try {
-    const result = await api.changeFail2banLifecycle(
+    await api.changeFail2banLifecycle(
       pending.value.input,
       pending.value.key,
     );
     if (closed) return;
     pending.value = null;
     plan.value = null;
-    notice.value = `操作任务已创建：${result.task_id}`;
+    notice.value = "操作已提交，请查看执行进度。";
     await refresh();
   } catch (e) {
     if (!closed) {
@@ -344,9 +349,9 @@ async function submit() {
     if (!closed) busy.value = false;
   }
 }
-onMounted(() => {
-  void refresh();
-  void loadAssets();
+onMounted(async () => {
+  await Promise.all([refresh(), loadAssets()]);
+  if (!closed && !action.value && owner.value === "managed" && !["installed", "interrupted", "rolling-back"].includes(currentManaged.value?.state ?? "") && options.value.some((item) => item.value === "install")) action.value = "install";
 });
 onUnmounted(() => {
   closed = true;
@@ -357,21 +362,18 @@ onUnmounted(() => {
 <template>
   <section class="panel page-stack">
     <div class="toolbar">
-      <h3>实例安装与服务控制</h3>
+      <h3>安装与服务管理</h3>
       <NButton size="small" :loading="reading" @click="refresh"
         >刷新任务</NButton
       >
     </div>
-    <NFormItem label="目标实例"
+    <NFormItem v-if="binding?.engine.owner === 'existing'" label="管理的软件"
       ><NSelect
         v-model:value="owner"
         :options="ownerOptions"
         :disabled="busy || active || !!pending"
     /></NFormItem>
-    <p v-if="owner === 'managed'">
-      独立实例的安装登记、服务运行、开机设置与 jail 保护分别核对。
-    </p>
-    <template v-else>
+    <template v-if="owner === 'existing'">
       <p>
         全局服务：{{
           binding?.engine.owner === "existing"
@@ -380,10 +382,10 @@ onUnmounted(() => {
         }}
       </p>
       <NAlert v-if="!existingAuthorized" type="warning"
-        >已有实例服务控制未获本机授权。</NAlert
+        >当前连接仅可查看状态，尚不支持控制服务。</NAlert
       >
       <NAlert v-else type="warning"
-        >全局服务操作影响该实例的全部 jail，包括 SSH 等系统保护。</NAlert
+        >操作会影响该软件的全部防护规则，包括 SSH 登录保护。</NAlert
       >
     </template>
     <p v-if="owner === 'managed' && currentManaged">
@@ -391,8 +393,8 @@ onUnmounted(() => {
       {{ currentManaged.version || "—" }}
     </p>
     <p v-if="currentService?.available">
-      服务：{{ currentService.active }} / {{ currentService.sub }} ·
-      开机设置：{{ currentService.unit_file || "未知" }}
+      服务：{{ serviceState(currentService.active) }} ·
+      开机启动：{{ ['enabled', 'enabled-runtime'].includes(currentService.unit_file) ? '已开启' : currentService.unit_file === 'disabled' ? '已关闭' : '状态不可用' }}
     </p>
     <p v-else>服务状态未知</p>
     <p v-if="currentAt">
@@ -412,22 +414,21 @@ onUnmounted(() => {
           placeholder="选择操作"
       /></NFormItem>
       <template v-if="action === 'install'">
-        <NFormItem label="已准备的签名资产"
+        <NFormItem label="安装版本"
           ><NSelect
             v-model:value="selected"
             :options="assets"
             :disabled="busy || active || !!pending"
-            placeholder="选择单个 Fail2ban 资产的准备记录"
+            placeholder="请先下载安装包"
         /></NFormItem>
         <div class="toolbar">
           <NButton size="small" :loading="assetsReading" @click="loadAssets"
             >刷新准备记录</NButton
-          ><RouterLink to="/components">组件准备</RouterLink>
+          ><RouterLink :to="{ path: '/components', query: { software: 'fail2ban' } }">下载安装包</RouterLink>
         </div>
         <NAlert v-if="assetsError" type="warning">{{ assetsError }}</NAlert>
         <p v-if="!assets.length">
-          需要先检查并准备单个 Fail2ban 签名资产，以及兼容的宿主机 Python 和
-          SQLite 标准库。
+          请先在软件商店下载安装包，并准备所需的运行依赖。
         </p>
       </template>
       <div class="toolbar">
@@ -452,12 +453,9 @@ onUnmounted(() => {
     <section v-if="plan" class="surface page-stack">
       <h4>{{ names[plan.input.action] }}</h4>
       <p>
-        预览 {{ new Date(plan.at * 1000).toLocaleString() }} · 实例
-        {{ plan.input.base_id || "首次安装" }}
+        准备时间：{{ new Date(plan.at * 1000).toLocaleString() }}
       </p>
-      <ul>
-        <li v-for="impact in plan.impacts" :key="impact">{{ impact }}</li>
-      </ul>
+      <AdvancedDetails title="变更明细"><ul><li v-for="impact in plan.impacts" :key="impact">{{ impact }}</li></ul></AdvancedDetails>
       <p v-if="plan.jails.length">
         {{
           plan.input.engine_owner === "existing"
@@ -500,7 +498,7 @@ onUnmounted(() => {
         {{ states[task.state] || "状态未知" }} ·
         {{ new Date(task.created_at * 1000).toLocaleString() }}
       </p>
-      <p>任务 {{ task.id }}</p>
+      <AdvancedDetails title="任务详情"><p>{{ task.id }}</p></AdvancedDetails>
       <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
       <template v-if="task.result">
         <p>
@@ -525,6 +523,6 @@ onUnmounted(() => {
         </p>
       </template>
     </article>
-    <p>显示最近 16 次实例操作。安装中断后的续办或撤回需要重新预览并确认。</p>
+    <p>显示最近 16 次操作。安装中断后可以选择继续安装或撤销安装。</p>
   </section>
 </template>

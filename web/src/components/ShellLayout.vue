@@ -6,7 +6,6 @@ import { useSession } from "../stores/session";
 import { api } from "../api/client";
 import { useAction } from "../composables/action";
 import { useNodes } from "../stores/node";
-import { sourceNodeId } from "../api/context";
 
 const route = useRoute(),
   router = useRouter(),
@@ -27,8 +26,17 @@ const links = computed(() =>
     .getRoutes()
     .filter((item) => item.meta.nav)
     .sort((a, b) => (a.meta.order ?? 0) - (b.meta.order ?? 0))
-    .map(({ path, meta }) => ({ path, meta, active: route.path === path })),
+    .map(({ path, meta }) => ({ path, meta, active: route.path === path || route.meta.parent === path })),
 );
+const groups = computed(() => {
+  const result = new Map<string, typeof links.value>();
+  for (const link of links.value) {
+    const group = link.meta.group ?? "常用功能";
+    if (!result.has(group)) result.set(group, []);
+    result.get(group)!.push(link);
+  }
+  return [...result].map(([name, items]) => ({ name, items }));
+});
 function requestReauth() {
   reauth.value = true;
 }
@@ -51,7 +59,7 @@ async function loadNodes() {
 function selectNode(id: string) {
   if (nodes.switching || busy.value || route.meta.localOnly) return;
   dialog.warning({
-    title: "切换操作节点",
+    title: "切换服务器",
     content: "未保存的表单将被丢弃，当前查询和日志流将关闭。确认切换？",
     positiveText: "确认切换",
     negativeText: "取消",
@@ -81,10 +89,11 @@ onUnmounted(() => {
         ><span class="brand-mark">N</span
         ><span>Nginx<span class="brand-light">Panel</span></span></router-link
       >
-      <div class="sidebar-label">工作空间</div>
       <nav class="nav-list" aria-label="主导航">
+        <div v-for="group in groups" :key="group.name" class="nav-group">
+          <div class="sidebar-label">{{ group.name }}</div>
         <router-link
-          v-for="link in links"
+          v-for="link in group.items"
           :key="link.path"
           :to="link.path"
           class="nav-link"
@@ -92,20 +101,20 @@ onUnmounted(() => {
           ><span class="nav-symbol">{{ link.meta.symbol }}</span
           >{{ link.meta.title }}</router-link
         >
+        </div>
       </nav>
       <div class="sidebar-bottom">
-        <span class="status-dot" />{{ currentNode }}<span class="local-badge">{{ route.meta.localOnly || !nodes.selected ? "LOCAL" : "REMOTE" }}</span>
+        {{ currentNode }}
       </div>
     </aside>
     <div class="main-column">
       <header class="topbar">
-        <span class="breadcrumb">工作空间 <span>/</span> {{ title }}</span>
+        <span class="breadcrumb">控制台 <span>/</span> {{ title }}</span>
         <div class="topbar-right">
-          <template v-if="canManageNodes">
-            <n-select aria-label="当前操作节点" style="width: 190px" :value="route.meta.localOnly ? '' : nodes.selected?.connection ?? ''" :options="nodeOptions" :disabled="!!route.meta.localOnly || nodes.switching || busy" @update:value="selectNode" />
-            <n-button text :disabled="busy || nodes.switching" @click="loadNodes">刷新节点</n-button>
+          <template v-if="canManageNodes && (nodes.connections.length || nodes.selected)">
+            <n-select aria-label="当前服务器" style="width: 190px" :value="route.meta.localOnly ? '' : nodes.selected?.connection ?? ''" :options="nodeOptions" :disabled="!!route.meta.localOnly || nodes.switching || busy" @update:value="selectNode" />
           </template>
-          <n-tag size="small" :bordered="false">{{ route.meta.localOnly ? "本机管理" : currentNode }}</n-tag
+          <n-tag size="small" :bordered="false">{{ route.meta.localOnly ? "本机" : currentNode }}</n-tag
           ><span class="username">{{ session.me?.username }}</span
           ><n-button text @click="logout">退出</n-button>
         </div>
@@ -117,7 +126,6 @@ onUnmounted(() => {
             <p>{{ route.meta.subtitle }}</p>
           </div>
         </div>
-        <p class="muted">节点：{{ currentNode }} · {{ route.meta.localOnly ? sourceNodeId : nodes.selected?.nodeId ?? sourceNodeId }}</p>
         <n-alert v-if="nodes.error && !route.meta.localOnly" type="error" style="margin-bottom: 16px">
           {{ nodes.error }}
           <n-button v-if="nodes.selected" size="small" :disabled="busy || nodes.switching" @click="selectNode(nodes.selected.connection)">重新检查连接</n-button>
@@ -125,7 +133,7 @@ onUnmounted(() => {
         <slot />
       </main>
       <footer class="footer">
-        NginxPanel <span>节点自治 · 配置可追溯</span>
+        NginxPanel
       </footer>
     </div>
     <n-modal

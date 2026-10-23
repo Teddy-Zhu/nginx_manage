@@ -2,15 +2,17 @@
 {
   "meta": {
     "title": "配置迁移",
-    "subtitle": "配置导出、导入与节点迁入",
+    "subtitle": "在服务器之间导出、导入配置",
     "nav": true,
-    "order": 7,
-    "symbol": "⇄"
+    "order": 21,
+    "symbol": "⇄",
+    "group": "数据与设置"
   }
 }
 </route>
 
 <script setup lang="ts">
+import { RouterLink } from "vue-router";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   NAlert,
@@ -186,7 +188,7 @@ const canImport = computed(() =>
 const canPull = computed(() => canImport.value && has("nodes.manage"));
 const options = [
   { label: "仅保存草稿", value: "draft" },
-  { label: "保存期望配置", value: "save" },
+  { label: "保存配置", value: "save" },
   { label: "保存并应用 Nginx", value: "apply" },
 ];
 const states: Record<string, string> = {
@@ -500,6 +502,7 @@ onUnmounted(() => {
 
 <template>
   <div class="page-stack">
+    <div class="toolbar"><RouterLink to="/migration-push">迁移到其他服务器</RouterLink></div>
     <NAlert type="info" title="迁移范围"
       >迁移 Nginx 原生配置、HTTP/Stream、访问列表及 WAF，可选择证书、DNS
       凭据、ACME 账户与签发配置及通知渠道。导入替换目标 Nginx
@@ -541,9 +544,9 @@ onUnmounted(() => {
           >主机 DNS 已保存配置</NCheckbox
         ><NCheckbox v-model:checked="includeMonitoring">包含监控配置</NCheckbox
         ><NCheckbox v-model:checked="includeFail2ban"
-          >包含 jail 期望配置</NCheckbox
+          >包含登录防护配置</NCheckbox
         ><NCheckbox v-model:checked="includeFirewall"
-          >包含防火墙期望规则</NCheckbox
+          >包含防火墙规则</NCheckbox
         >
       </div>
       <NButton
@@ -594,7 +597,7 @@ onUnmounted(() => {
       >
     </section>
     <section v-if="canPull" class="panel">
-      <h2>从源节点迁入</h2>
+      <h2>从其他服务器迁入</h2>
       <NFormItem label="源节点 API"
         ><NInput
           v-model:value="remoteURL"
@@ -659,9 +662,9 @@ onUnmounted(() => {
         ><NCheckbox v-model:checked="remoteHostDNS"
           >主机 DNS 已保存配置</NCheckbox
         ><NCheckbox v-model:checked="remoteMonitoring">包含监控配置</NCheckbox
-        ><NCheckbox v-model:checked="remoteFail2ban">jail 期望配置</NCheckbox
+        ><NCheckbox v-model:checked="remoteFail2ban">登录防护配置</NCheckbox
         ><NCheckbox v-model:checked="remoteFirewall"
-          >包含防火墙期望规则</NCheckbox
+          >包含防火墙规则</NCheckbox
         ><NButton
           :disabled="
             busy || !remoteURL || !remoteKey || !firewallValid || !hostDNSValid

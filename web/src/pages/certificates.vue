@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "证书",
-    "subtitle": "证书版本、有效期与站点引用",
+    "title": "SSL 证书",
+    "subtitle": "管理证书、申请和自动续期",
     "nav": true,
-    "order": 4,
-    "symbol": "▱"
+    "order": 2,
+    "symbol": "▱",
+    "group": "网站与安全"
   }
 }
 </route>
@@ -385,7 +386,7 @@ onUnmounted(() => {
     </template>
     <h3>当前引用</h3>
     <p v-if="!activeBindings.length" class="muted">
-      当前期望与最近确认修订均未引用此证书。
+      当前没有网站使用此证书。
     </p>
     <p
       v-for="binding in activeBindings"
@@ -397,13 +398,13 @@ onUnmounted(() => {
           ? "待应用"
           : binding.revision_state === "applied"
             ? "最近确认生效"
-            : "期望与最近确认生效"
+            : "已配置并应用"
       }}
       ·
       {{
         binding.resource_id
           ? `站点 ${binding.resource_id.slice(0, 8)}`
-          : `原生文件 ${binding.file_id.slice(0, 8)}`
+          : `自定义配置 ${binding.file_id.slice(0, 8)}`
       }}
       · 版本
       {{

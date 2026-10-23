@@ -6,17 +6,17 @@ umask 077
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen IP:端口] [--nginx-log-owner agent|external|unconfirmed] [--dns-owner unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh openssh|none] [--start]
+用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen IP:端口] [--nginx-log-owner agent|external|unconfirmed] [--dns-owner auto|unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner auto|unconfirmed|direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh auto|openssh|none] [--start]
 面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
 默认在全部网卡监听 HTTPS 并随机选择空闲端口；--listen 可指定监听地址和端口。
 仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
---dns-owner 明确批准宿主机 DNS 所有者并开放对应服务写入路径；默认 unconfirmed，仅允许读取。不会安装、启停或切换网络管理器。
---firewall-owner 与 --firewall-ssh 配套确认宿主机防火墙后端及 SSH 保护方式；默认 unconfirmed，仅允许读取。UFW 额外开放 /etc/ufw 写入；不安装、启停或切换管理器，本机授权登记另行完成。
---nginx-log-owner 明确 Nginx 日志的唯一轮转所有者；默认 unconfirmed，仅允许读取。选择 agent 前须排除外部轮转规则竞争，不迁出或修改外部规则。
+默认自动识别主机 DNS 和防火墙，启用已支持环境的管理能力；可显式选择 unconfirmed 保持只读。不会安装、启停或切换系统网络管理器。
+防火墙自动完成空规则区域的管理登记，不改动已有业务规则；默认识别并保护 OpenSSH，不能确定的环境保留只读。
+Nginx 应用专用日志默认由本系统轮转；已有外部轮转时可选择 external，不修改外部规则。
 SELinux 启用时注册本应用的持久文件标签模块并应用标签，保留系统进程策略与当前防护状态。
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen= start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=unconfirmed firewall_owner=unconfirmed firewall_ssh=unconfirmed nginx_log_owner=unconfirmed
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel listen= start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=auto firewall_owner=auto firewall_ssh=auto nginx_log_owner=agent
 while (($#)); do
   case "$1" in
     --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--panel-mode|--panel-image|--nginx-image|--dns-owner|--firewall-owner|--firewall-ssh|--nginx-log-owner)
@@ -40,47 +40,6 @@ while (($#)); do
     *) usage; die "未知参数：$1" ;;
   esac
 done
-case "$nginx_log_owner" in
-  unconfirmed|agent|external) ;;
-  *) die 'nginx-log-owner 仅允许 agent、external 或 unconfirmed' ;;
-esac
-log_agent_flags=
-if [[ $nginx_log_owner != unconfirmed ]]; then log_agent_flags="--nginx-log-owner $nginx_log_owner"; fi
-dns_agent_flags= dns_write_paths=
-case "$dns_owner" in
-  unconfirmed) ;;
-  regular-file)
-    dns_agent_flags='--dns-scope host --dns-owner regular-file'
-    # Atomic replacement of resolv.conf requires a writable parent directory.
-    dns_write_paths=/etc ;;
-  networkmanager) dns_agent_flags='--dns-scope host --dns-owner networkmanager' ;;
-  networkd)
-    dns_agent_flags='--dns-scope host --dns-owner networkd'
-    dns_write_paths=-/etc/systemd/network ;;
-  netplan)
-    dns_agent_flags='--dns-scope host --dns-owner netplan'
-    dns_write_paths='-/etc/netplan -/run/systemd/network -/run/NetworkManager/system-connections' ;;
-  *) die 'dns-owner 仅允许 unconfirmed、regular-file、networkmanager、networkd 或 netplan' ;;
-esac
-firewall_agent_flags= firewall_write_paths= firewall_after=
-case "$firewall_owner" in
-  unconfirmed|direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy) ;;
-  *) die 'firewall-owner 仅允许 unconfirmed、direct-nftables、firewalld、ufw、iptables-nft 或 iptables-legacy' ;;
-esac
-case "$firewall_ssh" in
-  unconfirmed|openssh|none) ;;
-  *) die 'firewall-ssh 仅允许 unconfirmed、openssh 或 none' ;;
-esac
-if [[ $firewall_owner == unconfirmed ]]; then
-  [[ $firewall_ssh == unconfirmed ]] || die 'firewall-ssh 须与明确的 firewall-owner 配套使用'
-else
-  [[ $firewall_ssh != unconfirmed ]] || die '选择 firewall-owner 时须明确 firewall-ssh 为 openssh 或 none'
-  firewall_agent_flags="--firewall-scope host --firewall-owner $firewall_owner --firewall-ssh $firewall_ssh"
-  case "$firewall_owner" in
-    ufw) firewall_write_paths=-/etc/ufw; firewall_after=ufw.service ;;
-    firewalld) firewall_after=firewalld.service ;;
-  esac
-fi
 [[ $EUID == 0 ]] || die '安装需要本机 root'
 [[ ! -e /etc/nginxpanel/install/lifecycle && ! -L /etc/nginxpanel/install/lifecycle ]] || die '已有卸载或重装记录，请使用 manage.sh reinstall 或续办完全卸载'
 [[ -n $binary && -n $web ]] || { usage; exit 1; }
@@ -236,6 +195,66 @@ canonical "$binary"; canonical "$web"
 trusted_file "$binary" $((192 * 1024 * 1024))
 [[ -x $binary ]] || die '指定面板程序不可执行'
 native_elf "$binary"
+# Resolve only on the installation host, using the same adapters as the Agent.
+# Values are parsed as data; never evaluate detector output as shell code.
+if [[ $dns_owner == auto || $firewall_owner == auto || $firewall_ssh == auto ]]; then
+  detected=$("$binary" installation-defaults --data-dir "$data") || die '无法检测主机管理环境'
+  detected_dns=unconfirmed detected_firewall=unconfirmed detected_ssh=unconfirmed
+  while IFS='=' read -r key value; do
+    case "$key:$value" in
+      dns_owner:unconfirmed|dns_owner:regular-file|dns_owner:networkmanager|dns_owner:networkd|dns_owner:netplan) detected_dns=$value ;;
+      firewall_owner:unconfirmed|firewall_owner:direct-nftables|firewall_owner:firewalld|firewall_owner:ufw|firewall_owner:iptables-nft|firewall_owner:iptables-legacy) detected_firewall=$value ;;
+      firewall_ssh:unconfirmed|firewall_ssh:openssh|firewall_ssh:none) detected_ssh=$value ;;
+      *) die '主机环境检测返回了无效结果' ;;
+    esac
+  done <<<"$detected"
+  if [[ $dns_owner == auto ]]; then dns_owner=$detected_dns; fi
+  if [[ $firewall_owner == auto ]]; then firewall_owner=$detected_firewall; fi
+  if [[ $firewall_ssh == auto ]]; then
+    if [[ $firewall_owner == unconfirmed ]]; then firewall_ssh=unconfirmed; else firewall_ssh=$detected_ssh; fi
+  fi
+fi
+case "$nginx_log_owner" in
+  unconfirmed|agent|external) ;;
+  *) die 'nginx-log-owner 仅允许 agent、external 或 unconfirmed' ;;
+esac
+log_agent_flags=
+if [[ $nginx_log_owner != unconfirmed ]]; then log_agent_flags="--nginx-log-owner $nginx_log_owner"; fi
+dns_agent_flags= dns_write_paths=
+case "$dns_owner" in
+  unconfirmed) ;;
+  regular-file)
+    dns_agent_flags='--dns-scope host --dns-owner regular-file'
+    # Atomic replacement of resolv.conf requires a writable parent directory.
+    dns_write_paths=/etc ;;
+  networkmanager) dns_agent_flags='--dns-scope host --dns-owner networkmanager' ;;
+  networkd)
+    dns_agent_flags='--dns-scope host --dns-owner networkd'
+    dns_write_paths=-/etc/systemd/network ;;
+  netplan)
+    dns_agent_flags='--dns-scope host --dns-owner netplan'
+    dns_write_paths='-/etc/netplan -/run/systemd/network -/run/NetworkManager/system-connections' ;;
+  *) die 'dns-owner 仅允许 unconfirmed、regular-file、networkmanager、networkd 或 netplan' ;;
+esac
+firewall_agent_flags= firewall_write_paths= firewall_after=
+case "$firewall_owner" in
+  unconfirmed|direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy) ;;
+  *) die 'firewall-owner 仅允许 unconfirmed、direct-nftables、firewalld、ufw、iptables-nft 或 iptables-legacy' ;;
+esac
+case "$firewall_ssh" in
+  unconfirmed|openssh|none) ;;
+  *) die 'firewall-ssh 仅允许 unconfirmed、openssh 或 none' ;;
+esac
+if [[ $firewall_owner == unconfirmed ]]; then
+  [[ $firewall_ssh == unconfirmed ]] || die 'firewall-ssh 须与明确的 firewall-owner 配套使用'
+else
+  [[ $firewall_ssh != unconfirmed ]] || die '选择 firewall-owner 时须明确 firewall-ssh 为 openssh 或 none'
+  firewall_agent_flags="--firewall-scope host --firewall-owner $firewall_owner --firewall-ssh $firewall_ssh"
+  case "$firewall_owner" in
+    ufw) firewall_write_paths=-/etc/ufw; firewall_after=ufw.service ;;
+    firewalld) firewall_after=firewalld.service ;;
+  esac
+fi
 nginx_source=()
 if [[ -n $nginx_image ]]; then
   nginx_source=()
@@ -391,7 +410,7 @@ fi
 port=${BASH_REMATCH[2]}
 ((10#$port >= 1024 && 10#$port <= 65535)) || die '管理端口须为 1024–65535'
 "$binary" panel-listen-default --listen "$listen" >/dev/null || die '管理地址无效'
-printf 'native-install-v14\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\nnginx_log_owner=%s\nselinux_profile=%s\nselinux_policy_sha256=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" "$nginx_log_owner" "$selinux_profile" "$selinux_policy_hash" >"$work/intent"
+printf 'native-install-v15\ndata=%s\nlisten=%s\nrelease=%s\npanel_mode=%s\npanel_image=%s\nnginx_image=%s\nimage_manifest_sha256=%s\nwithout_nginx=%s\nnginx=%s\nnginx_sha256=%s\nnginx_plan=%s\nnginx_asset=%s\nrelease_trust=%s\nprerelease=%s\ndns_owner=%s\nnginx_log_owner=%s\nfirewall_owner=%s\nfirewall_ssh=%s\nselinux_profile=%s\nselinux_policy_sha256=%s\n' "$data" "$listen" "$release" "$panel_mode" "$panel_image" "$nginx_image" "$image_manifest_hash" "$without_nginx" "$nginx" "$nginx_hash" "$nginx_plan" "$nginx_asset" "$release_trust" "$prerelease" "$dns_owner" "$nginx_log_owner" "$firewall_owner" "$firewall_ssh" "$selinux_profile" "$selinux_policy_hash" >"$work/intent"
 if [[ -e $state/intent || -L $state/intent ]]; then
   trusted_file "$state/intent" 4096
   cmp -s "$work/intent" "$state/intent" || die '已有不同安装计划；版本更新和路径迁移须走维护流程'
@@ -489,7 +508,7 @@ else
   "$release_dir/nginxpanel" panel-native-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --listen "$listen" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" >"$work/panel-runtime.json"
 fi
 # Only unfinished installations run init; a live panel owns the writer lock.
-printf 'native-install-v14\n' >"$work/ready"
+printf 'native-install-v15\n' >"$work/ready"
 if [[ -e $state/ready || -L $state/ready ]]; then
   trusted_file "$state/ready" 64
   cmp -s "$work/ready" "$state/ready" || die '安装就绪记录不匹配'
@@ -830,6 +849,14 @@ if [[ $selinux_profile != disabled ]]; then
   for unit in "${install_units[@]}"; do restorecon -F "/etc/systemd/system/$unit" 9>&-; done
 fi
 systemctl daemon-reload
+# Root installation authorizes only our empty namespace; no traffic policy is
+# installed and no system firewall manager is enabled or replaced here.
+case "$firewall_owner" in
+  direct-nftables) "$release_dir/nginxpanel" firewall-init --data-dir "$data" --firewall-scope host >"$work/firewall-registration.json" ;;
+  firewalld) "$release_dir/nginxpanel" firewalld-init --data-dir "$data" --firewall-scope host >"$work/firewall-registration.json" ;;
+  ufw) "$release_dir/nginxpanel" ufw-init --data-dir "$data" --firewall-scope host >"$work/firewall-registration.json" ;;
+  iptables-nft|iptables-legacy) "$release_dir/nginxpanel" iptables-init --data-dir "$data" --firewall-scope host --firewall-backend "$firewall_owner" >"$work/firewall-registration.json" ;;
+esac
 write_owned "$work/ready" "$state/ready" 600
 if [[ $start == yes ]]; then
   start_units=(nginxpanel-agent.service)
@@ -851,5 +878,5 @@ fi
 printf '已准备宿主机部署：%s\n面板运行模式：%s\n管理地址：https://%s\n' "$data" "$panel_mode" "$listen"
 printf '%s\n' '使用机器公网或内网 IP 及上述端口访问；通配监听地址不是浏览器访问地址。云安全组和外部防火墙需允许该 TCP 端口。'
 if [[ $panel_mode == docker ]]; then printf '%s\n' '面板 Compose：/etc/nginxpanel/docker/compose.yaml；使用 docker compose -f /etc/nginxpanel/docker/compose.yaml up -d 启动。'; fi
-if [[ $without_nginx == yes ]]; then printf '%s\n' 'Nginx 未安装；配置导入可预检并准备可信资产，安装与运行接入仍须明确完成。'; fi
+if [[ $without_nginx == yes ]]; then printf '%s\n' 'Nginx 尚未安装，登录面板后可前往“软件商店”安装。'; fi
 if [[ -f $data/bootstrap/token ]]; then printf '一次性引导文件：%s/bootstrap/token\n' "$data"; fi

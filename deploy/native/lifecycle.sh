@@ -115,19 +115,26 @@ lifecycle_capture_running() {
   fi
 }
 lifecycle_check_removal() {
-  local checker=$1 output result
+  local checker=$1 output
   trusted_file "$checker"
   [[ -x $checker ]] || die '卸载检查程序不可执行'
-  if output=$("$checker" installation-removal-check --data-dir "$data" 2>&1); then
-    if [[ -n $output ]]; then printf '%s\n' "$output"; fi
-  else
-    result=$?
-    printf '%s\n' "$output" >&2
-    if [[ $output == *'unknown subcommand'* && $output == *'installation-removal-check'* ]]; then
-      printf '%s\n' '已安装程序缺少卸载检查命令。请从最新源码或完整安装包执行 sudo bash install.sh --uninstall（默认保留数据），完全卸载加 --purge；未使用环境全新安装加 --fresh。' >&2
+  if output=$("$checker" installation-removal-prepare --data-dir "$data" 2>&1); then
+    :
+  elif [[ $output == *'unknown subcommand'* && $output == *'installation-removal-prepare'* ]]; then
+    # Older checkers predate automatic empty registration. Keep their original
+    # read-only checks, including refusal to remove manually managed rules.
+    if ! output=$("$checker" installation-removal-check --data-dir "$data" 2>&1); then
+      printf '%s\n' "$output" >&2
+      if [[ $output == *'unknown subcommand'* && $output == *'installation-removal-check'* ]]; then
+        printf '%s\n' '已安装程序缺少卸载检查命令。请从最新源码或完整安装包执行 sudo bash install.sh --uninstall（默认保留数据），完全卸载加 --purge；未使用环境全新安装加 --fresh。' >&2
+      fi
+      return 1
     fi
-    return "$result"
+  else
+    printf '%s\n' "$output" >&2
+    return 1
   fi
+  if [[ -n $output ]]; then printf '%s\n' "$output"; fi
 }
 lifecycle_validate_materials() {
   local digest expected name extra

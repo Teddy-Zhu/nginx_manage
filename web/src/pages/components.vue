@@ -1,16 +1,23 @@
 <route lang="json">
 {
   "meta": {
-    "title": "组件准备",
-    "subtitle": "面板与受信任组件的准备任务",
+    "title": "软件商店",
+    "subtitle": "安装和管理所需软件",
     "nav": true,
-    "order": 7.2,
-    "symbol": "◇"
+    "order": 13,
+    "symbol": "◇",
+    "group": "服务器管理"
   }
 }
 </route>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { RouterLink, useRoute } from "vue-router";
+import AdvancedDetails from "../components/AdvancedDetails.vue";
+import Fail2banPythonPanel from "../components/Fail2banPythonPanel.vue";
+import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
+import Fail2banExistingPanel from "../components/Fail2banExistingPanel.vue";
+import { nginxState, fail2banState } from "../utils/software";
 import ComponentOfflineUpload from "../components/ComponentOfflineUpload.vue";
 import ComponentReleaseDetails from "../components/ComponentReleaseDetails.vue";
 import {
@@ -29,10 +36,37 @@ import {
   type ComponentOverview,
   type ComponentTask,
   type ComponentCreateInput,
+  type Fail2banObservation,
+  type Fail2banInstance,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const api = useNodeAPI();
+const route = useRoute();
+const software = route.query.software === "nginx" || route.query.software === "fail2ban" ? route.query.software : "";
+const fail2ban = ref<Fail2banObservation | null>(null), instance = ref<Fail2banInstance | null>(null);
+const moduleEnabled = ref(false), fail2banError = ref("");
+const nginxStatus = computed(() => nginxState(overview.value));
+const fail2banStatus = computed(() => fail2banState(fail2ban.value));
+const stateNames = { installed: "已安装", missing: "未安装", unbound: "待连接", recovery: "安装未完成", unavailable: "状态不可用" };
+const prepared = computed(() => tasks.value.find((task) => task.action === "prepare" && task.state === "succeeded" && task.result?.runtime_ready && (task.result.release?.expires_at ?? 0) * 1000 > clock.value && task.result.release?.assets.some((asset) => asset.component === software && task.result!.release!.selected.includes(asset.id))));
+async function loadFail2ban() {
+  const result = await Promise.allSettled([api.fail2ban(), api.modules()]);
+  if (closed) return;
+  if (result[0].status === "fulfilled") { fail2ban.value = result[0].value; fail2banError.value = ""; }
+  else { fail2ban.value = null; fail2banError.value = apiError(result[0].reason).message; }
+  if (result[1].status === "fulfilled") moduleEnabled.value = result[1].value.some((item) => item.id === "fail2ban" && item.enabled);
+  if (software === "fail2ban" && fail2ban.value?.binding.state === "bound") {
+    try { instance.value = await api.fail2banInstance(); }
+    catch (cause) { fail2banError.value = apiError(cause).message; }
+  }
+}
+async function enableFail2ban() {
+  await run(async () => {
+    await api.setModule("fail2ban", true);
+    await loadFail2ban();
+  });
+}
 
 const session = useSession(),
   { run, busy } = useAction();
@@ -42,7 +76,7 @@ const overview = ref<ComponentOverview | null>(null),
   error = ref("");
 const tag = ref(""),
   prerelease = ref(false),
-  components = ref<Array<"nginx" | "fail2ban" | "panel" | "web">>(["nginx"]),
+  components = ref<Array<"nginx" | "fail2ban" | "panel" | "web">>([software || "nginx"]),
   assets = ref(""),
   selection = ref("components");
 const checkID = ref(""),
@@ -57,7 +91,7 @@ const active = computed(() =>
 );
 const checks = computed(() =>
   tasks.value.filter(
-    (t) => t.action === "check" && t.state === "succeeded" && t.result?.release,
+    (t) => t.action === "check" && t.state === "succeeded" && t.result?.release && (!software || t.result.release.assets.some((asset) => asset.component === software && t.result!.release!.selected.includes(asset.id))),
   ),
 );
 const checked = computed(() =>
@@ -188,7 +222,7 @@ async function activate(t: ComponentTask) {
   } });
 }
 onMounted(async () => {
-  await load();
+  await Promise.all([load(), loadFail2ban()]);
   if (!closed)
     timer = setInterval(() => {
       clock.value = Date.now();
@@ -208,6 +242,62 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-stack">
+    <div class="toolbar"><h2>已安装与可选软件</h2><NButton :loading="busy" @click="() => { load(); loadFail2ban(); }">刷新</NButton></div>
+    <NAlert v-if="error" type="error">软件状态读取失败：{{ error }}</NAlert>
+    <div class="software-grid">
+      <section class="panel software-card">
+        <div class="toolbar"><h3>Nginx</h3><NTag :type="nginxStatus === 'installed' ? 'success' : 'default'">{{ stateNames[nginxStatus] }}</NTag></div>
+        <p class="muted">网站和反向代理服务，支持 HTTPS、访问控制与基础防护。</p>
+        <p v-if="overview?.installation">{{ overview.installation.version }} · {{ overview.running ? '运行中' : '未运行' }}</p>
+        <div class="toolbar">
+          <RouterLink v-if="nginxStatus === 'installed'" to="/nginx"><NButton type="primary">管理</NButton></RouterLink>
+          <RouterLink v-else-if="nginxStatus === 'missing'" :to="{ path: '/components', query: { software: 'nginx' } }"><NButton type="primary">安装</NButton></RouterLink>
+          <RouterLink v-if="nginxStatus === 'installed'" :to="overview?.installation?.owner === 'docker' ? '/nginx-images' : '/component-switches'"><NButton>更新</NButton></RouterLink>
+        </div>
+      </section>
+      <section class="panel software-card">
+        <div class="toolbar"><h3>Fail2ban</h3><NTag :type="fail2banStatus === 'installed' ? 'success' : 'default'">{{ stateNames[fail2banStatus] }}</NTag></div>
+        <p class="muted">登录保护服务，可自动封禁多次认证失败的 IP。</p>
+        <div class="toolbar">
+          <RouterLink v-if="fail2banStatus === 'installed'" to="/fail2ban"><NButton type="primary">管理</NButton></RouterLink>
+          <RouterLink v-else-if="fail2banStatus !== 'unavailable'" :to="{ path: '/components', query: { software: 'fail2ban', ...(fail2banStatus === 'unbound' ? { existing: '1' } : {}) } }"><NButton type="primary">{{ fail2banStatus === 'unbound' ? '连接已有安装' : fail2banStatus === 'recovery' ? '继续安装' : '安装' }}</NButton></RouterLink>
+          <RouterLink v-if="fail2banStatus === 'installed'" :to="{ path: '/components', query: { software: 'fail2ban' } }"><NButton>软件设置</NButton></RouterLink>
+        </div>
+        <AdvancedDetails v-if="fail2banError" title="读取失败详情"><p>{{ fail2banError }}</p></AdvancedDetails>
+      </section>
+    </div>
+    <template v-if="software">
+      <section class="panel page-stack">
+        <div class="toolbar"><h2>{{ software === 'nginx' ? '安装 Nginx' : '安装与管理 Fail2ban' }}</h2><RouterLink to="/components">返回软件列表</RouterLink></div>
+        <template v-if="software === 'fail2ban' && !moduleEnabled">
+          <p>开启登录防护功能后即可安装或连接软件。</p><NButton type="primary" :loading="busy" @click="enableFail2ban">开启登录防护</NButton>
+        </template>
+        <template v-else-if="route.query.existing !== '1' && (software === 'nginx' ? nginxStatus !== 'installed' : fail2banStatus !== 'installed')">
+          <NAlert v-if="overview && !overview.available" type="warning" title="安装源暂不可用">无法获取可安装的软件，请联系管理员配置安装源，或使用下方的离线安装。<AdvancedDetails title="查看原因"><p>{{ overview.reason }}</p></AdvancedDetails></NAlert>
+          <p class="muted">自动匹配当前服务器的可用版本。</p>
+          <NButton v-if="permitted" type="primary" :loading="busy || active" :disabled="!overview?.available || active" @click="check">{{ active ? '正在处理，请稍候…' : '查找可用版本' }}</NButton>
+          <div v-if="release && checked" class="page-stack">
+            <p>可安装版本：<strong>{{ release.tag }}</strong> · 下载大小 {{ bytes(release.archive_bytes) }}</p>
+            <NAlert v-if="!checked.result?.runtime_ready" type="warning">当前服务器尚缺少运行依赖，请先完成下方的依赖安装。<AdvancedDetails title="依赖详情"><p>{{ checked.result?.runtime_reason }}</p></AdvancedDetails></NAlert>
+            <NButton v-if="permitted && !prepared" type="primary" :loading="busy || active" :disabled="!canPrepare" @click="prepare">下载安装包</NButton>
+          </div>
+          <NAlert v-if="prepared" type="success">安装包已就绪。</NAlert>
+          <RouterLink v-if="software === 'nginx' && prepared" :to="{ path: '/component-installations', query: { prepare: prepared.id } }"><NButton type="primary">开始安装</NButton></RouterLink>
+          <RouterLink v-if="software === 'nginx'" to="/component-installations">查看安装进度与历史记录</RouterLink>
+        </template>
+        <div v-for="task in tasks.filter((item) => ['queued', 'running', 'failed', 'recovery_required'].includes(item.state)).slice(0, 5)" :key="task.id" class="component-row">
+          <span>{{ task.action === 'check' ? '检查版本' : task.action === 'prepare' ? '下载安装包' : '更新软件' }}</span><NTag :type="task.state === 'failed' ? 'error' : 'info'">{{ taskLabel(task) }}</NTag>
+          <AdvancedDetails v-if="task.error" title="任务详情"><p>{{ task.error }}</p></AdvancedDetails>
+        </div>
+      </section>
+      <template v-if="software === 'fail2ban' && moduleEnabled">
+        <Fail2banPythonPanel v-if="fail2ban && fail2ban.python.standard_library !== true" :module-enabled="moduleEnabled" :python="fail2ban.python" :observed-at="fail2ban.at" @changed="loadFail2ban" />
+        <Fail2banExistingPanel v-if="route.query.existing === '1'" :module-enabled="moduleEnabled" @changed="loadFail2ban" />
+        <Fail2banLifecyclePanel v-else :key="prepared?.id ?? 'no-package'" :module-enabled="moduleEnabled" :binding="fail2ban?.binding ?? null" :instance="instance" :managed="fail2ban?.managed ?? null" :service="fail2ban?.services.find((item) => item.id === 'nginxpanel-fail2ban.service') ?? null" :observed-at="fail2ban?.at ?? 0" @changed="loadFail2ban" />
+      </template>
+    </template>
+    <AdvancedDetails title="离线安装与高级选项">
+
     <ComponentOfflineUpload :available="overview?.available === true" :blocked="active || busy" @changed="load" />
     <section v-if="overview" class="panel page-stack">
       <h2>节点前端版本</h2>
@@ -460,45 +550,6 @@ onUnmounted(() => {
         </template>
       </div>
     </section>
+    </AdvancedDetails>
   </div>
 </template>
-<style scoped>
-.page-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.panel {
-  padding: 20px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: var(--panel-bg, #fff);
-}
-.grid-2 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 0 16px;
-}
-.component-task {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
-}
-.table-wrap {
-  overflow-x: auto;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-th,
-td {
-  padding: 10px;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
-  vertical-align: top;
-}
-h2,
-p {
-  margin: 0;
-}
-</style>

@@ -169,7 +169,7 @@ async function save() {
     if (closed) return;
     accept(result);
     pending = null;
-    notice.value = "jail 期望配置已保存，尚未应用";
+    notice.value = "防护规则已保存，尚未生效";
   } catch (e) {
     if (!closed) error.value = apiError(e).message;
   } finally {
@@ -204,12 +204,11 @@ onUnmounted(() => {
 <template>
   <section class="panel page-stack">
     <div class="toolbar">
-      <h3>jail 期望配置</h3>
+      <h3>防护规则</h3>
       <span v-if="view" class="muted">版本 {{ view.version }}</span>
     </div>
     <NAlert type="info"
-      >配置保存后需预览并确认应用。当前支持独立受管实例的 Nginx
-      客户端动作，已有实例的 jail 保持只读。</NAlert
+      >保存后点击检查并应用，使规则生效。已有软件的规则可在高级防护设置中管理。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
@@ -219,7 +218,7 @@ onUnmounted(() => {
     />
     <div v-for="jail in jails" :key="jail.id" class="surface page-stack">
       <div class="toolbar">
-        <h4>{{ jail.name || "未命名 jail" }}</h4>
+        <h4>{{ jail.name || "未命名规则" }}</h4>
         <NButton
           :disabled="busy"
           size="small"
@@ -239,12 +238,11 @@ onUnmounted(() => {
           :options="templateOptions"
         />
       </NFormItem>
-      <NFormItem label="期望启用"
+      <NFormItem label="启用规则"
         ><NSwitch v-model:value="jail.enabled" :disabled="busy"
       /></NFormItem>
       <NAlert v-if="jail.template === panelTemplate" type="warning">
-        来源为面板密码认证失败日志，仅记录 TCP
-        对端。面板登录保护仅适用于本机直连；启用前须核对宿主机动作授权和持续同步状态。
+        面板登录保护适用于直接访问面板的连接。启用前，请在高级防护设置中配置主机登录保护。
       </NAlert>
       <NFormItem v-else label="站点结构化访问日志"
         ><NSelect
@@ -253,7 +251,7 @@ onUnmounted(() => {
           :options="sourceOptions"
           filterable
       /></NFormItem>
-      <NFormItem label="期望动作"
+      <NFormItem label="封禁方式"
         ><NSelect
           v-model:value="jail.action"
           :disabled="busy || jail.template === panelTemplate"
@@ -307,7 +305,7 @@ onUnmounted(() => {
         :disabled="busy || !view || !dirty"
         :loading="busy"
         @click="save"
-        >保存期望配置</NButton
+        >保存规则</NButton
       >
       <NButton :disabled="busy || !view?.version || dirty" @click="inspect"
         >预览保存配置</NButton
@@ -328,7 +326,7 @@ onUnmounted(() => {
           jails.find((jail) => jail.id === entry.id)?.name || entry.jail_name
         }}</strong>
         <span>
-          · {{ entry.enabled ? "期望启用" : "期望停用" }} · 模板{{
+          · {{ entry.enabled ? "启用规则" : "停用规则" }} · 模板{{
             entry.template_ready ? "已核对" : "未就绪"
           }}
           · 日志{{ entry.source_ready ? "已核对" : "未就绪" }}</span

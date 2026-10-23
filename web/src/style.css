@@ -76,7 +76,8 @@ h2 {
   bottom: 0;
   display: flex;
   flex-direction: column;
-  padding: 30px 18px 18px;
+  padding: 22px 14px 14px;
+  z-index: 20;
 }
 .brand {
   display: flex;
@@ -106,18 +107,23 @@ h2 {
   color: #929c96;
   font-size: 11px;
   letter-spacing: 1px;
-  margin: 49px 14px 15px;
+  margin: 20px 14px 8px;
 }
 .nav-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding-bottom: 16px;
 }
+.nav-group { display: grid; gap: 3px; }
 .nav-link {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 14px;
+  padding: 9px 14px;
   color: #66736b;
   border-radius: 8px;
   transition: background 0.15s;
@@ -205,8 +211,60 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 29px;
+  margin-bottom: 22px;
 }
+.advanced-details {
+  border: 1px solid #e5eae7;
+  border-radius: 8px;
+  margin: 16px 0;
+  background: #fff;
+  min-width: 0;
+}
+.advanced-details > summary {
+  padding: 14px 18px;
+  cursor: pointer;
+  color: #647068;
+  font-weight: 500;
+}
+.advanced-content { padding: 4px 18px 18px; overflow-x: auto; }
+.software-required {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 320px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.software-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: #eaf5ef;
+  color: #087f68;
+  font-size: 26px;
+  font-weight: 700;
+}
+.software-grid, .shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.software-card { display: flex; flex-direction: column; gap: 16px; }
+.software-card .toolbar { margin: 0; }
+.software-card p { flex: 1; }
+.shortcut-grid a {
+  border: 1px solid #e5eae7;
+  border-radius: 8px;
+  background: white;
+  padding: 18px;
+  display: grid;
+  gap: 6px;
+}
+.shortcut-grid a:hover { border-color: #087f68; background: #f5faf7; }
 .page-heading p {
   color: #859087;
   font-size: 13px;
@@ -576,6 +634,7 @@ h2 {
   .sidebar-bottom {
     display: none;
   }
+  .nav-group { display: contents; }
   .nav-list {
     flex-direction: row;
     gap: 5px;
@@ -689,3 +748,6 @@ h2 {
     grid-template-columns: 110px 1fr;
   }
 }
+
+.toolbar .advanced-details { margin: 0; }
+.toolbar .advanced-content { display: grid; gap: 8px; }

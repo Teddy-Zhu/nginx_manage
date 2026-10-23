@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdvancedDetails from "./AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -31,7 +32,7 @@ const pending = ref<{ input: Fail2banPythonTaskInput; key: string } | null>(
   null,
 );
 const selected = ref(""),
-  refreshIndex = ref(false),
+  refreshIndex = ref(true),
   clock = ref(Date.now());
 const reading = ref(false),
   busy = ref(false),
@@ -79,7 +80,7 @@ const plans = computed(() =>
       ? [
           {
             value: task.id,
-            label: `${plan.os} ${plan.version} · ${plan.manager} · ${new Date(plan.at * 1000).toLocaleString()}`,
+            label: `安装方案 · ${new Date(plan.at * 1000).toLocaleString()}`,
             plan,
           },
         ]
@@ -211,7 +212,7 @@ onUnmounted(() => {
 <template>
   <section class="panel page-stack">
     <div class="toolbar">
-      <h3>Python 依赖</h3>
+      <h3>安装运行依赖</h3>
       <NButton size="small" :loading="reading" @click="refresh"
         >刷新任务</NButton
       >
@@ -219,7 +220,8 @@ onUnmounted(() => {
     <p v-if="currentPython?.standard_library === true">
       系统 Python {{ currentPython.version || "—" }} · 标准库与 SQLite 可用
     </p>
-    <p v-else>{{ currentPython?.reason || "系统 Python 状态未知" }}</p>
+    <p v-else class="muted">Fail2ban 的运行依赖尚未就绪。</p>
+    <AdvancedDetails v-if="currentPython?.reason" title="依赖详情"><p>{{ currentPython.reason }}</p></AdvancedDetails>
     <p v-if="currentAt">
       状态快照 {{ new Date(currentAt * 1000).toLocaleString() }}
     </p>
@@ -239,12 +241,10 @@ onUnmounted(() => {
         >请先启用 Fail2ban 管理模块。</NAlert
       >
       <p>
-        为缺少系统 Python
-        的宿主机生成依赖计划，核对软件包后单独确认安装。已存在的 Python
-        不会被替换。
+        自动识别服务器环境，检查并安装所需的运行依赖。
       </p>
       <NCheckbox v-model:checked="refreshIndex" :disabled="!canSubmit"
-        >刷新现有软件仓库索引</NCheckbox
+        >更新软件列表</NCheckbox
       >
       <div class="toolbar">
         <NPopconfirm
@@ -254,33 +254,29 @@ onUnmounted(() => {
         >
           <template #trigger
             ><NButton :disabled="!canSubmit" :loading="busy"
-              >刷新索引并生成计划</NButton
+              >更新软件列表并检查依赖</NButton
             ></template
           >
           将使用宿主机现有仓库配置刷新索引，可能运行已有包管理器钩子。本次不安装软件包。
         </NPopconfirm>
         <NButton v-else :disabled="!canSubmit" :loading="busy" @click="plan"
-          >生成依赖计划</NButton
+          >检查所需依赖</NButton
         >
       </div>
-      <NFormItem label="可安装的依赖计划">
+      <NFormItem v-if="plans.length > 1" label="安装方案">
         <NSelect
           v-model:value="selected"
           :options="plans"
           :disabled="busy || !!pending"
-          placeholder="选择尚未过期的计划"
+          placeholder="选择安装方案"
         />
       </NFormItem>
       <template v-if="chosen">
         <p>
-          {{ chosen.os }} {{ chosen.version }} / {{ chosen.architecture }} ·
-          {{ chosen.manager }} · 有效期至
-          {{ new Date(chosen.expires_at * 1000).toLocaleString() }}
-        </p>
-        <p>
           下载 {{ bytes(chosen.download_bytes) }} · 安装空间
           {{ bytes(chosen.installed_bytes) }}
         </p>
+        <AdvancedDetails title="软件包明细">
         <ul>
           <li v-for="impact in chosen.impacts" :key="impact">{{ impact }}</li>
         </ul>
@@ -312,14 +308,14 @@ onUnmounted(() => {
             </tbody>
           </table>
         </div>
+        </AdvancedDetails>
         <NPopconfirm :disabled="!canSubmit" @positive-click="install">
           <template #trigger
             ><NButton type="primary" :disabled="!canSubmit" :loading="busy"
-              >确认安装计划中的依赖</NButton
+              >安装所需依赖</NButton
             ></template
           >
-          将安装上述软件包并运行系统包维护脚本。安装前会重新核对仓库及系统状态；安装完成后仍需单独安装
-          Fail2ban。
+          将从系统软件仓库安装所列依赖，完成后可继续安装 Fail2ban。
         </NPopconfirm>
       </template>
     </template>

@@ -1,16 +1,18 @@
 <route lang="json">
 {
   "meta": {
-    "title": "服务器",
-    "subtitle": "宿主机资源与趋势",
+    "title": "监控",
+    "subtitle": "查看 CPU、内存、磁盘与服务状态",
     "nav": true,
-    "order": 0.5,
-    "symbol": "▥"
+    "order": 10,
+    "symbol": "▥",
+    "group": "服务器管理"
   }
 }
 </route>
 
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref, watch, toRaw } from "vue";
 import {
   NAlert,
@@ -354,9 +356,9 @@ onUnmounted(() => {
         :value="latest?.enabled ?? false"
         :disabled="!canToggle || busy"
         @update:value="toggle"
-      /><span>基础监控</span
+      /><span>资源监控</span
       ><n-tag size="small" :type="latest?.stale ? 'warning' : 'success'">{{
-        latest?.stale ? "数据未就绪或已过期" : "宿主机样本"
+        !latest?.sample ? "等待数据" : latest.stale ? "数据已过期" : "数据正常"
       }}</n-tag>
     </div>
     <div class="actions">
@@ -379,16 +381,18 @@ onUnmounted(() => {
     class="notice"
     >{{ capability.reason }}</n-alert
   >
-  <p class="muted">
+  <p class="muted">{{ latest?.sample ? `更新时间：${new Date(latest.sample.at * 1000).toLocaleString()}` : '暂无监控数据' }}</p>
+  <AdvancedDetails title="采样详情">  <p class="muted">
     {{
       latest?.sample
         ? `采样时间：${new Date(latest.sample.at * 1000).toLocaleString()}`
-        : "暂无宿主机样本"
+        : "暂无监控数据"
     }}
     · {{ settings?.settings.interval_seconds ?? "—" }} 秒采样 · 保留
     {{ settings?.settings.retention_hours ?? "—" }} 小时 · 历史占用
     {{ bytes(latest?.stored_bytes) }}
   </p>
+</AdvancedDetails>
   <div class="stat-grid">
     <div v-for="card in cards" :key="card.label" class="stat-card">
       <span class="stat-label">{{ card.label }}</span
@@ -487,7 +491,7 @@ onUnmounted(() => {
     />
   </section>
   <section class="surface">
-    <h2>受管服务</h2>
+    <h2>服务状态</h2>
     <n-data-table
       :columns="serviceColumns"
       :data="latest?.sample?.services ?? []"

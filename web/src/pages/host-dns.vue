@@ -1,15 +1,17 @@
 <route lang="json">
 {
   "meta": {
-    "title": "主机 DNS",
-    "subtitle": "解析器配置与确认恢复",
+    "title": "DNS 设置",
+    "subtitle": "设置服务器使用的 DNS 地址",
     "nav": true,
-    "order": 0.6,
-    "symbol": "◎"
+    "order": 11,
+    "symbol": "◎",
+    "group": "服务器管理"
   }
 }
 </route>
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import {
@@ -534,7 +536,7 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-toolbar">
-    <h2>主机 DNS</h2>
+    <h2>DNS 设置</h2>
     <div class="actions">
       <span>启用管理</span
       ><n-switch
@@ -552,11 +554,14 @@ onUnmounted(() => {
   >
   <section v-if="observed" class="panel">
     <div class="page-toolbar">
-      <h3>解析器状态</h3>
+      <h3>当前 DNS</h3>
       <n-tag :type="observed.writable ? 'success' : 'warning'">{{
-        observed.writable ? "可接管" : "只读"
+        observed.writable ? "可管理" : "仅查看"
       }}</n-tag>
     </div>
+    <dl class="detail-list"><dt>DNS 地址</dt><dd>{{ observed.current.servers.join("、") || "未配置" }}</dd><dt>搜索域</dt><dd>{{ observed.current.search.join("、") || "无" }}</dd></dl>
+    <NAlert v-if="!observed.writable" type="info" :bordered="false">当前网络配置仅支持查看。需要修改时，请查看网络配置详情。</NAlert>
+    <AdvancedDetails title="网络配置详情">
     <dl>
       <dt>配置来源/所有者线索</dt>
       <dd>{{ observed.owner }}</dd>
@@ -581,16 +586,17 @@ onUnmounted(() => {
     <n-alert v-if="observed.reason" type="warning" :bordered="false">{{
       observed.reason
     }}</n-alert>
+    </AdvancedDetails>
     <n-alert
       v-if="drift"
       type="warning"
       :bordered="false"
       style="margin-top: 12px"
-      >当前配置与最近确认的期望不同，请检查外部修改后重新规划。</n-alert
+      >DNS 设置已被其他工具修改，请刷新后重新配置。</n-alert
     >
     <template v-if="networkManager || networkd">
       <n-form-item
-        :label="networkd ? '目标网卡' : '目标连接'"
+        label="网络接口"
         style="margin-top: 16px"
       >
         <n-select
@@ -605,7 +611,7 @@ onUnmounted(() => {
         <dd>{{ networkLink.persistent.routing_domains.join("、") || "无" }}</dd>
       </dl>
       <template v-if="connection">
-        <dl>
+        <AdvancedDetails title="网卡配置详情"><dl>
           <dt>接口 / IP 方法</dt>
           <dd>
             {{ connection.interface }} · IPv4 {{ connection.method4 || "—" }} /
@@ -624,6 +630,7 @@ onUnmounted(() => {
           v-if="connection.netplan"
           :source="connection.netplan"
         />
+        </AdvancedDetails>
         <n-alert v-if="connection.reason" type="warning" :bordered="false">{{
           connection.reason
         }}</n-alert>
@@ -640,6 +647,7 @@ onUnmounted(() => {
       >配置 DNS</n-button
     >
   </section>
+  <AdvancedDetails title="网卡诊断">
   <section
     v-for="link in observed?.links ?? []"
     :key="link.target"
@@ -709,6 +717,7 @@ onUnmounted(() => {
       link.reason
     }}</n-alert>
   </section>
+  </AdvancedDetails>
   <section v-if="pending || task" class="panel">
     <div class="page-toolbar">
       <h3>{{ activeTask || pending ? "当前变更" : "最近变更" }}</h3>
@@ -751,7 +760,7 @@ onUnmounted(() => {
     </div>
   </section>
   <section v-if="editing" class="panel">
-    <h3>DNS 变更计划</h3>
+    <h3>修改 DNS</h3>
     <template v-if="!networkManager">
       <n-form-item label="DNS 服务器（1–3 个 IPv4 / IPv6 地址）"
         ><n-input
@@ -865,7 +874,7 @@ onUnmounted(() => {
         <dd v-if="plan.input.target">{{ plan.input.target }}</dd>
         <dt>验证域名</dt>
         <dd>{{ plan.input.verify_names.join("、") }}</dd>
-        <dt>未确认恢复</dt>
+        <dt>自动恢复期限</dt>
         <dd>{{ plan.input.timeout_seconds }} 秒</dd>
       </dl>
       <n-button

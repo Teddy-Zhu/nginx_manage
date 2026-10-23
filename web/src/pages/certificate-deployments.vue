@@ -2,8 +2,10 @@
 {
   "meta": {
     "title": "证书部署",
-    "subtitle": "最新证书版本、已应用绑定与部署任务",
-    "nav": false
+    "subtitle": "更新网站使用的 SSL 证书",
+    "nav": false,
+    "parent": "/certificates",
+    "software": "nginx"
   }
 }
 </route>

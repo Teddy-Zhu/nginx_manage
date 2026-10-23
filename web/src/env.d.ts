@@ -12,5 +12,8 @@ declare module "vue-router" {
     nav?: boolean;
     order?: number;
     symbol?: string;
+    group?: string;
+    parent?: string;
+    software?: "nginx" | "fail2ban";
   }
 }

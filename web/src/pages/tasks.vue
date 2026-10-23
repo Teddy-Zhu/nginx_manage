@@ -1,11 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "任务与审计",
-    "subtitle": "查看执行阶段和操作记录",
+    "title": "任务与操作记录",
+    "subtitle": "查看任务进度与历史操作",
     "nav": true,
-    "order": 5,
-    "symbol": "☷"
+    "order": 22,
+    "symbol": "☷",
+    "group": "数据与设置"
   }
 }
 </route>
@@ -30,6 +31,7 @@ import {
   type AuditFilter,
 } from "../api/client";
 import { useAction } from "../composables/action";
+import { taskKinds, taskStates, taskStages } from "../utils/tasks";
 const api = useNodeAPI();
 const { request } = api;
 
@@ -78,98 +80,6 @@ function queryFilter(): AuditFilter {
     request_id: filter.request_id,
   };
 }
-const taskKinds: Record<string, string> = {
-  "component.install": "Nginx 首次安装",
-  "component.switch": "Nginx 组件切换",
-  "nginx.validate": "配置校验",
-  "nginx.apply": "配置应用",
-  "nginx.restore": "受管配置恢复",
-  "acme.account.register": "ACME 账户注册",
-  "acme.issue": "ACME 证书签发",
-};
-const taskStates: Record<string, string> = {
-  queued: "排队中",
-  running: "执行中",
-  compensating: "回滚中",
-  succeeded: "已完成",
-  failed: "失败",
-  rolled_back: "已回滚",
-  recovery_required: "需要恢复",
-  cancelled: "已取消",
-};
-const taskStages: Record<string, string> = {
-  queued: "等待执行",
-  account_reconciling: "核对 CA 账户",
-  account_registering: "注册 CA 账户",
-  account_ready: "账户已就绪",
-  account_registration_failed: "账户注册失败",
-  order_reconciling: "核对原订单",
-  order_creating: "创建 CA 订单",
-  order_rejected: "CA 拒绝订单",
-  order_create_unconfirmed: "订单创建待确认",
-  order_invalid: "订单无效",
-  order_finalizing: "提交证书申请",
-  order_finalization_unconfirmed: "签发提交待确认",
-  order_timeout: "等待订单完成",
-  http01_preflight: "预检 HTTP-01 入口",
-  http01_unavailable: "HTTP-01 入口不可用",
-  http01_dns_failed: "HTTP-01 域名解析失败",
-  http01_publishing: "发布 HTTP 验证材料",
-  http01_publish_failed: "HTTP 验证材料发布或本机验证失败",
-  http01_validating: "CA 验证 HTTP 入口",
-  http01_validation_failed: "HTTP-01 验证失败",
-  http01_cleaning: "清理 HTTP 验证材料",
-  http01_cleanup_unconfirmed: "HTTP 验证材料清理待确认",
-  dns_publishing: "发布 DNS 验证记录",
-  dns_propagating: "检查 TXT 传播",
-  dns_validating: "CA 验证域名",
-  dns_cleaning: "清理验证记录",
-  dns_cleanup_unconfirmed: "验证记录清理待确认",
-  dns_credentials_failed: "DNS 凭据读取失败",
-  dns_publish_failed: "验证记录发布失败",
-  dns_propagation_failed: "TXT 传播或验证失败",
-  authorization_failed: "域名授权失败",
-  account_load_failed: "签发账户读取失败",
-  ca_unavailable: "CA 通信失败",
-  csr_invalid: "申请材料校验失败",
-  certificate_download_failed: "证书下载未完成",
-  certificate_store_failed: "证书版本保存失败",
-  certificate_issued: "证书已签发",
-  issuance_failed: "证书签发失败",
-  explicit_recovery: "已交由恢复任务处理",
-  profile_archived: "签发配置已停用",
-  submit_unconfirmed: "提交待确认",
-  operation_missing: "执行记录缺失",
-  agent_submit_pending: "等待接收",
-  preparing: "生成候选配置",
-  prepared: "候选配置就绪",
-  testing: "校验配置",
-  nginx_tested: "校验通过",
-  switch_pending: "准备切换",
-  switched: "确认运行状态",
-  runtime_confirmed: "已确认生效",
-  rollback_pending: "恢复上一修订",
-  rollback_confirmed: "已确认恢复",
-  rollback_unconfirmed: "恢复待确认",
-  nginx_test_failed: "配置校验失败",
-  external_conflict: "外部修改冲突",
-  runtime_unconfirmed: "运行状态待确认",
-  runtime_mismatch: "运行修订不一致",
-  agent_unreachable: "等待连接",
-  reconciling: "核对执行结果",
-  agent_rejected: "操作未被接受",
-  agent_not_ready: "执行环境未就绪",
-  superseded: "修订已被替换",
-  interrupted_before_switch: "切换前中断",
-  prepare_failed: "候选配置生成失败",
-  candidate_changed: "恢复候选已变化",
-  previous_load_failed: "快照基础修订读取失败",
-  module_prepare_failed: "受信模块准备失败",
-  restore_switch_pending: "准备切换恢复候选",
-  restore_switched: "确认恢复运行状态",
-  restore_confirmed: "已确认受管恢复",
-  restore_unconfirmed: "受管恢复待确认",
-};
 const taskColumns: DataTableColumns<Task> = [
   { title: "任务 ID", key: "id", render: (r) => r.id.slice(0, 8) },
   { title: "类型", key: "kind", render: (r) => taskKinds[r.kind] ?? r.kind },

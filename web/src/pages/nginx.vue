@@ -1,16 +1,19 @@
 <route lang="json">
 {
   "meta": {
-    "title": "Nginx 配置",
-    "subtitle": "配置原文、常用字段与不可变修订",
+    "title": "网站与代理",
+    "subtitle": "创建网站和反向代理，管理域名与 HTTPS",
     "nav": true,
     "order": 1,
-    "symbol": "⌘"
+    "symbol": "⌘",
+    "group": "网站与安全",
+    "software": "nginx"
   }
 }
 </route>
 
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
@@ -719,7 +722,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
   <div class="toolbar">
     <div class="inline-gap">
       <n-tag size="small" :bordered="false">{{
-        tree?.version ? `期望修订 #${tree.version}` : "尚未保存"
+        tree?.version ? `配置版本 #${tree.version}` : "尚未保存"
       }}</n-tag
       ><n-tag
         v-if="runtime?.external_change"
@@ -742,6 +745,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       ><span class="muted">{{ draftNote }}</span>
     </div>
     <div class="inline-gap">
+      <AdvancedDetails title="更多操作">
       <n-button :disabled="busy || !!formDirty" @click="changesVisible = true"
         >配置差异</n-button
       >
@@ -749,10 +753,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         >外部修改</n-button
       >
       <n-button :disabled="busy || dirty" @click="modulesVisible = true"
-        >受信模块</n-button
+        >模块管理</n-button
       >
-      <n-button :disabled="busy" @click="showHistory">修订历史</n-button
-      ><n-button :disabled="busy" @click="load">重新加载</n-button
+      <n-button :disabled="busy" @click="showHistory">修改记录</n-button>
+      </AdvancedDetails>
+      <n-button :disabled="busy" @click="load">刷新</n-button
       ><n-button
         :disabled="
           busy ||
@@ -763,17 +768,17 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           !runtime.running
         "
         @click="applySaved"
-        >应用已保存修订</n-button
+        >应用配置</n-button
       ><n-button
         type="primary"
         :disabled="busy || dirty"
         @click="createVisible = true"
-        >＋ 新建代理配置</n-button
+        >＋ 添加网站 / 代理</n-button
       >
     </div>
   </div>
   <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >配置保存后成为期望修订，应用结果以任务记录和运行确认状态为准。</n-alert
+    >保存修改后，点击“应用配置”使设置生效。</n-alert
   >
   <n-alert
     v-if="runtimeError || runtime?.reason"
@@ -782,8 +787,8 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     style="margin-bottom: 20px"
     >{{ runtimeError || runtime?.reason }}</n-alert
   >
-  <n-tabs type="line" animated
-    ><n-tab-pane name="native" tab="原生配置">
+  <n-tabs type="line" animated default-value="fields"
+    ><n-tab-pane name="native" tab="高级配置">
       <div class="editor-layout surface">
         <aside class="file-tree">
           <div class="section-heading">
@@ -879,21 +884,21 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             :loading="busy"
             :disabled="!!formDirty"
             @click="save()"
-            >保存有效修订</n-button
+            >保存配置</n-button
           >
         </div>
       </div> </n-tab-pane
-    ><n-tab-pane name="fields" tab="常用字段">
+    ><n-tab-pane name="fields" tab="网站与代理">
       <n-alert
         v-if="differsFromDesired"
         type="warning"
         :bordered="false"
         style="margin-bottom: 20px"
-        >原文与当前有效修订不同。先保存为有效修订，再修改常用字段。</n-alert
+        >配置文件有未保存修改，请先保存后再修改表单。</n-alert
       >
       <div v-if="tree?.resources.length" class="editor-layout surface">
         <aside class="file-tree">
-          <div class="section-heading"><h2>受管资源</h2></div>
+          <div class="section-heading"><h2>网站与代理</h2></div>
           <button
             v-for="item in tree.resources"
             :key="item.id"
@@ -915,7 +920,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           <template v-if="resource"
             ><div class="section-heading">
               <h2>{{ resource.kind.toUpperCase() }} 代理</h2>
-              <span class="mono muted">{{ resource.id.slice(0, 8) }}</span>
+
             </div>
             <div class="toolbar">
               <n-button
@@ -950,7 +955,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   :disabled="busy || differsFromDesired"
               /></n-form-item>
               <template v-if="resource.kind === 'http'">
-                <n-form-item label="客户端动态拒绝入口">
+                <n-form-item label="动态 IP 封禁">
                   <n-switch
                     :value="metadata.client_deny === true"
                     @update:value="metadata.client_deny = $event === true"
@@ -1027,7 +1032,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                     "
                     @update:value="chooseCertificate"
                 /></n-form-item>
-                <n-form-item v-if="certificateChoice" label="不可变版本"
+                <n-form-item v-if="certificateChoice" label="证书版本"
                   ><n-select
                     :value="fieldInputs.certificate || null"
                     :options="certificateVersionOptions"

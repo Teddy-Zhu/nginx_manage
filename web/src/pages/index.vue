@@ -2,257 +2,95 @@
 {
   "meta": {
     "title": "概览",
-    "subtitle": "当前节点的配置与执行状态",
+    "subtitle": "查看服务器状态与常用功能",
     "nav": true,
     "order": 0,
-    "symbol": "◫"
+    "symbol": "◫",
+    "group": "常用功能"
   }
 }
 </route>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import {
-  NAlert,
-  NTag,
-  NButton,
-  NDataTable,
-  NEmpty,
-  type DataTableColumns,
-} from "naive-ui";
-import {
-  useNodeAPI,
-  type Task,
-  type NginxRuntime,
-  type MonitoringLatest,
-  type NotificationOverview,
-} from "../api/client";
+import { ref, computed, onMounted } from "vue";
+import { NAlert, NButton, NDataTable, type DataTableColumns } from "naive-ui";
 import { RouterLink } from "vue-router";
-import { useAction } from "../composables/action";
-const api = useNodeAPI();
-const { request } = api;
+import { apiError, useNodeAPI, type Task, type ComponentOverview, type MonitoringLatest, type NotificationOverview } from "../api/client";
+import AdvancedDetails from "../components/AdvancedDetails.vue";
+import { nginxState } from "../utils/software";
+import { taskKinds, taskStates } from "../utils/tasks";
 
-interface Tool {
-  installed: boolean;
-  path?: string;
-  running: boolean | null;
-}
+const api = useNodeAPI();
 interface Capabilities {
-  nginx: NginxRuntime | null;
   mode: string;
   reason: string;
-  host: null | {
-    os: string;
-    version: string;
-    architecture: string;
-    kernel: string;
-    tools: Record<string, Tool>;
-    dns: { candidate_owner: string; reason: string };
-    selinux: string;
-    apparmor: string;
-  };
-  version: number;
-  desired_revision: string | null;
-  applied_revision: string | null;
+  host: { os: string; version: string; architecture: string; kernel: string } | null;
 }
-const { run, busy } = useAction(),
-  capabilities = ref<Capabilities | null>(null),
-  tasks = ref<Task[]>([]),
-  monitoring = ref<MonitoringLatest | null>(null),
-  notifications = ref<NotificationOverview | null>(null);
+const capabilities = ref<Capabilities | null>(null), nginx = ref<ComponentOverview | null>(null);
+const monitoring = ref<MonitoringLatest | null>(null), notifications = ref<NotificationOverview | null>(null);
+const tasks = ref<Task[] | null>(null), errors = ref<string[]>([]), loading = ref(false);
+const softwareState = computed(() => nginxState(nginx.value));
+const nginxLabel = computed(() => softwareState.value === "missing" ? "未安装" : softwareState.value === "unavailable" ? "状态不可用" : nginx.value?.running ? "运行中" : "未运行");
 function metric(kind: string, field: string) {
-  const value = monitoring.value?.sample?.metrics.find(
-    (m) => m.kind === kind && m.id === "total",
-  )?.values[field];
+  if (monitoring.value?.stale) return "—";
+  const value = monitoring.value?.sample?.metrics.find((item) => item.kind === kind && item.id === "total")?.values[field];
   return value == null ? "—" : `${value.toFixed(1)}%`;
 }
 async function load() {
-  await run(async () => {
-    const result = await Promise.all([
-      request<Capabilities>({ url: "/system/capabilities" }),
-      api.tasks(),
-      api.monitoringLatest(),
-      api.notifications(),
-    ]);
-    capabilities.value = result[0];
-    tasks.value = result[1];
-    monitoring.value = result[2];
-    notifications.value = result[3];
-  });
+  if (loading.value) return;
+  loading.value = true;
+  const results = await Promise.allSettled([
+    api.request<Capabilities>({ url: "/system/capabilities" }), api.components(), api.monitoringLatest(), api.tasks(), api.notifications(),
+  ]);
+  const labels = ["服务器状态", "Nginx 状态", "监控数据", "任务记录", "通知状态"];
+  errors.value = results.flatMap((result, index) => result.status === "rejected" ? [`${labels[index]}：${apiError(result.reason).message}`] : []);
+  capabilities.value = results[0].status === "fulfilled" ? results[0].value : null;
+  nginx.value = results[1].status === "fulfilled" ? results[1].value : null;
+  monitoring.value = results[2].status === "fulfilled" ? results[2].value : null;
+  tasks.value = results[3].status === "fulfilled" ? results[3].value : null;
+  notifications.value = results[4].status === "fulfilled" ? results[4].value : null;
+  loading.value = false;
 }
 const columns: DataTableColumns<Task> = [
-  { title: "任务", key: "kind" },
-  { title: "状态", key: "state" },
-  { title: "阶段", key: "stage" },
-  {
-    title: "创建时间",
-    key: "created_at",
-    render: (row) => new Date(row.created_at * 1000).toLocaleString(),
-  },
+  { title: "任务", key: "kind", render: (row) => taskKinds[row.kind] ?? "系统任务" },
+  { title: "状态", key: "state", render: (row) => taskStates[row.state] ?? "未知状态" },
+  { title: "创建时间", key: "created_at", render: (row) => new Date(row.created_at * 1000).toLocaleString() },
 ];
 onMounted(load);
 </script>
 
 <template>
-  <div class="toolbar">
-    <span class="muted">所有状态来自当前节点</span
-    ><n-button :loading="busy" @click="load">刷新状态</n-button>
-  </div>
-  <n-alert
-    v-if="capabilities?.mode === 'preview'"
-    type="warning"
-    :bordered="false"
-    style="margin-bottom: 24px"
-    title="预览模式"
-    >未连接宿主机 Agent。配置可保存与预览，宿主机状态与实际应用不可用。</n-alert
-  >
-  <n-alert
-    v-if="
-      notifications &&
-      (notifications.health.failed ||
-        notifications.health.reason ||
-        notifications.health.dropped_deliveries)
-    "
-    type="warning"
-    :bordered="false"
-    style="margin-bottom: 24px"
-    >通知投递存在异常：{{
-      notifications.health.reason ||
-      `${notifications.health.failed} 条失败，${notifications.health.dropped_deliveries} 条因容量限制未完成`
-    }}。<RouterLink to="/notifications">查看投递记录</RouterLink></n-alert
-  >
-  <div class="stat-grid">
-    <div class="stat-card">
-      <span class="stat-label">Agent 连接</span
-      ><strong>{{
-        capabilities
-          ? capabilities.mode === "connected"
-            ? "已连接"
-            : "未连接"
-          : "—"
-      }}</strong
-      ><span class="stat-hint">本机受限执行器</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">期望配置修订</span
-      ><strong>{{
-        capabilities?.version ? `#${capabilities.version}` : "未保存"
-      }}</strong
-      ><span class="stat-hint">{{
-        capabilities?.desired_revision?.slice(0, 8) ?? "暂无有效修订"
-      }}</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">实际生效修订</span
-      ><strong>{{
-        capabilities?.nginx?.running && capabilities.nginx.integrity
-          ? capabilities.nginx.revision_id.slice(0, 8) || "初始配置"
-          : "未确认"
-      }}</strong
-      ><span class="stat-hint"
-        >最近确认：{{
-          capabilities?.applied_revision?.slice(0, 8) ?? "尚无业务修订"
-        }}</span
-      >
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">最近失败任务</span
-      ><strong>{{
-        tasks.filter(
-          (t) => t.state === "failed" || t.state === "recovery_required",
-        ).length
-      }}</strong
-      ><span class="stat-hint">最近 {{ tasks.length }} 个任务</span>
-    </div>
-  </div>
-  <section class="surface" style="margin-bottom: 24px">
-    <div class="section-heading">
-      <h2>资源概览</h2>
-      <RouterLink to="/server">查看服务器</RouterLink>
-    </div>
-    <p class="muted">
-      {{
-        monitoring?.reason ||
-        (monitoring?.stale ? "样本已过期" : "宿主机最新样本")
-      }}
-    </p>
+  <div class="page-stack">
+    <div class="toolbar"><h2>服务器概况</h2><NButton :loading="loading" @click="load">刷新</NButton></div>
+    <NAlert v-if="errors.length" type="warning" title="部分状态暂时无法读取">其他功能仍可使用，请稍后刷新。<AdvancedDetails title="查看详情"><p v-for="error in errors" :key="error">{{ error }}</p></AdvancedDetails></NAlert>
+    <NAlert v-if="capabilities && capabilities.mode !== 'connected'" type="warning" title="服务器管理服务未连接">请检查面板服务是否正常运行。<AdvancedDetails title="连接详情"><p>{{ capabilities.reason }}</p></AdvancedDetails></NAlert>
+    <NAlert v-if="notifications && (notifications.health.failed || notifications.health.reason || notifications.health.dropped_deliveries)" type="warning">有通知未能正常发送，<RouterLink to="/notifications">查看通知记录</RouterLink>。</NAlert>
     <div class="stat-grid">
-      <div class="stat-card">
-        <span class="stat-label">CPU</span
-        ><strong>{{ metric("cpu", "usage_percent") }}</strong>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">内存</span
-        ><strong>{{ metric("memory", "used_percent") }}</strong>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">采样时间</span
-        ><strong style="font-size: 16px">{{
-          monitoring?.sample
-            ? new Date(monitoring.sample.at * 1000).toLocaleString()
-            : "—"
-        }}</strong>
-      </div>
+      <div class="stat-card"><span class="stat-label">CPU 使用率</span><strong>{{ metric('cpu', 'usage_percent') }}</strong><span class="stat-hint">{{ monitoring?.stale ? '数据已过期' : monitoring?.sample ? '当前使用情况' : '暂无监控数据' }}</span></div>
+      <div class="stat-card"><span class="stat-label">内存使用率</span><strong>{{ metric('memory', 'used_percent') }}</strong><RouterLink to="/server">查看监控</RouterLink></div>
+      <div class="stat-card"><span class="stat-label">Nginx</span><strong>{{ nginxLabel }}</strong><RouterLink v-if="softwareState === 'missing'" :to="{ path: '/components', query: { software: 'nginx' } }">前往安装</RouterLink><RouterLink v-else-if="softwareState === 'installed'" to="/nginx">管理网站</RouterLink><span v-else class="stat-hint">请刷新重试</span></div>
+      <div class="stat-card"><span class="stat-label">待处理问题</span><strong>{{ tasks ? tasks.filter((task) => ['failed', 'recovery_required'].includes(task.state)).length : '—' }}</strong><RouterLink to="/tasks">查看任务记录</RouterLink></div>
     </div>
-  </section>
-  <div class="two-columns">
-    <section class="surface">
-      <div class="section-heading">
-        <h2>宿主机</h2>
-        <n-tag
-          size="small"
-          :type="capabilities?.host ? 'success' : 'default'"
-          :bordered="false"
-          >{{ capabilities?.host ? "Agent 采集" : "未知" }}</n-tag
-        >
+    <section class="panel page-stack">
+      <h2>常用操作</h2>
+      <div class="shortcut-grid">
+        <RouterLink to="/nginx"><strong>网站与代理</strong><span class="muted">管理域名、网站和反向代理</span></RouterLink>
+        <RouterLink to="/certificates"><strong>SSL 证书</strong><span class="muted">申请和更新网站证书</span></RouterLink>
+        <RouterLink to="/firewall-rules"><strong>防火墙</strong><span class="muted">管理端口和访问规则</span></RouterLink>
+        <RouterLink to="/components"><strong>软件商店</strong><span class="muted">安装所需软件</span></RouterLink>
       </div>
-      <dl v-if="capabilities?.host" class="detail-list">
-        <dt>操作系统</dt>
-        <dd>{{ capabilities.host.os }} {{ capabilities.host.version }}</dd>
-        <dt>架构</dt>
-        <dd>{{ capabilities.host.architecture }}</dd>
-        <dt>内核</dt>
-        <dd>{{ capabilities.host.kernel }}</dd>
-        <dt>SELinux</dt>
-        <dd>{{ capabilities.host.selinux }}</dd>
-        <dt>AppArmor</dt>
-        <dd>{{ capabilities.host.apparmor }}</dd>
-        <dt>DNS 候选所有者</dt>
-        <dd>{{ capabilities.host.dns.candidate_owner }}</dd>
-      </dl>
-      <n-empty v-else description="连接宿主机 Agent 后可查看真实系统信息" />
     </section>
-    <section class="surface">
-      <div class="section-heading">
-        <h2>组件探测</h2>
-        <span class="muted">安装状态</span>
-      </div>
-      <template v-if="capabilities?.host"
-        ><div
-          v-for="(tool, name) in capabilities.host.tools"
-          :key="name"
-          class="component-row"
-        >
-          <span class="mono">{{ name }}</span
-          ><n-tag
-            size="small"
-            :bordered="false"
-            :type="tool.installed ? 'success' : 'default'"
-            >{{ tool.installed ? "已安装" : "未发现" }}</n-tag
-          >
-        </div></template
-      ><n-empty v-else description="暂无宿主机探测数据" />
-    </section>
+    <div class="two-columns">
+      <section class="surface">
+        <div class="section-heading"><h2>系统信息</h2><RouterLink to="/server">详细监控</RouterLink></div>
+        <dl v-if="capabilities?.host" class="detail-list"><dt>操作系统</dt><dd>{{ capabilities.host.os }} {{ capabilities.host.version }}</dd><dt>系统架构</dt><dd>{{ capabilities.host.architecture }}</dd><dt>内核版本</dt><dd>{{ capabilities.host.kernel }}</dd></dl>
+        <p v-else class="muted">暂时无法读取系统信息</p>
+        <AdvancedDetails v-if="monitoring?.reason" title="监控详情"><p>{{ monitoring.reason }}</p><RouterLink to="/modules">功能设置</RouterLink></AdvancedDetails>
+      </section>
+      <section class="surface">
+        <div class="section-heading"><h2>最近任务</h2><RouterLink to="/tasks">全部记录</RouterLink></div>
+        <NDataTable :columns="columns" :data="(tasks ?? []).slice(0, 5)" :bordered="false" :loading="loading" :single-line="false" />
+      </section>
+    </div>
   </div>
-  <section class="surface">
-    <div class="section-heading">
-      <h2>最近任务</h2>
-      <router-link to="/tasks">查看全部 →</router-link>
-    </div>
-    <n-data-table
-      :columns="columns"
-      :data="tasks.slice(0, 6)"
-      :bordered="false"
-    />
-  </section>
 </template>

@@ -1,11 +1,13 @@
 <route lang="json">
 {
   "meta": {
-    "title": "组件切换",
-    "subtitle": "Nginx 版本切换与恢复",
-    "nav": true,
+    "title": "更新 Nginx",
+    "subtitle": "更换版本或恢复上一版本",
+    "nav": false,
     "order": 7.22,
-    "symbol": "◇"
+    "symbol": "◇",
+    "parent": "/components",
+    "software": "nginx"
   }
 }
 </route>

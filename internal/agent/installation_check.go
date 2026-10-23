@@ -15,6 +15,16 @@ import (
 // CheckInstallationRemoval only inspects state. Host protections must be
 // released through their owners before removing the executors and recovery data.
 func CheckInstallationRemoval(ctx context.Context, data string) error {
+	return checkInstallationRemoval(ctx, data, false)
+}
+
+// PrepareInstallationRemoval releases only empty registrations created during
+// installation. Existing business rules still require their normal removal flow.
+func PrepareInstallationRemoval(ctx context.Context, data string) error {
+	return checkInstallationRemoval(ctx, data, true)
+}
+
+func checkInstallationRemoval(ctx context.Context, data string, releaseEmpty bool) error {
 	if os.Geteuid() != 0 {
 		return errors.New("卸载检查需要本机 root")
 	}
@@ -67,18 +77,34 @@ func CheckInstallationRemoval(ctx context.Context, data string) error {
 	}{
 		{"nftables 登记（firewall-remove）", func() (bool, error) {
 			r, e := loadNFTRegistration(data)
+			if e == nil && releaseEmpty && r != nil && r.State == "registered" {
+				_, e = ManageFirewallRegistration(ctx, data, "host", "remove")
+				return e != nil, e
+			}
 			return r != nil && r.State != "released", e
 		}},
 		{"firewalld 登记（firewalld-remove）", func() (bool, error) {
 			r, e := loadFirewalldRegistration(data)
+			if e == nil && releaseEmpty && r != nil && r.State == "registered" {
+				_, e = ManageFirewalldRegistration(ctx, data, "host", "remove")
+				return e != nil, e
+			}
 			return r != nil && r.State != "released", e
 		}},
 		{"UFW 登记（ufw-remove）", func() (bool, error) {
 			r, e := loadUFWRegistration(data)
+			if e == nil && releaseEmpty && r != nil && r.State == "registered" {
+				_, e = ManageUFWRegistration(ctx, data, "host", "remove")
+				return e != nil, e
+			}
 			return r != nil && r.State != "released", e
 		}},
 		{"iptables 登记（iptables-remove）", func() (bool, error) {
 			r, e := loadIPTablesRegistration(data)
+			if e == nil && releaseEmpty && r != nil && r.State == "registered" {
+				_, e = ManageIPTablesRegistration(ctx, data, "host", "", "remove")
+				return e != nil, e
+			}
 			return r != nil && r.State != "released", e
 		}},
 		{"Docker 防火墙登记（docker-firewall-remove）", func() (bool, error) {

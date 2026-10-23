@@ -1,12 +1,13 @@
 <route lang="json">
 {
   "meta": {
-    "title": "节点连接",
-    "subtitle": "远程授权与连接状态",
+    "title": "服务器连接",
+    "subtitle": "连接和管理其他服务器",
     "nav": true,
     "localOnly": true,
-    "order": 8,
-    "symbol": "◎"
+    "order": 24,
+    "symbol": "◎",
+    "group": "数据与设置"
   }
 }
 </route>

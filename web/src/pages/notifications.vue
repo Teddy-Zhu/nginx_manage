@@ -2,10 +2,11 @@
 {
   "meta": {
     "title": "通知",
-    "subtitle": "渠道、事件与投递记录",
+    "subtitle": "设置通知渠道和接收事件",
     "nav": true,
-    "order": 6.5,
-    "symbol": "♧"
+    "order": 23,
+    "symbol": "♧",
+    "group": "数据与设置"
   }
 }
 </route>

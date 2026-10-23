@@ -1,11 +1,13 @@
 <route lang="json">
 {
   "meta": {
-    "title": "基础 WAF",
-    "subtitle": "站点防护策略、限流与路径规则",
+    "title": "网站防护",
+    "subtitle": "设置访问限流和基础攻击防护",
     "nav": true,
-    "order": 3,
-    "symbol": "◇"
+    "order": 4,
+    "symbol": "◇",
+    "group": "网站与安全",
+    "software": "nginx"
   }
 }
 </route>
@@ -114,7 +116,7 @@ const columns: DataTableColumns<WAFPolicy> = [
   {
     title: "编辑",
     key: "editable",
-    render: (row) => (row.editable ? "可编辑" : "仅原生编辑"),
+    render: (row) => (row.editable ? "可编辑" : "通过高级配置编辑"),
   },
 ];
 const methodOptions = [
@@ -230,7 +232,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 <template>
   <div class="toolbar">
     <span class="muted">{{
-      tree?.version ? `期望修订 #${tree.version}` : "尚未保存"
+      tree?.version ? `配置版本 #${tree.version}` : "尚未保存"
     }}</span>
     <div class="inline-gap">
       <router-link :to="{ path: '/logs', query: { events: '1' } }"

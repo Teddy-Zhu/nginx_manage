@@ -354,6 +354,8 @@ func run() error {
 		"panel-listen-default":               {"port": true, "listen": true},
 		"panel-listen-set":                   {"data-dir": true, "listen": true},
 		"installation-removal-check":         {"data-dir": true},
+		"installation-removal-prepare":       {"data-dir": true},
+		"installation-defaults":              {"data-dir": true},
 		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
 		"panel-native-serve":                 {"data-dir": true},
 		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
@@ -1137,6 +1139,18 @@ func run() error {
 		return agent.SetPanelListen(absDir, *listen)
 	case "installation-removal-check":
 		return agent.CheckInstallationRemoval(ctx, absDir)
+	case "installation-removal-prepare":
+		return agent.PrepareInstallationRemoval(ctx, absDir)
+	case "installation-defaults":
+		out, err := agent.DetectInstallationDefaults(ctx, absDir)
+		if err != nil {
+			return err
+		}
+		for _, warning := range out.Warnings {
+			fmt.Fprintln(os.Stderr, warning)
+		}
+		_, err = fmt.Fprintf(os.Stdout, "dns_owner=%s\nfirewall_owner=%s\nfirewall_ssh=%s\n", out.DNSOwner, out.FirewallOwner, out.FirewallSSH)
+		return err
 	case "panel-native-bind":
 		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, Listen: *listen, UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
 		if err != nil {

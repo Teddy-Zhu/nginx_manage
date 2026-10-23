@@ -59,7 +59,7 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 ### 默认配置与高级设置
 
-`--port 23456` 可在源码或 Release 安装时指定管理端口（1024–65535）；省略时由操作系统选择随机空闲端口，首次保存后续装和重启保持。`--yes` 采用推荐配置并直接安装；去掉后仅需核对最终摘要。需要调整路径、部署方式或宿主机授权时使用 `--advanced`，例如 `sudo bash install.sh --advanced`。高级设置需要交互终端。
+`--port 23456` 可在源码或 Release 安装时指定管理端口（1024–65535）；省略时由操作系统选择随机空闲端口，首次保存后续装和重启保持。`--yes` 采用推荐配置并直接安装；去掉后仅需核对最终摘要。需要调整路径、部署方式或自动识别的主机管理设置时使用 `--advanced`，例如 `sudo bash install.sh --advanced`。高级设置需要交互终端。
 
 | 检测项 | 默认推荐 |
 | --- | --- |
@@ -69,7 +69,9 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 | Nginx | Docker 方案优先匹配的固定模块镜像，其次使用检测到的可信本机程序；没有可用来源时先装面板，登录后补齐组件 |
 | 数据目录 | 优先 `/srv/nginxpanel`；不可用时尝试 `/var/lib/nginxpanel`，已有数据不覆盖 |
 | 管理入口 | 默认 `[::]:随机空闲端口`，支持 IPv4/IPv6；内核不支持 IPv6 时使用 `0.0.0.0:随机空闲端口`，允许外部访问 |
-| 启动与主机授权 | 默认启用并启动服务；DNS、防火墙及日志轮转默认只读 |
+| 启动与主机管理 | 默认启动服务并开启监控、DNS 和防火墙功能；自动识别受支持的网络配置，完成空防火墙区域登记；应用专用 Nginx 日志由本系统轮转 |
+
+基础监控、DNS 和防火墙功能默认开启，不安装额外软件。DNS 与防火墙复用已有系统能力；不支持、冲突或无法核实的环境保留只读并报告原因。Fail2ban、Python、通知和定期备份不会默认安装或启用。防火墙规则仍由用户保存并明确应用，网络变更保留超时恢复与连接确认。卸载可自动释放经过核对的空规则登记，有业务规则时须先从防火墙页面移除。
 
 高级设置沿用检测结果作为默认值；缺少或有多个候选的镜像引用需要明确选择。检测只发现材料和基本能力，最终签名、镜像内容及运行能力仍由标准安装器校验。只访问目标本机 Docker，不沿用指向其他主机的 Docker context。没有可用 Nginx 时先装面板，代理流量须待 Nginx 组件安装并应用配置后才可用。
 
@@ -131,10 +133,11 @@ sudo chmod -R go-w /opt/approved/nginxpanel
 
 | 参数 | 何时选择 | 默认行为 |
 | --- | --- | --- |
-| `--dns-owner regular-file` | 确认 DNS 来源为受支持的普通文件 | 未指定时 DNS 只读 |
+| `--dns-owner auto`（默认） | 自动识别受支持的 DNS 配置；不能确认时保留只读并说明原因 | 不修改现有 DNS 地址 |
+| `--dns-owner regular-file` | 指定 DNS 来源为受支持的普通文件 | 高级设置可选 `unconfirmed` 保持只读 |
 | `--dns-owner networkmanager` / `networkd` / `netplan` | 确认目标实际由对应管理器管理 DNS | 不安装或切换网络管理器 |
-| `--firewall-owner direct-nftables` / `firewalld` / `ufw` / `iptables-nft` / `iptables-legacy` | 明确目标后端，配合 `--firewall-ssh openssh`；确认无 SSH 服务时显式选 `none` | 未指定时只读；后端本机登记另行完成 |
-| `--nginx-log-owner agent` | 本应用 Nginx 日志由 Agent 独占轮转，已排除外部规则竞争 | 未指定时轮转只读 |
+| `--firewall-owner direct-nftables` / `firewalld` / `ufw` / `iptables-nft` / `iptables-legacy` | 明确目标后端，配合 `--firewall-ssh openssh`；确认无 SSH 服务时显式选 `none` | 默认 `auto` 自动识别并登记空规则区域；不更换系统防火墙或应用访问规则 |
+| `--nginx-log-owner agent` | 本应用 Nginx 日志由 Agent 独占轮转，已排除外部规则竞争 | 默认 `agent`；仅管理本应用专用日志 |
 | `--nginx-log-owner external` | 继续由现有日志工具轮转 | 本应用不修改外部规则 |
 
 首次只使用代理功能时，可保留默认的主机管理范围。后续 DNS、防火墙及 Fail2ban 写入需要各自的所有权检查和授权，见[使用手册](user-guide.md)。
