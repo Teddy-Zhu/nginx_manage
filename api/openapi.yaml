@@ -581,7 +581,7 @@ paths:
               properties:
                 token: { type: string, maxLength: 100 }
                 username: { type: string, maxLength: 64 }
-                password: { type: string, minLength: 12, maxLength: 256 }
+                password: { type: string, minLength: 6 }
       responses:
         '201': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
@@ -599,7 +599,7 @@ paths:
               required: [username, password]
               properties:
                 username: { type: string, maxLength: 64 }
-                password: { type: string, maxLength: 256 }
+                password: { type: string }
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
@@ -622,7 +622,7 @@ paths:
               type: object
               required: [password]
               properties:
-                password: { type: string, maxLength: 256 }
+                password: { type: string }
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
@@ -639,7 +639,7 @@ paths:
               type: object
               required: [password]
               properties:
-                password: { type: string, minLength: 12, maxLength: 256 }
+                password: { type: string, minLength: 6 }
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }

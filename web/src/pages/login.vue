@@ -74,13 +74,12 @@ async function submit() {
               :maxlength="64"
               placeholder="输入管理员用户名"
           /></n-form-item>
-          <n-form-item :label="bootstrap ? '设置密码（至少 12 字节）' : '密码'"
+          <n-form-item :label="bootstrap ? '设置密码（至少 6 个字符）' : '密码'"
             ><n-input
               v-model:value="password"
               type="password"
               show-password-on="click"
               :autocomplete="bootstrap ? 'new-password' : 'current-password'"
-              :maxlength="256"
               placeholder="输入密码"
           /></n-form-item>
           <n-button
@@ -89,7 +88,11 @@ async function submit() {
             block
             attr-type="submit"
             :loading="busy"
-            :disabled="!username || !password || (bootstrap && !token)"
+            :disabled="
+              !username ||
+              !password ||
+              (bootstrap && (!token || [...password].length < 6))
+            "
             >{{ bootstrap ? "创建管理员并登录" : "登录" }}
             <span style="margin-left: auto">→</span></n-button
           >

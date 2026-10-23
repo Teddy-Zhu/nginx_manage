@@ -165,20 +165,19 @@ onMounted(load);
         <dd>{{ session.localMe?.username }}</dd>
       </dl>
       <n-form @submit.prevent="changePassword"
-        ><n-form-item label="新密码（12–256 字节）"
+        ><n-form-item label="新密码（至少 6 个字符）"
           ><n-input
             v-model:value="password"
             type="password"
             autocomplete="new-password"
             show-password-on="click"
-            :maxlength="256"
         /></n-form-item>
         <div class="inline-gap">
           <n-button
             attr-type="submit"
             type="primary"
             :loading="busy"
-            :disabled="!password"
+            :disabled="[...password].length < 6"
             >修改密码</n-button
           ><n-button :disabled="busy" @click="revokeSessions"
             >撤销全部会话</n-button
