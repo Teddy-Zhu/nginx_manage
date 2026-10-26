@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "./ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
@@ -200,9 +201,7 @@ function schedule() {
     return;
   timer = setTimeout(() => {
     now.value = Date.now();
-    if (active.value || pending.value || pendingCancel.value)
-      void refreshTasks();
-    else schedule();
+    schedule();
   }, 3000);
 }
 async function loadResource(name: string | null) {
@@ -434,6 +433,7 @@ onUnmounted(() => {
   detailController?.abort();
   if (timer) clearTimeout(timer);
 });
+useLiveRefresh(api, ["tasks"], refreshTasks);
 </script>
 
 <template>

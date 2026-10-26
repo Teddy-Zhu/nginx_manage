@@ -11,6 +11,8 @@
 }
 </route>
 <script setup lang="ts">
+import AdvancedDetails from "../components/AdvancedDetails.vue";
+import { useLiveRefresh } from "../composables/live";
 import MappingInput from "../components/MappingInput.vue";
 import { mappingRecord, type MappingRow } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -164,8 +166,7 @@ const stateLabels: Record<string, string> = {
   rolled_back: "已补偿",
 };
 const date = (value: number) => new Date(value * 1000).toLocaleString();
-let timer: ReturnType<typeof setInterval> | undefined,
-  controller: AbortController | null = null,
+let controller: AbortController | null = null,
   reading = false,
   closed = false;
 async function load() {
@@ -194,10 +195,16 @@ async function inspect(id: string) {
   });
 }
 const mappingError = computed(() => {
-  try { mappingRecord(mappings.value); return ""; }
-  catch (cause) { return (cause as Error).message; }
+  try {
+    mappingRecord(mappings.value);
+    return "";
+  } catch (cause) {
+    return (cause as Error).message;
+  }
 });
-function mappingObject(): Record<string, string> { return mappingRecord(mappings.value); }
+function mappingObject(): Record<string, string> {
+  return mappingRecord(mappings.value);
+}
 async function submit() {
   await run(async () => {
     if (!firewallValid.value) throw new Error("请修正防火墙网卡映射");
@@ -268,13 +275,12 @@ async function resume() {
 }
 onMounted(() => {
   void load();
-  timer = setInterval(() => void load(), 3000);
 });
 onUnmounted(() => {
   closed = true;
   controller?.abort();
-  if (timer) clearInterval(timer);
 });
+useLiveRefresh(api, ["tasks"], load);
 </script>
 <template>
   <div class="stack">
@@ -284,27 +290,29 @@ onUnmounted(() => {
     <template v-else>
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <section class="panel stack">
-        <h2>目标节点</h2>
-        <NFormItem label="目标 HTTPS API"
-          ><NInput
-            v-model:value="url"
-            placeholder="https://target.example.com:9443/api/v1"
-        /></NFormItem>
-        <NFormItem label="目标 API Key"
-          ><NInput
-            v-model:value="key"
-            type="password"
-            show-password-on="click"
-            autocomplete="off"
-        /></NFormItem>
-        <NFormItem label="自签名证书 SHA-256（可选）"
-          ><NInput v-model:value="fingerprint"
-        /></NFormItem>
-        <NFormItem label="预期目标节点 ID（可选）"
-          ><NInput v-model:value="node"
-        /></NFormItem>
+        <h2>迁移到其他服务器</h2>
+        <div class="form-grid">
+          <NFormItem label="目标 HTTPS API"
+            ><NInput
+              v-model:value="url"
+              placeholder="https://target.example.com:9443/api/v1"
+          /></NFormItem>
+          <NFormItem label="目标 API Key"
+            ><NInput
+              v-model:value="key"
+              type="password"
+              show-password-on="click"
+              autocomplete="off"
+          /></NFormItem>
+          <NFormItem label="自签名证书 SHA-256（可选）"
+            ><NInput v-model:value="fingerprint"
+          /></NFormItem>
+          <NFormItem label="预期目标节点 ID（可选）"
+            ><NInput v-model:value="node"
+          /></NFormItem>
+        </div>
         <NFormItem label="导出范围"
-          ><div class="toolbar">
+          ><div class="choice-grid">
             <NCheckbox v-model:checked="certificates">证书与私钥</NCheckbox
             ><NCheckbox v-model:checked="credentials">DNS 凭据</NCheckbox
             ><NCheckbox v-model:checked="automation">ACME 配置</NCheckbox
@@ -319,34 +327,47 @@ onUnmounted(() => {
             >
           </div></NFormItem
         >
-        <NFormItem label="目标参数映射" :validation-status="mappingError ? 'error' : undefined" :feedback="mappingError"
-          ><MappingInput :max="128" v-model:value="mappings" :disabled="busy" /></NFormItem>
-        <MigrationHostDNSOptions
-          v-model="hostDNSSettings"
-          @update:valid="hostDNSValid = $event"
-          :disabled="busy"
-        />
-        <MigrationMonitoringOptions
-          v-model="monitoringSettings"
-          :disabled="busy"
-        />
-        <MigrationFail2banOptions v-model="fail2banSettings" :disabled="busy" />
-        <MigrationFirewallOptions
-          v-model="firewallSettings"
-          @update:valid="firewallValid = $event"
-          :disabled="busy"
-        />
+        <AdvancedDetails title="环境映射与可选配置"
+          ><div class="page-stack">
+            <NFormItem
+              label="目标参数映射"
+              :validation-status="mappingError ? 'error' : undefined"
+              :feedback="mappingError"
+              ><MappingInput
+                :max="128"
+                v-model:value="mappings"
+                :disabled="busy"
+            /></NFormItem>
+            <MigrationHostDNSOptions
+              v-model="hostDNSSettings"
+              @update:valid="hostDNSValid = $event"
+              :disabled="busy"
+            />
+            <MigrationMonitoringOptions
+              v-model="monitoringSettings"
+              :disabled="busy"
+            />
+            <MigrationFail2banOptions
+              v-model="fail2banSettings"
+              :disabled="busy"
+            />
+            <MigrationFirewallOptions
+              v-model="firewallSettings"
+              @update:valid="firewallValid = $event"
+              :disabled="busy"
+            /></div
+        ></AdvancedDetails>
         <NFormItem label="执行方式"
           ><NSelect v-model:value="mode" :options="modes"
         /></NFormItem>
         <NCheckbox v-model:checked="enableNginx"
           >授权启用目标 Nginx 配置模块</NCheckbox
         >
-        <div v-if="mode !== 'preview'">
+        <div v-if="mode !== 'preview'" class="page-stack">
           <NCheckbox v-model:checked="prepareDependencies"
             >授权目标准备 Nginx 可信组件</NCheckbox
           >
-          <template v-if="prepareDependencies">
+          <div v-if="prepareDependencies" class="page-stack">
             <NFormItem label="目标 Nginx 组件发行标签（可选）"
               ><NInput
                 v-model:value="dependencyTag"
@@ -377,26 +398,33 @@ onUnmounted(() => {
               需要组件管理权限。使用目标信任的签名资产；首次安装仅适用于未安装
               Nginx 的原生部署，Docker 模块由镜像提供。
             </p>
-          </template>
+          </div>
         </div>
-        <p>
+        <p class="section-note">
           使用创建任务时的源配置快照，源节点继续运行。原生配置始终包含在迁移包内；目标保留管理身份及主机设置，迁入的自动化配置和通知渠道保持停用。
         </p>
-        <NPopconfirm @positive-click="submit"
-          ><template #trigger
-            ><NButton
-              type="primary"
-              :disabled="
-                busy || !url || !key || !firewallValid || !!mappingError || !hostDNSValid
-              "
-              >创建迁出任务</NButton
-            ></template
-          >{{
-            mode === "preview"
-              ? "确认将加密配置包发送到目标进行预检？"
-              : "确认按所选方式迁入目标？保存或应用会替换目标 Nginx 业务配置。"
-          }}</NPopconfirm
-        >
+        <div class="form-actions">
+          <NPopconfirm @positive-click="submit"
+            ><template #trigger
+              ><NButton
+                type="primary"
+                :disabled="
+                  busy ||
+                  !url ||
+                  !key ||
+                  !firewallValid ||
+                  !!mappingError ||
+                  !hostDNSValid
+                "
+                >创建迁出任务</NButton
+              ></template
+            >{{
+              mode === "preview"
+                ? "确认将加密配置包发送到目标进行预检？"
+                : "确认按所选方式迁入目标？保存或应用会替换目标 Nginx 业务配置。"
+            }}</NPopconfirm
+          >
+        </div>
       </section>
       <section v-if="selected" class="panel stack">
         <div class="toolbar">
@@ -412,7 +440,7 @@ onUnmounted(() => {
             >{{ stateLabels[selected.state] || selected.state }}</NTag
           ><NButton :disabled="busy || reading" @click="load">刷新</NButton>
         </div>
-        <dl class="details">
+        <dl class="detail-list">
           <dt>任务</dt>
           <dd>{{ selected.id }}</dd>
           <dt>阶段</dt>
@@ -504,7 +532,7 @@ onUnmounted(() => {
       <section class="panel stack">
         <h2>迁出记录</h2>
         <p v-if="history.length === 0" class="muted">暂无迁出记录</p>
-        <div v-for="item in history" :key="item.id" class="toolbar">
+        <div v-for="item in history" :key="item.id" class="record-card">
           <NButton text @click="inspect(item.id)"
             >{{ date(item.created_at) }} · {{ item.target_url }}</NButton
           ><NTag>{{

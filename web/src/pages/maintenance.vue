@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -61,7 +62,6 @@ const rootPhase = computed(
   () => labels[view.value?.agent.phase ?? ""] ?? "未确认",
 );
 let controller: AbortController | null = null,
-  timer: ReturnType<typeof setInterval> | undefined,
   reading = false,
   closed = false;
 async function load() {
@@ -92,15 +92,12 @@ async function release() {
   await run(() => api.releaseMaintenance(id), "恢复写入请求已受理");
   await load();
 }
-onMounted(() => {
-  void load();
-  timer = setInterval(() => void load(), 3000);
-});
+onMounted(() => { void load(); });
 onUnmounted(() => {
   closed = true;
   controller?.abort();
-  if (timer) clearInterval(timer);
 });
+useLiveRefresh(api, ["tasks", "maintenance"], load);
 </script>
 <template>
   <div class="stack">

@@ -11,7 +11,8 @@
 </route>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useLiveRefresh } from "../composables/live";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NAlert, NButton, NEmpty, NSelect, NTag } from "naive-ui";
 import {
@@ -54,7 +55,6 @@ const taskStates: Record<string, string> = {
   cancelled: "已取消",
 };
 const date = (value: number) => new Date(value * 1000).toLocaleString();
-let timer: ReturnType<typeof setInterval> | undefined;
 let pendingSelection = false;
 
 async function loadSelected() {
@@ -127,22 +127,8 @@ watch(busy, (working) => {
 });
 onMounted(() => {
   void load();
-  timer = setInterval(() => {
-    if (
-      !busy.value &&
-      !preview.value &&
-      (status.value?.state === "pending" ||
-        status.value?.state === "partial" ||
-        status.value?.history.some((task) =>
-          ["queued", "running", "compensating"].includes(task.state),
-        ))
-    )
-      void run(loadSelected);
-  }, 10000);
 });
-onUnmounted(() => {
-  if (timer) clearInterval(timer);
-});
+useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !preview.value) return run(loadSelected); });
 </script>
 
 <template>

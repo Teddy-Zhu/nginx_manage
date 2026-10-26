@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -86,7 +87,6 @@ const submissionNames = {
   acknowledged: "客户端已返回回执",
 };
 let closed = false,
-  timer: ReturnType<typeof setTimeout> | undefined,
   queryVersion = 0;
 watch(ip, () => {
   status.value = null;
@@ -125,7 +125,6 @@ async function inspect() {
 }
 async function refresh() {
   if (closed || reading.value) return;
-  if (timer) clearTimeout(timer);
   reading.value = true;
   const previouslyActive = new Set(
     tasks.value
@@ -155,10 +154,6 @@ async function refresh() {
   } finally {
     if (!closed) {
       reading.value = false;
-      if (active.value || pending.value)
-        timer = setTimeout(() => {
-          void refresh();
-        }, 3000);
     }
   }
 }
@@ -211,8 +206,8 @@ onMounted(() => {
 onUnmounted(() => {
   closed = true;
   controller.abort();
-  if (timer) clearTimeout(timer);
 });
+useLiveRefresh(api, ["tasks"], refresh);
 </script>
 
 <template>

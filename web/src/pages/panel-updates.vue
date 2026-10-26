@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { NAlert, NButton, NCheckbox, NFormItem, NPopconfirm, NSelect, NTag } from "naive-ui";
@@ -30,7 +31,6 @@ const chosen = computed(() => prepared.value.find((t) => t.id === selected.value
 const needsCoordination = computed(() => !!chosen.value?.result?.panel?.requires_coordination);
 watch([selected, needsCoordination], () => { coordinateAgent.value = needsCoordination.value; allowDowntime.value = false; });
 const active = computed(() => tasks.value.some((t) => t.stage !== "restore_isolated" && !["succeeded", "failed", "rolled_back", "cancelled"].includes(t.state)));
-const cleanupPending = computed(() => tasks.value.some((t) => t.result?.release_acknowledged && (t.result.cleanup.state !== "done" || t.result.active)));
 const cleanupStates: Record<string, string> = { pending: "等待清理", running: "清理中", blocked: "清理待处理", done: "已清理" };
 const canCreate = computed(() => canWrite.value && held.value && !!chosen.value?.result?.panel?.automatic_rollback && (!coordinateAgent.value || allowDowntime.value) && !active.value && !busy.value);
 const states: Record<string, string> = { queued: "排队中", running: "更新中", compensating: "恢复原版本", waiting_confirmation: "确认维护释放", recovery_required: "待恢复", succeeded: "更新完成", failed: "更新未完成", rolled_back: "已恢复原版本", cancelled: "已取消" };
@@ -40,7 +40,7 @@ function canResume(t: PanelUpdateTask) {
   const result = t.result;
   return canWrite.value && held.value && maintenance.value?.agent.id === t.input.maintenance_id && !busy.value && t.state === "recovery_required" && !["operation_missing", "operation_mismatch", "intent_mismatch", "control_mismatch", "restore_isolated"].includes(t.stage) && (result ? !result.active && !result.finalized && result.sequence < 32 : ["epoch_changed", "maintenance_unconfirmed"].includes(t.stage));
 }
-let controller: AbortController | null = null, timer: ReturnType<typeof setInterval> | undefined, reading = false, closed = false;
+let controller: AbortController | null = null, reading = false, closed = false;
 async function load() {
   if (reading || closed) return;
   reading = true; controller = new AbortController();
@@ -61,8 +61,9 @@ async function resume(t: PanelUpdateTask) {
   await run(async () => { await api.resumePanelUpdate(t.id, keyFor({ id: t.id, sequence: t.result?.sequence ?? 0, command: "resume" })); keyFor = useIdempotency(); }, "原更新续办请求已受理");
   await load();
 }
-onMounted(async () => { await load(); if (!closed) timer = setInterval(() => { if (active.value || cleanupPending.value || maintenance.value?.phase !== "open") void load(); }, 3000); });
-onUnmounted(() => { closed = true; controller?.abort(); if (timer) clearInterval(timer); });
+onMounted(() => { void load(); });
+onUnmounted(() => { closed = true; controller?.abort(); });
+useLiveRefresh(api, ["tasks", "maintenance"], load);
 </script>
 <template>
   <div class="page-stack">

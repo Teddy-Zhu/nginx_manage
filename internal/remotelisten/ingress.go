@@ -244,7 +244,7 @@ func Serve(ctx context.Context, socket string, handler http.Handler, httpMode bo
 	l := &ingressListener{ctx: ctx, cancel: cancel, queue: make(chan *ingressConn, 16), done: make(chan struct{})}
 	l.httpMode = httpMode
 	go l.receive(socket)
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+	server := &http.Server{BaseContext: func(net.Listener) context.Context { return ctx }, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 		if ic, ok := c.(*ingressConn); ok {
 			return context.WithValue(ctx, connectionKey{}, ic.id)
 		}

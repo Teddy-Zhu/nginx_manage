@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 import TaskLogButton from "./TaskLogButton.vue";
 
@@ -128,7 +129,6 @@ const stages: Record<string, string> = {
   completion_unacknowledged: "等待完成结果确认",
 };
 let closed = false;
-let timer: ReturnType<typeof setTimeout> | undefined;
 async function loadAssets() {
   if (closed || assetsReading.value || !session.me?.scopes.includes("components.manage")) return;
   assetsReading.value = true;
@@ -147,7 +147,6 @@ async function loadAssets() {
 }
 async function refresh() {
   if (closed || reading.value) return;
-  if (timer) clearTimeout(timer);
   reading.value = true;
   const before = new Set(tasks.value
     .filter((task) => task.input.action === "run" && activeStates.has(task.state))
@@ -170,8 +169,6 @@ async function refresh() {
   } finally {
     if (!closed) {
       reading.value = false;
-      if (active.value || pending.value)
-        timer = setTimeout(() => { void refresh(); }, 3000);
     }
   }
 }
@@ -181,7 +178,6 @@ async function submit(input?: Fail2banUpgradeInput) {
     if (!available.value || !input) return;
     pending.value = { input: { ...input }, key: randomUUID() };
   }
-  if (timer) clearTimeout(timer);
   busy.value = true;
   error.value = "";
   try {
@@ -245,8 +241,8 @@ onMounted(() => {
 onUnmounted(() => {
   closed = true;
   controller.abort();
-  if (timer) clearTimeout(timer);
 });
+useLiveRefresh(api, ["tasks"], refresh);
 </script>
 
 <template>

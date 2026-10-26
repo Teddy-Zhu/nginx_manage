@@ -12,7 +12,8 @@
 </route>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, h } from "vue";
+import { useLiveRefresh } from "../composables/live";
+import { ref, reactive, onMounted, h } from "vue";
 import {
   NButton,
   NDataTable,
@@ -34,7 +35,7 @@ import {
 } from "../api/client";
 import { useAction } from "../composables/action";
 import TaskLogButton from "../components/TaskLogButton.vue";
-import { isTaskActive, taskKinds, taskStates, taskStageLabel } from "../utils/tasks";
+import { taskKinds, taskStates, taskStageLabel } from "../utils/tasks";
 const api = useNodeAPI();
 const { request } = api;
 
@@ -200,14 +201,8 @@ async function exportAudit() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 }
-let timer: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-  void loadTasks();
-  timer = setInterval(() => {
-    if (tab.value === "tasks" && tasks.value.some((task) => isTaskActive(task.state))) void loadTasks();
-  }, 3000);
-});
-onUnmounted(() => { if (timer) clearInterval(timer); });
+onMounted(loadTasks);
+useLiveRefresh(api, ["tasks"], () => { if (tab.value === "tasks") return loadTasks(); });
 </script>
 <template>
   <div class="toolbar">

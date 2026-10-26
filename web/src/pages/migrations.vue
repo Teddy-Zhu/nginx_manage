@@ -12,6 +12,8 @@
 </route>
 
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import MappingInput from "../components/MappingInput.vue";
 import { mappingRecord, type MappingRow } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
@@ -27,6 +29,8 @@ import {
   NPopconfirm,
   NSelect,
   NTag,
+  NTabs,
+  NTabPane,
 } from "naive-ui";
 import {
   useNodeAPI,
@@ -158,7 +162,6 @@ const continuingPull = computed(
     ["queued", "running", "recovery_required"].includes(plan.value.pull.state),
 );
 const controller = new AbortController();
-let timer: ReturnType<typeof setInterval> | undefined;
 let loading = false;
 const has = (scope: string) => session.me?.scopes.includes(scope) ?? false;
 const canExport = computed(() => has("backup.export"));
@@ -190,6 +193,7 @@ const canImport = computed(() =>
   ].every(has),
 );
 const canPull = computed(() => canImport.value && has("nodes.manage"));
+const transferTab = ref(canExport.value ? "export" : "file");
 const options = [
   { label: "仅保存草稿", value: "draft" },
   { label: "保存配置", value: "save" },
@@ -236,10 +240,16 @@ const stepStates: Record<string, string> = {
 };
 const time = (n: number) => new Date(n * 1000).toLocaleString();
 const mappingError = computed(() => {
-  try { mappingRecord(mappings.value); return ""; }
-  catch (cause) { return (cause as Error).message; }
+  try {
+    mappingRecord(mappings.value);
+    return "";
+  } catch (cause) {
+    return (cause as Error).message;
+  }
 });
-function mappingObject(): Record<string, string> { return mappingRecord(mappings.value); }
+function mappingObject(): Record<string, string> {
+  return mappingRecord(mappings.value);
+}
 async function load() {
   if (loading || busy.value || document.hidden) return;
   loading = true;
@@ -482,244 +492,287 @@ async function execute() {
   });
   await load();
 }
-onMounted(async () => {
-  if (has("backup.restore") && has("backup.secrets")) await load();
-  timer = setInterval(() => {
-    if (has("backup.restore") && has("backup.secrets")) void load();
-  }, 5000);
+onMounted(() => {
+  if (has("backup.restore") && has("backup.secrets")) void load();
 });
 onUnmounted(() => {
   controller.abort();
-  if (timer) clearInterval(timer);
   remoteKey.value = "";
   passphrase.value = "";
   importPassphrase.value = "";
   pendingPull = null;
 });
+useLiveRefresh(api, ["tasks"], () => {
+  if (has("backup.restore") && has("backup.secrets")) return load();
+});
 </script>
 
 <template>
   <div class="page-stack">
-    <div class="toolbar"><RouterLink to="/migration-push">迁移到其他服务器</RouterLink></div>
-    <NAlert type="info" title="迁移范围"
-      >迁移 Nginx 原生配置、HTTP/Stream、访问列表及 WAF，可选择证书、DNS
-      凭据、ACME 账户与签发配置及通知渠道。导入替换目标 Nginx
-      配置；节点身份、管理入口与主机 DNS
-      保留。监控设置保留目标值；导入的通知渠道、自动续期和自动部署保持停用，HTTP-01
-      须重新确认公网条件。</NAlert
+    <div class="toolbar">
+      <p class="muted">导出本机配置，或从配置包、其他服务器迁入。</p>
+      <RouterLink to="/migration-push">迁移到其他服务器 →</RouterLink>
+    </div>
+    <NAlert type="info"
+      >导入前会检查目标环境与所需软件。保存或应用迁入配置将替换目标 Nginx
+      配置，请先备份。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <section v-if="canExport" class="panel">
-      <h2>导出配置</h2>
-      <NFormItem label="配置包类型"
-        ><NSelect
-          v-model:value="exportMode"
-          :options="exportOptions"
-          :disabled="busy"
-      /></NFormItem>
-      <NAlert v-if="exportMode === 'portable'" type="warning">
-        仅导出可识别的受管字段、IP 访问列表和基础
-        WAF，不包含完整原文、凭据或可选材料。原生认证、自定义路径、头常量及备注等内容会省略；迁入站点保持停用，须检查并补齐保护后再启用。
-      </NAlert>
-      <NFormItem v-if="exportMode === 'encrypted'" label="加密口令"
-        ><NInput
-          v-model:value="passphrase"
-          type="password"
-          show-password-on="click"
-          placeholder="16–256 字节，单独保管"
-          autocomplete="new-password"
-      /></NFormItem>
-      <div v-if="exportMode === 'encrypted'" class="actions">
-        <NCheckbox v-model:checked="includeCertificates"
-          >包含证书与私钥</NCheckbox
-        ><NCheckbox v-model:checked="includeCredentials"
-          >包含 DNS 凭据</NCheckbox
-        ><NCheckbox v-model:checked="includeAutomation"
-          >包含 ACME 账户与签发配置</NCheckbox
-        ><NCheckbox v-model:checked="includeNotifications"
-          >包含通知渠道及凭据</NCheckbox
-        ><NCheckbox v-model:checked="includeHostDNS"
-          >主机 DNS 已保存配置</NCheckbox
-        ><NCheckbox v-model:checked="includeMonitoring">包含监控配置</NCheckbox
-        ><NCheckbox v-model:checked="includeFail2ban"
-          >包含登录防护配置</NCheckbox
-        ><NCheckbox v-model:checked="includeFirewall"
-          >包含防火墙规则</NCheckbox
-        >
-      </div>
-      <NButton
-        :disabled="busy || !exportReady"
-        :loading="busy"
-        @click="exportPackage"
-        >{{
-          exportMode === "portable" ? "导出普通归档" : "导出加密包"
-        }}</NButton
-      >
-      <template v-if="exported">
-        <h3>导出范围与省略内容</h3>
-        <ul>
-          <li v-for="item in exported.manifest.omissions" :key="item">
-            {{ item }}
-          </li>
-        </ul>
-      </template>
-    </section>
-    <section v-if="canImport" class="panel">
-      <h2>导入配置包</h2>
-      <NFormItem label="配置包"
-        ><input
-          type="file"
-          accept=".age,.tar"
-          :disabled="busy"
-          @change="selectFile"
-      /></NFormItem>
-      <NFormItem v-if="fileEncrypted === true" label="解密口令"
-        ><NInput
-          v-model:value="importPassphrase"
-          type="password"
-          show-password-on="click"
-          autocomplete="off"
-      /></NFormItem>
-      <NButton
-        :disabled="
-          busy ||
-          !file ||
-          fileEncrypted === null ||
-          (fileEncrypted && importPassphrase.length < 16) ||
-          !firewallValid ||
-          !!mappingError || !hostDNSValid
-        "
-        :loading="busy"
-        @click="previewFile"
-        >预检配置包</NButton
-      >
-    </section>
-    <section v-if="canPull" class="panel">
-      <h2>从其他服务器迁入</h2>
-      <NFormItem label="源节点 API"
-        ><NInput
-          v-model:value="remoteURL"
-          placeholder="https://source.example.com:9443/api/v1"
-          autocomplete="off"
-      /></NFormItem>
-      <NFormItem label="源节点 API Key"
-        ><NInput
-          v-model:value="remoteKey"
-          type="password"
-          show-password-on="click"
-          autocomplete="off"
-      /></NFormItem>
-      <NFormItem label="TLS 证书 SHA-256（自签名证书必填）"
-        ><NInput v-model:value="fingerprint" autocomplete="off"
-      /></NFormItem>
-      <NFormItem label="预期源节点 ID（可选）"
-        ><NInput v-model:value="sourceNode"
-      /></NFormItem>
-      <div v-if="has('components.manage')">
-        <NCheckbox v-model:checked="remoteDependencies"
-          >迁入前自动准备 Nginx 依赖</NCheckbox
-        >
-        <template v-if="remoteDependencies">
-          <NFormItem label="Nginx 组件发行标签（可选）">
-            <NInput
-              v-model:value="dependencyTag"
-              placeholder="留空使用稳定版"
-            />
-          </NFormItem>
-          <NCheckbox v-model:checked="dependencyPrerelease"
-            >允许指定的预发布版本</NCheckbox
-          >
-          <div v-if="has('system.write')">
-            <NCheckbox v-model:checked="dependencyInstall"
-              >授权缺失时首次安装 Nginx</NCheckbox
-            >
-            <template v-if="dependencyInstall">
-              <NCheckbox v-model:checked="dependencyStart"
-                >安装后启动</NCheckbox
+    <section class="panel page-stack">
+      <NTabs v-model:value="transferTab" type="line" animated>
+        <NTabPane v-if="canExport" name="export" tab="导出配置"
+          ><div class="page-stack">
+            <p class="muted">选择配置包类型后下载到本机。</p>
+            <NFormItem label="配置包类型"
+              ><NSelect
+                v-model:value="exportMode"
+                :options="exportOptions"
+                :disabled="busy"
+            /></NFormItem>
+            <NAlert v-if="exportMode === 'portable'" type="warning">
+              仅导出可识别的受管字段、IP 访问列表和基础
+              WAF，不包含完整原文、凭据或可选材料。原生认证、自定义路径、头常量及备注等内容会省略；迁入站点保持停用，须检查并补齐保护后再启用。
+            </NAlert>
+            <NFormItem v-if="exportMode === 'encrypted'" label="加密口令"
+              ><NInput
+                v-model:value="passphrase"
+                type="password"
+                show-password-on="click"
+                placeholder="16–256 字节，单独保管"
+                autocomplete="new-password"
+            /></NFormItem>
+            <div v-if="exportMode === 'encrypted'" class="choice-grid">
+              <NCheckbox v-model:checked="includeCertificates"
+                >包含证书与私钥</NCheckbox
+              ><NCheckbox v-model:checked="includeCredentials"
+                >包含 DNS 凭据</NCheckbox
+              ><NCheckbox v-model:checked="includeAutomation"
+                >包含 ACME 账户与签发配置</NCheckbox
+              ><NCheckbox v-model:checked="includeNotifications"
+                >包含通知渠道及凭据</NCheckbox
+              ><NCheckbox v-model:checked="includeHostDNS"
+                >主机 DNS 已保存配置</NCheckbox
+              ><NCheckbox v-model:checked="includeMonitoring"
+                >包含监控配置</NCheckbox
+              ><NCheckbox v-model:checked="includeFail2ban"
+                >包含登录防护配置</NCheckbox
+              ><NCheckbox v-model:checked="includeFirewall"
+                >包含防火墙规则</NCheckbox
               >
-              <NCheckbox v-model:checked="dependencyEnable"
-                >开机自动启动</NCheckbox
+            </div>
+            <div class="button-row">
+              <NButton
+                type="primary"
+                :disabled="busy || !exportReady"
+                :loading="busy"
+                @click="exportPackage"
+                >{{
+                  exportMode === "portable" ? "导出配置包" : "导出加密包"
+                }}</NButton
               >
-            </template>
-          </div>
-          <p class="muted">
-            首次安装仅适用于尚未安装 Nginx 的原生部署。Docker 使用预置模块镜像。
-          </p>
-        </template>
-      </div>
-      <div class="actions">
-        <NCheckbox v-model:checked="remoteCertificates"
-          >包含证书与私钥</NCheckbox
-        ><NCheckbox v-model:checked="remoteCredentials">包含 DNS 凭据</NCheckbox
-        ><NCheckbox v-model:checked="remoteAutomation"
-          >包含 ACME 账户与签发配置</NCheckbox
-        ><NCheckbox
-          v-if="has('notifications.write')"
-          v-model:checked="remoteNotifications"
-          >包含通知渠道及凭据</NCheckbox
-        ><NCheckbox v-model:checked="remoteHostDNS"
-          >主机 DNS 已保存配置</NCheckbox
-        ><NCheckbox v-model:checked="remoteMonitoring">包含监控配置</NCheckbox
-        ><NCheckbox v-model:checked="remoteFail2ban">登录防护配置</NCheckbox
-        ><NCheckbox v-model:checked="remoteFirewall"
-          >包含防火墙规则</NCheckbox
-        ><NButton
-          :disabled="
-            busy || !remoteURL || !remoteKey || !firewallValid || !!mappingError || !hostDNSValid
-          "
-          @click="pull(false)"
-          >拉取并预检</NButton
-        ><NPopconfirm @positive-click="pull(true)"
-          ><template #trigger
-            ><NButton
-              type="primary"
-              :disabled="
-                busy ||
-                !remoteURL ||
-                !remoteKey ||
-                !firewallValid ||
-                !!mappingError || !hostDNSValid
-              "
-              >一键迁入</NButton
-            ></template
-          >按所选模式迁入，并执行已授权的依赖准备与首次安装。保存或应用将替换目标
-          Nginx 配置。</NPopconfirm
+            </div>
+            <AdvancedDetails v-if="exported" title="导出范围与省略内容">
+              <ul>
+                <li v-for="item in exported.manifest.omissions" :key="item">
+                  {{ item }}
+                </li>
+              </ul>
+            </AdvancedDetails>
+          </div></NTabPane
         >
-      </div>
+        <NTabPane v-if="canImport" name="file" tab="从文件导入"
+          ><div class="page-stack">
+            <NFormItem label="配置包"
+              ><input
+                type="file"
+                accept=".age,.tar"
+                :disabled="busy"
+                @change="selectFile"
+            /></NFormItem>
+            <NFormItem v-if="fileEncrypted === true" label="解密口令"
+              ><NInput
+                v-model:value="importPassphrase"
+                type="password"
+                show-password-on="click"
+                autocomplete="off"
+            /></NFormItem>
+            <div class="button-row">
+              <NButton
+                type="primary"
+                :disabled="
+                  busy ||
+                  !file ||
+                  fileEncrypted === null ||
+                  (fileEncrypted && importPassphrase.length < 16) ||
+                  !firewallValid ||
+                  !!mappingError ||
+                  !hostDNSValid
+                "
+                :loading="busy"
+                @click="previewFile"
+                >预检配置包</NButton
+              >
+            </div>
+          </div></NTabPane
+        >
+        <NTabPane v-if="canPull" name="remote" tab="从服务器迁入"
+          ><div class="page-stack">
+            <div class="form-grid">
+              <NFormItem label="源节点 API"
+                ><NInput
+                  v-model:value="remoteURL"
+                  placeholder="https://source.example.com:9443/api/v1"
+                  autocomplete="off"
+              /></NFormItem>
+              <NFormItem label="源节点 API Key"
+                ><NInput
+                  v-model:value="remoteKey"
+                  type="password"
+                  show-password-on="click"
+                  autocomplete="off"
+              /></NFormItem>
+              <NFormItem label="TLS 证书 SHA-256（自签名证书必填）"
+                ><NInput v-model:value="fingerprint" autocomplete="off"
+              /></NFormItem>
+              <NFormItem label="预期源节点 ID（可选）"
+                ><NInput v-model:value="sourceNode"
+              /></NFormItem>
+              <div
+                v-if="has('components.manage')"
+                class="full-width page-stack"
+              >
+                <NCheckbox v-model:checked="remoteDependencies"
+                  >迁入前自动准备 Nginx 依赖</NCheckbox
+                >
+                <template v-if="remoteDependencies">
+                  <NFormItem label="Nginx 组件发行标签（可选）">
+                    <NInput
+                      v-model:value="dependencyTag"
+                      placeholder="留空使用稳定版"
+                    />
+                  </NFormItem>
+                  <NCheckbox v-model:checked="dependencyPrerelease"
+                    >允许指定的预发布版本</NCheckbox
+                  >
+                  <div v-if="has('system.write')">
+                    <NCheckbox v-model:checked="dependencyInstall"
+                      >授权缺失时首次安装 Nginx</NCheckbox
+                    >
+                    <template v-if="dependencyInstall">
+                      <NCheckbox v-model:checked="dependencyStart"
+                        >安装后启动</NCheckbox
+                      >
+                      <NCheckbox v-model:checked="dependencyEnable"
+                        >开机自动启动</NCheckbox
+                      >
+                    </template>
+                  </div>
+                  <p class="muted">
+                    首次安装仅适用于尚未安装 Nginx 的原生部署。Docker
+                    使用预置模块镜像。
+                  </p>
+                </template>
+              </div>
+            </div>
+            <div class="choice-grid">
+              <NCheckbox v-model:checked="remoteCertificates"
+                >包含证书与私钥</NCheckbox
+              ><NCheckbox v-model:checked="remoteCredentials"
+                >包含 DNS 凭据</NCheckbox
+              ><NCheckbox v-model:checked="remoteAutomation"
+                >包含 ACME 账户与签发配置</NCheckbox
+              ><NCheckbox
+                v-if="has('notifications.write')"
+                v-model:checked="remoteNotifications"
+                >包含通知渠道及凭据</NCheckbox
+              ><NCheckbox v-model:checked="remoteHostDNS"
+                >主机 DNS 已保存配置</NCheckbox
+              ><NCheckbox v-model:checked="remoteMonitoring"
+                >包含监控配置</NCheckbox
+              ><NCheckbox v-model:checked="remoteFail2ban"
+                >登录防护配置</NCheckbox
+              ><NCheckbox v-model:checked="remoteFirewall"
+                >包含防火墙规则</NCheckbox
+              >
+            </div>
+            <div class="button-row">
+              <NButton
+                :disabled="
+                  busy ||
+                  !remoteURL ||
+                  !remoteKey ||
+                  !firewallValid ||
+                  !!mappingError ||
+                  !hostDNSValid
+                "
+                @click="pull(false)"
+                >拉取并预检</NButton
+              ><NPopconfirm @positive-click="pull(true)"
+                ><template #trigger
+                  ><NButton
+                    type="primary"
+                    :disabled="
+                      busy ||
+                      !remoteURL ||
+                      !remoteKey ||
+                      !firewallValid ||
+                      !!mappingError ||
+                      !hostDNSValid
+                    "
+                    >一键迁入</NButton
+                  ></template
+                >按所选模式迁入，并执行已授权的依赖准备与首次安装。保存或应用将替换目标
+                Nginx 配置。</NPopconfirm
+              >
+            </div>
+          </div></NTabPane
+        >
+      </NTabs>
     </section>
-    <section v-if="canImport" class="panel">
-      <h2>导入选项</h2>
+    <section
+      v-if="canImport && transferTab !== 'export'"
+      class="panel page-stack"
+    >
+      <h2>导入设置</h2>
       <NFormItem label="执行模式"
         ><NSelect v-model:value="mode" :options="options"
       /></NFormItem>
       <NCheckbox v-if="has('system.write')" v-model:checked="enableNginx"
         >允许启用目标 Nginx 配置模块</NCheckbox
       >
-      <NFormItem label="参数映射（原参数 → 目标参数）" :validation-status="mappingError ? 'error' : undefined" :feedback="mappingError"
-        ><MappingInput :max="128" v-model:value="mappings" :disabled="busy" /></NFormItem>
-      <MigrationHostDNSOptions
-        v-model="hostDNSSettings"
-        @update:valid="hostDNSValid = $event"
-        :disabled="busy"
-        :allow-map="has('host.dns.write')"
-      />
-      <MigrationMonitoringOptions
-        v-model="monitoringSettings"
-        :allow-replace="has('monitoring.write')"
-        :disabled="busy"
-      />
-      <MigrationFail2banOptions v-model="fail2banSettings" :disabled="busy" />
-      <MigrationFirewallOptions
-        v-model="firewallSettings"
-        @update:valid="firewallValid = $event"
-        :disabled="busy"
-      />
-      <p class="muted">
-        映射在预检时生效；修改后需重新预检。源 Key 需要
-        backup.export、backup.secrets 和 config.secrets 权限。
-      </p>
+      <AdvancedDetails title="环境映射与可选配置">
+        <div class="page-stack">
+          <NFormItem
+            label="参数映射（原参数 → 目标参数）"
+            :validation-status="mappingError ? 'error' : undefined"
+            :feedback="mappingError"
+            ><MappingInput :max="128" v-model:value="mappings" :disabled="busy"
+          /></NFormItem>
+          <MigrationHostDNSOptions
+            v-model="hostDNSSettings"
+            @update:valid="hostDNSValid = $event"
+            :disabled="busy"
+            :allow-map="has('host.dns.write')"
+          />
+          <MigrationMonitoringOptions
+            v-model="monitoringSettings"
+            :allow-replace="has('monitoring.write')"
+            :disabled="busy"
+          />
+          <MigrationFail2banOptions
+            v-model="fail2banSettings"
+            :disabled="busy"
+          />
+          <MigrationFirewallOptions
+            v-model="firewallSettings"
+            @update:valid="firewallValid = $event"
+            :disabled="busy"
+          />
+          <p class="muted">环境映射修改后，请重新预检。</p>
+        </div></AdvancedDetails
+      >
     </section>
-    <section v-if="plan" class="panel">
+    <section v-if="plan" class="panel page-stack">
       <NAlert v-if="plan.mode === 'portable'" type="warning"
         >此计划来自可移植配置。迁入站点均已停用，须检查省略项并补齐保护后再启用。</NAlert
       >
@@ -728,14 +781,10 @@ onUnmounted(() => {
         <NTag>{{ states[plan.state] ?? plan.state }}</NTag>
         <NTag v-if="plan.pruned_at" type="warning">材料已清理</NTag>
       </div>
-      <p>
-        源节点 {{ plan.source_node }} · {{ plan.source_version }}
-      </p>
+      <p>源节点 {{ plan.source_node }} · {{ plan.source_version }}</p>
       <NAlert v-if="plan.pruned_at" type="info">
         迁移材料已于
-        {{
-          time(plan.pruned_at)
-        }}
+        {{ time(plan.pruned_at) }}
         清理，无法重新预检或执行。原计划摘要与执行结果仍可查询。
       </NAlert>
       <p v-if="plan.state === 'planned'" class="muted">
@@ -859,7 +908,7 @@ onUnmounted(() => {
         }}</NPopconfirm
       >
     </section>
-    <section v-if="history.length" class="panel">
+    <section v-if="history.length" class="panel page-stack">
       <h2>迁移记录</h2>
       <div v-for="item in history" :key="item.id" class="actions">
         <NButton text :disabled="busy" @click="selectPlan(item.id)">{{

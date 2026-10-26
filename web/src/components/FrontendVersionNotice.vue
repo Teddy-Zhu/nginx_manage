@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { onMounted, onUnmounted, ref } from "vue";
 import { NAlert, NButton, NPopconfirm } from "naive-ui";
 import { api, apiError } from "../api/client";
@@ -6,7 +7,7 @@ import { loadedFrontendEntries } from "../frontend-version";
 
 const changed = ref(false), error = ref("");
 const controller = new AbortController();
-let reading = false, closed = false, timer: ReturnType<typeof setInterval> | undefined;
+let reading = false, closed = false;
 async function check() {
   if (closed || reading || document.hidden) return;
   reading = true;
@@ -18,10 +19,10 @@ async function check() {
   } catch (e) { if (!closed) error.value = apiError(e).message; }
   finally { reading = false; }
 }
-function visible() { if (!document.hidden) void check(); }
 function reload() { window.location.reload(); }
-onMounted(() => { void check(); timer = setInterval(() => void check(), 60_000); document.addEventListener("visibilitychange", visible); });
-onUnmounted(() => { closed = true; controller.abort(); if (timer) clearInterval(timer); document.removeEventListener("visibilitychange", visible); });
+onMounted(() => void check());
+onUnmounted(() => { closed = true; controller.abort(); });
+useLiveRefresh(api, ["version"], check);
 </script>
 
 <template>

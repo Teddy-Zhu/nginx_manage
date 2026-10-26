@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { NAlert, NButton, NFormItem, NPopconfirm, NSelect, NTag } from "naive-ui";
@@ -34,7 +35,7 @@ function canResume(t: AgentUpgradeTask) {
   const result = t.result;
   return canWrite.value && held.value && maintenance.value?.agent.id === t.input.maintenance_id && !busy.value && t.state === "recovery_required" && !["operation_missing", "operation_mismatch", "intent_mismatch", "control_mismatch", "restore_isolated"].includes(t.stage) && (result ? !result.active && !result.finalized && result.sequence < 32 : ["epoch_changed", "maintenance_unconfirmed"].includes(t.stage));
 }
-let controller: AbortController | null = null, timer: ReturnType<typeof setInterval> | undefined, reading = false, closed = false;
+let controller: AbortController | null = null, reading = false, closed = false;
 async function load() {
   if (reading || closed) return;
   reading = true; controller = new AbortController();
@@ -55,8 +56,9 @@ async function resume(t: AgentUpgradeTask) {
   await run(async () => { await api.resumeAgentUpgrade(t.id, keyFor({ id: t.id, sequence: t.result?.sequence ?? 0, command: "resume" })); keyFor = useIdempotency(); }, "原升级续办请求已受理");
   await load();
 }
-onMounted(async () => { await load(); if (!closed) timer = setInterval(() => { if (active.value || maintenance.value && maintenance.value.phase !== "open") void load(); }, 3000); });
-onUnmounted(() => { closed = true; controller?.abort(); if (timer) clearInterval(timer); });
+onMounted(load);
+onUnmounted(() => { closed = true; controller?.abort(); });
+useLiveRefresh(api, ["tasks", "maintenance"], load);
 </script>
 <template>
   <div class="page-stack">

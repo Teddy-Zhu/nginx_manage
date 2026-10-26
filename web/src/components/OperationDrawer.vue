@@ -66,12 +66,13 @@ function eventLabel(row: LogRow) {
 }
 
 let controller: AbortController | undefined;
-let timer: ReturnType<typeof setTimeout> | undefined;
+let unsubscribe: (() => void) | undefined;
 let ticker: ReturnType<typeof setInterval> | undefined;
 let refresh: (() => Promise<void>) | undefined;
 function stop() {
   controller?.abort();
-  if (timer) clearTimeout(timer);
+  unsubscribe?.();
+  unsubscribe = undefined;
   if (ticker) clearInterval(ticker);
   ticker = undefined;
   refresh = undefined;
@@ -93,12 +94,11 @@ watch(
     controller = current;
     const api = createAPI({ ...operation.scope, signal: current.signal });
     let sourceId = "",
-      finishedReads = 0;
+      pending = false;
     refresh = async () => {
       if (current.signal.aborted || reading.value) return;
-      if (timer) clearTimeout(timer);
+      pending = false;
       reading.value = true;
-      let retry = true;
       try {
         const value = await api.task(operation.taskId);
         if (current.signal.aborted) return;
@@ -163,31 +163,22 @@ watch(
               logError.value = apiError(cause).message;
           }
         }
-        if (
-          !isTaskActive(value.state) &&
-          !["recovery_required", "waiting_confirmation"].includes(value.state)
-        )
-          finishedReads++;
-        retry =
-          isTaskActive(value.state) ||
-          ["recovery_required", "waiting_confirmation"].includes(value.state) ||
-          (canReadLogs.value && finishedReads < 3);
       } catch (cause) {
         if (!current.signal.aborted) {
           const error = apiError(cause);
           statusError.value = error.message;
-          retry = error.status === 0 || error.status >= 500;
         }
       } finally {
         if (!current.signal.aborted) {
           reading.value = false;
-          if (retry)
-            timer = setTimeout(() => {
-              void refresh?.();
-            }, 3000);
+          if (pending) window.queueMicrotask(() => void refresh?.());
         }
       }
     };
+    unsubscribe = api.subscribe(["tasks"], () => {
+      pending = true;
+      void refresh?.();
+    });
     void refresh();
   },
   { immediate: true },

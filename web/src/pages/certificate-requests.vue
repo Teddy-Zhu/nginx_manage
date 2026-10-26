@@ -10,6 +10,7 @@
 </route>
 
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -336,27 +337,14 @@ onBeforeRouteLeave(
 );
 onMounted(() => {
   void load();
-  timer = setInterval(() => {
-    now.value = Date.now();
-    if (
-      !busy.value &&
-      !policyID.value &&
-      profiles.value.some(
-        (item) =>
-          item.state === "issuing" || item.auto_renew || item.auto_deploy,
-      )
-    )
-      void run(async () => {
-        profiles.value = await api.acmeProfiles(offset.value);
-        if (selected.value) orders.value = await api.acmeOrders(selected.value);
-      });
-  }, 10000);
+  timer = setInterval(() => { now.value = Date.now(); }, 10000);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
   window.removeEventListener("beforeunload", beforeUnload);
 });
+useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !policyID.value) return run(async () => { profiles.value = await api.acmeProfiles(offset.value); if (selected.value) orders.value = await api.acmeOrders(selected.value); }); });
 </script>
 
 <template>

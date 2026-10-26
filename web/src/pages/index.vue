@@ -12,7 +12,8 @@
 </route>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useLiveRefresh } from "../composables/live";
+import { ref, computed, onMounted } from "vue";
 import { NAlert, NButton, NDataTable, type DataTableColumns } from "naive-ui";
 import { RouterLink } from "vue-router";
 import { apiError, useNodeAPI, type Task, type ComponentOverview, type MonitoringLatest, type NotificationOverview } from "../api/client";
@@ -56,16 +57,8 @@ const columns: DataTableColumns<Task> = [
   { title: "状态", key: "state", render: (row) => taskStates[row.state] ?? "未知状态" },
   { title: "创建时间", key: "created_at", render: (row) => new Date(row.created_at * 1000).toLocaleString() },
 ];
-let poll: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-  void load();
-  poll = setInterval(() => {
-    if (!document.hidden) void load();
-  }, 15_000);
-});
-onUnmounted(() => {
-  if (poll) clearInterval(poll);
-});
+onMounted(load);
+useLiveRefresh(api, ["tasks", "monitoring", "notifications"], load);
 </script>
 
 <template>

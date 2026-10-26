@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 
 import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
@@ -73,7 +74,7 @@ const form = ref({
   clear_signing: false,
 });
 const controller = new AbortController();
-let timer: ReturnType<typeof setInterval> | undefined,
+let
   refreshPending = false;
 const loading = ref(false);
 const testKeys = new Map<string, { version: number; key: string }>();
@@ -450,16 +451,13 @@ function visibility() {
 onMounted(async () => {
   document.addEventListener("visibilitychange", visibility);
   await load();
-  if (!controller.signal.aborted)
-    timer = setInterval(() => {
-      if (!document.hidden && !busy.value) void fetchData();
-    }, 15_000);
+
 });
 onUnmounted(() => {
   controller.abort();
-  if (timer) clearInterval(timer);
   document.removeEventListener("visibilitychange", visibility);
 });
+useLiveRefresh(api, ["notifications"], () => { if (!busy.value) return fetchData(); });
 </script>
 
 <template>

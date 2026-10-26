@@ -10,6 +10,7 @@
 </route>
 
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { sha256Hex } from "../utils/crypto";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
@@ -313,18 +314,7 @@ onBeforeRouteLeave(
 );
 onMounted(() => {
   void load();
-  timer = setInterval(() => {
-    now.value = Date.now();
-    if (
-      !busy.value &&
-      !accountEditing.value &&
-      !credentialEditing.value &&
-      accounts.value.some(activeAccount)
-    )
-      void run(async () => {
-        accounts.value = await api.acmeAccounts();
-      });
-  }, 10000);
+  timer = setInterval(() => { now.value = Date.now(); }, 10000);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
@@ -332,6 +322,7 @@ onUnmounted(() => {
   secrets.value = {};
   window.removeEventListener("beforeunload", beforeUnload);
 });
+useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !accountEditing.value && !credentialEditing.value) return run(async () => { accounts.value = await api.acmeAccounts(); }); });
 </script>
 
 <template>

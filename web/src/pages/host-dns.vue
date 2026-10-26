@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
@@ -187,8 +188,7 @@ const domainPolicy = (value: string | null) =>
 const sourceOwner = (value: string) => sourceOwnerLabels[value] ?? "未确认";
 const controller = new AbortController();
 let poll: ReturnType<typeof setInterval> | undefined;
-let pendingRead = false,
-  lastRead = 0;
+let pendingRead = false;
 let applyKey = "";
 let previewAttempt: { digest: string; key: string } | undefined;
 const decisionKeys = new Map<string, string>();
@@ -290,7 +290,6 @@ async function read() {
     return;
   }
   reading.value = true;
-  lastRead = Date.now();
   try {
     const [state, modules] = await Promise.all([
       api.hostDNS(controller.signal),
@@ -517,21 +516,14 @@ onMounted(async () => {
   await loadMigrationCandidate();
   if (controller.signal.aborted) return;
   document.addEventListener("visibilitychange", visible);
-  poll = setInterval(() => {
-    now.value = Date.now();
-    if (
-      !document.hidden &&
-      Date.now() - lastRead >=
-        (pending.value || activeTask.value ? 2000 : 15000)
-    )
-      void read();
-  }, 1000);
+  poll = setInterval(() => { now.value = Date.now(); }, 1000);
 });
 onUnmounted(() => {
   controller.abort();
   if (poll) clearInterval(poll);
   document.removeEventListener("visibilitychange", visible);
 });
+useLiveRefresh(api, ["tasks"], read);
 </script>
 <template>
   <div class="page-toolbar">

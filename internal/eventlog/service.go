@@ -18,11 +18,12 @@ import (
 )
 
 type Service struct {
-	DB      *sql.DB
-	Agent   *agent.Client
-	input   chan logs.Event
-	dropped atomic.Int64
-	held    []logs.Event
+	OnDelivered func()
+	DB          *sql.DB
+	Agent       *agent.Client
+	input       chan logs.Event
+	dropped     atomic.Int64
+	held        []logs.Event
 }
 
 func New(db *sql.DB, client *agent.Client) *Service {
@@ -242,5 +243,13 @@ func (s *Service) deliver(ctx context.Context) error {
 	}
 	// Acknowledgement authorizes deletion of only the original epoch's prefix.
 	_, err = s.DB.ExecContext(ctx, "DELETE FROM event_log_queue WHERE sequence<=? AND EXISTS(SELECT 1 FROM settings WHERE key='event_log_epoch' AND value=?)", batch.Events[len(batch.Events)-1].Sequence, batch.Epoch)
+	if s.OnDelivered != nil {
+		for _, event := range batch.Events {
+			if event.Category == "task" {
+				s.OnDelivered()
+				break
+			}
+		}
+	}
 	return err
 }

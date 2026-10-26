@@ -15,114 +15,305 @@
 import { randomUUID } from "../utils/crypto";
 
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
-import { NAlert, NButton, NCheckbox, NFormItem, NInput, NPopconfirm, NTag } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NFormItem,
+  NInput,
+  NPopconfirm,
+  NTag,
+  NForm,
+  NTabs,
+  NTabPane,
+} from "naive-ui";
 import { useNodeAPI, apiError, type NodeConnection } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+import AdvancedDetails from "../components/AdvancedDetails.vue";
 import NodePairing from "../components/NodePairing.vue";
 const api = useNodeAPI();
 
-const session = useSession(), { run, busy, message } = useAction();
-const nodes = ref<NodeConnection[]>([]), error = ref(""), selected = ref<string[]>([]), checking = ref<string[]>([]);
+const session = useSession(),
+  { run, busy, message } = useAction();
+const nodes = ref<NodeConnection[]>([]),
+  error = ref(""),
+  selected = ref<string[]>([]),
+  checking = ref<string[]>([]);
 const form = reactive({ name: "", url: "", api_key: "", fingerprint: "" });
-const canManage = computed(() => !!session.localMe?.scopes.includes("nodes.manage") && !!session.localMe?.scopes.includes("read"));
+const canManage = computed(
+  () =>
+    !!session.localMe?.scopes.includes("nodes.manage") &&
+    !!session.localMe?.scopes.includes("read"),
+);
 const active = computed(() => nodes.value.filter((n) => !n.removed_at));
 const removed = computed(() => nodes.value.filter((n) => n.removed_at));
-const states: Record<string, string> = { connected: "连接正常", stale: "需要重新检查", unreachable: "无法连接", identity_changed: "身份已变化", authorization_failed: "授权不可用", incompatible: "版本不兼容", removing: "删除待完成", removed: "连接已删除" };
-let keyFor = useIdempotency(), closed = false;
+const states: Record<string, string> = {
+  connected: "连接正常",
+  stale: "需要重新检查",
+  unreachable: "无法连接",
+  identity_changed: "身份已变化",
+  authorization_failed: "授权不可用",
+  incompatible: "版本不兼容",
+  removing: "删除待完成",
+  removed: "连接已删除",
+};
+let keyFor = useIdempotency(),
+  closed = false;
 const controller = new AbortController();
-function date(value: number) { return value ? new Date(value * 1000).toLocaleString() : "—"; }
+function date(value: number) {
+  return value ? new Date(value * 1000).toLocaleString() : "—";
+}
 function replace(value: NodeConnection) {
   nodes.value = [value, ...nodes.value.filter((n) => n.id !== value.id)];
   window.dispatchEvent(new Event("node-connections-changed"));
 }
 async function load() {
   if (!canManage.value) return;
-  try { const result = await api.nodes(controller.signal); if (!closed) { nodes.value = result; selected.value = selected.value.filter((id) => result.some((n) => n.id === id && !n.removed_at)); error.value = ""; } }
-  catch (cause) { if (!closed) error.value = apiError(cause).message; }
+  try {
+    const result = await api.nodes(controller.signal);
+    if (!closed) {
+      nodes.value = result;
+      selected.value = selected.value.filter((id) =>
+        result.some((n) => n.id === id && !n.removed_at),
+      );
+      error.value = "";
+    }
+  } catch (cause) {
+    if (!closed) error.value = apiError(cause).message;
+  }
 }
 async function create() {
   const input = { ...form };
   await run(async () => {
     const value = await api.createNode(input, keyFor(input));
     if (closed) return;
-    replace(value); form.name = form.url = form.api_key = form.fingerprint = ""; keyFor = useIdempotency();
+    replace(value);
+    form.name = form.url = form.api_key = form.fingerprint = "";
+    keyFor = useIdempotency();
   }, "节点连接已登记");
 }
 function select(id: string, value: boolean) {
-  if (value && selected.value.length < 8) selected.value = [...selected.value, id];
+  if (value && selected.value.length < 8)
+    selected.value = [...selected.value, id];
   if (!value) selected.value = selected.value.filter((v) => v !== id);
 }
 async function check(ids: string[]) {
   if (!canManage.value || checking.value.length || !ids.length) return;
   checking.value = [...ids];
-  const queue = [...ids], failures: string[] = [];
+  const queue = [...ids],
+    failures: string[] = [];
   async function worker() {
     while (queue.length && !closed) {
       const id = queue.shift()!;
-      try { const value = await api.refreshNode(id, randomUUID()); if (!closed) replace(value); }
-      catch (cause) { failures.push(`${nodes.value.find((n) => n.id === id)?.name ?? id}：${apiError(cause).message}`); }
+      try {
+        const value = await api.refreshNode(id, randomUUID());
+        if (!closed) replace(value);
+      } catch (cause) {
+        failures.push(
+          `${nodes.value.find((n) => n.id === id)?.name ?? id}：${apiError(cause).message}`,
+        );
+      }
     }
   }
   await Promise.all([worker(), worker()]);
-  if (!closed) { checking.value = []; if (failures.length) message.error(failures.join("；")); }
+  if (!closed) {
+    checking.value = [];
+    if (failures.length) message.error(failures.join("；"));
+  }
 }
 async function remove(node: NodeConnection) {
   await run(async () => {
-    const value = await api.deleteNode(node.id, keyFor({ action: "delete", id: node.id }));
+    const value = await api.deleteNode(
+      node.id,
+      keyFor({ action: "delete", id: node.id }),
+    );
     if (closed) return;
-    replace(value); selected.value = selected.value.filter((id) => id !== node.id); keyFor = useIdempotency();
+    replace(value);
+    selected.value = selected.value.filter((id) => id !== node.id);
+    keyFor = useIdempotency();
   });
 }
 onMounted(load);
-onUnmounted(() => { closed = true; controller.abort(); form.api_key = ""; });
+onUnmounted(() => {
+  closed = true;
+  controller.abort();
+  form.api_key = "";
+});
 </script>
 <template>
   <div class="page-stack">
-    <NAlert v-if="!canManage" type="warning">需要节点管理与读取权限。</NAlert>
+    <NAlert v-if="!canManage" type="warning">需要服务器连接管理权限。</NAlert>
     <template v-else>
-      <NodePairing @connected="load" />
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <section class="panel page-stack">
-        <div class="toolbar"><h2>添加节点连接</h2><NButton @click="load">刷新列表</NButton></div>
-        <p>填写目标节点的 HTTPS API 地址和专用 Token，并通过独立渠道核对目标证书的 SHA-256 指纹。</p>
-        <NFormItem label="连接名称"><NInput v-model:value="form.name" :disabled="busy" :maxlength="100" /></NFormItem>
-        <NFormItem label="目标 API"><NInput v-model:value="form.url" :disabled="busy" placeholder="https://node.example.com/api/v1" :maxlength="2048" /></NFormItem>
-        <NFormItem label="目标 Token"><NInput v-model:value="form.api_key" :disabled="busy" type="password" show-password-on="click" autocomplete="off" :maxlength="193" /></NFormItem>
-        <NFormItem label="证书 SHA-256 指纹"><NInput v-model:value="form.fingerprint" :disabled="busy" placeholder="64 位十六进制 SHA-256" :maxlength="64" /></NFormItem>
-        <p class="muted">Token 至少需要 read 权限。每个控制节点使用独立 Token，并在目标节点限制允许来源。</p>
-        <div><NButton type="primary" :loading="busy" :disabled="!form.name || !form.url || !form.api_key || form.fingerprint.length !== 64 || !!checking.length" @click="create">核对并添加</NButton></div>
+        <div class="toolbar">
+          <h2>已连接的服务器</h2>
+          <div class="inline-gap">
+            <NButton
+              :loading="!!checking.length"
+              :disabled="!selected.length || busy"
+              @click="check(selected)"
+              >检查所选连接<span v-if="selected.length"
+                >（{{ selected.length }}）</span
+              ></NButton
+            ><NButton :disabled="busy" @click="load">刷新</NButton>
+          </div>
+        </div>
+        <p v-if="!active.length" class="empty-state">
+          暂无服务器连接，可在下方添加。
+        </p>
+        <div v-else class="record-list">
+          <article v-for="node in active" :key="node.id" class="record-card">
+            <div class="toolbar">
+              <NCheckbox
+                :checked="selected.includes(node.id)"
+                :disabled="
+                  busy ||
+                  !!checking.length ||
+                  node.state === 'removing' ||
+                  (!selected.includes(node.id) && selected.length >= 8)
+                "
+                @update:checked="(value: boolean) => select(node.id, value)"
+                ><strong>{{ node.name }}</strong></NCheckbox
+              >
+              <NTag
+                :type="node.state === 'connected' ? 'success' : 'warning'"
+                >{{ states[node.state] ?? node.state }}</NTag
+              >
+            </div>
+            <p class="record-address">{{ node.url }}</p>
+            <div class="record-meta">
+              <span>最近检查 {{ date(node.checked_at) }}</span
+              ><span>授权到期 {{ date(node.expires_at) }}</span>
+            </div>
+            <NAlert v-if="node.error" type="warning">{{ node.error }}</NAlert>
+            <AdvancedDetails title="连接详情"
+              ><dl class="detail-list">
+                <dt>服务器编号</dt>
+                <dd>{{ node.node_id }}</dd>
+                <dt>凭据编号</dt>
+                <dd>{{ node.credential_id }}</dd>
+                <dt>证书指纹</dt>
+                <dd class="mono">{{ node.fingerprint }}</dd>
+                <dt>授权权限</dt>
+                <dd>{{ node.scopes.join("、") }}</dd>
+              </dl></AdvancedDetails
+            >
+            <div class="button-row">
+              <NButton
+                :loading="checking.includes(node.id)"
+                :disabled="
+                  busy || !!checking.length || node.state === 'removing'
+                "
+                @click="check([node.id])"
+                >检查连接</NButton
+              >
+              <NPopconfirm
+                :disabled="busy || !!checking.length"
+                positive-text="删除连接"
+                @positive-click="remove(node)"
+                ><template #trigger
+                  ><NButton
+                    type="error"
+                    secondary
+                    :disabled="busy || !!checking.length"
+                    >{{
+                      node.state === "removing" ? "继续删除" : "删除连接"
+                    }}</NButton
+                  ></template
+                >删除
+                {{
+                  node.name
+                }}
+                并撤销连接授权。无法连接时，请到目标服务器撤销对应授权。</NPopconfirm
+              >
+            </div>
+          </article>
+        </div>
       </section>
       <section class="panel page-stack">
-        <div class="toolbar"><h2>已登记节点</h2><NButton :loading="!!checking.length" :disabled="!selected.length || busy" @click="check(selected)">检查所选 {{ selected.length }} 个节点</NButton></div>
-        <p class="muted">最多选择 8 个节点；每个节点分别显示检查结果。</p>
-        <p v-if="!active.length" class="muted">暂无节点连接</p>
-        <article v-for="node in active" :key="node.id" class="panel page-stack">
-          <div class="toolbar">
-            <NCheckbox :checked="selected.includes(node.id)" :disabled="busy || !!checking.length || node.state === 'removing' || (!selected.includes(node.id) && selected.length >= 8)" @update:checked="(value: boolean) => select(node.id, value)">{{ node.name }}</NCheckbox>
-            <NTag :type="node.state === 'connected' ? 'success' : 'warning'">{{ states[node.state] ?? node.state }}</NTag>
-          </div>
-          <p>{{ node.url }}</p>
-          <p class="muted">永久节点编号 {{ node.node_id }} · API v{{ node.api_version }}</p>
-          <p class="muted">最近检查 {{ date(node.checked_at) }} · 授权到期 {{ date(node.expires_at) }}</p>
-          <p v-if="node.capabilities && node.state === 'connected'">目标执行器：{{ node.capabilities.mode === "connected" ? "已连接" : "预览模式" }}</p>
-          <details><summary>连接与授权详情</summary><p>凭据编号 {{ node.credential_id }}</p><p>指纹 {{ node.fingerprint }}</p><p>权限 {{ node.scopes.join("、") }}</p></details>
-          <NAlert v-if="node.error" type="warning">{{ node.error }}</NAlert>
-          <div class="toolbar">
-            <NButton :disabled="busy || !!checking.length || node.state === 'removing'" @click="check([node.id])">检查连接</NButton>
-            <NPopconfirm :disabled="busy || !!checking.length" positive-text="删除连接" @positive-click="remove(node)"><template #trigger><NButton type="error" :disabled="busy || !!checking.length">{{ node.state === "removing" ? "继续删除" : "删除连接" }}</NButton></template>删除 {{ node.name }} 并尝试撤销目标 Token。若无法确认撤销，需要在目标节点补做撤销。</NPopconfirm>
-          </div>
-        </article>
+        <h2>添加服务器</h2>
+        <NTabs type="line" animated>
+          <NTabPane name="token" tab="使用 API 密钥">
+            <NForm
+              label-placement="top"
+              :disabled="busy"
+              @submit.prevent="create"
+            >
+              <div class="form-grid">
+                <NFormItem label="连接名称"
+                  ><NInput
+                    v-model:value="form.name"
+                    placeholder="例如：生产服务器"
+                    :maxlength="100"
+                /></NFormItem>
+                <NFormItem label="服务器 API 地址"
+                  ><NInput
+                    v-model:value="form.url"
+                    placeholder="https://server.example.com/api/v1"
+                    :maxlength="2048"
+                /></NFormItem>
+                <NFormItem label="API 密钥"
+                  ><NInput
+                    v-model:value="form.api_key"
+                    type="password"
+                    show-password-on="click"
+                    autocomplete="off"
+                    :maxlength="193"
+                /></NFormItem>
+                <NFormItem label="证书 SHA-256 指纹"
+                  ><NInput
+                    v-model:value="form.fingerprint"
+                    placeholder="目标服务器的 64 位证书指纹"
+                    :maxlength="64"
+                /></NFormItem>
+              </div>
+              <p class="section-note">
+                从目标服务器获取专用 API 密钥和证书指纹。密钥至少需要读取权限。
+              </p>
+              <div class="form-actions">
+                <NButton
+                  type="primary"
+                  attr-type="submit"
+                  :loading="busy"
+                  :disabled="
+                    !form.name ||
+                    !form.url ||
+                    !form.api_key ||
+                    form.fingerprint.length !== 64 ||
+                    !!checking.length
+                  "
+                  >添加连接</NButton
+                >
+              </div>
+            </NForm>
+          </NTabPane>
+          <NTabPane name="pairing" tab="使用配对信息"
+            ><NodePairing @connected="load"
+          /></NTabPane>
+        </NTabs>
       </section>
-      <section v-if="removed.length" class="panel page-stack">
-        <h2>已删除连接</h2>
-        <article v-for="node in removed" :key="node.id" class="panel page-stack">
-          <div class="toolbar"><strong>{{ node.name }}</strong><NTag :type="node.revocation === 'revoked' ? 'success' : 'warning'">{{ node.revocation === "revoked" ? "目标授权已撤销" : "目标授权待核对" }}</NTag></div>
-          <p class="muted">{{ node.url }} · {{ date(node.removed_at) }}</p>
-          <p>永久节点编号 {{ node.node_id }} · 目标凭据编号 {{ node.credential_id }}</p>
-          <NAlert v-if="node.revocation === 'pending'" type="warning">未确认目标授权撤销，请在目标节点的机器凭据中撤销此凭据。</NAlert>
-        </article>
-      </section>
+      <AdvancedDetails v-if="removed.length" title="已删除的连接">
+        <div class="record-list">
+          <article v-for="node in removed" :key="node.id" class="record-card">
+            <div class="toolbar">
+              <strong>{{ node.name }}</strong
+              ><NTag
+                :type="node.revocation === 'revoked' ? 'success' : 'warning'"
+                >{{
+                  node.revocation === "revoked" ? "授权已撤销" : "授权待核对"
+                }}</NTag
+              >
+            </div>
+            <p class="record-address">{{ node.url }}</p>
+            <p class="muted">删除时间 {{ date(node.removed_at) }}</p>
+            <NAlert v-if="node.revocation === 'pending'" type="warning"
+              >请到目标服务器撤销凭据 {{ node.credential_id }}。</NAlert
+            >
+          </article>
+        </div>
+      </AdvancedDetails>
     </template>
   </div>
 </template>

@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -231,21 +232,14 @@ async function activate(t: ComponentTask) {
 onMounted(async () => {
   await Promise.all([load(), loadFail2ban()]);
   if (!closed)
-    timer = setInterval(() => {
-      clock.value = Date.now();
-      if (
-        tasks.value.some((t) =>
-          ["queued", "running", "recovery_required"].includes(t.state),
-        )
-      )
-        void load();
-    }, 3000);
+    timer = setInterval(() => { clock.value = Date.now(); }, 1000);
 });
 onUnmounted(() => {
   closed = true;
   controller?.abort();
   if (timer) clearInterval(timer);
 });
+useLiveRefresh(api, ["tasks"], () => Promise.all([load(), loadFail2ban()]));
 </script>
 <template>
   <div class="page-stack">

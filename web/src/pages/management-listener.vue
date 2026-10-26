@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
@@ -84,10 +85,10 @@ async function decide(action: "confirm" | "rollback") {
 onMounted(async () => {
   await load();
   if (closed) return;
-  let ticks = 0;
-  timer = setInterval(() => { remaining.value = Math.max(0, (operation.value?.deadline ?? 0) - Math.floor(Date.now() / 1000)); if (pending.value && ++ticks % 3 === 0 && !busy.value) void load(); }, 1000);
+  timer = setInterval(() => { remaining.value = Math.max(0, (operation.value?.deadline ?? 0) - Math.floor(Date.now() / 1000)); }, 1000);
 });
 onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = form.certificate = ""; });
+useLiveRefresh(api, ["listener"], load);
 </script>
 <template>
   <div class="page-stack">

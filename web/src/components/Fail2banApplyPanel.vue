@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -43,11 +44,9 @@ const states: Record<string, string> = {
   failed: "应用失败",
   cancelled: "已取消",
 };
-let closed = false,
-  timer: ReturnType<typeof setTimeout> | undefined;
+let closed = false;
 async function refresh() {
   if (reading.value || closed) return;
-  if (timer) clearTimeout(timer);
   reading.value = true;
   try {
     const result = await api.fail2banTasks(controller.signal);
@@ -63,10 +62,6 @@ async function refresh() {
   } finally {
     if (!closed) {
       reading.value = false;
-      if (active.value || pending.value)
-        timer = setTimeout(() => {
-          void refresh();
-        }, 3000);
     }
   }
 }
@@ -113,8 +108,8 @@ onMounted(() => {
 onUnmounted(() => {
   closed = true;
   controller.abort();
-  if (timer) clearTimeout(timer);
 });
+useLiveRefresh(api, ["tasks"], refresh);
 </script>
 <template>
   <section class="surface page-stack">

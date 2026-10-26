@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref, watch, toRaw } from "vue";
 import {
@@ -59,8 +60,7 @@ const edit = ref<MonitoringSettings | null>(null),
   error = ref(""),
   historyError = ref("");
 const controller = new AbortController();
-let poll: ReturnType<typeof setInterval> | undefined,
-  reading = false,
+let reading = false,
   historyController: AbortController | undefined,
   historyMinute = 0;
 const metrics = computed(() => latest.value?.sample?.metrics ?? []);
@@ -352,30 +352,12 @@ watch(selected, () => {
   void readHistory();
 });
 watch([field, hours], () => void readHistory());
-function visible() {
-  if (!document.hidden) {
-    void readLatest();
-    void readHistory();
-  }
-}
-onMounted(async () => {
-  document.addEventListener("visibilitychange", visible);
-  await load();
-  if (!controller.signal.aborted)
-    poll = setInterval(() => {
-      if (!document.hidden && !busy.value) {
-        void readLatest();
-        if (Math.floor(Date.now() / 60000) !== historyMinute)
-          void readHistory();
-      }
-    }, 15_000);
-});
+onMounted(load);
 onUnmounted(() => {
   controller.abort();
   historyController?.abort();
-  if (poll) clearInterval(poll);
-  document.removeEventListener("visibilitychange", visible);
 });
+useLiveRefresh(api, ["monitoring"], async () => { if (!busy.value) { await readLatest(); if (Math.floor(Date.now() / 60000) !== historyMinute) await readHistory(); } });
 </script>
 
 <template>

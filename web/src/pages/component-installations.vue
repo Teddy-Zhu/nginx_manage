@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
@@ -239,16 +240,14 @@ async function control(t: NginxInstallTask, command: "resume" | "cancel") {
 onMounted(async () => {
   await load();
   if (!closed)
-    timer = setInterval(() => {
-      clock.value = Date.now();
-      if (active.value || waiting.value || maintenance.value?.phase !== "open") void load();
-    }, 3000);
+    timer = setInterval(() => { clock.value = Date.now(); }, 1000);
 });
 onUnmounted(() => {
   closed = true;
   controller?.abort();
   if (timer) clearInterval(timer);
 });
+useLiveRefresh(api, ["tasks", "maintenance"], load);
 </script>
 <template>
   <div class="page-stack">

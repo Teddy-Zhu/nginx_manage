@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 
 import AdvancedDetails from "./AdvancedDetails.vue";
@@ -110,12 +111,10 @@ const latest = computed(
 const currentPython = computed(() => latest.value?.python ?? props.python);
 const currentAt = computed(() => latest.value?.at ?? props.observedAt);
 const bytes = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
-let closed = false,
-  timer: ReturnType<typeof setTimeout> | undefined;
+let closed = false;
 
 async function refresh() {
   if (closed || reading.value) return;
-  if (timer) clearTimeout(timer);
   reading.value = true;
   const before = new Set(
     tasks.value
@@ -146,10 +145,6 @@ async function refresh() {
   } finally {
     if (!closed) {
       reading.value = false;
-      if (active.value || pending.value)
-        timer = setTimeout(() => {
-          void refresh();
-        }, 3000);
     }
   }
 }
@@ -211,8 +206,8 @@ onMounted(() => {
 onUnmounted(() => {
   closed = true;
   controller.abort();
-  if (timer) clearTimeout(timer);
 });
+useLiveRefresh(api, ["tasks"], refresh);
 </script>
 
 <template>

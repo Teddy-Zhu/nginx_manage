@@ -5,18 +5,34 @@ import { NAlert, NButton, NTag, NSelect, useDialog } from "naive-ui";
 import { useSession } from "../stores/session";
 import { useAction } from "../composables/action";
 import { useNodes } from "../stores/node";
+import { liveDisconnected } from "../api/live";
 import { currentOperation, operationVisible } from "../stores/operation";
 
 const route = useRoute(),
   router = useRouter(),
   session = useSession();
 const { run, busy } = useAction();
-const nodes = useNodes(), dialog = useDialog();
-const canManageNodes = computed(() => ["read", "nodes.manage"].every((scope) => session.localMe?.scopes.includes(scope)));
-const currentNode = computed(() => route.meta.localOnly || !nodes.selected ? "本机" : nodes.selected.name);
+const nodes = useNodes(),
+  dialog = useDialog();
+const canManageNodes = computed(() =>
+  ["read", "nodes.manage"].every((scope) =>
+    session.localMe?.scopes.includes(scope),
+  ),
+);
+const currentNode = computed(() =>
+  route.meta.localOnly || !nodes.selected ? "本机" : nodes.selected.name,
+);
 const nodeOptions = computed(() => [
   { label: "本机", value: "" },
-  ...nodes.connections.filter((node) => !node.removed_at || node.id === nodes.selected?.connection).map((node) => ({ label: node.name, value: node.id, disabled: !!node.removed_at || node.state === "removing" })),
+  ...nodes.connections
+    .filter(
+      (node) => !node.removed_at || node.id === nodes.selected?.connection,
+    )
+    .map((node) => ({
+      label: node.name,
+      value: node.id,
+      disabled: !!node.removed_at || node.state === "removing",
+    })),
 ]);
 const title = computed(() => route.meta.title ?? "NginxPanel");
 const links = computed(() =>
@@ -24,7 +40,11 @@ const links = computed(() =>
     .getRoutes()
     .filter((item) => item.meta.nav)
     .sort((a, b) => (a.meta.order ?? 0) - (b.meta.order ?? 0))
-    .map(({ path, meta }) => ({ path, meta, active: route.path === path || route.meta.parent === path })),
+    .map(({ path, meta }) => ({
+      path,
+      meta,
+      active: route.path === path || route.meta.parent === path,
+    })),
 );
 const groups = computed(() => {
   const result = new Map<string, typeof links.value>();
@@ -76,15 +96,15 @@ onUnmounted(() => {
       <nav class="nav-list" aria-label="主导航">
         <div v-for="group in groups" :key="group.name" class="nav-group">
           <div class="sidebar-label">{{ group.name }}</div>
-        <router-link
-          v-for="link in group.items"
-          :key="link.path"
-          :to="link.path"
-          class="nav-link"
-          :class="{ active: link.active }"
-          ><span class="nav-symbol">{{ link.meta.symbol }}</span
-          >{{ link.meta.title }}</router-link
-        >
+          <router-link
+            v-for="link in group.items"
+            :key="link.path"
+            :to="link.path"
+            class="nav-link"
+            :class="{ active: link.active }"
+            ><span class="nav-symbol">{{ link.meta.symbol }}</span
+            >{{ link.meta.title }}</router-link
+          >
         </div>
       </nav>
       <div class="sidebar-bottom">
@@ -95,11 +115,31 @@ onUnmounted(() => {
       <header class="topbar">
         <span class="breadcrumb">控制台 <span>/</span> {{ title }}</span>
         <div class="topbar-right">
-          <NButton v-if="currentOperation" size="small" @click="operationVisible = true">操作进度</NButton>
-          <template v-if="canManageNodes && (nodes.connections.length || nodes.selected)">
-            <n-select aria-label="当前服务器" class="node-select" :value="route.meta.localOnly ? '' : nodes.selected?.connection ?? ''" :options="nodeOptions" :disabled="!!route.meta.localOnly || nodes.switching || busy" @update:value="selectNode" />
+          <NButton
+            v-if="currentOperation"
+            size="small"
+            @click="operationVisible = true"
+            >操作进度</NButton
+          >
+          <template
+            v-if="
+              canManageNodes && (nodes.connections.length || nodes.selected)
+            "
+          >
+            <n-select
+              aria-label="当前服务器"
+              class="node-select"
+              :value="
+                route.meta.localOnly ? '' : (nodes.selected?.connection ?? '')
+              "
+              :options="nodeOptions"
+              :disabled="!!route.meta.localOnly || nodes.switching || busy"
+              @update:value="selectNode"
+            />
           </template>
-          <n-tag size="small" :bordered="false">{{ route.meta.localOnly ? "本机" : currentNode }}</n-tag
+          <n-tag size="small" :bordered="false">{{
+            route.meta.localOnly ? "本机" : currentNode
+          }}</n-tag
           ><span class="username">{{ session.me?.username }}</span
           ><n-button text @click="logout">退出</n-button>
         </div>
@@ -112,15 +152,32 @@ onUnmounted(() => {
           </div>
           <div id="page-heading-actions" />
         </div>
-        <n-alert v-if="nodes.error && !route.meta.localOnly" type="error" style="margin-bottom: 16px">
+        <n-alert
+          v-if="nodes.error && !route.meta.localOnly"
+          type="error"
+          style="margin-bottom: 16px"
+        >
           {{ nodes.error }}
-          <n-button v-if="nodes.selected" size="small" :disabled="busy || nodes.switching" @click="selectNode(nodes.selected.connection)">重新检查连接</n-button>
+          <n-button
+            v-if="nodes.selected"
+            size="small"
+            :disabled="busy || nodes.switching"
+            @click="selectNode(nodes.selected.connection)"
+            >重新检查连接</n-button
+          >
         </n-alert>
+        <NAlert v-if="liveDisconnected" type="warning" class="live-warning"
+          >实时连接已断开，正在重新连接。您可以手动刷新查看最新状态。</NAlert
+        >
         <slot />
       </main>
-      <footer class="footer">
-        NginxPanel
-      </footer>
+      <footer class="footer">NginxPanel</footer>
     </div>
   </div>
 </template>
+
+<style scoped>
+.live-warning {
+  margin-bottom: 20px;
+}
+</style>

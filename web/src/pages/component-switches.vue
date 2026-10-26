@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import {
@@ -164,7 +165,6 @@ function canControl(t: NginxSwitchTask) {
   );
 }
 let controller: AbortController | null = null,
-  timer: ReturnType<typeof setInterval> | undefined,
   reading = false,
   closed = false;
 async function load() {
@@ -237,19 +237,14 @@ async function control(t: NginxSwitchTask, command: "resume" | "rollback") {
   }, "原切换控制请求已受理");
   await load();
 }
-onMounted(async () => {
-  await load();
-  if (!closed)
-    timer = setInterval(() => {
-      clock.value = Date.now();
-      if (active.value || maintenance.value?.phase !== "open") void load();
-    }, 3000);
-});
+let clockTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => { void load(); clockTimer = setInterval(() => { clock.value = Date.now(); }, 1000); });
 onUnmounted(() => {
   closed = true;
+  if (clockTimer) clearInterval(clockTimer);
   controller?.abort();
-  if (timer) clearInterval(timer);
 });
+useLiveRefresh(api, ["tasks", "maintenance"], load);
 </script>
 <template>
   <div class="page-stack">

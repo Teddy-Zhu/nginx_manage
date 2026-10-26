@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
@@ -155,7 +156,6 @@ const protections: DataTableColumns<FirewallPlan["protections"][number]> = [
   },
 ];
 let timer: ReturnType<typeof setInterval> | undefined,
-  ticks = 0,
   closed = false,
   reading = false;
 function updateDeadline() {
@@ -364,17 +364,14 @@ async function decide(action: "confirm" | "rollback") {
 }
 onMounted(() => {
   void load();
-  timer = setInterval(() => {
-    updateDeadline();
-    if (++ticks % (active.value || uncertain.value || preparing.value ? 3 : 30) === 0)
-      void readRuntime();
-  }, 1000);
+  timer = setInterval(updateDeadline, 1000);
 });
 onUnmounted(() => {
   closed = true;
   controller.abort();
   if (timer) clearInterval(timer);
 });
+useLiveRefresh(api, ["firewall"], readRuntime);
 </script>
 <template>
   <div class="page-toolbar">

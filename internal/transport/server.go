@@ -30,6 +30,7 @@ import (
 	"nginxpanel/internal/nodes"
 	"nginxpanel/internal/notifications"
 	"nginxpanel/internal/panelupdates"
+	"nginxpanel/internal/realtime"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
@@ -39,6 +40,8 @@ import (
 )
 
 type Server struct {
+	Realtime        *realtime.Hub
+	realtimeStreams atomic.Int32
 	FrontendVersion func() (string, []string, error)
 	History         *history.Service
 	Audit           *auditlog.Service
@@ -77,6 +80,9 @@ var _ apigen.ServerInterface = (*Server)(nil)
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if s.Realtime == nil {
+		s.Realtime = realtime.New(s.realtimeFingerprint)
+	}
 	apigen.HandlerWithOptions(s, apigen.StdHTTPServerOptions{BaseURL: "/api/v1", BaseRouter: mux, ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 		s.fail(w, r, fault.Invalid("请求参数缺失或无效"))
 	}})
@@ -87,7 +93,24 @@ func (s *Server) Handler() http.Handler {
 	// outer response boundary so a failed session commit cannot append success JSON.
 	s.Auth.Sessions.ErrorFunc = func(_ http.ResponseWriter, _ *http.Request, err error) { panic(sessionFailure{err}) }
 	s.remoteRoutes(mux)
-	return s.middleware(s.remoteBoundary(s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux)))))
+	sessionHandler := s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux)))
+	return s.middleware(s.remoteBoundary(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/events" {
+			// A long-lived socket must not re-save its loaded session after logout.
+			token := ""
+			if cookie, err := r.Cookie(s.Auth.Sessions.Cookie.Name); err == nil {
+				token = cookie.Value
+			}
+			ctx, err := s.Auth.Sessions.Load(r.Context(), token)
+			if err != nil {
+				s.fail(w, r, err)
+				return
+			}
+			s.realtime(w, r.WithContext(ctx))
+			return
+		}
+		sessionHandler.ServeHTTP(w, r)
+	})))
 }
 
 func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {

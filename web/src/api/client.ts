@@ -1,3 +1,4 @@
+import { subscribeLive, type LiveTopic } from "./live";
 import { sha256Hex } from "../utils/crypto";
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import type { components, operations } from "./schema";
@@ -494,6 +495,7 @@ function componentTaskTitle(data: ComponentCreateInput) {
 export function createAPI(scope: RequestScope) {
   const request = <T>(config: RequestConfig) => scopedRequest<T>(config, scope);
   return {
+  subscribe: (topics: LiveTopic[], changed: () => void) => subscribeLive(scope, topics, changed),
   request,
   downloadLogFile: (data: LogQuery) => downloadLogFileFor(data, scope),
   runtimeHistory: () => request<RuntimeHistoryStatus[]>({ url: "/history/runtime" }),
