@@ -2,13 +2,17 @@ import { sha256Hex } from "../utils/crypto";
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import type { components, operations } from "./schema";
 import { onScopeDispose } from "vue";
+import { acceptOperation, beginOperation, rejectOperation } from "../stores/operation";
 import { useRoute } from "vue-router";
 import { invalidateNodeScope, nodeGeneration, nodeRequestError, pageScope, scopeSignal, selectedTarget, sourceNodeId, type RequestScope } from "./context";
 
 type ResponseBody<T> = Omit<components["schemas"]["Response"], "data"> & {
   data: T;
 };
-type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
+type RequestConfig = Omit<AxiosRequestConfig, "signal"> & {
+  signal?: AbortSignal;
+  activity?: string | { title: string; requestOnly: true };
+};
 const FIREWALL_REQUEST_TIMEOUT = 85_000;
 export type GeoIPSource = components["schemas"]["GeoIPSource"];
 export type GeoIPState = components["schemas"]["GeoIPState"];
@@ -305,6 +309,20 @@ function endpoint(url: string, scope: RequestScope) {
 }
 export function request<T>(config: RequestConfig): Promise<T> { return scopedRequest<T>(config, controlScope); }
 async function scopedRequest<T>(config: RequestConfig, scope: RequestScope): Promise<T> {
+  assertScope(scope);
+  const { activity, ...options } = config;
+  const operation = activity ? beginOperation(typeof activity === "string" ? activity : activity.title, scope, typeof activity !== "string" && activity.requestOnly) : null;
+  try {
+    const data = await sendRequest<T>(options, scope);
+    if (operation !== null) acceptOperation(operation, data);
+    return data;
+  } catch (cause) {
+    const error = cause instanceof ApiError ? cause : apiError(cause);
+    if (operation !== null) rejectOperation(operation, error.message, error.status === 0 || error.status >= 500);
+    throw error;
+  }
+}
+async function sendRequest<T>(config: RequestConfig, scope: RequestScope): Promise<T> {
 	 scope = { ...scope, signal: scopeSignal(scope) };
   assertScope(scope);
   try {
@@ -469,7 +487,11 @@ function followLogsFor(
   return close;
 }
 
-function createAPI(scope: RequestScope) {
+function componentTaskTitle(data: ComponentCreateInput) {
+  return { check: "检查可用版本", prepare: "下载安装包", activate: "启用前端资源", pull: "下载运行镜像" }[data.input.action];
+}
+
+export function createAPI(scope: RequestScope) {
   const request = <T>(config: RequestConfig) => scopedRequest<T>(config, scope);
   return {
   request,
@@ -545,7 +567,7 @@ function createAPI(scope: RequestScope) {
       timeout: 45_000,
     }),
   startMigrationPush: (data: MigrationPushInput, key: string) =>
-    request<MigrationPushTask>({
+    request<MigrationPushTask>({ activity: "迁移到目标服务器",
       method: "POST",
       url: "/migrations/push",
       data,
@@ -564,7 +586,7 @@ function createAPI(scope: RequestScope) {
     data: MigrationPushResumeInput,
     key: string,
   ) =>
-    request<MigrationPushTask>({
+    request<MigrationPushTask>({ activity: "迁移到目标服务器",
       method: "POST",
       url: `/migrations/push/${encodeURIComponent(id)}/resume`,
       data,
@@ -603,22 +625,22 @@ function createAPI(scope: RequestScope) {
   discardComponentOfflineUpload: (id: string) =>
     request<ComponentOfflineUpload>({ url: `/components/offline/${encodeURIComponent(id)}`, method: "DELETE" }),
   pullComponentImage: (data: ComponentCreateInput, key: string) =>
-    request<ComponentTask>({ url: "/components/images/pull", method: "POST", data, headers: { "Idempotency-Key": key } }),
+    request<ComponentTask>({ activity: componentTaskTitle(data),  url: "/components/images/pull", method: "POST", data, headers: { "Idempotency-Key": key } }),
   activateFrontend: (data: ComponentCreateInput, key: string) =>
-    request<ComponentTask>({ url: "/components/frontend/activate", method: "POST", data, headers: { "Idempotency-Key": key } }),
+    request<ComponentTask>({ activity: componentTaskTitle(data),  url: "/components/frontend/activate", method: "POST", data, headers: { "Idempotency-Key": key } }),
   componentTasks: (signal?: AbortSignal) =>
     request<ComponentTask[]>({ url: "/components/tasks", signal }),
   panelImageUpgrades: (signal?: AbortSignal) =>
     request<ImageUpgradeTask[]>({ url: "/panel/images/upgrades", signal }),
   createPanelImageUpgrade: (data: PanelImageUpgradeCreateInput, key: string) =>
-    request<ImageUpgradeTask>({
+    request<ImageUpgradeTask>({ activity: "更新运行环境",
       url: "/panel/images/upgrades",
       method: "POST",
       data,
       headers: { "Idempotency-Key": key },
     }),
   resumePanelImageUpgrade: (id: string, key: string) =>
-    request<ImageUpgradeTask>({
+    request<ImageUpgradeTask>({ activity: "更新运行环境",
       url: `/panel/images/upgrades/${encodeURIComponent(id)}/resume`,
       method: "POST",
       headers: { "Idempotency-Key": key },
@@ -626,14 +648,14 @@ function createAPI(scope: RequestScope) {
   nginxImageUpgrades: (signal?: AbortSignal) =>
     request<ImageUpgradeTask[]>({ url: "/nginx/images/upgrades", signal }),
   createNginxImageUpgrade: (data: NginxImageUpgradeCreateInput, key: string) =>
-    request<ImageUpgradeTask>({
+    request<ImageUpgradeTask>({ activity: "更新运行环境",
       url: "/nginx/images/upgrades",
       method: "POST",
       data,
       headers: { "Idempotency-Key": key },
     }),
   resumeNginxImageUpgrade: (id: string, key: string) =>
-    request<ImageUpgradeTask>({
+    request<ImageUpgradeTask>({ activity: "更新运行环境",
       url: `/nginx/images/upgrades/${encodeURIComponent(id)}/resume`,
       method: "POST",
       headers: { "Idempotency-Key": key },
@@ -641,14 +663,14 @@ function createAPI(scope: RequestScope) {
   agentUpgrades: (signal?: AbortSignal) =>
     request<AgentUpgradeTask[]>({ url: "/agent/upgrades", signal }),
   createAgentUpgrade: (data: AgentUpgradeCreateInput, key: string) =>
-    request<AgentUpgradeTask>({
+    request<AgentUpgradeTask>({ activity: "更新系统管理服务",
       url: "/agent/upgrades",
       method: "POST",
       data,
       headers: { "Idempotency-Key": key },
     }),
   resumeAgentUpgrade: (id: string, key: string) =>
-    request<AgentUpgradeTask>({
+    request<AgentUpgradeTask>({ activity: "更新系统管理服务",
       url: `/agent/upgrades/${encodeURIComponent(id)}/resume`,
       method: "POST",
       headers: { "Idempotency-Key": key },
@@ -656,14 +678,14 @@ function createAPI(scope: RequestScope) {
   panelUpdates: (signal?: AbortSignal) =>
     request<PanelUpdateTask[]>({ url: "/panel/updates", signal }),
   createPanelUpdate: (data: PanelUpdateCreateInput, key: string) =>
-    request<PanelUpdateTask>({
+    request<PanelUpdateTask>({ activity: "更新管理面板",
       url: "/panel/updates",
       method: "POST",
       data,
       headers: { "Idempotency-Key": key },
     }),
   resumePanelUpdate: (id: string, key: string) =>
-    request<PanelUpdateTask>({
+    request<PanelUpdateTask>({ activity: "更新管理面板",
       url: `/panel/updates/${encodeURIComponent(id)}/resume`,
       method: "POST",
       headers: { "Idempotency-Key": key },
@@ -671,7 +693,7 @@ function createAPI(scope: RequestScope) {
   nginxInstallations: (signal?: AbortSignal) =>
     request<NginxInstallTask[]>({ url: "/components/installations", signal }),
   createNginxInstallation: (data: NginxInstallCreateInput, key: string) =>
-    request<NginxInstallTask>({
+    request<NginxInstallTask>({ activity: "安装 Nginx",
       url: "/components/installations",
       method: "POST",
       data,
@@ -682,7 +704,7 @@ function createAPI(scope: RequestScope) {
     command: "resume" | "cancel",
     key: string,
   ) =>
-    request<NginxInstallTask>({
+    request<NginxInstallTask>({ activity: "安装 Nginx",
       url: `/components/installations/${encodeURIComponent(id)}/${command}`,
       method: "POST",
       headers: { "Idempotency-Key": key },
@@ -690,7 +712,7 @@ function createAPI(scope: RequestScope) {
   nginxSwitches: (signal?: AbortSignal) =>
     request<NginxSwitchTask[]>({ url: "/components/switches", signal }),
   createNginxSwitch: (data: NginxSwitchCreateInput, key: string) =>
-    request<NginxSwitchTask>({
+    request<NginxSwitchTask>({ activity: "更新 Nginx",
       url: "/components/switches",
       method: "POST",
       data,
@@ -701,13 +723,13 @@ function createAPI(scope: RequestScope) {
     command: "resume" | "rollback",
     key: string,
   ) =>
-    request<NginxSwitchTask>({
+    request<NginxSwitchTask>({ activity: "更新 Nginx",
       url: `/components/switches/${encodeURIComponent(id)}/${command}`,
       method: "POST",
       headers: { "Idempotency-Key": key },
     }),
   createComponentTask: (data: ComponentCreateInput, key: string) =>
-    request<ComponentTask>({
+    request<ComponentTask>({ activity: componentTaskTitle(data),
       url: "/components/tasks",
       method: "POST",
       headers: { "Idempotency-Key": key },
@@ -761,9 +783,9 @@ function createAPI(scope: RequestScope) {
   fail2banPythonTasks: (signal?: AbortSignal) =>
     request<Fail2banPythonTaskStatus[]>({ url: "/fail2ban/python/tasks", signal }),
   changeFail2banPython: (data: Fail2banPythonTaskInput, key: string) =>
-    request<Fail2banPythonTask>({ url: "/fail2ban/python", method: "POST", data, headers: { "Idempotency-Key": key } }),
+    request<Fail2banPythonTask>({ activity: data.action === "plan" ? "检查 Fail2ban 运行依赖" : "安装 Fail2ban 运行依赖",  url: "/fail2ban/python", method: "POST", data, headers: { "Idempotency-Key": key } }),
   changeFail2banUpgrade: (data: Fail2banUpgradeInput, key: string) =>
-    request<Fail2banUpgradeTask>({ url: "/fail2ban/upgrade", method: "POST", data, headers: { "Idempotency-Key": key } }),
+    request<Fail2banUpgradeTask>({ activity: "更新 Fail2ban",  url: "/fail2ban/upgrade", method: "POST", data, headers: { "Idempotency-Key": key } }),
   fail2banUpgradeTasks: (signal?: AbortSignal) =>
     request<Fail2banUpgradeTaskStatus[]>({ url: "/fail2ban/upgrade/tasks", signal }),
   previewFail2banLifecycle: (data: Fail2banLifecyclePreviewInput, signal?: AbortSignal) =>
@@ -771,7 +793,7 @@ function createAPI(scope: RequestScope) {
   fail2banLifecycleTasks: (signal?: AbortSignal) =>
     request<Fail2banLifecycleTaskStatus[]>({ url: "/fail2ban/lifecycle/tasks", signal }),
   changeFail2banLifecycle: (data: Fail2banLifecycleInput, key: string) =>
-    request<Fail2banLifecycleTask>({ url: "/fail2ban/lifecycle", method: "POST", data, headers: { "Idempotency-Key": key } }),
+    request<Fail2banLifecycleTask>({ activity: ({ install: "安装 Fail2ban", resume: "继续安装 Fail2ban", rollback: "撤回 Fail2ban 安装", start: "启动 Fail2ban", stop: "停止 Fail2ban", enable: "开启 Fail2ban 开机启动", disable: "关闭 Fail2ban 开机启动" }[data.action] ?? "管理 Fail2ban 服务"),  url: "/fail2ban/lifecycle", method: "POST", data, headers: { "Idempotency-Key": key } }),
   fail2banAddress: (
     query: Pick<
       Fail2banAddressInput,
@@ -790,7 +812,7 @@ function createAPI(scope: RequestScope) {
       signal,
     }),
   changeFail2banAddress: (data: Fail2banAddressInput, key: string) =>
-    request<Fail2banAddressTask>({
+    request<Fail2banAddressTask>({ activity: "更新 Fail2ban IP 名单",
       url: "/fail2ban/addresses",
       method: "POST",
       data,
@@ -810,7 +832,7 @@ function createAPI(scope: RequestScope) {
       data: Fail2banExistingPolicyInput,
       key: string,
     ) =>
-      request<Fail2banExistingPolicyTask>({
+      request<Fail2banExistingPolicyTask>({ activity: "更新 Fail2ban 防护规则",
         url: "/fail2ban/existing/operations",
         method: "POST",
         data,
@@ -827,14 +849,14 @@ function createAPI(scope: RequestScope) {
         signal,
       }),
     cancelFail2banExistingPolicy: (id: string, key: string) =>
-      request<Fail2banExistingPolicyTask>({
+      request<Fail2banExistingPolicyTask>({ activity: "更新 Fail2ban 防护规则",
         url: `/fail2ban/existing/tasks/${encodeURIComponent(id)}/cancel`,
         method: "POST",
         headers: { "Idempotency-Key": key },
       }),
     fail2banRuntime: (signal?:AbortSignal) => request<Fail2banJailsRuntime>({url:"/fail2ban/runtime",signal}),
   fail2banTasks: (signal?:AbortSignal) => request<Fail2banApplyTaskStatus[]>({url:"/fail2ban/tasks",signal}),
-  applyFail2ban: (data:Fail2banApplyInput,key:string) => request<Fail2banApplyTask>({url:"/fail2ban/apply",method:"POST",data,headers:{"Idempotency-Key":key}}),
+  applyFail2ban: (data:Fail2banApplyInput,key:string) => request<Fail2banApplyTask>({ activity: "应用登录防护配置", url:"/fail2ban/apply",method:"POST",data,headers:{"Idempotency-Key":key}}),
   fail2banInstance: (signal?: AbortSignal) => request<Fail2banInstance>({ url: "/fail2ban/instance", signal }),
   fail2banJail: (name: string, signal?: AbortSignal) => request<Fail2banJail>({ url: `/fail2ban/jails/${encodeURIComponent(name)}`, signal, timeout: 30_000 }),
   fail2ban: (signal?: AbortSignal) =>
@@ -843,7 +865,7 @@ function createAPI(scope: RequestScope) {
     request<FirewallObservation>({ url: "/firewall", signal }),
   firewallGeoIP: (signal?: AbortSignal) => request<GeoIPState>({url:"/firewall/geoip",signal}),
   saveFirewallGeoIP: (data: GeoIPSourceInput,key:string) => request<GeoIPState>({url:"/firewall/geoip",method:"PUT",data,headers:{"Idempotency-Key":key}}),
-  updateFirewallGeoIP: (data: GeoIPUpdateInput,key:string) => request<GeoIPState>({url:"/firewall/geoip/update",method:"POST",data,headers:{"Idempotency-Key":key},timeout:125_000}),
+  updateFirewallGeoIP: (data: GeoIPUpdateInput,key:string) => request<GeoIPState>({ activity: { title: "更新 GeoIP 数据", requestOnly: true },url:"/firewall/geoip/update",method:"POST",data,headers:{"Idempotency-Key":key},timeout:125_000}),
   resolveFirewallGeoIP: (data:GeoIPResolveInput) => request<GeoIPResolved>({url:"/firewall/geoip/resolve",method:"POST",data,timeout:30_000}),
   firewallPolicy: (signal?: AbortSignal) =>
     request<FirewallPolicyView>({ url: "/firewall/policy", signal }),
@@ -859,7 +881,7 @@ function createAPI(scope: RequestScope) {
       headers: { "Idempotency-Key": key },
     }),
   applyHostDNS: (plan_id: string, key: string) =>
-    request<HostDNSChange>({
+    request<HostDNSChange>({ activity: "应用 DNS 配置",
       url: "/host/dns/apply",
       method: "POST",
       data: { plan_id },
@@ -986,7 +1008,7 @@ function createAPI(scope: RequestScope) {
       headers: { "Idempotency-Key": key },
     }),
   issueACMEProfile: (id: string, data: ACMEIssueInput, key: string) =>
-    request<ACMEChangeResult>({
+    request<ACMEChangeResult>({ activity: "申请网站证书",
       method: "POST",
       url: `/acme-profiles/${id}/issue`,
       data,
@@ -1015,7 +1037,7 @@ function createAPI(scope: RequestScope) {
       headers: { "Idempotency-Key": key },
     }),
   registerACMEAccount: (id: string, version: number, key: string) =>
-    request<ACMEChangeResult>({
+    request<ACMEChangeResult>({ activity: "注册证书账户",
       method: "POST",
       url: `/acme-accounts/${id}/register`,
       data: { base_version: version, terms_agreed: true },
@@ -1066,7 +1088,7 @@ function createAPI(scope: RequestScope) {
   preview: (data: SaveRequest) =>
     request<Tree>({ method: "POST", url: "/nginx/config-tree/preview", data }),
   save: (data: SaveRequest, key: string) =>
-    request<SaveResult>({
+    request<SaveResult>({ activity: data.apply ? "应用 Nginx 配置" : data.validate ? "校验 Nginx 配置" : undefined,
       method: "PUT",
       url: "/nginx/config-tree",
       data,
@@ -1134,7 +1156,7 @@ function createAPI(scope: RequestScope) {
       url: `/certificates/${encodeURIComponent(id)}/deploy-preview`,
     }),
   deployCertificate: (id: string, data: CertificateDeployInput, key: string) =>
-    request<CertificateDeployment>({
+    request<CertificateDeployment>({ activity: "部署网站证书",
       method: "POST",
       url: `/certificates/${encodeURIComponent(id)}/deploy`,
       data,
@@ -1169,7 +1191,7 @@ function createAPI(scope: RequestScope) {
       headers: { "Idempotency-Key": key },
     }),
   apply: (base_version: number, key: string) =>
-    request<SaveResult>({
+    request<SaveResult>({ activity: "应用 Nginx 配置",
       method: "POST",
       url: "/nginx/apply",
       data: { base_version },
@@ -1196,7 +1218,7 @@ function createAPI(scope: RequestScope) {
       headers: { "Idempotency-Key": key },
     }),
   restoreExternal: (data: RestoreExternalRequest, key: string) =>
-    request<SaveResult>({
+    request<SaveResult>({ activity: "恢复 Nginx 配置",
       method: "POST",
       url: "/nginx/external/restore",
       data,
@@ -1210,6 +1232,7 @@ function createAPI(scope: RequestScope) {
       headers: { "Idempotency-Key": key },
     }),
   tasks: () => request<Task[]>({ url: "/tasks" }),
+  task: (id: string, signal?: AbortSignal) => request<Task>({ url: `/tasks/${encodeURIComponent(id)}`, signal }),
   modules: (signal?: AbortSignal) =>
     request<Module[]>({ url: "/system/modules", signal }),
   setModule: (

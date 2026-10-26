@@ -14,6 +14,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
+import TaskLogButton from "../components/TaskLogButton.vue";
 import {
   NAlert,
   NButton,
@@ -309,6 +310,7 @@ onUnmounted(() => {
       <article v-for="t in tasks" :key="t.id" class="page-stack">
         <div class="toolbar">
           <h3>Nginx 安装</h3>
+          <TaskLogButton :task-id="t.id" title="Nginx 安装日志" />
           <NTag
             :type="
               t.state === 'succeeded'

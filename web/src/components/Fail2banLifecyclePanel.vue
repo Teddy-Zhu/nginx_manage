@@ -2,6 +2,7 @@
 import { randomUUID } from "../utils/crypto";
 
 import AdvancedDetails from "./AdvancedDetails.vue";
+import TaskLogButton from "./TaskLogButton.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { NAlert, NButton, NFormItem, NPopconfirm, NSelect } from "naive-ui";
@@ -83,6 +84,7 @@ const managedStates: Record<string, string> = {
   "rolling-back": "撤回中",
   "rolled-back": "已撤回",
 };
+const accepted = ref(new Set<string>());
 const activeStates = new Set([
   "queued",
   "running",
@@ -105,7 +107,7 @@ const error = ref(""),
   notice = ref("");
 const clock = ref(Date.now());
 const active = computed(() =>
-  tasks.value.some((task) => activeStates.has(task.state)),
+  accepted.value.size > 0 || tasks.value.some((task) => activeStates.has(task.state)),
 );
 function permitted(value: Action) {
   const scopes = session.me?.scopes ?? [];
@@ -235,6 +237,7 @@ async function loadAssets() {
       preparations.value = result;
       assetsError.value = "";
       clock.value = Date.now();
+      if (!assets.value.some((item) => item.value === selected.value)) selected.value = assets.value[0]?.value ?? "";
     }
   } catch (e) {
     if (!closed) assetsError.value = apiError(e).message;
@@ -259,12 +262,13 @@ async function refresh() {
     historyError.value = "";
     if (
       result.some(
-        (task) => before.has(task.id) && !activeStates.has(task.state),
+        (task) => (before.has(task.id) || accepted.value.has(task.id)) && !activeStates.has(task.state),
       )
     ) {
       plan.value = null;
       emit("changed");
     }
+    for (const task of result) accepted.value.delete(task.id);
   } catch (e) {
     if (!closed) {
       historyError.value = apiError(e).message;
@@ -332,11 +336,12 @@ async function submit() {
   busy.value = true;
   error.value = "";
   try {
-    await api.changeFail2banLifecycle(
+    const result = await api.changeFail2banLifecycle(
       pending.value.input,
       pending.value.key,
     );
     if (closed) return;
+    accepted.value.add(result.task_id);
     pending.value = null;
     plan.value = null;
     notice.value = "操作已提交，请查看执行进度。";
@@ -500,6 +505,7 @@ onUnmounted(() => {
         {{ states[task.state] || "状态未知" }} ·
         {{ new Date(task.created_at * 1000).toLocaleString() }}
       </p>
+        <TaskLogButton :task-id="task.id" />
       <AdvancedDetails title="任务详情"><p>{{ task.id }}</p></AdvancedDetails>
       <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
       <template v-if="task.result">

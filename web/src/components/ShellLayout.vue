@@ -5,6 +5,7 @@ import { NAlert, NButton, NTag, NSelect, useDialog } from "naive-ui";
 import { useSession } from "../stores/session";
 import { useAction } from "../composables/action";
 import { useNodes } from "../stores/node";
+import { currentOperation, operationVisible } from "../stores/operation";
 
 const route = useRoute(),
   router = useRouter(),
@@ -94,6 +95,7 @@ onUnmounted(() => {
       <header class="topbar">
         <span class="breadcrumb">控制台 <span>/</span> {{ title }}</span>
         <div class="topbar-right">
+          <NButton v-if="currentOperation" size="small" @click="operationVisible = true">操作进度</NButton>
           <template v-if="canManageNodes && (nodes.connections.length || nodes.selected)">
             <n-select aria-label="当前服务器" class="node-select" :value="route.meta.localOnly ? '' : nodes.selected?.connection ?? ''" :options="nodeOptions" :disabled="!!route.meta.localOnly || nodes.switching || busy" @update:value="selectNode" />
           </template>

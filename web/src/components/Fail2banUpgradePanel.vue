@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { randomUUID } from "../utils/crypto";
+import TaskLogButton from "./TaskLogButton.vue";
 
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -31,11 +32,12 @@ const reading = ref(false),
   busy = ref(false);
 const pending = ref<{ input: Fail2banUpgradeInput; key: string } | null>(null);
 const clock = ref(Date.now());
+const accepted = ref(new Set<string>());
 const activeStates = new Set([
   "queued", "running", "compensating", "recovery_required",
 ]);
 const active = computed(() =>
-  tasks.value.some((task) => activeStates.has(task.state)),
+  accepted.value.size > 0 || tasks.value.some((task) => activeStates.has(task.state)),
 );
 const permitted = computed(() =>
   session.me?.scopes.includes("components.manage") &&
@@ -157,8 +159,9 @@ async function refresh() {
     tasks.value = result;
     loaded.value = true;
     historyError.value = "";
-    if (result.some((task) => before.has(task.id) && !activeStates.has(task.state)))
+    if (result.some((task) => (before.has(task.id) || accepted.value.has(task.id)) && !activeStates.has(task.state)))
       emit("changed");
+    for (const task of result) accepted.value.delete(task.id);
   } catch (e) {
     if (!closed) {
       historyError.value = apiError(e).message;
@@ -184,9 +187,10 @@ async function submit(input?: Fail2banUpgradeInput) {
   try {
     const result = await api.changeFail2banUpgrade(pending.value.input, pending.value.key);
     if (closed) return;
+    accepted.value.add(result.task_id);
     pending.value = null;
     loaded.value = false;
-    notice.value = `任务已创建：${result.task_id}`;
+    notice.value = "操作已提交，请查看执行进度。";
     await refresh();
   } catch (e) {
     if (!closed) {
@@ -292,6 +296,7 @@ onUnmounted(() => {
     <p v-if="loaded && !tasks.length">暂无升级操作记录。</p>
     <article v-for="task in tasks" :key="task.id" class="surface page-stack">
       <p>{{ actions[task.input.action] }} · {{ states[task.state] || '状态未知' }} · {{ new Date(task.created_at * 1000).toLocaleString() }}</p>
+        <TaskLogButton :task-id="task.id" />
       <p>任务 {{ task.id }}</p>
       <p v-if="stages[task.stage]">{{ stages[task.stage] }}</p>
       <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>

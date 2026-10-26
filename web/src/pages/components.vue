@@ -16,6 +16,7 @@ import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
+import TaskLogButton from "../components/TaskLogButton.vue";
 import Fail2banPythonPanel from "../components/Fail2banPythonPanel.vue";
 import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
 import Fail2banExistingPanel from "../components/Fail2banExistingPanel.vue";
@@ -58,6 +59,7 @@ async function loadFail2ban() {
   if (result[0].status === "fulfilled") { fail2ban.value = result[0].value; fail2banError.value = ""; }
   else { fail2ban.value = null; fail2banError.value = apiError(result[0].reason).message; }
   if (result[1].status === "fulfilled") moduleEnabled.value = result[1].value.some((item) => item.id === "fail2ban" && item.enabled);
+  else fail2banError.value = apiError(result[1].reason).message;
   if (software === "fail2ban" && fail2ban.value?.binding.state === "bound") {
     try { instance.value = await api.fail2banInstance(); }
     catch (cause) { fail2banError.value = apiError(cause).message; }
@@ -116,6 +118,7 @@ const stateLabels: Record<string, string> = {
   failed: "失败",
   recovery_required: "待本机恢复",
 };
+const accepted = ref(new Set<string>());
 function chooseComponents(value: Array<"nginx" | "fail2ban" | "panel" | "web">) {
   const added = value.find((item) => (item === "panel" || item === "web") && !components.value.includes(item));
   components.value = added ? [added] : value.filter((item) => item !== "panel" && item !== "web");
@@ -145,7 +148,8 @@ async function load() {
       api.componentTasks(controller.signal),
     ]);
     overview.value = source;
-    tasks.value = items;
+    tasks.value = [...tasks.value.filter((task) => accepted.value.has(task.id) && !items.some((item) => item.id === task.id)), ...items];
+    for (const task of items) accepted.value.delete(task.id);
     error.value = "";
     if (!checks.value.some((t) => t.id === checkID.value))
       checkID.value = checks.value[0]?.id ?? "";
@@ -158,6 +162,7 @@ async function load() {
 async function submit(input: ComponentCreateInput) {
   await run(async () => {
     const task = await (input.input.action === "activate" ? api.activateFrontend(input, keyFor(input)) : input.input.action === "pull" ? api.pullComponentImage(input, keyFor(input)) : api.createComponentTask(input, keyFor(input)));
+    accepted.value.add(task.id);
     tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
     keyFor = useIdempotency();
   }, "组件任务已排队");
@@ -246,7 +251,7 @@ onUnmounted(() => {
   <div class="page-stack">
     <div class="toolbar"><h2>已安装与可选软件</h2><NButton :loading="busy" @click="() => { load(); loadFail2ban(); }">刷新</NButton></div>
     <NAlert v-if="error" type="error">软件状态读取失败：{{ error }}</NAlert>
-    <div class="software-grid">
+    <div v-if="!software" class="software-grid">
       <section class="panel software-card">
         <div class="toolbar"><h3>Nginx</h3><NTag :type="nginxStatus === 'installed' ? 'success' : 'default'">{{ stateNames[nginxStatus] }}</NTag></div>
         <p class="muted">网站和反向代理服务，支持 HTTPS、访问控制与基础防护。</p>
@@ -271,6 +276,7 @@ onUnmounted(() => {
     <template v-if="software">
       <section class="panel page-stack">
         <div class="toolbar"><h2>{{ software === 'nginx' ? '安装 Nginx' : '安装与管理 Fail2ban' }}</h2><RouterLink to="/components">返回软件列表</RouterLink></div>
+        <NAlert v-if="software === 'fail2ban' && fail2banError" type="error">{{ fail2banError }}</NAlert>
         <template v-if="software === 'fail2ban' && !moduleEnabled">
           <p>开启登录防护功能后即可安装或连接软件。</p><NButton type="primary" :loading="busy" @click="enableFail2ban">开启登录防护</NButton>
         </template>
@@ -287,9 +293,9 @@ onUnmounted(() => {
           <RouterLink v-if="software === 'nginx' && prepared" :to="{ path: '/component-installations', query: { prepare: prepared.id } }"><NButton type="primary">开始安装</NButton></RouterLink>
           <RouterLink v-if="software === 'nginx'" to="/component-installations">查看安装进度与历史记录</RouterLink>
         </template>
-        <div v-for="task in tasks.filter((item) => ['queued', 'running', 'failed', 'recovery_required'].includes(item.state)).slice(0, 5)" :key="task.id" class="component-row">
-          <span>{{ task.action === 'check' ? '检查版本' : task.action === 'prepare' ? '下载安装包' : '更新软件' }}</span><NTag :type="task.state === 'failed' ? 'error' : 'info'">{{ taskLabel(task) }}</NTag>
-          <AdvancedDetails v-if="task.error" title="任务详情"><p>{{ task.error }}</p></AdvancedDetails>
+        <div v-for="task in tasks.slice(0, 5)" :key="task.id" class="surface page-stack">
+          <div class="toolbar"><span>{{ task.action === 'check' ? '检查版本' : task.action === 'prepare' ? '下载安装包' : '更新软件' }}</span><NTag :type="task.state === 'failed' ? 'error' : task.state === 'succeeded' ? 'success' : 'info'">{{ taskLabel(task) }}</NTag><TaskLogButton :task-id="task.id" /></div>
+          <NAlert v-if="task.error" type="error">{{ task.error }}</NAlert>
         </div>
       </section>
       <template v-if="software === 'fail2ban' && moduleEnabled">

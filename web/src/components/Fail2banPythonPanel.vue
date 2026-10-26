@@ -2,6 +2,7 @@
 import { randomUUID } from "../utils/crypto";
 
 import AdvancedDetails from "./AdvancedDetails.vue";
+import TaskLogButton from "./TaskLogButton.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -42,6 +43,7 @@ const reading = ref(false),
 const error = ref(""),
   historyError = ref(""),
   notice = ref("");
+const accepted = ref(new Set<string>());
 const activeStates = new Set([
   "queued",
   "running",
@@ -58,7 +60,7 @@ const states: Record<string, string> = {
   cancelled: "已取消",
 };
 const active = computed(() =>
-  tasks.value.some((task) => activeStates.has(task.state)),
+  accepted.value.size > 0 || tasks.value.some((task) => activeStates.has(task.state)),
 );
 const canManage = computed(
   () => session.me?.scopes.includes("components.manage") ?? false,
@@ -131,10 +133,11 @@ async function refresh() {
       selected.value = plans.value[0]?.value ?? "";
     if (
       result.some(
-        (task) => before.has(task.id) && !activeStates.has(task.state),
+        (task) => (before.has(task.id) || accepted.value.has(task.id)) && !activeStates.has(task.state),
       )
     )
       emit("changed");
+    for (const task of result) accepted.value.delete(task.id);
   } catch (cause) {
     if (!closed) {
       historyError.value = apiError(cause).message;
@@ -176,8 +179,9 @@ async function submit(input?: Fail2banPythonTaskInput) {
       pending.value.key,
     );
     if (closed) return;
+    accepted.value.add(result.task_id);
     pending.value = null;
-    notice.value = `任务已创建：${result.task_id}`;
+    notice.value = "操作已提交，请查看执行进度。";
     await refresh();
   } catch (cause) {
     if (!closed) {
@@ -329,6 +333,7 @@ onUnmounted(() => {
           {{ states[task.state] || task.state }} ·
           {{ new Date(task.created_at * 1000).toLocaleString() }}
         </p>
+        <TaskLogButton :task-id="task.id" />
         <p>{{ task.id }}</p>
         <p v-if="task.error || task.result?.error">
           {{ task.error || task.result?.error }}

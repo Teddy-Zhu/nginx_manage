@@ -12,7 +12,7 @@
 </route>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, onMounted, onUnmounted, h } from "vue";
 import {
   NButton,
   NDataTable,
@@ -25,6 +25,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import {
+  apiError,
   useNodeAPI,
   type Task,
   type AuditRow,
@@ -32,7 +33,8 @@ import {
   type AuditFilter,
 } from "../api/client";
 import { useAction } from "../composables/action";
-import { taskKinds, taskStates, taskStages } from "../utils/tasks";
+import TaskLogButton from "../components/TaskLogButton.vue";
+import { isTaskActive, taskKinds, taskStates, taskStageLabel } from "../utils/tasks";
 const api = useNodeAPI();
 const { request } = api;
 
@@ -41,6 +43,7 @@ const { run, busy } = useAction(),
 const audits = ref<AuditPage | null>(null),
   offset = ref(0),
   tab = ref("tasks");
+const tasksError = ref("");
 function localTime(value: number) {
   const date = new Date(value);
   return new Date(value - date.getTimezoneOffset() * 60_000)
@@ -82,17 +85,18 @@ function queryFilter(): AuditFilter {
   };
 }
 const taskColumns: DataTableColumns<Task> = [
+  { title: "日志", key: "logs", render: (task) => h(TaskLogButton, { taskId: task.id, title: taskKinds[task.kind] ?? "操作详情" }) },
   { title: "任务 ID", key: "id", render: (r) => r.id.slice(0, 8) },
-  { title: "类型", key: "kind", render: (r) => taskKinds[r.kind] ?? r.kind },
+  { title: "类型", key: "kind", render: (r) => taskKinds[r.kind] ?? "后台任务" },
   {
     title: "状态",
     key: "state",
-    render: (r) => taskStates[r.state] ?? r.state,
+    render: (r) => taskStates[r.state] ?? "状态待确认",
   },
   {
     title: "阶段",
     key: "stage",
-    render: (r) => taskStages[r.stage] ?? r.stage,
+    render: (r) => taskStageLabel(r.stage, r.kind, r.state),
   },
   { title: "错误", key: "last_error", render: (r) => r.last_error || "—" },
   {
@@ -137,10 +141,15 @@ const auditColumns: DataTableColumns<AuditRow> = [
 ];
 async function loadTasks() {
   await run(async () => {
-    tasks.value = await request<Task[]>({
-      url: "/tasks",
-      params: { offset: offset.value },
-    });
+    try {
+      tasks.value = await request<Task[]>({
+        url: "/tasks",
+        params: { offset: offset.value },
+      });
+      tasksError.value = "";
+    } catch (cause) {
+      tasksError.value = apiError(cause).message;
+    }
   });
 }
 async function searchAudit() {
@@ -191,19 +200,28 @@ async function exportAudit() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 }
-onMounted(loadTasks);
+let timer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  void loadTasks();
+  timer = setInterval(() => {
+    if (tab.value === "tasks" && tasks.value.some((task) => isTaskActive(task.state))) void loadTasks();
+  }, 3000);
+});
+onUnmounted(() => { if (timer) clearInterval(timer); });
 </script>
 <template>
   <div class="toolbar">
     <span class="muted">每页最多 30 条记录</span
     ><n-button :loading="busy" @click="load">刷新</n-button>
   </div>
+  <NAlert v-if="tab === 'tasks' && tasksError" type="error">{{ tasksError }}</NAlert>
   <section class="surface">
     <n-tabs type="line" :value="tab" @update:value="changeTab"
       ><n-tab-pane name="tasks" tab="执行任务"
         ><n-data-table
           :columns="taskColumns"
           :data="tasks"
+          :loading="busy"
           :bordered="false"
           :scroll-x="900" /></n-tab-pane
       ><n-tab-pane name="audit" tab="操作审计">

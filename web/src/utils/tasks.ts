@@ -1,6 +1,17 @@
 export const taskKinds: Record<string, string> = {
   "component.install": "安装 Nginx",
   "component.switch": "更新 Nginx",
+  "component.check": "检查软件版本",
+  "component.prepare": "下载安装包",
+  "component.activate": "启用前端资源",
+  "component.pull": "下载运行镜像",
+  "maintenance.enter": "维护操作",
+  "fail2ban.lifecycle": "管理 Fail2ban 服务",
+  "fail2ban.python": "安装 Fail2ban 运行依赖",
+  "fail2ban.upgrade": "更新 Fail2ban",
+  "fail2ban.apply": "应用登录防护配置",
+  "fail2ban.address": "更新登录防护 IP 名单",
+  "fail2ban.existing": "更新登录防护规则",
   "nginx.validate": "配置校验",
   "nginx.apply": "配置应用",
   "nginx.restore": "恢复配置",
@@ -11,6 +22,7 @@ export const taskStates: Record<string, string> = {
   queued: "排队中",
   running: "执行中",
   compensating: "回滚中",
+  waiting_confirmation: "等待确认",
   succeeded: "已完成",
   failed: "失败",
   rolled_back: "已回滚",
@@ -19,6 +31,39 @@ export const taskStates: Record<string, string> = {
 };
 export const taskStages: Record<string, string> = {
   queued: "等待执行",
+  draining: "等待当前任务结束",
+  root_acquiring: "准备维护环境",
+  held: "等待操作确认",
+  releasing: "结束维护",
+  released: "维护已结束",
+  checking: "检查安装来源与软件包",
+  checked: "可用版本检查完成",
+  failed: "执行失败",
+  interrupted: "执行已中断",
+  executing: "执行操作",
+  observing: "确认执行结果",
+  lifecycle_confirmed: "操作已完成",
+  state_confirmed_receipt_unknown: "服务状态已确认",
+  python_confirmed: "运行依赖安装完成",
+  python_confirmed_receipt_unknown: "运行依赖已就绪",
+  plan_ready: "安装方案已准备",
+  plan_ready_receipt_unknown: "安装方案已准备",
+  invalid_intent: "安装参数不正确",
+  authorization_expired: "操作确认已过期",
+  preflight_failed: "安装前检查未通过",
+  preflight_rejected: "安装条件不满足",
+  target_changed: "服务状态发生变化，请重新确认",
+  execution_unconfirmed: "正在核对执行结果",
+  state_unconfirmed: "正在核对服务状态",
+  service_pending: "等待服务就绪",
+  service_unconfirmed: "服务状态待确认",
+  agent_unconfirmed: "正在重新连接管理服务",
+  downloading: "下载安装包",
+  extracting: "解压安装包",
+  installing: "安装软件",
+  enabling: "设置开机启动",
+  starting: "启动服务",
+  confirming: "确认安装结果",
   account_reconciling: "核对 CA 账户",
   account_registering: "注册 CA 账户",
   account_ready: "账户已就绪",
@@ -90,3 +135,13 @@ export const taskStages: Record<string, string> = {
   restore_confirmed: "已确认受管恢复",
   restore_unconfirmed: "受管恢复待确认",
 };
+
+export function isTaskActive(state: string) {
+  return ["queued", "running", "compensating"].includes(state);
+}
+
+export function taskStageLabel(stage: string, kind: string, state: string) {
+  if (stage === "prepared" && kind.startsWith("component.")) return "安装包已准备";
+  if (stage === "executing" && kind === "fail2ban.python") return "处理运行依赖";
+  return taskStages[stage] ?? (state === "succeeded" ? "操作已完成" : state === "failed" ? "执行失败" : "正在处理");
+}
