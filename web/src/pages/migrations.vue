@@ -738,8 +738,7 @@ onUnmounted(() => {
         <NTag v-if="plan.pruned_at" type="warning">材料已清理</NTag>
       </div>
       <p>
-        源节点 {{ plan.source_node }} · {{ plan.source_version }} · 目标基础版本
-        {{ plan.base_version }}
+        源节点 {{ plan.source_node }} · {{ plan.source_version }}
       </p>
       <NAlert v-if="plan.pruned_at" type="info">
         迁移材料已于
@@ -847,7 +846,6 @@ onUnmounted(() => {
       <ul>
         <li v-for="item in plan.omissions" :key="item">{{ item }}</li>
       </ul>
-      <p v-if="plan.revision_id">配置修订：{{ plan.revision_id }}</p>
       <p v-if="plan.task_id">应用任务：{{ plan.task_id }}</p>
       <NPopconfirm v-if="plan.state === 'planned'" @positive-click="execute"
         ><template #trigger

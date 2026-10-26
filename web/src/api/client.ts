@@ -250,14 +250,6 @@ export type NotificationChange = components["schemas"]["NotificationChange"];
 export type NotificationHealth = components["schemas"]["NotificationHealth"];
 export type NotificationOverview =
   components["schemas"]["NotificationOverview"];
-export interface Revision {
-  id: string;
-  version: number;
-  state: string;
-  created_at: number;
-  pruned_at: number;
-}
-
 export class ApiError extends Error {
   constructor(
     public code: string,
@@ -1185,10 +1177,6 @@ function createAPI(scope: RequestScope) {
     }),
   nginxRuntime: (signal?: AbortSignal) =>
     request<NginxRuntime>({ url: "/nginx/runtime", signal }),
-  revisions: () =>
-    request<Revision[]>({ url: "/nginx/revisions", params: { limit: 100 } }),
-  revision: (id: string) =>
-    request<Tree>({ url: `/nginx/revisions/${encodeURIComponent(id)}` }),
   diff: (base_revision: string, files: ConfigFile[]) =>
     request<Difference>({
       method: "POST",

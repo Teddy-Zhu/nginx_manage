@@ -230,10 +230,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 </script>
 
 <template>
-  <div class="toolbar">
-    <span class="muted">{{
-      tree?.version ? `配置版本 #${tree.version}` : "尚未保存"
-    }}</span>
+  <div class="toolbar" style="justify-content: flex-end">
     <div class="inline-gap">
       <router-link :to="{ path: '/logs', query: { events: '1' } }"
         >防护事件</router-link

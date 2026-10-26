@@ -194,10 +194,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 </script>
 
 <template>
-  <div class="toolbar">
-    <span class="muted"
-      >配置版本 {{ tree?.version ? `#${tree.version}` : "尚未保存" }}</span
-    >
+  <div class="toolbar" style="justify-content: flex-end">
     <div class="inline-gap">
       <n-button :loading="busy" @click="load">刷新</n-button
       ><n-button type="primary" :disabled="busy" @click="open(null)"

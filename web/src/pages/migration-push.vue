@@ -429,10 +429,6 @@ onUnmounted(() => {
           <dd>{{ selected.target_url }}</dd>
           <dt>目标节点</dt>
           <dd>{{ selected.target_node || "待核对" }}</dd>
-          <template v-if="selected.target_bound"
-            ><dt>目标基础版本</dt>
-            <dd>{{ selected.target_base_version }}</dd></template
-          >
           <dt>授权截止</dt>
           <dd>{{ date(selected.expires_at) }}</dd>
         </dl>

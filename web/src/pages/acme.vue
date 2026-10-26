@@ -551,7 +551,7 @@ onUnmounted(() => {
           <div>
             <h2>{{ item.name }}</h2>
             <p class="muted">
-              {{ providerName(item.provider) }} · 版本 {{ item.version }}
+              {{ providerName(item.provider) }}
             </p>
           </div>
           <div class="inline-gap">

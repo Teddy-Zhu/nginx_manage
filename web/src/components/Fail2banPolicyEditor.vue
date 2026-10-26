@@ -218,7 +218,6 @@ onUnmounted(() => {
   <section class="panel page-stack">
     <div class="toolbar">
       <h3>防护规则</h3>
-      <span v-if="view" class="muted">版本 {{ view.version }}</span>
     </div>
     <NAlert type="info"
       >保存后点击检查并应用，使规则生效。已有软件的规则可在高级防护设置中管理。</NAlert

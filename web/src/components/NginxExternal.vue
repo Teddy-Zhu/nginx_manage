@@ -116,7 +116,7 @@ async function capture() {
     return;
   if (
     !window.confirm(
-      `将 ${report.detail.path} 的外部变更保存为独立草稿？当前期望及运行配置不会因此改变。`,
+      `将 ${report.detail.path} 的外部变更载入编辑区？检查并保存后才能应用。`,
     )
   )
     return;
@@ -130,7 +130,7 @@ async function capture() {
     emit("captured", result);
     show.value = false;
     snapshot.value = null;
-  }, "外部内容已保存为草稿，尚未应用");
+  }, "外部配置已载入编辑区，请检查后保存");
 }
 async function previewRestore() {
   const report = snapshot.value,
@@ -165,7 +165,7 @@ async function restore() {
     return;
   if (
     !window.confirm(
-      `发布已保存期望修订 #${review.version} 并重新加载 Nginx？原外部副本会保留；切换后若无法确认运行结果，将暂停后续配置操作。`,
+      "发布已保存的配置并重新加载 Nginx？原外部副本会保留；切换后若无法确认运行结果，将暂停后续配置操作。",
     )
   )
     return;
@@ -206,7 +206,7 @@ watch(show, (visible) => {
     </div>
     <n-alert type="info" :bordered="false" style="margin-bottom: 16px"
       >差异基于磁盘副本，不代表这些内容已经被 Nginx
-      加载。捕获只保存草稿；恢复会发布已保存期望修订并重新加载。损坏的证书或模块须选择有效的新版本并保存，或由本机管理员修复。</n-alert
+      加载。载入编辑区后需检查并保存；恢复会发布已保存的配置并重新加载。损坏的证书或模块须选择有效的新版本并保存，或由本机管理员修复。</n-alert
     >
     <template v-if="snapshot">
       <n-alert
@@ -282,16 +282,16 @@ watch(show, (visible) => {
           "
           :loading="busy"
           @click="capture"
-          >保存选中文件为草稿</n-button
+          >载入选中文件到编辑区</n-button
         ></template
       >
       <section v-if="!snapshot.integrity" class="restore-section">
         <h3>恢复受管配置</h3>
         <p class="muted">
-          恢复目标为已保存期望修订。请先查看它与最近生效修订的原文差异；原外部发布副本保留，恢复后若无法确认运行结果，将暂停后续配置操作。
+          将恢复为面板中已保存的配置。请先查看它与已生效配置的差异；原外部副本会保留，恢复后若无法确认运行结果，将暂停后续配置操作。
         </p>
         <n-alert v-if="!tree?.revision_id" type="warning" :bordered="false"
-          >请先保存有效的期望修订。</n-alert
+          >请先保存有效配置。</n-alert
         >
         <n-button
           :disabled="busy || !restorable"
@@ -300,15 +300,11 @@ watch(show, (visible) => {
           >预览恢复目标</n-button
         >
         <template v-if="reviewed && restoreReview">
-          <p>
-            目标：期望修订 #{{ restoreReview.version
-            }}<span class="muted mono"> · {{ restoreReview.revision }}</span>
-          </p>
           <n-alert
             v-if="restoreReview.difference.diagnostics.length"
             type="warning"
             :bordered="false"
-            >目标原文存在诊断，请整理并保存有效修订后再恢复。</n-alert
+            >配置存在错误，请修正并保存后再恢复。</n-alert
           >
           <n-select
             v-if="restoreOptions.length"
@@ -321,12 +317,12 @@ watch(show, (visible) => {
             v-if="restoreFile"
             :before="restoreFile.before_content"
             :after="restoreFile.after_content"
-            before-label="最近生效修订原文"
-            after-label="恢复目标原文"
+            before-label="已生效配置"
+            after-label="已保存配置"
           />
           <n-empty
             v-else
-            description="目标与最近生效修订原文一致；恢复将重新生成受管发布副本"
+            description="已保存配置与已生效配置内容一致，恢复将重新生成运行文件"
           />
           <n-button
             type="warning"

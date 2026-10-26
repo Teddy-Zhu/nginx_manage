@@ -90,16 +90,6 @@ const taskColumns: DataTableColumns<Task> = [
     render: (r) => taskStates[r.state] ?? r.state,
   },
   {
-    title: "目标修订",
-    key: "revision_id",
-    render: (r) => r.revision_id?.slice(0, 8) || "—",
-  },
-  {
-    title: "确认修订",
-    key: "observed_revision",
-    render: (r) => r.observed_revision?.slice(0, 8) || "—",
-  },
-  {
     title: "阶段",
     key: "stage",
     render: (r) => taskStages[r.stage] ?? r.stage,

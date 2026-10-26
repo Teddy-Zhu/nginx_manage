@@ -426,8 +426,7 @@ onUnmounted(() => {
   <section v-if="view" class="panel">
     <h3>当前规则状态</h3>
     <p v-if="stored?.version">
-      已保存版本 {{ stored.version }} ·
-      <template v-if="view.confirmed_action === 'apply'">已应用版本 {{ view.confirmed_version }}</template>
+      <template v-if="view.confirmed_action === 'apply'">{{ view.confirmed_version === stored.version ? '已生效' : '有修改待应用' }}</template>
       <template v-else-if="view.confirmed_action === 'remove'">规则已移除</template>
       <template v-else>尚未应用</template>
     </p>
@@ -523,8 +522,7 @@ onUnmounted(() => {
       </n-tag>
     </div>
     <p>
-      已核对 {{ preparation.completed_commands }} / {{ preparation.total_commands }} 步 ·
-      版本 {{ preparation.version }}
+      已核对 {{ preparation.completed_commands }} / {{ preparation.total_commands }} 步
     </p>
     <p v-if="preparing" class="muted">
       准备期间尚未应用规则。截止时间 {{ new Date(preparation.deadline * 1000).toLocaleString() }}
@@ -542,7 +540,6 @@ onUnmounted(() => {
   <section v-if="plan && !preparing && (!plan.preparation || plan.preparation.state === 'ready')" class="panel">
     <div class="page-toolbar">
       <h3>
-        版本 {{ plan.version }}
         {{ plan.action === "remove" ? "移除" : "应用" }}计划
       </h3>
       <n-tag type="info">{{ plan.action === "remove" ? "移除本系统规则" : `${plan.generated_rules} 条规则` }}</n-tag>
@@ -621,8 +618,7 @@ onUnmounted(() => {
       }}</n-tag>
     </div>
     <p>
-      {{ operation.action === "remove" ? "移除" : "应用" }} · 策略版本
-      {{ operation.version }} · 操作 {{ operation.id }}
+      {{ operation.action === "remove" ? "移除" : "应用" }} · 操作 {{ operation.id }}
     </p>
     <n-alert
       v-if="operation.error"

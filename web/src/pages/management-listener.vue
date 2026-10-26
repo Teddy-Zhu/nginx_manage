@@ -118,7 +118,7 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
       </section>
       <section v-if="view?.available" class="panel page-stack">
         <div class="toolbar"><h2>入口设置</h2><NButton :disabled="busy || pending" @click="resetForm">恢复已保存设置</NButton></div>
-        <NAlert v-if="version !== view.version && !pending" type="warning">监听版本已变化，请重新载入已确认配置。</NAlert>
+        <NAlert v-if="version !== view.version && !pending" type="warning">管理入口配置已变化，请重新载入已确认配置。</NAlert>
         <p>地址、来源或证书变更均需在 120 秒内确认。变更时已有远程连接会断开。</p>
         <NAlert type="info">端口和允许来源须与已确认的防火墙策略一致。冲突时请先调整并确认防火墙策略；云安全组和其他系统规则需另行核对。</NAlert>
         <NFormItem label="监听端口"><NInput v-model:value="listenPort" :disabled="busy || pending" placeholder="输入监听端口" :maxlength="5" /></NFormItem>

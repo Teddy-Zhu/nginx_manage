@@ -99,7 +99,6 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.passphr
           <p>{{ record.scheduled ? '定期备份' : '手动备份' }} · {{ date(record.created_at) }} · {{ record.archive_size ? bytes(record.archive_size) : '尚无归档' }} · 到期 {{ date(record.expires_at) }}</p>
           <p class="digest">{{ record.id }}<template v-if="record.archive_sha256"><br />SHA-256 {{ record.archive_sha256 }}</template></p>
           <NAlert v-if="record.error" type="warning">{{ record.error }}</NAlert>
-          <p v-if="record.database">数据库版本 {{ record.database.schema_version }} · 配置版本 {{ record.database.head_version }}</p>
           <div class="toolbar">
             <NButton v-if="record.available && canDownload" :disabled="busy" @click="download(record.id)">下载加密归档</NButton>
             <NPopconfirm v-if="canWrite && !record.deleted_at && (['succeeded', 'failed', 'cancelled', 'rolled_back'].includes(record.state) || record.stage === 'cleanup_failed')" @positive-click="erase(record.id)">

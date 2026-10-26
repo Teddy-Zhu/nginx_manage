@@ -31,14 +31,11 @@ import {
   NFormItem,
   NSelect,
   NSwitch,
-  NDataTable,
-  type DataTableColumns,
 } from "naive-ui";
 import {
   useNodeAPI,
   ApiError,
   type Tree,
-  type Revision,
   type ConfigFile,
   type Resource,
   type SaveResult,
@@ -53,7 +50,6 @@ import NginxExternal from "../components/NginxExternal.vue";
 import NginxModules from "../components/NginxModules.vue";
 import UpstreamMembers from "../components/UpstreamMembers.vue";
 const api = useNodeAPI();
-const { request } = api;
 
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency();
@@ -84,8 +80,7 @@ const tree = ref<Tree | null>(null),
   selected = ref(""),
   persisted = ref(""),
   draftNote = ref("");
-const diagnostics = ref<Tree["diagnostics"]>([]),
-  historyVisible = ref(false);
+const diagnostics = ref<Tree["diagnostics"]>([]);
 const changesVisible = ref(false),
   externalVisible = ref(false);
 const modulesVisible = ref(false);
@@ -496,22 +491,6 @@ const pathExample = computed(() => {
   return `${incoming} → ${uri ? uri + incoming.slice(prefix.length) : incoming}`;
 });
 
-const revisions = ref<Revision[]>([]);
-const revisionColumns: DataTableColumns<Revision> = [
-  { title: "修订", key: "version", render: (r) => `#${r.version}` },
-  {
-    title: "类型",
-    key: "state",
-    render: (r) =>
-      r.pruned_at ? "材料已清理" : r.state === "draft" ? "草稿" : "有效配置",
-  },
-  {
-    title: "保存时间",
-    key: "created_at",
-    render: (r) => new Date(r.created_at * 1000).toLocaleString(),
-  },
-];
-
 function setTree(value: Tree) {
   tree.value = value;
   files.value = structuredClone(value.files);
@@ -592,32 +571,26 @@ async function preview() {
     if (!result.diagnostics.length) message.success("配置解析与安全校验通过");
   });
 }
-async function save(draft = false, validate = false, apply = false) {
+async function save(validate = false, apply = false) {
   if (formDirty.value) return;
   const input = {
     base_version: tree.value?.version ?? 0,
     files: files.value,
-    draft,
+    draft: false,
     validate,
     apply,
   };
   await run(async () => {
     try {
       const result = await api.save(input, keyFor(input));
-      if (draft) {
-        draftNote.value = `草稿 #${result.tree.version} 已保存`;
-        diagnostics.value = result.tree.diagnostics;
-        persisted.value = sourceJSON.value;
-      } else {
-        setTree(result.tree);
-        message.success(
-          result.task_id
-            ? apply
-              ? "修订已保存并加入应用队列"
-              : "修订已保存并加入 Nginx 校验队列"
-            : "有效修订已保存",
-        );
-      }
+      setTree(result.tree);
+      message.success(
+        result.task_id
+          ? apply
+            ? "配置已保存并加入应用队列"
+            : "配置已保存并加入 Nginx 校验队列"
+          : "配置已保存，尚未应用",
+      );
     } catch (error) {
       if (error instanceof ApiError && error.code === "CONFIG_INVALID") {
         const data = error.data as SaveResult | null;
@@ -775,34 +748,11 @@ async function createResource() {
     createVisible.value = false;
   }, "代理配置已保存，尚未应用");
 }
-async function showHistory() {
-  await run(async () => {
-    revisions.value = await request<Revision[]>({
-      url: "/nginx/revisions",
-      params: { limit: 100 },
-    });
-    historyVisible.value = true;
-  });
-}
-async function loadRevision(row: Revision) {
-  if (row.pruned_at) return;
-  if (dirty.value && !window.confirm("有未保存修改，确认加载历史原文？"))
-    return;
-  await run(async () => {
-    const result = await request<Tree>({ url: `/nginx/revisions/${row.id}` });
-    files.value = structuredClone(result.files);
-    selected.value = files.value[0]?.id ?? "";
-    diagnostics.value = result.diagnostics;
-    draftNote.value = `基于历史修订 #${row.version} 编辑`;
-    resource.value = null;
-    historyVisible.value = false;
-  });
-}
 function capturedExternal(result: SaveResult) {
   files.value = structuredClone(result.tree.files);
   selected.value = files.value[0]?.id ?? "";
   diagnostics.value = result.tree.diagnostics;
-  draftNote.value = `外部草稿 #${result.tree.version} 已保存，尚未应用`;
+  draftNote.value = "外部配置已载入编辑区，请检查后保存";
   resource.value = null;
   fieldInputs.value = {};
   certificateRequest++;
@@ -826,10 +776,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 <template>
   <div class="toolbar">
     <div class="inline-gap">
-      <n-tag size="small" :bordered="false">{{
-        tree?.version ? `配置版本 #${tree.version}` : "尚未保存"
-      }}</n-tag
-      ><n-tag
+      <n-tag
         v-if="runtime?.external_change"
         size="small"
         type="error"
@@ -860,7 +807,6 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         <n-button :disabled="busy || dirty" @click="modulesVisible = true"
           >模块管理</n-button
         >
-        <n-button :disabled="busy" @click="showHistory">修改记录</n-button>
       </AdvancedDetails>
       <n-button :disabled="busy" @click="load">刷新</n-button
       ><n-button
@@ -963,15 +909,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         </div>
       </div>
       <div class="save-bar">
-        <span class="muted"
-          >{{ files.length }} 个文件 · 原文与字段共享修订</span
-        >
+        <span class="muted">{{ files.length }} 个配置文件</span>
         <div class="inline-gap">
           <n-button :loading="busy" :disabled="!!formDirty" @click="preview"
             >解析与预览</n-button
           ><n-button :disabled="busy || !!formDirty" @click="save(true)"
-            >保存草稿</n-button
-          ><n-button :disabled="busy || !!formDirty" @click="save(false, true)"
             >保存并校验</n-button
           ><n-button
             type="primary"
@@ -982,7 +924,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               !runtime.integrity ||
               !runtime.running
             "
-            @click="save(false, false, true)"
+            @click="save(false, true)"
             >保存并应用</n-button
           ><n-button
             type="primary"
@@ -1392,25 +1334,6 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       ><n-button block type="primary" attr-type="submit">添加</n-button></n-form
     ></n-modal
   >
-  <n-modal
-    v-model:show="historyVisible"
-    preset="card"
-    title="修订历史"
-    style="width: 720px; max-width: 94vw"
-    ><p class="muted">选择保留材料的修订加载原文，保存时会创建新修订。</p>
-    <n-data-table
-      :columns="revisionColumns"
-      :data="revisions"
-      :row-props="
-        (row: Revision) => ({
-          onClick: () => loadRevision(row),
-          style: row.pruned_at
-            ? 'cursor: default; opacity: .6'
-            : 'cursor: pointer',
-        })
-      "
-      :bordered="false"
-  /></n-modal>
 </template>
 
 <style scoped>

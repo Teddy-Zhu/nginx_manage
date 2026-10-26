@@ -146,7 +146,7 @@ onUnmounted(() => {
           >{{ pending ? "重试原提交" : "应用已保存配置" }}</NButton
         >
       </template>
-      应用此版本将更新本应用的受管 jail，并停用本次移除的 jail。确认继续？
+      应用配置将更新本系统的防护规则，并停用本次移除的规则。确认继续？
     </NPopconfirm>
     <p class="muted">
       jail 配置应用成功后，请核对 Nginx 拒绝状态或宿主机同步状态。

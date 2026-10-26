@@ -13,7 +13,6 @@ import {
   useNodeAPI,
   type ConfigFile,
   type Difference,
-  type Revision,
   type Tree,
 } from "../api/client";
 import { useAction } from "../composables/action";
@@ -26,32 +25,23 @@ const props = defineProps<{
   appliedRevision: string;
 }>();
 const { run, busy } = useAction();
-const revisions = ref<Revision[]>([]),
-  base = ref(""),
-  target = ref("editor"),
+const base = ref(""),
   difference = ref<Difference | null>(null),
   selected = ref("");
 const options = computed(() => {
-  const rows = revisions.value
-    .filter((row) => !row.pruned_at)
-    .map((row) => ({
-      label: `修订 #${row.version}${row.state === "draft" ? "（草稿）" : ""}`,
-      value: row.id,
-    }));
-  if (
-    props.tree?.revision_id &&
-    !rows.some((row) => row.value === props.tree!.revision_id)
-  )
-    rows.unshift({
-      label: `期望修订 #${props.tree.version}`,
-      value: props.tree.revision_id,
+  const rows = [
+    {
+      label: "已保存配置",
+      value: props.tree?.revision_id ?? "",
+    },
+  ];
+  if (props.appliedRevision && props.appliedRevision !== props.tree?.revision_id)
+    rows.push({
+      label: "已生效配置",
+      value: props.appliedRevision,
     });
-  return [{ label: "初始配置", value: "" }, ...rows];
+  return rows;
 });
-const targets = computed(() => [
-  { label: "当前编辑原文", value: "editor" },
-  ...options.value.filter((item) => item.value),
-]);
 const fileOptions = computed(
   () =>
     difference.value?.files.map((file) => ({
@@ -62,7 +52,7 @@ const fileOptions = computed(
 const file = computed(() =>
   difference.value?.files.find((item) => item.file_id === selected.value),
 );
-watch([base, target], () => {
+watch(base, () => {
   difference.value = null;
 });
 function status(value: string) {
@@ -80,11 +70,7 @@ function status(value: string) {
 async function compare() {
   difference.value = null;
   await run(async () => {
-    const files =
-      target.value === "editor"
-        ? props.files
-        : (await api.revision(target.value)).files;
-    difference.value = await api.diff(base.value, files);
+    difference.value = await api.diff(base.value, props.files);
     selected.value = difference.value.files[0]?.file_id ?? "";
   });
 }
@@ -93,11 +79,7 @@ watch(show, async (visible) => {
     difference.value = null;
     return;
   }
-  base.value = props.tree?.revision_id ?? "";
-  target.value = "editor";
-  await run(async () => {
-    revisions.value = await api.revisions();
-  });
+  base.value = props.appliedRevision || props.tree?.revision_id || "";
   await compare();
 });
 function resourceName(id: string) {
@@ -121,25 +103,9 @@ function resourceName(id: string) {
           v-model:value="base"
           :options="options"
           :disabled="busy" /></n-form-item
-      ><n-form-item label="比较目标"
-        ><n-select
-          v-model:value="target"
-          :options="targets"
-          :disabled="busy" /></n-form-item
       ><n-button type="primary" :loading="busy" @click="compare">比较</n-button>
     </div>
-    <n-button
-      v-if="appliedRevision"
-      size="small"
-      :disabled="busy"
-      style="margin-bottom: 16px"
-      @click="
-        base = appliedRevision;
-        target = 'editor';
-        compare();
-      "
-      >与最近生效修订比较</n-button
-    >
+    <p class="muted">与当前编辑的配置内容比较。</p>
     <template v-if="difference">
       <n-alert
         v-if="difference.diagnostics.length"
@@ -175,17 +141,19 @@ function resourceName(id: string) {
         <source-diff
           :before="file.before_content"
           :after="file.after_content"
-          before-label="基准原文"
-          after-label="目标原文"
+          :before-label="
+            options.find((option) => option.value === base)?.label || '原配置'
+          "
+          after-label="当前编辑内容"
       /></template>
-      <n-empty v-else description="两个配置树没有原文或路径差异" />
+      <n-empty v-else description="配置内容没有变化" />
     </template>
   </n-modal>
 </template>
 <style scoped>
 .comparison-selectors {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 16px;
 }

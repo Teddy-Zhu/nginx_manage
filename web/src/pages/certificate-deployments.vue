@@ -184,7 +184,7 @@ onUnmounted(() => {
         }}
       </p>
       <p class="muted">
-        绑定状态以最近确认的 Nginx 应用修订为准，包含停用站点的配置引用。
+        绑定状态以已确认生效的 Nginx 配置为准，包含停用站点的配置引用。
       </p>
       <n-alert
         v-if="certificate.versions[0]?.environment === 'staging'"
@@ -198,7 +198,7 @@ onUnmounted(() => {
     <section v-if="preview" class="surface notice">
       <h2>部署预览</h2>
       <p class="muted">
-        基础配置版本：{{ preview.base_version }} · 目标证书：{{
+        目标证书：{{
           preview.version_id
         }}
       </p>
@@ -208,7 +208,7 @@ onUnmounted(() => {
       <template v-else>
         <p>
           将替换 {{ preview.changes.length }} 处证书链或私钥引用，并应用新的
-          Nginx 修订。
+          Nginx 配置。
         </p>
         <div
           v-for="(change, index) in preview.changes"
@@ -245,10 +245,7 @@ onUnmounted(() => {
           >{{ binding.resource_id || "共享配置" }} · {{ binding.file_id }} ·
           {{ binding.purpose }}</span
         ><small class="muted"
-          >证书版本 {{ binding.version_id }} · 配置 v{{
-            binding.revision_version
-          }}
-          ·
+          >证书版本 {{ binding.version_id }} ·
           {{
             binding.revision_state === "desired_applied"
               ? "期望及已应用"

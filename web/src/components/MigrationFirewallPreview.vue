@@ -34,10 +34,7 @@ const actions: Record<string, string> = {
       源后端 {{ info.source_backend }} · 源规则 {{ info.source_rules }} 条<span
         v-if="info.mode !== 'preserve'"
       >
-        · 目标后端 {{ info.target_backend }} · 基础版本 {{ info.base_version
-        }}<span v-if="info.saved_version">
-          · 保存版本 {{ info.saved_version }}</span
-        ></span
+        · 目标后端 {{ info.target_backend }}</span
       >
     </p>
     <p v-if="info.mode !== 'preserve'">

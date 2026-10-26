@@ -31,11 +31,5 @@ const thresholds = computed(() => [
       {{ threshold.value.recover }}% 持续
       {{ threshold.value.recover_seconds }} 秒。
     </p>
-    <p v-if="info.mode === 'replace'">
-      目标基础版本 {{ info.base_version
-      }}<span v-if="info.saved_version"
-        >，导入版本 {{ info.saved_version }}</span
-      >。
-    </p>
   </div>
 </template>

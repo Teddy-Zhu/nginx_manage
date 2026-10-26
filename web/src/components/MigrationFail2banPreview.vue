@@ -18,11 +18,7 @@ const states: Record<string, string> = {
     </p>
     <p v-if="info.mode !== 'preserve'">
       保留 {{ info.preserved_jails }} 个，替换
-      {{ info.replaced_jails }} 个，目标共 {{ info.total_jails }} 个。基础版本
-      {{ info.base_version
-      }}<span v-if="info.saved_version"
-        >，保存版本 {{ info.saved_version }}</span
-      >。
+      {{ info.replaced_jails }} 个，目标共 {{ info.total_jails }} 个。
     </p>
     <NAlert v-for="warning in info.warnings" :key="warning" type="warning">{{
       warning

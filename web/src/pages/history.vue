@@ -55,7 +55,7 @@ const result = ref<HistoryResult | null>(null);
 const pending = ref<{ token: string; key: string } | null>(null);
 const total = computed(() => preview.value?.items.length ?? 0);
 const names: Record<string, string> = {
-  revision: "配置修订",
+  revision: "旧配置文件",
   certificate: "证书版本",
   order: "ACME 订单",
   migration: "迁移计划载荷",
@@ -75,9 +75,9 @@ const itemColumns: DataTableColumns<HistoryItem> = [
   { title: "标识", key: "id", ellipsis: { tooltip: true } },
   { title: "所属资源", key: "resource_id", ellipsis: { tooltip: true } },
   {
-    title: "版本",
+    title: "证书版本",
     key: "version",
-    render: (r) => (r.version ? `#${r.version}` : "—"),
+    render: (r) => (r.kind === "certificate" && r.version ? `#${r.version}` : "—"),
   },
   {
     title: "创建时间",
@@ -138,7 +138,7 @@ async function execute() {
       <div class="page-stack">
         <NAlert type="info" :bordered="false">
           仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。迁移材料仅在依赖、安装、维护与自动迁入均结束后可清理，计划摘要及原操作回执保留。
-          修订、任务及审计记录仍保留；已清理材料无法再加载。本操作不回收运行文件，也不保证数据库文件缩小。
+          操作及审计记录仍保留；已清理材料无法恢复。本操作不清理运行文件。
         </NAlert>
         <section class="surface">
           <div class="grid-2">
@@ -146,16 +146,6 @@ async function execute() {
               <input
                 v-model="filter.before"
                 type="datetime-local"
-                :disabled="busy || !!pending"
-              />
-            </NFormItem>
-            <NFormItem label="至少保留配置修订数">
-              <NInputNumber
-                v-model:value="filter.revision_keep"
-                :min="2"
-                :max="100"
-                :precision="0"
-                :clearable="false"
                 :disabled="busy || !!pending"
               />
             </NFormItem>

@@ -387,7 +387,6 @@ onUnmounted(() => {
       v-for="binding in activeBindings"
       :key="`${binding.revision_id}:${binding.resource_id}:${binding.file_id}:${binding.version_id}`"
     >
-      修订 #{{ binding.revision_version }} ·
       {{
         binding.revision_state === "desired"
           ? "待应用"
@@ -406,11 +405,6 @@ onUnmounted(() => {
         selected.versions.find((item) => item.id === binding.version_id)
           ?.ordinal ?? "—"
       }}
-    </p>
-    <p v-if="selected.historical_references" class="muted">
-      另有
-      {{ selected.historical_references }}
-      条历史修订引用，证书版本保留用于回滚。
     </p>
     <p v-if="selected.bindings_truncated" class="muted">
       引用较多，当前仅显示部分记录。
