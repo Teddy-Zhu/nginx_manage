@@ -37,7 +37,11 @@ func (s *Service) CreateResource(ctx context.Context, p auth.Principal, requestI
 	if in.Kind != "http" && in.Kind != "stream" {
 		return SaveResult{}, fault.Invalid("资源类型须为 http 或 stream")
 	}
-	for field, values := range map[string][]string{"listeners": in.Listen, "upstream": {in.Upstream}} {
+	fields := map[string][]string{"listeners": in.Listen}
+	if in.Kind == "http" || len(in.UpstreamServers) == 0 {
+		fields["upstream"] = []string{in.Upstream}
+	}
+	for field, values := range fields {
 		if err := validateField(field, values, in.Kind); err != nil {
 			return SaveResult{}, fault.Invalid(err.Error())
 		}

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ValueListInput from "./ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
 
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -7,7 +9,6 @@ import {
   NButton,
   NCheckbox,
   NFormItem,
-  NInput,
   NInputNumber,
   NPopconfirm,
   NSelect,
@@ -40,7 +41,7 @@ const enabled = ref(false),
   banTime = ref<number | null>(null),
   findTime = ref<number | null>(null),
   maxRetry = ref<number | null>(null),
-  ignoreIPs = ref(""),
+  ignoreIPs = ref<string[]>([]),
   confirmStop = ref(false);
 const error = ref(""),
   historyError = ref(""),
@@ -98,7 +99,7 @@ const policy = computed<Fail2banExistingPolicy | null>(() => {
     ban_time: banTime.value,
     find_time: findTime.value,
     max_retry: maxRetry.value,
-    ignore_ips: ignoreIPs.value.split(/\s+/).filter(Boolean).sort(),
+    ignore_ips: cleanList(ignoreIPs.value).sort(),
   };
 });
 const fingerprint = computed(() =>
@@ -176,7 +177,7 @@ function setPolicy(value: Fail2banExistingPolicy) {
   banTime.value = value.ban_time;
   findTime.value = value.find_time;
   maxRetry.value = value.max_retry;
-  ignoreIPs.value = value.ignore_ips.join("\n");
+  ignoreIPs.value = [...value.ignore_ips];
 }
 function copyPolicy(value: Fail2banExistingPolicy): Fail2banExistingPolicy {
   return { ...value, ignore_ips: [...value.ignore_ips] };
@@ -509,12 +510,8 @@ onUnmounted(() => {
               :disabled="editingDisabled"
           /></NFormItem>
         </div>
-        <NFormItem label="忽略的 IP/CIDR（每行一项）"
-          ><NInput
-            v-model:value="ignoreIPs"
-            type="textarea"
-            :disabled="editingDisabled"
-        /></NFormItem>
+        <NFormItem label="白名单 IP / 网段"
+          ><ValueListInput v-model:value="ignoreIPs" :max="64" item-label="白名单地址" placeholder="192.0.2.1 或 192.0.2.0/24" :maxlength="64" :disabled="editingDisabled" /></NFormItem>
         <div class="actions">
           <NButton
             :loading="busy"

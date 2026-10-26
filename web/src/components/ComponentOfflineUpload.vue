@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import ValueListInput from "./ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
 
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { NAlert, NButton, NCheckbox, NFormItem, NInput, NPopconfirm, NSelect } from "naive-ui";
+import { NAlert, NButton, NCheckbox, NFormItem, NPopconfirm, NSelect } from "naive-ui";
 import {
   apiError,
   useNodeAPI,
@@ -19,7 +21,7 @@ const api = useNodeAPI(), session = useSession(), controller = new AbortControll
 const manifest = ref<File | null>(null), signature = ref<File | null>(null);
 const archives = ref<File[]>([]), uploads = ref<ComponentOfflineUpload[]>([]);
 const selected = ref(""), component = ref<"nginx" | "fail2ban" | "panel" | "web">(props.initialComponent ?? "nginx");
-const selection = ref("components"), assetIDs = ref("");
+const selection = ref("components"), assetIDs = ref<string[]>([]);
 const prerelease = ref(false), busy = ref(false), reading = ref(false), uploading = ref(false);
 const error = ref(""), notice = ref(""), paused = ref(false), clock = ref(Date.now());
 const pendingStart = ref<{ input: ComponentOfflineInput; key: string } | null>(null);
@@ -92,7 +94,7 @@ async function start() {
         manifest: await base64(manifest.value),
         signature: await base64(signature.value),
         components: selection.value === "components" ? [component.value] : [],
-        assets: selection.value === "assets" ? assetIDs.value.split(/[\s,]+/).filter(Boolean) : [],
+        assets: selection.value === "assets" ? cleanList(assetIDs.value) : [],
         prerelease: prerelease.value,
       };
       if (closed) return;
@@ -213,7 +215,7 @@ onUnmounted(() => { closed = true; paused.value = true; controller.abort(); });
       ]" :disabled="busy || !!pendingStart" />
     </NFormItem>
     <NFormItem v-else label="资产 ID">
-      <NInput v-model:value="assetIDs" :disabled="busy || !!pendingStart" maxlength="512" placeholder="最多两个资产 ID，以逗号分隔" />
+      <ValueListInput v-model:value="assetIDs" item-label="资产 ID" placeholder="资产 ID" :max="2" :maxlength="256" :disabled="busy || !!pendingStart" />
     </NFormItem>
     <NFormItem label="发布清单">
       <input type="file" accept=".json" :disabled="busy || !!pendingStart" @change="file($event, 'manifest')" />

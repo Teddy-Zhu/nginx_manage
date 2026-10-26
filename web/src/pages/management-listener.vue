@@ -12,9 +12,11 @@
 }
 </route>
 <script setup lang="ts">
+import ValueListInput from "../components/ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
-import { NAlert, NButton, NCheckbox, NFormItem, NInput, NPopconfirm, NTag } from "naive-ui";
+import { NAlert, NButton, NCheckbox, NFormItem, NInput, NInputNumber, NPopconfirm, NTag } from "naive-ui";
 import { apiError, useNodeAPI, type ManagementListenerInput, type ManagementListenerView } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
@@ -24,11 +26,15 @@ const api = useNodeAPI(), session = useSession(), { run, busy } = useAction();
 const view = ref<ManagementListenerView | null>(null), error = ref(""), uncertain = ref(false), publicURL = ref(""), version = ref(-1);
 const canManage = computed(() => ["read", "system.write"].every((scope) => session.localMe?.scopes.includes(scope)));
 const recommendedListen = `0.0.0.0:${49152 + crypto.getRandomValues(new Uint16Array(1))[0]! % 16384}`;
-const form = reactive({ listen: recommendedListen, sources: "0.0.0.0/0\n::/0", certificate: "", key: "", rotate: false });
+const form = reactive({ listen: recommendedListen, sources: ["0.0.0.0/0", "::/0"], certificate: "", key: "", rotate: false });
 let keyFor = useIdempotency(), timer: ReturnType<typeof setInterval> | undefined, closed = false;
 const listenPort = computed({
-  get: () => form.listen.slice(form.listen.lastIndexOf(":") + 1),
-  set: (port: string) => { form.listen = `${form.listen.slice(0, form.listen.lastIndexOf(":") + 1)}${port}`; },
+  get: () => Number(form.listen.slice(form.listen.lastIndexOf(":") + 1)) || null,
+  set: (port: number | null) => { form.listen = `${form.listen.slice(0, form.listen.lastIndexOf(":") + 1)}${port ?? ""}`; },
+});
+const listenAddress = computed({
+  get: () => form.listen.slice(0, form.listen.lastIndexOf(":")).replace(/^\[|\]$/g, ""),
+  set: (address: string) => { const host = address.trim(); form.listen = `${host.includes(":") ? `[${host}]` : host}:${listenPort.value ?? ""}`; },
 });
 const operation = computed(() => view.value?.operation);
 const pending = computed(() => operation.value?.state === "waiting_confirmation");
@@ -42,7 +48,7 @@ function resetForm() {
   if (!view.value) return;
   version.value = view.value.version;
   form.listen = view.value.confirmed.listen || recommendedListen;
-  form.sources = view.value.confirmed.allowed_sources.length ? view.value.confirmed.allowed_sources.join("\n") : "0.0.0.0/0\n::/0";
+  form.sources = view.value.confirmed.allowed_sources.length ? [...view.value.confirmed.allowed_sources] : ["0.0.0.0/0", "::/0"];
   form.certificate = form.key = ""; form.rotate = false;
   keyFor = useIdempotency(); uncertain.value = false;
 }
@@ -53,7 +59,7 @@ async function load() {
 }
 async function apply(enabled: boolean) {
   if (!view.value) return;
-  const input: ManagementListenerInput = { version: version.value, enabled, listen: enabled ? form.listen.trim() : "", allowed_sources: enabled ? form.sources.trim().split(/\s+/).filter(Boolean) : [], certificate_pem: enabled ? form.certificate : "", key_pem: enabled ? form.key : "", rotate_certificate: enabled && form.rotate };
+  const input: ManagementListenerInput = { version: version.value, enabled, listen: enabled ? form.listen.trim() : "", allowed_sources: enabled ? cleanList(form.sources) : [], certificate_pem: enabled ? form.certificate : "", key_pem: enabled ? form.key : "", rotate_certificate: enabled && form.rotate };
   await run(async () => {
     if (enabled) {
       const port = form.listen.slice(form.listen.lastIndexOf(":") + 1);
@@ -121,15 +127,15 @@ onUnmounted(() => { closed = true; if (timer) clearInterval(timer); form.key = f
         <NAlert v-if="version !== view.version && !pending" type="warning">管理入口配置已变化，请重新载入已确认配置。</NAlert>
         <p>地址、来源或证书变更均需在 120 秒内确认。变更时已有远程连接会断开。</p>
         <NAlert type="info">端口和允许来源须与已确认的防火墙策略一致。冲突时请先调整并确认防火墙策略；云安全组和其他系统规则需另行核对。</NAlert>
-        <NFormItem label="监听端口"><NInput v-model:value="listenPort" :disabled="busy || pending" placeholder="输入监听端口" :maxlength="5" /></NFormItem>
-        <AdvancedDetails title="高级访问设置"><NFormItem label="监听 IP 与端口"><NInput v-model:value="form.listen" :disabled="busy || pending" placeholder="0.0.0.0:9444 或 [::]:9444" :maxlength="64" /></NFormItem>
-        <NFormItem label="允许访问的 IP / CIDR"><NInput v-model:value="form.sources" type="textarea" :disabled="busy || pending" placeholder="203.0.113.10/32，每行一个来源" /></NFormItem>
+        <NFormItem label="监听端口"><NInputNumber v-model:value="listenPort" :disabled="busy || pending" placeholder="监听端口" :min="1" :max="65535" :precision="0" /></NFormItem>
+        <AdvancedDetails title="高级访问设置"><NFormItem label="监听地址"><NInput v-model:value="listenAddress" :disabled="busy || pending" placeholder="0.0.0.0 或 ::" :maxlength="64" /></NFormItem>
+        <NFormItem label="允许访问的 IP / CIDR"><ValueListInput v-model:value="form.sources" item-label="来源网段" :max="32" placeholder="192.0.2.0/24 或 ::/0" :maxlength="64" :disabled="busy || pending" /></NFormItem>
         <NFormItem label="证书 PEM"><NInput v-model:value="form.certificate" type="textarea" :disabled="busy || pending" :maxlength="16384" placeholder="留空沿用已确认的证书；首次启用生成自签证书" /></NFormItem>
         <NFormItem label="私钥 PEM"><NInput v-model:value="form.key" type="textarea" :disabled="busy || pending" :maxlength="8192" autocomplete="off" /></NFormItem>
         <NCheckbox v-model:checked="form.rotate" :disabled="busy || pending || !!form.certificate || !!form.key">生成新的自签证书</NCheckbox>
         </AdvancedDetails><p v-if="!httpMode" class="muted">自签证书须独立核对指纹；更换证书后，现有控制节点需要显式更新信任。</p>
         <div class="toolbar">
-          <NButton type="primary" :loading="busy" :disabled="pending || version !== view.version || !view.attached || !form.sources.trim()" @click="apply(true)">暂用并等待确认</NButton>
+          <NButton type="primary" :loading="busy" :disabled="pending || version !== view.version || !view.attached || !cleanList(form.sources).length" @click="apply(true)">暂用并等待确认</NButton>
           <NPopconfirm positive-text="停用" @positive-click="apply(false)"><template #trigger><NButton :disabled="busy || pending || !view.confirmed.enabled || version !== view.version">停用远程入口</NButton></template>停用须通过主入口执行，不会关闭主入口。</NPopconfirm>
         </div>
       </section>

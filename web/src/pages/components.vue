@@ -11,6 +11,8 @@
 }
 </route>
 <script setup lang="ts">
+import ValueListInput from "../components/ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
@@ -77,7 +79,7 @@ const overview = ref<ComponentOverview | null>(null),
 const tag = ref(""),
   prerelease = ref(false),
   components = ref<Array<"nginx" | "fail2ban" | "panel" | "web">>([software || "nginx"]),
-  assets = ref(""),
+  assets = ref<string[]>([]),
   selection = ref("components");
 const checkID = ref(""),
   clock = ref(Date.now());
@@ -169,7 +171,7 @@ async function check() {
       tag: tag.value.trim(),
       prerelease: prerelease.value,
       ...(selection.value === "assets"
-        ? { assets: assets.value.split(/[\s,]+/).filter(Boolean) }
+        ? { assets: cleanList(assets.value) }
         : { components: components.value }),
       plan_id: "",
       manifest_sha256: "",
@@ -388,11 +390,7 @@ onUnmounted(() => {
             ]"
         /></NFormItem>
         <NFormItem v-else label="资产 ID"
-          ><NInput
-            v-model:value="assets"
-            placeholder="多个 ID 用逗号分隔"
-            maxlength="256"
-        /></NFormItem>
+          ><ValueListInput v-model:value="assets" item-label="资产 ID" placeholder="资产 ID" :max="2" :maxlength="256" /></NFormItem>
         <NFormItem label="发行标签"
           ><NInput
             v-model:value="tag"

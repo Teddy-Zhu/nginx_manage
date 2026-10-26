@@ -12,6 +12,8 @@
 </route>
 
 <script setup lang="ts">
+import MappingInput from "../components/MappingInput.vue";
+import { mappingRecord, type MappingRow } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
 
 import { RouterLink } from "vue-router";
@@ -59,7 +61,7 @@ const { run, busy, message } = useAction(),
 const passphrase = ref(""),
   importPassphrase = ref(""),
   file = ref<File | null>(null),
-  mappings = ref("{}");
+  mappings = ref<MappingRow[]>([]);
 const exportMode = ref<MigrationExportInput["mode"]>("portable");
 const exported = ref<MigrationPackage | null>(null);
 const fileEncrypted = ref<boolean | null>(null);
@@ -233,17 +235,11 @@ const stepStates: Record<string, string> = {
   review: "核对",
 };
 const time = (n: number) => new Date(n * 1000).toLocaleString();
-function mappingObject(): Record<string, string> {
-  const value: unknown = JSON.parse(mappings.value);
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.values(value).some((v) => typeof v !== "string")
-  )
-    throw new Error("映射须为原参数到目标参数的 JSON 对象");
-  return value as Record<string, string>;
-}
+const mappingError = computed(() => {
+  try { mappingRecord(mappings.value); return ""; }
+  catch (cause) { return (cause as Error).message; }
+});
+function mappingObject(): Record<string, string> { return mappingRecord(mappings.value); }
 async function load() {
   if (loading || busy.value || document.hidden) return;
   loading = true;
@@ -591,7 +587,7 @@ onUnmounted(() => {
           fileEncrypted === null ||
           (fileEncrypted && importPassphrase.length < 16) ||
           !firewallValid ||
-          !hostDNSValid
+          !!mappingError || !hostDNSValid
         "
         :loading="busy"
         @click="previewFile"
@@ -669,7 +665,7 @@ onUnmounted(() => {
           >包含防火墙规则</NCheckbox
         ><NButton
           :disabled="
-            busy || !remoteURL || !remoteKey || !firewallValid || !hostDNSValid
+            busy || !remoteURL || !remoteKey || !firewallValid || !!mappingError || !hostDNSValid
           "
           @click="pull(false)"
           >拉取并预检</NButton
@@ -682,7 +678,7 @@ onUnmounted(() => {
                 !remoteURL ||
                 !remoteKey ||
                 !firewallValid ||
-                !hostDNSValid
+                !!mappingError || !hostDNSValid
               "
               >一键迁入</NButton
             ></template
@@ -699,13 +695,8 @@ onUnmounted(() => {
       <NCheckbox v-if="has('system.write')" v-model:checked="enableNginx"
         >允许启用目标 Nginx 配置模块</NCheckbox
       >
-      <NFormItem label="参数映射（原参数 → 目标参数）"
-        ><NInput
-          v-model:value="mappings"
-          type="textarea"
-          :autosize="{ minRows: 3, maxRows: 10 }"
-          placeholder='{"192.168.1.10:80":"0.0.0.0:80"}'
-      /></NFormItem>
+      <NFormItem label="参数映射（原参数 → 目标参数）" :validation-status="mappingError ? 'error' : undefined" :feedback="mappingError"
+        ><MappingInput :max="128" v-model:value="mappings" :disabled="busy" /></NFormItem>
       <MigrationHostDNSOptions
         v-model="hostDNSSettings"
         @update:valid="hostDNSValid = $event"

@@ -11,6 +11,8 @@
 }
 </route>
 <script setup lang="ts">
+import ValueListInput from "../components/ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
 
 import AdvancedDetails from "../components/AdvancedDetails.vue";
@@ -21,7 +23,6 @@ import {
   NButton,
   NCheckbox,
   NFormItem,
-  NInput,
   NInputNumber,
   NSelect,
   NSwitch,
@@ -53,9 +54,9 @@ const overview = ref<HostDNSOverview | null>(null),
   editing = ref(false),
   reading = ref(false),
   now = ref(Date.now());
-const servers = ref(""),
-  search = ref(""),
-  verifyNames = ref(""),
+const servers = ref<string[]>([]),
+  search = ref<string[]>([]),
+  verifyNames = ref<string[]>([]),
   takeover = ref(false),
   timeout = ref<number | null>(120);
 const target = ref("");
@@ -64,16 +65,16 @@ const families = ref([
     label: "IPv4",
     method: "",
     enabled: false,
-    servers: "",
-    search: "",
+    servers: [] as string[],
+    search: [] as string[],
     automatic: false,
   },
   {
     label: "IPv6",
     method: "",
     enabled: false,
-    servers: "",
-    search: "",
+    servers: [] as string[],
+    search: [] as string[],
     automatic: false,
   },
 ]);
@@ -282,11 +283,7 @@ const labels: Record<string, string> = {
   unknown_agent_state: "无法识别本机执行状态",
 };
 const label = (s: string | undefined) => (s ? (labels[s] ?? "状态未知") : "—");
-const split = (s: string) =>
-  s
-    .split(/[\s,]+/)
-    .map((v) => v.trim())
-    .filter(Boolean);
+
 async function read() {
   if (reading.value) {
     pendingRead = true;
@@ -348,15 +345,15 @@ function edit() {
   const staticConfig = networkd.value
     ? networkLink.value?.persistent
     : observed.value.current;
-  servers.value = staticConfig?.servers.join("\n") ?? "";
-  search.value = staticConfig?.search.join("\n") ?? "";
+  servers.value = [...(staticConfig?.servers ?? [])];
+  search.value = [...(staticConfig?.search ?? [])];
   const c = connection.value;
   for (const [i, f] of families.value.entries()) {
     const value = i === 0 ? c?.applied?.ipv4 : c?.applied?.ipv6;
     f.enabled = !!value;
     f.method = (i === 0 ? c?.method4 : c?.method6) ?? "";
-    f.servers = value?.servers.join("\n") ?? "";
-    f.search = value?.search.join("\n") ?? "";
+    f.servers = [...(value?.servers ?? [])];
+    f.search = [...(value?.search ?? [])];
     f.automatic = value?.automatic ?? false;
   }
   takeover.value = false;
@@ -395,16 +392,16 @@ async function loadMigrationCandidate() {
       throw new Error("迁移映射目标与当前 DNS 所有者不匹配，须重新映射");
     target.value = item.target;
     edit();
-    servers.value = item.config.servers.join("\n");
-    search.value = item.config.search.join("\n");
+    servers.value = [...item.config.servers];
+    search.value = [...item.config.search];
     for (const [index, family] of families.value.entries()) {
       const config = index === 0 ? item.config.ipv4 : item.config.ipv6;
       family.enabled = !!config;
-      family.servers = config?.servers.join("\n") ?? "";
-      family.search = config?.search.join("\n") ?? "";
+      family.servers = [...(config?.servers ?? [])];
+      family.search = [...(config?.search ?? [])];
       family.automatic = config?.automatic ?? false;
     }
-    verifyNames.value = "";
+    verifyNames.value = [];
     migrationNotice.value =
       "迁移配置已载入，待核对目标和验证域名，再生成 DNS 变更计划。";
   } catch (cause) {
@@ -432,26 +429,26 @@ async function preview() {
           search: [],
           ipv4: families.value[0]!.enabled
             ? {
-                servers: split(families.value[0]!.servers),
-                search: split(families.value[0]!.search),
+                servers: cleanList(families.value[0]!.servers),
+                search: cleanList(families.value[0]!.search),
                 automatic: families.value[0]!.automatic,
               }
             : null,
           ipv6: families.value[1]!.enabled
             ? {
-                servers: split(families.value[1]!.servers),
-                search: split(families.value[1]!.search),
+                servers: cleanList(families.value[1]!.servers),
+                search: cleanList(families.value[1]!.search),
                 automatic: families.value[1]!.automatic,
               }
             : null,
         }
       : {
-          servers: split(servers.value),
-          search: split(search.value),
+          servers: cleanList(servers.value),
+          search: cleanList(search.value),
           ipv4: null,
           ipv6: null,
         },
-    verify_names: split(verifyNames.value),
+    verify_names: cleanList(verifyNames.value),
     timeout_seconds: timeout.value,
     takeover: takeover.value,
   };
@@ -764,21 +761,9 @@ onUnmounted(() => {
     <h3>修改 DNS</h3>
     <template v-if="!networkManager">
       <n-form-item label="DNS 服务器（1–3 个 IPv4 / IPv6 地址）"
-        ><n-input
-          v-model:value="servers"
-          :disabled="busy"
-          type="textarea"
-          placeholder="每行一个地址"
-          @update:value="invalidate"
-      /></n-form-item>
+        ><ValueListInput v-model:value="servers" item-label="DNS 地址" :max="3" placeholder="1.1.1.1 或 2606:4700:4700::1111" :disabled="busy" @update:value="invalidate" /></n-form-item>
       <n-form-item label="搜索域（最多 6 个，可留空）"
-        ><n-input
-          v-model:value="search"
-          :disabled="busy"
-          type="textarea"
-          placeholder="每行一个搜索域"
-          @update:value="invalidate"
-      /></n-form-item>
+        ><ValueListInput v-model:value="search" item-label="搜索域" :max="6" placeholder="example.com" :disabled="busy" @update:value="invalidate" /></n-form-item>
     </template>
     <template v-else>
       <NAlert v-if="observed?.owner === 'netplan'" type="info">
@@ -795,34 +780,16 @@ onUnmounted(() => {
             />
           </n-form-item>
           <n-form-item label="手动 DNS 地址（最多 3 个）">
-            <n-input
-              v-model:value="family.servers"
-              :disabled="busy"
-              type="textarea"
-              placeholder="每行一个地址，可留空"
-              @update:value="invalidate"
-            />
+            <ValueListInput v-model:value="family.servers" item-label="DNS 地址" :max="3" placeholder="DNS 服务器地址" :disabled="busy" @update:value="invalidate" />
           </n-form-item>
           <n-form-item label="搜索域（最多 6 个）">
-            <n-input
-              v-model:value="family.search"
-              :disabled="busy"
-              type="textarea"
-              placeholder="每行一个搜索域"
-              @update:value="invalidate"
-            />
+            <ValueListInput v-model:value="family.search" item-label="搜索域" :max="6" placeholder="example.com" :disabled="busy" @update:value="invalidate" />
           </n-form-item>
         </div>
       </template>
     </template>
     <n-form-item label="本机解析验证域名（1–2 个）"
-      ><n-input
-        v-model:value="verifyNames"
-        :disabled="busy"
-        type="textarea"
-        placeholder="填写本环境中必须可解析的完整域名"
-        @update:value="invalidate"
-    /></n-form-item>
+      ><ValueListInput v-model:value="verifyNames" item-label="验证域名" :max="2" placeholder="本环境中必须可解析的完整域名" :disabled="busy" @update:value="invalidate" /></n-form-item>
     <n-form-item label="确认期限（秒）"
       ><n-input-number
         v-model:value="timeout"

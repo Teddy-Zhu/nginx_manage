@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ValueListInput from "./ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { NAlert, NButton, NFormItem, NInput, NInputNumber, NPopconfirm, NSelect, NTag } from "naive-ui";
 import { useNodeAPI, type Pairing, type PairingJob } from "../api/client";
@@ -12,7 +14,7 @@ const canIssue = computed(() => !!session.localMe?.scopes.includes("auth.manage"
 const scopes = computed(() => (session.localMe?.scopes ?? []).map((scope) => ({ label: scope, value: scope })));
 const offers = ref<Pairing[]>([]), jobs = ref<PairingJob[]>([]);
 const connect = reactive({ name: "", url: "", fingerprint: "", code: "" });
-const grant = reactive({ name: "", controller: "", scopes: ["read"], sources: "", days: 90 });
+const grant = reactive({ name: "", controller: "", scopes: ["read"], sources: [] as string[], days: 90 });
 const offeredID = ref(""), offeredCode = ref(""), offeredExpiry = ref(0);
 let connectKey = useIdempotency(), offerKey = useIdempotency(), grantEpoch = Math.floor(Date.now() / 1000);
 const offerStates: Record<Pairing["state"], string> = { offered: "等待领取", claimed: "等待确认", confirmed: "授权已确认", revoked: "已撤销", expired: "已过期" };
@@ -35,7 +37,7 @@ function record(job: PairingJob) {
 async function start() {
   await run(async () => {
     let code: { node_id?: unknown; id?: unknown; secret?: unknown };
-    try { code = JSON.parse(connect.code); } catch { throw new Error("配对信息须为目标节点生成的 JSON"); }
+    try { code = JSON.parse(connect.code); } catch { throw new Error("请粘贴目标节点生成的完整配对信息"); }
     if (!code || typeof code.node_id !== "string" || typeof code.id !== "string" || typeof code.secret !== "string") throw new Error("配对信息缺少目标编号、配对编号或秘密");
     const input = { name: connect.name, url: connect.url, fingerprint: connect.fingerprint, target_node_id: code.node_id, pairing_id: code.id, secret: code.secret };
     const value = await api.startPairing(input, connectKey(input));
@@ -51,7 +53,7 @@ async function abandon(job: PairingJob) {
 }
 async function offer() {
   await run(async () => {
-    const input = { name: grant.name, controller_node_id: grant.controller, scopes: grant.scopes, allowed_sources: grant.sources.trim().split(/\s+/).filter(Boolean), credential_expires_at: grantEpoch + grant.days * 86400 };
+    const input = { name: grant.name, controller_node_id: grant.controller, scopes: grant.scopes, allowed_sources: cleanList(grant.sources), credential_expires_at: grantEpoch + grant.days * 86400 };
     const value = await api.createPairing(input, offerKey(input));
     offers.value = [value.pairing, ...offers.value.filter((item) => item.id !== value.pairing.id)];
     offeredID.value = value.pairing.id; offeredExpiry.value = value.pairing.expires_at;
@@ -91,10 +93,10 @@ onUnmounted(() => { connect.code = ""; offeredCode.value = ""; });
         <NFormItem label="授权名称"><NInput v-model:value="grant.name" :maxlength="100" :disabled="busy" /></NFormItem>
         <NFormItem label="控制节点永久编号"><NInput v-model:value="grant.controller" :maxlength="36" :disabled="busy" /></NFormItem>
         <NFormItem label="授权权限"><NSelect v-model:value="grant.scopes" multiple :options="scopes" :disabled="busy" /></NFormItem>
-        <NFormItem label="允许来源 CIDR"><NInput v-model:value="grant.sources" type="textarea" :maxlength="4096" :disabled="busy" placeholder="每行一个 CIDR，例如 192.0.2.10/32" /></NFormItem>
+        <NFormItem label="允许来源 CIDR"><ValueListInput v-model:value="grant.sources" item-label="来源网段" :max="32" placeholder="192.0.2.10/32" :maxlength="64" :disabled="busy" /></NFormItem>
         <NFormItem label="确认后凭据有效天数"><NInputNumber :value="grant.days" :min="1" :max="366" :precision="0" :disabled="busy" :clearable="false" @update:value="(value: number | null) => { if (value !== null) grant.days = value; }" /></NFormItem>
         <p class="muted">配对信息 5 分钟内有效，仅展示一次。授权默认只读；允许来源按目标实际直连地址匹配，经网关时填写网关来源。</p>
-        <div><NButton type="primary" :loading="busy" :disabled="!grant.name || !grant.controller || !grant.sources.trim() || !grant.scopes.includes('read')" @click="offer">生成一次性配对信息</NButton></div>
+        <div><NButton type="primary" :loading="busy" :disabled="!grant.name || !grant.controller || !cleanList(grant.sources).length || !grant.scopes.includes('read')" @click="offer">生成一次性配对信息</NButton></div>
       </div>
     </details>
     <NAlert v-if="offeredCode" type="warning" title="请安全传递配对信息">

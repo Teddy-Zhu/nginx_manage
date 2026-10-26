@@ -13,6 +13,7 @@
 </route>
 
 <script setup lang="ts">
+import UnitInput from "../components/UnitInput.vue";
 import { computed, onMounted, onUnmounted, ref, toRaw } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
@@ -380,8 +381,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             仅记录限速和并发超额，方法、路径和请求体限制继续执行。
           </p>
           <n-form-item label="最大请求体（留空继承，0 表示不限制）"
-            ><n-input v-model:value="form.body_size" placeholder="10m"
-          /></n-form-item>
+            ><UnitInput v-model:value="form.body_size" kind="size" :disabled="locked" /></n-form-item>
           <n-form-item label="允许的方法（留空表示不限制）"
             ><n-select
               v-model:value="form.methods"

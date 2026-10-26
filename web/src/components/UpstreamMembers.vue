@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { NButton, NInput, NInputNumber, NSwitch } from "naive-ui";
+import UnitInput from "./UnitInput.vue";
+import EndpointInput from "./EndpointInput.vue";
+import { NButton, NInputNumber, NSwitch } from "naive-ui";
 const props = defineProps<{ value: string; disabled?: boolean }>();
 const emit = defineEmits<{ "update:value": [value: string] }>();
 type Member = {
@@ -68,13 +70,7 @@ function remove(index: number) {
 <template>
   <div class="upstream-members">
     <div v-for="(row, index) in rows" :key="index" class="upstream-member">
-      <label class="member-address"
-        >后端地址<n-input
-          v-model:value="row.address"
-          placeholder="127.0.0.1:3000 或 app.example.com:80"
-          :disabled="disabled"
-          @update:value="update"
-      /></label>
+      <div class="member-address"><EndpointInput v-model:value="row.address" :disabled="disabled" @update:value="update" /></div>
       <label
         >权重<n-input-number
           v-model:value="row.weight"
@@ -92,12 +88,7 @@ function remove(index: number) {
           @update:value="update"
       /></label>
       <label
-        >重试间隔<n-input
-          v-model:value="row.failTimeout"
-          placeholder="10s"
-          :disabled="disabled"
-          @update:value="update"
-      /></label>
+        >重试间隔<UnitInput v-model:value="row.failTimeout" kind="time" :disabled="disabled" @update:value="update" /></label>
       <label class="member-backup"
         >备用<n-switch
           v-model:value="row.backup"
@@ -122,16 +113,14 @@ function remove(index: number) {
 }
 .upstream-member {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) repeat(
-      3,
-      minmax(95px, 1fr)
-    ) auto auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
   gap: 10px;
   align-items: end;
   padding: 14px;
   background: var(--surface-soft, rgba(128, 128, 128, 0.05));
   border-radius: 10px;
 }
+.member-address { grid-column: 1 / -1; }
 label {
   display: grid;
   gap: 6px;

@@ -11,6 +11,8 @@
 }
 </route>
 <script setup lang="ts">
+import MappingInput from "../components/MappingInput.vue";
+import { mappingRecord, type MappingRow } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   NAlert,
@@ -52,7 +54,7 @@ const url = ref(""),
   key = ref(""),
   fingerprint = ref(""),
   node = ref(""),
-  mappings = ref("{}"),
+  mappings = ref<MappingRow[]>([]),
   resumeKey = ref("");
 const certificates = ref(false),
   credentials = ref(false),
@@ -191,17 +193,11 @@ async function inspect(id: string) {
     resumeKey.value = "";
   });
 }
-function mappingObject(): Record<string, string> {
-  const value: unknown = JSON.parse(mappings.value);
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.values(value).some((item) => typeof item !== "string")
-  )
-    throw new Error("映射须为原参数到目标参数的 JSON 对象");
-  return value as Record<string, string>;
-}
+const mappingError = computed(() => {
+  try { mappingRecord(mappings.value); return ""; }
+  catch (cause) { return (cause as Error).message; }
+});
+function mappingObject(): Record<string, string> { return mappingRecord(mappings.value); }
 async function submit() {
   await run(async () => {
     if (!firewallValid.value) throw new Error("请修正防火墙网卡映射");
@@ -323,12 +319,8 @@ onUnmounted(() => {
             >
           </div></NFormItem
         >
-        <NFormItem label="目标参数映射"
-          ><NInput
-            v-model:value="mappings"
-            type="textarea"
-            :autosize="{ minRows: 3, maxRows: 8 }"
-        /></NFormItem>
+        <NFormItem label="目标参数映射" :validation-status="mappingError ? 'error' : undefined" :feedback="mappingError"
+          ><MappingInput :max="128" v-model:value="mappings" :disabled="busy" /></NFormItem>
         <MigrationHostDNSOptions
           v-model="hostDNSSettings"
           @update:valid="hostDNSValid = $event"
@@ -395,7 +387,7 @@ onUnmounted(() => {
             ><NButton
               type="primary"
               :disabled="
-                busy || !url || !key || !firewallValid || !hostDNSValid
+                busy || !url || !key || !firewallValid || !!mappingError || !hostDNSValid
               "
               >创建迁出任务</NButton
             ></template

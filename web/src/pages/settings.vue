@@ -13,6 +13,8 @@
 </route>
 
 <script setup lang="ts">
+import ValueListInput from "../components/ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { RouterLink, useRouter } from "vue-router";
 import { ref, onMounted } from "vue";
@@ -52,7 +54,7 @@ const credentialVisible = ref(false),
   tokenVisible = ref(false),
   name = ref(""),
   scopes = ref<string[]>(["read"]),
-  sources = ref(""),
+  sources = ref<string[]>([]),
   token = ref(""),
   password = ref("");
 const credentialColumns: DataTableColumns<Credential> = [
@@ -83,9 +85,7 @@ async function createCredential() {
       data: {
         name: name.value,
         scopes: scopes.value,
-        allowed_sources: sources.value.trim()
-          ? sources.value.trim().split(/\s+/)
-          : [],
+        allowed_sources: cleanList(sources.value),
         expires_at: Math.floor(Date.now() / 1000) + 90 * 86400,
       },
     });
@@ -243,10 +243,8 @@ onMounted(load);
               value: scope,
             }))
           " /></n-form-item
-      ><n-form-item label="允许来源（可选，CIDR 使用空格分隔）"
-        ><n-input
-          v-model:value="sources"
-          placeholder="192.0.2.0/24 2001:db8::/32" /></n-form-item
+      ><n-form-item label="允许来源（可选）"
+        ><ValueListInput v-model:value="sources" item-label="来源网段" :max="32" placeholder="192.0.2.0/24 或 2001:db8::/32" :maxlength="64" /></n-form-item
       ><n-button
         attr-type="submit"
         block

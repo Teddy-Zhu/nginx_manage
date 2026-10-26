@@ -202,6 +202,27 @@ func (n *apiNode) initialize(t *testing.T) {
 	n.request(t, "POST", "/session", credentials, nil, 200, "OK")
 }
 
+func TestAPIStreamUpstreamGroupInput(t *testing.T) {
+	n := startAPINode(t)
+	n.initialize(t)
+	direct := nginxconfig.CreateRequest{Kind: "stream", Listen: []string{"18080"}}
+	n.request(t, "POST", "/nginx/resources", direct, map[string]string{"Idempotency-Key": "empty-direct"}, 400, "VALIDATION_FAILED")
+	group := direct
+	group.UpstreamServers = []string{"127.0.0.1:9000 weight=2", "[::1]:9001 backup"}
+	httpGroup := group
+	httpGroup.Kind, httpGroup.Domains = "http", []string{"group.example.test"}
+	n.request(t, "POST", "/nginx/resources", httpGroup, map[string]string{"Idempotency-Key": "empty-http-target"}, 400, "VALIDATION_FAILED")
+	saved := readAPIData[nginxconfig.SaveResult](t, n.request(t, "POST", "/nginx/resources", group, map[string]string{"Idempotency-Key": "stream-group"}, 201, "OK"))
+	if len(saved.Tree.Resources) != 1 {
+		t.Fatal("stream group did not create exactly one proxy")
+	}
+	resource := saved.Tree.Resources[0]
+	members, upstream := resource.Fields["upstream_servers"], resource.Fields["upstream"]
+	if resource.Kind != "stream" || len(members.Values) != 2 || !members.Editable || len(upstream.Values) != 1 || !strings.HasPrefix(upstream.Values[0], "nginxpanel_up_") {
+		t.Fatal("stream group did not retain editable members and use its generated upstream")
+	}
+}
+
 func TestAPILargeFirewallPolicyPersistence(t *testing.T) {
 	n := startAPINode(t)
 	n.initialize(t)

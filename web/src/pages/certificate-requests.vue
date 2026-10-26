@@ -10,6 +10,8 @@
 </route>
 
 <script setup lang="ts">
+import ValueListInput from "../components/ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
@@ -43,7 +45,7 @@ const profiles = ref<ACMEProfile[]>([]),
   credentials = ref<DNSCredential[]>([]);
 const offset = ref(0);
 const editing = ref(false),
-  domainsText = ref(""),
+  domainEntries = ref<string[]>([]),
   baseline = ref("");
 const emptyForm = (): ACMEProfileInput => ({
   name: "",
@@ -59,7 +61,7 @@ const form = ref(emptyForm()),
   orders = ref<ACMEOrder[]>([]),
   now = ref(Date.now());
 const formJSON = computed(() =>
-  JSON.stringify([form.value, domainsText.value]),
+  JSON.stringify([form.value, domainEntries.value]),
 );
 const policyID = ref(""),
   policyName = ref("");
@@ -77,12 +79,7 @@ const policyDirty = computed(
 const dirty = computed(
   () => editing.value && formJSON.value !== baseline.value,
 );
-const domains = computed(() =>
-  domainsText.value
-    .split(/\r?\n/)
-    .map((value) => value.trim())
-    .filter(Boolean),
-);
+const domains = computed(() => cleanList(domainEntries.value));
 const valid = computed(
   () =>
     form.value.name.trim() &&
@@ -219,7 +216,7 @@ function start() {
   )
     return;
   form.value = emptyForm();
-  domainsText.value = "";
+  domainEntries.value = [];
   baseline.value = formJSON.value;
   editing.value = true;
 }
@@ -231,7 +228,7 @@ function close() {
     return;
   editing.value = false;
   form.value = emptyForm();
-  domainsText.value = "";
+  domainEntries.value = [];
 }
 async function create() {
   if (busy.value || !valid.value) return;
@@ -244,7 +241,7 @@ async function create() {
     if (!result.profile) throw new Error("未返回有效签发配置");
     editing.value = false;
     form.value = emptyForm();
-    domainsText.value = "";
+    domainEntries.value = [];
     offset.value = 0;
     selected.value = "";
     orders.value = [];
@@ -474,17 +471,8 @@ onUnmounted(() => {
           v-model:value="form.credential_id"
           :options="credentialOptions"
       /></n-form-item>
-      <n-form-item label="申请域名（每行一项，最多 64 项）"
-        ><n-input
-          v-model:value="domainsText"
-          type="textarea"
-          :maxlength="16384"
-          :placeholder="
-            form.challenge_type === 'dns-01'
-              ? 'example.com\n*.example.com'
-              : 'example.com\nwww.example.com'
-          "
-      /></n-form-item>
+      <n-form-item label="申请域名（最多 64 项）"
+        ><ValueListInput v-model:value="domainEntries" item-label="域名" :max="64" :maxlength="253" :placeholder="form.challenge_type === 'dns-01' ? 'example.com 或 *.example.com' : 'example.com'" /></n-form-item>
       <div class="inline-gap">
         <n-button
           type="primary"

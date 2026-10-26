@@ -13,6 +13,8 @@
 </route>
 
 <script setup lang="ts">
+import ValueListInput from "../components/ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
@@ -45,7 +47,7 @@ const tree = ref<Tree | null>(null),
 const name = ref(""),
   notes = ref(""),
   mode = ref<"allowlist" | "denylist">("denylist"),
-  entries = ref("");
+  entries = ref<string[]>([]);
 const countries = ref<string[]>([]);
 const geoIP = ref<GeoIPState | null>(null);
 const geoError = ref("");
@@ -118,7 +120,7 @@ function open(row: AccessList | null) {
   name.value = row?.name ?? "";
   notes.value = row?.notes ?? "";
   mode.value = row?.mode === "allowlist" ? "allowlist" : "denylist";
-  entries.value = row?.entries.join("\n") ?? "";
+  entries.value = [...(row?.entries ?? [])];
   countries.value = [...(row?.countries ?? [])];
   baseline.value = formJSON.value;
 }
@@ -147,10 +149,7 @@ async function save() {
     notes: notes.value,
     mode: mode.value,
     countries: countries.value,
-    entries: entries.value
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean),
+    entries: cleanList(entries.value),
   };
   await run(async () => {
     const out = await api.saveAccessList(id, input, keyFor({ id, ...input }));
@@ -292,14 +291,8 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               ]"
               :disabled="busy || selected?.editable === false"
           /></n-form-item>
-          <n-form-item label="地址（每行一个 IP 或 CIDR，最多 128 项）"
-            ><n-input
-              v-model:value="entries"
-              type="textarea"
-              :autosize="{ minRows: 6, maxRows: 16 }"
-              placeholder="192.0.2.1&#10;2001:db8::/32"
-              :disabled="busy || selected?.editable === false"
-          /></n-form-item>
+          <n-form-item label="IP 地址或网段（最多 128 项）"
+            ><ValueListInput v-model:value="entries" item-label="地址" placeholder="192.0.2.1 或 2001:db8::/32" :maxlength="64" :disabled="busy || selected?.editable === false" /></n-form-item>
           <n-form-item label="国家和地区"
             ><n-select
               v-model:value="countries"
@@ -321,7 +314,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             }}。更新数据后，重新保存并应用规则以同步。
           </p>
           <p
-            v-if="mode === 'allowlist' && !entries.trim() && !countries.length"
+            v-if="mode === 'allowlist' && !cleanList(entries).length && !countries.length"
             class="muted"
           >
             空白名单会拒绝全部地址。

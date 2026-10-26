@@ -11,6 +11,10 @@
 }
 </route>
 <script setup lang="ts">
+import ValueListInput from "../components/ValueListInput.vue";
+import { cleanList } from "../utils/form";
+import PortRangesInput from "../components/PortRangesInput.vue";
+import type { PortRange } from "../utils/form";
 import { computed, h, onMounted, onUnmounted, ref, toRaw } from "vue";
 import {
   NAlert,
@@ -58,8 +62,8 @@ const geoip = ref<GeoIPState | null>(null),
 const activeTab = ref("rules"),
   editing = ref<FirewallRule | null>(null),
   kind = ref("port"),
-  portsText = ref("80,443"),
-  sourcesText = ref(""),
+  portRanges = ref<PortRange[]>([{ from: 80, to: null }, { from: 443, to: null }]),
+  sources = ref<string[]>([]),
   formError = ref("");
 const formBusy = ref(false);
 const controller = new AbortController();
@@ -122,8 +126,8 @@ function reorder(rules: FirewallRule[]) {
 }
 function add() {
   kind.value = "port";
-  portsText.value = "80,443";
-  sourcesText.value = "";
+  portRanges.value = [{ from: 80, to: null }, { from: 443, to: null }];
+  sources.value = [];
   formError.value = "";
   editing.value = {
     id: randomUUID(),
@@ -144,10 +148,8 @@ function add() {
 function edit(rule: FirewallRule) {
   editing.value = structuredClone(toRaw(rule));
   kind.value = ruleKind(rule);
-  portsText.value = rule.ports
-    .map((p) => (p.from === p.to ? String(p.from) : `${p.from}-${p.to}`))
-    .join(",");
-  sourcesText.value = kind.value === "country" ? "" : rule.sources.join("\n");
+  portRanges.value = rule.ports.map((p) => ({ from: p.from, to: p.from === p.to ? null : p.to }));
+  sources.value = kind.value === "country" ? [] : [...rule.sources];
   formError.value = "";
 }
 function changeKind(value: string) {
@@ -171,22 +173,13 @@ async function commitRule() {
   }
   if (value.protocol === "any") value.ports = [{ from: 1, to: 65535 }];
   else {
-    const parts = portsText.value
-      .trim()
-      .split(/[,，\s]+/)
-      .filter(Boolean);
-    if (!parts.length || parts.length > 16) {
+    if (!portRanges.value.length || portRanges.value.length > 16 || portRanges.value.some((p) => p.from === null)) {
       formError.value = "请填写 1–16 个端口或端口范围";
       return;
     }
-    const ports = parts.map((part) => {
-      const match = /^(\d{1,5})(?:-(\d{1,5}))?$/.exec(part);
-      return match
-        ? { from: Number(match[1]), to: Number(match[2] || match[1]) }
-        : { from: 0, to: 0 };
-    });
-    if (ports.some((p) => p.from < 1 || p.to > 65535 || p.to < p.from)) {
-      formError.value = "端口须为 1–65535，例如 80,443,8000-8010";
+    const ports = portRanges.value.map((p) => ({ from: p.from!, to: p.to ?? p.from! }));
+    if (ports.some((p) => !Number.isInteger(p.from) || !Number.isInteger(p.to) || p.from < 1 || p.to > 65535 || p.to < p.from)) {
+      formError.value = "端口须为 1–65535，结束端口不能小于起始端口";
       return;
     }
     value.ports = ports;
@@ -239,10 +232,10 @@ async function commitRule() {
     value.geoip_updated_at = undefined;
     value.sources =
       kind.value === "address"
-        ? [...new Set(sourcesText.value.split(/[,，\s]+/).filter(Boolean))]
+        ? [...new Set(cleanList(sources.value))]
         : [];
     if (kind.value === "address" && !value.sources.length) {
-      formError.value = "请输入 IP 地址或网段，每行一个";
+      formError.value = "请添加 IP 地址或网段";
       return;
     }
   }
@@ -619,18 +612,12 @@ onMounted(load);
         >请先在“GeoIP 数据”中更新国家地址数据。</n-alert
       >
       <n-form-item v-if="kind === 'address'" label="IP 地址或网段"
-        ><n-input
-          v-model:value="sourcesText"
-          type="textarea"
-          :autosize="{ minRows: 4, maxRows: 12 }"
-          placeholder="每行一个 IP 或 CIDR，例如 192.168.1.10、192.168.1.0/24"
-      /></n-form-item>
+        ><ValueListInput :max="policy.backend === 'direct-nftables' ? 262144 : 32" v-model:value="sources" item-label="来源地址" placeholder="192.0.2.1 或 192.0.2.0/24" :maxlength="64" /></n-form-item>
       <n-form-item label="协议"
         ><n-select v-model:value="editing.protocol" :options="protocols"
       /></n-form-item>
       <n-form-item v-if="editing.protocol !== 'any'" label="端口"
-        ><n-input v-model:value="portsText" placeholder="例如 80,443,8000-8010"
-      /></n-form-item>
+        ><PortRangesInput v-model:value="portRanges" /></n-form-item>
       <AdvancedDetails title="更多设置">
         <n-form-item label="地址类型"
           ><n-select

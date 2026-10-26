@@ -16,6 +16,11 @@
 import { randomUUID } from "../utils/crypto";
 
 import AdvancedDetails from "../components/AdvancedDetails.vue";
+import ValueListInput from "../components/ValueListInput.vue";
+import NginxListeners from "../components/NginxListeners.vue";
+import NginxFieldInput from "../components/NginxFieldInput.vue";
+import EndpointInput from "../components/EndpointInput.vue";
+import { cleanList } from "../utils/form";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
@@ -23,8 +28,6 @@ import {
   NInput,
   NAlert,
   NTag,
-  NTabs,
-  NTabPane,
   NEmpty,
   NModal,
   NForm,
@@ -84,6 +87,7 @@ const diagnostics = ref<Tree["diagnostics"]>([]);
 const changesVisible = ref(false),
   externalVisible = ref(false);
 const modulesVisible = ref(false);
+const sourceVisible = ref(false);
 const createVisible = ref(false),
   fileVisible = ref(false),
   newPath = ref("");
@@ -98,7 +102,7 @@ const metadata = ref<ResourceMetadata>({
 });
 const createKind = ref<"http" | "stream">("http"),
   createListen = ref("8080"),
-  createDomains = ref(""),
+  createDomains = ref<string[]>([]),
   createUpstream = ref("");
 const createTargetMode = ref<"direct" | "group">("direct");
 const createHostMode = ref("target");
@@ -332,7 +336,7 @@ function fieldText(field: Resource["fields"][string]) {
 }
 const fieldLabels: Record<string, string> = {
   http01: "HTTP-01 验证入口（需 80 端口，保存并应用）",
-  listeners: "监听（每行一项）",
+  listeners: "监听地址",
   domains: "域名",
   upstream: "上游地址",
   upstream_servers: "上游组成员",
@@ -346,21 +350,21 @@ const fieldLabels: Record<string, string> = {
   http_version: "上游 HTTP 版本",
   buffering: "响应缓冲",
   request_buffering: "请求缓冲",
-  request_headers: "转发请求头（每行：名称 参数值）",
-  response_headers: "响应头（每行：名称 参数值 [always]）",
+  request_headers: "转发请求头",
+  response_headers: "响应头",
   upstream_tls_verify: "校验上游 TLS",
   upstream_tls_sni: "发送上游 SNI",
   upstream_tls_name: "上游 TLS 校验名称",
   upstream_tls_ca: "上游受信 CA 路径",
   certificate: "证书链路径",
   certificate_key: "证书私钥路径",
-  https_redirect: "HTTP 跳转 HTTPS（目标端口，留空关闭）",
+  https_redirect: "HTTPS 跳转端口",
   hsts: "HSTS",
   tls_protocols: "TLS 协议",
-  access_log: "访问日志路径及格式，或 off",
-  error_log: "错误日志路径及级别",
+  access_log: "访问日志",
+  error_log: "错误日志",
   cache: "响应缓存",
-  trusted_sources: "可信代理来源（每行一个 IP/CIDR）",
+  trusted_sources: "可信代理来源",
   real_ip_header: "真实 IP 头",
   real_ip_recursive: "递归解析真实 IP",
   access_list: "IP 与国家访问控制",
@@ -730,7 +734,7 @@ async function createResource() {
     },
     domains:
       createKind.value === "http"
-        ? createDomains.value.trim().split(/\s+/)
+        ? cleanList(createDomains.value)
         : [],
     upstream: createUpstream.value.trim(),
     preserve_host: createHostMode.value === "incoming",
@@ -749,6 +753,7 @@ async function createResource() {
   }, "代理配置已保存，尚未应用");
 }
 function capturedExternal(result: SaveResult) {
+  sourceVisible.value = true;
   files.value = structuredClone(result.tree.files);
   selected.value = files.value[0]?.id ?? "";
   diagnostics.value = result.tree.diagnostics;
@@ -798,6 +803,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     </div>
     <div class="inline-gap">
       <AdvancedDetails title="更多操作">
+        <NButton :disabled="busy || !!formDirty" @click="sourceVisible = true">编辑源文件</NButton>
         <n-button :disabled="busy || !!formDirty" @click="changesVisible = true"
           >配置差异</n-button
         >
@@ -838,110 +844,13 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     style="margin-bottom: 20px"
     >{{ runtimeError || runtime?.reason }}</n-alert
   >
-  <n-tabs type="line" animated default-value="fields"
-    ><n-tab-pane name="native" tab="高级配置">
-      <div class="editor-layout surface">
-        <aside class="file-tree">
-          <div class="section-heading">
-            <h2>配置文件</h2>
-            <n-button
-              text
-              title="添加文件"
-              :disabled="busy || !!formDirty"
-              @click="fileVisible = true"
-              >＋</n-button
-            >
-          </div>
-          <button
-            v-for="file in files"
-            :key="file.id"
-            class="file-item"
-            :class="{ selected: selected === file.id }"
-            @click="selected = file.id"
-          >
-            <span>▤</span>{{ file.path }}
-          </button>
-          <div class="file-budget">{{ files.length }} / 128 个文件</div>
-        </aside>
-        <div class="editor-main">
-          <template v-if="currentFile"
-            ><div class="editor-title">
-              <span class="mono">{{ currentFile.path }}</span>
-              <div class="inline-gap">
-                <span class="muted"
-                  >{{ currentFile.content.split("\n").length }} 行</span
-                ><n-button
-                  v-if="currentFile.path !== 'nginx.conf'"
-                  text
-                  type="error"
-                  :disabled="busy || !!formDirty"
-                  @click="removeFile"
-                  >移除</n-button
-                >
-              </div>
-            </div>
-            <textarea
-              v-model="currentFile.content"
-              class="code-editor"
-              :disabled="busy || !!formDirty"
-              spellcheck="false"
-              :aria-label="currentFile.path"
-              :maxlength="262144"
-            /></template
-          ><n-empty v-else description="请选择配置文件" />
-        </div>
-      </div>
-      <div v-if="diagnostics.length" class="diagnostics surface">
-        <div class="section-heading">
-          <h2>配置诊断</h2>
-          <n-tag type="error" size="small">{{ diagnostics.length }} 项</n-tag>
-        </div>
-        <div
-          v-for="(item, index) in diagnostics"
-          :key="index"
-          class="diagnostic-row"
-        >
-          <span class="mono"
-            >{{ files.find((f) => f.id === item.file_id)?.path }}:{{
-              item.line
-            }}</span
-          ><span>{{ item.message }}</span>
-        </div>
-      </div>
-      <div class="save-bar">
-        <span class="muted">{{ files.length }} 个配置文件</span>
-        <div class="inline-gap">
-          <n-button :loading="busy" :disabled="!!formDirty" @click="preview"
-            >解析与预览</n-button
-          ><n-button :disabled="busy || !!formDirty" @click="save(true)"
-            >保存并校验</n-button
-          ><n-button
-            type="primary"
-            :disabled="
-              busy ||
-              !!formDirty ||
-              !runtime?.available ||
-              !runtime.integrity ||
-              !runtime.running
-            "
-            @click="save(false, true)"
-            >保存并应用</n-button
-          ><n-button
-            type="primary"
-            :loading="busy"
-            :disabled="!!formDirty"
-            @click="save()"
-            >保存配置</n-button
-          >
-        </div>
-      </div> </n-tab-pane
-    ><n-tab-pane name="fields" tab="网站与代理">
+
       <n-alert
         v-if="differsFromDesired"
         type="warning"
         :bordered="false"
         style="margin-bottom: 20px"
-        >配置文件有未保存修改，请先保存后再修改表单。</n-alert
+        >源文件有未保存修改，请先保存后再修改表单。<NButton text type="primary" @click="sourceVisible = true">继续编辑源文件</NButton></n-alert
       >
       <div v-if="tree?.resources.length" class="editor-layout surface">
         <aside class="file-tree">
@@ -1096,10 +1005,10 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                 <div class="proxy-field-grid">
                   <n-form-item
                     v-for="(field, name) in group.fields"
-                    :key="name"
+                    :key="`${resource.id}:${name}`"
                     :class="{
                       'wide-field':
-                        field.format === 'lines' || name === 'upstream_servers',
+                        field.format === 'lines' || field.format === 'tokens' || name === 'upstream_servers',
                     }"
                     :label="
                       name === 'upstream' && groupedHTTP
@@ -1141,22 +1050,15 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                         !!fieldFeatureReason(name)
                       "
                     />
-                    <n-input
+                    <NginxFieldInput
                       v-else
-                      v-model:value="fieldInputs[name]"
-                      :type="field.format === 'lines' ? 'textarea' : 'text'"
-                      :autosize="
-                        field.format === 'lines'
-                          ? { minRows: 1, maxRows: 10 }
-                          : false
-                      "
-                      :disabled="
-                        busy ||
-                        !field.editable ||
-                        differsFromDesired ||
-                        !!fieldFeatureReason(name)
-                      "
-                      placeholder="未设置"
+                      :value="fieldInputs[name] ?? ''"
+                      @update:value="fieldInputs[name] = $event"
+                      :name="name"
+                      :format="field.format"
+                      :kind="resource.kind"
+                      :resource-id="resource.id"
+                      :disabled="busy || !field.editable || differsFromDesired || !!fieldFeatureReason(name)"
                     />
                     <router-link
                       v-if="name === 'access_list'"
@@ -1237,8 +1139,105 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           ></template
         ></n-empty
       >
-    </n-tab-pane></n-tabs
-  >
+  <NModal v-model:show="sourceVisible" preset="card" title="编辑 Nginx 源文件" style="width: 1400px; max-width: 96vw">
+    <NAlert type="warning" :bordered="false" style="margin-bottom: 16px">源文件修改会影响代理服务，请在保存前校验配置。</NAlert>
+      <div class="editor-layout surface">
+        <aside class="file-tree">
+          <div class="section-heading">
+            <h2>配置文件</h2>
+            <n-button
+              text
+              title="添加文件"
+              :disabled="busy || !!formDirty"
+              @click="fileVisible = true"
+              >＋</n-button
+            >
+          </div>
+          <button
+            v-for="file in files"
+            :key="file.id"
+            class="file-item"
+            :class="{ selected: selected === file.id }"
+            @click="selected = file.id"
+          >
+            <span>▤</span>{{ file.path }}
+          </button>
+          <div class="file-budget">{{ files.length }} / 128 个文件</div>
+        </aside>
+        <div class="editor-main">
+          <template v-if="currentFile"
+            ><div class="editor-title">
+              <span class="mono">{{ currentFile.path }}</span>
+              <div class="inline-gap">
+                <span class="muted"
+                  >{{ currentFile.content.split("\n").length }} 行</span
+                ><n-button
+                  v-if="currentFile.path !== 'nginx.conf'"
+                  text
+                  type="error"
+                  :disabled="busy || !!formDirty"
+                  @click="removeFile"
+                  >移除</n-button
+                >
+              </div>
+            </div>
+            <textarea
+              v-model="currentFile.content"
+              class="code-editor"
+              :disabled="busy || !!formDirty"
+              spellcheck="false"
+              :aria-label="currentFile.path"
+              :maxlength="262144"
+            /></template
+          ><n-empty v-else description="请选择配置文件" />
+        </div>
+      </div>
+      <div v-if="diagnostics.length" class="diagnostics surface">
+        <div class="section-heading">
+          <h2>配置诊断</h2>
+          <n-tag type="error" size="small">{{ diagnostics.length }} 项</n-tag>
+        </div>
+        <div
+          v-for="(item, index) in diagnostics"
+          :key="index"
+          class="diagnostic-row"
+        >
+          <span class="mono"
+            >{{ files.find((f) => f.id === item.file_id)?.path }}:{{
+              item.line
+            }}</span
+          ><span>{{ item.message }}</span>
+        </div>
+      </div>
+      <div class="save-bar">
+        <span class="muted">{{ files.length }} 个配置文件</span>
+        <div class="inline-gap">
+          <n-button :loading="busy" :disabled="!!formDirty" @click="preview"
+            >解析与预览</n-button
+          ><n-button :disabled="busy || !!formDirty" @click="save(true)"
+            >保存并校验</n-button
+          ><n-button
+            type="primary"
+            :disabled="
+              busy ||
+              !!formDirty ||
+              !runtime?.available ||
+              !runtime.integrity ||
+              !runtime.running
+            "
+            @click="save(false, true)"
+            >保存并应用</n-button
+          ><n-button
+            type="primary"
+            :loading="busy"
+            :disabled="!!formDirty"
+            @click="save()"
+            >保存配置</n-button
+          >
+        </div>
+      </div>
+  </NModal>
+
   <configuration-changes
     v-model:show="changesVisible"
     :tree="tree"
@@ -1276,14 +1275,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             { label: 'TCP / UDP Stream', value: 'stream' },
           ]" /></n-form-item
       ><n-form-item label="监听"
-        ><n-input
-          v-model:value="createListen"
-          type="textarea"
-          placeholder="每行一项：8080 或 [::]:8080；UDP 添加 udp" /></n-form-item
+        ><NginxListeners v-model:value="createListen" :kind="createKind" :disabled="busy" /></n-form-item
       ><n-form-item v-if="createKind === 'http'" label="域名"
-        ><n-input
-          v-model:value="createDomains"
-          placeholder="多个域名使用空格分隔" /></n-form-item
+        ><ValueListInput v-model:value="createDomains" item-label="域名" placeholder="example.com 或 *.example.com" :maxlength="253" :disabled="busy" /></n-form-item
       ><n-form-item label="转发目标"
         ><n-select
           v-model:value="createTargetMode"
@@ -1293,6 +1287,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           ]"
       /></n-form-item>
       <n-form-item
+        v-if="createKind === 'http' || createTargetMode === 'direct'"
         :label="
           createKind === 'http'
             ? createTargetMode === 'group'
@@ -1300,7 +1295,8 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               : '目标网站地址'
             : '上游地址'
         "
-        ><n-input
+        ><EndpointInput v-if="createKind === 'stream' && createTargetMode === 'direct'" v-model:value="createUpstream" :disabled="busy" /><n-input
+          v-else
           v-model:value="createUpstream"
           :placeholder="
             createKind === 'http' ? 'http://127.0.0.1:3000' : '127.0.0.1:5432'

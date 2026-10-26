@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ValueListInput from "./ValueListInput.vue";
+import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
 
 import Fail2banTemplateCatalog from "./Fail2banTemplateCatalog.vue";
@@ -29,8 +31,7 @@ const view = ref<Fail2banPolicyView | null>(null),
   jails = ref<Fail2banDesiredJail[]>([]);
 const templates = ref<Fail2banTemplate[]>([]),
   sources = ref<LogSource[]>([]);
-const ignoreText = ref<Record<string, string>>({}),
-  preview = ref<Fail2banPolicyPreview | null>(null);
+const preview = ref<Fail2banPolicyPreview | null>(null);
 const busy = ref(false),
   error = ref(""),
   notice = ref("");
@@ -38,7 +39,7 @@ let closed = false,
   savedEditor = "",
   pending: { digest: string; key: string } | null = null;
 const serialize = () =>
-  JSON.stringify({ jails: jails.value, ignore: ignoreText.value });
+  JSON.stringify({ jails: jails.value });
 const dirty = computed(() => !!view.value && serialize() !== savedEditor);
 const templateOptions = computed(() =>
   templates.value.map((template) => ({
@@ -88,9 +89,6 @@ function accept(value: Fail2banPolicyView) {
     ...jail,
     ignore_ips: [...jail.ignore_ips],
   }));
-  ignoreText.value = Object.fromEntries(
-    jails.value.map((jail) => [jail.id, jail.ignore_ips.join("\n")]),
-  );
   savedEditor = serialize();
   preview.value = null;
 }
@@ -131,7 +129,6 @@ function add() {
   jails.value.push(template.id === panelTemplate
     ? { ...common, template: panelTemplate, resource_id: "", action: "host-input" }
     : { ...common, template: template.id, resource_id: "", action: "nginx-client" });
-  ignoreText.value[id] = "";
   preview.value = null;
 }
 function setNumber(
@@ -143,7 +140,6 @@ function setNumber(
 }
 function remove(id: string) {
   jails.value = jails.value.filter((jail) => jail.id !== id);
-  delete ignoreText.value[id];
   preview.value = null;
 }
 async function save() {
@@ -157,10 +153,7 @@ async function save() {
     for (const jail of jails.value) {
       const saved = view.value.policy.jails.find((item) => item.id === jail.id);
       if (saved && (saved.template !== jail.template || saved.resource_id !== jail.resource_id || saved.action !== jail.action)) {
-        const oldID = jail.id;
         jail.id = randomUUID();
-        ignoreText.value[jail.id] = ignoreText.value[oldID] || "";
-        delete ignoreText.value[oldID];
       }
     }
     const input = {
@@ -168,10 +161,7 @@ async function save() {
       policy: {
         jails: jails.value.map((jail) => ({
           ...jail,
-          ignore_ips: (ignoreText.value[jail.id] || "")
-            .split(/[\n,]/)
-            .map((value) => value.trim())
-            .filter(Boolean),
+          ignore_ips: cleanList(jail.ignore_ips),
         })),
       },
     };
@@ -298,13 +288,8 @@ onUnmounted(() => {
             :precision="0"
         /></NFormItem>
       </div>
-      <NFormItem label="白名单 IP / CIDR（每行一个）"
-        ><NInput
-          v-model:value="ignoreText[jail.id]"
-          :disabled="busy"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 6 }"
-      /></NFormItem>
+      <NFormItem label="白名单 IP / 网段"
+        ><ValueListInput v-model:value="jail.ignore_ips" :max="64" item-label="白名单地址" placeholder="192.0.2.1 或 192.0.2.0/24" :maxlength="64" :disabled="busy" /></NFormItem>
     </div>
     <div class="actions">
       <NButton
