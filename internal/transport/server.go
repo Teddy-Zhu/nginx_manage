@@ -324,6 +324,17 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 		s.fail(w, r, fault.Invalid("缺少 enabled 字段"))
 		return
 	}
+	if id == "fail2ban" && !*in.Enabled && s.Agent != nil {
+		state, err := s.Agent.ReadFail2banContainer(r.Context())
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		if state.Installed {
+			s.fail(w, r, fault.Conflict("请先在软件商店卸载登录防护，再关闭此功能；配置和防护数据会保留"))
+			return
+		}
+	}
 	var err error
 	if id == "firewall" {
 		if !s.firewallReady(w, r) {

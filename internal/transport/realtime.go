@@ -23,7 +23,7 @@ var realtimeScopes = map[string][]string{
 	"tasks": {"read"}, "monitoring": {"read"}, "notifications": {"read"},
 	"maintenance": {"read", "system.write"}, "backups": {"read", "backup.export"},
 	"firewall": {"read", "security.write"}, "listener": {"read", "system.write"}, "version": {"read"},
-	"dns": {"read"},
+	"dns": {"read"}, "fail2ban": {"read"},
 }
 
 // Fingerprints contain no credentials and never leave this process. Clients
@@ -139,6 +139,11 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 			return "", errors.New("agent unavailable")
 		}
 		value, err = s.Agent.ManagementListener(ctx)
+	case "fail2ban":
+		if s.Agent == nil {
+			return "", errors.New("agent unavailable")
+		}
+		value, err = s.Agent.ReadFail2banContainer(ctx)
 	case "dns":
 		if s.HostDNS == nil {
 			return "", errors.New("DNS unavailable")

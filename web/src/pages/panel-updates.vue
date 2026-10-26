@@ -1,368 +1,264 @@
 <route lang="json">
 {
   "meta": {
-    "title": "面板更新",
-    "subtitle": "版本更新与任务恢复",
-    "nav": false,
-    "order": 7.22,
-    "symbol": "◇",
-    "parent": "/settings"
+    "title": "系统更新",
+    "subtitle": "检查版本与更新记录",
+    "order": 30,
+    "localOnly": true
   }
 }
 </route>
 <script setup lang="ts">
-import TaskLogButton from "../components/TaskLogButton.vue";
-import { useLiveRefresh } from "../composables/live";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
-import {
-  NAlert,
-  NButton,
-  NCheckbox,
-  NFormItem,
-  NPopconfirm,
-  NSelect,
-  NTag,
-} from "naive-ui";
+import { computed, onMounted, ref } from "vue";
+import { NAlert, NButton, NCheckbox, NEmpty, NTag } from "naive-ui";
 import {
   useNodeAPI,
-  apiError,
+  type ComponentCreateInput,
   type ComponentTask,
-  type MaintenanceView,
-  type PanelUpdateTask,
 } from "../api/client";
-import { useAction, useIdempotency } from "../composables/action";
+import { useAction } from "../composables/action";
+import { useLiveRefresh } from "../composables/live";
 import { useSession } from "../stores/session";
-const api = useNodeAPI();
-
-const session = useSession(),
+import { inspectTask } from "../stores/operation";
+import { taskStates } from "../utils/tasks";
+import { randomUUID } from "../utils/crypto";
+import TaskLogButton from "../components/TaskLogButton.vue";
+const api = useNodeAPI(),
+  session = useSession(),
   { run, busy } = useAction();
-let keyFor = useIdempotency();
-const preparations = ref<ComponentTask[]>([]),
-  tasks = ref<PanelUpdateTask[]>([]),
-  maintenance = ref<MaintenanceView | null>(null),
-  selected = ref(""),
-  error = ref("");
-const coordinateAgent = ref(false),
-  allowDowntime = ref(false);
-const canWrite = computed(
+const tasks = ref<ComponentTask[]>([]),
+  version = ref(""),
+  prerelease = ref(false),
+  lastID = ref("");
+const permitted = computed(
   () =>
-    !!session.me?.scopes.includes("components.manage") &&
-    !!session.me?.scopes.includes("system.write"),
+    session.me?.scopes.includes("components.manage") &&
+    session.me.scopes.includes("system.write"),
 );
-const held = computed(
-  () =>
-    maintenance.value?.phase === "held" &&
-    maintenance.value.agent.phase === "held" &&
-    maintenance.value.agent.id === maintenance.value.session?.task_id &&
-    maintenance.value.agent.epoch === maintenance.value.session?.root_epoch,
-);
-const prepared = computed(() =>
-  preparations.value.filter(
-    (t) =>
-      t.action === "prepare" &&
-      t.state === "succeeded" &&
-      t.result?.runtime_ready &&
-      t.result.panel &&
-      t.result.release,
-  ),
-);
-const chosen = computed(() =>
-  prepared.value.find((t) => t.id === selected.value),
-);
-const needsCoordination = computed(
-  () => !!chosen.value?.result?.panel?.requires_coordination,
-);
-watch([selected, needsCoordination], () => {
-  coordinateAgent.value = needsCoordination.value;
-  allowDowntime.value = false;
-});
 const active = computed(() =>
   tasks.value.some(
     (t) =>
-      t.stage !== "restore_isolated" &&
-      !["succeeded", "failed", "rolled_back", "cancelled"].includes(t.state),
+      ["queued", "running", "recovery_required"].includes(t.state) &&
+      t.stage !== "restore_isolated",
   ),
 );
-const cleanupStates: Record<string, string> = {
-  pending: "等待清理",
-  running: "清理中",
-  blocked: "清理待处理",
-  done: "已清理",
-};
-const canCreate = computed(
-  () =>
-    canWrite.value &&
-    held.value &&
-    !!chosen.value?.result?.panel?.automatic_rollback &&
-    (!coordinateAgent.value || allowDowntime.value) &&
-    !active.value &&
-    !busy.value,
+const last = computed(() => tasks.value.find((t) => t.id === lastID.value));
+const checked = computed(() =>
+  tasks.value.find(
+    (t) =>
+      t.action === "check" &&
+      t.state === "succeeded" &&
+      t.result?.input.prerelease === prerelease.value &&
+      t.result?.release?.assets.some(
+        (a) =>
+          a.component === "panel" && t.result!.release!.selected.includes(a.id),
+      ),
+  ),
 );
-const states: Record<string, string> = {
-  queued: "排队中",
-  running: "更新中",
-  compensating: "恢复原版本",
-  waiting_confirmation: "确认维护释放",
-  recovery_required: "待恢复",
-  succeeded: "更新完成",
-  failed: "更新未完成",
-  rolled_back: "已恢复原版本",
-  cancelled: "已取消",
-};
-const stages: Record<string, string> = {
-  restore_isolated: "源任务已隔离",
-  queued: "等待执行",
-  capturing: "备份更新前的数据",
-  stopping: "停止原版本",
-  selecting: "切换版本",
-  starting: "启动新版本",
-  checking: "确认就绪",
-  rollback_stopping: "停止更新进程",
-  rollback_selecting: "选择原版本",
-  restoring: "恢复匹配数据",
-  rollback_starting: "启动原版本",
-  rollback_checking: "确认原版本就绪",
-  committed: "更新已提交",
-  compensated: "原版本已恢复",
-  aborted: "更新已中止",
-  agent_submit_pending: "提交更新",
-  control_pending: "提交续办授权",
-  maintenance_unconfirmed: "等待原维护会话",
-  epoch_changed: "需要重新授权",
-  authorization_expired: "启动授权已过期",
-  agent_unconfirmed: "等待独立事务确认",
-  control_unconfirmed: "等待续办确认",
-  control_rejected: "续办未受理",
-  preflight_unconfirmed: "等待执行条件确认",
-  preflight_rejected: "未通过执行条件检查",
-  operation_missing: "独立记录待本机恢复",
-  operation_mismatch: "独立记录待本机核对",
-  intent_mismatch: "原更新意图待本机核对",
-  control_mismatch: "续办记录待本机核对",
-};
-function date(value: number) {
-  return new Date(value * 1000).toLocaleString();
-}
-function canResume(t: PanelUpdateTask) {
-  const result = t.result;
-  return (
-    canWrite.value &&
-    held.value &&
-    maintenance.value?.agent.id === t.input.maintenance_id &&
-    !busy.value &&
-    t.state === "recovery_required" &&
-    ![
-      "operation_missing",
-      "operation_mismatch",
-      "intent_mismatch",
-      "control_mismatch",
-      "restore_isolated",
-    ].includes(t.stage) &&
-    (result
-      ? !result.active && !result.finalized && result.sequence < 32
-      : ["epoch_changed", "maintenance_unconfirmed"].includes(t.stage))
-  );
-}
-let controller: AbortController | null = null,
-  reading = false,
-  closed = false;
+const release = computed(() => checked.value?.result?.release);
+const prepared = computed(() =>
+  tasks.value.find(
+    (t) =>
+      t.action === "prepare" &&
+      t.state === "succeeded" &&
+      t.result?.panel &&
+      t.result.input.plan_id === release.value?.plan_id,
+  ),
+);
+const history = computed(() =>
+  tasks.value
+    .filter((t) => t.result?.input.software?.action === "update-panel")
+    .slice(0, 10),
+);
 async function load() {
-  if (reading || closed) return;
-  reading = true;
-  controller = new AbortController();
-  try {
-    const [sources, items, view] = await Promise.all([
-      api.componentTasks(controller.signal),
-      api.panelUpdates(controller.signal),
-      canWrite.value
-        ? api.maintenance(controller.signal)
-        : Promise.resolve(null),
+  await run(async () => {
+    const [items, current] = await Promise.all([
+      api.componentTasks(),
+      api.systemVersion(),
     ]);
-    preparations.value = sources;
     tasks.value = items;
-    maintenance.value = view;
-    error.value = "";
-    if (!prepared.value.some((t) => t.id === selected.value))
-      selected.value = prepared.value[0]?.id ?? "";
-  } catch (e) {
-    if (!closed) error.value = apiError(e).message;
-  } finally {
-    reading = false;
-  }
+    version.value = current.version;
+  });
+}
+async function submit(input: ComponentCreateInput) {
+  await run(async () => {
+    const task = await api.createComponentTask(input, randomUUID());
+    lastID.value = task.id;
+    tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
+    inspectTask(
+      task.id,
+      input.input.action === "software" ? "系统更新日志" : "更新准备日志",
+    );
+  });
+}
+async function check() {
+  await submit({
+    input: {
+      action: "check",
+      components: ["panel"],
+      tag: "",
+      prerelease: prerelease.value,
+      plan_id: "",
+      manifest_sha256: "",
+      trust_sha256: "",
+    },
+  });
+}
+async function download() {
+  const r = release.value,
+    t = checked.value;
+  if (!r || !t) return;
+  await submit({
+    check_task_id: t.id,
+    input: {
+      action: "prepare",
+      tag: r.tag,
+      prerelease: prerelease.value,
+      assets: r.selected,
+      plan_id: r.plan_id,
+      manifest_sha256: r.manifest_sha256,
+      trust_sha256: r.trust_sha256,
+      offline_id: t.result?.input.offline_id,
+    },
+  });
 }
 async function update() {
-  if (!canCreate.value || !maintenance.value) return;
-  const input = {
-    maintenance_id: maintenance.value.agent.id,
-    prepare_task_id: selected.value,
-    coordinate_agent: coordinateAgent.value,
-    allow_downtime: coordinateAgent.value && allowDowntime.value,
-  };
-  await run(async () => {
-    const t = await api.createPanelUpdate(input, keyFor(input));
-    tasks.value = [t, ...tasks.value.filter((item) => item.id !== t.id)];
-    keyFor = useIdempotency();
-  }, "面板更新任务已受理");
-  await load();
+  const t = prepared.value;
+  if (!t?.result?.release) return;
+  if (!window.confirm("现在更新系统？面板连接将短暂中断，已有数据会保留。"))
+    return;
+  await submit({
+    input: {
+      action: "software",
+      tag: "",
+      prerelease: false,
+      plan_id: "",
+      manifest_sha256: "",
+      trust_sha256: "",
+      software: {
+        action: "update-panel",
+        plan_id: t.result.release.plan_id,
+        prerelease: t.result.input.prerelease,
+      },
+    },
+  });
 }
-async function resume(t: PanelUpdateTask) {
-  if (!canResume(t)) return;
-  await run(async () => {
-    await api.resumePanelUpdate(
-      t.id,
-      keyFor({
-        id: t.id,
-        sequence: t.result?.sequence ?? 0,
-        command: "resume",
-      }),
-    );
-    keyFor = useIdempotency();
-  }, "原更新续办请求已受理");
-  await load();
-}
-onMounted(() => {
-  void load();
-});
-onUnmounted(() => {
-  closed = true;
-  controller?.abort();
-});
-useLiveRefresh(api, ["tasks", "maintenance"], load);
+useLiveRefresh(api, ["tasks"], load);
+onMounted(load);
 </script>
 <template>
   <div class="page-stack">
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">
-      <div class="toolbar">
-        <h2>更新面板版本</h2>
-        <NButton @click="load">刷新</NButton>
+      <div class="section-heading">
+        <div>
+          <h3>当前版本</h3>
+          <p class="current-version">{{ version || "正在读取" }}</p>
+        </div>
+        <NButton :loading="busy" @click="load">刷新</NButton>
       </div>
-      <p>
-        在<RouterLink to="/components">软件商店</RouterLink
-        >完成面板准备，并在<RouterLink to="/maintenance">维护模式</RouterLink
-        >进入维护后开始更新。
+      <p class="muted">
+        检查并下载新版本后，即可更新。更新期间面板会短暂断开，完成后自动恢复连接。
       </p>
-      <NAlert type="info"
-        >更新期间面板暂时不可用。提交前失败时，将恢复原版本及匹配数据。</NAlert
-      >
-      <NAlert v-if="canWrite && !held" type="warning"
-        >尚未进入维护模式，请先确认维护状态。</NAlert
-      >
-      <NFormItem label="更新版本"
-        ><NSelect
-          v-model:value="selected"
-          :options="
-            prepared.map((t) => ({
-              label: `${t.result?.release?.version} · ${date(t.created_at)}`,
-              value: t.id,
-            }))
-          "
-          placeholder="选择已下载版本"
-          :disabled="!canWrite || busy"
-      /></NFormItem>
-      <p v-if="chosen?.result?.panel">
-        版本 {{ chosen.result.release?.version }}
-      </p>
-      <NAlert
-        v-if="chosen?.result?.panel && !chosen.result.panel.automatic_rollback"
-        type="warning"
-        >此发布未开放自动回滚，无法使用自动更新。</NAlert
-      >
-      <NCheckbox
-        v-if="canWrite"
-        v-model:checked="coordinateAgent"
-        :disabled="needsCoordination || busy"
-        >同时更新系统管理服务</NCheckbox
-      >
-      <NAlert v-if="coordinateAgent" type="warning"
-        >更新期间面板暂时无法访问，网站服务继续运行。更新失败时将尝试恢复原版本。</NAlert
-      >
-      <NCheckbox
-        v-if="coordinateAgent"
-        v-model:checked="allowDowntime"
-        :disabled="busy"
-        >允许更新期间暂停面板访问</NCheckbox
-      >
-      <div v-if="canWrite">
-        <NPopconfirm
-          :disabled="!canCreate"
-          positive-text="开始更新"
-          @positive-click="update"
-          ><template #trigger
-            ><NButton type="primary" :disabled="!canCreate" :loading="busy"
-              >开始更新</NButton
-            ></template
-          >确认更新到 {{ chosen?.result?.release?.version }}？{{
-            coordinateAgent
-              ? "将同时更新系统管理服务，期间面板与管理操作暂时不可用。"
-              : "更新期间面板暂时不可用。"
-          }}</NPopconfirm
+      <div class="button-row">
+        <NButton
+          type="primary"
+          :loading="busy || active"
+          :disabled="!permitted || active"
+          @click="check"
+          >{{ active ? "正在处理" : "检查更新" }}</NButton
+        ><NCheckbox v-model:checked="prerelease" :disabled="busy || active"
+          >包含预览版本</NCheckbox
         >
+      </div>
+      <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
+      <div v-if="last" class="button-row">
+        <NTag
+          :type="
+            last.state === 'succeeded'
+              ? 'success'
+              : last.state === 'failed'
+                ? 'error'
+                : 'info'
+          "
+          >{{ taskStates[last.state] || "正在处理" }}</NTag
+        ><TaskLogButton :task-id="last.id" />
       </div>
     </section>
+    <section v-if="release" class="panel page-stack">
+      <div class="section-heading">
+        <h3>可用版本 {{ release.version }}</h3>
+        <NTag v-if="prepared" type="success">已下载</NTag>
+      </div>
+      <p v-if="release.notes">{{ release.notes }}</p>
+      <p class="muted">
+        下载大小：{{ (release.archive_bytes / 1048576).toFixed(1) }} MB
+      </p>
+      <NAlert v-if="!checked?.result?.runtime_ready" type="warning"
+        >服务器暂不满足此版本的安装条件，请查看检查日志。</NAlert
+      >
+      <div class="button-row">
+        <NButton
+          v-if="!prepared"
+          type="primary"
+          :loading="busy || active"
+          :disabled="
+            !permitted ||
+            active ||
+            !checked?.result?.runtime_ready ||
+            release.expires_at * 1000 <= Date.now()
+          "
+          @click="download"
+          >下载更新</NButton
+        ><NButton
+          v-else
+          type="primary"
+          :loading="busy || active"
+          :disabled="
+            !permitted ||
+            active ||
+            prepared.result?.panel?.requires_coordination
+          "
+          @click="update"
+          >立即更新</NButton
+        ><TaskLogButton v-if="prepared" :task-id="prepared.id" />
+      </div>
+      <NAlert
+        v-if="prepared?.result?.panel?.requires_coordination"
+        type="warning"
+        >此版本需要更新安装程序，请使用安装脚本更新。</NAlert
+      >
+    </section>
     <section class="panel page-stack">
-      <h2>更新任务</h2>
-      <p v-if="!tasks.length" class="muted">暂无更新任务</p>
-      <article v-for="task in tasks" :key="task.id" class="panel page-stack">
-        <TaskLogButton :task-id="task.id" />
-        <div class="toolbar">
-          <strong>{{ states[task.state] ?? "状态待确认" }}</strong
-          ><NTag
-            :type="
-              task.state === 'succeeded'
-                ? 'success'
-                : ['failed', 'recovery_required'].includes(task.state)
-                  ? 'warning'
-                  : 'info'
-            "
-            >{{ stages[task.stage] ?? "正在处理" }}</NTag
-          >
-        </div>
-        <p class="muted">
-          {{ date(task.created_at) }} ·
-          {{ task.input.coordinate_agent ? "系统更新" : "面板更新" }}
-        </p>
-        <p v-if="task.result">
-          {{
-            task.result.active
-              ? "正在更新"
-              : task.result.finalized
-                ? "更新处理已结束"
-                : "正在确认更新状态"
-          }}
-        </p>
-        <NAlert
-          v-if="task.error"
-          :type="task.state === 'rolled_back' ? 'info' : 'warning'"
-          >{{ task.error }}</NAlert
-        >
-        <NAlert
-          v-if="task.result?.finalized && !task.result.release_acknowledged"
-          type="info"
-          >更新结果已保存，正在确认维护释放。</NAlert
-        >
-        <template v-if="task.result?.release_acknowledged">
+      <h3>更新记录</h3>
+      <NEmpty v-if="!history.length" description="暂无更新记录" />
+      <article v-for="task in history" :key="task.id" class="update-record">
+        <div>
+          <strong>{{ taskStates[task.state] || "正在处理" }}</strong>
           <p class="muted">
-            恢复材料：{{
-              cleanupStates[task.result.cleanup.state] ??
-              task.result.cleanup.state
-            }}<span v-if="task.result.cleanup.completed_at">
-              · {{ date(task.result.cleanup.completed_at) }}</span
-            >
+            {{ new Date(task.created_at * 1000).toLocaleString() }}
           </p>
-          <NAlert v-if="task.result.cleanup.error" type="warning">{{
-            task.result.cleanup.error
-          }}</NAlert>
-        </template>
-        <div v-if="canResume(task)">
-          <NPopconfirm positive-text="续办原更新" @positive-click="resume(task)"
-            ><template #trigger
-              ><NButton :loading="busy">续办原更新</NButton></template
-            >确认继续此更新操作？系统将按原进度完成更新或恢复原版本。</NPopconfirm
-          >
+          <p v-if="task.error">{{ task.error }}</p>
         </div>
+        <TaskLogButton :task-id="task.id" />
       </article>
     </section>
   </div>
 </template>
+<style scoped>
+.current-version {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 8px 0 0;
+}
+.update-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+.update-record p {
+  margin: 8px 0 0;
+}
+</style>

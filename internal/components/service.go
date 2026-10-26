@@ -56,6 +56,19 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	if err := in.Input.Validate(); err != nil {
 		return out, err
 	}
+	if in.Input.Action == "software" {
+		if err := p.Require("system.write"); err != nil {
+			return out, err
+		}
+		if in.Input.Software.Action == "fail2ban" {
+			if err := p.Require("security.write"); err != nil {
+				return out, err
+			}
+		}
+		if in.CheckTaskID != "" || in.PrepareTaskID != "" {
+			return out, fault.Invalid("软件操作不能引用组件任务")
+		}
+	}
 	if in.Input.Action == "activate" || in.Input.Action == "pull" {
 		if err := p.Require("system.write"); err != nil {
 			return out, err
@@ -110,18 +123,12 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	if !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
-	var active, count int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.activate','component.pull') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&active); err != nil {
+	var active int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.activate','component.pull','component.software') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&active); err != nil {
 		return out, err
 	}
 	if active != 0 {
 		return out, fault.Conflict("已有组件任务执行中或待恢复")
-	}
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM component_operations").Scan(&count); err != nil {
-		return out, err
-	}
-	if count >= 64 {
-		return out, fault.Conflict("组件任务达到 64 项保留上限，须本机维护")
 	}
 	now := time.Now().Unix()
 	if in.Input.Action == "pull" {

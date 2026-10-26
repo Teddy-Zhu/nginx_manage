@@ -3,21 +3,22 @@ package fail2ban
 // Observation is inventory, not approval to start an engine or manage a jail.
 // Presence, service state and complete engine readiness remain separate.
 type Observation struct {
-	Managed       Managed     `json:"managed"`
-	At            int64       `json:"at"`
-	Source        string      `json:"source"`
-	Scope         string      `json:"scope"`
-	Available     bool        `json:"available"`
-	Writable      bool        `json:"writable"`
-	Reason        string      `json:"reason"`
-	Tools         []Tool      `json:"tools"`
-	ClientVersion string      `json:"client_version"`
-	Python        Python      `json:"python"`
-	Services      []Service   `json:"services"`
-	Socket        Socket      `json:"socket"`
-	Missing       []string    `json:"missing"`
-	Warnings      []string    `json:"warnings"`
-	Binding       BindingView `json:"binding"`
+	Container     *ContainerStatus `json:"container,omitempty"`
+	Managed       Managed          `json:"managed"`
+	At            int64            `json:"at"`
+	Source        string           `json:"source"`
+	Scope         string           `json:"scope"`
+	Available     bool             `json:"available"`
+	Writable      bool             `json:"writable"`
+	Reason        string           `json:"reason"`
+	Tools         []Tool           `json:"tools"`
+	ClientVersion string           `json:"client_version"`
+	Python        Python           `json:"python"`
+	Services      []Service        `json:"services"`
+	Socket        Socket           `json:"socket"`
+	Missing       []string         `json:"missing"`
+	Warnings      []string         `json:"warnings"`
+	Binding       BindingView      `json:"binding"`
 }
 type Tool struct {
 	ID       string `json:"id"`

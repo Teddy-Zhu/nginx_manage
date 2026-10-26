@@ -371,6 +371,8 @@ func Run(ctx context.Context, o Options) error {
 				return readinessStatus(ctx, o, running.Release, db, maintenanceService, agentClient)
 			}, func(ctx context.Context, restoreID, maintenanceID string) (panelready.ReleaseStatus, error) {
 				return readinessReleaseStatus(ctx, o, running.Release, db, restoreID, maintenanceID)
+			}, func(ctx context.Context) (panelready.Status, error) {
+				return healthyStatus(ctx, o, running.Release, db)
 			})
 		}()
 	}

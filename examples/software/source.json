@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "example",
+  "name": "示例软件源",
+  "applications": [
+    {
+      "id": "web",
+      "name": "示例网站",
+      "description": "用于演示软件源格式，安装前请调整访问端口。",
+      "image": "nginx:stable-alpine",
+      "ports": [{ "host": 18080, "container": 80, "protocol": "tcp" }],
+      "volumes": [{ "name": "html", "target": "/usr/share/nginx/html" }],
+      "environment": {}
+    }
+  ]
+}

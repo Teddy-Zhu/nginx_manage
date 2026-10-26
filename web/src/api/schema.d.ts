@@ -481,6 +481,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/fail2ban/container": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFail2banContainer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/firewall/runtime": {
         parameters: {
             query?: never;
@@ -4318,6 +4334,7 @@ export interface components {
             warnings: string[];
             binding: components["schemas"]["Fail2banBindingView"];
             managed: components["schemas"]["Fail2banManaged"];
+            container?: components["schemas"]["Fail2banContainerStatus"];
         };
         /** @description 实际面板及 SSH 监听端口，仅用于生成期望规则；不代表外部可达，也不授予写入权限。 */
         FirewallShortcutPorts: {
@@ -5259,9 +5276,117 @@ export interface components {
             approved_at: number;
             reused: boolean;
         };
+        Fail2banContainerRule: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "ssh" | "panel" | "nginx";
+            enabled: boolean;
+            ports: number[];
+            max_retry: number;
+            find_time: number;
+            ban_time: number;
+        };
+        Fail2banContainerConfig: {
+            /** Format: int64 */
+            revision: number;
+            image: string;
+            auto_start: boolean;
+            whitelist: string[];
+            rules: components["schemas"]["Fail2banContainerRule"][];
+        };
+        Fail2banContainerJail: {
+            id: string;
+            running: boolean;
+            banned: string[];
+            /** Format: int64 */
+            current_failed: number;
+            /** Format: int64 */
+            total_failed: number;
+            /** Format: int64 */
+            total_banned: number;
+            error: string;
+            /** Format: int64 */
+            current_banned: number;
+        };
+        Fail2banContainerStatus: {
+            installed: boolean;
+            running: boolean;
+            ready: boolean;
+            config: components["schemas"]["Fail2banContainerConfig"];
+            jails: components["schemas"]["Fail2banContainerJail"][];
+            logs: string;
+            error: string;
+        };
+        Fail2banContainerRequest: {
+            /** @enum {string} */
+            action: "install" | "configure" | "start" | "stop" | "restart" | "update" | "uninstall" | "ban" | "unban";
+            config?: components["schemas"]["Fail2banContainerConfig"];
+            jail_id?: string;
+            address?: string;
+        };
+        SoftwarePort: {
+            host: number;
+            container: number;
+            /** @enum {string} */
+            protocol: "tcp" | "udp";
+        };
+        SoftwareVolume: {
+            name: string;
+            target: string;
+        };
+        SoftwareApplication: {
+            id: string;
+            name: string;
+            description: string;
+            image: string;
+            ports?: components["schemas"]["SoftwarePort"][];
+            volumes?: components["schemas"]["SoftwareVolume"][];
+            environment?: {
+                [key: string]: string;
+            };
+        };
+        SoftwareSource: {
+            /** @enum {integer} */
+            schema: 1;
+            id: string;
+            name: string;
+            url?: string;
+            applications: components["schemas"]["SoftwareApplication"][];
+        };
+        SoftwareInstallation: {
+            source_id: string;
+            application: components["schemas"]["SoftwareApplication"];
+            container: string;
+            image_id: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        SoftwareCatalog: {
+            sources: components["schemas"]["SoftwareSource"][];
+            installed: components["schemas"]["SoftwareInstallation"][];
+            error?: string;
+        };
+        SoftwareRequest: {
+            /** @enum {string} */
+            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban";
+            source?: components["schemas"]["SoftwareSource"];
+            url?: string;
+            source_id?: string;
+            app_id?: string;
+            plan_id?: string;
+            prerelease?: boolean;
+            fail2ban?: components["schemas"]["Fail2banContainerRequest"];
+        };
+        SoftwareResult: {
+            source_id?: string;
+            app_id?: string;
+            message: string;
+            log: string;
+        };
         ComponentInput: {
             /** @enum {string} */
-            action: "check" | "prepare" | "activate" | "pull";
+            action: "check" | "prepare" | "activate" | "pull" | "software";
             tag: string;
             prerelease: boolean;
             components?: ("nginx" | "fail2ban" | "panel" | "web")[];
@@ -5274,10 +5399,11 @@ export interface components {
             frontend_base_id?: string;
             expected_frontend_id?: string;
             image_id?: string;
+            software?: components["schemas"]["SoftwareRequest"];
         };
         ComponentCreateInput: {
             input: components["schemas"]["ComponentInput"];
-            check_task_id: string;
+            check_task_id?: string;
             prepare_task_id?: string;
         };
         ComponentOverview: {
@@ -5295,6 +5421,7 @@ export interface components {
             switch_available: boolean;
             switch_reason: string;
             frontend: components["schemas"]["ComponentFrontendStatus"];
+            software: components["schemas"]["SoftwareCatalog"];
         };
         ComponentAsset: {
             id: string;
@@ -5398,6 +5525,7 @@ export interface components {
             frontend?: components["schemas"]["ComponentFrontendResult"];
             announcement?: components["schemas"]["ComponentReleaseAnnouncement"];
             image?: components["schemas"]["ComponentImagePreparation"];
+            software?: components["schemas"]["SoftwareResult"];
         };
         ComponentTask: {
             id: string;
@@ -7634,6 +7762,19 @@ export interface operations {
         };
     };
     getFail2ban: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getFail2banContainer: {
         parameters: {
             query?: never;
             header?: never;

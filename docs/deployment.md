@@ -92,7 +92,7 @@ git pull --ff-only
 sudo bash install.sh --fresh
 ```
 
-`--fresh` 先在 Docker 中编译当前源码，再以新工具检查旧安装、完全卸载并安装新版本。旧账号、配置、密钥、证书和备份全部删除，重新生成初始化信息及随机管理端口；指定端口可加 `--port 23456`。交互时先确认完全卸载，再核对新安装摘要；`--yes` 明确确认整个过程。已有业务数据时使用面板及 Agent 的[维护更新流程](operations.md#组件准备与更新)。
+`--fresh` 先在 Docker 中编译当前源码，再以新工具检查旧安装、完全卸载并安装新版本。旧账号、配置、密钥、证书和备份全部删除，重新生成初始化信息及随机管理端口；指定端口可加 `--port 23456`。交互时先确认完全卸载，再核对新安装摘要；`--yes` 明确确认整个过程。已有业务数据时使用面板及 Agent 的[系统更新流程](operations.md#组件准备与更新)。
 
 旧程序缺少 `installation-removal-check` 时，也可只卸载：
 
@@ -211,7 +211,7 @@ sudo systemctl status nginxpanel-agent.service
 sudo docker compose -f /etc/nginxpanel/docker/compose.yaml ps
 ```
 
-生成配置使用 host network，业务端口直接属于宿主机网络。保留安装器生成的用户、权限、挂载和容器身份约束；运行镜像通过面板维护流程更换。详见[Docker 部署参考](../deploy/docker/README.md)。
+生成配置使用 host network，业务端口直接属于宿主机网络。保留安装器生成的用户、权限、挂载和容器身份约束；运行镜像通过系统更新入口更换。详见[Docker 部署参考](../deploy/docker/README.md)。
 
 ## 6. 首次访问与管理员初始化
 

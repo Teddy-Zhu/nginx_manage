@@ -29,7 +29,8 @@ NginxPanel 用于管理专用 Nginx 实例及相关主机功能。安装和宿�
 | 远程访问面板、来源限制与本机救援 | [管理入口](management-listener.md) |
 | 原生 Nginx 动态模块批准 | [模块接入](native-modules.md) |
 | 防火墙后端授权、入口保护、应用与回滚 | [防火墙](firewall.md) |
-| Fail2ban 接入、jail、服务控制与恢复 | [Fail2ban](fail2ban.md) |
+| 登录防护、Docker 软件安装与软件源配置 | [软件源与部署](software-sources.md) |
+| 已有原生 Fail2ban 的内部接口参考 | [Fail2ban](fail2ban.md) |
 | 本地配置迁到云端、文件或 API 迁移 | [配置迁移](migration.md) |
 | 加密备份、离线检查与完整恢复 | [完整备份](backups.md) |
 | 连接和管理其他节点 | [多节点](nodes.md) |

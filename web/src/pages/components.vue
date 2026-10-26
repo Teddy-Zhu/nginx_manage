@@ -21,15 +21,13 @@ import {
   type ComponentTask,
   type ComponentCreateInput,
   type Fail2banObservation,
-  type Fail2banInstance,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useLiveRefresh } from "../composables/live";
 import { useSession } from "../stores/session";
 import { nginxState, fail2banState } from "../utils/software";
+import SoftwareSourcesPanel from "../components/SoftwareSourcesPanel.vue";
 import Fail2banInstallPanel from "../components/Fail2banInstallPanel.vue";
-import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
-import Fail2banExistingPanel from "../components/Fail2banExistingPanel.vue";
 import TaskLogButton from "../components/TaskLogButton.vue";
 
 const api = useNodeAPI(),
@@ -42,8 +40,7 @@ const software =
     : "";
 const overview = ref<ComponentOverview | null>(null),
   tasks = ref<ComponentTask[]>([]),
-  fail2ban = ref<Fail2banObservation | null>(null),
-  instance = ref<Fail2banInstance | null>(null);
+  fail2ban = ref<Fail2banObservation | null>(null);
 const moduleEnabled = ref(false),
   installing = ref(false),
   reading = ref(false),
@@ -122,8 +119,7 @@ async function load() {
     moduleEnabled.value = modules.some(
       (item) => item.id === "fail2ban" && item.enabled,
     );
-    if (software === "fail2ban" && observation.binding.state === "bound")
-      instance.value = await api.fail2banInstance(controller.signal);
+
     error.value = "";
   } catch (failure) {
     if (!controller.signal.aborted) error.value = apiError(failure).message;
@@ -303,35 +299,11 @@ useLiveRefresh(api, ["tasks"], load);
         </div>
       </section>
     </div>
-    <template v-if="software === 'fail2ban'">
-      <Fail2banExistingPanel
-        v-if="fail2banStatus === 'unbound' || route.query.existing === '1'"
-        :module-enabled="moduleEnabled"
-        @changed="load"
-      />
-      <Fail2banInstallPanel
-        v-else-if="fail2banStatus !== 'installed' || installing"
-        @busy="installing = $event"
-        @changed="load"
-      />
-      <template v-else
-        ><Fail2banLifecyclePanel
-          :module-enabled="moduleEnabled"
-          :binding="fail2ban?.binding ?? null"
-          :instance="instance"
-          :managed="fail2ban?.managed ?? null"
-          :service="
-            fail2ban?.services.find(
-              (item) => item.id === 'nginxpanel-fail2ban.service',
-            ) ?? null
-          "
-          :observed-at="fail2ban?.at ?? 0"
-          @changed="load"
-        /><RouterLink to="/fail2ban"
-          ><NButton type="primary">设置登录防护规则</NButton></RouterLink
-        ></template
-      >
-    </template>
+    <Fail2banInstallPanel
+      v-if="software === 'fail2ban'"
+      @busy="installing = $event"
+      @changed="load"
+    />
     <section v-if="software !== 'fail2ban'" class="panel page-stack">
       <h3>
         {{
@@ -348,7 +320,9 @@ useLiveRefresh(api, ["tasks"], load);
           ><NSelect
             v-model:value="selection"
             :options="
-              Object.entries(names).map(([value, label]) => ({ value, label }))
+              Object.entries(names)
+                .filter(([value]) => value !== 'fail2ban')
+                .map(([value, label]) => ({ value, label }))
             "
             :disabled="busy || active" /></NFormItem
         ><NCheckbox v-model:checked="prerelease" :disabled="busy || active"
@@ -475,5 +449,12 @@ useLiveRefresh(api, ["tasks"], load);
         </p>
       </article>
     </section>
+    <SoftwareSourcesPanel
+      v-if="!software"
+      :catalog="overview?.software"
+      :tasks="tasks"
+      :active="active"
+      @changed="load"
+    />
   </div>
 </template>

@@ -21,6 +21,7 @@ export function useLiveRefresh(
     listener: ["read", "system.write"],
     version: ["read"],
     dns: ["read"],
+    fail2ban: ["read"],
   };
   let release: (() => void) | undefined;
   let running = false,

@@ -179,7 +179,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}()
 	}
 	mux := http.NewServeMux()
-	componentManager := &components.Manager{DataDir: s.DataDir, Dir: filepath.Join(s.DataDir, "agent", "components"), TrustPath: s.ReleaseTrust, TokenPath: s.ReleaseToken, Scope: s.ComponentScope, Dev: s.Dev}
+	componentManager := &components.Manager{Fail2banAction: s.manageContainerFail2ban, UpdatePanel: s.updateSoftwarePanel, DataDir: s.DataDir, Dir: filepath.Join(s.DataDir, "agent", "components"), TrustPath: s.ReleaseTrust, TokenPath: s.ReleaseToken, Scope: s.ComponentScope, Dev: s.Dev}
 	defer componentManager.Close()
 	if err := componentManager.Open(ctx); err != nil {
 		return err

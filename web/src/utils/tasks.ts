@@ -4,6 +4,7 @@ export const taskKinds: Record<string, string> = {
   "component.check": "检查软件版本",
   "component.prepare": "下载安装包",
   "component.activate": "启用前端资源",
+  "component.software": "软件管理",
   "component.pull": "下载运行镜像",
   "maintenance.enter": "维护操作",
   "fail2ban.lifecycle": "管理 Fail2ban 服务",
@@ -30,6 +31,8 @@ export const taskStates: Record<string, string> = {
   cancelled: "已取消",
 };
 export const taskStages: Record<string, string> = {
+  software_running: "正在处理软件",
+  software_done: "软件操作完成",
   queued: "等待执行",
   draining: "等待当前任务结束",
   root_acquiring: "准备维护环境",
@@ -141,7 +144,16 @@ export function isTaskActive(state: string) {
 }
 
 export function taskStageLabel(stage: string, kind: string, state: string) {
-  if (stage === "prepared" && kind.startsWith("component.")) return "安装包已准备";
-  if (stage === "executing" && kind === "fail2ban.python") return "处理运行依赖";
-  return taskStages[stage] ?? (state === "succeeded" ? "操作已完成" : state === "failed" ? "执行失败" : "正在处理");
+  if (stage === "prepared" && kind.startsWith("component."))
+    return "安装包已准备";
+  if (stage === "executing" && kind === "fail2ban.python")
+    return "处理运行依赖";
+  return (
+    taskStages[stage] ??
+    (state === "succeeded"
+      ? "操作已完成"
+      : state === "failed"
+        ? "执行失败"
+        : "正在处理")
+  );
 }

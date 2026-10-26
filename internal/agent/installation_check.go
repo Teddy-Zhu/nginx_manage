@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"nginxpanel/internal/fail2bancontainer"
 	"nginxpanel/internal/panelruntime"
+	"nginxpanel/internal/software"
 )
 
 // Must match the native installer's intent and ready records.
@@ -136,6 +138,18 @@ func checkInstallationRemoval(ctx context.Context, data string, releaseEmpty boo
 	}
 	if len(overlays) != 0 {
 		return errors.New("仍有本应用接管的外部 Fail2ban jail，请先通过 fail2ban-existing-jail-release 解除接管")
+	}
+	if _, installed, err := fail2bancontainer.Configuration(data); err != nil {
+		return err
+	} else if installed {
+		return errors.New("请先在软件商店卸载登录防护，再卸载本系统；防护配置会保留")
+	}
+	catalog, err := software.Read(data)
+	if err != nil {
+		return err
+	}
+	if len(catalog.Installed) > 0 {
+		return errors.New("请先在软件商店卸载第三方软件，再卸载本系统；数据卷会保留")
 	}
 	return nil
 }

@@ -199,7 +199,7 @@ func (s *onlineSession) get(ctx context.Context, endpoint, accept, etag string) 
 		return nil, errors.New("GitHub HTTPS 请求失败，请检查证书、DNS、网络和重定向目标")
 	}
 	blocked := s.cache.BlockedUntil
-	if response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusTooManyRequests {
+	if response.StatusCode == http.StatusTooManyRequests {
 		blocked = max(blocked, now+60)
 	}
 	if response.Header.Get("X-RateLimit-Remaining") == "0" {
@@ -224,7 +224,19 @@ func (s *onlineSession) get(ctx context.Context, endpoint, accept, etag string) 
 	}
 	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusNotModified {
 		response.Body.Close()
-		return nil, fmt.Errorf("GitHub 返回 HTTP %d；请检查仓库访问权限、发行资产和限流期限", response.StatusCode)
+		switch response.StatusCode {
+		case http.StatusNotFound:
+			return nil, fmt.Errorf("软件源 %s 未找到可用发行或资产（HTTP 404）；请检查仓库、发行标签及私有仓库访问权限", s.publisher.trust.Repository)
+		case http.StatusUnauthorized:
+			return nil, errors.New("GitHub 访问令牌无效或已过期（HTTP 401）")
+		case http.StatusForbidden, http.StatusTooManyRequests:
+			if blocked > now {
+				return nil, fmt.Errorf("GitHub 暂时拒绝请求（HTTP %d），可重试时间 %s", response.StatusCode, time.Unix(blocked, 0).UTC().Format(time.RFC3339))
+			}
+			return nil, errors.New("GitHub 拒绝访问，请检查仓库读取权限（HTTP 403）")
+		default:
+			return nil, fmt.Errorf("GitHub 软件源请求失败（HTTP %d）", response.StatusCode)
+		}
 	}
 	if response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" {
 		response.Body.Close()

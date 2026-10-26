@@ -12,21 +12,23 @@ import (
 	"nginxpanel/internal/nginxruntime"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/releases"
+	"nginxpanel/internal/software"
 )
 
 type Input struct {
-	ImageID            string   `json:"image_id,omitempty"`
-	FrontendBaseID     string   `json:"frontend_base_id,omitempty"`
-	ExpectedFrontendID string   `json:"expected_frontend_id,omitempty"`
-	OfflineID          string   `json:"offline_id,omitempty"`
-	Action             string   `json:"action"`
-	Tag                string   `json:"tag"`
-	Prerelease         bool     `json:"prerelease"`
-	Components         []string `json:"components,omitempty"`
-	Assets             []string `json:"assets,omitempty"`
-	PlanID             string   `json:"plan_id"`
-	ManifestSHA256     string   `json:"manifest_sha256"`
-	TrustSHA256        string   `json:"trust_sha256"`
+	Software           *software.Request `json:"software,omitempty"`
+	ImageID            string            `json:"image_id,omitempty"`
+	FrontendBaseID     string            `json:"frontend_base_id,omitempty"`
+	ExpectedFrontendID string            `json:"expected_frontend_id,omitempty"`
+	OfflineID          string            `json:"offline_id,omitempty"`
+	Action             string            `json:"action"`
+	Tag                string            `json:"tag"`
+	Prerelease         bool              `json:"prerelease"`
+	Components         []string          `json:"components,omitempty"`
+	Assets             []string          `json:"assets,omitempty"`
+	PlanID             string            `json:"plan_id"`
+	ManifestSHA256     string            `json:"manifest_sha256"`
+	TrustSHA256        string            `json:"trust_sha256"`
 }
 
 var operationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -37,6 +39,18 @@ func digest(value string) bool {
 	return err == nil && len(raw) == 32 && value == strings.ToLower(value)
 }
 func (in Input) Validate() error {
+	if in.Action == "software" {
+		if in.Software == nil || in.OfflineID != "" || in.ImageID != "" || in.FrontendBaseID != "" || in.ExpectedFrontendID != "" || in.Tag != "" || in.Prerelease || len(in.Components) != 0 || len(in.Assets) != 0 || in.PlanID != "" || in.ManifestSHA256 != "" || in.TrustSHA256 != "" {
+			return fault.Invalid("软件操作输入无效")
+		}
+		if err := in.Software.Validate(); err != nil {
+			return fault.Invalid(err.Error())
+		}
+		return nil
+	}
+	if in.Software != nil {
+		return fault.Invalid("此操作不能携带软件源配置")
+	}
 	if in.OfflineID != "" && (!ValidID(in.OfflineID) || in.Tag == "" || len(in.Components) != 0 || len(in.Assets) == 0) {
 		return fault.Invalid("离线组件须引用上传 UUID、固定标签及资产选择")
 	}
@@ -149,6 +163,7 @@ func release(plan releases.Plan) Release {
 }
 
 type Operation struct {
+	Software      *software.Result       `json:"software,omitempty"`
 	Image         *ImagePreparation      `json:"image,omitempty"`
 	Announcement  *releases.Announcement `json:"announcement,omitempty"`
 	Frontend      *FrontendResult        `json:"frontend,omitempty"`
@@ -169,6 +184,7 @@ type Operation struct {
 	Panel         *PanelPreparation      `json:"panel,omitempty"`
 }
 type Overview struct {
+	Software         software.Catalog            `json:"software"`
 	Frontend         panelruntime.FrontendStatus `json:"frontend"`
 	SwitchAvailable  bool                        `json:"switch_available"`
 	SwitchReason     string                      `json:"switch_reason"`

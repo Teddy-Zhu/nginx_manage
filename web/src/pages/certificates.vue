@@ -12,8 +12,11 @@
 </route>
 
 <script setup lang="ts">
+import CertificateWorkspace from "../components/CertificateWorkspace.vue";
+import { useLiveRefresh } from "../composables/live";
+import { useRoute, useRouter } from "vue-router";
 import { sha256Hex } from "../utils/crypto";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
   NAlert,
@@ -24,7 +27,6 @@ import {
   NFormItem,
   NInput,
   NModal,
-  NSelect,
   NTag,
   type DataTableColumns,
 } from "naive-ui";
@@ -36,12 +38,16 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 const api = useNodeAPI();
+const route = useRoute(),
+  router = useRouter();
+const selectedID = computed(() =>
+  typeof route.query.certificate === "string" ? route.query.certificate : "",
+);
 
 const { run, busy, message } = useAction(),
   keyFor = useIdempotency();
 const items = ref<Certificate[]>([]),
-  selected = ref<Certificate | null>(null),
-  versionID = ref("");
+  selected = ref<Certificate | null>(null);
 const importing = ref(false),
   replaceID = ref<string | null>(null),
   baseVersion = ref(0),
@@ -62,14 +68,7 @@ const dirty = computed(
   () => importing.value && formJSON.value !== baseline.value,
 );
 const version = computed(() =>
-  selected.value?.versions.find((item) => item.id === versionID.value),
-);
-const versionOptions = computed(
-  () =>
-    selected.value?.versions.map((item) => ({
-      label: `${item.environment === "staging" ? "测试 · " : ""}到期 ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()}`,
-      value: item.id,
-    })) ?? [],
+  selected.value ? latest(selected.value) : undefined,
 );
 const activeBindings = computed(() => {
   const seen = new Set<string>();
@@ -91,7 +90,7 @@ function latest(item: Certificate) {
   return item.versions.find((value) => value.id === item.latest_version_id);
 }
 function expiry(value: CertificateVersion | undefined) {
-  if (!value) return "无证书版本";
+  if (!value) return "尚无证书";
   if (now.value < value.summary.chain_not_before * 1000) return "尚未生效";
   const remaining = value.summary.chain_not_after * 1000 - now.value;
   if (remaining <= 0) return "已过期";
@@ -112,38 +111,52 @@ const columns: DataTableColumns<Certificate> = [
         : "—";
     },
   },
-  { title: "当前证书", key: "version", render: (row) => `#${row.version}` },
   {
     title: "来源",
     key: "source",
     render: (row) =>
       latest(row)?.environment === "staging"
-        ? "ACME 测试"
+        ? "自动申请（测试）"
         : row.source === "acme"
-          ? "ACME 正式"
+          ? "自动申请"
           : "手动导入",
   },
   { title: "有效期", key: "expiry", render: (row) => expiry(latest(row)) },
 ];
+async function loadSelected() {
+  const id = selectedID.value;
+  if (!id) {
+    selected.value = null;
+    return;
+  }
+  const item = await api.certificate(id);
+  if (selectedID.value === id) selected.value = item;
+}
 async function load() {
   await run(async () => {
     items.value = await api.certificates();
-    if (selected.value) {
-      const current = items.value.find(
-        (item) => item.id === selected.value!.id,
-      );
-      selected.value = current ? await api.certificate(current.id) : null;
-      versionID.value = selected.value?.latest_version_id ?? "";
-    }
+    await loadSelected();
   });
 }
-async function open(item: Certificate) {
+function open(item: Certificate) {
   if (busy.value) return;
-  await run(async () => {
-    selected.value = await api.certificate(item.id);
-    versionID.value = selected.value.latest_version_id;
-  });
+  void router.replace({ query: { ...route.query, certificate: item.id } });
 }
+let pendingSelection = false;
+watch(selectedID, () => {
+  selected.value = null;
+  pendingSelection = true;
+  if (!busy.value) {
+    pendingSelection = false;
+    void run(loadSelected);
+  }
+});
+watch(busy, (working) => {
+  if (!working && pendingSelection) {
+    pendingSelection = false;
+    void run(loadSelected);
+  }
+});
 function startImport(item: Certificate | null) {
   if (busy.value) return;
   importGeneration++;
@@ -221,20 +234,22 @@ async function save() {
     );
     if (!result.certificate) throw new Error("证书导入未返回有效资源");
     selected.value = result.certificate;
-    versionID.value = result.certificate.latest_version_id;
     items.value = [
       ...items.value.filter((item) => item.id !== result.certificate!.id),
       result.certificate,
     ];
     importing.value = false;
     clearImport();
-  }, "证书版本已导入，请绑定站点并应用配置");
+    void router.replace({
+      query: { ...route.query, certificate: result.certificate.id },
+    });
+  }, "证书已导入，可前往网站设置使用");
 }
 async function remove() {
   const item = selected.value;
   if (!item || busy.value || item.bindings.length || item.historical_references)
     return;
-  if (!window.confirm(`确认删除 ${item.name} 及其所有未引用版本？`)) return;
+  if (!window.confirm(`确认删除 ${item.name} 及其证书材料？`)) return;
   await run(async () => {
     await api.deleteCertificate(
       item.id,
@@ -247,9 +262,30 @@ async function remove() {
     );
     items.value = items.value.filter((value) => value.id !== item.id);
     selected.value = null;
-    versionID.value = "";
+    void router.replace({ query: { ...route.query, certificate: undefined } });
   }, "证书已删除");
 }
+columns.push({
+  title: "操作",
+  key: "actions",
+  width: 90,
+  render: (row) =>
+    h(
+      NButton,
+      {
+        size: "small",
+        disabled: busy.value,
+        onClick: (event: MouseEvent) => {
+          event.stopPropagation();
+          open(row);
+        },
+      },
+      () => "查看详情",
+    ),
+});
+useLiveRefresh(api, ["tasks"], () => {
+  if (!busy.value && !importing.value) return load();
+});
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (dirty.value) event.preventDefault();
 };
@@ -269,200 +305,213 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="toolbar">
-    <span class="muted">{{ items.length }} 张证书</span>
-    <div class="inline-gap">
-      <router-link to="/certificate-requests"
-        ><n-button :disabled="busy">ACME 签发</n-button></router-link
-      >
-      <router-link to="/certificate-deployments"
-        ><n-button :disabled="busy">证书部署</n-button></router-link
-      >
-      <router-link to="/acme"
-        ><n-button :disabled="busy">ACME 账户与 DNS 凭据</n-button></router-link
-      >
-      <n-button :loading="busy" @click="load">刷新</n-button
-      ><n-button type="primary" :disabled="busy" @click="startImport(null)"
-        >导入证书</n-button
-      >
-    </div>
-  </div>
-  <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >手动证书需自行续期。首次绑定在
-    <router-link to="/nginx">Nginx 配置</router-link>
-    中保存并应用；已有绑定可通过证书部署切换到当前证书。</n-alert
-  >
-  <section class="surface">
-    <n-data-table
-      :columns="columns"
-      :data="items"
-      :bordered="false"
-      :row-props="
-        (row: Certificate) => ({
-          onClick: () => open(row),
-          style: 'cursor: pointer',
-        })
-      "
-    />
-  </section>
-  <section v-if="selected" class="surface" style="margin-top: 20px">
-    <div class="section-heading">
-      <div>
-        <h2>{{ selected.name }}</h2>
-        <p class="muted">{{ selected.notes }}</p>
+  <CertificateWorkspace>
+    <section class="surface">
+      <ol class="cert-workflow">
+        <li>
+          <div>
+            <h2>获取证书</h2>
+            <p class="muted">自动申请，或导入已有证书。</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h2>用于网站</h2>
+            <p class="muted">在网站设置中选择证书，保存并应用。</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h2>续期与更新</h2>
+            <p class="muted">
+              自动申请的证书可开启续期，导入的证书需手动更新。
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
+    <section class="surface cert-section">
+      <div class="cert-heading">
+        <div>
+          <h2>我的证书</h2>
+          <p class="muted">共 {{ items.length }} 张证书</p>
+        </div>
+        <div class="cert-actions">
+          <n-button :loading="busy" @click="load">刷新</n-button>
+          <n-button :disabled="busy" @click="startImport(null)"
+            >导入证书</n-button
+          >
+          <router-link
+            :to="{ path: '/certificate-requests', query: { new: '1' } }"
+            ><n-button type="primary" :disabled="busy"
+              >申请证书</n-button
+            ></router-link
+          >
+        </div>
       </div>
-      <div class="inline-gap">
-        <n-button :disabled="busy" @click="startImport(selected)"
-          >更新证书</n-button
-        ><n-button
-          type="error"
-          :disabled="
-            busy ||
-            !!selected.bindings.length ||
-            !!selected.historical_references
-          "
-          @click="remove"
-          >删除</n-button
-        >
+      <n-data-table
+        v-if="items.length"
+        :columns="columns"
+        :data="items"
+        :bordered="false"
+        :scroll-x="720"
+        :row-props="
+          (row: Certificate) => ({
+            onClick: () => open(row),
+            style: 'cursor: pointer',
+          })
+        "
+      />
+      <n-empty
+        v-else
+        class="cert-empty"
+        description="还没有证书，可自动申请或导入已有证书"
+      />
+    </section>
+    <section v-if="selected" class="surface cert-section">
+      <div class="cert-heading">
+        <div>
+          <h2>{{ selected.name }}</h2>
+          <p v-if="selected.notes" class="muted">{{ selected.notes }}</p>
+        </div>
+        <div class="cert-actions">
+          <router-link
+            :to="{
+              path: '/certificate-deployments',
+              query: { certificate: selected.id },
+            }"
+            ><n-button type="primary">用于网站</n-button></router-link
+          >
+          <router-link
+            v-if="selected.source === 'acme'"
+            :to="{
+              path: '/certificate-requests',
+              query: { certificate: selected.id },
+            }"
+            ><n-button>续期设置</n-button></router-link
+          >
+          <n-button :disabled="busy" @click="startImport(selected)"
+            >导入更新</n-button
+          >
+          <n-button
+            type="error"
+            :disabled="
+              busy ||
+              !!selected.bindings.length ||
+              !!selected.historical_references
+            "
+            @click="remove"
+            >删除</n-button
+          >
+        </div>
       </div>
-    </div>
-    <n-select
-      v-model:value="versionID"
-      :options="versionOptions"
-      style="max-width: 440px; margin-bottom: 20px"
-    />
-    <template v-if="version">
-      <div class="inline-gap" style="flex-wrap: wrap; margin-bottom: 16px">
-        <n-tag :bordered="false">{{ expiry(version) }}</n-tag
-        ><n-tag :bordered="false">{{ version.summary.key_algorithm }}</n-tag
-        ><n-tag :bordered="false">{{
-          version.summary.trust === "system"
-            ? "系统信任链"
-            : version.summary.trust === "private"
-              ? "私有 CA"
-              : version.summary.trust === "acme_staging"
-                ? "ACME 测试证书"
-                : "自签证书"
-        }}</n-tag
-        ><n-tag
-          v-if="version.id === selected.latest_version_id"
+      <template v-if="version">
+        <div class="cert-actions">
+          <n-tag :bordered="false">{{ expiry(version) }}</n-tag
+          ><n-tag :bordered="false">{{
+            version.environment === "staging"
+              ? "测试证书"
+              : version.summary.trust === "system"
+                ? "受信任证书"
+                : version.summary.trust === "private"
+                  ? "私有证书"
+                  : "自签证书"
+          }}</n-tag>
+        </div>
+        <n-alert
+          v-if="version.environment === 'staging'"
+          type="warning"
           :bordered="false"
-          >当前证书</n-tag
+          >测试证书不受浏览器信任，请申请正式证书用于网站。</n-alert
         >
-      </div>
-      <p v-if="version.environment === 'staging'" class="muted">
-        测试证书不受浏览器信任，请申请正式环境证书用于公开站点。
-      </p>
-      <p v-else-if="version.summary.trust !== 'system'" class="muted">
-        客户端需要信任相应证书或私有 CA。
-      </p>
-      <p>
-        有效期：{{ date(version.summary.not_before) }} —
-        {{ date(version.summary.not_after) }}
+        <dl class="cert-stats">
+          <div>
+            <dt>生效时间</dt>
+            <dd>{{ date(version.summary.chain_not_before) }}</dd>
+          </div>
+          <div>
+            <dt>到期时间</dt>
+            <dd>{{ date(version.summary.chain_not_after) }}</dd>
+          </div>
+          <div>
+            <dt>签发机构</dt>
+            <dd>{{ version.summary.issuer }}</dd>
+          </div>
+        </dl>
+        <div class="cert-section">
+          <h3>适用域名与 IP</h3>
+          <div class="cert-actions">
+            <n-tag
+              v-for="domain in [
+                ...version.summary.dns_names,
+                ...version.summary.ip_addresses,
+              ]"
+              :key="domain"
+              size="small"
+              >{{ domain }}</n-tag
+            >
+          </div>
+        </div>
+      </template>
+      <p class="muted">
+        {{
+          activeBindings.length
+            ? "此证书已有网站使用，可在“网站证书”查看生效情况并更新。"
+            : "此证书尚未用于网站，点击“用于网站”继续。"
+        }}
       </p>
       <p
-        v-if="
-          version.summary.chain_not_before !== version.summary.not_before ||
-          version.summary.chain_not_after !== version.summary.not_after
-        "
+        v-if="selected.bindings.length || selected.historical_references"
         class="muted"
       >
-        证书链共同有效期：{{ date(version.summary.chain_not_before) }} —
-        {{ date(version.summary.chain_not_after) }}
+        网站或历史配置仍在使用此证书，暂不能删除。
       </p>
-      <p>签发者：{{ version.summary.issuer }}</p>
-      <p>主体：{{ version.summary.subject }}</p>
-      <p>证书链：{{ version.summary.chain_length }} 张</p>
-      <div class="inline-gap" style="flex-wrap: wrap">
-        <n-tag
-          v-for="domain in [
-            ...version.summary.dns_names,
-            ...version.summary.ip_addresses,
-          ]"
-          :key="domain"
-          size="small"
-          >{{ domain }}</n-tag
-        >
-      </div>
-    </template>
-    <h3>当前引用</h3>
-    <p v-if="!activeBindings.length" class="muted">当前没有网站使用此证书。</p>
-    <p
-      v-for="binding in activeBindings"
-      :key="`${binding.revision_id}:${binding.resource_id}:${binding.file_id}:${binding.version_id}`"
+    </section>
+    <n-modal
+      :show="importing"
+      preset="card"
+      :title="replaceID ? '更新证书文件' : '导入证书'"
+      style="width: 760px; max-width: 94vw"
+      :mask-closable="false"
+      :close-on-esc="false"
+      @close="closeImport"
     >
-      {{
-        binding.revision_state === "desired"
-          ? "待应用"
-          : binding.revision_state === "applied"
-            ? "最近确认生效"
-            : "已配置并应用"
-      }}
-      ·
-      {{
-        binding.resource_id
-          ? `站点 ${binding.resource_id.slice(0, 8)}`
-          : `自定义配置 ${binding.file_id.slice(0, 8)}`
-      }}
-      · 版本
-      {{
-        selected.versions.find((item) => item.id === binding.version_id)
-          ?.ordinal ?? "—"
-      }}
-    </p>
-    <p v-if="selected.bindings_truncated" class="muted">
-      引用较多，当前仅显示部分记录。
-    </p>
-  </section>
-  <n-empty
-    v-else-if="items.length"
-    description="选择证书查看版本和引用"
-    style="margin-top: 40px"
-  />
-  <n-modal
-    :show="importing"
-    preset="card"
-    :title="replaceID ? '导入证书新版本' : '导入证书'"
-    style="width: 760px; max-width: 94vw"
-    :mask-closable="false"
-    :close-on-esc="false"
-    @close="closeImport"
-  >
-    <n-form :disabled="busy" label-placement="top" @submit.prevent="save">
-      <n-form-item label="名称"
-        ><n-input v-model:value="name" :maxlength="128"
-      /></n-form-item>
-      <n-form-item label="备注"
-        ><n-input v-model:value="notes" :maxlength="2048"
-      /></n-form-item>
-      <n-form-item label="证书文件"
-        ><div style="width: 100%">
-          <input
-            type="file"
-            accept=".pem,.crt,.cer"
-            :disabled="busy"
-            @change="readFile($event, 'chain')"
-          />
-          <p v-if="chainName" class="muted">已选择：{{ chainName }}</p>
-        </div></n-form-item
-      >
-      <n-form-item label="私钥文件"
-        ><div style="width: 100%">
-          <input
-            type="file"
-            accept=".pem,.key"
-            :disabled="busy"
-            @change="readFile($event, 'key')"
-          />
-          <p v-if="keyName" class="muted">已选择：{{ keyName }}</p>
-        </div></n-form-item
-      >
-      <p class="muted">请选择配套的证书和私钥文件。私钥导入后会加密保存。</p>
-      <div class="inline-gap">
-        <n-button type="primary" attr-type="submit" :loading="busy"
-          >导入版本</n-button
-        ><n-button :disabled="busy" @click="closeImport">取消</n-button>
-      </div>
-    </n-form>
-  </n-modal>
+      <n-form :disabled="busy" label-placement="top" @submit.prevent="save">
+        <n-form-item label="名称"
+          ><n-input v-model:value="name" :maxlength="128"
+        /></n-form-item>
+        <n-form-item label="备注"
+          ><n-input v-model:value="notes" :maxlength="2048"
+        /></n-form-item>
+        <n-form-item label="证书文件"
+          ><div style="width: 100%">
+            <input
+              type="file"
+              accept=".pem,.crt,.cer"
+              :disabled="busy"
+              @change="readFile($event, 'chain')"
+            />
+            <p v-if="chainName" class="muted">已选择：{{ chainName }}</p>
+          </div></n-form-item
+        >
+        <n-form-item label="私钥文件"
+          ><div style="width: 100%">
+            <input
+              type="file"
+              accept=".pem,.key"
+              :disabled="busy"
+              @change="readFile($event, 'key')"
+            />
+            <p v-if="keyName" class="muted">已选择：{{ keyName }}</p>
+          </div></n-form-item
+        >
+        <p class="muted">请选择配套的证书和私钥文件。私钥导入后会加密保存。</p>
+        <div class="inline-gap">
+          <n-button type="primary" attr-type="submit" :loading="busy"
+            >确认导入</n-button
+          ><n-button :disabled="busy" @click="closeImport">取消</n-button>
+        </div>
+      </n-form>
+    </n-modal>
+  </CertificateWorkspace>
 </template>

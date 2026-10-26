@@ -196,3 +196,16 @@ func readLocal(ctx context.Context, s panelruntime.Snapshot, pid, parentPID int,
 	}
 	return envelope.NodeID, peer, nil
 }
+
+// ReadHealthy authenticates ordinary startup independently from maintenance.
+func ReadHealthy(ctx context.Context, s panelruntime.Snapshot, pid, parentPID int) (Status, error) {
+	var out Status
+	node, _, err := readLocal(ctx, s, pid, parentPID, "/v1/health", &out)
+	if err != nil {
+		return out, err
+	}
+	if out.Protocol != Protocol || out.PID != pid || out.ReleaseID != s.Release.ID || out.Version != s.Release.Version || out.Mode != s.Deployment.Mode || out.NodeID != node || out.DatabaseSchema != s.Release.DatabaseSchema {
+		return out, errors.New("面板启动状态与当前程序不一致")
+	}
+	return out, nil
+}

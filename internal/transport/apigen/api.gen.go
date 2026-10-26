@@ -436,6 +436,7 @@ const (
 	ComponentInputActionCheck    ComponentInputAction = "check"
 	ComponentInputActionPrepare  ComponentInputAction = "prepare"
 	ComponentInputActionPull     ComponentInputAction = "pull"
+	ComponentInputActionSoftware ComponentInputAction = "software"
 )
 
 // Valid indicates whether the value is a known member of the ComponentInputAction enum.
@@ -448,6 +449,8 @@ func (e ComponentInputAction) Valid() bool {
 	case ComponentInputActionPrepare:
 		return true
 	case ComponentInputActionPull:
+		return true
+	case ComponentInputActionSoftware:
 		return true
 	default:
 		return false
@@ -573,16 +576,16 @@ func (e ExternalFileStatus) Valid() bool {
 
 // Defines values for Fail2banAddressInputAction.
 const (
-	Ban   Fail2banAddressInputAction = "ban"
-	Unban Fail2banAddressInputAction = "unban"
+	Fail2banAddressInputActionBan   Fail2banAddressInputAction = "ban"
+	Fail2banAddressInputActionUnban Fail2banAddressInputAction = "unban"
 )
 
 // Valid indicates whether the value is a known member of the Fail2banAddressInputAction enum.
 func (e Fail2banAddressInputAction) Valid() bool {
 	switch e {
-	case Ban:
+	case Fail2banAddressInputActionBan:
 		return true
-	case Unban:
+	case Fail2banAddressInputActionUnban:
 		return true
 	default:
 		return false
@@ -772,6 +775,66 @@ func (e Fail2banBindingViewState) Valid() bool {
 	case Fail2banBindingViewStateUnavailable:
 		return true
 	case Fail2banBindingViewStateUnbound:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Fail2banContainerRequestAction.
+const (
+	Fail2banContainerRequestActionBan       Fail2banContainerRequestAction = "ban"
+	Fail2banContainerRequestActionConfigure Fail2banContainerRequestAction = "configure"
+	Fail2banContainerRequestActionInstall   Fail2banContainerRequestAction = "install"
+	Fail2banContainerRequestActionRestart   Fail2banContainerRequestAction = "restart"
+	Fail2banContainerRequestActionStart     Fail2banContainerRequestAction = "start"
+	Fail2banContainerRequestActionStop      Fail2banContainerRequestAction = "stop"
+	Fail2banContainerRequestActionUnban     Fail2banContainerRequestAction = "unban"
+	Fail2banContainerRequestActionUninstall Fail2banContainerRequestAction = "uninstall"
+	Fail2banContainerRequestActionUpdate    Fail2banContainerRequestAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the Fail2banContainerRequestAction enum.
+func (e Fail2banContainerRequestAction) Valid() bool {
+	switch e {
+	case Fail2banContainerRequestActionBan:
+		return true
+	case Fail2banContainerRequestActionConfigure:
+		return true
+	case Fail2banContainerRequestActionInstall:
+		return true
+	case Fail2banContainerRequestActionRestart:
+		return true
+	case Fail2banContainerRequestActionStart:
+		return true
+	case Fail2banContainerRequestActionStop:
+		return true
+	case Fail2banContainerRequestActionUnban:
+		return true
+	case Fail2banContainerRequestActionUninstall:
+		return true
+	case Fail2banContainerRequestActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Fail2banContainerRuleKind.
+const (
+	Fail2banContainerRuleKindNginx Fail2banContainerRuleKind = "nginx"
+	Fail2banContainerRuleKindPanel Fail2banContainerRuleKind = "panel"
+	Fail2banContainerRuleKindSsh   Fail2banContainerRuleKind = "ssh"
+)
+
+// Valid indicates whether the value is a known member of the Fail2banContainerRuleKind enum.
+func (e Fail2banContainerRuleKind) Valid() bool {
+	switch e {
+	case Fail2banContainerRuleKindNginx:
+		return true
+	case Fail2banContainerRuleKindPanel:
+		return true
+	case Fail2banContainerRuleKindSsh:
 		return true
 	default:
 		return false
@@ -2295,16 +2358,16 @@ func (e FirewallProtectionFamily) Valid() bool {
 
 // Defines values for FirewallProtectionService.
 const (
-	Management FirewallProtectionService = "management"
-	Ssh        FirewallProtectionService = "ssh"
+	FirewallProtectionServiceManagement FirewallProtectionService = "management"
+	FirewallProtectionServiceSsh        FirewallProtectionService = "ssh"
 )
 
 // Valid indicates whether the value is a known member of the FirewallProtectionService enum.
 func (e FirewallProtectionService) Valid() bool {
 	switch e {
-	case Management:
+	case FirewallProtectionServiceManagement:
 		return true
-	case Ssh:
+	case FirewallProtectionServiceSsh:
 		return true
 	default:
 		return false
@@ -3139,6 +3202,75 @@ func (e ResourceKind) Valid() bool {
 	}
 }
 
+// Defines values for SoftwarePortProtocol.
+const (
+	SoftwarePortProtocolTcp SoftwarePortProtocol = "tcp"
+	SoftwarePortProtocolUdp SoftwarePortProtocol = "udp"
+)
+
+// Valid indicates whether the value is a known member of the SoftwarePortProtocol enum.
+func (e SoftwarePortProtocol) Valid() bool {
+	switch e {
+	case SoftwarePortProtocolTcp:
+		return true
+	case SoftwarePortProtocolUdp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwareRequestAction.
+const (
+	SoftwareRequestActionDelete      SoftwareRequestAction = "delete"
+	SoftwareRequestActionFail2ban    SoftwareRequestAction = "fail2ban"
+	SoftwareRequestActionImport      SoftwareRequestAction = "import"
+	SoftwareRequestActionInstall     SoftwareRequestAction = "install"
+	SoftwareRequestActionRefresh     SoftwareRequestAction = "refresh"
+	SoftwareRequestActionUninstall   SoftwareRequestAction = "uninstall"
+	SoftwareRequestActionUpdate      SoftwareRequestAction = "update"
+	SoftwareRequestActionUpdatePanel SoftwareRequestAction = "update-panel"
+)
+
+// Valid indicates whether the value is a known member of the SoftwareRequestAction enum.
+func (e SoftwareRequestAction) Valid() bool {
+	switch e {
+	case SoftwareRequestActionDelete:
+		return true
+	case SoftwareRequestActionFail2ban:
+		return true
+	case SoftwareRequestActionImport:
+		return true
+	case SoftwareRequestActionInstall:
+		return true
+	case SoftwareRequestActionRefresh:
+		return true
+	case SoftwareRequestActionUninstall:
+		return true
+	case SoftwareRequestActionUpdate:
+		return true
+	case SoftwareRequestActionUpdatePanel:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwareSourceSchema.
+const (
+	SoftwareSourceSchemaN1 SoftwareSourceSchema = 1
+)
+
+// Valid indicates whether the value is a known member of the SoftwareSourceSchema enum.
+func (e SoftwareSourceSchema) Valid() bool {
+	switch e {
+	case SoftwareSourceSchemaN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SystemVersionRuntime.
 const (
 	Development SystemVersionRuntime = "development"
@@ -3899,7 +4031,7 @@ type ComponentAsset struct {
 
 // ComponentCreateInput defines model for ComponentCreateInput.
 type ComponentCreateInput struct {
-	CheckTaskId   string         `json:"check_task_id"`
+	CheckTaskId   *string        `json:"check_task_id,omitempty"`
 	Input         ComponentInput `json:"input"`
 	PrepareTaskId *string        `json:"prepare_task_id,omitempty"`
 }
@@ -3950,11 +4082,12 @@ type ComponentInput struct {
 	ManifestSha256     string                      `json:"manifest_sha256"`
 
 	// OfflineId 可选的本机离线上传 UUID；不存在时从已配置在线源检查/准备。准备必须保留原检查来源。
-	OfflineId   *string `json:"offline_id,omitempty"`
-	PlanId      string  `json:"plan_id"`
-	Prerelease  bool    `json:"prerelease"`
-	Tag         string  `json:"tag"`
-	TrustSha256 string  `json:"trust_sha256"`
+	OfflineId   *string          `json:"offline_id,omitempty"`
+	PlanId      string           `json:"plan_id"`
+	Prerelease  bool             `json:"prerelease"`
+	Software    *SoftwareRequest `json:"software,omitempty"`
+	Tag         string           `json:"tag"`
+	TrustSha256 string           `json:"trust_sha256"`
 }
 
 // ComponentInputAction defines model for ComponentInput.Action.
@@ -4020,6 +4153,7 @@ type ComponentOperation struct {
 	RequestHash   string                        `json:"request_hash"`
 	RuntimeReady  bool                          `json:"runtime_ready"`
 	RuntimeReason string                        `json:"runtime_reason"`
+	Software      *SoftwareResult               `json:"software,omitempty"`
 	Stage         string                        `json:"stage"`
 	State         string                        `json:"state"`
 	UpdatedAt     int64                         `json:"updated_at"`
@@ -4038,6 +4172,7 @@ type ComponentOverview struct {
 	Running          bool                    `json:"running"`
 	RuntimeReason    string                  `json:"runtime_reason"`
 	Scope            string                  `json:"scope"`
+	Software         SoftwareCatalog         `json:"software"`
 	SwitchAvailable  bool                    `json:"switch_available"`
 	SwitchReason     string                  `json:"switch_reason"`
 	TrustSha256      string                  `json:"trust_sha256"`
@@ -4386,6 +4521,64 @@ type Fail2banBindingView struct {
 
 // Fail2banBindingViewState defines model for Fail2banBindingView.State.
 type Fail2banBindingViewState string
+
+// Fail2banContainerConfig defines model for Fail2banContainerConfig.
+type Fail2banContainerConfig struct {
+	AutoStart bool                    `json:"auto_start"`
+	Image     string                  `json:"image"`
+	Revision  int64                   `json:"revision"`
+	Rules     []Fail2banContainerRule `json:"rules"`
+	Whitelist []string                `json:"whitelist"`
+}
+
+// Fail2banContainerJail defines model for Fail2banContainerJail.
+type Fail2banContainerJail struct {
+	Banned        []string `json:"banned"`
+	CurrentBanned int64    `json:"current_banned"`
+	CurrentFailed int64    `json:"current_failed"`
+	Error         string   `json:"error"`
+	Id            string   `json:"id"`
+	Running       bool     `json:"running"`
+	TotalBanned   int64    `json:"total_banned"`
+	TotalFailed   int64    `json:"total_failed"`
+}
+
+// Fail2banContainerRequest defines model for Fail2banContainerRequest.
+type Fail2banContainerRequest struct {
+	Action  Fail2banContainerRequestAction `json:"action"`
+	Address *string                        `json:"address,omitempty"`
+	Config  *Fail2banContainerConfig       `json:"config,omitempty"`
+	JailId  *string                        `json:"jail_id,omitempty"`
+}
+
+// Fail2banContainerRequestAction defines model for Fail2banContainerRequest.Action.
+type Fail2banContainerRequestAction string
+
+// Fail2banContainerRule defines model for Fail2banContainerRule.
+type Fail2banContainerRule struct {
+	BanTime  int                       `json:"ban_time"`
+	Enabled  bool                      `json:"enabled"`
+	FindTime int                       `json:"find_time"`
+	Id       string                    `json:"id"`
+	Kind     Fail2banContainerRuleKind `json:"kind"`
+	MaxRetry int                       `json:"max_retry"`
+	Name     string                    `json:"name"`
+	Ports    []int                     `json:"ports"`
+}
+
+// Fail2banContainerRuleKind defines model for Fail2banContainerRule.Kind.
+type Fail2banContainerRuleKind string
+
+// Fail2banContainerStatus defines model for Fail2banContainerStatus.
+type Fail2banContainerStatus struct {
+	Config    Fail2banContainerConfig `json:"config"`
+	Error     string                  `json:"error"`
+	Installed bool                    `json:"installed"`
+	Jails     []Fail2banContainerJail `json:"jails"`
+	Logs      string                  `json:"logs"`
+	Ready     bool                    `json:"ready"`
+	Running   bool                    `json:"running"`
+}
 
 // Fail2banDesiredJail defines model for Fail2banDesiredJail.
 type Fail2banDesiredJail struct {
@@ -4879,21 +5072,22 @@ type Fail2banManaged struct {
 
 // Fail2banObservation defines model for Fail2banObservation.
 type Fail2banObservation struct {
-	At            int64               `json:"at"`
-	Available     bool                `json:"available"`
-	Binding       Fail2banBindingView `json:"binding"`
-	ClientVersion string              `json:"client_version"`
-	Managed       Fail2banManaged     `json:"managed"`
-	Missing       []string            `json:"missing"`
-	Python        Fail2banPython      `json:"python"`
-	Reason        string              `json:"reason"`
-	Scope         string              `json:"scope"`
-	Services      []Fail2banService   `json:"services"`
-	Socket        Fail2banSocket      `json:"socket"`
-	Source        string              `json:"source"`
-	Tools         []Fail2banTool      `json:"tools"`
-	Warnings      []string            `json:"warnings"`
-	Writable      bool                `json:"writable"`
+	At            int64                    `json:"at"`
+	Available     bool                     `json:"available"`
+	Binding       Fail2banBindingView      `json:"binding"`
+	ClientVersion string                   `json:"client_version"`
+	Container     *Fail2banContainerStatus `json:"container,omitempty"`
+	Managed       Fail2banManaged          `json:"managed"`
+	Missing       []string                 `json:"missing"`
+	Python        Fail2banPython           `json:"python"`
+	Reason        string                   `json:"reason"`
+	Scope         string                   `json:"scope"`
+	Services      []Fail2banService        `json:"services"`
+	Socket        Fail2banSocket           `json:"socket"`
+	Source        string                   `json:"source"`
+	Tools         []Fail2banTool           `json:"tools"`
+	Warnings      []string                 `json:"warnings"`
+	Writable      bool                     `json:"writable"`
 }
 
 // Fail2banPackage defines model for Fail2banPackage.
@@ -7930,6 +8124,84 @@ type SaveResult struct {
 	Tree   Tree    `json:"tree"`
 }
 
+// SoftwareApplication defines model for SoftwareApplication.
+type SoftwareApplication struct {
+	Description string             `json:"description"`
+	Environment *map[string]string `json:"environment,omitempty"`
+	Id          string             `json:"id"`
+	Image       string             `json:"image"`
+	Name        string             `json:"name"`
+	Ports       *[]SoftwarePort    `json:"ports,omitempty"`
+	Volumes     *[]SoftwareVolume  `json:"volumes,omitempty"`
+}
+
+// SoftwareCatalog defines model for SoftwareCatalog.
+type SoftwareCatalog struct {
+	Error     *string                `json:"error,omitempty"`
+	Installed []SoftwareInstallation `json:"installed"`
+	Sources   []SoftwareSource       `json:"sources"`
+}
+
+// SoftwareInstallation defines model for SoftwareInstallation.
+type SoftwareInstallation struct {
+	Application SoftwareApplication `json:"application"`
+	Container   string              `json:"container"`
+	ImageId     string              `json:"image_id"`
+	SourceId    string              `json:"source_id"`
+	UpdatedAt   int64               `json:"updated_at"`
+}
+
+// SoftwarePort defines model for SoftwarePort.
+type SoftwarePort struct {
+	Container int                  `json:"container"`
+	Host      int                  `json:"host"`
+	Protocol  SoftwarePortProtocol `json:"protocol"`
+}
+
+// SoftwarePortProtocol defines model for SoftwarePort.Protocol.
+type SoftwarePortProtocol string
+
+// SoftwareRequest defines model for SoftwareRequest.
+type SoftwareRequest struct {
+	Action     SoftwareRequestAction     `json:"action"`
+	AppId      *string                   `json:"app_id,omitempty"`
+	Fail2ban   *Fail2banContainerRequest `json:"fail2ban,omitempty"`
+	PlanId     *string                   `json:"plan_id,omitempty"`
+	Prerelease *bool                     `json:"prerelease,omitempty"`
+	Source     *SoftwareSource           `json:"source,omitempty"`
+	SourceId   *string                   `json:"source_id,omitempty"`
+	Url        *string                   `json:"url,omitempty"`
+}
+
+// SoftwareRequestAction defines model for SoftwareRequest.Action.
+type SoftwareRequestAction string
+
+// SoftwareResult defines model for SoftwareResult.
+type SoftwareResult struct {
+	AppId    *string `json:"app_id,omitempty"`
+	Log      string  `json:"log"`
+	Message  string  `json:"message"`
+	SourceId *string `json:"source_id,omitempty"`
+}
+
+// SoftwareSource defines model for SoftwareSource.
+type SoftwareSource struct {
+	Applications []SoftwareApplication `json:"applications"`
+	Id           string                `json:"id"`
+	Name         string                `json:"name"`
+	Schema       SoftwareSourceSchema  `json:"schema"`
+	Url          *string               `json:"url,omitempty"`
+}
+
+// SoftwareSourceSchema defines model for SoftwareSource.Schema.
+type SoftwareSourceSchema int
+
+// SoftwareVolume defines model for SoftwareVolume.
+type SoftwareVolume struct {
+	Name   string `json:"name"`
+	Target string `json:"target"`
+}
+
 // SystemVersion defines model for SystemVersion.
 type SystemVersion struct {
 	AgentProtocol   int64                `json:"agent_protocol"`
@@ -9783,6 +10055,9 @@ type ServerInterface interface {
 
 	// (POST /fail2ban/apply)
 	ApplyFail2ban(w http.ResponseWriter, r *http.Request, params ApplyFail2banParams)
+
+	// (GET /fail2ban/container)
+	GetFail2banContainer(w http.ResponseWriter, r *http.Request)
 
 	// (POST /fail2ban/existing/operations)
 	ChangeFail2banExistingPolicy(w http.ResponseWriter, r *http.Request, params ChangeFail2banExistingPolicyParams)
@@ -13414,6 +13689,20 @@ func (siw *ServerInterfaceWrapper) ApplyFail2ban(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ApplyFail2ban(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFail2banContainer operation middleware
+func (siw *ServerInterfaceWrapper) GetFail2banContainer(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFail2banContainer(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20232,6 +20521,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/instance", wrapper.GetFail2banInstance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/jails/{name}", wrapper.GetFail2banJail)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban", wrapper.GetFail2ban)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/fail2ban/container", wrapper.GetFail2banContainer)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/firewall/runtime", wrapper.GetFirewallRuntime)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/plan", wrapper.PlanFirewall)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/firewall/apply", wrapper.ApplyFirewall)

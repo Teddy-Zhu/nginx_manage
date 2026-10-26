@@ -140,7 +140,7 @@ func Listen(data string) (net.Listener, error) {
 	return &rootListener{l}, nil
 }
 
-func Serve(ctx context.Context, l net.Listener, nodeID string, status func(context.Context) (Status, error), released func(context.Context, string, string) (ReleaseStatus, error)) error {
+func Serve(ctx context.Context, l net.Listener, nodeID string, status func(context.Context) (Status, error), released func(context.Context, string, string) (ReleaseStatus, error), healthy ...func(context.Context) (Status, error)) error {
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/v1/maintenance-release/") {
 			serveRelease(w, r, nodeID, released)
@@ -149,10 +149,14 @@ func Serve(ctx context.Context, l net.Listener, nodeID string, status func(conte
 		id := secure.ID()
 		out := Envelope{Code: "NOT_FOUND", Message: "接口不存在", RequestID: id, NodeID: nodeID}
 		code := http.StatusNotFound
-		if r.Method == http.MethodGet && r.URL.Path == "/v1/readiness" && r.URL.RawQuery == "" {
+		if r.Method == http.MethodGet && (r.URL.Path == "/v1/readiness" || r.URL.Path == "/v1/health" && len(healthy) == 1) && r.URL.RawQuery == "" {
 			call, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
-			s, err := status(call)
+			read := status
+			if r.URL.Path == "/v1/health" {
+				read = healthy[0]
+			}
+			s, err := read(call)
 			if err == nil {
 				out.Code, out.Message, out.Data, code = "OK", "操作成功", &s, http.StatusOK
 			} else {

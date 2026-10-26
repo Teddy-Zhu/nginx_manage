@@ -15,7 +15,8 @@ export type LiveTopic =
   | "firewall"
   | "listener"
   | "version"
-  | "dns";
+  | "dns"
+  | "fail2ban";
 interface Listener {
   topics: LiveTopic[];
   changed: () => void;

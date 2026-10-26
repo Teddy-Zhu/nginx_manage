@@ -32,6 +32,7 @@ func componentReply(w http.ResponseWriter, data any, err error) {
 }
 func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 	s.componentOfflineHandlers(mux, m)
+	s.fail2banContainerHandler(mux)
 	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {
 		out := m.Overview()
 		out.Installation = s.Installation
@@ -66,7 +67,7 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 		componentReply(w, out, err)
 	})
 	mux.HandleFunc("POST /v1/components/operations", func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 		defer r.Body.Close()
 		var in components.Request
 		d := json.NewDecoder(r.Body)

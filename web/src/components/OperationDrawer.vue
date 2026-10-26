@@ -16,6 +16,8 @@ import { isTaskActive, taskStageLabel, taskStates } from "../utils/tasks";
 const session = useSession();
 const task = ref<Task | null>(null);
 const rows = ref<LogRow[]>([]);
+const softwareLog = ref(""),
+  softwareMessage = ref("");
 const statusError = ref(""),
   logError = ref(""),
   logNotice = ref("");
@@ -85,6 +87,7 @@ watch(
     stop();
     task.value = null;
     rows.value = [];
+    softwareLog.value = softwareMessage.value = "";
     statusError.value = logError.value = logNotice.value = "";
     checkedAt.value = 0;
     reading.value = false;
@@ -115,6 +118,26 @@ watch(
         checkedAt.value = clock.value = Date.now();
         statusError.value = "";
         if (canReadLogs.value) {
+          if (
+            value.kind === "component.software" &&
+            session.localMe?.scopes.includes("components.manage") &&
+            (!operation.scope.target ||
+              operation.scope.target.scopes.includes("components.manage"))
+          ) {
+            try {
+              const details = (await api.componentTasks()).find(
+                (t) => t.id === value.id,
+              );
+              if (current.signal.aborted) return;
+              softwareLog.value = details?.result?.software?.log ?? "";
+              softwareMessage.value =
+                details?.result?.runtime_reason ||
+                details?.result?.software?.message ||
+                "";
+            } catch (error) {
+              logError.value = apiError(error).message;
+            }
+          }
           try {
             if (!sourceId)
               sourceId =
@@ -283,6 +306,10 @@ onUnmounted(stop);
               ><span>{{ eventLabel(row) }}</span>
             </li>
           </ol>
+          <p v-if="canReadLogs && softwareMessage">{{ softwareMessage }}</p>
+          <pre v-if="canReadLogs && softwareLog" class="software-log">{{
+            softwareLog
+          }}</pre>
           <NAlert v-if="logNotice" type="warning">{{ logNotice }}</NAlert>
         </template>
       </div>
@@ -294,6 +321,16 @@ onUnmounted(stop);
 </template>
 
 <style scoped>
+.software-log {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 12px;
+}
 .operation-state {
   display: flex;
   align-items: center;

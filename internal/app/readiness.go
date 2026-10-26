@@ -54,3 +54,12 @@ func readinessStatus(ctx context.Context, o Options, release panelruntime.Releas
 	}
 	return out, out.Validate()
 }
+
+func healthyStatus(ctx context.Context, o Options, release panelruntime.Release, db *sql.DB) (panelready.Status, error) {
+	out := panelready.Status{Protocol: panelready.Protocol, PID: os.Getpid(), Version: o.Version, Mode: o.PanelRuntime, ReleaseID: release.ID}
+	err := db.QueryRowContext(ctx, "SELECT (SELECT MAX(version_id) FROM goose_db_version),(SELECT value FROM settings WHERE key='node_id')").Scan(&out.DatabaseSchema, &out.NodeID)
+	if err == nil && out.DatabaseSchema != release.DatabaseSchema {
+		err = errors.New("数据库迁移尚未完成")
+	}
+	return out, err
+}

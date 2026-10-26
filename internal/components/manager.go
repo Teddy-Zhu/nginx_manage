@@ -20,9 +20,12 @@ import (
 	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/software"
 )
 
 type Manager struct {
+	Fail2banAction                            func(context.Context, software.Request, software.Progress) (software.Result, error)
+	UpdatePanel                               func(context.Context, software.Request, software.Progress) (software.Result, error)
 	Dir, DataDir, TrustPath, TokenPath, Scope string
 	Dev                                       bool
 	mu                                        sync.Mutex
@@ -44,6 +47,11 @@ func (m *Manager) Overview() Overview {
 		out.Frontend = frontend
 	} else {
 		out.Frontend.Reason = bounded(err.Error())
+	}
+	var catalogErr error
+	out.Software, catalogErr = software.Read(m.DataDir)
+	if catalogErr != nil {
+		out.Software.Error = bounded(catalogErr.Error())
 	}
 	trust, err := releases.InspectTrust(m.TrustPath)
 	if err != nil {
@@ -87,6 +95,7 @@ func (m *Manager) Open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	var resume *Operation
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -101,12 +110,25 @@ func (m *Manager) Open(ctx context.Context) error {
 		if out.State != "queued" && out.State != "running" && !(out.State == "recovery_required" && out.Input.Action == "prepare") {
 			continue
 		}
+		if out.Input.Action == "software" && out.Input.Software != nil && out.Input.Software.Action == "update-panel" {
+			if resume != nil {
+				return errors.New("发现多项未完成的系统更新，请检查服务日志")
+			}
+			copy := out
+			resume = &copy
+			continue
+		}
 		recoverCtx, stop := context.WithTimeout(ctx, 30*time.Second)
 		m.interrupted(recoverCtx, &out)
 		stop()
 		if err := m.write(&out); err != nil {
 			return err
 		}
+	}
+	if resume != nil {
+		m.active = true
+		m.workers.Add(1)
+		go m.run(*resume, time.Now().Add(3*time.Minute))
 	}
 	return nil
 }
@@ -136,6 +158,9 @@ func (m *Manager) Status(id string) (Operation, error) {
 	return out, err
 }
 func (m *Manager) Submit(in Request) (Operation, error) {
+	if m.Dev || m.Scope != "host" {
+		return Operation{}, fault.Unavailable("当前环境不允许修改宿主机软件")
+	}
 	if in.Protocol != protocol.Agent || !ValidID(in.OperationID) {
 		return Operation{}, fault.Invalid("组件请求协议或标识无效")
 	}
@@ -147,7 +172,7 @@ func (m *Manager) Submit(in Request) (Operation, error) {
 	if m.closed || m.poisoned || m.ctx == nil || m.ctx.Err() != nil {
 		return Operation{}, fault.Unavailable("组件执行器已停止或记录待本机恢复")
 	}
-	if overview := m.Overview(); !overview.Available {
+	if overview := m.Overview(); !overview.Available && in.Input.Action != "software" {
 		return Operation{}, fault.Unavailable(overview.Reason)
 	}
 	raw, err := json.Marshal(in)
@@ -167,12 +192,8 @@ func (m *Manager) Submit(in Request) (Operation, error) {
 	if m.active {
 		return Operation{}, fault.Conflict("已有组件检查或准备操作正在执行")
 	}
-	_, count, err := m.entries()
-	if err != nil {
+	if _, _, err := m.entries(); err != nil {
 		return Operation{}, err
-	}
-	if count >= 64 {
-		return Operation{}, fault.Conflict("组件记录已达 64 项，须本机维护")
 	}
 	now := time.Now().Unix()
 	out := Operation{Protocol: protocol.Agent, ID: in.OperationID, RequestHash: secure.Hash(raw), Input: in.Input, State: "queued", Stage: "queued", CreatedAt: now, UpdatedAt: now, Deadline: now + 600}
@@ -182,7 +203,7 @@ func (m *Manager) Submit(in Request) (Operation, error) {
 	}
 	m.active = true
 	m.workers.Add(1)
-	go m.run(out)
+	go m.run(out, time.Unix(out.Deadline, 0))
 	return out, nil
 }
 func (m *Manager) host() releases.Host {
@@ -202,6 +223,10 @@ func bounded(message string) string {
 func (m *Manager) interrupted(ctx context.Context, out *Operation) {
 	out.Announcement = nil
 	out.State, out.Stage, out.ErrorCode, out.Error = "failed", "interrupted", "COMPONENT_INTERRUPTED", "组件操作在确认完成前中断，未启用或切换运行版本"
+	if out.Input.Action == "software" {
+		out.Error = "软件操作在确认完成前中断，请检查当前状态与日志后重试"
+		return
+	}
 	if out.Input.Action == "pull" {
 		if out.Image != nil {
 			if err := m.reconcileImage(ctx, out); err != nil {
@@ -233,14 +258,44 @@ func (m *Manager) interrupted(ctx context.Context, out *Operation) {
 	}
 	out.State, out.Stage, out.ErrorCode, out.Error = "recovery_required", "receipt_unconfirmed", "COMPONENT_PREPARATION_UNCONFIRMED", "准备目录存在但未确认有效："+bounded(err.Error())
 }
-func (m *Manager) run(out Operation) {
+func (m *Manager) run(out Operation, until time.Time) {
 	defer m.workers.Done()
 	defer func() { m.mu.Lock(); m.active = false; m.mu.Unlock() }()
-	ctx, cancel := context.WithDeadline(m.ctx, time.Unix(out.Deadline, 0))
+	ctx, cancel := context.WithDeadline(m.ctx, until)
 	defer cancel()
 	out.State, out.Stage = "running", "checking"
 	err := m.write(&out)
-	if err == nil && out.Input.Action == "pull" {
+	if err == nil && out.Input.Action == "software" {
+		progress := func(text string) {
+			out.Stage = "software_running"
+			out.RuntimeReason = bounded(text)
+			if e := m.write(&out); e != nil {
+				slog.Error("软件进度保存失败", "error", e)
+				cancel()
+			}
+		}
+		var result software.Result
+		if out.Input.Software.Action == "fail2ban" {
+			if m.Fail2banAction == nil {
+				err = errors.New("登录防护安装不可用")
+			} else {
+				result, err = m.Fail2banAction(ctx, *out.Input.Software, progress)
+			}
+		} else if out.Input.Software.Action == "update-panel" {
+			if m.UpdatePanel == nil {
+				err = errors.New("此安装未提供面板更新能力")
+			} else {
+				result, err = m.UpdatePanel(ctx, *out.Input.Software, progress)
+			}
+		} else {
+			result, err = software.Run(ctx, m.DataDir, *out.Input.Software, progress)
+		}
+		out.Software = &result
+		if err == nil {
+			out.State, out.Stage = "succeeded", "software_done"
+			out.RuntimeReason = bounded(result.Message)
+		}
+	} else if err == nil && out.Input.Action == "pull" {
 		err = m.pullImage(ctx, &out)
 	} else if err == nil && out.Input.Action == "activate" {
 		err = m.activateFrontend(ctx, &out)

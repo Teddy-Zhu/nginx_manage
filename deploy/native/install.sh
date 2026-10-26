@@ -308,6 +308,7 @@ ensure_dir /opt/nginxpanel/agent-releases 755 root root
 ensure_dir /opt/nginxpanel/prepared 755 root root
 ensure_dir /opt/nginxpanel/release-downloads 700 root root
 ensure_dir /etc/nginxpanel 755 root root
+ensure_dir /etc/modules-load.d 755 root root
 ensure_dir /etc/nginxpanel/install 700 root root
 state=/etc/nginxpanel/install
 work=$(mktemp -d "$state/work.XXXXXXXX")
@@ -592,7 +593,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /run/ufw.lock /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases /etc/systemd/system -/etc/fail2ban/jail.d $dns_write_paths $firewall_write_paths
+ReadWritePaths=$data/agent $data/runtime $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run /run/nginxpanel-host /run/nginxpanel-install /run/ufw.lock /opt/nginxpanel/prepared /opt/nginxpanel/release-downloads /opt/nginxpanel/agent-releases /etc/systemd/system /etc/modules-load.d -/etc/nginxpanel/docker -/etc/fail2ban/jail.d $dns_write_paths $firewall_write_paths
 InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
 RestrictSUIDSGID=yes
 LockPersonality=yes

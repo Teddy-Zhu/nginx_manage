@@ -22,7 +22,7 @@ type Runner struct {
 
 func (r *Runner) Run(ctx context.Context) error {
 	// An expired Web lease is never evidence that the root operation stopped.
-	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore','acme.account.register','acme.issue','host.dns.apply','component.check','component.prepare','component.activate','component.pull','component.install','component.switch','panel.update','agent.upgrade','panel.image','nginx.image','maintenance.enter','migration.push','migration.dependencies','backup.create','fail2ban.apply','fail2ban.address','fail2ban.lifecycle','fail2ban.python','fail2ban.existing','fail2ban.upgrade')"); err != nil {
+	if _, err := r.DB.ExecContext(ctx, "UPDATE tasks SET state='recovery_required',stage='unknown_task' WHERE state IN ('running','compensating') AND kind NOT IN ('nginx.apply','nginx.validate','nginx.restore','acme.account.register','acme.issue','host.dns.apply','component.check','component.prepare','component.activate','component.pull','component.software','component.install','component.switch','panel.update','agent.upgrade','panel.image','nginx.image','maintenance.enter','migration.push','migration.dependencies','backup.create','fail2ban.apply','fail2ban.address','fail2ban.lifecycle','fail2ban.python','fail2ban.existing','fail2ban.upgrade')"); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(2 * time.Second)

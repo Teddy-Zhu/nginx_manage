@@ -16,15 +16,13 @@ import (
 )
 
 func (m *Manager) entries() ([]os.DirEntry, int, error) {
+	// Public history queries are bounded separately. Retaining completed receipts
+	// must not exhaust an execution quota for everyday software operations.
 	entries, err := os.ReadDir(m.Dir)
 	if err != nil {
 		return nil, 0, err
 	}
-	if len(entries) > 128 {
-		return nil, 0, errors.New("组件操作目录超过 128 项，须本机维护")
-	}
 	count := 0
-	var total int64
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
@@ -34,15 +32,11 @@ func (m *Manager) entries() ([]os.DirEntry, int, error) {
 		if !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || st.Uid != 0 || st.Nlink != 1 || info.Size() > 64<<10 {
 			return nil, 0, errors.New("组件操作目录存在不受信任的条目")
 		}
-		total += info.Size()
 		if strings.HasSuffix(entry.Name(), ".json") && ValidID(strings.TrimSuffix(entry.Name(), ".json")) {
 			count++
 		} else if entry.Name() != ".manager.lock" && !strings.HasPrefix(entry.Name(), ".tmp-") {
 			return nil, 0, errors.New("组件操作目录存在未知文件")
 		}
-	}
-	if count > 64 || total > 8<<20 {
-		return nil, 0, errors.New("组件操作记录超出保留预算")
 	}
 	return entries, count, nil
 }
@@ -85,12 +79,8 @@ func containsState(state string) bool {
 }
 
 func (m *Manager) write(out *Operation) error {
-	entries, _, err := m.entries()
-	if err != nil {
+	if _, _, err := m.entries(); err != nil {
 		return err
-	}
-	if len(entries) >= 128 {
-		return errors.New("组件操作目录没有暂存容量")
 	}
 	out.UpdatedAt = time.Now().Unix()
 	if err := out.Validate(Request{Protocol: out.Protocol, OperationID: out.ID, Input: out.Input}); err != nil {

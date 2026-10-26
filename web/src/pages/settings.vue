@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "设置",
-    "subtitle": "管理账户、访问入口与系统维护",
+    "subtitle": "管理账户、访问入口与系统更新",
     "nav": true,
     "localOnly": true,
     "order": 25,
@@ -179,10 +179,7 @@ onMounted(load);
     <section>
       <h3>其他管理</h3>
       <div class="inline-gap">
-        <RouterLink to="/maintenance">维护模式</RouterLink
-        ><RouterLink to="/agent-upgrades">管理服务更新</RouterLink
-        ><RouterLink to="/panel-images">运行环境更新</RouterLink
-        ><RouterLink to="/firewall">防火墙状态</RouterLink>
+        <RouterLink to="/firewall">防火墙状态</RouterLink>
       </div>
     </section>
   </section>

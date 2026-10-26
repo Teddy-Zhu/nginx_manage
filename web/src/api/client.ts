@@ -49,6 +49,9 @@ export type ComponentOfflineInput = components["schemas"]["ComponentOfflineInput
 export type ComponentOfflineChunk = components["schemas"]["ComponentOfflineChunk"];
 export type ComponentOfflineAsset = components["schemas"]["ComponentOfflineAsset"];
 export type ComponentOfflineUpload = components["schemas"]["ComponentOfflineUpload"];
+export type SoftwareRequest = components["schemas"]["SoftwareRequest"];
+export type SoftwareSource = components["schemas"]["SoftwareSource"];
+export type SoftwareCatalog = components["schemas"]["SoftwareCatalog"];
 export type ComponentInput = components["schemas"]["ComponentInput"];
 export type ComponentCreateInput =
   components["schemas"]["ComponentCreateInput"];
@@ -160,6 +163,10 @@ export type MigrationFail2banInput = components["schemas"]["MigrationFail2banInp
 export type MigrationFail2banPlan = components["schemas"]["MigrationFail2banPlan"];
 export type Fail2banInstance = components["schemas"]["Fail2banInstance"];
 export type Fail2banJail = components["schemas"]["Fail2banJail"];
+export type Fail2banContainerStatus=components["schemas"]["Fail2banContainerStatus"];
+export type Fail2banContainerRule=components["schemas"]["Fail2banContainerRule"];
+export type Fail2banContainerConfig=components["schemas"]["Fail2banContainerConfig"];
+export type Fail2banContainerRequest=components["schemas"]["Fail2banContainerRequest"];
 export type Fail2banObservation = components["schemas"]["Fail2banObservation"];
 export type FirewallObservation = components["schemas"]["FirewallObservation"];
 export type FirewallRule = components["schemas"]["FirewallRule"];
@@ -489,7 +496,7 @@ function followLogsFor(
 }
 
 function componentTaskTitle(data: ComponentCreateInput) {
-  return { check: "检查可用版本", prepare: "下载安装包", activate: "启用前端资源", pull: "下载运行镜像" }[data.input.action];
+  return { check: "检查可用版本", prepare: "下载安装包", activate: "启用前端资源", pull: "下载运行镜像", software: data.input.software?.action==="update-panel"?"更新系统":"软件操作" }[data.input.action];
 }
 
 export function createAPI(scope: RequestScope) {
@@ -861,6 +868,7 @@ export function createAPI(scope: RequestScope) {
   applyFail2ban: (data:Fail2banApplyInput,key:string) => request<Fail2banApplyTask>({ activity: "应用登录防护配置", url:"/fail2ban/apply",method:"POST",data,headers:{"Idempotency-Key":key}}),
   fail2banInstance: (signal?: AbortSignal) => request<Fail2banInstance>({ url: "/fail2ban/instance", signal }),
   fail2banJail: (name: string, signal?: AbortSignal) => request<Fail2banJail>({ url: `/fail2ban/jails/${encodeURIComponent(name)}`, signal, timeout: 30_000 }),
+  fail2banContainer:(signal?:AbortSignal)=>request<Fail2banContainerStatus>({url:"/fail2ban/container",signal,timeout:30_000}),
   fail2ban: (signal?: AbortSignal) =>
     request<Fail2banObservation>({ url: "/fail2ban", signal }),
   firewall: (signal?: AbortSignal) =>

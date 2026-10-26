@@ -45,7 +45,7 @@ func (s *Server) CreateComponentTask(w http.ResponseWriter, r *http.Request, par
 		return
 	}
 	var in components.CreateInput
-	if err := decodeLimit(w, r, &in, 16<<10); err != nil {
+	if err := decodeLimit(w, r, &in, 64<<10); err != nil {
 		s.fail(w, r, err)
 		return
 	}

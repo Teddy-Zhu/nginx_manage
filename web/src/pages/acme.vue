@@ -1,7 +1,7 @@
 <route lang="json">
 {
   "meta": {
-    "title": "证书申请设置",
+    "title": "申请设置",
     "subtitle": "管理签发账户和 DNS 验证信息",
     "nav": false,
     "parent": "/certificates"
@@ -10,9 +10,11 @@
 </route>
 
 <script setup lang="ts">
+import CertificateWorkspace from "../components/CertificateWorkspace.vue";
+import { useRoute } from "vue-router";
 import { useLiveRefresh } from "../composables/live";
 import { sha256Hex } from "../utils/crypto";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
   NAlert,
@@ -37,6 +39,19 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 const api = useNodeAPI();
+const route = useRoute();
+const activeTab = ref(
+  route.query.tab === "credentials" ? "credentials" : "accounts",
+);
+watch(
+  () => route.query.tab,
+  (tab) => {
+    activeTab.value = tab === "credentials" ? "credentials" : "accounts";
+  },
+);
+const readyAccounts = computed(() =>
+  accounts.value.filter((item) => item.state === "ready"),
+);
 
 const { busy, run, message } = useAction(),
   keyFor = useIdempotency();
@@ -47,7 +62,7 @@ const accountEditing = ref(false),
   accountForm = ref<ACMEAccountInput>({
     name: "",
     email: "",
-    environment: "staging",
+    environment: "production",
     terms_agreed: false,
   });
 const accountBaseline = ref("");
@@ -128,7 +143,7 @@ function startAccount() {
   accountForm.value = {
     name: "",
     email: "",
-    environment: "staging",
+    environment: "production",
     terms_agreed: false,
   };
   accountBaseline.value = JSON.stringify(accountForm.value);
@@ -144,7 +159,7 @@ function closeAccount() {
   accountForm.value = {
     name: "",
     email: "",
-    environment: "staging",
+    environment: "production",
     terms_agreed: false,
   };
 }
@@ -162,7 +177,7 @@ async function createAccount() {
     accountForm.value = {
       name: "",
       email: "",
-      environment: "staging",
+      environment: "production",
       terms_agreed: false,
     };
   }, "账户注册已排队，可在任务中查看结果");
@@ -222,7 +237,7 @@ function startCredential(item: DNSCredential | null) {
   if (
     busy.value ||
     (credentialDirty.value &&
-      !window.confirm("凭据修改尚未保存，确认重新填写？"))
+      !window.confirm("DNS 授权尚未保存，确认重新填写？"))
   )
     return;
   const id = item?.provider ?? "cloudflare";
@@ -248,7 +263,7 @@ function clearCredential() {
 function closeCredential() {
   if (
     busy.value ||
-    (credentialDirty.value && !window.confirm("凭据修改尚未保存，确认取消？"))
+    (credentialDirty.value && !window.confirm("DNS 授权尚未保存，确认取消？"))
   )
     return;
   clearCredential();
@@ -280,16 +295,16 @@ async function saveCredential() {
       input,
       keyFor({ action: "save-dns-credential", id, digest }),
     );
-    if (!out.credential) throw new Error("凭据保存未返回有效资源");
+    if (!out.credential) throw new Error("DNS 授权保存未返回有效信息");
     credentials.value = [
       ...credentials.value.filter((item) => item.id !== out.credential!.id),
       out.credential,
     ];
     clearCredential();
-  }, "DNS 凭据已保存");
+  }, "DNS 授权已保存");
 }
 async function removeCredential(item: DNSCredential) {
-  if (busy.value || !window.confirm(`确认删除 DNS 凭据 ${item.name}？`)) return;
+  if (busy.value || !window.confirm(`确认删除 DNS 授权 ${item.name}？`)) return;
   await run(async () => {
     await api.deleteDNSCredential(
       item.id,
@@ -304,16 +319,27 @@ async function removeCredential(item: DNSCredential) {
       (value) => value.id !== item.id,
     );
     if (originalCredential.value?.id === item.id) clearCredential();
-  }, "DNS 凭据已删除");
+  }, "DNS 授权已删除");
 }
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (dirty.value) event.preventDefault();
 };
 onBeforeRouteLeave(
-  () => !dirty.value || window.confirm("ACME 设置有未保存内容，确认离开？"),
+  () => !dirty.value || window.confirm("申请设置有未保存内容，确认离开？"),
 );
 onMounted(() => {
-  void load();
+  void load().then(() => {
+    if (route.query.from === "request") {
+      if (activeTab.value === "accounts" && !accounts.value.length)
+        startAccount();
+      else if (
+        activeTab.value === "credentials" &&
+        !credentials.value.length &&
+        providers.value.length
+      )
+        startCredential(null);
+    }
+  });
   timer = setInterval(() => {
     now.value = Date.now();
   }, 10000);
@@ -333,254 +359,287 @@ useLiveRefresh(api, ["tasks"], () => {
 </script>
 
 <template>
-  <div class="toolbar">
-    <router-link to="/certificates">返回证书</router-link>
-    <div class="inline-gap">
-      <router-link to="/certificate-requests">ACME 签发</router-link>
-      <router-link to="/tasks">查看任务</router-link
-      ><n-button :loading="busy" @click="load">刷新</n-button>
-    </div>
-  </div>
-  <n-tabs type="line" animated>
-    <n-tab-pane name="accounts" tab="ACME 账户">
-      <n-alert type="info" :bordered="false"
-        >测试与正式环境使用独立账户。测试环境证书不受浏览器信任。<a
-          href="https://letsencrypt.org/repository/"
-          target="_blank"
-          rel="noopener noreferrer"
-          >查看 Let's Encrypt 服务条款</a
-        ></n-alert
-      >
-      <div class="toolbar" style="margin-top: 20px">
-        <span class="muted">{{ accounts.length }} 个账户</span
-        ><n-button type="primary" :disabled="busy" @click="startAccount"
-          >添加账户</n-button
-        >
-      </div>
-      <section
-        v-if="accountEditing"
-        class="surface"
-        style="margin-bottom: 20px"
-      >
-        <n-form
-          label-placement="top"
-          :disabled="busy"
-          @submit.prevent="createAccount"
-        >
-          <n-form-item label="名称"
-            ><n-input v-model:value="accountForm.name" :maxlength="128"
-          /></n-form-item>
-          <n-form-item label="邮箱"
-            ><n-input
-              v-model:value="accountForm.email"
-              :maxlength="254"
-              :input-props="{ type: 'email', autocomplete: 'email' }"
-          /></n-form-item>
-          <n-form-item label="CA 环境"
-            ><n-select
-              v-model:value="accountForm.environment"
-              :options="[
-                { label: 'Let’s Encrypt Staging（测试）', value: 'staging' },
-                {
-                  label: 'Let’s Encrypt Production（正式）',
-                  value: 'production',
-                },
-              ]"
-          /></n-form-item>
-          <n-form-item
-            ><n-checkbox v-model:checked="accountForm.terms_agreed"
-              >已阅读并同意 Let's Encrypt 当前服务条款</n-checkbox
-            ></n-form-item
-          >
-          <div class="inline-gap">
-            <n-button
-              type="primary"
-              attr-type="submit"
-              :loading="busy"
-              :disabled="
-                !accountForm.name.trim() ||
-                !accountForm.email.trim() ||
-                !accountForm.terms_agreed
-              "
-              >注册账户</n-button
-            ><n-button :disabled="busy" @click="closeAccount">取消</n-button>
-          </div>
-        </n-form>
-      </section>
-      <n-empty
-        v-if="!accounts.length && !accountEditing"
-        description="尚未添加 ACME 账户"
-      />
-      <section
-        v-for="item in accounts"
-        :key="item.id"
-        class="surface account-card"
-      >
-        <div class="section-heading">
-          <div>
-            <h2>{{ item.name }}</h2>
-            <p class="muted">{{ item.email }}</p>
-          </div>
-          <div class="inline-gap">
-            <n-tag
-              :bordered="false"
-              :type="item.environment === 'production' ? 'warning' : 'default'"
-              >{{ item.environment === "production" ? "正式" : "测试" }}</n-tag
-            ><n-tag
-              :bordered="false"
-              :type="
-                item.state === 'ready'
-                  ? 'success'
-                  : item.state === 'failed'
-                    ? 'error'
-                    : 'default'
-              "
-              >{{ states[item.state] }}</n-tag
-            >
-          </div>
-        </div>
-        <p v-if="item.last_error" class="error">{{ item.last_error }}</p>
-        <p
-          v-if="item.state === 'failed' && item.retry_after * 1000 > now"
-          class="muted"
-        >
-          允许重试时间：{{ date(item.retry_after) }}
+  <CertificateWorkspace>
+    <div class="cert-heading">
+      <div>
+        <h2>申请设置</h2>
+        <p class="muted">
+          申请账户用于接收证书通知，DNS 授权用于自动验证域名。
         </p>
-
-        <div class="inline-gap">
-          <n-button
-            v-if="item.state === 'failed'"
-            :disabled="busy || item.retry_after * 1000 > now"
-            @click="retryAccount(item)"
-            >重试注册</n-button
-          ><n-button
-            type="error"
-            :disabled="busy || activeAccount(item)"
-            @click="removeAccount(item)"
-            >移除本机账户</n-button
-          >
+      </div>
+      <n-button :loading="busy" @click="load">刷新</n-button>
+    </div>
+    <section v-if="route.query.from === 'request'" class="surface cert-section">
+      <div class="cert-heading">
+        <div>
+          <h2>
+            {{ readyAccounts.length ? "申请账户已就绪" : "完成准备后继续申请" }}
+          </h2>
+          <p class="muted">
+            {{
+              readyAccounts.length
+                ? "DNS 验证还需添加域名所在服务商的授权，网站验证无需 DNS 授权。"
+                : "先注册申请账户；选择 DNS 验证时，再添加域名所在服务商的授权。"
+            }}
+          </p>
         </div>
-      </section>
-    </n-tab-pane>
-    <n-tab-pane name="credentials" tab="DNS 凭据">
-      <n-alert type="info" :bordered="false"
-        >凭据字段保存后不回显。保存仅核对字段，DNS API
-        权限及域名访问需在验证任务中确认。</n-alert
-      >
-      <div class="toolbar" style="margin-top: 20px">
-        <span class="muted">{{ credentials.length }} 组凭据</span
-        ><n-button
-          type="primary"
-          :disabled="busy || !providers.length"
-          @click="startCredential(null)"
-          >添加凭据</n-button
+        <router-link
+          :to="{ path: '/certificate-requests', query: { new: '1' } }"
+          ><n-button :type="readyAccounts.length ? 'primary' : 'default'">{{
+            readyAccounts.length ? "继续申请证书" : "返回申请"
+          }}</n-button></router-link
         >
       </div>
-      <section
-        v-if="credentialEditing"
-        class="surface"
-        style="margin-bottom: 20px"
-      >
-        <n-form
-          label-placement="top"
-          :disabled="busy"
-          @submit.prevent="saveCredential"
+    </section>
+    <n-tabs v-model:value="activeTab" type="segment" animated>
+      <n-tab-pane name="accounts" tab="申请账户">
+        <n-alert type="info" :bordered="false"
+          >测试与正式环境使用独立账户。测试环境证书不受浏览器信任。<a
+            href="https://letsencrypt.org/repository/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >查看 Let's Encrypt 服务条款</a
+          ></n-alert
         >
-          <n-form-item label="名称"
-            ><n-input v-model:value="credentialName" :maxlength="128"
-          /></n-form-item>
-          <n-form-item label="DNS 提供商"
-            ><n-select
-              v-model:value="provider"
-              :options="providerOptions"
-              :disabled="!!originalCredential || busy"
-              @update:value="changeProvider"
-          /></n-form-item>
-          <n-form-item v-if="originalCredential"
-            ><n-checkbox
-              v-model:checked="replaceSecrets"
-              @update:checked="changeReplace"
-              >替换凭据全部字段</n-checkbox
-            ></n-form-item
+        <div class="toolbar" style="margin-top: 20px">
+          <span class="muted">{{ accounts.length }} 个账户</span
+          ><n-button type="primary" :disabled="busy" @click="startAccount"
+            >添加账户</n-button
           >
-          <template v-if="replaceSecrets"
-            ><n-form-item
-              v-for="field in fields"
-              :key="field.key"
-              :label="field.label"
-              :required="field.required"
+        </div>
+        <section
+          v-if="accountEditing"
+          class="surface"
+          style="margin-bottom: 20px"
+        >
+          <n-form
+            label-placement="top"
+            :disabled="busy"
+            @submit.prevent="createAccount"
+          >
+            <n-form-item label="名称"
+              ><n-input v-model:value="accountForm.name" :maxlength="128"
+            /></n-form-item>
+            <n-form-item label="邮箱"
               ><n-input
-                v-model:value="secrets[field.key]"
-                type="password"
-                show-password-on="click"
-                :maxlength="2048"
-                :input-props="{
-                  autocomplete: 'new-password',
-                  spellcheck: false,
-                }" /></n-form-item
-          ></template>
-          <p v-else class="muted">保留已保存的凭据字段。</p>
+                v-model:value="accountForm.email"
+                :maxlength="254"
+                :input-props="{ type: 'email', autocomplete: 'email' }"
+            /></n-form-item>
+            <n-form-item label="证书用途"
+              ><n-select
+                v-model:value="accountForm.environment"
+                :options="[
+                  { label: '测试证书（不受浏览器信任）', value: 'staging' },
+                  {
+                    label: '正式证书（网站使用）',
+                    value: 'production',
+                  },
+                ]"
+            /></n-form-item>
+            <n-form-item
+              ><n-checkbox v-model:checked="accountForm.terms_agreed"
+                >已阅读并同意 Let's Encrypt 当前服务条款</n-checkbox
+              ></n-form-item
+            >
+            <div class="inline-gap">
+              <n-button
+                type="primary"
+                attr-type="submit"
+                :loading="busy"
+                :disabled="
+                  !accountForm.name.trim() ||
+                  !accountForm.email.trim() ||
+                  !accountForm.terms_agreed
+                "
+                >注册账户</n-button
+              ><n-button :disabled="busy" @click="closeAccount">取消</n-button>
+            </div>
+          </n-form>
+        </section>
+        <n-empty
+          v-if="!accounts.length && !accountEditing"
+          description="尚未添加申请账户"
+        />
+        <section
+          v-for="item in accounts"
+          :key="item.id"
+          class="surface account-card"
+        >
+          <div class="section-heading">
+            <div>
+              <h2>{{ item.name }}</h2>
+              <p class="muted">{{ item.email }}</p>
+            </div>
+            <div class="inline-gap">
+              <n-tag
+                :bordered="false"
+                :type="
+                  item.environment === 'production' ? 'warning' : 'default'
+                "
+                >{{
+                  item.environment === "production" ? "正式" : "测试"
+                }}</n-tag
+              ><n-tag
+                :bordered="false"
+                :type="
+                  item.state === 'ready'
+                    ? 'success'
+                    : item.state === 'failed'
+                      ? 'error'
+                      : 'default'
+                "
+                >{{ states[item.state] }}</n-tag
+              >
+            </div>
+          </div>
+          <p v-if="item.last_error" class="error">{{ item.last_error }}</p>
+          <p
+            v-if="item.state === 'failed' && item.retry_after * 1000 > now"
+            class="muted"
+          >
+            允许重试时间：{{ date(item.retry_after) }}
+          </p>
+
           <div class="inline-gap">
             <n-button
-              type="primary"
-              attr-type="submit"
-              :loading="busy"
-              :disabled="!validCredential"
-              >保存凭据</n-button
-            ><n-button :disabled="busy" @click="closeCredential">取消</n-button>
-          </div>
-        </n-form>
-      </section>
-      <n-empty
-        v-if="!credentials.length && !credentialEditing"
-        description="尚未添加 DNS 凭据"
-      />
-      <section
-        v-for="item in credentials"
-        :key="item.id"
-        class="surface account-card"
-      >
-        <div class="section-heading">
-          <div>
-            <h2>{{ item.name }}</h2>
-            <p class="muted">
-              {{ providerName(item.provider) }}
-            </p>
-          </div>
-          <div class="inline-gap">
-            <n-button :disabled="busy" @click="startCredential(item)"
-              >编辑</n-button
+              v-if="item.state === 'failed'"
+              :disabled="busy || item.retry_after * 1000 > now"
+              @click="retryAccount(item)"
+              >重试注册</n-button
             ><n-button
               type="error"
-              :disabled="busy"
-              @click="removeCredential(item)"
-              >删除</n-button
+              :disabled="busy || activeAccount(item)"
+              @click="removeAccount(item)"
+              >移除本机账户</n-button
             >
           </div>
+        </section>
+      </n-tab-pane>
+      <n-tab-pane name="credentials" tab="DNS 授权">
+        <n-alert type="info" :bordered="false"
+          >授权用于自动添加和清理域名验证记录，不修改网站解析。密钥保存后不会再次显示。</n-alert
+        >
+        <div class="toolbar" style="margin-top: 20px">
+          <span class="muted">{{ credentials.length }} 组授权</span
+          ><n-button
+            type="primary"
+            :disabled="busy || !providers.length"
+            @click="startCredential(null)"
+            >添加 DNS 授权</n-button
+          >
         </div>
-        <p class="muted">
-          已配置字段：{{
-            item.field_names
-              .map(
-                (key) =>
-                  providers
-                    .find((value) => value.id === item.provider)
-                    ?.fields.find((field) => field.key === key)?.label ?? key,
-              )
-              .join("、")
-          }}
-        </p>
-      </section>
-    </n-tab-pane>
-  </n-tabs>
+        <section
+          v-if="credentialEditing"
+          class="surface"
+          style="margin-bottom: 20px"
+        >
+          <n-form
+            label-placement="top"
+            :disabled="busy"
+            @submit.prevent="saveCredential"
+          >
+            <n-form-item label="名称"
+              ><n-input v-model:value="credentialName" :maxlength="128"
+            /></n-form-item>
+            <n-form-item label="域名服务商"
+              ><n-select
+                v-model:value="provider"
+                :options="providerOptions"
+                :disabled="!!originalCredential || busy"
+                @update:value="changeProvider"
+            /></n-form-item>
+            <n-form-item v-if="originalCredential"
+              ><n-checkbox
+                v-model:checked="replaceSecrets"
+                @update:checked="changeReplace"
+                >更新授权密钥</n-checkbox
+              ></n-form-item
+            >
+            <template v-if="replaceSecrets"
+              ><n-form-item
+                v-for="field in fields"
+                :key="field.key"
+                :label="field.label"
+                :required="field.required"
+                ><n-input
+                  v-model:value="secrets[field.key]"
+                  type="password"
+                  show-password-on="click"
+                  :maxlength="2048"
+                  :input-props="{
+                    autocomplete: 'new-password',
+                    spellcheck: false,
+                  }" /></n-form-item
+            ></template>
+            <p v-else class="muted">保留已保存的授权密钥。</p>
+            <div class="inline-gap">
+              <n-button
+                type="primary"
+                attr-type="submit"
+                :loading="busy"
+                :disabled="!validCredential"
+                >保存授权</n-button
+              ><n-button :disabled="busy" @click="closeCredential"
+                >取消</n-button
+              >
+            </div>
+          </n-form>
+        </section>
+        <n-empty
+          v-if="!credentials.length && !credentialEditing"
+          description="尚未添加 DNS 授权"
+        />
+        <section
+          v-for="item in credentials"
+          :key="item.id"
+          class="surface account-card"
+        >
+          <div class="section-heading">
+            <div>
+              <h2>{{ item.name }}</h2>
+              <p class="muted">
+                {{ providerName(item.provider) }}
+              </p>
+            </div>
+            <div class="inline-gap">
+              <n-button :disabled="busy" @click="startCredential(item)"
+                >编辑</n-button
+              ><n-button
+                type="error"
+                :disabled="busy"
+                @click="removeCredential(item)"
+                >删除</n-button
+              >
+            </div>
+          </div>
+          <p class="muted">
+            已配置字段：{{
+              item.field_names
+                .map(
+                  (key) =>
+                    providers
+                      .find((value) => value.id === item.provider)
+                      ?.fields.find((field) => field.key === key)?.label ?? key,
+                )
+                .join("、")
+            }}
+          </p>
+        </section>
+      </n-tab-pane>
+    </n-tabs>
+  </CertificateWorkspace>
 </template>
 
 <style scoped>
 .account-card {
   margin-bottom: 16px;
 }
-.fingerprint {
-  overflow-wrap: anywhere;
+.n-tab-pane {
+  padding-top: 20px;
+}
+.account-card p {
+  margin-top: 8px;
 }
 a {
   color: #246e54;
