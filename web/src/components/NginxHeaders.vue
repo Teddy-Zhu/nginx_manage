@@ -16,7 +16,7 @@ watch(() => props.value, (value) => {
       return { name: args[0]!, value: args[1]!, always: args[2] === "always" };
     });
     error.value = "";
-  } catch { error.value = "此请求头包含复杂参数，请通过高级源文件编辑调整。"; }
+  } catch { error.value = `此${props.response ? "响应头" : "请求头"}包含复杂参数，请通过高级源文件编辑调整。`; }
 }, { immediate: true });
 function update() {
   emitted = rows.value.filter((row) => row.name || row.value).map((row) => `${nginxQuote(row.name.trim())} ${nginxQuote(row.value)}${props.response && row.always ? " always" : ""}`).join("\n");
@@ -28,10 +28,10 @@ function remove(index: number) { rows.value.splice(index, 1); update(); }
   <NAlert v-if="error" type="warning">{{ error }}</NAlert>
   <div v-else class="headers-input">
     <div v-for="(row, index) in rows" :key="index" class="header-row">
-      <label>名称<NInput v-model:value="row.name" placeholder="例如 X-Forwarded-For" :maxlength="64" :disabled="disabled" @update:value="update" /></label>
-      <label>值<NInput v-model:value="row.value" placeholder="请求头值，可使用 Nginx 变量" :maxlength="2048" :disabled="disabled" @update:value="update" /></label>
+      <label>名称<NInput v-model:value="row.name" :placeholder="response ? '例如 X-Content-Type-Options' : '例如 X-Forwarded-For'" :maxlength="64" :disabled="disabled" @update:value="update" /></label>
+      <label>值<NInput v-model:value="row.value" :placeholder="`${response ? '响应头' : '请求头'}值，可使用 Nginx 变量`" :maxlength="2048" :disabled="disabled" @update:value="update" /></label>
       <label v-if="response" class="always">所有响应<NSwitch v-model:value="row.always" :disabled="disabled" @update:value="update" /></label>
-      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除请求头 ${index + 1}`" @click="remove(index)">移除</NButton>
+      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除${response ? '响应头' : '请求头'} ${index + 1}`" @click="remove(index)">移除</NButton>
     </div>
     <NButton attr-type="button" dashed :disabled="disabled || rows.length >= 128" @click="rows.push({ name: '', value: '', always: false })">＋ 添加{{ response ? '响应头' : '请求头' }}</NButton>
   </div>

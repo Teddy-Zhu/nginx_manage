@@ -14,7 +14,7 @@ import (
 func runDeploymentUpgrade(ctx context.Context, command string, args []string) error {
 	allowed := map[string]map[string]bool{
 		"deployment-upgrade":         {"data-dir": true, "operation-id": true, "release-plan": true, "release-prerelease": true, "maintenance-id": true, "maintenance-epoch": true, "allow-downtime": true},
-		"deployment-upgrade-resume":  {"data-dir": true, "operation-id": true, "maintenance-epoch": true},
+		"deployment-upgrade-resume":  {"data-dir": true, "operation-id": true, "maintenance-epoch": true, "foreground": true},
 		"deployment-upgrade-status":  {"data-dir": true, "operation-id": true},
 		"deployment-upgrade-inspect": {"data-dir": true, "maintenance-id": true},
 	}
@@ -34,6 +34,7 @@ func runDeploymentUpgrade(ctx context.Context, command string, args []string) er
 	epoch := f.String("maintenance-epoch", "", "expected current maintenance epoch")
 	prerelease := f.Bool("release-prerelease", false, "authorize signed prerelease")
 	downtime := f.Bool("allow-downtime", false, "authorize coordinated panel and Agent interruption")
+	foreground := f.Bool("foreground", false, "resume with this root-approved repair tool instead of the installed worker")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -64,7 +65,7 @@ func runDeploymentUpgrade(ctx context.Context, command string, args []string) er
 	if command == "deployment-upgrade-status" {
 		out, err = agent.PanelUpdateStatus(abs, *id)
 	} else {
-		out, err = agent.QueueDeploymentUpgrade(ctx, abs, *id, *plan, *maintenance, *epoch, *prerelease, *downtime, command == "deployment-upgrade-resume")
+		out, err = agent.QueueDeploymentUpgrade(ctx, abs, *id, *plan, *maintenance, *epoch, *prerelease, *downtime, command == "deployment-upgrade-resume", *foreground)
 	}
 	if out.OperationID != "" {
 		if encoded := json.NewEncoder(os.Stdout).Encode(out); encoded != nil {

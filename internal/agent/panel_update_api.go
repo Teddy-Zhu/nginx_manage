@@ -105,6 +105,10 @@ func (s *Server) readPanelUpdate(ctx context.Context, id string) (panelupdates.O
 }
 
 func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request, rootRecovery bool) (panelupdates.Operation, error) {
+	return s.queuePanelUpdateDispatch(ctx, req, rootRecovery, true)
+}
+
+func (s *Server) queuePanelUpdateDispatch(ctx context.Context, req panelupdates.Request, rootRecovery, dispatch bool) (panelupdates.Operation, error) {
 	var zero panelupdates.Operation
 	if rootRecovery && (os.Geteuid() != 0 || !req.Input.CoordinateAgent || req.Command != "resume") {
 		return zero, fault.Invalid("协调更新本机恢复入口无效")
@@ -248,6 +252,9 @@ func (s *Server) queuePanelUpdate(ctx context.Context, req panelupdates.Request,
 	service = nil
 	unlock()
 	unlock = nil
+	if !dispatch {
+		return s.readPanelUpdate(ctx, req.OperationID)
+	}
 	if failed {
 		if _, err = installationSystemctl(ctx, "reset-failed", panelUpdateUnit(req.OperationID)); err != nil {
 			return zero, fault.Unavailable("更新授权已保存，服务复位结果未确认，请查询原操作")

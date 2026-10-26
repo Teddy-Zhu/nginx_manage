@@ -14,10 +14,24 @@ import (
 
 // QueueDeploymentUpgrade uses the installed independent update service. A root
 // rescue is a new bounded authorization for the original immutable transaction.
-func QueueDeploymentUpgrade(ctx context.Context, data, id, plan, maintenanceID, epoch string, prerelease, allowDowntime, resume bool) (Record, error) {
+func QueueDeploymentUpgrade(ctx context.Context, data, id, plan, maintenanceID, epoch string, prerelease, allowDowntime, resume, foreground bool) (Record, error) {
 	var zero Record
 	if os.Geteuid() != 0 || !validID(id) {
 		return zero, errors.New("协调部署需要本机 root 和原操作 UUID")
+	}
+	if foreground && !resume {
+		return zero, errors.New("前台救援仅可续办原协调部署事务")
+	}
+	if foreground {
+		// A root-approved repair binary can finish compensation when the installed
+		// worker itself is defective. The original intent and grants still apply.
+		binary, err := os.Executable()
+		if err != nil {
+			return zero, err
+		}
+		if _, err = trustedFile(binary, true); err != nil {
+			return zero, err
+		}
 	}
 	if _, err := panelruntime.Root(data); err != nil {
 		return zero, err
@@ -52,8 +66,15 @@ func QueueDeploymentUpgrade(ctx context.Context, data, id, plan, maintenanceID, 
 		epoch = grant.MaintenanceEpoch
 	}
 	req := panelupdates.Request{Actor: "local-root", RequestID: secure.ID(), Protocol: Protocol, OperationID: id, Input: in, Sequence: sequence, Command: command, Epoch: epoch, AuthorizationUntil: time.Now().Unix() + 300}
-	if _, err = s.queuePanelUpdate(ctx, req, resume); err != nil {
+	if _, err = s.queuePanelUpdateDispatch(ctx, req, resume, !foreground); err != nil {
 		return zero, err
+	}
+	if foreground {
+		r, err := panelUpdateRecord(data, id)
+		if err != nil {
+			return r, err
+		}
+		return updatePanel(ctx, r.PanelUpdate.Intent.Input, id, req.Epoch, &req)
 	}
 	return panelUpdateRecord(data, id)
 }

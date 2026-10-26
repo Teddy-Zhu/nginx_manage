@@ -221,6 +221,41 @@ func TestAPIStreamUpstreamGroupInput(t *testing.T) {
 	if resource.Kind != "stream" || len(members.Values) != 2 || !members.Editable || len(upstream.Values) != 1 || !strings.HasPrefix(upstream.Values[0], "nginxpanel_up_") {
 		t.Fatal("stream group did not retain editable members and use its generated upstream")
 	}
+	containsGroup := func(files []nginxconfig.File, name string) bool {
+		for _, file := range files {
+			if strings.Contains(file.Content, "upstream "+name+" {") {
+				return true
+			}
+		}
+		return false
+	}
+	for _, kind := range []string{"stream", "http"} {
+		if kind == "http" {
+			httpGroup.BaseVersion, httpGroup.Upstream = saved.Tree.Version, "http://127.0.0.1:9000"
+			saved = readAPIData[nginxconfig.SaveResult](t, n.request(t, "POST", "/nginx/resources", httpGroup, map[string]string{"Idempotency-Key": "http-group"}, 201, "OK"))
+		}
+		owner := saved.Tree.Resources[0]
+		groupName := strings.TrimPrefix(owner.Fields["upstream"].Values[0], "http://")
+		alias := nginxconfig.CreateRequest{BaseVersion: saved.Tree.Version, Kind: kind, Listen: []string{"18081"}, Upstream: groupName}
+		if kind == "http" {
+			alias.Upstream, alias.Domains = "http://"+groupName, []string{"alias.example.test"}
+		}
+		saved = readAPIData[nginxconfig.SaveResult](t, n.request(t, "POST", "/nginx/resources", alias, map[string]string{"Idempotency-Key": kind + "-shared"}, 201, "OK"))
+		aliasID := ""
+		for _, item := range saved.Tree.Resources {
+			if item.ID != owner.ID {
+				aliasID = item.ID
+			}
+		}
+		saved = readAPIData[nginxconfig.SaveResult](t, n.request(t, "DELETE", "/nginx/resources/"+owner.ID, nginxconfig.ResourceActionRequest{BaseVersion: saved.Tree.Version}, map[string]string{"Idempotency-Key": kind + "-delete-owner"}, 200, "OK"))
+		if len(saved.Tree.Resources) != 1 || !containsGroup(saved.Tree.Files, groupName) {
+			t.Fatal("deleting one proxy removed a shared upstream group")
+		}
+		saved = readAPIData[nginxconfig.SaveResult](t, n.request(t, "DELETE", "/nginx/resources/"+aliasID, nginxconfig.ResourceActionRequest{BaseVersion: saved.Tree.Version}, map[string]string{"Idempotency-Key": kind + "-delete-last"}, 200, "OK"))
+		if len(saved.Tree.Resources) != 0 || containsGroup(saved.Tree.Files, groupName) {
+			t.Fatal("deleting the last proxy retained its generated upstream group")
+		}
+	}
 }
 
 func TestAPILargeFirewallPolicyPersistence(t *testing.T) {

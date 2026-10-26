@@ -190,6 +190,14 @@ func (s *Service) ResourceAction(ctx context.Context, p auth.Principal, requestI
 	}
 	edits := map[string][]Edit{}
 	if action == "delete" {
+		// Only remove generated, exclusively referenced groups. Native or shared
+		// groups retain the existing ownership and ambiguous-reference guards.
+		if resource.Fields["upstream_servers"].Editable {
+			owner, group, reason := parsed.target(doc, block, resource.Kind, specs(resource.Kind)["upstream_servers"])
+			if reason == "" && group != nil && strings.HasPrefix(group.Args[0].Value, "nginxpanel_up_") {
+				edits[owner.File.ID] = append(edits[owner.File.ID], Edit{group.Start, group.End, ""})
+			}
+		}
 		edits[doc.File.ID] = append(edits[doc.File.ID], Edit{block.Start, block.End, ""}, Edit{block.MarkerStart, block.MarkerEnd, ""})
 		if block.MetadataStart >= 0 {
 			edits[doc.File.ID] = append(edits[doc.File.ID], Edit{block.MetadataStart, block.MetadataEnd, ""})

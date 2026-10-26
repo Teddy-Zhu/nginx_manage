@@ -242,7 +242,7 @@ func observePanelReadinessSource(ctx context.Context, current panelruntime.Snaps
 	if err = panelReadinessListener(ctx, hostPID, current.Deployment.Listen); err != nil {
 		return out, err
 	}
-	https, err := panelready.CheckHTTPS(ctx, current, status.NodeID)
+	https, err := panelready.CheckListener(ctx, current, status.NodeID)
 	if err != nil {
 		return out, err
 	}

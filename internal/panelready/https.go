@@ -77,8 +77,8 @@ func readCertificate(d panelruntime.Deployment, directories []string) (*x509.Cer
 	return x509.ParseCertificate(block.Bytes)
 }
 
-func readResponse(ctx context.Context, c *http.Client, address, path string, limit int64) ([]byte, http.Header, error) {
-	u := url.URL{Scheme: "https", Host: address, Path: path}
+func readResponse(ctx context.Context, c *http.Client, scheme, address, path string, limit int64) ([]byte, http.Header, error) {
+	u := url.URL{Scheme: scheme, Host: address, Path: path}
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, nil, err
@@ -127,15 +127,19 @@ func apiData(raw []byte, header http.Header, node string, out any) error {
 	return decode(e.Data, out)
 }
 
-// CheckHTTPS uses the real listener and published routes. It checks each
-// immutable frontend file, without an npm build or browser execution.
-func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HTTPSResult, error) {
+// CheckListener uses the configured management protocol and published routes.
+// HTTPS pins the saved certificate; HTTP remains confined to the local listener.
+func CheckListener(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HTTPSResult, error) {
 	var out HTTPSResult
 	cert, err := localCertificate(s.Deployment)
 	if err != nil {
 		return out, err
 	}
 	out.CertificateSHA256 = secure.Hash(cert.Raw)
+	scheme := "https"
+	if s.Deployment.HTTP {
+		scheme = "http"
+	}
 	address := panelruntime.LocalListen(s.Deployment.Listen)
 	// This local endpoint is identified by its saved certificate, including
 	// installations whose public certificate has no loopback DNS/IP SAN.
@@ -159,7 +163,7 @@ func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HT
 		}}}
 	defer t.CloseIdleConnections()
 	c := &http.Client{Transport: t, Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("面板就绪请求不接受重定向") }}
-	raw, headers, err := readResponse(ctx, c, address, "/api/v1/system/health", ResponseLimit)
+	raw, headers, err := readResponse(ctx, c, scheme, address, "/api/v1/system/health", ResponseLimit)
 	if err != nil {
 		return out, err
 	}
@@ -173,7 +177,7 @@ func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HT
 	if health.Status != "ok" || health.Development {
 		return out, errors.New("实际 API 健康状态无效")
 	}
-	raw, headers, err = readResponse(ctx, c, address, "/api/v1/system/version", ResponseLimit)
+	raw, headers, err = readResponse(ctx, c, scheme, address, "/api/v1/system/version", ResponseLimit)
 	if err != nil {
 		return out, err
 	}
@@ -209,7 +213,7 @@ func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HT
 	sort.Strings(files)
 	for _, name := range files {
 		f := web[name]
-		raw, headers, err = readResponse(ctx, c, address, "/"+name, f.Size)
+		raw, headers, err = readResponse(ctx, c, scheme, address, "/"+name, f.Size)
 		if err != nil {
 			return out, err
 		}
@@ -235,7 +239,7 @@ func CheckHTTPS(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HT
 		out.FrontendFiles++
 	}
 	// The browser entry route must resolve to this same signed index.
-	raw, headers, err = readResponse(ctx, c, address, "/", web["index.html"].Size)
+	raw, headers, err = readResponse(ctx, c, scheme, address, "/", web["index.html"].Size)
 	if err != nil {
 		return out, err
 	}
