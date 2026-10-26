@@ -40,7 +40,7 @@ const nodes = ref<NodeConnection[]>([]),
   error = ref(""),
   selected = ref<string[]>([]),
   checking = ref<string[]>([]);
-const form = reactive({ name: "", url: "", api_key: "", fingerprint: "" });
+const form = reactive({ name: "", url: "", api_key: "" });
 const canManage = computed(
   () =>
     !!session.localMe?.scopes.includes("nodes.manage") &&
@@ -89,7 +89,7 @@ async function create() {
     const value = await api.createNode(input, keyFor(input));
     if (closed) return;
     replace(value);
-    form.name = form.url = form.api_key = form.fingerprint = "";
+    form.name = form.url = form.api_key = "";
     keyFor = useIdempotency();
   }, "节点连接已登记");
 }
@@ -194,8 +194,6 @@ onUnmounted(() => {
                 <dd>{{ node.node_id }}</dd>
                 <dt>凭据编号</dt>
                 <dd>{{ node.credential_id }}</dd>
-                <dt>证书指纹</dt>
-                <dd class="mono">{{ node.fingerprint }}</dd>
                 <dt>授权权限</dt>
                 <dd>{{ node.scopes.join("、") }}</dd>
               </dl></AdvancedDetails
@@ -223,9 +221,7 @@ onUnmounted(() => {
                     }}</NButton
                   ></template
                 >删除
-                {{
-                  node.name
-                }}
+                {{ node.name }}
                 并撤销连接授权。无法连接时，请到目标服务器撤销对应授权。</NPopconfirm
               >
             </div>
@@ -254,7 +250,7 @@ onUnmounted(() => {
                     placeholder="https://server.example.com/api/v1"
                     :maxlength="2048"
                 /></NFormItem>
-                <NFormItem label="API 密钥"
+                <NFormItem class="full-width" label="API 密钥"
                   ><NInput
                     v-model:value="form.api_key"
                     type="password"
@@ -262,15 +258,9 @@ onUnmounted(() => {
                     autocomplete="off"
                     :maxlength="193"
                 /></NFormItem>
-                <NFormItem label="证书 SHA-256 指纹"
-                  ><NInput
-                    v-model:value="form.fingerprint"
-                    placeholder="目标服务器的 64 位证书指纹"
-                    :maxlength="64"
-                /></NFormItem>
               </div>
               <p class="section-note">
-                从目标服务器获取专用 API 密钥和证书指纹。密钥至少需要读取权限。
+                填写目标服务器地址和专用 API 密钥，密钥至少需要读取权限。
               </p>
               <div class="form-actions">
                 <NButton
@@ -281,7 +271,6 @@ onUnmounted(() => {
                     !form.name ||
                     !form.url ||
                     !form.api_key ||
-                    form.fingerprint.length !== 64 ||
                     !!checking.length
                   "
                   >添加连接</NButton

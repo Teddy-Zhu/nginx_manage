@@ -71,6 +71,10 @@ func (s *Service) StartPush(ctx context.Context, p auth.Principal, requestID, ke
 	if prior, found, e := s.pushPrior(ctx, p, key, hash); found || e != nil {
 		return prior, e
 	}
+	in.Remote, err = resolveRemote(ctx, in.Remote)
+	if err != nil {
+		return PushTask{}, err
+	}
 	passphrase := secure.Token()
 	packet, err := s.Export(ctx, p, requestID, ExportInput{Mode: "encrypted", Passphrase: passphrase, Selection: in.Remote.Selection})
 	// Keep the randomly generated passphrase in the same protected job as its

@@ -36,7 +36,7 @@ func Client(remote Endpoint) (*http.Client, string, error) {
 		if err != nil || len(pin) != 32 {
 			return nil, "", fault.Invalid("TLS 指纹须为 64 位十六进制 SHA-256")
 		}
-		config.InsecureSkipVerify = true // A locally supplied exact certificate pin replaces public CA trust.
+		config.InsecureSkipVerify = true // An established exact certificate pin replaces public CA trust.
 		config.VerifyConnection = func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {
 				return errors.New("missing certificate")

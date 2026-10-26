@@ -4868,7 +4868,7 @@ export interface components {
         PairingJobInput: {
             name: string;
             url: string;
-            fingerprint: string;
+            fingerprint?: string;
             target_node_id: string;
             pairing_id: string;
             secret: string;
@@ -4899,7 +4899,7 @@ export interface components {
             name: string;
             url: string;
             api_key: string;
-            fingerprint: string;
+            fingerprint?: string;
         };
         NodeIdentity: {
             node_id: string;
@@ -6690,7 +6690,7 @@ export interface components {
         MigrationRemote: {
             url: string;
             api_key: string;
-            fingerprint: string;
+            fingerprint?: string;
             node_id: string;
             selection: components["schemas"]["MigrationSelection"];
         };

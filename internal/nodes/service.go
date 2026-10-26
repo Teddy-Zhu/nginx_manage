@@ -44,8 +44,8 @@ func (s *Service) create(ctx context.Context, p auth.Principal, trace, key strin
 	if err := validKey(key); err != nil {
 		return Connection{}, err
 	}
-	if in.Name == "" || len(in.Name) > 100 || strings.TrimSpace(in.Name) != in.Name || strings.ContainsAny(in.Name, "\x00\r\n") || !pin.MatchString(strings.ToLower(in.Fingerprint)) || len(in.APIKey) < 20 || len(in.APIKey) > 193 || strings.TrimSpace(in.APIKey) != in.APIKey {
-		return Connection{}, fault.Invalid("连接名称、Token 或 TLS SHA-256 指纹无效")
+	if in.Name == "" || len(in.Name) > 100 || strings.TrimSpace(in.Name) != in.Name || strings.ContainsAny(in.Name, "\x00\r\n") || in.Fingerprint != "" && !pin.MatchString(strings.ToLower(in.Fingerprint)) || len(in.APIKey) < 20 || len(in.APIKey) > 193 || strings.TrimSpace(in.APIKey) != in.APIKey {
+		return Connection{}, fault.Invalid("连接名称或 API 密钥无效")
 	}
 	hash := requestHash("create", in)
 	if c, found, err := s.replay(ctx, p, key, "create", hash); found || err != nil {
@@ -56,7 +56,7 @@ func (s *Service) create(ctx context.Context, p auth.Principal, trace, key strin
 		return Connection{}, err
 	}
 	defer done()
-	endpoint := remoteapi.Endpoint{URL: in.URL, APIKey: in.APIKey, Fingerprint: strings.ToLower(in.Fingerprint)}
+	endpoint := remoteapi.Endpoint{URL: in.URL, APIKey: in.APIKey, Fingerprint: in.Fingerprint}
 	client, base, err := remoteapi.Client(endpoint)
 	if err != nil {
 		return Connection{}, err
@@ -67,7 +67,14 @@ func (s *Service) create(ctx context.Context, p auth.Principal, trace, key strin
 		return Connection{}, err
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	identity, caps, err := probe(callCtx, endpoint, expected, credential)
+	var identity Identity
+	var caps json.RawMessage
+	if expected == "" {
+		endpoint, err = remoteapi.Resolve(callCtx, endpoint)
+	}
+	if err == nil {
+		identity, caps, err = probe(callCtx, endpoint, expected, credential)
+	}
 	cancel()
 	if err != nil {
 		state, message := probeFailure(err)

@@ -52,7 +52,7 @@ const scopes = computed(() =>
 );
 const offers = ref<Pairing[]>([]),
   jobs = ref<PairingJob[]>([]);
-const connect = reactive({ name: "", url: "", fingerprint: "", code: "" });
+const connect = reactive({ name: "", url: "", code: "" });
 const grant = reactive({
   name: "",
   controller: "",
@@ -124,7 +124,6 @@ async function start() {
     const input = {
       name: connect.name,
       url: connect.url,
-      fingerprint: connect.fingerprint,
       target_node_id: code.node_id,
       pairing_id: code.id,
       secret: code.secret,
@@ -218,12 +217,6 @@ onUnmounted(() => {
               :disabled="busy"
               placeholder="https://node.example.com/api/v1"
           /></NFormItem>
-          <NFormItem label="目标证书 SHA-256 指纹"
-            ><NInput
-              v-model:value="connect.fingerprint"
-              :maxlength="64"
-              :disabled="busy"
-          /></NFormItem>
           <NFormItem class="full-width" label="目标生成的配对信息"
             ><NInput
               v-model:value="connect.code"
@@ -233,18 +226,13 @@ onUnmounted(() => {
               autocomplete="off"
           /></NFormItem>
           <p class="section-note full-width">
-            目标授权须绑定上方本机永久编号。通过独立渠道核对证书指纹后，在配对有效期内连接。
+            使用目标服务器生成的配对信息，在有效期内完成连接。
           </p>
           <div class="form-actions full-width">
             <NButton
               type="primary"
               :loading="busy"
-              :disabled="
-                !connect.name ||
-                !connect.url ||
-                connect.fingerprint.length !== 64 ||
-                !connect.code
-              "
+              :disabled="!connect.name || !connect.url || !connect.code"
               @click="start"
               >配对并登记连接</NButton
             >

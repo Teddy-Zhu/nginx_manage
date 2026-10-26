@@ -135,7 +135,6 @@ watch([remoteCertificates, remoteCredentials], ([a, b]) => {
 });
 const remoteURL = ref(""),
   remoteKey = ref(""),
-  fingerprint = ref(""),
   sourceNode = ref("");
 const mode = ref<MigrationExecuteInput["mode"]>("draft"),
   enableNginx = ref(false),
@@ -368,7 +367,6 @@ function remoteInput(execute: boolean, version: number): MigrationPullInput {
     remote: {
       url: remoteURL.value,
       api_key: remoteKey.value,
-      fingerprint: fingerprint.value,
       node_id: sourceNode.value,
       selection: {
         certificates: remoteCertificates.value,
@@ -631,12 +629,10 @@ useLiveRefresh(api, ["tasks"], () => {
                   show-password-on="click"
                   autocomplete="off"
               /></NFormItem>
-              <NFormItem label="TLS 证书 SHA-256（自签名证书必填）"
-                ><NInput v-model:value="fingerprint" autocomplete="off"
-              /></NFormItem>
-              <NFormItem label="预期源节点 ID（可选）"
-                ><NInput v-model:value="sourceNode"
-              /></NFormItem>
+              <AdvancedDetails class="full-width" title="连接选项"
+                ><NFormItem label="预期源服务器编号（可选）"
+                  ><NInput v-model:value="sourceNode" /></NFormItem
+              ></AdvancedDetails>
               <div
                 v-if="has('components.manage')"
                 class="full-width page-stack"

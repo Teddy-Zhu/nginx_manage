@@ -84,7 +84,7 @@ type ImportInput struct {
 type Remote struct {
 	URL         string    `json:"url"`
 	APIKey      string    `json:"api_key"`
-	Fingerprint string    `json:"fingerprint"`
+	Fingerprint string    `json:"fingerprint,omitempty"`
 	NodeID      string    `json:"node_id"`
 	Selection   Selection `json:"selection"`
 }

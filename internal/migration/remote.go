@@ -20,6 +20,12 @@ type pullReservation struct {
 	Grant                  *pullGrant
 }
 
+func resolveRemote(ctx context.Context, remote Remote) (Remote, error) {
+	endpoint, err := remoteapi.Resolve(ctx, remoteapi.Endpoint{URL: remote.URL, APIKey: remote.APIKey, Fingerprint: remote.Fingerprint})
+	remote.Fingerprint = endpoint.Fingerprint
+	return remote, err
+}
+
 func remoteClient(remote Remote) (*http.Client, string, error) {
 	return remoteapi.Client(remoteapi.Endpoint{URL: remote.URL, APIKey: remote.APIKey, Fingerprint: remote.Fingerprint})
 }
@@ -99,7 +105,11 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, requestID, key str
 	}
 	plan, err := func() (Plan, error) {
 		defer s.mu.Unlock()
-		client, base, err := remoteClient(in.Remote)
+		remote, err := resolveRemote(ctx, in.Remote)
+		if err != nil {
+			return Plan{}, err
+		}
+		client, base, err := remoteClient(remote)
 		if err != nil {
 			return Plan{}, err
 		}

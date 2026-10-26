@@ -2,6 +2,8 @@
 
 网页中的参数与网卡映射使用“添加映射”逐项填写来源和目标，无需编写 JSON。DNS 映射可选择系统、网卡或网络连接，分别填写网卡名与连接 UUID；自定义 DNS 配置使用地址列表、搜索域及自动获取开关。下文的 JSON 示例用于 API 调用。
 
+远程迁移只需填写服务器 API 地址及专用 API 密钥，系统自动处理证书校验。自签名或私有 CA 证书使用首次连接信任；后台迁出任务保存证书信任信息，后续重试不会自动接受其他证书。
+
 文件迁移和 API 一键迁移的操作顺序见[使用手册](user-guide.md#从本地迁移到云端)，完整备份恢复另见[运维文档](operations.md#完整备份恢复)。本文提供迁移字段、权限、映射及续办合同。
 
 “配置迁移”页面由 `src/pages/migrations.vue` 自动扫描接入。当前实现普通可移植归档、加密配置包、API 拉取及源端推送，均使用同一目标预检、修订保存及 Nginx 执行器。已完成隔离容器内的双节点 HTTPS 迁移与授权验证，具体范围见[验证记录](validation.md#双节点-https-迁移与授权)。Debian 12/amd64 Docker 到 Debian 13/amd64 原生节点的配置实际应用、监听映射、Agent 中断补偿及目标整机重启已在独立内核虚拟机通过，见[记录](validation.md#docker-到原生节点的配置迁移2026-10-22)。另已完成原生节点迁入全新无 Nginx 目标的缺失检测、授权签名安装、重新预检及实际应用，范围见[当前进度 R05](progress.md#已完成并有证据的主要范围)。原生到 Docker 的基本代表场景也已通过，见[当前进度 R06](progress.md#已完成并有证据的主要范围)。真实云端外部集成仍待验收。
@@ -59,7 +61,6 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
   "remote": {
     "url": "https://source.example.com:9443/api/v1",
     "api_key": "源节点导出 Key",
-    "fingerprint": "",
     "node_id": "",
     "selection": {
       "certificates": true,
@@ -113,7 +114,7 @@ ACME 迁移须同时选择证书和 DNS 凭据，并先完成注册、签发及�
 
 ## 源端推送式一键迁出
 
-源节点调用 `POST /api/v1/migrations/push` 并提供 `Idempotency-Key`，或使用自动扫描的“迁出到节点”页面。输入格式沿用 `remote.url/api_key/fingerprint/node_id/selection`，但 remote 指向目标；另有 `mappings`、可选 `firewall`、`mode=preview|draft|save|apply`、`enable_nginx`、可选 `base_version` 和可选 `dependencies: {tag, prerelease, install?: {start, enable}}`。未提供基础版本时，首次受信连接读取并固定目标当前配置版本，后续不自动改用新版本。首次响应为 HTTP 202 的父任务；`GET /migrations/push` 列表及 `GET /migrations/push/{id}` 查询同一任务和目标逐项结果。preview/draft/save 的完成只表示对应步骤完成，apply 须等目标执行器确认生效才报告应用成功。
+源节点调用 `POST /api/v1/migrations/push` 并提供 `Idempotency-Key`，或使用自动扫描的“迁出到节点”页面。输入格式沿用 `remote.url/api_key/selection`，`node_id` 为可选身份约束（留空自动识别），但 remote 指向目标；另有 `mappings`、可选 `firewall`、`mode=preview|draft|save|apply`、`enable_nginx`、可选 `base_version` 和可选 `dependencies: {tag, prerelease, install?: {start, enable}}`。未提供基础版本时，首次受信连接读取并固定目标当前配置版本，后续不自动改用新版本。首次响应为 HTTP 202 的父任务；`GET /migrations/push` 列表及 `GET /migrations/push/{id}` 查询同一任务和目标逐项结果。preview/draft/save 的完成只表示对应步骤完成，apply 须等目标执行器确认生效才报告应用成功。
 
 源端要求 backup.export、backup.secrets、config.secrets 和 nodes.manage，浏览器需近期认证。目标 Key 需 backup.restore、backup.secrets、config.write、config.secrets、security.write；迁入通知另需 notifications.write，替换监控设置另需 monitoring.write，启用配置模块另需 system.write，授权准备组件另需 components.manage，授权首次安装另需 system.write。目标通过 `GET /migrations/receiver` 提供当前版本和本 Key 权限，身份在首次连接后持久绑定；每个响应核对同一节点。目标接收使用 `PUT /migrations/receive/{id}`，固定 ID、配置包散列、Nginx/防火墙映射及基础版本的回执和计划同事务保存；重复 ID 的不同内容会被拒绝。执行沿用 `/migrations/{id}/execute` 和原幂等键，不另建导入执行器。
 

@@ -54,7 +54,6 @@ const session = useSession(),
 let keyFor = useIdempotency();
 const url = ref(""),
   key = ref(""),
-  fingerprint = ref(""),
   node = ref(""),
   mappings = ref<MappingRow[]>([]),
   resumeKey = ref("");
@@ -212,7 +211,6 @@ async function submit() {
       remote: {
         url: url.value.trim(),
         api_key: key.value,
-        fingerprint: fingerprint.value.trim(),
         node_id: node.value.trim(),
         selection: {
           certificates: certificates.value,
@@ -304,12 +302,10 @@ useLiveRefresh(api, ["tasks"], load);
               show-password-on="click"
               autocomplete="off"
           /></NFormItem>
-          <NFormItem label="自签名证书 SHA-256（可选）"
-            ><NInput v-model:value="fingerprint"
-          /></NFormItem>
-          <NFormItem label="预期目标节点 ID（可选）"
-            ><NInput v-model:value="node"
-          /></NFormItem>
+          <AdvancedDetails class="full-width" title="连接选项"
+            ><NFormItem label="预期目标服务器编号（可选）"
+              ><NInput v-model:value="node" /></NFormItem
+          ></AdvancedDetails>
         </div>
         <NFormItem label="导出范围"
           ><div class="choice-grid">

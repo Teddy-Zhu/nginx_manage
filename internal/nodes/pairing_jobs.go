@@ -63,8 +63,8 @@ func (s *Service) StartPairing(ctx context.Context, p auth.Principal, trace, key
 	if err := validKey(key); err != nil {
 		return PairingJob{}, err
 	}
-	if in.Name == "" || len(in.Name) > 100 || strings.TrimSpace(in.Name) != in.Name || strings.ContainsAny(in.Name, "\x00\r\n") || !uuid.MatchString(in.PairingID) || !uuid.MatchString(in.TargetNodeID) || in.TargetNodeID == s.NodeID || !pairingSecret.MatchString(in.Secret) || !pin.MatchString(strings.ToLower(in.Fingerprint)) {
-		return PairingJob{}, fault.Invalid("配对名称、目标编号、配对信息或证书指纹无效")
+	if in.Name == "" || len(in.Name) > 100 || strings.TrimSpace(in.Name) != in.Name || strings.ContainsAny(in.Name, "\x00\r\n") || !uuid.MatchString(in.PairingID) || !uuid.MatchString(in.TargetNodeID) || in.TargetNodeID == s.NodeID || !pairingSecret.MatchString(in.Secret) || in.Fingerprint != "" && !pin.MatchString(strings.ToLower(in.Fingerprint)) {
+		return PairingJob{}, fault.Invalid("配对名称、目标编号或配对信息无效")
 	}
 	client, base, err := remoteapi.Client(remoteapi.Endpoint{URL: in.URL, APIKey: in.Secret, Fingerprint: in.Fingerprint})
 	if err != nil {
@@ -149,7 +149,7 @@ func (s *Service) savePairingJob(ctx context.Context, j *PairingJob, m *pairingM
 	if j.ConnectionID != "" {
 		connection = j.ConnectionID
 	}
-	if _, err = tx.ExecContext(finish, "UPDATE node_pairing_jobs SET material=?,credential_id=?,connection_id=?,state=?,stage=?,last_error=?,revocation=?,updated_at=? WHERE id=? AND principal=?", material, j.CredentialID, connection, j.State, j.Stage, j.Error, j.Revocation, j.UpdatedAt, j.ID, j.principal); err != nil {
+	if _, err = tx.ExecContext(finish, "UPDATE node_pairing_jobs SET fingerprint=?,material=?,credential_id=?,connection_id=?,state=?,stage=?,last_error=?,revocation=?,updated_at=? WHERE id=? AND principal=?", j.Fingerprint, material, j.CredentialID, connection, j.State, j.Stage, j.Error, j.Revocation, j.UpdatedAt, j.ID, j.principal); err != nil {
 		return err
 	}
 	if err = audit(finish, tx, trace, j.principal, "nodes.pairing."+j.Stage, j.ID, outcome); err != nil {
@@ -222,6 +222,15 @@ func (s *Service) ResumePairing(ctx context.Context, p auth.Principal, trace, id
 		return j, nil
 	}
 	if j.Stage == "exchange" {
+		// Persist first-contact trust before the exchange can consume the code.
+		ep, err = remoteapi.Resolve(work, ep)
+		if err != nil {
+			return failed(err)
+		}
+		j.Fingerprint = ep.Fingerprint
+		if err = s.savePairingJob(ctx, &j, &m, trace, "connected"); err != nil {
+			return j, err
+		}
 		var exchange PairingExchange
 		if err = pairingRPC(work, ep, j.TargetNodeID, j.PairingID, false, PairingClaim{Secret: m.Secret, ControllerNodeID: s.NodeID, Claim: m.Claim}, &exchange); err != nil {
 			return failed(err)

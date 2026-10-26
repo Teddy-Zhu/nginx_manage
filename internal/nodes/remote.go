@@ -50,7 +50,7 @@ func call(ctx context.Context, in remoteapi.Endpoint, expected, method, path str
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return body, &probeError{"unreachable", "无法连接目标 HTTPS API；请检查网络、证书指纹和有效期"}
+		return body, &probeError{"unreachable", "无法连接目标 HTTPS API，请检查服务器地址、网络和证书有效期"}
 	}
 	defer resp.Body.Close()
 	media, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))

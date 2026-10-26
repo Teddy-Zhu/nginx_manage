@@ -2675,7 +2675,7 @@ components:
     PairingJobInput:
       type: object
       additionalProperties: false
-      required: [name, url, fingerprint, target_node_id, pairing_id, secret]
+      required: [name, url, target_node_id, pairing_id, secret]
       properties:
         name: {type: string, minLength: 1, maxLength: 100}
         url: {type: string, maxLength: 2048}
@@ -2704,7 +2704,7 @@ components:
         created_at: {type: integer, format: int64}
         updated_at: {type: integer, format: int64}
     NodeCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["name", "url", "api_key", "fingerprint"], "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 100}, "url": {"type": "string", "maxLength": 2048}, "api_key": {"type": "string", "minLength": 20, "maxLength": 193, "writeOnly": true}, "fingerprint": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}}}
+      {"type": "object", "additionalProperties": false, "required": ["name", "url", "api_key"], "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 100}, "url": {"type": "string", "maxLength": 2048}, "api_key": {"type": "string", "minLength": 20, "maxLength": 193, "writeOnly": true}, "fingerprint": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}}}
     NodeIdentity:
       {"type": "object", "additionalProperties": false, "required": ["node_id", "credential_id", "scopes", "expires_at", "api_version", "database_schema", "agent_protocol", "parser_version", "policy_version", "remote_protocol"], "properties": {"node_id": {"type": "string"}, "credential_id": {"type": "string"}, "scopes": {"type": "array", "items": {"type": "string"}}, "expires_at": {"type": "integer", "format": "int64"}, "api_version": {"type": "integer", "format": "int64"}, "database_schema": {"type": "integer", "format": "int64"}, "agent_protocol": {"type": "integer", "format": "int64"}, "parser_version": {"type": "string"}, "policy_version": {"type": "string"}, "remote_protocol": {"type": "integer", "format": "int64"}}}
     NodeConnection:
@@ -4814,7 +4814,7 @@ components:
     MigrationExecuteInput:
       {"type": "object", "additionalProperties": false, "required": ["mode", "enable_nginx"], "properties": {"mode": {"type": "string", "enum": ["draft", "save", "apply"]}, "enable_nginx": {"type": "boolean"}}}
     MigrationRemote:
-      {"type": "object", "additionalProperties": false, "required": ["url", "api_key", "fingerprint", "node_id", "selection"], "properties": {"url": {"type": "string"}, "api_key": {"type": "string"}, "fingerprint": {"type": "string"}, "node_id": {"type": "string"}, "selection": {"$ref": "#/components/schemas/MigrationSelection"}}}
+      {"type": "object", "additionalProperties": false, "required": ["url", "api_key", "node_id", "selection"], "properties": {"url": {"type": "string"}, "api_key": {"type": "string"}, "fingerprint": {"type": "string"}, "node_id": {"type": "string"}, "selection": {"$ref": "#/components/schemas/MigrationSelection"}}}
     MigrationPullStatus:
       {"type": "object", "additionalProperties": false, "required": ["state", "stage", "mode", "error", "deadline"], "properties": {"state": {"type": "string"}, "stage": {"type": "string"}, "mode": {"type": "string", "enum": ["draft", "save", "apply"]}, "error": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}}}
     MigrationPullInput:

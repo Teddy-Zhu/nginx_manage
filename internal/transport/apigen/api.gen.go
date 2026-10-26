@@ -7093,7 +7093,7 @@ type MigrationReceiverSchema int64
 // MigrationRemote defines model for MigrationRemote.
 type MigrationRemote struct {
 	ApiKey      string             `json:"api_key"`
-	Fingerprint string             `json:"fingerprint"`
+	Fingerprint *string            `json:"fingerprint,omitempty"`
 	NodeId      string             `json:"node_id"`
 	Selection   MigrationSelection `json:"selection"`
 	Url         string             `json:"url"`
@@ -7482,7 +7482,7 @@ type NodeConnection struct {
 // NodeCreateInput defines model for NodeCreateInput.
 type NodeCreateInput struct {
 	ApiKey      *string `json:"api_key,omitempty"`
-	Fingerprint string  `json:"fingerprint"`
+	Fingerprint *string `json:"fingerprint,omitempty"`
 	Name        string  `json:"name"`
 	Url         string  `json:"url"`
 }
@@ -7716,7 +7716,7 @@ type PairingJobState string
 
 // PairingJobInput defines model for PairingJobInput.
 type PairingJobInput struct {
-	Fingerprint  string  `json:"fingerprint"`
+	Fingerprint  *string `json:"fingerprint,omitempty"`
 	Name         string  `json:"name"`
 	PairingId    string  `json:"pairing_id"`
 	Secret       *string `json:"secret,omitempty"`

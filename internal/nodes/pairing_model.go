@@ -57,7 +57,7 @@ type PairingExchange struct {
 type PairingJobInput struct {
 	Name         string `json:"name"`
 	URL          string `json:"url"`
-	Fingerprint  string `json:"fingerprint"`
+	Fingerprint  string `json:"fingerprint,omitempty"`
 	TargetNodeID string `json:"target_node_id"`
 	PairingID    string `json:"pairing_id"`
 	Secret       string `json:"secret"`
