@@ -345,7 +345,7 @@ onUnmounted(reset);
 
 <template>
   <div class="toolbar">
-    <n-button :loading="busy" @click="run(load)">刷新来源</n-button
+    <div class="inline-gap"><n-button :loading="busy" @click="run(load)">刷新来源</n-button
     ><n-select
       v-model:value="policyScope"
       style="width: 180px"
@@ -356,7 +356,7 @@ onUnmounted(reset);
         }))
       "
     /><n-button :disabled="!policy" @click="editPolicy">轮转与保留</n-button
-    ><span class="muted"
+    ></div><span class="muted"
       >{{ sources.length }} 个来源 ·
       {{ Math.round((policy?.bytes ?? 0) / 1048576) }} MiB</span
     >
@@ -542,18 +542,7 @@ onUnmounted(reset);
   gap: 0 16px;
   margin-top: 16px;
 }
-.log-filters input[type="datetime-local"] {
-  width: 100%;
-  min-width: 0;
-  padding: 6px 10px;
-  border: 1px solid #d8dee8;
-  border-radius: 3px;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  box-sizing: border-box;
-}
 .n-alert {
-  margin: 12px 0;
+  margin: 16px 0;
 }
 </style>

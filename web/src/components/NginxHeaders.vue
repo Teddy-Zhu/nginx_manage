@@ -26,21 +26,22 @@ function remove(index: number) { rows.value.splice(index, 1); update(); }
 </script>
 <template>
   <NAlert v-if="error" type="warning">{{ error }}</NAlert>
-  <div v-else class="headers-input">
-    <div v-for="(row, index) in rows" :key="index" class="header-row">
-      <label>名称<NInput v-model:value="row.name" :placeholder="response ? '例如 X-Content-Type-Options' : '例如 X-Forwarded-For'" :maxlength="64" :disabled="disabled" @update:value="update" /></label>
-      <label>值<NInput v-model:value="row.value" :placeholder="`${response ? '响应头' : '请求头'}值，可使用 Nginx 变量`" :maxlength="2048" :disabled="disabled" @update:value="update" /></label>
-      <label v-if="response" class="always">所有响应<NSwitch v-model:value="row.always" :disabled="disabled" @update:value="update" /></label>
+  <div v-else class="field-list">
+    <div v-for="(row, index) in rows" :key="index" class="header-row field-row" :class="{ response }">
+      <label class="field-label header-name">名称<NInput v-model:value="row.name" :placeholder="response ? '例如 X-Content-Type-Options' : '例如 X-Forwarded-For'" :maxlength="64" :disabled="disabled" @update:value="update" /></label>
+      <label class="field-label header-value">值<NInput v-model:value="row.value" :placeholder="`${response ? '响应头' : '请求头'}值，可使用 Nginx 变量`" :maxlength="2048" :disabled="disabled" @update:value="update" /></label>
+      <label v-if="response" class="field-label always">所有响应<span class="field-toggle"><NSwitch v-model:value="row.always" :disabled="disabled" @update:value="update" /></span></label>
       <NButton attr-type="button" :disabled="disabled" :aria-label="`移除${response ? '响应头' : '请求头'} ${index + 1}`" @click="remove(index)">移除</NButton>
     </div>
-    <NButton attr-type="button" dashed :disabled="disabled || rows.length >= 128" @click="rows.push({ name: '', value: '', always: false })">＋ 添加{{ response ? '响应头' : '请求头' }}</NButton>
+    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || rows.length >= 128" @click="rows.push({ name: '', value: '', always: false })">＋ 添加{{ response ? '响应头' : '请求头' }}</NButton>
   </div>
 </template>
 <style scoped>
-.headers-input { width: 100%; display: grid; gap: 12px; }
-.header-row { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
-label { display: grid; gap: 6px; font-size: 13px; min-width: 0; flex: 1; }
-label.always { flex: 0 0 auto; align-self: center; }
-.header-row > label:not(.always) { min-width: 150px; }
-.headers-input > :last-child { justify-self: start; }
+.header-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; }
+.header-row.response { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 72px auto; }
+@container (max-width: 540px) {
+  .header-row, .header-row.response { grid-template-columns: minmax(0, 1fr) auto; }
+  .header-name, .header-value { grid-column: 1 / -1; }
+  .header-row > button { grid-column: 2; }
+}
 </style>

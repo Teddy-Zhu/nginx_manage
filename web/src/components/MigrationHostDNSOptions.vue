@@ -91,9 +91,9 @@ function remove(index: number) { rows.value.splice(index, 1); update(); }
 <style scoped>
 .dns-mappings { display: grid; gap: 14px; margin-bottom: 18px; }
 .dns-mapping { border: 1px solid var(--border-color, #e4e7ec); border-radius: 10px; padding: 16px; }
-.mapping-targets { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: start; }
-.mapping-targets > button { margin-top: 26px; }
+.mapping-targets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; align-items: start; }
+.mapping-targets > button { grid-column: 1 / -1; justify-self: end; margin-bottom: 20px; }
 .family-config { padding-left: 16px; border-left: 2px solid var(--border-color, #e4e7ec); }
 .dns-mappings > button { justify-self: start; }
-@media (max-width: 680px) { .mapping-targets { grid-template-columns: 1fr; } .mapping-targets > button { margin: 0 0 14px; justify-self: start; } }
+@media (max-width: 680px) { .mapping-targets { grid-template-columns: minmax(0, 1fr); } }
 </style>

@@ -326,11 +326,12 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                 .join("、") || "无"
             }}
           </p>
-          <n-button
-            type="primary"
-            attr-type="submit"
-            :loading="busy"
-            :disabled="
+          <div class="form-actions">
+            <n-button
+              type="primary"
+              attr-type="submit"
+              :loading="busy"
+              :disabled="
               busy ||
               selected?.editable === false ||
               (countries.length > 0 && !geoIP?.ready) ||
@@ -342,8 +343,10 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   geoIP.updated_at !== selected.geoip_updated_at
                 ))
             "
-            >保存规则</n-button
-          >
+              >保存规则</n-button
+            >
+
+          </div>
         </n-form> </template
       ><n-empty v-else description="选择或新建访问列表" />
     </section>

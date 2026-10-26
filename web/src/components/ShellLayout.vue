@@ -95,7 +95,7 @@ onUnmounted(() => {
         <span class="breadcrumb">控制台 <span>/</span> {{ title }}</span>
         <div class="topbar-right">
           <template v-if="canManageNodes && (nodes.connections.length || nodes.selected)">
-            <n-select aria-label="当前服务器" style="width: 190px" :value="route.meta.localOnly ? '' : nodes.selected?.connection ?? ''" :options="nodeOptions" :disabled="!!route.meta.localOnly || nodes.switching || busy" @update:value="selectNode" />
+            <n-select aria-label="当前服务器" class="node-select" :value="route.meta.localOnly ? '' : nodes.selected?.connection ?? ''" :options="nodeOptions" :disabled="!!route.meta.localOnly || nodes.switching || busy" @update:value="selectNode" />
           </template>
           <n-tag size="small" :bordered="false">{{ route.meta.localOnly ? "本机" : currentNode }}</n-tag
           ><span class="username">{{ session.me?.username }}</span
@@ -106,7 +106,7 @@ onUnmounted(() => {
         <div class="page-heading">
           <div>
             <h1>{{ title }}</h1>
-            <p>{{ route.meta.subtitle }}</p>
+            <p v-if="route.meta.subtitle">{{ route.meta.subtitle }}</p>
           </div>
           <div id="page-heading-actions" />
         </div>

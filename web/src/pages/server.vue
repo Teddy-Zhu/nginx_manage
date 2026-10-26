@@ -605,15 +605,13 @@ onUnmounted(() => {
 .notice {
   margin-bottom: 16px;
 }
-.surface {
-  margin-top: 20px;
-}
+.stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .trend-selectors {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) minmax(140px, 1fr) 150px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 150px;
+  gap: 12px;
   max-width: 760px;
-  width: 100%;
+  flex: 1 1 500px;
 }
 .condition {
   padding: 10px 0;
@@ -623,19 +621,21 @@ onUnmounted(() => {
 }
 .threshold-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
 }
 fieldset {
-  border: 1px solid var(--border, #ddd);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   margin: 12px 0;
-  padding: 14px;
+  padding: 16px;
+  min-width: 0;
 }
 .threshold-label {
   margin-left: 10px;
 }
 @media (max-width: 760px) {
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trend-selectors {
     grid-template-columns: 1fr;
   }
@@ -643,5 +643,7 @@ fieldset {
     align-items: stretch;
     flex-direction: column;
   }
+  .trend-selectors { flex-basis: auto; width: 100%; }
+  .threshold-grid { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

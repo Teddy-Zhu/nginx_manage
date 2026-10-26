@@ -239,17 +239,3 @@ async function execute() {
     /></NTabPane>
   </NTabs>
 </template>
-
-<style scoped>
-input[type="datetime-local"] {
-  width: 100%;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid #d8dee8;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  box-sizing: border-box;
-}
-</style>

@@ -38,17 +38,13 @@ function updateLog(index: number, value: string) {
   <UnitInput v-else-if="name.endsWith('_timeout') || name === 'body_size'" :value="value" :kind="name === 'body_size' ? 'size' : 'time'" :disabled="disabled" @update:value="emit('update:value', $event)" />
   <NInputNumber v-else-if="name === 'responses' || name === 'https_redirect'" v-model:value="numeric" :min="name === 'responses' ? 0 : 1" :max="name === 'responses' ? 1024 : 65535" :precision="0" :disabled="disabled" :placeholder="name === 'responses' ? '继承默认' : '未开启跳转'" />
   <NAutoComplete v-else-if="name === 'real_ip_header'" :value="value" :options="['X-Forwarded-For', 'X-Real-IP', 'CF-Connecting-IP']" :disabled="disabled" placeholder="选择或输入请求头名称" @update:value="emit('update:value', $event)" />
-  <div v-else-if="name === 'access_log' || name === 'error_log'" class="log-input">
+  <div v-else-if="name === 'access_log' || name === 'error_log'" class="field-list">
     <NSelect v-model:value="logMode" :options="[{ label: '继承默认', value: 'inherit' }, { label: '开启日志', value: 'enabled' }, { label: '关闭日志', value: 'off' }]" :disabled="disabled" />
     <template v-if="logMode === 'enabled'">
-      <label>日志位置<NInput :value="logParts[0]" :disabled="disabled" placeholder="日志路径" @update:value="updateLog(0, $event)" /></label>
-      <label>{{ name === 'error_log' ? '日志级别' : '日志格式' }}<NSelect :value="logParts[1] || ''" :options="(name === 'error_log' ? ['', 'debug', 'info', 'notice', 'warn', 'error', 'crit', 'alert', 'emerg'] : kind === 'http' ? ['', 'nginxpanel_http', 'combined'] : ['nginxpanel_stream']).map((value) => ({ label: value || '继承默认', value }))" :disabled="disabled" @update:value="updateLog(1, $event)" /></label>
+      <label class="field-label">日志位置<NInput :value="logParts[0]" :disabled="disabled" placeholder="日志路径" @update:value="updateLog(0, $event)" /></label>
+      <label class="field-label">{{ name === 'error_log' ? '日志级别' : '日志格式' }}<NSelect :value="logParts[1] || ''" :options="(name === 'error_log' ? ['', 'debug', 'info', 'notice', 'warn', 'error', 'crit', 'alert', 'emerg'] : kind === 'http' ? ['', 'nginxpanel_http', 'combined'] : ['nginxpanel_stream']).map((value) => ({ label: value || '继承默认', value }))" :disabled="disabled" @update:value="updateLog(1, $event)" /></label>
     </template>
   </div>
   <ValueListInput v-else-if="format === 'lines' || format === 'tokens'" v-model:value="values" :disabled="disabled" />
   <NInput v-else :value="value" :disabled="disabled" placeholder="未设置" @update:value="emit('update:value', $event)" />
 </template>
-<style scoped>
-.log-input { width: 100%; display: grid; gap: 10px; }
-label { display: grid; gap: 6px; font-size: 13px; }
-</style>

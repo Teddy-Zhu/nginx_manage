@@ -5,6 +5,7 @@ import {
   NDialogProvider,
   zhCN,
   dateZhCN,
+  type GlobalThemeOverrides,
 } from "naive-ui";
 import { useRoute } from "vue-router";
 import ShellLayout from "./components/ShellLayout.vue";
@@ -14,13 +15,24 @@ import { useNodes } from "./stores/node";
 
 const route = useRoute();
 const nodes = useNodes();
-const themeOverrides = {
+const themeOverrides: GlobalThemeOverrides = {
   common: {
     primaryColor: "#087f68",
     primaryColorHover: "#0c987d",
     primaryColorPressed: "#066751",
     borderRadius: "8px",
     fontFamily: 'Inter, "Noto Sans SC", system-ui, sans-serif',
+    fontSize: "14px",
+    lineHeight: "1.6",
+    heightMedium: "36px",
+    borderColor: "#e2e9e5",
+  },
+  DataTable: {
+    thColor: "#f7faf8",
+    thTextColor: "#58695f",
+    thFontWeight: "600",
+    thPaddingMedium: "12px 16px",
+    tdPaddingMedium: "14px 16px",
   },
 };
 </script>

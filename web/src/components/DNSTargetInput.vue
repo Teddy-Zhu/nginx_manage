@@ -18,12 +18,9 @@ function update() {
 }
 </script>
 <template>
-  <div class="dns-target">
+  <div class="field-list">
     <NSelect v-model:value="kind" :options="options" :disabled="disabled" @update:value="update" />
     <NInput v-if="kind === 'connection'" v-model:value="connection" aria-label="连接 UUID" placeholder="连接 UUID" :maxlength="36" :disabled="disabled" @update:value="update" />
     <NInput v-if="kind !== 'system'" v-model:value="networkInterface" aria-label="网卡名称" placeholder="网卡名称，例如 eth0" :maxlength="15" :disabled="disabled" @update:value="update" />
   </div>
 </template>
-<style scoped>
-.dns-target { width: 100%; display: grid; gap: 8px; }
-</style>

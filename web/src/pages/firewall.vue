@@ -205,7 +205,7 @@ onUnmounted(() => {
     30 秒。</n-alert
   >
   <template v-if="observation">
-    <section class="panel">
+    <section class="surface">
       <h3>观测概览</h3>
       <dl>
         <dt>观测时间</dt>
@@ -233,7 +233,7 @@ onUnmounted(() => {
       >
     </section>
     <template v-if="observation.available">
-      <section class="panel">
+      <section class="surface">
         <h3>目标表内核快照</h3>
         <n-alert
           v-if="!observation.kernel.available"
@@ -276,7 +276,7 @@ onUnmounted(() => {
         <p class="muted">登记与内核状态共同核对所有权；外部可达性须分别核对。</p>
       </section>
       <div class="managers">
-        <section class="panel">
+        <section class="surface">
           <h3>firewalld</h3>
           <dl>
             <dt>当前运行</dt>
@@ -308,7 +308,7 @@ onUnmounted(() => {
             :registration="observation.firewalld.registration"
           />
         </section>
-        <section class="panel">
+        <section class="surface">
           <h3>UFW</h3>
           <dl>
             <dt>受信工具</dt>
@@ -346,7 +346,7 @@ onUnmounted(() => {
           >
         </section>
       </div>
-      <section class="panel">
+      <section class="surface">
         <h3>iptables 本机授权</h3>
         <dl>
           <dt>显式后端</dt>
@@ -371,7 +371,7 @@ onUnmounted(() => {
         >{{ observation.iptables_registration.registration.reason }}</n-alert
         >
       </section>
-      <section class="panel">
+      <section class="surface">
         <h3>默认 iptables 命令</h3>
         <dl v-for="tool in observation.iptables" :key="tool.family">
           <dt>{{ familyNames[tool.family] ?? tool.family }}</dt>
@@ -384,7 +384,7 @@ onUnmounted(() => {
           命令后端与已运行的规则分别展示；工具存在不代表已启用策略。
         </p>
       </section>
-      <section class="panel">
+      <section class="surface">
         <h3>内核规则结构</h3>
         <p class="muted">
           nftables 与 iptables-nft
@@ -418,7 +418,7 @@ onUnmounted(() => {
           </n-collapse-item>
         </n-collapse>
       </section>
-      <section class="panel">
+      <section class="surface">
         <h3>Docker 转发路径线索</h3>
         <dl>
           <dt>后端标记</dt>
@@ -445,17 +445,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.panel {
-  padding: 20px;
-  margin-top: 16px;
-  border: 1px solid var(--border, #e5eae7);
-  border-radius: 12px;
-  background: white;
-  min-width: 0;
-}
-.panel h3 {
-  margin-top: 0;
-}
 .notice {
   margin: 16px 0;
 }

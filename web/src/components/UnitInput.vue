@@ -15,11 +15,11 @@ watch(() => props.value, (value) => {
 function update() { emit("update:value", amount.value === null ? "" : props.kind === "size" && amount.value === 0 ? "0" : `${amount.value}${unit.value}`); }
 </script>
 <template>
-  <div class="unit-input">
+  <div class="unit-input field-row">
     <NInputNumber v-model:value="amount" :min="0" :max="kind === 'size' ? 999999999 : 9999999" :precision="0" :disabled="disabled" placeholder="未设置" @update:value="update" />
     <NSelect v-model:value="unit" :options="options" :disabled="disabled" @update:value="update" />
   </div>
 </template>
 <style scoped>
-.unit-input { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; }
+.unit-input { width: 100%; grid-template-columns: minmax(0, 1fr) 88px; }
 </style>

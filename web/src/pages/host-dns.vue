@@ -550,7 +550,7 @@ onUnmounted(() => {
   <n-alert type="info" :bordered="false" style="margin: 16px 0"
     >主机解析器变更可能影响证书申请、更新、通知和远程连接。未在期限内确认的设置会自动恢复。</n-alert
   >
-  <section v-if="observed" class="panel">
+  <section v-if="observed" class="surface">
     <div class="page-toolbar">
       <h3>当前 DNS</h3>
       <n-tag :type="observed.writable ? 'success' : 'warning'">{{
@@ -649,7 +649,7 @@ onUnmounted(() => {
   <section
     v-for="link in observed?.links ?? []"
     :key="link.target"
-    class="panel"
+    class="surface"
   >
     <div class="page-toolbar">
       <h3>{{ link.interface }} · networkd</h3>
@@ -716,7 +716,7 @@ onUnmounted(() => {
     }}</n-alert>
   </section>
   </AdvancedDetails>
-  <section v-if="pending || task" class="panel">
+  <section v-if="pending || task" class="surface">
     <div class="page-toolbar">
       <h3>{{ activeTask || pending ? "当前变更" : "最近变更" }}</h3>
       <n-tag
@@ -757,7 +757,7 @@ onUnmounted(() => {
       >
     </div>
   </section>
-  <section v-if="editing" class="panel">
+  <section v-if="editing" class="surface">
     <h3>修改 DNS</h3>
     <template v-if="!networkManager">
       <n-form-item label="DNS 服务器（1–3 个 IPv4 / IPv6 地址）"
@@ -855,24 +855,10 @@ onUnmounted(() => {
   </section>
 </template>
 <style scoped>
-.panel {
-  padding: 24px;
-  background: var(--bg-surface, #fff);
-  border: 1px solid var(--border, #e5eae7);
-  border-radius: 12px;
-  margin-top: 16px;
-}
 .actions {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
-}
-.page-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
   flex-wrap: wrap;
 }
 dl {

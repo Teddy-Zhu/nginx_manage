@@ -706,7 +706,7 @@ onUnmounted(() => {
       请求体)，使用 X-NginxPanel-Timestamp 和 X-NginxPanel-Signature
       请求头；签名值以 sha256= 开头。</n-alert
     >
-    <div class="actions footer">
+    <div class="actions form-actions">
       <n-button @click="channelModal = false">取消</n-button
       ><n-button type="primary" :loading="busy" @click="saveChannel"
         >保存</n-button
@@ -752,7 +752,7 @@ onUnmounted(() => {
         任一空间阈值不足时告警，恢复需同时达到容量阈值的 1.2 倍及比例阈值加
         2%。有效期和尝试次数作用于新建投递。
       </p>
-      <div class="actions footer">
+      <div class="actions form-actions">
         <n-button @click="policyModal = false">取消</n-button
         ><n-button type="primary" :loading="busy" @click="savePolicy"
           >保存</n-button
@@ -766,28 +766,21 @@ onUnmounted(() => {
 .actions,
 .pagination {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
 .notice {
   margin-bottom: 16px;
 }
-.surface {
-  margin-top: 24px;
-}
 .pagination {
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: 20px;
 }
 .subscriptions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-}
-.footer {
-  justify-content: flex-end;
-  margin-top: 24px;
 }
 @media (max-width: 700px) {
   .subscriptions {

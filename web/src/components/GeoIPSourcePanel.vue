@@ -272,11 +272,11 @@ async function update() {
 .geoip-source {
   display: grid;
   gap: 24px;
-  padding: 16px 0 4px;
+  padding: 8px 0 0;
 }
 .source-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
@@ -290,10 +290,10 @@ async function update() {
 .source-info {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
   margin: 0;
-  padding: 22px 24px;
-  background: #f7faf8;
+  padding: 20px;
+  background: var(--surface-soft);
   border-radius: 8px;
 }
 .source-info dt {

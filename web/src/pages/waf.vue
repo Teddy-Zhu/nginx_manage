@@ -320,7 +320,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             :feedback="
               !has('limit_req_status') ? unavailable('limit_req_status') : ''
             "
-            ><div class="inline-gap">
+            ><div class="rate-input field-row">
               <n-input-number
                 :value="form.rate"
                 :min="0"
@@ -335,7 +335,6 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   { label: '每分钟', value: 'r/m' },
                 ]"
                 :disabled="locked || !has('limit_req_status')"
-                style="width: 120px"
               /></div
           ></n-form-item>
           <n-form-item label="突发额度（不延迟转发，超额拒绝）"
@@ -396,34 +395,36 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             ]"
             :key="section.key"
           >
-            <div class="section-heading">
-              <h3>{{ section.title }}</h3>
-              <n-button
-                size="small"
-                :disabled="locked || form[section.key].length >= 128"
-                @click="form[section.key].push({ match: 'exact', path: '' })"
-                >添加</n-button
+            <div class="field-list path-rules">
+              <div class="section-heading">
+                <h3>{{ section.title }}</h3>
+                <n-button
+                  size="small"
+                  :disabled="locked || form[section.key].length >= 128"
+                  @click="form[section.key].push({ match: 'exact', path: '' })"
+                  >添加</n-button
+                >
+              </div>
+              <div
+                v-for="(item, index) in form[section.key]"
+                :key="index"
+                class="path-rule field-row"
               >
-            </div>
-            <div
-              v-for="(item, index) in form[section.key]"
-              :key="index"
-              class="inline-gap"
-              style="margin-bottom: 12px"
-            >
-              <n-select
-                v-model:value="item.match"
-                :options="pathModes"
-                style="width: 130px"
-              /><n-input
-                v-model:value="item.path"
-                placeholder="/admin/"
-                :maxlength="512"
-              /><n-button
-                :disabled="locked"
-                @click="form[section.key].splice(index, 1)"
-                >移除</n-button
-              >
+                <n-select
+                  v-model:value="item.match"
+                  :options="pathModes"
+                  :aria-label="`路径匹配方式 ${index + 1}`"
+                /><n-input
+                  v-model:value="item.path"
+                  placeholder="/admin/"
+                  :maxlength="512"
+                  :aria-label="`路径 ${index + 1}`"
+                /><n-button
+                  :disabled="locked"
+                  @click="form[section.key].splice(index, 1)"
+                  >移除</n-button
+                >
+              </div>
             </div>
           </template>
           <p class="muted">
@@ -431,15 +432,28 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             区分大小写匹配。豁免仅跳过方法检查、请求限速和并发限制；ACL、明确拒绝路径和请求体限制仍生效。
           </p>
           <p class="muted">关联代理：{{ affected.join("、") || "无" }}</p>
-          <n-button
-            type="primary"
-            attr-type="submit"
-            :loading="busy"
-            :disabled="locked || (!!selected && !dirty)"
-            >保存策略</n-button
-          >
+          <div class="form-actions">
+            <n-button
+              type="primary"
+              attr-type="submit"
+              :loading="busy"
+              :disabled="locked || (!!selected && !dirty)"
+              >保存策略</n-button
+            >
+
+          </div>
         </n-form> </template
       ><n-empty v-else description="选择或新建防护策略" />
     </section>
   </div>
 </template>
+<style scoped>
+.rate-input { width: 100%; grid-template-columns: minmax(0, 1fr) 112px; }
+.path-rules { margin: 24px 0; }
+.path-rules .section-heading { margin-bottom: 0; }
+.path-rule { grid-template-columns: 120px minmax(0, 1fr) auto; }
+@container (max-width: 400px) {
+  .path-rule { grid-template-columns: minmax(0, 1fr) auto; }
+  .path-rule > :first-child { grid-column: 1 / -1; }
+}
+</style>

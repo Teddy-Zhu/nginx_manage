@@ -68,10 +68,10 @@ function remove(index: number) {
 </script>
 
 <template>
-  <div class="upstream-members">
-    <div v-for="(row, index) in rows" :key="index" class="upstream-member">
+  <div class="field-list">
+    <div v-for="(row, index) in rows" :key="index" class="upstream-member field-row">
       <div class="member-address"><EndpointInput v-model:value="row.address" :disabled="disabled" @update:value="update" /></div>
-      <label
+      <label class="field-label"
         >权重<n-input-number
           v-model:value="row.weight"
           :min="1"
@@ -79,7 +79,7 @@ function remove(index: number) {
           :disabled="disabled"
           @update:value="update"
       /></label>
-      <label
+      <label class="field-label"
         >失败次数<n-input-number
           v-model:value="row.maxFails"
           :min="0"
@@ -87,17 +87,20 @@ function remove(index: number) {
           :disabled="disabled"
           @update:value="update"
       /></label>
-      <label
+      <label class="field-label member-interval"
         >重试间隔<UnitInput v-model:value="row.failTimeout" kind="time" :disabled="disabled" @update:value="update" /></label>
-      <label class="member-backup"
-        >备用<n-switch
+      <label class="field-label member-backup"
+        >备用<span class="field-toggle"><n-switch
           v-model:value="row.backup"
           :disabled="disabled"
           @update:value="update"
-      /></label>
-      <n-button :disabled="disabled" @click="remove(index)">移除</n-button>
+      /></span></label>
+      <n-button class="member-remove" attr-type="button" :disabled="disabled" @click="remove(index)">移除</n-button>
     </div>
     <n-button
+      class="field-add"
+      attr-type="button"
+      dashed
       :disabled="disabled || rows.length >= 128"
       @click="rows.push(blank())"
       >添加后端</n-button
@@ -106,35 +109,18 @@ function remove(index: number) {
 </template>
 
 <style scoped>
-.upstream-members {
-  width: 100%;
-  display: grid;
-  gap: 12px;
-}
 .upstream-member {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
-  gap: 10px;
-  align-items: end;
-  padding: 14px;
-  background: var(--surface-soft, rgba(128, 128, 128, 0.05));
+  grid-template-columns: minmax(88px, 1fr) minmax(100px, 1fr) minmax(180px, 1.4fr) 56px auto;
+  padding: 16px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
 }
 .member-address { grid-column: 1 / -1; }
-label {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-}
-.member-backup {
-  align-self: center;
-}
-@media (max-width: 1000px) {
+@container (max-width: 680px) {
   .upstream-member {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .member-address {
-    grid-column: 1 / -1;
-  }
+  .member-interval { grid-column: 1 / -1; }
 }
 </style>

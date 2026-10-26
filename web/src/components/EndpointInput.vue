@@ -18,12 +18,11 @@ function update() {
 }
 </script>
 <template>
-  <div class="endpoint-input">
-    <label>后端地址<NInput v-model:value="host" placeholder="IP 地址或域名" :maxlength="253" :disabled="disabled" @update:value="update" /></label>
-    <label>端口<NInputNumber v-model:value="port" :min="1" :max="65535" :precision="0" placeholder="端口" :disabled="disabled" @update:value="update" /></label>
+  <div class="endpoint-input field-row">
+    <label class="field-label">后端地址<NInput v-model:value="host" placeholder="IP 地址或域名" :maxlength="253" :disabled="disabled" @update:value="update" /></label>
+    <label class="field-label">端口<NInputNumber v-model:value="port" :min="1" :max="65535" :precision="0" placeholder="端口" :disabled="disabled" @update:value="update" /></label>
   </div>
 </template>
 <style scoped>
-.endpoint-input { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px; }
-label { min-width: 0; display: grid; gap: 6px; font-size: 13px; }
+.endpoint-input { width: 100%; grid-template-columns: minmax(0, 1fr) 112px; }
 </style>

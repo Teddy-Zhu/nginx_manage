@@ -888,9 +888,6 @@ onUnmounted(() => {
 .migration-steps code {
   overflow-wrap: anywhere;
 }
-h2 {
-  font-size: 18px;
-}
 ul {
   padding-left: 20px;
 }

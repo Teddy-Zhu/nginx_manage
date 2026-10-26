@@ -423,7 +423,7 @@ onUnmounted(() => {
     class="notice"
     >修改后需在 120 秒内确认连接正常，超时自动恢复。请通过<RouterLink to="/management-listener">安全管理入口</RouterLink>访问面板后应用规则。云服务器还需放行对应的安全组端口。</n-alert
   >
-  <section v-if="view" class="panel">
+  <section v-if="view" class="surface">
     <h3>当前规则状态</h3>
     <p v-if="stored?.version">
       <template v-if="view.confirmed_action === 'apply'">{{ view.confirmed_version === stored.version ? '已生效' : '有修改待应用' }}</template>
@@ -454,7 +454,7 @@ onUnmounted(() => {
     </p>
   </section>
   <AdvancedDetails title="连接保护详情">
-  <section v-if="observedProtections" class="panel">
+  <section v-if="observedProtections" class="surface">
     <div class="page-toolbar">
       <h3>保护依据核对</h3>
       <n-tag
@@ -512,7 +512,7 @@ onUnmounted(() => {
     </template>
   </section>
   </AdvancedDetails>
-  <section v-if="preparation" class="panel">
+  <section v-if="preparation" class="surface">
     <div class="page-toolbar">
       <h3>检查防火墙规则</h3>
       <n-tag
@@ -537,7 +537,7 @@ onUnmounted(() => {
       >取消准备</n-button
     >
   </section>
-  <section v-if="plan && !preparing && (!plan.preparation || plan.preparation.state === 'ready')" class="panel">
+  <section v-if="plan && !preparing && (!plan.preparation || plan.preparation.state === 'ready')" class="surface">
     <div class="page-toolbar">
       <h3>
         {{ plan.action === "remove" ? "移除" : "应用" }}计划
@@ -610,7 +610,7 @@ onUnmounted(() => {
   <n-alert v-if="uncertain" type="warning" :bordered="false" class="notice"
     >执行结果尚未取得。请保留本页，通过原请求查询或重送；未确认的变更会自动恢复。</n-alert
   >
-  <section v-if="operation" class="panel">
+  <section v-if="operation" class="surface">
     <div class="page-toolbar">
       <h3>运行操作</h3>
       <n-tag :type="operation.state === 'succeeded' ? 'success' : 'warning'">{{
@@ -662,17 +662,6 @@ onUnmounted(() => {
 <style scoped>
 .notice {
   margin: 16px 0;
-}
-.panel {
-  padding: 20px;
-  margin-top: 16px;
-  border: 1px solid var(--border, #e5eae7);
-  border-radius: 12px;
-  background: white;
-  min-width: 0;
-}
-.panel h3 {
-  margin-top: 0;
 }
 dl {
   display: grid;

@@ -493,7 +493,7 @@ onMounted(load);
       >前往规则管理</n-button
     ></n-alert
   >
-  <div class="firewall-card">
+  <div class="firewall-card surface">
     <n-tabs v-model:value="activeTab" type="line" animated>
       <n-tab-pane name="rules" tab="规则管理">
         <div class="section-toolbar">
@@ -662,18 +662,15 @@ onMounted(load);
 </template>
 <style scoped>
 .firewall-card {
-  padding: 8px 24px 24px;
-  border: 1px solid #e5eae7;
-  border-radius: 12px;
-  background: #fff;
+  padding-top: 0;
 }
 .section-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
-  margin: 16px 0 20px;
+  margin: 8px 0 20px;
 }
 .section-title {
   display: flex;
@@ -712,10 +709,5 @@ onMounted(load);
 }
 :deep(.n-alert) {
   margin-bottom: 16px;
-}
-@media (max-width: 600px) {
-  .firewall-card {
-    padding: 4px 14px 16px;
-  }
 }
 </style>

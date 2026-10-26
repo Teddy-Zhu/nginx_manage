@@ -34,6 +34,7 @@ import {
   NFormItem,
   NSelect,
   NSwitch,
+  NDropdown,
 } from "naive-ui";
 import {
   useNodeAPI,
@@ -320,6 +321,18 @@ const dirty = computed(
     tree.value !== null &&
     (sourceJSON.value !== persisted.value || !!formDirty.value),
 );
+const moreActions = computed(() => [
+  { label: "编辑源文件", key: "source", disabled: busy.value || !!formDirty.value },
+  { label: "配置差异", key: "changes", disabled: busy.value || !!formDirty.value },
+  { label: "外部修改", key: "external", disabled: busy.value || dirty.value },
+  { label: "模块管理", key: "modules", disabled: busy.value || dirty.value },
+]);
+function selectMoreAction(key: string) {
+  if (key === "source") sourceVisible.value = true;
+  else if (key === "changes") changesVisible.value = true;
+  else if (key === "external") externalVisible.value = true;
+  else if (key === "modules") modulesVisible.value = true;
+}
 const differsFromDesired = computed(
   () =>
     sourceJSON.value !==
@@ -802,18 +815,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       ><span class="muted">{{ draftNote }}</span>
     </div>
     <div class="inline-gap">
-      <AdvancedDetails title="更多操作">
-        <NButton :disabled="busy || !!formDirty" @click="sourceVisible = true">编辑源文件</NButton>
-        <n-button :disabled="busy || !!formDirty" @click="changesVisible = true"
-          >配置差异</n-button
-        >
-        <n-button :disabled="busy || dirty" @click="externalVisible = true"
-          >外部修改</n-button
-        >
-        <n-button :disabled="busy || dirty" @click="modulesVisible = true"
-          >模块管理</n-button
-        >
-      </AdvancedDetails>
+      <NDropdown trigger="click" :options="moreActions" @select="selectMoreAction">
+        <NButton :disabled="busy">更多操作</NButton>
+      </NDropdown>
       <n-button :disabled="busy" @click="load">刷新</n-button
       ><n-button
         :disabled="
@@ -876,19 +880,19 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
           <template v-if="resource"
             ><div class="section-heading">
               <h2>{{ resource.kind.toUpperCase() }} 代理</h2>
-            </div>
-            <div class="toolbar">
-              <n-button
-                :disabled="busy || dirty"
-                @click="resourceAction('copy')"
-                >复制</n-button
-              >
-              <n-button
-                type="error"
-                :disabled="busy || dirty"
-                @click="resourceAction('delete')"
-                >移除</n-button
-              >
+              <div class="inline-gap">
+                <n-button
+                  :disabled="busy || dirty"
+                  @click="resourceAction('copy')"
+                  >复制</n-button
+                >
+                <n-button
+                  type="error"
+                  :disabled="busy || dirty"
+                  @click="resourceAction('delete')"
+                  >移除</n-button
+                >
+              </div>
             </div>
             <n-form label-placement="top">
               <n-form-item label="名称"
@@ -919,6 +923,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                 <h3 v-if="!group.advanced">{{ group.title }}</h3>
                 <template v-if="group.key === 'basic'">
                   <n-button
+                    class="upstream-group-action"
                     v-if="
                       !resource.fields.upstream_servers?.editable &&
                       !enablingGroup
@@ -1008,7 +1013,8 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                     :key="`${resource.id}:${name}`"
                     :class="{
                       'wide-field':
-                        field.format === 'lines' || field.format === 'tokens' || name === 'upstream_servers',
+                        field.format === 'lines' || field.format === 'tokens' || name === 'upstream_servers' || (name === 'upstream' && resource.kind === 'stream'),
+                      'access-list-field': name === 'access_list',
                     }"
                     :label="
                       name === 'upstream' && groupedHTTP
@@ -1078,7 +1084,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                       :disabled="busy || differsFromDesired"
                     />
                   </n-form-item>
-                  <div class="toolbar">
+                  <div class="inline-gap preset-actions">
                     <n-button
                       :disabled="
                         busy || differsFromDesired || !canPreset('websocket')
@@ -1121,13 +1127,16 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                   <p class="muted">路径示例：{{ pathExample }}</p>
                 </template>
               </component>
-              <n-button
-                type="primary"
-                :loading="busy"
-                :disabled="busy || differsFromDesired || !formDirty"
-                @click="saveFields"
-                >保存配置</n-button
-              ></n-form
+              <div class="form-actions">
+                <n-button
+                  type="primary"
+                  :loading="busy"
+                  :disabled="busy || differsFromDesired || !formDirty"
+                  @click="saveFields"
+                  >保存配置</n-button
+                >
+
+              </div></n-form
             ></template
           ><n-empty v-else description="请选择一个代理进行编辑" />
         </div>
@@ -1334,18 +1343,23 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 
 <style scoped>
 .resource-form {
-  max-width: none;
+  container: proxy-editor / inline-size;
 }
+.resource-form > .section-heading,
 .resource-form :deep(.n-form) {
   max-width: 880px;
 }
-.proxy-settings {
-  margin-top: 20px;
+.proxy-settings:not(.advanced-details) {
+  margin-top: 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
 }
+.proxy-settings h3 { margin-bottom: 16px; }
+.upstream-group-action, .preset-actions { margin-bottom: 20px; }
 .proxy-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 20px;
+  gap: 0 24px;
 }
 .proxy-field-grid > * {
   min-width: 0;
@@ -1354,11 +1368,12 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
   grid-column: 1 / -1;
 }
 .access-list-link {
-  margin-left: 8px;
   white-space: nowrap;
   flex-shrink: 0;
 }
-@media (max-width: 900px) {
+.access-list-field :deep(.n-form-item-blank) { flex-wrap: wrap; gap: 8px; }
+.access-list-field :deep(.n-select) { flex: 1; min-width: 160px; }
+@container proxy-editor (max-width: 600px) {
   .proxy-field-grid {
     grid-template-columns: minmax(0, 1fr);
   }

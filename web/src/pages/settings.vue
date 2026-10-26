@@ -152,9 +152,9 @@ onMounted(load);
       <dd>{{ systemVersion.version }}</dd>
     </dl>
   </section>
-  <section class="surface" style="margin: 20px 0">
+  <section class="surface">
     <h2>管理设置</h2>
-    <div class="shortcut-grid" style="margin-top: 16px">
+    <div class="shortcut-grid">
       <RouterLink to="/management-listener"><strong>安全管理入口</strong><span class="muted">连接确认和访问限制</span></RouterLink>
       <RouterLink to="/modules"><strong>功能开关</strong><span class="muted">管理可选功能</span></RouterLink>
       <RouterLink to="/panel-updates"><strong>系统更新</strong><span class="muted">检查版本与更新记录</span></RouterLink>
@@ -162,38 +162,36 @@ onMounted(load);
     </div>
     <AdvancedDetails title="高级维护"><div class="inline-gap"><RouterLink to="/maintenance">维护模式</RouterLink><RouterLink to="/agent-upgrades">管理服务更新</RouterLink><RouterLink to="/panel-images">运行环境更新</RouterLink><RouterLink to="/firewall">网络诊断</RouterLink></div></AdvancedDetails>
   </section>
-  <div class="two-columns">
-    <section class="surface">
-      <div class="section-heading">
-        <h2>管理员账户</h2>
-        <n-tag size="small" :bordered="false">单管理员</n-tag>
-      </div>
-      <dl class="detail-list">
-        <dt>用户名</dt>
-        <dd>{{ session.localMe?.username }}</dd>
-      </dl>
-      <n-form @submit.prevent="changePassword"
-        ><n-form-item label="新密码（至少 6 个字符）"
-          ><n-input
-            v-model:value="password"
-            type="password"
-            autocomplete="new-password"
-            show-password-on="click"
-        /></n-form-item>
-        <div class="inline-gap">
-          <n-button
-            attr-type="submit"
-            type="primary"
-            :loading="busy"
-            :disabled="[...password].length < 6"
-            >修改密码</n-button
-          ><n-button :disabled="busy" @click="revokeSessions"
-            >撤销全部会话</n-button
-          >
-        </div></n-form
-      >
-    </section>
-  </div>
+  <section class="surface">
+    <div class="section-heading">
+      <h2>管理员账户</h2>
+      <n-tag size="small" :bordered="false">单管理员</n-tag>
+    </div>
+    <dl class="detail-list">
+      <dt>用户名</dt>
+      <dd>{{ session.localMe?.username }}</dd>
+    </dl>
+    <n-form label-placement="top" class="account-form" @submit.prevent="changePassword"
+      ><n-form-item label="新密码（至少 6 个字符）"
+        ><n-input
+          v-model:value="password"
+          type="password"
+          autocomplete="new-password"
+          show-password-on="click"
+      /></n-form-item>
+      <div class="form-actions">
+        <n-button
+          attr-type="submit"
+          type="primary"
+          :loading="busy"
+          :disabled="[...password].length < 6"
+          >修改密码</n-button
+        ><n-button :disabled="busy" @click="revokeSessions"
+          >撤销全部会话</n-button
+        >
+      </div></n-form
+    >
+  </section>
   <section class="surface">
     <div class="section-heading">
       <div>
@@ -273,3 +271,6 @@ onMounted(load);
     ></n-modal
   >
 </template>
+<style scoped>
+.account-form { max-width: 560px; }
+</style>
