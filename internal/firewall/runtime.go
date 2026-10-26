@@ -183,6 +183,7 @@ type ProtectionObservation struct {
 	Reason       string       `json:"reason"`
 }
 type RuntimeView struct {
+	Shortcuts             ShortcutPorts         `json:"shortcuts"`
 	Preparation           *PlanPreparation      `json:"preparation"`
 	Backend               string                `json:"backend"`
 	CanPlan               bool                  `json:"can_plan"`
@@ -197,6 +198,13 @@ type RuntimeView struct {
 	Kernel                KernelView            `json:"kernel"`
 	Protections           []Protection          `json:"protections"`
 	Operation             *Operation            `json:"operation"`
+}
+
+type ShortcutPorts struct {
+	Management  []int  `json:"management"`
+	SSH         []int  `json:"ssh"`
+	SSHDetected bool   `json:"ssh_detected"`
+	Reason      string `json:"reason"`
 }
 
 func PolicyDigest(policy Policy) (string, error) {

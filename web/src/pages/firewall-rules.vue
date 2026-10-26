@@ -48,6 +48,7 @@ import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 import { randomUUID } from "../utils/crypto";
 import { countryOptions, countryName } from "../utils/countries";
+import { accessMode, allowPorts, defaultRule, modeRules, orderRules } from "../utils/firewall-shortcuts";
 const api = useNodeAPI(),
   session = useSession(),
   dialog = useDialog();
@@ -67,7 +68,8 @@ const activeTab = ref("rules"),
   ]),
   sources = ref<string[]>([]),
   formError = ref("");
-const formBusy = ref(false);
+const formBusy = ref(false), checkError = ref("");
+const quickBusy = ref<"management" | "ssh" | "web" | null>(null);
 const controller = new AbortController();
 onUnmounted(() => controller.abort());
 const canWrite = computed(
@@ -81,6 +83,9 @@ const dirty = computed(
 const countries = computed(() => [
   ...new Set(policy.value.rules.flatMap((rule) => rule.countries || [])),
 ]);
+const mode = computed(() => accessMode(policy.value.rules));
+const modeLabel = computed(() => mode.value === "allow" ? "默认放通 · 黑名单" :
+  mode.value === "deny" ? "默认屏蔽 · 白名单" : policy.value.rules.length ? "自定义访问规则" : "跟随系统规则");
 const kinds = [
   { label: "端口规则", value: "port" },
   { label: "IP 黑白名单", value: "address" },
@@ -120,11 +125,74 @@ const portsLabel = (rule: FirewallRule) =>
     ? "全部端口"
     : `${rule.protocol.toUpperCase()} ${rule.ports.map((p) => (p.from === p.to ? p.from : `${p.from}-${p.to}`)).join(", ")}`;
 function reorder(rules: FirewallRule[]) {
-  rules.forEach((rule, index) => {
-    rule.priority = index * 10;
+  try {
+    policy.value.rules = orderRules(rules);
+    preview.value = null;
+    checkError.value = "";
+    return true;
+  } catch (error) {
+    message.error(apiError(error).message);
+    return false;
+  }
+}
+function chooseMode(action: "allow" | "deny") {
+  if (mode.value === action) return;
+  dialog.warning({
+    title: action === "allow" ? "启用黑名单模式" : "启用白名单模式",
+    content: (action === "allow"
+      ? "未单独屏蔽的 TCP、UDP 端口将允许访问。"
+      : "未放行的 TCP、UDP 端口将屏蔽访问。请先添加网站等需要开放的服务；当前管理来源的面板和 SSH 入口仍受保护。") +
+      "此操作替换全端口默认规则，保留按端口、IP 和地区设置的规则。保存并应用后生效。",
+    positiveText: "确定",
+    negativeText: "取消",
+    onPositiveClick: () => {
+      try {
+        if (reorder(modeRules(policy.value.rules, action)))
+          message.success("默认访问方式已调整，请保存并应用");
+      } catch (error) {
+        message.error(apiError(error).message);
+      }
+    },
   });
-  policy.value.rules = rules;
-  preview.value = null;
+}
+async function quickPorts(service: "management" | "ssh" | "web") {
+  quickBusy.value = service;
+  try {
+    await run(async () => {
+      let ports = [80, 443];
+      if (service !== "web") {
+        const runtime = await api.firewallRuntime(controller.signal);
+        if (service === "ssh" && !runtime.shortcuts.ssh_detected)
+          throw new Error(runtime.shortcuts.reason || "无法读取 SSH 端口，请稍后重试");
+        ports = runtime.shortcuts[service];
+        if (!ports.length)
+          throw new Error(service === "ssh" ? "未发现正在监听的 SSH 服务，请先启动服务或手动添加端口" : "未读取到面板监听端口，请刷新后重试");
+      }
+      const name = service === "management" ? "面板访问" : service === "ssh" ? "SSH 访问" : "网站访问";
+      if (reorder(allowPorts(policy.value.rules, name, ports)))
+        message.success(`已添加 ${name}（TCP ${ports.join("、")}），请保存并应用`);
+    });
+  } finally {
+    quickBusy.value = null;
+  }
+}
+function quickAddress(action: "allow" | "deny") {
+  add();
+  changeKind("address");
+  editing.value!.action = action;
+  editing.value!.name = action === "allow" ? "IP 白名单" : "IP 黑名单";
+  portRanges.value = [{ from: 1, to: 65535 }];
+}
+function resetRules() {
+  dialog.warning({
+    title: "重置防火墙规则",
+    content: "将清空本面板添加的访问规则，并恢复为跟随系统规则。系统及其他软件自行维护的规则继续保留。保存并应用后生效。",
+    positiveText: "重置规则",
+    negativeText: "取消",
+    onPositiveClick: () => {
+      if (reorder([])) message.success("规则已清空，请保存并应用");
+    },
+  });
 }
 function add() {
   kind.value = "port";
@@ -261,11 +329,9 @@ async function commitRule() {
       return;
     }
   }
-  reorder([
-    value,
-    ...policy.value.rules.filter((rule) => rule.id !== value.id),
-  ]);
-  editing.value = null;
+  const exists = policy.value.rules.some((rule) => rule.id === value.id);
+  if (reorder(exists ? policy.value.rules.map((rule) => rule.id === value.id ? value : rule) : [value, ...policy.value.rules]))
+    editing.value = null;
 }
 function remove(rule: FirewallRule) {
   dialog.warning({
@@ -313,10 +379,11 @@ const columns: DataTableColumns<FirewallRule> = [
     render: (rule) =>
       h(NSwitch, {
         value: rule.enabled,
-        disabled: busy.value || !canWrite.value,
+        disabled: busy.value || !canWrite.value || defaultRule(rule),
         "onUpdate:value": (value: boolean) => {
           rule.enabled = value;
           preview.value = null;
+          checkError.value = "";
         },
       }),
   },
@@ -336,7 +403,7 @@ const columns: DataTableColumns<FirewallRule> = [
               {
                 size: "small",
                 text: true,
-                disabled: busy.value || !canWrite.value,
+                disabled: busy.value || !canWrite.value || defaultRule(rule),
                 type: "primary",
                 onClick: () => edit(rule),
               },
@@ -350,6 +417,7 @@ const columns: DataTableColumns<FirewallRule> = [
                 disabled:
                   busy.value ||
                   !canWrite.value ||
+                  defaultRule(rule) ||
                   policy.value.rules[0]?.id === rule.id,
                 onClick: () =>
                   reorder([
@@ -364,7 +432,7 @@ const columns: DataTableColumns<FirewallRule> = [
               {
                 size: "small",
                 text: true,
-                disabled: busy.value || !canWrite.value,
+                disabled: busy.value || !canWrite.value || defaultRule(rule),
                 type: "error",
                 onClick: () => remove(rule),
               },
@@ -399,6 +467,7 @@ async function load() {
     else if (canWrite.value)
       message.error(`GeoIP 配置读取失败：${apiError(data.reason).message}`);
     preview.value = null;
+    checkError.value = "";
   });
 }
 function refresh() {
@@ -424,16 +493,25 @@ async function save(confirmConflicts = false) {
       stored.value = saved;
       policy.value = structuredClone(saved.policy);
       preview.value = null;
+      checkError.value = "";
       message.success("规则已保存，应用变更后生效");
     } catch (error) {
       const failure = apiError(error);
+      checkError.value = failure.message;
       if (!confirmConflicts && failure.code === "FIREWALL_RULE_CONFLICT") {
+        const checked = JSON.stringify(data);
         dialog.warning({
-          title: "确认规则覆盖",
+          title: "确认规则优先顺序",
           content: failure.message,
-          positiveText: "确认覆盖",
+          positiveText: "按此顺序保存",
           negativeText: "取消",
-          onPositiveClick: () => void save(true),
+          onPositiveClick: () => {
+            if (checked !== JSON.stringify({ ...data, base_version: stored.value?.version || 0, policy: policy.value })) {
+              message.warning("规则已变化，请重新保存并检查");
+              return;
+            }
+            void save(true);
+          },
         });
         return;
       }
@@ -518,6 +596,45 @@ onMounted(load);
   <div class="firewall-card surface">
     <n-tabs v-model:value="activeTab" type="line" animated>
       <n-tab-pane name="rules" tab="规则管理">
+        <section class="quick-actions">
+          <div class="section-title">
+            <h2>快捷设置</h2>
+            <n-tag size="small" :bordered="false">{{ modeLabel }}</n-tag>
+          </div>
+          <p class="muted">选择访问方式或添加常用规则，保存并应用后生效。</p>
+          <div class="mode-options">
+            <n-button
+              class="mode-choice"
+              :type="mode === 'allow' ? 'primary' : 'default'"
+              :secondary="mode === 'allow'"
+              :disabled="busy || !canWrite || !stored"
+              :aria-pressed="mode === 'allow'"
+              @click="chooseMode('allow')"
+            >
+              <strong>默认放通（黑名单）</strong>
+              <span>仅屏蔽名单中的端口或来源</span>
+            </n-button>
+            <n-button
+              class="mode-choice"
+              :type="mode === 'deny' ? 'primary' : 'default'"
+              :secondary="mode === 'deny'"
+              :disabled="busy || !canWrite || !stored"
+              :aria-pressed="mode === 'deny'"
+              @click="chooseMode('deny')"
+            >
+              <strong>默认屏蔽（白名单）</strong>
+              <span>仅允许名单中的端口或来源</span>
+            </n-button>
+          </div>
+          <div class="shortcut-buttons">
+            <n-button :loading="quickBusy === 'management'" :disabled="busy || !canWrite || !stored" @click="quickPorts('management')">放通面板端口</n-button>
+            <n-button :loading="quickBusy === 'web'" :disabled="busy || !canWrite || !stored" @click="quickPorts('web')">放通网站（80 / 443）</n-button>
+            <n-button :loading="quickBusy === 'ssh'" :disabled="busy || !canWrite || !stored" @click="quickPorts('ssh')">放通 SSH</n-button>
+            <n-button :disabled="busy || !canWrite || !stored" @click="quickAddress('deny')">添加 IP 黑名单</n-button>
+            <n-button :disabled="busy || !canWrite || !stored" @click="quickAddress('allow')">添加 IP 白名单</n-button>
+            <n-button type="error" secondary :disabled="busy || !canWrite || !stored || !policy.rules.length" @click="resetRules">重置防火墙规则</n-button>
+          </div>
+        </section>
         <div class="section-toolbar">
           <div>
             <div class="section-title">
@@ -531,11 +648,12 @@ onMounted(load);
           <n-button
             type="primary"
             secondary
-            :disabled="busy || !canWrite"
+            :disabled="busy || !canWrite || !stored"
             @click="add"
             >添加规则</n-button
           >
         </div>
+        <n-alert v-if="checkError" type="error" :show-icon="false">{{ checkError }}</n-alert>
         <n-data-table
           :columns="columns"
           :data="policy.rules"
@@ -688,6 +806,44 @@ onMounted(load);
 <style scoped>
 .firewall-card {
   padding-top: 0;
+}
+.quick-actions {
+  padding: 16px 0 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-color, #e8eee9);
+}
+.mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.mode-choice {
+  height: auto;
+  min-height: 82px;
+  padding: 16px;
+}
+.mode-choice :deep(.n-button__content) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+.mode-choice span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+.shortcut-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 680px) {
+  .mode-options { grid-template-columns: 1fr; }
+  .shortcut-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .section-toolbar {
   display: flex;

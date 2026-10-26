@@ -75,6 +75,9 @@ func (s *Service) Save(ctx context.Context, p auth.Principal, requestID, key str
 		return out, e
 	}
 	in.Policy = normalized
+	if err := checkPolicyOrder(normalized); err != nil {
+		return out, err
+	}
 	raw, e := json.Marshal(struct {
 		Action string
 		Input  PolicyInput
@@ -154,6 +157,10 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 	}
 	out.PolicyHash = view.Policy.Hash()
 	out.Backend = view.Policy.Backend
+	if problems := policyProblems(view.Policy); len(problems) > 0 {
+		out.Errors = append(out.Errors, problems...)
+		return out, nil
+	}
 	for _, r := range view.Policy.Rules {
 		if r.Enabled {
 			out.LogicalRules++

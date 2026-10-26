@@ -640,7 +640,7 @@ export interface paths {
         };
         /** @description 返回 FirewallPolicyView。未保存时 version 为 0；仅表示期望策略，不代表内核生效。 */
         get: operations["getFirewallPolicy"];
-        /** @description 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须有效登录会话。最多 1000 条规则及 16 MiB 规范策略；新增的规则冲突须明确确认。 */
+        /** @description 版本 CAS、加密策略、幂等响应与审计同事务；允许模块停用时保存期望，不触发宿主机应用。浏览器须有效登录会话。最多 1000 条规则及 16 MiB 规范策略；重复或被前序规则完全覆盖的规则返回 FIREWALL_RULE_SHADOWED，部分重叠且动作相反返回 FIREWALL_RULE_CONFLICT 须明确确认。末尾默认端口规则允许前序例外。 */
         put: operations["setFirewallPolicy"];
         post?: never;
         delete?: never;
@@ -4319,6 +4319,13 @@ export interface components {
             binding: components["schemas"]["Fail2banBindingView"];
             managed: components["schemas"]["Fail2banManaged"];
         };
+        /** @description 实际面板及 SSH 监听端口，仅用于生成期望规则；不代表外部可达，也不授予写入权限。 */
+        FirewallShortcutPorts: {
+            management: number[];
+            ssh: number[];
+            ssh_detected: boolean;
+            reason: string;
+        };
         FirewallRuntime: {
             available: boolean;
             reason: string;
@@ -4338,6 +4345,7 @@ export interface components {
             /** @description 可尝试生成计划；available 表示策略执行就绪，二者须分别显示。 */
             can_plan: boolean;
             preparation: components["schemas"]["FirewallPlanPreparation"] | null;
+            shortcuts: components["schemas"]["FirewallShortcutPorts"];
         };
         BackupInput: {
             name: string;

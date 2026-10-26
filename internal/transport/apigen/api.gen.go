@@ -6051,6 +6051,9 @@ type FirewallRuntime struct {
 	ProtectionObservation FirewallProtectionObservation `json:"protection_observation"`
 	Protections           []FirewallProtection          `json:"protections"`
 	Reason                string                        `json:"reason"`
+
+	// Shortcuts 实际面板及 SSH 监听端口，仅用于生成期望规则；不代表外部可达，也不授予写入权限。
+	Shortcuts FirewallShortcutPorts `json:"shortcuts"`
 }
 
 // FirewallRuntimeBackend defines model for FirewallRuntime.Backend.
@@ -6058,6 +6061,14 @@ type FirewallRuntimeBackend string
 
 // FirewallRuntimeConfirmedAction defines model for FirewallRuntime.ConfirmedAction.
 type FirewallRuntimeConfirmedAction string
+
+// FirewallShortcutPorts 实际面板及 SSH 监听端口，仅用于生成期望规则；不代表外部可达，也不授予写入权限。
+type FirewallShortcutPorts struct {
+	Management  []int  `json:"management"`
+	Reason      string `json:"reason"`
+	Ssh         []int  `json:"ssh"`
+	SshDetected bool   `json:"ssh_detected"`
+}
 
 // FirewallTable defines model for FirewallTable.
 type FirewallTable struct {

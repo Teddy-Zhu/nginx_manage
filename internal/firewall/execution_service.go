@@ -64,6 +64,9 @@ func (s *Service) Plan(ctx context.Context, in PlanInput, connection string) (Pl
 			return out, fault.Conflict("期望策略版本变化，请重新读取并生成计划")
 		}
 		input.Policy = view.Policy
+		if err := checkPolicyOrder(input.Policy); err != nil {
+			return out, err
+		}
 		if in.DockerTargets != nil {
 			normalized, err := in.DockerTargets.Normalize(view.Policy)
 			if err != nil {

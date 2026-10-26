@@ -50,7 +50,11 @@ func firewallControlHandler(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) firewallRuntimeHandlers(mux *http.ServeMux, f *hostFirewall) {
-	mux.HandleFunc("GET /v1/firewall/runtime", firewallControlHandler(func(w http.ResponseWriter, r *http.Request) { firewallReply(w, f.View(), nil) }))
+	mux.HandleFunc("GET /v1/firewall/runtime", firewallControlHandler(func(w http.ResponseWriter, r *http.Request) {
+		out := f.View()
+		out.Shortcuts = f.shortcutPorts(r.Context())
+		firewallReply(w, out, nil)
+	}))
 	mux.HandleFunc("GET /v1/firewall/operations/{id}", firewallControlHandler(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if !validID(id) {
