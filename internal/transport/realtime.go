@@ -23,6 +23,7 @@ var realtimeScopes = map[string][]string{
 	"tasks": {"read"}, "monitoring": {"read"}, "notifications": {"read"},
 	"maintenance": {"read", "system.write"}, "backups": {"read", "backup.export"},
 	"firewall": {"read", "security.write"}, "listener": {"read", "system.write"}, "version": {"read"},
+	"dns": {"read"},
 }
 
 // Fingerprints contain no credentials and never leave this process. Clients
@@ -138,6 +139,16 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 			return "", errors.New("agent unavailable")
 		}
 		value, err = s.Agent.ManagementListener(ctx)
+	case "dns":
+		if s.HostDNS == nil {
+			return "", errors.New("DNS unavailable")
+		}
+		var enabled bool
+		if err = s.DB.QueryRowContext(ctx, "SELECT enabled FROM module_settings WHERE id='host-dns'").Scan(&enabled); err != nil {
+			return "", err
+		}
+		dns, e := s.HostDNS.Overview(ctx)
+		value, err = []any{enabled, dns}, e
 	case "version":
 		if s.FrontendVersion != nil {
 			var id string
@@ -164,7 +175,6 @@ func (s *Server) realtime(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, fault.Invalid("需要 WebSocket 连接"))
 		return
 	}
-	// Cookie-authenticated sockets require an exact same-origin browser handshake.
 	origin := r.Header.Get("Origin")
 	if !p.Machine || origin != "" {
 		u, err := url.Parse(origin)
@@ -177,25 +187,20 @@ func (s *Server) realtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	topics := strings.Split(r.URL.Query().Get("topics"), ",")
-	if len(topics) == 0 || len(topics) > len(realtimeScopes) {
-		s.fail(w, r, fault.Invalid("实时订阅无效"))
-		return
-	}
-	for _, topic := range topics {
-		scopes, exists := realtimeScopes[topic]
-		if !exists {
-			s.fail(w, r, fault.Invalid("实时订阅类型无效"))
-			return
-		}
-		if err := p.Require(scopes...); err != nil {
-			s.fail(w, r, err)
-			return
-		}
-		if r.Header.Get(remoteapi.HopHeader) != "" && slices.Contains([]string{"firewall", "listener", "backups"}, topic) {
+	// Machine streams feed the browser broker and cannot recursively forward.
+	if p.Machine {
+		topics := strings.Split(r.URL.Query().Get("topics"), ",")
+		if r.URL.Query().Get("connection") != "" {
 			s.fail(w, r, auth.ErrForbidden)
 			return
 		}
+		if err := realtimeTopics(p, topics, r.Header.Get(remoteapi.HopHeader) != ""); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	} else if r.URL.RawQuery != "" {
+		s.fail(w, r, fault.Invalid("请在实时连接内提交订阅"))
+		return
 	}
 	if s.realtimeStreams.Add(1) > 32 {
 		s.realtimeStreams.Add(-1)
@@ -203,137 +208,92 @@ func (s *Server) realtime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.realtimeStreams.Add(-1)
-	var upstream *websocket.Conn
-	connection := r.URL.Query().Get("connection")
-	node := s.NodeID
-	if connection != "" {
-		if p.Machine || r.Header.Get(remoteapi.HopHeader) != "" || s.Nodes == nil {
-			s.fail(w, r, auth.ErrForbidden)
-			return
-		}
-		var err error
-		upstream, node, err = s.Nodes.OpenRealtime(r.Context(), p, connection, topics)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-		defer upstream.Close()
-	}
 	upgrader := websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024, HandshakeTimeout: 5 * time.Second, CheckOrigin: func(*http.Request) bool { return true }, Error: func(w http.ResponseWriter, r *http.Request, _ int, _ error) {
 		s.fail(w, r, fault.Invalid("实时连接握手失败"))
 	}}
-	// No session mutation is performed during the read-only handshake.
 	conn, err := upgrader.Upgrade(w, r, w.Header())
 	if err != nil {
 		return
 	}
 	defer conn.Close()
-	conn.SetReadLimit(1024)
 	conn.SetReadDeadline(time.Now().Add(45 * time.Second))
 	conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(45 * time.Second)) })
-	done := make(chan struct{})
+	if p.Machine {
+		s.realtimeSource(r, p, conn)
+		return
+	}
+	s.realtimeBrowser(r, p, conn)
+}
+
+func realtimeTopics(p auth.Principal, topics []string, forwarded bool) error {
+	if len(topics) == 0 || len(topics) > len(realtimeScopes) {
+		return fault.Invalid("实时订阅无效")
+	}
+	seen := map[string]bool{}
+	for _, topic := range topics {
+		scopes, exists := realtimeScopes[topic]
+		if !exists || seen[topic] {
+			return fault.Invalid("实时订阅类型无效或重复")
+		}
+		seen[topic] = true
+		if err := p.Require(scopes...); err != nil {
+			return err
+		}
+		if forwarded && slices.Contains([]string{"firewall", "listener", "backups"}, topic) {
+			return auth.ErrForbidden
+		}
+	}
+	return nil
+}
+
+func (s *Server) realtimeSource(r *http.Request, p auth.Principal, conn *websocket.Conn) {
+	conn.SetReadLimit(1024)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
 	go func() {
-		defer close(done)
+		defer cancel()
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {
 				return
 			}
 		}
 	}()
-	write := func(payload any) error {
-		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		return conn.WriteJSON(payload)
-	}
+	sub := s.Realtime.Subscribe(strings.Split(r.URL.Query().Get("topics"), ","))
+	defer sub.Close()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
-	var wake <-chan struct{}
-	var take func() []string
-	var incoming chan json.RawMessage
-	if upstream == nil {
-		sub := s.Realtime.Subscribe(topics)
-		defer sub.Close()
-		wake = sub.Wake
-		take = sub.Take
-	} else {
-		incoming = make(chan json.RawMessage, 1)
-		upstream.SetReadLimit(64 << 10)
-		upstream.SetReadDeadline(time.Now().Add(45 * time.Second))
-		upstream.SetPongHandler(func(string) error { return upstream.SetReadDeadline(time.Now().Add(45 * time.Second)) })
-		go func() {
-			defer close(incoming)
-			for {
-				_, raw, e := upstream.ReadMessage()
-				if e != nil {
-					return
-				}
-				select {
-				case incoming <- raw:
-				case <-done:
-					return
-				}
-			}
-		}()
+	write := func(code, message string, data any) error {
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		return conn.WriteJSON(Response{Code: code, Message: message, Data: data, NodeID: s.NodeID, RequestID: r.Context().Value(requestIDKey).(string)})
 	}
 	for {
 		select {
-		case <-done:
+		case <-ctx.Done():
 			return
-		case <-r.Context().Done():
-			return
-		case <-wake:
+		case <-sub.Wake:
 			if !s.realtimeAlive(r, p) {
-				write(Response{Code: "UNAUTHENTICATED", Message: "会话或授权已失效", NodeID: s.NodeID, RequestID: r.Context().Value(requestIDKey).(string)})
+				write("UNAUTHENTICATED", "会话或授权已失效", nil)
 				return
 			}
-			if err = write(Response{Code: "OK", Message: "状态已更新", Data: map[string]any{"topics": take()}, RequestID: r.Context().Value(requestIDKey).(string), NodeID: node}); err != nil {
-				return
+			topics := sub.Take()
+			if len(topics) == 0 {
+				continue
 			}
-		case raw, open := <-incoming:
-			if !open {
-				return
-			}
-			if !s.realtimeAlive(r, p) {
-				return
-			}
-			if !validRemoteEnvelope(raw, node, 200) {
-				return
-			}
-			var frame struct {
-				Data struct {
-					Topics []string `json:"topics"`
-				} `json:"data"`
-			}
-			if json.Unmarshal(raw, &frame) != nil {
-				return
-			}
-			for _, topic := range frame.Data.Topics {
-				if !slices.Contains(topics, topic) {
-					return
-				}
-			}
-			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if err = conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+			if err := write("OK", "状态已更新", map[string]any{"topics": topics}); err != nil {
 				return
 			}
 		case <-heartbeat.C:
 			if !s.realtimeAlive(r, p) {
-				write(Response{Code: "UNAUTHENTICATED", Message: "会话或授权已失效", NodeID: s.NodeID, RequestID: r.Context().Value(requestIDKey).(string)})
+				write("UNAUTHENTICATED", "会话或授权已失效", nil)
 				return
 			}
-			if upstream != nil {
-				if err = s.Nodes.RealtimeAlive(r.Context(), p, connection, node); err != nil {
-					return
-				}
-				if err = upstream.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
-					return
-				}
-			}
-			if err = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
 				return
 			}
 		}
 	}
 }
+
 func (s *Server) realtimeAlive(r *http.Request, p auth.Principal) bool {
 	current, err := s.Auth.Authenticate(r)
 	if err != nil || current.ID != p.ID || current.Machine != p.Machine || current.Require(p.Scopes...) != nil {

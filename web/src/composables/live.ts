@@ -20,6 +20,7 @@ export function useLiveRefresh(
     firewall: ["read", "security.write"],
     listener: ["read", "system.write"],
     version: ["read"],
+    dns: ["read"],
   };
   let release: (() => void) | undefined;
   let running = false,
@@ -44,11 +45,14 @@ export function useLiveRefresh(
     }
   };
   const stop = watch(
-    () => session.localMe?.authenticated,
+    () =>
+      session.localMe?.authenticated
+        ? session.localMe.scopes.slice().sort().join(",")
+        : null,
     (authenticated) => {
       release?.();
       release = undefined;
-      if (authenticated) {
+      if (authenticated !== null) {
         const allowed = topics.filter((topic) =>
           required[topic].every((scope) =>
             session.localMe?.scopes.includes(scope),

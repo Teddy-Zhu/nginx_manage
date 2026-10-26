@@ -23,7 +23,6 @@ import {
   NButton,
   NCheckbox,
   NFormItem,
-  NInputNumber,
   NSelect,
   NSwitch,
   NTag,
@@ -38,6 +37,7 @@ import {
 } from "../api/client";
 import { useAction } from "../composables/action";
 import { useSession } from "../stores/session";
+import { inspectTask } from "../stores/operation";
 
 const api = useNodeAPI();
 const route = useRoute();
@@ -56,8 +56,8 @@ const overview = ref<HostDNSOverview | null>(null),
 const servers = ref<string[]>([]),
   search = ref<string[]>([]),
   verifyNames = ref<string[]>([]),
-  takeover = ref(false),
-  timeout = ref<number | null>(120);
+  takeover = ref(false);
+const confirmationSeconds = 120;
 const target = ref("");
 const families = ref([
   {
@@ -260,9 +260,9 @@ async function read() {
         ? !targets.some((item) => item.target === target.value)
         : target.value !== ""
     ) {
-      target.value =
-        (targets.find((item) => item.writable) ?? targets[0])?.target ?? "";
-      editing.value = false;
+      if (!editing.value && !activeTask.value)
+        target.value =
+          (targets.find((item) => item.writable) ?? targets[0])?.target ?? "";
       invalidate();
     }
     module.value = modules.find((m) => m.id === "host-dns") ?? null;
@@ -297,13 +297,18 @@ function edit() {
   search.value = [...(staticConfig?.search ?? [])];
   const c = connection.value;
   for (const [i, f] of families.value.entries()) {
-    const value = i === 0 ? c?.applied?.ipv4 : c?.applied?.ipv6;
+    const config = c?.applied ?? c?.persistent;
+    const value = i === 0 ? config?.ipv4 : config?.ipv6;
     f.enabled = !!value;
     f.method = (i === 0 ? c?.method4 : c?.method6) ?? "";
     f.servers = [...(value?.servers ?? [])];
     f.search = [...(value?.search ?? [])];
     f.automatic = value?.automatic ?? false;
   }
+  if (sharedSearch.value)
+    search.value = [
+      ...(families.value.find((family) => family.enabled)?.search ?? []),
+    ];
   takeover.value = false;
   plan.value = null;
   editing.value = true;
@@ -337,7 +342,7 @@ async function loadMigrationCandidate() {
           )
         : observed.value.owner !== "regular-file" || item.target !== "")
     )
-      throw new Error("迁移映射目标与当前 DNS 所有者不匹配，须重新映射");
+      throw new Error("迁移配置对应的网络接口已变化，请重新选择目标后导入");
     target.value = item.target;
     edit();
     servers.value = [...item.config.servers];
@@ -349,9 +354,13 @@ async function loadMigrationCandidate() {
       family.search = [...(config?.search ?? [])];
       family.automatic = config?.automatic ?? false;
     }
+    if (sharedSearch.value)
+      search.value = [
+        ...(families.value.find((family) => family.enabled)?.search ?? []),
+      ];
     verifyNames.value = [];
     migrationNotice.value =
-      "迁移配置已载入，待核对目标和验证域名，再生成 DNS 变更计划。";
+      "迁移配置已载入，请核对 DNS 地址，填写测试域名后检查设置。";
   } catch (cause) {
     if (!controller.signal.aborted)
       migrationError.value =
@@ -364,8 +373,8 @@ function invalidate() {
 }
 async function preview() {
   if (!observed.value) return;
-  if (timeout.value === null) {
-    message.error("请填写确认期限");
+  if (!cleanList(verifyNames.value).length) {
+    message.error("请填写至少一个测试域名，用于检查新 DNS 是否正常");
     return;
   }
   const input: HostDNSPlanInput = {
@@ -378,14 +387,18 @@ async function preview() {
           ipv4: families.value[0]!.enabled
             ? {
                 servers: cleanList(families.value[0]!.servers),
-                search: cleanList(families.value[0]!.search),
+                search: cleanList(
+                  sharedSearch.value ? search.value : families.value[0]!.search,
+                ),
                 automatic: families.value[0]!.automatic,
               }
             : null,
           ipv6: families.value[1]!.enabled
             ? {
                 servers: cleanList(families.value[1]!.servers),
-                search: cleanList(families.value[1]!.search),
+                search: cleanList(
+                  sharedSearch.value ? search.value : families.value[1]!.search,
+                ),
                 automatic: families.value[1]!.automatic,
               }
             : null,
@@ -397,7 +410,7 @@ async function preview() {
           ipv6: null,
         },
     verify_names: cleanList(verifyNames.value),
-    timeout_seconds: timeout.value,
+    timeout_seconds: confirmationSeconds,
     takeover: takeover.value,
   };
   const digest = JSON.stringify(input);
@@ -412,7 +425,11 @@ async function preview() {
 }
 async function apply() {
   const p = plan.value;
-  if (!p || p.expires_at * 1000 <= Date.now()) return;
+  if (!p || p.expires_at * 1000 <= Date.now()) {
+    invalidate();
+    message.warning("检查结果已过期，请重新检查设置");
+    return;
+  }
   if (!window.confirm("临时应用主机 DNS？确认期限内未确认将自动恢复原设置。"))
     return;
   await run(async () => {
@@ -420,7 +437,7 @@ async function apply() {
     plan.value = null;
     editing.value = false;
     await read();
-  }, "DNS 变更已排队，等待本机核验与确认");
+  }, "DNS 设置已提交，解析检查通过后请确认保留");
 }
 async function decide(action: "confirm" | "rollback") {
   const t = task.value;
@@ -453,18 +470,14 @@ async function toggle(enabled: boolean) {
       await api.setModule("host-dns", enabled);
       await read();
     },
-    enabled ? "主机 DNS 模块已启用" : "主机 DNS 模块已停用",
+    enabled ? "已启用 DNS 管理" : "已停用 DNS 管理",
   );
-}
-function visible() {
-  if (!document.hidden) void read();
 }
 onMounted(async () => {
   await read();
   if (controller.signal.aborted) return;
   await loadMigrationCandidate();
   if (controller.signal.aborted) return;
-  document.addEventListener("visibilitychange", visible);
   poll = setInterval(() => {
     now.value = Date.now();
   }, 1000);
@@ -472,282 +485,559 @@ onMounted(async () => {
 onUnmounted(() => {
   controller.abort();
   if (poll) clearInterval(poll);
-  document.removeEventListener("visibilitychange", visible);
 });
-useLiveRefresh(api, ["tasks"], read);
+useLiveRefresh(api, ["tasks", "dns"], read);
+const sharedSearch = computed(
+  () => networkManager.value && observed.value?.owner === "netplan",
+);
+const currentConfig = computed(() =>
+  networkManager.value
+    ? (connection.value?.applied ?? connection.value?.persistent)
+    : networkd.value
+      ? networkLink.value?.persistent
+        ? {
+            servers: networkLink.value.persistent.servers,
+            search: networkLink.value.persistent.search,
+            ipv4: null,
+            ipv6: null,
+          }
+        : null
+      : observed.value?.current,
+);
+const configRows = (config: HostDNSPlanInput["config"] | null | undefined) => {
+  if (!config) return [{ label: "DNS 地址", value: "暂时无法读取" }];
+  if (!config.ipv4 && !config.ipv6)
+    return [
+      { label: "DNS 地址", value: config.servers.join("、") || "尚未设置" },
+      { label: "域名后缀", value: config.search.join("、") || "无" },
+    ];
+  return [config.ipv4, config.ipv6].flatMap((family, index) =>
+    family
+      ? [
+          {
+            label: `${index === 0 ? "IPv4" : "IPv6"} DNS`,
+            value: [
+              family.automatic ? "自动获取" : "手动指定",
+              ...family.servers,
+            ].join(" · "),
+          },
+          {
+            label: `${index === 0 ? "IPv4" : "IPv6"} 后缀`,
+            value: family.search.join("、") || "无",
+          },
+        ]
+      : [],
+  );
+};
+const currentRows = computed(() => configRows(currentConfig.value));
+const targetLabel = computed(
+  () =>
+    choices.value.find((choice) => choice.value === target.value)?.label ??
+    "当前服务器",
+);
+const steps = ["查看配置", "修改设置", "检查并应用", "确认生效"];
+const step = computed(() =>
+  activeTask.value || pending.value
+    ? 3
+    : plan.value
+      ? 2
+      : editing.value
+        ? 1
+        : 0,
+);
+const planExpired = computed(
+  () => !!plan.value && plan.value.expires_at * 1000 <= now.value,
+);
+const statusType = computed(() =>
+  ["failed", "recovery_required"].includes(
+    pending.value?.state ?? task.value?.state ?? "",
+  )
+    ? ("error" as const)
+    : canConfirm.value
+      ? ("warning" as const)
+      : task.value?.state === "succeeded"
+        ? ("success" as const)
+        : ("info" as const),
+);
+function cancelEdit() {
+  editing.value = false;
+  migrationNotice.value = "";
+  invalidate();
+  void read();
+}
 </script>
 <template>
-  <div class="page-toolbar">
-    <div class="actions">
-      <span>启用管理</span
-      ><n-switch
-        :value="module?.enabled ?? false"
-        :disabled="!canToggle || busy"
-        @update:value="toggle"
-      /><n-button :loading="reading" @click="read">刷新</n-button>
-    </div>
-  </div>
-  <NAlert v-if="migrationError" type="error">{{ migrationError }}</NAlert>
-  <NAlert v-if="migrationNotice" type="info">{{ migrationNotice }}</NAlert>
-  <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
-  <n-alert type="info" :bordered="false" style="margin: 16px 0"
-    >主机解析器变更可能影响证书申请、更新、通知和远程连接。未在期限内确认的设置会自动恢复。</n-alert
-  >
-  <section v-if="observed" class="surface">
-    <div class="page-toolbar">
-      <h3>当前 DNS</h3>
-      <n-tag :type="observed.writable ? 'success' : 'warning'">{{
-        observed.writable ? "可管理" : "仅查看"
-      }}</n-tag>
-    </div>
-    <dl class="detail-list">
-      <dt>DNS 地址</dt>
-      <dd>{{ observed.current.servers.join("、") || "未配置" }}</dd>
-      <dt>搜索域</dt>
-      <dd>{{ observed.current.search.join("、") || "无" }}</dd>
-    </dl>
-    <NAlert v-if="!observed.writable" type="info" :bordered="false"
-      >当前网络设置仅支持查看，请联系服务器管理员修改。</NAlert
-    >
+  <Teleport defer to="#page-heading-actions">
+    <n-button :loading="reading" :disabled="busy" @click="read">刷新</n-button>
+  </Teleport>
+  <div class="dns-page page-stack">
+    <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
+    <n-alert v-if="migrationError" type="error" :bordered="false">{{
+      migrationError
+    }}</n-alert>
+    <n-alert v-if="migrationNotice" type="info" :bordered="false">{{
+      migrationNotice
+    }}</n-alert>
+    <ol class="dns-steps" aria-label="DNS 设置流程">
+      <li
+        v-for="(item, index) in steps"
+        :key="item"
+        :class="{ current: step === index, completed: step > index }"
+        :aria-current="step === index ? 'step' : undefined"
+      >
+        <span>{{ index + 1 }}</span
+        >{{ item }}
+      </li>
+    </ol>
 
-    <n-alert
-      v-if="drift"
-      type="warning"
-      :bordered="false"
-      style="margin-top: 12px"
-      >DNS 设置已被其他工具修改，请刷新后重新配置。</n-alert
-    >
-    <template v-if="networkManager || networkd">
-      <n-form-item label="网络接口" style="margin-top: 16px">
+    <section v-if="activeTask || pending" class="surface dns-change">
+      <div class="section-toolbar">
+        <div>
+          <h2>当前变更</h2>
+          <p class="muted">{{ label(pending?.stage ?? task?.stage) }}</p>
+        </div>
+        <n-tag :type="statusType" :bordered="false">{{
+          label(pending?.state ?? task?.state)
+        }}</n-tag>
+      </div>
+      <n-alert
+        v-if="pending?.error || task?.error"
+        type="error"
+        :bordered="false"
+        >{{ pending?.error || task?.error }}</n-alert
+      >
+      <p v-if="task?.decision">
+        {{
+          task.decision === "confirm"
+            ? "正在保存已确认的设置，请稍候。"
+            : "正在恢复原设置，请稍候。"
+        }}
+      </p>
+      <div v-else-if="canConfirm" class="confirmation-notice">
+        <div>
+          <strong>解析检查已通过</strong>
+          <p>
+            请确认业务连接正常，并在
+            {{ remaining }} 秒内保留设置；超时将自动恢复。
+          </p>
+        </div>
+        <n-button
+          type="primary"
+          :loading="busy"
+          :disabled="remaining === 0"
+          @click="decide('confirm')"
+          >确认保留</n-button
+        >
+      </div>
+      <p v-else-if="!pending?.error && !task?.error" class="muted">
+        正在处理 DNS 设置，请等待检查结果。
+      </p>
+      <div class="dns-actions">
+        <n-button
+          v-if="activeTask"
+          :disabled="!canWrite || busy || !!task?.decision"
+          @click="decide('rollback')"
+          >{{ task?.state === "queued" ? "取消变更" : "恢复原设置" }}</n-button
+        >
+        <n-button
+          v-if="task"
+          quaternary
+          @click="inspectTask(task.id, 'DNS 设置日志')"
+          >查看日志</n-button
+        >
+      </div>
+    </section>
+
+    <section v-if="observed" class="surface">
+      <div class="section-toolbar">
+        <div>
+          <h2>当前 DNS</h2>
+          <p class="muted">
+            {{
+              networkManager || networkd
+                ? targetLabel
+                : "服务器当前使用的解析设置"
+            }}
+          </p>
+        </div>
+        <div class="dns-actions">
+          <span class="switch-label"
+            >DNS 管理<n-switch
+              :value="module?.enabled ?? false"
+              :disabled="
+                !canToggle || busy || editing || activeTask || !!pending
+              "
+              @update:value="toggle"
+          /></span>
+          <n-button
+            v-if="!editing"
+            type="primary"
+            :disabled="
+              !canWrite ||
+              !module?.enabled ||
+              !writable ||
+              activeTask ||
+              !!pending ||
+              busy
+            "
+            @click="edit"
+            >修改 DNS</n-button
+          >
+        </div>
+      </div>
+      <n-form-item
+        v-if="choices.length > 1"
+        label="网络接口"
+        class="dns-interface"
+      >
         <n-select
           v-model:value="target"
           :options="choices"
-          :disabled="busy || editing || activeTask"
+          :disabled="busy || editing || activeTask || !!pending"
           @update:value="invalidate"
         />
       </n-form-item>
-      <dl v-if="networkd && networkLink?.persistent">
-        <dt>保留的路由域</dt>
-        <dd>{{ networkLink.persistent.routing_domains.join("、") || "无" }}</dd>
+      <dl class="dns-details">
+        <template v-for="row in currentRows" :key="row.label"
+          ><dt>{{ row.label }}</dt>
+          <dd>{{ row.value }}</dd></template
+        >
       </dl>
-      <template v-if="connection">
-        <n-alert v-if="connection.reason" type="warning" :bordered="false">{{
-          connection.reason
-        }}</n-alert>
-      </template>
-    </template>
-    <n-button
-      v-if="!editing"
-      type="primary"
-      style="margin-top: 16px"
-      :disabled="
-        !canWrite || !module?.enabled || !writable || activeTask || busy
-      "
-      @click="edit"
-      >配置 DNS</n-button
-    >
-  </section>
+      <n-alert v-if="!writable" type="info" :bordered="false"
+        >当前网络配置仅支持查看，无法在此修改 DNS 设置。</n-alert
+      >
+      <n-alert v-else-if="!module?.enabled" type="info" :bordered="false"
+        >启用 DNS 管理后可修改设置。</n-alert
+      >
+      <n-alert v-if="drift" type="warning" :bordered="false"
+        >DNS 设置已在其他位置修改，重新检查后再应用。</n-alert
+      >
+    </section>
 
-  <section v-if="pending || task" class="surface">
-    <div class="page-toolbar">
-      <h3>{{ activeTask || pending ? "当前变更" : "最近变更" }}</h3>
-      <n-tag
-        :type="
-          (pending?.state ?? task?.state) === 'recovery_required'
-            ? 'error'
-            : 'info'
-        "
-        >{{ label(pending?.state ?? task?.state) }}</n-tag
-      >
-    </div>
-    <p>
-      {{ label(pending?.stage ?? task?.stage)
-      }}<span v-if="pending && pending.state !== 'recovery_required'">
-        · 剩余确认时间 {{ remaining }} 秒</span
-      >
-    </p>
-    <p v-if="task?.decision">
-      {{ task.decision === "confirm" ? "确认" : "恢复" }}请求等待执行
-    </p>
-    <n-alert
-      v-if="pending?.error || task?.error"
-      type="warning"
-      :bordered="false"
-      >{{ pending?.error || task?.error }}</n-alert
-    >
-    <p class="muted">操作 {{ pending?.operation_id ?? task?.operation_id }}</p>
-    <div v-if="activeTask" class="actions">
-      <n-button
-        type="primary"
-        :disabled="!canConfirm || busy || remaining === 0"
-        @click="decide('confirm')"
-        >确认保留</n-button
-      ><n-button
-        :disabled="!canWrite || busy || !!task?.decision"
-        @click="decide('rollback')"
-        >{{ task?.state === "queued" ? "取消变更" : "恢复原设置" }}</n-button
-      >
-    </div>
-  </section>
-  <section v-if="editing" class="surface">
-    <h3>修改 DNS</h3>
-    <template v-if="!networkManager">
-      <n-form-item label="DNS 服务器（1–3 个 IPv4 / IPv6 地址）"
-        ><ValueListInput
-          v-model:value="servers"
-          item-label="DNS 地址"
-          :max="3"
-          placeholder="1.1.1.1 或 2606:4700:4700::1111"
-          :disabled="busy"
-          @update:value="invalidate"
-      /></n-form-item>
-      <n-form-item label="搜索域（最多 6 个，可留空）"
-        ><ValueListInput
-          v-model:value="search"
-          item-label="搜索域"
-          :max="6"
-          placeholder="example.com"
-          :disabled="busy"
-          @update:value="invalidate"
-      /></n-form-item>
-    </template>
-    <template v-else>
-      <NAlert v-if="observed?.owner === 'netplan'" type="info">
-        此连接的 IPv4 与 IPv6 共用搜索域。
-      </NAlert>
-      <template v-for="family in families" :key="family.label">
-        <div v-if="family.enabled">
-          <h4>{{ family.label }}</h4>
-          <n-form-item label="自动获取 DNS">
-            <n-switch
-              v-model:value="family.automatic"
-              :disabled="busy || !['auto', 'dhcp'].includes(family.method)"
-              @update:value="invalidate"
-            />
-          </n-form-item>
-          <n-form-item label="手动 DNS 地址（最多 3 个）">
-            <ValueListInput
-              v-model:value="family.servers"
-              item-label="DNS 地址"
-              :max="3"
-              placeholder="DNS 服务器地址"
-              :disabled="busy"
-              @update:value="invalidate"
-            />
-          </n-form-item>
-          <n-form-item label="搜索域（最多 6 个）">
-            <ValueListInput
-              v-model:value="family.search"
-              item-label="搜索域"
-              :max="6"
-              placeholder="example.com"
-              :disabled="busy"
-              @update:value="invalidate"
-            />
-          </n-form-item>
+    <section v-if="editing" class="surface dns-editor">
+      <div class="section-toolbar">
+        <div>
+          <h2>修改设置</h2>
+          <p class="muted">填写 DNS 地址，再检查并应用变更。</p>
         </div>
+        <n-button quaternary :disabled="busy" @click="cancelEdit"
+          >取消修改</n-button
+        >
+      </div>
+      <template v-if="!networkManager">
+        <n-form-item label="DNS 地址" required>
+          <ValueListInput
+            v-model:value="servers"
+            item-label="DNS 地址"
+            :max="3"
+            placeholder="输入 DNS 服务器的 IP 地址"
+            :disabled="busy"
+            @update:value="invalidate"
+          />
+        </n-form-item>
+        <n-form-item label="域名后缀（可选）">
+          <ValueListInput
+            v-model:value="search"
+            item-label="域名后缀"
+            :max="6"
+            placeholder="例如 corp.example.com"
+            :disabled="busy"
+            @update:value="invalidate"
+          />
+        </n-form-item>
       </template>
-    </template>
-    <n-form-item label="本机解析验证域名（1–2 个）"
-      ><ValueListInput
-        v-model:value="verifyNames"
-        item-label="验证域名"
-        :max="2"
-        placeholder="本环境中必须可解析的完整域名"
-        :disabled="busy"
-        @update:value="invalidate"
-    /></n-form-item>
-    <n-form-item label="确认期限（秒）"
-      ><n-input-number
-        v-model:value="timeout"
-        :disabled="busy"
-        :min="45"
-        :max="180"
-        :precision="0"
-        :show-button="true"
-        :update-value-on-input="false"
-        @update:value="invalidate"
-    /></n-form-item>
-    <n-checkbox
-      v-model:checked="takeover"
-      :disabled="busy"
-      @update:checked="invalidate"
-      >{{
-        networkManager
-          ? "确认接管所选连接的 DNS 设置"
-          : networkd
-            ? "确认接管所选网卡的静态 DNS 设置"
-            : "确认接管该主机的普通 DNS 配置文件"
-      }}</n-checkbox
-    >
-    <div class="actions" style="margin-top: 16px">
-      <n-button
-        :disabled="
-          !canWrite || busy || !takeover || !writable || !module?.enabled
-        "
-        @click="preview"
-        >生成计划</n-button
-      ><n-button
-        :disabled="busy"
-        @click="
-          editing = false;
-          plan = null;
-        "
-        >取消</n-button
+      <div v-else class="dns-families">
+        <template v-for="family in families" :key="family.label">
+          <div v-if="family.enabled" class="dns-family">
+            <div class="section-toolbar">
+              <h3>{{ family.label }}</h3>
+              <span class="switch-label"
+                >自动获取 DNS<n-switch
+                  v-model:value="family.automatic"
+                  :disabled="busy || !['auto', 'dhcp'].includes(family.method)"
+                  @update:value="invalidate"
+              /></span>
+            </div>
+            <n-form-item
+              :label="family.automatic ? '补充 DNS 地址（可选）' : 'DNS 地址'"
+              :required="!family.automatic"
+            >
+              <ValueListInput
+                v-model:value="family.servers"
+                item-label="DNS 地址"
+                :max="3"
+                :placeholder="
+                  family.label === 'IPv4' ? '输入 IPv4 地址' : '输入 IPv6 地址'
+                "
+                :disabled="busy"
+                @update:value="invalidate"
+              />
+            </n-form-item>
+            <n-form-item v-if="!sharedSearch" label="域名后缀（可选）">
+              <ValueListInput
+                v-model:value="family.search"
+                item-label="域名后缀"
+                :max="6"
+                placeholder="例如 corp.example.com"
+                :disabled="busy"
+                @update:value="invalidate"
+              />
+            </n-form-item>
+          </div>
+        </template>
+      </div>
+      <n-form-item
+        v-if="sharedSearch"
+        label="域名后缀（可选，IPv4 与 IPv6 共用）"
       >
-    </div>
-    <template v-if="plan"
-      ><n-alert type="warning" :bordered="false" style="margin-top: 16px">{{
-        plan.impact
+        <ValueListInput
+          v-model:value="search"
+          item-label="域名后缀"
+          :max="6"
+          placeholder="例如 corp.example.com"
+          :disabled="busy"
+          @update:value="invalidate"
+        />
+      </n-form-item>
+      <p class="muted">域名后缀用于补全内网短名称，不需要时可留空。</p>
+      <div class="dns-verification">
+        <h3>连接检查</h3>
+        <n-form-item label="测试域名" required>
+          <ValueListInput
+            v-model:value="verifyNames"
+            item-label="测试域名"
+            :max="2"
+            placeholder="例如 example.com"
+            :disabled="busy"
+            @update:value="invalidate"
+          />
+        </n-form-item>
+        <p class="muted">
+          填写新 DNS 应能解析的域名。应用后有
+          {{ confirmationSeconds }} 秒确认时间，超时自动恢复。
+        </p>
+      </div>
+      <n-checkbox
+        v-model:checked="takeover"
+        :disabled="busy"
+        @update:checked="invalidate"
+        >确认用以上设置替换当前 DNS 配置</n-checkbox
+      >
+      <div class="dns-actions dns-form-footer">
+        <n-button
+          :type="plan && !planExpired ? 'default' : 'primary'"
+          :loading="busy"
+          :disabled="
+            !canWrite ||
+            !takeover ||
+            !writable ||
+            !module?.enabled ||
+            activeTask ||
+            !!pending
+          "
+          @click="preview"
+          >{{ plan ? "重新检查" : "检查设置" }}</n-button
+        >
+        <n-button :disabled="busy" @click="cancelEdit">取消</n-button>
+      </div>
+
+      <div v-if="plan" class="dns-review">
+        <div class="section-toolbar">
+          <h3>确认修改内容</h3>
+          <n-tag
+            :type="planExpired ? 'warning' : 'success'"
+            :bordered="false"
+            >{{ planExpired ? "请重新检查" : "检查通过" }}</n-tag
+          >
+        </div>
+        <div class="dns-comparison">
+          <div>
+            <h4>当前设置</h4>
+            <dl class="dns-details">
+              <template v-for="row in configRows(plan.before)" :key="row.label"
+                ><dt>{{ row.label }}</dt>
+                <dd>{{ row.value }}</dd></template
+              >
+            </dl>
+          </div>
+          <div>
+            <h4>修改后</h4>
+            <dl class="dns-details">
+              <template
+                v-for="row in configRows(plan.input.config)"
+                :key="row.label"
+                ><dt>{{ row.label }}</dt>
+                <dd>{{ row.value }}</dd></template
+              >
+            </dl>
+          </div>
+        </div>
+        <p class="muted">
+          测试域名：{{
+            plan.input.verify_names.join("、")
+          }}。应用后请确认连接正常，再保留设置。
+        </p>
+        <n-button
+          type="primary"
+          :loading="busy"
+          :disabled="
+            planExpired ||
+            !canWrite ||
+            !module?.enabled ||
+            !writable ||
+            activeTask ||
+            !!pending
+          "
+          @click="apply"
+          >应用 DNS 设置</n-button
+        >
+      </div>
+    </section>
+
+    <section v-if="task && !activeTask && !pending" class="surface">
+      <div class="section-toolbar">
+        <h2>最近操作</h2>
+        <n-tag :type="statusType" :bordered="false">{{
+          label(task.state)
+        }}</n-tag>
+      </div>
+      <p>{{ label(task.stage) }}</p>
+      <n-alert v-if="task.error" type="warning" :bordered="false">{{
+        task.error
       }}</n-alert>
-      <dl>
-        <dt>原 DNS</dt>
-        <dd>{{ configText(plan.before) }}</dd>
-        <dt>新 DNS</dt>
-        <dd>{{ configText(plan.input.config) }}</dd>
-        <dt v-if="plan.input.target">目标连接</dt>
-        <dd v-if="plan.input.target">{{ plan.input.target }}</dd>
-        <dt>验证域名</dt>
-        <dd>{{ plan.input.verify_names.join("、") }}</dd>
-        <dt>自动恢复期限</dt>
-        <dd>{{ plan.input.timeout_seconds }} 秒</dd>
-      </dl>
-      <n-button
-        type="primary"
-        :disabled="busy || !module?.enabled || !writable || activeTask"
-        @click="apply"
-        >临时应用</n-button
-      ></template
-    >
-  </section>
+      <n-button quaternary @click="inspectTask(task.id, 'DNS 设置日志')"
+        >查看日志</n-button
+      >
+    </section>
+  </div>
 </template>
 <style scoped>
-.actions {
+.dns-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 20px;
+  margin: 0;
+  list-style: none;
+  border: 1px solid var(--border-color, #e2e9e5);
+  border-radius: 10px;
+  background: var(--surface-color, #fff);
+}
+.dns-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted, #7b8680);
+  font-size: 14px;
+}
+.dns-steps li span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 50%;
+  background: #edf2ef;
+}
+.dns-steps li.current {
+  color: #087f68;
+  font-weight: 600;
+}
+.dns-steps li.current span,
+.dns-steps li.completed span {
+  color: #087f68;
+  background: #e4f3ec;
+}
+.dns-actions,
+.switch-label {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.dns-actions {
   flex-wrap: wrap;
 }
-dl {
-  display: grid;
-  grid-template-columns: 130px minmax(0, 1fr);
-  gap: 12px;
+.switch-label {
+  color: var(--text-muted, #7b8680);
+  white-space: nowrap;
 }
-dt,
-.muted {
+.dns-details {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px 20px;
+  margin: 20px 0;
+}
+.dns-details dt {
   color: var(--text-muted, #7b8680);
 }
-dd {
+.dns-details dd {
   margin: 0;
   overflow-wrap: anywhere;
 }
-h3 {
-  margin-top: 0;
+.dns-interface {
+  max-width: 560px;
 }
-@media (max-width: 600px) {
-  dl {
+.dns-families,
+.dns-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.dns-family,
+.dns-comparison > div {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border-color, #e2e9e5);
+  border-radius: 8px;
+}
+.dns-family {
+  margin-bottom: 20px;
+}
+.dns-verification,
+.dns-review {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color, #e2e9e5);
+}
+.dns-form-footer {
+  margin-top: 20px;
+}
+.confirmation-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 18px;
+  margin: 16px 0;
+  border-radius: 8px;
+  background: #fff9e9;
+}
+.confirmation-notice p {
+  margin: 6px 0 0;
+}
+@media (max-width: 760px) {
+  .dns-families,
+  .dns-comparison {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 12px;
+  }
+  .dns-family {
+    margin-bottom: 12px;
+  }
+  .dns-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    padding: 16px;
+  }
+}
+@media (max-width: 480px) {
+  .dns-details {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .dns-details dd {
+    margin-bottom: 8px;
   }
 }
 </style>

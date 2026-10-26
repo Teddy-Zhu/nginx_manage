@@ -167,7 +167,7 @@ onUnmounted(() => {
           >
         </n-alert>
         <NAlert v-if="liveDisconnected" type="warning" class="live-warning"
-          >实时连接已断开，正在重新连接。您可以手动刷新查看最新状态。</NAlert
+          >实时状态更新暂时中断，正在重新连接。您可以手动刷新查看最新状态。</NAlert
         >
         <slot />
       </main>
