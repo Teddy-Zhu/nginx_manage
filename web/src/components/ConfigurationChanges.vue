@@ -35,7 +35,10 @@ const options = computed(() => {
       value: props.tree?.revision_id ?? "",
     },
   ];
-  if (props.appliedRevision && props.appliedRevision !== props.tree?.revision_id)
+  if (
+    props.appliedRevision &&
+    props.appliedRevision !== props.tree?.revision_id
+  )
     rows.push({
       label: "已生效配置",
       value: props.appliedRevision,

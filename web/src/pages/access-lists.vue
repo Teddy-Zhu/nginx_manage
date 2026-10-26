@@ -292,7 +292,13 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               :disabled="busy || selected?.editable === false"
           /></n-form-item>
           <n-form-item label="IP 地址或网段（最多 128 项）"
-            ><ValueListInput v-model:value="entries" item-label="地址" placeholder="192.0.2.1 或 2001:db8::/32" :maxlength="64" :disabled="busy || selected?.editable === false" /></n-form-item>
+            ><ValueListInput
+              v-model:value="entries"
+              item-label="地址"
+              placeholder="192.0.2.1 或 2001:db8::/32"
+              :maxlength="64"
+              :disabled="busy || selected?.editable === false"
+          /></n-form-item>
           <n-form-item label="国家和地区"
             ><n-select
               v-model:value="countries"
@@ -314,7 +320,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             }}。更新数据后，重新保存并应用规则以同步。
           </p>
           <p
-            v-if="mode === 'allowlist' && !cleanList(entries).length && !countries.length"
+            v-if="
+              mode === 'allowlist' &&
+              !cleanList(entries).length &&
+              !countries.length
+            "
             class="muted"
           >
             空白名单会拒绝全部地址。
@@ -332,20 +342,19 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               attr-type="submit"
               :loading="busy"
               :disabled="
-              busy ||
-              selected?.editable === false ||
-              (countries.length > 0 && !geoIP?.ready) ||
-              (!!selected &&
-                !dirty &&
-                !(
-                  countries.length &&
-                  geoIP &&
-                  geoIP.updated_at !== selected.geoip_updated_at
-                ))
-            "
+                busy ||
+                selected?.editable === false ||
+                (countries.length > 0 && !geoIP?.ready) ||
+                (!!selected &&
+                  !dirty &&
+                  !(
+                    countries.length &&
+                    geoIP &&
+                    geoIP.updated_at !== selected.geoip_updated_at
+                  ))
+              "
               >保存规则</n-button
             >
-
           </div>
         </n-form> </template
       ><n-empty v-else description="选择或新建访问列表" />

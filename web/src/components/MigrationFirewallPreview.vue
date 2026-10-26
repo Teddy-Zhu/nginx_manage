@@ -30,13 +30,7 @@ const actions: Record<string, string> = {
         {{ states[info.state] || info.state }}</NTag
       >
     </div>
-    <p>
-      源后端 {{ info.source_backend }} · 源规则 {{ info.source_rules }} 条<span
-        v-if="info.mode !== 'preserve'"
-      >
-        · 目标后端 {{ info.target_backend }}</span
-      >
-    </p>
+    <p>来源规则 {{ info.source_rules }} 条</p>
     <p v-if="info.mode !== 'preserve'">
       保留 {{ info.preserved_rules }} 条，替换
       {{ info.replaced_rules }} 条，迁入后共 {{ info.total_rules }} 条。Nginx

@@ -72,12 +72,11 @@ const scopeColumns: DataTableColumns<HistoryScope> = [
 ];
 const itemColumns: DataTableColumns<HistoryItem> = [
   { title: "类别", key: "kind", render: (r) => names[r.kind] },
-  { title: "标识", key: "id", ellipsis: { tooltip: true } },
-  { title: "所属资源", key: "resource_id", ellipsis: { tooltip: true } },
   {
     title: "证书版本",
     key: "version",
-    render: (r) => (r.kind === "certificate" && r.version ? `#${r.version}` : "—"),
+    render: (r) =>
+      r.kind === "certificate" && r.version ? `#${r.version}` : "—",
   },
   {
     title: "创建时间",
@@ -134,11 +133,10 @@ async function execute() {
 
 <template>
   <NTabs type="line" animated>
-    <NTabPane name="database" tab="数据库材料">
+    <NTabPane name="database" tab="历史记录">
       <div class="page-stack">
         <NAlert type="info" :bordered="false">
-          仅清理截止时间之前、超出保留数量且不再被使用的历史材料。当前配置、最新证书、未完成任务和待清理的外部验证记录会保留。迁移材料仅在依赖、安装、维护与自动迁入均结束后可清理，计划摘要及原操作回执保留。
-          操作及审计记录仍保留；已清理材料无法恢复。本操作不清理运行文件。
+          清理超过保留期限且不再使用的旧记录。当前配置、最新证书和未完成任务会保留，操作日志仍可查询。清理后无法恢复。
         </NAlert>
         <section class="surface">
           <div class="grid-2">
@@ -223,9 +221,7 @@ async function execute() {
           />
         </section>
         <section v-if="result" class="surface page-stack">
-          <NAlert type="success" :bordered="false"
-            >已完成清理，记录标识：{{ result.id }}</NAlert
-          >
+          <NAlert type="success" :bordered="false">已完成清理</NAlert>
           <NDataTable
             :columns="scopeColumns"
             :data="result.scopes"
@@ -234,7 +230,7 @@ async function execute() {
         </section>
       </div>
     </NTabPane>
-    <NTabPane name="runtime" tab="运行文件" display-directive="if"
+    <NTabPane name="runtime" tab="旧文件" display-directive="if"
       ><RuntimeHistory
     /></NTabPane>
   </NTabs>

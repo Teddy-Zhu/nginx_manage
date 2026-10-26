@@ -86,9 +86,21 @@ function queryFilter(): AuditFilter {
   };
 }
 const taskColumns: DataTableColumns<Task> = [
-  { title: "日志", key: "logs", render: (task) => h(TaskLogButton, { taskId: task.id, title: taskKinds[task.kind] ?? "操作详情" }) },
-  { title: "任务 ID", key: "id", render: (r) => r.id.slice(0, 8) },
-  { title: "类型", key: "kind", render: (r) => taskKinds[r.kind] ?? "后台任务" },
+  {
+    title: "日志",
+    key: "logs",
+    render: (task) =>
+      h(TaskLogButton, {
+        taskId: task.id,
+        title: taskKinds[task.kind] ?? "操作详情",
+      }),
+  },
+
+  {
+    title: "类型",
+    key: "kind",
+    render: (r) => taskKinds[r.kind] ?? "后台任务",
+  },
   {
     title: "状态",
     key: "state",
@@ -126,9 +138,9 @@ const auditColumns: DataTableColumns<AuditRow> = [
     key: "action",
     render: (r) => auditActions[r.action] ?? r.action,
   },
-  { title: "请求标识", key: "request_id" },
+
   { title: "操作者", key: "principal" },
-  { title: "资源", key: "resource_id" },
+
   {
     title: "结果",
     key: "outcome",
@@ -202,14 +214,18 @@ async function exportAudit() {
   });
 }
 onMounted(loadTasks);
-useLiveRefresh(api, ["tasks"], () => { if (tab.value === "tasks") return loadTasks(); });
+useLiveRefresh(api, ["tasks"], () => {
+  if (tab.value === "tasks") return loadTasks();
+});
 </script>
 <template>
   <div class="toolbar">
     <span class="muted">每页最多 30 条记录</span
     ><n-button :loading="busy" @click="load">刷新</n-button>
   </div>
-  <NAlert v-if="tab === 'tasks' && tasksError" type="error">{{ tasksError }}</NAlert>
+  <NAlert v-if="tab === 'tasks' && tasksError" type="error">{{
+    tasksError
+  }}</NAlert>
   <section class="surface">
     <n-tabs type="line" :value="tab" @update:value="changeTab"
       ><n-tab-pane name="tasks" tab="执行任务"
@@ -249,12 +265,6 @@ useLiveRefresh(api, ["tasks"], () => { if (tab.value === "tasks") return loadTas
                 tag
                 placeholder="选择操作"
             /></NFormItem>
-            <NFormItem label="资源标识"
-              ><NInput
-                v-model:value="filter.resource_id"
-                placeholder="精确匹配，留空为全部"
-                :maxlength="128"
-            /></NFormItem>
             <NFormItem label="执行结果"
               ><NSelect
                 :value="filter.outcome || null"
@@ -269,12 +279,6 @@ useLiveRefresh(api, ["tasks"], () => { if (tab.value === "tasks") return loadTas
                 clearable
                 tag
                 placeholder="选择结果"
-            /></NFormItem>
-            <NFormItem label="请求标识"
-              ><NInput
-                v-model:value="filter.request_id"
-                placeholder="精确匹配，留空为全部"
-                :maxlength="128"
             /></NFormItem>
           </div>
           <div class="toolbar">

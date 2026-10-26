@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import AdvancedDetails from "./AdvancedDetails.vue";
+import { permissionLabel } from "../utils/permissions";
 import ValueListInput from "./ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
@@ -27,26 +27,9 @@ const emit = defineEmits<{ connected: [] }>();
 const canIssue = computed(
   () => !!session.localMe?.scopes.includes("auth.manage"),
 );
-const scopeNames: Record<string, string> = {
-  read: "查看状态",
-  "config.write": "管理 Nginx 配置",
-  "config.secrets": "查看配置凭据",
-  "security.write": "管理安全规则",
-  "system.write": "管理系统设置",
-  "host.dns.write": "管理系统 DNS",
-  "monitoring.write": "管理监控",
-  "components.manage": "管理组件",
-  "auth.manage": "管理授权",
-  "backup.export": "导出备份",
-  "backup.secrets": "备份敏感配置",
-  "backup.restore": "恢复备份",
-  "update.execute": "执行升级",
-  "nodes.manage": "管理服务器连接",
-  "notifications.write": "管理通知",
-};
 const scopes = computed(() =>
   (session.localMe?.scopes ?? []).map((scope) => ({
-    label: scopeNames[scope] ?? scope,
+    label: permissionLabel(scope),
     value: scope,
   })),
 );
@@ -198,9 +181,10 @@ onUnmounted(() => {
       <h3>一次性配对</h3>
       <NButton :disabled="busy" @click="load">刷新配对记录</NButton>
     </div>
-    <AdvancedDetails title="本机连接信息"
-      ><p class="mono">服务器编号：{{ sourceNodeId }}</p></AdvancedDetails
-    >
+    <div class="field-list">
+      <span>本机连接码</span><NInput :value="sourceNodeId" readonly />
+      <p class="muted">授权其他服务器连接时，在对方填写此连接码。</p>
+    </div>
     <NTabs type="segment"
       ><NTabPane name="connect" tab="连接其他服务器">
         <div class="form-grid">
@@ -210,7 +194,7 @@ onUnmounted(() => {
               :maxlength="100"
               :disabled="busy"
           /></NFormItem>
-          <NFormItem label="目标 HTTPS API"
+          <NFormItem label="服务器地址"
             ><NInput
               v-model:value="connect.url"
               :maxlength="2048"
@@ -234,7 +218,7 @@ onUnmounted(() => {
               :loading="busy"
               :disabled="!connect.name || !connect.url || !connect.code"
               @click="start"
-              >配对并登记连接</NButton
+              >连接服务器</NButton
             >
           </div>
         </div>
@@ -247,7 +231,7 @@ onUnmounted(() => {
               :maxlength="100"
               :disabled="busy"
           /></NFormItem>
-          <NFormItem label="控制节点永久编号"
+          <NFormItem label="对方服务器连接码"
             ><NInput
               v-model:value="grant.controller"
               :maxlength="36"
@@ -260,7 +244,7 @@ onUnmounted(() => {
               :options="scopes"
               :disabled="busy"
           /></NFormItem>
-          <NFormItem label="允许来源 CIDR"
+          <NFormItem label="允许连接的 IP 或网段"
             ><ValueListInput
               v-model:value="grant.sources"
               item-label="来源网段"
@@ -269,7 +253,7 @@ onUnmounted(() => {
               :maxlength="64"
               :disabled="busy"
           /></NFormItem>
-          <NFormItem label="确认后凭据有效天数"
+          <NFormItem label="授权有效天数"
             ><NInputNumber
               :value="grant.days"
               :min="1"
@@ -319,12 +303,7 @@ onUnmounted(() => {
       <p>
         {{ job.url }} · {{ stages[job.stage] }} · {{ date(job.updated_at) }}
       </p>
-      <p class="muted">
-        目标 {{ job.target_node_id }} · 配对 {{ job.pairing_id }}
-      </p>
-      <p v-if="job.credential_id" class="muted">
-        目标凭据 {{ job.credential_id }}
-      </p>
+
       <NAlert v-if="job.error" type="warning">{{ job.error }}</NAlert>
       <div
         v-if="job.state !== 'succeeded' && job.state !== 'abandoned'"
@@ -334,7 +313,7 @@ onUnmounted(() => {
           v-if="job.state !== 'abandoning'"
           :disabled="busy"
           @click="resume(job)"
-          >续办原配对</NButton
+          >继续连接</NButton
         >
         <NPopconfirm
           :disabled="busy"
@@ -348,25 +327,23 @@ onUnmounted(() => {
         >
       </div>
     </article>
-    <details v-if="canIssue && offers.length">
-      <summary>本机签发的配对授权</summary>
+    <section v-if="canIssue && offers.length" class="page-stack">
+      <h3>连接授权</h3>
       <article v-for="pair in offers" :key="pair.id" class="record-card">
         <div class="toolbar">
           <strong>{{ pair.name }}</strong
           ><NTag>{{ offerStates[pair.state] }}</NTag>
         </div>
-        <p class="muted">
-          配对 {{ pair.id }} · 控制节点 {{ pair.controller_node_id }}
-        </p>
+
         <p>
-          权限 {{ pair.scopes.join("、") }} · 来源
+          权限 {{ pair.scopes.map(permissionLabel).join("、") }} · 来源
           {{ pair.allowed_sources.join("、") }}
         </p>
         <p>
-          领取有效至 {{ date(pair.expires_at) }} · 凭据批准有效至
+          领取有效至 {{ date(pair.expires_at) }} · 授权有效至
           {{ date(pair.credential_expires_at) }}
         </p>
-        <p v-if="pair.credential_id">目标凭据 {{ pair.credential_id }}</p>
+
         <NPopconfirm
           v-if="pair.state !== 'revoked'"
           :disabled="busy"
@@ -376,9 +353,9 @@ onUnmounted(() => {
             ><NButton type="error" :disabled="busy"
               >撤销配对及授权</NButton
             ></template
-          >立即阻止领取，并撤销该配对已交换的机器凭据。</NPopconfirm
+          >撤销后，对方服务器将无法继续连接本机。</NPopconfirm
         >
       </article>
-    </details>
+    </section>
   </div>
 </template>

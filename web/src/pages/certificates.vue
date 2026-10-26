@@ -49,6 +49,8 @@ const importing = ref(false),
   notes = ref(""),
   fullchain = ref(""),
   privateKey = ref("");
+const chainName = ref(""),
+  keyName = ref("");
 const baseline = ref(""),
   now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -65,7 +67,7 @@ const version = computed(() =>
 const versionOptions = computed(
   () =>
     selected.value?.versions.map((item) => ({
-      label: `${item.environment === "staging" ? "测试 · " : ""}版本 ${item.ordinal} · ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()}`,
+      label: `${item.environment === "staging" ? "测试 · " : ""}到期 ${new Date(item.summary.chain_not_after * 1000).toLocaleDateString()}`,
       value: item.id,
     })) ?? [],
 );
@@ -110,7 +112,7 @@ const columns: DataTableColumns<Certificate> = [
         : "—";
     },
   },
-  { title: "最新版本", key: "version", render: (row) => `#${row.version}` },
+  { title: "当前证书", key: "version", render: (row) => `#${row.version}` },
   {
     title: "来源",
     key: "source",
@@ -151,6 +153,7 @@ function startImport(item: Certificate | null) {
   notes.value = item?.notes ?? "";
   fullchain.value = "";
   privateKey.value = "";
+  chainName.value = keyName.value = "";
   baseline.value = formJSON.value;
   importing.value = true;
 }
@@ -160,6 +163,7 @@ function clearImport() {
   notes.value = "";
   fullchain.value = "";
   privateKey.value = "";
+  chainName.value = keyName.value = "";
   baseline.value = "";
   replaceID.value = null;
 }
@@ -187,8 +191,13 @@ async function readFile(event: Event, target: "chain" | "key") {
     const value = await file.text();
     if (!importing.value || generation !== importGeneration || busy.value)
       return;
-    if (target === "chain") fullchain.value = value;
-    else privateKey.value = value;
+    if (target === "chain") {
+      fullchain.value = value;
+      chainName.value = file.name;
+    } else {
+      privateKey.value = value;
+      keyName.value = file.name;
+    }
   } catch {
     message.error("无法读取所选文件");
   }
@@ -281,7 +290,7 @@ onUnmounted(() => {
   <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
     >手动证书需自行续期。首次绑定在
     <router-link to="/nginx">Nginx 配置</router-link>
-    中保存并应用；已有绑定可通过证书部署切换到最新版本。</n-alert
+    中保存并应用；已有绑定可通过证书部署切换到当前证书。</n-alert
   >
   <section class="surface">
     <n-data-table
@@ -304,7 +313,7 @@ onUnmounted(() => {
       </div>
       <div class="inline-gap">
         <n-button :disabled="busy" @click="startImport(selected)"
-          >导入新版本</n-button
+          >更新证书</n-button
         ><n-button
           type="error"
           :disabled="
@@ -338,7 +347,7 @@ onUnmounted(() => {
         ><n-tag
           v-if="version.id === selected.latest_version_id"
           :bordered="false"
-          >最新版本</n-tag
+          >当前证书</n-tag
         >
       </div>
       <p v-if="version.environment === 'staging'" class="muted">
@@ -375,14 +384,9 @@ onUnmounted(() => {
           >{{ domain }}</n-tag
         >
       </div>
-      <p class="muted" style="overflow-wrap: anywhere">
-        SHA-256：{{ version.summary.fingerprint }}
-      </p>
     </template>
     <h3>当前引用</h3>
-    <p v-if="!activeBindings.length" class="muted">
-      当前没有网站使用此证书。
-    </p>
+    <p v-if="!activeBindings.length" class="muted">当前没有网站使用此证书。</p>
     <p
       v-for="binding in activeBindings"
       :key="`${binding.revision_id}:${binding.resource_id}:${binding.file_id}:${binding.version_id}`"
@@ -431,42 +435,29 @@ onUnmounted(() => {
       <n-form-item label="备注"
         ><n-input v-model:value="notes" :maxlength="2048"
       /></n-form-item>
-      <n-form-item label="PEM 证书链（终端证书在前，随后为中间证书）"
+      <n-form-item label="证书文件"
         ><div style="width: 100%">
           <input
             type="file"
             accept=".pem,.crt,.cer"
             :disabled="busy"
             @change="readFile($event, 'chain')"
-          /><n-input
-            v-model:value="fullchain"
-            type="textarea"
-            :maxlength="131072"
-            :autosize="{ minRows: 6, maxRows: 12 }"
-            :input-props="{ spellcheck: false, autocomplete: 'off' }"
-            placeholder="-----BEGIN CERTIFICATE-----"
-          /></div
-      ></n-form-item>
-      <n-form-item label="未加密 PEM 私钥"
+          />
+          <p v-if="chainName" class="muted">已选择：{{ chainName }}</p>
+        </div></n-form-item
+      >
+      <n-form-item label="私钥文件"
         ><div style="width: 100%">
           <input
             type="file"
             accept=".pem,.key"
             :disabled="busy"
             @change="readFile($event, 'key')"
-          /><n-input
-            v-model:value="privateKey"
-            type="textarea"
-            :maxlength="16384"
-            :autosize="{ minRows: 5, maxRows: 10 }"
-            :input-props="{ spellcheck: false, autocomplete: 'off' }"
-            placeholder="-----BEGIN PRIVATE KEY-----"
-          /></div
-      ></n-form-item>
-      <p class="muted">
-        证书链与私钥合计最多 128 KiB，证书链最多 16 张。私有 CA
-        须包含自签根证书；私钥导入后不回显。
-      </p>
+          />
+          <p v-if="keyName" class="muted">已选择：{{ keyName }}</p>
+        </div></n-form-item
+      >
+      <p class="muted">请选择配套的证书和私钥文件。私钥导入后会加密保存。</p>
       <div class="inline-gap">
         <n-button type="primary" attr-type="submit" :loading="busy"
           >导入版本</n-button

@@ -103,7 +103,7 @@ function remove(index: number) {
       dashed
       :disabled="disabled || rows.length >= 128"
       @click="rows.push(blank())"
-      >添加后端</n-button
+      >添加服务器</n-button
     >
   </div>
 </template>

@@ -16,7 +16,6 @@ import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
 
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import {
@@ -33,14 +32,13 @@ import {
   useNodeAPI,
   apiError,
   type HostDNSOverview,
-  type HostLinkDNS,
   type HostDNSPlan,
   type HostDNSPlanInput,
   type Module,
 } from "../api/client";
 import { useAction } from "../composables/action";
 import { useSession } from "../stores/session";
-import HostDNSNetplanSource from "../components/HostDNSNetplanSource.vue";
+
 const api = useNodeAPI();
 const route = useRoute();
 const migrationNotice = ref("");
@@ -113,15 +111,15 @@ const writable = computed(
 const choices = computed(() => [
   ...(["networkd", "netplan"].includes(observed.value?.owner ?? "")
     ? (observed.value?.links.map((link) => ({
-          label: `${link.interface}${link.writable ? "" : "（只读）"}`,
-          value: link.target,
-        })) ?? [])
+        label: `${link.interface}${link.writable ? "" : "（只读）"}`,
+        value: link.target,
+      })) ?? [])
     : []),
   ...(["networkmanager", "netplan"].includes(observed.value?.owner ?? "")
     ? (observed.value?.connections.map((c) => ({
-          label: `${c.name} · ${c.interface}${c.writable ? "" : "（只读）"}`,
-          value: c.target,
-        })) ?? [])
+        label: `${c.name} · ${c.interface}${c.writable ? "" : "（只读）"}`,
+        value: c.target,
+      })) ?? [])
     : []),
 ]);
 const configText = (config: HostDNSPlanInput["config"] | null | undefined) => {
@@ -137,55 +135,7 @@ const configText = (config: HostDNSPlanInput["config"] | null | undefined) => {
     .filter(Boolean)
     .join(" / ");
 };
-const effectiveText = (
-  config: HostDNSPlanInput["config"] | null | undefined,
-) =>
-  config
-    ? [config.ipv4, config.ipv6]
-        .map((f, i) =>
-          f
-            ? `${i === 0 ? "IPv4" : "IPv6"}：${f.servers.join("、") || "无"}；搜索域：${f.search.join("、") || "无"}`
-            : "",
-        )
-        .filter(Boolean)
-        .join(" / ") || "无"
-    : "无法读取";
-const linkServers = (state: HostLinkDNS | null) =>
-  state
-    ? state.servers
-        .map(
-          (s) =>
-            `${s.address.includes(":") && s.port && s.port !== 53 ? `[${s.address}]` : s.address}${s.port && s.port !== 53 ? `:${s.port}` : ""}${s.server_name ? ` #${s.server_name}` : ""}${s.source && s.source !== "resolved" ? `（${s.source}）` : ""}`,
-        )
-        .join("、") || "无"
-    : "无法读取";
-const linkDomains = (state: HostLinkDNS | null) =>
-  state
-    ? state.domains
-        .map(
-          (d) =>
-            `${d.routing ? "~" : ""}${d.domain}${d.source && d.source !== "resolved" ? `（${d.source}）` : ""}`,
-        )
-        .join("、") || "无"
-    : "无法读取";
-const autoPolicy = (value: boolean | null) =>
-  value === null ? "未显式设置" : value ? "允许获取" : "忽略";
-const dnrPolicy = (value: boolean | null) =>
-  value === null ? "继承 DNS 策略" : autoPolicy(value);
-const domainPolicyLabels: Record<string, string> = {
-  yes: "搜索域",
-  no: "忽略",
-  route: "路由域",
-};
-const sourceOwnerLabels: Record<string, string> = {
-  networkd: "本机 networkd 源",
-  generated: "运行时生成源",
-  vendor: "系统提供的源",
-  unknown: "未确认",
-};
-const domainPolicy = (value: string | null) =>
-  value === null ? "未显式设置" : (domainPolicyLabels[value] ?? "无法识别");
-const sourceOwner = (value: string) => sourceOwnerLabels[value] ?? "未确认";
+
 const controller = new AbortController();
 let poll: ReturnType<typeof setInterval> | undefined;
 let pendingRead = false;
@@ -322,9 +272,8 @@ async function read() {
       (plan.value.expires_at * 1000 <= Date.now() ||
         plan.value.input.source_hash !==
           (plan.value.input.target
-            ? targets.find(
-                (c) => c.target === plan.value!.input.target,
-              )?.source_hash
+            ? targets.find((c) => c.target === plan.value!.input.target)
+                ?.source_hash
             : state.observed.source_hash))
     )
       plan.value = null;
@@ -516,7 +465,9 @@ onMounted(async () => {
   await loadMigrationCandidate();
   if (controller.signal.aborted) return;
   document.addEventListener("visibilitychange", visible);
-  poll = setInterval(() => { now.value = Date.now(); }, 1000);
+  poll = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
 });
 onUnmounted(() => {
   controller.abort();
@@ -549,34 +500,16 @@ useLiveRefresh(api, ["tasks"], read);
         observed.writable ? "可管理" : "仅查看"
       }}</n-tag>
     </div>
-    <dl class="detail-list"><dt>DNS 地址</dt><dd>{{ observed.current.servers.join("、") || "未配置" }}</dd><dt>搜索域</dt><dd>{{ observed.current.search.join("、") || "无" }}</dd></dl>
-    <NAlert v-if="!observed.writable" type="info" :bordered="false">当前网络配置仅支持查看。需要修改时，请查看网络配置详情。</NAlert>
-    <AdvancedDetails title="网络配置详情">
-    <dl>
-      <dt>配置来源/所有者线索</dt>
-      <dd>{{ observed.owner }}</dd>
-      <dt>解析器入口</dt>
-      <dd>
-        {{ observed.source
-        }}<span v-if="observed.link_target"> → {{ observed.link_target }}</span>
-      </dd>
-      <dt>入口 DNS 地址</dt>
-      <dd>{{ observed.current.servers.join("、") || "未明确配置" }}</dd>
-      <dt>入口搜索域</dt>
+    <dl class="detail-list">
+      <dt>DNS 地址</dt>
+      <dd>{{ observed.current.servers.join("、") || "未配置" }}</dd>
+      <dt>搜索域</dt>
       <dd>{{ observed.current.search.join("、") || "无" }}</dd>
-      <dt>持久配置</dt>
-      <dd>
-        {{
-          observed.persistent
-            ? `${observed.persistent.servers.join("、") || "未明确配置"}；搜索域：${observed.persistent.search.join("、") || "无"}`
-            : "上游持久配置未确认"
-        }}
-      </dd>
     </dl>
-    <n-alert v-if="observed.reason" type="warning" :bordered="false">{{
-      observed.reason
-    }}</n-alert>
-    </AdvancedDetails>
+    <NAlert v-if="!observed.writable" type="info" :bordered="false"
+      >当前网络设置仅支持查看，请联系服务器管理员修改。</NAlert
+    >
+
     <n-alert
       v-if="drift"
       type="warning"
@@ -585,10 +518,7 @@ useLiveRefresh(api, ["tasks"], read);
       >DNS 设置已被其他工具修改，请刷新后重新配置。</n-alert
     >
     <template v-if="networkManager || networkd">
-      <n-form-item
-        label="网络接口"
-        style="margin-top: 16px"
-      >
+      <n-form-item label="网络接口" style="margin-top: 16px">
         <n-select
           v-model:value="target"
           :options="choices"
@@ -601,26 +531,6 @@ useLiveRefresh(api, ["tasks"], read);
         <dd>{{ networkLink.persistent.routing_domains.join("、") || "无" }}</dd>
       </dl>
       <template v-if="connection">
-        <AdvancedDetails title="网卡配置详情"><dl>
-          <dt>接口 / IP 方法</dt>
-          <dd>
-            {{ connection.interface }} · IPv4 {{ connection.method4 || "—" }} /
-            IPv6 {{ connection.method6 || "—" }}
-          </dd>
-          <dt>当前有效 DNS</dt>
-          <dd>{{ effectiveText(connection.effective) }}</dd>
-          <dt>运行中的设置</dt>
-          <dd>{{ configText(connection.applied) }}</dd>
-          <dt>持久设置</dt>
-          <dd>{{ configText(connection.persistent) }}</dd>
-          <dt>保留的路由域</dt>
-          <dd>{{ connection.routing_domains.join("、") || "无" }}</dd>
-        </dl>
-        <HostDNSNetplanSource
-          v-if="connection.netplan"
-          :source="connection.netplan"
-        />
-        </AdvancedDetails>
         <n-alert v-if="connection.reason" type="warning" :bordered="false">{{
           connection.reason
         }}</n-alert>
@@ -637,77 +547,7 @@ useLiveRefresh(api, ["tasks"], read);
       >配置 DNS</n-button
     >
   </section>
-  <AdvancedDetails title="网卡诊断">
-  <section
-    v-for="link in observed?.links ?? []"
-    :key="link.target"
-    class="surface"
-  >
-    <div class="page-toolbar">
-      <h3>{{ link.interface }} · networkd</h3>
-      <n-tag :type="link.writable ? 'success' : 'warning'">{{
-        link.writable ? "可接管" : "只读"
-      }}</n-tag>
-    </div>
-    <dl>
-      <dt>网卡状态</dt>
-      <dd>{{ link.state || "无法读取" }}</dd>
-      <dt>持久源归属</dt>
-      <dd>{{ sourceOwner(link.owner) }}</dd>
-      <dt>已加载源文件</dt>
-      <dd>{{ link.loaded_sources.join("、") || "未确认" }}</dd>
-      <dt>当前磁盘源文件</dt>
-      <dd>{{ link.disk_sources.join("、") || "无法读取" }}</dd>
-      <dt>networkd 已加载 DNS</dt>
-      <dd>{{ linkServers(link.loaded) }}</dd>
-      <dt>已加载搜索 / 路由域</dt>
-      <dd>{{ linkDomains(link.loaded) }}</dd>
-      <dt>resolved 当前 DNS</dt>
-      <dd>{{ linkServers(link.effective) }}</dd>
-      <dt>resolved 搜索 / 路由域</dt>
-      <dd>{{ linkDomains(link.effective) }}</dd>
-      <template v-if="link.persistent">
-        <dt>磁盘 DNS 字段</dt>
-        <dd>{{ link.persistent.servers.join("、") || "无显式地址" }}</dd>
-        <dt>磁盘搜索 / 路由域</dt>
-        <dd>
-          {{
-            [
-              ...link.persistent.search,
-              ...link.persistent.routing_domains,
-            ].join("、") || "无"
-          }}
-        </dd>
-        <dt>DHCPv4 DNS 策略</dt>
-        <dd>
-          {{ autoPolicy(link.persistent.dhcp4) }}；域名：{{
-            domainPolicy(link.persistent.domains4)
-          }}；加密 DNS：{{ dnrPolicy(link.persistent.dnr4) }}
-        </dd>
-        <dt>DHCPv6 DNS 策略</dt>
-        <dd>
-          {{ autoPolicy(link.persistent.dhcp6) }}；域名：{{
-            domainPolicy(link.persistent.domains6)
-          }}；加密 DNS：{{ dnrPolicy(link.persistent.dnr6) }}
-        </dd>
-        <dt>IPv6 RA DNS 策略</dt>
-        <dd>
-          {{ autoPolicy(link.persistent.ipv6_ra) }}；域名：{{
-            domainPolicy(link.persistent.domains_ra)
-          }}；加密 DNS：{{ dnrPolicy(link.persistent.dnr_ra) }}
-        </dd>
-      </template>
-      <template v-else
-        ><dt>磁盘 DNS 字段</dt>
-        <dd>无法完整确认</dd></template
-      >
-    </dl>
-    <HostDNSNetplanSource v-if="link.netplan" :source="link.netplan" />
-    <n-alert v-if="link.reason" type="warning" :bordered="false">{{
-      link.reason
-    }}</n-alert>
-  </section>
-  </AdvancedDetails>
+
   <section v-if="pending || task" class="surface">
     <div class="page-toolbar">
       <h3>{{ activeTask || pending ? "当前变更" : "最近变更" }}</h3>
@@ -753,9 +593,23 @@ useLiveRefresh(api, ["tasks"], read);
     <h3>修改 DNS</h3>
     <template v-if="!networkManager">
       <n-form-item label="DNS 服务器（1–3 个 IPv4 / IPv6 地址）"
-        ><ValueListInput v-model:value="servers" item-label="DNS 地址" :max="3" placeholder="1.1.1.1 或 2606:4700:4700::1111" :disabled="busy" @update:value="invalidate" /></n-form-item>
+        ><ValueListInput
+          v-model:value="servers"
+          item-label="DNS 地址"
+          :max="3"
+          placeholder="1.1.1.1 或 2606:4700:4700::1111"
+          :disabled="busy"
+          @update:value="invalidate"
+      /></n-form-item>
       <n-form-item label="搜索域（最多 6 个，可留空）"
-        ><ValueListInput v-model:value="search" item-label="搜索域" :max="6" placeholder="example.com" :disabled="busy" @update:value="invalidate" /></n-form-item>
+        ><ValueListInput
+          v-model:value="search"
+          item-label="搜索域"
+          :max="6"
+          placeholder="example.com"
+          :disabled="busy"
+          @update:value="invalidate"
+      /></n-form-item>
     </template>
     <template v-else>
       <NAlert v-if="observed?.owner === 'netplan'" type="info">
@@ -772,16 +626,37 @@ useLiveRefresh(api, ["tasks"], read);
             />
           </n-form-item>
           <n-form-item label="手动 DNS 地址（最多 3 个）">
-            <ValueListInput v-model:value="family.servers" item-label="DNS 地址" :max="3" placeholder="DNS 服务器地址" :disabled="busy" @update:value="invalidate" />
+            <ValueListInput
+              v-model:value="family.servers"
+              item-label="DNS 地址"
+              :max="3"
+              placeholder="DNS 服务器地址"
+              :disabled="busy"
+              @update:value="invalidate"
+            />
           </n-form-item>
           <n-form-item label="搜索域（最多 6 个）">
-            <ValueListInput v-model:value="family.search" item-label="搜索域" :max="6" placeholder="example.com" :disabled="busy" @update:value="invalidate" />
+            <ValueListInput
+              v-model:value="family.search"
+              item-label="搜索域"
+              :max="6"
+              placeholder="example.com"
+              :disabled="busy"
+              @update:value="invalidate"
+            />
           </n-form-item>
         </div>
       </template>
     </template>
     <n-form-item label="本机解析验证域名（1–2 个）"
-      ><ValueListInput v-model:value="verifyNames" item-label="验证域名" :max="2" placeholder="本环境中必须可解析的完整域名" :disabled="busy" @update:value="invalidate" /></n-form-item>
+      ><ValueListInput
+        v-model:value="verifyNames"
+        item-label="验证域名"
+        :max="2"
+        placeholder="本环境中必须可解析的完整域名"
+        :disabled="busy"
+        @update:value="invalidate"
+    /></n-form-item>
     <n-form-item label="确认期限（秒）"
       ><n-input-number
         v-model:value="timeout"

@@ -128,7 +128,9 @@ watch(busy, (working) => {
 onMounted(() => {
   void load();
 });
-useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !preview.value) return run(loadSelected); });
+useLiveRefresh(api, ["tasks"], () => {
+  if (!busy.value && !preview.value) return run(loadSelected);
+});
 </script>
 
 <template>
@@ -183,11 +185,7 @@ useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !preview.value) return
     </section>
     <section v-if="preview" class="surface notice">
       <h2>部署预览</h2>
-      <p class="muted">
-        目标证书：{{
-          preview.version_id
-        }}
-      </p>
+      <p class="muted">目标证书：{{ preview.version_id }}</p>
       <p v-if="!preview.changes.length">
         现有绑定已使用最新版本，无需再次部署。
       </p>

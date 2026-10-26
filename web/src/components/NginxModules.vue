@@ -18,14 +18,14 @@ const report = ref<NginxFeatures | null>(null),
   selected = ref<string[]>([]);
 const options = computed(() => {
   const items = (report.value?.modules ?? []).map((item) => ({
-    label: `${item.name} · ${item.sha256.slice(0, 12)}`,
+    label: item.name,
     value: item.path,
     disabled: !item.available && !selected.value.includes(item.path),
   }));
   for (const path of props.tree?.module_paths ?? []) {
     if (!items.some((item) => item.value === path))
       items.push({
-        label: `未批准或不可用 · ${path}`,
+        label: "不可用模块",
         value: path,
         disabled: !selected.value.includes(path),
       });
@@ -94,7 +94,7 @@ watch(
     :close-on-esc="!busy"
   >
     <n-alert type="info" :bordered="false"
-      >内置模块自动可用，无需选择。此处管理已安装并批准的可选动态模块，保存后需应用配置。取消模块前，请先移除依赖它的配置。</n-alert
+      >常用模块已内置。启用可选功能后，请应用配置使其生效。</n-alert
     >
     <div class="toolbar" style="margin-top: 16px">
       <span class="muted">Nginx {{ report?.version || "版本未知" }}</span
@@ -110,7 +110,7 @@ watch(
       >
       <n-empty
         v-if="!options.length"
-        description="没有已批准的动态模块。静态编译模块无需选择。"
+        description="当前没有可选模块，内置功能已可使用。"
       />
       <template v-else>
         <n-select
@@ -118,12 +118,12 @@ watch(
           multiple
           :options="options"
           :disabled="busy"
-          placeholder="选择已批准模块"
+          placeholder="选择可选功能"
         />
         <div v-for="item in report.modules" :key="item.path" class="module-row">
           <div>
             <strong>{{ item.name }}</strong>
-            <p class="muted mono">SHA-256 {{ item.sha256 }}</p>
+
             <p v-if="item.features.length" class="muted">
               提供能力：{{ item.features.join("、") }}
             </p>
@@ -137,7 +137,7 @@ watch(
             ><n-tag
               :type="item.running ? 'success' : 'default'"
               :bordered="false"
-              >{{ item.running ? "已确认运行" : "未确认运行" }}</n-tag
+              >{{ item.running ? "已启用" : "未启用" }}</n-tag
             >
           </div>
         </div>

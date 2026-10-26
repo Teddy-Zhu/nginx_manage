@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TaskLogButton from "./TaskLogButton.vue";
 import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 
@@ -75,11 +76,6 @@ const stateNames: Record<string, string> = {
   cancelled: "已取消",
 };
 const engineNames = { unknown: "未知", banned: "已封禁", clear: "未封禁" };
-const backendNames: Record<string, string> = {
-  "nginx-client": "Nginx 受管拒绝集合",
-  "host-input": "宿主机入口规则",
-  "existing-ssh": "已有 SSH jail 官方动作",
-};
 const submissionNames = {
   not_sent: "尚未派发",
   not_needed: "已封禁，无需重复操作",
@@ -248,26 +244,17 @@ useLiveRefresh(api, ["tasks"], refresh);
       >
       <template v-if="status.available">
         <p>
-          地址 {{ status.ip }} · 采样
+          地址 {{ status.ip }} · 更新于
           {{ new Date(status.at * 1000).toLocaleString() }}
         </p>
         <p>
-          当前 jail：{{ engineNames[status.engine_state] }} · 到期时间：{{
+          封禁状态：{{ engineNames[status.engine_state] }} · 到期时间：{{
             expiry(status.expires_at, status.permanent)
           }}
         </p>
+
         <p>
-          {{ backendNames[status.backend] || "动作后端" }}：{{
-            status.action_state === "denied"
-              ? "已包含此地址"
-              : status.action_state === "clear"
-                ? "未包含此地址"
-                : "未知"
-          }}
-        </p>
-        <p v-if="status.generation">动作代次：{{ status.generation }}</p>
-        <p>
-          封禁沿用当前 jail 时长（{{
+          封禁时长沿用当前防护规则（{{
             status.ban_time === -1 ? "永久" : `${status.ban_time} 秒`
           }}）。解封仅影响当前 jail；其他 jail 可能继续拒绝此地址。
         </p>
@@ -288,13 +275,12 @@ useLiveRefresh(api, ["tasks"], refresh);
             <template #trigger
               ><NButton :disabled="!ready">解封地址</NButton></template
             >
-            确认从 {{ jail }} 解封 {{ status.ip }}？此操作同时清除此 jail
-            的对应持久封禁记录。
+            确认从 {{ jail }} 解封 {{ status.ip }}？
           </NPopconfirm>
         </div>
       </template>
     </template>
-    <p v-if="!moduleEnabled">Fail2ban 管理模块未启用，当前仅可查询。</p>
+    <p v-if="!moduleEnabled">登录防护已停用，当前仅可查看。</p>
     <div class="toolbar">
       <h4>手动操作记录</h4>
       <NButton size="small" :loading="reading" @click="refresh"
@@ -304,31 +290,29 @@ useLiveRefresh(api, ["tasks"], refresh);
     <NAlert v-if="historyError" type="error">{{ historyError }}</NAlert>
     <p v-if="active">存在尚未结束的手动操作，完成后可提交新操作。</p>
     <p v-if="loaded && !history.length">
-      最近的手动操作中没有当前 jail 的记录。
+      最近的手动操作中没有当前防护规则的记录。
     </p>
     <article v-for="task in history" :key="task.id" class="surface page-stack">
+      <TaskLogButton :task-id="task.id" />
       <p>
         {{ task.input.action === "ban" ? "封禁" : "解封" }}
         {{ task.input.ip }} · {{ stateNames[task.state] || "状态未知" }} ·
         {{ new Date(task.created_at * 1000).toLocaleString() }}
       </p>
-      <p>任务 {{ task.id }}</p>
+
       <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
       <template v-if="task.result">
         <p>
-          {{ submissionNames[task.result.submission] }} · 引擎{{
+          {{ submissionNames[task.result.submission] }} · 状态{{
             engineNames[task.result.engine_state]
           }}
         </p>
         <p v-if="task.result.observed_at">
-          观测 {{ new Date(task.result.observed_at * 1000).toLocaleString() }} ·
+          更新于
+          {{ new Date(task.result.observed_at * 1000).toLocaleString() }} ·
           到期时间：{{ expiry(task.result.expires_at, task.result.permanent) }}
         </p>
       </template>
     </article>
-    <p>
-      记录保留最近 16 次手动操作中的当前 jail
-      项。引擎观测是任务快照，动作后端的当前状态需单独查询。
-    </p>
   </section>
 </template>

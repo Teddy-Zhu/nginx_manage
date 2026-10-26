@@ -38,8 +38,7 @@ const busy = ref(false),
 let closed = false,
   savedEditor = "",
   pending: { digest: string; key: string } | null = null;
-const serialize = () =>
-  JSON.stringify({ jails: jails.value });
+const serialize = () => JSON.stringify({ jails: jails.value });
 const dirty = computed(() => !!view.value && serialize() !== savedEditor);
 const templateOptions = computed(() =>
   templates.value.map((template) => ({
@@ -126,9 +125,21 @@ function add() {
     max_retry: template.max_retry,
     ignore_ips: [],
   };
-  jails.value.push(template.id === panelTemplate
-    ? { ...common, template: panelTemplate, resource_id: "", action: "host-input" }
-    : { ...common, template: template.id, resource_id: "", action: "nginx-client" });
+  jails.value.push(
+    template.id === panelTemplate
+      ? {
+          ...common,
+          template: panelTemplate,
+          resource_id: "",
+          action: "host-input",
+        }
+      : {
+          ...common,
+          template: template.id,
+          resource_id: "",
+          action: "nginx-client",
+        },
+  );
   preview.value = null;
 }
 function setNumber(
@@ -152,7 +163,12 @@ async function save() {
     // to the original target and must not move to another one.
     for (const jail of jails.value) {
       const saved = view.value.policy.jails.find((item) => item.id === jail.id);
-      if (saved && (saved.template !== jail.template || saved.resource_id !== jail.resource_id || saved.action !== jail.action)) {
+      if (
+        saved &&
+        (saved.template !== jail.template ||
+          saved.resource_id !== jail.resource_id ||
+          saved.action !== jail.action)
+      ) {
         jail.id = randomUUID();
       }
     }
@@ -210,7 +226,7 @@ onUnmounted(() => {
       <h3>防护规则</h3>
     </div>
     <NAlert type="info"
-      >保存后点击检查并应用，使规则生效。已有软件的规则可在高级防护设置中管理。</NAlert
+      >保存后点击检查并应用，使规则生效。已有软件的规则可在下方管理。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
@@ -244,7 +260,7 @@ onUnmounted(() => {
         ><NSwitch v-model:value="jail.enabled" :disabled="busy"
       /></NFormItem>
       <NAlert v-if="jail.template === panelTemplate" type="warning">
-        面板登录保护适用于直接访问面板的连接。启用前，请在高级防护设置中配置主机登录保护。
+        面板登录防护适用于直接访问面板的连接。通过反向代理访问时，请使用站点登录防护。
       </NAlert>
       <NFormItem v-else label="站点结构化访问日志"
         ><NSelect
@@ -289,7 +305,14 @@ onUnmounted(() => {
         /></NFormItem>
       </div>
       <NFormItem label="白名单 IP / 网段"
-        ><ValueListInput v-model:value="jail.ignore_ips" :max="64" item-label="白名单地址" placeholder="192.0.2.1 或 192.0.2.0/24" :maxlength="64" :disabled="busy" /></NFormItem>
+        ><ValueListInput
+          v-model:value="jail.ignore_ips"
+          :max="64"
+          item-label="白名单地址"
+          placeholder="192.0.2.1 或 192.0.2.0/24"
+          :maxlength="64"
+          :disabled="busy"
+      /></NFormItem>
     </div>
     <div class="actions">
       <NButton

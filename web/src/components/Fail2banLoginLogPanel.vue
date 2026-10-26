@@ -27,7 +27,6 @@ const columns: DataTableColumns<Fail2banPanelLoginEvent> = [
     render: (row) => new Date(row.time_iso8601).toLocaleString(),
   },
   { title: "TCP 对端", key: "peer_addr" },
-  { title: "请求标识", key: "request_id", ellipsis: { tooltip: true } },
 ];
 async function load() {
   if (busy.value) return;
@@ -58,8 +57,8 @@ onUnmounted(() => {
       <NButton :loading="busy" :disabled="busy" @click="load">刷新记录</NButton>
     </div>
     <NAlert type="info"
-      >仅记录密码认证拒绝，显示最近 20 条。反向代理后的 TCP
-      对端通常为代理地址。日志可用不代表自动封禁已启用。</NAlert
+      >显示最近 20 条登录失败记录。启用防护规则后，可自动封禁多次登录失败的
+      IP。</NAlert
     >
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <template v-if="view">
@@ -68,10 +67,7 @@ onUnmounted(() => {
           view.available ? "日志可读取" : "日志不可用"
         }}</NTag>
         <span class="muted"
-          >采样 {{ new Date(view.at * 1000).toLocaleString() }} ·
-          {{ view.scope === "host" ? "宿主机" : "范围未确认" }} ·
-          {{ (view.bytes / 1024 / 1024).toFixed(2) }} /
-          {{ (view.limit_bytes / 1024 / 1024).toFixed(0) }} MiB</span
+          >更新于 {{ new Date(view.at * 1000).toLocaleString() }}</span
         >
       </div>
       <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>

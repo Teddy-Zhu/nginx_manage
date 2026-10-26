@@ -41,3 +41,9 @@ export function nginxArgs(text: string): string[] {
   return args;
 }
 export const nginxQuote = (value: string) => '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+
+export function dnsLocationLabel(target: string): string {
+  if (!target) return "系统 DNS";
+  const name = target.startsWith("networkd:") ? target.slice(9) : target.split("@").at(-1);
+  return name ? `网卡 ${name}` : "网络连接";
+}

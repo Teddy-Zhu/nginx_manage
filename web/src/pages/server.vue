@@ -13,7 +13,6 @@
 
 <script setup lang="ts">
 import { useLiveRefresh } from "../composables/live";
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref, watch, toRaw } from "vue";
 import {
   NAlert,
@@ -357,7 +356,12 @@ onUnmounted(() => {
   controller.abort();
   historyController?.abort();
 });
-useLiveRefresh(api, ["monitoring"], async () => { if (!busy.value) { await readLatest(); if (Math.floor(Date.now() / 60000) !== historyMinute) await readHistory(); } });
+useLiveRefresh(api, ["monitoring"], async () => {
+  if (!busy.value) {
+    await readLatest();
+    if (Math.floor(Date.now() / 60000) !== historyMinute) await readHistory();
+  }
+});
 </script>
 
 <template>
@@ -392,18 +396,14 @@ useLiveRefresh(api, ["monitoring"], async () => { if (!busy.value) { await readL
     class="notice"
     >{{ capability.reason }}</n-alert
   >
-  <p class="muted">{{ latest?.sample ? `更新时间：${new Date(latest.sample.at * 1000).toLocaleString()}` : '暂无监控数据' }}</p>
-  <AdvancedDetails title="采样详情">  <p class="muted">
+  <p class="muted">
     {{
       latest?.sample
-        ? `采样时间：${new Date(latest.sample.at * 1000).toLocaleString()}`
+        ? `更新时间：${new Date(latest.sample.at * 1000).toLocaleString()}`
         : "暂无监控数据"
     }}
-    · {{ settings?.settings.interval_seconds ?? "—" }} 秒采样 · 保留
-    {{ settings?.settings.retention_hours ?? "—" }} 小时 · 历史占用
-    {{ bytes(latest?.stored_bytes) }}
   </p>
-</AdvancedDetails>
+
   <div class="stat-grid">
     <div v-for="card in cards" :key="card.label" class="stat-card">
       <span class="stat-label">{{ card.label }}</span
@@ -587,7 +587,9 @@ useLiveRefresh(api, ["monitoring"], async () => { if (!busy.value) { await readL
 .notice {
   margin-bottom: 16px;
 }
-.stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.stat-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .trend-selectors {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 150px;
@@ -617,7 +619,9 @@ fieldset {
   margin-left: 10px;
 }
 @media (max-width: 760px) {
-  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .trend-selectors {
     grid-template-columns: 1fr;
   }
@@ -625,7 +629,12 @@ fieldset {
     align-items: stretch;
     flex-direction: column;
   }
-  .trend-selectors { flex-basis: auto; width: 100%; }
-  .threshold-grid { grid-template-columns: minmax(0, 1fr); }
+  .trend-selectors {
+    flex-basis: auto;
+    width: 100%;
+  }
+  .threshold-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

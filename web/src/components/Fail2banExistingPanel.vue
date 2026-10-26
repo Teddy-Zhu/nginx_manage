@@ -161,7 +161,7 @@ const stageNames: Record<string, string> = {
   payload_invalid: "材料无法核对",
   cancel_unconfirmed: "取消结果未知",
   restore_isolated: "恢复隔离",
-  agent_rejected: "执行器拒绝",
+  agent_rejected: "操作未执行",
   submit_unconfirmed: "提交结果待核对",
   agent_submit_pending: "正在提交",
 };
@@ -345,9 +345,7 @@ async function submit(action: "preview" | "apply") {
     pending.value = null;
     confirmStop.value = false;
     notice.value =
-      original.input.action === "preview"
-        ? "预览任务已创建"
-        : "应用任务已创建，等待运行确认";
+      original.input.action === "preview" ? "正在检查变更" : "正在保存设置";
     await refreshTasks();
   } catch (e) {
     if (!closed) {
@@ -364,8 +362,7 @@ async function submit(action: "preview" | "apply") {
 }
 async function cancel(id: string) {
   if (closed || busy.value || !canWrite.value) return;
-  if (!pendingCancel.value)
-    pendingCancel.value = { id, key: randomUUID() };
+  if (!pendingCancel.value) pendingCancel.value = { id, key: randomUUID() };
   busy.value = true;
   error.value = "";
   try {
@@ -439,7 +436,7 @@ useLiveRefresh(api, ["tasks"], refreshTasks);
 <template>
   <section class="panel page-stack">
     <div class="actions">
-      <h3>已接管的已有 jail</h3>
+      <h3>已有防护规则</h3>
       <NButton
         :disabled="busy"
         :loading="reading"
@@ -455,9 +452,9 @@ useLiveRefresh(api, ["tasks"], refreshTasks);
       >任务记录读取失败：{{ historyError }}</NAlert
     >
     <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
-    <p v-if="!resources.length" class="muted">暂无本机已接管的 jail。</p>
+    <p v-if="!resources.length" class="muted">暂无已连接的防护规则。</p>
     <template v-else>
-      <NFormItem label="Jail"
+      <NFormItem label="防护规则"
         ><NSelect
           v-model:value="selected"
           :options="
@@ -470,7 +467,7 @@ useLiveRefresh(api, ["tasks"], refreshTasks);
         :disabled="!selected || busy || active || !!pending"
         :loading="detailReading"
         @click="loadResource(selected)"
-        >重新读取保存参数</NButton
+        >重新加载设置</NButton
       >
       <template v-if="resource">
         <p class="muted">
@@ -511,7 +508,14 @@ useLiveRefresh(api, ["tasks"], refreshTasks);
           /></NFormItem>
         </div>
         <NFormItem label="白名单 IP / 网段"
-          ><ValueListInput v-model:value="ignoreIPs" :max="64" item-label="白名单地址" placeholder="192.0.2.1 或 192.0.2.0/24" :maxlength="64" :disabled="editingDisabled" /></NFormItem>
+          ><ValueListInput
+            v-model:value="ignoreIPs"
+            :max="64"
+            item-label="白名单地址"
+            placeholder="192.0.2.1 或 192.0.2.0/24"
+            :maxlength="64"
+            :disabled="editingDisabled"
+        /></NFormItem>
         <div class="actions">
           <NButton
             :loading="busy"

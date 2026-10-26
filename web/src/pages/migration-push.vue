@@ -11,7 +11,6 @@
 }
 </route>
 <script setup lang="ts">
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { useLiveRefresh } from "../composables/live";
 import MappingInput from "../components/MappingInput.vue";
 import { mappingRecord, type MappingRow } from "../utils/form";
@@ -37,9 +36,9 @@ import {
   type MigrationHostDNSInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
+import TaskLogButton from "../components/TaskLogButton.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
-import MigrationHostDNSOptions from "../components/MigrationHostDNSOptions.vue";
 import MigrationHostDNSPreview from "../components/MigrationHostDNSPreview.vue";
 import MigrationMonitoringOptions from "../components/MigrationMonitoringOptions.vue";
 import MigrationMonitoringPreview from "../components/MigrationMonitoringPreview.vue";
@@ -66,16 +65,8 @@ const certificates = ref(false),
   includeMonitoring = ref(false),
   includeHostDNS = ref(false),
   enableNginx = ref(false);
-const hostDNSSettings = ref<MigrationHostDNSInput>({
-  mode: "preserve",
-  mappings: {},
-});
-const hostDNSValid = ref(true);
 function hostDNSOptions(): MigrationHostDNSInput {
-  if (!hostDNSValid.value) throw new Error("请修正主机 DNS 目标映射");
-  return JSON.parse(
-    JSON.stringify(hostDNSSettings.value),
-  ) as MigrationHostDNSInput;
+  return { mode: "preserve", mappings: {} };
 }
 const monitoringSettings = ref<MigrationMonitoringInput>({ mode: "preserve" });
 const fail2banSettings = ref<MigrationFail2banInput>({ mode: "preserve" });
@@ -290,7 +281,7 @@ useLiveRefresh(api, ["tasks"], load);
       <section class="panel stack">
         <h2>迁移到其他服务器</h2>
         <div class="form-grid">
-          <NFormItem label="目标 HTTPS API"
+          <NFormItem label="服务器地址"
             ><NInput
               v-model:value="url"
               placeholder="https://target.example.com:9443/api/v1"
@@ -302,10 +293,6 @@ useLiveRefresh(api, ["tasks"], load);
               show-password-on="click"
               autocomplete="off"
           /></NFormItem>
-          <AdvancedDetails class="full-width" title="连接选项"
-            ><NFormItem label="预期目标服务器编号（可选）"
-              ><NInput v-model:value="node" /></NFormItem
-          ></AdvancedDetails>
         </div>
         <NFormItem label="导出范围"
           ><div class="choice-grid">
@@ -323,8 +310,9 @@ useLiveRefresh(api, ["tasks"], load);
             >
           </div></NFormItem
         >
-        <AdvancedDetails title="环境映射与可选配置"
-          ><div class="page-stack">
+        <section>
+          <h3>迁移设置</h3>
+          <div class="page-stack">
             <NFormItem
               label="目标参数映射"
               :validation-status="mappingError ? 'error' : undefined"
@@ -334,11 +322,10 @@ useLiveRefresh(api, ["tasks"], load);
                 v-model:value="mappings"
                 :disabled="busy"
             /></NFormItem>
-            <MigrationHostDNSOptions
-              v-model="hostDNSSettings"
-              @update:valid="hostDNSValid = $event"
-              :disabled="busy"
-            />
+            <p class="muted">
+              保留目标服务器的网络设置。DNS
+              可在迁移完成后，到目标服务器的网络设置中调整。
+            </p>
             <MigrationMonitoringOptions
               v-model="monitoringSettings"
               :disabled="busy"
@@ -351,8 +338,9 @@ useLiveRefresh(api, ["tasks"], load);
               v-model="firewallSettings"
               @update:valid="firewallValid = $event"
               :disabled="busy"
-            /></div
-        ></AdvancedDetails>
+            />
+          </div>
+        </section>
         <NFormItem label="执行方式"
           ><NSelect v-model:value="mode" :options="modes"
         /></NFormItem>
@@ -374,7 +362,7 @@ useLiveRefresh(api, ["tasks"], load);
             >
             <div>
               <NCheckbox v-model:checked="dependencyInstall"
-                >授权目标缺失时首次安装 Nginx</NCheckbox
+                >授权目标缺失时安装 Nginx</NCheckbox
               >
               <template v-if="dependencyInstall">
                 <NCheckbox v-model:checked="dependencyStart"
@@ -389,15 +377,11 @@ useLiveRefresh(api, ["tasks"], load);
                 </p>
               </template>
             </div>
-            <p>
-              目标 Key
-              需要组件管理权限。使用目标信任的签名资产；首次安装仅适用于未安装
-              Nginx 的原生部署，Docker 模块由镜像提供。
-            </p>
+            <p>目标服务器的访问密钥需要具备安装软件的权限。</p>
           </div>
         </div>
         <p class="section-note">
-          使用创建任务时的源配置快照，源节点继续运行。原生配置始终包含在迁移包内；目标保留管理身份及主机设置，迁入的自动化配置和通知渠道保持停用。
+          迁移期间原服务器继续运行。目标保留管理员账户和网络设置；迁入的自动任务和通知默认停用。
         </p>
         <div class="form-actions">
           <NPopconfirm @positive-click="submit"
@@ -409,8 +393,7 @@ useLiveRefresh(api, ["tasks"], load);
                   !url ||
                   !key ||
                   !firewallValid ||
-                  !!mappingError ||
-                  !hostDNSValid
+                  !!mappingError
                 "
                 >创建迁出任务</NButton
               ></template
@@ -437,14 +420,11 @@ useLiveRefresh(api, ["tasks"], load);
           ><NButton :disabled="busy || reading" @click="load">刷新</NButton>
         </div>
         <dl class="detail-list">
-          <dt>任务</dt>
-          <dd>{{ selected.id }}</dd>
           <dt>阶段</dt>
           <dd>{{ labels[selected.stage] || selected.stage }}</dd>
           <dt>目标</dt>
           <dd>{{ selected.target_url }}</dd>
-          <dt>目标节点</dt>
-          <dd>{{ selected.target_node || "待核对" }}</dd>
+
           <dt>授权截止</dt>
           <dd>{{ date(selected.expires_at) }}</dd>
         </dl>
@@ -472,29 +452,23 @@ useLiveRefresh(api, ["tasks"], load);
             v-if="selected.plan.dependencies"
             :status="selected.plan.dependencies"
           />
-          <p>
-            目标计划：{{ selected.plan.id
-            }}<span v-if="selected.plan.task_id">
-              · 执行任务：{{ selected.plan.task_id }}</span
-            >
-          </p>
+          <TaskLogButton
+            v-if="selected.plan.task_id"
+            :task-id="selected.plan.task_id"
+          />
           <NAlert v-if="selected.plan.pruned_at" type="info">
-            目标迁移材料已清理，当前显示原计划摘要与执行结果。
+            迁移文件已清理，当前保留迁移记录和执行结果。
           </NAlert>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>项目</th>
-                  <th>资源</th>
                   <th>状态</th>
                   <th>结果</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(step, index) in selected.plan.steps" :key="index">
-                  <td>{{ step.kind }}</td>
-                  <td>{{ step.resource }}</td>
                   <td>{{ stepStates[step.state] || step.state }}</td>
                   <td>{{ step.message }}</td>
                 </tr>

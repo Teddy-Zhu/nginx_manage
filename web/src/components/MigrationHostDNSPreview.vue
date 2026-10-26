@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
+import { dnsLocationLabel } from "../utils/form";
 import type { MigrationHostDNSPlan, HostDNSPlanInput } from "../api/client";
 defineProps<{ info: MigrationHostDNSPlan; planId?: string }>();
 const stateLabels = {
@@ -29,15 +30,15 @@ function describe(config: HostDNSPlanInput["config"]) {
   <div class="surface">
     <h3>主机 DNS</h3>
     <p>{{ stateLabels[info.state] }}</p>
-    <p v-if="!info.entries.length">源节点没有已保存的 DNS 期望配置。</p>
+    <p v-if="!info.entries.length">来源服务器没有已保存的 DNS 配置。</p>
     <dl v-for="item in info.entries" :key="item.source" class="details">
-      <dt>源目标</dt>
-      <dd>{{ item.source || "受管 resolv.conf" }}</dd>
+      <dt>来源网络</dt>
+      <dd>{{ dnsLocationLabel(item.source) }}</dd>
       <dt>源配置</dt>
       <dd>{{ describe(item.source_config) }}</dd>
       <template v-if="item.target !== null && item.config">
         <dt>目标</dt>
-        <dd>{{ item.target || "受管 resolv.conf" }}</dd>
+        <dd>{{ dnsLocationLabel(item.target) }}</dd>
         <dt>目标配置</dt>
         <dd>{{ describe(item.config) }}</dd>
       </template>
@@ -62,7 +63,7 @@ function describe(config: HostDNSPlanInput["config"]) {
       </template>
     </dl>
     <p v-if="info.mode === 'map'">
-      DNS 独立应用与确认；Nginx 迁移完成后仍需核对主机解析器。
+      迁移完成后，请到网络设置中应用 DNS 配置并确认连接正常。
     </p>
   </div>
 </template>

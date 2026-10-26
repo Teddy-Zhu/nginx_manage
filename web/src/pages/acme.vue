@@ -314,7 +314,9 @@ onBeforeRouteLeave(
 );
 onMounted(() => {
   void load();
-  timer = setInterval(() => { now.value = Date.now(); }, 10000);
+  timer = setInterval(() => {
+    now.value = Date.now();
+  }, 10000);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
@@ -322,7 +324,12 @@ onUnmounted(() => {
   secrets.value = {};
   window.removeEventListener("beforeunload", beforeUnload);
 });
-useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !accountEditing.value && !credentialEditing.value) return run(async () => { accounts.value = await api.acmeAccounts(); }); });
+useLiveRefresh(api, ["tasks"], () => {
+  if (!busy.value && !accountEditing.value && !credentialEditing.value)
+    return run(async () => {
+      accounts.value = await api.acmeAccounts();
+    });
+});
 </script>
 
 <template>
@@ -439,12 +446,7 @@ useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !accountEditing.value 
         >
           允许重试时间：{{ date(item.retry_after) }}
         </p>
-        <p class="muted mono fingerprint">
-          公钥 SHA-256：{{ item.key_fingerprint }}
-        </p>
-        <p v-if="item.account_url" class="muted fingerprint">
-          账户：{{ item.account_url }}
-        </p>
+
         <div class="inline-gap">
           <n-button
             v-if="item.state === 'failed'"

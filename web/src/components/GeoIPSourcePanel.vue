@@ -14,7 +14,6 @@ import {
 } from "naive-ui";
 import { useNodeAPI, type GeoIPState, type GeoIPSource } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
-import AdvancedDetails from "./AdvancedDetails.vue";
 import { countryOptions } from "../utils/countries";
 const props = defineProps<{
   state: GeoIPState | null;
@@ -246,13 +245,13 @@ async function update() {
           的地址列表。
         </p>
       </template>
-      <AdvancedDetails class="full-width" title="高级设置">
+      <section class="full-width">
         <n-form-item label="允许从内网镜像下载"
           ><n-switch
             v-model:value="draft.allow_private_network"
             :disabled="busy || !writable"
         /></n-form-item>
-      </AdvancedDetails>
+      </section>
     </n-form>
     <template #footer>
       <n-space justify="end" :size="12">

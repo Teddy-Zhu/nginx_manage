@@ -13,9 +13,9 @@
 </route>
 
 <script setup lang="ts">
+import { permissionLabel } from "../utils/permissions";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { RouterLink, useRouter } from "vue-router";
 import { ref, onMounted } from "vue";
 import {
@@ -59,7 +59,11 @@ const credentialVisible = ref(false),
   password = ref("");
 const credentialColumns: DataTableColumns<Credential> = [
   { title: "名称", key: "name" },
-  { title: "权限", key: "scopes", render: (r) => r.scopes.join(", ") },
+  {
+    title: "权限",
+    key: "scopes",
+    render: (r) => r.scopes.map(permissionLabel).join("、"),
+  },
   {
     title: "到期时间",
     key: "expires_at",
@@ -155,12 +159,32 @@ onMounted(load);
   <section class="surface">
     <h2>管理设置</h2>
     <div class="shortcut-grid">
-      <RouterLink to="/management-listener"><strong>安全管理入口</strong><span class="muted">连接确认和访问限制</span></RouterLink>
-      <RouterLink to="/modules"><strong>功能开关</strong><span class="muted">管理可选功能</span></RouterLink>
-      <RouterLink to="/panel-updates"><strong>系统更新</strong><span class="muted">检查版本与更新记录</span></RouterLink>
-      <RouterLink to="/history"><strong>清理存储</strong><span class="muted">清理不再使用的历史文件</span></RouterLink>
+      <RouterLink to="/management-listener"
+        ><strong>安全管理入口</strong
+        ><span class="muted">连接确认和访问限制</span></RouterLink
+      >
+      <RouterLink to="/modules"
+        ><strong>功能开关</strong
+        ><span class="muted">管理可选功能</span></RouterLink
+      >
+      <RouterLink to="/panel-updates"
+        ><strong>系统更新</strong
+        ><span class="muted">检查版本与更新记录</span></RouterLink
+      >
+      <RouterLink to="/history"
+        ><strong>清理存储</strong
+        ><span class="muted">清理不再使用的历史文件</span></RouterLink
+      >
     </div>
-    <AdvancedDetails title="高级维护"><div class="inline-gap"><RouterLink to="/maintenance">维护模式</RouterLink><RouterLink to="/agent-upgrades">管理服务更新</RouterLink><RouterLink to="/panel-images">运行环境更新</RouterLink><RouterLink to="/firewall">网络诊断</RouterLink></div></AdvancedDetails>
+    <section>
+      <h3>其他管理</h3>
+      <div class="inline-gap">
+        <RouterLink to="/maintenance">维护模式</RouterLink
+        ><RouterLink to="/agent-upgrades">管理服务更新</RouterLink
+        ><RouterLink to="/panel-images">运行环境更新</RouterLink
+        ><RouterLink to="/firewall">防火墙状态</RouterLink>
+      </div>
+    </section>
   </section>
   <section class="surface">
     <div class="section-heading">
@@ -171,7 +195,10 @@ onMounted(load);
       <dt>用户名</dt>
       <dd>{{ session.localMe?.username }}</dd>
     </dl>
-    <n-form label-placement="top" class="account-form" @submit.prevent="changePassword"
+    <n-form
+      label-placement="top"
+      class="account-form"
+      @submit.prevent="changePassword"
       ><n-form-item label="新密码（至少 6 个字符）"
         ><n-input
           v-model:value="password"
@@ -237,12 +264,17 @@ onMounted(load);
           multiple
           :options="
             (session.localMe?.scopes ?? []).map((scope) => ({
-              label: scope,
+              label: permissionLabel(scope),
               value: scope,
             }))
           " /></n-form-item
       ><n-form-item label="允许来源（可选）"
-        ><ValueListInput v-model:value="sources" item-label="来源网段" :max="32" placeholder="192.0.2.0/24 或 2001:db8::/32" :maxlength="64" /></n-form-item
+        ><ValueListInput
+          v-model:value="sources"
+          item-label="来源网段"
+          :max="32"
+          placeholder="192.0.2.0/24 或 2001:db8::/32"
+          :maxlength="64" /></n-form-item
       ><n-button
         attr-type="submit"
         block
@@ -272,5 +304,7 @@ onMounted(load);
   >
 </template>
 <style scoped>
-.account-form { max-width: 560px; }
+.account-form {
+  max-width: 560px;
+}
 </style>

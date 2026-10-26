@@ -74,8 +74,7 @@ const form = ref({
   clear_signing: false,
 });
 const controller = new AbortController();
-let
-  refreshPending = false;
+let refreshPending = false;
 const loading = ref(false);
 const testKeys = new Map<string, { version: number; key: string }>();
 const canWrite = computed(
@@ -202,10 +201,8 @@ const eventColumns: DataTableColumns<NotificationEvent> = [
         () => severity[e.severity] ?? e.severity,
       ),
   },
-  { title: "资源", key: "resource_id", ellipsis: { tooltip: true } },
   { title: "摘要", key: "summary", ellipsis: { tooltip: true } },
   { title: "合并次数", key: "occurrences" },
-  { title: "事件 ID", key: "id", ellipsis: { tooltip: true } },
 ];
 const deliveryColumns: DataTableColumns<NotificationDelivery> = [
   { title: "创建时间", key: "created_at", render: (d) => time(d.created_at) },
@@ -227,7 +224,6 @@ const deliveryColumns: DataTableColumns<NotificationDelivery> = [
     render: (d) =>
       d.last_error || (d.http_status ? `HTTP ${d.http_status}` : "—"),
   },
-  { title: "事件 ID", key: "event_id", ellipsis: { tooltip: true } },
   {
     title: "操作",
     key: "action",
@@ -451,13 +447,14 @@ function visibility() {
 onMounted(async () => {
   document.addEventListener("visibilitychange", visibility);
   await load();
-
 });
 onUnmounted(() => {
   controller.abort();
   document.removeEventListener("visibilitychange", visibility);
 });
-useLiveRefresh(api, ["notifications"], () => { if (!busy.value) return fetchData(); });
+useLiveRefresh(api, ["notifications"], () => {
+  if (!busy.value) return fetchData();
+});
 </script>
 
 <template>
@@ -571,8 +568,7 @@ useLiveRefresh(api, ["notifications"], () => { if (!busy.value) return fetchData
       >
     </div>
     <p class="muted">
-      失败按退避策略重试，达到次数或有效期后停止。接收端应按节点与事件 ID
-      去重；请求结果不确定时可能重复送达。
+      发送失败后会自动重试，超过重试次数或有效期后停止。网络异常时，通知可能重复送达。
     </p>
   </section>
   <section class="surface">
@@ -670,7 +666,7 @@ useLiveRefresh(api, ["notifications"], () => { if (!busy.value) return fetchData
         v-model:checked="form.clear_bearer"
         >清除原 Bearer Token</n-checkbox
       >
-      <n-form-item label="HMAC-SHA256 共享密钥（可选，至少 16 字节）"
+      <n-form-item label="签名密钥（可选）"
         ><n-input
           v-model:value="form.signing_secret"
           type="password"
@@ -699,11 +695,7 @@ useLiveRefresh(api, ["notifications"], () => { if (!busy.value) return fetchData
             :label="kind.label"
           /></div></n-checkbox-group
     ></n-form-item>
-    <n-alert v-if="form.kind === 'webhook'" type="info" :bordered="false"
-      >Webhook 签名为 HMAC-SHA256(共享密钥, 时间戳 + "." + 原始 JSON
-      请求体)，使用 X-NginxPanel-Timestamp 和 X-NginxPanel-Signature
-      请求头；签名值以 sha256= 开头。</n-alert
-    >
+
     <div class="actions form-actions">
       <n-button @click="channelModal = false">取消</n-button
       ><n-button type="primary" :loading="busy" @click="saveChannel"

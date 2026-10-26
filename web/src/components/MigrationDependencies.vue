@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TaskLogButton from "./TaskLogButton.vue";
 import { NTag } from "naive-ui";
 import type { MigrationDependencyStatus } from "../api/client";
 defineProps<{ status: MigrationDependencyStatus }>();
@@ -11,14 +12,14 @@ const states: Record<string, string> = {
 };
 const stages: Record<string, string> = {
   checking: "检查可信组件",
-  preparing: "准备签名资产",
-  prepared: "资产已准备",
+  preparing: "下载软件",
+  prepared: "软件下载完成",
   not_required: "已有组件",
   target_dependencies: "目标缺少配置依赖",
   unavailable: "当前部署不可准备",
   runtime_recovery: "原实例需要恢复",
   system_dependencies: "缺少系统运行依赖",
-  capability_missing: "资产能力不匹配",
+  capability_missing: "所选软件不满足迁移要求",
   release_expired: "发行检查已过期",
   grant_expired: "准备授权已过期",
   target_changed: "目标状态已变化",
@@ -30,7 +31,7 @@ const stages: Record<string, string> = {
   maintenance: "等待独占维护",
   installing: "首次安装中",
   installed: "首次安装完成",
-  releasing: "恢复写入中",
+  releasing: "恢复配置修改中",
   installation_unavailable: "安装服务不可用",
   installation_wait: "等待安装服务",
   installation_failed: "首次安装失败",
@@ -55,28 +56,24 @@ const stages: Record<string, string> = {
       {{ stages[status.stage] || status.stage }}
     </p>
     <p v-if="status.stage === 'prepared'">
-      可信资产已准备；请核对实例安装与运行状态后重新预检。
+      可信软件下载完成；请核对实例安装与运行状态后重新预检。
     </p>
     <p v-if="status.error">{{ status.error }}</p>
-    <dl>
-      <dt>准备任务</dt>
-      <dd>{{ status.task_id }}</dd>
-      <template v-if="status.check_task_id"
-        ><dt>组件检查任务</dt>
-        <dd>{{ status.check_task_id }}</dd></template
-      ><template v-if="status.prepare_task_id"
-        ><dt>资产准备任务</dt>
-        <dd>{{ status.prepare_task_id }}</dd></template
-      >
-      <template v-if="status.maintenance_task_id"
-        ><dt>维护任务</dt>
-        <dd>{{ status.maintenance_task_id }}</dd></template
-      >
-      <template v-if="status.install_task_id"
-        ><dt>首次安装任务</dt>
-        <dd>{{ status.install_task_id }}</dd></template
-      >
-    </dl>
+    <div class="button-row">
+      <TaskLogButton
+        v-if="status.check_task_id"
+        :task-id="status.check_task_id"
+        title="检查安装条件"
+      /><TaskLogButton
+        v-if="status.prepare_task_id"
+        :task-id="status.prepare_task_id"
+        title="下载软件"
+      /><TaskLogButton
+        v-if="status.install_task_id"
+        :task-id="status.install_task_id"
+        title="安装 Nginx"
+      />
+    </div>
   </div>
 </template>
 <style scoped>

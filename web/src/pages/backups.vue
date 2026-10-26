@@ -29,7 +29,6 @@ import {
   NTabPane,
   NForm,
 } from "naive-ui";
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { RouterLink } from "vue-router";
 import {
   apiError,
@@ -258,7 +257,7 @@ useLiveRefresh(api, ["tasks", "backups"], load);
                 /></NFormItem>
               </div>
               <p class="section-note">
-                创建快照时会短暂暂停配置修改。<template
+                创建备份时会短暂暂停配置修改。<template
                   v-if="form.encryption === 'passphrase'"
                   >恢复口令不会保存在系统中；加密完成前请勿重启面板。</template
                 >
@@ -383,14 +382,7 @@ useLiveRefresh(api, ["tasks", "backups"], load);
             <NAlert v-if="record.error" type="warning">{{
               record.error
             }}</NAlert>
-            <AdvancedDetails title="文件校验信息"
-              ><p class="mono record-address">
-                编号 {{ record.id
-                }}<template v-if="record.archive_sha256"
-                  ><br />SHA-256 {{ record.archive_sha256 }}</template
-                >
-              </p></AdvancedDetails
-            >
+
             <div class="button-row">
               <NButton
                 v-if="record.available && canDownload"

@@ -30,7 +30,6 @@ import {
 import { useNodeAPI, apiError, type NodeConnection } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import NodePairing from "../components/NodePairing.vue";
 const api = useNodeAPI();
 
@@ -188,16 +187,7 @@ onUnmounted(() => {
               ><span>授权到期 {{ date(node.expires_at) }}</span>
             </div>
             <NAlert v-if="node.error" type="warning">{{ node.error }}</NAlert>
-            <AdvancedDetails title="连接详情"
-              ><dl class="detail-list">
-                <dt>服务器编号</dt>
-                <dd>{{ node.node_id }}</dd>
-                <dt>凭据编号</dt>
-                <dd>{{ node.credential_id }}</dd>
-                <dt>授权权限</dt>
-                <dd>{{ node.scopes.join("、") }}</dd>
-              </dl></AdvancedDetails
-            >
+
             <div class="button-row">
               <NButton
                 :loading="checking.includes(node.id)"
@@ -283,7 +273,8 @@ onUnmounted(() => {
           /></NTabPane>
         </NTabs>
       </section>
-      <AdvancedDetails v-if="removed.length" title="已删除的连接">
+      <section v-if="removed.length">
+        <h3>已删除的连接</h3>
         <div class="record-list">
           <article v-for="node in removed" :key="node.id" class="record-card">
             <div class="toolbar">
@@ -298,11 +289,11 @@ onUnmounted(() => {
             <p class="record-address">{{ node.url }}</p>
             <p class="muted">删除时间 {{ date(node.removed_at) }}</p>
             <NAlert v-if="node.revocation === 'pending'" type="warning"
-              >请到目标服务器撤销凭据 {{ node.credential_id }}。</NAlert
+              >请在目标服务器中撤销此连接授权。</NAlert
             >
           </article>
         </div>
-      </AdvancedDetails>
+      </section>
     </template>
   </div>
 </template>

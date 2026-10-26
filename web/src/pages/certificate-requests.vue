@@ -337,14 +337,22 @@ onBeforeRouteLeave(
 );
 onMounted(() => {
   void load();
-  timer = setInterval(() => { now.value = Date.now(); }, 10000);
+  timer = setInterval(() => {
+    now.value = Date.now();
+  }, 10000);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
   window.removeEventListener("beforeunload", beforeUnload);
 });
-useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !policyID.value) return run(async () => { profiles.value = await api.acmeProfiles(offset.value); if (selected.value) orders.value = await api.acmeOrders(selected.value); }); });
+useLiveRefresh(api, ["tasks"], () => {
+  if (!busy.value && !policyID.value)
+    return run(async () => {
+      profiles.value = await api.acmeProfiles(offset.value);
+      if (selected.value) orders.value = await api.acmeOrders(selected.value);
+    });
+});
 </script>
 
 <template>
@@ -460,7 +468,17 @@ useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !policyID.value) retur
           :options="credentialOptions"
       /></n-form-item>
       <n-form-item label="申请域名（最多 64 项）"
-        ><ValueListInput v-model:value="domainEntries" item-label="域名" :max="64" :maxlength="253" :placeholder="form.challenge_type === 'dns-01' ? 'example.com 或 *.example.com' : 'example.com'" /></n-form-item>
+        ><ValueListInput
+          v-model:value="domainEntries"
+          item-label="域名"
+          :max="64"
+          :maxlength="253"
+          :placeholder="
+            form.challenge_type === 'dns-01'
+              ? 'example.com 或 *.example.com'
+              : 'example.com'
+          "
+      /></n-form-item>
       <div class="inline-gap">
         <n-button
           type="primary"
@@ -601,7 +619,7 @@ useLiveRefresh(api, ["tasks"], () => { if (!busy.value && !policyID.value) retur
             taskStates[order.state] ?? order.state
           }}</n-tag>
         </div>
-        <p class="muted mono domains">订单 {{ order.id }}</p>
+
         <p v-if="order.terminal" class="muted">
           CA
           已确认订单失效；若有未清理材料，请先恢复原任务完成清理，再创建新订单。

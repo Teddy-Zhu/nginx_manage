@@ -345,18 +345,20 @@ onUnmounted(reset);
 
 <template>
   <div class="toolbar">
-    <div class="inline-gap"><n-button :loading="busy" @click="run(load)">刷新来源</n-button
-    ><n-select
-      v-model:value="policyScope"
-      style="width: 180px"
-      :options="
-        policies.map((item) => ({
-          label: item.scope === 'system' ? '系统日志策略' : 'Nginx 日志策略',
-          value: item.scope,
-        }))
-      "
-    /><n-button :disabled="!policy" @click="editPolicy">轮转与保留</n-button
-    ></div><span class="muted"
+    <div class="inline-gap">
+      <n-button :loading="busy" @click="run(load)">刷新来源</n-button
+      ><n-select
+        v-model:value="policyScope"
+        style="width: 180px"
+        :options="
+          policies.map((item) => ({
+            label: item.scope === 'system' ? '系统日志策略' : 'Nginx 日志策略',
+            value: item.scope,
+          }))
+        "
+      /><n-button :disabled="!policy" @click="editPolicy">轮转与保留</n-button>
+    </div>
+    <span class="muted"
       >{{ sources.length }} 个来源 ·
       {{ Math.round((policy?.bytes ?? 0) / 1048576) }} MiB</span
     >
@@ -424,9 +426,7 @@ onUnmounted(reset);
       <n-form-item label="关键字"
         ><n-input v-model:value="filter.keyword" :maxlength="256"
       /></n-form-item>
-      <n-form-item v-if="http" label="防护策略 ID"
-        ><n-input v-model:value="filter.policy" :maxlength="128"
-      /></n-form-item>
+
       <n-form-item v-if="http" label="防护原因 / 事件"
         ><n-input v-model:value="filter.reason" :maxlength="256"
       /></n-form-item>
@@ -437,7 +437,7 @@ onUnmounted(reset);
       >
     </n-form>
     <n-alert v-if="source?.sensitive" type="warning" :bordered="false"
-      >原生日志或历史文件可能包含请求行及查询参数。读取需要敏感配置权限和近期身份确认；页面与下载尽力脱敏，原始文件不保证完全排除敏感信息。</n-alert
+      >日志可能包含访问地址等敏感信息，请妥善保管导出的文件。</n-alert
     >
     <n-alert v-if="source?.reason" type="warning" :bordered="false">{{
       source.reason
@@ -462,7 +462,7 @@ onUnmounted(reset);
         >实时跟随</n-button
       ><n-button v-else @click="stop">停止跟随</n-button
       ><n-button :disabled="busy || !selected" @click="download"
-        >下载 JSONL</n-button
+        >下载日志</n-button
       >
     </div>
     <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
@@ -495,7 +495,9 @@ onUnmounted(reset);
     style="width: 620px; max-width: 94vw"
   >
     <template v-if="policy && policyInput">
-      <n-alert type="info" :bordered="false">按大小或保留时间自动整理日志。只清理已结束写入的历史日志，当前日志可能暂时超过限额。</n-alert>
+      <n-alert type="info" :bordered="false"
+        >按大小或保留时间自动整理日志。只清理已结束写入的历史日志，当前日志可能暂时超过限额。</n-alert
+      >
       <n-alert v-if="!policy.editable" type="warning" :bordered="false">{{
         policy.scope === "system"
           ? "系统日志暂不可用，请检查服务器管理服务。"

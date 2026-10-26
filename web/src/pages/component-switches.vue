@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import TaskLogButton from "../components/TaskLogButton.vue";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -238,7 +239,12 @@ async function control(t: NginxSwitchTask, command: "resume" | "rollback") {
   await load();
 }
 let clockTimer: ReturnType<typeof setInterval> | undefined;
-onMounted(() => { void load(); clockTimer = setInterval(() => { clock.value = Date.now(); }, 1000); });
+onMounted(() => {
+  void load();
+  clockTimer = setInterval(() => {
+    clock.value = Date.now();
+  }, 1000);
+});
 onUnmounted(() => {
   closed = true;
   if (clockTimer) clearInterval(clockTimer);
@@ -259,7 +265,7 @@ useLiveRefresh(api, ["tasks", "maintenance"], load);
       }}</NAlert>
       <p>
         选择已准备的 Nginx 组件，切换前须先进入<RouterLink to="/maintenance"
-          >配置维护</RouterLink
+          >维护模式</RouterLink
         >。切换期间代理流量会短暂中断。
       </p>
       <p v-if="overview?.installation">
@@ -267,10 +273,10 @@ useLiveRefresh(api, ["tasks", "maintenance"], load);
         {{ runtime?.running ? "运行中" : "运行未确认" }}
       </p>
       <NAlert v-if="canWrite && !held" type="warning"
-        >尚未进入配置维护，请先确认维护状态。</NAlert
+        >尚未进入维护模式，请先确认维护状态。</NAlert
       >
       <div v-if="canWrite" class="grid-2">
-        <NFormItem label="已准备组件"
+        <NFormItem label="已下载版本"
           ><NSelect
             :value="selected"
             :options="
@@ -281,12 +287,12 @@ useLiveRefresh(api, ["tasks", "maintenance"], load);
             "
             @update:value="choose"
         /></NFormItem>
-        <NFormItem label="Nginx 资产"
+        <NFormItem label="Nginx 版本"
           ><NSelect
             v-model:value="asset"
             :options="
               assets.map((a) => ({
-                label: `${a.version} · ${a.id}`,
+                label: a.version,
                 value: a.id,
               }))
             "
@@ -295,7 +301,7 @@ useLiveRefresh(api, ["tasks", "maintenance"], load);
       </div>
       <p v-if="!prepared.length" class="muted">
         暂无有效准备结果，请先完成<RouterLink to="/components"
-          >组件准备</RouterLink
+          >软件商店</RouterLink
         >。
       </p>
       <div v-if="canWrite" class="toolbar">
@@ -312,8 +318,9 @@ useLiveRefresh(api, ["tasks", "maintenance"], load);
       <h2>切换任务</h2>
       <p v-if="!tasks.length" class="muted">暂无切换任务</p>
       <article v-for="t in tasks" :key="t.id" class="page-stack">
+        <TaskLogButton :task-id="t.id" />
         <div class="toolbar">
-          <h3>{{ t.input.asset_id }}</h3>
+          <h3>Nginx 更新</h3>
           <NTag
             :type="
               t.state === 'succeeded'

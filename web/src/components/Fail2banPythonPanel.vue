@@ -2,7 +2,6 @@
 import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 
-import AdvancedDetails from "./AdvancedDetails.vue";
 import TaskLogButton from "./TaskLogButton.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
@@ -60,8 +59,10 @@ const states: Record<string, string> = {
   failed: "未完成",
   cancelled: "已取消",
 };
-const active = computed(() =>
-  accepted.value.size > 0 || tasks.value.some((task) => activeStates.has(task.state)),
+const active = computed(
+  () =>
+    accepted.value.size > 0 ||
+    tasks.value.some((task) => activeStates.has(task.state)),
 );
 const canManage = computed(
   () => session.me?.scopes.includes("components.manage") ?? false,
@@ -132,7 +133,9 @@ async function refresh() {
       selected.value = plans.value[0]?.value ?? "";
     if (
       result.some(
-        (task) => (before.has(task.id) || accepted.value.has(task.id)) && !activeStates.has(task.state),
+        (task) =>
+          (before.has(task.id) || accepted.value.has(task.id)) &&
+          !activeStates.has(task.state),
       )
     )
       emit("changed");
@@ -222,7 +225,7 @@ useLiveRefresh(api, ["tasks"], refresh);
       系统 Python {{ currentPython.version || "—" }} · 标准库与 SQLite 可用
     </p>
     <p v-else class="muted">Fail2ban 的运行依赖尚未就绪。</p>
-    <AdvancedDetails v-if="currentPython?.reason" title="依赖详情"><p>{{ currentPython.reason }}</p></AdvancedDetails>
+
     <p v-if="currentAt">
       状态快照 {{ new Date(currentAt * 1000).toLocaleString() }}
     </p>
@@ -238,12 +241,8 @@ useLiveRefresh(api, ["tasks"], refresh);
       >
     </NAlert>
     <template v-if="canManage">
-      <NAlert v-if="!moduleEnabled" type="warning"
-        >请先启用 Fail2ban 管理模块。</NAlert
-      >
-      <p>
-        自动识别服务器环境，检查并安装所需的运行依赖。
-      </p>
+      <NAlert v-if="!moduleEnabled" type="warning">请先开启登录防护。</NAlert>
+      <p>自动识别服务器环境，检查并安装所需的运行依赖。</p>
       <NCheckbox v-model:checked="refreshIndex" :disabled="!canSubmit"
         >更新软件列表</NCheckbox
       >
@@ -277,39 +276,7 @@ useLiveRefresh(api, ["tasks"], refresh);
           下载 {{ bytes(chosen.download_bytes) }} · 安装空间
           {{ bytes(chosen.installed_bytes) }}
         </p>
-        <AdvancedDetails title="软件包明细">
-        <ul>
-          <li v-for="impact in chosen.impacts" :key="impact">{{ impact }}</li>
-        </ul>
-        <div class="python-package-table">
-          <table>
-            <thead>
-              <tr>
-                <th>软件包</th>
-                <th>版本 / 架构</th>
-                <th>来源 / 仓库</th>
-                <th>下载 / 安装</th>
-                <th>SHA-256</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="pkg in chosen.packages"
-                :key="`${pkg.name}:${pkg.architecture}`"
-              >
-                <td>{{ pkg.name }}</td>
-                <td>{{ pkg.version }} / {{ pkg.architecture }}</td>
-                <td>{{ pkg.source }}<br />{{ pkg.repository }}</td>
-                <td>
-                  {{ bytes(pkg.download_bytes) }} /
-                  {{ bytes(pkg.installed_bytes) }}
-                </td>
-                <td class="package-digest">{{ pkg.sha256 }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        </AdvancedDetails>
+
         <NPopconfirm :disabled="!canSubmit" @positive-click="install">
           <template #trigger
             ><NButton type="primary" :disabled="!canSubmit" :loading="busy"

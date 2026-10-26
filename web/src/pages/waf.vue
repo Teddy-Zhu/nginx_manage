@@ -380,7 +380,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
             仅记录限速和并发超额，方法、路径和请求体限制继续执行。
           </p>
           <n-form-item label="最大请求体（留空继承，0 表示不限制）"
-            ><UnitInput v-model:value="form.body_size" kind="size" :disabled="locked" /></n-form-item>
+            ><UnitInput
+              v-model:value="form.body_size"
+              kind="size"
+              :disabled="locked"
+          /></n-form-item>
           <n-form-item label="允许的方法（留空表示不限制）"
             ><n-select
               v-model:value="form.methods"
@@ -440,7 +444,6 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               :disabled="locked || (!!selected && !dirty)"
               >保存策略</n-button
             >
-
           </div>
         </n-form> </template
       ><n-empty v-else description="选择或新建防护策略" />
@@ -448,12 +451,25 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
   </div>
 </template>
 <style scoped>
-.rate-input { width: 100%; grid-template-columns: minmax(0, 1fr) 112px; }
-.path-rules { margin: 24px 0; }
-.path-rules .section-heading { margin-bottom: 0; }
-.path-rule { grid-template-columns: 120px minmax(0, 1fr) auto; }
+.rate-input {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) 112px;
+}
+.path-rules {
+  margin: 24px 0;
+}
+.path-rules .section-heading {
+  margin-bottom: 0;
+}
+.path-rule {
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+}
 @container (max-width: 400px) {
-  .path-rule { grid-template-columns: minmax(0, 1fr) auto; }
-  .path-rule > :first-child { grid-column: 1 / -1; }
+  .path-rule {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .path-rule > :first-child {
+    grid-column: 1 / -1;
+  }
 }
 </style>

@@ -13,7 +13,6 @@
 
 <script setup lang="ts">
 import { useLiveRefresh } from "../composables/live";
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import MappingInput from "../components/MappingInput.vue";
 import { mappingRecord, type MappingRow } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
@@ -47,6 +46,7 @@ import {
   type MigrationHostDNSInput,
 } from "../api/client";
 import MigrationDependencies from "../components/MigrationDependencies.vue";
+import TaskLogButton from "../components/TaskLogButton.vue";
 import MigrationFirewallOptions from "../components/MigrationFirewallOptions.vue";
 import MigrationFirewallPreview from "../components/MigrationFirewallPreview.vue";
 import MigrationHostDNSOptions from "../components/MigrationHostDNSOptions.vue";
@@ -528,8 +528,7 @@ useLiveRefresh(api, ["tasks"], () => {
                 :disabled="busy"
             /></NFormItem>
             <NAlert v-if="exportMode === 'portable'" type="warning">
-              仅导出可识别的受管字段、IP 访问列表和基础
-              WAF，不包含完整原文、凭据或可选材料。原生认证、自定义路径、头常量及备注等内容会省略；迁入站点保持停用，须检查并补齐保护后再启用。
+              仅导出网站基础设置和访问规则，不包含自定义配置、密码等敏感信息。导入的网站默认停用，请检查配置后再启用。
             </NAlert>
             <NFormItem v-if="exportMode === 'encrypted'" label="加密口令"
               ><NInput
@@ -569,13 +568,6 @@ useLiveRefresh(api, ["tasks"], () => {
                 }}</NButton
               >
             </div>
-            <AdvancedDetails v-if="exported" title="导出范围与省略内容">
-              <ul>
-                <li v-for="item in exported.manifest.omissions" :key="item">
-                  {{ item }}
-                </li>
-              </ul>
-            </AdvancedDetails>
           </div></NTabPane
         >
         <NTabPane v-if="canImport" name="file" tab="从文件导入"
@@ -629,10 +621,7 @@ useLiveRefresh(api, ["tasks"], () => {
                   show-password-on="click"
                   autocomplete="off"
               /></NFormItem>
-              <AdvancedDetails class="full-width" title="连接选项"
-                ><NFormItem label="预期源服务器编号（可选）"
-                  ><NInput v-model:value="sourceNode" /></NFormItem
-              ></AdvancedDetails>
+
               <div
                 v-if="has('components.manage')"
                 class="full-width page-stack"
@@ -652,7 +641,7 @@ useLiveRefresh(api, ["tasks"], () => {
                   >
                   <div v-if="has('system.write')">
                     <NCheckbox v-model:checked="dependencyInstall"
-                      >授权缺失时首次安装 Nginx</NCheckbox
+                      >授权缺失时安装 Nginx</NCheckbox
                     >
                     <template v-if="dependencyInstall">
                       <NCheckbox v-model:checked="dependencyStart"
@@ -664,8 +653,7 @@ useLiveRefresh(api, ["tasks"], () => {
                     </template>
                   </div>
                   <p class="muted">
-                    首次安装仅适用于尚未安装 Nginx 的原生部署。Docker
-                    使用预置模块镜像。
+                    仅在目标服务器尚未安装 Nginx 时执行安装。
                   </p>
                 </template>
               </div>
@@ -736,7 +724,8 @@ useLiveRefresh(api, ["tasks"], () => {
       <NCheckbox v-if="has('system.write')" v-model:checked="enableNginx"
         >允许启用目标 Nginx 配置模块</NCheckbox
       >
-      <AdvancedDetails title="环境映射与可选配置">
+      <section>
+        <h3>迁移设置</h3>
         <div class="page-stack">
           <NFormItem
             label="参数映射（原参数 → 目标参数）"
@@ -746,6 +735,7 @@ useLiveRefresh(api, ["tasks"], () => {
           /></NFormItem>
           <MigrationHostDNSOptions
             v-model="hostDNSSettings"
+            :sources="plan?.host_dns?.entries.map((item) => item.source) ?? []"
             @update:valid="hostDNSValid = $event"
             :disabled="busy"
             :allow-map="has('host.dns.write')"
@@ -765,8 +755,8 @@ useLiveRefresh(api, ["tasks"], () => {
             :disabled="busy"
           />
           <p class="muted">环境映射修改后，请重新预检。</p>
-        </div></AdvancedDetails
-      >
+        </div>
+      </section>
     </section>
     <section v-if="plan" class="panel page-stack">
       <NAlert v-if="plan.mode === 'portable'" type="warning"
@@ -777,11 +767,10 @@ useLiveRefresh(api, ["tasks"], () => {
         <NTag>{{ states[plan.state] ?? plan.state }}</NTag>
         <NTag v-if="plan.pruned_at" type="warning">材料已清理</NTag>
       </div>
-      <p>源节点 {{ plan.source_node }} · {{ plan.source_version }}</p>
       <NAlert v-if="plan.pruned_at" type="info">
         迁移材料已于
         {{ time(plan.pruned_at) }}
-        清理，无法重新预检或执行。原计划摘要与执行结果仍可查询。
+        清理，无法重新预检或执行，迁移记录和执行结果仍可查询。
       </NAlert>
       <p v-if="plan.state === 'planned'" class="muted">
         有效期至 {{ time(plan.expires_at) }}
@@ -847,7 +836,7 @@ useLiveRefresh(api, ["tasks"], () => {
         >
         <div v-if="has('system.write')">
           <NCheckbox v-model:checked="dependencyInstall"
-            >授权缺失时首次安装 Nginx</NCheckbox
+            >授权缺失时安装 Nginx</NCheckbox
           >
           <template v-if="dependencyInstall">
             <NCheckbox v-model:checked="dependencyStart">安装后启动</NCheckbox>
@@ -860,8 +849,7 @@ useLiveRefresh(api, ["tasks"], () => {
         <NPopconfirm @positive-click="prepareDependencies"
           ><template #trigger
             ><NButton :disabled="busy">准备 Nginx 依赖</NButton></template
-          >按所选选项准备 Nginx 依赖？首次安装仅适用于未安装 Nginx
-          的原生部署，Docker 模块由镜像提供。</NPopconfirm
+          >确认准备 Nginx？仅在目标服务器尚未安装 Nginx 时执行安装。</NPopconfirm
         >
       </div>
       <div class="migration-steps">
@@ -875,14 +863,13 @@ useLiveRefresh(api, ["tasks"], () => {
                   : 'default'
             "
             >{{ stepStates[step.state] ?? step.state }}</NTag
-          ><code>{{ step.resource }}</code
           ><span>{{ step.message }}</span>
         </div>
       </div>
       <ul>
         <li v-for="item in plan.omissions" :key="item">{{ item }}</li>
       </ul>
-      <p v-if="plan.task_id">应用任务：{{ plan.task_id }}</p>
+      <TaskLogButton v-if="plan.task_id" :task-id="plan.task_id" />
       <NPopconfirm v-if="plan.state === 'planned'" @positive-click="execute"
         ><template #trigger
           ><NButton
@@ -908,11 +895,10 @@ useLiveRefresh(api, ["tasks"], () => {
       <h2>迁移记录</h2>
       <div v-for="item in history" :key="item.id" class="actions">
         <NButton text :disabled="busy" @click="selectPlan(item.id)">{{
-          item.id
+          `查看记录 · ${time(item.expires_at)}`
         }}</NButton
         ><NTag>{{ states[item.state] ?? item.state }}</NTag
-        ><NTag v-if="item.pruned_at" type="warning">材料已清理</NTag
-        ><span>{{ item.source_node }}</span>
+        ><NTag v-if="item.pruned_at" type="warning">材料已清理</NTag>
       </div>
     </section>
   </div>

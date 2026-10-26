@@ -241,7 +241,7 @@ onUnmounted(stop);
               }}<span v-if="elapsed"> · 已用时 {{ elapsed }}</span>
             </p>
             <p v-if="active" class="muted">
-              任务正在后台执行，状态与日志每 3 秒更新。
+              任务正在后台执行，进度和日志将自动更新。
             </p>
             <p v-if="needsAttention">请返回原操作页面确认或恢复任务。</p>
           </div>

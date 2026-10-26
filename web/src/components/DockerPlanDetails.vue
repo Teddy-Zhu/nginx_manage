@@ -56,10 +56,12 @@ const mappingOptions = computed(() =>
       )
     )
       return [];
-    return [{
-      label: `${port.family === "ipv4" ? "IPv4" : "IPv6"} ${port.protocol.toUpperCase()} [${port.host_ip}]:${port.host_port} → ${port.container_id.slice(0, 12)}:${port.container_port}`,
-      value: index,
-    }];
+    return [
+      {
+        label: `${port.family === "ipv4" ? "IPv4" : "IPv6"} ${port.protocol.toUpperCase()} [${port.host_ip}]:${port.host_port} → 容器端口 ${port.container_port}`,
+        value: index,
+      },
+    ];
   }),
 );
 const addressOptions = computed(() =>
@@ -70,32 +72,33 @@ const addressOptions = computed(() =>
       !port ||
       entry.family !== port.family ||
       (rule?.interface && rule.interface !== entry.interface) ||
-      (!["0.0.0.0", "::"].includes(port.host_ip) && port.host_ip !== entry.address)
+      (!["0.0.0.0", "::"].includes(port.host_ip) &&
+        port.host_ip !== entry.address)
     )
       return [];
     return [{ label: `${entry.interface} / ${entry.address}`, value: index }];
   }),
 );
 const bindings = computed(() => props.targets?.bindings ?? []);
-const generations: DataTableColumns<NonNullable<Plan["transition"]>["families"][number]> = [
-  { title: "地址族", key: "family" },
-  { title: "代际链", key: "chain" },
-  { title: "新增规则", key: "generated_rules" },
-  { title: "保留现有规则", key: "preserved_rules" },
-  { title: "候选批次", key: "candidate_bytes", render: (row) => `${row.candidate_bytes} 字节` },
-  { title: "撤回批次", key: "previous_bytes", render: (row) => `${row.previous_bytes} 字节` },
-];
+
 watch([ruleID, () => props.plan.snapshot_hash], () => {
   mapping.value = null;
   address.value = null;
 });
-watch(mapping, () => { address.value = null; });
+watch(mapping, () => {
+  address.value = null;
+});
 function change(next: Binding[]) {
-  emit("change", next.length ? {
-    engine_hash: props.plan.engine_hash,
-    snapshot_hash: props.plan.snapshot_hash,
-    bindings: next,
-  } : null);
+  emit(
+    "change",
+    next.length
+      ? {
+          engine_hash: props.plan.engine_hash,
+          snapshot_hash: props.plan.snapshot_hash,
+          bindings: next,
+        }
+      : null,
+  );
 }
 function sameBinding(a: Binding, b: Binding) {
   return Object.keys(a).every(
@@ -104,12 +107,16 @@ function sameBinding(a: Binding, b: Binding) {
 }
 function add() {
   const port = selectedPort.value;
-  const local = address.value === null ? null : props.plan.addresses[address.value];
+  const local =
+    address.value === null ? null : props.plan.addresses[address.value];
   if (
-    !port || !local || !selectedRule.value ||
+    !port ||
+    !local ||
+    !selectedRule.value ||
     (port.family !== "ipv4" && port.family !== "ipv6") ||
     (port.protocol !== "tcp" && port.protocol !== "udp") ||
-    props.disabled || bindings.value.length >= 128 ||
+    props.disabled ||
+    bindings.value.length >= 128 ||
     !mappingOptions.value.some((option) => option.value === mapping.value) ||
     !addressOptions.value.some((option) => option.value === address.value)
   )
@@ -130,86 +137,116 @@ function add() {
   change([...bindings.value, binding]);
 }
 const columns: DataTableColumns<Binding> = [
-  { title: "规则", key: "rule_id", width: 170, render: (row) => rules.value.find((rule) => rule.id === row.rule_id)?.name ?? row.rule_id },
-  { title: "容器", key: "container_id", width: 140, ellipsis: { tooltip: true } },
-  { title: "原始目的", key: "destination", width: 210, render: (row) => `[${row.destination}]:${row.host_port} / ${row.protocol.toUpperCase()}` },
+  {
+    title: "规则",
+    key: "rule_id",
+    width: 170,
+    render: (row) =>
+      rules.value.find((rule) => rule.id === row.rule_id)?.name ?? row.rule_id,
+  },
+  {
+    title: "容器",
+    key: "container_id",
+    width: 140,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: "访问地址",
+    key: "destination",
+    width: 210,
+    render: (row) =>
+      `[${row.destination}]:${row.host_port} / ${row.protocol.toUpperCase()}`,
+  },
   { title: "容器端口", key: "container_port", width: 100 },
-  { title: "入口接口", key: "input_interface", width: 140 },
+  { title: "网卡", key: "input_interface", width: 140 },
   {
     title: "操作",
     key: "actions",
     width: 90,
-    render: (row) => h(
-      NButton,
-      {
-        size: "small",
-        disabled: props.disabled,
-        onClick: () => change(bindings.value.filter((entry) => !sameBinding(entry, row))),
-      },
-      () => "移除",
-    ),
+    render: (row) =>
+      h(
+        NButton,
+        {
+          size: "small",
+          disabled: props.disabled,
+          onClick: () =>
+            change(bindings.value.filter((entry) => !sameBinding(entry, row))),
+        },
+        () => "移除",
+      ),
   },
-];
-const entries: DataTableColumns<Plan["entries"][number]> = [
-  { title: "地址族", key: "family", width: 90 },
-  { title: "规则参数", key: "expression", minWidth: 950, ellipsis: { tooltip: true } },
-];
-const resolved: DataTableColumns<Plan["bindings"][number]> = [
-  { title: "容器地址", key: "container_address", minWidth: 190 },
-  { title: "bridge 出口", key: "output_interface", minWidth: 170 },
-  { title: "原始目的", key: "binding.destination", minWidth: 210, render: (row) => `[${row.binding.destination}]:${row.binding.host_port}` },
-  { title: "DNAT 路径", key: "path.dnat_rules", minWidth: 130, render: (row) => `已核对 ${row.path.dnat_rules} 条规则` },
-  { title: "实际路由", key: "path.route_prefix", minWidth: 230, render: (row) => `${row.path.route_prefix} / 表 ${row.path.route_table}` },
 ];
 </script>
 
 <template>
-  <h4>Docker 发布端口目标</h4>
+  <h4>容器端口规则</h4>
   <n-alert type="warning" :bordered="false">{{ plan.reason }}</n-alert>
-  <p class="muted">选择规则对应的实际映射和入口地址。每个地址族、主机端口均需绑定；通配绑定不会自动覆盖所有本机地址。目标绑定仅用于本次计划，刷新页面后需重新选择。</p>
+  <p class="muted">选择规则对应的容器端口和访问地址。此关联仅用于本次变更。</p>
   <n-space class="notice">
-    <n-button :disabled="disabled" @click="emit('reload')">重新读取目标</n-button>
-    <n-button :disabled="disabled || !bindings.length" @click="change([])">清空绑定</n-button>
-    <span>{{ bindings.length }} / 128 个绑定</span>
+    <n-button :disabled="disabled" @click="emit('reload')"
+      >重新读取目标</n-button
+    >
+    <n-button :disabled="disabled || !bindings.length" @click="change([])"
+      >清空关联</n-button
+    >
+    <span>{{ bindings.length }} / 128 项关联</span>
   </n-space>
-  <p v-if="plan.truncated" class="muted">映射清单仅展示前 128 项；未展示的映射可通过 API 提交经核对的目标绑定。</p>
+  <p v-if="plan.truncated" class="muted">
+    仅显示前 128 项，请减少选择范围后重试。
+  </p>
   <div class="grid">
-    <n-form-item label="期望规则"><n-select v-model:value="ruleID" :options="ruleOptions" :disabled="disabled" /></n-form-item>
-    <n-form-item label="主机发布映射"><n-select v-model:value="mapping" :options="mappingOptions" :disabled="disabled || !ruleID" filterable /></n-form-item>
-    <n-form-item label="入口接口 / 原始目的地址"><n-select v-model:value="address" :options="addressOptions" :disabled="disabled || mapping === null" filterable /></n-form-item>
+    <n-form-item label="防火墙规则"
+      ><n-select
+        v-model:value="ruleID"
+        :options="ruleOptions"
+        :disabled="disabled"
+    /></n-form-item>
+    <n-form-item label="容器端口"
+      ><n-select
+        v-model:value="mapping"
+        :options="mappingOptions"
+        :disabled="disabled || !ruleID"
+        filterable
+    /></n-form-item>
+    <n-form-item label="访问地址"
+      ><n-select
+        v-model:value="address"
+        :options="addressOptions"
+        :disabled="disabled || mapping === null"
+        filterable
+    /></n-form-item>
   </div>
-  <n-button :disabled="disabled || address === null || bindings.length >= 128" @click="add">添加目标绑定</n-button>
-  <p v-if="ruleID && !mappingOptions.length" class="muted">没有符合该规则的同族 bridge/NAT 映射候选，请检查容器运行状态、发布端口和网络模式。</p>
-  <p v-if="mapping !== null && !addressOptions.length" class="muted">没有与该映射对应的本机入口地址，请核对接口及固定或通配绑定。</p>
-  <n-data-table :columns="columns" :data="bindings" :pagination="{ pageSize: 10 }" :scroll-x="1000" class="notice" />
-  <n-alert v-for="warning in plan.warnings" :key="warning" type="info" :bordered="false" class="notice">{{ warning }}</n-alert>
-  <template v-if="plan.compiled">
-    <dl>
-      <dt>Docker 生成规则</dt><dd>{{ plan.generated_rules }} 条 / {{ plan.program_bytes }} 字节</dd>
-      <dt>主机入站生成规则</dt><dd>{{ plan.host_generated_rules }} 条（含入口保护）</dd>
-      <dt>目标绑定摘要</dt><dd class="digest">{{ plan.bindings_hash }}</dd>
-      <dt>Docker 程序摘要</dt><dd class="digest">{{ plan.program_hash }}</dd>
-    </dl>
-    <template v-if="plan.transition">
-      <h4>代际切换计划</h4>
-      <dl>
-        <dt>挂接路径</dt><dd>{{ plan.transition.hook_chain }} 首位 → {{ plan.transition.entry_chain }} → 代际链</dd>
-        <dt>独立授权</dt><dd class="digest">{{ plan.transition.registration_operation_id }}</dd>
-        <dt>含入口的生成规则</dt><dd>{{ plan.transition.generated_rules }} 条 / {{ plan.transition.runtime_bytes }} 字节</dd>
-        <dt>代际程序摘要</dt><dd class="digest">{{ plan.transition.runtime_hash }}</dd>
-        <dt>官方预演</dt><dd>{{ plan.transition.dry_run_commands }} 个批次通过</dd>
-        <dt>预演摘要</dt><dd class="digest">{{ plan.transition.dry_run_hash }}</dd>
-        <dt>切换与撤回摘要</dt><dd class="digest">{{ plan.transition.transaction_hash }}</dd>
-      </dl>
-      <n-data-table :columns="generations" :data="plan.transition.families" :pagination="false" :scroll-x="1000" />
-    </template>
-    <n-data-table :columns="resolved" :data="plan.bindings" :pagination="{ pageSize: 10 }" :scroll-x="1000" />
-    <h4>Docker 规则预览</h4>
-    <p v-if="plan.entries_truncated" class="muted">仅展示前 128 条；摘要包含完整编译规则。</p>
-    <n-data-table :columns="entries" :data="plan.entries" :pagination="{ pageSize: 10 }" :scroll-x="1100" />
-  </template>
+  <n-button
+    :disabled="disabled || address === null || bindings.length >= 128"
+    @click="add"
+    >添加关联</n-button
+  >
+  <p v-if="ruleID && !mappingOptions.length" class="muted">
+    没有匹配的容器端口，请检查容器是否运行并开放了对应端口。
+  </p>
+  <p v-if="mapping !== null && !addressOptions.length" class="muted">
+    没有与该映射对应的本机入口地址，请核对接口及固定或通配绑定。
+  </p>
+  <n-data-table
+    :columns="columns"
+    :data="bindings"
+    :pagination="{ pageSize: 10 }"
+    :scroll-x="1000"
+    class="notice"
+  />
+  <n-alert
+    v-for="warning in plan.warnings"
+    :key="warning"
+    type="info"
+    :bordered="false"
+    class="notice"
+    >{{ warning }}</n-alert
+  >
+  <p v-if="plan.compiled" class="muted">规则检查通过，可应用变更。</p>
 </template>
 
 <style scoped>
-.digest { overflow-wrap: anywhere; }
+.digest {
+  overflow-wrap: anywhere;
+}
 </style>

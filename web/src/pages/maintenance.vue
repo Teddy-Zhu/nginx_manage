@@ -49,18 +49,15 @@ const labels: Record<string, string> = {
   open: "正常",
   draining: "等待在途任务",
   root_acquiring: "等待独占确认",
-  closing: "等待在途操作",
+  closing: "等待正在执行的操作",
   held: "维护中",
-  releasing: "恢复写入中",
-  released: "已恢复写入",
+  releasing: "恢复配置修改中",
+  released: "已恢复配置修改",
   failed: "维护失败",
   recovery_required: "待恢复",
   unavailable: "状态不可确认",
 };
 const phase = computed(() => labels[view.value?.phase ?? ""] ?? "读取中");
-const rootPhase = computed(
-  () => labels[view.value?.agent.phase ?? ""] ?? "未确认",
-);
 let controller: AbortController | null = null,
   reading = false,
   closed = false;
@@ -89,10 +86,12 @@ async function enter() {
 async function release() {
   const id = recoverID.value;
   if (!id) return;
-  await run(() => api.releaseMaintenance(id), "恢复写入请求已受理");
+  await run(() => api.releaseMaintenance(id), "恢复配置修改请求已受理");
   await load();
 }
-onMounted(() => { void load(); });
+onMounted(() => {
+  void load();
+});
 onUnmounted(() => {
   closed = true;
   controller?.abort();
@@ -122,32 +121,20 @@ useLiveRefresh(api, ["tasks", "maintenance"], load);
           <NButton :disabled="reading" @click="load">刷新</NButton>
         </div>
         <p>
-          维护期间暂停配置写入、自动续期和部署，已有代理服务继续运行。在途操作完成后进入维护状态。
+          维护期间暂停配置写入、自动续期和部署，已有代理服务继续运行。正在执行的操作完成后进入维护状态。
         </p>
         <dl v-if="view" class="details">
-          <dt>在途 Web 操作</dt>
-          <dd>{{ view.active }}</dd>
-          <dt>Agent 状态</dt>
-          <dd>{{ rootPhase }}</dd>
-          <dt>在途 Agent 操作</dt>
-          <dd>{{ view.agent.busy }}</dd>
-          <template v-if="view.session"
-            ><dt>维护任务</dt>
-            <dd>{{ view.session.task_id }}</dd>
-            <dt>等待截止</dt>
-            <dd>
-              {{ new Date(view.session.deadline * 1000).toLocaleString() }}
-            </dd></template
-          >
-          <template v-if="orphan"
-            ><dt>独立维护标识</dt>
-            <dd>{{ view.agent.id }}</dd></template
-          >
+          <dt>正在处理的操作</dt>
+          <dd>{{ view.active + view.agent.busy }}</dd>
+          <dt v-if="view.session">等待截止时间</dt>
+          <dd v-if="view.session">
+            {{ new Date(view.session.deadline * 1000).toLocaleString() }}
+          </dd>
         </dl>
         <NAlert v-if="view && !view.agent.available" type="info">{{
           view.agent.reason || "本机尚未开放维护操作"
         }}</NAlert>
-        <NFormItem label="等待在途操作的时限（秒）"
+        <NFormItem label="等待正在执行的操作的时限（秒）"
           ><NInputNumber
             v-model:value="seconds"
             :min="30"
@@ -167,16 +154,16 @@ useLiveRefresh(api, ["tasks", "maintenance"], load);
                 "
                 >进入维护</NButton
               ></template
-            >确认暂停新的配置写入并等待在途操作结束？</NPopconfirm
+            >确认暂停新的配置写入并等待正在执行的操作结束？</NPopconfirm
           >
           <NPopconfirm @positive-click="release"
             ><template #trigger
               ><NButton :disabled="busy || !canRelease"
-                >恢复写入</NButton
+                >恢复配置修改</NButton
               ></template
             >{{
               orphan
-                ? "确认已核对独立维护记录，并释放此维护锁？"
+                ? "确认结束当前维护并恢复配置修改？"
                 : "确认结束维护并恢复配置写入？"
             }}</NPopconfirm
           >

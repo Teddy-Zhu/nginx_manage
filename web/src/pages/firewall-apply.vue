@@ -13,7 +13,6 @@
 </route>
 <script setup lang="ts">
 import { useLiveRefresh } from "../composables/live";
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -36,9 +35,7 @@ import {
 import { useAction, useIdempotency } from "../composables/action";
 import { useRoute } from "vue-router";
 import { useSession } from "../stores/session";
-import FirewalldPlanDetails from "../components/FirewalldPlanDetails.vue";
-import UFWPlanDetails from "../components/UFWPlanDetails.vue";
-import IPTablesPlanDetails from "../components/IPTablesPlanDetails.vue";
+
 import DockerPlanDetails from "../components/DockerPlanDetails.vue";
 
 const route = useRoute();
@@ -62,9 +59,9 @@ const view = ref<FirewallRuntime | null>(null),
   uncertain = ref(false),
   remaining = ref(0);
 const controller = new AbortController();
-const dockerTargets = ref<NonNullable<FirewallPlanInput["docker_targets"]> | null>(
-  null,
-);
+const dockerTargets = ref<NonNullable<
+  FirewallPlanInput["docker_targets"]
+> | null>(null);
 const canManage = computed(() =>
   ["read", "security.write"].every((scope) =>
     session.localMe?.scopes.includes(scope),
@@ -75,10 +72,12 @@ const preparation = computed(() => {
   const latest = view.value?.preparation;
   return latest && ["running", "cancelling"].includes(latest.state)
     ? latest
-    : plan.value?.preparation ?? latest;
+    : (plan.value?.preparation ?? latest);
 });
 const preparing = computed(
-  () => !!preparation.value && ["running", "cancelling"].includes(preparation.value.state),
+  () =>
+    !!preparation.value &&
+    ["running", "cancelling"].includes(preparation.value.state),
 );
 const preparationStates = {
   running: "正在准备",
@@ -87,13 +86,7 @@ const preparationStates = {
   failed: "准备失败",
   cancelled: "已取消",
 };
-const observedProtections = computed(() => view.value?.protection_observation);
-const protectionStates = {
-  unavailable: "尚不可核对",
-  not_applicable: "无适用策略",
-  current: "采样时一致",
-  changed: "保护依据已变化",
-};
+
 const emptyInitial = computed(
   () =>
     view.value?.available &&
@@ -179,14 +172,21 @@ async function readRuntime() {
     if (pending && ["running", "cancelling"].includes(pending.state))
       action.value = pending.action;
     if (
-      pending && pending.action === action.value &&
+      pending &&
+      pending.action === action.value &&
       (["running", "cancelling"].includes(pending.state) ||
-        pending.action === "remove" || pending.version === stored.value?.version) &&
-      (plan.value?.id !== pending.id || plan.value?.preparation?.state !== pending.state) &&
+        pending.action === "remove" ||
+        pending.version === stored.value?.version) &&
+      (plan.value?.id !== pending.id ||
+        plan.value?.preparation?.state !== pending.state) &&
       ["running", "cancelling", "ready"].includes(pending.state)
     ) {
       plan.value = await api.planFirewall(
-        { action: pending.action, version: pending.version, preparation_id: pending.id },
+        {
+          action: pending.action,
+          version: pending.version,
+          preparation_id: pending.id,
+        },
         controller.signal,
       );
     } else if (plan.value && pending && plan.value.id === pending.id) {
@@ -340,9 +340,10 @@ function apply() {
       plan.value?.action === "remove"
         ? "移除本应用防火墙规则"
         : "应用防火墙策略",
-    content: plan.value?.action === "remove"
-      ? "将移除本系统管理的防火墙规则及入口保护，保留已保存配置，其他来源规则继续生效。请在 120 秒内通过新的管理连接确认，超时将恢复原规则。"
-      : "将应用已保存规则并保护管理与 SSH 入口。请在 120 秒内通过新的管理连接确认，连接中断或超时将恢复原规则。",
+    content:
+      plan.value?.action === "remove"
+        ? "将移除本系统管理的防火墙规则及入口保护，保留已保存配置，其他来源规则继续生效。请在 120 秒内通过新的管理连接确认，超时将恢复原规则。"
+        : "将应用已保存规则并保护管理与 SSH 入口。请在 120 秒内通过新的管理连接确认，连接中断或超时将恢复原规则。",
     positiveText: "执行",
     negativeText: "取消",
     onPositiveClick: submit,
@@ -407,27 +408,31 @@ useLiveRefresh(api, ["firewall"], readRuntime);
   <n-alert v-if="error" type="error" :bordered="false" class="notice">{{
     error
   }}</n-alert>
-  <n-alert
-    v-if="view?.reason"
-    type="warning"
-    :bordered="false"
-    class="notice"
-    >暂时无法应用规则。<RouterLink to="/management-listener">检查安全访问设置</RouterLink><AdvancedDetails title="查看原因"><p>{{ view.reason }}</p></AdvancedDetails></n-alert
+  <n-alert v-if="view?.reason" type="warning" :bordered="false" class="notice"
+    >暂时无法应用规则。<RouterLink to="/management-listener"
+      >检查安全访问设置</RouterLink
+    ></n-alert
   >
-  <n-alert
-    type="info"
-    :bordered="false"
-    class="notice"
-    >修改后需在 120 秒内确认连接正常，超时自动恢复。请通过<RouterLink to="/management-listener">安全管理入口</RouterLink>访问面板后应用规则。云服务器还需放行对应的安全组端口。</n-alert
+  <n-alert type="info" :bordered="false" class="notice"
+    >修改后需在 120 秒内确认连接正常，超时自动恢复。请通过<RouterLink
+      to="/management-listener"
+      >安全管理入口</RouterLink
+    >访问面板后应用规则。云服务器还需放行对应的安全组端口。</n-alert
   >
   <section v-if="view" class="surface">
     <h3>当前规则状态</h3>
     <p v-if="stored?.version">
-      <template v-if="view.confirmed_action === 'apply'">{{ view.confirmed_version === stored.version ? '已生效' : '有修改待应用' }}</template>
-      <template v-else-if="view.confirmed_action === 'remove'">规则已移除</template>
+      <template v-if="view.confirmed_action === 'apply'">{{
+        view.confirmed_version === stored.version ? "已生效" : "有修改待应用"
+      }}</template>
+      <template v-else-if="view.confirmed_action === 'remove'"
+        >规则已移除</template
+      >
       <template v-else>尚未应用</template>
     </p>
-    <p v-else class="muted">尚未添加规则。<RouterLink to="/firewall-rules">添加规则</RouterLink></p>
+    <p v-else class="muted">
+      尚未添加规则。<RouterLink to="/firewall-rules">添加规则</RouterLink>
+    </p>
     <n-data-table
       v-if="view.protections.length"
       :columns="protections"
@@ -450,81 +455,36 @@ useLiveRefresh(api, ["firewall"], readRuntime);
       本面板添加的规则已移除，已保存的配置保留。其他来源的防火墙规则继续生效。
     </p>
   </section>
-  <AdvancedDetails title="连接保护详情">
-  <section v-if="observedProtections" class="surface">
-    <div class="page-toolbar">
-      <h3>保护依据核对</h3>
-      <n-tag
-        :type="
-          observedProtections.state === 'current'
-            ? 'success'
-            : observedProtections.state === 'not_applicable'
-              ? 'default'
-              : 'warning'
-        "
-      >
-        {{ protectionStates[observedProtections.state] }}
-      </n-tag>
-    </div>
-    <p v-if="observedProtections.observed_at">
-      采样时间
-      {{ new Date(observedProtections.observed_at * 1000).toLocaleString() }} ·
-      计划 {{ observedProtections.plan_id }}
-    </p>
-    <n-alert
-      v-if="observedProtections.reason"
-      :type="
-        observedProtections.state === 'not_applicable' ? 'info' : 'warning'
-      "
-      :bordered="false"
-      class="notice"
-    >
-      {{ observedProtections.reason }}
-    </n-alert>
-    <template
-      v-if="
-        observedProtections.state === 'current' ||
-        observedProtections.state === 'changed'
-      "
-    >
-      <p>
-        当前 SSH 保护：{{
-          observedProtections.ssh_profile === "openssh"
-            ? "OpenSSH"
-            : "本机已确认无 SSH 保护"
-        }}
-        · 实际监听
-        {{ observedProtections.ssh_listeners.join(", ") || "未观察到" }}
-      </p>
-      <n-data-table
-        v-if="observedProtections.protections.length"
-        :columns="protections"
-        :data="observedProtections.protections"
-        :pagination="{ pageSize: 10 }"
-        :scroll-x="650"
-      />
-      <p class="muted">
-        此处为采样时重新核对的保护项，上方仍为已确认规则中的保护项。差异需要重新应用并确认；采样不自动修改规则，也不证明外部可达性。
-      </p>
-    </template>
-  </section>
-  </AdvancedDetails>
+
   <section v-if="preparation" class="surface">
     <div class="page-toolbar">
       <h3>检查防火墙规则</h3>
       <n-tag
-        :type="preparation.state === 'ready' ? 'success' : preparation.state === 'failed' ? 'error' : 'info'"
+        :type="
+          preparation.state === 'ready'
+            ? 'success'
+            : preparation.state === 'failed'
+              ? 'error'
+              : 'info'
+        "
       >
         {{ preparationStates[preparation.state] }}
       </n-tag>
     </div>
     <p>
-      已核对 {{ preparation.completed_commands }} / {{ preparation.total_commands }} 步
+      已核对 {{ preparation.completed_commands }} /
+      {{ preparation.total_commands }} 步
     </p>
     <p v-if="preparing" class="muted">
-      准备期间尚未应用规则。截止时间 {{ new Date(preparation.deadline * 1000).toLocaleString() }}
+      准备期间尚未应用规则。截止时间
+      {{ new Date(preparation.deadline * 1000).toLocaleString() }}
     </p>
-    <n-alert v-if="preparation.error" type="warning" :bordered="false" class="notice">
+    <n-alert
+      v-if="preparation.error"
+      type="warning"
+      :bordered="false"
+      class="notice"
+    >
       {{ preparation.error }}
     </n-alert>
     <n-button
@@ -534,12 +494,21 @@ useLiveRefresh(api, ["firewall"], readRuntime);
       >取消准备</n-button
     >
   </section>
-  <section v-if="plan && !preparing && (!plan.preparation || plan.preparation.state === 'ready')" class="surface">
+  <section
+    v-if="
+      plan &&
+      !preparing &&
+      (!plan.preparation || plan.preparation.state === 'ready')
+    "
+    class="surface"
+  >
     <div class="page-toolbar">
-      <h3>
-        {{ plan.action === "remove" ? "移除" : "应用" }}计划
-      </h3>
-      <n-tag type="info">{{ plan.action === "remove" ? "移除本系统规则" : `${plan.generated_rules} 条规则` }}</n-tag>
+      <h3>{{ plan.action === "remove" ? "移除" : "应用" }}计划</h3>
+      <n-tag type="info">{{
+        plan.action === "remove"
+          ? "移除本系统规则"
+          : `${plan.generated_rules} 条规则`
+      }}</n-tag>
     </div>
     <dl>
       <dt>管理监听</dt>
@@ -566,30 +535,16 @@ useLiveRefresh(api, ["firewall"], readRuntime);
       @change="bindDocker"
       @reload="reloadDocker"
     />
-    <AdvancedDetails title="防火墙诊断">
-    <FirewalldPlanDetails
-      v-if="plan.firewalld"
-      :plan="plan.firewalld"
-      :program-hash="plan.program_hash"
-    />
-    <UFWPlanDetails
-      v-if="plan.ufw"
-      :plan="plan.ufw"
-      :program-hash="plan.program_hash"
-    />
-    <IPTablesPlanDetails
-      v-if="plan.iptables"
-      :plan="plan.iptables"
-      :program-hash="plan.program_hash"
-    />
-    </AdvancedDetails>
+
     <n-data-table
       :columns="protections"
       :data="plan.protections"
       :pagination="{ pageSize: 10 }"
       :scroll-x="650"
     />
-    <p class="muted">请核对以上连接保护。执行后需通过新连接确认；云安全组和其他系统规则仍可能影响访问。</p>
+    <p class="muted">
+      请核对以上连接保护。执行后需通过新连接确认；云安全组和其他系统规则仍可能影响访问。
+    </p>
     <n-button
       type="warning"
       :disabled="
@@ -601,7 +556,7 @@ useLiveRefresh(api, ["firewall"], readRuntime);
         (!uncertain && Date.now() / 1000 >= plan.expires_at)
       "
       @click="apply"
-      >{{ uncertain ? "查询或重送原请求" : "执行此计划" }}</n-button
+      >{{ uncertain ? "确认操作进度" : "确认应用" }}</n-button
     >
   </section>
   <n-alert v-if="uncertain" type="warning" :bordered="false" class="notice"
@@ -615,7 +570,8 @@ useLiveRefresh(api, ["firewall"], readRuntime);
       }}</n-tag>
     </div>
     <p>
-      {{ operation.action === "remove" ? "移除" : "应用" }} · 操作 {{ operation.id }}
+      {{ operation.action === "remove" ? "移除" : "应用" }} · 操作
+      {{ operation.id }}
     </p>
     <n-alert
       v-if="operation.error"

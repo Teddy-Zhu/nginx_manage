@@ -33,7 +33,6 @@ import {
   useDialog,
   type DataTableColumns,
 } from "naive-ui";
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import GeoIPSourcePanel from "../components/GeoIPSourcePanel.vue";
 import {
   useNodeAPI,
@@ -62,7 +61,10 @@ const geoip = ref<GeoIPState | null>(null),
 const activeTab = ref("rules"),
   editing = ref<FirewallRule | null>(null),
   kind = ref("port"),
-  portRanges = ref<PortRange[]>([{ from: 80, to: null }, { from: 443, to: null }]),
+  portRanges = ref<PortRange[]>([
+    { from: 80, to: null },
+    { from: 443, to: null },
+  ]),
   sources = ref<string[]>([]),
   formError = ref("");
 const formBusy = ref(false);
@@ -126,7 +128,10 @@ function reorder(rules: FirewallRule[]) {
 }
 function add() {
   kind.value = "port";
-  portRanges.value = [{ from: 80, to: null }, { from: 443, to: null }];
+  portRanges.value = [
+    { from: 80, to: null },
+    { from: 443, to: null },
+  ];
   sources.value = [];
   formError.value = "";
   editing.value = {
@@ -148,7 +153,10 @@ function add() {
 function edit(rule: FirewallRule) {
   editing.value = structuredClone(toRaw(rule));
   kind.value = ruleKind(rule);
-  portRanges.value = rule.ports.map((p) => ({ from: p.from, to: p.from === p.to ? null : p.to }));
+  portRanges.value = rule.ports.map((p) => ({
+    from: p.from,
+    to: p.from === p.to ? null : p.to,
+  }));
   sources.value = kind.value === "country" ? [] : [...rule.sources];
   formError.value = "";
 }
@@ -173,12 +181,28 @@ async function commitRule() {
   }
   if (value.protocol === "any") value.ports = [{ from: 1, to: 65535 }];
   else {
-    if (!portRanges.value.length || portRanges.value.length > 16 || portRanges.value.some((p) => p.from === null)) {
+    if (
+      !portRanges.value.length ||
+      portRanges.value.length > 16 ||
+      portRanges.value.some((p) => p.from === null)
+    ) {
       formError.value = "请填写 1–16 个端口或端口范围";
       return;
     }
-    const ports = portRanges.value.map((p) => ({ from: p.from!, to: p.to ?? p.from! }));
-    if (ports.some((p) => !Number.isInteger(p.from) || !Number.isInteger(p.to) || p.from < 1 || p.to > 65535 || p.to < p.from)) {
+    const ports = portRanges.value.map((p) => ({
+      from: p.from!,
+      to: p.to ?? p.from!,
+    }));
+    if (
+      ports.some(
+        (p) =>
+          !Number.isInteger(p.from) ||
+          !Number.isInteger(p.to) ||
+          p.from < 1 ||
+          p.to > 65535 ||
+          p.to < p.from,
+      )
+    ) {
       formError.value = "端口须为 1–65535，结束端口不能小于起始端口";
       return;
     }
@@ -231,9 +255,7 @@ async function commitRule() {
     value.countries = [];
     value.geoip_updated_at = undefined;
     value.sources =
-      kind.value === "address"
-        ? [...new Set(cleanList(sources.value))]
-        : [];
+      kind.value === "address" ? [...new Set(cleanList(sources.value))] : [];
     if (kind.value === "address" && !value.sources.length) {
       formError.value = "请添加 IP 地址或网段";
       return;
@@ -528,18 +550,14 @@ onMounted(load);
             </div>
           </template>
         </n-data-table>
-        <AdvancedDetails title="高级设置">
-          <n-form-item label="防火墙管理方式"
-            ><n-select
-              v-model:value="policy.backend"
-              :options="backends"
-              :disabled="busy || !canWrite || !!stored?.version"
-          /></n-form-item>
+        <section>
+          <h3>规则检查</h3>
+
           <p class="muted">
             本工具管理的规则与系统已有规则共同生效。其他防火墙或云安全组中的限制需要在对应位置调整。
           </p>
           <n-space align="center" class="advanced-actions"
-            ><RouterLink to="/firewall">查看系统已有规则</RouterLink>
+            ><RouterLink to="/firewall">查看防火墙状态</RouterLink>
             <n-button
               :disabled="busy || dirty || !stored?.version"
               @click="check"
@@ -558,7 +576,7 @@ onMounted(load);
           <p v-if="observation && !observation.writable">
             {{ observation.reason }}
           </p>
-        </AdvancedDetails>
+        </section>
       </n-tab-pane>
       <n-tab-pane v-if="canWrite" name="geoip" tab="GeoIP 数据源"
         ><GeoIPSourcePanel
@@ -612,13 +630,20 @@ onMounted(load);
         >请先在“GeoIP 数据”中更新国家地址数据。</n-alert
       >
       <n-form-item v-if="kind === 'address'" label="IP 地址或网段"
-        ><ValueListInput :max="policy.backend === 'direct-nftables' ? 262144 : 32" v-model:value="sources" item-label="来源地址" placeholder="192.0.2.1 或 192.0.2.0/24" :maxlength="64" /></n-form-item>
+        ><ValueListInput
+          :max="policy.backend === 'direct-nftables' ? 262144 : 32"
+          v-model:value="sources"
+          item-label="来源地址"
+          placeholder="192.0.2.1 或 192.0.2.0/24"
+          :maxlength="64"
+      /></n-form-item>
       <n-form-item label="协议"
         ><n-select v-model:value="editing.protocol" :options="protocols"
       /></n-form-item>
       <n-form-item v-if="editing.protocol !== 'any'" label="端口"
-        ><PortRangesInput v-model:value="portRanges" /></n-form-item>
-      <AdvancedDetails title="更多设置">
+        ><PortRangesInput v-model:value="portRanges"
+      /></n-form-item>
+      <section>
         <n-form-item label="地址类型"
           ><n-select
             v-model:value="editing.family"
@@ -645,7 +670,7 @@ onMounted(load);
         <n-form-item label="备注"
           ><n-input v-model:value="editing.comment" maxlength="512"
         /></n-form-item>
-      </AdvancedDetails>
+      </section>
       <n-space justify="end"
         ><n-button :disabled="busy || formBusy" @click="editing = null"
           >取消</n-button

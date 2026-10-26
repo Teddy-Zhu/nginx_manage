@@ -12,16 +12,15 @@
 }
 </route>
 <script setup lang="ts">
-import AdvancedDetails from "../components/AdvancedDetails.vue";
 import { RouterLink } from "vue-router";
-import Fail2banPythonPanel from "../components/Fail2banPythonPanel.vue";
+
 import Fail2banLifecyclePanel from "../components/Fail2banLifecyclePanel.vue";
 import Fail2banUpgradePanel from "../components/Fail2banUpgradePanel.vue";
 import Fail2banAddressPanel from "../components/Fail2banAddressPanel.vue";
 import Fail2banExistingPanel from "../components/Fail2banExistingPanel.vue";
 import Fail2banPolicyEditor from "../components/Fail2banPolicyEditor.vue";
 import Fail2banLoginLogPanel from "../components/Fail2banLoginLogPanel.vue";
-import Fail2banHostInputPanel from "../components/Fail2banHostInputPanel.vue";
+
 import { computed, h, onMounted, onUnmounted, ref } from "vue";
 import {
   NAlert,
@@ -40,16 +39,6 @@ import {
 
 const api = useNodeAPI(),
   controller = new AbortController();
-const managedStates: Record<string, string> = {
-  absent: "未登记",
-  unavailable: "状态未知",
-  reserved: "待安装",
-  ready: "已准备",
-  installed: "已登记",
-  interrupted: "安装未完成",
-  "rolling-back": "撤回中",
-  "rolled-back": "已撤回",
-};
 const view = ref<Fail2banObservation | null>(null),
   error = ref(""),
   reading = ref(false),
@@ -73,9 +62,9 @@ const jailRows: DataTableColumns<Fail2banInstance["jails"][number]> = [
     key: "managed",
     render: (row) =>
       row.managed
-        ? "本应用管理"
+        ? "面板管理"
         : adoptedJails.value.has(row.name)
-          ? "本机接管登记"
+          ? "已连接的规则"
           : "其他防护规则",
   },
   {
@@ -101,66 +90,6 @@ const bannedRows = computed(
 );
 const bannedColumns: DataTableColumns<{ ip: string }> = [
   { title: "已封禁的 IP", key: "ip" },
-];
-const status = (value: boolean | null) =>
-  value === null ? "未知" : value ? "是" : "否";
-const python = computed(() => view.value?.python);
-const tools: DataTableColumns<Fail2banObservation["tools"][number]> = [
-  { title: "程序", key: "id" },
-  { title: "发现文件", key: "present", render: (row) => status(row.present) },
-  {
-    title: "路径与权限已核对",
-    key: "trusted",
-    render: (row) => (row.trusted ? "是" : "未通过"),
-  },
-  {
-    title: "实际路径",
-    key: "resolved",
-    render: (row) => row.resolved || row.path || "—",
-    minWidth: 240,
-    ellipsis: { tooltip: true },
-  },
-  {
-    title: "状态说明",
-    key: "reason",
-    render: (row) => row.reason || "—",
-    minWidth: 240,
-  },
-];
-const services: DataTableColumns<Fail2banObservation["services"][number]> = [
-  { title: "服务单元", key: "id" },
-  {
-    title: "加载",
-    key: "load",
-    render: (row) => (row.available ? row.load : "未知"),
-  },
-  {
-    title: "活动状态",
-    key: "active",
-    render: (row) => (row.available ? `${row.active} / ${row.sub}` : "未知"),
-  },
-  {
-    title: "开机状态",
-    key: "unit_file",
-    render: (row) => row.unit_file || "未知",
-  },
-  {
-    title: "主进程 PID",
-    key: "main_pid",
-    render: (row) => row.main_pid ?? "未知",
-  },
-  {
-    title: "状态说明",
-    key: "reason",
-    render: (row) => row.reason || "—",
-    minWidth: 240,
-  },
-];
-const modules: DataTableColumns<
-  Fail2banObservation["python"]["modules"][number]
-> = [
-  { title: "标准库", key: "name" },
-  { title: "可导入", key: "available", render: (row) => status(row.available) },
 ];
 async function load() {
   if (reading.value || closed) return;
@@ -226,16 +155,53 @@ onUnmounted(() => {
   <div class="page-stack">
     <div class="page-toolbar">
       <h2>登录防护</h2>
-      <div class="inline-gap"><RouterLink :to="{ path: '/components', query: { software: 'fail2ban' } }">软件设置</RouterLink><NButton :loading="reading" @click="load">刷新</NButton></div>
+      <div class="inline-gap">
+        <RouterLink
+          :to="{ path: '/components', query: { software: 'fail2ban' } }"
+          >软件设置</RouterLink
+        ><NButton :loading="reading" @click="load">刷新</NButton>
+      </div>
     </div>
-    <div class="stat-grid"><div class="stat-card"><span class="stat-label">防护服务</span><strong>{{ instance?.available ? '运行中' : instanceError || instance ? '连接异常' : '正在读取' }}</strong></div><div class="stat-card"><span class="stat-label">运行规则</span><strong>{{ instance?.available ? instance.jails.length : '—' }}</strong></div><div class="stat-card"><span class="stat-label">软件版本</span><strong>{{ instance?.server_version || view?.managed.version || '—' }}</strong></div></div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-label">防护服务</span
+        ><strong>{{
+          instance?.available
+            ? "运行中"
+            : instanceError || instance
+              ? "连接异常"
+              : "正在读取"
+        }}</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">运行规则</span
+        ><strong>{{
+          instance?.available ? instance.jails.length : "—"
+        }}</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">软件版本</span
+        ><strong>{{
+          instance?.server_version || view?.managed.version || "—"
+        }}</strong>
+      </div>
+    </div>
     <Fail2banPolicyEditor />
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NAlert v-if="instanceError" type="error">{{ instanceError }}</NAlert>
     <section v-if="instance" class="panel page-stack">
-      <div class="toolbar"><h3>防护规则</h3><NTag :type="instance.available ? 'success' : 'warning'">{{ instance.available ? '已连接' : '连接异常' }}</NTag></div>
-      <p v-if="instance.available && !instance.jails.length" class="muted">还没有防护规则，请先添加规则。</p>
-      <NAlert v-if="instance.reason" type="warning">暂时无法读取部分防护状态。<AdvancedDetails title="查看原因"><p>{{ instance.reason }}</p></AdvancedDetails></NAlert>
+      <div class="toolbar">
+        <h3>防护规则</h3>
+        <NTag :type="instance.available ? 'success' : 'warning'">{{
+          instance.available ? "已连接" : "连接异常"
+        }}</NTag>
+      </div>
+      <p v-if="instance.available && !instance.jails.length" class="muted">
+        还没有防护规则，请先添加规则。
+      </p>
+      <NAlert v-if="instance.reason" type="warning"
+        >暂时无法读取部分防护状态。</NAlert
+      >
       <NDataTable
         v-if="instance.available"
         :columns="jailRows"
@@ -260,10 +226,7 @@ onUnmounted(() => {
           jail.reason
         }}</NAlert>
         <template v-if="jail.available">
-          <p>
-            采样 {{ new Date(jail.at * 1000).toLocaleString() }} · 服务端
-            {{ jail.server_version }}
-          </p>
+          <p>更新于 {{ new Date(jail.at * 1000).toLocaleString() }}</p>
           <p>
             当前失败 {{ jail.current_failed }} · 累计失败
             {{ jail.total_failed }} · 当前封禁 {{ jail.current_banned }} ·
@@ -285,150 +248,30 @@ onUnmounted(() => {
         />
       </template>
     </section>
-    <AdvancedDetails title="高级防护设置">
-    <Fail2banPythonPanel
-      :module-enabled="moduleEnabled === true"
-      :python="view?.python ?? null"
-      :observed-at="view?.at ?? 0"
-      @changed="load"
-    />
-    <Fail2banLifecyclePanel
-      :module-enabled="moduleEnabled === true"
-      :binding="view?.binding ?? null"
-      :instance="instance"
-      :managed="view?.managed ?? null"
-      :service="
-        view?.services.find(
-          (item) => item.id === 'nginxpanel-fail2ban.service',
-        ) ?? null
-      "
-      :observed-at="view?.at ?? 0"
-      @changed="load"
-    />
-    <Fail2banUpgradePanel
-      :module-enabled="moduleEnabled === true"
-      @changed="load"
-    />
-    <Fail2banExistingPanel
-      :module-enabled="moduleEnabled === true"
-      @resources="setAdoptedJails"
-      @changed="load"
-    />
-    <Fail2banLoginLogPanel />
-    <Fail2banHostInputPanel />
-    </AdvancedDetails>
-    <AdvancedDetails title="诊断详情">
-    <section class="panel page-stack">
-      <div class="toolbar">
-        <h3>管理状态</h3>
-        <NTag :type="moduleEnabled ? 'info' : 'default'"
-          >模块{{
-            moduleEnabled === null
-              ? "状态未知"
-              : moduleEnabled
-                ? "已启用"
-                : "已停用"
-          }}</NTag
-        >
-      </div>
-      <p>
-        服务运行独立于面板模块开关。已有实例接入后，未接管的 jail 保持只读。
-      </p>
-      <template v-if="view">
-        <p>
-          观测时间
-          {{ view.at ? new Date(view.at * 1000).toLocaleString() : "未知" }} ·
-          {{ view.available ? "宿主机诊断" : "宿主机范围未就绪" }}
-        </p>
-        <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
-      </template>
+    <section class="page-stack">
+      <Fail2banLifecyclePanel
+        :module-enabled="moduleEnabled === true"
+        :binding="view?.binding ?? null"
+        :instance="instance"
+        :managed="view?.managed ?? null"
+        :service="
+          view?.services.find(
+            (item) => item.id === 'nginxpanel-fail2ban.service',
+          ) ?? null
+        "
+        :observed-at="view?.at ?? 0"
+        @changed="load"
+      />
+      <Fail2banUpgradePanel
+        :module-enabled="moduleEnabled === true"
+        @changed="load"
+      />
+      <Fail2banExistingPanel
+        :module-enabled="moduleEnabled === true"
+        @resources="setAdoptedJails"
+        @changed="load"
+      />
+      <Fail2banLoginLogPanel />
     </section>
-    <section v-if="view" class="panel page-stack">
-      <div class="toolbar">
-        <h3>受管引擎</h3>
-        <NTag
-          :type="
-            view.managed.state === 'installed'
-              ? 'info'
-              : view.managed.state === 'interrupted'
-                ? 'warning'
-                : 'default'
-          "
-        >
-          {{ managedStates[view.managed.state] || "状态未知" }}
-        </NTag>
-      </div>
-      <template v-if="view.managed.operation_id">
-        <p>
-          Fail2ban {{ view.managed.version }} · Python
-          {{ view.managed.python_version }}
-        </p>
-        <p>{{ view.managed.service }} · {{ view.managed.python_path }}</p>
-        <p class="muted">
-          批准时间
-          {{ new Date(view.managed.approved_at * 1000).toLocaleString() }}
-        </p>
-      </template>
-      <p v-if="view.managed.reason">{{ view.managed.reason }}</p>
-      <p class="muted">安装登记、实际服务运行和 jail 保护状态分别核对。</p>
-    </section>
-    <template v-if="view?.available">
-      <section class="panel page-stack">
-        <h3>固定系统工具</h3>
-        <p>官方客户端版本 {{ view.client_version || "未能读取" }}</p>
-        <NDataTable :columns="tools" :data="view.tools" :scroll-x="900" />
-        <NAlert v-if="view.missing.length" type="warning"
-          >固定系统路径未发现：{{ view.missing.join("、") }}</NAlert
-        >
-      </section>
-      <section v-if="python" class="panel page-stack">
-        <h3>系统 Python</h3>
-        <p>
-          {{
-            python.executable.resolved ||
-            python.executable.path ||
-            "未发现受信解释器"
-          }}
-          · 版本 {{ python.version || "未知" }}
-        </p>
-        <p>
-          必要标准库可用：{{ status(python.standard_library) }} · SQLite
-          {{ python.sqlite_version || "未知" }}
-        </p>
-        <p v-if="python.package.available">
-          软件包归属 {{ python.package.manager }} / {{ python.package.name }} /
-          {{ python.package.version }}
-        </p>
-        <p v-else>{{ python.package.reason }}</p>
-        <NAlert
-          v-if="python.reason"
-          :type="python.standard_library ? 'info' : 'warning'"
-          >{{ python.reason }}</NAlert
-        >
-        <NDataTable
-          v-if="python.modules.length"
-          :columns="modules"
-          :data="python.modules"
-          :pagination="{ pageSize: 8 }"
-        />
-      </section>
-      <section class="panel page-stack">
-        <h3>服务与默认 Socket</h3>
-        <NDataTable
-          :columns="services"
-          :data="view.services"
-          :scroll-x="1000"
-        />
-        <p>
-          {{ view.socket.path }} · 文件存在：{{ status(view.socket.present) }} ·
-          root 保护：{{ view.socket.root_protected ? "已核对" : "未核对" }}
-        </p>
-        <p class="muted">{{ view.socket.reason }}</p>
-      </section>
-      <NAlert v-for="warning in view.warnings" :key="warning" type="warning">{{
-        warning
-      }}</NAlert>
-    </template>
-    </AdvancedDetails>
   </div>
 </template>

@@ -55,7 +55,6 @@ const states: Record<string, string> = {
   succeeded: "已清理",
 };
 const columns: DataTableColumns<RuntimeHistoryStatus> = [
-  { title: "操作标识", key: "operation_id", ellipsis: { tooltip: true } },
   {
     title: "材料",
     key: "preview.filter.kind",
@@ -90,7 +89,7 @@ const columns: DataTableColumns<RuntimeHistoryStatus> = [
                   r.preview.filter.maintenance_id,
               onClick: () => execute(r),
             },
-            { default: () => "按原清单续办" },
+            { default: () => "继续清理" },
           ),
   },
 ];
@@ -119,8 +118,8 @@ async function inspect() {
   await run(async () => {
     await refresh();
     if (!held.value || !maintenance.value?.session)
-      throw new Error("请先在配置维护中等待当前节点进入维护状态");
-    if (savedPending.value) throw new Error("请先按原清单续办已有清理操作");
+      throw new Error("请先在维护模式中等待当前节点进入维护状态");
+    if (savedPending.value) throw new Error("请先继续清理已有清理操作");
     const cutoff = new Date(before.value).getTime() / 1000;
     if (
       !Number.isFinite(cutoff) ||
@@ -170,15 +169,13 @@ onMounted(load);
 <template>
   <div class="page-stack">
     <NAlert type="info" :bordered="false">
-      仅回收不再引用的发布目录与证书运行副本，保留当前发布、回滚锚点及灾备引用。操作记录与数据库材料保留。
-      先清理发布目录，再预览证书副本；每批最多 8 个目录、512 个条目、16
-      MiB。清理中断后须按原清单续办，完成前不能退出维护。
+      清理不再使用的旧配置文件和证书副本，保留当前运行所需的文件。清理前需要进入维护模式，未完成的清理可以继续执行。
     </NAlert>
     <div class="toolbar">
       <span>{{
-        held ? "当前节点已进入维护状态" : "须先进入配置维护并排空任务"
+        held ? "当前节点已进入维护状态" : "须先进入维护模式并排空任务"
       }}</span>
-      <RouterLink to="/maintenance">配置维护</RouterLink>
+      <RouterLink to="/maintenance">维护模式</RouterLink>
       <NButton :loading="busy" @click="load">刷新状态</NButton>
     </div>
     <section class="surface">
@@ -214,13 +211,13 @@ onMounted(load);
         :loading="busy"
         :disabled="!held || !!savedPending"
         @click="inspect"
-        >预览回收范围</NButton
+        >查看可清理文件</NButton
       >
     </section>
     <NAlert v-if="pending" type="warning" :bordered="false">
-      原操作 {{ pending.operation_id }} 结果待核对。
+      上次清理的结果尚未确认，请继续核对。
       <NButton :loading="busy" :disabled="!held" @click="execute()"
-        >核对并续办原操作</NButton
+        >核对并继续清理</NButton
       >
     </NAlert>
     <section v-if="preview" class="surface page-stack">
@@ -236,18 +233,15 @@ onMounted(load);
             ><NButton
               type="error"
               :disabled="busy || !held || !preview.targets.length"
-              >回收本批运行材料</NButton
+              >清理本批文件</NButton
             ></template
           >
-          确认删除本批运行文件？运行副本不可撤销，数据库历史材料仍按独立保留策略管理。
+          确认清理所选旧文件？清理后无法恢复。
         </NPopconfirm>
-      </div>
-      <div v-for="target in preview.targets" :key="target">
-        <code>{{ target }}</code>
       </div>
     </section>
     <section class="surface page-stack">
-      <h3>最近 16 次运行材料维护</h3>
+      <h3>最近清理记录</h3>
       <NDataTable
         :columns="columns"
         :data="records"
