@@ -15,7 +15,7 @@
 import TaskLogButton from "../components/TaskLogButton.vue";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import {
   NAlert,
   NButton,
@@ -36,7 +36,8 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
-const api = useNodeAPI();
+const api = useNodeAPI(),
+  route = useRoute();
 
 const session = useSession(),
   { run, busy } = useAction();
@@ -47,7 +48,9 @@ const overview = ref<ComponentOverview | null>(null),
   tasks = ref<NginxSwitchTask[]>([]),
   error = ref("");
 const runtime = ref<NginxRuntime | null>(null);
-const selected = ref(""),
+const selected = ref(
+    typeof route.query.prepare === "string" ? route.query.prepare : "",
+  ),
   asset = ref(""),
   downtime = ref(false),
   clock = ref(Date.now());

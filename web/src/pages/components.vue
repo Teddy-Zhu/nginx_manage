@@ -43,6 +43,7 @@ import SoftwareSourcesPanel from "../components/SoftwareSourcesPanel.vue";
 import SoftwareCard from "../components/SoftwareCard.vue";
 import SoftwareActions from "../components/SoftwareActions.vue";
 import { builtinSoftware } from "../software/builtin";
+import BuiltinSoftwarePanel from "../components/BuiltinSoftwarePanel.vue";
 import TaskLogButton from "../components/TaskLogButton.vue";
 
 const api = useNodeAPI(),
@@ -296,8 +297,8 @@ useLiveRefresh(
   <NModal
     :show="!!selected"
     preset="card"
-    :title="selectedApp?.name ?? '软件详情'"
-    style="width: 820px; max-width: calc(100vw - 32px)"
+    :title="selectedApp ? `软件管理 · ${selectedApp.name}` : '软件管理'"
+    style="width: 760px; max-width: calc(100vw - 32px)"
     :mask-closable="false"
     :closable="!detailBusy"
     :close-on-esc="!detailBusy"
@@ -308,16 +309,11 @@ useLiveRefresh(
     "
   >
     <div class="software-details page-stack">
-      <div v-if="selectedApp" class="detail-intro">
-        <NTag :bordered="false" :type="selectedApp.status.tone">{{
-          selectedApp.status.label
-        }}</NTag
-        ><span class="muted">{{ selectedApp.description }}</span>
-      </div>
-      <component
-        :is="selectedApp.panel"
+      <BuiltinSoftwarePanel
         v-if="selectedApp"
-        v-bind="selectedApp.panelProps"
+        :key="selectedApp.id"
+        :app="selectedApp"
+        :active="active"
         @busy="detailBusy = $event"
         @changed="load"
         @task="recordTask"
@@ -415,12 +411,6 @@ useLiveRefresh(
   max-height: calc(100dvh - 220px);
   overflow-y: auto;
   padding-right: 4px;
-}
-.detail-intro {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 .dialog-footer {
   display: flex;

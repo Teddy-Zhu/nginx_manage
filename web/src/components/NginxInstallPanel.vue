@@ -26,6 +26,11 @@ const api = useNodeAPI(),
   { run, busy } = useAction();
 let keyFor = useIdempotency();
 const prerelease = ref(false);
+const updatePath = computed(() =>
+  props.overview?.installation?.owner === "docker"
+    ? "/nginx-images"
+    : "/component-switches",
+);
 const permitted = computed(
   () => !!session.me?.scopes.includes("components.manage"),
 );
@@ -125,22 +130,13 @@ function pull(item: ComponentTask, imageID: string) {
     <NAlert v-if="overview && !overview.available" type="warning"
       >安装源暂不可用，请稍后重试或查看操作日志。</NAlert
     >
-    <div v-if="overview?.installation" class="nginx-current">
-      <div>
-        <strong>当前版本 {{ overview.installation.version }}</strong>
-        <p class="muted">{{ overview.running ? "运行中" : "已停止" }}</p>
-      </div>
-      <RouterLink
-        :to="
-          overview.installation.owner === 'docker'
-            ? '/nginx-images'
-            : '/component-switches'
-        "
-        ><NButton>更新与版本管理</NButton></RouterLink
+    <div v-if="overview?.installation" class="button-row">
+      <RouterLink :to="updatePath"
+        ><NButton>应用已下载的更新</NButton></RouterLink
       >
     </div>
     <div class="section-heading">
-      <h3>{{ overview?.installation ? "下载其他版本" : "选择安装版本" }}</h3>
+      <h3>{{ overview?.installation ? "下载更新" : "选择安装版本" }}</h3>
       <NCheckbox v-model:checked="prerelease" :disabled="busy || active"
         >包含预览版本</NCheckbox
       >
@@ -190,12 +186,14 @@ function pull(item: ComponentTask, imageID: string) {
       <div class="button-row">
         <RouterLink
           :to="{
-            path: '/component-installations',
+            path: overview?.installation
+              ? updatePath
+              : '/component-installations',
             query: { prepare: item.id },
           }"
-          ><NButton type="primary" :disabled="busy || active || !permitted"
-            >继续安装</NButton
-          ></RouterLink
+          ><NButton type="primary" :disabled="busy || active || !permitted">{{
+            overview?.installation ? "应用更新" : "继续安装"
+          }}</NButton></RouterLink
         >
         <template
           v-for="image in item.result?.release?.images ?? []"
@@ -216,15 +214,3 @@ function pull(item: ComponentTask, imageID: string) {
     </section>
   </div>
 </template>
-<style scoped>
-.nginx-current {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px;
-  border-radius: 10px;
-  background: var(--surface-soft);
-  flex-wrap: wrap;
-}
-</style>

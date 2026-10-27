@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, toRaw } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import {
   NAlert,
   NButton,
@@ -24,20 +24,15 @@ import { useLiveRefresh } from "../composables/live";
 import { useNodes } from "../stores/node";
 import { randomUUID } from "../utils/crypto";
 import type { PortRange } from "../utils/form";
-import {
-  softwareStatus,
-  softwareConfirmation,
-  standardServiceActions,
-  type SoftwareOperation,
-} from "../utils/software";
+import { softwareStatus } from "../utils/software";
 import FormDialog from "./FormDialog.vue";
 import PortRangesInput from "./PortRangesInput.vue";
-import SoftwareControls from "./SoftwareControls.vue";
 import TaskLogButton from "./TaskLogButton.vue";
 
-defineProps<{ embedded?: boolean }>();
 const emit = defineEmits<{ changed: []; busy: [value: boolean] }>();
-const message = useMessage();
+const message = useMessage(),
+  route = useRoute(),
+  router = useRouter();
 const status = ref<FrpsStatus | null>(null),
   reading = ref(false),
   readError = ref("");
@@ -203,18 +198,20 @@ function selectAddress(value: string) {
   draft.value.bind_address =
     value === "all" ? "0.0.0.0" : value === "ipv6" ? "::" : "";
 }
-async function operate(action: SoftwareOperation) {
-  if (action === "install") {
-    settings();
-    return;
-  }
-  const confirmation =
-    action === "uninstall"
-      ? "卸载 FRP 服务端？所有客户端连接将断开，服务配置和访问密钥会保留。"
-      : softwareConfirmation(action, "FRP 服务端");
-  if (confirmation && !window.confirm(confirmation)) return;
-  await submit({ action: "frps", frps: { action } }, "FRP 服务端操作日志");
-}
+watch(
+  [
+    () => route.query.install,
+    () => status.value?.installed,
+    processing,
+    permitted,
+  ],
+  ([intent, installed, locked, writable]) => {
+    if (intent !== "1" || installed === undefined || locked || !writable)
+      return;
+    if (!installed) settings();
+    void router.replace({ query: { ...route.query, install: undefined } });
+  },
+);
 async function save() {
   const config = draft.value;
   if (!config || !status.value || processing.value || !permitted.value) return;
@@ -227,7 +224,8 @@ async function save() {
       invalid("connection", "请填写接收连接的 IP 地址");
     if (!config.token.trim() && !status.value?.token_set)
       invalid("connection", "请填写访问密钥");
-    if (!config.image.trim()) invalid("connection", "请填写软件下载来源");
+    if (!status.value?.installed && !config.image.trim())
+      invalid("connection", "请填写软件下载来源");
     const ports = unrestricted.value
       ? []
       : ranges.value.map((row) => {
@@ -266,7 +264,7 @@ useLiveRefresh(api, ["software"], load, () => reading.value);
 onMounted(load);
 </script>
 <template>
-  <section class="page-stack frps-panel" :class="{ panel: !embedded }">
+  <section class="page-stack panel frps-panel">
     <div class="frps-toolbar">
       <div class="frps-service-status">
         <h3>服务状态</h3>
@@ -282,15 +280,9 @@ onMounted(load);
           @click="settings"
           >服务设置</NButton
         >
-        <SoftwareControls
-          compact
-          :installed="status.installed"
-          :runtime="status.state"
-          :permitted="permitted && status.state !== 'unknown'"
-          :busy="processing"
-          :actions="standardServiceActions"
-          @operate="operate"
-        />
+        <RouterLink :to="{ path: '/components', query: { software: 'frps' } }"
+          ><NButton>软件管理</NButton></RouterLink
+        >
       </div>
     </div>
     <NSkeleton v-if="!status && reading" text :repeat="3" />
@@ -355,14 +347,12 @@ onMounted(load);
     >
       <template #extra>
         <p class="muted">安装后可连接其他设备，使用端口映射和网站转发。</p>
-        <SoftwareControls
-          :installed="false"
-          :runtime="status.state"
-          :permitted="permitted"
-          :busy="processing"
-          :actions="standardServiceActions"
-          @operate="operate"
-        />
+        <NButton
+          type="primary"
+          :disabled="!permitted || processing || status.state === 'unknown'"
+          @click="settings"
+          >安装 FRP 服务端</NButton
+        >
       </template>
     </NEmpty>
     <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
@@ -474,11 +464,8 @@ onMounted(load);
                   :disabled="processing || !permitted"
                 />
               </div>
-              <div class="frps-setting-row">
-                <div>
-                  <span>开机自动启动</span>
-                  <p>服务器重启后自动运行此服务。</p>
-                </div>
+              <div v-if="!status?.installed" class="frps-setting-row">
+                <span>开机自动启动</span>
                 <NSwitch
                   v-model:value="draft.auto_start"
                   aria-label="开机自动启动"
@@ -486,7 +473,7 @@ onMounted(load);
                 />
               </div>
             </div>
-            <NFormItem label="软件下载来源">
+            <NFormItem v-if="!status?.installed" label="软件下载来源" required>
               <NInput
                 v-model:value="draft.image"
                 placeholder="默认使用官方发布版本"
@@ -717,9 +704,6 @@ onMounted(load);
 }
 .frps-empty {
   padding: 36px 0;
-}
-.frps-empty .button-row {
-  justify-content: center;
 }
 .frps-task {
   justify-content: space-between;

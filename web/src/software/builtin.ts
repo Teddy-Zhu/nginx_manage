@@ -1,26 +1,49 @@
-import { markRaw } from "vue";
-import Fail2banInstallPanel from "../components/Fail2banInstallPanel.vue";
-import FrpsInstallPanel from "../components/FrpsInstallPanel.vue";
+import { markRaw, type Component } from "vue";
 import NginxInstallPanel from "../components/NginxInstallPanel.vue";
 import type {
   ComponentOverview,
   ComponentTask,
   Fail2banContainerStatus,
+  SoftwareRequest,
 } from "../api/client";
 import {
   fail2banRuntime,
   softwareStatus,
+  standardServiceActions,
+  type RuntimeState,
+  type SoftwareOperation,
   type SoftwareView,
 } from "../utils/software";
 
-// Built-in integrations register their state adapter, entry and detail panel here.
-// Store templates and third-party sources do not interpret application IDs.
+export interface SoftwareRuntimeSettings {
+  image: string;
+  auto_start: boolean;
+}
+export interface BuiltinSoftwareView extends SoftwareView {
+  runtime: RuntimeState;
+  scopes: string[];
+  actions: SoftwareOperation[];
+  task?: ComponentTask;
+  error?: string;
+  module?: string;
+  settings?: SoftwareRuntimeSettings;
+  request?: (
+    action: SoftwareOperation | "configure",
+    settings?: SoftwareRuntimeSettings,
+  ) => SoftwareRequest;
+  installTo?: string;
+  installer?: Component;
+  installerProps?: Record<string, unknown>;
+}
+
+// Integrations declare lifecycle operations here. Feature editors stay on their own routes.
 export function builtinSoftware(
   overview: ComponentOverview | null,
   fail2ban: Fail2banContainerStatus | null,
   tasks: ComponentTask[],
   active: boolean,
-) {
+): BuiltinSoftwareView[] {
+  const frps = overview?.frps;
   const definitions = [
     {
       id: "nginx",
@@ -37,15 +60,20 @@ export function builtinSoftware(
       task: tasks.find(
         (task) =>
           task.action !== "software" &&
-          task.result?.input.components?.includes("nginx"),
+          (task.result?.input.components?.includes("nginx") ||
+            task.result?.release?.assets.some(
+              (asset) => asset.component === "nginx",
+            )),
       ),
       entry: { to: "/nginx" },
       note: overview?.installation
         ? `版本 ${overview.installation.version}`
         : "系统内置",
       scopes: ["components.manage"],
-      panel: markRaw(NginxInstallPanel),
-      panelProps: { overview, tasks, active },
+      actions: ["install", "update"] as SoftwareOperation[],
+      error: overview?.runtime_reason,
+      installer: markRaw(NginxInstallPanel),
+      installerProps: { overview, tasks, active },
     },
     {
       id: "fail2ban",
@@ -61,8 +89,22 @@ export function builtinSoftware(
       entry: { to: "/fail2ban" },
       note: "系统内置",
       scopes: ["components.manage", "system.write", "security.write"],
-      panel: markRaw(Fail2banInstallPanel),
-      panelProps: { embedded: true },
+      actions: standardServiceActions,
+      module: "fail2ban",
+      error: fail2ban?.error,
+      settings: fail2ban?.config,
+      request: (
+        action: SoftwareOperation | "configure",
+        settings?: SoftwareRuntimeSettings,
+      ): SoftwareRequest => ({
+        action: "fail2ban",
+        fail2ban: {
+          action,
+          ...(["install", "configure"].includes(action) && fail2ban
+            ? { config: { ...fail2ban.config, ...settings } }
+            : {}),
+        },
+      }),
     },
     {
       id: "frps",
@@ -71,26 +113,35 @@ export function builtinSoftware(
       description:
         "接入内网客户端，提供 TCP、UDP 端口映射和 HTTP、HTTPS 网站转发。",
       accent: "green" as const,
-      installed: overview?.frps?.installed ?? null,
-      runtime: overview?.frps?.state ?? ("unknown" as const),
+      installed: frps?.installed ?? null,
+      runtime: frps?.state ?? ("unknown" as const),
       task: tasks.find(
         (task) => task.result?.input.software?.action === "frps",
       ),
       entry: { to: "/frps" },
-      note: overview?.frps?.stats?.version
-        ? `版本 ${overview.frps.stats.version}`
-        : "系统内置",
+      note: frps?.stats?.version ? `版本 ${frps.stats.version}` : "系统内置",
       scopes: ["components.manage", "system.write"],
-      panel: markRaw(FrpsInstallPanel),
-      panelProps: { embedded: true },
+      actions: standardServiceActions,
+      error: frps?.error,
+      settings: frps?.config,
+      installTo: "/frps?install=1",
+      request: (
+        action: SoftwareOperation | "configure",
+        settings?: SoftwareRuntimeSettings,
+      ): SoftwareRequest => ({
+        action: "frps",
+        frps: {
+          action,
+          ...(action === "configure" && frps
+            ? { config: { ...frps.config, ...settings } }
+            : {}),
+        },
+      }),
     },
   ];
-  return definitions.map(
-    (item) =>
-      ({
-        ...item,
-        installed: item.installed === true,
-        status: softwareStatus(item.installed, item.runtime, item.task),
-      }) satisfies SoftwareView & object,
-  );
+  return definitions.map((item) => ({
+    ...item,
+    installed: item.installed === true,
+    status: softwareStatus(item.installed, item.runtime, item.task),
+  }));
 }

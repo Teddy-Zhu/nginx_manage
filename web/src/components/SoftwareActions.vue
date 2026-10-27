@@ -25,12 +25,12 @@ defineEmits<{ manage: [] }>();
       !app.installed && (!permitted || active || app.status.state === 'unknown')
     "
     @click="$emit('manage')"
-    >{{ app.installed ? "管理" : "安装" }}</NButton
+    >{{ app.installed ? "软件管理" : "安装" }}</NButton
   >
   <NButton
     v-if="app.entry || !app.installed"
     quaternary
     @click="$emit('manage')"
-    >{{ app.installed ? "管理" : "详情" }}</NButton
+    >{{ app.installed ? "软件管理" : "详情" }}</NButton
   >
 </template>

@@ -25,11 +25,13 @@ import {
   softwareCatalogEntries,
   applicationView,
   softwareConfirmation,
+  applicationActions,
+  softwareApplicationTask,
   type CatalogEntry,
   type SoftwareOperation,
 } from "../utils/software";
 import SoftwareActions from "./SoftwareActions.vue";
-import SoftwareApplicationPanel from "./SoftwareApplicationPanel.vue";
+import SoftwareManagementPanel from "./SoftwareManagementPanel.vue";
 const props = defineProps<{
   catalog?: SoftwareCatalog;
   tasks: ComponentTask[];
@@ -250,7 +252,11 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
   <NModal
     :show="!!selectedEntry"
     preset="card"
-    :title="selectedEntry?.application.name ?? '软件管理'"
+    :title="
+      selectedEntry
+        ? `软件管理 · ${selectedEntry.application.name}`
+        : '软件管理'
+    "
     style="width: 760px; max-width: calc(100vw - 32px)"
     :mask-closable="false"
     :closable="!busy"
@@ -261,13 +267,26 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
       }
     "
   >
-    <SoftwareApplicationPanel
+    <SoftwareManagementPanel
       v-if="selectedEntry"
-      :entry="selectedEntry"
-      :tasks="tasks"
-      :origin="origin"
+      :app="view(selectedEntry)"
+      :runtime="selectedEntry.installation?.state ?? 'unknown'"
+      :actions="applicationActions(selectedEntry)"
       :permitted="permitted"
       :busy="busy || active"
+      :task="
+        softwareApplicationTask(
+          tasks,
+          selectedEntry.source.id,
+          selectedEntry.application.id,
+        )
+      "
+      :error="
+        selectedEntry.installation?.error ||
+        (!selectedEntry.listed
+          ? '软件源已不再提供此软件，仍可启停、查看日志或卸载。'
+          : '')
+      "
       @operate="operate($event, selectedEntry!)"
     />
     <template #footer
