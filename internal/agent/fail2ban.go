@@ -81,7 +81,7 @@ func (f *fail2banObserver) collect(ctx context.Context) fail2ban.Observation {
 		out.Available = false
 		return out
 	}
-	out.Container = &fail2ban.ContainerStatus{Installed: installed, Config: config, Jails: []fail2ban.ContainerJail{}}
+	out.Container = &fail2ban.ContainerStatus{State: "unknown", Installed: installed, Config: config, Jails: []fail2ban.ContainerJail{}}
 	out.Managed = readFail2banManaged(f.data)
 	out.Binding = fail2banBindingView(f.data)
 	for _, id := range []string{"fail2ban-client", "fail2ban-server", "fail2ban-regex"} {
@@ -144,7 +144,7 @@ func (s *Server) fail2banHandlers(mux *http.ServeMux, ctx context.Context) {
 				dnsReply(w, nil, fault.Unavailable("登录防护配置不可用"))
 				return
 			}
-			out.Container = &fail2ban.ContainerStatus{Installed: installed, Config: config, Jails: []fail2ban.ContainerJail{}}
+			out.Container = &fail2ban.ContainerStatus{State: "unknown", Installed: installed, Config: config, Jails: []fail2ban.ContainerJail{}}
 			out.Managed = readFail2banManaged(s.DataDir)
 			out.Binding = fail2banBindingView(s.DataDir)
 		}

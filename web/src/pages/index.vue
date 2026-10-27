@@ -114,7 +114,7 @@ const columns: DataTableColumns<Task> = [
 onMounted(load);
 useLiveRefresh(
   api,
-  ["tasks", "monitoring", "notifications"],
+  ["tasks", "software", "monitoring", "notifications"],
   load,
   () => loading.value,
 );

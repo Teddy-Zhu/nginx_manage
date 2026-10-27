@@ -5317,33 +5317,26 @@ export interface components {
             jails: components["schemas"]["Fail2banContainerJail"][];
             logs: string;
             error: string;
+            /** @enum {string} */
+            state: "running" | "starting" | "stopped" | "unhealthy" | "missing" | "unknown";
         };
         Fail2banContainerRequest: {
             /** @enum {string} */
-            action: "install" | "configure" | "start" | "stop" | "restart" | "update" | "uninstall" | "ban" | "unban";
+            action: "install" | "configure" | "start" | "stop" | "restart" | "update" | "uninstall" | "ban" | "unban" | "logs";
             config?: components["schemas"]["Fail2banContainerConfig"];
             jail_id?: string;
             address?: string;
         };
-        SoftwarePort: {
-            host: number;
-            container: number;
-            /** @enum {string} */
-            protocol: "tcp" | "udp";
-        };
-        SoftwareVolume: {
-            name: string;
-            target: string;
+        SoftwareAction: {
+            command: string[];
+            description?: string;
         };
         SoftwareApplication: {
             id: string;
             name: string;
             description: string;
-            image: string;
-            ports?: components["schemas"]["SoftwarePort"][];
-            volumes?: components["schemas"]["SoftwareVolume"][];
-            environment?: {
-                [key: string]: string;
+            actions: {
+                [key: string]: components["schemas"]["SoftwareAction"];
             };
         };
         SoftwareSource: {
@@ -5357,10 +5350,13 @@ export interface components {
         SoftwareInstallation: {
             source_id: string;
             application: components["schemas"]["SoftwareApplication"];
-            container: string;
-            image_id: string;
             /** Format: int64 */
             updated_at: number;
+            /** @enum {string} */
+            state?: "running" | "starting" | "stopped" | "unhealthy" | "missing" | "unknown";
+            error?: string;
+            /** @description 软件状态操作返回的访问地址；{host} 表示当前服务器地址 */
+            entry?: string;
         };
         SoftwareCatalog: {
             sources: components["schemas"]["SoftwareSource"][];
@@ -5369,7 +5365,7 @@ export interface components {
         };
         SoftwareRequest: {
             /** @enum {string} */
-            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban";
+            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban" | "start" | "stop" | "restart" | "logs";
             source?: components["schemas"]["SoftwareSource"];
             url?: string;
             source_id?: string;

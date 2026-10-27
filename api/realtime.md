@@ -8,18 +8,25 @@
 {"type":"subscribe","revision":1,"subscriptions":[{"connection":"","topics":["monitoring"],"resources":["/monitoring/latest","/monitoring/history?kind=cpu&id=total&value=usage_percent&window=3600&points=180"]}]}
 ```
 
-服务端首次发送完整快照，随后推送发生变化的主题对应资源。每个资源保留统一响应格式和状态码；前端先更新同一帧内的全部快照，再通知页面使用数据。监控数值及采样时间包含在 `/monitoring/latest` 的响应中。
+服务端首次逐项发送订阅资源的数据，随后只推送内容变化的资源。每条消息统一采用单层 `code`、`message`、`data`；`data` 直接承载业务数据，不再嵌套 HTTP 响应。成功时 `message` 为空，失败时包含明确原因并额外携带 `status`，保留各页面现有错误处理。
 
 ```json
-{"code":"OK","message":"状态已更新","data":{"connection":"","topics":["monitoring"],"revision":1,"values":{"/monitoring/latest":{"status":200,"response":{"code":"OK","message":"操作成功","data":{"enabled":true,"stale":false,"sample":{"at":1793060000,"source":"host-agent","metrics":[{"kind":"cpu","id":"total","values":{"usage_percent":13.5}}]}},"request_id":"...","node_id":"..."}}}},"request_id":"...","node_id":"..."}
+{"code":"OK","message":"","data":{"enabled":true,"stale":false,"sample":{"at":1793060000,"source":"host-agent","metrics":[{"kind":"cpu","id":"total","values":{"usage_percent":13.5}}]}},"resource":"/monitoring/latest","revision":1}
 ```
 
-资源与主题由前后端共用的 `api/realtime-resources.json` 定义。只允许列明的读取资源，服务端在进程内复用现有读取逻辑、参数校验、权限校验和错误响应。不会通过 HTTP 再次请求本机 API。`refresh: true` 可重新同步现有订阅；保存操作会触发状态同步。
+```json
+{"code":"FORBIDDEN","message":"权限不足","data":null,"status":403,"resource":"/credentials","revision":1}
+```
+
+`resource` 用于匹配订阅；`revision` 是订阅序号，用于丢弃仍在传输的旧订阅消息。仅远端消息携带 `connection`；仅日志首次同步或恢复携带 `reset: true`。不再重复发送主题、请求 ID、节点 ID、成功状态码及内嵌响应包装。节点身份仍通过已有登录和远端握手校验确认，权限校验保持在服务端。
+
+资源与主题由前后端共用的 `api/realtime-resources.json` 定义。只允许列明的读取资源，服务端在进程内复用现有读取逻辑、参数校验、权限校验和错误响应。不会通过 HTTP 再次请求本机 API。`refresh: true` 可重新同步现有订阅；保存操作会触发状态同步。客户端收到资源数据后更新缓存，再通知对应主题的页面读取数据。
 
 | 主题 | 数据 | 权限 |
 | --- | --- | --- |
 | monitoring | 最新监控、趋势、监控设置 | read |
 | tasks | 任务、软件操作、证书及其他相关状态 | read；各资源另行校验权限 |
+| software | 软件清单与真实运行状态（含外部启停） | read、components.manage |
 | notifications | 通知状态、事件、投递记录 | read |
 | maintenance | 维护状态 | read、system.write |
 | backups | 备份记录与策略 | read、backup.export |
@@ -36,6 +43,6 @@
 
 实时日志通过 `/logs/live?query=JSON` 订阅，查询须为最近模式、无结束时间且不携带游标。服务端维护并释放游标，推送增量日志；`reset: true` 表示订阅首次同步或游标恢复，应替换已有日志。前端不再建立 EventSource 或额外实时连接。
 
-远端资源通过现有证书校验、目标身份与单跳授权连接目标 `/events?topics=...&resources=...`，完整转发资源数据。资源还需满足远端 HTTP 读取白名单，浏览器不接触远端凭据。远端中断只影响对应订阅，本机及其他连接继续工作。备份、防火墙执行及管理入口仅支持本机订阅。
+远端资源通过现有证书校验、目标身份与单跳授权连接目标 `/events?topics=...&resources=...`，按同一精简格式转发资源数据。资源还需满足远端 HTTP 读取白名单，浏览器不接触远端凭据。远端中断只影响对应订阅，本机及其他连接继续工作。备份、防火墙执行及管理入口仅支持本机订阅。
 
 Cookie 握手严格校验同源，会话与授权在连接期间持续复核。失效时发送 `UNAUTHENTICATED` 并关闭连接。每个服务最多 32 条实时连接；一个浏览器最多订阅 16 个服务器范围，每个范围最多 64 个资源、合计最多 128 个资源。命令最大 64 KiB，消息最大 8 MiB。服务端每 15 秒 Ping，45 秒内无响应断开。观察器仅在有订阅时运行，每 2 秒检查已订阅主题；监控仍按用户配置的采样间隔产生新样本，默认 15 秒。

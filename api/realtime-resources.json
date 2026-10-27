@@ -91,7 +91,6 @@
     "paths": [
       "/tasks",
       "/tasks/{id}",
-      "/components",
       "/components/tasks",
       "/components/installations",
       "/components/installations/{id}",
@@ -154,6 +153,12 @@
       "/nodes/pairings",
       "/nodes/pairings/{id}",
       "/nodes/{id}"
+    ]
+  },
+  {
+    "topic": "software",
+    "paths": [
+      "/components"
     ]
   }
 ]

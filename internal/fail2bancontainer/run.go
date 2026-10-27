@@ -42,6 +42,13 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 		}
 	}
 	switch r.Action {
+	case "logs":
+		if !present {
+			return out, errors.New("软件容器不存在，请更新软件以恢复安装")
+		}
+		out.Log, err = command(ctx, "logs", "--tail", "100", Name)
+		out.Message = "服务日志已读取"
+		return out, err
 	case "install", "update":
 		if r.Action == "install" {
 			if installed && c.Revision != r.Config.Revision {

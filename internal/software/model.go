@@ -1,4 +1,4 @@
-// Package software manages user-selected Docker applications and their catalogs.
+// Package software manages software catalogs and invokes provider-defined operations.
 package software
 
 import (
@@ -10,23 +10,15 @@ import (
 	"strings"
 )
 
-type Port struct {
-	Host      int    `json:"host"`
-	Container int    `json:"container"`
-	Protocol  string `json:"protocol"`
-}
-type Volume struct {
-	Name   string `json:"name"`
-	Target string `json:"target"`
+type Action struct {
+	Command     []string `json:"command"`
+	Description string   `json:"description,omitempty"`
 }
 type Application struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
-	Image       string            `json:"image"`
-	Ports       []Port            `json:"ports,omitempty"`
-	Volumes     []Volume          `json:"volumes,omitempty"`
-	Environment map[string]string `json:"environment,omitempty"`
+	Actions     map[string]Action `json:"actions"`
 }
 type Source struct {
 	Schema       int           `json:"schema"`
@@ -38,9 +30,10 @@ type Source struct {
 type Installation struct {
 	SourceID    string      `json:"source_id"`
 	Application Application `json:"application"`
-	Container   string      `json:"container"`
-	ImageID     string      `json:"image_id"`
 	UpdatedAt   int64       `json:"updated_at"`
+	State       string      `json:"state,omitempty"`
+	Error       string      `json:"error,omitempty"`
+	Entry       string      `json:"entry,omitempty"`
 }
 type Catalog struct {
 	Sources   []Source       `json:"sources"`
@@ -66,7 +59,6 @@ type Result struct {
 
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 var image = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/@-]{0,255}$`)
-var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 
 func (s Source) Validate() error {
 	raw, err := json.Marshal(s)
@@ -83,36 +75,32 @@ func (s Source) Validate() error {
 	}
 	seen := map[string]bool{}
 	for _, app := range s.Applications {
-		if !identifier.MatchString(app.ID) || seen[app.ID] || strings.TrimSpace(app.Name) == "" || len(app.Name) > 128 || len(app.Description) > 1024 || !image.MatchString(app.Image) || len(app.Ports) > 32 || len(app.Volumes) > 16 || len(app.Environment) > 64 {
-			return errors.New("软件名称、镜像或配置无效")
+		if !identifier.MatchString(app.ID) || seen[app.ID] || strings.TrimSpace(app.Name) == "" || len(app.Name) > 128 || len(app.Description) > 1024 || len(app.Actions) < 3 || len(app.Actions) > 8 {
+			return errors.New("软件名称或操作定义无效")
 		}
 		seen[app.ID] = true
-		ports := map[string]bool{}
-		for _, p := range app.Ports {
-			if p.Host < 1 || p.Host > 65535 || p.Container < 1 || p.Container > 65535 || p.Protocol != "tcp" && p.Protocol != "udp" {
-				return errors.New("端口映射无效")
+		for _, required := range []string{"install", "uninstall", "status"} {
+			if _, ok := app.Actions[required]; !ok {
+				return errors.New("软件必须定义安装、卸载和状态检查操作")
 			}
-			key := string(rune(p.Host)) + p.Protocol
-			if ports[key] {
-				return errors.New("同一软件的主机端口重复")
-			}
-			ports[key] = true
 		}
-		vols := map[string]bool{}
-		targets := map[string]bool{}
-		for _, v := range app.Volumes {
-			if !identifier.MatchString(v.Name) || vols[v.Name] || targets[v.Target] || !strings.HasPrefix(v.Target, "/") || v.Target == "/" || strings.Contains(v.Target, "..") || strings.ContainsAny(v.Target, ",\x00\r\n") || len(v.Target) > 256 {
-				return errors.New("软件数据目录无效")
+		for name, action := range app.Actions {
+			switch name {
+			case "install", "uninstall", "status", "start", "stop", "restart", "update", "logs":
+			default:
+				return errors.New("不支持的软件操作：" + name)
 			}
-			vols[v.Name] = true
-			targets[v.Target] = true
-		}
-		for name, value := range app.Environment {
-			if !envName.MatchString(name) || len(value) > 4096 || strings.ContainsRune(value, 0) {
-				return errors.New("软件环境变量无效")
+			if len(action.Command) == 0 || len(action.Command) > 32 || strings.TrimSpace(action.Command[0]) == "" || len(action.Description) > 512 {
+				return errors.New("软件操作命令无效")
+			}
+			for _, arg := range action.Command {
+				if len(arg) > 8192 || strings.ContainsRune(arg, 0) {
+					return errors.New("软件操作参数无效")
+				}
 			}
 		}
 	}
+
 	return nil
 }
 func (r Request) Validate() error {
@@ -139,7 +127,7 @@ func (r Request) Validate() error {
 		if identifier.MatchString(r.SourceID) && r.Source == nil && r.URL == "" && r.AppID == "" && r.PlanID == "" && !r.Prerelease {
 			return nil
 		}
-	case "install", "update", "uninstall":
+	case "install", "update", "uninstall", "start", "stop", "restart", "logs":
 		if identifier.MatchString(r.SourceID) && identifier.MatchString(r.AppID) && r.Source == nil && r.URL == "" && r.PlanID == "" && !r.Prerelease {
 			return nil
 		}

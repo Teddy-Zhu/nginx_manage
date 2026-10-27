@@ -27,9 +27,28 @@ import (
 const realtimeFrameLimit = 8 << 20
 
 type realtimeValue struct {
-	Reset    bool            `json:"reset,omitempty"`
-	Status   int             `json:"status"`
-	Response json.RawMessage `json:"response"`
+	Code    string          `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+	Status  int             `json:"status,omitempty"`
+	Reset   bool            `json:"reset,omitempty"`
+}
+
+type realtimeMessage struct {
+	realtimeValue
+	Resource   string `json:"resource,omitempty"`
+	Connection string `json:"connection,omitempty"`
+	Revision   uint64 `json:"revision,omitempty"`
+}
+
+func validRealtimeValue(value realtimeValue) bool {
+	return value.Code != "" && json.Valid(value.Data) &&
+		(value.Code == "OK" && value.Status == 0 || value.Code != "OK" && value.Status >= 400 && value.Status <= 599 && value.Message != "")
+}
+
+func realtimeUnavailable(message string) realtimeValue {
+	err := fault.Unavailable(message).(*fault.Error)
+	return realtimeValue{Code: err.Code, Message: err.Message, Data: json.RawMessage("null"), Status: err.Status}
 }
 
 func validateRealtimeResources(topics, resources []string) error {
@@ -87,14 +106,15 @@ func (c *realtimeCapture) SetWriteDeadline(deadline time.Time) error {
 }
 
 type realtimeResources struct {
-	server  *Server
-	request *http.Request
-	subject string
-	cursors map[string]string
+	server   *Server
+	request  *http.Request
+	subject  string
+	cursors  map[string]string
+	previous map[string]realtimeValue
 }
 
 func (s *Server) realtimeResources(r *http.Request) *realtimeResources {
-	return &realtimeResources{server: s, request: r, cursors: map[string]string{}}
+	return &realtimeResources{server: s, request: r, cursors: map[string]string{}, previous: map[string]realtimeValue{}}
 }
 func (state *realtimeResources) Close() {
 	if state.server.Agent == nil || len(state.cursors) == 0 {
@@ -161,16 +181,30 @@ func (state *realtimeResources) Read(ctx context.Context, topics, resources []st
 				state.server.realtimeReader.ServeHTTP(capture, r)
 			}
 		}
-		if capture.status == 0 || !json.Valid(capture.body.Bytes()) {
-			capture = &realtimeCapture{header: http.Header{}}
-			state.server.fail(capture, r, fault.Unavailable("实时状态读取失败"))
+		if u.Path == "/api/v1/logs/live" && capture.status == http.StatusNoContent {
+			continue
+		}
+		var value realtimeValue
+		if capture.status == 0 || json.Unmarshal(capture.body.Bytes(), &value) != nil || value.Code == "" || !json.Valid(value.Data) || (value.Code == "OK") != (capture.status >= 200 && capture.status < 300) {
+			value = realtimeUnavailable("实时状态读取失败")
 		}
 		if total+capture.body.Len() > 7<<20 {
-			capture = &realtimeCapture{header: http.Header{}}
-			state.server.fail(capture, r, fault.Unavailable("实时数据超出限制，请缩小查询范围"))
+			value = realtimeUnavailable("实时数据超出限制，请缩小查询范围")
 		}
 		total += capture.body.Len()
-		out[resource] = realtimeValue{Reset: capture.Header().Get("X-Realtime-Reset") == "true", Status: capture.status, Response: json.RawMessage(capture.body.Bytes())}
+		if value.Code == "OK" {
+			value.Message = ""
+		} else if value.Status == 0 {
+			value.Status = capture.status
+		}
+		value.Reset = capture.Header().Get("X-Realtime-Reset") == "true"
+		previous, exists := state.previous[resource]
+		// Live log pages are deltas: identical rows may be separate events.
+		if u.Path != "/api/v1/logs/live" && exists && previous.Code == value.Code && previous.Message == value.Message && previous.Status == value.Status && bytes.Equal(previous.Data, value.Data) {
+			continue
+		}
+		state.previous[resource] = value
+		out[resource] = value
 	}
 	return out
 }
@@ -212,5 +246,9 @@ func (state *realtimeResources) logs(w http.ResponseWriter, r *http.Request, key
 	state.cursors[key] = page.Cursor
 	// Cursors belong to the subscription and are released with it.
 	page.Cursor = ""
+	if len(page.Rows) == 0 && !page.Gap && !page.More && page.ScannedBytes == 0 && page.Skipped == 0 && page.Notice == "" && w.Header().Get("X-Realtime-Reset") != "true" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	s.ok(w, r, page)
 }

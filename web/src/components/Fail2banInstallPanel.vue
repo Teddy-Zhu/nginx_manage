@@ -9,6 +9,14 @@ import {
 import { useSoftwareOperations } from "../composables/software";
 import { useLiveRefresh } from "../composables/live";
 import TaskLogButton from "./TaskLogButton.vue";
+import {
+  fail2banRuntime,
+  standardServiceActions,
+  softwareStatus,
+  softwareConfirmation,
+  type SoftwareOperation,
+} from "../utils/software";
+import SoftwareControls from "./SoftwareControls.vue";
 defineProps<{ embedded?: boolean }>();
 const emit = defineEmits<{ changed: []; busy: [value: boolean] }>();
 const reading = ref(false),
@@ -19,6 +27,13 @@ const status = ref<Fail2banContainerStatus | null>(null),
 const { api, run, busy, permitted, active, last, submit } =
   useSoftwareOperations(load);
 const processing = computed(() => busy.value || active.value);
+const displayStatus = computed(() =>
+  softwareStatus(
+    status.value ? status.value.installed : null,
+    fail2banRuntime(status.value),
+    last.value,
+  ),
+);
 watch(processing, (value) => emit("busy", value));
 async function load() {
   if (reading.value) return;
@@ -40,27 +55,14 @@ async function load() {
   }
 }
 async function operate(action: Fail2banContainerRequest["action"]) {
-  if (
-    action === "uninstall" &&
-    !window.confirm("卸载登录防护？防护会停止，配置和数据保留。")
-  )
-    return;
-  if (
-    action === "stop" &&
-    !window.confirm("停止登录防护？已封禁的地址将解除限制。")
-  )
-    return;
-  if (
-    action === "update" &&
-    !window.confirm("更新登录防护？防护将短暂重启，规则和数据保留。")
-  )
-    return;
+  const confirmation =
+    action === "stop"
+      ? "停止登录防护？已封禁的地址将解除限制。"
+      : action === "configure"
+        ? ""
+        : softwareConfirmation(action as SoftwareOperation, "Fail2ban");
+  if (confirmation && !window.confirm(confirmation)) return;
   if (action === "install") {
-    if (
-      status.value?.installed &&
-      !window.confirm("重新安装登录防护？规则和数据会保留。")
-    )
-      return;
     const ready = await run(async () => {
       const modules = await api.modules();
       if (!modules.some((m) => m.id === "fail2ban" && m.enabled))
@@ -100,20 +102,7 @@ onMounted(load);
         <h3>{{ status?.installed ? "登录防护软件" : "安装 Fail2ban" }}</h3>
         <p class="muted">自动封禁反复认证失败的 IP，保护服务器、面板和网站。</p>
       </div>
-      <NTag
-        :type="
-          status?.ready ? 'success' : status?.installed ? 'warning' : 'default'
-        "
-        >{{
-          status?.ready
-            ? "运行中"
-            : status?.running
-              ? "正在启动"
-              : status?.installed
-                ? "已停止"
-                : "未安装"
-        }}</NTag
-      >
+      <NTag :type="displayStatus.tone">{{ displayStatus.label }}</NTag>
     </div>
     <NAlert v-if="status?.error" type="warning">{{ status.error }}</NAlert>
     <template v-if="!status?.installed">
@@ -141,29 +130,16 @@ onMounted(load);
       <div class="button-row">
         <RouterLink to="/fail2ban"
           ><NButton type="primary">防护规则</NButton></RouterLink
-        ><NButton
-          :disabled="!permitted || processing"
-          :loading="busy"
-          @click="operate(status.running ? 'stop' : 'start')"
-          >{{ status.running ? "停止" : "启动" }}</NButton
-        ><NButton
-          :disabled="!permitted || processing || !status.running"
-          @click="operate('restart')"
-          >重启</NButton
-        ><NButton
-          :disabled="!permitted || processing"
-          @click="operate('update')"
-          >更新</NButton
-        ><NButton
-          :disabled="!permitted || processing"
-          @click="operate('install')"
-          >重新安装</NButton
-        ><NButton
-          :disabled="!permitted || processing"
-          @click="operate('uninstall')"
-          >卸载</NButton
         ><NButton :disabled="processing" @click="load">刷新</NButton>
       </div>
+      <SoftwareControls
+        :installed="status.installed"
+        :runtime="fail2banRuntime(status)"
+        :permitted="permitted"
+        :busy="processing"
+        :actions="standardServiceActions"
+        @operate="operate($event as Fail2banContainerRequest['action'])"
+      />
       <div class="button-row">
         <NCheckbox
           v-model:checked="autoStart"
@@ -191,22 +167,9 @@ onMounted(load);
       }}</span
       ><TaskLogButton :task-id="last.id" />
     </div>
-    <details v-if="status?.logs">
-      <summary>服务日志</summary>
-      <pre class="service-log">{{ status.logs }}</pre>
-    </details>
   </section>
 </template>
 <style scoped>
-.service-log {
-  max-height: 320px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: var(--surface-soft);
-  padding: 16px;
-  border-radius: 10px;
-}
 .section-heading p {
   margin: 8px 0 0;
 }

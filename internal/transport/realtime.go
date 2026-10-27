@@ -24,6 +24,7 @@ var realtimeScopes = map[string][]string{
 	"maintenance": {"read", "system.write"}, "backups": {"read", "backup.export"},
 	"firewall": {"read", "security.write"}, "listener": {"read", "system.write"}, "version": {"read"},
 	"dns": {"read"}, "fail2ban": {"read"}, "logs": {"read"}, "nginx": {"read"}, "nodes": {"read", "nodes.manage"},
+	"software": {"read", "components.manage"},
 }
 
 // Fingerprints select changed resources; only authorized snapshots leave the server.
@@ -31,6 +32,11 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 	var value any
 	var err error
 	switch topic {
+	case "software":
+		if s.Agent == nil {
+			return "", errors.New("agent unavailable")
+		}
+		value, err = s.Agent.ReadComponents(ctx)
 	case "nginx":
 		if s.Agent == nil {
 			return "", errors.New("agent unavailable")
@@ -305,9 +311,9 @@ func (s *Server) realtimeSource(r *http.Request, p auth.Principal, conn *websock
 	defer sub.Close()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
-	write := func(code, message string, data any) error {
+	write := func(message realtimeMessage) error {
 		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		return conn.WriteJSON(Response{Code: code, Message: message, Data: data, NodeID: s.NodeID, RequestID: r.Context().Value(requestIDKey).(string)})
+		return conn.WriteJSON(message)
 	}
 	for {
 		select {
@@ -315,19 +321,24 @@ func (s *Server) realtimeSource(r *http.Request, p auth.Principal, conn *websock
 			return
 		case <-sub.Wake:
 			if !s.realtimeAlive(r, p) {
-				write("UNAUTHENTICATED", "会话或授权已失效", nil)
+				write(realtimeMessage{realtimeValue: realtimeValue{Code: "UNAUTHENTICATED", Message: "会话或授权已失效"}})
 				return
 			}
 			topics := sub.Take()
 			if len(topics) == 0 {
 				continue
 			}
-			if err := write("OK", "状态已更新", map[string]any{"topics": topics, "values": state.Read(ctx, topics, resources)}); err != nil {
-				return
+			values := state.Read(ctx, topics, resources)
+			for _, resource := range resources {
+				if value, exists := values[resource]; exists {
+					if err := write(realtimeMessage{realtimeValue: value, Resource: resource}); err != nil {
+						return
+					}
+				}
 			}
 		case <-heartbeat.C:
 			if !s.realtimeAlive(r, p) {
-				write("UNAUTHENTICATED", "会话或授权已失效", nil)
+				write(realtimeMessage{realtimeValue: realtimeValue{Code: "UNAUTHENTICATED", Message: "会话或授权已失效"}})
 				return
 			}
 			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {

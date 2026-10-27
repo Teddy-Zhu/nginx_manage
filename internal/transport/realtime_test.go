@@ -1,19 +1,20 @@
 package transport
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/fault"
 	"nginxpanel/internal/hostdns"
 	"nginxpanel/internal/modules"
 	"nginxpanel/internal/monitoring"
@@ -150,54 +151,49 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks", "monitoring"}, Resources: []string{"/tasks", "/monitoring/latest", "/monitoring/history?kind=cpu&id=total&value=usage_percent&points=3&window=3600"}}, {Connection: remote, Topics: []string{"tasks"}, Resources: []string{"/tasks"}}}}); err != nil {
 		t.Fatal(err)
 	}
-	var frame Response
-	localReady, remoteFailed := false, false
-	for !localReady || !remoteFailed {
-		if err = conn.ReadJSON(&frame); err != nil {
-			t.Fatal(err)
+	var frame realtimeMessage
+	seen := map[string]bool{}
+	remoteFailed := false
+	for len(seen) < 3 || !remoteFailed {
+		frame = readRealtimeMessage(t, conn)
+		if frame.Revision != 1 {
+			t.Fatalf("invalid subscription revision: %+v", frame)
 		}
-		if frame.NodeID != server.NodeID || frame.RequestID == "" {
-			t.Fatalf("invalid identity: %+v", frame)
-		}
-		data := decodeRealtimeData(t, frame)
-		if data.Revision != 1 {
-			t.Fatalf("invalid subscription revision: %+v", data)
-		}
-		if data.Connection == remote && frame.Code == "REMOTE_STREAM_INTERRUPTED" {
+		if frame.Connection == remote && frame.Code == "REMOTE_STREAM_INTERRUPTED" {
 			remoteFailed = true
+			continue
 		}
-		if data.Connection == "" && frame.Code == "OK" && slices.Contains(data.Topics, "tasks") {
-			value, exists := data.Values["/tasks"]
-			var payload Response
-			if !exists || value.Status != 200 || json.Unmarshal(value.Response, &payload) != nil || payload.Code != "OK" || payload.NodeID != server.NodeID {
-				t.Fatalf("missing authorized task snapshot: %+v", data)
-			}
-			var metricFrame struct{ Data monitoring.Latest }
-			latest := data.Values["/monitoring/latest"]
-			if latest.Status != 200 || json.Unmarshal(latest.Response, &metricFrame) != nil || metricFrame.Data.Sample == nil || *metricFrame.Data.Sample.Metrics[0].Values["usage_percent"] != 13.5 {
-				t.Fatalf("missing metric values: %s", latest.Response)
-			}
-			history := data.Values["/monitoring/history?kind=cpu&id=total&value=usage_percent&points=3&window=3600"]
-			if history.Status != 200 {
-				t.Fatalf("rolling history unavailable: %s", history.Response)
-			}
-			localReady = true
+		if frame.Connection != "" || frame.Code != "OK" {
+			t.Fatalf("invalid local snapshot: %+v", frame)
 		}
+		switch frame.Resource {
+		case "/tasks":
+			var tasks []json.RawMessage
+			if json.Unmarshal(frame.Data, &tasks) != nil {
+				t.Fatalf("missing task data: %s", frame.Data)
+			}
+		case "/monitoring/latest":
+			var latest monitoring.Latest
+			if json.Unmarshal(frame.Data, &latest) != nil || latest.Sample == nil || *latest.Sample.Metrics[0].Values["usage_percent"] != 13.5 {
+				t.Fatalf("missing metric values: %s", frame.Data)
+			}
+		case "/monitoring/history?kind=cpu&id=total&value=usage_percent&points=3&window=3600":
+		default:
+			t.Fatalf("unrequested resource: %s", frame.Resource)
+		}
+		seen[frame.Resource] = true
 	}
 	// Replace topics in the same socket and remove the failed remote source.
 	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 2, Subscriptions: []realtimeFilter{{Topics: []string{"backups"}, Resources: []string{"/backups"}}}}); err != nil {
 		t.Fatal(err)
 	}
 	for {
-		if err = conn.ReadJSON(&frame); err != nil {
-			t.Fatal(err)
-		}
-		data := decodeRealtimeData(t, frame)
-		if data.Revision < 2 {
+		frame = readRealtimeMessage(t, conn)
+		if frame.Revision < 2 {
 			continue
 		}
-		if data.Connection != "" || !slices.Equal(data.Topics, []string{"backups"}) {
-			t.Fatalf("old subscription leaked: %+v", data)
+		if frame.Connection != "" || frame.Resource != "/backups" {
+			t.Fatalf("old subscription leaked: %+v", frame)
 		}
 		break
 	}
@@ -211,10 +207,8 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 		t.Fatal(err)
 	}
 	for {
-		if err = conn.ReadJSON(&frame); err != nil {
-			t.Fatal(err)
-		}
-		if decodeRealtimeData(t, frame).Revision == 4 {
+		frame = readRealtimeMessage(t, conn)
+		if frame.Revision == 4 {
 			break
 		}
 	}
@@ -245,17 +239,64 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 	}
 }
 
-func decodeRealtimeData(t *testing.T, frame Response) realtimeData {
+func readRealtimeMessage(t *testing.T, conn *websocket.Conn) realtimeMessage {
 	t.Helper()
-	raw, err := json.Marshal(frame.Data)
+	_, raw, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var data realtimeData
-	if err = json.Unmarshal(raw, &data); err != nil {
+	var fields map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &fields); err != nil {
 		t.Fatal(err)
 	}
-	return data
+	allowed := map[string]bool{"code": true, "message": true, "data": true, "resource": true, "connection": true, "revision": true, "status": true, "reset": true}
+	for field := range fields {
+		if !allowed[field] {
+			t.Fatalf("redundant envelope field %s: %s", field, raw)
+		}
+	}
+	var frame realtimeMessage
+	if err = json.Unmarshal(raw, &frame); err != nil {
+		t.Fatal(err)
+	}
+	if frame.Code == "OK" && (frame.Status != 0 || frame.Message != "" || !json.Valid(frame.Data)) {
+		t.Fatalf("invalid success payload: %s", raw)
+	}
+	if frame.Resource != "" && !validRealtimeValue(frame.realtimeValue) {
+		t.Fatalf("invalid resource result: %s", raw)
+	}
+	return frame
+}
+
+func TestRealtimeResourcesOnlyPushChangedData(t *testing.T) {
+	server := &Server{NodeID: secure.ID()}
+	value := 1
+	server.realtimeReader = server.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/missing") {
+			server.fail(w, r, fault.New(404, "NOT_FOUND", "任务不存在"))
+			return
+		}
+		server.ok(w, r, map[string]int{"value": value})
+	}))
+	state := server.realtimeResources(httptest.NewRequest(http.MethodGet, "/api/v1/events", nil))
+	resources := []string{"/tasks", "/tasks/missing"}
+	first := state.Read(t.Context(), []string{"tasks"}, resources)
+	if len(first) != 2 || first["/tasks"].Code != "OK" || first["/tasks"].Message != "" || first["/tasks"].Status != 0 || first["/tasks/missing"].Status != 404 {
+		t.Fatalf("invalid initial snapshot: %+v", first)
+	}
+	// Request IDs change on every dispatch and must not trigger another push.
+	if unchanged := state.Read(t.Context(), []string{"tasks"}, resources); len(unchanged) != 0 {
+		t.Fatalf("unchanged resources repeated: %+v", unchanged)
+	}
+	value++
+	changed := state.Read(t.Context(), []string{"tasks"}, resources)
+	if len(changed) != 1 || !bytes.Equal(changed["/tasks"].Data, []byte(`{"value":2}`)) {
+		t.Fatalf("changed resource missing: %+v", changed)
+	}
+	reset := server.realtimeResources(state.request).Read(t.Context(), []string{"tasks"}, resources)
+	if len(reset) != 2 {
+		t.Fatalf("new subscription did not receive complete snapshot: %+v", reset)
+	}
 }
 
 func TestRealtimeSubscriptionValidation(t *testing.T) {

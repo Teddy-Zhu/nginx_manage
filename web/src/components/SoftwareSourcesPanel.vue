@@ -12,19 +12,24 @@ import {
   NTag,
 } from "naive-ui";
 import {
-  useNodeAPI,
   type ComponentTask,
   type SoftwareCatalog,
   type SoftwareRequest,
   type SoftwareSource,
 } from "../api/client";
-import { useAction } from "../composables/action";
-import { useSession } from "../stores/session";
-import { inspectTask } from "../stores/operation";
-import { randomUUID } from "../utils/crypto";
+import { useSoftwareOperations } from "../composables/software";
+import { useNodes } from "../stores/node";
 import TaskLogButton from "./TaskLogButton.vue";
 import SoftwareCard from "./SoftwareCard.vue";
-import { softwareCatalogEntries } from "../utils/software";
+import {
+  softwareCatalogEntries,
+  applicationView,
+  softwareConfirmation,
+  type CatalogEntry,
+  type SoftwareOperation,
+} from "../utils/software";
+import SoftwareActions from "./SoftwareActions.vue";
+import SoftwareApplicationPanel from "./SoftwareApplicationPanel.vue";
 const props = defineProps<{
   catalog?: SoftwareCatalog;
   tasks: ComponentTask[];
@@ -34,32 +39,40 @@ const props = defineProps<{
   statusFilter: string;
 }>();
 const emit = defineEmits<{ changed: []; task: [task: ComponentTask] }>();
-const api = useNodeAPI(),
-  session = useSession(),
-  { run, busy } = useAction();
+const {
+  run,
+  busy,
+  permitted,
+  submit: submitTask,
+} = useSoftwareOperations(
+  () => emit("changed"),
+  ["components.manage", "system.write"],
+);
+const nodes = useNodes();
+const origin = computed(() =>
+  nodes.selected
+    ? (nodes.connections.find((item) => item.id === nodes.selected?.connection)
+        ?.url ?? "")
+    : window.location.origin,
+);
+const selected = ref("");
+const selectedEntry = computed(() =>
+  entries.value.find(
+    (entry) => `${entry.source.id}/${entry.application.id}` === selected.value,
+  ),
+);
+function view(entry: CatalogEntry) {
+  return applicationView(entry, props.tasks, origin.value);
+}
 const manageSources = ref(false);
 const selectedSource = ref("");
-const latestRequest = ref<SoftwareRequest | null>(null),
-  pending = ref<SoftwareRequest | null>(null);
 const showImport = ref(false),
   url = ref(""),
   source = ref<SoftwareSource | null>(null),
   fileName = ref(""),
   fileInput = ref<HTMLInputElement | null>(null),
   latest = ref("");
-const permitted = computed(
-  () =>
-    session.me?.scopes.includes("components.manage") &&
-    session.me.scopes.includes("system.write"),
-);
 const job = computed(() => props.tasks.find((t) => t.id === latest.value));
-watch(
-  () => job.value?.state,
-  (state, old) => {
-    if (state && state !== old && ["succeeded", "failed"].includes(state))
-      emit("changed");
-  },
-);
 const entries = computed(() => softwareCatalogEntries(props.catalog));
 const sourceOptions = computed(() => [
   { label: "全部软件源", value: "" },
@@ -94,34 +107,6 @@ const visibleEntries = computed(() => {
           : !entry.installation)),
   );
 });
-function applicationTask(sourceID: string, appID: string) {
-  return props.tasks.find((task) => {
-    const request =
-      task.result?.input.software ??
-      (task.id === latest.value ? latestRequest.value : null);
-    return request?.source_id === sourceID && request.app_id === appID;
-  });
-}
-function processing(task?: ComponentTask) {
-  return (
-    !!task &&
-    task.stage !== "restore_isolated" &&
-    ["queued", "running", "recovery_required"].includes(task.state)
-  );
-}
-function applicationStatus(entry: (typeof entries.value)[number]) {
-  const task = applicationTask(entry.source.id, entry.application.id);
-  if (processing(task)) {
-    if (task?.state === "recovery_required") return "需要处理";
-    const request = task?.result?.input.software ?? latestRequest.value;
-    return request?.action === "uninstall"
-      ? "卸载中"
-      : request?.action === "update"
-        ? "更新中"
-        : "安装中";
-  }
-  return entry.installation ? "已安装" : "未安装";
-}
 function openImport() {
   manageSources.value = false;
   url.value = fileName.value = "";
@@ -140,61 +125,34 @@ async function chooseFile(event: Event) {
   (event.target as HTMLInputElement).value = "";
 }
 async function submit(request: SoftwareRequest) {
-  await run(async () => {
-    pending.value = request;
-    const input = {
-      action: "software" as const,
-      tag: "",
-      prerelease: false,
-      plan_id: "",
-      manifest_sha256: "",
-      trust_sha256: "",
-      software: request,
-    };
-    let task: ComponentTask;
-    try {
-      task = await api.createComponentTask({ input }, randomUUID());
-    } finally {
-      pending.value = null;
-    }
-    latestRequest.value = request;
-    emit("task", task);
-    latest.value = task.id;
-    showImport.value = false;
-    source.value = null;
-    url.value = "";
-    fileName.value = "";
-    emit("changed");
-    inspectTask(task.id, "软件操作日志");
-  });
+  const task = await submitTask(request, "软件操作日志");
+  if (!task) return;
+  emit("task", task);
+  latest.value = task.id;
+  showImport.value = false;
+  source.value = null;
+  url.value = fileName.value = "";
+  emit("changed");
 }
 async function removeSource(id: string) {
   if (!window.confirm("删除此软件源？已安装的软件需要先卸载。")) return;
   await submit({ action: "delete", source_id: id });
 }
-async function install(
-  sourceID: string,
-  appID: string,
-  name: string,
-  exists: boolean,
-) {
-  if (
-    !window.confirm(
-      exists
-        ? `更新 ${name}？软件将短暂重启，已有数据卷会保留。`
-        : `安装 ${name}？将下载镜像并开放配置中列出的端口。`,
-    )
-  )
-    return;
+async function operate(action: SoftwareOperation, entry: CatalogEntry) {
+  const definition =
+    action === "install" || action === "update"
+      ? entry.application
+      : entry.installation?.application;
+  const description = definition?.actions[action]?.description;
+  const prompt = softwareConfirmation(action, entry.application.name);
+  const confirmation =
+    prompt && [prompt, description].filter(Boolean).join("\n");
+  if (confirmation && !window.confirm(confirmation)) return;
   await submit({
-    action: exists ? "update" : "install",
-    source_id: sourceID,
-    app_id: appID,
+    action,
+    source_id: entry.source.id,
+    app_id: entry.application.id,
   });
-}
-async function uninstall(sourceID: string, appID: string, name: string) {
-  if (!window.confirm(`卸载 ${name}？软件会停止，数据卷将保留。`)) return;
-  await submit({ action: "uninstall", source_id: sourceID, app_id: appID });
 }
 </script>
 <template>
@@ -237,72 +195,19 @@ async function uninstall(sourceID: string, appID: string, name: string) {
         :description="entry.application.description || '暂无软件介绍'"
         category="第三方应用"
         accent="amber"
-        :status="applicationStatus(entry)"
-        :status-type="
-          processing(applicationTask(entry.source.id, entry.application.id))
-            ? 'info'
-            : entry.installation
-              ? 'success'
-              : 'default'
-        "
+        :status="view(entry).status.label"
+        :status-type="view(entry).status.tone"
       >
         <div class="app-meta">
-          <span>来自 {{ entry.source.name }}</span
-          ><span v-if="entry.application.ports?.length"
-            >访问端口
-            {{
-              entry.application.ports
-                .map((port) => `${port.host}/${port.protocol.toUpperCase()}`)
-                .join("、")
-            }}</span
-          >
+          <span>来自 {{ entry.source.name }}</span>
         </div>
         <template #actions>
-          <NButton
-            type="primary"
-            :loading="
-              busy &&
-              pending?.source_id === entry.source.id &&
-              pending?.app_id === entry.application.id &&
-              pending?.action !== 'uninstall'
-            "
-            :disabled="!permitted || busy || active"
-            @click="
-              install(
-                entry.source.id,
-                entry.application.id,
-                entry.application.name,
-                !!entry.installation,
-              )
-            "
-            >{{ entry.installation ? "更新" : "安装" }}</NButton
-          >
-          <div class="app-secondary-actions">
-            <TaskLogButton
-              v-if="applicationTask(entry.source.id, entry.application.id)"
-              :task-id="
-                applicationTask(entry.source.id, entry.application.id)!.id
-              "
-            /><NButton
-              v-if="entry.installation"
-              quaternary
-              :disabled="!permitted || busy || active"
-              :loading="
-                busy &&
-                pending?.source_id === entry.source.id &&
-                pending?.app_id === entry.application.id &&
-                pending?.action === 'uninstall'
-              "
-              @click="
-                uninstall(
-                  entry.source.id,
-                  entry.application.id,
-                  entry.application.name,
-                )
-              "
-              >卸载</NButton
-            >
-          </div>
+          <SoftwareActions
+            :app="view(entry)"
+            :permitted="permitted"
+            :active="active || busy"
+            @manage="selected = view(entry).id"
+          />
         </template>
       </SoftwareCard>
     </div>
@@ -342,6 +247,35 @@ async function uninstall(sourceID: string, appID: string, name: string) {
       >
     </div>
   </div>
+  <NModal
+    :show="!!selectedEntry"
+    preset="card"
+    :title="selectedEntry?.application.name ?? '软件管理'"
+    style="width: 760px; max-width: calc(100vw - 32px)"
+    :mask-closable="false"
+    :closable="!busy"
+    :close-on-esc="!busy"
+    @update:show="
+      (show: boolean) => {
+        if (!show && !busy) selected = '';
+      }
+    "
+  >
+    <SoftwareApplicationPanel
+      v-if="selectedEntry"
+      :entry="selectedEntry"
+      :tasks="tasks"
+      :origin="origin"
+      :permitted="permitted"
+      :busy="busy || active"
+      @operate="operate($event, selectedEntry!)"
+    />
+    <template #footer
+      ><div class="dialog-footer">
+        <NButton :disabled="busy" @click="selected = ''">关闭</NButton>
+      </div></template
+    >
+  </NModal>
   <NModal
     v-model:show="manageSources"
     preset="card"
@@ -460,7 +394,7 @@ async function uninstall(sourceID: string, appID: string, name: string) {
           @change="chooseFile"
         />
       </div>
-      <p class="muted">添加后可查看软件介绍和访问端口，再选择安装。</p>
+      <p class="muted">添加后可查看软件介绍，再选择安装。</p>
     </div>
   </FormDialog>
 </template>
@@ -496,11 +430,6 @@ async function uninstall(sourceID: string, appID: string, name: string) {
 .app-meta {
   display: grid;
   gap: 4px;
-}
-.app-secondary-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 .operation-feedback {
   display: flex;

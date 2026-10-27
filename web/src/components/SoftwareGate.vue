@@ -9,6 +9,7 @@ import {
   type SoftwareState,
 } from "../utils/software";
 import { useSession } from "../stores/session";
+import { useLiveRefresh } from "../composables/live";
 
 const props = defineProps<{ software?: "nginx" | "fail2ban" }>();
 const api = useNodeAPI();
@@ -21,11 +22,12 @@ const canInspect = computed(
     session.me?.scopes.includes("components.manage"),
 );
 const loading = ref(!!props.software),
+  reading = ref(false),
   state = ref<SoftwareState>("unavailable"),
   error = ref("");
 async function load() {
-  if (!props.software || !canInspect.value) return;
-  loading.value = true;
+  if (!props.software || !canInspect.value || reading.value) return;
+  reading.value = true;
   error.value = "";
   try {
     if (props.software === "nginx") {
@@ -34,23 +36,27 @@ async function load() {
       if (state.value === "unavailable")
         throw new Error(status.reason || "服务器管理服务不可用。");
     } else {
-      const status = await api.fail2ban();
+      const status = await api.fail2banContainer();
       state.value = fail2banState(status);
-      if (state.value === "unavailable")
-        throw new Error(
-          status.reason ||
-            status.binding.reason ||
-            status.managed.reason ||
-            "服务器管理服务不可用。",
-        );
     }
   } catch (cause) {
     error.value = apiError(cause).message;
   } finally {
+    reading.value = false;
     loading.value = false;
   }
 }
 watch([() => props.software, canInspect], load, { immediate: true });
+useLiveRefresh(
+  api,
+  props.software === "nginx"
+    ? ["software"]
+    : props.software === "fail2ban"
+      ? ["fail2ban"]
+      : [],
+  load,
+  () => reading.value,
+);
 </script>
 
 <template>

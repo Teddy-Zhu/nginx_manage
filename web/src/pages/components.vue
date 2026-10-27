@@ -12,7 +12,7 @@
 </route>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   NAlert,
   NButton,
@@ -30,42 +30,45 @@ import {
   useNodeAPI,
   type ComponentOverview,
   type ComponentTask,
-  type Fail2banObservation,
+  type Fail2banContainerStatus,
 } from "../api/client";
 import { useLiveRefresh } from "../composables/live";
 import { useSession } from "../stores/session";
 import {
-  nginxState,
-  fail2banState,
+  softwareTaskActive,
+  softwareTaskLabel,
   softwareCatalogEntries,
 } from "../utils/software";
 import SoftwareSourcesPanel from "../components/SoftwareSourcesPanel.vue";
 import SoftwareCard from "../components/SoftwareCard.vue";
-import Fail2banInstallPanel from "../components/Fail2banInstallPanel.vue";
-import NginxInstallPanel from "../components/NginxInstallPanel.vue";
+import SoftwareActions from "../components/SoftwareActions.vue";
+import { builtinSoftware } from "../software/builtin";
 import TaskLogButton from "../components/TaskLogButton.vue";
 
 const api = useNodeAPI(),
   route = useRoute(),
   router = useRouter(),
   session = useSession();
-type SystemSoftware = "nginx" | "fail2ban";
 const overview = ref<ComponentOverview | null>(null),
   tasks = ref<ComponentTask[]>([]),
-  fail2ban = ref<Fail2banObservation | null>(null);
+  fail2ban = ref<Fail2banContainerStatus | null>(null);
 const reading = ref(false),
   loaded = ref(false),
   error = ref("");
 const store = ref("system"),
   search = ref(""),
   statusFilter = ref("all");
-const selected = ref<SystemSoftware | null>(null),
+const selected = ref<string | null>(null),
   detailBusy = ref(false),
   showHistory = ref(false);
 const controller = new AbortController();
+const active = computed(() => tasks.value.some(softwareTaskActive));
+const systemSoftware = computed(() =>
+  builtinSoftware(overview.value, fail2ban.value, tasks.value, active.value),
+);
 const querySoftware = computed(() =>
-  route.query.software === "nginx" || route.query.software === "fail2ban"
-    ? route.query.software
+  systemSoftware.value.some((app) => app.id === route.query.software)
+    ? String(route.query.software)
     : null,
 );
 watch(
@@ -76,65 +79,6 @@ watch(
   },
   { immediate: true },
 );
-const permitted = computed(
-  () => !!session.me?.scopes.includes("components.manage"),
-);
-const active = computed(() =>
-  tasks.value.some(
-    (task) =>
-      task.stage !== "restore_isolated" &&
-      ["queued", "running", "recovery_required"].includes(task.state),
-  ),
-);
-const nginxStatus = computed(() => nginxState(overview.value)),
-  fail2banStatus = computed(() => fail2banState(fail2ban.value));
-const stateNames = {
-  installed: "已安装",
-  missing: "未安装",
-  unbound: "待连接",
-  recovery: "安装未完成",
-  unavailable: "状态不可用",
-};
-const systemSoftware = computed(() => [
-  {
-    id: "nginx" as const,
-    name: "Nginx",
-    category: "网站服务",
-    description: "创建网站与反向代理，管理 HTTPS、上游服务和网站访问控制。",
-    state: nginxStatus.value,
-    status:
-      nginxStatus.value === "installed"
-        ? overview.value?.running
-          ? "运行中"
-          : "已停止"
-        : stateNames[nginxStatus.value],
-    installed: nginxStatus.value === "installed",
-    management: "/nginx",
-    action: "管理网站",
-    accent: "green" as const,
-  },
-  {
-    id: "fail2ban" as const,
-    name: "Fail2ban",
-    category: "安全防护",
-    description: "自动封禁反复登录失败的 IP，保护 SSH、管理面板和网站。",
-    state: fail2banStatus.value,
-    status:
-      fail2banStatus.value === "installed"
-        ? fail2ban.value?.container
-          ? fail2ban.value.container.ready
-            ? "运行中"
-            : fail2ban.value.container.running
-              ? "正在启动"
-              : "已停止"
-          : "已安装"
-        : stateNames[fail2banStatus.value],
-    installed: fail2banStatus.value === "installed",
-    management: "/fail2ban",
-    action: "设置防护",
-    accent: "blue" as const,
-  },
-]);
 const filteredSystemSoftware = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
   return systemSoftware.value.filter(
@@ -144,9 +88,7 @@ const filteredSystemSoftware = computed(() => {
           .toLocaleLowerCase()
           .includes(query)) &&
       (statusFilter.value === "all" ||
-        (statusFilter.value === "installed"
-          ? app.installed
-          : app.state === "missing")),
+        (statusFilter.value === "installed" ? app.installed : !app.installed)),
   );
 });
 const thirdPartyCount = computed(
@@ -162,23 +104,6 @@ const stateLabels: Record<string, string> = {
   failed: "未完成",
   recovery_required: "需要处理",
 };
-function taskName(task: ComponentTask) {
-  const request = task.result?.input.software;
-  if (task.action === "software")
-    return request?.action === "fail2ban"
-      ? "登录防护操作"
-      : request?.action === "update-panel"
-        ? "系统更新"
-        : "第三方软件操作";
-  return (
-    {
-      check: "检查软件版本",
-      prepare: "下载软件",
-      pull: "下载运行环境",
-      activate: "更新面板界面",
-    }[task.action] ?? "软件操作"
-  );
-}
 function recordTask(task: ComponentTask) {
   tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)];
 }
@@ -186,22 +111,32 @@ async function load() {
   if (reading.value || controller.signal.aborted) return;
   reading.value = true;
   try {
-    const [source, items, observation] = await Promise.all([
+    const [source, items, observation] = await Promise.allSettled([
       api.components(controller.signal),
       api.componentTasks(controller.signal),
-      api.fail2ban(controller.signal),
+      api.fail2banContainer(controller.signal),
     ]);
     if (controller.signal.aborted) return;
-    overview.value = source;
-    tasks.value = [
-      ...tasks.value.filter(
-        (task) => !items.some((item) => item.id === task.id),
-      ),
-      ...items,
-    ].sort((a, b) => b.created_at - a.created_at);
-    fail2ban.value = observation;
+    overview.value = source.status === "fulfilled" ? source.value : null;
+    if (items.status === "fulfilled")
+      tasks.value = [
+        ...tasks.value.filter(
+          (task) => !items.value.some((item) => item.id === task.id),
+        ),
+        ...items.value,
+      ].sort((a, b) => b.created_at - a.created_at);
+    fail2ban.value =
+      observation.status === "fulfilled" ? observation.value : null;
     loaded.value = true;
-    error.value = "";
+    error.value = [source, items, observation]
+      .flatMap((result, index) =>
+        result.status === "rejected"
+          ? [
+              `${["软件列表", "操作记录", "登录防护"][index]}：${apiError(result.reason).message}`,
+            ]
+          : [],
+      )
+      .join("；");
   } catch (failure) {
     if (!controller.signal.aborted) error.value = apiError(failure).message;
   } finally {
@@ -218,7 +153,12 @@ function closeDetails() {
 }
 onMounted(load);
 onUnmounted(() => controller.abort());
-useLiveRefresh(api, ["tasks", "fail2ban"], load, () => reading.value);
+useLiveRefresh(
+  api,
+  ["tasks", "software", "fail2ban"],
+  load,
+  () => reading.value,
+);
 </script>
 <template>
   <Teleport defer to="#page-heading-actions">
@@ -310,44 +250,22 @@ useLiveRefresh(api, ["tasks", "fail2ban"], load, () => reading.value);
             :name="app.name"
             :description="app.description"
             :category="app.category"
-            :status="app.status"
+            :status="app.status.label"
             :accent="app.accent"
-            :status-type="
-              app.installed
-                ? app.status === '运行中' || app.status === '已安装'
-                  ? 'success'
-                  : 'warning'
-                : app.state === 'unavailable' || app.state === 'recovery'
-                  ? 'warning'
-                  : 'default'
-            "
+            :status-type="app.status.tone"
           >
-            <span v-if="app.id === 'nginx' && overview?.installation"
-              >版本 {{ overview.installation.version }}</span
-            ><span v-else
-              >系统内置 ·
-              {{ app.id === "nginx" ? "网站与代理" : "登录防护" }}</span
-            >
+            <span>{{ app.note }}</span>
             <template #actions>
-              <RouterLink v-if="app.installed" :to="app.management"
-                ><NButton type="primary">{{ app.action }}</NButton></RouterLink
-              >
-              <NButton
-                v-else
-                type="primary"
-                :disabled="!permitted || app.state === 'unavailable' || active"
-                @click="selected = app.id"
-                >{{
-                  app.state === "recovery"
-                    ? "继续安装"
-                    : app.state === "unbound"
-                      ? "连接软件"
-                      : "安装"
-                }}</NButton
-              >
-              <NButton quaternary @click="selected = app.id">{{
-                app.installed ? "软件管理" : "详情"
-              }}</NButton>
+              <SoftwareActions
+                :app="app"
+                :permitted="
+                  app.scopes.every((scope) =>
+                    session.me?.scopes.includes(scope),
+                  )
+                "
+                :active="active"
+                @manage="selected = app.id"
+              />
             </template>
           </SoftwareCard>
         </div>
@@ -391,25 +309,18 @@ useLiveRefresh(api, ["tasks", "fail2ban"], load, () => reading.value);
   >
     <div class="software-details page-stack">
       <div v-if="selectedApp" class="detail-intro">
-        <NTag
-          :bordered="false"
-          :type="selectedApp.installed ? 'success' : 'default'"
-          >{{ selectedApp.status }}</NTag
+        <NTag :bordered="false" :type="selectedApp.status.tone">{{
+          selectedApp.status.label
+        }}</NTag
         ><span class="muted">{{ selectedApp.description }}</span>
       </div>
-      <Fail2banInstallPanel
-        v-if="selected === 'fail2ban'"
-        embedded
+      <component
+        :is="selectedApp.panel"
+        v-if="selectedApp"
+        v-bind="selectedApp.panelProps"
         @busy="detailBusy = $event"
         @changed="load"
-      />
-      <NginxInstallPanel
-        v-if="selected === 'nginx'"
-        :overview="overview"
-        :tasks="tasks"
-        :active="active"
         @task="recordTask"
-        @busy="detailBusy = $event"
       />
     </div>
     <template #footer
@@ -431,7 +342,7 @@ useLiveRefresh(api, ["tasks", "fail2ban"], load, () => reading.value);
         class="record-card"
       >
         <div class="section-heading">
-          <strong>{{ taskName(item) }}</strong
+          <strong>{{ softwareTaskLabel(item) }}</strong
           ><NTag
             :bordered="false"
             :type="

@@ -786,6 +786,7 @@ const (
 	Fail2banContainerRequestActionBan       Fail2banContainerRequestAction = "ban"
 	Fail2banContainerRequestActionConfigure Fail2banContainerRequestAction = "configure"
 	Fail2banContainerRequestActionInstall   Fail2banContainerRequestAction = "install"
+	Fail2banContainerRequestActionLogs      Fail2banContainerRequestAction = "logs"
 	Fail2banContainerRequestActionRestart   Fail2banContainerRequestAction = "restart"
 	Fail2banContainerRequestActionStart     Fail2banContainerRequestAction = "start"
 	Fail2banContainerRequestActionStop      Fail2banContainerRequestAction = "stop"
@@ -802,6 +803,8 @@ func (e Fail2banContainerRequestAction) Valid() bool {
 	case Fail2banContainerRequestActionConfigure:
 		return true
 	case Fail2banContainerRequestActionInstall:
+		return true
+	case Fail2banContainerRequestActionLogs:
 		return true
 	case Fail2banContainerRequestActionRestart:
 		return true
@@ -835,6 +838,36 @@ func (e Fail2banContainerRuleKind) Valid() bool {
 	case Fail2banContainerRuleKindPanel:
 		return true
 	case Fail2banContainerRuleKindSsh:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Fail2banContainerStatusState.
+const (
+	Fail2banContainerStatusStateMissing   Fail2banContainerStatusState = "missing"
+	Fail2banContainerStatusStateRunning   Fail2banContainerStatusState = "running"
+	Fail2banContainerStatusStateStarting  Fail2banContainerStatusState = "starting"
+	Fail2banContainerStatusStateStopped   Fail2banContainerStatusState = "stopped"
+	Fail2banContainerStatusStateUnhealthy Fail2banContainerStatusState = "unhealthy"
+	Fail2banContainerStatusStateUnknown   Fail2banContainerStatusState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the Fail2banContainerStatusState enum.
+func (e Fail2banContainerStatusState) Valid() bool {
+	switch e {
+	case Fail2banContainerStatusStateMissing:
+		return true
+	case Fail2banContainerStatusStateRunning:
+		return true
+	case Fail2banContainerStatusStateStarting:
+		return true
+	case Fail2banContainerStatusStateStopped:
+		return true
+	case Fail2banContainerStatusStateUnhealthy:
+		return true
+	case Fail2banContainerStatusStateUnknown:
 		return true
 	default:
 		return false
@@ -3202,18 +3235,30 @@ func (e ResourceKind) Valid() bool {
 	}
 }
 
-// Defines values for SoftwarePortProtocol.
+// Defines values for SoftwareInstallationState.
 const (
-	SoftwarePortProtocolTcp SoftwarePortProtocol = "tcp"
-	SoftwarePortProtocolUdp SoftwarePortProtocol = "udp"
+	SoftwareInstallationStateMissing   SoftwareInstallationState = "missing"
+	SoftwareInstallationStateRunning   SoftwareInstallationState = "running"
+	SoftwareInstallationStateStarting  SoftwareInstallationState = "starting"
+	SoftwareInstallationStateStopped   SoftwareInstallationState = "stopped"
+	SoftwareInstallationStateUnhealthy SoftwareInstallationState = "unhealthy"
+	SoftwareInstallationStateUnknown   SoftwareInstallationState = "unknown"
 )
 
-// Valid indicates whether the value is a known member of the SoftwarePortProtocol enum.
-func (e SoftwarePortProtocol) Valid() bool {
+// Valid indicates whether the value is a known member of the SoftwareInstallationState enum.
+func (e SoftwareInstallationState) Valid() bool {
 	switch e {
-	case SoftwarePortProtocolTcp:
+	case SoftwareInstallationStateMissing:
 		return true
-	case SoftwarePortProtocolUdp:
+	case SoftwareInstallationStateRunning:
+		return true
+	case SoftwareInstallationStateStarting:
+		return true
+	case SoftwareInstallationStateStopped:
+		return true
+	case SoftwareInstallationStateUnhealthy:
+		return true
+	case SoftwareInstallationStateUnknown:
 		return true
 	default:
 		return false
@@ -3226,7 +3271,11 @@ const (
 	SoftwareRequestActionFail2ban    SoftwareRequestAction = "fail2ban"
 	SoftwareRequestActionImport      SoftwareRequestAction = "import"
 	SoftwareRequestActionInstall     SoftwareRequestAction = "install"
+	SoftwareRequestActionLogs        SoftwareRequestAction = "logs"
 	SoftwareRequestActionRefresh     SoftwareRequestAction = "refresh"
+	SoftwareRequestActionRestart     SoftwareRequestAction = "restart"
+	SoftwareRequestActionStart       SoftwareRequestAction = "start"
+	SoftwareRequestActionStop        SoftwareRequestAction = "stop"
 	SoftwareRequestActionUninstall   SoftwareRequestAction = "uninstall"
 	SoftwareRequestActionUpdate      SoftwareRequestAction = "update"
 	SoftwareRequestActionUpdatePanel SoftwareRequestAction = "update-panel"
@@ -3243,7 +3292,15 @@ func (e SoftwareRequestAction) Valid() bool {
 		return true
 	case SoftwareRequestActionInstall:
 		return true
+	case SoftwareRequestActionLogs:
+		return true
 	case SoftwareRequestActionRefresh:
+		return true
+	case SoftwareRequestActionRestart:
+		return true
+	case SoftwareRequestActionStart:
+		return true
+	case SoftwareRequestActionStop:
 		return true
 	case SoftwareRequestActionUninstall:
 		return true
@@ -4571,14 +4628,18 @@ type Fail2banContainerRuleKind string
 
 // Fail2banContainerStatus defines model for Fail2banContainerStatus.
 type Fail2banContainerStatus struct {
-	Config    Fail2banContainerConfig `json:"config"`
-	Error     string                  `json:"error"`
-	Installed bool                    `json:"installed"`
-	Jails     []Fail2banContainerJail `json:"jails"`
-	Logs      string                  `json:"logs"`
-	Ready     bool                    `json:"ready"`
-	Running   bool                    `json:"running"`
+	Config    Fail2banContainerConfig      `json:"config"`
+	Error     string                       `json:"error"`
+	Installed bool                         `json:"installed"`
+	Jails     []Fail2banContainerJail      `json:"jails"`
+	Logs      string                       `json:"logs"`
+	Ready     bool                         `json:"ready"`
+	Running   bool                         `json:"running"`
+	State     Fail2banContainerStatusState `json:"state"`
 }
+
+// Fail2banContainerStatusState defines model for Fail2banContainerStatus.State.
+type Fail2banContainerStatusState string
 
 // Fail2banDesiredJail defines model for Fail2banDesiredJail.
 type Fail2banDesiredJail struct {
@@ -8124,15 +8185,18 @@ type SaveResult struct {
 	Tree   Tree    `json:"tree"`
 }
 
+// SoftwareAction defines model for SoftwareAction.
+type SoftwareAction struct {
+	Command     []string `json:"command"`
+	Description *string  `json:"description,omitempty"`
+}
+
 // SoftwareApplication defines model for SoftwareApplication.
 type SoftwareApplication struct {
-	Description string             `json:"description"`
-	Environment *map[string]string `json:"environment,omitempty"`
-	Id          string             `json:"id"`
-	Image       string             `json:"image"`
-	Name        string             `json:"name"`
-	Ports       *[]SoftwarePort    `json:"ports,omitempty"`
-	Volumes     *[]SoftwareVolume  `json:"volumes,omitempty"`
+	Actions     map[string]SoftwareAction `json:"actions"`
+	Description string                    `json:"description"`
+	Id          string                    `json:"id"`
+	Name        string                    `json:"name"`
 }
 
 // SoftwareCatalog defines model for SoftwareCatalog.
@@ -8145,21 +8209,17 @@ type SoftwareCatalog struct {
 // SoftwareInstallation defines model for SoftwareInstallation.
 type SoftwareInstallation struct {
 	Application SoftwareApplication `json:"application"`
-	Container   string              `json:"container"`
-	ImageId     string              `json:"image_id"`
-	SourceId    string              `json:"source_id"`
-	UpdatedAt   int64               `json:"updated_at"`
+
+	// Entry 软件状态操作返回的访问地址；{host} 表示当前服务器地址
+	Entry     *string                    `json:"entry,omitempty"`
+	Error     *string                    `json:"error,omitempty"`
+	SourceId  string                     `json:"source_id"`
+	State     *SoftwareInstallationState `json:"state,omitempty"`
+	UpdatedAt int64                      `json:"updated_at"`
 }
 
-// SoftwarePort defines model for SoftwarePort.
-type SoftwarePort struct {
-	Container int                  `json:"container"`
-	Host      int                  `json:"host"`
-	Protocol  SoftwarePortProtocol `json:"protocol"`
-}
-
-// SoftwarePortProtocol defines model for SoftwarePort.Protocol.
-type SoftwarePortProtocol string
+// SoftwareInstallationState defines model for SoftwareInstallation.State.
+type SoftwareInstallationState string
 
 // SoftwareRequest defines model for SoftwareRequest.
 type SoftwareRequest struct {
@@ -8195,12 +8255,6 @@ type SoftwareSource struct {
 
 // SoftwareSourceSchema defines model for SoftwareSource.Schema.
 type SoftwareSourceSchema int
-
-// SoftwareVolume defines model for SoftwareVolume.
-type SoftwareVolume struct {
-	Name   string `json:"name"`
-	Target string `json:"target"`
-}
 
 // SystemVersion defines model for SystemVersion.
 type SystemVersion struct {

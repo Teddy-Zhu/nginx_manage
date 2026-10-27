@@ -72,11 +72,12 @@ print(json.dumps(result))
 
 func Status(ctx context.Context, data string) (fail2ban.ContainerStatus, error) {
 	c, installed, err := Configuration(data)
-	out := fail2ban.ContainerStatus{Installed: installed, Config: c, Jails: []fail2ban.ContainerJail{}}
+	out := fail2ban.ContainerStatus{State: "unknown", Installed: installed, Config: c, Jails: []fail2ban.ContainerJail{}}
 	if err != nil {
 		return out, err
 	}
 	if !installed {
+		out.State = "missing"
 		return out, nil
 	}
 	present, err := exists(ctx)
@@ -84,6 +85,7 @@ func Status(ctx context.Context, data string) (fail2ban.ContainerStatus, error) 
 		return out, err
 	}
 	if !present {
+		out.State = "missing"
 		out.Error = "软件容器不存在，请重新安装"
 		return out, nil
 	}
@@ -101,8 +103,10 @@ func Status(ctx context.Context, data string) (fail2ban.ContainerStatus, error) 
 		out.Logs = logs
 	}
 	if !out.Running {
+		out.State = "stopped"
 		return out, nil
 	}
+	out.State = "starting"
 	raw, err := command(ctx, "exec", Name, "python3", "-c", statusScript)
 	if err != nil {
 		out.Error = "登录防护尚未就绪，请查看服务日志"
@@ -116,6 +120,7 @@ func Status(ctx context.Context, data string) (fail2ban.ContainerStatus, error) 
 		return out, errors.New("登录防护返回的规则过多")
 	}
 	out.Ready = true
+	out.State = "running"
 	for _, rule := range c.Rules {
 		if !rule.Enabled {
 			continue

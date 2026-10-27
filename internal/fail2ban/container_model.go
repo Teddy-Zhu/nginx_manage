@@ -37,6 +37,7 @@ type ContainerJail struct {
 	Error         string   `json:"error"`
 }
 type ContainerStatus struct {
+	State     string          `json:"state"`
 	Installed bool            `json:"installed"`
 	Running   bool            `json:"running"`
 	Ready     bool            `json:"ready"`
@@ -87,7 +88,7 @@ func (r ContainerRequest) Validate() error {
 		if r.Config != nil && r.JailID == "" && r.Address == "" {
 			return r.Config.Validate()
 		}
-	case "start", "stop", "restart", "update", "uninstall":
+	case "start", "stop", "restart", "update", "uninstall", "logs":
 		if r.Config == nil && r.JailID == "" && r.Address == "" {
 			return nil
 		}

@@ -298,7 +298,12 @@ onUnmounted(() => {
   controller?.abort();
   if (timer) clearInterval(timer);
 });
-useLiveRefresh(api, ["tasks", "maintenance"], load, () => reading.value);
+useLiveRefresh(
+  api,
+  ["tasks", "software", "maintenance"],
+  load,
+  () => reading.value,
+);
 </script>
 <template>
   <div class="page-stack">

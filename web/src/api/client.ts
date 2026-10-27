@@ -1,5 +1,5 @@
 import { LiveError, isLiveResource, liveSessionActive, readLive, refreshLive, watchLiveResource } from "./live";
-import { subscribeLive, type LiveTopic } from "./live";
+import { subscribeLive, type LiveTopic, type LiveResult } from "./live";
 import { sha256Hex } from "../utils/crypto";
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import type { components, operations } from "./schema";
@@ -347,7 +347,7 @@ async function sendRequest<T>(config: RequestConfig, scope: RequestScope): Promi
   if (liveSessionActive() && (method === "GET" || preparationRead) && isLiveResource(resource)) {
     try {
       const result = await readLive(scope, resource, signal, config.timeout ?? 20_000);
-      return responseData<T>(result.response as ResponseBody<T>, result.status, scope);
+      return liveData<T>(result, scope);
     } catch (cause) {throw apiError(cause);}
   }
   try {
@@ -362,6 +362,12 @@ async function sendRequest<T>(config: RequestConfig, scope: RequestScope): Promi
     }
     throw apiError(cause);
   }
+}
+function liveData<T>(value: LiveResult, scope: RequestScope): T {
+  assertScope(scope);
+  if (value.code !== "OK")
+    throw new ApiError(value.code, value.message, value.status!, value.data);
+  return value.data as T;
 }
 function responseData<T>(body: ResponseBody<T>, status: number, scope: RequestScope): T {
   assertScope(scope);
@@ -474,7 +480,7 @@ function followLogsFor(
   assertScope(scope);
   const resource = "/logs/live?"+new URLSearchParams({query: JSON.stringify({...query,cursor:""})});
   return watchLiveResource(scope, resource, (value) => {
-    try {page(responseData<LogPage>(value.response as ResponseBody<LogPage>,value.status,scope),value.reset);}
+    try {page(liveData<LogPage>(value,scope),value.reset);}
     catch (cause) {error(apiError(cause));}
   });
 }

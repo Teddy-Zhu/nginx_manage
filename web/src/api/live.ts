@@ -1,17 +1,13 @@
 import { ref } from "vue";
 import resources from "../../../api/realtime-resources.json";
-import {
-  nodeGeneration,
-  scopeSignal,
-  sourceNodeId,
-  type RequestScope,
-} from "./context";
+import { nodeGeneration, scopeSignal, type RequestScope } from "./context";
 
 export type LiveTopic =
   | "nginx"
   | "nodes"
   | "logs"
   | "tasks"
+  | "software"
   | "monitoring"
   | "notifications"
   | "maintenance"
@@ -26,8 +22,10 @@ interface Listener {
   changed: () => void;
 }
 export interface LiveResult {
-  status: number;
-  response: unknown;
+  code: string;
+  message: string;
+  data: unknown;
+  status?: number;
   reset?: boolean;
 }
 interface Entry {
@@ -45,6 +43,7 @@ interface Binding {
 const bindings = new WeakMap<RequestScope, Map<string, Binding>>();
 export const liveTopicScopes: Record<LiveTopic, string[]> = {
   tasks: ["read"],
+  software: ["read", "components.manage"],
   monitoring: ["read"],
   logs: ["read"],
   nginx: ["read"],
@@ -253,15 +252,10 @@ interface Channel {
   failures: number;
   retry?: ReturnType<typeof setTimeout>;
 }
-interface LiveFrame {
-  code: string;
-  node_id: string;
-  data?: {
-    connection: string;
-    topics: LiveTopic[];
-    revision: number;
-    values: Record<string, LiveResult>;
-  };
+interface LiveFrame extends LiveResult {
+  resource?: string;
+  connection?: string;
+  revision?: number;
 }
 const channels = new Map<string, Channel>();
 let socket: WebSocket | undefined;
@@ -333,28 +327,34 @@ function receive(current: WebSocket, event: MessageEvent) {
     !frame ||
     typeof frame !== "object" ||
     typeof frame.code !== "string" ||
-    typeof frame.node_id !== "string"
+    typeof frame.message !== "string" ||
+    !("data" in frame)
   ) {
     current.close();
     return;
   }
   if (
     frame.code === "UNAUTHENTICATED" &&
-    frame.node_id === sourceNodeId.value
+    !frame.connection &&
+    !frame.resource
   ) {
     window.dispatchEvent(new Event("session-expired"));
     current.close();
     return;
   }
-  if (!frame.data || !Number.isSafeInteger(frame.data.revision)) {
+  if (!Number.isSafeInteger(frame.revision)) {
     current.close();
     return;
   }
   // A changed subscription may leave older frames in flight.
-  if (frame.data.revision !== revision) return;
-  const channel = channels.get(frame.data.connection);
+  if (frame.revision !== revision) return;
+  const channel = channels.get(frame.connection ?? "");
   if (!channel) return;
-  if (frame.code === "REMOTE_STREAM_INTERRUPTED" && frame.data.connection) {
+  if (
+    frame.code === "REMOTE_STREAM_INTERRUPTED" &&
+    frame.connection &&
+    !frame.resource
+  ) {
     channel.failures++;
     status();
     if (channel.retry) clearTimeout(channel.retry);
@@ -364,33 +364,18 @@ function receive(current: WebSocket, event: MessageEvent) {
     }, delay(channel.failures));
     return;
   }
-  const node = channel.scope.target?.nodeId ?? sourceNodeId.value;
-  const topics = new Set([
-    ...[...channel.listeners].flatMap((listener) => listener.topics),
-    ...[...channel.entries.keys()].map((resource) => resourceTopic(resource)!),
-  ]);
+  const entry = frame.resource
+    ? channel.entries.get(frame.resource)
+    : undefined;
   if (
-    frame.code !== "OK" ||
-    !node ||
-    frame.node_id !== node ||
-    !Array.isArray(frame.data.topics) ||
-    !frame.data.topics.length ||
-    frame.data.topics.some((topic) => !topics.has(topic)) ||
-    !frame.data.values ||
-    typeof frame.data.values !== "object" ||
-    Array.isArray(frame.data.values) ||
-    Object.entries(frame.data.values).some(
-      ([resource, value]) =>
-        !channel.entries.has(resource) ||
-        !frame.data!.topics.includes(resourceTopic(resource)!) ||
-        !value ||
-        !Number.isInteger(value.status) ||
-        value.status < 100 ||
-        value.status > 599 ||
-        !value.response ||
-        typeof value.response !== "object" ||
-        (value.response as { node_id?: string }).node_id !== node,
-    )
+    !entry ||
+    (frame.reset !== undefined && typeof frame.reset !== "boolean") ||
+    (frame.code === "OK"
+      ? frame.status !== undefined
+      : !Number.isInteger(frame.status) ||
+        frame.status! < 400 ||
+        frame.status! > 599 ||
+        !frame.message)
   ) {
     current.close();
     return;
@@ -399,22 +384,18 @@ function receive(current: WebSocket, event: MessageEvent) {
   if (channel.retry) clearTimeout(channel.retry);
   channel.retry = undefined;
   status();
-  // Install the entire snapshot before invoking loaders. Their reads use this
-  // data synchronously; they never trigger HTTP requests for realtime resources.
-  for (const [resource, value] of Object.entries(frame.data.values)) {
-    const entry = channel.entries.get(resource)!;
-    entry.value = value;
-    for (const done of [...entry.waiters]) done(value);
-    for (const changed of [...entry.watchers]) {
-      try {
-        changed(value);
-      } catch (error) {
-        console.error("实时数据处理失败", error);
-      }
+  // Cache the pushed value before notifying readers and page subscriptions.
+  entry.value = frame;
+  for (const done of [...entry.waiters]) done(frame);
+  for (const changed of [...entry.watchers]) {
+    try {
+      changed(frame);
+    } catch (error) {
+      console.error("实时数据处理失败", error);
     }
   }
   for (const listener of [...channel.listeners]) {
-    if (listener.topics.some((topic) => frame.data!.topics.includes(topic))) {
+    if (listener.topics.includes(resourceTopic(frame.resource!)!)) {
       try {
         listener.changed();
       } catch (error) {

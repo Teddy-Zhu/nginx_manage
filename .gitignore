@@ -9,3 +9,5 @@ web/src/auto-imports.d.ts
 web/src/components.d.ts
 *.log
 .env
+
+/examples/software/dist/

@@ -36,6 +36,7 @@ import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 import ValueListInput from "../components/ValueListInput.vue";
 import TaskLogButton from "../components/TaskLogButton.vue";
+import { fail2banRuntime, softwareStatus } from "../utils/software";
 const reading = ref(false),
   readError = ref("");
 const status = ref<Fail2banContainerStatus | null>(null),
@@ -46,6 +47,12 @@ const status = ref<Fail2banContainerStatus | null>(null),
   showBan = ref(false);
 const { api, run, busy, permitted, active, last, submit } =
   useSoftwareOperations(load);
+const displayStatus = computed(() =>
+  softwareStatus(
+    status.value ? status.value.installed : null,
+    fail2banRuntime(status.value),
+  ),
+);
 const blocked = computed(() => busy.value || active.value);
 const options = [
   { label: "SSH 登录", value: "ssh" },
@@ -220,9 +227,7 @@ onMounted(load);
           </p>
         </div>
         <div class="button-row">
-          <NTag :type="status?.ready ? 'success' : 'warning'">{{
-            status?.ready ? "防护运行中" : "防护未运行"
-          }}</NTag
+          <NTag :type="displayStatus.tone">{{ displayStatus.label }}</NTag
           ><NButton :disabled="blocked" @click="load">刷新</NButton
           ><RouterLink
             :to="{ path: '/components', query: { software: 'fail2ban' } }"
@@ -478,7 +483,14 @@ onMounted(load);
     :busy="busy"
     :draft="whitelist"
     :submit-disabled="!permitted || blocked || !status || !editBase"
-    @submit="editBase && whitelist && save({ ...editBase, whitelist: whitelist.map((a) => a.trim()).filter(Boolean) })"
+    @submit="
+      editBase &&
+      whitelist &&
+      save({
+        ...editBase,
+        whitelist: whitelist.map((a) => a.trim()).filter(Boolean),
+      })
+    "
     @cancel="whitelist = null"
     ><div v-if="whitelist" class="page-stack">
       <ValueListInput

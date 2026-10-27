@@ -1,0 +1,8 @@
+services:
+  web:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - "${DEMO_PORT:-18080}:80"
+    volumes:
+      - ./data:/usr/share/nginx/html:ro

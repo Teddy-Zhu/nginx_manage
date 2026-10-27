@@ -9,7 +9,11 @@ import { useLiveRefresh } from "./live";
 import { useSession } from "../stores/session";
 import { inspectTask } from "../stores/operation";
 import { randomUUID } from "../utils/crypto";
-export function useSoftwareOperations(changed: () => Promise<void> | void) {
+import { softwareTaskActive, softwareTaskInput } from "../utils/software";
+export function useSoftwareOperations(
+  changed: () => Promise<void> | void,
+  scopes = ["components.manage", "system.write", "security.write"],
+) {
   const api = useNodeAPI(),
     session = useSession(),
     { run, busy, message } = useAction();
@@ -17,20 +21,13 @@ export function useSoftwareOperations(changed: () => Promise<void> | void) {
   const tasks = ref<ComponentTask[]>([]),
     lastID = ref("");
   const permitted = computed(() =>
-    ["components.manage", "system.write", "security.write"].every((s) =>
-      session.me?.scopes.includes(s),
-    ),
+    scopes.every((s) => session.me?.scopes.includes(s)),
   );
-  const active = computed(() =>
-    tasks.value.some(
-      (t) =>
-        ["queued", "running", "recovery_required"].includes(t.state) &&
-        t.stage !== "restore_isolated",
-    ),
-  );
+  const active = computed(() => tasks.value.some(softwareTaskActive));
   const last = computed(() => tasks.value.find((t) => t.id === lastID.value));
   async function refresh() {
-    if (reading.value || !session.me?.scopes.includes("components.manage")) return;
+    if (reading.value || !session.me?.scopes.includes("components.manage"))
+      return;
     reading.value = true;
     try {
       tasks.value = await api.componentTasks();
@@ -44,20 +41,14 @@ export function useSoftwareOperations(changed: () => Promise<void> | void) {
   }
   async function submit(request: SoftwareRequest, title: string) {
     return await run(async () => {
-      const input = {
-        action: "software" as const,
-        tag: "",
-        prerelease: false,
-        plan_id: "",
-        manifest_sha256: "",
-        trust_sha256: "",
-        software: request,
-      };
-      const task = await api.createComponentTask({ input }, randomUUID());
+      const task = await api.createComponentTask(
+        softwareTaskInput(request),
+        randomUUID(),
+      );
       lastID.value = task.id;
       tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
       inspectTask(task.id, title);
-      return true;
+      return task;
     });
   }
   watch(
