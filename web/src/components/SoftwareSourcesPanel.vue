@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import FormDialog from "./FormDialog.vue";
 import { computed, ref, watch } from "vue";
-import { NAlert, NButton, NEmpty, NFormItem, NInput, NTag } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NEmpty,
+  NFormItem,
+  NInput,
+  NModal,
+  NSelect,
+  NTag,
+} from "naive-ui";
 import {
   useNodeAPI,
   type ComponentTask,
@@ -14,15 +23,24 @@ import { useSession } from "../stores/session";
 import { inspectTask } from "../stores/operation";
 import { randomUUID } from "../utils/crypto";
 import TaskLogButton from "./TaskLogButton.vue";
+import SoftwareCard from "./SoftwareCard.vue";
+import { softwareCatalogEntries } from "../utils/software";
 const props = defineProps<{
   catalog?: SoftwareCatalog;
   tasks: ComponentTask[];
   active: boolean;
+  visible: boolean;
+  search: string;
+  statusFilter: string;
 }>();
-const emit = defineEmits<{ changed: [] }>();
+const emit = defineEmits<{ changed: []; task: [task: ComponentTask] }>();
 const api = useNodeAPI(),
   session = useSession(),
   { run, busy } = useAction();
+const manageSources = ref(false);
+const selectedSource = ref("");
+const latestRequest = ref<SoftwareRequest | null>(null),
+  pending = ref<SoftwareRequest | null>(null);
 const showImport = ref(false),
   url = ref(""),
   source = ref<SoftwareSource | null>(null),
@@ -42,27 +60,73 @@ watch(
       emit("changed");
   },
 );
-const sources = computed(() =>
-  (props.catalog?.sources ?? []).map((s) => ({
-    ...s,
-    applications: [
-      ...s.applications,
-      ...(props.catalog?.installed ?? [])
-        .filter(
-          (i) =>
-            i.source_id === s.id &&
-            !s.applications.some((a) => a.id === i.application.id),
-        )
-        .map((i) => i.application),
-    ],
+const entries = computed(() => softwareCatalogEntries(props.catalog));
+const sourceOptions = computed(() => [
+  { label: "全部软件源", value: "" },
+  ...(props.catalog?.sources ?? []).map((item) => ({
+    label: item.name,
+    value: item.id,
   })),
+]);
+watch(
+  () => props.catalog?.sources,
+  (sources) => {
+    if (
+      selectedSource.value &&
+      sources &&
+      !sources.some((source) => source.id === selectedSource.value)
+    )
+      selectedSource.value = "";
+  },
 );
-function installed(sourceID: string, appID: string) {
-  return (
-    props.catalog?.installed.some(
-      (i) => i.source_id === sourceID && i.application.id === appID,
-    ) ?? false
+const visibleEntries = computed(() => {
+  const query = props.search.trim().toLocaleLowerCase();
+  return entries.value.filter(
+    (entry) =>
+      (!selectedSource.value || entry.source.id === selectedSource.value) &&
+      (!query ||
+        `${entry.application.name} ${entry.application.description} ${entry.source.name}`
+          .toLocaleLowerCase()
+          .includes(query)) &&
+      (props.statusFilter === "all" ||
+        (props.statusFilter === "installed"
+          ? !!entry.installation
+          : !entry.installation)),
   );
+});
+function applicationTask(sourceID: string, appID: string) {
+  return props.tasks.find((task) => {
+    const request =
+      task.result?.input.software ??
+      (task.id === latest.value ? latestRequest.value : null);
+    return request?.source_id === sourceID && request.app_id === appID;
+  });
+}
+function processing(task?: ComponentTask) {
+  return (
+    !!task &&
+    task.stage !== "restore_isolated" &&
+    ["queued", "running", "recovery_required"].includes(task.state)
+  );
+}
+function applicationStatus(entry: (typeof entries.value)[number]) {
+  const task = applicationTask(entry.source.id, entry.application.id);
+  if (processing(task)) {
+    if (task?.state === "recovery_required") return "需要处理";
+    const request = task?.result?.input.software ?? latestRequest.value;
+    return request?.action === "uninstall"
+      ? "卸载中"
+      : request?.action === "update"
+        ? "更新中"
+        : "安装中";
+  }
+  return entry.installation ? "已安装" : "未安装";
+}
+function openImport() {
+  manageSources.value = false;
+  url.value = fileName.value = "";
+  source.value = null;
+  showImport.value = true;
 }
 async function chooseFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
@@ -77,6 +141,7 @@ async function chooseFile(event: Event) {
 }
 async function submit(request: SoftwareRequest) {
   await run(async () => {
+    pending.value = request;
     const input = {
       action: "software" as const,
       tag: "",
@@ -86,7 +151,14 @@ async function submit(request: SoftwareRequest) {
       trust_sha256: "",
       software: request,
     };
-    const task = await api.createComponentTask({ input }, randomUUID());
+    let task: ComponentTask;
+    try {
+      task = await api.createComponentTask({ input }, randomUUID());
+    } finally {
+      pending.value = null;
+    }
+    latestRequest.value = request;
+    emit("task", task);
     latest.value = task.id;
     showImport.value = false;
     source.value = null;
@@ -126,101 +198,230 @@ async function uninstall(sourceID: string, appID: string, name: string) {
 }
 </script>
 <template>
-  <section class="panel page-stack">
-    <div class="section-heading">
-      <div>
-        <h3>第三方软件</h3>
-        <p class="muted">导入软件源后，选择需要安装的软件。</p>
-      </div>
-      <NButton :disabled="!permitted || active" @click="showImport = true"
-        >添加软件源</NButton
+  <Teleport defer to="#software-source-actions">
+    <div v-if="visible" class="source-tools">
+      <NSelect
+        v-model:value="selectedSource"
+        :options="sourceOptions"
+        aria-label="软件源"
+        class="source-select"
+      />
+      <NButton @click="manageSources = true"
+        >管理软件源<span class="source-count">{{
+          catalog?.sources.length ?? 0
+        }}</span></NButton
       >
     </div>
+  </Teleport>
+  <div v-show="visible" class="page-stack">
     <NAlert v-if="catalog?.error" type="error"
-      >暂时无法读取软件源，请查看服务日志。</NAlert
+      >暂时无法读取第三方软件，请刷新后重试。</NAlert
     >
-    <NEmpty v-else-if="!sources.length" description="尚未添加第三方软件源" />
-    <article
-      v-for="item in sources"
-      :key="item.id"
-      class="source-group page-stack"
-    >
-      <div class="section-heading">
-        <h4>{{ item.name }}</h4>
-        <div class="button-row">
-          <NButton
-            v-if="item.url"
-            size="small"
-            :disabled="!permitted || busy || active"
-            @click="submit({ action: 'refresh', source_id: item.id })"
-            >更新列表</NButton
-          ><NButton
-            size="small"
-            :disabled="!permitted || busy || active"
-            @click="removeSource(item.id)"
-            >删除软件源</NButton
+    <template v-else-if="!catalog?.sources.length">
+      <section class="store-empty">
+        <NEmpty description="尚未添加第三方软件源" />
+        <p class="muted">添加软件源，即可浏览和安装其中的应用。</p>
+        <NButton
+          type="primary"
+          :disabled="!permitted || busy || active"
+          @click="openImport"
+          >添加软件源</NButton
+        >
+      </section>
+    </template>
+    <div v-else-if="visibleEntries.length" class="store-grid">
+      <SoftwareCard
+        v-for="entry in visibleEntries"
+        :key="entry.source.id + '/' + entry.application.id"
+        :name="entry.application.name"
+        :description="entry.application.description || '暂无软件介绍'"
+        category="第三方应用"
+        accent="amber"
+        :status="applicationStatus(entry)"
+        :status-type="
+          processing(applicationTask(entry.source.id, entry.application.id))
+            ? 'info'
+            : entry.installation
+              ? 'success'
+              : 'default'
+        "
+      >
+        <div class="app-meta">
+          <span>来自 {{ entry.source.name }}</span
+          ><span v-if="entry.application.ports?.length"
+            >访问端口
+            {{
+              entry.application.ports
+                .map((port) => `${port.host}/${port.protocol.toUpperCase()}`)
+                .join("、")
+            }}</span
           >
         </div>
-      </div>
-      <div class="software-grid">
-        <article
-          v-for="app in item.applications"
-          :key="app.id"
-          class="software-card page-stack"
-        >
-          <div class="section-heading">
-            <h4>{{ app.name }}</h4>
-            <NTag
-              :type="installed(item.id, app.id) ? 'success' : 'default'"
-              size="small"
-              >{{ installed(item.id, app.id) ? "已安装" : "未安装" }}</NTag
-            >
-          </div>
-          <p v-if="app.description" class="muted">{{ app.description }}</p>
-          <p v-if="app.ports?.length" class="muted">
-            访问端口：{{
-              app.ports
-                .map((p) => `${p.host}/${p.protocol.toUpperCase()}`)
-                .join("、")
-            }}
-          </p>
-          <div class="button-row">
-            <NButton
-              type="primary"
-              :loading="busy"
-              :disabled="!permitted || active"
-              @click="
-                install(item.id, app.id, app.name, installed(item.id, app.id))
+        <template #actions>
+          <NButton
+            type="primary"
+            :loading="
+              busy &&
+              pending?.source_id === entry.source.id &&
+              pending?.app_id === entry.application.id &&
+              pending?.action !== 'uninstall'
+            "
+            :disabled="!permitted || busy || active"
+            @click="
+              install(
+                entry.source.id,
+                entry.application.id,
+                entry.application.name,
+                !!entry.installation,
+              )
+            "
+            >{{ entry.installation ? "更新" : "安装" }}</NButton
+          >
+          <div class="app-secondary-actions">
+            <TaskLogButton
+              v-if="applicationTask(entry.source.id, entry.application.id)"
+              :task-id="
+                applicationTask(entry.source.id, entry.application.id)!.id
               "
-              >{{ installed(item.id, app.id) ? "更新软件" : "安装" }}</NButton
-            ><NButton
-              v-if="installed(item.id, app.id)"
+            /><NButton
+              v-if="entry.installation"
+              quaternary
               :disabled="!permitted || busy || active"
-              @click="uninstall(item.id, app.id, app.name)"
+              :loading="
+                busy &&
+                pending?.source_id === entry.source.id &&
+                pending?.app_id === entry.application.id &&
+                pending?.action === 'uninstall'
+              "
+              @click="
+                uninstall(
+                  entry.source.id,
+                  entry.application.id,
+                  entry.application.name,
+                )
+              "
               >卸载</NButton
             >
           </div>
-        </article>
-      </div>
-    </article>
-    <div v-if="job" class="button-row">
-      <span>{{
-        job.state === "succeeded"
-          ? "操作已完成"
-          : job.state === "failed"
-            ? "操作未完成"
-            : "正在处理"
-      }}</span
-      ><TaskLogButton :task-id="job.id" />
+        </template>
+      </SoftwareCard>
     </div>
-    <NAlert v-if="job?.error" type="error">{{ job.error }}</NAlert>
-  </section>
+    <section v-else class="store-empty">
+      <NEmpty
+        :description="
+          entries.length ? '没有符合条件的软件' : '软件源中暂无软件'
+        "
+      /><NButton v-if="selectedSource" @click="selectedSource = ''"
+        >查看全部软件源</NButton
+      >
+      <p v-else class="muted">
+        可调整搜索条件，或在“管理软件源”中更新软件列表。
+      </p>
+    </section>
+    <div v-if="job" class="operation-feedback">
+      <NTag
+        :bordered="false"
+        :type="
+          job.state === 'succeeded'
+            ? 'success'
+            : job.state === 'failed'
+              ? 'error'
+              : 'info'
+        "
+        >{{
+          job.state === "succeeded"
+            ? "操作已完成"
+            : job.state === "failed"
+              ? "操作未完成"
+              : "正在处理"
+        }}</NTag
+      ><TaskLogButton :task-id="job.id" /><span
+        v-if="job.error"
+        class="error"
+        >{{ job.error }}</span
+      >
+    </div>
+  </div>
+  <NModal
+    v-model:show="manageSources"
+    preset="card"
+    title="第三方软件源"
+    style="width: 760px; max-width: calc(100vw - 32px)"
+    :mask-closable="false"
+    :closable="!busy"
+    :close-on-esc="!busy"
+  >
+    <div class="sources-body page-stack">
+      <div class="section-heading">
+        <span class="muted">{{ catalog?.sources.length ?? 0 }} 个软件源</span
+        ><NButton
+          type="primary"
+          :disabled="!permitted || busy || active"
+          @click="openImport"
+          >添加软件源</NButton
+        >
+      </div>
+      <NAlert v-if="catalog?.error" type="error"
+        >暂时无法读取软件源，请关闭后刷新重试。</NAlert
+      >
+      <NEmpty
+        v-else-if="!catalog?.sources.length"
+        description="尚未添加软件源"
+      />
+      <article
+        v-for="item in catalog?.sources ?? []"
+        :key="item.id"
+        class="record-card page-stack"
+      >
+        <div>
+          <strong>{{ item.name }}</strong>
+          <p class="muted source-address">{{ item.url || "本地文件导入" }}</p>
+        </div>
+        <div class="source-footer">
+          <span class="muted">{{ item.applications.length }} 款软件</span>
+          <div class="button-row">
+            <NButton
+              v-if="item.url"
+              size="small"
+              :disabled="!permitted || busy || active"
+              @click="submit({ action: 'refresh', source_id: item.id })"
+              >更新列表</NButton
+            ><NButton
+              size="small"
+              type="error"
+              secondary
+              :disabled="
+                !permitted ||
+                busy ||
+                active ||
+                catalog?.installed.some(
+                  (installed) => installed.source_id === item.id,
+                )
+              "
+              @click="removeSource(item.id)"
+              >删除</NButton
+            >
+          </div>
+        </div>
+        <p
+          v-if="
+            catalog?.installed.some(
+              (installed) => installed.source_id === item.id,
+            )
+          "
+          class="muted"
+        >
+          卸载此源已安装的软件后，可删除该软件源。
+        </p>
+      </article>
+    </div>
+  </NModal>
   <FormDialog
     :show="showImport"
     title="添加软件源"
     :busy="busy"
     :draft="[url, source]"
-    :submit-disabled="!source && !url.trim()"
+    :submit-disabled="!permitted || active || (!source && !url.trim())"
     submit-text="添加"
     @submit="
       submit(
@@ -229,7 +430,11 @@ async function uninstall(sourceID: string, appID: string, name: string) {
           : { action: 'import', url: url.trim() },
       )
     "
-    @cancel="showImport = false"
+    @cancel="
+      showImport = false;
+      source = null;
+      url = fileName = '';
+    "
   >
     <div class="page-stack">
       <NFormItem label="软件源地址"
@@ -255,38 +460,75 @@ async function uninstall(sourceID: string, appID: string, name: string) {
           @change="chooseFile"
         />
       </div>
-      <p class="muted">
-        请使用可信的软件源。添加后可查看软件和端口，再选择安装。
-      </p>
-    </div></FormDialog
-  >
+      <p class="muted">添加后可查看软件介绍和访问端口，再选择安装。</p>
+    </div>
+  </FormDialog>
 </template>
 <style scoped>
-.source-group {
-  border-top: 1px solid var(--border-color);
-  padding-top: 20px;
+.source-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.source-group h4,
-.software-card p {
-  margin: 0;
+.source-select {
+  width: 180px;
 }
-.software-grid {
+.source-count {
+  margin-left: 8px;
+  color: var(--text-muted);
+}
+.store-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 20px;
 }
-.software-card {
-  border: 1px solid var(--border-color);
+.store-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 56px 20px;
+  border: 1px dashed var(--border-color);
   border-radius: 12px;
-  padding: 18px;
+  background: var(--bg-surface);
 }
-.software-card .button-row {
-  margin-top: auto;
+.app-meta {
+  display: grid;
+  gap: 4px;
 }
-:deep(.software-import) {
-  width: min(620px, calc(100vw - 32px));
+.app-secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.software-import {
-  width: min(620px, calc(100vw - 32px));
+.operation-feedback {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sources-body {
+  max-height: calc(100dvh - 200px);
+  overflow-y: auto;
+}
+.source-address {
+  overflow-wrap: anywhere;
+  margin-top: 4px;
+}
+.source-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+@media (max-width: 560px) {
+  .source-select {
+    width: 100%;
+  }
+  .source-tools {
+    width: 100%;
+  }
 }
 </style>

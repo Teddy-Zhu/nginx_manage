@@ -1,4 +1,32 @@
-import type { ComponentOverview, Fail2banObservation } from "../api/client";
+import type {
+  ComponentOverview,
+  Fail2banObservation,
+  SoftwareCatalog,
+} from "../api/client";
+
+export function softwareCatalogEntries(catalog?: SoftwareCatalog) {
+  return (catalog?.sources ?? []).flatMap((source) => {
+    const installations = (catalog?.installed ?? []).filter(
+      (item) => item.source_id === source.id,
+    );
+    const applications = [
+      ...source.applications,
+      ...installations
+        .filter(
+          (item) =>
+            !source.applications.some((app) => app.id === item.application.id),
+        )
+        .map((item) => item.application),
+    ];
+    return applications.map((application) => ({
+      source,
+      application,
+      installation: installations.find(
+        (item) => item.application.id === application.id,
+      ),
+    }));
+  });
+}
 
 export type SoftwareState =
   "installed" | "missing" | "unbound" | "recovery" | "unavailable";

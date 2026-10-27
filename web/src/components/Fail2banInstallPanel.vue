@@ -9,6 +9,7 @@ import {
 import { useSoftwareOperations } from "../composables/software";
 import { useLiveRefresh } from "../composables/live";
 import TaskLogButton from "./TaskLogButton.vue";
+defineProps<{ embedded?: boolean }>();
 const emit = defineEmits<{ changed: []; busy: [value: boolean] }>();
 const reading = ref(false),
   readError = ref("");
@@ -93,8 +94,8 @@ useLiveRefresh(api, ["fail2ban"], load);
 onMounted(load);
 </script>
 <template>
-  <section class="panel page-stack">
-    <div class="section-heading">
+  <section class="page-stack" :class="{ panel: !embedded }">
+    <div v-if="!embedded" class="section-heading">
       <div>
         <h3>{{ status?.installed ? "登录防护软件" : "安装 Fail2ban" }}</h3>
         <p class="muted">自动封禁反复认证失败的 IP，保护服务器、面板和网站。</p>
