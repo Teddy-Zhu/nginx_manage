@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import FormDialog from "../components/FormDialog.vue";
 import { randomUUID } from "../utils/crypto";
 
@@ -133,6 +134,7 @@ async function remove(node: NodeConnection) {
     keyFor = useIdempotency();
   });
 }
+useLiveRefresh(api, ["nodes"], load, () => busy.value);
 onMounted(load);
 onUnmounted(() => {
   closed = true;

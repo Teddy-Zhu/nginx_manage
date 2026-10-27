@@ -1,0 +1,159 @@
+[
+  {
+    "topic": "monitoring",
+    "paths": [
+      "/monitoring/latest",
+      "/monitoring/settings",
+      "/monitoring/history",
+      "/system/health"
+    ]
+  },
+  {
+    "topic": "logs",
+    "paths": [
+      "/logs/sources",
+      "/logs/live",
+      "/logs/policy"
+    ]
+  },
+  {
+    "topic": "version",
+    "paths": [
+      "/system/version"
+    ]
+  },
+  {
+    "topic": "notifications",
+    "paths": [
+      "/notifications",
+      "/notifications/events",
+      "/notifications/deliveries"
+    ]
+  },
+  {
+    "topic": "maintenance",
+    "paths": [
+      "/maintenance"
+    ]
+  },
+  {
+    "topic": "backups",
+    "paths": [
+      "/backups",
+      "/backups/policy",
+      "/backups/{id}"
+    ]
+  },
+  {
+    "topic": "firewall",
+    "paths": [
+      "/firewall/runtime",
+      "/firewall",
+      "/firewall/geoip",
+      "/firewall/operations/{id}",
+      "/firewall/plan",
+      "/firewall/policy"
+    ]
+  },
+  {
+    "topic": "listener",
+    "paths": [
+      "/management/listener",
+      "/management/listener/operations/{id}"
+    ]
+  },
+  {
+    "topic": "dns",
+    "paths": [
+      "/host/dns",
+      "/system/modules"
+    ]
+  },
+  {
+    "topic": "fail2ban",
+    "paths": [
+      "/fail2ban/container",
+      "/fail2ban",
+      "/fail2ban/runtime",
+      "/fail2ban/instance",
+      "/fail2ban/jails/{name}",
+      "/fail2ban/existing/resources",
+      "/fail2ban/existing/resources/{name}",
+      "/fail2ban/addresses/status",
+      "/fail2ban/policy",
+      "/fail2ban/host-input",
+      "/fail2ban/panel-login",
+      "/fail2ban/templates"
+    ]
+  },
+  {
+    "topic": "tasks",
+    "paths": [
+      "/tasks",
+      "/tasks/{id}",
+      "/components",
+      "/components/tasks",
+      "/components/installations",
+      "/components/installations/{id}",
+      "/components/switches",
+      "/components/switches/{id}",
+      "/components/offline",
+      "/components/offline/{id}",
+      "/nginx/images/upgrades",
+      "/nginx/images/upgrades/{id}",
+      "/panel/images/upgrades",
+      "/panel/images/upgrades/{id}",
+      "/agent/upgrades",
+      "/agent/upgrades/{id}",
+      "/panel/updates",
+      "/panel/updates/{id}",
+      "/migrations",
+      "/migrations/{id}",
+      "/migrations/push",
+      "/migrations/push/{id}",
+      "/fail2ban/python/tasks",
+      "/fail2ban/upgrade/tasks",
+      "/fail2ban/lifecycle/tasks",
+      "/fail2ban/addresses/tasks",
+      "/fail2ban/existing/tasks",
+      "/fail2ban/existing/tasks/{id}",
+      "/fail2ban/tasks",
+      "/certificates",
+      "/certificates/{id}",
+      "/certificates/{id}/deployments",
+      "/certificates/{id}/versions",
+      "/acme-accounts",
+      "/acme-accounts/{id}",
+      "/acme-profiles",
+      "/acme-profiles/{id}/orders",
+      "/system/capabilities",
+      "/credentials",
+      "/certificates/{id}/deploy-preview",
+      "/dns-providers",
+      "/dns-credentials",
+      "/migrations/receiver",
+      "/history/runtime"
+    ]
+  },
+  {
+    "topic": "nginx",
+    "paths": [
+      "/nginx/runtime",
+      "/nginx/config-tree",
+      "/nginx/external",
+      "/nginx/features",
+      "/nginx/revisions",
+      "/nginx/revisions/{id}"
+    ]
+  },
+  {
+    "topic": "nodes",
+    "paths": [
+      "/nodes",
+      "/remote/pairings",
+      "/nodes/pairings",
+      "/nodes/pairings/{id}",
+      "/nodes/{id}"
+    ]
+  }
+]

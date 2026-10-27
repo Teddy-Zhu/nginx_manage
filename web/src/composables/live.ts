@@ -1,6 +1,6 @@
 import { onScopeDispose, watch } from "vue";
 import { useSession } from "../stores/session";
-import type { LiveTopic } from "../api/live";
+import { liveTopicScopes, type LiveTopic } from "../api/live";
 
 type LiveAPI = {
   subscribe: (topics: LiveTopic[], changed: () => void) => () => void;
@@ -12,18 +12,6 @@ export function useLiveRefresh(
   blocked: () => boolean = () => false,
 ) {
   const session = useSession();
-  const required: Record<LiveTopic, string[]> = {
-    tasks: ["read"],
-    monitoring: ["read"],
-    notifications: ["read"],
-    maintenance: ["read", "system.write"],
-    backups: ["read", "backup.export"],
-    firewall: ["read", "security.write"],
-    listener: ["read", "system.write"],
-    version: ["read"],
-    dns: ["read"],
-    fail2ban: ["read"],
-  };
   let release: (() => void) | undefined;
   let running = false,
     pending = false,
@@ -67,7 +55,7 @@ export function useLiveRefresh(
       pending = false;
       if (authenticated !== null) {
         const allowed = topics.filter((topic) =>
-          required[topic].every((scope) =>
+          liveTopicScopes[topic].every((scope) =>
             session.localMe?.scopes.includes(scope),
           ),
         );

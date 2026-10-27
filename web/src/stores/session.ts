@@ -1,3 +1,4 @@
+import { setLiveSession } from "../api/live";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { api, setCSRF, type Me } from "../api/client";
@@ -10,6 +11,7 @@ export const useSession = defineStore("session", () => {
   let restoring: Promise<void> | null = null;
   function set(value: Me) {
     localMe.value = value;
+    setLiveSession(value.authenticated, value.scopes);
     setCSRF(value.csrf);
   }
   async function restore() {
@@ -31,6 +33,7 @@ export const useSession = defineStore("session", () => {
     clear();
   }
   function clear() {
+    setLiveSession(false);
     resetAPIContext();
     localMe.value = null;
     ready.value = false;

@@ -153,7 +153,7 @@ function query(): LogQuery {
 function accept(page: LogPage, append = false) {
   result.value = page;
   queried.value = true;
-  rows.value = append ? [...rows.value, ...page.rows].slice(-200) : page.rows;
+  rows.value = append ? [...rows.value,...page.rows].slice(-200) : page.rows;
   if (current) current.cursor = page.cursor;
 }
 async function load() {
@@ -199,20 +199,15 @@ function follow() {
     if (!current || current.mode !== "recent" || current.until)
       throw new Error("请先查询无结束时间的最近日志");
     if (following.value) return;
-    // Check access before opening the log stream.
     const token = generation;
-    const page = await api.queryLogs({ ...current });
-    if (token !== generation) {
-      release(page.cursor);
-      return;
-    }
-    accept(page, true);
+    release(current.cursor);
+    current.cursor = "";
     following.value = true;
     error.value = "";
     closeStream = followLogs(
       { ...current },
-      (page) => {
-        if (token === generation) accept(page, true);
+      (page, reset) => {
+        if (token === generation) accept(page, !reset);
       },
       (cause) => {
         if (token !== generation) return;

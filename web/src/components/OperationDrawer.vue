@@ -69,10 +69,13 @@ function eventLabel(row: LogRow) {
 
 let controller: AbortController | undefined;
 let unsubscribe: (() => void) | undefined;
+let stopLogs: (() => void) | undefined;
 let ticker: ReturnType<typeof setInterval> | undefined;
 let refresh: (() => Promise<void>) | undefined;
 function stop() {
   controller?.abort();
+  stopLogs?.();
+  stopLogs = undefined;
   unsubscribe?.();
   unsubscribe = undefined;
   if (ticker) clearInterval(ticker);
@@ -146,39 +149,18 @@ watch(
                     source.category === "task" &&
                     source.resource_id === operation.taskId,
                 )?.id ?? "";
-            if (sourceId) {
-              const page = await api.queryLogs({
-                source_id: sourceId,
-                mode: "history",
-                from: Math.max(
-                  value.created_at - 1,
-                  Math.floor(Date.now() / 1000) - 7 * 86400 + 1,
-                ),
-                until: Math.floor(Date.now() / 1000),
-                status: 0,
-                ip: "",
-                path: "",
-                keyword: "",
-                policy_id: "",
-                reason: "",
-                events_only: false,
-                limit: 100,
-                cursor: "",
-              });
-              try {
+            if (sourceId && !stopLogs) {
+              stopLogs = api.followLogs({
+                source_id: sourceId, mode: "recent",
+                from: Math.max(value.created_at - 1, Math.floor(Date.now()/1000)-7*86400+1),
+                until: 0, status: 0, ip: "", path: "", keyword: "", policy_id: "", reason: "",
+                events_only: false, limit: 100, cursor: "",
+              }, (page, reset) => {
                 if (current.signal.aborted) return;
-                rows.value = [...page.rows].sort((a, b) => a.time - b.time);
-                logNotice.value =
-                  page.notice ||
-                  (page.gap
-                    ? "部分历史日志缺失，当前任务状态不受影响。"
-                    : page.more
-                      ? "当前仅展示部分日志，可在日志管理中继续查看。"
-                      : "");
-              } finally {
-                if (page.cursor && !current.signal.aborted)
-                  await api.releaseLogCursor(page.cursor);
-              }
+                rows.value = [...(reset ? [] : rows.value), ...page.rows].sort((a,b) => a.time-b.time).slice(-100);
+                logNotice.value = page.notice || (page.gap ? "部分历史日志缺失，当前任务状态不受影响。" : "");
+                logError.value = "";
+              }, (cause) => {if (!current.signal.aborted) logError.value = cause.message;});
             }
             if (!current.signal.aborted) logError.value = "";
           } catch (cause) {

@@ -16,7 +16,7 @@ import (
 
 // OpenRealtime uses the same pinned certificate, destination restrictions and
 // target-bound machine authorization as ordinary node requests.
-func (s *Service) OpenRealtime(ctx context.Context, p auth.Principal, id string, topics []string) (*websocket.Conn, string, error) {
+func (s *Service) OpenRealtime(ctx context.Context, p auth.Principal, id string, topics []string, resources []string) (*websocket.Conn, string, error) {
 	if err := p.Require("nodes.manage", "read"); err != nil {
 		return nil, "", err
 	}
@@ -45,7 +45,8 @@ func (s *Service) OpenRealtime(ctx context.Context, p auth.Principal, id string,
 	headers.Set(remoteapi.ProtocolHeader, "1")
 	scopes, _ := json.Marshal(p.Scopes)
 	headers.Set(remoteapi.ScopesHeader, string(scopes))
-	target := "wss" + strings.TrimPrefix(base, "https") + "/events?topics=" + url.QueryEscape(strings.Join(topics, ","))
+	encodedResources, _ := json.Marshal(resources)
+	target := "wss" + strings.TrimPrefix(base, "https") + "/events?topics=" + url.QueryEscape(strings.Join(topics, ",")) + "&resources=" + url.QueryEscape(string(encodedResources))
 	conn, response, err := dialer.DialContext(ctx, target, headers)
 	if err != nil {
 		if response != nil && response.Body != nil {

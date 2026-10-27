@@ -1,3 +1,4 @@
+import { LiveError, isLiveResource, liveSessionActive, readLive, refreshLive, watchLiveResource } from "./live";
 import { subscribeLive, type LiveTopic } from "./live";
 import { sha256Hex } from "../utils/crypto";
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
@@ -331,11 +332,29 @@ async function scopedRequest<T>(config: RequestConfig, scope: RequestScope): Pro
   }
 }
 async function sendRequest<T>(config: RequestConfig, scope: RequestScope): Promise<T> {
-	 scope = { ...scope, signal: scopeSignal(scope) };
   assertScope(scope);
+  const signal = config.signal ? AbortSignal.any([config.signal, scopeSignal(scope)]) : scopeSignal(scope);
+  const method = String(config.method ?? "GET").toUpperCase();
+  let resource = axios.getUri({url: String(config.url ?? ""), params: config.params});
+  if (liveSessionActive() && method === "GET" && resource.startsWith("/monitoring/history?")) {
+    const query = new URLSearchParams(resource.split("?")[1]);
+    query.set("window", String(Number(query.get("until"))-Number(query.get("from"))));
+    query.delete("from");query.delete("until");
+    resource = "/monitoring/history?"+query.toString();
+  }
+  const preparationRead = method === "POST" && config.url === "/firewall/plan" && config.data?.preparation_id && !config.data?.cancel_preparation;
+  if (preparationRead) resource = "/firewall/plan?"+new URLSearchParams({input: JSON.stringify(config.data)});
+  if (liveSessionActive() && (method === "GET" || preparationRead) && isLiveResource(resource)) {
+    try {
+      const result = await readLive(scope, resource, signal, config.timeout ?? 20_000);
+      return responseData<T>(result.response as ResponseBody<T>, result.status, scope);
+    } catch (cause) {throw apiError(cause);}
+  }
   try {
     const result = await http.request<ResponseBody<T>>({ ...config, baseURL: "/api/v1", url: endpoint(String(config.url ?? ""), scope), headers: { ...config.headers, "X-CSRF-Token": csrf }, signal: config.signal ? AbortSignal.any([config.signal, scopeSignal(scope)]) : scopeSignal(scope) });
-    return responseData(result.data, result.status, scope);
+    const data = responseData<T>(result.data, result.status, scope);
+    if (!["GET", "HEAD", "OPTIONS"].includes(method) && !/\/(preview|plan|query|resolve|check|download|cursors\/release)$/.test(String(config.url))) refreshLive(scope);
+    return data;
   } catch (cause) {
     assertScope(scope);
     if (cause instanceof AxiosError && cause.response?.data && !(cause.response.data instanceof Blob)) {
@@ -366,7 +385,8 @@ function checkNode(value: string, scope: RequestScope, status = 200, code = "OK"
 export function apiError(error: unknown): ApiError {
   let normalized: ApiError;
   if (error instanceof ApiError) normalized = error;
-  else if (axios.isCancel(error))
+  else if (error instanceof LiveError) normalized = new ApiError(error.code,error.message,error.status);
+  else if (axios.isCancel(error) || (error instanceof DOMException && error.name === "AbortError"))
     normalized = new ApiError("CANCELLED", "请求已取消", 0);
   else if (error instanceof AxiosError) {
     const body = error.response?.data as ResponseBody<unknown> | undefined;
@@ -448,51 +468,15 @@ async function exportAuditFor(data: AuditFilter, scope: RequestScope) {
 function followLogsFor(
   scope: RequestScope,
   query: LogQuery,
-  page: (value: LogPage) => void,
+  page: (value: LogPage, reset?: boolean) => void,
   error: (value: ApiError) => void,
 ) {
-  scope = { ...scope, signal: scopeSignal(scope) };
   assertScope(scope);
-  const signal = scopeSignal(scope);
-  const source = new EventSource(
-    `/api/v1${endpoint("/logs/stream", scope)}?${new URLSearchParams({ query: JSON.stringify(query) })}`,
-    { withCredentials: true },
-  );
-  const aborted = () => {
-    close();
-    error(new ApiError("CANCELLED", "节点请求已取消", 0));
-  };
-  const close = () => {
-    source.close();
-    signal.removeEventListener("abort", aborted);
-  };
-  signal.addEventListener("abort", aborted, { once: true });
-  source.addEventListener("page", (event) => {
-    try {
-      page(
-        responseData<LogPage>(
-          JSON.parse((event as MessageEvent<string>).data),
-          200, scope,
-        ),
-      );
-    } catch (cause) {
-      close();
-      error(apiError(cause));
-    }
+  const resource = "/logs/live?"+new URLSearchParams({query: JSON.stringify({...query,cursor:""})});
+  return watchLiveResource(scope, resource, (value) => {
+    try {page(responseData<LogPage>(value.response as ResponseBody<LogPage>,value.status,scope),value.reset);}
+    catch (cause) {error(apiError(cause));}
   });
-  const failed = (event: Event) => {
-    close();
-    try {
-      if (event instanceof MessageEvent && event.data)
-        responseData<unknown>(JSON.parse(event.data), 400, scope);
-      throw new ApiError("LOG_STREAM_ENDED", "实时连接已结束，请重新连接", 0);
-    } catch (cause) {
-      error(apiError(cause));
-    }
-  };
-  source.addEventListener("error", failed);
-  source.addEventListener("end", failed);
-  return close;
 }
 
 function componentTaskTitle(data: ComponentCreateInput) {
@@ -512,7 +496,7 @@ export function createAPI(scope: RequestScope) {
   executeHistory: (data: HistoryExecuteInput, key: string) => request<HistoryResult>({ url: "/history/execute", method: "POST", data, headers: { "Idempotency-Key": key } }),
   audit: (params: AuditQuery) => request<AuditPage>({ url: "/audit", params }),
   exportAudit: (data: AuditFilter) => exportAuditFor(data, scope),
-  followLogs: (query: LogQuery, page: (value: LogPage) => void, error: (value: ApiError) => void) => followLogsFor(scope, query, page, error),
+  followLogs: (query: LogQuery, page: (value: LogPage, reset?: boolean) => void, error: (value: ApiError) => void) => followLogsFor(scope, query, page, error),
   nodes: (signal?: AbortSignal) => request<NodeConnection[]>({ url: "/nodes", signal }),
   pairings: () => request<Pairing[]>({ url: "/remote/pairings" }),
   backups: () => request<BackupOverview>({ url: "/backups" }),

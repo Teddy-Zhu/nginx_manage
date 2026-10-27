@@ -3,8 +3,10 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -13,10 +15,40 @@ import (
 	"github.com/gorilla/websocket"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/hostdns"
+	"nginxpanel/internal/modules"
+	"nginxpanel/internal/monitoring"
 	"nginxpanel/internal/nodes"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 )
+
+type realtimeHostReader struct{}
+
+func TestRealtimeFirewallResponseDeadline(t *testing.T) {
+	capture := &realtimeCapture{header: http.Header{}}
+	ctx, cancel, ok := (&Server{}).firewallControlContext(capture, httptest.NewRequest(http.MethodGet, "/api/v1/firewall/runtime", nil))
+	if !ok {
+		t.Fatalf("firewall snapshot rejected: %s", capture.body.String())
+	}
+	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		t.Fatal("firewall request deadline missing")
+	}
+	if _, err := capture.Write([]byte("{}")); err != nil {
+		t.Fatal(err)
+	}
+	if err := http.NewResponseController(capture).SetWriteDeadline(time.Now().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture.Write([]byte("{}")); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("snapshot write deadline not enforced: %v", err)
+	}
+}
+
+func (realtimeHostReader) ReadHostMetrics(context.Context, int64) (monitoring.Sample, error) {
+	value := 13.5
+	return monitoring.Sample{At: time.Now().Unix(), Source: "host-agent", Metrics: []monitoring.Metric{{Kind: "cpu", ID: "total", Values: map[string]*float64{"usage_percent": &value}}}, Services: []monitoring.ServiceState{}, Warnings: []string{}}, nil
+}
 
 func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 	db, err := storage.Open(t.Context(), t.TempDir())
@@ -38,7 +70,40 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := &Server{DB: db, Auth: authentication, NodeID: secure.ID(), Dev: true, Nodes: &nodes.Service{DB: db}}
+	if err = modules.Init(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	if err = monitoring.Ensure(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(t.Context(), "UPDATE module_settings SET enabled=1 WHERE id='monitoring'"); err != nil {
+		t.Fatal(err)
+	}
+	metrics := &monitoring.Service{DB: db, Agent: realtimeHostReader{}}
+	sampleCtx, cancelSample := context.WithCancel(t.Context())
+	sampleDone := make(chan error, 1)
+	go func() { sampleDone <- metrics.Run(sampleCtx) }()
+	defer func() {
+		cancelSample()
+		if err := <-sampleDone; err != nil {
+			t.Error(err)
+		}
+	}()
+	sampleReady := time.Now().Add(time.Second)
+	for {
+		latest, e := metrics.Latest(t.Context())
+		if e != nil {
+			t.Fatal(e)
+		}
+		if latest.Sample != nil {
+			break
+		}
+		if time.Now().After(sampleReady) {
+			t.Fatal("initial sample missing")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	server := &Server{Monitoring: metrics, DB: db, Auth: authentication, NodeID: secure.ID(), Dev: true, Nodes: &nodes.Service{DB: db}}
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 	target := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/api/v1/events"
@@ -82,7 +147,7 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 	}
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	remote := secure.ID()
-	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}}, {Connection: remote, Topics: []string{"tasks"}}}}); err != nil {
+	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks", "monitoring"}, Resources: []string{"/tasks", "/monitoring/latest", "/monitoring/history?kind=cpu&id=total&value=usage_percent&points=3&window=3600"}}, {Connection: remote, Topics: []string{"tasks"}, Resources: []string{"/tasks"}}}}); err != nil {
 		t.Fatal(err)
 	}
 	var frame Response
@@ -101,12 +166,26 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 		if data.Connection == remote && frame.Code == "REMOTE_STREAM_INTERRUPTED" {
 			remoteFailed = true
 		}
-		if data.Connection == "" && frame.Code == "OK" && slices.Equal(data.Topics, []string{"tasks"}) {
+		if data.Connection == "" && frame.Code == "OK" && slices.Contains(data.Topics, "tasks") {
+			value, exists := data.Values["/tasks"]
+			var payload Response
+			if !exists || value.Status != 200 || json.Unmarshal(value.Response, &payload) != nil || payload.Code != "OK" || payload.NodeID != server.NodeID {
+				t.Fatalf("missing authorized task snapshot: %+v", data)
+			}
+			var metricFrame struct{ Data monitoring.Latest }
+			latest := data.Values["/monitoring/latest"]
+			if latest.Status != 200 || json.Unmarshal(latest.Response, &metricFrame) != nil || metricFrame.Data.Sample == nil || *metricFrame.Data.Sample.Metrics[0].Values["usage_percent"] != 13.5 {
+				t.Fatalf("missing metric values: %s", latest.Response)
+			}
+			history := data.Values["/monitoring/history?kind=cpu&id=total&value=usage_percent&points=3&window=3600"]
+			if history.Status != 200 {
+				t.Fatalf("rolling history unavailable: %s", history.Response)
+			}
 			localReady = true
 		}
 	}
 	// Replace topics in the same socket and remove the failed remote source.
-	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 2, Subscriptions: []realtimeFilter{{Topics: []string{"backups"}}}}); err != nil {
+	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 2, Subscriptions: []realtimeFilter{{Topics: []string{"backups"}, Resources: []string{"/backups"}}}}); err != nil {
 		t.Fatal(err)
 	}
 	for {
@@ -128,7 +207,7 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 3, Subscriptions: []realtimeFilter{}}); err != nil {
 		t.Fatal(err)
 	}
-	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 4, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}}}}); err != nil {
+	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 4, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}, Resources: []string{"/tasks"}}}}); err != nil {
 		t.Fatal(err)
 	}
 	for {
@@ -188,11 +267,16 @@ func TestRealtimeSubscriptionValidation(t *testing.T) {
 		valid   bool
 	}{
 		{"empty releases all", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{}}, true},
-		{"local DNS", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"dns"}}}}, true},
+		{"local DNS", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"dns"}, Resources: []string{"/host/dns"}}}}, true},
+		{"missing resource", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}}}}, false},
+		{"wrong resource topic", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}, Resources: []string{"/monitoring/latest"}}}}, false},
+		{"unlisted resource", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}, Resources: []string{"/me"}}}}, false},
+		{"download is not a snapshot", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"backups"}, Resources: []string{"/backups/x/download"}}}}, false},
+		{"firewall mutations rejected", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"firewall"}, Resources: []string{"/firewall/plan?input=%7B%22action%22:%22apply%22,%22version%22:1%7D"}}}}, false},
 		{"unknown topic", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"unknown"}}}}, false},
-		{"duplicate source", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}}, {Topics: []string{"version"}}}}, false},
+		{"duplicate source", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks"}, Resources: []string{"/tasks"}}, {Topics: []string{"version"}, Resources: []string{"/system/version"}}}}, false},
 		{"replayed revision", realtimeRequest{Type: "subscribe", Revision: 0, Subscriptions: []realtimeFilter{}}, false},
-		{"remote local-only topic", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Connection: secure.ID(), Topics: []string{"firewall"}}}}, false},
+		{"remote local-only topic", realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Connection: secure.ID(), Topics: []string{"firewall"}, Resources: []string{"/firewall/runtime"}}}}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if err := server.validateRealtimeRequest(p, test.request, 0); (err == nil) != test.valid {
@@ -200,7 +284,7 @@ func TestRealtimeSubscriptionValidation(t *testing.T) {
 			}
 		})
 	}
-	if err := server.validateRealtimeRequest(auth.Principal{Scopes: []string{"read"}}, realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"maintenance"}}}}, 0); err == nil {
+	if err := server.validateRealtimeRequest(auth.Principal{Scopes: []string{"read"}}, realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"maintenance"}, Resources: []string{"/maintenance"}}}}, 0); err == nil {
 		t.Fatal("permission check bypassed")
 	}
 }

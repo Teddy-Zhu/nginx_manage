@@ -9,7 +9,7 @@ COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./web/
 RUN --mount=type=cache,target=/pnpm-store \
     /opt/build-tools/node_modules/.bin/pnpm --dir web install --frozen-lockfile --store-dir /pnpm-store
 COPY web ./web
-COPY api/openapi.yaml ./api/openapi.yaml
+COPY api/openapi.yaml api/realtime-resources.json ./api/
 RUN /opt/build-tools/node_modules/.bin/pnpm --dir web generate:routes && \
     /opt/build-tools/node_modules/.bin/pnpm --dir web build
 

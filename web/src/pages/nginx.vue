@@ -13,6 +13,7 @@
 </route>
 
 <script setup lang="ts">
+import { useLiveRefresh } from "../composables/live";
 import FormDialog from "../components/FormDialog.vue";
 import { randomUUID } from "../utils/crypto";
 
@@ -829,6 +830,11 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
 onBeforeRouteLeave(
   () => !dirty.value || window.confirm("修改尚未保存，确认离开？"),
 );
+useLiveRefresh(api, ["nginx", "tasks"], async () => {
+  await loadRuntime();
+  await loadTLSChoices();
+  if (!dirty.value) setTree(await api.tree());
+}, () => busy.value);
 onMounted(() => {
   void load();
   window.addEventListener("beforeunload", beforeUnload);

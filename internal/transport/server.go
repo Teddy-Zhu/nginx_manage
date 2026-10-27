@@ -42,6 +42,7 @@ import (
 type Server struct {
 	Realtime        *realtime.Hub
 	realtimeStreams atomic.Int32
+	realtimeReader  http.Handler
 	FrontendVersion func() (string, []string, error)
 	History         *history.Service
 	Audit           *auditlog.Service
@@ -92,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	// SCS continues its original Write after ErrorFunc returns. Unwind to the
 	// outer response boundary so a failed session commit cannot append success JSON.
 	s.Auth.Sessions.ErrorFunc = func(_ http.ResponseWriter, _ *http.Request, err error) { panic(sessionFailure{err}) }
+	s.realtimeReader = s.middleware(s.remoteBoundary(mux))
 	s.remoteRoutes(mux)
 	sessionHandler := s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux)))
 	return s.middleware(s.remoteBoundary(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

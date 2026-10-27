@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	contract "nginxpanel/api"
 	"slices"
 	"sync"
 	"time"
@@ -16,16 +17,19 @@ import (
 type realtimeFilter struct {
 	Connection string   `json:"connection"`
 	Topics     []string `json:"topics"`
+	Resources  []string `json:"resources"`
 }
 type realtimeRequest struct {
 	Type          string           `json:"type"`
 	Revision      uint64           `json:"revision"`
+	Refresh       bool             `json:"refresh,omitempty"`
 	Subscriptions []realtimeFilter `json:"subscriptions"`
 }
 type realtimeData struct {
-	Connection string   `json:"connection"`
-	Topics     []string `json:"topics"`
-	Revision   uint64   `json:"revision"`
+	Connection string                   `json:"connection"`
+	Topics     []string                 `json:"topics"`
+	Revision   uint64                   `json:"revision"`
+	Values     map[string]realtimeValue `json:"values"`
 }
 type realtimeChannel struct {
 	filter realtimeFilter
@@ -36,6 +40,7 @@ type realtimeUpdate struct {
 	channel *realtimeChannel
 	node    string
 	topics  []string
+	values  map[string]realtimeValue
 	error   bool
 }
 
@@ -52,7 +57,7 @@ func (s *Server) realtimeBrowser(r *http.Request, p auth.Principal, conn *websoc
 		}
 		workers.Wait()
 	}()
-	conn.SetReadLimit(16 << 10)
+	conn.SetReadLimit(64 << 10)
 	commands := make(chan realtimeRequest, 1)
 	go func() {
 		defer cancel()
@@ -93,11 +98,12 @@ func (s *Server) realtimeBrowser(r *http.Request, p auth.Principal, conn *websoc
 			desired := map[string]realtimeFilter{}
 			for _, filter := range command.Subscriptions {
 				slices.Sort(filter.Topics)
+				slices.Sort(filter.Resources)
 				desired[filter.Connection] = filter
 			}
 			for key, channel := range channels {
 				filter, exists := desired[key]
-				if !exists || channel.failed || !slices.Equal(filter.Topics, channel.filter.Topics) {
+				if !exists || command.Refresh || channel.failed || !slices.Equal(filter.Topics, channel.filter.Topics) || !slices.Equal(filter.Resources, channel.filter.Resources) {
 					channel.cancel()
 					delete(channels, key)
 				}
@@ -126,7 +132,7 @@ func (s *Server) realtimeBrowser(r *http.Request, p auth.Principal, conn *websoc
 				channel.failed = true
 				code, message = "REMOTE_STREAM_INTERRUPTED", "服务器状态更新暂时中断，正在重新连接"
 			}
-			if err := write(code, message, update.node, realtimeData{Connection: channel.filter.Connection, Topics: update.topics, Revision: revision}); err != nil {
+			if err := write(code, message, update.node, realtimeData{Connection: channel.filter.Connection, Topics: update.topics, Revision: revision, Values: update.values}); err != nil {
 				return
 			}
 		case <-heartbeat.C:
@@ -146,12 +152,20 @@ func (s *Server) validateRealtimeRequest(p auth.Principal, in realtimeRequest, p
 		return fault.Invalid("实时订阅无效")
 	}
 	seen := map[string]bool{}
+	total := 0
 	for _, filter := range in.Subscriptions {
 		if seen[filter.Connection] || filter.Connection != "" && len(filter.Connection) != 36 {
 			return fault.Invalid("服务器订阅无效")
 		}
 		seen[filter.Connection] = true
 		if err := realtimeTopics(p, filter.Topics, filter.Connection != ""); err != nil {
+			return err
+		}
+		total += len(filter.Resources)
+		if total > 128 {
+			return fault.Invalid("实时资源数量超出限制")
+		}
+		if err := validateRealtimeResources(filter.Topics, filter.Resources); err != nil {
 			return err
 		}
 		if filter.Connection != "" {
@@ -169,15 +183,17 @@ func (s *Server) validateRealtimeRequest(p auth.Principal, in realtimeRequest, p
 func (s *Server) realtimeChannel(ctx context.Context, r *http.Request, p auth.Principal, channel *realtimeChannel, out chan<- realtimeUpdate) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	send := func(node string, topics []string, failed bool) bool {
+	send := func(node string, topics []string, values map[string]realtimeValue, failed bool) bool {
 		select {
-		case out <- realtimeUpdate{channel: channel, node: node, topics: topics, error: failed}:
+		case out <- realtimeUpdate{channel: channel, node: node, topics: topics, values: values, error: failed}:
 			return true
 		case <-ctx.Done():
 			return false
 		}
 	}
 	if channel.filter.Connection == "" {
+		state := s.realtimeResources(r)
+		defer state.Close()
 		sub := s.Realtime.Subscribe(channel.filter.Topics)
 		defer sub.Close()
 		for {
@@ -186,23 +202,23 @@ func (s *Server) realtimeChannel(ctx context.Context, r *http.Request, p auth.Pr
 				return
 			case <-sub.Wake:
 				topics := sub.Take()
-				if len(topics) > 0 && !send(s.NodeID, topics, false) {
+				if len(topics) > 0 && !send(s.NodeID, topics, state.Read(ctx, topics, channel.filter.Resources), false) {
 					return
 				}
 			}
 		}
 	}
-	upstream, node, err := s.Nodes.OpenRealtime(ctx, p, channel.filter.Connection, channel.filter.Topics)
+	upstream, node, err := s.Nodes.OpenRealtime(ctx, p, channel.filter.Connection, channel.filter.Topics, channel.filter.Resources)
 	if err != nil {
 		if ctx.Err() == nil {
-			send(s.NodeID, []string{}, true)
+			send(s.NodeID, []string{}, nil, true)
 		}
 		return
 	}
 	defer upstream.Close()
 	stop := context.AfterFunc(ctx, func() { upstream.Close() })
 	defer stop()
-	upstream.SetReadLimit(64 << 10)
+	upstream.SetReadLimit(realtimeFrameLimit)
 	upstream.SetReadDeadline(time.Now().Add(45 * time.Second))
 	upstream.SetPongHandler(func(string) error { return upstream.SetReadDeadline(time.Now().Add(45 * time.Second)) })
 	incoming := make(chan []byte, 1)
@@ -228,30 +244,50 @@ func (s *Server) realtimeChannel(ctx context.Context, r *http.Request, p auth.Pr
 			return
 		case raw, open := <-incoming:
 			if !open || !validRemoteEnvelope(raw, node, 200) {
-				send(node, []string{}, true)
+				send(node, []string{}, nil, true)
 				return
 			}
 			var frame struct {
 				Data struct {
-					Topics []string `json:"topics"`
+					Topics []string                 `json:"topics"`
+					Values map[string]realtimeValue `json:"values"`
 				} `json:"data"`
 			}
 			if json.Unmarshal(raw, &frame) != nil || len(frame.Data.Topics) == 0 {
-				send(node, []string{}, true)
+				send(node, []string{}, nil, true)
 				return
 			}
 			for _, topic := range frame.Data.Topics {
 				if !slices.Contains(channel.filter.Topics, topic) {
-					send(node, []string{}, true)
+					send(node, []string{}, nil, true)
 					return
 				}
 			}
-			if !send(node, frame.Data.Topics, false) {
+			expected := 0
+			for _, resource := range channel.filter.Resources {
+				topic, _ := contract.RealtimeTopic(resource)
+				if slices.Contains(frame.Data.Topics, topic) {
+					expected++
+				}
+			}
+			valid := len(frame.Data.Values) == expected
+			for resource, value := range frame.Data.Values {
+				topic, ok := contract.RealtimeTopic(resource)
+				if !ok || !slices.Contains(channel.filter.Resources, resource) || !slices.Contains(frame.Data.Topics, topic) || !validRemoteEnvelope(value.Response, node, value.Status) {
+					valid = false
+					break
+				}
+			}
+			if !valid {
+				send(node, []string{}, nil, true)
+				return
+			}
+			if !send(node, frame.Data.Topics, frame.Data.Values, false) {
 				return
 			}
 		case <-heartbeat.C:
 			if s.Nodes.RealtimeAlive(ctx, p, channel.filter.Connection, node) != nil || upstream.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)) != nil {
-				send(node, []string{}, true)
+				send(node, []string{}, nil, true)
 				return
 			}
 		}

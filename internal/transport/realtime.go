@@ -23,15 +23,40 @@ var realtimeScopes = map[string][]string{
 	"tasks": {"read"}, "monitoring": {"read"}, "notifications": {"read"},
 	"maintenance": {"read", "system.write"}, "backups": {"read", "backup.export"},
 	"firewall": {"read", "security.write"}, "listener": {"read", "system.write"}, "version": {"read"},
-	"dns": {"read"}, "fail2ban": {"read"},
+	"dns": {"read"}, "fail2ban": {"read"}, "logs": {"read"}, "nginx": {"read"}, "nodes": {"read", "nodes.manage"},
 }
 
-// Fingerprints contain no credentials and never leave this process. Clients
-// receive invalidations and read through the existing, permission-checked API.
+// Fingerprints select changed resources; only authorized snapshots leave the server.
 func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string, error) {
 	var value any
 	var err error
 	switch topic {
+	case "nginx":
+		if s.Agent == nil {
+			return "", errors.New("agent unavailable")
+		}
+		value, err = s.Agent.NginxState(ctx)
+	case "nodes":
+		rows, e := s.DB.QueryContext(ctx, `SELECT 'node:'||id,state,json_array(version,updated_at,removed_at,last_error,expires_at>0 AND expires_at<=unixepoch()) FROM nodes UNION ALL SELECT 'pair:'||id,state,json_array(expires_at<=unixepoch()) FROM node_pairings UNION ALL SELECT 'job:'||id,state,json_array(stage,last_error,updated_at) FROM node_pairing_jobs ORDER BY 1`)
+		if e != nil {
+			return "", e
+		}
+		defer rows.Close()
+		hash := sha256.New()
+		encoder := json.NewEncoder(hash)
+		for rows.Next() {
+			var id, state, details string
+			if e = rows.Scan(&id, &state, &details); e != nil {
+				return "", e
+			}
+			if e = encoder.Encode([]string{id, state, details}); e != nil {
+				return "", e
+			}
+		}
+		return hex.EncodeToString(hash.Sum(nil)), rows.Err()
+	case "logs":
+		// Log cursors must advance independently of task state transitions.
+		return time.Now().UTC().Format("20060102150405"), nil
 	case "tasks":
 		rows, e := s.DB.QueryContext(ctx, `SELECT id,kind,state,stage,last_error,observed_revision,updated_at FROM tasks ORDER BY id`)
 		if e != nil {
@@ -203,6 +228,15 @@ func (s *Server) realtime(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, err)
 			return
 		}
+		var resources []string
+		if len(r.URL.RawQuery) > 128<<10 || json.Unmarshal([]byte(r.URL.Query().Get("resources")), &resources) != nil {
+			s.fail(w, r, fault.Invalid("实时资源无效"))
+			return
+		}
+		if err := validateRealtimeResources(topics, resources); err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	} else if r.URL.RawQuery != "" {
 		s.fail(w, r, fault.Invalid("请在实时连接内提交订阅"))
 		return
@@ -263,6 +297,10 @@ func (s *Server) realtimeSource(r *http.Request, p auth.Principal, conn *websock
 			}
 		}
 	}()
+	var resources []string
+	json.Unmarshal([]byte(r.URL.Query().Get("resources")), &resources)
+	state := s.realtimeResources(r)
+	defer state.Close()
 	sub := s.Realtime.Subscribe(strings.Split(r.URL.Query().Get("topics"), ","))
 	defer sub.Close()
 	heartbeat := time.NewTicker(15 * time.Second)
@@ -284,7 +322,7 @@ func (s *Server) realtimeSource(r *http.Request, p auth.Principal, conn *websock
 			if len(topics) == 0 {
 				continue
 			}
-			if err := write("OK", "状态已更新", map[string]any{"topics": topics}); err != nil {
+			if err := write("OK", "状态已更新", map[string]any{"topics": topics, "values": state.Read(ctx, topics, resources)}); err != nil {
 				return
 			}
 		case <-heartbeat.C:
@@ -309,4 +347,21 @@ func (s *Server) realtimeAlive(r *http.Request, p auth.Principal) bool {
 		return e == nil && alive
 	}
 	return true
+}
+
+// Successful state changes wake other sessions as well as the initiating page.
+func (s *Server) realtimeMutation(r *http.Request) {
+	if s.Realtime == nil || r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" || strings.HasPrefix(r.URL.Path, "/api/v1/logs/") {
+		return
+	}
+	for _, suffix := range []string{"/preview", "/plan", "/resolve", "/query", "/check", "/download"} {
+		if strings.HasSuffix(r.URL.Path, suffix) {
+			return
+		}
+	}
+	topics := make([]string, 0, len(realtimeScopes))
+	for topic := range realtimeScopes {
+		topics = append(topics, topic)
+	}
+	s.Realtime.Notify(topics...)
 }

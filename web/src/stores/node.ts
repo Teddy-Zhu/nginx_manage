@@ -11,8 +11,10 @@ export const useNodes = defineStore("nodes", () => {
   const generation = nodeGeneration;
   const error = nodeRequestError;
   let loading: Promise<void> | null = null;
+  let unsubscribe: (() => void) | undefined;
   async function load() {
     if (loading) return loading;
+    if (!unsubscribe) unsubscribe = api.subscribe(["nodes"], () => {void load().catch((cause: unknown) => {error.value = cause instanceof Error ? cause.message : "无法更新服务器状态";});});
     loading = api.nodes().then((value) => {
       connections.value = value;
       const current = selectedTarget.value;
@@ -42,6 +44,6 @@ export const useNodes = defineStore("nodes", () => {
       throw cause;
     } finally { switching.value = false; }
   }
-  watch(sourceNodeId, (id) => { if (!id) connections.value = []; });
+  watch(sourceNodeId, (id) => { if (!id) {unsubscribe?.();unsubscribe = undefined;connections.value = [];} });
   return { connections, switching, selected, generation, error, load, select };
 });

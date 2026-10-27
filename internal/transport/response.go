@@ -46,6 +46,9 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, status int, cod
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	w.Write(b)
+	if status >= 200 && status < 300 {
+		s.realtimeMutation(r)
+	}
 }
 func (s *Server) ok(w http.ResponseWriter, r *http.Request, data any) {
 	s.respond(w, r, 200, "OK", "操作成功", data)
