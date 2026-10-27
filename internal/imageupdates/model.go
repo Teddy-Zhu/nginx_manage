@@ -156,7 +156,7 @@ type Agent interface {
 
 type CreateInput struct {
 	AllowDowntime bool   `json:"allow_downtime"`
-	MaintenanceID string `json:"maintenance_id"`
+	MaintenanceID string `json:"-"`
 	PrepareTaskID string `json:"prepare_task_id"`
 }
 

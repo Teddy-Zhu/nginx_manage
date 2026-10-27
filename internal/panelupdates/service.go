@@ -168,12 +168,22 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return zero, err
 	}
-	if in.CoordinateAgent != in.AllowDowntime || !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
+	if in.CoordinateAgent != in.AllowDowntime || !validKey(key) || in.MaintenanceID != "" && !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) {
 		return zero, fault.Invalid("更新参数或幂等键无效")
 	}
 	hash := requestHash("panel.update", in)
 	if t, found, err := s.replay(ctx, p, key, hash); err != nil || found {
 		return t, err
+	}
+	if in.MaintenanceID == "" {
+		var task Task
+		err := s.Maintenance.Submit(ctx, p, requestID, func(id string) (string, error) {
+			in.MaintenanceID = id
+			var err error
+			task, err = s.Create(ctx, p, requestID, key, in)
+			return task.ID, err
+		})
+		return task, err
 	}
 	if s.Agent == nil || s.Components == nil {
 		return zero, fault.Unavailable("独立更新执行器未配置")

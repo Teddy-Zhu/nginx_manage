@@ -147,7 +147,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return out, err
 	}
-	if !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) || !assetValue.MatchString(in.AssetID) {
+	if !validKey(key) || in.MaintenanceID != "" && !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) || !assetValue.MatchString(in.AssetID) {
 		return out, fault.Invalid("安装任务参数或幂等键无效")
 	}
 	hash := requestHash("nginx.install", in)
@@ -168,6 +168,16 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	}
 	if t, found, err := replay(); err != nil || found {
 		return t, err
+	}
+	if in.MaintenanceID == "" {
+		var task Task
+		err := s.Maintenance.Submit(ctx, p, requestID, func(id string) (string, error) {
+			in.MaintenanceID = id
+			var err error
+			task, err = s.CreateLinked(ctx, p, requestID, key, in, authorizationUntil, link)
+			return task.ID, err
+		})
+		return task, err
 	}
 	if s.Agent == nil || s.Components == nil {
 		return out, fault.Unavailable("安装执行器未配置")

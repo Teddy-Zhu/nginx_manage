@@ -34,11 +34,13 @@ func historyTerminal(r Record) bool {
 	return r.State == "succeeded" || r.State == "failed" || r.State == "rolled_back" || r.State == "cancelled"
 }
 func historyRequestHash(in history.RuntimeExecuteInput) string {
+	in.Filter.MaintenanceID = ""
 	raw, _ := json.Marshal(in)
 	return secure.Hash(raw)
 }
 func historyPlanHash(p runtimeHistoryPlan) string {
 	p.Preview.SHA256 = ""
+	p.Preview.Filter.MaintenanceID = ""
 	raw, _ := json.Marshal(p)
 	return secure.Hash(raw)
 }

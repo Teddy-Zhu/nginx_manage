@@ -95,7 +95,7 @@ func (s *Server) Handler() http.Handler {
 	s.Auth.Sessions.ErrorFunc = func(_ http.ResponseWriter, _ *http.Request, err error) { panic(sessionFailure{err}) }
 	s.realtimeReader = s.middleware(s.remoteBoundary(mux))
 	s.remoteRoutes(mux)
-	sessionHandler := s.Auth.Sessions.LoadAndSave(s.protect(s.maintenanceAdmission(mux)))
+	sessionHandler := s.Auth.Sessions.LoadAndSave(s.protect(s.operationAdmission(mux)))
 	return s.middleware(s.remoteBoundary(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/events" {
 			// A long-lived socket must not re-save its loaded session after logout.

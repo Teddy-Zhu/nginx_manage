@@ -10,7 +10,6 @@ export type LiveTopic =
   | "software"
   | "monitoring"
   | "notifications"
-  | "maintenance"
   | "backups"
   | "firewall"
   | "listener"
@@ -49,7 +48,6 @@ export const liveTopicScopes: Record<LiveTopic, string[]> = {
   nginx: ["read"],
   nodes: ["read", "nodes.manage"],
   notifications: ["read"],
-  maintenance: ["read", "system.write"],
   backups: ["read", "backup.export"],
   firewall: ["read", "security.write"],
   listener: ["read", "system.write"],
@@ -179,12 +177,7 @@ export function readLive(
   if (signal.aborted || scopeSignal(scope).aborted)
     return Promise.reject(cancelled());
   const topic = resourceTopic(resource)!;
-  if (
-    scope.target &&
-    (["backups", "firewall", "listener"].includes(topic) ||
-      (topic === "maintenance" &&
-        !scope.target.scopes.includes("system.write")))
-  )
+  if (scope.target && ["backups", "firewall", "listener"].includes(topic))
     return Promise.reject(
       new LiveError("FORBIDDEN", "当前服务器不支持此项实时操作", 403),
     );
@@ -476,10 +469,7 @@ export function subscribeLive(
   topics = topics.filter((topic) => topicAllowed(scope, topic));
   if (scope.target)
     topics = topics.filter(
-      (topic) =>
-        !["backups", "firewall", "listener"].includes(topic) &&
-        (topic !== "maintenance" ||
-          scope.target!.scopes.includes("system.write")),
+      (topic) => !["backups", "firewall", "listener"].includes(topic),
     );
   const signal = scopeSignal(scope);
   if (

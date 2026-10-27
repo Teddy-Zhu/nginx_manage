@@ -120,7 +120,7 @@ type Agent interface {
 }
 
 type CreateInput struct {
-	MaintenanceID string `json:"maintenance_id"`
+	MaintenanceID string `json:"-"`
 	PrepareTaskID string `json:"prepare_task_id"`
 }
 

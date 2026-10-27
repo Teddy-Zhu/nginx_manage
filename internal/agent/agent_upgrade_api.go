@@ -145,13 +145,18 @@ func (s *Server) queueAgentUpgrade(ctx context.Context, req agentupdates.Request
 			service()
 		}
 	}()
-	active, failed, err := agentUpgradeHost(ctx, s.DataDir, req.OperationID)
-	if err != nil {
-		return zero, err
-	}
 	r, err = AgentUpgradeStatus(s.DataDir, req.OperationID)
 	fresh := os.IsNotExist(err)
 	if err != nil && !fresh {
+		return zero, err
+	}
+	active, failed, err := agentUpgradeHost(ctx, s.DataDir, req.OperationID)
+	if err != nil {
+		// The worker locks are held and no transaction has been published.
+		// Report a definite rejection so its task can finish and release admission.
+		if fresh {
+			return zero, fault.New(http.StatusConflict, "AGENT_UPGRADE_REJECTED", panelRestoreError(err))
+		}
 		return zero, err
 	}
 	if !fresh {

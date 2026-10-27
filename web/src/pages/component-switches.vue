@@ -30,7 +30,6 @@ import {
   apiError,
   type ComponentOverview,
   type ComponentTask,
-  type MaintenanceView,
   type NginxSwitchTask,
   type NginxRuntime,
 } from "../api/client";
@@ -43,7 +42,6 @@ const session = useSession(),
   { run, busy } = useAction();
 let keyFor = useIdempotency();
 const overview = ref<ComponentOverview | null>(null),
-  maintenance = ref<MaintenanceView | null>(null),
   preparations = ref<ComponentTask[]>([]),
   tasks = ref<NginxSwitchTask[]>([]),
   error = ref("");
@@ -58,13 +56,6 @@ const canWrite = computed(
   () =>
     session.me?.scopes.includes("system.write") &&
     session.me.scopes.includes("components.manage"),
-);
-const held = computed(
-  () =>
-    maintenance.value?.phase === "held" &&
-    maintenance.value.agent.phase === "held" &&
-    maintenance.value.agent.id === maintenance.value.session?.task_id &&
-    maintenance.value.agent.epoch === maintenance.value.session?.root_epoch,
 );
 const prepared = computed(() =>
   preparations.value.filter(
@@ -97,7 +88,6 @@ const active = computed(() =>
 const canCreate = computed(
   () =>
     canWrite.value &&
-    held.value &&
     overview.value?.switch_available &&
     overview.value.installation &&
     runtime.value?.available &&
@@ -142,7 +132,7 @@ const stages: Record<string, string> = {
   cancelled_before_switch: "已取消切换",
   control_pending: "等待控制确认",
   authorization_expired: "授权已过期",
-  maintenance_unconfirmed: "等待维护确认",
+  maintenance_unconfirmed: "等待操作准备",
   agent_unconfirmed: "状态未确认",
   operation_missing: "独立记录缺失",
   control_rejected: "控制操作未执行",
@@ -155,8 +145,6 @@ function date(n: number) {
 function canControl(t: NginxSwitchTask) {
   return !!(
     canWrite.value &&
-    held.value &&
-    maintenance.value?.agent.id === t.input.maintenance_id &&
     !busy.value &&
     t.state === "recovery_required" &&
     t.stage !== "restore_isolated" &&
@@ -176,20 +164,16 @@ async function load() {
   reading.value = true;
   controller = new AbortController();
   try {
-    const [source, preparedTasks, items, view, running] = await Promise.all([
+    const [source, preparedTasks, items, running] = await Promise.all([
       api.components(controller.signal),
       api.componentTasks(controller.signal),
       api.nginxSwitches(controller.signal),
-      canWrite.value
-        ? api.maintenance(controller.signal)
-        : Promise.resolve(null),
       api.nginxRuntime(controller.signal),
     ]);
     overview.value = source;
     runtime.value = running;
     preparations.value = preparedTasks;
     tasks.value = items;
-    maintenance.value = view;
     error.value = "";
     if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
@@ -206,15 +190,9 @@ function choose(id: string) {
   asset.value = assets.value[0]?.id ?? "";
 }
 async function switchComponent() {
-  if (
-    !canCreate.value ||
-    !maintenance.value ||
-    !runtime.value ||
-    !overview.value?.installation
-  )
+  if (!canCreate.value || !runtime.value || !overview.value?.installation)
     return;
   const input = {
-    maintenance_id: maintenance.value.agent.id,
     prepare_task_id: selected.value,
     asset_id: asset.value,
     allow_downtime: downtime.value,
@@ -253,12 +231,7 @@ onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer);
   controller?.abort();
 });
-useLiveRefresh(
-  api,
-  ["tasks", "software", "maintenance"],
-  load,
-  () => reading.value,
-);
+useLiveRefresh(api, ["tasks", "software"], load, () => reading.value);
 </script>
 <template>
   <div class="page-stack">
@@ -271,18 +244,11 @@ useLiveRefresh(
       <NAlert v-if="overview && !overview.switch_available" type="info">{{
         overview.switch_reason
       }}</NAlert>
-      <p>
-        选择已准备的 Nginx 组件，切换前须先进入<RouterLink to="/maintenance"
-          >维护模式</RouterLink
-        >。切换期间代理流量会短暂中断。
-      </p>
+      <p class="muted">选择已下载的 Nginx 版本。更新时网站连接会短暂中断。</p>
       <p v-if="overview?.installation">
         当前版本：{{ overview.installation.version }} ·
         {{ runtime?.running ? "运行中" : "运行未确认" }}
       </p>
-      <NAlert v-if="canWrite && !held" type="warning"
-        >尚未进入维护模式，请先确认维护状态。</NAlert
-      >
       <div v-if="canWrite" class="grid-2">
         <NFormItem label="已下载版本"
           ><NSelect

@@ -45,7 +45,6 @@ func (s *Server) CreateNginxInstallation(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var in struct {
-		MaintenanceID string `json:"maintenance_id"`
 		PrepareTaskID string `json:"prepare_task_id"`
 		AssetID       string `json:"asset_id"`
 		Start         *bool  `json:"start"`
@@ -59,7 +58,7 @@ func (s *Server) CreateNginxInstallation(w http.ResponseWriter, r *http.Request,
 		s.fail(w, r, fault.Invalid("须明确是否立即启动和设置开机启动"))
 		return
 	}
-	out, err := s.Installations.Create(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, nginxinstall.CreateInput{MaintenanceID: in.MaintenanceID, PrepareTaskID: in.PrepareTaskID, AssetID: in.AssetID, Start: *in.Start, Enable: *in.Enable})
+	out, err := s.Installations.Create(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, nginxinstall.CreateInput{PrepareTaskID: in.PrepareTaskID, AssetID: in.AssetID, Start: *in.Start, Enable: *in.Enable})
 	if err != nil {
 		s.fail(w, r, err)
 		return

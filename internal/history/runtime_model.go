@@ -8,7 +8,7 @@ import (
 
 // RuntimeFilter selects a bounded batch of immutable runtime material.
 type RuntimeFilter struct {
-	MaintenanceID string `json:"maintenance_id"`
+	MaintenanceID string `json:"maintenance_id,omitempty"`
 	Kind          string `json:"kind"`
 	Before        int64  `json:"before"`
 	Keep          int    `json:"keep"`

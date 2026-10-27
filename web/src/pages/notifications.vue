@@ -4,7 +4,7 @@
     "title": "通知",
     "subtitle": "设置通知渠道和接收事件",
     "nav": true,
-    "order": 23,
+    "order": 52,
     "symbol": "♧",
     "group": "数据与设置"
   }

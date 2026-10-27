@@ -5,7 +5,7 @@
     "subtitle": "管理账户、访问入口与系统更新",
     "nav": true,
     "localOnly": true,
-    "order": 25,
+    "order": 53,
     "symbol": "⚙",
     "group": "数据与设置"
   }

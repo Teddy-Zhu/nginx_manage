@@ -2,7 +2,6 @@
 import { randomUUID } from "../utils/crypto";
 
 import { computed, h, onMounted, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
 import {
   NAlert,
   NButton,
@@ -15,7 +14,6 @@ import {
 } from "naive-ui";
 import {
   useNodeAPI,
-  type MaintenanceView,
   type RuntimeHistoryExecuteInput,
   type RuntimeHistoryPreview,
   type RuntimeHistoryStatus,
@@ -24,7 +22,6 @@ import { useAction } from "../composables/action";
 
 const api = useNodeAPI();
 const { busy, run } = useAction();
-const maintenance = ref<MaintenanceView | null>(null);
 const records = ref<RuntimeHistoryStatus[]>([]);
 const preview = ref<RuntimeHistoryPreview | null>(null);
 const pending = ref<RuntimeHistoryExecuteInput | null>(null);
@@ -35,12 +32,6 @@ const before = ref(
   new Date(initial.getTime() - initial.getTimezoneOffset() * 60_000)
     .toISOString()
     .slice(0, 16),
-);
-const held = computed(
-  () =>
-    maintenance.value?.phase === "held" &&
-    maintenance.value.agent.phase === "held" &&
-    !!maintenance.value.session?.task_id,
 );
 const savedPending = computed(() =>
   records.value.find((r) => r.state !== "succeeded"),
@@ -82,11 +73,7 @@ const columns: DataTableColumns<RuntimeHistoryStatus> = [
             NButton,
             {
               size: "small",
-              disabled:
-                busy.value ||
-                !held.value ||
-                maintenance.value?.session?.task_id !==
-                  r.preview.filter.maintenance_id,
+              disabled: busy.value,
               onClick: () => execute(r),
             },
             { default: () => "继续清理" },
@@ -97,7 +84,6 @@ watch([kind, keep, before], () => {
   preview.value = null;
 });
 async function refresh() {
-  maintenance.value = await api.maintenance();
   records.value = await api.runtimeHistory();
   const completed =
     pending.value &&
@@ -117,8 +103,6 @@ async function load() {
 async function inspect() {
   await run(async () => {
     await refresh();
-    if (!held.value || !maintenance.value?.session)
-      throw new Error("请先在维护模式中等待当前节点进入维护状态");
     if (savedPending.value) throw new Error("请先继续清理已有清理操作");
     const cutoff = new Date(before.value).getTime() / 1000;
     if (
@@ -131,7 +115,6 @@ async function inspect() {
     preview.value = null;
     pending.value = null;
     preview.value = await api.previewRuntimeHistory({
-      maintenance_id: maintenance.value.session.task_id,
       kind: kind.value,
       before: Math.floor(cutoff),
       keep: keep.value,
@@ -169,13 +152,9 @@ onMounted(load);
 <template>
   <div class="page-stack">
     <NAlert type="info" :bordered="false">
-      清理不再使用的旧配置文件和证书副本，保留当前运行所需的文件。清理前需要进入维护模式，未完成的清理可以继续执行。
+      清理不再使用的旧配置文件和证书副本，保留当前运行所需的文件。未完成的清理可以继续执行。
     </NAlert>
     <div class="toolbar">
-      <span>{{
-        held ? "当前节点已进入维护状态" : "须先进入维护模式并排空任务"
-      }}</span>
-      <RouterLink to="/maintenance">维护模式</RouterLink>
       <NButton :loading="busy" @click="load">刷新状态</NButton>
     </div>
     <section class="surface">
@@ -207,16 +186,13 @@ onMounted(load);
             :disabled="busy || !!savedPending"
         /></NFormItem>
       </div>
-      <NButton
-        :loading="busy"
-        :disabled="!held || !!savedPending"
-        @click="inspect"
+      <NButton :loading="busy" :disabled="!!savedPending" @click="inspect"
         >查看可清理文件</NButton
       >
     </section>
     <NAlert v-if="pending" type="warning" :bordered="false">
       上次清理的结果尚未确认，请继续核对。
-      <NButton :loading="busy" :disabled="!held" @click="execute()"
+      <NButton :loading="busy" :disabled="busy" @click="execute()"
         >核对并继续清理</NButton
       >
     </NAlert>
@@ -230,9 +206,7 @@ onMounted(load);
         >
         <NPopconfirm v-if="!pending" @positive-click="() => execute()">
           <template #trigger
-            ><NButton
-              type="error"
-              :disabled="busy || !held || !preview.targets.length"
+            ><NButton type="error" :disabled="busy || !preview.targets.length"
               >清理本批文件</NButton
             ></template
           >

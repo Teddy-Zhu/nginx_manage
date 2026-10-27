@@ -28,7 +28,6 @@ import {
   apiError,
   type AgentUpgradeTask,
   type ComponentTask,
-  type MaintenanceView,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
@@ -39,20 +38,12 @@ const api = useNodeAPI(),
 let keyFor = useIdempotency();
 const preparations = ref<ComponentTask[]>([]),
   tasks = ref<AgentUpgradeTask[]>([]),
-  maintenance = ref<MaintenanceView | null>(null),
   selected = ref(""),
   error = ref("");
 const canWrite = computed(
   () =>
     !!session.me?.scopes.includes("components.manage") &&
     !!session.me?.scopes.includes("system.write"),
-);
-const held = computed(
-  () =>
-    maintenance.value?.phase === "held" &&
-    maintenance.value.agent.phase === "held" &&
-    maintenance.value.agent.id === maintenance.value.session?.task_id &&
-    maintenance.value.agent.epoch === maintenance.value.session?.root_epoch,
 );
 const prepared = computed(() =>
   preparations.value.filter(
@@ -76,12 +67,7 @@ const active = computed(() =>
   ),
 );
 const canCreate = computed(
-  () =>
-    canWrite.value &&
-    held.value &&
-    !!chosen.value &&
-    !active.value &&
-    !busy.value,
+  () => canWrite.value && !!chosen.value && !active.value && !busy.value,
 );
 const states: Record<string, string> = {
   queued: "排队中",
@@ -109,7 +95,7 @@ const stages: Record<string, string> = {
   compensated: "原版本已恢复",
   agent_submit_pending: "提交升级",
   control_pending: "提交续办授权",
-  maintenance_unconfirmed: "等待原维护会话",
+  maintenance_unconfirmed: "等待操作准备",
   epoch_changed: "需要重新授权",
   authorization_expired: "启动授权已过期",
   agent_unconfirmed: "等待独立事务确认",
@@ -129,8 +115,6 @@ function canResume(t: AgentUpgradeTask) {
   const result = t.result;
   return (
     canWrite.value &&
-    held.value &&
-    maintenance.value?.agent.id === t.input.maintenance_id &&
     !busy.value &&
     t.state === "recovery_required" &&
     ![
@@ -153,16 +137,12 @@ async function load() {
   reading.value = true;
   controller = new AbortController();
   try {
-    const [sources, items, view] = await Promise.all([
+    const [sources, items] = await Promise.all([
       api.componentTasks(controller.signal),
       api.agentUpgrades(controller.signal),
-      canWrite.value
-        ? api.maintenance(controller.signal)
-        : Promise.resolve(null),
     ]);
     preparations.value = sources;
     tasks.value = items;
-    maintenance.value = view;
     error.value = "";
     if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
@@ -173,9 +153,8 @@ async function load() {
   }
 }
 async function upgrade() {
-  if (!canCreate.value || !maintenance.value) return;
+  if (!canCreate.value) return;
   const input = {
-    maintenance_id: maintenance.value.agent.id,
     prepare_task_id: selected.value,
   };
   await run(async () => {
@@ -205,7 +184,7 @@ onUnmounted(() => {
   closed = true;
   controller?.abort();
 });
-useLiveRefresh(api, ["tasks", "maintenance"], load, () => reading.value);
+useLiveRefresh(api, ["tasks"], load, () => reading.value);
 </script>
 <template>
   <div class="page-stack">
@@ -215,18 +194,15 @@ useLiveRefresh(api, ["tasks", "maintenance"], load, () => reading.value);
         <h2>更新管理服务</h2>
         <NButton @click="load">刷新</NButton>
       </div>
-      <p>
-        在<RouterLink to="/components">软件商店</RouterLink
-        >完成面板准备，并在<RouterLink to="/maintenance">维护模式</RouterLink
-        >进入维护后开始升级。
+      <p class="muted">
+        请先在<RouterLink :to="{ path: '/components', query: {} }"
+          >软件商店</RouterLink
+        >下载所需版本，再开始更新。
       </p>
       <NAlert type="info"
         >升级期间宿主机管理操作暂时不可用。失败时恢复原版本。</NAlert
       >
 
-      <NAlert v-if="canWrite && !held" type="warning"
-        >尚未进入维护模式，请先确认维护状态。</NAlert
-      >
       <NFormItem label="已准备版本"
         ><NSelect
           v-model:value="selected"
@@ -287,10 +263,6 @@ useLiveRefresh(api, ["tasks", "maintenance"], load, () => reading.value);
           :type="task.state === 'rolled_back' ? 'info' : 'warning'"
           >{{ task.error }}</NAlert
         >
-        <p v-if="task.result?.finalized">
-          更新已结束，可前往<RouterLink to="/maintenance">维护模式</RouterLink
-          >结束维护。
-        </p>
         <div v-if="canResume(task)">
           <NPopconfirm positive-text="续办原升级" @positive-click="resume(task)"
             ><template #trigger

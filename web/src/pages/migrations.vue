@@ -4,7 +4,7 @@
     "title": "配置迁移",
     "subtitle": "在服务器之间导出、导入配置",
     "nav": true,
-    "order": 21,
+    "order": 51,
     "symbol": "⇄",
     "group": "数据与设置"
   }

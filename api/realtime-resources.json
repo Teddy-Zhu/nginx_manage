@@ -31,12 +31,6 @@
     ]
   },
   {
-    "topic": "maintenance",
-    "paths": [
-      "/maintenance"
-    ]
-  },
-  {
     "topic": "backups",
     "paths": [
       "/backups",

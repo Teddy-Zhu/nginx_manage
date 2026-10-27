@@ -4,9 +4,9 @@
     "title": "防火墙",
     "subtitle": "管理端口和 IP 黑白名单",
     "nav": true,
-    "order": 5,
+    "order": 30,
     "symbol": "≡",
-    "group": "网站与安全"
+    "group": "安全防护"
   }
 }
 </route>

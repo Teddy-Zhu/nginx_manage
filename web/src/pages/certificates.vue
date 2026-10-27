@@ -4,9 +4,9 @@
     "title": "SSL 证书",
     "subtitle": "管理证书、申请和自动续期",
     "nav": true,
-    "order": 2,
+    "order": 11,
     "symbol": "▱",
-    "group": "网站与安全"
+    "group": "网站服务"
   }
 }
 </route>

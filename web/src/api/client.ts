@@ -42,10 +42,6 @@ export type BackupPolicy = components["schemas"]["BackupPolicy"];
 export type BackupRecord = components["schemas"]["BackupRecord"];
 export type BackupOverview = components["schemas"]["BackupOverview"];
 export type BackupDownloadTicket = components["schemas"]["BackupDownloadTicket"];
-export type MaintenanceView = components["schemas"]["MaintenanceView"];
-export type MaintenanceSession = components["schemas"]["MaintenanceSession"];
-export type MaintenanceStartInput =
-  components["schemas"]["MaintenanceStartInput"];
 export type ComponentOfflineInput = components["schemas"]["ComponentOfflineInput"];
 export type ComponentOfflineChunk = components["schemas"]["ComponentOfflineChunk"];
 export type ComponentOfflineAsset = components["schemas"]["ComponentOfflineAsset"];
@@ -601,20 +597,6 @@ export function createAPI(scope: RequestScope) {
       data,
       headers: { "Idempotency-Key": key },
       timeout: 45_000,
-    }),
-  maintenance: (signal?: AbortSignal) =>
-    request<MaintenanceView>({ url: "/maintenance", signal }),
-  enterMaintenance: (data: MaintenanceStartInput, key: string) =>
-    request<MaintenanceSession>({
-      url: "/maintenance",
-      method: "POST",
-      data,
-      headers: { "Idempotency-Key": key },
-    }),
-  releaseMaintenance: (id: string) =>
-    request<MaintenanceSession>({
-      url: `/maintenance/${encodeURIComponent(id)}/release`,
-      method: "POST",
     }),
   components: (signal?: AbortSignal) =>
     request<ComponentOverview>({ url: "/components", signal }),

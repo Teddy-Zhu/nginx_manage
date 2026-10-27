@@ -17,7 +17,7 @@
   --release-manifest-sha256 <manifest-sha256>
 ```
 
-配套 Nginx 镜像将 `--component` 改为 `nginx`。只从签名清单推导固定 GHCR 摘要及当前架构，当前支持公开发行包；不接受任意镜像或 Registry 凭据。固定信任为 `/etc/nginxpanel/release-trust.json`，预发布须显式 `--release-prerelease`。下载后核对实际镜像和签名启动器，不启动容器。中断不会切换运行版本；再次显式执行时先核对本地镜像，核对通过则复用。已有面板可在组件页完成签名面板准备后分别拉取镜像，再进入配置维护执行运行镜像替换。镜像下载、安装与运行切换分别授权，安装器和日常启动仍不隐式拉取。
+配套 Nginx 镜像将 `--component` 改为 `nginx`。只从签名清单推导固定 GHCR 摘要及当前架构，当前支持公开发行包；不接受任意镜像或 Registry 凭据。固定信任为 `/etc/nginxpanel/release-trust.json`，预发布须显式 `--release-prerelease`。下载后核对实际镜像和签名启动器，不启动容器。中断不会切换运行版本；再次显式执行时先核对本地镜像，核对通过则复用。已有面板可在组件页完成签名面板准备后分别拉取镜像，再从更新页应用所选版本。镜像下载、安装与运行切换分别授权，安装器和日常启动仍不隐式拉取。
 
 ## Nginx 固定模块镜像
 
@@ -139,7 +139,7 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 
 固定发布信任为 `/etc/nginxpanel/release-trust.json`，预发布需显式添加 `--release-prerelease`。普通应用更新与镜像替换分别管理。专门的 `/api/v1/panel/images/upgrades` 维护接口已接入独立 worker，创建仅引用已完成的面板准备任务与原维护会话，镜像摘要和离线文件位置从 root 签名计划推导，不能在请求中指定任意镜像地址、路径或信任。安装器登记 `nginxpanel-image@.service`；独立 root worker 在持久意图发布后停止、删除原固定实例，切换 root 只读绑定与生成的 Compose，再按固定权限策略重建并检查实际容器、应用、HTTPS、原配置和维护身份。Compose 项目标签及容器标签随事务保留；以后运行 Compose 可能按其配置散列再次重建，仍须使用生成的摘要引用。禁止强制删除、删除原镜像、指定任意 Docker 地址或接管同名未知容器。
 
-前进期限固定为授权后十分钟。失败先持久记录恢复方向，再使用保留的原镜像恢复；恢复不依赖目标签名文件或目标公钥继续可用，不恢复或覆盖业务数据库。若原容器尚未改变且仍就绪，直接确认原实例。未确认的结果保留 `recovery_required`，继续阻止维护释放。进程停止后只能使用原 UUID 显式续办，不重新创建任务；续办不延长期限，也不反转恢复方向。Agent 重启后，可通过 `panel-image-probe --data-dir /srv/nginxpanel --maintenance-id <maintenance-uuid>` 以登记账户重新确认原维护会话，再将返回的 epoch 传给 `panel-image-resume --data-dir /srv/nginxpanel --panel-image <operation-uuid> --maintenance-epoch <epoch>`。若主机重启使原容器产生新的运行代次，只有显式续办能够登记该代次，并转为确认或恢复原镜像。事务成功或完整恢复后，仍由原维护流程显式释放维护会话。
+前进期限固定为授权后十分钟。失败先持久记录恢复方向，再使用保留的原镜像恢复；恢复不依赖目标签名文件或目标公钥继续可用，不恢复或覆盖业务数据库。若原容器尚未改变且仍就绪，直接确认原实例。未确认的结果保留 `recovery_required`，继续阻止维护释放。进程停止后只能使用原 UUID 显式续办，不重新创建任务；续办不延长期限，也不反转恢复方向。Agent 重启后，可通过 `panel-image-probe --data-dir /srv/nginxpanel --maintenance-id <maintenance-uuid>` 以登记账户重新确认原维护会话，再将返回的 epoch 传给 `panel-image-resume --data-dir /srv/nginxpanel --panel-image <operation-uuid> --maintenance-epoch <epoch>`。若主机重启使原容器产生新的运行代次，只有显式续办能够登记该代次，并转为确认或恢复原镜像。事务成功或完整恢复后，由后台自动完成收尾。
 
 网页/API 创建持久任务并在 IPC 前记录派发；断连后仅查询原事务，服务停止须以新幂等键显式续办。root 启动授权按连续序号保存且只领取一次，普通 CLI 不能绕过托管任务续办。若容器不可用导致网页无法访问，先用 `panel-image-probe` 核对原维护会话，再执行 `panel-image-rescue --data-dir /srv/nginxpanel --panel-image <operation-uuid> --maintenance-epoch <epoch>`，以 `local-root` 记录追加同一事务的救援授权；页面恢复后会对账该结果，不新建或重放任务。
 
@@ -176,7 +176,7 @@ sudo /opt/nginxpanel/current/nginxpanel launcher-operation --data-dir /srv/nginx
 
 ## 面板与宿主 Agent 协调更新
 
-目标 Agent 协议变化时，优先使用安装脚本更新部署；以下为专门的本机协调维护接口；API 沿用 `POST /api/v1/panel/updates`，增加 `coordinate_agent: true` 和 `allow_downtime: true`。必须先完成签名面板准备、进入维护，并满足已安装 launcher 与目标准备协议一致及发布允许自动回滚的条件。原生部署无需 launcher 镜像。镜像和 Nginx 不随此操作替换。
+目标 Agent 协议变化时，优先使用安装脚本更新部署；以下为专门的本机协调维护接口；API 沿用 `POST /api/v1/panel/updates`，增加 `coordinate_agent: true` 和 `allow_downtime: true`。必须先完成签名面板准备，并满足已安装 launcher 与目标准备协议一致及发布允许自动回滚的条件。原生部署无需 launcher 镜像。镜像和 Nginx 不随此操作替换。
 
 本机 root 可使用同一独立 systemd 更新服务。初次受理指定新 UUID；恢复只引用原 UUID，不修改目标、不延长原前进期限。省略 epoch 时读取原维护记录的当前 epoch。服务结果不明时先查询，不重复初次命令。
 

@@ -115,7 +115,7 @@ func (s *Service) start(ctx context.Context, p auth.Principal, requestID, key st
 	}
 	s.mu.Unlock()
 	if !allowed {
-		return out, fault.Conflict("维护未就绪，或已有维护及待恢复记录")
+		return out, fault.Conflict("另一个系统操作正在执行或等待恢复，请查看操作记录")
 	}
 	committed := false
 	commitAttempted := false
@@ -128,13 +128,6 @@ func (s *Service) start(ctx context.Context, p auth.Principal, requestID, key st
 			}
 		}
 	}()
-	var count int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM maintenance_sessions").Scan(&count); err != nil {
-		return out, err
-	}
-	if count >= 64 {
-		return out, fault.Conflict("维护记录达到 64 项保留上限，须本机维护")
-	}
 	now := time.Now().Unix()
 	out = Session{TaskID: secure.ID(), OwnerTaskID: ownerTaskID, Phase: "draining", Deadline: now + in.DrainSeconds, CreatedAt: now, UpdatedAt: now}
 	if err = s.insert(ctx, tx, p, out); err != nil {
@@ -183,7 +176,7 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 		return out, err
 	}
 	if !validID(id) {
-		return out, fault.Invalid("维护标识无效")
+		return out, fault.Invalid("操作标识无效")
 	}
 	s.control.Lock()
 	defer s.control.Unlock()
@@ -198,41 +191,41 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 		return out, err
 	}
 	if backups != 0 {
-		return out, fault.Conflict("原备份仍在捕获一致性快照，不能释放维护锁")
+		return out, fault.Conflict("原备份仍在捕获一致性快照，暂时无法完成操作收尾")
 	}
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM nginx_installations i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','cancelled')", id).Scan(&installations); err != nil {
 		return out, err
 	}
 	if installations != 0 {
-		return out, fault.Conflict("原 Nginx 安装任务仍在执行或待恢复，不能释放维护锁")
+		return out, fault.Conflict("原 Nginx 安装任务仍在执行或待恢复，暂时无法完成操作收尾")
 	}
 	var switches int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM nginx_switches i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back')", id).Scan(&switches); err != nil {
 		return out, err
 	}
 	if switches != 0 {
-		return out, fault.Conflict("原 Nginx 切换任务仍在执行或待补偿，不能释放维护锁")
+		return out, fault.Conflict("原 Nginx 切换任务仍在执行或待补偿，暂时无法完成操作收尾")
 	}
 	var updates int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM panel_updates i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back','cancelled')", id).Scan(&updates); err != nil {
 		return out, err
 	}
 	if updates != 0 {
-		return out, fault.Conflict("原面板更新仍在执行或待恢复，不能手工释放维护锁")
+		return out, fault.Conflict("原面板更新仍在执行或待恢复，暂时无法完成操作收尾")
 	}
 	var upgrades int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_upgrades i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back','cancelled')", id).Scan(&upgrades); err != nil {
 		return out, err
 	}
 	if upgrades != 0 {
-		return out, fault.Conflict("原 Agent 升级仍在执行或待恢复，不能释放维护锁")
+		return out, fault.Conflict("原 Agent 升级仍在执行或待恢复，暂时无法完成操作收尾")
 	}
 	var imageUpgrades int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM panel_image_upgrades i JOIN tasks t ON t.id=i.task_id WHERE i.maintenance_id=? AND t.state NOT IN ('succeeded','failed','rolled_back','cancelled')", id).Scan(&imageUpgrades); err != nil {
 		return out, err
 	}
 	if imageUpgrades != 0 {
-		return out, fault.Conflict("原镜像替换仍在执行或待恢复，不能释放维护锁")
+		return out, fault.Conflict("原镜像替换仍在执行或待恢复，暂时无法完成操作收尾")
 	}
 	session, err := readSession(tx.QueryRowContext(ctx, "SELECT "+columns+" FROM maintenance_sessions WHERE task_id=?", id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -407,6 +400,40 @@ func (s *Service) step(ctx context.Context) error {
 		}
 		return nil
 	}
+	// Recover task ownership if the web process stopped between committing the
+	// task and recording its owner. No user action is needed to release a guard
+	// after its installation/update task has reached a terminal state.
+	taskID, taskState, err := s.operationTask(ctx, session.TaskID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && session.OwnerTaskID == "" {
+		if _, err = s.DB.ExecContext(ctx, "UPDATE maintenance_sessions SET owner_task_id=? WHERE task_id=?", taskID, session.TaskID); err != nil {
+			return err
+		}
+		session.OwnerTaskID = taskID
+	}
+	if taskID != "" && session.OwnerTaskID == taskID && (taskState == "succeeded" || taskState == "failed" || taskState == "rolled_back" || taskState == "cancelled") && (session.Phase == "held" || session.Phase == "recovery_required") {
+		session.Phase = "releasing"
+		if err = s.save(ctx, session); err != nil {
+			return err
+		}
+	}
+	if taskID == "" && session.OwnerTaskID == "" && time.Now().Unix() >= session.Deadline && session.Phase == "held" {
+		// An interrupted synchronous cleanup may still own approved unlinks.
+		// Ask the Agent first so its original guard remains resumable on failure.
+		call, cancel := context.WithTimeout(ctx, 3*time.Second)
+		_, releaseErr := s.Agent.ReleaseMaintenance(call, RootRequest{Protocol: protocol.Agent, OperationID: session.TaskID})
+		cancel()
+		if releaseErr != nil {
+			s.publish(session, "held", releaseErr.Error())
+			return nil
+		}
+		session.Phase = "releasing"
+		if err = s.save(ctx, session); err != nil {
+			return err
+		}
+	}
 	if root.ID != "" && root.ID != session.TaskID {
 		session.Phase, session.Error = "recovery_required", "Agent 维护标识与数据库不一致，须本机恢复"
 		return s.save(ctx, session)
@@ -442,6 +469,9 @@ func (s *Service) step(ctx context.Context) error {
 				s.publish(session, "releasing", "Agent 释放确认无效")
 				return nil
 			}
+			s.mu.Lock()
+			s.root = RootStatus{Available: ack.Available, Phase: "open", Epoch: ack.Epoch}
+			s.mu.Unlock()
 		}
 		session.Phase = "released"
 		if session.Error != "" {

@@ -4,9 +4,9 @@
     "title": "网站访问控制",
     "subtitle": "管理网站的 IP 与国家黑白名单",
     "nav": true,
-    "order": 3,
+    "order": 12,
     "symbol": "◈",
-    "group": "网站与安全",
+    "group": "网站服务",
     "software": "nginx"
   }
 }

@@ -74,7 +74,7 @@ type Service struct {
 // The caller must release this guard after committing its durable intent.
 func (s *Service) Held(id string) (RootStatus, func(), error) {
 	if s == nil {
-		return RootStatus{}, nil, fault.Unavailable("维护服务未配置")
+		return RootStatus{}, nil, fault.Unavailable("系统操作服务未配置")
 	}
 	s.control.Lock()
 	s.mu.Lock()
@@ -83,7 +83,7 @@ func (s *Service) Held(id string) (RootStatus, func(), error) {
 	s.mu.Unlock()
 	if !ok {
 		s.control.Unlock()
-		return r, nil, fault.Conflict("须等待原维护会话重新进入 held")
+		return r, nil, fault.Conflict("正在准备当前操作，请稍后重试")
 	}
 	return r, s.control.Unlock, nil
 }
@@ -95,7 +95,7 @@ func (s *Service) Admit() (func(), bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.phase != "open" {
+	if s.session != nil && s.phase != "open" {
 		return nil, false
 	}
 	s.active++
@@ -110,7 +110,7 @@ func (s *Service) Progress() (func(), bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.phase != "open" && s.phase != "draining" {
+	if s.session != nil && s.phase != "open" && s.phase != "draining" {
 		return nil, false
 	}
 	s.active++

@@ -88,7 +88,7 @@ sudo systemctl status nginxpanel.service nginxpanel-agent.service nginxpanel-ngi
 
 主机指标来源显式为 host。Nginx 日志轮转通过安装参数 `--nginx-log-owner agent|external|unconfirmed` 选择唯一所有者，并保存在本机安装意图中；默认 unconfirmed，轮转策略只读。确认本项目日志未被外部 logrotate 等规则管理后可选择 agent；选择 external 时继续由外部管理，不迁出或修改外部规则。DNS 通过安装参数 `--dns-owner` 明确批准实际所有者与宿主机范围，并配置对应 Agent 写入目录；默认 unconfirmed，仅允许读取。普通文件、networkd/resolved、NetworkManager 及 netplan 的实现与已验证系统组合见[验证记录](../../docs/validation.md)，业务页面不能绕过本机所有权和系统沙箱授权。
 
-安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新使用各独立维护入口，Docker 使用下述容器模式。管理脚本提供 `uninstall --keep-data`、`uninstall --purge` 和 `reinstall`；保留数据卸载使用本机材料恢复原版本及服务状态，不能替代跨主机迁移或版本更新。清理范围及阻塞处理见[运维文档](../../docs/operations.md#卸载与重新安装)。
+安装意图和完成标记保存在 `/etc/nginxpanel/install/`。失败保留账户、节点数据和记录，使用相同产物及参数重试；成功复制前不切换程序，配置文件通过同目录暂存和 rename 发布，不覆盖不同的现存内容。源产物变化、外部修改或服务启动失败须先检查原因，不能删除意图文件伪装成新安装。更新从设置中的系统更新或软件商店发起，Docker 使用下述容器模式。管理脚本提供 `uninstall --keep-data`、`uninstall --purge` 和 `reinstall`；保留数据卸载使用本机材料恢复原版本及服务状态，不能替代跨主机迁移或版本更新。清理范围及阻塞处理见[运维文档](../../docs/operations.md#卸载与重新安装)。
 
 组件准备由原生 Agent 的 `--component-scope host` 启用，发行信任须由本机 root 配置，见 [发行准备](../../docs/releases.md)。安装器预建 `/opt/nginxpanel/prepared`（0755）及 `/opt/nginxpanel/release-downloads`（0700），并仅向 Agent unit 开放这两个额外写目录。缺少有效信任时页面报告不可用，不创建默认发布者。原生首次安装通过下述绑定接入，Web 首次安装见下节，运行中版本切换见[组件维护切换](../../docs/releases.md#原生-nginx-运行组件维护切换)。
 
@@ -111,45 +111,25 @@ Nginx 的两个 unit 入口改用 `nginx-runtime`，校验配置后通过 exec �
 
 安装、启动及运行确认仍分开：默认不启用服务，`--start` 才启动；组件页面展示已登记来源、版本、散列及实际运行确认。首次安装不会切换正在运行的实例；运行中切换与恢复使用独立组件切换流程。已有运行范围见[进度清单](../../docs/progress.md)与[验证记录](../../docs/validation.md)。
 
-安装的 Agent 同时以 `--maintenance-scope host` 确认配置维护范围。面板“配置维护”关闭新写入、等待既有任务结束并取得独立 root 锁；手动进入维护后须显式恢复写入，Web 或 Agent 重启不会把锁当作已释放。状态不可核实时保持写入关闭。组件切换和备份使用各自的独立任务，复用此维护准入。
+安装、更新及备份任务自行完成必要的串行处理与收尾。系统不提供手动进入或退出的维护模式；操作中断时在原任务中继续处理，不另建相同操作。
 
 仅面板安装使用 `component-bind --nginx-uninstalled` 保存同一 root 只读记录，其中所有运行文件和签名字段必须为空。Agent 的 `--nginx-binding` 接受这一明确状态并报告执行能力缺失；记录不存在或既有资产丢失仍拒绝启动。`nginx-init` 和 `nginx-runtime` 要求真正的安装绑定，未安装登记不能绕过此检查。`nginx-runtime-status` 是 systemd 的只读条件入口，不执行 Nginx、下载或初始化。
 
 ## 为已部署的面板首次安装 Nginx
 
-仅适用于原生 `--without-nginx` 节点，且 Web/Agent 已启动、Nginx 签名资产已准备。先从“配置维护”进入维护，等待 Web 与独立 Agent 均为 `held`。从 `GET /api/v1/maintenance` 的统一响应 `data.agent.id`、`data.agent.epoch` 取得当前维护标识和 epoch；安装期间保留该维护会话。
+原生 `--without-nginx` 节点可以从“软件应用 → 软件商店 → Nginx”下载并安装。选择版本，设置开机启动及安装后立即启动，然后点击“开始安装”。后台自动准备执行条件，完成后恢复正常操作；关闭页面不影响任务执行。
 
-在目标宿主机使用已登记的面板程序执行，安装操作 UUID 须预先生成并留存：
-
-```sh
-sudo /opt/nginxpanel/current/nginxpanel component-install \
-  --data-dir /srv/nginxpanel \
-  --install-operation '<本次安装UUID>' \
-  --maintenance-id '<当前维护UUID>' \
-  --maintenance-epoch '<当前Agent epoch>' \
-  --release-plan '<已准备的64位计划ID>' \
-  --release-select '<单一Nginx资产ID>' \
-  --install-enable \
-  --install-start
-```
-
-`--install-enable` 仅设置专用服务开机启用，`--install-start` 才立即启动；均省略时只安装并接入 Agent；未请求启动不等于执行停止，运行状态按实际观测返回。信任文件默认 `/etc/nginxpanel/release-trust.json`，使用其他固定信任或预发布资产时须填写相应 `--release-trust`、`--release-prerelease`。模块批准清单固定为 `/etc/nginxpanel/nginx-modules.json`，不下载、编译或安装模块和系统包。
-
-独立 root 进程先保存 `<DATA_DIR>/agent/operations/<安装UUID>.json`，核对原生服务、原未安装登记和签名资产，再初始化受管空基线并检查配置、原子发布安装绑定，按显式选项控制专用 Nginx，并重启 Agent。最后以 Web 身份通过原有 IPC 权限核对 Agent 的安装来源、基线完整性及所请求的运行状态。安装不会接管已有实例或应用迁移业务配置；结果从标准输出返回独立 JSON 记录，失败同时返回非零退出状态。
-
-中断或失败保留原记录并阻止释放维护锁。核对记录阶段及 systemd 日志后，等待原维护会话再次为 `held`，以**相同安装 UUID、维护 UUID、资产和全部原选项**，更新当前 epoch 并增加 `--resume-install` 续办；不能换新操作或资产掩盖未完成安装。绑定尚未发布时，也可保留上述全部原选项并增加 `--abort-install` 显式取消，已生成的受管空基线和审计记录保留。绑定发布后仅允许续办确认，不按未安装状态取消。成功或有效取消后，再从面板显式结束维护。
-
-Web/API 启动见下节。迁移已支持显式授权的自动维护及首次安装；运行中版本切换见下文，已运行及未覆盖范围见[进度清单](../../docs/progress.md)。
+安装只创建空的网站配置，不接管已有实例，不下载、编译或安装额外模块。未完成任务从安装记录中继续或取消；已发布绑定后只允许继续确认。
 
 ## 页面与 API 首次安装
 
 当前原生安装器另登记 `nginxpanel-install@.service` 模板，不设置开机启用。每次 API 安装使用原操作 UUID 对应的固定实例启动独立 root worker，与 Agent 生命周期分开；Web 无需 root 权限或服务管理权限。模板参数与非阻塞启动遵循 [systemd 模板规范](https://github.com/systemd/systemd/blob/main/man/systemd.unit.xml) 和 [systemctl 启动规范](https://github.com/systemd/systemd/blob/main/man/systemctl.xml)，受理启动不等于安装完成。
 
-在“组件准备”完成签名资产准备，进入“配置维护”并等待确认后，打开“组件安装”，选择准备结果与单一 Nginx 资产。开机启动和立即启动分别勾选；安装只创建空基线，业务配置仍通过导入和应用流程发布。未结束的安装任务同时阻止 Web 和 root 释放原维护锁。
+在软件商店完成资产下载，打开 Nginx 安装页，选择已下载版本。开机启动和立即启动分别勾选；安装只创建空基线，业务配置仍通过导入和应用流程发布。未结束的安装任务同时阻止 Web 和 root 释放原维护锁。
 
-对应 API 均返回统一外壳，写入要求 `components.manage`、`system.write`，浏览器还需近期认证；查询另需 `read`。准备结果须属于当前调用者，管理员可按原授权读取；维护会话也须由当前调用者拥有或具备管理员权限。请求使用 `Idempotency-Key`：
+对应 API 均返回统一外壳，写入要求 `components.manage`、`system.write`，浏览器使用当前有效会话；查询另需 `read`。准备结果须属于当前调用者，管理员可按原授权读取。请求使用 `Idempotency-Key`：
 
-- `POST /api/v1/components/installations`：JSON 为 `maintenance_id`、`prepare_task_id`、`asset_id`、`start`、`enable`，后二者必须显式填写。服务器从已完成的准备任务固定计划、清单和信任散列。
+- `POST /api/v1/components/installations`：JSON 为 `prepare_task_id`、`asset_id`、`start`、`enable`，后二者必须显式填写。服务器从已完成的准备任务固定计划、清单和信任散列。
 - `GET /api/v1/components/installations` 及 `GET /api/v1/components/installations/{id}`：读取原任务及独立执行结果。
 - `POST /api/v1/components/installations/{id}/resume`：重新授权十分钟，只续办原资产和原选项。
 - `POST /api/v1/components/installations/{id}/cancel`：仅在确认执行器停止且尚未发布安装登记时取消；已有基线和审计记录保留。

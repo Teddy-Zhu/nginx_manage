@@ -45,7 +45,6 @@ func (s *Server) CreateNginxSwitch(w http.ResponseWriter, r *http.Request, param
 		return
 	}
 	var in struct {
-		MaintenanceID      string  `json:"maintenance_id"`
 		PrepareTaskID      string  `json:"prepare_task_id"`
 		AssetID            string  `json:"asset_id"`
 		AllowDowntime      *bool   `json:"allow_downtime"`
@@ -61,7 +60,7 @@ func (s *Server) CreateNginxSwitch(w http.ResponseWriter, r *http.Request, param
 		s.fail(w, r, fault.Invalid("须明确停机确认和当前完整发布标识"))
 		return
 	}
-	out, err := s.Switches.Create(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, nginxswitch.CreateInput{MaintenanceID: in.MaintenanceID, PrepareTaskID: in.PrepareTaskID, AssetID: in.AssetID, AllowDowntime: *in.AllowDowntime, ExpectedSHA256: in.ExpectedSHA256, ExpectedRevision: *in.ExpectedRevision, ExpectedDeployment: *in.ExpectedDeployment})
+	out, err := s.Switches.Create(r.Context(), p, r.Context().Value(requestIDKey).(string), params.IdempotencyKey, nginxswitch.CreateInput{PrepareTaskID: in.PrepareTaskID, AssetID: in.AssetID, AllowDowntime: *in.AllowDowntime, ExpectedSHA256: in.ExpectedSHA256, ExpectedRevision: *in.ExpectedRevision, ExpectedDeployment: *in.ExpectedDeployment})
 	if err != nil {
 		s.fail(w, r, err)
 		return

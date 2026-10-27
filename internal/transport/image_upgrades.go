@@ -50,7 +50,7 @@ func (s *Server) createImageUpgrade(w http.ResponseWriter, r *http.Request, comp
 			s.fail(w, r, err)
 			return
 		}
-		in.MaintenanceID, in.PrepareTaskID = body.MaintenanceId, body.PrepareTaskId
+		in.PrepareTaskID = body.PrepareTaskId
 		in.AllowDowntime = body.AllowDowntime != nil && *body.AllowDowntime
 	} else if err := decodeLimit(w, r, &in, 4096); err != nil {
 		s.fail(w, r, err)

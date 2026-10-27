@@ -4,9 +4,9 @@
     "title": "日志",
     "subtitle": "查询网站访问、系统与操作日志",
     "nav": true,
-    "order": 12,
+    "order": 41,
     "symbol": "▤",
-    "group": "服务器管理"
+    "group": "系统管理"
   }
 }
 </route>

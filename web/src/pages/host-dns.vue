@@ -4,9 +4,9 @@
     "title": "DNS 设置",
     "subtitle": "设置服务器使用的 DNS 地址",
     "nav": true,
-    "order": 11,
+    "order": 40,
     "symbol": "◎",
-    "group": "服务器管理"
+    "group": "系统管理"
   }
 }
 </route>

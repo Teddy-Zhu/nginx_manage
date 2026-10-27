@@ -4,9 +4,9 @@
     "title": "软件商店",
     "subtitle": "安装和管理所需软件",
     "nav": true,
-    "order": 13,
+    "order": 20,
     "symbol": "◇",
-    "group": "服务器管理"
+    "group": "软件应用"
   }
 }
 </route>

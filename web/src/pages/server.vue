@@ -4,9 +4,9 @@
     "title": "监控",
     "subtitle": "查看 CPU、内存、磁盘与服务状态",
     "nav": true,
-    "order": 10,
+    "order": 1,
     "symbol": "▥",
-    "group": "服务器管理"
+    "group": "概览"
   }
 }
 </route>

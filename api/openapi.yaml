@@ -527,10 +527,6 @@ paths:
     {"get": {"operationId": "getMigrationPush", "parameters": [{"$ref": "#/components/parameters/ID"}], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /migrations/push/{id}/resume:
     {"post": {"operationId": "resumeMigrationPush", "parameters": [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MigrationPushResumeInput"}}}}, "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
-  /maintenance:
-    {"get": {"operationId": "getMaintenance", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}, "post": {"operationId": "enterMaintenance", "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MaintenanceStartInput"}}}}, "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
-  /maintenance/{id}/release:
-    {"post": {"operationId": "releaseMaintenance", "parameters": [{"$ref": "#/components/parameters/ID"}, {"$ref": "#/components/parameters/CSRF"}], "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /components/installations:
     {"get": {"operationId": "listNginxInstallations", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}, "post": {"operationId": "createNginxInstallation", "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/NginxInstallCreateInput"}}}}, "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /components/installations/{id}:
@@ -1980,7 +1976,7 @@ components:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
     RuntimeHistoryFilter:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "kind", "before", "keep"], "properties": {"maintenance_id": {"type": "string"}, "kind": {"type": "string"}, "before": {"type": "integer", "format": "int64"}, "keep": {"type": "integer", "minimum": 2, "maximum": 32}}}
+      {"type": "object", "additionalProperties": false, "required": ["kind", "before", "keep"], "properties": {"kind": {"type": "string"}, "before": {"type": "integer", "format": "int64"}, "keep": {"type": "integer", "minimum": 2, "maximum": 32}}}
     RuntimeHistoryExecuteInput:
       {"type": "object", "additionalProperties": false, "required": ["operation_id", "filter", "sha256"], "properties": {"operation_id": {"type": "string"}, "filter": {"$ref": "#/components/schemas/RuntimeHistoryFilter"}, "sha256": {"type": "string"}}}
     RuntimeHistoryPreview:
@@ -2585,16 +2581,6 @@ components:
       {"type": "object", "required": ["api_key"], "properties": {"api_key": {"type": "string", "minLength": 20, "maxLength": 512}}, "additionalProperties": false}
     MigrationPushTask:
       {"type": "object", "required": ["id", "state", "stage", "mode", "target_url", "target_node", "package_sha256", "error", "created_at", "updated_at", "expires_at", "target_bound", "target_base_version"], "properties": {"id": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "mode": {"type": "string"}, "target_url": {"type": "string"}, "target_node": {"type": "string"}, "package_sha256": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "expires_at": {"type": "integer", "format": "int64"}, "plan": {"$ref": "#/components/schemas/MigrationPlan"}, "target_bound": {"type": "boolean"}, "target_base_version": {"type": "integer", "format": "int64"}}, "additionalProperties": false}
-    MaintenanceStartInput:
-      {"type": "object", "required": ["drain_seconds"], "properties": {"drain_seconds": {"type": "integer", "format": "int64", "minimum": 30, "maximum": 300}}}
-    MaintenanceCompletion:
-      {"type": "object", "required": ["operation_id", "request_sha256", "outcome"], "properties": {"operation_id": {"type": "string"}, "request_sha256": {"type": "string"}, "outcome": {"type": "string"}}}
-    MaintenanceRootStatus:
-      {"type": "object", "required": ["available", "id", "phase", "epoch", "busy", "reason"], "properties": {"available": {"type": "boolean"}, "id": {"type": "string"}, "phase": {"type": "string"}, "epoch": {"type": "string"}, "busy": {"type": "integer", "format": "int64"}, "reason": {"type": "string"}, "completion": {"$ref": "#/components/schemas/MaintenanceCompletion"}}}
-    MaintenanceSession:
-      {"type": "object", "required": ["task_id", "phase", "deadline", "root_requested", "root_epoch", "error", "created_at", "updated_at", "owner_task_id"], "properties": {"task_id": {"type": "string"}, "phase": {"type": "string"}, "deadline": {"type": "integer", "format": "int64"}, "root_requested": {"type": "boolean"}, "root_epoch": {"type": "string"}, "error": {"type": "string"}, "created_at": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "owner_task_id": {"type": "string"}}}
-    MaintenanceView:
-      {"type": "object", "required": ["phase", "active", "agent", "reason"], "properties": {"phase": {"type": "string"}, "active": {"type": "integer", "format": "int64"}, "agent": {"$ref": "#/components/schemas/MaintenanceRootStatus"}, "reason": {"type": "string"}, "session": {"$ref": "#/components/schemas/MaintenanceSession"}}}
     AuditFilter:
       {"type": "object", "additionalProperties": false, "required": ["from", "until"], "properties": {"from": {"type": "integer", "format": "int64"}, "until": {"type": "integer", "format": "int64"}, "principal": {"type": "string", "maxLength": 128}, "action": {"type": "string", "maxLength": 128}, "resource_id": {"type": "string", "maxLength": 128}, "outcome": {"type": "string", "maxLength": 128}, "request_id": {"type": "string", "maxLength": 128}}}
     AuditRow:
@@ -2606,7 +2592,7 @@ components:
     NginxSwitchPlan:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "plan_id", "asset_id", "manifest_sha256", "trust_sha256", "expected_sha256", "expected_revision", "expected_deployment", "prerelease", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "plan_id": {"type": "string"}, "asset_id": {"type": "string"}, "manifest_sha256": {"type": "string"}, "trust_sha256": {"type": "string"}, "expected_sha256": {"type": "string"}, "expected_revision": {"type": "string"}, "expected_deployment": {"type": "string"}, "prerelease": {"type": "boolean"}, "allow_downtime": {"type": "boolean"}}}
     NginxSwitchCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id", "asset_id", "expected_sha256", "expected_revision", "expected_deployment", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "asset_id": {"type": "string"}, "expected_sha256": {"type": "string"}, "expected_revision": {"type": "string"}, "expected_deployment": {"type": "string"}, "allow_downtime": {"type": "boolean"}}}
+      {"type": "object", "additionalProperties": false, "required": ["prepare_task_id", "asset_id", "expected_sha256", "expected_revision", "expected_deployment", "allow_downtime"], "properties": {"prepare_task_id": {"type": "string"}, "asset_id": {"type": "string"}, "expected_sha256": {"type": "string"}, "expected_revision": {"type": "string"}, "expected_deployment": {"type": "string"}, "allow_downtime": {"type": "boolean"}}}
     NginxSwitchAuthorization:
       {"type": "object", "additionalProperties": false, "required": ["operation_id", "epoch", "command", "protocol", "sequence", "authorization_until", "input"], "properties": {"operation_id": {"type": "string"}, "epoch": {"type": "string"}, "command": {"type": "string"}, "protocol": {"type": "integer", "format": "int64"}, "sequence": {"type": "integer", "format": "int64"}, "authorization_until": {"type": "integer", "format": "int64"}, "input": {"$ref": "#/components/schemas/NginxSwitchPlan"}}}
     NginxSwitchComponent:
@@ -2620,7 +2606,7 @@ components:
     NginxInstallPlan:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "plan_id", "asset_id", "manifest_sha256", "trust_sha256", "prerelease", "start", "enable"], "properties": {"maintenance_id": {"type": "string"}, "plan_id": {"type": "string"}, "asset_id": {"type": "string"}, "manifest_sha256": {"type": "string"}, "trust_sha256": {"type": "string"}, "prerelease": {"type": "boolean"}, "start": {"type": "boolean"}, "enable": {"type": "boolean"}}}
     NginxInstallCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id", "asset_id", "start", "enable"], "properties": {"maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "asset_id": {"type": "string"}, "start": {"type": "boolean"}, "enable": {"type": "boolean"}}}
+      {"type": "object", "additionalProperties": false, "required": ["prepare_task_id", "asset_id", "start", "enable"], "properties": {"prepare_task_id": {"type": "string"}, "asset_id": {"type": "string"}, "start": {"type": "boolean"}, "enable": {"type": "boolean"}}}
     NginxInstallOperation:
       {"type": "object", "additionalProperties": false, "required": ["protocol", "sequence", "deadline", "updated_at", "id", "request_hash", "command", "state", "stage", "error", "input", "active", "running"], "properties": {"protocol": {"type": "integer", "format": "int64"}, "sequence": {"type": "integer", "format": "int64"}, "deadline": {"type": "integer", "format": "int64"}, "updated_at": {"type": "integer", "format": "int64"}, "id": {"type": "string"}, "request_hash": {"type": "string"}, "command": {"type": "string"}, "state": {"type": "string"}, "stage": {"type": "string"}, "error": {"type": "string"}, "input": {"$ref": "#/components/schemas/NginxInstallPlan"}, "active": {"type": "boolean"}, "running": {"type": "boolean"}, "installation": {"$ref": "#/components/schemas/NginxInstallation"}}}
     NginxInstallTask:
@@ -2727,9 +2713,9 @@ components:
     ImageUpgradeInput:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "plan_id", "prerelease", "component", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "plan_id": {"type": "string"}, "prerelease": {"type": "boolean"}, "component": {"type": "string", "enum": ["panel-launcher", "nginx"]}, "allow_downtime": {"type": "boolean"}}}
     PanelImageUpgradeCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id"], "properties": {"allow_downtime": {"type": "boolean"}, "maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["prepare_task_id"], "properties": {"allow_downtime": {"type": "boolean"}, "prepare_task_id": {"type": "string"}}}
     NginxImageUpgradeCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "allow_downtime": {"type": "boolean", "enum": [true]}}}
+      {"type": "object", "additionalProperties": false, "required": ["prepare_task_id", "allow_downtime"], "properties": {"prepare_task_id": {"type": "string"}, "allow_downtime": {"type": "boolean", "enum": [true]}}}
     ImageUpgradeAuthorization:
       {"type": "object", "additionalProperties": false, "required": ["protocol", "operation_id", "input", "sequence", "command", "epoch", "authorization_until", "actor", "request_id"], "properties": {"protocol": {"type": "integer", "format": "int64"}, "operation_id": {"type": "string"}, "input": {"$ref": "#/components/schemas/ImageUpgradeInput"}, "sequence": {"type": "integer", "format": "int64"}, "command": {"type": "string"}, "epoch": {"type": "string"}, "authorization_until": {"type": "integer", "format": "int64"}, "actor": {"type": "string"}, "request_id": {"type": "string"}}}
     ImageUpgradeOperation:
@@ -2739,7 +2725,7 @@ components:
     AgentUpgradeInput:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "plan_id", "prerelease"], "properties": {"maintenance_id": {"type": "string"}, "plan_id": {"type": "string"}, "prerelease": {"type": "boolean"}}}
     AgentUpgradeCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id"], "properties": {"maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["prepare_task_id"], "properties": {"prepare_task_id": {"type": "string"}}}
     AgentUpgradeAuthorization:
       {"type": "object", "additionalProperties": false, "required": ["protocol", "operation_id", "input", "sequence", "command", "epoch", "authorization_until", "actor", "request_id"], "properties": {"protocol": {"type": "integer", "format": "int64"}, "operation_id": {"type": "string"}, "input": {"$ref": "#/components/schemas/AgentUpgradeInput"}, "sequence": {"type": "integer", "format": "int64"}, "command": {"type": "string"}, "epoch": {"type": "string"}, "authorization_until": {"type": "integer", "format": "int64"}, "actor": {"type": "string"}, "request_id": {"type": "string"}}}
     AgentUpgradeOperation:
@@ -2749,7 +2735,7 @@ components:
     PanelUpdateInput:
       {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "plan_id", "prerelease", "coordinate_agent", "allow_downtime"], "properties": {"maintenance_id": {"type": "string"}, "plan_id": {"type": "string"}, "prerelease": {"type": "boolean"}, "coordinate_agent": {"type": "boolean"}, "allow_downtime": {"type": "boolean"}}}
     PanelUpdateCreateInput:
-      {"type": "object", "additionalProperties": false, "required": ["maintenance_id", "prepare_task_id"], "properties": {"maintenance_id": {"type": "string"}, "prepare_task_id": {"type": "string"}, "coordinate_agent": {"type": "boolean"}, "allow_downtime": {"type": "boolean"}}}
+      {"type": "object", "additionalProperties": false, "required": ["prepare_task_id"], "properties": {"prepare_task_id": {"type": "string"}, "coordinate_agent": {"type": "boolean"}, "allow_downtime": {"type": "boolean"}}}
     PanelUpdateAuthorization:
       {"type": "object", "additionalProperties": false, "required": ["protocol", "operation_id", "input", "sequence", "command", "epoch", "authorization_until", "actor", "request_id"], "properties": {"protocol": {"type": "integer", "format": "int64"}, "operation_id": {"type": "string"}, "input": {"$ref": "#/components/schemas/PanelUpdateInput"}, "sequence": {"type": "integer", "format": "int64"}, "command": {"type": "string"}, "epoch": {"type": "string"}, "authorization_until": {"type": "integer", "format": "int64"}, "actor": {"type": "string"}, "request_id": {"type": "string"}}}
     PanelUpdateCleanup:

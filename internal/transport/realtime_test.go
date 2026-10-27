@@ -325,7 +325,7 @@ func TestRealtimeSubscriptionValidation(t *testing.T) {
 			}
 		})
 	}
-	if err := server.validateRealtimeRequest(auth.Principal{Scopes: []string{"read"}}, realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"maintenance"}, Resources: []string{"/maintenance"}}}}, 0); err == nil {
+	if err := server.validateRealtimeRequest(auth.Principal{Scopes: []string{"read"}}, realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"software"}, Resources: []string{"/components"}}}}, 0); err == nil {
 		t.Fatal("permission check bypassed")
 	}
 }

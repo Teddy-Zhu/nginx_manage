@@ -1317,38 +1317,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/maintenance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getMaintenance"];
-        put?: never;
-        post: operations["enterMaintenance"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/maintenance/{id}/release": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["releaseMaintenance"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/components/installations": {
         parameters: {
             query?: never;
@@ -3060,7 +3028,6 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         RuntimeHistoryFilter: {
-            maintenance_id: string;
             kind: string;
             /** Format: int64 */
             before: number;
@@ -4591,47 +4558,6 @@ export interface components {
             /** Format: int64 */
             target_base_version: number;
         };
-        MaintenanceStartInput: {
-            /** Format: int64 */
-            drain_seconds: number;
-        };
-        MaintenanceCompletion: {
-            operation_id: string;
-            request_sha256: string;
-            outcome: string;
-        };
-        MaintenanceRootStatus: {
-            available: boolean;
-            id: string;
-            phase: string;
-            epoch: string;
-            /** Format: int64 */
-            busy: number;
-            reason: string;
-            completion?: components["schemas"]["MaintenanceCompletion"];
-        };
-        MaintenanceSession: {
-            task_id: string;
-            phase: string;
-            /** Format: int64 */
-            deadline: number;
-            root_requested: boolean;
-            root_epoch: string;
-            error: string;
-            /** Format: int64 */
-            created_at: number;
-            /** Format: int64 */
-            updated_at: number;
-            owner_task_id: string;
-        };
-        MaintenanceView: {
-            phase: string;
-            /** Format: int64 */
-            active: number;
-            agent: components["schemas"]["MaintenanceRootStatus"];
-            reason: string;
-            session?: components["schemas"]["MaintenanceSession"];
-        };
         AuditFilter: {
             /** Format: int64 */
             from: number;
@@ -4685,7 +4611,6 @@ export interface components {
             allow_downtime: boolean;
         };
         NginxSwitchCreateInput: {
-            maintenance_id: string;
             prepare_task_id: string;
             asset_id: string;
             expected_sha256: string;
@@ -4776,7 +4701,6 @@ export interface components {
             enable: boolean;
         };
         NginxInstallCreateInput: {
-            maintenance_id: string;
             prepare_task_id: string;
             asset_id: string;
             start: boolean;
@@ -4982,11 +4906,9 @@ export interface components {
         };
         PanelImageUpgradeCreateInput: {
             allow_downtime?: boolean;
-            maintenance_id: string;
             prepare_task_id: string;
         };
         NginxImageUpgradeCreateInput: {
-            maintenance_id: string;
             prepare_task_id: string;
             /** @enum {boolean} */
             allow_downtime: true;
@@ -5059,7 +4981,6 @@ export interface components {
             prerelease: boolean;
         };
         AgentUpgradeCreateInput: {
-            maintenance_id: string;
             prepare_task_id: string;
         };
         AgentUpgradeAuthorization: {
@@ -5130,7 +5051,6 @@ export interface components {
             allow_downtime: boolean;
         };
         PanelUpdateCreateInput: {
-            maintenance_id: string;
             prepare_task_id: string;
             coordinate_agent?: boolean;
             allow_downtime?: boolean;
@@ -8975,58 +8895,6 @@ export interface operations {
                 "application/json": components["schemas"]["MigrationPushResumeInput"];
             };
         };
-        responses: {
-            202: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    getMaintenance: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    enterMaintenance: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-                "Idempotency-Key": components["parameters"]["Idempotency"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MaintenanceStartInput"];
-            };
-        };
-        responses: {
-            202: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    releaseMaintenance: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-            };
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             202: components["responses"]["JSON"];
             default: components["responses"]["JSON"];

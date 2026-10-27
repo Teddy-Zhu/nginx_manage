@@ -5,9 +5,9 @@
     "subtitle": "连接和管理其他服务器",
     "nav": true,
     "localOnly": true,
-    "order": 24,
+    "order": 43,
     "symbol": "◎",
-    "group": "数据与设置"
+    "group": "系统管理"
   }
 }
 </route>

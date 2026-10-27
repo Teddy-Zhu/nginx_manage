@@ -4,6 +4,8 @@
 
 已接入离线 `release-verify/release-prepare` 和在线 `release-check/release-fetch` 本机命令。验证入口只验签、检查清单及解析依赖闭包，返回 `state=manifest_verified`；准备入口继续核对归档、宿主机运行依赖并发布不可变副本，返回 `state=prepared`。准备不等于安装、启用或运行；不执行包内程序、脚本或包管理器，也不迁移数据库或切换当前版本。
 
+面向用户的安装、更新、版本切换和文件清理已取消手动维护模式。公共 API 不再提供 `/maintenance` 及其释放入口，创建请求不再接受 `maintenance_id`。以下底层合同中的该字段仅供内部任务串行执行和原事务恢复使用，由服务端生成及释放；本机恢复命令的标识和 epoch 取自原任务回执，不是独立的用户设置。
+
 ## 信任与签名
 
 安装时由本机 root 保存 `/etc/nginxpanel/release-trust.json`。目录及其上层必须由 root 持有且不可被组/其他账户写入，文件不允许链接或额外硬链接。最多 8 个固定公钥；轮换/撤销只修改此本机配置，普通配置迁移不覆盖它。`repository` 为固定 `owner/repo` 身份，也是在线发现和下载唯一仓库。
@@ -347,7 +349,7 @@ API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.s
 
 安装器的固定 Agent 入口允许追加本机 root 批准的 `--dns-scope/--dns-owner` 与 `--firewall-scope/--firewall-owner/--firewall-ssh` 键值参数；只接受既定枚举，每个选项最多一次。升级保留参数原顺序，并继续绑定完整服务文件散列和实际进程参数；程序、数据目录、允许 UID、Nginx 绑定及维护范围等固定字段变更，或未知、重复参数均拒绝升级。
 
-先通过原组件流程检查和准备面板资产，并在系统页取得已排空的维护会话及 Agent epoch，再提交新的操作 UUID：
+日常操作从更新页面发起，服务端自动准备执行条件。以下为已有底层事务的诊断与恢复命令，参数取原任务回执：
 
 ```sh
 sudo /opt/nginxpanel/current/nginxpanel agent-upgrade \
@@ -366,14 +368,14 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 
 程序发布在 root 持有的 `/opt/nginxpanel/agent-releases/<程序SHA-256>`，不覆盖旧目录，保留最多八项（含本次暂存），单程序最多 192 MiB；审计在节点私有 `agent/operations`，不进入业务迁移或灾备包。原安装器同时登记固定 worker；自定义 drop-in、缺失模板或未登记服务须本机处理，不能以首次安装器覆盖现有安装。Agent/数据库/归档为 114/34/6；本轮只完成实现与源码集成审阅，构建、测试、服务控制和故障注入待 P5 隔离环境集中验证。
 
-网页进入「Agent 升级」，选择当前用户可读取且已完成签名暂存的面板准备任务，在原维护会话处于 held 时提交。`POST /api/v1/agent/upgrades` 接收 `maintenance_id` 和 `prepare_task_id`，要求 `components.manage`、`system.write`、有效登录会话及幂等键；浏览器同时要求 CSRF。`GET /api/v1/agent/upgrades` 与 `GET /api/v1/agent/upgrades/{id}` 读取本人任务，`auth.manage` 可读取其他用户任务。`POST /api/v1/agent/upgrades/{id}/resume` 要求相同写权限、原维护会话、当前 epoch、新幂等授权和已停止且未结束的原 root 事务。返回统一使用 `code/message/data/request_id/node_id`，成功受理为 HTTP 202。远程节点仅转发这些明确资源，并核对相同权限。
+网页进入「Agent 升级」，选择当前用户可读取且已完成签名暂存的面板准备任务，直接提交。`POST /api/v1/agent/upgrades` 接收 `prepare_task_id`，要求 `components.manage`、`system.write`、有效登录会话及幂等键；浏览器同时要求 CSRF。`GET /api/v1/agent/upgrades` 与 `GET /api/v1/agent/upgrades/{id}` 读取本人任务，`auth.manage` 可读取其他用户任务。`POST /api/v1/agent/upgrades/{id}/resume` 要求相同写权限、原维护会话、当前 epoch、新幂等授权和已停止且未结束的原 root 事务。返回统一使用 `code/message/data/request_id/node_id`，成功受理为 HTTP 202。远程节点仅转发这些明确资源，并核对相同权限。
 
-任务和授权加密保存，单次启动授权五分钟，root 最多保留 32 次连续授权，本地每任务最多保留 64 次请求、共 64 项任务。派发标记先提交，HTTP 断开、Agent 重启或服务启动结果不明后只查询原记录；曾提交但 root 记录缺失时须本机处理。源备份隔离任务不得在恢复目标提交或续办。面板更新与 Agent 升级不能并行；事务确认后在配置维护页显式释放维护锁。首次安装器预建 root 程序发布目录，并登记 `/etc/tmpfiles.d/nginxpanel.conf` 以在开机时创建共享安装锁目录；Agent 服务只获得发布子目录写入权，程序指针仍由独立升级服务切换。
+任务和授权加密保存，单次启动授权五分钟，root 最多保留 32 次连续授权，本地每任务最多保留 64 次请求、共 64 项任务。派发标记先提交，HTTP 断开、Agent 重启或服务启动结果不明后只查询原记录；曾提交但 root 记录缺失时须本机处理。源备份隔离任务不得在恢复目标提交或续办。面板更新与 Agent 升级不能并行；事务确认后自动完成收尾。首次安装器预建 root 程序发布目录，并登记 `/etc/tmpfiles.d/nginxpanel.conf` 以在开机时创建共享安装锁目录；Agent 服务只获得发布子目录写入权，程序指针仍由独立升级服务切换。
 
 
 ### 面板运行镜像替换
 
-容器面板在“运行镜像”页选择已完成的签名面板准备任务，持有配置维护会话后更换 launcher 镜像。当前应用、前端选择与业务数据库保留；运行镜像须已在目标主机按摘要准备。统一 API 为 `GET/POST /api/v1/panel/images/upgrades`、`GET /api/v1/panel/images/upgrades/{id}` 和 `POST /api/v1/panel/images/upgrades/{id}/resume`，创建字段为 `maintenance_id`、`prepare_task_id`。写请求需要组件管理、系统写权限、有效登录会话或显式授权 Token、幂等键；远程节点使用已登记的同资源转发路径。
+容器面板在“运行镜像”页选择已完成的签名面板准备任务，由后台准备执行条件后更换 launcher 镜像。当前应用、前端选择与业务数据库保留；运行镜像须已在目标主机按摘要准备。统一 API 为 `GET/POST /api/v1/panel/images/upgrades`、`GET /api/v1/panel/images/upgrades/{id}` 和 `POST /api/v1/panel/images/upgrades/{id}/resume`，创建字段为 `prepare_task_id`。写请求需要组件管理、系统写权限、有效登录会话或显式授权 Token、幂等键；远程节点使用已登记的同资源转发路径。
 
 持久任务与 root 意图分别保存，签名清单决定镜像地址，禁止调用者指定 Docker 地址、宿主路径、任意镜像或发布信任。启动/续办授权有效期五分钟、连续保存并仅领取一次；断连、进程停止和结果不明只查询原 UUID，显式续办不延长原十分钟前进期限。独立 worker 的失败恢复和本机救援见 [Docker 部署说明](../deploy/docker/README.md#面板容器与-launcher-对端核对)。页面退出不取消 worker，替换期间页面可能断开，恢复连接后继续查询原任务。
 
@@ -381,7 +383,7 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 
 ## 签名镜像拉取
 
-完成面板签名准备后，组件页展示同一发行的本机架构镜像。选择“拉取镜像”会创建独立 `component.pull` 持久任务；API 为 `POST /api/v1/components/images/pull`，请求使用 `ComponentCreateInput`，其中 `prepare_task_id` 为本人的成功准备任务、`check_task_id` 为空，`input.action=pull`、`input.image_id=panel-launcher|nginx`，其余标签、资产、计划与签名散列须和准备结果一致。写入口要求 `components.manage`、`system.write`、有效登录会话或显式授权 Token、幂等键，远程节点沿登记路径转发。镜像拉取应在进入配置维护之前完成。
+完成面板签名准备后，组件页展示同一发行的本机架构镜像。选择“拉取镜像”会创建独立 `component.pull` 持久任务；API 为 `POST /api/v1/components/images/pull`，请求使用 `ComponentCreateInput`，其中 `prepare_task_id` 为本人的成功准备任务、`check_task_id` 为空，`input.action=pull`、`input.image_id=panel-launcher|nginx`，其余标签、资产、计划与签名散列须和准备结果一致。写入口要求 `components.manage`、`system.write`、有效登录会话或显式授权 Token、幂等键，远程节点沿登记路径转发。镜像拉取应在应用更新之前完成。
 
 root 重新核对准备目录及当前发布信任，从签名清单推导固定 GHCR 摘要和 Linux amd64/arm64 平台；不接受用户镜像地址、Docker 地址或 Registry 凭据。当前入口下载可公开访问的发行镜像；私有包访问策略须由发布方在发布前安排。通过固定 Docker Engine API 1.47 读取下载进度，十分钟期限、8 MiB 总进度、64 KiB 单条进度与 65,536 条记录上限；HTTP 成功但流中报错也判失败。下载后核对实际镜像摘要、配置、架构、卷声明及签名启动器字节，过程只创建并删除未启动的元数据容器。已有镜像核对通过则复用，仅权威镜像缺失允许下载。
 

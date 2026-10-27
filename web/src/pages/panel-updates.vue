@@ -4,7 +4,8 @@
     "title": "系统更新",
     "subtitle": "检查版本与更新记录",
     "order": 30,
-    "localOnly": true
+    "localOnly": true,
+    "parent": "/settings"
   }
 }
 </route>

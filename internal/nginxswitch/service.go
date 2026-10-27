@@ -142,13 +142,23 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key s
 	if err := p.Require("components.manage", "system.write"); err != nil {
 		return out, err
 	}
-	if !validKey(key) || !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) || !assetValue.MatchString(in.AssetID) || !in.AllowDowntime || !sha256Value.MatchString(in.ExpectedSHA256) || in.ExpectedRevision != "" && !components.ValidID(in.ExpectedRevision) || in.ExpectedDeployment != "" && !components.ValidID(in.ExpectedDeployment) {
+	if !validKey(key) || in.MaintenanceID != "" && !components.ValidID(in.MaintenanceID) || !components.ValidID(in.PrepareTaskID) || !assetValue.MatchString(in.AssetID) || !in.AllowDowntime || !sha256Value.MatchString(in.ExpectedSHA256) || in.ExpectedRevision != "" && !components.ValidID(in.ExpectedRevision) || in.ExpectedDeployment != "" && !components.ValidID(in.ExpectedDeployment) {
 		return out, fault.Invalid("切换任务参数或幂等键无效")
 	}
 	hash := requestHash("nginx.switch", in)
 	replay := func() (Task, bool, error) { return s.replay(ctx, p, key, hash) }
 	if t, found, err := replay(); err != nil || found {
 		return t, err
+	}
+	if in.MaintenanceID == "" {
+		var task Task
+		err := s.Maintenance.Submit(ctx, p, requestID, func(id string) (string, error) {
+			in.MaintenanceID = id
+			var err error
+			task, err = s.Create(ctx, p, requestID, key, in)
+			return task.ID, err
+		})
+		return task, err
 	}
 	if s.Agent == nil || s.Components == nil {
 		return out, fault.Unavailable("切换执行器未配置")

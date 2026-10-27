@@ -21,7 +21,7 @@ import (
 
 var realtimeScopes = map[string][]string{
 	"tasks": {"read"}, "monitoring": {"read"}, "notifications": {"read"},
-	"maintenance": {"read", "system.write"}, "backups": {"read", "backup.export"},
+	"backups":  {"read", "backup.export"},
 	"firewall": {"read", "security.write"}, "listener": {"read", "system.write"}, "version": {"read"},
 	"dns": {"read"}, "fail2ban": {"read"}, "logs": {"read"}, "nginx": {"read"}, "nodes": {"read", "nodes.manage"},
 	"software": {"read", "components.manage"},
@@ -118,11 +118,6 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 			err = encoder.Encode(value)
 		}
 		return hex.EncodeToString(hash.Sum(nil)), err
-	case "maintenance":
-		if s.Maintenance == nil {
-			return "", errors.New("maintenance unavailable")
-		}
-		value = s.Maintenance.View()
 	case "backups":
 		// Policy and file cleanup do not always transition the generic task.
 		rows, e := s.DB.QueryContext(ctx, `SELECT b.task_id,t.state,t.stage,b.archive_size,b.deleted_at,t.last_error FROM backup_records b JOIN tasks t ON t.id=b.task_id ORDER BY b.task_id`)

@@ -6,7 +6,7 @@
     "nav": true,
     "order": 0,
     "symbol": "◫",
-    "group": "常用功能"
+    "group": "概览"
   }
 }
 </route>

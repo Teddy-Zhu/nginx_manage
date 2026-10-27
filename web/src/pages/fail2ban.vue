@@ -4,9 +4,9 @@
     "title": "登录防护",
     "subtitle": "自动封禁多次认证失败的 IP",
     "nav": true,
-    "order": 6,
+    "order": 31,
     "symbol": "◈",
-    "group": "网站与安全",
+    "group": "安全防护",
     "software": "fail2ban"
   }
 }

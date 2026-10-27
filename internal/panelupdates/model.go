@@ -177,7 +177,7 @@ type Agent interface {
 type CreateInput struct {
 	CoordinateAgent bool   `json:"coordinate_agent"`
 	AllowDowntime   bool   `json:"allow_downtime"`
-	MaintenanceID   string `json:"maintenance_id"`
+	MaintenanceID   string `json:"-"`
 	PrepareTaskID   string `json:"prepare_task_id"`
 }
 

@@ -4,9 +4,9 @@
     "title": "网站与代理",
     "subtitle": "创建网站和反向代理，管理域名与 HTTPS",
     "nav": true,
-    "order": 1,
+    "order": 10,
     "symbol": "⌘",
-    "group": "网站与安全",
+    "group": "网站服务",
     "software": "nginx"
   }
 }

@@ -146,7 +146,7 @@ type Host interface {
 	SubmitNginxSwitch(context.Context, Request) (Operation, error)
 }
 type CreateInput struct {
-	MaintenanceID      string `json:"maintenance_id"`
+	MaintenanceID      string `json:"-"`
 	PrepareTaskID      string `json:"prepare_task_id"`
 	AssetID            string `json:"asset_id"`
 	AllowDowntime      bool   `json:"allow_downtime"`

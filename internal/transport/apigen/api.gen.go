@@ -3796,7 +3796,6 @@ type AgentUpgradeAuthorization struct {
 
 // AgentUpgradeCreateInput defines model for AgentUpgradeCreateInput.
 type AgentUpgradeCreateInput struct {
-	MaintenanceId string `json:"maintenance_id"`
 	PrepareTaskId string `json:"prepare_task_id"`
 }
 
@@ -7029,51 +7028,6 @@ type LogSource struct {
 	Sensitive    bool   `json:"sensitive"`
 }
 
-// MaintenanceCompletion defines model for MaintenanceCompletion.
-type MaintenanceCompletion struct {
-	OperationId   string `json:"operation_id"`
-	Outcome       string `json:"outcome"`
-	RequestSha256 string `json:"request_sha256"`
-}
-
-// MaintenanceRootStatus defines model for MaintenanceRootStatus.
-type MaintenanceRootStatus struct {
-	Available  bool                   `json:"available"`
-	Busy       int64                  `json:"busy"`
-	Completion *MaintenanceCompletion `json:"completion,omitempty"`
-	Epoch      string                 `json:"epoch"`
-	Id         string                 `json:"id"`
-	Phase      string                 `json:"phase"`
-	Reason     string                 `json:"reason"`
-}
-
-// MaintenanceSession defines model for MaintenanceSession.
-type MaintenanceSession struct {
-	CreatedAt     int64  `json:"created_at"`
-	Deadline      int64  `json:"deadline"`
-	Error         string `json:"error"`
-	OwnerTaskId   string `json:"owner_task_id"`
-	Phase         string `json:"phase"`
-	RootEpoch     string `json:"root_epoch"`
-	RootRequested bool   `json:"root_requested"`
-	TaskId        string `json:"task_id"`
-	UpdatedAt     int64  `json:"updated_at"`
-}
-
-// MaintenanceStartInput defines model for MaintenanceStartInput.
-type MaintenanceStartInput struct {
-	DrainSeconds int64 `json:"drain_seconds"`
-}
-
-// MaintenanceView defines model for MaintenanceView.
-type MaintenanceView struct {
-	Active  int64                 `json:"active"`
-	Agent   MaintenanceRootStatus `json:"agent"`
-	Phase   string                `json:"phase"`
-	Reason  string                `json:"reason"`
-	Session *MaintenanceSession   `json:"session,omitempty"`
-}
-
 // ManagementListenerConfig defines model for ManagementListenerConfig.
 type ManagementListenerConfig struct {
 	AllowedSources       []string `json:"allowed_sources"`
@@ -7666,7 +7620,6 @@ type NginxFeatures struct {
 // NginxImageUpgradeCreateInput defines model for NginxImageUpgradeCreateInput.
 type NginxImageUpgradeCreateInput struct {
 	AllowDowntime NginxImageUpgradeCreateInputAllowDowntime `json:"allow_downtime"`
-	MaintenanceId string                                    `json:"maintenance_id"`
 	PrepareTaskId string                                    `json:"prepare_task_id"`
 }
 
@@ -7677,7 +7630,6 @@ type NginxImageUpgradeCreateInputAllowDowntime bool
 type NginxInstallCreateInput struct {
 	AssetId       string `json:"asset_id"`
 	Enable        bool   `json:"enable"`
-	MaintenanceId string `json:"maintenance_id"`
 	PrepareTaskId string `json:"prepare_task_id"`
 	Start         bool   `json:"start"`
 }
@@ -7788,7 +7740,6 @@ type NginxSwitchCreateInput struct {
 	ExpectedDeployment string `json:"expected_deployment"`
 	ExpectedRevision   string `json:"expected_revision"`
 	ExpectedSha256     string `json:"expected_sha256"`
-	MaintenanceId      string `json:"maintenance_id"`
 	PrepareTaskId      string `json:"prepare_task_id"`
 }
 
@@ -8123,7 +8074,6 @@ type PairingOffer struct {
 // PanelImageUpgradeCreateInput defines model for PanelImageUpgradeCreateInput.
 type PanelImageUpgradeCreateInput struct {
 	AllowDowntime *bool  `json:"allow_downtime,omitempty"`
-	MaintenanceId string `json:"maintenance_id"`
 	PrepareTaskId string `json:"prepare_task_id"`
 }
 
@@ -8154,7 +8104,6 @@ type PanelUpdateCleanup struct {
 type PanelUpdateCreateInput struct {
 	AllowDowntime   *bool  `json:"allow_downtime,omitempty"`
 	CoordinateAgent *bool  `json:"coordinate_agent,omitempty"`
-	MaintenanceId   string `json:"maintenance_id"`
 	PrepareTaskId   string `json:"prepare_task_id"`
 }
 
@@ -8265,10 +8214,9 @@ type RuntimeHistoryExecuteInput struct {
 
 // RuntimeHistoryFilter defines model for RuntimeHistoryFilter.
 type RuntimeHistoryFilter struct {
-	Before        int64  `json:"before"`
-	Keep          int    `json:"keep"`
-	Kind          string `json:"kind"`
-	MaintenanceId string `json:"maintenance_id"`
+	Before int64  `json:"before"`
+	Keep   int    `json:"keep"`
+	Kind   string `json:"kind"`
 }
 
 // RuntimeHistoryPreview defines model for RuntimeHistoryPreview.
@@ -9050,19 +8998,6 @@ type StreamLogsParams struct {
 	Query string `form:"query" json:"query"`
 }
 
-// EnterMaintenanceParams defines parameters for EnterMaintenance.
-type EnterMaintenanceParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
-	IdempotencyKey Idempotency `json:"Idempotency-Key"`
-}
-
-// ReleaseMaintenanceParams defines parameters for ReleaseMaintenance.
-type ReleaseMaintenanceParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
-}
-
 // ApplyManagementListenerParams defines parameters for ApplyManagementListener.
 type ApplyManagementListenerParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -9697,9 +9632,6 @@ type SetLogPolicyJSONRequestBody = LogPolicyInput
 
 // QueryLogsJSONRequestBody defines body for QueryLogs for application/json ContentType.
 type QueryLogsJSONRequestBody = LogQuery
-
-// EnterMaintenanceJSONRequestBody defines body for EnterMaintenance for application/json ContentType.
-type EnterMaintenanceJSONRequestBody = MaintenanceStartInput
 
 // ApplyManagementListenerJSONRequestBody defines body for ApplyManagementListener for application/json ContentType.
 type ApplyManagementListenerJSONRequestBody = ManagementListenerInput
@@ -10400,15 +10332,6 @@ type ServerInterface interface {
 
 	// (GET /logs/stream)
 	StreamLogs(w http.ResponseWriter, r *http.Request, params StreamLogsParams)
-
-	// (GET /maintenance)
-	GetMaintenance(w http.ResponseWriter, r *http.Request)
-
-	// (POST /maintenance)
-	EnterMaintenance(w http.ResponseWriter, r *http.Request, params EnterMaintenanceParams)
-
-	// (POST /maintenance/{id}/release)
-	ReleaseMaintenance(w http.ResponseWriter, r *http.Request, id ID, params ReleaseMaintenanceParams)
 
 	// (GET /management/listener)
 	GetManagementListener(w http.ResponseWriter, r *http.Request)
@@ -15972,134 +15895,6 @@ func (siw *ServerInterfaceWrapper) StreamLogs(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
-// GetMaintenance operation middleware
-func (siw *ServerInterfaceWrapper) GetMaintenance(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetMaintenance(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// EnterMaintenance operation middleware
-func (siw *ServerInterfaceWrapper) EnterMaintenance(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params EnterMaintenanceParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey Idempotency
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.EnterMaintenance(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ReleaseMaintenance operation middleware
-func (siw *ServerInterfaceWrapper) ReleaseMaintenance(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ReleaseMaintenanceParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ReleaseMaintenance(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetManagementListener operation middleware
 func (siw *ServerInterfaceWrapper) GetManagementListener(w http.ResponseWriter, r *http.Request) {
 
@@ -20765,9 +20560,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/push", wrapper.StartMigrationPush)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations/push/{id}", wrapper.GetMigrationPush)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/migrations/push/{id}/resume", wrapper.ResumeMigrationPush)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/maintenance", wrapper.GetMaintenance)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance", wrapper.EnterMaintenance)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/maintenance/{id}/release", wrapper.ReleaseMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/installations", wrapper.ListNginxInstallations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/installations", wrapper.CreateNginxInstallation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/installations/{id}", wrapper.GetNginxInstallation)

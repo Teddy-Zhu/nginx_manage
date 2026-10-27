@@ -5,7 +5,7 @@
     "subtitle": "备份系统数据，或从备份恢复",
     "nav": true,
     "localOnly": true,
-    "order": 20,
+    "order": 50,
     "symbol": "▣",
     "group": "数据与设置"
   }
@@ -85,11 +85,11 @@ const stages: Record<string, string> = {
   queued: "已排队",
   draining: "等待写入完成",
   capturing: "捕获快照",
-  releasing: "释放维护",
+  releasing: "完成收尾",
   encrypting: "正在加密",
   publishing: "发布归档",
   ready: "可下载",
-  release_failed: "正在清理并释放维护",
+  release_failed: "正在清理并完成收尾",
   cleanup_failed: "清理待处理",
   failed: "已失败",
   deleted: "文件已删除",

@@ -4,9 +4,9 @@
     "title": "任务与操作记录",
     "subtitle": "查看任务进度与历史操作",
     "nav": true,
-    "order": 22,
+    "order": 42,
     "symbol": "☷",
-    "group": "数据与设置"
+    "group": "系统管理"
   }
 }
 </route>

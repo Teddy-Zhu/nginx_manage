@@ -29,28 +29,16 @@ import {
   apiError,
   type ComponentOverview,
   type ComponentTask,
-  type MaintenanceView,
   type NginxInstallTask,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 const api = useNodeAPI(),
   route = useRoute();
-const waiting = ref(false),
-  ownedSession = ref(""),
-  ownTask = ref("");
-const installInput = ref<{
-  prepare_task_id: string;
-  asset_id: string;
-  start: boolean;
-  enable: boolean;
-} | null>(null);
-
 const session = useSession(),
   { run, busy } = useAction();
 let keyFor = useIdempotency();
 const overview = ref<ComponentOverview | null>(null),
-  maintenance = ref<MaintenanceView | null>(null),
   preparations = ref<ComponentTask[]>([]),
   tasks = ref<NginxInstallTask[]>([]),
   error = ref("");
@@ -65,13 +53,6 @@ const canWrite = computed(
   () =>
     session.me?.scopes.includes("system.write") &&
     session.me.scopes.includes("components.manage"),
-);
-const held = computed(
-  () =>
-    maintenance.value?.phase === "held" &&
-    maintenance.value.agent.phase === "held" &&
-    maintenance.value.agent.id === maintenance.value.session?.task_id &&
-    maintenance.value.agent.epoch === maintenance.value.session?.root_epoch,
 );
 const prepared = computed(() =>
   preparations.value.filter(
@@ -106,9 +87,6 @@ const active = computed(() =>
 const canCreate = computed(
   () =>
     canWrite.value &&
-    !!maintenance.value &&
-    (maintenance.value.phase === "open" || held.value) &&
-    !waiting.value &&
     overview.value?.install_available &&
     chosen.value &&
     assets.value.some((a) => a.id === asset.value) &&
@@ -137,7 +115,7 @@ const stages: Record<string, string> = {
   cancelled_before_binding: "已取消安装",
   control_pending: "等待控制确认",
   authorization_expired: "授权已过期",
-  maintenance_unconfirmed: "等待维护确认",
+  maintenance_unconfirmed: "等待操作准备",
   agent_unconfirmed: "状态未确认",
   operation_missing: "独立记录缺失",
   control_rejected: "控制操作未执行",
@@ -149,8 +127,6 @@ function date(n: number) {
 function canControl(t: NginxInstallTask) {
   return !!(
     canWrite.value &&
-    held.value &&
-    maintenance.value?.agent.id === t.input.maintenance_id &&
     !busy.value &&
     t.state === "recovery_required" &&
     t.result &&
@@ -170,18 +146,14 @@ async function load() {
   reading.value = true;
   controller = new AbortController();
   try {
-    const [source, preparedTasks, items, view] = await Promise.all([
+    const [source, preparedTasks, items] = await Promise.all([
       api.components(controller.signal),
       api.componentTasks(controller.signal),
       api.nginxInstallations(controller.signal),
-      canWrite.value
-        ? api.maintenance(controller.signal)
-        : Promise.resolve(null),
     ]);
     overview.value = source;
     preparations.value = preparedTasks;
     tasks.value = items;
-    maintenance.value = view;
     error.value = "";
     if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
@@ -192,86 +164,25 @@ async function load() {
   } finally {
     reading.value = false;
   }
-  if (
-    !closed &&
-    waiting.value &&
-    maintenance.value &&
-    ["failed", "recovery_required", "unavailable"].includes(
-      maintenance.value.phase,
-    )
-  ) {
-    waiting.value = false;
-    error.value = "安装准备未完成，请前往设置中的系统维护查看并恢复。";
-  }
-  if (!closed && waiting.value && held.value && !busy.value)
-    await submitInstall();
-  if (
-    !closed &&
-    ownedSession.value &&
-    ownTask.value &&
-    !active.value &&
-    !busy.value &&
-    tasks.value.some(
-      (task) => task.id === ownTask.value && task.state === "succeeded",
-    )
-  ) {
-    const id = ownedSession.value;
-    ownedSession.value = "";
-    await run(async () => {
-      await api.releaseMaintenance(id);
-    });
-  }
 }
+
 function choose(id: string) {
   selected.value = id;
   asset.value = assets.value[0]?.id ?? "";
 }
 async function install() {
-  if (!canCreate.value || !maintenance.value) return;
-  installInput.value = {
+  if (!canCreate.value) return;
+  const input = {
     prepare_task_id: selected.value,
     asset_id: asset.value,
     start: start.value,
     enable: enable.value,
   };
   await run(async () => {
-    if (maintenance.value?.phase === "open") {
-      const input = { drain_seconds: 120 };
-      const session = await api.enterMaintenance(input, keyFor(input));
-      ownedSession.value = session.task_id;
-    }
-    waiting.value = true;
-  });
-  await load();
-}
-async function submitInstall() {
-  if (
-    !waiting.value ||
-    !held.value ||
-    !installInput.value ||
-    !maintenance.value ||
-    busy.value
-  )
-    return;
-  const input = {
-    ...installInput.value,
-    maintenance_id: maintenance.value.agent.id,
-  };
-  // A failed or uncertain submission requires an explicit retry with the same
-  // idempotency key; polling must never keep submitting installation requests.
-  waiting.value = false;
-  await run(async () => {
     const task = await api.createNginxInstallation(input, keyFor(input));
-    ownTask.value = task.id;
     tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)];
     keyFor = useIdempotency();
   }, "已开始安装 Nginx");
-}
-async function finish() {
-  if (!maintenance.value?.session || active.value || waiting.value) return;
-  await run(async () => {
-    await api.releaseMaintenance(maintenance.value!.session!.task_id);
-  });
   await load();
 }
 async function control(t: NginxInstallTask, command: "resume" | "cancel") {
@@ -298,12 +209,7 @@ onUnmounted(() => {
   controller?.abort();
   if (timer) clearInterval(timer);
 });
-useLiveRefresh(
-  api,
-  ["tasks", "software", "maintenance"],
-  load,
-  () => reading.value,
-);
+useLiveRefresh(api, ["tasks", "software"], load, () => reading.value);
 </script>
 <template>
   <div class="page-stack">
@@ -324,17 +230,11 @@ useLiveRefresh(
         title="当前无法安装"
         >请检查软件安装条件。</NAlert
       >
-      <p v-if="!overview?.installation" class="muted">
-        安装期间会暂时停止配置修改，现有服务继续运行。
-      </p>
-      <NAlert v-if="waiting" type="info"
-        >正在等待当前任务结束，随后开始安装。请保持此页面打开。</NAlert
-      >
       <div v-if="canWrite" class="grid-2">
         <NFormItem label="安装版本"
           ><NSelect
             :value="selected"
-            :disabled="waiting || active"
+            :disabled="active"
             :options="
               prepared.map((t) => ({
                 label: t.result?.release?.tag ?? '已下载版本',
@@ -346,7 +246,7 @@ useLiveRefresh(
         <NFormItem v-if="assets.length > 1" label="安装版本"
           ><NSelect
             v-model:value="asset"
-            :disabled="waiting || active"
+            :disabled="active"
             :options="
               assets.map((a) => ({
                 label: a.version,
@@ -355,9 +255,9 @@ useLiveRefresh(
             "
         /></NFormItem>
         <section>
-          <NCheckbox v-model:checked="enable" :disabled="waiting || active"
+          <NCheckbox v-model:checked="enable" :disabled="active"
             >开机启动</NCheckbox
-          ><NCheckbox v-model:checked="start" :disabled="waiting || active"
+          ><NCheckbox v-model:checked="start" :disabled="active"
             >安装后立即启动</NCheckbox
           >
         </section>
@@ -371,18 +271,12 @@ useLiveRefresh(
       <div v-if="canWrite" class="toolbar">
         <NPopconfirm @positive-click="install"
           ><template #trigger
-            ><NButton type="primary" :disabled="!canCreate" :loading="busy">{{
-              waiting ? "准备安装中…" : "开始安装"
-            }}</NButton></template
-          >确认安装 Nginx？安装期间将暂停配置修改。</NPopconfirm
+            ><NButton type="primary" :disabled="!canCreate" :loading="busy"
+              >开始安装</NButton
+            ></template
+          >确认安装 Nginx？</NPopconfirm
         >
       </div>
-      <NButton
-        v-if="held && !active && !waiting"
-        :loading="busy"
-        @click="finish"
-        >结束安装维护，恢复配置修改</NButton
-      >
     </section>
     <section class="panel page-stack">
       <h2>安装记录</h2>
