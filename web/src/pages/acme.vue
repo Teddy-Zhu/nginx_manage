@@ -350,12 +350,14 @@ onUnmounted(() => {
   secrets.value = {};
   window.removeEventListener("beforeunload", beforeUnload);
 });
-useLiveRefresh(api, ["tasks"], () => {
-  if (!busy.value && !accountEditing.value && !credentialEditing.value)
-    return run(async () => {
-      accounts.value = await api.acmeAccounts();
-    });
-});
+useLiveRefresh(
+  api,
+  ["tasks"],
+  () => run(async () => {
+    accounts.value = await api.acmeAccounts();
+  }),
+  () => busy.value || accountEditing.value || credentialEditing.value,
+);
 </script>
 
 <template>

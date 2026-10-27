@@ -13,7 +13,7 @@ export function useSoftwareOperations(changed: () => Promise<void> | void) {
   const api = useNodeAPI(),
     session = useSession(),
     { run, busy, message } = useAction();
-  let reading = false;
+  const reading = ref(false);
   const tasks = ref<ComponentTask[]>([]),
     lastID = ref("");
   const permitted = computed(() =>
@@ -30,8 +30,8 @@ export function useSoftwareOperations(changed: () => Promise<void> | void) {
   );
   const last = computed(() => tasks.value.find((t) => t.id === lastID.value));
   async function refresh() {
-    if (reading || !session.me?.scopes.includes("components.manage")) return;
-    reading = true;
+    if (reading.value || !session.me?.scopes.includes("components.manage")) return;
+    reading.value = true;
     try {
       tasks.value = await api.componentTasks();
     } catch (error) {
@@ -39,7 +39,7 @@ export function useSoftwareOperations(changed: () => Promise<void> | void) {
         error instanceof Error ? error.message : "无法读取操作状态",
       );
     } finally {
-      reading = false;
+      reading.value = false;
     }
   }
   async function submit(request: SoftwareRequest, title: string) {
@@ -67,7 +67,7 @@ export function useSoftwareOperations(changed: () => Promise<void> | void) {
         void changed();
     },
   );
-  useLiveRefresh(api, ["tasks"], refresh);
+  useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
   onMounted(refresh);
   return { api, run, busy, permitted, active, last, submit, refresh };
 }

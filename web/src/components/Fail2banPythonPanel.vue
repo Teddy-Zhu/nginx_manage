@@ -210,7 +210,7 @@ onUnmounted(() => {
   closed = true;
   controller.abort();
 });
-useLiveRefresh(api, ["tasks"], refresh);
+useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
 </script>
 
 <template>

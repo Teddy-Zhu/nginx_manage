@@ -387,13 +387,15 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
   window.removeEventListener("beforeunload", beforeUnload);
 });
-useLiveRefresh(api, ["tasks"], () => {
-  if (!busy.value && !policyID.value)
-    return run(async () => {
-      profiles.value = await api.acmeProfiles(offset.value);
-      if (selected.value) orders.value = await api.acmeOrders(selected.value);
-    });
-});
+useLiveRefresh(
+  api,
+  ["tasks"],
+  () => run(async () => {
+    profiles.value = await api.acmeProfiles(offset.value);
+    if (selected.value) orders.value = await api.acmeOrders(selected.value);
+  }),
+  () => busy.value || !!policyID.value,
+);
 </script>
 
 <template>

@@ -214,9 +214,7 @@ async function exportAudit() {
   });
 }
 onMounted(loadTasks);
-useLiveRefresh(api, ["tasks"], () => {
-  if (tab.value === "tasks") return loadTasks();
-});
+useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tasks");
 </script>
 <template>
   <div class="toolbar">

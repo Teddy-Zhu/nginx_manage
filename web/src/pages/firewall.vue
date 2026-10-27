@@ -59,7 +59,7 @@ async function load() {
 }
 onMounted(load);
 onUnmounted(() => controller.abort());
-useLiveRefresh(api, ["tasks", "firewall", "listener"], load);
+useLiveRefresh(api, ["tasks", "firewall", "listener"], load, () => busy.value);
 </script>
 <template>
   <div class="page-stack">

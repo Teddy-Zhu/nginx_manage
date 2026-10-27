@@ -112,7 +112,12 @@ const columns: DataTableColumns<Task> = [
   },
 ];
 onMounted(load);
-useLiveRefresh(api, ["tasks", "monitoring", "notifications"], load);
+useLiveRefresh(
+  api,
+  ["tasks", "monitoring", "notifications"],
+  load,
+  () => loading.value,
+);
 </script>
 
 <template>
@@ -150,7 +155,7 @@ useLiveRefresh(api, ["tasks", "monitoring", "notifications"], load);
           monitoring?.stale
             ? "数据已过期"
             : monitoring?.sample
-              ? "当前使用情况"
+              ? `更新于 ${new Date(monitoring.sample.at * 1000).toLocaleTimeString()}`
               : "暂无监控数据"
         }}</span>
       </div>

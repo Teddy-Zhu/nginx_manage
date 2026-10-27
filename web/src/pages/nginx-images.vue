@@ -162,12 +162,12 @@ function canResume(t: ImageUpgradeTask) {
       : ["epoch_changed", "maintenance_unconfirmed"].includes(t.stage))
   );
 }
+const reading = ref(false);
 let controller: AbortController | null = null,
-  reading = false,
   closed = false;
 async function load() {
-  if (reading || closed) return;
-  reading = true;
+  if (reading.value || closed) return;
+  reading.value = true;
   controller = new AbortController();
   try {
     const [sources, items, view] = await Promise.all([
@@ -186,7 +186,7 @@ async function load() {
   } catch (e) {
     if (!closed) error.value = apiError(e).message;
   } finally {
-    reading = false;
+    reading.value = false;
   }
 }
 async function upgrade() {
@@ -225,7 +225,7 @@ onUnmounted(() => {
   closed = true;
   controller?.abort();
 });
-useLiveRefresh(api, ["tasks", "maintenance"], load);
+useLiveRefresh(api, ["tasks", "maintenance"], load, () => reading.value);
 </script>
 <template>
   <div class="page-stack">

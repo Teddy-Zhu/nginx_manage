@@ -163,11 +163,11 @@ function canControl(t: NginxInstallTask) {
 }
 let controller: AbortController | null = null,
   timer: ReturnType<typeof setInterval> | undefined,
-  reading = false,
+  reading = ref(false),
   closed = false;
 async function load() {
-  if (reading || closed) return;
-  reading = true;
+  if (reading.value || closed) return;
+  reading.value = true;
   controller = new AbortController();
   try {
     const [source, preparedTasks, items, view] = await Promise.all([
@@ -190,7 +190,7 @@ async function load() {
   } catch (e) {
     if (!closed) error.value = apiError(e).message;
   } finally {
-    reading = false;
+    reading.value = false;
   }
   if (
     !closed &&
@@ -298,7 +298,7 @@ onUnmounted(() => {
   controller?.abort();
   if (timer) clearInterval(timer);
 });
-useLiveRefresh(api, ["tasks", "maintenance"], load);
+useLiveRefresh(api, ["tasks", "maintenance"], load, () => reading.value);
 </script>
 <template>
   <div class="page-stack">

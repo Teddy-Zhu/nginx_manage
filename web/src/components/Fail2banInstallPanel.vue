@@ -90,7 +90,7 @@ async function operate(action: Fail2banContainerRequest["action"]) {
     action === "install" ? "Fail2ban 安装日志" : "登录防护操作日志",
   );
 }
-useLiveRefresh(api, ["fail2ban"], load);
+useLiveRefresh(api, ["fail2ban"], load, () => reading.value);
 onMounted(load);
 </script>
 <template>

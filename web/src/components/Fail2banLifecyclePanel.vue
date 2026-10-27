@@ -205,7 +205,7 @@ async function change(action?: Fail2banLifecyclePreviewInput["action"]) {
 }
 onMounted(refresh);
 onUnmounted(() => controller.abort());
-useLiveRefresh(api, ["tasks"], refresh);
+useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
 </script>
 
 <template>

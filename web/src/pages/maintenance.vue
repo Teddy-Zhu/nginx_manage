@@ -58,12 +58,12 @@ const labels: Record<string, string> = {
   unavailable: "状态不可确认",
 };
 const phase = computed(() => labels[view.value?.phase ?? ""] ?? "读取中");
+const reading = ref(false);
 let controller: AbortController | null = null,
-  reading = false,
   closed = false;
 async function load() {
-  if (reading || closed || !permitted.value) return;
-  reading = true;
+  if (reading.value || closed || !permitted.value) return;
+  reading.value = true;
   controller = new AbortController();
   try {
     view.value = await api.maintenance(controller.signal);
@@ -71,7 +71,7 @@ async function load() {
   } catch (e) {
     if (!closed) error.value = apiError(e).message;
   } finally {
-    reading = false;
+    reading.value = false;
   }
 }
 async function enter() {
@@ -96,7 +96,7 @@ onUnmounted(() => {
   closed = true;
   controller?.abort();
 });
-useLiveRefresh(api, ["tasks", "maintenance"], load);
+useLiveRefresh(api, ["tasks", "maintenance"], load, () => reading.value);
 </script>
 <template>
   <div class="stack">

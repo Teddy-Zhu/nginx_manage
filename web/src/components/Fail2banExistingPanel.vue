@@ -430,7 +430,7 @@ onUnmounted(() => {
   detailController?.abort();
   if (timer) clearTimeout(timer);
 });
-useLiveRefresh(api, ["tasks"], refreshTasks);
+useLiveRefresh(api, ["tasks"], refreshTasks, () => reading.value);
 </script>
 
 <template>

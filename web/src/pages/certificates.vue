@@ -282,9 +282,7 @@ columns.push({
       () => "查看详情",
     ),
 });
-useLiveRefresh(api, ["tasks"], () => {
-  if (!busy.value && !importing.value) return load();
-});
+useLiveRefresh(api, ["tasks"], load, () => busy.value || importing.value);
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (dirty.value) event.preventDefault();
 };

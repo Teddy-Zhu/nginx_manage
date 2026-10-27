@@ -161,7 +161,7 @@ const continuingPull = computed(
     ["queued", "running", "recovery_required"].includes(plan.value.pull.state),
 );
 const controller = new AbortController();
-let loading = false;
+const loading = ref(false);
 const has = (scope: string) => session.me?.scopes.includes(scope) ?? false;
 const canExport = computed(() => has("backup.export"));
 const canEncryptedExport = computed(
@@ -250,8 +250,8 @@ function mappingObject(): Record<string, string> {
   return mappingRecord(mappings.value);
 }
 async function load() {
-  if (loading || busy.value || document.hidden) return;
-  loading = true;
+  if (loading.value || busy.value || document.hidden) return;
+  loading.value = true;
   try {
     const items = await api.migrations(controller.signal);
     history.value = items;
@@ -271,7 +271,7 @@ async function load() {
   } catch (e) {
     if (!controller.signal.aborted) error.value = apiError(e).message;
   } finally {
-    loading = false;
+    loading.value = false;
   }
 }
 async function currentVersion() {
@@ -502,7 +502,7 @@ onUnmounted(() => {
 });
 useLiveRefresh(api, ["tasks"], () => {
   if (has("backup.restore") && has("backup.secrets")) return load();
-});
+}, () => loading.value || busy.value);
 </script>
 
 <template>

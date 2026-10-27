@@ -156,13 +156,13 @@ const stateLabels: Record<string, string> = {
   rolled_back: "已补偿",
 };
 const date = (value: number) => new Date(value * 1000).toLocaleString();
+const reading = ref(false);
 let controller: AbortController | null = null,
-  reading = false,
   closed = false;
 async function load() {
-  if (reading || closed || busy.value || !permitted.value || document.hidden)
+  if (reading.value || closed || busy.value || !permitted.value || document.hidden)
     return;
-  reading = true;
+  reading.value = true;
   controller = new AbortController();
   try {
     history.value = await api.migrationPushes(controller.signal);
@@ -175,7 +175,7 @@ async function load() {
   } catch (e) {
     if (!closed) error.value = apiError(e).message;
   } finally {
-    reading = false;
+    reading.value = false;
   }
 }
 async function inspect(id: string) {
@@ -269,7 +269,7 @@ onUnmounted(() => {
   closed = true;
   controller?.abort();
 });
-useLiveRefresh(api, ["tasks"], load);
+useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
 </script>
 <template>
   <div class="stack">

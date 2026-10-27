@@ -206,7 +206,7 @@ async function ban() {
     addresses.value = [];
   }
 }
-useLiveRefresh(api, ["fail2ban"], load);
+useLiveRefresh(api, ["fail2ban"], load, () => reading.value);
 onMounted(load);
 </script>
 <template>

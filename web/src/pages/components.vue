@@ -218,7 +218,7 @@ function closeDetails() {
 }
 onMounted(load);
 onUnmounted(() => controller.abort());
-useLiveRefresh(api, ["tasks", "fail2ban"], load);
+useLiveRefresh(api, ["tasks", "fail2ban"], load, () => reading.value);
 </script>
 <template>
   <Teleport defer to="#page-heading-actions">

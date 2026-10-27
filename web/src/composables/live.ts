@@ -9,6 +9,7 @@ export function useLiveRefresh(
   api: LiveAPI,
   topics: LiveTopic[],
   refresh: () => Promise<unknown> | void,
+  blocked: () => boolean = () => false,
 ) {
   const session = useSession();
   const required: Record<LiveTopic, string[]> = {
@@ -27,13 +28,13 @@ export function useLiveRefresh(
   let running = false,
     pending = false,
     disposed = false;
-  const update = async () => {
-    if (disposed || document.hidden) return;
-    pending = true;
-    if (running) return;
+  const ready = () =>
+    !disposed && release !== undefined && !document.hidden && !blocked();
+  const drain = async () => {
+    if (running || !ready()) return;
     running = true;
     try {
-      while (pending && !disposed && !document.hidden) {
+      while (pending && ready()) {
         pending = false;
         await refresh();
       }
@@ -45,6 +46,16 @@ export function useLiveRefresh(
       running = false;
     }
   };
+  const update = () => {
+    if (disposed || !release) return;
+    // Keep one refresh queued while a page is loading or editing. A final
+    // state change may be the last notification until another user action.
+    pending = true;
+    void drain();
+  };
+  const stopBlocked = watch(blocked, (value) => {
+    if (!value && pending) void drain();
+  });
   const stop = watch(
     () =>
       session.localMe?.authenticated
@@ -53,6 +64,7 @@ export function useLiveRefresh(
     (authenticated) => {
       release?.();
       release = undefined;
+      pending = false;
       if (authenticated !== null) {
         const allowed = topics.filter((topic) =>
           required[topic].every((scope) =>
@@ -60,19 +72,20 @@ export function useLiveRefresh(
           ),
         );
         if (allowed.length)
-          release = api.subscribe(allowed, () => void update());
+          release = api.subscribe(allowed, update);
       }
     },
     { immediate: true },
   );
   const visible = () => {
-    if (!document.hidden) void update();
+    if (!document.hidden) update();
   };
   document.addEventListener("visibilitychange", visible);
   onScopeDispose(() => {
     disposed = true;
     release?.();
     stop();
+    stopBlocked();
     document.removeEventListener("visibilitychange", visible);
   });
 }

@@ -168,9 +168,7 @@ watch(busy, (working) => {
 onMounted(() => {
   void load();
 });
-useLiveRefresh(api, ["tasks"], () => {
-  if (!busy.value && !preview.value) return load();
-});
+useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
 </script>
 
 <template>

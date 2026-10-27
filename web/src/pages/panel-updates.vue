@@ -143,7 +143,7 @@ async function update() {
     },
   });
 }
-useLiveRefresh(api, ["tasks"], load);
+useLiveRefresh(api, ["tasks"], load, () => busy.value);
 onMounted(load);
 </script>
 <template>

@@ -459,9 +459,7 @@ onUnmounted(() => {
   controller.abort();
   document.removeEventListener("visibilitychange", visibility);
 });
-useLiveRefresh(api, ["notifications"], () => {
-  if (!busy.value) return fetchData();
-});
+useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
 </script>
 
 <template>

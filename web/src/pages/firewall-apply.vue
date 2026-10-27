@@ -148,9 +148,9 @@ const protections: DataTableColumns<FirewallPlan["protections"][number]> = [
     ellipsis: { tooltip: true },
   },
 ];
+const reading = ref(false);
 let timer: ReturnType<typeof setInterval> | undefined,
-  closed = false,
-  reading = false;
+  closed = false;
 function updateDeadline() {
   remaining.value = Math.max(
     0,
@@ -158,8 +158,8 @@ function updateDeadline() {
   );
 }
 async function readRuntime() {
-  if (closed || reading || !canManage.value) return;
-  reading = true;
+  if (closed || reading.value || !canManage.value) return;
+  reading.value = true;
   try {
     const result = await api.firewallRuntime(controller.signal);
     if (closed) return;
@@ -195,7 +195,7 @@ async function readRuntime() {
   } catch (cause) {
     if (!closed) error.value = apiError(cause).message;
   } finally {
-    reading = false;
+    reading.value = false;
   }
 }
 async function load() {
@@ -372,7 +372,7 @@ onUnmounted(() => {
   controller.abort();
   if (timer) clearInterval(timer);
 });
-useLiveRefresh(api, ["firewall"], readRuntime);
+useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
 </script>
 <template>
   <div class="page-toolbar">

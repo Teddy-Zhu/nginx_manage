@@ -7,22 +7,23 @@ import { loadedFrontendEntries } from "../frontend-version";
 
 const changed = ref(false), error = ref("");
 const controller = new AbortController();
-let reading = false, closed = false;
+const reading = ref(false);
+let closed = false;
 async function check() {
-  if (closed || reading || document.hidden) return;
-  reading = true;
+  if (closed || reading.value || document.hidden) return;
+  reading.value = true;
   try {
     const version = await api.systemVersion(controller.signal);
     if (closed) return;
     error.value = "";
     if (version.frontend_id && loadedFrontendEntries.length) changed.value = JSON.stringify([...version.frontend_entries].sort()) !== JSON.stringify(loadedFrontendEntries);
   } catch (e) { if (!closed) error.value = apiError(e).message; }
-  finally { reading = false; }
+  finally { reading.value = false; }
 }
 function reload() { window.location.reload(); }
 onMounted(() => void check());
 onUnmounted(() => { closed = true; controller.abort(); });
-useLiveRefresh(api, ["version"], check);
+useLiveRefresh(api, ["version"], check, () => reading.value);
 </script>
 
 <template>

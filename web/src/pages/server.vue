@@ -60,8 +60,7 @@ const edit = ref<MonitoringSettings | null>(null),
   historyError = ref("");
 const controller = new AbortController();
 let reading = false,
-  historyController: AbortController | undefined,
-  historyMinute = 0;
+  historyController: AbortController | undefined;
 const metrics = computed(() => latest.value?.sample?.metrics ?? []);
 const current = computed(() =>
   metrics.value.find((m) => `${m.kind}:${m.id}` === selected.value),
@@ -269,7 +268,6 @@ async function readHistory() {
     return;
   }
   const until = Math.floor(Date.now() / 1000);
-  historyMinute = Math.floor(until / 60);
   try {
     const result = await api.monitoringHistory(
       {
@@ -356,12 +354,15 @@ onUnmounted(() => {
   controller.abort();
   historyController?.abort();
 });
-useLiveRefresh(api, ["monitoring"], async () => {
-  if (!busy.value) {
+useLiveRefresh(
+  api,
+  ["monitoring"],
+  async () => {
     await readLatest();
-    if (Math.floor(Date.now() / 60000) !== historyMinute) await readHistory();
-  }
-});
+    await readHistory();
+  },
+  () => busy.value,
+);
 </script>
 
 <template>
