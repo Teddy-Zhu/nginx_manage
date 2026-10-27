@@ -116,9 +116,13 @@ export function softwareTaskLabel(task: ComponentTask) {
     );
   const request = task.result?.input.software;
   const action =
-    request?.action === "fail2ban" ? request.fail2ban?.action : request?.action;
+    request?.action === "frps"
+      ? request.frps?.action
+      : request?.action === "fail2ban"
+        ? request.fail2ban?.action
+        : request?.action;
   if (action && action in softwareOperationLabels)
-    return `${softwareOperationLabels[action as SoftwareOperation]}${request?.action === "fail2ban" ? " · 登录防护" : ""}`;
+    return `${softwareOperationLabels[action as SoftwareOperation]}${request?.action === "frps" ? " · FRP 服务端" : request?.action === "fail2ban" ? " · 登录防护" : ""}`;
   const labels: Record<string, string> = {
     import: "添加软件源",
     refresh: "更新软件列表",
@@ -138,9 +142,11 @@ export function softwareStatus(
       return { state: "recovery", label: "需要处理", tone: "warning" };
     const request = task?.result?.input.software;
     const action =
-      request?.action === "fail2ban"
-        ? request.fail2ban?.action
-        : request?.action;
+      request?.action === "frps"
+        ? request.frps?.action
+        : request?.action === "fail2ban"
+          ? request.fail2ban?.action
+          : request?.action;
     return {
       state: "busy",
       label: pendingLabels[action ?? ""] ?? "处理中",

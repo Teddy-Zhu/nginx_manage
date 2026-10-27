@@ -4,6 +4,7 @@ package components
 import (
 	"context"
 	"encoding/hex"
+	"nginxpanel/internal/frps"
 	"regexp"
 	"slices"
 	"strings"
@@ -184,6 +185,7 @@ type Operation struct {
 	Panel         *PanelPreparation      `json:"panel,omitempty"`
 }
 type Overview struct {
+	Frps             *frps.Status                `json:"frps,omitempty"`
 	Software         software.Catalog            `json:"software"`
 	Frontend         panelruntime.FrontendStatus `json:"frontend"`
 	SwitchAvailable  bool                        `json:"switch_available"`

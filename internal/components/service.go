@@ -224,6 +224,7 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]Task, error) {
 			if e = json.Unmarshal(raw, &op); e != nil {
 				return nil, e
 			}
+			redactOperation(&op)
 			t.Result = &op
 		}
 		out = append(out, t)

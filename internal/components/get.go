@@ -46,7 +46,15 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Task, e
 		if op.Protocol != protocol.Agent || op.ID != out.OperationID || op.Input.Action != out.Action {
 			return Task{}, errors.New("组件任务结果与原任务不一致")
 		}
+		redactOperation(&op)
 		out.Result = &op
 	}
 	return out, nil
+}
+
+// Public task results expose settings without returning stored client credentials.
+func redactOperation(op *Operation) {
+	if request := op.Input.Software; request != nil && request.Frps != nil && request.Frps.Config != nil {
+		request.Frps.Config.Token = ""
+	}
 }

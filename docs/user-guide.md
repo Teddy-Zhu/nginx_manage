@@ -264,3 +264,7 @@ curl --config ./nginxpanel-read.curl --silent --show-error --fail-with-body \
 “GeoIP 数据”默认使用 GitHub 开源的 Loyalsoldier Country.mmdb，可修改下载地址或切换至 IPdeny。支持 MaxMind MMDB、每行一个网段的 CIDR 文本及 gzip 压缩文件。CIDR 下载地址用 `{country}` 代表小写国家代码，并选择需要更新的国家。内网 HTTPS 镜像需明确启用“允许从内网镜像下载”。
 
 更新 GeoIP 数据后，当前页面的国家名单会重新解析；保存并应用防火墙变更后生效。数据源变更、下载失败或解析失败不会直接改变已生效规则。迁移包携带数据源配置与已解析名单快照，目标机器可继续手动更新数据。
+
+## FRP 服务端
+
+从软件商店按需安装 FRP 服务端，设置客户端连接端口、访问密钥和允许映射的端口。网站转发可单独启用 HTTP、HTTPS 入口。详见 [FRP 服务端使用说明](frps.md)。

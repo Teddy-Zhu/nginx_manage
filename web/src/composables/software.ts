@@ -60,5 +60,5 @@ export function useSoftwareOperations(
   );
   useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
   onMounted(refresh);
-  return { api, run, busy, permitted, active, last, submit, refresh };
+  return { api, run, busy, permitted, active, last, tasks, submit, refresh };
 }

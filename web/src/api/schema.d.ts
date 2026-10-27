@@ -5327,6 +5327,49 @@ export interface components {
             jail_id?: string;
             address?: string;
         };
+        FrpsPortRange: {
+            from: number;
+            to: number;
+        };
+        FrpsConfig: {
+            image: string;
+            auto_start: boolean;
+            bind_address: string;
+            bind_port: number;
+            token: string;
+            tls_only: boolean;
+            allow_ports: components["schemas"]["FrpsPortRange"][];
+            http_port: number;
+            https_port: number;
+            subdomain_host: string;
+        };
+        FrpsStats: {
+            version: string;
+            /** Format: int64 */
+            clients: number;
+            /** Format: int64 */
+            proxies: number;
+            /** Format: int64 */
+            connections: number;
+            /** Format: int64 */
+            traffic_in: number;
+            /** Format: int64 */
+            traffic_out: number;
+        };
+        FrpsStatus: {
+            installed: boolean;
+            /** @enum {string} */
+            state: "running" | "starting" | "stopped" | "unhealthy" | "missing" | "unknown";
+            config: components["schemas"]["FrpsConfig"];
+            token_set: boolean;
+            stats?: components["schemas"]["FrpsStats"];
+            error: string;
+        };
+        FrpsRequest: {
+            /** @enum {string} */
+            action: "install" | "configure" | "start" | "stop" | "restart" | "update" | "uninstall" | "logs";
+            config?: components["schemas"]["FrpsConfig"];
+        };
         SoftwareAction: {
             command: string[];
             description?: string;
@@ -5365,7 +5408,7 @@ export interface components {
         };
         SoftwareRequest: {
             /** @enum {string} */
-            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban" | "start" | "stop" | "restart" | "logs";
+            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban" | "start" | "stop" | "restart" | "logs" | "frps";
             source?: components["schemas"]["SoftwareSource"];
             url?: string;
             source_id?: string;
@@ -5373,6 +5416,7 @@ export interface components {
             plan_id?: string;
             prerelease?: boolean;
             fail2ban?: components["schemas"]["Fail2banContainerRequest"];
+            frps?: components["schemas"]["FrpsRequest"];
         };
         SoftwareResult: {
             source_id?: string;
@@ -5418,6 +5462,7 @@ export interface components {
             switch_reason: string;
             frontend: components["schemas"]["ComponentFrontendStatus"];
             software: components["schemas"]["SoftwareCatalog"];
+            frps?: components["schemas"]["FrpsStatus"];
         };
         ComponentAsset: {
             id: string;

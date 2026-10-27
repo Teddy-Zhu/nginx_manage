@@ -24,7 +24,7 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 两种方式都会自动检测环境、安装并启动服务，最后输出首次访问方法。去掉 `--yes` 可先核对摘要；加 `--advanced` 才进入自定义设置。也可对下载的脚本加 `--source`，一次完成拉取源码、容器编译和安装。Release 入口需仓库已发布包含安装脚本的新发行。默认监听全部网卡并随机选择空闲管理端口，保存后重启不变；安装后可直接用机器公网或内网 IP 访问。首次指定端口可加 `--port 23456`。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务，或用 `sudo bash /opt/nginxpanel/manage.sh set-port 23456` 修改端口。
 
-源码安装默认在 Docker 中编译并安装面板和固定模块的静态 Nginx；预置 HTTPS、HTTP/2、反向代理、缓存、gzip / 静态 gzip、真实 IP、访问控制、限流、状态统计、子请求认证、内容替换、分片及 TCP/UDP 转发、TLS 预读等常用模块。Fail2ban 等其他软件按需安装，不依赖宿主机编译工具。
+源码安装默认在 Docker 中编译并安装面板和固定模块的静态 Nginx；预置 HTTPS、HTTP/2、反向代理、缓存、gzip / 静态 gzip、真实 IP、访问控制、限流、状态统计、子请求认证、内容替换、分片及 TCP/UDP 转发、TLS 预读等常用模块。Fail2ban、[FRP 服务端](docs/frps.md)等其他软件按需安装，不依赖宿主机编译工具。
 
 | 文档 | 内容 |
 | --- | --- |

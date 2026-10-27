@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/url"
 	"nginxpanel/internal/fail2ban"
+	"nginxpanel/internal/frps"
 	"regexp"
 	"strings"
 )
@@ -41,6 +42,7 @@ type Catalog struct {
 	Error     string         `json:"error,omitempty"`
 }
 type Request struct {
+	Frps       *frps.Request              `json:"frps,omitempty"`
 	Fail2ban   *fail2ban.ContainerRequest `json:"fail2ban,omitempty"`
 	Action     string                     `json:"action"`
 	Source     *Source                    `json:"source,omitempty"`
@@ -104,6 +106,15 @@ func (s Source) Validate() error {
 	return nil
 }
 func (r Request) Validate() error {
+	if r.Action == "frps" {
+		if r.Frps == nil || r.Fail2ban != nil || r.Source != nil || r.URL != "" || r.SourceID != "" || r.AppID != "" || r.PlanID != "" || r.Prerelease {
+			return errors.New("FRP 操作参数无效")
+		}
+		return r.Frps.Validate()
+	}
+	if r.Frps != nil {
+		return errors.New("此操作不能携带 FRP 配置")
+	}
 	if r.Action == "fail2ban" {
 		if r.Fail2ban == nil || r.Source != nil || r.URL != "" || r.SourceID != "" || r.AppID != "" || r.PlanID != "" || r.Prerelease {
 			return errors.New("登录防护操作参数无效")

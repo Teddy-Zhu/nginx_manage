@@ -24,6 +24,7 @@ import (
 )
 
 type Manager struct {
+	FrpsAction                                func(context.Context, software.Request, software.Progress) (software.Result, error)
 	Fail2banAction                            func(context.Context, software.Request, software.Progress) (software.Result, error)
 	UpdatePanel                               func(context.Context, software.Request, software.Progress) (software.Result, error)
 	Dir, DataDir, TrustPath, TokenPath, Scope string
@@ -275,7 +276,13 @@ func (m *Manager) run(out Operation, until time.Time) {
 			}
 		}
 		var result software.Result
-		if out.Input.Software.Action == "fail2ban" {
+		if out.Input.Software.Action == "frps" {
+			if m.FrpsAction == nil {
+				err = errors.New("FRP 服务端管理不可用")
+			} else {
+				result, err = m.FrpsAction(ctx, *out.Input.Software, progress)
+			}
+		} else if out.Input.Software.Action == "fail2ban" {
 			if m.Fail2banAction == nil {
 				err = errors.New("登录防护安装不可用")
 			} else {

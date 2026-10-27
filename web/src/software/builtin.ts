@@ -1,5 +1,6 @@
 import { markRaw } from "vue";
 import Fail2banInstallPanel from "../components/Fail2banInstallPanel.vue";
+import FrpsInstallPanel from "../components/FrpsInstallPanel.vue";
 import NginxInstallPanel from "../components/NginxInstallPanel.vue";
 import type {
   ComponentOverview,
@@ -61,6 +62,26 @@ export function builtinSoftware(
       note: "系统内置",
       scopes: ["components.manage", "system.write", "security.write"],
       panel: markRaw(Fail2banInstallPanel),
+      panelProps: { embedded: true },
+    },
+    {
+      id: "frps",
+      name: "FRP 服务端",
+      category: "网络连接",
+      description:
+        "接入内网客户端，提供 TCP、UDP 端口映射和 HTTP、HTTPS 网站转发。",
+      accent: "green" as const,
+      installed: overview?.frps?.installed ?? null,
+      runtime: overview?.frps?.state ?? ("unknown" as const),
+      task: tasks.find(
+        (task) => task.result?.input.software?.action === "frps",
+      ),
+      entry: { to: "/frps" },
+      note: overview?.frps?.stats?.version
+        ? `版本 ${overview.frps.stats.version}`
+        : "系统内置",
+      scopes: ["components.manage", "system.write"],
+      panel: markRaw(FrpsInstallPanel),
       panelProps: { embedded: true },
     },
   ];

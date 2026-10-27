@@ -2536,6 +2536,72 @@ func (e FirewallUFWPlanReloadBackend) Valid() bool {
 	}
 }
 
+// Defines values for FrpsRequestAction.
+const (
+	FrpsRequestActionConfigure FrpsRequestAction = "configure"
+	FrpsRequestActionInstall   FrpsRequestAction = "install"
+	FrpsRequestActionLogs      FrpsRequestAction = "logs"
+	FrpsRequestActionRestart   FrpsRequestAction = "restart"
+	FrpsRequestActionStart     FrpsRequestAction = "start"
+	FrpsRequestActionStop      FrpsRequestAction = "stop"
+	FrpsRequestActionUninstall FrpsRequestAction = "uninstall"
+	FrpsRequestActionUpdate    FrpsRequestAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the FrpsRequestAction enum.
+func (e FrpsRequestAction) Valid() bool {
+	switch e {
+	case FrpsRequestActionConfigure:
+		return true
+	case FrpsRequestActionInstall:
+		return true
+	case FrpsRequestActionLogs:
+		return true
+	case FrpsRequestActionRestart:
+		return true
+	case FrpsRequestActionStart:
+		return true
+	case FrpsRequestActionStop:
+		return true
+	case FrpsRequestActionUninstall:
+		return true
+	case FrpsRequestActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FrpsStatusState.
+const (
+	FrpsStatusStateMissing   FrpsStatusState = "missing"
+	FrpsStatusStateRunning   FrpsStatusState = "running"
+	FrpsStatusStateStarting  FrpsStatusState = "starting"
+	FrpsStatusStateStopped   FrpsStatusState = "stopped"
+	FrpsStatusStateUnhealthy FrpsStatusState = "unhealthy"
+	FrpsStatusStateUnknown   FrpsStatusState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the FrpsStatusState enum.
+func (e FrpsStatusState) Valid() bool {
+	switch e {
+	case FrpsStatusStateMissing:
+		return true
+	case FrpsStatusStateRunning:
+		return true
+	case FrpsStatusStateStarting:
+		return true
+	case FrpsStatusStateStopped:
+		return true
+	case FrpsStatusStateUnhealthy:
+		return true
+	case FrpsStatusStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GeoIPSourceFormat.
 const (
 	Cidr GeoIPSourceFormat = "cidr"
@@ -3269,6 +3335,7 @@ func (e SoftwareInstallationState) Valid() bool {
 const (
 	SoftwareRequestActionDelete      SoftwareRequestAction = "delete"
 	SoftwareRequestActionFail2ban    SoftwareRequestAction = "fail2ban"
+	SoftwareRequestActionFrps        SoftwareRequestAction = "frps"
 	SoftwareRequestActionImport      SoftwareRequestAction = "import"
 	SoftwareRequestActionInstall     SoftwareRequestAction = "install"
 	SoftwareRequestActionLogs        SoftwareRequestAction = "logs"
@@ -3287,6 +3354,8 @@ func (e SoftwareRequestAction) Valid() bool {
 	case SoftwareRequestActionDelete:
 		return true
 	case SoftwareRequestActionFail2ban:
+		return true
+	case SoftwareRequestActionFrps:
 		return true
 	case SoftwareRequestActionImport:
 		return true
@@ -4220,6 +4289,7 @@ type ComponentOperation struct {
 type ComponentOverview struct {
 	Available        bool                    `json:"available"`
 	Frontend         ComponentFrontendStatus `json:"frontend"`
+	Frps             *FrpsStatus             `json:"frps,omitempty"`
 	InstallAvailable bool                    `json:"install_available"`
 	InstallReason    string                  `json:"install_reason"`
 	Installation     *NginxInstallation      `json:"installation,omitempty"`
@@ -6420,6 +6490,58 @@ type FirewallZone struct {
 	Sources    []string `json:"sources"`
 }
 
+// FrpsConfig defines model for FrpsConfig.
+type FrpsConfig struct {
+	AllowPorts    []FrpsPortRange `json:"allow_ports"`
+	AutoStart     bool            `json:"auto_start"`
+	BindAddress   string          `json:"bind_address"`
+	BindPort      int             `json:"bind_port"`
+	HttpPort      int             `json:"http_port"`
+	HttpsPort     int             `json:"https_port"`
+	Image         string          `json:"image"`
+	SubdomainHost string          `json:"subdomain_host"`
+	TlsOnly       bool            `json:"tls_only"`
+	Token         string          `json:"token"`
+}
+
+// FrpsPortRange defines model for FrpsPortRange.
+type FrpsPortRange struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
+// FrpsRequest defines model for FrpsRequest.
+type FrpsRequest struct {
+	Action FrpsRequestAction `json:"action"`
+	Config *FrpsConfig       `json:"config,omitempty"`
+}
+
+// FrpsRequestAction defines model for FrpsRequest.Action.
+type FrpsRequestAction string
+
+// FrpsStats defines model for FrpsStats.
+type FrpsStats struct {
+	Clients     int64  `json:"clients"`
+	Connections int64  `json:"connections"`
+	Proxies     int64  `json:"proxies"`
+	TrafficIn   int64  `json:"traffic_in"`
+	TrafficOut  int64  `json:"traffic_out"`
+	Version     string `json:"version"`
+}
+
+// FrpsStatus defines model for FrpsStatus.
+type FrpsStatus struct {
+	Config    FrpsConfig      `json:"config"`
+	Error     string          `json:"error"`
+	Installed bool            `json:"installed"`
+	State     FrpsStatusState `json:"state"`
+	Stats     *FrpsStats      `json:"stats,omitempty"`
+	TokenSet  bool            `json:"token_set"`
+}
+
+// FrpsStatusState defines model for FrpsStatus.State.
+type FrpsStatusState string
+
 // GeoIPResolveInput defines model for GeoIPResolveInput.
 type GeoIPResolveInput struct {
 	Countries []string `json:"countries"`
@@ -8226,6 +8348,7 @@ type SoftwareRequest struct {
 	Action     SoftwareRequestAction     `json:"action"`
 	AppId      *string                   `json:"app_id,omitempty"`
 	Fail2ban   *Fail2banContainerRequest `json:"fail2ban,omitempty"`
+	Frps       *FrpsRequest              `json:"frps,omitempty"`
 	PlanId     *string                   `json:"plan_id,omitempty"`
 	Prerelease *bool                     `json:"prerelease,omitempty"`
 	Source     *SoftwareSource           `json:"source,omitempty"`

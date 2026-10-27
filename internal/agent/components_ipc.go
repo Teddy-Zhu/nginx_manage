@@ -10,6 +10,7 @@ import (
 
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/frpscontainer"
 	"nginxpanel/internal/software"
 )
 
@@ -36,6 +37,12 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 	s.fail2banContainerHandler(mux)
 	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {
 		out := m.Overview()
+		if !s.Dev && s.ComponentScope == "host" {
+			call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+			status := frpscontainer.Status(call, s.DataDir)
+			out.Frps = &status
+			cancel()
+		}
 		if !s.Dev && out.Software.Error == "" {
 			call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			software.Observe(call, s.DataDir, &out.Software)
