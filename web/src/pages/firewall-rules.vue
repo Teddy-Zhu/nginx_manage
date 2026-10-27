@@ -20,6 +20,7 @@ import {
   NAlert,
   NButton,
   NDataTable,
+  NDropdown,
   NForm,
   NFormItem,
   NInput,
@@ -32,6 +33,7 @@ import {
   NTag,
   useDialog,
   type DataTableColumns,
+  type DropdownOption,
 } from "naive-ui";
 import GeoIPSourcePanel from "../components/GeoIPSourcePanel.vue";
 import {
@@ -86,6 +88,42 @@ const countries = computed(() => [
 const mode = computed(() => accessMode(policy.value.rules));
 const modeLabel = computed(() => mode.value === "allow" ? "默认放通 · 黑名单" :
   mode.value === "deny" ? "默认屏蔽 · 白名单" : policy.value.rules.length ? "自定义访问规则" : "跟随系统规则");
+const shortcutOptions = computed<DropdownOption[]>(() => [
+  {
+    type: "group",
+    label: "访问模式",
+    key: "modes",
+    children: [
+      { label: "默认放通（黑名单）", key: "mode-allow", disabled: mode.value === "allow" },
+      { label: "默认屏蔽（白名单）", key: "mode-deny", disabled: mode.value === "deny" },
+    ],
+  },
+  {
+    type: "group",
+    label: "常用规则",
+    key: "rules",
+    children: [
+      { label: "放通面板端口", key: "management" },
+      { label: "放通网站（80 / 443）", key: "web" },
+      { label: "放通 SSH", key: "ssh" },
+      { label: "添加 IP 黑名单", key: "address-deny" },
+      { label: "添加 IP 白名单", key: "address-allow" },
+    ],
+  },
+  { type: "divider", key: "reset-divider" },
+  { label: "重置防火墙规则", key: "reset", disabled: !policy.value.rules.length },
+]);
+function selectShortcut(key: string) {
+  if (busy.value || !canWrite.value || !stored.value) return;
+  switch (key) {
+    case "mode-allow": chooseMode("allow"); break;
+    case "mode-deny": chooseMode("deny"); break;
+    case "management": case "web": case "ssh": void quickPorts(key); break;
+    case "address-deny": quickAddress("deny"); break;
+    case "address-allow": quickAddress("allow"); break;
+    case "reset": resetRules(); break;
+  }
+}
 const kinds = [
   { label: "端口规则", value: "port" },
   { label: "IP 黑白名单", value: "address" },
@@ -596,45 +634,6 @@ onMounted(load);
   <div class="firewall-card surface">
     <n-tabs v-model:value="activeTab" type="line" animated>
       <n-tab-pane name="rules" tab="规则管理">
-        <section class="quick-actions">
-          <div class="section-title">
-            <h2>快捷设置</h2>
-            <n-tag size="small" :bordered="false">{{ modeLabel }}</n-tag>
-          </div>
-          <p class="muted">选择访问方式或添加常用规则，保存并应用后生效。</p>
-          <div class="mode-options">
-            <n-button
-              class="mode-choice"
-              :type="mode === 'allow' ? 'primary' : 'default'"
-              :secondary="mode === 'allow'"
-              :disabled="busy || !canWrite || !stored"
-              :aria-pressed="mode === 'allow'"
-              @click="chooseMode('allow')"
-            >
-              <strong>默认放通（黑名单）</strong>
-              <span>仅屏蔽名单中的端口或来源</span>
-            </n-button>
-            <n-button
-              class="mode-choice"
-              :type="mode === 'deny' ? 'primary' : 'default'"
-              :secondary="mode === 'deny'"
-              :disabled="busy || !canWrite || !stored"
-              :aria-pressed="mode === 'deny'"
-              @click="chooseMode('deny')"
-            >
-              <strong>默认屏蔽（白名单）</strong>
-              <span>仅允许名单中的端口或来源</span>
-            </n-button>
-          </div>
-          <div class="shortcut-buttons">
-            <n-button :loading="quickBusy === 'management'" :disabled="busy || !canWrite || !stored" @click="quickPorts('management')">放通面板端口</n-button>
-            <n-button :loading="quickBusy === 'web'" :disabled="busy || !canWrite || !stored" @click="quickPorts('web')">放通网站（80 / 443）</n-button>
-            <n-button :loading="quickBusy === 'ssh'" :disabled="busy || !canWrite || !stored" @click="quickPorts('ssh')">放通 SSH</n-button>
-            <n-button :disabled="busy || !canWrite || !stored" @click="quickAddress('deny')">添加 IP 黑名单</n-button>
-            <n-button :disabled="busy || !canWrite || !stored" @click="quickAddress('allow')">添加 IP 白名单</n-button>
-            <n-button type="error" secondary :disabled="busy || !canWrite || !stored || !policy.rules.length" @click="resetRules">重置防火墙规则</n-button>
-          </div>
-        </section>
         <div class="section-toolbar">
           <div>
             <div class="section-title">
@@ -642,16 +641,29 @@ onMounted(load);
               <n-tag size="small" :bordered="false"
                 >{{ policy.rules.length }} 条</n-tag
               >
+              <n-tag size="small" :bordered="false">{{ modeLabel }}</n-tag>
             </div>
             <p class="muted">从上到下依次匹配，首条命中的规则生效。</p>
           </div>
-          <n-button
-            type="primary"
-            secondary
-            :disabled="busy || !canWrite || !stored"
-            @click="add"
-            >添加规则</n-button
-          >
+          <n-space align="center" :size="12">
+            <n-dropdown
+              trigger="click"
+              placement="bottom-end"
+              :options="shortcutOptions"
+              :disabled="busy || !canWrite || !stored"
+              @select="selectShortcut"
+            >
+              <n-button :loading="quickBusy !== null" :disabled="busy || !canWrite || !stored">
+                快捷添加 <span aria-hidden="true" class="shortcut-arrow">▾</span>
+              </n-button>
+            </n-dropdown>
+            <n-button
+              type="primary"
+              secondary
+              :disabled="busy || !canWrite || !stored"
+              @click="add"
+              >添加规则</n-button>
+          </n-space>
         </div>
         <n-alert v-if="checkError" type="error" :show-icon="false">{{ checkError }}</n-alert>
         <n-data-table
@@ -807,43 +819,8 @@ onMounted(load);
 .firewall-card {
   padding-top: 0;
 }
-.quick-actions {
-  padding: 16px 0 24px;
-  margin-bottom: 24px;
-  border-bottom: 1px solid var(--border-color, #e8eee9);
-}
-.mode-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin: 16px 0;
-}
-.mode-choice {
-  height: auto;
-  min-height: 82px;
-  padding: 16px;
-}
-.mode-choice :deep(.n-button__content) {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-  white-space: normal;
-  text-align: left;
-}
-.mode-choice span {
-  font-size: 12px;
-  opacity: 0.8;
-}
-.shortcut-buttons {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-@media (max-width: 680px) {
-  .mode-options { grid-template-columns: 1fr; }
-  .shortcut-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shortcut-arrow {
+  margin-left: 8px;
 }
 .section-toolbar {
   display: flex;
@@ -855,6 +832,7 @@ onMounted(load);
 }
 .section-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 6px;
