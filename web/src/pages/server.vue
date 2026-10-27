@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch, toRaw } from "vue";
 import {
@@ -20,7 +21,6 @@ import {
   NDataTable,
   NFormItem,
   NInputNumber,
-  NModal,
   NSelect,
   NSwitch,
   NTag,
@@ -508,11 +508,16 @@ useLiveRefresh(api, ["monitoring"], async () => {
       :data="latest?.sample?.services ?? []"
     />
   </section>
-  <n-modal
-    v-model:show="modal"
-    preset="card"
+  <FormDialog
+    :show="modal"
+    :draft="edit"
     title="采样与资源阈值"
-    style="width: min(720px, 95vw)"
+    :busy="busy"
+    :submit-disabled="
+      !edit || thresholdKinds.some((t) => thresholdInvalid(edit![t.key]))
+    "
+    @submit="save"
+    @cancel="modal = false"
   >
     <template v-if="edit">
       <div class="two-columns">
@@ -561,18 +566,8 @@ useLiveRefresh(api, ["monitoring"], async () => {
           恢复值须小于超限值，启用时持续窗口至少为两个采样间隔。
         </p>
       </fieldset>
-      <div class="actions">
-        <n-button @click="modal = false">取消</n-button
-        ><n-button
-          type="primary"
-          :loading="busy"
-          :disabled="thresholdKinds.some((t) => thresholdInvalid(edit![t.key]))"
-          @click="save"
-          >保存</n-button
-        >
-      </div>
     </template>
-  </n-modal>
+  </FormDialog>
 </template>
 
 <style scoped>

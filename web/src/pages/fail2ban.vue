@@ -12,8 +12,9 @@
 }
 </route>
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { computed, onMounted, ref } from "vue";
-import { onBeforeRouteLeave, RouterLink } from "vue-router";
+import { RouterLink } from "vue-router";
 import {
   NAlert,
   NButton,
@@ -22,7 +23,6 @@ import {
   NFormItem,
   NInput,
   NInputNumber,
-  NModal,
   NSelect,
   NTag,
 } from "naive-ui";
@@ -70,12 +70,6 @@ const banned = computed(() =>
         "防护规则",
     })),
   ),
-);
-const hasEditing = computed(
-  () => !!editing.value || whitelist.value !== null || showBan.value,
-);
-onBeforeRouteLeave(
-  () => !hasEditing.value || window.confirm("当前输入尚未保存，确认离开？"),
 );
 const editBase = ref<Fail2banContainerConfig | null>(null),
   banMode = ref<"ban" | "unban">("ban");
@@ -406,13 +400,20 @@ onMounted(load);
       <NEmpty v-else description="暂无服务日志" />
     </section>
   </div>
-  <NModal
+  <FormDialog
     :show="!!editing"
-    preset="card"
     title="防护规则"
-    class="defense-modal"
-    :mask-closable="!busy"
-    @update:show="!$event && (editing = null)"
+    :busy="busy"
+    :draft="editing"
+    :submit-disabled="
+      !permitted ||
+      blocked ||
+      !editing ||
+      !editing.name.trim() ||
+      !editing.ports.length
+    "
+    @submit="saveRule"
+    @cancel="editing = null"
     ><div v-if="editing" class="page-stack">
       <NFormItem label="规则名称"
         ><NInput v-model:value="editing.name" maxlength="40" /></NFormItem
@@ -469,29 +470,16 @@ onMounted(load);
         /></NFormItem>
       </div>
       <NCheckbox v-model:checked="editing.enabled">启用规则</NCheckbox>
-      <div class="button-row">
-        <NButton
-          type="primary"
-          :loading="busy"
-          :disabled="
-            !permitted ||
-            blocked ||
-            !editing.name.trim() ||
-            !editing.ports.length
-          "
-          @click="saveRule"
-          >保存规则</NButton
-        ><NButton :disabled="busy" @click="editing = null">取消</NButton>
-      </div>
-    </div></NModal
+    </div></FormDialog
   >
-  <NModal
+  <FormDialog
     :show="whitelist !== null"
-    preset="card"
     title="编辑信任名单"
-    class="defense-modal"
-    :mask-closable="!busy"
-    @update:show="!$event && (whitelist = null)"
+    :busy="busy"
+    :draft="whitelist"
+    :submit-disabled="!permitted || blocked || !status || !editBase"
+    @submit="editBase && whitelist && save({ ...editBase, whitelist: whitelist.map((a) => a.trim()).filter(Boolean) })"
+    @cancel="whitelist = null"
     ><div v-if="whitelist" class="page-stack">
       <ValueListInput
         v-model:value="whitelist"
@@ -500,30 +488,19 @@ onMounted(load);
         :max="128"
         :maxlength="64"
         :disabled="busy"
-      />
-      <div class="button-row">
-        <NButton
-          type="primary"
-          :loading="busy"
-          :disabled="!permitted || blocked || !status"
-          @click="
-            editBase &&
-            save({
-              ...editBase,
-              whitelist: whitelist.map((a) => a.trim()).filter(Boolean),
-            })
-          "
-          >保存名单</NButton
-        ><NButton :disabled="busy" @click="whitelist = null">取消</NButton>
-      </div>
-    </div></NModal
-  >
-  <NModal
-    v-model:show="showBan"
-    preset="card"
+      /></div
+  ></FormDialog>
+  <FormDialog
+    :show="showBan"
+    :submit-text="banMode === 'ban' ? '确认封禁' : '解除封禁'"
     :title="banMode === 'ban' ? '添加封禁' : '解除封禁'"
-    class="defense-modal"
-    :mask-closable="!busy"
+    :busy="busy"
+    :draft="[banRule, addresses]"
+    :submit-disabled="
+      !permitted || blocked || !banRule || !addresses[0]?.trim()
+    "
+    @submit="ban"
+    @cancel="showBan = false"
     ><div class="page-stack">
       <NFormItem label="防护规则"
         ><NSelect v-model:value="banRule" :options="ruleOptions" /></NFormItem
@@ -532,18 +509,8 @@ onMounted(load);
           :value="addresses[0] ?? ''"
           placeholder="输入需要封禁的 IP 地址"
           @update:value="addresses = [$event]"
-      /></NFormItem>
-      <div class="button-row">
-        <NButton
-          type="primary"
-          :loading="busy"
-          :disabled="!permitted || blocked || !banRule || !addresses[0]?.trim()"
-          @click="ban"
-          >{{ banMode === "ban" ? "确认封禁" : "解除封禁" }}</NButton
-        ><NButton :disabled="busy" @click="showBan = false">取消</NButton>
-      </div>
-    </div></NModal
-  >
+      /></NFormItem></div
+  ></FormDialog>
 </template>
 <style scoped>
 .defense-stats {

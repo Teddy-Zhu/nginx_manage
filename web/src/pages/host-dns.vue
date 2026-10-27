@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
@@ -288,6 +289,16 @@ async function read() {
     }
   }
 }
+const editBaseline = ref("");
+const editSnapshot = computed(() =>
+  JSON.stringify([
+    servers.value,
+    search.value,
+    families.value,
+    verifyNames.value,
+    takeover.value,
+  ]),
+);
 function edit() {
   if (!observed.value) return;
   const staticConfig = networkd.value
@@ -311,6 +322,7 @@ function edit() {
     ];
   takeover.value = false;
   plan.value = null;
+  editBaseline.value = editSnapshot.value;
   editing.value = true;
 }
 async function loadMigrationCandidate() {
@@ -714,16 +726,24 @@ function cancelEdit() {
       >
     </section>
 
-    <section v-if="editing" class="surface dns-editor">
-      <div class="section-toolbar">
-        <div>
-          <h2>修改设置</h2>
-          <p class="muted">填写 DNS 地址，再检查并应用变更。</p>
-        </div>
-        <n-button quaternary :disabled="busy" @click="cancelEdit"
-          >取消修改</n-button
-        >
-      </div>
+    <FormDialog
+      :show="editing"
+      title="修改 DNS"
+      :busy="busy"
+      width="860px"
+      :dirty="editSnapshot !== editBaseline"
+      :submit-disabled="
+        !canWrite ||
+        !takeover ||
+        !writable ||
+        !module?.enabled ||
+        activeTask ||
+        !!pending
+      "
+      :submit-text="plan && !planExpired ? '应用设置' : '检查设置'"
+      @submit="plan && !planExpired ? apply() : preview()"
+      @cancel="cancelEdit"
+    >
       <template v-if="!networkManager">
         <n-form-item label="DNS 地址" required>
           <ValueListInput
@@ -823,23 +843,6 @@ function cancelEdit() {
         @update:checked="invalidate"
         >确认用以上设置替换当前 DNS 配置</n-checkbox
       >
-      <div class="dns-actions dns-form-footer">
-        <n-button
-          :type="plan && !planExpired ? 'default' : 'primary'"
-          :loading="busy"
-          :disabled="
-            !canWrite ||
-            !takeover ||
-            !writable ||
-            !module?.enabled ||
-            activeTask ||
-            !!pending
-          "
-          @click="preview"
-          >{{ plan ? "重新检查" : "检查设置" }}</n-button
-        >
-        <n-button :disabled="busy" @click="cancelEdit">取消</n-button>
-      </div>
 
       <div v-if="plan" class="dns-review">
         <div class="section-toolbar">
@@ -877,22 +880,8 @@ function cancelEdit() {
             plan.input.verify_names.join("、")
           }}。应用后请确认连接正常，再保留设置。
         </p>
-        <n-button
-          type="primary"
-          :loading="busy"
-          :disabled="
-            planExpired ||
-            !canWrite ||
-            !module?.enabled ||
-            !writable ||
-            activeTask ||
-            !!pending
-          "
-          @click="apply"
-          >应用 DNS 设置</n-button
-        >
       </div>
-    </section>
+    </FormDialog>
 
     <section v-if="task && !activeTask && !pending" class="surface">
       <div class="section-toolbar">

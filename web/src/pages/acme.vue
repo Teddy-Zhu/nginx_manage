@@ -10,6 +10,7 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import CertificateWorkspace from "../components/CertificateWorkspace.vue";
 import { useRoute } from "vue-router";
 import { useLiveRefresh } from "../composables/live";
@@ -21,7 +22,6 @@ import {
   NButton,
   NCheckbox,
   NEmpty,
-  NForm,
   NFormItem,
   NInput,
   NSelect,
@@ -407,56 +407,44 @@ useLiveRefresh(api, ["tasks"], () => {
             >添加账户</n-button
           >
         </div>
-        <section
-          v-if="accountEditing"
-          class="surface"
-          style="margin-bottom: 20px"
+        <FormDialog
+          :show="accountEditing"
+          title="添加申请账户"
+          :busy="busy"
+          :submit-disabled="
+            !accountForm.name.trim() ||
+            !accountForm.email.trim() ||
+            !accountForm.terms_agreed
+          "
+          @submit="createAccount"
+          @cancel="closeAccount"
         >
-          <n-form
-            label-placement="top"
-            :disabled="busy"
-            @submit.prevent="createAccount"
+          <n-form-item label="名称"
+            ><n-input v-model:value="accountForm.name" :maxlength="128"
+          /></n-form-item>
+          <n-form-item label="邮箱"
+            ><n-input
+              v-model:value="accountForm.email"
+              :maxlength="254"
+              :input-props="{ type: 'email', autocomplete: 'email' }"
+          /></n-form-item>
+          <n-form-item label="证书用途"
+            ><n-select
+              v-model:value="accountForm.environment"
+              :options="[
+                { label: '测试证书（不受浏览器信任）', value: 'staging' },
+                {
+                  label: '正式证书（网站使用）',
+                  value: 'production',
+                },
+              ]"
+          /></n-form-item>
+          <n-form-item
+            ><n-checkbox v-model:checked="accountForm.terms_agreed"
+              >已阅读并同意 Let's Encrypt 当前服务条款</n-checkbox
+            ></n-form-item
           >
-            <n-form-item label="名称"
-              ><n-input v-model:value="accountForm.name" :maxlength="128"
-            /></n-form-item>
-            <n-form-item label="邮箱"
-              ><n-input
-                v-model:value="accountForm.email"
-                :maxlength="254"
-                :input-props="{ type: 'email', autocomplete: 'email' }"
-            /></n-form-item>
-            <n-form-item label="证书用途"
-              ><n-select
-                v-model:value="accountForm.environment"
-                :options="[
-                  { label: '测试证书（不受浏览器信任）', value: 'staging' },
-                  {
-                    label: '正式证书（网站使用）',
-                    value: 'production',
-                  },
-                ]"
-            /></n-form-item>
-            <n-form-item
-              ><n-checkbox v-model:checked="accountForm.terms_agreed"
-                >已阅读并同意 Let's Encrypt 当前服务条款</n-checkbox
-              ></n-form-item
-            >
-            <div class="inline-gap">
-              <n-button
-                type="primary"
-                attr-type="submit"
-                :loading="busy"
-                :disabled="
-                  !accountForm.name.trim() ||
-                  !accountForm.email.trim() ||
-                  !accountForm.terms_agreed
-                "
-                >注册账户</n-button
-              ><n-button :disabled="busy" @click="closeAccount">取消</n-button>
-            </div>
-          </n-form>
-        </section>
+        </FormDialog>
         <n-empty
           v-if="!accounts.length && !accountEditing"
           description="尚未添加申请账户"
@@ -529,63 +517,49 @@ useLiveRefresh(api, ["tasks"], () => {
             >添加 DNS 授权</n-button
           >
         </div>
-        <section
-          v-if="credentialEditing"
-          class="surface"
-          style="margin-bottom: 20px"
+        <FormDialog
+          :show="credentialEditing"
+          :title="originalCredential ? '编辑 DNS 授权' : '添加 DNS 授权'"
+          :busy="busy"
+          :submit-disabled="!validCredential"
+          @submit="saveCredential"
+          @cancel="closeCredential"
         >
-          <n-form
-            label-placement="top"
-            :disabled="busy"
-            @submit.prevent="saveCredential"
+          <n-form-item label="名称"
+            ><n-input v-model:value="credentialName" :maxlength="128"
+          /></n-form-item>
+          <n-form-item label="域名服务商"
+            ><n-select
+              v-model:value="provider"
+              :options="providerOptions"
+              :disabled="!!originalCredential || busy"
+              @update:value="changeProvider"
+          /></n-form-item>
+          <n-form-item v-if="originalCredential"
+            ><n-checkbox
+              v-model:checked="replaceSecrets"
+              @update:checked="changeReplace"
+              >更新授权密钥</n-checkbox
+            ></n-form-item
           >
-            <n-form-item label="名称"
-              ><n-input v-model:value="credentialName" :maxlength="128"
-            /></n-form-item>
-            <n-form-item label="域名服务商"
-              ><n-select
-                v-model:value="provider"
-                :options="providerOptions"
-                :disabled="!!originalCredential || busy"
-                @update:value="changeProvider"
-            /></n-form-item>
-            <n-form-item v-if="originalCredential"
-              ><n-checkbox
-                v-model:checked="replaceSecrets"
-                @update:checked="changeReplace"
-                >更新授权密钥</n-checkbox
-              ></n-form-item
-            >
-            <template v-if="replaceSecrets"
-              ><n-form-item
-                v-for="field in fields"
-                :key="field.key"
-                :label="field.label"
-                :required="field.required"
-                ><n-input
-                  v-model:value="secrets[field.key]"
-                  type="password"
-                  show-password-on="click"
-                  :maxlength="2048"
-                  :input-props="{
-                    autocomplete: 'new-password',
-                    spellcheck: false,
-                  }" /></n-form-item
-            ></template>
-            <p v-else class="muted">保留已保存的授权密钥。</p>
-            <div class="inline-gap">
-              <n-button
-                type="primary"
-                attr-type="submit"
-                :loading="busy"
-                :disabled="!validCredential"
-                >保存授权</n-button
-              ><n-button :disabled="busy" @click="closeCredential"
-                >取消</n-button
-              >
-            </div>
-          </n-form>
-        </section>
+          <template v-if="replaceSecrets"
+            ><n-form-item
+              v-for="field in fields"
+              :key="field.key"
+              :label="field.label"
+              :required="field.required"
+              ><n-input
+                v-model:value="secrets[field.key]"
+                type="password"
+                show-password-on="click"
+                :maxlength="2048"
+                :input-props="{
+                  autocomplete: 'new-password',
+                  spellcheck: false,
+                }" /></n-form-item
+          ></template>
+          <p v-else class="muted">保留已保存的授权密钥。</p>
+        </FormDialog>
         <n-empty
           v-if="!credentials.length && !credentialEditing"
           description="尚未添加 DNS 授权"

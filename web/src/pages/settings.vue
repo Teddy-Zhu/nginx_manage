@@ -13,6 +13,7 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { permissionLabel } from "../utils/permissions";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
@@ -21,7 +22,6 @@ import { ref, onMounted } from "vue";
 import {
   NButton,
   NInput,
-  NForm,
   NFormItem,
   NModal,
   NSelect,
@@ -50,6 +50,7 @@ const { run, busy, message } = useAction(),
 const credentials = ref<Credential[]>([]);
 const systemVersion = ref<SystemVersion | null>(null);
 
+const passwordOpen = ref(false);
 const credentialVisible = ref(false),
   tokenVisible = ref(false),
   name = ref(""),
@@ -94,6 +95,9 @@ async function createCredential() {
       },
     });
     token.value = result.token;
+    name.value = "";
+    scopes.value = ["read"];
+    sources.value = [];
     credentialVisible.value = false;
     tokenVisible.value = true;
     credentials.value = await request<Credential[]>({ url: "/credentials" });
@@ -123,6 +127,7 @@ async function changePassword() {
       data: { password: password.value },
     });
     password.value = "";
+    passwordOpen.value = false;
     session.clear();
     await router.push("/login");
   }, "密码已修改，请重新登录");
@@ -192,10 +197,23 @@ onMounted(load);
       <dt>用户名</dt>
       <dd>{{ session.localMe?.username }}</dd>
     </dl>
-    <n-form
-      label-placement="top"
-      class="account-form"
-      @submit.prevent="changePassword"
+    <div class="form-actions">
+      <n-button :disabled="busy" @click="passwordOpen = true"
+        >修改密码</n-button
+      >
+      <n-button :disabled="busy" @click="revokeSessions">撤销全部会话</n-button>
+    </div>
+    <FormDialog
+      :show="passwordOpen"
+      title="修改密码"
+      :busy="busy"
+      :dirty="!!password"
+      :submit-disabled="[...password].length < 6"
+      @submit="changePassword"
+      @cancel="
+        passwordOpen = false;
+        password = '';
+      "
       ><n-form-item label="新密码（至少 6 个字符）"
         ><n-input
           v-model:value="password"
@@ -203,18 +221,7 @@ onMounted(load);
           autocomplete="new-password"
           show-password-on="click"
       /></n-form-item>
-      <div class="form-actions">
-        <n-button
-          attr-type="submit"
-          type="primary"
-          :loading="busy"
-          :disabled="[...password].length < 6"
-          >修改密码</n-button
-        ><n-button :disabled="busy" @click="revokeSessions"
-          >撤销全部会话</n-button
-        >
-      </div></n-form
-    >
+    </FormDialog>
   </section>
   <section class="surface">
     <div class="section-heading">
@@ -247,41 +254,40 @@ onMounted(load);
       "
     />
   </section>
-  <n-modal
-    v-model:show="credentialVisible"
-    preset="card"
+  <FormDialog
+    :show="credentialVisible"
     title="创建机器凭据"
-    style="width: 500px; max-width: 94vw"
-    ><n-form @submit.prevent="createCredential"
-      ><n-form-item label="名称"
-        ><n-input v-model:value="name" :maxlength="100" /></n-form-item
-      ><n-form-item label="权限范围"
-        ><n-select
-          v-model:value="scopes"
-          multiple
-          :options="
-            (session.localMe?.scopes ?? []).map((scope) => ({
-              label: permissionLabel(scope),
-              value: scope,
-            }))
-          " /></n-form-item
-      ><n-form-item label="允许来源（可选）"
-        ><ValueListInput
-          v-model:value="sources"
-          item-label="来源网段"
-          :max="32"
-          placeholder="192.0.2.0/24 或 2001:db8::/32"
-          :maxlength="64" /></n-form-item
-      ><n-button
-        attr-type="submit"
-        block
-        type="primary"
-        :loading="busy"
-        :disabled="!name || !scopes.length"
-        >创建</n-button
-      ></n-form
-    ></n-modal
-  >
+    :busy="busy"
+    :draft="[name, scopes, sources]"
+    :submit-disabled="!name.trim() || !scopes.length"
+    submit-text="创建"
+    @submit="createCredential"
+    @cancel="
+      credentialVisible = false;
+      name = '';
+      scopes = ['read'];
+      sources = [];
+    "
+    ><n-form-item label="名称"
+      ><n-input v-model:value="name" :maxlength="100" /></n-form-item
+    ><n-form-item label="权限范围"
+      ><n-select
+        v-model:value="scopes"
+        multiple
+        :options="
+          (session.localMe?.scopes ?? []).map((scope) => ({
+            label: permissionLabel(scope),
+            value: scope,
+          }))
+        " /></n-form-item
+    ><n-form-item label="允许来源（可选）"
+      ><ValueListInput
+        v-model:value="sources"
+        item-label="来源网段"
+        :max="32"
+        placeholder="192.0.2.0/24 或 2001:db8::/32"
+        :maxlength="64" /></n-form-item
+  ></FormDialog>
   <n-modal
     v-model:show="tokenVisible"
     preset="card"

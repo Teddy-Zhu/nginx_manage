@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import CertificateWorkspace from "../components/CertificateWorkspace.vue";
 import { useLiveRefresh } from "../composables/live";
 import { useRoute, useRouter } from "vue-router";
@@ -23,10 +24,8 @@ import {
   NButton,
   NDataTable,
   NEmpty,
-  NForm,
   NFormItem,
   NInput,
-  NModal,
   NTag,
   type DataTableColumns,
 } from "naive-ui";
@@ -275,7 +274,7 @@ columns.push({
       {
         size: "small",
         disabled: busy.value,
-        onClick: (event: MouseEvent) => {
+        onClick: (event: globalThis.MouseEvent) => {
           event.stopPropagation();
           open(row);
         },
@@ -467,51 +466,44 @@ onUnmounted(() => {
         网站或历史配置仍在使用此证书，暂不能删除。
       </p>
     </section>
-    <n-modal
+    <FormDialog
       :show="importing"
-      preset="card"
       :title="replaceID ? '更新证书文件' : '导入证书'"
-      style="width: 760px; max-width: 94vw"
-      :mask-closable="false"
-      :close-on-esc="false"
-      @close="closeImport"
+      :busy="busy"
+      width="760px"
+      submit-text="确认导入"
+      @submit="save"
+      @cancel="closeImport"
     >
-      <n-form :disabled="busy" label-placement="top" @submit.prevent="save">
-        <n-form-item label="名称"
-          ><n-input v-model:value="name" :maxlength="128"
-        /></n-form-item>
-        <n-form-item label="备注"
-          ><n-input v-model:value="notes" :maxlength="2048"
-        /></n-form-item>
-        <n-form-item label="证书文件"
-          ><div style="width: 100%">
-            <input
-              type="file"
-              accept=".pem,.crt,.cer"
-              :disabled="busy"
-              @change="readFile($event, 'chain')"
-            />
-            <p v-if="chainName" class="muted">已选择：{{ chainName }}</p>
-          </div></n-form-item
-        >
-        <n-form-item label="私钥文件"
-          ><div style="width: 100%">
-            <input
-              type="file"
-              accept=".pem,.key"
-              :disabled="busy"
-              @change="readFile($event, 'key')"
-            />
-            <p v-if="keyName" class="muted">已选择：{{ keyName }}</p>
-          </div></n-form-item
-        >
-        <p class="muted">请选择配套的证书和私钥文件。私钥导入后会加密保存。</p>
-        <div class="inline-gap">
-          <n-button type="primary" attr-type="submit" :loading="busy"
-            >确认导入</n-button
-          ><n-button :disabled="busy" @click="closeImport">取消</n-button>
-        </div>
-      </n-form>
-    </n-modal>
+      <n-form-item label="名称"
+        ><n-input v-model:value="name" :maxlength="128"
+      /></n-form-item>
+      <n-form-item label="备注"
+        ><n-input v-model:value="notes" :maxlength="2048"
+      /></n-form-item>
+      <n-form-item label="证书文件"
+        ><div style="width: 100%">
+          <input
+            type="file"
+            accept=".pem,.crt,.cer"
+            :disabled="busy"
+            @change="readFile($event, 'chain')"
+          />
+          <p v-if="chainName" class="muted">已选择：{{ chainName }}</p>
+        </div></n-form-item
+      >
+      <n-form-item label="私钥文件"
+        ><div style="width: 100%">
+          <input
+            type="file"
+            accept=".pem,.key"
+            :disabled="busy"
+            @change="readFile($event, 'key')"
+          />
+          <p v-if="keyName" class="muted">已选择：{{ keyName }}</p>
+        </div></n-form-item
+      >
+      <p class="muted">请选择配套的证书和私钥文件。私钥导入后会加密保存。</p>
+    </FormDialog>
   </CertificateWorkspace>
 </template>

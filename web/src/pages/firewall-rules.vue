@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import PortRangesInput from "../components/PortRangesInput.vue";
@@ -21,10 +22,8 @@ import {
   NButton,
   NDataTable,
   NDropdown,
-  NForm,
   NFormItem,
   NInput,
-  NModal,
   NSelect,
   NSpace,
   NSwitch,
@@ -50,7 +49,13 @@ import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
 import { randomUUID } from "../utils/crypto";
 import { countryOptions, countryName } from "../utils/countries";
-import { accessMode, allowPorts, defaultRule, modeRules, orderRules } from "../utils/firewall-shortcuts";
+import {
+  accessMode,
+  allowPorts,
+  defaultRule,
+  modeRules,
+  orderRules,
+} from "../utils/firewall-shortcuts";
 const api = useNodeAPI(),
   session = useSession(),
   dialog = useDialog();
@@ -70,7 +75,8 @@ const activeTab = ref("rules"),
   ]),
   sources = ref<string[]>([]),
   formError = ref("");
-const formBusy = ref(false), checkError = ref("");
+const formBusy = ref(false),
+  checkError = ref("");
 const quickBusy = ref<"management" | "ssh" | "web" | null>(null);
 const controller = new AbortController();
 onUnmounted(() => controller.abort());
@@ -86,16 +92,31 @@ const countries = computed(() => [
   ...new Set(policy.value.rules.flatMap((rule) => rule.countries || [])),
 ]);
 const mode = computed(() => accessMode(policy.value.rules));
-const modeLabel = computed(() => mode.value === "allow" ? "默认放通 · 黑名单" :
-  mode.value === "deny" ? "默认屏蔽 · 白名单" : policy.value.rules.length ? "自定义访问规则" : "跟随系统规则");
+const modeLabel = computed(() =>
+  mode.value === "allow"
+    ? "默认放通 · 黑名单"
+    : mode.value === "deny"
+      ? "默认屏蔽 · 白名单"
+      : policy.value.rules.length
+        ? "自定义访问规则"
+        : "跟随系统规则",
+);
 const shortcutOptions = computed<DropdownOption[]>(() => [
   {
     type: "group",
     label: "访问模式",
     key: "modes",
     children: [
-      { label: "默认放通（黑名单）", key: "mode-allow", disabled: mode.value === "allow" },
-      { label: "默认屏蔽（白名单）", key: "mode-deny", disabled: mode.value === "deny" },
+      {
+        label: "默认放通（黑名单）",
+        key: "mode-allow",
+        disabled: mode.value === "allow",
+      },
+      {
+        label: "默认屏蔽（白名单）",
+        key: "mode-deny",
+        disabled: mode.value === "deny",
+      },
     ],
   },
   {
@@ -111,17 +132,35 @@ const shortcutOptions = computed<DropdownOption[]>(() => [
     ],
   },
   { type: "divider", key: "reset-divider" },
-  { label: "重置防火墙规则", key: "reset", disabled: !policy.value.rules.length },
+  {
+    label: "重置防火墙规则",
+    key: "reset",
+    disabled: !policy.value.rules.length,
+  },
 ]);
 function selectShortcut(key: string) {
   if (busy.value || !canWrite.value || !stored.value) return;
   switch (key) {
-    case "mode-allow": chooseMode("allow"); break;
-    case "mode-deny": chooseMode("deny"); break;
-    case "management": case "web": case "ssh": void quickPorts(key); break;
-    case "address-deny": quickAddress("deny"); break;
-    case "address-allow": quickAddress("allow"); break;
-    case "reset": resetRules(); break;
+    case "mode-allow":
+      chooseMode("allow");
+      break;
+    case "mode-deny":
+      chooseMode("deny");
+      break;
+    case "management":
+    case "web":
+    case "ssh":
+      void quickPorts(key);
+      break;
+    case "address-deny":
+      quickAddress("deny");
+      break;
+    case "address-allow":
+      quickAddress("allow");
+      break;
+    case "reset":
+      resetRules();
+      break;
   }
 }
 const kinds = [
@@ -177,9 +216,10 @@ function chooseMode(action: "allow" | "deny") {
   if (mode.value === action) return;
   dialog.warning({
     title: action === "allow" ? "启用黑名单模式" : "启用白名单模式",
-    content: (action === "allow"
-      ? "未单独屏蔽的 TCP、UDP 端口将允许访问。"
-      : "未放行的 TCP、UDP 端口将屏蔽访问。请先添加网站等需要开放的服务；当前管理来源的面板和 SSH 入口仍受保护。") +
+    content:
+      (action === "allow"
+        ? "未单独屏蔽的 TCP、UDP 端口将允许访问。"
+        : "未放行的 TCP、UDP 端口将屏蔽访问。请先添加网站等需要开放的服务；当前管理来源的面板和 SSH 入口仍受保护。") +
       "此操作替换全端口默认规则，保留按端口、IP 和地区设置的规则。保存并应用后生效。",
     positiveText: "确定",
     negativeText: "取消",
@@ -201,14 +241,27 @@ async function quickPorts(service: "management" | "ssh" | "web") {
       if (service !== "web") {
         const runtime = await api.firewallRuntime(controller.signal);
         if (service === "ssh" && !runtime.shortcuts.ssh_detected)
-          throw new Error(runtime.shortcuts.reason || "无法读取 SSH 端口，请稍后重试");
+          throw new Error(
+            runtime.shortcuts.reason || "无法读取 SSH 端口，请稍后重试",
+          );
         ports = runtime.shortcuts[service];
         if (!ports.length)
-          throw new Error(service === "ssh" ? "未发现正在监听的 SSH 服务，请先启动服务或手动添加端口" : "未读取到面板监听端口，请刷新后重试");
+          throw new Error(
+            service === "ssh"
+              ? "未发现正在监听的 SSH 服务，请先启动服务或手动添加端口"
+              : "未读取到面板监听端口，请刷新后重试",
+          );
       }
-      const name = service === "management" ? "面板访问" : service === "ssh" ? "SSH 访问" : "网站访问";
+      const name =
+        service === "management"
+          ? "面板访问"
+          : service === "ssh"
+            ? "SSH 访问"
+            : "网站访问";
       if (reorder(allowPorts(policy.value.rules, name, ports)))
-        message.success(`已添加 ${name}（TCP ${ports.join("、")}），请保存并应用`);
+        message.success(
+          `已添加 ${name}（TCP ${ports.join("、")}），请保存并应用`,
+        );
     });
   } finally {
     quickBusy.value = null;
@@ -224,7 +277,8 @@ function quickAddress(action: "allow" | "deny") {
 function resetRules() {
   dialog.warning({
     title: "重置防火墙规则",
-    content: "将清空本面板添加的访问规则，并恢复为跟随系统规则。系统及其他软件自行维护的规则继续保留。保存并应用后生效。",
+    content:
+      "将清空本面板添加的访问规则，并恢复为跟随系统规则。系统及其他软件自行维护的规则继续保留。保存并应用后生效。",
     positiveText: "重置规则",
     negativeText: "取消",
     onPositiveClick: () => {
@@ -368,7 +422,15 @@ async function commitRule() {
     }
   }
   const exists = policy.value.rules.some((rule) => rule.id === value.id);
-  if (reorder(exists ? policy.value.rules.map((rule) => rule.id === value.id ? value : rule) : [value, ...policy.value.rules]))
+  if (
+    reorder(
+      exists
+        ? policy.value.rules.map((rule) =>
+            rule.id === value.id ? value : rule,
+          )
+        : [value, ...policy.value.rules],
+    )
+  )
     editing.value = null;
 }
 function remove(rule: FirewallRule) {
@@ -544,7 +606,14 @@ async function save(confirmConflicts = false) {
           positiveText: "按此顺序保存",
           negativeText: "取消",
           onPositiveClick: () => {
-            if (checked !== JSON.stringify({ ...data, base_version: stored.value?.version || 0, policy: policy.value })) {
+            if (
+              checked !==
+              JSON.stringify({
+                ...data,
+                base_version: stored.value?.version || 0,
+                policy: policy.value,
+              })
+            ) {
               message.warning("规则已变化，请重新保存并检查");
               return;
             }
@@ -653,8 +722,12 @@ onMounted(load);
               :disabled="busy || !canWrite || !stored"
               @select="selectShortcut"
             >
-              <n-button :loading="quickBusy !== null" :disabled="busy || !canWrite || !stored">
-                快捷添加 <span aria-hidden="true" class="shortcut-arrow">▾</span>
+              <n-button
+                :loading="quickBusy !== null"
+                :disabled="busy || !canWrite || !stored"
+              >
+                快捷添加
+                <span aria-hidden="true" class="shortcut-arrow">▾</span>
               </n-button>
             </n-dropdown>
             <n-button
@@ -662,10 +735,13 @@ onMounted(load);
               secondary
               :disabled="busy || !canWrite || !stored"
               @click="add"
-              >添加规则</n-button>
+              >添加规则</n-button
+            >
           </n-space>
         </div>
-        <n-alert v-if="checkError" type="error" :show-icon="false">{{ checkError }}</n-alert>
+        <n-alert v-if="checkError" type="error" :show-icon="false">{{
+          checkError
+        }}</n-alert>
         <n-data-table
           :columns="columns"
           :data="policy.rules"
@@ -718,20 +794,15 @@ onMounted(load);
       /></n-tab-pane>
     </n-tabs>
   </div>
-  <n-modal
+  <FormDialog
     :show="!!editing"
-    preset="card"
     title="防火墙规则"
-    style="width: min(680px, 94vw)"
-    :mask-closable="false"
-    :closable="!formBusy"
-    @update:show="
-      (value: boolean) => {
-        if (!value) editing = null;
-      }
-    "
+    :busy="busy || formBusy"
+    :draft="[editing, sources, portRanges, kind]"
+    @submit="commitRule"
+    @cancel="editing = null"
   >
-    <n-form v-if="editing" :disabled="formBusy">
+    <template v-if="editing">
       <n-alert v-if="formError" type="error">{{ formError }}</n-alert>
       <n-form-item label="规则类型"
         ><n-select
@@ -800,20 +871,8 @@ onMounted(load);
         <n-form-item label="备注"
           ><n-input v-model:value="editing.comment" maxlength="512"
         /></n-form-item>
-      </section>
-      <n-space justify="end"
-        ><n-button :disabled="busy || formBusy" @click="editing = null"
-          >取消</n-button
-        ><n-button
-          type="primary"
-          :loading="formBusy"
-          :disabled="busy || formBusy"
-          @click="commitRule"
-          >确定</n-button
-        ></n-space
-      >
-    </n-form>
-  </n-modal>
+      </section> </template
+  ></FormDialog>
 </template>
 <style scoped>
 .firewall-card {

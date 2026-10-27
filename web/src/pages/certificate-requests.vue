@@ -10,6 +10,7 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import CertificateWorkspace from "../components/CertificateWorkspace.vue";
 import { inspectTask } from "../stores/operation";
 import { useRoute, useRouter } from "vue-router";
@@ -22,9 +23,7 @@ import {
   NAlert,
   NButton,
   NEmpty,
-  NModal,
   NCheckbox,
-  NForm,
   NFormItem,
   NInput,
   NSelect,
@@ -447,106 +446,97 @@ useLiveRefresh(api, ["tasks"], () => {
         ><span class="muted">也可在申请时选择网站验证。</span>
       </div>
     </section>
-    <section v-if="editing" class="surface cert-section">
-      <div>
-        <h2>申请新证书</h2>
-        <p class="muted">提交后开始验证域名，申请结果会显示在下方记录中。</p>
+    <FormDialog
+      :show="editing"
+      title="申请新证书"
+      :busy="busy"
+      :submit-disabled="!valid"
+      submit-text="提交申请"
+      @submit="create"
+      @cancel="close"
+    >
+      <p class="muted">提交后开始验证域名，可在申请记录中查看结果。</p>
+      <div class="cert-form-grid">
+        <n-form-item label="证书名称" required
+          ><n-input
+            v-model:value="form.name"
+            :maxlength="128"
+            placeholder="便于识别，例如：公司网站"
+        /></n-form-item>
+        <n-form-item label="申请账户" required
+          ><n-select v-model:value="form.account_id" :options="accountOptions"
+        /></n-form-item>
       </div>
-      <n-form label-placement="top" :disabled="busy" @submit.prevent="create">
-        <div class="cert-form-grid">
-          <n-form-item label="证书名称" required
-            ><n-input
-              v-model:value="form.name"
-              :maxlength="128"
-              placeholder="便于识别，例如：公司网站"
-          /></n-form-item>
-          <n-form-item label="申请账户" required
-            ><n-select
-              v-model:value="form.account_id"
-              :options="accountOptions"
-          /></n-form-item>
-        </div>
+      <n-alert
+        v-if="selectedAccount?.environment === 'staging'"
+        type="warning"
+        :bordered="false"
+        class="form-notice"
+        >此账户用于测试，申请的证书不受浏览器信任。正式网站请选择正式账户。</n-alert
+      >
+      <n-form-item label="验证方式"
+        ><n-select
+          :value="form.challenge_type"
+          :options="[
+            { label: 'DNS 验证（支持通配域名）', value: 'dns-01' },
+            { label: '网站验证（需要公网 80 端口）', value: 'http-01' },
+          ]"
+          @update:value="changeChallengeType"
+      /></n-form-item>
+      <template v-if="form.challenge_type === 'dns-01'">
+        <n-form-item label="DNS 授权" required
+          ><n-select
+            v-model:value="form.credential_id"
+            :options="credentialOptions"
+            placeholder="选择域名所在服务商的授权"
+        /></n-form-item>
         <n-alert
-          v-if="selectedAccount?.environment === 'staging'"
+          v-if="!credentialOptions.length"
           type="warning"
           :bordered="false"
           class="form-notice"
-          >此账户用于测试，申请的证书不受浏览器信任。正式网站请选择正式账户。</n-alert
+          >尚未添加 DNS 授权，请先前往
+          <router-link
+            :to="{
+              path: '/acme',
+              query: { tab: 'credentials', from: 'request' },
+            }"
+            >申请设置</router-link
+          >
+          添加，或改用网站验证。</n-alert
         >
-        <n-form-item label="验证方式"
-          ><n-select
-            :value="form.challenge_type"
-            :options="[
-              { label: 'DNS 验证（支持通配域名）', value: 'dns-01' },
-              { label: '网站验证（需要公网 80 端口）', value: 'http-01' },
-            ]"
-            @update:value="changeChallengeType"
-        /></n-form-item>
-        <template v-if="form.challenge_type === 'dns-01'">
-          <n-form-item label="DNS 授权" required
-            ><n-select
-              v-model:value="form.credential_id"
-              :options="credentialOptions"
-              placeholder="选择域名所在服务商的授权"
-          /></n-form-item>
-          <n-alert
-            v-if="!credentialOptions.length"
-            type="warning"
-            :bordered="false"
-            class="form-notice"
-            >尚未添加 DNS 授权，请先前往
-            <router-link
-              :to="{
-                path: '/acme',
-                query: { tab: 'credentials', from: 'request' },
-              }"
-              >申请设置</router-link
-            >
-            添加，或改用网站验证。</n-alert
-          >
-          <p v-else class="muted form-notice">
-            申请时会临时添加域名验证记录，完成后自动清理。
-          </p>
-        </template>
-        <template v-else>
-          <n-alert type="info" :bordered="false" class="form-notice"
-            >域名需指向这台服务器，公网 80 端口需可访问，并在
-            <router-link to="/nginx">网站与代理</router-link>
-            中启用域名验证入口。通配域名请改用 DNS 验证。</n-alert
-          >
-          <n-form-item
-            ><n-checkbox v-model:checked="form.http01_confirmed"
-              >已配置网站验证入口，并确认域名指向及公网 80
-              端口可访问</n-checkbox
-            ></n-form-item
-          >
-        </template>
-        <n-form-item label="申请域名" required
-          ><ValueListInput
-            v-model:value="domainEntries"
-            item-label="域名"
-            :max="64"
-            :maxlength="253"
-            :placeholder="
-              form.challenge_type === 'dns-01'
-                ? 'example.com 或 *.example.com'
-                : 'example.com'
-            "
-        /></n-form-item>
-        <n-form-item label="备注（选填）"
-          ><n-input v-model:value="form.notes" :maxlength="2048"
-        /></n-form-item>
-        <div class="cert-form-footer">
-          <n-button
-            type="primary"
-            attr-type="submit"
-            :loading="busy"
-            :disabled="!valid"
-            >提交申请</n-button
-          ><n-button :disabled="busy" @click="close">取消</n-button>
-        </div>
-      </n-form>
-    </section>
+        <p v-else class="muted form-notice">
+          申请时会临时添加域名验证记录，完成后自动清理。
+        </p>
+      </template>
+      <template v-else>
+        <n-alert type="info" :bordered="false" class="form-notice"
+          >域名需指向这台服务器，公网 80 端口需可访问，并在
+          <router-link to="/nginx">网站与代理</router-link>
+          中启用域名验证入口。通配域名请改用 DNS 验证。</n-alert
+        >
+        <n-form-item
+          ><n-checkbox v-model:checked="form.http01_confirmed"
+            >已配置网站验证入口，并确认域名指向及公网 80 端口可访问</n-checkbox
+          ></n-form-item
+        >
+      </template>
+      <n-form-item label="申请域名" required
+        ><ValueListInput
+          v-model:value="domainEntries"
+          item-label="域名"
+          :max="64"
+          :maxlength="253"
+          :placeholder="
+            form.challenge_type === 'dns-01'
+              ? 'example.com 或 *.example.com'
+              : 'example.com'
+          "
+      /></n-form-item>
+      <n-form-item label="备注（选填）"
+        ><n-input v-model:value="form.notes" :maxlength="2048"
+      /></n-form-item>
+    </FormDialog>
     <div class="cert-heading">
       <h2>申请记录</h2>
       <router-link v-if="route.query.certificate" to="/certificate-requests"
@@ -719,48 +709,35 @@ useLiveRefresh(api, ["tasks"], () => {
         >下一页</n-button
       >
     </div>
-    <n-modal
+    <FormDialog
       :show="!!policyID"
-      preset="card"
-      :title="`${policyName} · 续期设置`"
-      style="width: 560px; max-width: 94vw"
-      :mask-closable="false"
-      :close-on-esc="false"
-      :closable="false"
+      :title="'续期设置 · ' + policyName"
+      :busy="busy"
+      @submit="savePolicy"
+      @cancel="closePolicy"
     >
-      <n-form
-        label-placement="top"
-        :disabled="busy"
-        @submit.prevent="savePolicy"
+      <n-form-item
+        ><n-checkbox v-model:checked="policy.auto_renew"
+          >到期前自动续期</n-checkbox
+        ></n-form-item
       >
-        <n-form-item
-          ><n-checkbox v-model:checked="policy.auto_renew"
-            >到期前自动续期</n-checkbox
-          ></n-form-item
-        >
-        <p class="muted form-notice">
-          按证书到期时间自动申请续期；连续失败时暂停并保留原证书。
-        </p>
-        <n-form-item
-          ><n-checkbox v-model:checked="policy.auto_deploy"
-            >续期后自动更新已使用此证书的网站</n-checkbox
-          ></n-form-item
-        >
-        <p class="muted form-notice">
-          首次使用需在网站设置中选择证书并应用。关闭后，网站证书需手动更新。
-        </p>
-        <n-form-item
-          ><n-checkbox v-model:checked="policy.reset_failures"
-            >清除失败记录并恢复自动续期</n-checkbox
-          ></n-form-item
-        >
-        <div class="cert-form-footer">
-          <n-button type="primary" attr-type="submit" :loading="busy"
-            >保存设置</n-button
-          ><n-button :disabled="busy" @click="closePolicy">取消</n-button>
-        </div>
-      </n-form>
-    </n-modal>
+      <p class="muted form-notice">
+        按证书到期时间自动申请续期；连续失败时暂停并保留原证书。
+      </p>
+      <n-form-item
+        ><n-checkbox v-model:checked="policy.auto_deploy"
+          >续期后自动更新已使用此证书的网站</n-checkbox
+        ></n-form-item
+      >
+      <p class="muted form-notice">
+        首次使用需在网站设置中选择证书并应用。关闭后，网站证书需手动更新。
+      </p>
+      <n-form-item
+        ><n-checkbox v-model:checked="policy.reset_failures"
+          >清除失败记录并恢复自动续期</n-checkbox
+        ></n-form-item
+      >
+    </FormDialog>
   </CertificateWorkspace>
 </template>
 <style scoped>

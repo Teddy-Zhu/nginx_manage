@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 
@@ -25,7 +26,6 @@ import {
   NFormItem,
   NInput,
   NInputNumber,
-  NModal,
   NSelect,
   NSwitch,
   NTag,
@@ -329,6 +329,12 @@ function editChannel(channel: NotificationChannel | null) {
   };
   channelModal.value = true;
 }
+function clearChannelSecrets() {
+  form.value.bot_token =
+    form.value.bearer_token =
+    form.value.signing_secret =
+      "";
+}
 async function saveChannel() {
   const f = form.value,
     c = edited.value;
@@ -357,6 +363,7 @@ async function saveChannel() {
       idempotency({ id: c?.id ?? "", input }),
     );
     channelModal.value = false;
+    clearChannelSecrets();
     await fetchData();
   }, "渠道设置已保存");
 }
@@ -597,11 +604,16 @@ useLiveRefresh(api, ["notifications"], () => {
       任务故障按资源和小时合并。证书到期阈值同时参考实际寿命与已保存续期时间；数据目录空间告警独立于宿主机监控。
     </p>
   </section>
-  <n-modal
-    v-model:show="channelModal"
-    preset="card"
+  <FormDialog
+    :show="channelModal"
+    :draft="form"
     :title="edited ? '编辑通知渠道' : '新增通知渠道'"
-    style="width: min(740px, 95vw)"
+    :busy="busy"
+    @submit="saveChannel"
+    @cancel="
+      channelModal = false;
+      clearChannelSecrets();
+    "
   >
     <div class="two-columns">
       <n-form-item label="名称"
@@ -695,19 +707,14 @@ useLiveRefresh(api, ["notifications"], () => {
             :label="kind.label"
           /></div></n-checkbox-group
     ></n-form-item>
-
-    <div class="actions form-actions">
-      <n-button @click="channelModal = false">取消</n-button
-      ><n-button type="primary" :loading="busy" @click="saveChannel"
-        >保存</n-button
-      >
-    </div>
-  </n-modal>
-  <n-modal
-    v-model:show="policyModal"
-    preset="card"
+  </FormDialog>
+  <FormDialog
+    :show="policyModal"
+    :draft="policy"
     title="通知策略"
-    style="width: min(660px, 95vw)"
+    :busy="busy"
+    @submit="savePolicy"
+    @cancel="policyModal = false"
   >
     <template v-if="policy"
       ><div class="two-columns">
@@ -742,14 +749,8 @@ useLiveRefresh(api, ["notifications"], () => {
         任一空间阈值不足时告警，恢复需同时达到容量阈值的 1.2 倍及比例阈值加
         2%。有效期和尝试次数作用于新建投递。
       </p>
-      <div class="actions form-actions">
-        <n-button @click="policyModal = false">取消</n-button
-        ><n-button type="primary" :loading="busy" @click="savePolicy"
-          >保存</n-button
-        >
-      </div></template
-    >
-  </n-modal>
+    </template>
+  </FormDialog>
 </template>
 
 <style scoped>

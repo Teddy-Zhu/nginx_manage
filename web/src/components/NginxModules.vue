@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import FormDialog from "./FormDialog.vue";
 import { computed, ref, watch } from "vue";
-import { NAlert, NButton, NEmpty, NModal, NSelect, NTag } from "naive-ui";
+import { NAlert, NButton, NEmpty, NSelect, NTag } from "naive-ui";
 import {
   useNodeAPI,
   type NginxFeatures,
@@ -84,14 +85,15 @@ watch(
 );
 </script>
 <template>
-  <n-modal
-    v-model:show="show"
-    preset="card"
+  <FormDialog
+    :show="show"
     title="Nginx 可选模块"
-    style="width: 820px; max-width: 94vw"
-    :mask-closable="!busy"
-    :closable="!busy"
-    :close-on-esc="!busy"
+    :busy="busy"
+    :dirty="changed"
+    width="820px"
+    :submit-disabled="!report || invalid || !changed || !tree"
+    @submit="save"
+    @cancel="show = false"
   >
     <n-alert type="info" :bordered="false"
       >常用模块已内置。启用可选功能后，请应用配置使其生效。</n-alert
@@ -148,17 +150,9 @@ watch(
           style="margin-top: 16px"
           >所选模块包含未批准或不可用版本。请移除或选择可用版本后保存。</n-alert
         >
-        <n-button
-          type="primary"
-          :loading="busy"
-          :disabled="busy || invalid || !changed || !tree"
-          style="margin-top: 16px"
-          @click="save"
-          >保存模块选择</n-button
-        >
       </template>
     </template>
-  </n-modal>
+  </FormDialog>
 </template>
 <style scoped>
 .module-row {

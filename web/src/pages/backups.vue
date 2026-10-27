@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import {
@@ -25,9 +26,6 @@ import {
   NRadioButton,
   NRadioGroup,
   NTag,
-  NTabs,
-  NTabPane,
-  NForm,
 } from "naive-ui";
 import { RouterLink } from "vue-router";
 import {
@@ -43,6 +41,12 @@ import { useSession } from "../stores/session";
 const api = useNodeAPI(),
   session = useSession(),
   { run, busy } = useAction();
+const manualOpen = ref(false),
+  policyOpen = ref(false);
+const manualBaseline = ref(""),
+  policyBaseline = ref("");
+const manualSnapshot = computed(() => JSON.stringify(form));
+const policySnapshot = computed(() => JSON.stringify(policy));
 const view = ref<BackupOverview | null>(null),
   error = ref(""),
   uncertain = ref(false),
@@ -121,6 +125,22 @@ function setPolicy(value: BackupPolicy) {
     value.authorization_until || Math.floor(Date.now() / 1000) + 30 * 86400,
   );
 }
+function openManual() {
+  if (!uncertain.value) {
+    form.name = "手动备份";
+    form.encryption = "recipient";
+    form.recipient = view.value?.policy.recipient ?? "";
+    form.passphrase = "";
+  }
+  manualBaseline.value = manualSnapshot.value;
+  manualOpen.value = true;
+}
+function openPolicy() {
+  if (!view.value) return;
+  setPolicy(view.value.policy);
+  policyBaseline.value = policySnapshot.value;
+  policyOpen.value = true;
+}
 async function load() {
   if (!canRead.value || closed) return;
   try {
@@ -128,7 +148,7 @@ async function load() {
     if (closed) return;
     view.value = result;
     error.value = "";
-    if (!policyVersion.value) setPolicy(result.policy);
+    if (!policyOpen.value) setPolicy(result.policy);
   } catch (cause) {
     if (!closed) error.value = apiError(cause).message;
   }
@@ -149,6 +169,7 @@ async function create() {
       throw cause;
     }
     uncertain.value = false;
+    manualOpen.value = false;
     form.passphrase = "";
     keyFor = useIdempotency();
   });
@@ -168,6 +189,7 @@ async function savePolicy() {
       authorization_until: policy.enabled && Number.isFinite(until) ? until : 0,
     });
     setPolicy(result);
+    policyOpen.value = false;
   }, "备份设置已保存");
   await load();
 }
@@ -215,131 +237,139 @@ useLiveRefresh(api, ["tasks", "backups"], load);
         <RouterLink to="/migrations">配置迁移</RouterLink>。</NAlert
       >
       <section v-if="canWrite" class="panel page-stack">
-        <h2>备份设置</h2>
-        <NTabs type="line" animated>
-          <NTabPane name="manual" tab="手动备份">
-            <NForm
-              label-placement="top"
-              :disabled="busy || uncertain"
-              @submit.prevent="create"
+        <div class="toolbar">
+          <h2>备份设置</h2>
+          <div class="inline-gap">
+            <NButton :disabled="busy || !view" @click="openPolicy"
+              >定期备份设置</NButton
             >
-              <NAlert v-if="uncertain" type="warning"
-                >暂未收到任务结果，请重试原请求或刷新记录。</NAlert
-              >
-              <div class="form-grid">
-                <NFormItem label="备份名称"
-                  ><NInput v-model:value="form.name" maxlength="100"
-                /></NFormItem>
-                <NFormItem label="加密方式"
-                  ><NRadioGroup v-model:value="form.encryption"
-                    ><NRadioButton value="recipient">恢复公钥</NRadioButton
-                    ><NRadioButton value="passphrase"
-                      >恢复口令</NRadioButton
-                    ></NRadioGroup
-                  ></NFormItem
-                >
-                <NFormItem
-                  v-if="form.encryption === 'recipient'"
-                  class="full-width"
-                  label="age X25519 恢复公钥"
-                  ><NInput v-model:value="form.recipient" placeholder="age1…"
-                /></NFormItem>
-                <NFormItem
-                  v-else
-                  class="full-width"
-                  label="恢复口令"
-                  feedback="16–256 字节，请单独保存"
-                  ><NInput
-                    v-model:value="form.passphrase"
-                    type="password"
-                    show-password-on="click"
-                    autocomplete="new-password"
-                /></NFormItem>
-              </div>
-              <p class="section-note">
-                创建备份时会短暂暂停配置修改。<template
-                  v-if="form.encryption === 'passphrase'"
-                  >恢复口令不会保存在系统中；加密完成前请勿重启面板。</template
-                >
-              </p>
-              <div class="form-actions">
-                <NButton
-                  type="primary"
-                  attr-type="submit"
-                  :loading="busy"
-                  :disabled="!!active && !uncertain"
-                  >{{ uncertain ? "重试原请求" : "创建备份" }}</NButton
-                >
-              </div>
-            </NForm>
-          </NTabPane>
-          <NTabPane v-if="view" name="schedule" tab="定期备份">
-            <NForm
-              label-placement="top"
-              :disabled="busy"
-              @submit.prevent="savePolicy"
+            <NButton
+              type="primary"
+              :disabled="busy || (!!active && !uncertain)"
+              @click="openManual"
+              >创建备份</NButton
             >
-              <div class="page-stack">
-                <NAlert v-if="view.policy.error" type="warning">{{
-                  view.policy.error
-                }}</NAlert>
-                <NCheckbox v-model:checked="policy.enabled"
-                  >启用定期备份</NCheckbox
-                >
-                <div class="form-grid">
-                  <NFormItem class="full-width" label="age X25519 恢复公钥"
-                    ><NInput
-                      v-model:value="policy.recipient"
-                      placeholder="age1…"
-                      @update:value="policy.keySaved = false"
-                  /></NFormItem>
-                  <NFormItem label="备份间隔（小时）"
-                    ><NInputNumber
-                      v-model:value="policy.interval"
-                      :min="1"
-                      :max="168"
-                      :precision="0"
-                  /></NFormItem>
-                  <NFormItem label="保留数量"
-                    ><NInputNumber
-                      v-model:value="policy.keep"
-                      :min="1"
-                      :max="15"
-                      :precision="0"
-                  /></NFormItem>
-                  <NFormItem label="最长保留天数"
-                    ><NInputNumber
-                      v-model:value="policy.days"
-                      :min="1"
-                      :max="90"
-                      :precision="0"
-                  /></NFormItem>
-                  <NFormItem v-if="policy.enabled" label="定期备份授权到期"
-                    ><input v-model="policy.until" type="datetime-local"
-                  /></NFormItem>
-                </div>
-                <NCheckbox v-model:checked="policy.keySaved"
-                  >已将对应恢复私钥单独保存</NCheckbox
-                >
-                <p class="section-note">
-                  达到保留数量或保留天数时，系统自动清理较早的备份。授权到期后停止创建新备份。
-                </p>
-                <p v-if="view.policy.enabled" class="muted">
-                  下次备份 {{ date(view.policy.next_run_at) }} · 授权到期
-                  {{ date(view.policy.authorization_until) }}
-                </p>
-              </div>
-              <div class="form-actions">
-                <NButton :disabled="busy" @click="setPolicy(view.policy)"
-                  >重置修改</NButton
-                ><NButton type="primary" attr-type="submit" :loading="busy"
-                  >保存设置</NButton
-                >
-              </div>
-            </NForm>
-          </NTabPane>
-        </NTabs>
+          </div>
+        </div>
+        <p v-if="view" class="muted">
+          {{ view.policy.enabled ? "已启用定期备份" : "未启用定期备份"
+          }}<template v-if="view.policy.enabled">
+            · 下次备份 {{ date(view.policy.next_run_at) }}</template
+          >
+        </p>
       </section>
+      <FormDialog
+        :show="manualOpen"
+        title="创建备份"
+        :busy="busy"
+        :form-disabled="uncertain"
+        :dirty="manualSnapshot !== manualBaseline"
+        :submit-disabled="!!active && !uncertain"
+        :submit-text="uncertain ? '重试原请求' : '创建备份'"
+        @submit="create"
+        @cancel="
+          manualOpen = false;
+          if (!uncertain) form.passphrase = '';
+        "
+      >
+        <NAlert v-if="uncertain" type="warning"
+          >暂未收到任务结果，请重试原请求或刷新记录。</NAlert
+        >
+        <div class="form-grid">
+          <NFormItem label="备份名称"
+            ><NInput v-model:value="form.name" maxlength="100"
+          /></NFormItem>
+          <NFormItem label="加密方式"
+            ><NRadioGroup v-model:value="form.encryption"
+              ><NRadioButton value="recipient">恢复公钥</NRadioButton
+              ><NRadioButton value="passphrase"
+                >恢复口令</NRadioButton
+              ></NRadioGroup
+            ></NFormItem
+          >
+          <NFormItem
+            v-if="form.encryption === 'recipient'"
+            class="full-width"
+            label="age X25519 恢复公钥"
+            ><NInput v-model:value="form.recipient" placeholder="age1…"
+          /></NFormItem>
+          <NFormItem
+            v-else
+            class="full-width"
+            label="恢复口令"
+            feedback="16–256 字节，请单独保存"
+            ><NInput
+              v-model:value="form.passphrase"
+              type="password"
+              show-password-on="click"
+              autocomplete="new-password"
+          /></NFormItem>
+        </div>
+        <p class="section-note">
+          创建备份时会短暂暂停配置修改。<template
+            v-if="form.encryption === 'passphrase'"
+            >恢复口令不会保存在系统中；加密完成前请勿重启面板。</template
+          >
+        </p>
+      </FormDialog>
+      <FormDialog
+        :show="policyOpen"
+        title="定期备份设置"
+        :busy="busy"
+        :dirty="policySnapshot !== policyBaseline"
+        @submit="savePolicy"
+        @cancel="policyOpen = false"
+        ><template v-if="view">
+          <div class="page-stack">
+            <NAlert v-if="view.policy.error" type="warning">{{
+              view.policy.error
+            }}</NAlert>
+            <NCheckbox v-model:checked="policy.enabled">启用定期备份</NCheckbox>
+            <div class="form-grid">
+              <NFormItem class="full-width" label="age X25519 恢复公钥"
+                ><NInput
+                  v-model:value="policy.recipient"
+                  placeholder="age1…"
+                  @update:value="policy.keySaved = false"
+              /></NFormItem>
+              <NFormItem label="备份间隔（小时）"
+                ><NInputNumber
+                  v-model:value="policy.interval"
+                  :min="1"
+                  :max="168"
+                  :precision="0"
+              /></NFormItem>
+              <NFormItem label="保留数量"
+                ><NInputNumber
+                  v-model:value="policy.keep"
+                  :min="1"
+                  :max="15"
+                  :precision="0"
+              /></NFormItem>
+              <NFormItem label="最长保留天数"
+                ><NInputNumber
+                  v-model:value="policy.days"
+                  :min="1"
+                  :max="90"
+                  :precision="0"
+              /></NFormItem>
+              <NFormItem v-if="policy.enabled" label="定期备份授权到期"
+                ><input v-model="policy.until" type="datetime-local"
+              /></NFormItem>
+            </div>
+            <NCheckbox v-model:checked="policy.keySaved"
+              >已将对应恢复私钥单独保存</NCheckbox
+            >
+            <p class="section-note">
+              达到保留数量或保留天数时，系统自动清理较早的备份。授权到期后停止创建新备份。
+            </p>
+            <p v-if="view.policy.enabled" class="muted">
+              下次备份 {{ date(view.policy.next_run_at) }} · 授权到期
+              {{ date(view.policy.authorization_until) }}
+            </p>
+          </div>
+        </template></FormDialog
+      >
       <section v-if="view" class="panel page-stack">
         <div class="toolbar">
           <h2>备份记录</h2>

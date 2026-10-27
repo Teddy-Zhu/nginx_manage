@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormDialog from "./FormDialog.vue";
 import { permissionLabel } from "../utils/permissions";
 import ValueListInput from "./ValueListInput.vue";
 import { cleanList } from "../utils/form";
@@ -12,8 +13,6 @@ import {
   NPopconfirm,
   NSelect,
   NTag,
-  NTabs,
-  NTabPane,
 } from "naive-ui";
 import { useNodeAPI, type Pairing, type PairingJob } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
@@ -43,6 +42,25 @@ const grant = reactive({
   sources: [] as string[],
   days: 90,
 });
+const connectOpen = ref(false),
+  grantOpen = ref(false);
+const connectSnapshot = computed(() => JSON.stringify(connect));
+const grantSnapshot = computed(() => JSON.stringify(grant));
+const connectBaseline = ref(""),
+  grantBaseline = ref("");
+function openConnect() {
+  connect.name = connect.url = connect.code = "";
+  connectBaseline.value = connectSnapshot.value;
+  connectOpen.value = true;
+}
+function openGrant() {
+  grant.name = grant.controller = "";
+  grant.scopes = ["read"];
+  grant.sources = [];
+  grant.days = 90;
+  grantBaseline.value = grantSnapshot.value;
+  grantOpen.value = true;
+}
 const offeredID = ref(""),
   offeredCode = ref(""),
   offeredExpiry = ref(0);
@@ -113,6 +131,7 @@ async function start() {
     };
     const value = await api.startPairing(input, connectKey(input));
     record(value);
+    connectOpen.value = false;
     connect.code = "";
     connectKey = useIdempotency();
     if (value.state === "succeeded") message.success("节点连接已登记");
@@ -142,6 +161,7 @@ async function offer() {
       value.pairing,
       ...offers.value.filter((item) => item.id !== value.pairing.id),
     ];
+    grantOpen.value = false;
     offeredID.value = value.pairing.id;
     offeredExpiry.value = value.pairing.expires_at;
     offeredCode.value = value.secret
@@ -178,115 +198,121 @@ onUnmounted(() => {
 <template>
   <div class="page-stack">
     <div class="toolbar">
-      <h3>一次性配对</h3>
-      <NButton :disabled="busy" @click="load">刷新配对记录</NButton>
+      <h2>服务器配对</h2>
+      <div class="inline-gap">
+        <NButton :disabled="busy" @click="load">刷新</NButton>
+        <NButton :disabled="busy" @click="openConnect"
+          >使用配对信息连接</NButton
+        >
+        <NButton v-if="canIssue" :disabled="busy" @click="openGrant"
+          >生成配对信息</NButton
+        >
+      </div>
     </div>
     <div class="field-list">
       <span>本机连接码</span><NInput :value="sourceNodeId" readonly />
       <p class="muted">授权其他服务器连接时，在对方填写此连接码。</p>
     </div>
-    <NTabs type="segment"
-      ><NTabPane name="connect" tab="连接其他服务器">
-        <div class="form-grid">
-          <NFormItem label="连接名称"
-            ><NInput
-              v-model:value="connect.name"
-              :maxlength="100"
-              :disabled="busy"
-          /></NFormItem>
-          <NFormItem label="服务器地址"
-            ><NInput
-              v-model:value="connect.url"
-              :maxlength="2048"
-              :disabled="busy"
-              placeholder="https://node.example.com/api/v1"
-          /></NFormItem>
-          <NFormItem class="full-width" label="目标生成的配对信息"
-            ><NInput
-              v-model:value="connect.code"
-              type="textarea"
-              :maxlength="2048"
-              :disabled="busy"
-              autocomplete="off"
-          /></NFormItem>
-          <p class="section-note full-width">
-            使用目标服务器生成的配对信息，在有效期内完成连接。
-          </p>
-          <div class="form-actions full-width">
-            <NButton
-              type="primary"
-              :loading="busy"
-              :disabled="!connect.name || !connect.url || !connect.code"
-              @click="start"
-              >连接服务器</NButton
-            >
-          </div>
-        </div>
-      </NTabPane>
-      <NTabPane v-if="canIssue" name="grant" tab="授权其他服务器连接本机">
-        <div class="form-grid">
-          <NFormItem label="授权名称"
-            ><NInput
-              v-model:value="grant.name"
-              :maxlength="100"
-              :disabled="busy"
-          /></NFormItem>
-          <NFormItem label="对方服务器连接码"
-            ><NInput
-              v-model:value="grant.controller"
-              :maxlength="36"
-              :disabled="busy"
-          /></NFormItem>
-          <NFormItem label="授权权限"
-            ><NSelect
-              v-model:value="grant.scopes"
-              multiple
-              :options="scopes"
-              :disabled="busy"
-          /></NFormItem>
-          <NFormItem label="允许连接的 IP 或网段"
-            ><ValueListInput
-              v-model:value="grant.sources"
-              item-label="来源网段"
-              :max="32"
-              placeholder="192.0.2.10/32"
-              :maxlength="64"
-              :disabled="busy"
-          /></NFormItem>
-          <NFormItem label="授权有效天数"
-            ><NInputNumber
-              :value="grant.days"
-              :min="1"
-              :max="366"
-              :precision="0"
-              :disabled="busy"
-              :clearable="false"
-              @update:value="
-                (value: number | null) => {
-                  if (value !== null) grant.days = value;
-                }
-              "
-          /></NFormItem>
-          <p class="section-note full-width">
-            配对信息 5
-            分钟内有效，仅展示一次。授权默认只读；允许来源按目标实际直连地址匹配，经网关时填写网关来源。
-          </p>
-          <div class="form-actions full-width">
-            <NButton
-              type="primary"
-              :loading="busy"
-              :disabled="
-                !grant.name ||
-                !grant.controller ||
-                !cleanList(grant.sources).length ||
-                !grant.scopes.includes('read')
-              "
-              @click="offer"
-              >生成一次性配对信息</NButton
-            >
-          </div>
-        </div>
-      </NTabPane></NTabs
+    <FormDialog
+      :show="connectOpen"
+      title="使用配对信息连接服务器"
+      :busy="busy"
+      :dirty="connectSnapshot !== connectBaseline"
+      :submit-disabled="
+        !connect.name.trim() || !connect.url.trim() || !connect.code.trim()
+      "
+      submit-text="连接"
+      @submit="start"
+      @cancel="
+        connectOpen = false;
+        connect.code = '';
+      "
+      ><div class="form-grid">
+        <NFormItem label="连接名称"
+          ><NInput
+            v-model:value="connect.name"
+            :maxlength="100"
+            :disabled="busy"
+        /></NFormItem>
+        <NFormItem label="服务器地址"
+          ><NInput
+            v-model:value="connect.url"
+            :maxlength="2048"
+            :disabled="busy"
+            placeholder="https://node.example.com/api/v1"
+        /></NFormItem>
+        <NFormItem class="full-width" label="目标生成的配对信息"
+          ><NInput
+            v-model:value="connect.code"
+            type="textarea"
+            :maxlength="2048"
+            :disabled="busy"
+            autocomplete="off"
+        /></NFormItem>
+        <p class="section-note full-width">
+          使用目标服务器生成的配对信息，在有效期内完成连接。
+        </p>
+      </div></FormDialog
+    >
+    <FormDialog
+      :show="grantOpen"
+      title="生成配对信息"
+      :busy="busy"
+      :dirty="grantSnapshot !== grantBaseline"
+      :submit-disabled="
+        !grant.name.trim() ||
+        !grant.controller.trim() ||
+        !cleanList(grant.sources).length ||
+        !grant.scopes.includes('read')
+      "
+      submit-text="生成"
+      @submit="offer"
+      @cancel="grantOpen = false"
+      ><div class="form-grid">
+        <NFormItem label="授权名称"
+          ><NInput v-model:value="grant.name" :maxlength="100" :disabled="busy"
+        /></NFormItem>
+        <NFormItem label="对方服务器连接码"
+          ><NInput
+            v-model:value="grant.controller"
+            :maxlength="36"
+            :disabled="busy"
+        /></NFormItem>
+        <NFormItem label="授权权限"
+          ><NSelect
+            v-model:value="grant.scopes"
+            multiple
+            :options="scopes"
+            :disabled="busy"
+        /></NFormItem>
+        <NFormItem label="允许连接的 IP 或网段"
+          ><ValueListInput
+            v-model:value="grant.sources"
+            item-label="来源网段"
+            :max="32"
+            placeholder="192.0.2.10/32"
+            :maxlength="64"
+            :disabled="busy"
+        /></NFormItem>
+        <NFormItem label="授权有效天数"
+          ><NInputNumber
+            :value="grant.days"
+            :min="1"
+            :max="366"
+            :precision="0"
+            :disabled="busy"
+            :clearable="false"
+            @update:value="
+              (value: number | null) => {
+                if (value !== null) grant.days = value;
+              }
+            "
+        /></NFormItem>
+        <p class="section-note full-width">
+          配对信息 5
+          分钟内有效，仅展示一次。授权默认只读；允许来源按目标实际直连地址匹配，经网关时填写网关来源。
+        </p>
+      </div></FormDialog
     >
     <NAlert v-if="offeredCode" type="warning" title="请安全传递配对信息">
       有效至 {{ date(offeredExpiry) }}

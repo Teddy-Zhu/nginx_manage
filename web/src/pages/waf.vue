@@ -13,15 +13,14 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import UnitInput from "../components/UnitInput.vue";
-import { computed, onMounted, onUnmounted, ref, toRaw } from "vue";
+import { computed, h, onMounted, onUnmounted, ref, toRaw } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
   NAlert,
   NButton,
   NDataTable,
-  NEmpty,
-  NForm,
   NFormItem,
   NInput,
   NInputNumber,
@@ -119,6 +118,17 @@ const columns: DataTableColumns<WAFPolicy> = [
     key: "editable",
     render: (row) => (row.editable ? "可编辑" : "通过高级配置编辑"),
   },
+  {
+    title: "操作",
+    key: "actions",
+    width: 90,
+    render: (row) =>
+      h(
+        NButton,
+        { size: "small", disabled: busy.value, onClick: () => open(row) },
+        { default: () => (row.editable ? "编辑" : "查看") },
+      ),
+  },
 ];
 const methodOptions = [
   "GET",
@@ -142,6 +152,15 @@ function open(policy: WAFPolicy | null) {
   editing.value = true;
   baseline.value = serialized.value;
 }
+function close() {
+  if (
+    busy.value ||
+    (dirty.value && !window.confirm("修改尚未保存，确认取消？"))
+  )
+    return;
+  editing.value = false;
+  selected.value = null;
+}
 async function load() {
   if (dirty.value && !window.confirm("修改尚未保存，确认重新加载？")) return;
   await run(async () => {
@@ -164,8 +183,7 @@ async function load() {
 }
 async function save() {
   if (!tree.value || locked.value) return;
-  const id = selected.value?.id ?? null,
-    previous = new Set(tree.value.waf_policies.map((item) => item.id));
+  const id = selected.value?.id ?? null;
   const input = {
     ...structuredClone(toRaw(form.value)),
     base_version: tree.value.version,
@@ -181,10 +199,8 @@ async function save() {
     const out = await api.saveWAF(id, input, keyFor({ id, ...input }));
     tree.value = out.tree;
     baseline.value = serialized.value;
-    const updated = out.tree.waf_policies.find((item) =>
-      id ? item.id === id : !previous.has(item.id),
-    );
-    if (updated) open(updated);
+    editing.value = false;
+    selected.value = null;
   }, "WAF 策略已保存，尚未应用");
 }
 async function remove() {
@@ -264,191 +280,173 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         .join("；")
     }}。可保存停用策略，启用前须确认模块能力。</n-alert
   >
-  <div class="two-columns">
-    <section class="surface">
-      <div class="section-heading"><h2>防护策略</h2></div>
-      <n-data-table
-        :columns="columns"
-        :data="tree?.waf_policies ?? []"
-        :bordered="false"
-        :row-props="
-          (row: WAFPolicy) => ({
-            onClick: () => {
-              if (!busy) open(row);
-            },
-            style: 'cursor: pointer',
-          })
-        "
-      />
-    </section>
-    <section class="surface">
-      <template v-if="editing">
+  <section class="surface">
+    <div class="section-heading"><h2>防护策略</h2></div>
+    <n-data-table
+      :columns="columns"
+      :data="tree?.waf_policies ?? []"
+      :bordered="false"
+    />
+  </section>
+  <FormDialog
+    :show="editing"
+    :title="selected ? '编辑防护策略' : '新建防护策略'"
+    :busy="busy"
+    :form-disabled="selected?.editable === false"
+    :submit-disabled="locked || (!!selected && !dirty)"
+    @submit="save"
+    @cancel="close"
+  >
+    <n-alert
+      v-if="selected && !selected.editable"
+      type="warning"
+      :bordered="false"
+      style="margin-bottom: 20px"
+      >{{ selected.reason }}</n-alert
+    >
+
+    <n-form-item label="名称"
+      ><n-input v-model:value="form.metadata.name" :maxlength="128"
+    /></n-form-item>
+    <n-form-item label="备注"
+      ><n-input
+        v-model:value="form.metadata.notes"
+        type="textarea"
+        :maxlength="2048"
+    /></n-form-item>
+    <n-form-item label="启用策略"
+      ><n-switch
+        v-model:value="form.metadata.enabled"
+        :disabled="locked || (!coreAvailable && !form.metadata.enabled)"
+    /></n-form-item>
+    <n-form-item
+      label="每来源请求速率（0 表示关闭）"
+      :feedback="
+        !has('limit_req_status') ? unavailable('limit_req_status') : ''
+      "
+      ><div class="rate-input field-row">
+        <n-input-number
+          :value="form.rate"
+          :min="0"
+          :max="100000"
+          :precision="0"
+          :disabled="locked || !has('limit_req_status')"
+          @update:value="rateChanged"
+        /><n-select
+          v-model:value="form.rate_unit"
+          :options="[
+            { label: '每秒', value: 'r/s' },
+            { label: '每分钟', value: 'r/m' },
+          ]"
+          :disabled="locked || !has('limit_req_status')"
+        /></div
+    ></n-form-item>
+    <n-form-item label="突发额度（不延迟转发，超额拒绝）"
+      ><n-input-number
+        :value="form.burst"
+        :min="0"
+        :max="10000"
+        :precision="0"
+        :disabled="locked || !has('limit_req_status') || form.rate === 0"
+        @update:value="(value) => (form.burst = value ?? 0)"
+    /></n-form-item>
+    <n-form-item
+      label="每来源并发上限（0 表示关闭）"
+      :feedback="
+        !has('limit_conn_status') ? unavailable('limit_conn_status') : ''
+      "
+      ><n-input-number
+        :value="form.connections"
+        :min="0"
+        :max="65535"
+        :precision="0"
+        :disabled="locked || !has('limit_conn_status')"
+        @update:value="(value) => (form.connections = value ?? 0)"
+    /></n-form-item>
+    <p class="muted">
+      HTTP/1 仅统计正在处理且已读完请求头的连接；HTTP/2、HTTP/3 按并发请求计数。
+    </p>
+    <n-form-item label="限流拒绝状态"
+      ><n-select
+        v-model:value="form.reject_status"
+        :options="[
+          { label: '429 请求过多', value: 429 },
+          { label: '503 服务不可用', value: 503 },
+        ]"
+    /></n-form-item>
+    <n-form-item label="限流观察模式"
+      ><n-switch
+        v-model:value="form.observe"
+        :disabled="locked || (!canObserve && !form.observe)"
+    /></n-form-item>
+    <p v-if="form.observe" class="muted">
+      仅记录限速和并发超额，方法、路径和请求体限制继续执行。
+    </p>
+    <n-form-item label="最大请求体（留空继承，0 表示不限制）"
+      ><UnitInput v-model:value="form.body_size" kind="size" :disabled="locked"
+    /></n-form-item>
+    <n-form-item label="允许的方法（留空表示不限制）"
+      ><n-select
+        v-model:value="form.methods"
+        multiple
+        tag
+        :options="methodOptions"
+    /></n-form-item>
+    <template
+      v-for="section in [
+        { key: 'denied_paths' as const, title: '拒绝路径' },
+        { key: 'exempt_paths' as const, title: '豁免路径' },
+      ]"
+      :key="section.key"
+    >
+      <div class="field-list path-rules">
         <div class="section-heading">
-          <h2>{{ selected ? "编辑策略" : "新建策略" }}</h2>
+          <h3>{{ section.title }}</h3>
           <n-button
-            v-if="selected"
-            type="error"
-            :disabled="locked || dirty || !!selected.resources.length"
-            @click="remove"
-            >删除</n-button
+            size="small"
+            :disabled="locked || form[section.key].length >= 128"
+            @click="form[section.key].push({ match: 'exact', path: '' })"
+            >添加</n-button
           >
         </div>
-        <n-alert
-          v-if="selected && !selected.editable"
-          type="warning"
-          :bordered="false"
-          style="margin-bottom: 20px"
-          >{{ selected.reason }}</n-alert
+        <div
+          v-for="(item, index) in form[section.key]"
+          :key="index"
+          class="path-rule field-row"
         >
-        <n-form label-placement="top" :disabled="locked" @submit.prevent="save">
-          <n-form-item label="名称"
-            ><n-input v-model:value="form.metadata.name" :maxlength="128"
-          /></n-form-item>
-          <n-form-item label="备注"
-            ><n-input
-              v-model:value="form.metadata.notes"
-              type="textarea"
-              :maxlength="2048"
-          /></n-form-item>
-          <n-form-item label="启用策略"
-            ><n-switch
-              v-model:value="form.metadata.enabled"
-              :disabled="locked || (!coreAvailable && !form.metadata.enabled)"
-          /></n-form-item>
-          <n-form-item
-            label="每来源请求速率（0 表示关闭）"
-            :feedback="
-              !has('limit_req_status') ? unavailable('limit_req_status') : ''
-            "
-            ><div class="rate-input field-row">
-              <n-input-number
-                :value="form.rate"
-                :min="0"
-                :max="100000"
-                :precision="0"
-                :disabled="locked || !has('limit_req_status')"
-                @update:value="rateChanged"
-              /><n-select
-                v-model:value="form.rate_unit"
-                :options="[
-                  { label: '每秒', value: 'r/s' },
-                  { label: '每分钟', value: 'r/m' },
-                ]"
-                :disabled="locked || !has('limit_req_status')"
-              /></div
-          ></n-form-item>
-          <n-form-item label="突发额度（不延迟转发，超额拒绝）"
-            ><n-input-number
-              :value="form.burst"
-              :min="0"
-              :max="10000"
-              :precision="0"
-              :disabled="locked || !has('limit_req_status') || form.rate === 0"
-              @update:value="(value) => (form.burst = value ?? 0)"
-          /></n-form-item>
-          <n-form-item
-            label="每来源并发上限（0 表示关闭）"
-            :feedback="
-              !has('limit_conn_status') ? unavailable('limit_conn_status') : ''
-            "
-            ><n-input-number
-              :value="form.connections"
-              :min="0"
-              :max="65535"
-              :precision="0"
-              :disabled="locked || !has('limit_conn_status')"
-              @update:value="(value) => (form.connections = value ?? 0)"
-          /></n-form-item>
-          <p class="muted">
-            HTTP/1 仅统计正在处理且已读完请求头的连接；HTTP/2、HTTP/3
-            按并发请求计数。
-          </p>
-          <n-form-item label="限流拒绝状态"
-            ><n-select
-              v-model:value="form.reject_status"
-              :options="[
-                { label: '429 请求过多', value: 429 },
-                { label: '503 服务不可用', value: 503 },
-              ]"
-          /></n-form-item>
-          <n-form-item label="限流观察模式"
-            ><n-switch
-              v-model:value="form.observe"
-              :disabled="locked || (!canObserve && !form.observe)"
-          /></n-form-item>
-          <p v-if="form.observe" class="muted">
-            仅记录限速和并发超额，方法、路径和请求体限制继续执行。
-          </p>
-          <n-form-item label="最大请求体（留空继承，0 表示不限制）"
-            ><UnitInput
-              v-model:value="form.body_size"
-              kind="size"
-              :disabled="locked"
-          /></n-form-item>
-          <n-form-item label="允许的方法（留空表示不限制）"
-            ><n-select
-              v-model:value="form.methods"
-              multiple
-              tag
-              :options="methodOptions"
-          /></n-form-item>
-          <template
-            v-for="section in [
-              { key: 'denied_paths' as const, title: '拒绝路径' },
-              { key: 'exempt_paths' as const, title: '豁免路径' },
-            ]"
-            :key="section.key"
+          <n-select
+            v-model:value="item.match"
+            :options="pathModes"
+            :aria-label="`路径匹配方式 ${index + 1}`"
+          /><n-input
+            v-model:value="item.path"
+            placeholder="/admin/"
+            :maxlength="512"
+            :aria-label="`路径 ${index + 1}`"
+          /><n-button
+            :disabled="locked"
+            @click="form[section.key].splice(index, 1)"
+            >移除</n-button
           >
-            <div class="field-list path-rules">
-              <div class="section-heading">
-                <h3>{{ section.title }}</h3>
-                <n-button
-                  size="small"
-                  :disabled="locked || form[section.key].length >= 128"
-                  @click="form[section.key].push({ match: 'exact', path: '' })"
-                  >添加</n-button
-                >
-              </div>
-              <div
-                v-for="(item, index) in form[section.key]"
-                :key="index"
-                class="path-rule field-row"
-              >
-                <n-select
-                  v-model:value="item.match"
-                  :options="pathModes"
-                  :aria-label="`路径匹配方式 ${index + 1}`"
-                /><n-input
-                  v-model:value="item.path"
-                  placeholder="/admin/"
-                  :maxlength="512"
-                  :aria-label="`路径 ${index + 1}`"
-                /><n-button
-                  :disabled="locked"
-                  @click="form[section.key].splice(index, 1)"
-                  >移除</n-button
-                >
-              </div>
-            </div>
-          </template>
-          <p class="muted">
-            路径按规范化后的 URI
-            区分大小写匹配。豁免仅跳过方法检查、请求限速和并发限制；ACL、明确拒绝路径和请求体限制仍生效。
-          </p>
-          <p class="muted">关联代理：{{ affected.join("、") || "无" }}</p>
-          <div class="form-actions">
-            <n-button
-              type="primary"
-              attr-type="submit"
-              :loading="busy"
-              :disabled="locked || (!!selected && !dirty)"
-              >保存策略</n-button
-            >
-          </div>
-        </n-form> </template
-      ><n-empty v-else description="选择或新建防护策略" />
-    </section>
-  </div>
+        </div>
+      </div>
+    </template>
+    <p class="muted">
+      路径按规范化后的 URI
+      区分大小写匹配。豁免仅跳过方法检查、请求限速和并发限制；ACL、明确拒绝路径和请求体限制仍生效。
+    </p>
+    <p class="muted">关联代理：{{ affected.join("、") || "无" }}</p>
+
+    <template #actions>
+      <n-button
+        v-if="selected"
+        type="error"
+        :disabled="locked || dirty || !!selected.resources.length"
+        @click="remove"
+        >删除</n-button
+      ></template
+    >
+  </FormDialog>
 </template>
 <style scoped>
 .rate-input {

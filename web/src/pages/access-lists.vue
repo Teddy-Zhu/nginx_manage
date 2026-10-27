@@ -13,16 +13,15 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, h, onMounted, onUnmounted, ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
   NAlert,
   NButton,
   NDataTable,
-  NEmpty,
-  NForm,
   NFormItem,
   NInput,
   NSelect,
@@ -112,6 +111,17 @@ const columns: DataTableColumns<AccessList> = [
     key: "editable",
     render: (row) => (row.editable ? "可编辑" : "通过高级配置编辑"),
   },
+  {
+    title: "操作",
+    key: "actions",
+    width: 90,
+    render: (row) =>
+      h(
+        NButton,
+        { size: "small", disabled: busy.value, onClick: () => open(row) },
+        { default: () => (row.editable ? "编辑" : "查看") },
+      ),
+  },
 ];
 function open(row: AccessList | null) {
   if (dirty.value && !window.confirm("修改尚未保存，确认切换？")) return;
@@ -123,6 +133,15 @@ function open(row: AccessList | null) {
   entries.value = [...(row?.entries ?? [])];
   countries.value = [...(row?.countries ?? [])];
   baseline.value = formJSON.value;
+}
+function close() {
+  if (
+    busy.value ||
+    (dirty.value && !window.confirm("修改尚未保存，确认取消？"))
+  )
+    return;
+  editing.value = false;
+  selected.value = null;
 }
 async function load() {
   if (dirty.value && !window.confirm("修改尚未保存，确认重新加载？")) return;
@@ -142,7 +161,6 @@ async function load() {
 async function save() {
   if (!tree.value || (selected.value && !selected.value.editable)) return;
   const id = selected.value?.id ?? null;
-  const previous = new Set(tree.value.access_lists.map((item) => item.id));
   const input = {
     base_version: tree.value.version,
     name: name.value,
@@ -155,10 +173,8 @@ async function save() {
     const out = await api.saveAccessList(id, input, keyFor({ id, ...input }));
     tree.value = out.tree;
     baseline.value = formJSON.value;
-    const updated = out.tree.access_lists.find((item) =>
-      id ? item.id === id : !previous.has(item.id),
-    );
-    if (updated) open(updated);
+    editing.value = false;
+    selected.value = null;
   }, "访问列表已保存，尚未应用");
 }
 async function remove() {
@@ -232,132 +248,115 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       }}
     </p>
   </section>
-  <div class="two-columns">
-    <section class="surface">
-      <div class="section-heading"><h2>访问列表</h2></div>
-      <n-data-table
-        :columns="columns"
-        :data="tree?.access_lists ?? []"
-        :bordered="false"
-        :row-props="
-          (row: AccessList) => ({
-            onClick: () => {
-              if (!busy) open(row);
-            },
-            style: 'cursor: pointer',
-          })
-        "
-      />
-    </section>
-    <section class="surface">
-      <template v-if="editing">
-        <div class="section-heading">
-          <h2>{{ selected ? "编辑访问列表" : "新建访问列表" }}</h2>
-          <n-button
-            v-if="selected"
-            type="error"
-            :disabled="busy || dirty || !!affected.length"
-            @click="remove"
-            >删除</n-button
-          >
-        </div>
-        <n-alert
-          v-if="selected && !selected.editable"
-          type="warning"
-          :bordered="false"
-          style="margin-bottom: 20px"
-          >{{ selected.reason }}</n-alert
-        >
-        <n-form :disabled="busy" label-placement="top" @submit.prevent="save">
-          <n-form-item label="名称"
-            ><n-input
-              v-model:value="name"
-              :maxlength="128"
-              :disabled="busy || selected?.editable === false"
-          /></n-form-item>
-          <n-form-item label="备注"
-            ><n-input
-              v-model:value="notes"
-              type="textarea"
-              :maxlength="2048"
-              :disabled="busy || selected?.editable === false"
-          /></n-form-item>
-          <n-form-item label="模式"
-            ><n-select
-              v-model:value="mode"
-              :options="[
-                { label: '白名单', value: 'allowlist' },
-                { label: '黑名单', value: 'denylist' },
-              ]"
-              :disabled="busy || selected?.editable === false"
-          /></n-form-item>
-          <n-form-item label="IP 地址或网段（最多 128 项）"
-            ><ValueListInput
-              v-model:value="entries"
-              item-label="地址"
-              placeholder="192.0.2.1 或 2001:db8::/32"
-              :maxlength="64"
-              :disabled="busy || selected?.editable === false"
-          /></n-form-item>
-          <n-form-item label="国家和地区"
-            ><n-select
-              v-model:value="countries"
-              multiple
-              filterable
-              :options="countryOptions"
-              :disabled="busy || selected?.editable === false"
-              placeholder="选择国家和地区，可与 IP 地址一起使用"
-          /></n-form-item>
-          <n-alert
-            v-if="countries.length && !geoIP?.ready"
-            type="warning"
-            :bordered="false"
-            >请先在“管理数据源”中更新国家 IP 数据。</n-alert
-          >
-          <p v-if="selected?.geoip_updated_at" class="muted">
-            当前规则的国家数据：{{
-              new Date(selected.geoip_updated_at * 1000).toLocaleString()
-            }}。更新数据后，重新保存并应用规则以同步。
-          </p>
-          <p
-            v-if="
-              mode === 'allowlist' &&
-              !cleanList(entries).length &&
-              !countries.length
-            "
-            class="muted"
-          >
-            空白名单会拒绝全部地址。
-          </p>
-          <p class="muted">
-            关联代理：{{
-              affected
-                .map((item) => item.metadata.name || item.id.slice(0, 8))
-                .join("、") || "无"
-            }}
-          </p>
-          <div class="form-actions">
-            <n-button
-              type="primary"
-              attr-type="submit"
-              :loading="busy"
-              :disabled="
-                busy ||
-                selected?.editable === false ||
-                (countries.length > 0 && !geoIP?.ready) ||
-                (!!selected &&
-                  !dirty &&
-                  !(
-                    countries.length &&
-                    geoIP &&
-                    geoIP.updated_at !== selected.geoip_updated_at
-                  ))
-              "
-              >保存规则</n-button
-            >
-          </div>
-        </n-form> </template
-      ><n-empty v-else description="选择或新建访问列表" />
-    </section>
-  </div>
+  <section class="surface">
+    <div class="section-heading"><h2>访问列表</h2></div>
+    <n-data-table
+      :columns="columns"
+      :data="tree?.access_lists ?? []"
+      :bordered="false"
+    />
+  </section>
+  <FormDialog
+    :show="editing"
+    :title="selected ? '编辑访问列表' : '新建访问列表'"
+    :busy="busy"
+    :form-disabled="selected?.editable === false"
+    :submit-disabled="
+      selected?.editable === false ||
+      (countries.length > 0 && !geoIP?.ready) ||
+      (!!selected &&
+        !dirty &&
+        !(
+          countries.length &&
+          geoIP &&
+          geoIP.updated_at !== selected.geoip_updated_at
+        ))
+    "
+    @submit="save"
+    @cancel="close"
+  >
+    <n-alert
+      v-if="selected && !selected.editable"
+      type="warning"
+      :bordered="false"
+      style="margin-bottom: 20px"
+      >{{ selected.reason }}</n-alert
+    >
+
+    <n-form-item label="名称"
+      ><n-input
+        v-model:value="name"
+        :maxlength="128"
+        :disabled="busy || selected?.editable === false"
+    /></n-form-item>
+    <n-form-item label="备注"
+      ><n-input
+        v-model:value="notes"
+        type="textarea"
+        :maxlength="2048"
+        :disabled="busy || selected?.editable === false"
+    /></n-form-item>
+    <n-form-item label="模式"
+      ><n-select
+        v-model:value="mode"
+        :options="[
+          { label: '白名单', value: 'allowlist' },
+          { label: '黑名单', value: 'denylist' },
+        ]"
+        :disabled="busy || selected?.editable === false"
+    /></n-form-item>
+    <n-form-item label="IP 地址或网段（最多 128 项）"
+      ><ValueListInput
+        v-model:value="entries"
+        item-label="地址"
+        placeholder="192.0.2.1 或 2001:db8::/32"
+        :maxlength="64"
+        :disabled="busy || selected?.editable === false"
+    /></n-form-item>
+    <n-form-item label="国家和地区"
+      ><n-select
+        v-model:value="countries"
+        multiple
+        filterable
+        :options="countryOptions"
+        :disabled="busy || selected?.editable === false"
+        placeholder="选择国家和地区，可与 IP 地址一起使用"
+    /></n-form-item>
+    <n-alert
+      v-if="countries.length && !geoIP?.ready"
+      type="warning"
+      :bordered="false"
+      >请先在“管理数据源”中更新国家 IP 数据。</n-alert
+    >
+    <p v-if="selected?.geoip_updated_at" class="muted">
+      当前规则的国家数据：{{
+        new Date(selected.geoip_updated_at * 1000).toLocaleString()
+      }}。更新数据后，重新保存并应用规则以同步。
+    </p>
+    <p
+      v-if="
+        mode === 'allowlist' && !cleanList(entries).length && !countries.length
+      "
+      class="muted"
+    >
+      空白名单会拒绝全部地址。
+    </p>
+    <p class="muted">
+      关联代理：{{
+        affected
+          .map((item) => item.metadata.name || item.id.slice(0, 8))
+          .join("、") || "无"
+      }}
+    </p>
+
+    <template #actions>
+      <n-button
+        v-if="selected"
+        type="error"
+        :disabled="busy || dirty || !!affected.length"
+        @click="remove"
+        >删除</n-button
+      ></template
+    >
+  </FormDialog>
 </template>

@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import {
@@ -24,7 +25,6 @@ import {
   NFormItem,
   NInput,
   NInputNumber,
-  NModal,
   NSelect,
   NSwitch,
   type DataTableColumns,
@@ -488,11 +488,14 @@ onUnmounted(reset);
       :bordered="false"
     />
   </template>
-  <n-modal
-    v-model:show="policyOpen"
-    preset="card"
+  <FormDialog
+    :show="policyOpen"
+    :draft="policyInput"
     title="轮转与保留"
-    style="width: 620px; max-width: 94vw"
+    :busy="busy"
+    :submit-disabled="!policy?.editable || !policyInput"
+    @submit="savePolicy"
+    @cancel="policyOpen = false"
   >
     <template v-if="policy && policyInput">
       <n-alert type="info" :bordered="false"
@@ -503,38 +506,25 @@ onUnmounted(reset);
           ? "系统日志暂不可用，请检查服务器管理服务。"
           : "日志当前由其他工具管理，暂不支持在面板中修改轮转设置。"
       }}</n-alert>
-      <n-form
-        label-placement="top"
-        class="log-filters"
-        @submit.prevent="savePolicy"
-      >
-        <n-form-item
-          v-for="field in policyFields"
-          :key="field.key"
-          :label="field.label"
-          ><n-input-number
-            :value="policyInput.policy[field.key]"
-            :disabled="!policy.editable"
-            :min="field.min"
-            :max="field.max"
-            :precision="0"
-            @update:value="policyNumber(field.key, $event)"
-        /></n-form-item>
-        <n-form-item label="压缩已关闭历史文件"
-          ><n-switch
-            v-model:value="policyInput.policy.compress"
-            :disabled="!policy.editable"
-        /></n-form-item>
-        <n-button
-          type="primary"
-          attr-type="submit"
-          :loading="busy"
+
+      <n-form-item
+        v-for="field in policyFields"
+        :key="field.key"
+        :label="field.label"
+        ><n-input-number
+          :value="policyInput.policy[field.key]"
           :disabled="!policy.editable"
-          >保存策略</n-button
-        >
-      </n-form>
-    </template>
-  </n-modal>
+          :min="field.min"
+          :max="field.max"
+          :precision="0"
+          @update:value="policyNumber(field.key, $event)"
+      /></n-form-item>
+      <n-form-item label="压缩已关闭历史文件"
+        ><n-switch
+          v-model:value="policyInput.policy.compress"
+          :disabled="!policy.editable"
+      /></n-form-item> </template
+  ></FormDialog>
 </template>
 
 <style scoped>

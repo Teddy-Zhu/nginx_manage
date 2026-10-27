@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
@@ -38,6 +39,9 @@ const protocol = window.location.protocol;
 const api = useNodeAPI(),
   session = useSession(),
   { run, busy } = useAction();
+const editing = ref(false);
+const editBaseline = ref("");
+const editSnapshot = computed(() => JSON.stringify(form));
 const view = ref<ManagementListenerView | null>(null),
   error = ref(""),
   uncertain = ref(false),
@@ -109,6 +113,11 @@ function resetForm() {
   keyFor = useIdempotency();
   uncertain.value = false;
 }
+function openSettings() {
+  resetForm();
+  editBaseline.value = editSnapshot.value;
+  editing.value = true;
+}
 async function load() {
   if (!canManage.value || closed) return;
   try {
@@ -161,6 +170,7 @@ async function apply(enabled: boolean) {
       throw cause;
     }
     uncertain.value = false;
+    editing.value = false;
     form.certificate = form.key = "";
     form.rotate = false;
     keyFor = useIdempotency();
@@ -291,11 +301,52 @@ useLiveRefresh(api, ["listener"], load);
       <section v-if="view?.available" class="panel page-stack">
         <div class="toolbar">
           <h2>入口设置</h2>
-          <NButton :disabled="busy || pending" @click="resetForm"
-            >恢复已保存设置</NButton
-          >
+          <div class="inline-gap">
+            <NButton
+              :disabled="busy || pending || !view.attached"
+              @click="openSettings"
+              >修改设置</NButton
+            >
+            <NPopconfirm
+              positive-text="停用"
+              @positive-click="
+                resetForm();
+                apply(false);
+              "
+            >
+              <template #trigger
+                ><NButton :disabled="busy || pending || !view.confirmed.enabled"
+                  >停用远程入口</NButton
+                ></template
+              >
+              停用须通过主入口执行，不会关闭主入口。
+            </NPopconfirm>
+          </div>
         </div>
-        <NAlert v-if="version !== view.version && !pending" type="warning"
+        <p class="muted">修改端口或允许访问的地址后，需从新入口确认连接。</p>
+      </section>
+      <FormDialog
+        :show="editing"
+        title="修改安全管理入口"
+        :busy="busy"
+        :dirty="editSnapshot !== editBaseline"
+        :submit-disabled="
+          pending ||
+          !view ||
+          version !== view.version ||
+          !view.attached ||
+          !cleanList(form.sources).length
+        "
+        submit-text="应用并等待确认"
+        @submit="apply(true)"
+        @cancel="
+          editing = false;
+          form.key = form.certificate = '';
+        "
+      >
+        <NAlert
+          v-if="view && version !== view.version && !pending"
+          type="warning"
           >管理入口配置已变化，请重新载入已确认配置。</NAlert
         >
         <p>修改端口或允许访问的地址后，请在 120 秒内从新入口确认。</p>
@@ -322,34 +373,7 @@ useLiveRefresh(api, ["listener"], load);
               :disabled="busy || pending"
           /></NFormItem>
         </section>
-        <div class="toolbar">
-          <NButton
-            type="primary"
-            :loading="busy"
-            :disabled="
-              pending ||
-              version !== view.version ||
-              !view.attached ||
-              !cleanList(form.sources).length
-            "
-            @click="apply(true)"
-            >暂用并等待确认</NButton
-          >
-          <NPopconfirm positive-text="停用" @positive-click="apply(false)"
-            ><template #trigger
-              ><NButton
-                :disabled="
-                  busy ||
-                  pending ||
-                  !view.confirmed.enabled ||
-                  version !== view.version
-                "
-                >停用远程入口</NButton
-              ></template
-            >停用须通过主入口执行，不会关闭主入口。</NPopconfirm
-          >
-        </div>
-      </section>
+      </FormDialog>
     </template>
   </div>
 </template>

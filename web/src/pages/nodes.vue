@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import FormDialog from "../components/FormDialog.vue";
 import { randomUUID } from "../utils/crypto";
 
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
@@ -23,9 +24,6 @@ import {
   NInput,
   NPopconfirm,
   NTag,
-  NForm,
-  NTabs,
-  NTabPane,
 } from "naive-ui";
 import { useNodeAPI, apiError, type NodeConnection } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
@@ -39,6 +37,7 @@ const nodes = ref<NodeConnection[]>([]),
   error = ref(""),
   selected = ref<string[]>([]),
   checking = ref<string[]>([]);
+const adding = ref(false);
 const form = reactive({ name: "", url: "", api_key: "" });
 const canManage = computed(
   () =>
@@ -90,7 +89,8 @@ async function create() {
     replace(value);
     form.name = form.url = form.api_key = "";
     keyFor = useIdempotency();
-  }, "节点连接已登记");
+    adding.value = false;
+  }, "服务器连接已添加");
 }
 function select(id: string, value: boolean) {
   if (value && selected.value.length < 8)
@@ -156,12 +156,16 @@ onUnmounted(() => {
               >检查所选连接<span v-if="selected.length"
                 >（{{ selected.length }}）</span
               ></NButton
-            ><NButton :disabled="busy" @click="load">刷新</NButton>
+            ><NButton :disabled="busy" @click="load">刷新</NButton
+            ><NButton
+              type="primary"
+              :disabled="busy || !!checking.length"
+              @click="adding = true"
+              >添加服务器</NButton
+            >
           </div>
         </div>
-        <p v-if="!active.length" class="empty-state">
-          暂无服务器连接，可在下方添加。
-        </p>
+        <p v-if="!active.length" class="empty-state">暂无服务器连接。</p>
         <div v-else class="record-list">
           <article v-for="node in active" :key="node.id" class="record-card">
             <div class="toolbar">
@@ -219,60 +223,52 @@ onUnmounted(() => {
         </div>
       </section>
       <section class="panel page-stack">
-        <h2>添加服务器</h2>
-        <NTabs type="line" animated>
-          <NTabPane name="token" tab="使用 API 密钥">
-            <NForm
-              label-placement="top"
-              :disabled="busy"
-              @submit.prevent="create"
-            >
-              <div class="form-grid">
-                <NFormItem label="连接名称"
-                  ><NInput
-                    v-model:value="form.name"
-                    placeholder="例如：生产服务器"
-                    :maxlength="100"
-                /></NFormItem>
-                <NFormItem label="服务器 API 地址"
-                  ><NInput
-                    v-model:value="form.url"
-                    placeholder="https://server.example.com/api/v1"
-                    :maxlength="2048"
-                /></NFormItem>
-                <NFormItem class="full-width" label="API 密钥"
-                  ><NInput
-                    v-model:value="form.api_key"
-                    type="password"
-                    show-password-on="click"
-                    autocomplete="off"
-                    :maxlength="193"
-                /></NFormItem>
-              </div>
-              <p class="section-note">
-                填写目标服务器地址和专用 API 密钥，密钥至少需要读取权限。
-              </p>
-              <div class="form-actions">
-                <NButton
-                  type="primary"
-                  attr-type="submit"
-                  :loading="busy"
-                  :disabled="
-                    !form.name ||
-                    !form.url ||
-                    !form.api_key ||
-                    !!checking.length
-                  "
-                  >添加连接</NButton
-                >
-              </div>
-            </NForm>
-          </NTabPane>
-          <NTabPane name="pairing" tab="使用配对信息"
-            ><NodePairing @connected="load"
-          /></NTabPane>
-        </NTabs>
+        <NodePairing @connected="load" />
       </section>
+      <FormDialog
+        :show="adding"
+        title="添加服务器"
+        :busy="busy"
+        :dirty="!!(form.name || form.url || form.api_key)"
+        :submit-disabled="
+          !form.name.trim() ||
+          !form.url.trim() ||
+          !form.api_key ||
+          !!checking.length
+        "
+        submit-text="添加"
+        @submit="create"
+        @cancel="
+          adding = false;
+          form.name = form.url = form.api_key = '';
+        "
+      >
+        <div class="form-grid">
+          <NFormItem label="连接名称"
+            ><NInput
+              v-model:value="form.name"
+              placeholder="例如：生产服务器"
+              :maxlength="100"
+          /></NFormItem>
+          <NFormItem label="服务器 API 地址"
+            ><NInput
+              v-model:value="form.url"
+              placeholder="https://server.example.com/api/v1"
+              :maxlength="2048"
+          /></NFormItem>
+          <NFormItem class="full-width" label="API 密钥"
+            ><NInput
+              v-model:value="form.api_key"
+              type="password"
+              show-password-on="click"
+              autocomplete="off"
+              :maxlength="193"
+          /></NFormItem>
+        </div>
+        <p class="section-note">
+          填写目标服务器地址和专用 API 密钥，密钥至少需要读取权限。
+        </p>
+      </FormDialog>
       <section v-if="removed.length">
         <h3>已删除的连接</h3>
         <div class="record-list">

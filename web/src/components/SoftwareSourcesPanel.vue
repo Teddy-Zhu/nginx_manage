@@ -1,14 +1,7 @@
 <script setup lang="ts">
+import FormDialog from "./FormDialog.vue";
 import { computed, ref, watch } from "vue";
-import {
-  NAlert,
-  NButton,
-  NEmpty,
-  NFormItem,
-  NInput,
-  NModal,
-  NTag,
-} from "naive-ui";
+import { NAlert, NButton, NEmpty, NFormItem, NInput, NTag } from "naive-ui";
 import {
   useNodeAPI,
   type ComponentTask,
@@ -222,13 +215,21 @@ async function uninstall(sourceID: string, appID: string, name: string) {
     </div>
     <NAlert v-if="job?.error" type="error">{{ job.error }}</NAlert>
   </section>
-  <NModal
-    v-model:show="showImport"
-    preset="card"
+  <FormDialog
+    :show="showImport"
     title="添加软件源"
-    class="software-import"
-    :mask-closable="!busy"
-    :closable="!busy"
+    :busy="busy"
+    :draft="[url, source]"
+    :submit-disabled="!source && !url.trim()"
+    submit-text="添加"
+    @submit="
+      submit(
+        source
+          ? { action: 'import', source }
+          : { action: 'import', url: url.trim() },
+      )
+    "
+    @cancel="showImport = false"
   >
     <div class="page-stack">
       <NFormItem label="软件源地址"
@@ -257,23 +258,8 @@ async function uninstall(sourceID: string, appID: string, name: string) {
       <p class="muted">
         请使用可信的软件源。添加后可查看软件和端口，再选择安装。
       </p>
-      <div class="button-row">
-        <NButton
-          type="primary"
-          :loading="busy"
-          :disabled="!source && !url.trim()"
-          @click="
-            submit(
-              source
-                ? { action: 'import', source }
-                : { action: 'import', url: url.trim() },
-            )
-          "
-          >添加软件源</NButton
-        ><NButton :disabled="busy" @click="showImport = false">取消</NButton>
-      </div>
-    </div>
-  </NModal>
+    </div></FormDialog
+  >
 </template>
 <style scoped>
 .source-group {

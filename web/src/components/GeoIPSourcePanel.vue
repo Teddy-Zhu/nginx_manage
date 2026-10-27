@@ -1,9 +1,8 @@
 <script setup lang="ts">
+import FormDialog from "./FormDialog.vue";
 import { computed, ref, watch, toRaw } from "vue";
 import {
   NAlert,
-  NForm,
-  NModal,
   NTag,
   NButton,
   NFormItem,
@@ -36,7 +35,8 @@ const selected = ref<string[]>(["CN"]);
 watch(
   () => props.state,
   (value) => {
-    if (value) draft.value = structuredClone(toRaw(value.source));
+    if (value && !settingsOpen.value)
+      draft.value = structuredClone(toRaw(value.source));
   },
   { immediate: true },
 );
@@ -193,79 +193,65 @@ async function update() {
       国家名单更新后，保存并应用规则即可生效。
     </p>
   </div>
-  <n-modal
-    v-model:show="settingsOpen"
-    preset="card"
+  <FormDialog
+    :show="settingsOpen"
     title="数据源设置"
-    style="width: min(680px, 94vw)"
-    :mask-closable="!busy"
-    :closable="!busy"
-    :close-on-esc="!busy"
+    :busy="busy"
+    :draft="draft"
+    :submit-disabled="!writable || !dirty"
+    @submit="save"
+    @cancel="settingsOpen = false"
   >
-    <n-form :show-feedback="false" label-placement="top" class="source-form">
-      <n-form-item label="常用数据源" class="full-width">
-        <n-space>
-          <n-button :disabled="busy || !writable" @click="preset('mmdb')"
-            >GitHub MMDB</n-button
-          >
-          <n-button :disabled="busy || !writable" @click="preset('cidr')"
-            >IPdeny CIDR</n-button
-          >
-        </n-space>
-      </n-form-item>
-      <n-form-item label="数据源名称"
+    <n-form-item label="常用数据源" class="full-width">
+      <n-space>
+        <n-button :disabled="busy || !writable" @click="preset('mmdb')"
+          >GitHub MMDB</n-button
+        >
+        <n-button :disabled="busy || !writable" @click="preset('cidr')"
+          >IPdeny CIDR</n-button
+        >
+      </n-space>
+    </n-form-item>
+    <n-form-item label="数据源名称"
+      ><n-input
+        v-model:value="draft.name"
+        :disabled="busy || !writable"
+        maxlength="128"
+    /></n-form-item>
+    <n-form-item label="文件格式"
+      ><n-select
+        v-model:value="draft.format"
+        :options="formats"
+        :disabled="busy || !writable"
+    /></n-form-item>
+    <n-form-item
+      :label="draft.format === 'mmdb' ? '数据库下载地址' : 'IPv4 下载地址'"
+      class="full-width"
+      ><n-input
+        v-model:value="draft.url"
+        :disabled="busy || !writable"
+        placeholder="https://"
+    /></n-form-item>
+    <template v-if="draft.format === 'cidr'">
+      <n-form-item label="IPv6 下载地址（可选）" class="full-width"
         ><n-input
-          v-model:value="draft.name"
-          :disabled="busy || !writable"
-          maxlength="128"
-      /></n-form-item>
-      <n-form-item label="文件格式"
-        ><n-select
-          v-model:value="draft.format"
-          :options="formats"
-          :disabled="busy || !writable"
-      /></n-form-item>
-      <n-form-item
-        :label="draft.format === 'mmdb' ? '数据库下载地址' : 'IPv4 下载地址'"
-        class="full-width"
-        ><n-input
-          v-model:value="draft.url"
+          v-model:value="draft.ipv6_url"
           :disabled="busy || !writable"
           placeholder="https://"
       /></n-form-item>
-      <template v-if="draft.format === 'cidr'">
-        <n-form-item label="IPv6 下载地址（可选）" class="full-width"
-          ><n-input
-            v-model:value="draft.ipv6_url"
-            :disabled="busy || !writable"
-            placeholder="https://"
-        /></n-form-item>
-        <p class="muted full-width">
-          地址中的 {country} 会替换为国家代码，例如 cn。支持每行一个 IP 或 CIDR
-          的地址列表。
-        </p>
-      </template>
-      <section class="full-width">
-        <n-form-item label="允许从内网镜像下载"
-          ><n-switch
-            v-model:value="draft.allow_private_network"
-            :disabled="busy || !writable"
-        /></n-form-item>
-      </section>
-    </n-form>
-    <template #footer>
-      <n-space justify="end" :size="12">
-        <n-button :disabled="busy" @click="settingsOpen = false">取消</n-button>
-        <n-button
-          type="primary"
-          :loading="busy"
-          :disabled="!writable || !dirty"
-          @click="save"
-          >保存数据源</n-button
-        >
-      </n-space>
+      <p class="muted full-width">
+        地址中的 {country} 会替换为国家代码，例如 cn。支持每行一个 IP 或 CIDR
+        的地址列表。
+      </p>
     </template>
-  </n-modal>
+    <section class="full-width">
+      <n-form-item label="允许从内网镜像下载"
+        ><n-switch
+          v-model:value="draft.allow_private_network"
+          :disabled="busy || !writable"
+      /></n-form-item>
+    </section>
+  </FormDialog>
 </template>
 <style scoped>
 .geoip-source {
