@@ -4,14 +4,19 @@ import { RouterLink } from "vue-router";
 import {
   NAlert,
   NButton,
-  NCheckbox,
-  NForm,
+  NEmpty,
   NFormItem,
   NInput,
   NInputNumber,
-  NModal,
+  NRadioButton,
+  NRadioGroup,
+  NSelect,
   NSkeleton,
+  NSwitch,
+  NTabPane,
+  NTabs,
   NTag,
+  useMessage,
 } from "naive-ui";
 import type { FrpsConfig, FrpsStatus, FrpsRequest } from "../api/client";
 import { useSoftwareOperations } from "../composables/software";
@@ -25,24 +30,42 @@ import {
   standardServiceActions,
   type SoftwareOperation,
 } from "../utils/software";
+import FormDialog from "./FormDialog.vue";
 import PortRangesInput from "./PortRangesInput.vue";
 import SoftwareControls from "./SoftwareControls.vue";
 import TaskLogButton from "./TaskLogButton.vue";
 
 defineProps<{ embedded?: boolean }>();
 const emit = defineEmits<{ changed: []; busy: [value: boolean] }>();
+const message = useMessage();
 const status = ref<FrpsStatus | null>(null),
   reading = ref(false),
   readError = ref("");
+type SettingsTab = "connection" | "ports" | "web";
 const editing = ref(false),
+  tab = ref<SettingsTab>("connection"),
   draft = ref<FrpsConfig | null>(null),
   ranges = ref<PortRange[]>([]),
-  unrestricted = ref(false);
+  unrestricted = ref(false),
+  addressMode = ref("all");
 const httpEnabled = ref(false),
   httpsEnabled = ref(false);
+const addressOptions = [
+  { label: "所有 IPv4 地址（推荐）", value: "all" },
+  { label: "所有 IPv6 地址", value: "ipv6" },
+  { label: "指定 IP 地址", value: "custom" },
+];
 const { api, run, busy, permitted, active, last, tasks, submit } =
   useSoftwareOperations(load, ["components.manage", "system.write"]);
 const processing = computed(() => busy.value || active.value);
+const editorDraft = computed(() => ({
+  config: draft.value,
+  ranges: ranges.value,
+  unrestricted: unrestricted.value,
+  httpEnabled: httpEnabled.value,
+  httpsEnabled: httpsEnabled.value,
+  addressMode: addressMode.value,
+}));
 const currentTask = computed(() =>
   tasks.value.find((task) => task.result?.input.software?.action === "frps"),
 );
@@ -77,13 +100,20 @@ const allowed = computed(
       .map((row) =>
         row.from === row.to ? String(row.from) : `${row.from}–${row.to}`,
       )
-      .join("、") || "不限制映射端口",
+      .join("、") || "不限制",
 );
+const websites = computed(() => {
+  const config = status.value?.config;
+  return [
+    { name: "HTTP", port: config?.http_port ?? 0 },
+    { name: "HTTPS", port: config?.https_port ?? 0 },
+  ];
+});
 const metrics = computed(() => {
   const s = status.value?.stats;
   return [
     { label: "在线客户端", value: s?.clients ?? "—" },
-    { label: "端口与网站映射", value: s?.proxies ?? "—" },
+    { label: "映射数量", value: s?.proxies ?? "—" },
     { label: "当前连接", value: s?.connections ?? "—" },
     {
       label: "累计流入 / 流出",
@@ -102,6 +132,31 @@ function bytes(value: number) {
           : "B";
   const divisor = { GB: 1073741824, MB: 1048576, KB: 1024, B: 1 }[unit];
   return `${Number((value / divisor).toFixed(1))} ${unit}`;
+}
+async function copy(value: string) {
+  try {
+    if (window.isSecureContext && navigator.clipboard) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      // The panel also supports HTTP, where the Clipboard API is unavailable.
+      const previous = document.activeElement;
+      const input = document.createElement("textarea");
+      input.value = value;
+      input.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.append(input);
+      try {
+        input.focus();
+        input.select();
+        if (!document.execCommand("copy")) throw new Error("copy failed");
+      } finally {
+        input.remove();
+        if (previous instanceof window.HTMLElement) previous.focus();
+      }
+    }
+    message.success("已复制");
+  } catch {
+    message.error("复制失败，请手动选择并复制");
+  }
 }
 watch(processing, (value) => emit("busy", value));
 async function load() {
@@ -133,7 +188,20 @@ function settings() {
   unrestricted.value = ranges.value.length === 0;
   httpEnabled.value = draft.value.http_port > 0;
   httpsEnabled.value = draft.value.https_port > 0;
+  addressMode.value =
+    draft.value.bind_address === "0.0.0.0"
+      ? "all"
+      : draft.value.bind_address === "::"
+        ? "ipv6"
+        : "custom";
+  tab.value = "connection";
   editing.value = true;
+}
+function selectAddress(value: string) {
+  if (!draft.value) return;
+  addressMode.value = value;
+  draft.value.bind_address =
+    value === "all" ? "0.0.0.0" : value === "ipv6" ? "::" : "";
 }
 async function operate(action: SoftwareOperation) {
   if (action === "install") {
@@ -149,24 +217,31 @@ async function operate(action: SoftwareOperation) {
 }
 async function save() {
   const config = draft.value;
-  if (!config || !status.value) return;
+  if (!config || !status.value || processing.value || !permitted.value) return;
   const valid = await run(async () => {
+    const invalid = (section: SettingsTab, text: string): never => {
+      tab.value = section;
+      throw new Error(text);
+    };
+    if (!config.bind_address.trim())
+      invalid("connection", "请填写接收连接的 IP 地址");
     if (!config.token.trim() && !status.value?.token_set)
-      throw new Error("请填写访问密钥");
+      invalid("connection", "请填写访问密钥");
+    if (!config.image.trim()) invalid("connection", "请填写软件下载来源");
     const ports = unrestricted.value
       ? []
       : ranges.value.map((row) => {
           if (!row.from || (row.to !== null && row.to < row.from))
-            throw new Error("请填写完整的映射端口范围");
-          return { from: row.from, to: row.to ?? row.from };
+            invalid("ports", "请填写完整的映射端口范围");
+          return { from: row.from!, to: row.to ?? row.from! };
         });
     if (!unrestricted.value && ports.length === 0)
-      throw new Error("请添加允许映射的端口，或选择不限制映射端口");
+      invalid("ports", "请添加允许映射的端口，或选择不限制");
     if (
       (httpEnabled.value && !config.http_port) ||
       (httpsEnabled.value && !config.https_port)
     )
-      throw new Error("请填写网站转发端口");
+      invalid("web", "请填写已启用的网站入口端口");
     return {
       ...config,
       image: config.image.trim(),
@@ -178,11 +253,6 @@ async function save() {
     };
   });
   if (!valid) return;
-  if (
-    status.value.installed &&
-    !window.confirm("保存 FRP 设置？正在运行的服务会重启，客户端将重新连接。")
-  )
-    return;
   const action: FrpsRequest["action"] = status.value.installed
     ? "configure"
     : "install";
@@ -196,33 +266,24 @@ useLiveRefresh(api, ["software"], load, () => reading.value);
 onMounted(load);
 </script>
 <template>
-  <section class="page-stack" :class="{ surface: !embedded }">
-    <div class="section-heading frps-heading">
-      <div>
-        <h3>{{ status?.installed ? "FRP 服务端" : "安装 FRP 服务端" }}</h3>
-        <p class="muted">为其他设备提供端口映射和网站转发入口。</p>
+  <section class="page-stack frps-panel" :class="{ panel: !embedded }">
+    <div class="frps-toolbar">
+      <div class="frps-service-status">
+        <h3>服务状态</h3>
+        <NTag :type="display.tone" :bordered="false">{{ display.label }}</NTag>
+        <span v-if="status?.stats?.version" class="muted"
+          >v{{ status.stats.version }}</span
+        >
       </div>
-      <NTag :type="display.tone" :bordered="false">{{ display.label }}</NTag>
-    </div>
-    <NSkeleton v-if="!status && reading" text :repeat="3" />
-    <NAlert v-if="readError" type="error">{{ readError }}</NAlert>
-    <NAlert v-if="status?.error" type="warning">{{ status.error }}</NAlert>
-    <template v-if="status">
-      <div v-if="status.installed" class="frps-metrics">
-        <div v-for="item in metrics" :key="item.label" class="frps-metric">
-          <span class="muted">{{ item.label }}</span
-          ><strong>{{ item.value }}</strong>
-        </div>
-      </div>
-      <div class="button-row">
+      <div v-if="status?.installed" class="button-row">
         <NButton
-          v-if="status.installed"
           type="primary"
           :disabled="!permitted || processing"
           @click="settings"
           >服务设置</NButton
         >
         <SoftwareControls
+          compact
           :installed="status.installed"
           :runtime="status.state"
           :permitted="permitted && status.state !== 'unknown'"
@@ -231,199 +292,346 @@ onMounted(load);
           @operate="operate"
         />
       </div>
-      <div v-if="status.installed" class="frps-summary">
-        <div>
-          <span class="muted">客户端连接地址</span
-          ><strong>{{ endpoint }}</strong>
-        </div>
-        <div>
-          <span class="muted">允许映射的端口</span
-          ><strong>{{ allowed }}</strong>
-        </div>
-        <div>
-          <span class="muted">网站转发</span
-          ><strong>{{
-            status.config.http_port || status.config.https_port
-              ? [
-                  status.config.http_port
-                    ? `HTTP ${status.config.http_port}`
-                    : "",
-                  status.config.https_port
-                    ? `HTTPS ${status.config.https_port}`
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join("、")
-              : "未开启"
-          }}</strong>
-        </div>
-        <div>
-          <span class="muted">开机自动启动</span
-          ><strong>{{ status.config.auto_start ? "已开启" : "未开启" }}</strong>
+    </div>
+    <NSkeleton v-if="!status && reading" text :repeat="3" />
+    <NAlert v-if="readError" type="error">{{ readError }}</NAlert>
+    <NAlert v-if="status?.error" type="warning">{{ status.error }}</NAlert>
+    <template v-if="status?.installed">
+      <div class="frps-metrics">
+        <div v-for="item in metrics" :key="item.label" class="frps-metric">
+          <span class="muted">{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
         </div>
       </div>
-      <p class="muted">
-        客户端使用相同的访问密钥连接此服务。需要对外开放的端口可在<RouterLink
-          to="/firewall"
+      <section class="frps-connection">
+        <div>
+          <h4>客户端连接地址</h4>
+          <div class="frps-address">
+            <span>{{ endpoint || "—" }}</span>
+            <NButton
+              text
+              type="primary"
+              :disabled="!endpoint"
+              @click="copy(endpoint)"
+              >复制地址</NButton
+            >
+          </div>
+        </div>
+        <span class="frps-connection-security">{{
+          status.config.tls_only ? "仅允许加密连接" : "允许非加密连接"
+        }}</span>
+      </section>
+      <dl class="frps-summary">
+        <div>
+          <dt>允许映射的端口</dt>
+          <dd>{{ allowed }}</dd>
+        </div>
+        <div>
+          <dt>网站转发</dt>
+          <dd class="frps-website-status">
+            <span v-for="website in websites" :key="website.name"
+              >{{ website.name
+              }}<span :class="{ muted: !website.port }">{{
+                website.port ? `端口 ${website.port}` : "未开启"
+              }}</span></span
+            >
+          </dd>
+        </div>
+        <div>
+          <dt>开机启动</dt>
+          <dd>{{ status.config.auto_start ? "已开启" : "未开启" }}</dd>
+        </div>
+      </dl>
+      <div class="frps-note">
+        客户端需填写相同的访问密钥，连接与映射端口需在<RouterLink to="/firewall"
           >防火墙</RouterLink
         >中放行。
-      </p>
+      </div>
     </template>
+    <NEmpty
+      v-else-if="status"
+      class="frps-empty"
+      description="尚未安装 FRP 服务端"
+    >
+      <template #extra>
+        <p class="muted">安装后可连接其他设备，使用端口映射和网站转发。</p>
+        <SoftwareControls
+          :installed="false"
+          :runtime="status.state"
+          :permitted="permitted"
+          :busy="processing"
+          :actions="standardServiceActions"
+          @operate="operate"
+        />
+      </template>
+    </NEmpty>
     <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
-    <div v-if="last" class="button-row">
+    <div v-if="last" class="frps-task">
+      <span class="muted">{{
+        last.state === "succeeded"
+          ? "操作已完成"
+          : last.state === "failed"
+            ? "操作未完成"
+            : "正在处理，请稍候"
+      }}</span>
       <TaskLogButton :task-id="last.id" />
     </div>
-    <NModal
-      v-model:show="editing"
-      preset="card"
+    <FormDialog
+      :show="editing"
       :title="status?.installed ? 'FRP 服务设置' : '安装 FRP 服务端'"
-      class="frps-dialog"
-      :style="{ width: 'min(720px, calc(100vw - 32px))' }"
-      :mask-closable="!busy"
-      :closable="!busy"
+      :busy="busy"
+      :form-disabled="processing || !permitted"
+      :submit-disabled="!permitted || processing"
+      :submit-text="status?.installed ? '保存设置' : '安装并启动'"
+      :draft="editorDraft"
+      width="720px"
+      @submit="save"
+      @cancel="editing = false"
     >
-      <NForm v-if="draft" class="page-stack" @submit.prevent="save">
-        <div class="frps-form-grid">
-          <NFormItem label="监听地址"
-            ><NInput
-              v-model:value="draft.bind_address"
-              placeholder="0.0.0.0"
-              :disabled="busy"
-          /></NFormItem>
-          <NFormItem label="客户端连接端口"
-            ><NInputNumber
-              v-model:value="draft.bind_port"
-              :min="1"
-              :max="65535"
-              :precision="0"
-              :clearable="false"
-              :disabled="busy"
-          /></NFormItem>
-        </div>
-        <NFormItem label="访问密钥"
-          ><div class="frps-token">
-            <NInput
-              v-model:value="draft.token"
-              type="password"
-              show-password-on="click"
-              :maxlength="512"
-              :placeholder="
-                status?.token_set
-                  ? '已设置，留空保持不变'
-                  : '客户端连接时使用的密钥'
-              "
-              :disabled="busy"
-            /><NButton
-              :disabled="busy"
-              @click="draft.token = randomUUID().replaceAll('-', '')"
-              >生成密钥</NButton
+      <NTabs
+        v-if="draft"
+        v-model:value="tab"
+        type="line"
+        animated
+        class="frps-settings-tabs"
+      >
+        <NTabPane name="connection" tab="基本设置" display-directive="show">
+          <div class="frps-settings-content">
+            <div class="frps-form-grid">
+              <NFormItem label="接收连接的地址" required>
+                <div class="frps-address-input">
+                  <NSelect
+                    :value="addressMode"
+                    :options="addressOptions"
+                    :disabled="processing || !permitted"
+                    @update:value="selectAddress"
+                  />
+                  <NInput
+                    v-if="addressMode === 'custom'"
+                    v-model:value="draft.bind_address"
+                    placeholder="填写服务器的 IP 地址"
+                    :disabled="processing || !permitted"
+                  />
+                </div>
+              </NFormItem>
+              <NFormItem label="客户端连接端口" required>
+                <NInputNumber
+                  v-model:value="draft.bind_port"
+                  :min="1"
+                  :max="65535"
+                  :precision="0"
+                  :clearable="false"
+                  :disabled="processing || !permitted"
+                />
+              </NFormItem>
+            </div>
+            <NFormItem
+              :label="status?.token_set ? '更换访问密钥' : '访问密钥'"
+              :required="!status?.token_set"
             >
-          </div></NFormItem
-        >
-        <p v-if="!status?.token_set" class="muted">
-          请保存访问密钥，客户端连接时需要填写。
-        </p>
-        <p v-if="status?.token_set && draft.token" class="muted">
-          更换密钥后，客户端也需要更新密钥。
-        </p>
-        <div class="button-row">
-          <NCheckbox v-model:checked="draft.auto_start" :disabled="busy"
-            >开机自动启动</NCheckbox
-          ><NCheckbox v-model:checked="draft.tls_only" :disabled="busy"
-            >仅允许加密连接</NCheckbox
-          >
-        </div>
-        <section class="frps-settings-section">
-          <h4>允许映射的端口</h4>
-          <NCheckbox v-model:checked="unrestricted" :disabled="busy"
-            >不限制映射端口</NCheckbox
-          ><PortRangesInput
-            v-if="!unrestricted"
-            v-model:value="ranges"
-            :disabled="busy"
-          />
-        </section>
-        <section class="frps-settings-section">
-          <h4>网站转发</h4>
-          <div class="frps-form-grid">
-            <div>
-              <NCheckbox
-                v-model:checked="httpEnabled"
-                :disabled="busy"
-                @update:checked="draft.http_port ||= 8080"
-                >HTTP 网站</NCheckbox
-              ><NFormItem v-if="httpEnabled" label="HTTP 转发端口"
-                ><NInputNumber
+              <div class="frps-key-field">
+                <NInput
+                  v-model:value="draft.token"
+                  type="password"
+                  show-password-on="click"
+                  autocomplete="new-password"
+                  :maxlength="512"
+                  :placeholder="
+                    status?.token_set
+                      ? '留空保留当前密钥'
+                      : '客户端连接时使用的密钥'
+                  "
+                  :disabled="processing || !permitted"
+                />
+                <div class="button-row">
+                  <NButton
+                    :disabled="processing || !permitted"
+                    @click="draft.token = randomUUID().replaceAll('-', '')"
+                    >随机生成</NButton
+                  >
+                  <NButton
+                    :disabled="processing || !draft.token"
+                    @click="copy(draft.token)"
+                    >复制密钥</NButton
+                  >
+                </div>
+                <span class="frps-field-hint">{{
+                  status?.token_set
+                    ? "更换密钥后，已连接的客户端也需要更新密钥。"
+                    : "请保存此密钥，客户端连接时需要填写。"
+                }}</span>
+              </div>
+            </NFormItem>
+            <div class="frps-switch-list">
+              <div class="frps-setting-row">
+                <div>
+                  <span>仅允许加密连接</span>
+                  <p>客户端需要开启 TLS 加密。</p>
+                </div>
+                <NSwitch
+                  v-model:value="draft.tls_only"
+                  aria-label="仅允许加密连接"
+                  :disabled="processing || !permitted"
+                />
+              </div>
+              <div class="frps-setting-row">
+                <div>
+                  <span>开机自动启动</span>
+                  <p>服务器重启后自动运行此服务。</p>
+                </div>
+                <NSwitch
+                  v-model:value="draft.auto_start"
+                  aria-label="开机自动启动"
+                  :disabled="processing || !permitted"
+                />
+              </div>
+            </div>
+            <NFormItem label="软件下载来源">
+              <NInput
+                v-model:value="draft.image"
+                placeholder="默认使用官方发布版本"
+                :disabled="processing || !permitted"
+              />
+            </NFormItem>
+          </div>
+        </NTabPane>
+        <NTabPane name="ports" tab="端口映射" display-directive="show">
+          <div class="frps-settings-content">
+            <NFormItem label="客户端可使用的映射端口">
+              <NRadioGroup
+                :value="unrestricted ? 'all' : 'selected'"
+                :disabled="processing || !permitted"
+                @update:value="unrestricted = $event === 'all'"
+              >
+                <NRadioButton value="selected">指定端口</NRadioButton>
+                <NRadioButton value="all">不限制</NRadioButton>
+              </NRadioGroup>
+            </NFormItem>
+            <template v-if="!unrestricted">
+              <p class="frps-field-hint">
+                可以添加单个端口或一段连续端口，同时适用于 TCP 和 UDP 映射。
+              </p>
+              <PortRangesInput
+                v-model:value="ranges"
+                :disabled="processing || !permitted"
+              />
+            </template>
+            <NAlert v-else type="info" :show-icon="false"
+              >客户端可使用任意可用端口进行映射。对外访问仍受服务器防火墙限制。</NAlert
+            >
+          </div>
+        </NTabPane>
+        <NTabPane name="web" tab="网站转发" display-directive="show">
+          <div class="frps-settings-content">
+            <section class="frps-website-setting">
+              <div class="frps-setting-row">
+                <div>
+                  <h4>HTTP 网站转发</h4>
+                  <p>通过域名访问客户端提供的 HTTP 网站。</p>
+                </div>
+                <NSwitch
+                  v-model:value="httpEnabled"
+                  aria-label="HTTP 网站转发"
+                  :disabled="processing || !permitted"
+                  @update:value="draft.http_port ||= 8080"
+                />
+              </div>
+              <NFormItem v-if="httpEnabled" label="HTTP 入口端口" required>
+                <NInputNumber
                   v-model:value="draft.http_port"
                   :min="1"
                   :max="65535"
                   :precision="0"
                   :clearable="false"
-                  :disabled="busy"
-              /></NFormItem>
-            </div>
-            <div>
-              <NCheckbox
-                v-model:checked="httpsEnabled"
-                :disabled="busy"
-                @update:checked="draft.https_port ||= 8443"
-                >HTTPS 网站</NCheckbox
-              ><NFormItem v-if="httpsEnabled" label="HTTPS 转发端口"
-                ><NInputNumber
+                  :disabled="processing || !permitted"
+                />
+              </NFormItem>
+            </section>
+            <section class="frps-website-setting">
+              <div class="frps-setting-row">
+                <div>
+                  <h4>HTTPS 网站转发</h4>
+                  <p>通过域名访问客户端提供的 HTTPS 网站。</p>
+                </div>
+                <NSwitch
+                  v-model:value="httpsEnabled"
+                  aria-label="HTTPS 网站转发"
+                  :disabled="processing || !permitted"
+                  @update:value="draft.https_port ||= 8443"
+                />
+              </div>
+              <NFormItem v-if="httpsEnabled" label="HTTPS 入口端口" required>
+                <NInputNumber
                   v-model:value="draft.https_port"
                   :min="1"
                   :max="65535"
                   :precision="0"
                   :clearable="false"
-                  :disabled="busy"
-              /></NFormItem>
-            </div>
+                  :disabled="processing || !permitted"
+                />
+              </NFormItem>
+            </section>
+            <NFormItem
+              v-if="httpEnabled || httpsEnabled"
+              label="子域名后缀（可选）"
+            >
+              <div class="frps-key-field">
+                <NInput
+                  v-model:value="draft.subdomain_host"
+                  placeholder="例如 example.com"
+                  :disabled="processing || !permitted"
+                />
+                <span class="frps-field-hint"
+                  >设置后，客户端可使用 app.example.com
+                  等子域名。域名需解析到此服务器。</span
+                >
+              </div>
+            </NFormItem>
+            <p v-if="httpEnabled || httpsEnabled" class="frps-field-hint">
+              入口端口不能与其他服务重复。HTTPS 网站的证书需在客户端配置。
+            </p>
           </div>
-          <NFormItem
-            v-if="httpEnabled || httpsEnabled"
-            label="子域名后缀（可选）"
-            ><NInput
-              v-model:value="draft.subdomain_host"
-              placeholder="例如 example.com"
-              :disabled="busy"
-          /></NFormItem>
-        </section>
-        <NFormItem label="下载来源"
-          ><NInput
-            v-model:value="draft.image"
-            :disabled="busy"
-            placeholder="默认使用官方发布版本"
-        /></NFormItem>
-        <div class="dialog-footer">
-          <NButton :disabled="busy" @click="editing = false">取消</NButton
-          ><NButton
-            type="primary"
-            attr-type="submit"
-            :loading="busy"
-            :disabled="!permitted || processing"
-            >{{ status?.installed ? "保存设置" : "安装并启动" }}</NButton
-          >
-        </div>
-      </NForm>
-    </NModal>
+        </NTabPane>
+      </NTabs>
+      <template #actions>
+        <span v-if="status?.installed" class="frps-save-hint">{{
+          status.state === "stopped"
+            ? "保存后服务保持停止。"
+            : "保存后运行中的服务会重启。"
+        }}</span>
+      </template>
+    </FormDialog>
   </section>
 </template>
 <style scoped>
-.dialog-footer {
+.frps-toolbar,
+.frps-service-status,
+.frps-address,
+.frps-task,
+.frps-setting-row {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 8px;
-}
-.frps-heading {
   align-items: center;
+  gap: 12px;
 }
-.frps-heading h3,
-.frps-settings-section h4 {
+.frps-toolbar,
+.frps-setting-row {
+  justify-content: space-between;
+}
+.frps-toolbar,
+.frps-service-status,
+.frps-address {
+  flex-wrap: wrap;
+}
+.frps-panel h3,
+.frps-panel h4,
+.frps-settings-content h4,
+.frps-summary,
+.frps-summary dd,
+.frps-setting-row p {
   margin: 0;
 }
-.frps-heading p {
-  margin: 8px 0 0;
+.frps-service-status h3 {
+  font-size: 16px;
 }
 .frps-metrics {
   display: grid;
@@ -432,49 +640,142 @@ onMounted(load);
 }
 .frps-metric {
   min-width: 0;
-  padding: 18px;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 12px;
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--surface-soft);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .frps-metric strong {
-  font-size: 22px;
+  font-size: clamp(18px, 1.8vw, 24px);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.frps-connection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.frps-connection h4 {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.frps-connection > div,
+.frps-setting-row > div {
+  min-width: 0;
+}
+.frps-address > span {
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.frps-connection-security,
+.frps-field-hint,
+.frps-save-hint,
+.frps-setting-row p,
+.frps-note {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
 .frps-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 24px;
 }
 .frps-summary > div {
+  min-width: 0;
+}
+.frps-summary dt {
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.frps-summary dd {
+  overflow-wrap: anywhere;
+}
+.frps-website-status,
+.frps-website-status > span {
   display: flex;
+  gap: 12px;
+}
+.frps-website-status {
   flex-direction: column;
   gap: 6px;
 }
-.frps-summary strong {
-  font-weight: 500;
-  overflow-wrap: anywhere;
+.frps-note {
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+.frps-empty {
+  padding: 36px 0;
+}
+.frps-empty .button-row {
+  justify-content: center;
+}
+.frps-task {
+  justify-content: space-between;
+}
+.frps-settings-tabs :deep(.n-tabs-pane-wrapper) {
+  overflow: visible;
+}
+.frps-settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 12px;
+}
+.frps-settings-content :deep(.n-form-item-feedback-wrapper) {
+  min-height: 0;
 }
 .frps-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 20px;
 }
-.frps-form-grid .n-input-number {
+.frps-settings-content :deep(.n-input-number) {
   width: 100%;
 }
-.frps-token {
-  display: flex;
-  gap: 12px;
-  width: 100%;
-}
-.frps-settings-section {
+.frps-key-field,
+.frps-address-input {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
+  width: 100%;
+}
+.frps-field-hint {
+  margin: 0;
+}
+.frps-switch-list,
+.frps-website-setting {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.frps-setting-row {
+  padding: 16px;
+  gap: 20px;
+}
+.frps-setting-row p {
+  margin-top: 4px;
+}
+.frps-setting-row h4 {
+  font-size: 14px;
+  font-weight: 500;
+}
+.frps-switch-list .frps-setting-row + .frps-setting-row {
+  border-top: 1px solid var(--border-color);
+}
+.frps-website-setting :deep(.n-form-item) {
+  padding: 0 16px 16px;
+  max-width: 280px;
 }
 @media (max-width: 900px) {
   .frps-metrics {
@@ -483,12 +784,20 @@ onMounted(load);
 }
 @media (max-width: 560px) {
   .frps-form-grid,
-  .frps-summary,
-  .frps-metrics {
+  .frps-summary {
     grid-template-columns: minmax(0, 1fr);
   }
-  .frps-token {
-    flex-direction: column;
+  .frps-metric {
+    padding: 14px;
+  }
+  .frps-summary {
+    gap: 20px;
+  }
+  .frps-connection {
+    padding: 16px;
+  }
+  .frps-setting-row {
+    padding: 14px;
   }
 }
 </style>
