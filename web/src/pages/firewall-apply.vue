@@ -13,7 +13,7 @@
 </route>
 <script setup lang="ts">
 import { useLiveRefresh } from "../composables/live";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   NAlert,
   NButton,
@@ -59,6 +59,10 @@ const view = ref<FirewallRuntime | null>(null),
   uncertain = ref(false),
   remaining = ref(0);
 const controller = new AbortController();
+watch(() => route.query.action, (value) => {
+  action.value = value === "remove" ? "remove" : "apply";
+  plan.value = null;
+});
 const dockerTargets = ref<NonNullable<
   FirewallPlanInput["docker_targets"]
 > | null>(null);

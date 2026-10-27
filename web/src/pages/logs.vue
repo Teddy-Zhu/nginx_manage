@@ -162,6 +162,9 @@ async function load() {
   policies.value = values[1];
   if (!policy.value && policies.value.length)
     policyScope.value = policies.value[0]!.scope;
+  selectSource();
+}
+function selectSource() {
   if (!sources.value.some((item) => item.id === selected.value)) {
     selected.value =
       sources.value.find(
@@ -330,6 +333,16 @@ const columns = computed<DataTableColumns<LogRow>>(() => {
   return out;
 });
 watch([selected, filter], reset, { deep: true, flush: "sync" });
+watch(
+  () => [route.query.policy, route.query.events, route.query.resource],
+  () => {
+    filter.policy =
+      typeof route.query.policy === "string" ? route.query.policy : "";
+    filter.events = route.query.events === "1";
+    selected.value = "";
+    selectSource();
+  },
+);
 watch(category, () => {
   if (!sourceOptions.value.some((item) => item.value === selected.value))
     selected.value = sourceOptions.value[0]?.value ?? "";

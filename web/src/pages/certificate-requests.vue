@@ -17,7 +17,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
   NAlert,
@@ -373,6 +373,9 @@ onBeforeRouteLeave(
     (!dirty.value && !policyDirty.value) ||
     window.confirm("证书申请有未保存内容，确认离开？"),
 );
+watch(() => route.query.new, (intent) => {
+  if (intent === "1" && loaded.value && accountOptions.value.length) start();
+});
 onMounted(() => {
   void load().then(() => {
     if (loaded.value && route.query.new === "1" && accountOptions.value.length)

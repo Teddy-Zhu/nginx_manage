@@ -14,7 +14,7 @@
 <script setup lang="ts">
 import TaskLogButton from "../components/TaskLogButton.vue";
 import { useLiveRefresh } from "../composables/live";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import {
   NAlert,
@@ -50,6 +50,12 @@ const canWrite = computed(
   () =>
     !!session.me?.scopes.includes("components.manage") &&
     !!session.me?.scopes.includes("system.write"),
+);
+watch(
+  () => route.query.prepare,
+  (id) => {
+    selected.value = typeof id === "string" ? id : "";
+  },
 );
 const prepared = computed(() =>
   preparations.value.filter(

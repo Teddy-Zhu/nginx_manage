@@ -50,7 +50,7 @@ const themeOverrides: GlobalThemeOverrides = {
         <OperationDrawer v-if="!route.meta.public" />
         <router-view v-if="route.meta.public" />
         <shell-layout v-else>
-          <SoftwareGate v-if="!nodes.switching" :key="`${nodes.generation}:${route.fullPath}`" :software="route.meta.software">
+          <SoftwareGate v-if="!nodes.switching" :key="`${nodes.generation}:${route.path}`" :software="route.meta.software">
             <router-view />
           </SoftwareGate>
           <p v-else class="muted">正在连接服务器…</p>

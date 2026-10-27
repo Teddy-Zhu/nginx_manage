@@ -1,5 +1,6 @@
 import { computed, onMounted, ref, watch } from "vue";
 import {
+  ApiError,
   useNodeAPI,
   type ComponentTask,
   type SoftwareRequest,
@@ -32,6 +33,7 @@ export function useSoftwareOperations(
     try {
       tasks.value = await api.componentTasks();
     } catch (error) {
+      if (error instanceof ApiError && error.code === "CANCELLED") return;
       message.error(
         error instanceof Error ? error.message : "无法读取操作状态",
       );

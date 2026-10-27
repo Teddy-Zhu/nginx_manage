@@ -210,7 +210,9 @@ export function readLive(
     const timer = setTimeout(() => {
       signal.removeEventListener("abort", abort);
       entry.waiters.delete(done);
-      reject(new Error("实时连接暂不可用，请稍后重试"));
+      reject(
+        new LiveError("REALTIME_UNAVAILABLE", "实时连接暂不可用，请稍后重试", 0),
+      );
     }, timeout);
     signal.addEventListener("abort", abort, { once: true });
     entry.waiters.add(done);
@@ -292,6 +294,11 @@ function publish(force = false) {
   if (socket?.readyState !== WebSocket.OPEN) return;
   const desired = subscriptions(),
     next = JSON.stringify(desired);
+  // Navigation can dispose and recreate a resource before this batch is sent.
+  // An unchanged subscription still needs a snapshot if its cache was released.
+  force ||= [...channels.values()].some((channel) =>
+    [...channel.entries.values()].some((entry) => !entry.value),
+  );
   if (!force && next === signature) return;
   for (const channel of channels.values()) {
     if (channel.retry) clearTimeout(channel.retry);

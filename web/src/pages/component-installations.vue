@@ -12,7 +12,7 @@
 </route>
 <script setup lang="ts">
 import { useLiveRefresh } from "../composables/live";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import TaskLogButton from "../components/TaskLogButton.vue";
 import {
@@ -170,6 +170,10 @@ function choose(id: string) {
   selected.value = id;
   asset.value = assets.value[0]?.id ?? "";
 }
+watch(
+  () => route.query.prepare,
+  (id) => choose(typeof id === "string" ? id : ""),
+);
 async function install() {
   if (!canCreate.value) return;
   const input = {

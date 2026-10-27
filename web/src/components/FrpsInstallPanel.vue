@@ -18,7 +18,12 @@ import {
   NTag,
   useMessage,
 } from "naive-ui";
-import type { FrpsConfig, FrpsStatus, FrpsRequest } from "../api/client";
+import {
+  ApiError,
+  type FrpsConfig,
+  type FrpsStatus,
+  type FrpsRequest,
+} from "../api/client";
 import { useSoftwareOperations } from "../composables/software";
 import { useLiveRefresh } from "../composables/live";
 import { useNodes } from "../stores/node";
@@ -164,6 +169,7 @@ async function load() {
     readError.value = "";
     emit("changed");
   } catch (error) {
+    if (error instanceof ApiError && error.code === "CANCELLED") return;
     readError.value =
       error instanceof Error ? error.message : "无法读取 FRP 状态";
   } finally {

@@ -17,7 +17,7 @@ import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { randomUUID } from "../utils/crypto";
 
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import {
   NAlert,
@@ -329,8 +329,16 @@ async function loadMigrationCandidate() {
   const id = route.query.migration,
     source = route.query.source;
   if (typeof id !== "string" || typeof source !== "string") return;
+  migrationError.value = "";
+  migrationNotice.value = "";
   try {
     const migration = await api.migration(id, controller.signal);
+    if (
+      controller.signal.aborted ||
+      id !== route.query.migration ||
+      source !== route.query.source
+    )
+      return;
     if (migration.pruned_at)
       throw new Error("迁移材料已清理，无法载入目标 DNS 配置");
     const item = migration.host_dns?.entries.find(
@@ -374,7 +382,11 @@ async function loadMigrationCandidate() {
     migrationNotice.value =
       "迁移配置已载入，请核对 DNS 地址，填写测试域名后检查设置。";
   } catch (cause) {
-    if (!controller.signal.aborted)
+    if (
+      !controller.signal.aborted &&
+      id === route.query.migration &&
+      source === route.query.source
+    )
       migrationError.value =
         cause instanceof Error ? cause.message : apiError(cause).message;
   }
@@ -485,6 +497,12 @@ async function toggle(enabled: boolean) {
     enabled ? "已启用 DNS 管理" : "已停用 DNS 管理",
   );
 }
+watch(
+  () => [route.query.migration, route.query.source],
+  () => {
+    if (observed.value) void loadMigrationCandidate();
+  },
+);
 onMounted(async () => {
   await read();
   if (controller.signal.aborted) return;
