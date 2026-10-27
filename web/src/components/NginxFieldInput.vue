@@ -46,5 +46,5 @@ function updateLog(index: number, value: string) {
     </template>
   </div>
   <ValueListInput v-else-if="format === 'lines' || format === 'tokens'" v-model:value="values" :disabled="disabled" />
-  <NInput v-else :value="value" :disabled="disabled" placeholder="未设置" @update:value="emit('update:value', $event)" />
+  <NInput v-else :value="value" :disabled="disabled" :placeholder="name === 'upstream' ? 'http://127.0.0.1:3000 或 https://example.com' : name === 'location_prefix' ? '/' : '未设置'" @update:value="emit('update:value', $event)" />
 </template>

@@ -24,6 +24,9 @@ import {
   NDataTable,
   NFormItem,
   NInput,
+  NModal,
+  NRadio,
+  NRadioGroup,
   NSelect,
   type DataTableColumns,
 } from "naive-ui";
@@ -48,6 +51,12 @@ const name = ref(""),
   mode = ref<"allowlist" | "denylist">("denylist"),
   entries = ref<string[]>([]);
 const countries = ref<string[]>([]);
+const addressCount = computed(() => cleanList(entries.value).length);
+const ruleSummary = computed(() =>
+  mode.value === "allowlist"
+    ? "仅允许名单中的 IP 或国家访问，其余访问将被拒绝。"
+    : "阻止名单中的 IP 或国家访问，其余访问不受此名单限制。",
+);
 const geoIP = ref<GeoIPState | null>(null);
 const geoError = ref("");
 const sourceOpen = ref(false);
@@ -104,7 +113,7 @@ const columns: DataTableColumns<AccessList> = [
     title: "国家和地区",
     key: "countries",
     render: (row) =>
-      row.countries.length ? countryNames(row.countries) : "未限制",
+      row.countries.length ? countryNames(row.countries) : "未添加",
   },
   {
     title: "状态",
@@ -175,14 +184,14 @@ async function save() {
     baseline.value = formJSON.value;
     editing.value = false;
     selected.value = null;
-  }, "访问列表已保存，尚未应用");
+  }, "访问名单已保存，尚未应用");
 }
 async function remove() {
   if (!selected.value || !tree.value || affected.value.length || dirty.value)
     return;
   const id = selected.value.id,
     version = tree.value.version;
-  if (!window.confirm(`确认删除访问列表 ${selected.value.name || id}？`))
+  if (!window.confirm(`确认删除访问名单 ${selected.value.name || id}？`))
     return;
   await run(async () => {
     const out = await api.deleteAccessList(
@@ -193,7 +202,7 @@ async function remove() {
     tree.value = out.tree;
     selected.value = null;
     editing.value = false;
-  }, "访问列表已移除");
+  }, "访问名单已移除");
 }
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (dirty.value) event.preventDefault();
@@ -209,57 +218,61 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 </script>
 
 <template>
-  <div class="toolbar" style="justify-content: flex-end">
-    <div class="inline-gap">
-      <n-button :loading="busy" @click="load">刷新</n-button
-      ><n-button type="primary" :disabled="busy" @click="open(null)"
-        >新建访问列表</n-button
-      >
+  <div class="page-stack">
+    <div class="page-toolbar">
+      <p class="muted">
+        创建访问名单后，在<router-link to="/nginx">网站与代理</router-link
+        >中选择使用并应用。
+      </p>
+      <div class="inline-gap">
+        <n-button :disabled="busy" @click="sourceOpen = true"
+          >国家 IP 数据</n-button
+        >
+        <n-button :loading="busy" @click="load">刷新</n-button>
+        <n-button type="primary" :disabled="busy" @click="open(null)"
+          >新建访问名单</n-button
+        >
+      </div>
     </div>
+    <section class="surface">
+      <n-data-table
+        :columns="columns"
+        :data="tree?.access_lists ?? []"
+        :bordered="false"
+      />
+    </section>
   </div>
-  <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >白名单仅允许所选 IP 或国家访问，黑名单阻止所选 IP 或国家访问。保存后，在
-    <router-link to="/nginx">网站与代理</router-link> 中绑定并应用。</n-alert
+  <NModal
+    v-model:show="sourceOpen"
+    preset="card"
+    title="数据源与更新"
+    style="width: 880px; max-width: calc(100vw - 32px)"
   >
-  <section class="surface" style="margin-bottom: 20px">
-    <div v-if="!sourceOpen" class="section-heading">
-      <h2>国家 IP 数据</h2>
-      <n-button @click="sourceOpen = true">管理数据源</n-button>
-    </div>
-    <n-alert v-if="geoError" type="warning" :bordered="false">{{
-      geoError
-    }}</n-alert>
+    <n-alert
+      v-if="geoError"
+      type="warning"
+      :bordered="false"
+      class="access-notice"
+      >{{ geoError }}</n-alert
+    >
     <GeoIPSourcePanel
-      v-if="sourceOpen"
       :state="geoIP"
       :writable="!busy"
       :countries="usedCountries"
       @changed="geoIP = $event"
-    >
-      <template #actions
-        ><n-button @click="sourceOpen = false">收起</n-button></template
-      >
-    </GeoIPSourcePanel>
-    <p v-else class="muted">
-      {{
-        geoIP?.ready
-          ? `${geoIP.source.name} · 最近更新 ${new Date(geoIP.updated_at * 1000).toLocaleString()}`
-          : "添加国家规则前，请先更新国家 IP 数据。"
-      }}
-    </p>
-  </section>
-  <section class="surface">
-    <div class="section-heading"><h2>访问列表</h2></div>
-    <n-data-table
-      :columns="columns"
-      :data="tree?.access_lists ?? []"
-      :bordered="false"
     />
-  </section>
+  </NModal>
   <FormDialog
     :show="editing"
-    :title="selected ? '编辑访问列表' : '新建访问列表'"
+    :title="
+      selected
+        ? selected.editable
+          ? '编辑访问名单'
+          : '查看访问名单'
+        : '新建访问名单'
+    "
     :busy="busy"
+    width="860px"
     :form-disabled="selected?.editable === false"
     :submit-disabled="
       selected?.editable === false ||
@@ -275,80 +288,154 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     @submit="save"
     @cancel="close"
   >
-    <n-alert
-      v-if="selected && !selected.editable"
-      type="warning"
-      :bordered="false"
-      style="margin-bottom: 20px"
-      >{{ selected.reason }}</n-alert
-    >
-
-    <n-form-item label="名称"
-      ><n-input
-        v-model:value="name"
-        :maxlength="128"
-        :disabled="busy || selected?.editable === false"
-    /></n-form-item>
-    <n-form-item label="备注"
-      ><n-input
-        v-model:value="notes"
-        type="textarea"
-        :maxlength="2048"
-        :disabled="busy || selected?.editable === false"
-    /></n-form-item>
-    <n-form-item label="模式"
-      ><n-select
-        v-model:value="mode"
-        :options="[
-          { label: '白名单', value: 'allowlist' },
-          { label: '黑名单', value: 'denylist' },
-        ]"
-        :disabled="busy || selected?.editable === false"
-    /></n-form-item>
-    <n-form-item label="IP 地址或网段（最多 128 项）"
-      ><ValueListInput
-        v-model:value="entries"
-        item-label="地址"
-        placeholder="192.0.2.1 或 2001:db8::/32"
-        :maxlength="64"
-        :disabled="busy || selected?.editable === false"
-    /></n-form-item>
-    <n-form-item label="国家和地区"
-      ><n-select
-        v-model:value="countries"
-        multiple
-        filterable
-        :options="countryOptions"
-        :disabled="busy || selected?.editable === false"
-        placeholder="选择国家和地区，可与 IP 地址一起使用"
-    /></n-form-item>
-    <n-alert
-      v-if="countries.length && !geoIP?.ready"
-      type="warning"
-      :bordered="false"
-      >请先在“管理数据源”中更新国家 IP 数据。</n-alert
-    >
-    <p v-if="selected?.geoip_updated_at" class="muted">
-      当前规则的国家数据：{{
-        new Date(selected.geoip_updated_at * 1000).toLocaleString()
-      }}。更新数据后，重新保存并应用规则以同步。
-    </p>
-    <p
-      v-if="
-        mode === 'allowlist' && !cleanList(entries).length && !countries.length
-      "
-      class="muted"
-    >
-      空白名单会拒绝全部地址。
-    </p>
-    <p class="muted">
-      关联代理：{{
-        affected
-          .map((item) => item.metadata.name || item.id.slice(0, 8))
-          .join("、") || "无"
-      }}
-    </p>
-
+    <div class="access-editor">
+      <n-alert
+        v-if="selected && !selected.editable"
+        type="warning"
+        :bordered="false"
+        >{{ selected.reason }}</n-alert
+      >
+      <n-form-item :show-feedback="false" label="名单名称">
+        <n-input
+          v-model:value="name"
+          :maxlength="128"
+          placeholder="例如：办公网络、网站访问黑名单"
+        />
+      </n-form-item>
+      <section class="access-section">
+        <h3>访问方式</h3>
+        <template v-if="!selected || selected.editable">
+          <NRadioGroup
+            v-model:value="mode"
+            :disabled="busy || selected?.editable === false"
+            class="access-mode-options"
+            aria-label="访问方式"
+          >
+            <NRadio
+              value="denylist"
+              class="access-mode"
+              :class="{ active: mode === 'denylist' }"
+            >
+              <strong>黑名单</strong><span>阻止名单内访问</span>
+            </NRadio>
+            <NRadio
+              value="allowlist"
+              class="access-mode"
+              :class="{ active: mode === 'allowlist' }"
+            >
+              <strong>白名单</strong><span>仅允许名单内访问</span>
+            </NRadio>
+          </NRadioGroup>
+          <p class="section-note">{{ ruleSummary }}</p>
+        </template>
+        <p v-else>
+          {{
+            selected.mode === "allowlist"
+              ? "白名单"
+              : selected.mode === "denylist"
+                ? "黑名单"
+                : "自定义规则"
+          }}
+        </p>
+      </section>
+      <section class="access-section">
+        <div class="access-section-heading">
+          <h3>名单内容</h3>
+          <span class="section-note"
+            >{{ addressCount }} 个地址 ·
+            {{ countries.length }} 个国家或地区</span
+          >
+        </div>
+        <p class="section-note">
+          IP 和国家可以同时添加，命中其中任意一项即可匹配名单。
+        </p>
+        <div class="access-criteria">
+          <div class="access-criterion">
+            <n-form-item :show-feedback="false" label="IP 地址与网段（可选）">
+              <ValueListInput
+                v-model:value="entries"
+                item-label="地址"
+                placeholder="192.0.2.1 或 2001:db8::/32"
+                :maxlength="64"
+                :max="128"
+                :disabled="busy || selected?.editable === false"
+              />
+            </n-form-item>
+            <p class="section-note">
+              支持 IPv4、IPv6 和网段，最多添加 128 项。
+            </p>
+          </div>
+          <div class="access-criterion">
+            <n-form-item :show-feedback="false" label="国家和地区（可选）">
+              <n-select
+                v-model:value="countries"
+                multiple
+                filterable
+                clearable
+                :options="countryOptions"
+                placeholder="搜索并选择国家或地区"
+              />
+            </n-form-item>
+            <p class="section-note">使用国家 IP 数据识别访问来源。</p>
+            <n-alert
+              v-if="countries.length && (!geoIP?.ready || geoError)"
+              type="warning"
+              :bordered="false"
+            >
+              {{ geoError || "国家 IP 数据尚未就绪，请更新后保存。" }}
+              <n-button
+                text
+                type="primary"
+                :disabled="busy || selected?.editable === false"
+                @click="sourceOpen = true"
+                >管理国家数据</n-button
+              >
+            </n-alert>
+            <p v-if="selected?.geoip_updated_at" class="section-note">
+              名单数据更新于
+              {{
+                new Date(selected.geoip_updated_at * 1000).toLocaleString()
+              }}。更新国家数据后，重新保存并应用此名单。
+            </p>
+          </div>
+        </div>
+        <n-alert
+          v-if="
+            mode === 'allowlist' &&
+            !addressCount &&
+            !countries.length &&
+            (!selected || selected.editable)
+          "
+          type="warning"
+          :bordered="false"
+          >白名单为空时，将拒绝所有访问。</n-alert
+        >
+      </section>
+      <n-form-item :show-feedback="false" label="备注（可选）">
+        <n-input
+          v-model:value="notes"
+          type="textarea"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+          :maxlength="2048"
+          placeholder="填写这份名单的用途"
+        />
+      </n-form-item>
+      <div v-if="selected" class="access-usage">
+        <span class="section-note">使用此名单的网站</span>
+        <p>
+          {{
+            affected
+              .map(
+                (item) =>
+                  item.metadata.name ||
+                  item.fields.domains?.values[0] ||
+                  item.id.slice(0, 8),
+              )
+              .join("、") || "暂未使用"
+          }}
+        </p>
+      </div>
+    </div>
     <template #actions>
       <n-button
         v-if="selected"
@@ -356,7 +443,84 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         :disabled="busy || dirty || !!affected.length"
         @click="remove"
         >删除</n-button
-      ></template
-    >
+      >
+    </template>
   </FormDialog>
 </template>
+
+<style scoped>
+.access-editor {
+  display: grid;
+  gap: 24px;
+  container-type: inline-size;
+}
+.access-editor > .n-form-item {
+  margin-bottom: 0;
+}
+.access-section {
+  display: grid;
+  gap: 14px;
+}
+.access-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.access-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.access-mode {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+.access-mode.active {
+  border-color: #087f68;
+  background: #f5faf7;
+}
+.access-mode :deep(.n-radio__label) {
+  display: grid;
+  gap: 4px;
+}
+.access-mode span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.access-criteria {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.access-criterion {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+.access-criterion :deep(.n-form-item) {
+  margin-bottom: 0;
+}
+.access-usage {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 18px;
+}
+.access-notice {
+  margin-bottom: 16px;
+}
+@container (max-width: 620px) {
+  .access-criteria,
+  .access-mode-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

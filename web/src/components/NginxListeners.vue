@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { NAlert, NButton, NInput, NInputNumber, NSelect } from "naive-ui";
-const props = defineProps<{ value: string; kind: string; disabled?: boolean }>();
+const props = withDefaults(defineProps<{ value: string; kind: string; disabled?: boolean; allowTls?: boolean }>(), { allowTls: true });
 const emit = defineEmits<{ "update:value": [value: string] }>();
 type Listener = { address: string; port: number | null; options: string[] };
 const rows = ref<Listener[]>([]), error = ref("");
 const options = computed(() => [
-  ...(props.kind === "http" ? [{ label: "HTTPS", value: "ssl" }, { label: "HTTP/2", value: "http2" }] : [{ label: "UDP", value: "udp" }, { label: "端口复用", value: "reuseport" }]),
+  ...(props.kind === "http" ? props.allowTls ? [{ label: "HTTPS", value: "ssl" }, { label: "HTTP/2", value: "http2" }] : [] : [{ label: "UDP", value: "udp" }, { label: "端口复用", value: "reuseport" }]),
   { label: "默认站点", value: "default_server" },
   { label: "仅 IPv6", value: "ipv6only=on" },
   { label: "IPv4 / IPv6 双栈", value: "ipv6only=off" },
