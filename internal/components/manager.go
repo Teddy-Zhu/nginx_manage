@@ -24,6 +24,7 @@ import (
 )
 
 type Manager struct {
+	ContainerAction                           func(context.Context, software.Request, software.Progress) (software.Result, error)
 	FrpsAction                                func(context.Context, software.Request, software.Progress) (software.Result, error)
 	Fail2banAction                            func(context.Context, software.Request, software.Progress) (software.Result, error)
 	UpdatePanel                               func(context.Context, software.Request, software.Progress) (software.Result, error)
@@ -276,7 +277,13 @@ func (m *Manager) run(out Operation, until time.Time) {
 			}
 		}
 		var result software.Result
-		if out.Input.Software.Action == "frps" {
+		if out.Input.Software.Action == "container" {
+			if m.ContainerAction == nil {
+				err = errors.New("Docker 容器管理不可用")
+			} else {
+				result, err = m.ContainerAction(ctx, *out.Input.Software, progress)
+			}
+		} else if out.Input.Software.Action == "frps" {
 			if m.FrpsAction == nil {
 				err = errors.New("FRP 服务端管理不可用")
 			} else {

@@ -1497,6 +1497,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/docker/containers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDockerContainers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/docker/containers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDockerContainer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/docker/containers/{id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDockerContainerLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components": {
         parameters: {
             query?: never;
@@ -5326,9 +5374,63 @@ export interface components {
             installed: components["schemas"]["SoftwareInstallation"][];
             error?: string;
         };
+        DockerControl: {
+            id: string;
+            /** @enum {string} */
+            action: "start" | "stop" | "restart";
+        };
+        DockerPort: {
+            address: string;
+            public: number;
+            private: number;
+            protocol: string;
+        };
+        DockerContainer: {
+            id: string;
+            name: string;
+            image: string;
+            state: string;
+            /** Format: int64 */
+            created: number;
+            ports: components["schemas"]["DockerPort"][];
+            project: string;
+            service: string;
+            protected: boolean;
+        };
+        DockerOverview: {
+            available: boolean;
+            reason: string;
+            containers: components["schemas"]["DockerContainer"][];
+        };
+        DockerMount: {
+            source: string;
+            target: string;
+            read_only: boolean;
+        };
+        DockerNetwork: {
+            name: string;
+            address: string;
+            gateway: string;
+        };
+        DockerDetail: components["schemas"]["DockerContainer"] & {
+            image_id: string;
+            started: string;
+            finished: string;
+            restarts: number;
+            restart_policy: string;
+            health: string;
+            exit_code: number;
+            network_mode: string;
+            networks: components["schemas"]["DockerNetwork"][];
+            mounts: components["schemas"]["DockerMount"][];
+        };
+        DockerLogs: {
+            text: string;
+            truncated: boolean;
+        };
         SoftwareRequest: {
             /** @enum {string} */
-            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban" | "start" | "stop" | "restart" | "logs" | "frps";
+            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban" | "start" | "stop" | "restart" | "logs" | "frps" | "container";
             source?: components["schemas"]["SoftwareSource"];
             url?: string;
             source_id?: string;
@@ -5337,6 +5439,7 @@ export interface components {
             prerelease?: boolean;
             fail2ban?: components["schemas"]["Fail2banContainerRequest"];
             frps?: components["schemas"]["FrpsRequest"];
+            container?: components["schemas"]["DockerControl"];
         };
         SoftwareResult: {
             source_id?: string;
@@ -9140,6 +9243,51 @@ export interface operations {
             };
             path: {
                 id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getDockerContainers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getDockerContainer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getDockerContainerLogs: {
+        parameters: {
+            query?: {
+                tail?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
             };
             cookie?: never;
         };

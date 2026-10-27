@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import SettingsSection from "../components/SettingsSection.vue";
 import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
@@ -128,7 +129,7 @@ function setPolicy(value: BackupPolicy) {
 function openManual() {
   if (!uncertain.value) {
     form.name = "手动备份";
-    form.encryption = "recipient";
+    form.encryption = view.value?.policy.recipient ? "recipient" : "passphrase";
     form.recipient = view.value?.policy.recipient ?? "";
     form.passphrase = "";
   }
@@ -229,33 +230,40 @@ useLiveRefresh(api, ["tasks", "backups"], load);
 </script>
 <template>
   <div class="page-stack">
-    <NAlert v-if="!canRead" type="warning">需要备份读取权限。</NAlert>
+    <NAlert v-if="!canRead" type="warning">
+      需要备份读取权限。
+    </NAlert>
     <template v-else>
-      <NAlert v-if="error" type="error">{{ error }}</NAlert>
-      <NAlert type="info"
-        >备份包含系统数据、凭据和证书，请将备份与恢复密钥分开保存。在不同服务器之间迁移配置，可使用
-        <RouterLink to="/migrations">配置迁移</RouterLink>。</NAlert
-      >
+      <NAlert v-if="error" type="error">
+        {{ error }}
+      </NAlert>
+      <NAlert type="info">
+        备份包含系统数据、凭据和证书，请将备份与恢复密钥分开保存。在不同服务器之间迁移配置，可使用
+        <RouterLink to="/migrations">
+          配置迁移
+        </RouterLink>。
+      </NAlert>
       <section v-if="canWrite" class="panel page-stack">
         <div class="toolbar">
           <h2>备份设置</h2>
           <div class="inline-gap">
-            <NButton :disabled="busy || !view" @click="openPolicy"
-              >定期备份设置</NButton
-            >
+            <NButton :disabled="busy || !view" @click="openPolicy">
+              定期备份设置
+            </NButton>
             <NButton
               type="primary"
               :disabled="busy || (!!active && !uncertain)"
               @click="openManual"
-              >创建备份</NButton
             >
+              创建备份
+            </NButton>
           </div>
         </div>
         <p v-if="view" class="muted">
           {{ view.policy.enabled ? "已启用定期备份" : "未启用定期备份"
           }}<template v-if="view.policy.enabled">
-            · 下次备份 {{ date(view.policy.next_run_at) }}</template
-          >
+            · 下次备份 {{ date(view.policy.next_run_at) }}
+          </template>
         </p>
       </section>
       <FormDialog
@@ -272,45 +280,60 @@ useLiveRefresh(api, ["tasks", "backups"], load);
           if (!uncertain) form.passphrase = '';
         "
       >
-        <NAlert v-if="uncertain" type="warning"
-          >暂未收到任务结果，请重试原请求或刷新记录。</NAlert
-        >
-        <div class="form-grid">
-          <NFormItem label="备份名称"
-            ><NInput v-model:value="form.name" maxlength="100"
-          /></NFormItem>
-          <NFormItem label="加密方式"
-            ><NRadioGroup v-model:value="form.encryption"
-              ><NRadioButton value="recipient">恢复公钥</NRadioButton
-              ><NRadioButton value="passphrase"
-                >恢复口令</NRadioButton
-              ></NRadioGroup
-            ></NFormItem
-          >
-          <NFormItem
-            v-if="form.encryption === 'recipient'"
-            class="full-width"
-            label="age X25519 恢复公钥"
-            ><NInput v-model:value="form.recipient" placeholder="age1…"
-          /></NFormItem>
-          <NFormItem
-            v-else
-            class="full-width"
-            label="恢复口令"
-            feedback="16–256 字节，请单独保存"
-            ><NInput
-              v-model:value="form.passphrase"
-              type="password"
-              show-password-on="click"
-              autocomplete="new-password"
-          /></NFormItem>
+        <div class="settings-stack">
+          <NAlert v-if="uncertain" type="warning">
+            暂未收到任务结果，请重试原请求或刷新记录。
+          </NAlert>
+          <SettingsSection title="备份信息">
+            <NFormItem label="备份名称" :show-feedback="false">
+              <NInput
+                v-model:value="form.name"
+                maxlength="100"
+                placeholder="例如 更新前备份"
+              />
+            </NFormItem>
+          </SettingsSection>
+          <SettingsSection title="加密保护">
+            <NFormItem label="加密方式" :show-feedback="false">
+              <NRadioGroup v-model:value="form.encryption">
+                <NRadioButton value="passphrase">
+                  备份密码
+                </NRadioButton><NRadioButton value="recipient">
+                  备份公钥
+                </NRadioButton>
+              </NRadioGroup>
+            </NFormItem>
+            <NFormItem
+              v-if="form.encryption === 'recipient'"
+              label="备份接收公钥"
+              :show-feedback="false"
+            >
+              <NInput v-model:value="form.recipient" placeholder="age1…" />
+            </NFormItem>
+            <NFormItem
+              v-else
+              label="备份密码"
+              feedback="16–256 字节，请单独保存"
+            >
+              <NInput
+                v-model:value="form.passphrase"
+                type="password"
+                show-password-on="click"
+                autocomplete="new-password"
+              />
+            </NFormItem>
+            <p class="section-note">
+              恢复备份需要对应的密码或私钥，请妥善保管。<template
+                v-if="form.encryption === 'passphrase'"
+              >
+                备份密码不会保存到系统中，加密完成前请勿重启面板。
+              </template>
+            </p>
+          </SettingsSection>
+          <p class="section-note">
+            创建期间将短暂暂停配置修改。
+          </p>
         </div>
-        <p class="section-note">
-          创建备份时会短暂暂停配置修改。<template
-            v-if="form.encryption === 'passphrase'"
-            >恢复口令不会保存在系统中；加密完成前请勿重启面板。</template
-          >
-        </p>
       </FormDialog>
       <FormDialog
         :show="policyOpen"
@@ -319,67 +342,95 @@ useLiveRefresh(api, ["tasks", "backups"], load);
         :dirty="policySnapshot !== policyBaseline"
         @submit="savePolicy"
         @cancel="policyOpen = false"
-        ><template v-if="view">
-          <div class="page-stack">
-            <NAlert v-if="view.policy.error" type="warning">{{
+      >
+        <div v-if="view" class="settings-stack">
+          <NAlert v-if="view.policy.error" type="warning">
+            {{
               view.policy.error
-            }}</NAlert>
-            <NCheckbox v-model:checked="policy.enabled">启用定期备份</NCheckbox>
-            <div class="form-grid">
-              <NFormItem class="full-width" label="age X25519 恢复公钥"
-                ><NInput
-                  v-model:value="policy.recipient"
-                  placeholder="age1…"
-                  @update:value="policy.keySaved = false"
-              /></NFormItem>
-              <NFormItem label="备份间隔（小时）"
-                ><NInputNumber
+            }}
+          </NAlert>
+          <SettingsSection title="备份计划">
+            <template #actions>
+              <NCheckbox v-model:checked="policy.enabled">
+                启用定期备份
+              </NCheckbox>
+            </template>
+            <div class="settings-fields">
+              <NFormItem label="备份间隔（小时）" :show-feedback="false">
+                <NInputNumber
                   v-model:value="policy.interval"
                   :min="1"
                   :max="168"
                   :precision="0"
-              /></NFormItem>
-              <NFormItem label="保留数量"
-                ><NInputNumber
+                />
+              </NFormItem><NFormItem
+                v-if="policy.enabled"
+                label="自动备份授权到期时间"
+                :show-feedback="false"
+              >
+                <input v-model="policy.until" type="datetime-local" />
+              </NFormItem>
+            </div>
+          </SettingsSection>
+          <SettingsSection
+            title="保留策略"
+            description="超过保留数量或保留天数时，自动清理较早的备份。"
+          >
+            <div class="settings-fields">
+              <NFormItem label="保留数量" :show-feedback="false">
+                <NInputNumber
                   v-model:value="policy.keep"
                   :min="1"
                   :max="15"
                   :precision="0"
-              /></NFormItem>
-              <NFormItem label="最长保留天数"
-                ><NInputNumber
+                />
+              </NFormItem><NFormItem label="最长保留天数" :show-feedback="false">
+                <NInputNumber
                   v-model:value="policy.days"
                   :min="1"
                   :max="90"
                   :precision="0"
-              /></NFormItem>
-              <NFormItem v-if="policy.enabled" label="定期备份授权到期"
-                ><input v-model="policy.until" type="datetime-local"
-              /></NFormItem>
+                />
+              </NFormItem>
             </div>
-            <NCheckbox v-model:checked="policy.keySaved"
-              >已将对应恢复私钥单独保存</NCheckbox
-            >
-            <p class="section-note">
-              达到保留数量或保留天数时，系统自动清理较早的备份。授权到期后停止创建新备份。
-            </p>
-            <p v-if="view.policy.enabled" class="muted">
-              下次备份 {{ date(view.policy.next_run_at) }} · 授权到期
-              {{ date(view.policy.authorization_until) }}
-            </p>
-          </div>
-        </template></FormDialog
-      >
+          </SettingsSection>
+          <SettingsSection
+            title="加密保护"
+            description="定期备份使用公钥加密，恢复时需要对应私钥。"
+          >
+            <NFormItem label="备份接收公钥" :show-feedback="false">
+              <NInput
+                v-model:value="policy.recipient"
+                placeholder="age1…"
+                @update:value="policy.keySaved = false"
+              />
+            </NFormItem><NCheckbox v-model:checked="policy.keySaved">
+              已单独保存对应的恢复私钥
+            </NCheckbox>
+          </SettingsSection>
+          <p class="section-note">
+            授权到期后停止创建新备份。<template v-if="view.policy.enabled">
+              下次备份：{{ date(view.policy.next_run_at) }}；授权到期：{{
+                date(view.policy.authorization_until)
+              }}。
+            </template>
+          </p>
+        </div>
+      </FormDialog>
       <section v-if="view" class="panel page-stack">
         <div class="toolbar">
           <h2>备份记录</h2>
-          <NButton :disabled="busy" @click="load">刷新</NButton>
+          <NButton :disabled="busy" @click="load">
+            刷新
+          </NButton>
         </div>
         <p class="muted">
           单个备份上限 {{ bytes(view.archive_max) }}，总存储上限
           {{ bytes(view.store_max) }}。
         </p>
-        <p v-if="!view.records.length" class="empty-state">暂无备份记录</p>
+        <p v-if="!view.records.length" class="empty-state">
+          暂无备份记录
+        </p>
         <div v-else class="record-list">
           <article
             v-for="record in view.records"
@@ -387,8 +438,7 @@ useLiveRefresh(api, ["tasks", "backups"], load);
             class="record-card"
           >
             <div class="toolbar">
-              <strong>{{ record.name }}</strong
-              ><NTag
+              <strong>{{ record.name }}</strong><NTag
                 :type="
                   record.available
                     ? 'success'
@@ -396,46 +446,49 @@ useLiveRefresh(api, ["tasks", "backups"], load);
                       ? 'warning'
                       : 'default'
                 "
-                >{{ stages[record.stage] || record.stage }}</NTag
               >
+                {{ stages[record.stage] || record.stage }}
+              </NTag>
             </div>
             <div class="record-meta">
-              <span>{{ record.scheduled ? "定期备份" : "手动备份" }}</span
-              ><span>{{ date(record.created_at) }}</span
-              ><span>{{
+              <span>{{ record.scheduled ? "定期备份" : "手动备份" }}</span><span>{{ date(record.created_at) }}</span><span>{{
                 record.archive_size
                   ? bytes(record.archive_size)
                   : "正在准备文件"
-              }}</span
-              ><span>到期 {{ date(record.expires_at) }}</span>
+              }}</span><span>到期 {{ date(record.expires_at) }}</span>
             </div>
-            <NAlert v-if="record.error" type="warning">{{
-              record.error
-            }}</NAlert>
+            <NAlert v-if="record.error" type="warning">
+              {{
+                record.error
+              }}
+            </NAlert>
 
             <div class="button-row">
               <NButton
                 v-if="record.available && canDownload"
                 :disabled="busy"
                 @click="download(record.id)"
-                >下载备份</NButton
               >
+                下载备份
+              </NButton>
               <NPopconfirm
                 v-if="
                   canWrite &&
-                  !record.deleted_at &&
-                  (['succeeded', 'failed', 'cancelled', 'rolled_back'].includes(
-                    record.state,
-                  ) ||
-                    record.stage === 'cleanup_failed')
+                    !record.deleted_at &&
+                    (['succeeded', 'failed', 'cancelled', 'rolled_back'].includes(
+                      record.state,
+                    ) ||
+                      record.stage === 'cleanup_failed')
                 "
                 @positive-click="erase(record.id)"
               >
-                <template #trigger
-                  ><NButton :disabled="busy" type="error" secondary>{{
-                    record.stage === "cleanup_failed" ? "继续清理" : "删除文件"
-                  }}</NButton></template
-                >确认删除此备份文件？删除后无法恢复。
+                <template #trigger>
+                  <NButton :disabled="busy" type="error" secondary>
+                    {{
+                      record.stage === "cleanup_failed" ? "继续清理" : "删除文件"
+                    }}
+                  </NButton>
+                </template>确认删除此备份文件？删除后无法恢复。
               </NPopconfirm>
             </div>
           </article>

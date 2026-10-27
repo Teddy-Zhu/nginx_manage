@@ -115,6 +115,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/containers': RouteRecordInfo<
+      '/containers',
+      '/containers',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/fail2ban': RouteRecordInfo<
       '/fail2ban',
       '/fail2ban',
@@ -380,6 +387,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/components.vue': {
       routes:
         | '/components'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/containers.vue': {
+      routes:
+        | '/containers'
       views:
         | never
       pathParamNames:

@@ -3,6 +3,7 @@ import resources from "../../../api/realtime-resources.json";
 import { nodeGeneration, scopeSignal, type RequestScope } from "./context";
 
 export type LiveTopic =
+  | "docker"
   | "nginx"
   | "nodes"
   | "logs"
@@ -41,6 +42,7 @@ interface Binding {
 }
 const bindings = new WeakMap<RequestScope, Map<string, Binding>>();
 export const liveTopicScopes: Record<LiveTopic, string[]> = {
+  docker: ["read", "components.manage"],
   tasks: ["read"],
   software: ["read", "components.manage"],
   monitoring: ["read"],
@@ -211,7 +213,11 @@ export function readLive(
       signal.removeEventListener("abort", abort);
       entry.waiters.delete(done);
       reject(
-        new LiveError("REALTIME_UNAVAILABLE", "实时连接暂不可用，请稍后重试", 0),
+        new LiveError(
+          "REALTIME_UNAVAILABLE",
+          "实时连接暂不可用，请稍后重试",
+          0,
+        ),
       );
     }, timeout);
     signal.addEventListener("abort", abort, { once: true });

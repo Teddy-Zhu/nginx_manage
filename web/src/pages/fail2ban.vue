@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import SettingsSection from "../components/SettingsSection.vue";
 import FormDialog from "../components/FormDialog.vue";
 import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -227,19 +228,23 @@ onMounted(load);
           </p>
         </div>
         <div class="button-row">
-          <NTag :type="displayStatus.tone">{{ displayStatus.label }}</NTag
-          ><NButton :disabled="blocked" @click="load">刷新</NButton
-          ><RouterLink
+          <NTag :type="displayStatus.tone">
+            {{ displayStatus.label }}
+          </NTag><NButton :disabled="blocked" @click="load">
+            刷新
+          </NButton><RouterLink
             :to="{ path: '/components', query: { software: 'fail2ban' } }"
-            ><NButton>软件管理</NButton></RouterLink
           >
+            <NButton>软件管理</NButton>
+          </RouterLink>
         </div>
       </div>
-      <NAlert v-if="status?.error" type="warning">{{ status.error }}</NAlert>
+      <NAlert v-if="status?.error" type="warning">
+        {{ status.error }}
+      </NAlert>
       <div class="defense-stats">
         <div>
-          <span>已启用规则</span
-          ><strong>{{
+          <span>已启用规则</span><strong>{{
             status?.config.rules.filter((r) => r.enabled).length ?? 0
           }}</strong>
         </div>
@@ -247,15 +252,17 @@ onMounted(load);
           <span>当前封禁</span><strong>{{ totalBanned }}</strong>
         </div>
         <div>
-          <span>自动启动</span
-          ><strong>{{
+          <span>自动启动</span><strong>{{
             status?.config.auto_start ? "已开启" : "已关闭"
           }}</strong>
         </div>
       </div>
     </section>
-    <NAlert v-if="readError" type="error">{{ readError }}</NAlert
-    ><NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
+    <NAlert v-if="readError" type="error">
+      {{ readError }}
+    </NAlert><NAlert v-if="last?.error" type="error">
+      {{ last.error }}
+    </NAlert>
     <div v-if="last" class="button-row">
       <span>{{
         last.state === "succeeded"
@@ -263,8 +270,7 @@ onMounted(load);
           : last.state === "failed"
             ? "操作未完成"
             : "正在处理"
-      }}</span
-      ><TaskLogButton :task-id="last.id" />
+      }}</span><TaskLogButton :task-id="last.id" />
     </div>
     <section class="panel page-stack">
       <div class="section-heading">
@@ -273,24 +279,26 @@ onMounted(load);
           type="primary"
           :disabled="!permitted || blocked"
           @click="start()"
-          >添加规则</NButton
         >
+          添加规则
+        </NButton>
       </div>
       <NEmpty
         v-if="!status?.config.rules.length"
         description="添加需要保护的登录入口"
-        ><template #extra
-          ><div class="button-row">
-            <NButton :disabled="!permitted || blocked" @click="start('ssh')"
-              >保护 SSH</NButton
-            ><NButton :disabled="!permitted || blocked" @click="start('panel')"
-              >保护面板</NButton
-            ><NButton :disabled="!permitted || blocked" @click="start('nginx')"
-              >保护网站</NButton
-            >
-          </div></template
-        ></NEmpty
       >
+        <template #extra>
+          <div class="button-row">
+            <NButton :disabled="!permitted || blocked" @click="start('ssh')">
+              保护 SSH
+            </NButton><NButton :disabled="!permitted || blocked" @click="start('panel')">
+              保护面板
+            </NButton><NButton :disabled="!permitted || blocked" @click="start('nginx')">
+              保护网站
+            </NButton>
+          </div>
+        </template>
+      </NEmpty>
       <article
         v-for="rule in status?.config.rules"
         :key="rule.id"
@@ -298,10 +306,11 @@ onMounted(load);
       >
         <div>
           <div class="record-heading">
-            <strong>{{ rule.name }}</strong
-            ><NTag :type="rule.enabled ? 'success' : 'default'" size="small">{{
-              rule.enabled ? "已启用" : "已停用"
-            }}</NTag>
+            <strong>{{ rule.name }}</strong><NTag :type="rule.enabled ? 'success' : 'default'" size="small">
+              {{
+                rule.enabled ? "已启用" : "已停用"
+              }}
+            </NTag>
           </div>
           <p class="muted">
             {{ options.find((o) => o.value === rule.kind)?.label }} · 端口
@@ -322,18 +331,21 @@ onMounted(load);
             size="small"
             :disabled="!permitted || blocked"
             @click="start(rule.kind, rule)"
-            >编辑</NButton
-          ><NButton
+          >
+            编辑
+          </NButton><NButton
             size="small"
             :disabled="!permitted || blocked"
             @click="toggle(rule)"
-            >{{ rule.enabled ? "停用" : "启用" }}</NButton
-          ><NButton
+          >
+            {{ rule.enabled ? "停用" : "启用" }}
+          </NButton><NButton
             size="small"
             :disabled="!permitted || blocked"
             @click="removeRule(rule)"
-            >删除</NButton
           >
+            删除
+          </NButton>
         </div>
       </article>
     </section>
@@ -341,17 +353,18 @@ onMounted(load);
       <div class="section-heading">
         <div>
           <h3>信任名单</h3>
-          <p class="muted">名单中的地址不会因登录失败被自动封禁。</p>
+          <p class="muted">
+            名单中的地址不会因登录失败被自动封禁。
+          </p>
         </div>
-        <NButton :disabled="!permitted || blocked" @click="editWhitelist()"
-          >编辑名单</NButton
-        >
+        <NButton :disabled="!permitted || blocked" @click="editWhitelist()">
+          编辑名单
+        </NButton>
       </div>
       <div class="button-row">
-        <NTag v-for="ip in status?.config.whitelist" :key="ip">{{ ip }}</NTag
-        ><span v-if="!status?.config.whitelist.length" class="muted"
-          >尚未添加地址</span
-        >
+        <NTag v-for="ip in status?.config.whitelist" :key="ip">
+          {{ ip }}
+        </NTag><span v-if="!status?.config.whitelist.length" class="muted">尚未添加地址</span>
       </div>
     </section>
     <section class="panel page-stack">
@@ -366,8 +379,9 @@ onMounted(load);
             showBan = true;
             banRule = ruleOptions[0]?.value ?? null;
           "
-          >添加封禁</NButton
-        ><NButton
+        >
+          添加封禁
+        </NButton><NButton
           :disabled="
             !permitted || blocked || !status?.ready || !ruleOptions.length
           "
@@ -376,27 +390,28 @@ onMounted(load);
             showBan = true;
             banRule = ruleOptions[0]?.value ?? null;
           "
-          >解除指定地址</NButton
         >
+          解除指定地址
+        </NButton>
       </div>
-      <NAlert v-if="totalBanned > banned.length" type="info"
-        >封禁数量较多，当前显示前 128 个地址。</NAlert
-      ><NEmpty v-if="!banned.length" description="当前没有封禁地址" />
+      <NAlert v-if="totalBanned > banned.length" type="info">
+        封禁数量较多，当前显示前 128 个地址。
+      </NAlert><NEmpty v-if="!banned.length" description="当前没有封禁地址" />
       <article
         v-for="item in banned"
         :key="item.jail + item.address"
         class="ban-row"
       >
         <div>
-          <strong>{{ item.address }}</strong
-          ><span class="muted">{{ item.name }}</span>
+          <strong>{{ item.address }}</strong><span class="muted">{{ item.name }}</span>
         </div>
         <NButton
           size="small"
           :disabled="!permitted || blocked"
           @click="unban(item.jail, item.address)"
-          >解除封禁</NButton
         >
+          解除封禁
+        </NButton>
       </article>
     </section>
     <section class="panel page-stack">
@@ -412,71 +427,95 @@ onMounted(load);
     :draft="editing"
     :submit-disabled="
       !permitted ||
-      blocked ||
-      !editing ||
-      !editing.name.trim() ||
-      !editing.ports.length
+        blocked ||
+        !editing ||
+        !editing.name.trim() ||
+        !editing.ports.length
     "
     @submit="saveRule"
     @cancel="editing = null"
-    ><div v-if="editing" class="page-stack">
-      <NFormItem label="规则名称"
-        ><NInput v-model:value="editing.name" maxlength="40" /></NFormItem
-      ><NFormItem label="保护入口"
-        ><NSelect v-model:value="editing.kind" :options="options"
-      /></NFormItem>
-      <p v-if="editing.kind === 'nginx'" class="muted">
-        保护网站登录认证，对反复返回认证失败的来源进行封禁。
-      </p>
-      <NFormItem label="保护端口"
-        ><div class="port-list">
-          <div
-            v-for="(port, index) in editing.ports"
-            :key="index"
-            class="port-row"
-          >
-            <NInputNumber
-              :value="port"
-              @update:value="editing.ports[index] = $event ?? 0"
-              :min="1"
-              :max="65535"
-              :precision="0"
-              :show-button="false"
-              :placeholder="'端口'"
-            /><NButton @click="editing.ports.splice(index, 1)">移除</NButton>
-          </div>
-          <NButton
-            dashed
-            :disabled="editing.ports.length >= 15"
-            @click="editing.ports.push(22)"
-            >添加端口</NButton
-          >
-        </div></NFormItem
-      >
-      <div class="defense-fields">
-        <NFormItem label="失败次数"
-          ><NInputNumber
-            v-model:value="editing.max_retry"
-            :min="1"
-            :max="1000"
-            :precision="0" /></NFormItem
-        ><NFormItem label="统计时长（秒）"
-          ><NInputNumber
-            v-model:value="editing.find_time"
-            :min="10"
-            :max="604800"
-            :precision="0" /></NFormItem
-        ><NFormItem label="封禁时长（秒）"
-          ><NInputNumber
-            v-model:value="editing.ban_time"
-            :min="10"
-            :max="31536000"
-            :precision="0"
-        /></NFormItem>
-      </div>
-      <NCheckbox v-model:checked="editing.enabled">启用规则</NCheckbox>
-    </div></FormDialog
   >
+    <div v-if="editing" class="settings-stack">
+      <SettingsSection title="保护对象">
+        <div class="settings-fields">
+          <NFormItem label="规则名称" :show-feedback="false">
+            <NInput
+              v-model:value="editing.name"
+              maxlength="40"
+              placeholder="例如 SSH 登录保护"
+            />
+          </NFormItem>
+          <NFormItem label="保护入口" :show-feedback="false">
+            <NSelect v-model:value="editing.kind" :options="options" />
+          </NFormItem>
+          <NFormItem class="full-width" label="保护端口" :show-feedback="false">
+            <div class="port-list">
+              <div
+                v-for="(port, index) in editing.ports"
+                :key="index"
+                class="port-row"
+              >
+                <NInputNumber
+                  :value="port"
+                  :min="1"
+                  :max="65535"
+                  :precision="0"
+                  :show-button="false"
+                  placeholder="端口"
+                  @update:value="editing.ports[index] = $event ?? 0"
+                /><NButton @click="editing.ports.splice(index, 1)">
+                  移除
+                </NButton>
+              </div>
+              <NButton
+                dashed
+                :disabled="editing.ports.length >= 15"
+                @click="editing.ports.push(22)"
+              >
+                添加端口
+              </NButton>
+            </div>
+          </NFormItem>
+        </div>
+        <p v-if="editing.kind === 'nginx'" class="section-note">
+          对网站登录认证中反复失败的来源进行封禁。
+        </p>
+      </SettingsSection>
+      <SettingsSection
+        title="封禁条件"
+        description="同一来源在统计时间内达到失败次数后，按设置时长封禁。"
+      >
+        <div class="settings-fields">
+          <NFormItem label="失败次数" :show-feedback="false">
+            <NInputNumber
+              v-model:value="editing.max_retry"
+              :min="1"
+              :max="1000"
+              :precision="0"
+            />
+          </NFormItem><NFormItem label="统计时间（秒）" :show-feedback="false">
+            <NInputNumber
+              v-model:value="editing.find_time"
+              :min="10"
+              :max="604800"
+              :precision="0"
+            />
+          </NFormItem><NFormItem label="封禁时间（秒）" :show-feedback="false">
+            <NInputNumber
+              v-model:value="editing.ban_time"
+              :min="10"
+              :max="31536000"
+              :precision="0"
+            />
+          </NFormItem><NFormItem label="规则状态" :show-feedback="false">
+            <NCheckbox v-model:checked="editing.enabled">
+              启用规则
+            </NCheckbox>
+          </NFormItem>
+        </div>
+      </SettingsSection>
+    </div>
+  </FormDialog>
   <FormDialog
     :show="whitelist !== null"
     title="编辑信任名单"
@@ -485,14 +524,15 @@ onMounted(load);
     :submit-disabled="!permitted || blocked || !status || !editBase"
     @submit="
       editBase &&
-      whitelist &&
-      save({
-        ...editBase,
-        whitelist: whitelist.map((a) => a.trim()).filter(Boolean),
-      })
+        whitelist &&
+        save({
+          ...editBase,
+          whitelist: whitelist.map((a) => a.trim()).filter(Boolean),
+        })
     "
     @cancel="whitelist = null"
-    ><div v-if="whitelist" class="page-stack">
+  >
+    <div v-if="whitelist" class="page-stack">
       <ValueListInput
         v-model:value="whitelist"
         item-label="地址"
@@ -500,8 +540,9 @@ onMounted(load);
         :max="128"
         :maxlength="64"
         :disabled="busy"
-      /></div
-  ></FormDialog>
+      />
+    </div>
+  </FormDialog>
   <FormDialog
     :show="showBan"
     :submit-text="banMode === 'ban' ? '确认封禁' : '解除封禁'"
@@ -513,16 +554,19 @@ onMounted(load);
     "
     @submit="ban"
     @cancel="showBan = false"
-    ><div class="page-stack">
-      <NFormItem label="防护规则"
-        ><NSelect v-model:value="banRule" :options="ruleOptions" /></NFormItem
-      ><NFormItem label="IP 地址"
-        ><NInput
+  >
+    <div class="page-stack">
+      <NFormItem label="防护规则">
+        <NSelect v-model:value="banRule" :options="ruleOptions" />
+      </NFormItem><NFormItem label="IP 地址">
+        <NInput
           :value="addresses[0] ?? ''"
           placeholder="输入需要封禁的 IP 地址"
           @update:value="addresses = [$event]"
-      /></NFormItem></div
-  ></FormDialog>
+        />
+      </NFormItem>
+    </div>
+  </FormDialog>
 </template>
 <style scoped>
 .defense-stats {

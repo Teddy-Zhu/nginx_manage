@@ -11,6 +11,7 @@
 }
 </route>
 <script setup lang="ts">
+import SettingsSection from "../components/SettingsSection.vue";
 import FormDialog from "../components/FormDialog.vue";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
@@ -676,30 +677,34 @@ onMounted(load);
 <template>
   <Teleport defer to="#page-heading-actions">
     <n-space align="center" :size="12">
-      <n-button quaternary :disabled="busy" @click="refresh">刷新</n-button>
+      <n-button quaternary :disabled="busy" @click="refresh">
+        刷新
+      </n-button>
       <n-button
         v-if="activeTab === 'rules'"
         :disabled="busy || !canWrite || !dirty"
         @click="save()"
-        >保存修改</n-button
       >
+        保存修改
+      </n-button>
       <RouterLink v-if="activeTab === 'rules' && canWrite" to="/firewall-apply">
-        <n-button type="primary" :disabled="busy || !stored?.version || dirty"
-          >应用变更</n-button
-        >
+        <n-button type="primary" :disabled="busy || !stored?.version || dirty">
+          应用变更
+        </n-button>
       </RouterLink>
     </n-space>
   </Teleport>
-  <n-alert v-if="dirty" type="warning" :show-icon="false"
-    >有未保存的规则修改，保存并应用后生效。<n-button
+  <n-alert v-if="dirty" type="warning" :show-icon="false">
+    有未保存的规则修改，保存并应用后生效。<n-button
       v-if="activeTab !== 'rules'"
       text
       type="primary"
       style="margin-left: 12px"
       @click="activeTab = 'rules'"
-      >前往规则管理</n-button
-    ></n-alert
-  >
+    >
+      前往规则管理
+    </n-button>
+  </n-alert>
   <div class="firewall-card surface">
     <n-tabs v-model:value="activeTab" type="line" animated>
       <n-tab-pane name="rules" tab="规则管理">
@@ -707,12 +712,16 @@ onMounted(load);
           <div>
             <div class="section-title">
               <h2>访问规则</h2>
-              <n-tag size="small" :bordered="false"
-                >{{ policy.rules.length }} 条</n-tag
-              >
-              <n-tag size="small" :bordered="false">{{ modeLabel }}</n-tag>
+              <n-tag size="small" :bordered="false">
+                {{ policy.rules.length }} 条
+              </n-tag>
+              <n-tag size="small" :bordered="false">
+                {{ modeLabel }}
+              </n-tag>
             </div>
-            <p class="muted">从上到下依次匹配，首条命中的规则生效。</p>
+            <p class="muted">
+              从上到下依次匹配，首条命中的规则生效。
+            </p>
           </div>
           <n-space align="center" :size="12">
             <n-dropdown
@@ -735,13 +744,16 @@ onMounted(load);
               secondary
               :disabled="busy || !canWrite || !stored"
               @click="add"
-              >添加规则</n-button
             >
+              添加规则
+            </n-button>
           </n-space>
         </div>
-        <n-alert v-if="checkError" type="error" :show-icon="false">{{
-          checkError
-        }}</n-alert>
+        <n-alert v-if="checkError" type="error" :show-icon="false">
+          {{
+            checkError
+          }}
+        </n-alert>
         <n-data-table
           :columns="columns"
           :data="policy.rules"
@@ -762,20 +774,24 @@ onMounted(load);
           <p class="muted">
             本工具管理的规则与系统已有规则共同生效。其他防火墙或云安全组中的限制需要在对应位置调整。
           </p>
-          <n-space align="center" class="advanced-actions"
-            ><RouterLink to="/firewall">查看防火墙状态</RouterLink>
+          <n-space align="center" class="advanced-actions">
+            <RouterLink to="/firewall">
+              查看防火墙状态
+            </RouterLink>
             <n-button
               :disabled="busy || dirty || !stored?.version"
               @click="check"
-              >检查已保存规则</n-button
             >
+              检查已保存规则
+            </n-button>
           </n-space>
           <n-alert
             v-for="error in preview?.errors || []"
             :key="error"
             type="error"
-            >{{ error }}</n-alert
           >
+            {{ error }}
+          </n-alert>
           <p v-if="preview">
             {{ preview.compiled ? "规则检查通过" : "规则检查未通过" }}
           </p>
@@ -784,14 +800,15 @@ onMounted(load);
           </p>
         </section>
       </n-tab-pane>
-      <n-tab-pane v-if="canWrite" name="geoip" tab="GeoIP 数据源"
-        ><GeoIPSourcePanel
+      <n-tab-pane v-if="canWrite" name="geoip" tab="GeoIP 数据源">
+        <GeoIPSourcePanel
           :state="geoip"
           :writable="canWrite"
           :countries="countries"
           @changed="geoip = $event"
           @updated="updateCountryRules"
-      /></n-tab-pane>
+        />
+      </n-tab-pane>
     </n-tabs>
   </div>
   <FormDialog
@@ -802,77 +819,105 @@ onMounted(load);
     @submit="commitRule"
     @cancel="editing = null"
   >
-    <template v-if="editing">
-      <n-alert v-if="formError" type="error">{{ formError }}</n-alert>
-      <n-form-item label="规则类型"
-        ><n-select
-          :value="kind"
-          :options="kinds"
-          :disabled="busy"
-          @update:value="changeKind"
-      /></n-form-item>
-      <n-form-item label="名称"
-        ><n-input
-          v-model:value="editing.name"
-          maxlength="128"
-          placeholder="例如：网站访问、办公网络、地区屏蔽"
-      /></n-form-item>
-      <n-form-item label="处理方式"
-        ><n-select v-model:value="editing.action" :options="actions"
-      /></n-form-item>
-      <n-form-item v-if="kind === 'country'" label="国家和地区"
-        ><n-select
-          v-model:value="editing.countries"
-          multiple
-          filterable
-          :options="countryOptions"
-      /></n-form-item>
-      <n-alert v-if="kind === 'country' && !geoip?.ready" type="info"
-        >请先在“GeoIP 数据”中更新国家地址数据。</n-alert
-      >
-      <n-form-item v-if="kind === 'address'" label="IP 地址或网段"
-        ><ValueListInput
-          :max="policy.backend === 'direct-nftables' ? 262144 : 32"
-          v-model:value="sources"
-          item-label="来源地址"
-          placeholder="192.0.2.1 或 192.0.2.0/24"
-          :maxlength="64"
-      /></n-form-item>
-      <n-form-item label="协议"
-        ><n-select v-model:value="editing.protocol" :options="protocols"
-      /></n-form-item>
-      <n-form-item v-if="editing.protocol !== 'any'" label="端口"
-        ><PortRangesInput v-model:value="portRanges"
-      /></n-form-item>
-      <section>
-        <n-form-item label="地址类型"
-          ><n-select
-            v-model:value="editing.family"
-            :options="[
-              { label: 'IPv4 和 IPv6', value: 'both' },
-              { label: 'IPv4', value: 'ipv4' },
-              { label: 'IPv6', value: 'ipv6' },
-            ]"
-        /></n-form-item>
-        <n-form-item label="流量范围"
-          ><n-select
-            v-model:value="editing.scope"
-            :options="[
-              { label: '服务器入站', value: 'host_input' },
-              { label: 'Docker 发布端口', value: 'docker_published' },
-            ]"
-        /></n-form-item>
-        <n-form-item label="网卡（可选）"
-          ><n-input
-            v-model:value="editing.interface"
-            maxlength="15"
-            placeholder="所有网卡"
-        /></n-form-item>
-        <n-form-item label="备注"
-          ><n-input v-model:value="editing.comment" maxlength="512"
-        /></n-form-item>
-      </section> </template
-  ></FormDialog>
+    <div v-if="editing" class="settings-stack">
+      <n-alert v-if="formError" type="error">
+        {{ formError }}
+      </n-alert><SettingsSection title="规则信息">
+        <div class="settings-fields">
+          <n-form-item :show-feedback="false" label="规则类型">
+            <n-select
+              :value="kind"
+              :options="kinds"
+              :disabled="busy"
+              @update:value="changeKind"
+            />
+          </n-form-item>
+          <n-form-item :show-feedback="false" label="名称">
+            <n-input
+              v-model:value="editing.name"
+              maxlength="128"
+              placeholder="例如：网站访问、办公网络、地区屏蔽"
+            />
+          </n-form-item>
+          <n-form-item :show-feedback="false" label="处理方式">
+            <n-select v-model:value="editing.action" :options="actions" />
+          </n-form-item>
+        </div>
+      </SettingsSection><SettingsSection v-if="kind !== 'port'" title="来源范围">
+        <n-form-item
+          v-if="kind === 'country'"
+          :show-feedback="false"
+          label="国家和地区"
+        >
+          <n-select
+            v-model:value="editing.countries"
+            multiple
+            filterable
+            :options="countryOptions"
+          />
+        </n-form-item>
+        <n-alert v-if="kind === 'country' && !geoip?.ready" type="info">
+          请先在“GeoIP 数据”中更新国家地址数据。
+        </n-alert>
+        <n-form-item
+          v-if="kind === 'address'"
+          :show-feedback="false"
+          label="IP 地址或网段"
+        >
+          <ValueListInput
+            v-model:value="sources"
+            :max="policy.backend === 'direct-nftables' ? 262144 : 32"
+            item-label="来源地址"
+            placeholder="192.0.2.1 或 192.0.2.0/24"
+            :maxlength="64"
+          />
+        </n-form-item>
+      </SettingsSection><SettingsSection title="适用范围">
+        <div class="settings-fields">
+          <n-form-item :show-feedback="false" label="协议">
+            <n-select v-model:value="editing.protocol" :options="protocols" />
+          </n-form-item>
+          <n-form-item
+            v-if="editing.protocol !== 'any'"
+            :show-feedback="false"
+            label="端口"
+          >
+            <PortRangesInput v-model:value="portRanges" />
+          </n-form-item>
+
+          <n-form-item :show-feedback="false" label="地址类型">
+            <n-select
+              v-model:value="editing.family"
+              :options="[
+                { label: 'IPv4 和 IPv6', value: 'both' },
+                { label: 'IPv4', value: 'ipv4' },
+                { label: 'IPv6', value: 'ipv6' },
+              ]"
+            />
+          </n-form-item>
+          <n-form-item :show-feedback="false" label="流量范围">
+            <n-select
+              v-model:value="editing.scope"
+              :options="[
+                { label: '服务器入站', value: 'host_input' },
+                { label: 'Docker 发布端口', value: 'docker_published' },
+              ]"
+            />
+          </n-form-item>
+          <n-form-item :show-feedback="false" label="网卡（可选）">
+            <n-input
+              v-model:value="editing.interface"
+              maxlength="15"
+              placeholder="所有网卡"
+            />
+          </n-form-item>
+          <n-form-item :show-feedback="false" label="备注">
+            <n-input v-model:value="editing.comment" maxlength="512" />
+          </n-form-item>
+        </div>
+      </SettingsSection>
+    </div>
+  </FormDialog>
 </template>
 <style scoped>
 .firewall-card {

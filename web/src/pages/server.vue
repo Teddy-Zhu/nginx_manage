@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import SettingsSection from "../components/SettingsSection.vue";
 import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch, toRaw } from "vue";
@@ -372,15 +373,18 @@ useLiveRefresh(
         :value="latest?.enabled ?? false"
         :disabled="!canToggle || busy"
         @update:value="toggle"
-      /><span>资源监控</span
-      ><n-tag size="small" :type="latest?.stale ? 'warning' : 'success'">{{
-        !latest?.sample ? "等待数据" : latest.stale ? "数据已过期" : "数据正常"
-      }}</n-tag>
+      /><span>资源监控</span><n-tag size="small" :type="latest?.stale ? 'warning' : 'success'">
+        {{
+          !latest?.sample ? "等待数据" : latest.stale ? "数据已过期" : "数据正常"
+        }}
+      </n-tag>
     </div>
     <div class="actions">
-      <n-button :disabled="!canConfigure || !settings" @click="configure"
-        >采样与阈值</n-button
-      ><n-button :loading="busy" @click="load">刷新</n-button>
+      <n-button :disabled="!canConfigure || !settings" @click="configure">
+        采样与阈值
+      </n-button><n-button :loading="busy" @click="load">
+        刷新
+      </n-button>
     </div>
   </div>
   <n-alert
@@ -388,15 +392,17 @@ useLiveRefresh(
     type="warning"
     :bordered="false"
     class="notice"
-    >{{ error || latest?.reason }}</n-alert
   >
+    {{ error || latest?.reason }}
+  </n-alert>
   <n-alert
     v-if="capability && !capability.available"
     type="info"
     :bordered="false"
     class="notice"
-    >{{ capability.reason }}</n-alert
   >
+    {{ capability.reason }}
+  </n-alert>
   <p class="muted">
     {{
       latest?.sample
@@ -407,8 +413,7 @@ useLiveRefresh(
 
   <div class="stat-grid">
     <div v-for="card in cards" :key="card.label" class="stat-card">
-      <span class="stat-label">{{ card.label }}</span
-      ><strong>{{ card.value }}</strong>
+      <span class="stat-label">{{ card.label }}</span><strong>{{ card.value }}</strong>
     </div>
   </div>
   <section class="surface">
@@ -433,7 +438,9 @@ useLiveRefresh(
         />
       </div>
     </div>
-    <n-alert v-if="historyError" type="warning">{{ historyError }}</n-alert>
+    <n-alert v-if="historyError" type="warning">
+      {{ historyError }}
+    </n-alert>
     <MetricTrend :history="history" :unit="unit" />
     <p class="muted">
       {{ history?.notice ?? "缺失值显示为空，采样空档不连接。" }}
@@ -445,8 +452,9 @@ useLiveRefresh(
     type="info"
     :bordered="false"
     class="notice"
-    >{{ warning }}</n-alert
   >
+    {{ warning }}
+  </n-alert>
   <section v-if="latest?.conditions.length" class="surface">
     <h2>资源阈值</h2>
     <div
@@ -454,8 +462,7 @@ useLiveRefresh(
       :key="`${condition.kind}:${condition.id}`"
       class="condition"
     >
-      <span>{{ labels[condition.kind] }} · {{ condition.label }}</span
-      ><n-tag
+      <span>{{ labels[condition.kind] }} · {{ condition.label }}</span><n-tag
         :type="
           !condition.available
             ? 'default'
@@ -463,7 +470,8 @@ useLiveRefresh(
               ? 'error'
               : 'success'
         "
-        >{{
+      >
+        {{
           !condition.available
             ? condition.active
               ? "超限状态保留，等待采样"
@@ -473,13 +481,15 @@ useLiveRefresh(
               : condition.pending_at
                 ? "超限观察中"
                 : "正常"
-        }}</n-tag
-      ><span>{{ number(condition.value, "%") }}</span>
+        }}
+      </n-tag><span>{{ number(condition.value, "%") }}</span>
     </div>
   </section>
   <section class="surface">
     <h2>本地文件系统</h2>
-    <p class="muted">使用率基于普通用户可用空间；保留空间单独展示。</p>
+    <p class="muted">
+      使用率基于普通用户可用空间；保留空间单独展示。
+    </p>
     <n-data-table
       :columns="fsColumns"
       :data="kind('filesystem')"
@@ -520,54 +530,81 @@ useLiveRefresh(
     @submit="save"
     @cancel="modal = false"
   >
-    <template v-if="edit">
-      <div class="two-columns">
-        <n-form-item label="采样间隔（秒）"
-          ><n-input-number
-            v-model:value="edit.interval_seconds"
-            :min="15"
-            :max="300" /></n-form-item
-        ><n-form-item label="保留时间（小时）"
-          ><n-input-number
-            v-model:value="edit.retention_hours"
-            :min="1"
-            :max="24"
-        /></n-form-item>
-      </div>
-      <fieldset v-for="item in thresholdKinds" :key="item.key">
-        <legend>{{ item.label }}</legend>
-        <n-switch v-model:value="edit[item.key].enabled" /><span
-          class="threshold-label"
-          >启用资源阈值</span
-        >
-        <div class="threshold-grid">
-          <n-form-item label="超限值（%）"
-            ><n-input-number
+    <div v-if="edit" class="settings-stack">
+      <SettingsSection title="采样与历史">
+        <div class="settings-fields">
+          <n-form-item label="采样间隔（秒）" :show-feedback="false">
+            <n-input-number
+              v-model:value="edit.interval_seconds"
+              :min="15"
+              :max="300"
+            />
+          </n-form-item><n-form-item label="历史数据保留（小时）" :show-feedback="false">
+            <n-input-number
+              v-model:value="edit.retention_hours"
+              :min="1"
+              :max="24"
+            />
+          </n-form-item>
+        </div>
+      </SettingsSection>
+      <SettingsSection
+        v-for="item in thresholdKinds"
+        :key="item.key"
+        :title="item.label"
+      >
+        <template #actions>
+          <n-switch v-model:value="edit[item.key].enabled">
+            <template #checked>
+              已启用
+            </template><template #unchecked>
+              未启用
+            </template>
+          </n-switch>
+        </template>
+        <div class="settings-fields">
+          <n-form-item label="超过此使用率时提醒（%）" :show-feedback="false">
+            <n-input-number
               v-model:value="edit[item.key].high"
               :min="1"
-              :max="100" /></n-form-item
-          ><n-form-item label="恢复值（%）"
-            ><n-input-number
+              :max="100"
+              :disabled="!edit[item.key].enabled"
+            />
+          </n-form-item>
+          <n-form-item label="低于此使用率时恢复（%）" :show-feedback="false">
+            <n-input-number
               v-model:value="edit[item.key].recover"
               :min="0"
-              :max="99" /></n-form-item
-          ><n-form-item label="超限持续（秒）"
-            ><n-input-number
+              :max="99"
+              :disabled="!edit[item.key].enabled"
+            />
+          </n-form-item>
+          <n-form-item label="超限持续时间（秒）" :show-feedback="false">
+            <n-input-number
               v-model:value="edit[item.key].for_seconds"
               :min="30"
-              :max="3600" /></n-form-item
-          ><n-form-item label="恢复持续（秒）"
-            ><n-input-number
+              :max="3600"
+              :disabled="!edit[item.key].enabled"
+            />
+          </n-form-item>
+          <n-form-item label="恢复持续时间（秒）" :show-feedback="false">
+            <n-input-number
               v-model:value="edit[item.key].recover_seconds"
               :min="30"
               :max="3600"
-          /></n-form-item>
+              :disabled="!edit[item.key].enabled"
+            />
+          </n-form-item>
         </div>
-        <p v-if="thresholdInvalid(edit[item.key])" class="muted">
-          恢复值须小于超限值，启用时持续窗口至少为两个采样间隔。
-        </p>
-      </fieldset>
-    </template>
+        <n-alert
+          v-if="thresholdInvalid(edit[item.key])"
+          type="warning"
+          :bordered="false"
+        >
+          恢复值须小于超限值，启用时持续时间至少为两个采样间隔。
+        </n-alert>
+      </SettingsSection>
+    </div>
   </FormDialog>
 </template>
 

@@ -70,20 +70,25 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       @submit.prevent="submit"
     >
       <div class="form-dialog-body">
-        <fieldset :disabled="busy || formDisabled"><slot /></fieldset>
+        <fieldset :disabled="busy || formDisabled">
+          <slot />
+        </fieldset>
       </div>
       <slot name="footer">
         <div class="form-dialog-footer">
           <div><slot name="actions" /></div>
           <NSpace justify="end">
-            <NButton :disabled="busy" @click="cancel">取消</NButton>
+            <NButton :disabled="busy" @click="cancel">
+              取消
+            </NButton>
             <NButton
               type="primary"
               attr-type="submit"
               :loading="busy"
               :disabled="busy || submitDisabled"
-              >{{ submitText }}</NButton
             >
+              {{ submitText }}
+            </NButton>
           </NSpace>
         </div>
       </slot>
@@ -92,6 +97,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 </template>
 <style scoped>
 .form-dialog-body {
+  container-type: inline-size;
   max-height: calc(100dvh - 220px);
   overflow-y: auto;
   padding-right: 4px;

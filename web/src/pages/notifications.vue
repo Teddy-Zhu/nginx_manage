@@ -12,6 +12,7 @@
 </route>
 
 <script setup lang="ts">
+import SettingsSection from "../components/SettingsSection.vue";
 import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
@@ -472,9 +473,11 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
       /><span>外部通知</span>
     </div>
     <div class="actions">
-      <n-button :disabled="!canWrite || !overview" @click="editPolicy"
-        >通知策略</n-button
-      ><n-button :loading="busy" @click="load">刷新</n-button>
+      <n-button :disabled="!canWrite || !overview" @click="editPolicy">
+        通知策略
+      </n-button><n-button :loading="busy" @click="load">
+        刷新
+      </n-button>
     </div>
   </div>
   <n-alert
@@ -482,42 +485,41 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
     type="warning"
     :bordered="false"
     class="notice"
-    >{{ error || overview?.health.reason }}</n-alert
   >
+    {{ error || overview?.health.reason }}
+  </n-alert>
   <n-alert
     v-if="overview && !overview.enabled"
     type="info"
     :bordered="false"
     class="notice"
-    >外部通知已停用。待投递项在有效期内保留，恢复启用后继续处理。</n-alert
   >
+    外部通知已停用。待投递项在有效期内保留，恢复启用后继续处理。
+  </n-alert>
   <n-alert
     v-if="
       overview &&
-      (overview.health.evicted_events || overview.health.dropped_deliveries)
+        (overview.health.evicted_events || overview.health.dropped_deliveries)
     "
     type="warning"
     :bordered="false"
     class="notice"
-    >已触发存储上限：清理 {{ overview.health.evicted_events }} 条较早事件，丢弃
-    {{ overview.health.dropped_deliveries }} 条未完成投递。</n-alert
   >
+    已触发存储上限：清理 {{ overview.health.evicted_events }} 条较早事件，丢弃
+    {{ overview.health.dropped_deliveries }} 条未完成投递。
+  </n-alert>
   <div class="stat-grid">
     <div class="stat-card">
-      <span class="stat-label">通知渠道</span
-      ><strong>{{ overview?.channels.length ?? "—" }} / 16</strong>
+      <span class="stat-label">通知渠道</span><strong>{{ overview?.channels.length ?? "—" }} / 16</strong>
     </div>
     <div class="stat-card">
-      <span class="stat-label">等待投递</span
-      ><strong>{{ overview?.health.pending ?? "—" }}</strong>
+      <span class="stat-label">等待投递</span><strong>{{ overview?.health.pending ?? "—" }}</strong>
     </div>
     <div class="stat-card">
-      <span class="stat-label">投递失败</span
-      ><strong>{{ overview?.health.failed ?? "—" }}</strong>
+      <span class="stat-label">投递失败</span><strong>{{ overview?.health.failed ?? "—" }}</strong>
     </div>
     <div class="stat-card">
-      <span class="stat-label">投递有效期</span
-      ><strong>{{ overview?.policy.policy.ttl_hours ?? "—" }} 小时</strong>
+      <span class="stat-label">投递有效期</span><strong>{{ overview?.policy.policy.ttl_hours ?? "—" }} 小时</strong>
     </div>
   </div>
   <section class="surface">
@@ -527,8 +529,9 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
         type="primary"
         :disabled="!canWrite || (overview?.channels.length ?? 16) >= 16"
         @click="editChannel(null)"
-        >新增渠道</n-button
       >
+        新增渠道
+      </n-button>
     </div>
     <n-data-table
       :columns="channelColumns"
@@ -543,8 +546,8 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
     <div class="section-heading">
       <h2>投递记录</h2>
       <n-select
-        :disabled="loading"
         v-model:value="channelFilter"
+        :disabled="loading"
         :options="channelOptions"
         style="width: 220px"
       />
@@ -559,18 +562,19 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
       <n-button
         :disabled="deliveryOffset === 0 || busy || loading"
         @click="deliveryOffset = Math.max(0, deliveryOffset - 30)"
-        >上一页</n-button
-      ><span>第 {{ deliveryOffset / 30 + 1 }} 页</span
-      ><n-button
+      >
+        上一页
+      </n-button><span>第 {{ deliveryOffset / 30 + 1 }} 页</span><n-button
         :disabled="
           deliveries.length < 30 ||
-          deliveryOffset + 30 > 8192 ||
-          busy ||
-          loading
+            deliveryOffset + 30 > 8192 ||
+            busy ||
+            loading
         "
         @click="deliveryOffset += 30"
-        >下一页</n-button
       >
+        下一页
+      </n-button>
     </div>
     <p class="muted">
       发送失败后会自动重试，超过重试次数或有效期后停止。网络异常时，通知可能重复送达。
@@ -588,15 +592,16 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
       <n-button
         :disabled="eventOffset === 0 || busy || loading"
         @click="eventOffset = Math.max(0, eventOffset - 30)"
-        >上一页</n-button
-      ><span>第 {{ eventOffset / 30 + 1 }} 页</span
-      ><n-button
+      >
+        上一页
+      </n-button><span>第 {{ eventOffset / 30 + 1 }} 页</span><n-button
         :disabled="
           events.length < 30 || eventOffset + 30 > 2048 || busy || loading
         "
         @click="eventOffset += 30"
-        >下一页</n-button
       >
+        下一页
+      </n-button>
     </div>
     <p class="muted">
       任务故障按资源和小时合并。证书到期阈值同时参考实际寿命与已保存续期时间；数据目录空间告警独立于宿主机监控。
@@ -613,98 +618,161 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
       clearChannelSecrets();
     "
   >
-    <div class="two-columns">
-      <n-form-item label="名称"
-        ><n-input v-model:value="form.name" maxlength="128" /></n-form-item
-      ><n-form-item label="类型"
-        ><n-select
-          v-model:value="form.kind"
-          :disabled="!!edited"
-          :options="[
-            { label: 'Webhook', value: 'webhook' },
-            { label: 'Telegram', value: 'telegram' },
-          ]"
-      /></n-form-item>
+    <div class="settings-stack">
+      <SettingsSection title="基本信息">
+        <div class="settings-fields">
+          <n-form-item label="渠道名称" :show-feedback="false">
+            <n-input
+              v-model:value="form.name"
+              maxlength="128"
+              placeholder="例如 运维通知"
+            />
+          </n-form-item><n-form-item label="通知方式" :show-feedback="false">
+            <n-select
+              v-model:value="form.kind"
+              :disabled="!!edited"
+              :options="[
+                { label: 'Webhook', value: 'webhook' },
+                { label: 'Telegram', value: 'telegram' },
+              ]"
+            />
+          </n-form-item><n-form-item label="渠道状态" :show-feedback="false">
+            <n-switch v-model:value="form.enabled">
+              <template #checked>
+                已启用
+              </template><template #unchecked>
+                未启用
+              </template>
+            </n-switch>
+          </n-form-item>
+        </div>
+      </SettingsSection>
+      <SettingsSection title="接收目标">
+        <p v-if="edited" class="section-note">
+          当前目标：{{
+            edited.target || "未配置"
+          }}。地址和密钥留空时保留原设置。
+        </p>
+        <div v-if="form.kind === 'telegram'" class="settings-fields">
+          <n-form-item
+            class="full-width"
+            label="Bot Token"
+            :show-feedback="false"
+          >
+            <n-input
+              v-model:value="form.bot_token"
+              type="password"
+              show-password-on="click"
+              autocomplete="new-password"
+              :placeholder="
+                edited?.has_bot_token
+                  ? '已配置，留空保留'
+                  : '填写机器人 Bot Token'
+              "
+            />
+          </n-form-item>
+          <n-form-item label="接收者 Chat ID" :show-feedback="false">
+            <n-input
+              v-model:value="form.chat_id"
+              placeholder="数字 ID 或 @channelname"
+            />
+          </n-form-item>
+          <n-form-item
+            label="话题 ID（可选，0 表示不指定）"
+            :show-feedback="false"
+          >
+            <n-input-number v-model:value="form.thread_id" :min="0" />
+          </n-form-item>
+        </div>
+        <div v-else class="settings-fields">
+          <n-form-item
+            class="full-width"
+            label="Webhook 地址"
+            :show-feedback="false"
+          >
+            <n-input
+              v-model:value="form.url"
+              type="password"
+              show-password-on="click"
+              autocomplete="off"
+              placeholder="https://example.com/webhook"
+            />
+          </n-form-item>
+          <div class="full-width settings-stack">
+            <n-form-item
+              label="访问令牌 Bearer Token（可选）"
+              :show-feedback="false"
+            >
+              <n-input
+                v-model:value="form.bearer_token"
+                type="password"
+                show-password-on="click"
+                autocomplete="new-password"
+                :disabled="form.clear_bearer"
+                :placeholder="
+                  edited?.has_bearer_token ? '已配置，留空保留' : '未配置'
+                "
+              />
+            </n-form-item><n-checkbox
+              v-if="edited?.has_bearer_token"
+              v-model:checked="form.clear_bearer"
+              @update:checked="
+                (value) => {
+                  if (value) form.bearer_token = '';
+                }
+              "
+            >
+              移除已保存的访问令牌
+            </n-checkbox>
+          </div>
+          <div class="full-width settings-stack">
+            <n-form-item label="签名密钥（可选）" :show-feedback="false">
+              <n-input
+                v-model:value="form.signing_secret"
+                type="password"
+                show-password-on="click"
+                autocomplete="new-password"
+                :disabled="form.clear_signing"
+                :placeholder="
+                  edited?.has_signing_secret ? '已配置，留空保留' : '未配置'
+                "
+              />
+            </n-form-item>
+            <div class="actions">
+              <n-button
+                size="small"
+                :disabled="form.clear_signing"
+                @click="generateSecret"
+              >
+                生成密钥
+              </n-button><n-checkbox
+                v-if="edited?.has_signing_secret"
+                v-model:checked="form.clear_signing"
+                @update:checked="
+                  (value) => {
+                    if (value) form.signing_secret = '';
+                  }
+                "
+              >
+                移除已保存的签名密钥
+              </n-checkbox>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+      <SettingsSection title="接收事件">
+        <n-checkbox-group v-model:value="form.subscriptions">
+          <div class="subscriptions">
+            <n-checkbox
+              v-for="kind in overview?.kinds ?? []"
+              :key="kind.id"
+              :value="kind.id"
+              :label="kind.label"
+            />
+          </div>
+        </n-checkbox-group>
+      </SettingsSection>
     </div>
-    <n-form-item label="启用渠道"
-      ><n-switch v-model:value="form.enabled"
-    /></n-form-item>
-    <p v-if="edited" class="muted">
-      当前目标：{{ edited.target || "未配置" }}。地址和凭据留空时保留原值。
-    </p>
-    <template v-if="form.kind === 'telegram'">
-      <n-form-item label="Bot Token"
-        ><n-input
-          v-model:value="form.bot_token"
-          type="password"
-          show-password-on="click"
-          autocomplete="new-password"
-          :placeholder="
-            edited?.has_bot_token ? '已配置，留空保留' : '填写 Bot Token'
-          "
-      /></n-form-item>
-      <div class="two-columns">
-        <n-form-item label="Chat ID"
-          ><n-input
-            v-model:value="form.chat_id"
-            placeholder="数字 ID 或 @channelname" /></n-form-item
-        ><n-form-item label="话题 ID（0 表示不指定）"
-          ><n-input-number v-model:value="form.thread_id" :min="0"
-        /></n-form-item>
-      </div>
-    </template>
-    <template v-else>
-      <n-form-item label="HTTPS 地址"
-        ><n-input
-          v-model:value="form.url"
-          type="password"
-          show-password-on="click"
-          autocomplete="off"
-          placeholder="https://example.com/webhook"
-      /></n-form-item>
-      <n-form-item label="Bearer Token（可选）"
-        ><n-input
-          v-model:value="form.bearer_token"
-          type="password"
-          show-password-on="click"
-          autocomplete="new-password"
-          :placeholder="
-            edited?.has_bearer_token ? '已配置，留空保留' : '未配置'
-          " /></n-form-item
-      ><n-checkbox
-        v-if="edited?.has_bearer_token"
-        v-model:checked="form.clear_bearer"
-        >清除原 Bearer Token</n-checkbox
-      >
-      <n-form-item label="签名密钥（可选）"
-        ><n-input
-          v-model:value="form.signing_secret"
-          type="password"
-          show-password-on="click"
-          autocomplete="new-password"
-          :placeholder="
-            edited?.has_signing_secret ? '已配置，留空保留' : '未配置'
-          "
-      /></n-form-item>
-      <div class="actions">
-        <n-button size="small" @click="generateSecret">生成密钥</n-button
-        ><n-checkbox
-          v-if="edited?.has_signing_secret"
-          v-model:checked="form.clear_signing"
-          >清除原签名密钥</n-checkbox
-        >
-      </div>
-    </template>
-    <n-form-item label="事件订阅" style="margin-top: 20px"
-      ><n-checkbox-group v-model:value="form.subscriptions"
-        ><div class="subscriptions">
-          <n-checkbox
-            v-for="kind in overview?.kinds ?? []"
-            :key="kind.id"
-            :value="kind.id"
-            :label="kind.label"
-          /></div></n-checkbox-group
-    ></n-form-item>
   </FormDialog>
   <FormDialog
     :show="policyModal"
@@ -714,40 +782,62 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
     @submit="savePolicy"
     @cancel="policyModal = false"
   >
-    <template v-if="policy"
-      ><div class="two-columns">
-        <n-form-item label="证书到期提前天数"
-          ><n-input-number
-            v-model:value="policy.expiry_days"
-            :min="1"
-            :max="60" /></n-form-item
-        ><n-form-item label="投递有效期（小时）"
-          ><n-input-number
-            v-model:value="policy.ttl_hours"
-            :min="1"
-            :max="24" /></n-form-item
-        ><n-form-item label="最大尝试次数"
-          ><n-input-number
-            v-model:value="policy.max_attempts"
-            :min="1"
-            :max="8" /></n-form-item
-        ><n-form-item label="数据目录剩余容量阈值（MiB）"
-          ><n-input-number
-            v-model:value="policy.disk_mib"
-            :min="64"
-            :max="10240" /></n-form-item
-        ><n-form-item label="数据目录剩余比例阈值（%）"
-          ><n-input-number
-            v-model:value="policy.disk_percent"
-            :min="1"
-            :max="20"
-        /></n-form-item>
-      </div>
-      <p class="muted">
-        任一空间阈值不足时告警，恢复需同时达到容量阈值的 1.2 倍及比例阈值加
-        2%。有效期和尝试次数作用于新建投递。
-      </p>
-    </template>
+    <div v-if="policy" class="settings-stack">
+      <SettingsSection title="证书到期提醒">
+        <div class="settings-fields">
+          <n-form-item label="到期前多少天提醒" :show-feedback="false">
+            <n-input-number
+              v-model:value="policy.expiry_days"
+              :min="1"
+              :max="60"
+            />
+          </n-form-item>
+        </div>
+      </SettingsSection>
+      <SettingsSection
+        title="发送与重试"
+        description="设置适用于保存后新产生的通知。"
+      >
+        <div class="settings-fields">
+          <n-form-item label="通知有效期（小时）" :show-feedback="false">
+            <n-input-number
+              v-model:value="policy.ttl_hours"
+              :min="1"
+              :max="24"
+            />
+          </n-form-item><n-form-item label="最多发送尝试次数" :show-feedback="false">
+            <n-input-number
+              v-model:value="policy.max_attempts"
+              :min="1"
+              :max="8"
+            />
+          </n-form-item>
+        </div>
+      </SettingsSection>
+      <SettingsSection
+        title="存储空间提醒"
+        description="数据目录的剩余容量或剩余比例低于对应阈值时提醒。"
+      >
+        <div class="settings-fields">
+          <n-form-item label="剩余容量低于（MiB）" :show-feedback="false">
+            <n-input-number
+              v-model:value="policy.disk_mib"
+              :min="64"
+              :max="10240"
+            />
+          </n-form-item><n-form-item label="剩余比例低于（%）" :show-feedback="false">
+            <n-input-number
+              v-model:value="policy.disk_percent"
+              :min="1"
+              :max="20"
+            />
+          </n-form-item>
+        </div>
+        <p class="section-note">
+          剩余容量达到阈值的 1.2 倍，且剩余比例高于阈值 2 个百分点后，提醒恢复。
+        </p>
+      </SettingsSection>
+    </div>
   </FormDialog>
 </template>
 

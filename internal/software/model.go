@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"nginxpanel/internal/containers"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/frps"
 	"regexp"
@@ -42,6 +43,7 @@ type Catalog struct {
 	Error     string         `json:"error,omitempty"`
 }
 type Request struct {
+	Container  *containers.Control        `json:"container,omitempty"`
 	Frps       *frps.Request              `json:"frps,omitempty"`
 	Fail2ban   *fail2ban.ContainerRequest `json:"fail2ban,omitempty"`
 	Action     string                     `json:"action"`
@@ -106,6 +108,15 @@ func (s Source) Validate() error {
 	return nil
 }
 func (r Request) Validate() error {
+	if r.Action == "container" {
+		if r.Container == nil || r.Frps != nil || r.Fail2ban != nil || r.Source != nil || r.URL != "" || r.SourceID != "" || r.AppID != "" || r.PlanID != "" || r.Prerelease {
+			return errors.New("容器操作参数无效")
+		}
+		return r.Container.Validate()
+	}
+	if r.Container != nil {
+		return errors.New("此操作不能携带容器操作参数")
+	}
 	if r.Action == "frps" {
 		if r.Frps == nil || r.Fail2ban != nil || r.Source != nil || r.URL != "" || r.SourceID != "" || r.AppID != "" || r.PlanID != "" || r.Prerelease {
 			return errors.New("FRP 操作参数无效")

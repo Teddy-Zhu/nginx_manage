@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ var realtimeScopes = map[string][]string{
 	"firewall": {"read", "security.write"}, "listener": {"read", "system.write"}, "version": {"read"},
 	"dns": {"read"}, "fail2ban": {"read"}, "logs": {"read"}, "nginx": {"read"}, "nodes": {"read", "nodes.manage"},
 	"software": {"read", "components.manage"},
+	"docker":   {"read", "components.manage"},
 }
 
 // Fingerprints select changed resources; only authorized snapshots leave the server.
@@ -32,6 +34,8 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 	var value any
 	var err error
 	switch topic {
+	case "docker":
+		return strconv.FormatInt(time.Now().Unix()/3, 10), nil
 	case "software":
 		if s.Agent == nil {
 			return "", errors.New("agent unavailable")

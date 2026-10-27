@@ -544,6 +544,27 @@ func (e DNSCredentialInputProvider) Valid() bool {
 	}
 }
 
+// Defines values for DockerControlAction.
+const (
+	DockerControlActionRestart DockerControlAction = "restart"
+	DockerControlActionStart   DockerControlAction = "start"
+	DockerControlActionStop    DockerControlAction = "stop"
+)
+
+// Valid indicates whether the value is a known member of the DockerControlAction enum.
+func (e DockerControlAction) Valid() bool {
+	switch e {
+	case DockerControlActionRestart:
+		return true
+	case DockerControlActionStart:
+		return true
+	case DockerControlActionStop:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ExternalFileStatus.
 const (
 	ExternalFileStatusAdded      ExternalFileStatus = "added"
@@ -3333,6 +3354,7 @@ func (e SoftwareInstallationState) Valid() bool {
 
 // Defines values for SoftwareRequestAction.
 const (
+	SoftwareRequestActionContainer   SoftwareRequestAction = "container"
 	SoftwareRequestActionDelete      SoftwareRequestAction = "delete"
 	SoftwareRequestActionFail2ban    SoftwareRequestAction = "fail2ban"
 	SoftwareRequestActionFrps        SoftwareRequestAction = "frps"
@@ -3351,6 +3373,8 @@ const (
 // Valid indicates whether the value is a known member of the SoftwareRequestAction enum.
 func (e SoftwareRequestAction) Valid() bool {
 	switch e {
+	case SoftwareRequestActionContainer:
+		return true
 	case SoftwareRequestActionDelete:
 		return true
 	case SoftwareRequestActionFail2ban:
@@ -4470,6 +4494,86 @@ type Difference struct {
 	BaseRevision string           `json:"base_revision"`
 	Diagnostics  []Diagnostic     `json:"diagnostics"`
 	Files        []FileDifference `json:"files"`
+}
+
+// DockerContainer defines model for DockerContainer.
+type DockerContainer struct {
+	Created   int64        `json:"created"`
+	Id        string       `json:"id"`
+	Image     string       `json:"image"`
+	Name      string       `json:"name"`
+	Ports     []DockerPort `json:"ports"`
+	Project   string       `json:"project"`
+	Protected bool         `json:"protected"`
+	Service   string       `json:"service"`
+	State     string       `json:"state"`
+}
+
+// DockerControl defines model for DockerControl.
+type DockerControl struct {
+	Action DockerControlAction `json:"action"`
+	Id     string              `json:"id"`
+}
+
+// DockerControlAction defines model for DockerControl.Action.
+type DockerControlAction string
+
+// DockerDetail defines model for DockerDetail.
+type DockerDetail struct {
+	Created       int64           `json:"created"`
+	ExitCode      int             `json:"exit_code"`
+	Finished      string          `json:"finished"`
+	Health        string          `json:"health"`
+	Id            string          `json:"id"`
+	Image         string          `json:"image"`
+	ImageId       string          `json:"image_id"`
+	Mounts        []DockerMount   `json:"mounts"`
+	Name          string          `json:"name"`
+	NetworkMode   string          `json:"network_mode"`
+	Networks      []DockerNetwork `json:"networks"`
+	Ports         []DockerPort    `json:"ports"`
+	Project       string          `json:"project"`
+	Protected     bool            `json:"protected"`
+	RestartPolicy string          `json:"restart_policy"`
+	Restarts      int             `json:"restarts"`
+	Service       string          `json:"service"`
+	Started       string          `json:"started"`
+	State         string          `json:"state"`
+}
+
+// DockerLogs defines model for DockerLogs.
+type DockerLogs struct {
+	Text      string `json:"text"`
+	Truncated bool   `json:"truncated"`
+}
+
+// DockerMount defines model for DockerMount.
+type DockerMount struct {
+	ReadOnly bool   `json:"read_only"`
+	Source   string `json:"source"`
+	Target   string `json:"target"`
+}
+
+// DockerNetwork defines model for DockerNetwork.
+type DockerNetwork struct {
+	Address string `json:"address"`
+	Gateway string `json:"gateway"`
+	Name    string `json:"name"`
+}
+
+// DockerOverview defines model for DockerOverview.
+type DockerOverview struct {
+	Available  bool              `json:"available"`
+	Containers []DockerContainer `json:"containers"`
+	Reason     string            `json:"reason"`
+}
+
+// DockerPort defines model for DockerPort.
+type DockerPort struct {
+	Address  string `json:"address"`
+	Private  int    `json:"private"`
+	Protocol string `json:"protocol"`
+	Public   int    `json:"public"`
 }
 
 // ExternalDetail defines model for ExternalDetail.
@@ -8295,6 +8399,7 @@ type SoftwareInstallationState string
 type SoftwareRequest struct {
 	Action     SoftwareRequestAction     `json:"action"`
 	AppId      *string                   `json:"app_id,omitempty"`
+	Container  *DockerControl            `json:"container,omitempty"`
 	Fail2ban   *Fail2banContainerRequest `json:"fail2ban,omitempty"`
 	Frps       *FrpsRequest              `json:"frps,omitempty"`
 	PlanId     *string                   `json:"plan_id,omitempty"`
@@ -8767,6 +8872,11 @@ type UpdateDNSCredentialParams struct {
 
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
+// GetDockerContainerLogsParams defines parameters for GetDockerContainerLogs.
+type GetDockerContainerLogsParams struct {
+	Tail *int `form:"tail,omitempty" json:"tail,omitempty"`
 }
 
 // ChangeFail2banAddressParams defines parameters for ChangeFail2banAddress.
@@ -10149,6 +10259,15 @@ type ServerInterface interface {
 
 	// (GET /dns-providers)
 	ListDNSProviders(w http.ResponseWriter, r *http.Request)
+
+	// (GET /docker/containers)
+	GetDockerContainers(w http.ResponseWriter, r *http.Request)
+
+	// (GET /docker/containers/{id})
+	GetDockerContainer(w http.ResponseWriter, r *http.Request, id ID)
+
+	// (GET /docker/containers/{id}/logs)
+	GetDockerContainerLogs(w http.ResponseWriter, r *http.Request, id ID, params GetDockerContainerLogsParams)
 
 	// (GET /fail2ban)
 	GetFail2ban(w http.ResponseWriter, r *http.Request)
@@ -13561,6 +13680,88 @@ func (siw *ServerInterfaceWrapper) ListDNSProviders(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListDNSProviders(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDockerContainers operation middleware
+func (siw *ServerInterfaceWrapper) GetDockerContainers(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDockerContainers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDockerContainer operation middleware
+func (siw *ServerInterfaceWrapper) GetDockerContainer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDockerContainer(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDockerContainerLogs operation middleware
+func (siw *ServerInterfaceWrapper) GetDockerContainerLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDockerContainerLogsParams
+
+	// ------------- Optional query parameter "tail" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "tail", r.URL.Query(), &params.Tail, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "tail"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tail", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDockerContainerLogs(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20574,6 +20775,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/offline", wrapper.CreateComponentOfflineUpload)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/offline/{id}/assets/{asset}", wrapper.WriteComponentOfflineChunk)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/components/offline/{id}", wrapper.DiscardComponentOfflineUpload)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers", wrapper.GetDockerContainers)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers/{id}", wrapper.GetDockerContainer)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers/{id}/logs", wrapper.GetDockerContainerLogs)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components", wrapper.GetComponents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/frontend/activate", wrapper.CreateFrontendActivation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/images/pull", wrapper.CreateComponentImagePull)

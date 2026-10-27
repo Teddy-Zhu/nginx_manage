@@ -882,6 +882,12 @@ input[type="datetime-local"]:focus-visible {
 .stack > .advanced-details {
   margin: 0;
 }
+.settings-stack { display: grid; gap: 24px; min-width: 0; }
+.settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; align-items: start; }
+.settings-fields > * { min-width: 0; }
+.settings-fields > .full-width { grid-column: 1 / -1; }
+.settings-fields > .n-form-item { margin: 0; }
+@container (max-width: 600px) { .settings-fields { grid-template-columns: minmax(0, 1fr); } }
 .form-grid,
 .grid-2 {
   display: grid;

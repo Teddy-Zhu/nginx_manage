@@ -7304,6 +7304,122 @@
         "x-body-limit": 8192,
         "x-query-keys": []
       }
+    },
+    "/nodes/connections/{connection}/docker/containers": {
+      "get": {
+        "operationId": "remoteGetDockerContainers",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getDockerContainers",
+        "x-forward-path": "/docker/containers",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
+    },
+    "/nodes/connections/{connection}/docker/containers/{id}": {
+      "get": {
+        "operationId": "remoteGetDockerContainer",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getDockerContainer",
+        "x-forward-path": "/docker/containers/{id}",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          }
+        ],
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
+    },
+    "/nodes/connections/{connection}/docker/containers/{id}/logs": {
+      "get": {
+        "operationId": "remoteGetDockerContainerLogs",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getDockerContainerLogs",
+        "x-forward-path": "/docker/containers/{id}/logs",
+        "x-response-kind": "json",
+        "x-body-limit": 4194304,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/ID"
+          },
+          {
+            "name": "tail",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ],
+        "x-query-keys": [
+          "tail"
+        ],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
     }
   },
   "security": [

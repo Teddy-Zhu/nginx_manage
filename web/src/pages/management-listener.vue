@@ -12,6 +12,7 @@
 }
 </route>
 <script setup lang="ts">
+import SettingsSection from "../components/SettingsSection.vue";
 import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import ValueListInput from "../components/ValueListInput.vue";
@@ -206,24 +207,30 @@ useLiveRefresh(api, ["listener"], load);
 </script>
 <template>
   <div class="page-stack">
-    <NAlert v-if="!canManage" type="warning"
-      >当前账户没有修改入口设置的权限。</NAlert
-    >
+    <NAlert v-if="!canManage" type="warning">
+      当前账户没有修改入口设置的权限。
+    </NAlert>
     <template v-else>
-      <NAlert v-if="error" type="error">{{ error }}</NAlert>
-      <NAlert v-if="uncertain" type="warning"
-        >暂未确认操作结果，请刷新查看进度。</NAlert
-      >
+      <NAlert v-if="error" type="error">
+        {{ error }}
+      </NAlert>
+      <NAlert v-if="uncertain" type="warning">
+        暂未确认操作结果，请刷新查看进度。
+      </NAlert>
       <section class="panel page-stack">
         <div class="toolbar">
           <h2>入口状态</h2>
-          <NButton :disabled="busy" @click="load">刷新状态</NButton>
+          <NButton :disabled="busy" @click="load">
+            刷新状态
+          </NButton>
         </div>
         <p>
           用于确认防火墙等网络变更后的连接状态。启用后，请通过新地址访问面板；未按时确认会自动恢复。
         </p>
         <template v-if="view">
-          <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
+          <NAlert v-if="view.reason" type="warning">
+            {{ view.reason }}
+          </NAlert>
           <p>
             <NTag
               :type="
@@ -231,14 +238,15 @@ useLiveRefresh(api, ["listener"], load);
                   ? 'success'
                   : 'default'
               "
-              >{{
+            >
+              {{
                 !view.confirmed.enabled
                   ? "未开启"
                   : view.serving && view.attached
                     ? "已开启"
                     : "连接异常"
-              }}</NTag
-            >
+              }}
+            </NTag>
           </p>
           <p v-if="view.confirmed.enabled">
             已确认地址 {{ view.confirmed.listen }} · 来源
@@ -251,8 +259,9 @@ useLiveRefresh(api, ["listener"], load);
           <h2>最近操作</h2>
           <NTag
             :type="operation.state === 'succeeded' ? 'success' : 'warning'"
-            >{{ states[operation.state] }}</NTag
           >
+            {{ states[operation.state] }}
+          </NTag>
         </div>
 
         <p v-if="operation.config.enabled">
@@ -260,9 +269,11 @@ useLiveRefresh(api, ["listener"], load);
           {{ operation.config.allowed_sources.join("、") }}
         </p>
 
-        <NAlert v-if="operation.error" type="warning">{{
-          operation.error
-        }}</NAlert>
+        <NAlert v-if="operation.error" type="warning">
+          {{
+            operation.error
+          }}
+        </NAlert>
         <p v-if="operation.confirmed_source">
           已确认来源
           {{
@@ -270,31 +281,33 @@ useLiveRefresh(api, ["listener"], load);
           }}。此结果仅证明该来源到当前入口的连接可达。
         </p>
         <template v-if="pending">
-          <NAlert type="warning"
-            >请在 {{ date(operation.deadline) }} 前通过新入口确认（约
-            {{ remaining }} 秒）。超时或应用通道断开后自动恢复。</NAlert
-          >
-          <NFormItem label="新入口地址"
-            ><NInput
+          <NAlert type="warning">
+            请在 {{ date(operation.deadline) }} 前通过新入口确认（约
+            {{ remaining }} 秒）。超时或应用通道断开后自动恢复。
+          </NAlert>
+          <NFormItem label="新入口地址">
+            <NInput
               v-model:value="publicURL"
               :placeholder="`${protocol}//node.example.com:9444`"
-          /></NFormItem>
+            />
+          </NFormItem>
           <p v-if="confirmURL">
-            <a :href="confirmURL" target="_blank" rel="noopener noreferrer"
-              >打开新入口确认页面</a
-            >
+            <a :href="confirmURL" target="_blank" rel="noopener noreferrer">打开新入口确认页面</a>
           </p>
           <div class="toolbar">
-            <NButton type="primary" :disabled="busy" @click="decide('confirm')"
-              >确认当前新连接</NButton
-            >
+            <NButton type="primary" :disabled="busy" @click="decide('confirm')">
+              确认当前新连接
+            </NButton>
             <NPopconfirm
               positive-text="恢复"
               @positive-click="decide('rollback')"
-              ><template #trigger
-                ><NButton :disabled="busy">恢复原入口</NButton></template
-              >恢复后候选入口的连接将关闭。</NPopconfirm
             >
+              <template #trigger>
+                <NButton :disabled="busy">
+                  恢复原入口
+                </NButton>
+              </template>恢复后候选入口的连接将关闭。
+            </NPopconfirm>
           </div>
         </template>
       </section>
@@ -305,8 +318,9 @@ useLiveRefresh(api, ["listener"], load);
             <NButton
               :disabled="busy || pending || !view.attached"
               @click="openSettings"
-              >修改设置</NButton
             >
+              修改设置
+            </NButton>
             <NPopconfirm
               positive-text="停用"
               @positive-click="
@@ -314,16 +328,18 @@ useLiveRefresh(api, ["listener"], load);
                 apply(false);
               "
             >
-              <template #trigger
-                ><NButton :disabled="busy || pending || !view.confirmed.enabled"
-                  >停用远程入口</NButton
-                ></template
-              >
+              <template #trigger>
+                <NButton :disabled="busy || pending || !view.confirmed.enabled">
+                  停用远程入口
+                </NButton>
+              </template>
               停用须通过主入口执行，不会关闭主入口。
             </NPopconfirm>
           </div>
         </div>
-        <p class="muted">修改端口或允许访问的地址后，需从新入口确认连接。</p>
+        <p class="muted">
+          修改端口或允许访问的地址后，需从新入口确认连接。
+        </p>
       </section>
       <FormDialog
         :show="editing"
@@ -332,10 +348,10 @@ useLiveRefresh(api, ["listener"], load);
         :dirty="editSnapshot !== editBaseline"
         :submit-disabled="
           pending ||
-          !view ||
-          version !== view.version ||
-          !view.attached ||
-          !cleanList(form.sources).length
+            !view ||
+            version !== view.version ||
+            !view.attached ||
+            !cleanList(form.sources).length
         "
         submit-text="应用并等待确认"
         @submit="apply(true)"
@@ -344,35 +360,45 @@ useLiveRefresh(api, ["listener"], load);
           form.key = form.certificate = '';
         "
       >
-        <NAlert
-          v-if="view && version !== view.version && !pending"
-          type="warning"
-          >管理入口配置已变化，请重新载入已确认配置。</NAlert
-        >
-        <p>修改端口或允许访问的地址后，请在 120 秒内从新入口确认。</p>
-        <NAlert type="info"
-          >端口和允许来源须与已确认的防火墙策略一致。冲突时请先调整并确认防火墙策略；云安全组和其他系统规则需另行核对。</NAlert
-        >
-        <NFormItem label="监听端口"
-          ><NInputNumber
-            v-model:value="listenPort"
-            :disabled="busy || pending"
-            placeholder="监听端口"
-            :min="1"
-            :max="65535"
-            :precision="0"
-        /></NFormItem>
-        <section>
-          <NFormItem label="允许访问的 IP / CIDR"
-            ><ValueListInput
+        <div class="settings-stack">
+          <NAlert
+            v-if="view && version !== view.version && !pending"
+            type="warning"
+          >
+            管理入口设置已变化，请重新载入。
+          </NAlert>
+          <NAlert type="info" :bordered="false">
+            保存后，请在 120
+            秒内打开新入口并确认；未确认将自动恢复原设置。
+          </NAlert>
+          <SettingsSection title="访问端口">
+            <NFormItem label="面板端口" :show-feedback="false">
+              <NInputNumber
+                v-model:value="listenPort"
+                :disabled="busy || pending"
+                :min="1"
+                :max="65535"
+                :precision="0"
+              />
+            </NFormItem>
+          </SettingsSection>
+          <SettingsSection
+            title="允许访问的地址"
+            description="仅允许列表中的 IP 地址或网段连接管理入口。"
+          >
+            <ValueListInput
               v-model:value="form.sources"
-              item-label="来源网段"
+              item-label="来源地址或网段"
               :max="32"
-              placeholder="192.0.2.0/24 或 ::/0"
+              placeholder="例如 192.168.1.0/24"
               :maxlength="64"
               :disabled="busy || pending"
-          /></NFormItem>
-        </section>
+            />
+          </SettingsSection>
+          <p class="section-note">
+            新端口和来源地址也需要在防火墙中放行；使用云服务器时，请同时检查安全组。
+          </p>
+        </div>
       </FormDialog>
     </template>
   </div>

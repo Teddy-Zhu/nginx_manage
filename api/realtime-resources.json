@@ -154,5 +154,13 @@
     "paths": [
       "/components"
     ]
+  },
+  {
+    "topic": "docker",
+    "paths": [
+      "/docker/containers",
+      "/docker/containers/{id}",
+      "/docker/containers/{id}/logs"
+    ]
   }
 ]

@@ -33,6 +33,7 @@ func componentReply(w http.ResponseWriter, data any, err error) {
 	}{Protocol, code, message, data})
 }
 func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
+	s.containerHandlers(mux)
 	s.componentOfflineHandlers(mux, m)
 	s.fail2banContainerHandler(mux)
 	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {

@@ -49,6 +49,11 @@ export type ComponentOfflineUpload = components["schemas"]["ComponentOfflineUplo
 export type FrpsConfig = components["schemas"]["FrpsConfig"];
 export type FrpsStatus = components["schemas"]["FrpsStatus"];
 export type FrpsRequest = components["schemas"]["FrpsRequest"];
+export type DockerContainer = components["schemas"]["DockerContainer"];
+export type DockerOverview = components["schemas"]["DockerOverview"];
+export type DockerDetail = components["schemas"]["DockerDetail"];
+export type DockerLogs = components["schemas"]["DockerLogs"];
+export type DockerControl = components["schemas"]["DockerControl"];
 export type SoftwareRequest = components["schemas"]["SoftwareRequest"];
 export type SoftwareSource = components["schemas"]["SoftwareSource"];
 export type SoftwareCatalog = components["schemas"]["SoftwareCatalog"];
@@ -485,6 +490,7 @@ function followLogsFor(
 }
 
 function componentTaskTitle(data: ComponentCreateInput) {
+  if(data.input.software?.action==="container") return ({start:"启动容器",stop:"停止容器",restart:"重启容器"} as const)[data.input.software.container!.action];
   return { check: "检查可用版本", prepare: "下载安装包", activate: "启用前端资源", pull: "下载运行镜像", software: data.input.software?.action==="update-panel"?"更新系统":"软件操作" }[data.input.action];
 }
 
@@ -493,6 +499,13 @@ export function createAPI(scope: RequestScope) {
   return {
   subscribe: (topics: LiveTopic[], changed: () => void) => subscribeLive(scope, topics, changed),
   request,
+  dockerContainers: () => request<DockerOverview>({ url: "/docker/containers" }),
+  watchDockerContainer: (id: string, updated: (value: DockerDetail) => void, failed: (error: ApiError) => void) => watchLiveResource(scope, `/docker/containers/${encodeURIComponent(id)}`, value => {
+    try { updated(liveData<DockerDetail>(value, scope)); } catch (error) { failed(apiError(error)); }
+  }),
+  watchDockerLogs: (id: string, tail: number, updated: (value: DockerLogs) => void, failed: (error: ApiError) => void) => watchLiveResource(scope, `/docker/containers/${encodeURIComponent(id)}/logs?tail=${tail}`, value => {
+    try { updated(liveData<DockerLogs>(value, scope)); } catch (error) { failed(apiError(error)); }
+  }),
   downloadLogFile: (data: LogQuery) => downloadLogFileFor(data, scope),
   runtimeHistory: () => request<RuntimeHistoryStatus[]>({ url: "/history/runtime" }),
   previewRuntimeHistory: (data: RuntimeHistoryFilter) => request<RuntimeHistoryPreview>({ url: "/history/runtime/preview", method: "POST", data }),

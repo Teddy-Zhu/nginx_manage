@@ -549,6 +549,25 @@ paths:
     {"put": {"operationId": "writeComponentOfflineChunk", "x-scopes": ["components.manage"], "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 36}}, {"name": "asset", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 128}}, {"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComponentOfflineChunk"}}}}, "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "按 offset 上传最多 256 KiB 的 base64 分块。只写签名计划中的固定归档；已有前缀须逐字节相同，不覆盖或跳过字节，回执在同步落盘后返回。"}}
   /components/offline/{id}:
     {"delete": {"operationId": "discardComponentOfflineUpload", "x-scopes": ["components.manage"], "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 36}}, {"$ref": "#/components/parameters/CSRF"}], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}, "description": "幂等清除该上传的归档字节，保留清单、签名、原记录与清除标识。组件任务未结束时拒绝；不删除已准备、安装或运行版本。"}}
+  /docker/containers:
+    get:
+      operationId: getDockerContainers
+      x-scopes: [read, components.manage]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /docker/containers/{id}:
+    get:
+      operationId: getDockerContainer
+      x-scopes: [read, components.manage]
+      parameters: [{"$ref": "#/components/parameters/ID"}]
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /docker/containers/{id}/logs:
+    get:
+      operationId: getDockerContainerLogs
+      x-scopes: [read, components.manage]
+      parameters:
+        - {"$ref": "#/components/parameters/ID"}
+        - {name: tail, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 200}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /components:
     {"get": {"operationId": "getComponents", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /components/frontend/activate:
@@ -2790,8 +2809,24 @@ components:
       {"type": "object", "required": ["source_id", "application", "updated_at"], "properties": {"source_id": {"type": "string"}, "application": {"$ref": "#/components/schemas/SoftwareApplication"}, "updated_at": {"type": "integer", "format": "int64"}, "state": {"type": "string", "enum": ["running", "starting", "stopped", "unhealthy", "missing", "unknown"]}, "error": {"type": "string"}, "entry": {"type": "string", "description": "软件状态操作返回的访问地址；{host} 表示当前服务器地址"}}}
     SoftwareCatalog:
       {"type": "object", "required": ["sources", "installed"], "properties": {"sources": {"type": "array", "items": {"$ref": "#/components/schemas/SoftwareSource"}}, "installed": {"type": "array", "items": {"$ref": "#/components/schemas/SoftwareInstallation"}}, "error": {"type": "string"}}}
+    DockerControl:
+      {"type": "object", "required": ["id", "action"], "properties": {"id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "action": {"type": "string", "enum": ["start", "stop", "restart"]}}}
+    DockerPort:
+      {"type": "object", "required": ["address", "public", "private", "protocol"], "properties": {"address": {"type": "string"}, "public": {"type": "integer"}, "private": {"type": "integer"}, "protocol": {"type": "string"}}}
+    DockerContainer:
+      {"type": "object", "required": ["id", "name", "image", "state", "created", "ports", "project", "service", "protected"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "image": {"type": "string"}, "state": {"type": "string"}, "created": {"type": "integer", "format": "int64"}, "ports": {"type": "array", "items": {"$ref": "#/components/schemas/DockerPort"}}, "project": {"type": "string"}, "service": {"type": "string"}, "protected": {"type": "boolean"}}}
+    DockerOverview:
+      {"type": "object", "required": ["available", "reason", "containers"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "containers": {"type": "array", "items": {"$ref": "#/components/schemas/DockerContainer"}}}}
+    DockerMount:
+      {"type": "object", "required": ["source", "target", "read_only"], "properties": {"source": {"type": "string"}, "target": {"type": "string"}, "read_only": {"type": "boolean"}}}
+    DockerNetwork:
+      {"type": "object", "required": ["name", "address", "gateway"], "properties": {"name": {"type": "string"}, "address": {"type": "string"}, "gateway": {"type": "string"}}}
+    DockerDetail:
+      {"allOf": [{"$ref": "#/components/schemas/DockerContainer"}, {"type": "object", "required": ["image_id", "started", "finished", "restarts", "restart_policy", "health", "exit_code", "network_mode", "networks", "mounts"], "properties": {"image_id": {"type": "string"}, "started": {"type": "string"}, "finished": {"type": "string"}, "restarts": {"type": "integer"}, "restart_policy": {"type": "string"}, "health": {"type": "string"}, "exit_code": {"type": "integer"}, "network_mode": {"type": "string"}, "networks": {"type": "array", "items": {"$ref": "#/components/schemas/DockerNetwork"}}, "mounts": {"type": "array", "items": {"$ref": "#/components/schemas/DockerMount"}}}}]}
+    DockerLogs:
+      {"type": "object", "required": ["text", "truncated"], "properties": {"text": {"type": "string"}, "truncated": {"type": "boolean"}}}
     SoftwareRequest:
-      {"type": "object", "additionalProperties": false, "required": ["action"], "properties": {"action": {"type": "string", "enum": ["import", "refresh", "delete", "install", "update", "uninstall", "update-panel", "fail2ban", "start", "stop", "restart", "logs", "frps"]}, "source": {"$ref": "#/components/schemas/SoftwareSource"}, "url": {"type": "string"}, "source_id": {"type": "string"}, "app_id": {"type": "string"}, "plan_id": {"type": "string"}, "prerelease": {"type": "boolean"}, "fail2ban": {"$ref": "#/components/schemas/Fail2banContainerRequest"}, "frps": {"$ref": "#/components/schemas/FrpsRequest"}}}
+      {"type": "object", "additionalProperties": false, "required": ["action"], "properties": {"action": {"type": "string", "enum": ["import", "refresh", "delete", "install", "update", "uninstall", "update-panel", "fail2ban", "start", "stop", "restart", "logs", "frps", "container"]}, "source": {"$ref": "#/components/schemas/SoftwareSource"}, "url": {"type": "string"}, "source_id": {"type": "string"}, "app_id": {"type": "string"}, "plan_id": {"type": "string"}, "prerelease": {"type": "boolean"}, "fail2ban": {"$ref": "#/components/schemas/Fail2banContainerRequest"}, "frps": {"$ref": "#/components/schemas/FrpsRequest"}, "container": {"$ref": "#/components/schemas/DockerControl"}}}
     SoftwareResult:
       {"type": "object", "required": ["message", "log"], "properties": {"source_id": {"type": "string"}, "app_id": {"type": "string"}, "message": {"type": "string"}, "log": {"type": "string"}}}
     ComponentInput:
