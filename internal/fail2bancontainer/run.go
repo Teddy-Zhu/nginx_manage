@@ -230,7 +230,7 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 			defer cancel()
 			restoreErr := render(data, c)
 			if restoreErr == nil && alive {
-				_, restoreErr = client(recovery, "reload")
+				_, restoreErr = client(recovery, "reload", "--restart")
 			}
 			if restoreErr == nil && present {
 				restart := "no"
@@ -248,7 +248,9 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 			if err != nil {
 				return out, err
 			}
-			if _, err = client(ctx, "reload"); err != nil {
+			// Restart actions as well: a plain reload keeps an already-started
+			// IPSet action attached to its old ports even after configuration changes.
+			if _, err = client(ctx, "reload", "--restart"); err != nil {
 				return out, err
 			}
 		}

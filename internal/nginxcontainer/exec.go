@@ -236,14 +236,13 @@ func (r *Runtime) command(ctx context.Context, args, launch []string) (out []byt
 	return value, nil
 }
 func (r *Runtime) Version(ctx context.Context) (string, error) {
-	value, err := r.command(ctx, []string{"-V"}, nil)
-	if err != nil {
+	// The immutable image binding already records the build output. Verifying
+	// its running executable is sufficient; status reads must not create Docker
+	// exec sessions that can be left unstarted when the caller is cancelled.
+	if _, err := r.ObserveMaster(ctx); err != nil {
 		return "", err
 	}
-	if string(value) != r.Binding.Build {
-		return "", errors.New("运行镜像的编译信息与批准清单不一致")
-	}
-	return string(value), nil
+	return r.Binding.Build, nil
 }
 func testArguments(data, revision string) []string {
 	return []string{"-t", "-q", "-p", data + "/", "-c", filepath.Join(data, "nginx", "revisions", revision, "nginx.conf"), "-e", "stderr"}

@@ -24,9 +24,12 @@ func (f *hostFirewall) checkManagers(ctx context.Context) error {
 	return checkFirewallManagers(observer.collect(ctx))
 }
 func checkFirewallManagers(observed firewall.Observation) error {
-	if !observed.Available || observed.Manager != "direct-candidate" || observed.Backend == "legacy" || observed.Backend == "mixed" {
-		return fault.Unavailable("无法排除既有管理器或混合后端，保持只读")
+	if !observed.Available || observed.Manager != "direct-candidate" {
+		return fault.Unavailable("无法确认现有防火墙管理方式，暂不能应用规则")
 	}
+	// This executor only mutates its registered nftables table. Independent
+	// legacy rules (including the managed Fail2ban chain) remain in force;
+	// their presence must not prevent adding or removing our own rules.
 	nft := false
 	for _, r := range observed.Rulesets {
 		if r.ID == "nftables" && r.Available {

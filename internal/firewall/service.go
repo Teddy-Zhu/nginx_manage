@@ -307,7 +307,7 @@ func (s *Service) Preview(ctx context.Context, version int64) (Preview, error) {
 					}
 				}
 				if observed.Backend == "legacy" || observed.Backend == "mixed" {
-					out.Errors = append(out.Errors, "观察到 legacy 或混合后端，须先核对规则所有权")
+					out.Warnings = append(out.Warnings, "现有规则继续生效；本工具的放行规则不会覆盖其他来源的限制")
 				}
 				available := false
 				for _, set := range observed.Rulesets {

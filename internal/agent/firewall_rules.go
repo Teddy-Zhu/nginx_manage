@@ -452,7 +452,7 @@ func classifyFirewall(out *firewall.Observation) {
 	switch {
 	case nft && legacy:
 		out.Backend = "mixed"
-		out.Warnings = append(out.Warnings, "nftables 与 legacy 均有运行策略，不能混用写入后端")
+		out.Warnings = append(out.Warnings, "存在多个来源的防火墙规则，现有规则会继续生效")
 	case nft:
 		out.Backend = "nftables"
 	case legacy:
@@ -501,5 +501,5 @@ func classifyFirewall(out *firewall.Observation) {
 	if dockerNFT && dockerIPT {
 		out.Docker.Reason = "同时存在 Docker nftables 与 DOCKER-USER 标记，不能确认单一转发后端"
 	}
-	out.Reason = "当前仅支持读取；观测结果不能证明规则所有权或外部可达性"
+	out.Reason = "已读取防火墙状态；其他来源的访问限制仍会生效"
 }
