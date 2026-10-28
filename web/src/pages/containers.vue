@@ -16,12 +16,13 @@ import {
   NAlert,
   NButton,
   NDataTable,
+  NDropdown,
   NInput,
   NModal,
-  NPopconfirm,
   NSelect,
   NSpin,
   NTag,
+  useDialog,
   type DataTableColumns,
 } from "naive-ui";
 import {
@@ -43,6 +44,7 @@ import { copyText } from "../utils/copy";
 import SettingsSection from "../components/SettingsSection.vue";
 const api = useNodeAPI(),
   session = useSession(),
+  dialog = useDialog(),
   { run, busy, message } = useAction();
 const view = ref<DockerOverview | null>(null),
   tasks = ref<ComponentTask[]>([]),
@@ -147,7 +149,7 @@ function ports(c: DockerContainer) {
           ? `${p.address.includes(":") ? "[" + p.address + "]" : p.address || "全部地址"}:${p.public} → ${p.private}/${p.protocol}`
           : `${p.private}/${p.protocol}（未映射）`,
       )
-      .join("\n") || "未配置"
+      .join("\n") || "无端口映射"
   );
 }
 async function load() {
@@ -171,7 +173,15 @@ async function load() {
   }
 }
 async function control(c: DockerContainer, action: DockerControl["action"]) {
-  if (!canWrite.value || busy.value || active.value || c.protected) return;
+  if (
+    closed ||
+    !canWrite.value ||
+    busy.value ||
+    active.value ||
+    error.value ||
+    c.protected
+  )
+    return;
   const input = {
     action: "software" as const,
     tag: "",
@@ -196,43 +206,80 @@ async function copyLogs() {
     message.error("无法复制，请选择日志内容手动复制");
   }
 }
+function selectControl(c: DockerContainer, action: string) {
+  if (action === "stop") {
+    dialog.warning({
+      title: "停止容器",
+      content: `停止 ${c.name} 后，其提供的服务将不可用。确认停止？`,
+      positiveText: "停止容器",
+      negativeText: "取消",
+      onPositiveClick: () => control(c, "stop"),
+    });
+  } else if (action === "start" || action === "restart") {
+    void control(c, action);
+  }
+}
 const columns: DataTableColumns<DockerContainer> = [
   {
     title: "容器",
     key: "name",
-    minWidth: 190,
+    width: 300,
     render: (c) =>
       h("div", { class: "container-name" }, [
         h(
           NButton,
           {
+            class: "container-title",
             text: true,
             type: "primary",
+            title: c.name,
             onClick: () => (detailID.value = c.id),
           },
           () => c.name,
         ),
-        c.project
-          ? h(
-              "span",
-              { class: "section-note" },
-              `${c.project}${c.service ? " / " + c.service : ""}`,
-            )
-          : null,
-        c.component
-          ? h(
-              NTag,
-              { size: "small", bordered: false, type: "info" },
-              () => `系统 · ${components[c.component]}`,
-            )
+        c.component || c.project
+          ? h("div", { class: "container-meta" }, [
+              c.component
+                ? h(
+                    NTag,
+                    { size: "small", bordered: false, type: "info" },
+                    () => `系统 · ${components[c.component] ?? c.component}`,
+                  )
+                : null,
+              c.project
+                ? h(
+                    "span",
+                    {
+                      class: "container-project",
+                      title: `${c.project}${c.service ? " / " + c.service : ""}`,
+                    },
+                    `${c.project}${c.service ? " / " + c.service : ""}`,
+                  )
+                : null,
+            ])
           : null,
       ]),
   },
-  { title: "镜像", key: "image", minWidth: 220, ellipsis: { tooltip: true } },
+  {
+    title: "镜像",
+    key: "image",
+    minWidth: 210,
+    render: (c) =>
+      h(
+        "div",
+        { class: "container-image", title: c.image },
+        c.image.startsWith("sha256:")
+          ? [
+              h("span", "本地镜像"),
+              h("span", { class: "container-image-ref" }, c.image),
+            ]
+          : [h("span", { class: "container-image-name" }, c.image)],
+      ),
+  },
   {
     title: "状态",
     key: "state",
-    width: 120,
+    width: 110,
     render: (c) =>
       h(
         NTag,
@@ -252,95 +299,88 @@ const columns: DataTableColumns<DockerContainer> = [
   {
     title: "端口映射",
     key: "ports",
-    minWidth: 250,
-    render: (c) => h("span", { class: "container-ports" }, ports(c)),
+    minWidth: 220,
+    render: (c) =>
+      h(
+        "span",
+        { class: ["container-ports", { "container-muted": !c.ports.length }] },
+        ports(c),
+      ),
   },
   {
     title: "操作",
     key: "actions",
-    width: 280,
+    width: 190,
     fixed: "right",
-    render: (c) =>
-      h("div", { class: "actions" }, [
-        ...(["created", "exited"].includes(c.state)
+    render: (c) => {
+      const options = ["created", "exited"].includes(c.state)
+        ? [{ label: "启动容器", key: "start" }]
+        : ["running", "restarting"].includes(c.state)
           ? [
-              h(
-                NButton,
-                {
-                  size: "small",
-                  disabled:
-                    !canWrite.value ||
-                    busy.value ||
-                    !!active.value ||
-                    !!error.value ||
-                    c.protected,
-                  onClick: () => control(c, "start"),
-                },
-                () => "启动",
-              ),
+              { label: "重启容器", key: "restart" },
+              { label: "停止容器", key: "stop" },
             ]
-          : []),
-        ...(["running", "restarting"].includes(c.state)
-          ? [
-              h(
-                NButton,
-                {
-                  size: "small",
-                  disabled:
-                    !canWrite.value ||
-                    busy.value ||
-                    !!active.value ||
-                    !!error.value ||
-                    c.protected,
-                  onClick: () => control(c, "restart"),
-                },
-                () => "重启",
-              ),
-              h(
-                NPopconfirm,
-                {
-                  onPositiveClick: () => control(c, "stop"),
-                  positiveText: "停止容器",
-                  negativeText: "取消",
-                  disabled:
-                    !canWrite.value ||
-                    busy.value ||
-                    !!active.value ||
-                    !!error.value ||
-                    c.protected,
-                },
-                {
-                  trigger: () =>
-                    h(
-                      NButton,
-                      {
-                        size: "small",
-                        disabled:
-                          !canWrite.value ||
-                          busy.value ||
-                          !!active.value ||
-                          !!error.value ||
-                          c.protected,
-                      },
-                      () => "停止",
-                    ),
-                  default: () =>
-                    `停止 ${c.name} 后，其提供的服务将不可用。确认停止？`,
-                },
-              ),
-            ]
-          : []),
+          : [];
+      return h("div", { class: "container-actions" }, [
         h(
           NButton,
-          { size: "small", onClick: () => (logID.value = c.id) },
-          () => "日志",
-        ),
-        h(
-          NButton,
-          { size: "small", onClick: () => (detailID.value = c.id) },
+          {
+            size: "small",
+            text: true,
+            type: "primary",
+            onClick: () => (detailID.value = c.id),
+          },
           () => "详情",
         ),
-      ]),
+        h(
+          NButton,
+          {
+            size: "small",
+            text: true,
+            type: "primary",
+            onClick: () => (logID.value = c.id),
+          },
+          () => "日志",
+        ),
+        !c.protected && options.length
+          ? h(
+              NDropdown,
+              {
+                trigger: "click",
+                options,
+                onSelect: (action: string) => selectControl(c, action),
+              },
+              {
+                default: () =>
+                  h(
+                    NButton,
+                    {
+                      size: "small",
+                      quaternary: true,
+                      disabled:
+                        !canWrite.value ||
+                        busy.value ||
+                        !!active.value ||
+                        !!error.value,
+                      "aria-label": `管理 ${c.name}`,
+                    },
+                    () => [
+                      "更多",
+                      h(
+                        "span",
+                        {
+                          class: "container-action-arrow",
+                          "aria-hidden": "true",
+                        },
+                        "⌄",
+                      ),
+                    ],
+                  ),
+              },
+            )
+          : null,
+      ]);
+    },
   },
 ];
 watch(detailID, (id, _, cleanup) => {
@@ -422,26 +462,27 @@ onUnmounted(() => {
         </div>
       </div>
       <section class="panel page-stack">
-        <div class="toolbar">
+        <div class="container-list-toolbar">
           <h2>容器列表</h2>
-          <NButton :loading="loading" :disabled="busy" @click="load">
-            刷新
-          </NButton>
-        </div>
-        <div class="container-filters">
-          <NInput
-            v-model:value="search"
-            clearable
-            placeholder="搜索容器名称、镜像或项目"
-          /><NSelect
-            v-model:value="filter"
-            :options="[
-              { label: '全部状态', value: 'all' },
-              { label: '运行中', value: 'running' },
-              { label: '已停止 / 未启动', value: 'stopped' },
-              { label: '其他状态', value: 'other' },
-            ]"
-          />
+          <div class="container-filters">
+            <NInput
+              v-model:value="search"
+              class="container-search"
+              clearable
+              placeholder="搜索容器名称、镜像或项目"
+            /><NSelect
+              v-model:value="filter"
+              :options="[
+                { label: '全部状态', value: 'all' },
+                { label: '运行中', value: 'running' },
+                { label: '已停止 / 未启动', value: 'stopped' },
+                { label: '其他状态', value: 'other' },
+              ]"
+            />
+            <NButton :loading="loading" :disabled="busy" @click="load">
+              刷新
+            </NButton>
+          </div>
         </div>
         <NAlert v-if="active" type="info" :bordered="false">
           <div class="toolbar">
@@ -456,11 +497,13 @@ onUnmounted(() => {
           </div>
         </NAlert>
         <NDataTable
+          class="container-table"
+          table-layout="fixed"
           :loading="loading"
           :columns="columns"
           :data="filtered"
           :row-key="(c: DockerContainer) => c.id"
-          :scroll-x="1080"
+          :scroll-x="1040"
           :pagination="{ pageSize: 20 }"
           :bordered="false"
         />
@@ -643,19 +686,84 @@ onUnmounted(() => {
 .stat-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.container-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-width: 0;
+}
+.container-list-toolbar h2 {
+  flex-shrink: 0;
+}
 .container-filters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 200px;
-  gap: 16px;
+  grid-template-columns: minmax(180px, 320px) 160px auto;
+  gap: 12px;
+  max-width: 100%;
 }
-.container-name {
+.container-table :deep(.n-data-table-td) {
+  padding: 18px 16px;
+  vertical-align: middle;
+}
+.container-table :deep(.container-name),
+.container-table :deep(.container-image) {
   display: grid;
-  gap: 6px;
-  justify-items: start;
+  gap: 8px;
+  min-width: 0;
 }
-.container-ports {
+.container-table :deep(.container-title) {
+  max-width: 100%;
+  justify-content: flex-start;
+  font-weight: 600;
+}
+.container-table :deep(.container-title .n-button__content),
+.container-table :deep(.container-project),
+.container-table :deep(.container-image-name),
+.container-table :deep(.container-image-ref) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.container-table :deep(.container-meta) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.container-table :deep(.container-meta .n-tag) {
+  flex-shrink: 0;
+}
+.container-table :deep(.container-project) {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.container-table :deep(.container-image-ref) {
+  color: var(--text-muted);
+  font:
+    12px/1.5 ui-monospace,
+    monospace;
+}
+.container-table :deep(.container-muted) {
+  color: var(--text-muted);
+}
+.container-table :deep(.container-ports) {
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+.container-table :deep(.container-actions) {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 16px;
+  white-space: nowrap;
+}
+.container-table :deep(.container-action-arrow) {
+  margin-left: 4px;
+  font-size: 12px;
 }
 .container-dialog {
   width: 960px;
@@ -703,9 +811,15 @@ onUnmounted(() => {
   .stat-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .container-filters,
   .container-network {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .container-filters {
+    flex: 1 1 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .container-search {
+    grid-column: 1 / -1;
   }
   .container-mount {
     align-items: flex-start;
