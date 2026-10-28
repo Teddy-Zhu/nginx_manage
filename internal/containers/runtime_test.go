@@ -35,6 +35,7 @@ func TestContainerWorkflow(t *testing.T) {
 	}
 	var mu sync.Mutex
 	id, systemID := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	managedNames := map[string]string{systemID: "nginxpanel", strings.Repeat("d", 64): "nginxpanel-nginx", strings.Repeat("e", 64): "nginxpanel-frps", strings.Repeat("f", 64): "nginxpanel-fail2ban"}
 	state, tty, logMode, posts := "running", false, "normal", 0
 	frame := func(text string) []byte {
 		header := make([]byte, 8)
@@ -48,15 +49,32 @@ func TestContainerWorkflow(t *testing.T) {
 		path := strings.TrimPrefix(r.URL.Path, "/v1.47")
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet && path == "/containers/json" {
-			json.NewEncoder(w).Encode([]any{map[string]any{"Id": id, "Names": []string{"/demo"}, "Image": "demo:latest", "State": state, "Created": 123, "Labels": map[string]string{"com.docker.compose.project": "example", "secret": "hidden-value"}, "Ports": []any{map[string]any{"PrivatePort": 80, "PublicPort": 8080, "IP": "0.0.0.0", "Type": "tcp"}}}, map[string]any{"Id": systemID, "Names": []string{"/nginxpanel"}, "State": "running"}})
+			if r.URL.Query().Get("all") != "true" {
+				http.Error(w, "must include stopped containers", 400)
+				return
+			}
+			rows := []any{map[string]any{"Id": id, "Names": []string{"/demo"}, "Image": "demo:latest", "State": state, "Created": 123, "Labels": map[string]string{"com.docker.compose.project": "example", "secret": "hidden-value"}, "Ports": []any{map[string]any{"PrivatePort": 80, "PublicPort": 8080, "IP": "0.0.0.0", "Type": "tcp"}}}}
+			for managedID, name := range managedNames {
+				currentState := "running"
+				if name == "nginxpanel-frps" {
+					currentState = "exited"
+				}
+				rows = append(rows, map[string]any{"Id": managedID, "Names": []string{"/" + name}, "State": currentState})
+			}
+			json.NewEncoder(w).Encode(rows)
 			return
 		}
-		if r.Method == http.MethodGet && (path == "/containers/"+id+"/json" || path == "/containers/"+systemID+"/json") {
-			name, current := "/demo", id
-			if strings.Contains(path, systemID) {
-				name, current = "/nginxpanel", systemID
+		current := strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")
+		if r.Method == http.MethodGet && path == "/containers/"+current+"/json" && (current == id || managedNames[current] != "") {
+			name := "/demo"
+			if managedNames[current] != "" {
+				name = "/" + managedNames[current]
 			}
-			json.NewEncoder(w).Encode(map[string]any{"Id": current, "Name": name, "Image": "sha256:abc", "Created": "2026-10-27T00:00:00Z", "Config": map[string]any{"Image": "demo:latest", "Tty": tty, "Env": []string{"PASSWORD=hidden-value"}}, "State": map[string]any{"Status": state, "StartedAt": "2026-10-27T00:00:01Z", "FinishedAt": "0001-01-01T00:00:00Z", "Health": map[string]string{"Status": "healthy"}}, "HostConfig": map[string]any{"NetworkMode": "bridge", "RestartPolicy": map[string]string{"Name": "unless-stopped"}}, "NetworkSettings": map[string]any{"Networks": map[string]any{"bridge": map[string]string{"IPAddress": "172.18.0.2", "Gateway": "172.18.0.1"}}, "Ports": map[string]any{"80/tcp": []any{map[string]string{"HostIP": "0.0.0.0", "HostPort": "8080"}}}}, "Mounts": []any{map[string]any{"Source": "/srv/demo", "Destination": "/data", "RW": false}}})
+			inspectState := state
+			if name == "/nginxpanel-frps" {
+				inspectState = "exited"
+			}
+			json.NewEncoder(w).Encode(map[string]any{"Id": current, "Name": name, "Image": "sha256:abc", "Created": "2026-10-27T00:00:00Z", "Config": map[string]any{"Image": "demo:latest", "Tty": tty, "Env": []string{"PASSWORD=hidden-value"}}, "State": map[string]any{"Status": inspectState, "StartedAt": "2026-10-27T00:00:01Z", "FinishedAt": "0001-01-01T00:00:00Z", "Health": map[string]string{"Status": "healthy"}}, "HostConfig": map[string]any{"NetworkMode": "bridge", "RestartPolicy": map[string]string{"Name": "unless-stopped"}}, "NetworkSettings": map[string]any{"Networks": map[string]any{"bridge": map[string]string{"IPAddress": "172.18.0.2", "Gateway": "172.18.0.1"}}, "Ports": map[string]any{"80/tcp": []any{map[string]string{"HostIP": "0.0.0.0", "HostPort": "8080"}}}}, "Mounts": []any{map[string]any{"Source": "/srv/demo", "Destination": "/data", "RW": false}}})
 			return
 		}
 		if r.Method == http.MethodGet && path == "/containers/"+id+"/logs" {
@@ -110,11 +128,24 @@ func TestContainerWorkflow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	view, err := List(ctx)
-	if err != nil || !view.Available || len(view.Containers) != 2 {
+	if err != nil || !view.Available || len(view.Containers) != 5 {
 		t.Fatalf("list: %#v %v", view, err)
 	}
 	if view.Containers[0].Project != "example" || !view.Containers[1].Protected || view.Containers[0].Ports[0].Public != 8080 {
 		t.Fatalf("list details: %#v", view)
+	}
+	expected := map[string]string{"demo": "", "nginxpanel": "panel", "nginxpanel-nginx": "nginx", "nginxpanel-frps": "frps", "nginxpanel-fail2ban": "fail2ban"}
+	for _, row := range view.Containers {
+		if row.Component != expected[row.Name] || row.Protected != (row.Name == "nginxpanel") {
+			t.Fatalf("managed classification: %#v", row)
+		}
+		info, inspectErr := Inspect(ctx, row.ID)
+		if inspectErr != nil || info.Component != row.Component || info.Protected != row.Protected {
+			t.Fatalf("list/detail mismatch: %#v %v", info, inspectErr)
+		}
+		if row.Name == "nginxpanel-frps" && row.State != "exited" {
+			t.Fatal("stopped FRP omitted")
+		}
 	}
 	detail, err := Inspect(ctx, id)
 	if err != nil {

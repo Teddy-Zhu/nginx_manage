@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 )
 
-const Name = "nginxpanel-frps"
+const Name = frps.ContainerName
 const ownerLabel = "io.nginxpanel.component"
 const dataLabel = "io.nginxpanel.data"
 

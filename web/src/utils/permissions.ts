@@ -1,5 +1,5 @@
 const labels: Record<string, string> = {
-  read: "查看状态",
+  read: "查看状态与日志",
   "config.write": "管理网站配置",
   "config.secrets": "查看配置凭据",
   "security.write": "管理安全规则",
@@ -14,7 +14,6 @@ const labels: Record<string, string> = {
   "update.execute": "执行更新",
   "nodes.manage": "管理服务器连接",
   "notifications.write": "管理通知",
-  "logs.read": "查看日志",
 };
 export function permissionLabel(scope: string) {
   return labels[scope] ?? "其他权限";

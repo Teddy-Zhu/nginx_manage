@@ -9,6 +9,7 @@ import {
   NTag,
 } from "naive-ui";
 import { apiError, createAPI, type LogRow, type Task } from "../api/client";
+import { liveTopicScopes } from "../api/live";
 import { currentOperation, operationVisible } from "../stores/operation";
 import { useSession } from "../stores/session";
 import { isTaskActive, taskStageLabel, taskStates } from "../utils/tasks";
@@ -20,6 +21,7 @@ const softwareLog = ref(""),
   softwareMessage = ref("");
 const statusError = ref(""),
   logError = ref(""),
+  softwareError = ref(""),
   logNotice = ref("");
 const reading = ref(false),
   checkedAt = ref(0),
@@ -30,11 +32,13 @@ const needsAttention = computed(() =>
     task.value?.state ?? "",
   ),
 );
-const canReadLogs = computed(
-  () =>
-    !!session.localMe?.scopes.includes("logs.read") &&
-    (!currentOperation.value?.scope.target ||
-      currentOperation.value.scope.target.scopes.includes("logs.read")),
+const canReadLogs = computed(() =>
+  liveTopicScopes.logs.every(
+    (permission) =>
+      !!session.localMe?.scopes.includes(permission) &&
+      (!currentOperation.value?.scope.target ||
+        currentOperation.value.scope.target.scopes.includes(permission)),
+  ),
 );
 const state = computed(
   () => task.value?.state ?? currentOperation.value?.state ?? "queued",
@@ -91,7 +95,11 @@ watch(
     task.value = null;
     rows.value = [];
     softwareLog.value = softwareMessage.value = "";
-    statusError.value = logError.value = logNotice.value = "";
+    statusError.value =
+      logError.value =
+      softwareError.value =
+      logNotice.value =
+        "";
     checkedAt.value = 0;
     reading.value = false;
     const operation = currentOperation.value;
@@ -137,8 +145,9 @@ watch(
                 details?.result?.runtime_reason ||
                 details?.result?.software?.message ||
                 "";
+              softwareError.value = "";
             } catch (error) {
-              logError.value = apiError(error).message;
+              softwareError.value = apiError(error).message;
             }
           }
           try {
@@ -150,17 +159,41 @@ watch(
                     source.resource_id === operation.taskId,
                 )?.id ?? "";
             if (sourceId && !stopLogs) {
-              stopLogs = api.followLogs({
-                source_id: sourceId, mode: "recent",
-                from: Math.max(value.created_at - 1, Math.floor(Date.now()/1000)-7*86400+1),
-                until: 0, status: 0, ip: "", path: "", keyword: "", policy_id: "", reason: "",
-                events_only: false, limit: 100, cursor: "",
-              }, (page, reset) => {
-                if (current.signal.aborted) return;
-                rows.value = [...(reset ? [] : rows.value), ...page.rows].sort((a,b) => a.time-b.time).slice(-100);
-                logNotice.value = page.notice || (page.gap ? "部分历史日志缺失，当前任务状态不受影响。" : "");
-                logError.value = "";
-              }, (cause) => {if (!current.signal.aborted) logError.value = cause.message;});
+              stopLogs = api.followLogs(
+                {
+                  source_id: sourceId,
+                  mode: "recent",
+                  from: Math.max(
+                    value.created_at - 1,
+                    Math.floor(Date.now() / 1000) - 7 * 86400 + 1,
+                  ),
+                  until: 0,
+                  status: 0,
+                  ip: "",
+                  path: "",
+                  keyword: "",
+                  policy_id: "",
+                  reason: "",
+                  events_only: false,
+                  limit: 100,
+                  cursor: "",
+                },
+                (page, reset) => {
+                  if (current.signal.aborted) return;
+                  rows.value = [...(reset ? [] : rows.value), ...page.rows]
+                    .sort((a, b) => a.time - b.time)
+                    .slice(-100);
+                  logNotice.value =
+                    page.notice ||
+                    (page.gap
+                      ? "部分历史日志缺失，当前任务状态不受影响。"
+                      : "");
+                  logError.value = "";
+                },
+                (cause) => {
+                  if (!current.signal.aborted) logError.value = cause.message;
+                },
+              );
             }
             if (!current.signal.aborted) logError.value = "";
           } catch (cause) {
@@ -271,7 +304,10 @@ onUnmounted(stop);
           <NAlert v-else-if="logError" type="warning" title="日志暂不可用">{{
             logError
           }}</NAlert>
-          <p v-else-if="!rows.length" class="muted">
+          <p
+            v-else-if="!rows.length && !softwareLog && !softwareMessage"
+            class="muted"
+          >
             {{
               active
                 ? "等待执行日志，稍后自动更新…"
@@ -288,6 +324,12 @@ onUnmounted(stop);
               ><span>{{ eventLabel(row) }}</span>
             </li>
           </ol>
+          <NAlert
+            v-if="softwareError"
+            type="warning"
+            title="操作详情暂不可用"
+            >{{ softwareError }}</NAlert
+          >
           <p v-if="canReadLogs && softwareMessage">{{ softwareMessage }}</p>
           <pre v-if="canReadLogs && softwareLog" class="software-log">{{
             softwareLog

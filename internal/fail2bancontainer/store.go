@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-const Name = "nginxpanel-fail2ban"
+const Name = fail2ban.ContainerName
 
 func directory(data string) string { return filepath.Join(data, "agent", "fail2ban-container") }
 func Configuration(data string) (fail2ban.ContainerConfig, bool, error) {

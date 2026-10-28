@@ -544,6 +544,33 @@ func (e DNSCredentialInputProvider) Valid() bool {
 	}
 }
 
+// Defines values for DockerContainerComponent.
+const (
+	DockerContainerComponentEmpty    DockerContainerComponent = ""
+	DockerContainerComponentFail2ban DockerContainerComponent = "fail2ban"
+	DockerContainerComponentFrps     DockerContainerComponent = "frps"
+	DockerContainerComponentNginx    DockerContainerComponent = "nginx"
+	DockerContainerComponentPanel    DockerContainerComponent = "panel"
+)
+
+// Valid indicates whether the value is a known member of the DockerContainerComponent enum.
+func (e DockerContainerComponent) Valid() bool {
+	switch e {
+	case DockerContainerComponentEmpty:
+		return true
+	case DockerContainerComponentFail2ban:
+		return true
+	case DockerContainerComponentFrps:
+		return true
+	case DockerContainerComponentNginx:
+		return true
+	case DockerContainerComponentPanel:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DockerControlAction.
 const (
 	DockerControlActionRestart DockerControlAction = "restart"
@@ -559,6 +586,33 @@ func (e DockerControlAction) Valid() bool {
 	case DockerControlActionStart:
 		return true
 	case DockerControlActionStop:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DockerDetailComponent.
+const (
+	DockerDetailComponentEmpty    DockerDetailComponent = ""
+	DockerDetailComponentFail2ban DockerDetailComponent = "fail2ban"
+	DockerDetailComponentFrps     DockerDetailComponent = "frps"
+	DockerDetailComponentNginx    DockerDetailComponent = "nginx"
+	DockerDetailComponentPanel    DockerDetailComponent = "panel"
+)
+
+// Valid indicates whether the value is a known member of the DockerDetailComponent enum.
+func (e DockerDetailComponent) Valid() bool {
+	switch e {
+	case DockerDetailComponentEmpty:
+		return true
+	case DockerDetailComponentFail2ban:
+		return true
+	case DockerDetailComponentFrps:
+		return true
+	case DockerDetailComponentNginx:
+		return true
+	case DockerDetailComponentPanel:
 		return true
 	default:
 		return false
@@ -4498,16 +4552,20 @@ type Difference struct {
 
 // DockerContainer defines model for DockerContainer.
 type DockerContainer struct {
-	Created   int64        `json:"created"`
-	Id        string       `json:"id"`
-	Image     string       `json:"image"`
-	Name      string       `json:"name"`
-	Ports     []DockerPort `json:"ports"`
-	Project   string       `json:"project"`
-	Protected bool         `json:"protected"`
-	Service   string       `json:"service"`
-	State     string       `json:"state"`
+	Component DockerContainerComponent `json:"component"`
+	Created   int64                    `json:"created"`
+	Id        string                   `json:"id"`
+	Image     string                   `json:"image"`
+	Name      string                   `json:"name"`
+	Ports     []DockerPort             `json:"ports"`
+	Project   string                   `json:"project"`
+	Protected bool                     `json:"protected"`
+	Service   string                   `json:"service"`
+	State     string                   `json:"state"`
 }
+
+// DockerContainerComponent defines model for DockerContainer.Component.
+type DockerContainerComponent string
 
 // DockerControl defines model for DockerControl.
 type DockerControl struct {
@@ -4520,26 +4578,30 @@ type DockerControlAction string
 
 // DockerDetail defines model for DockerDetail.
 type DockerDetail struct {
-	Created       int64           `json:"created"`
-	ExitCode      int             `json:"exit_code"`
-	Finished      string          `json:"finished"`
-	Health        string          `json:"health"`
-	Id            string          `json:"id"`
-	Image         string          `json:"image"`
-	ImageId       string          `json:"image_id"`
-	Mounts        []DockerMount   `json:"mounts"`
-	Name          string          `json:"name"`
-	NetworkMode   string          `json:"network_mode"`
-	Networks      []DockerNetwork `json:"networks"`
-	Ports         []DockerPort    `json:"ports"`
-	Project       string          `json:"project"`
-	Protected     bool            `json:"protected"`
-	RestartPolicy string          `json:"restart_policy"`
-	Restarts      int             `json:"restarts"`
-	Service       string          `json:"service"`
-	Started       string          `json:"started"`
-	State         string          `json:"state"`
+	Component     DockerDetailComponent `json:"component"`
+	Created       int64                 `json:"created"`
+	ExitCode      int                   `json:"exit_code"`
+	Finished      string                `json:"finished"`
+	Health        string                `json:"health"`
+	Id            string                `json:"id"`
+	Image         string                `json:"image"`
+	ImageId       string                `json:"image_id"`
+	Mounts        []DockerMount         `json:"mounts"`
+	Name          string                `json:"name"`
+	NetworkMode   string                `json:"network_mode"`
+	Networks      []DockerNetwork       `json:"networks"`
+	Ports         []DockerPort          `json:"ports"`
+	Project       string                `json:"project"`
+	Protected     bool                  `json:"protected"`
+	RestartPolicy string                `json:"restart_policy"`
+	Restarts      int                   `json:"restarts"`
+	Service       string                `json:"service"`
+	Started       string                `json:"started"`
+	State         string                `json:"state"`
 }
+
+// DockerDetailComponent defines model for DockerDetail.Component.
+type DockerDetailComponent string
 
 // DockerLogs defines model for DockerLogs.
 type DockerLogs struct {

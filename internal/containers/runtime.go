@@ -14,7 +14,10 @@ import (
 	"time"
 
 	"nginxpanel/internal/dockerapi"
+	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/frps"
+	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
 )
 
@@ -41,6 +44,23 @@ func dockerError(err error) error {
 func protected(name string) bool {
 	// Reserve the managed panel container name even if deployment metadata is unavailable.
 	return strings.TrimPrefix(name, "/") == panelruntime.DockerName
+}
+func component(name string) string {
+	name = strings.TrimPrefix(name, "/")
+	switch name {
+	case panelruntime.DockerName:
+		return "panel"
+	case nginxcontainer.Name:
+		return "nginx"
+	case fail2ban.ContainerName:
+		return "fail2ban"
+	case frps.ContainerName:
+		return "frps"
+	}
+	if strings.HasPrefix(name, nginxcontainer.Name+"-check-") {
+		return "nginx"
+	}
+	return ""
 }
 func List(ctx context.Context) (Overview, error) {
 	out := Overview{Containers: []Container{}}
@@ -82,6 +102,7 @@ func List(ctx context.Context) (Overview, error) {
 			return out, fault.Unavailable("Docker 返回了无效的容器信息")
 		}
 		c := Container{ID: r.ID, Name: strings.TrimPrefix(r.Names[0], "/"), Image: r.Image, State: r.State, Created: r.Created, Ports: []Port{}, Project: r.Labels["com.docker.compose.project"], Service: r.Labels["com.docker.compose.service"], Protected: protected(r.Names[0])}
+		c.Component = component(c.Name)
 		for _, p := range r.Ports {
 			c.Ports = append(c.Ports, Port{Address: p.IP, Public: p.PublicPort, Private: p.PrivatePort, Protocol: p.Type})
 		}
@@ -161,6 +182,7 @@ func Inspect(ctx context.Context, id string) (Detail, error) {
 		return out, fault.Unavailable("容器创建时间无效")
 	}
 	out = Detail{Container: Container{ID: r.ID, Name: strings.TrimPrefix(r.Name, "/"), Image: r.Config.Image, State: r.State.Status, Created: created.Unix(), Ports: []Port{}, Project: r.Config.Labels["com.docker.compose.project"], Service: r.Config.Labels["com.docker.compose.service"], Protected: protected(r.Name)}, ImageID: r.Image, Started: r.State.StartedAt, Finished: r.State.FinishedAt, Restarts: r.RestartCount, RestartPolicy: r.HostConfig.RestartPolicy.Name, ExitCode: r.State.ExitCode, NetworkMode: r.HostConfig.NetworkMode, Networks: []Network{}, Mounts: []Mount{}}
+	out.Component = component(out.Name)
 	if r.State.Health != nil {
 		out.Health = r.State.Health.Status
 	}

@@ -9,6 +9,7 @@ import (
 )
 
 const Image = "ghcr.io/fatedier/frps:v0.71.1"
+const ContainerName = "nginxpanel-frps"
 
 type PortRange struct {
 	From int `json:"from"`

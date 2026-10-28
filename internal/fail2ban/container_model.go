@@ -8,6 +8,7 @@ import (
 )
 
 const ContainerImage = "crazymax/fail2ban:debian"
+const ContainerName = "nginxpanel-fail2ban"
 
 type ContainerRule struct {
 	ID       string `json:"id"`

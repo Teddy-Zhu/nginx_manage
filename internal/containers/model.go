@@ -36,6 +36,7 @@ type Container struct {
 	Ports     []Port `json:"ports"`
 	Project   string `json:"project"`
 	Service   string `json:"service"`
+	Component string `json:"component"`
 	Protected bool   `json:"protected"`
 }
 type Overview struct {

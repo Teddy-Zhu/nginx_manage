@@ -2814,7 +2814,7 @@ components:
     DockerPort:
       {"type": "object", "required": ["address", "public", "private", "protocol"], "properties": {"address": {"type": "string"}, "public": {"type": "integer"}, "private": {"type": "integer"}, "protocol": {"type": "string"}}}
     DockerContainer:
-      {"type": "object", "required": ["id", "name", "image", "state", "created", "ports", "project", "service", "protected"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "image": {"type": "string"}, "state": {"type": "string"}, "created": {"type": "integer", "format": "int64"}, "ports": {"type": "array", "items": {"$ref": "#/components/schemas/DockerPort"}}, "project": {"type": "string"}, "service": {"type": "string"}, "protected": {"type": "boolean"}}}
+      {"type": "object", "required": ["id", "name", "image", "state", "created", "ports", "project", "service", "component", "protected"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "image": {"type": "string"}, "state": {"type": "string"}, "created": {"type": "integer", "format": "int64"}, "ports": {"type": "array", "items": {"$ref": "#/components/schemas/DockerPort"}}, "project": {"type": "string"}, "service": {"type": "string"}, "component": {"type": "string", "enum": ["", "panel", "nginx", "frps", "fail2ban"]}, "protected": {"type": "boolean"}}}
     DockerOverview:
       {"type": "object", "required": ["available", "reason", "containers"], "properties": {"available": {"type": "boolean"}, "reason": {"type": "string"}, "containers": {"type": "array", "items": {"$ref": "#/components/schemas/DockerContainer"}}}}
     DockerMount:

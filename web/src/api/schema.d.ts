@@ -5395,6 +5395,8 @@ export interface components {
             ports: components["schemas"]["DockerPort"][];
             project: string;
             service: string;
+            /** @enum {string} */
+            component: "" | "panel" | "nginx" | "frps" | "fail2ban";
             protected: boolean;
         };
         DockerOverview: {
