@@ -3586,6 +3586,24 @@ func (e WAFPathMatch) Valid() bool {
 	}
 }
 
+// Defines values for GetResourceTemplateParamsKind.
+const (
+	GetResourceTemplateParamsKindHttp   GetResourceTemplateParamsKind = "http"
+	GetResourceTemplateParamsKindStream GetResourceTemplateParamsKind = "stream"
+)
+
+// Valid indicates whether the value is a known member of the GetResourceTemplateParamsKind enum.
+func (e GetResourceTemplateParamsKind) Valid() bool {
+	switch e {
+	case GetResourceTemplateParamsKindHttp:
+		return true
+	case GetResourceTemplateParamsKindStream:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConfirmPairingParamsXNginxpanelRemoteProtocol.
 const (
 	ConfirmPairingParamsXNginxpanelRemoteProtocolN1 ConfirmPairingParamsXNginxpanelRemoteProtocol = "1"
@@ -4463,9 +4481,12 @@ type ComponentTask struct {
 
 // CreateResource defines model for CreateResource.
 type CreateResource struct {
-	BaseVersion int64              `json:"base_version"`
-	Domains     []string           `json:"domains"`
-	Kind        CreateResourceKind `json:"kind"`
+	BaseVersion int64 `json:"base_version"`
+
+	// Changes 与编辑站点相同的可视化字段，在创建时一次保存。
+	Changes *map[string][]string `json:"changes,omitempty"`
+	Domains []string             `json:"domains"`
+	Kind    CreateResourceKind   `json:"kind"`
 
 	// Listen 每项为一条监听的地址及选项。
 	Listen   []string          `json:"listen"`
@@ -8342,8 +8363,12 @@ type ResourceKind string
 
 // ResourceAction defines model for ResourceAction.
 type ResourceAction struct {
-	BaseVersion int64   `json:"base_version"`
-	Name        *string `json:"name,omitempty"`
+	BaseVersion int64 `json:"base_version"`
+
+	// Changes 在副本保存前应用的字段修改，不修改原站点。
+	Changes  *map[string][]string `json:"changes,omitempty"`
+	Metadata *ResourceMetadata    `json:"metadata,omitempty"`
+	Name     *string              `json:"name,omitempty"`
 }
 
 // ResourceMetadata defines model for ResourceMetadata.
@@ -9372,6 +9397,14 @@ type CreateResourceParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
+
+// GetResourceTemplateParams defines parameters for GetResourceTemplate.
+type GetResourceTemplateParams struct {
+	Kind GetResourceTemplateParamsKind `form:"kind" json:"kind"`
+}
+
+// GetResourceTemplateParamsKind defines parameters for GetResourceTemplate.
+type GetResourceTemplateParamsKind string
 
 // DeleteResourceParams defines parameters for DeleteResource.
 type DeleteResourceParams struct {
@@ -10639,6 +10672,9 @@ type ServerInterface interface {
 
 	// (POST /nginx/resources)
 	CreateResource(w http.ResponseWriter, r *http.Request, params CreateResourceParams)
+
+	// (GET /nginx/resources/template)
+	GetResourceTemplate(w http.ResponseWriter, r *http.Request, params GetResourceTemplateParams)
 
 	// (DELETE /nginx/resources/{id})
 	DeleteResource(w http.ResponseWriter, r *http.Request, id ID, params DeleteResourceParams)
@@ -18103,6 +18139,39 @@ func (siw *ServerInterfaceWrapper) CreateResource(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetResourceTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetResourceTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetResourceTemplateParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetResourceTemplate(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteResource operation middleware
 func (siw *ServerInterfaceWrapper) DeleteResource(w http.ResponseWriter, r *http.Request) {
 
@@ -20878,6 +20947,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/nginx/native-modules", wrapper.SetNginxNativeModules)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/config-tree/preview", wrapper.PreviewConfigTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources", wrapper.CreateResource)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/resources/template", wrapper.GetResourceTemplate)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.DeleteResource)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/nginx/resources/{id}", wrapper.PatchResource)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/resources/{id}/copy", wrapper.CopyResource)

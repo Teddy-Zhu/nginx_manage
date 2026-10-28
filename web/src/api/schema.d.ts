@@ -2105,6 +2105,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/nginx/resources/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getResourceTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nginx/resources/{id}": {
         parameters: {
             query?: never;
@@ -6024,6 +6040,11 @@ export interface components {
             /** Format: int64 */
             base_version: number;
             name?: string;
+            metadata?: components["schemas"]["ResourceMetadata"];
+            /** @description 在副本保存前应用的字段修改，不修改原站点。 */
+            changes?: {
+                [key: string]: string[];
+            };
         };
         AccessList: {
             id: string;
@@ -6535,6 +6556,10 @@ export interface components {
              */
             preserve_host: boolean;
             metadata?: components["schemas"]["ResourceMetadata"];
+            /** @description 与编辑站点相同的可视化字段，在创建时一次保存。 */
+            changes?: {
+                [key: string]: string[];
+            };
         };
         SaveRequest: {
             /** Format: int64 */
@@ -9991,6 +10016,21 @@ export interface operations {
         };
         responses: {
             201: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getResourceTemplate: {
+        parameters: {
+            query: {
+                kind: "http" | "stream";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

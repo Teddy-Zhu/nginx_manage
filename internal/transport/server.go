@@ -576,6 +576,19 @@ func (s *Server) GetNginxRuntime(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, out)
 }
 
+func (s *Server) GetResourceTemplate(w http.ResponseWriter, r *http.Request, params apigen.GetResourceTemplateParams) {
+	p, ok := s.authorize(w, r, "config.write", "config.secrets")
+	if !ok {
+		return
+	}
+	out, err := s.Config.ResourceTemplate(p, string(params.Kind))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.respond(w, r, 200, "OK", "网站设置已就绪", out)
+}
+
 func (s *Server) CopyResource(w http.ResponseWriter, r *http.Request, id apigen.ID, params apigen.CopyResourceParams) {
 	s.resourceAction(w, r, id, "copy", params.IdempotencyKey)
 }
@@ -598,7 +611,7 @@ func (s *Server) resourceAction(w http.ResponseWriter, r *http.Request, id, acti
 		return
 	}
 	status := 201
-	message := "副本已保存为停用状态"
+	message := "副本已保存，尚未应用"
 	if action == "delete" {
 		status = 200
 		message = "代理已从期望修订移除"

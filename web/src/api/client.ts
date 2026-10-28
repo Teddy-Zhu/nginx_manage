@@ -1105,6 +1105,8 @@ export function createAPI(scope: RequestScope) {
       data: { base_version, changes, metadata },
       headers: { "Idempotency-Key": key },
     }),
+  resourceTemplate: (kind: "http" | "stream") =>
+    request<Resource>({ url: "/nginx/resources/template", params: { kind } }),
   createResource: (
     data: components["schemas"]["CreateResource"],
     key: string,
@@ -1120,11 +1122,12 @@ export function createAPI(scope: RequestScope) {
     action: "copy" | "delete",
     base_version: number,
     key: string,
+    details?: Pick<components["schemas"]["ResourceAction"], "changes" | "metadata">,
   ) =>
     request<SaveResult>({
       method: action === "copy" ? "POST" : "DELETE",
       url: `/nginx/resources/${encodeURIComponent(id)}${action === "copy" ? "/copy" : ""}`,
-      data: { base_version },
+      data: { base_version, ...details },
       headers: { "Idempotency-Key": key },
     }),
   saveAccessList: (id: string | null, data: AccessListInput, key: string) =>

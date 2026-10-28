@@ -12,14 +12,15 @@ import (
 )
 
 type CreateRequest struct {
-	BaseVersion     int64             `json:"base_version"`
-	Kind            string            `json:"kind"`
-	Listen          []string          `json:"listen"`
-	Domains         []string          `json:"domains"`
-	Upstream        string            `json:"upstream"`
-	UpstreamServers []string          `json:"upstream_servers"`
-	PreserveHost    bool              `json:"preserve_host"`
-	Metadata        *ResourceMetadata `json:"metadata,omitempty"`
+	BaseVersion     int64               `json:"base_version"`
+	Kind            string              `json:"kind"`
+	Listen          []string            `json:"listen"`
+	Domains         []string            `json:"domains"`
+	Upstream        string              `json:"upstream"`
+	UpstreamServers []string            `json:"upstream_servers"`
+	PreserveHost    bool                `json:"preserve_host"`
+	Metadata        *ResourceMetadata   `json:"metadata,omitempty"`
+	Changes         map[string][]string `json:"changes,omitempty"`
 }
 
 func (s *Service) CreateResource(ctx context.Context, p auth.Principal, requestID, key string, in CreateRequest) (SaveResult, error) {
@@ -76,8 +77,66 @@ func (s *Service) CreateResource(ctx context.Context, p auth.Principal, requestI
 	if err != nil {
 		return SaveResult{}, err
 	}
+	id := secure.ID()
+	files, err := parsed.createResource(in, id)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if len(in.Changes) > 0 {
+		parsed, err = Parse(files, s.Policy)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		changes := rebindResourceChanges(in.Changes, in.Kind, resourceTemplateID, id, "", "")
+		files, err = parsed.Patch(id, changes, nil)
+		if err != nil {
+			return SaveResult{}, fault.Invalid(err.Error())
+		}
+	}
+	return s.save(ctx, p, requestID, key, SaveRequest{BaseVersion: in.BaseVersion, Files: files}, digest)
+}
+
+// Templates use the same generator and field projection as persisted sites.
+const resourceTemplateID = "00000000-0000-4000-8000-000000000000"
+
+func (s *Service) ResourceTemplate(p auth.Principal, kind string) (Resource, error) {
+	if err := p.Require("config.write", "config.secrets"); err != nil {
+		return Resource{}, err
+	}
+	if kind != "http" && kind != "stream" {
+		return Resource{}, fault.Invalid("资源类型须为 http 或 stream")
+	}
+	in := CreateRequest{Kind: kind, Listen: []string{"80"}, Domains: []string{"_"}, Upstream: "http://127.0.0.1:8080"}
+	if kind == "stream" {
+		in.Listen, in.Domains, in.Upstream = []string{"7000"}, nil, "127.0.0.1:8080"
+	}
+	parsed, err := Parse([]File{{ID: secure.ID(), Path: "nginx.conf", Content: "events {}\n"}}, s.Policy)
+	if err != nil {
+		return Resource{}, err
+	}
+	files, err := parsed.createResource(in, resourceTemplateID)
+	if err != nil {
+		return Resource{}, err
+	}
+	parsed, err = Parse(files, s.Policy)
+	if err != nil {
+		return Resource{}, err
+	}
+	resource, _, _, err := parsed.resource(resourceTemplateID)
+	if err != nil {
+		return Resource{}, err
+	}
+	return *resource, nil
+}
+
+func (p *Parsed) createResource(in CreateRequest, id string) ([]File, error) {
+	metadata := ResourceMetadata{Enabled: true}
+	if in.Metadata != nil {
+		metadata = *in.Metadata
+	}
+	files := append([]File(nil), p.Tree.Files...)
 	var main *Document
-	for _, doc := range parsed.Documents {
+	for _, doc := range p.Documents {
 		if doc.File.Path == "nginx.conf" {
 			main = doc
 		}
@@ -86,12 +145,11 @@ func (s *Service) CreateResource(ctx context.Context, p auth.Principal, requestI
 	for _, node := range main.Nodes {
 		if node.Name == in.Kind {
 			if parent != nil {
-				return SaveResult{}, fault.Conflict("主配置存在多个同类上下文，请先整理原生配置")
+				return nil, fault.Conflict("主配置存在多个同类上下文，请先整理原生配置")
 			}
 			parent = node
 		}
 	}
-	id := secure.ID()
 	upstream := in.Upstream
 	group := ""
 	var block strings.Builder
@@ -145,17 +203,48 @@ func (s *Service) CreateResource(ctx context.Context, p auth.Principal, requestI
 	} else {
 		content += "\n" + in.Kind + " {" + block.String() + "}\n"
 	}
-	for i := range tree.Files {
-		if tree.Files[i].ID == main.File.ID {
-			tree.Files[i].Content = content
+	for i := range files {
+		if files[i].ID == main.File.ID {
+			files[i].Content = content
 		}
 	}
-	return s.save(ctx, p, requestID, key, SaveRequest{BaseVersion: in.BaseVersion, Files: tree.Files}, digest)
+	return files, nil
+}
+
+// Rebind site-owned logs and upstream references before applying edits to a clone.
+func rebindResourceChanges(changes map[string][]string, kind, fromID, toID, fromGroup, toGroup string) map[string][]string {
+	out := make(map[string][]string, len(changes))
+	prefix := "logs/nginx/"
+	if kind == "stream" {
+		prefix = "logs/stream/"
+	}
+	for name, values := range changes {
+		out[name] = append([]string(nil), values...)
+		for i, value := range values {
+			if name == "access_log" || name == "error_log" {
+				out[name][i] = strings.ReplaceAll(value, prefix+fromID+"/", prefix+toID+"/")
+			}
+			if name == "upstream" && fromGroup != "" && upstreamName(value, kind) == fromGroup {
+				if kind == "http" {
+					u, err := url.Parse(value)
+					if err == nil {
+						u.Host = toGroup
+						out[name][i] = u.String()
+					}
+				} else {
+					out[name][i] = toGroup
+				}
+			}
+		}
+	}
+	return out
 }
 
 type ResourceActionRequest struct {
-	BaseVersion int64  `json:"base_version"`
-	Name        string `json:"name,omitempty"`
+	BaseVersion int64               `json:"base_version"`
+	Name        string              `json:"name,omitempty"`
+	Changes     map[string][]string `json:"changes,omitempty"`
+	Metadata    *ResourceMetadata   `json:"metadata,omitempty"`
 }
 
 func (s *Service) ResourceAction(ctx context.Context, p auth.Principal, requestID, key, id, action string, in ResourceActionRequest) (SaveResult, error) {
@@ -189,6 +278,7 @@ func (s *Service) ResourceAction(ctx context.Context, p auth.Principal, requestI
 		return SaveResult{}, err
 	}
 	edits := map[string][]Edit{}
+	newID, cloneName, oldGroup := "", "", ""
 	if action == "delete" {
 		// Only remove generated, exclusively referenced groups. Native or shared
 		// groups retain the existing ownership and ambiguous-reference guards.
@@ -213,13 +303,15 @@ func (s *Service) ResourceAction(ctx context.Context, p auth.Principal, requestI
 			}
 			metadata.Name = string(name) + " 副本"
 		}
+		if in.Metadata != nil {
+			metadata = *in.Metadata
+		}
 		if err := validateMetadata(metadata); err != nil {
 			return SaveResult{}, fault.Invalid(err.Error())
 		}
-		newID := secure.ID()
+		newID = secure.ID()
 		body := doc.File.Content[block.Start:block.End]
 		copyEdits := []Edit{}
-		cloneName, oldGroup := "", ""
 		if field := resource.Fields["upstream_servers"]; field.Editable && len(field.Values) > 0 {
 			owner, group, reason := parsed.target(doc, block, resource.Kind, specs(resource.Kind)["upstream_servers"])
 			if reason != "" || group == nil {
@@ -270,6 +362,17 @@ func (s *Service) ResourceAction(ctx context.Context, p auth.Principal, requestI
 	files, err := parsed.editFiles(edits)
 	if err != nil {
 		return SaveResult{}, err
+	}
+	if action == "copy" && len(in.Changes) > 0 {
+		parsed, err = Parse(files, s.Policy)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		changes := rebindResourceChanges(in.Changes, resource.Kind, id, newID, oldGroup, cloneName)
+		files, err = parsed.Patch(newID, changes, nil)
+		if err != nil {
+			return SaveResult{}, fault.Invalid(err.Error())
+		}
 	}
 	return s.save(ctx, p, requestID, key, SaveRequest{BaseVersion: in.BaseVersion, Files: files}, digest)
 }

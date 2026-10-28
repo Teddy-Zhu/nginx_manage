@@ -17,12 +17,9 @@ import { useLiveRefresh } from "../composables/live";
 import FormDialog from "../components/FormDialog.vue";
 import { randomUUID } from "../utils/crypto";
 
-import ValueListInput from "../components/ValueListInput.vue";
-import NginxListeners from "../components/NginxListeners.vue";
 import NginxFieldInput from "../components/NginxFieldInput.vue";
-import EndpointInput from "../components/EndpointInput.vue";
-import { cleanList, nginxArgs } from "../utils/form";
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { nginxArgs } from "../utils/form";
+import { ref, computed, h, onMounted, onUnmounted, watch } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import {
   NButton,
@@ -39,6 +36,9 @@ import {
   NTabPane,
   NRadioGroup,
   NRadioButton,
+  NDataTable,
+  NTooltip,
+  type DataTableColumns,
 } from "naive-ui";
 import {
   useNodeAPI,
@@ -94,46 +94,194 @@ const changesVisible = ref(false),
 const modulesVisible = ref(false);
 const sourceVisible = ref(false);
 const resourceVisible = ref(false);
-const createVisible = ref(false),
-  fileVisible = ref(false),
+const fileVisible = ref(false),
   newPath = ref("");
-const editorOpen = computed(
-  () => resourceVisible.value || createVisible.value || sourceVisible.value,
-);
-const createName = ref(""),
-  createNotes = ref(""),
-  createMembers = ref("");
+const editorOpen = computed(() => resourceVisible.value || sourceVisible.value);
 const metadata = ref<ResourceMetadata>({
   name: "",
   notes: "",
   enabled: true,
   client_deny: false,
 });
-const createKind = ref<"http" | "stream">("http"),
-  createListen = ref("80"),
-  createDomains = ref<string[]>([]);
-const createHTTPUpstream = ref(""),
-  createStreamUpstream = ref("");
-const createUpstream = computed({
-  get: () =>
-    createKind.value === "http"
-      ? createHTTPUpstream.value
-      : createStreamUpstream.value,
-  set: (value: string) => {
-    if (createKind.value === "http") createHTTPUpstream.value = value;
-    else createStreamUpstream.value = value;
-  },
-});
-const createTargetMode = ref<"direct" | "group">("direct");
-const createHostMode = ref("target");
-const createGroupProtocol = ref<"http" | "https">("http"),
-  createGroupHost = ref(""),
-  createGroupPath = ref(""),
-  createError = ref("");
+const editorMode = ref<"create" | "edit" | "copy">("edit");
 const editorTab = ref("basic");
+const editorError = ref("");
 const resource = ref<Resource | null>(null),
   fieldInputs = ref<Record<string, string>>({});
 const enablingGroup = ref(false);
+const editorSnapshot = computed(() =>
+  JSON.stringify([metadata.value, fieldInputs.value, enablingGroup.value]),
+);
+const editorBaseline = ref("");
+const siteSearch = ref(""),
+  siteKind = ref("all"),
+  siteState = ref("all"),
+  sitePage = ref(1),
+  sitePageSize = ref(20);
+const filteredSites = computed(() => {
+  const term = siteSearch.value.trim().toLowerCase();
+  return (tree.value?.resources ?? []).filter(
+    (item) =>
+      (siteKind.value === "all" || item.kind === siteKind.value) &&
+      (siteState.value === "all" ||
+        item.metadata.enabled === (siteState.value === "enabled")) &&
+      (!term ||
+        [
+          item.metadata.name,
+          item.metadata.notes,
+          ...["domains", "listeners", "upstream", "upstream_servers"].flatMap(
+            (key) => item.fields[key]?.values ?? [],
+          ),
+        ].some((value) => value.toLowerCase().includes(term))),
+  );
+});
+watch([siteSearch, siteKind, siteState], () => {
+  sitePage.value = 1;
+});
+watch(
+  () => filteredSites.value.length,
+  (count) => {
+    sitePage.value = Math.max(
+      1,
+      Math.min(sitePage.value, Math.ceil(count / sitePageSize.value)),
+    );
+  },
+);
+function siteName(item: Resource) {
+  return (
+    item.metadata.name ||
+    item.fields.domains?.values[0] ||
+    (item.kind === "http" ? "未命名网站" : "未命名端口转发")
+  );
+}
+function siteTarget(item: Resource) {
+  const members = item.fields.upstream_servers?.values ?? [];
+  return members.length
+    ? members.join("\n")
+    : item.fields.upstream?.values.join("、") || "未设置转发目标";
+}
+const siteColumns: DataTableColumns<Resource> = [
+  {
+    title: "网站 / 服务",
+    key: "name",
+    width: 220,
+    ellipsis: { tooltip: true },
+    render: (item) =>
+      h("div", { class: "site-identity" }, [
+        h("strong", { class: "site-name" }, siteName(item)),
+        item.metadata.notes
+          ? h(
+              "span",
+              { class: "site-notes", title: item.metadata.notes },
+              item.metadata.notes,
+            )
+          : null,
+      ]),
+  },
+  {
+    title: "域名",
+    key: "domains",
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (item) =>
+      item.kind === "http"
+        ? item.fields.domains?.values.join("、") || "未设置域名"
+        : "—",
+  },
+  {
+    title: "访问入口",
+    key: "listeners",
+    width: 190,
+    ellipsis: { tooltip: true },
+    render: (item) =>
+      (item.fields.listeners?.values ?? [])
+        .map((value) => {
+          const args = nginxArgs(value);
+          return `${args[0] ?? ""} · ${args.includes("ssl") ? "HTTPS" : args.includes("udp") ? "UDP" : item.kind === "http" ? "HTTP" : "TCP"}`;
+        })
+        .join("、"),
+  },
+  {
+    title: "转发目标",
+    key: "upstream",
+    minWidth: 220,
+    render: (item) =>
+      h(NTooltip, null, {
+        trigger: () =>
+          h("div", { class: "site-target" }, [
+            (item.fields.upstream_servers?.values.length ?? 0) > 0
+              ? h(
+                  "span",
+                  { class: "site-target-label" },
+                  `服务器组 · ${item.fields.upstream_servers?.values.length ?? 0} 台`,
+                )
+              : null,
+            h(
+              "span",
+              { class: "site-truncate" },
+              siteTarget(item).replaceAll("\n", "、"),
+            ),
+          ]),
+        default: () =>
+          h(
+            "span",
+            {
+              style: {
+                whiteSpace: "pre-line",
+                overflowWrap: "anywhere",
+                maxWidth: "420px",
+                display: "block",
+              },
+            },
+            siteTarget(item),
+          ),
+      }),
+  },
+  {
+    title: "状态",
+    key: "enabled",
+    width: 85,
+    render: (item) =>
+      h(
+        NTag,
+        {
+          size: "small",
+          bordered: false,
+          type: item.metadata.enabled ? "success" : "default",
+        },
+        { default: () => (item.metadata.enabled ? "启用" : "停用") },
+      ),
+  },
+  {
+    title: "操作",
+    key: "actions",
+    width: 165,
+    render: (item) =>
+      h("div", { class: "site-actions" }, [
+        h(
+          NButton,
+          {
+            size: "small",
+            quaternary: true,
+            type: "primary",
+            disabled: busy.value,
+            onClick: () => selectResource(item),
+          },
+          { default: () => "编辑" },
+        ),
+        h(
+          NButton,
+          {
+            size: "small",
+            quaternary: true,
+            disabled: busy.value || dirty.value,
+            onClick: () => selectResource(item, "copy"),
+          },
+          { default: () => "复制配置" },
+        ),
+      ]),
+  },
+];
 const regularFields = computed(() =>
   Object.fromEntries(
     Object.entries(resource.value?.fields ?? {}).filter(
@@ -155,9 +303,39 @@ const groupedUpstream = computed(
 );
 const groupedHTTP = computed(
   () =>
-    groupedUpstream.value &&
+    !enablingGroup.value &&
+    (resource.value?.fields.upstream_servers?.values.length ?? 0) > 0 &&
     resource.value?.kind === "http" &&
     /^https?:\/\//.test(fieldInputs.value.upstream ?? ""),
+);
+const newGroupHost = computed(() => {
+  if (!enablingGroup.value || resource.value?.kind !== "http")
+    return "$proxy_host";
+  try {
+    return new URL(fieldInputs.value.upstream ?? "").host || "$proxy_host";
+  } catch {
+    return "$proxy_host";
+  }
+});
+watch(
+  newGroupHost,
+  (host, previous) => {
+    // Keep the default Host aligned with the target when enabling a server group.
+    // Explicit custom headers remain untouched.
+    if (!resource.value || resource.value.kind !== "http") return;
+    fieldInputs.value.request_headers = (
+      fieldInputs.value.request_headers ?? ""
+    )
+      .split("\n")
+      .map((line) => {
+        const args = nginxArgs(line);
+        return args[0]?.toLowerCase() === "host" && args[1] === previous
+          ? `Host ${host}`
+          : line;
+      })
+      .join("\n");
+  },
+  { flush: "sync" },
 );
 const upstreamProtocol = computed({
   get: () => fieldInputs.value.upstream?.match(/^(https?):\/\//)?.[1] ?? null,
@@ -406,16 +584,7 @@ const sourceJSON = computed(() =>
   ),
 );
 const formDirty = computed(
-  () =>
-    resource.value &&
-    ((enablingGroup.value && !!fieldInputs.value.upstream_servers?.trim()) ||
-      JSON.stringify(metadata.value) !==
-        JSON.stringify(resource.value.metadata) ||
-      Object.entries(resource.value.fields).some(
-        ([name, field]) =>
-          field.editable &&
-          (fieldInputs.value[name] ?? "") !== fieldText(field),
-      )),
+  () => !!resource.value && editorSnapshot.value !== editorBaseline.value,
 );
 const dirty = computed(
   () =>
@@ -731,10 +900,15 @@ async function save(validate = false, apply = false) {
     }
   });
 }
-function selectResource(value: Resource) {
+function selectResource(
+  value: Resource,
+  mode: "create" | "edit" | "copy" = "edit",
+) {
   if (formDirty.value && !window.confirm("字段修改尚未保存，确认切换？"))
     return;
   resourceVisible.value = true;
+  editorMode.value = mode;
+  editorError.value = "";
   editorTab.value = "basic";
   resource.value = value;
   enablingGroup.value = false;
@@ -742,6 +916,16 @@ function selectResource(value: Resource) {
   fieldInputs.value = Object.fromEntries(
     Object.entries(value.fields).map(([key, field]) => [key, fieldText(field)]),
   );
+  if (mode === "create") {
+    fieldInputs.value.domains = "";
+    fieldInputs.value.upstream = "";
+    if (value.kind === "stream") fieldInputs.value.listeners = "";
+  } else if (mode === "copy") {
+    metadata.value.name =
+      Array.from(siteName(value)).slice(0, 125).join("") + " 副本";
+    metadata.value.enabled = false;
+  }
+  editorBaseline.value = editorSnapshot.value;
   certificateRequest++;
   certificateChoice.value =
     (value.fields.certificate?.values[0] ?? "").split("/")[1] ?? "";
@@ -764,118 +948,132 @@ function closeResource() {
   certificateChoice.value = "";
   certificateDetail.value = null;
 }
-const createSnapshot = computed(() =>
-  JSON.stringify([
-    createName.value,
-    createNotes.value,
-    createKind.value,
-    createListen.value,
-    createDomains.value,
-    createHTTPUpstream.value,
-    createStreamUpstream.value,
-    createTargetMode.value,
-    createMembers.value,
-    createHostMode.value,
-    createGroupProtocol.value,
-    createGroupHost.value,
-    createGroupPath.value,
-  ]),
-);
-const createBaseline = ref(createSnapshot.value);
-watch(createSnapshot, () => {
-  createError.value = "";
-});
-function chooseCreateKind(value: "http" | "stream") {
-  if (createListen.value === (createKind.value === "http" ? "80" : ""))
-    createListen.value = value === "http" ? "80" : "";
-  else if (value === "http")
-    createListen.value = createListen.value.replace(
-      /\s+(?:udp|reuseport)\b/g,
-      "",
-    );
-  createKind.value = value;
+async function startCreate(kind: "http" | "stream" = "http") {
+  if (differsFromDesired.value) return;
+  await run(async () => {
+    const template = await api.resourceTemplate(kind);
+    selectResource(template, "create");
+  });
 }
-function startCreate() {
-  createName.value = createNotes.value = createMembers.value = "";
-  createHTTPUpstream.value = createStreamUpstream.value = "";
-  createKind.value = "http";
-  createListen.value = "80";
-  createDomains.value = [];
-  createTargetMode.value = "direct";
-  createHostMode.value = "target";
-  createGroupProtocol.value = "http";
-  createGroupHost.value = createGroupPath.value = createError.value = "";
-  createBaseline.value = createSnapshot.value;
-  createVisible.value = true;
+function changeCreateKind(value: unknown) {
+  if (
+    (value === "http" || value === "stream") &&
+    value !== resource.value?.kind
+  )
+    void startCreate(value);
+}
+function inputValues(name: string): string[] {
+  const value = fieldInputs.value[name]?.trim() ?? "";
+  if (!value) return [];
+  const format = resource.value?.fields[name]?.format;
+  return format === "tokens"
+    ? value.split(/\s+/)
+    : format === "lines"
+      ? value
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+      : [value];
 }
 async function saveFields() {
   if (!resource.value || !tree.value || differsFromDesired.value) return;
+  editorError.value = "";
   const changes: Record<string, string[]> = {};
   for (const [name, field] of Object.entries(resource.value.fields)) {
-    const value = fieldInputs.value[name] ?? "";
     if (
       (field.editable ||
         (name === "upstream_servers" && enablingGroup.value)) &&
-      value !== fieldText(field)
+      (fieldInputs.value[name] ?? "") !== fieldText(field)
     )
-      changes[name] = value.trim()
-        ? field.format === "tokens"
-          ? value.trim().split(/\s+/)
-          : field.format === "lines"
-            ? value
-                .split("\n")
-                .map((line) => line.trim())
-                .filter(Boolean)
-            : [value.trim()]
-        : [];
+      changes[name] = inputValues(name);
   }
   const id = resource.value.id,
-    version = tree.value.version;
-  await run(async () => {
-    const result = await api.patch(
-      id,
-      version,
-      changes,
-      keyFor({ id, version, changes, metadata: metadata.value }),
-      metadata.value,
-    );
-    setTree(result.tree);
-    resourceVisible.value = false;
-  }, "代理配置已保存，尚未应用");
+    version = tree.value.version,
+    mode = editorMode.value;
+  const savedMetadata = { ...metadata.value };
+  if (mode === "create") {
+    const input = {
+      base_version: version,
+      kind: resource.value.kind as "http" | "stream",
+      listen: inputValues("listeners"),
+      domains: inputValues("domains"),
+      upstream: inputValues("upstream")[0] ?? "",
+      preserve_host: false,
+      upstream_servers: enablingGroup.value
+        ? inputValues("upstream_servers")
+        : [],
+      metadata: savedMetadata,
+      changes: { ...changes },
+    };
+    if (!input.listen.length) editorError.value = "请至少添加一个访问端口。";
+    else if (input.kind === "http" && !input.domains.length)
+      editorError.value = "请填写网站域名。";
+    else if (enablingGroup.value && !input.upstream_servers.length)
+      editorError.value = "请至少添加一台目标服务器。";
+    else if (
+      !(input.kind === "stream" && enablingGroup.value) &&
+      !input.upstream
+    )
+      editorError.value =
+        input.kind === "http"
+          ? "请填写目标网站地址。"
+          : "请填写目标服务器地址与端口。";
+    if (editorError.value) {
+      editorTab.value = "basic";
+      return;
+    }
+    for (const name of ["listeners", "domains", "upstream", "upstream_servers"])
+      delete input.changes[name];
+    await run(async () => {
+      const result = await api.createResource(input, keyFor(input));
+      setTree(result.tree);
+      resourceVisible.value = false;
+    }, "网站或代理已创建，尚未应用");
+    return;
+  }
+  const details = { changes, metadata: savedMetadata };
+  await run(
+    async () => {
+      const result =
+        mode === "copy"
+          ? await api.resourceAction(
+              id,
+              "copy",
+              version,
+              keyFor({ id, version, ...details, action: "copy" }),
+              details,
+            )
+          : await api.patch(
+              id,
+              version,
+              changes,
+              keyFor({ id, version, ...details }),
+              savedMetadata,
+            );
+      setTree(result.tree);
+      resourceVisible.value = false;
+    },
+    mode === "copy" ? "配置副本已创建，尚未应用" : "代理配置已保存，尚未应用",
+  );
 }
-async function resourceAction(action: "copy" | "delete") {
+async function deleteResource() {
   if (!resource.value || !tree.value || dirty.value) return;
   const id = resource.value.id,
     version = tree.value.version;
   if (
-    action === "delete" &&
-    !window.confirm(
-      `确认从期望配置移除 ${resource.value.metadata.name || id}？`,
-    )
+    !window.confirm(`确认删除“${siteName(resource.value)}”？应用配置后生效。`)
   )
     return;
-  const previous = new Set(tree.value.resources.map((item) => item.id));
-  await run(
-    async () => {
-      const result = await api.resourceAction(
-        id,
-        action,
-        version,
-        keyFor({ action, id, version }),
-      );
-      setTree(result.tree);
-      resourceVisible.value = false;
-      if (action === "copy") {
-        const copy = result.tree.resources.find(
-          (item) => !previous.has(item.id),
-        );
-        if (copy) selectResource(copy);
-      }
-    },
-    action === "copy"
-      ? "副本已保存为停用状态"
-      : "代理已从期望配置移除，尚未应用",
-  );
+  await run(async () => {
+    const result = await api.resourceAction(
+      id,
+      "delete",
+      version,
+      keyFor({ action: "delete", id, version }),
+    );
+    setTree(result.tree);
+    resourceVisible.value = false;
+  }, "代理已删除，尚未应用");
 }
 function addFile() {
   const path = newPath.value.trim();
@@ -895,87 +1093,6 @@ function removeFile() {
   if (!window.confirm(`确认从配置树移除 ${currentFile.value.path}？`)) return;
   files.value = files.value.filter((f) => f.id !== selected.value);
   selected.value = files.value[0]?.id ?? "";
-}
-async function createResource() {
-  if (dirty.value) return;
-  createError.value = "";
-  const members =
-    createTargetMode.value === "group"
-      ? cleanList(createMembers.value.split("\n"))
-      : [];
-  let upstream = createUpstream.value.trim();
-  if (createTargetMode.value === "group" && createKind.value === "http") {
-    const host =
-      createGroupHost.value.trim() || members[0]?.split(/\s+/)[0] || "";
-    const path = createGroupPath.value.trim();
-    if (/[\s/?#@]/.test(createGroupHost.value.trim())) {
-      createError.value =
-        "后端网站域名请填写域名或 IP，可附带端口，例如 api.example.com。";
-      return;
-    }
-    if (path && (!path.startsWith("/") || /[?#]/.test(path))) {
-      createError.value = "目标路径须以 / 开头，例如 /api/。";
-      return;
-    }
-    upstream = `${createGroupProtocol.value}://${host}${path}`;
-  }
-  const input = {
-    base_version: tree.value?.version ?? 0,
-    kind: createKind.value,
-    listen: createListen.value
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean),
-    upstream_servers: members,
-    metadata: {
-      name: createName.value.trim(),
-      notes: createNotes.value,
-      enabled: true,
-      client_deny: false,
-    },
-    domains: createKind.value === "http" ? cleanList(createDomains.value) : [],
-    upstream:
-      createKind.value === "stream" && createTargetMode.value === "group"
-        ? ""
-        : upstream,
-    preserve_host:
-      createKind.value === "http" && createHostMode.value === "incoming",
-  };
-  if (!input.listen.length) {
-    createError.value = "请至少添加一个访问端口。";
-    return;
-  }
-  if (createKind.value === "http" && !input.domains.length) {
-    createError.value = "请填写网站域名。";
-    return;
-  }
-  if (
-    createTargetMode.value === "group" &&
-    input.upstream_servers.length === 0
-  ) {
-    createError.value = "请至少添加一台目标服务器。";
-    return;
-  }
-  if (createTargetMode.value === "direct" && !input.upstream) {
-    createError.value =
-      createKind.value === "http"
-        ? "请填写目标网站地址。"
-        : "请填写目标服务器地址与端口。";
-    return;
-  }
-  if (createKind.value === "http" && !/^https?:\/\//.test(input.upstream)) {
-    createError.value = "目标网站地址应以 http:// 或 https:// 开头。";
-    return;
-  }
-  if (members.some((line) => !/^.+:\d+$/.test(line.split(/\s+/)[0] ?? ""))) {
-    createError.value = "请为每台目标服务器填写地址与端口。";
-    return;
-  }
-  await run(async () => {
-    const result = await api.createResource(input, keyFor(input));
-    setTree(result.tree);
-    createVisible.value = false;
-  }, "代理配置已保存，尚未应用");
 }
 function capturedExternal(result: SaveResult) {
   sourceVisible.value = true;
@@ -1017,764 +1134,794 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
 </script>
 
 <template>
-  <div class="toolbar">
-    <div class="inline-gap">
-      <n-tag
-        v-if="runtime?.external_change"
-        size="small"
-        type="error"
-        :bordered="false"
-        >存在外部修改</n-tag
-      ><n-tag v-if="dirty" size="small" type="warning" :bordered="false"
-        >未保存修改</n-tag
-      ><n-tag
-        v-if="runtime?.running && runtime.integrity"
-        size="small"
-        :type="
-          runtime.revision_id === tree?.revision_id ? 'success' : 'warning'
-        "
-        :bordered="false"
-        >{{
-          runtime.revision_id === tree?.revision_id ? "已生效" : "待应用"
-        }}</n-tag
-      ><span class="muted">{{ draftNote }}</span>
-    </div>
-    <div class="inline-gap">
-      <NDropdown
-        trigger="click"
-        :options="moreActions"
-        @select="selectMoreAction"
-      >
-        <NButton :disabled="busy">更多操作</NButton>
-      </NDropdown>
-      <n-button :disabled="busy" @click="load">刷新</n-button
-      ><n-button
-        :disabled="
-          busy ||
-          dirty ||
-          !tree?.revision_id ||
-          !runtime?.available ||
-          !runtime.integrity ||
-          !runtime.running
-        "
-        @click="applySaved"
-        >应用配置</n-button
-      ><n-button type="primary" :disabled="busy || dirty" @click="startCreate"
-        >＋ 添加网站 / 代理</n-button
-      >
-    </div>
-  </div>
-  <n-alert type="info" :bordered="false" style="margin-bottom: 20px"
-    >保存修改后，点击“应用配置”使设置生效。</n-alert
-  >
-  <n-alert
-    v-if="runtimeError || runtime?.reason"
-    type="warning"
-    :bordered="false"
-    style="margin-bottom: 20px"
-    >{{ runtimeError || runtime?.reason }}</n-alert
-  >
-
-  <n-alert
-    v-if="differsFromDesired"
-    type="warning"
-    :bordered="false"
-    style="margin-bottom: 20px"
-    >源文件有未保存修改，请先保存后再修改表单。<NButton
-      text
-      type="primary"
-      @click="sourceVisible = true"
-      >继续编辑源文件</NButton
-    ></n-alert
-  >
-  <section v-if="tree?.resources.length" class="surface page-stack">
-    <h2>站点列表</h2>
-    <div class="record-list">
-      <article
-        v-for="item in tree.resources"
-        :key="item.id"
-        class="record-card"
-      >
-        <div class="toolbar">
-          <div>
-            <h3>
-              {{
-                item.metadata.name ||
-                item.fields.domains?.values[0] ||
-                item.id.slice(0, 8)
-              }}
-            </h3>
-            <p class="muted">
-              {{ item.kind === "http" ? "网站反向代理" : "TCP / UDP 代理" }} ·
-              {{ item.metadata.enabled ? "启用" : "停用" }}
-            </p>
-          </div>
-          <n-button :disabled="busy" @click="selectResource(item)"
-            >编辑</n-button
-          >
-        </div>
-        <p v-if="item.fields.domains?.values.length" class="muted">
-          {{ item.fields.domains.values.join("、") }}
-        </p>
-        <p v-if="item.metadata.notes" class="muted">
-          {{ item.metadata.notes }}
-        </p>
-      </article>
-    </div>
-  </section>
-  <n-empty v-else description="暂无受管代理配置"
-    ><template #extra
-      ><n-button :disabled="busy || dirty" @click="startCreate"
-        >新建代理配置</n-button
-      ></template
-    ></n-empty
-  >
-  <FormDialog
-    :show="resourceVisible"
-    :title="
-      resource?.kind === 'stream' ? '编辑 TCP / UDP 代理' : '编辑网站代理'
-    "
-    :busy="busy"
-    width="980px"
-    :submit-disabled="differsFromDesired || !formDirty"
-    @submit="saveFields"
-    @cancel="closeResource"
-  >
-    <div v-if="resource" class="proxy-editor">
-      <NTabs v-model:value="editorTab" type="line">
-        <NTabPane
-          v-for="tab in editorTabs"
-          :key="tab.key"
-          :name="tab.key"
-          :tab="tab.title"
-          display-directive="show"
+  <div class="nginx-page page-stack">
+    <div class="site-summary">
+      <div class="inline-gap">
+        <n-tag
+          v-if="runtime?.external_change"
+          size="small"
+          type="error"
+          :bordered="false"
         >
-          <div class="proxy-form">
-            <div v-if="tab.key === 'basic'" class="proxy-field-grid">
-              <n-form-item :show-feedback="false" label="名称">
-                <n-input
-                  v-model:value="metadata.name"
-                  :disabled="busy || differsFromDesired"
-                  :maxlength="128"
-                  placeholder="用于识别这个网站或服务"
-                />
-              </n-form-item>
-              <n-form-item :show-feedback="false" label="运行状态">
-                <div class="proxy-toggle">
-                  <n-switch
-                    v-model:value="metadata.enabled"
+          存在外部修改
+        </n-tag><n-tag v-if="dirty" size="small" type="warning" :bordered="false">
+          未保存修改
+        </n-tag><n-tag
+          v-if="runtime?.running && runtime.integrity"
+          size="small"
+          :type="
+            runtime.revision_id === tree?.revision_id ? 'success' : 'warning'
+          "
+          :bordered="false"
+        >
+          {{
+            runtime.revision_id === tree?.revision_id ? "已生效" : "待应用"
+          }}
+        </n-tag><span class="muted">{{ draftNote }}</span>
+      </div>
+      <Teleport to="#page-heading-actions" defer>
+        <div class="inline-gap">
+          <NDropdown
+            trigger="click"
+            :options="moreActions"
+            @select="selectMoreAction"
+          >
+            <NButton :disabled="busy">
+              更多操作
+            </NButton>
+          </NDropdown>
+          <n-button :disabled="busy" @click="load">
+            刷新
+          </n-button><n-button
+            :disabled="
+              busy ||
+                dirty ||
+                !tree?.revision_id ||
+                !runtime?.available ||
+                !runtime.integrity ||
+                !runtime.running
+            "
+            @click="applySaved"
+          >
+            应用配置
+          </n-button><n-button
+            type="primary"
+            :disabled="busy || dirty"
+            @click="startCreate()"
+          >
+            ＋ 添加网站 / 代理
+          </n-button>
+        </div>
+      </Teleport>
+      <span class="section-note">修改后需应用配置</span>
+    </div>
+    <n-alert
+      v-if="runtimeError || runtime?.reason"
+      type="warning"
+      :bordered="false"
+      class="site-alert"
+    >
+      {{ runtimeError || runtime?.reason }}
+    </n-alert>
+
+    <n-alert
+      v-if="differsFromDesired"
+      type="warning"
+      :bordered="false"
+      class="site-alert"
+    >
+      源文件有未保存修改，请先保存后再修改表单。<NButton
+        text
+        type="primary"
+        @click="sourceVisible = true"
+      >
+        继续编辑源文件
+      </NButton>
+    </n-alert>
+    <section class="surface site-list">
+      <div class="site-list-toolbar">
+        <NInput
+          v-model:value="siteSearch"
+          clearable
+          placeholder="搜索名称、域名、端口或转发目标"
+          aria-label="搜索网站"
+          class="site-search"
+        />
+        <NSelect
+          v-model:value="siteKind"
+          aria-label="筛选代理类型"
+          class="site-filter"
+          :options="[
+            { label: '全部类型', value: 'all' },
+            { label: '网站代理', value: 'http' },
+            { label: '端口转发', value: 'stream' },
+          ]"
+        />
+        <NSelect
+          v-model:value="siteState"
+          aria-label="筛选启用状态"
+          class="site-filter"
+          :options="[
+            { label: '全部状态', value: 'all' },
+            { label: '启用', value: 'enabled' },
+            { label: '停用', value: 'disabled' },
+          ]"
+        />
+        <span class="section-note site-count">共 {{ filteredSites.length }} 项</span>
+      </div>
+      <NDataTable
+        :data="filteredSites"
+        :columns="siteColumns"
+        :row-key="(item: Resource) => item.id"
+        size="small"
+        :bordered="false"
+        :scroll-x="1060"
+        table-layout="fixed"
+        :pagination="{
+          page: sitePage,
+          pageSize: sitePageSize,
+          showSizePicker: true,
+          pageSizes: [10, 20, 50],
+          onUpdatePage: (value: number) => (sitePage = value),
+          onUpdatePageSize: (value: number) => {
+            sitePageSize = value;
+            sitePage = 1;
+          },
+        }"
+      >
+        <template #empty>
+          <NEmpty
+            :description="
+              tree?.resources.length
+                ? '没有符合条件的网站或代理'
+                : '尚未添加网站或代理'
+            "
+          >
+            <template v-if="!tree?.resources.length" #extra>
+              <NButton :disabled="busy || dirty" @click="startCreate()">
+                添加网站 / 代理
+              </NButton>
+            </template>
+          </NEmpty>
+        </template>
+      </NDataTable>
+    </section>
+    <FormDialog
+      :show="resourceVisible"
+      :title="`${editorMode === 'create' ? '添加' : editorMode === 'copy' ? '复制' : '编辑'}${resource?.kind === 'stream' ? '端口转发' : '网站代理'}`"
+      :busy="busy"
+      width="980px"
+      :submit-disabled="
+        differsFromDesired || (editorMode === 'edit' && !formDirty)
+      "
+      :submit-text="
+        editorMode === 'create'
+          ? '创建'
+          : editorMode === 'copy'
+            ? '创建副本'
+            : '保存'
+      "
+      @submit="saveFields"
+      @cancel="closeResource"
+    >
+      <div v-if="resource" class="proxy-editor">
+        <NAlert
+          v-if="editorError"
+          type="warning"
+          :bordered="false"
+          class="proxy-form-error"
+        >
+          {{ editorError }}
+        </NAlert>
+        <NTabs v-model:value="editorTab" type="line">
+          <NTabPane
+            v-for="tab in editorTabs"
+            :key="tab.key"
+            :name="tab.key"
+            :tab="tab.title"
+            display-directive="show"
+          >
+            <div class="proxy-form">
+              <NFormItem
+                v-if="tab.key === 'basic' && editorMode === 'create'"
+                label="代理类型"
+                :show-feedback="false"
+              >
+                <NRadioGroup
+                  :value="resource.kind"
+                  :disabled="busy"
+                  @update:value="changeCreateKind"
+                >
+                  <NRadioButton value="http">
+                    网站代理
+                  </NRadioButton>
+                  <NRadioButton value="stream">
+                    TCP / UDP 端口转发
+                  </NRadioButton>
+                </NRadioGroup>
+              </NFormItem>
+              <div v-if="tab.key === 'basic'" class="proxy-field-grid">
+                <n-form-item :show-feedback="false" label="名称">
+                  <n-input
+                    v-model:value="metadata.name"
                     :disabled="busy || differsFromDesired"
-                    aria-label="启用网站或代理"
+                    :maxlength="128"
+                    placeholder="用于识别这个网站或服务"
                   />
-                  <span class="section-note">{{
-                    metadata.enabled ? "启用" : "停用"
-                  }}</span>
-                </div>
-              </n-form-item>
-            </div>
-            <section
-              v-for="group in fieldGroups.filter(
-                (item) => item.tab === tab.key,
-              )"
-              :key="group.key"
-              class="proxy-settings"
-            >
-              <div class="proxy-section-heading">
-                <h3>{{ group.title }}</h3>
-                <n-button
-                  v-if="
-                    group.key === 'target' &&
-                    !resource.fields.upstream_servers?.editable
-                  "
-                  size="small"
-                  :disabled="
-                    busy ||
-                    differsFromDesired ||
-                    !resource.fields.upstream?.editable
-                  "
-                  @click="enablingGroup = !enablingGroup"
-                  >{{
-                    enablingGroup ? "返回单个目标" : "改用服务器组"
-                  }}</n-button
-                >
-                <n-tag
-                  v-else-if="group.key === 'target' && groupedUpstream"
-                  size="small"
-                  :bordered="false"
-                  >服务器组</n-tag
-                >
+                </n-form-item>
+                <n-form-item :show-feedback="false" label="运行状态">
+                  <div class="proxy-toggle">
+                    <n-switch
+                      v-model:value="metadata.enabled"
+                      :disabled="busy || differsFromDesired"
+                      aria-label="启用网站或代理"
+                    />
+                    <span class="section-note">{{
+                      metadata.enabled ? "启用" : "停用"
+                    }}</span>
+                  </div>
+                </n-form-item>
               </div>
-              <p v-if="group.key === 'target'" class="section-note">
-                {{
-                  groupedUpstream
-                    ? "访问请求会转发至下面的目标服务器。"
-                    : resource.kind === "http"
-                      ? "填写要转发到的网站地址，支持 HTTP 和 HTTPS。"
-                      : "填写目标服务的地址与端口。"
-                }}
-              </p>
-              <p v-if="group.key === 'client'" class="section-note">
-                网站前方使用 CDN 或其他代理时，在这里设置可信来源。
-              </p>
-              <template v-if="group.key === 'https'">
-                <n-alert
-                  v-if="!tlsAvailable"
-                  type="warning"
-                  :bordered="false"
-                  style="margin-bottom: 16px"
-                  >{{ tlsReason }}</n-alert
-                >
-                <n-alert
-                  v-if="certificateError"
-                  type="warning"
-                  :bordered="false"
-                  style="margin-bottom: 16px"
-                  >{{ certificateError }}</n-alert
-                >
-                <n-form-item
-                  label="证书"
-                  :feedback="
-                    resource.fields.certificate?.reason ||
-                    resource.fields.certificate_key?.reason
-                  "
-                  ><n-select
-                    :value="certificateChoice"
-                    :options="certificateOptions"
-                    :disabled="
-                      !certificateEditable ||
-                      !tlsAvailable ||
-                      certificateLoading
+              <section
+                v-for="group in fieldGroups.filter(
+                  (item) => item.tab === tab.key,
+                )"
+                :key="group.key"
+                class="proxy-settings"
+              >
+                <div class="proxy-section-heading">
+                  <h3>{{ group.title }}</h3>
+                  <n-button
+                    v-if="
+                      group.key === 'target' &&
+                        !resource.fields.upstream_servers?.editable
                     "
-                    @update:value="chooseCertificate"
-                /></n-form-item>
-                <n-form-item
-                  :show-feedback="false"
-                  v-if="certificateChoice"
-                  label="证书版本"
-                  ><n-select
-                    :value="fieldInputs.certificate || null"
-                    :options="certificateVersionOptions"
-                    :loading="certificateLoading"
+                    size="small"
                     :disabled="
-                      !certificateEditable ||
-                      !tlsAvailable ||
-                      certificateLoading
+                      busy ||
+                        differsFromDesired ||
+                        !resource.fields.upstream?.editable
                     "
-                    @update:value="chooseCertificateVersion"
-                /></n-form-item>
-                <p v-if="boundCertificateVersion" class="muted">
-                  证书覆盖域名：{{
-                    [
-                      ...boundCertificateVersion.summary.dns_names,
-                      ...boundCertificateVersion.summary.ip_addresses,
-                    ].join("、")
+                    @click="enablingGroup = !enablingGroup"
+                  >
+                    {{ enablingGroup ? "返回单个目标" : "改用服务器组" }}
+                  </n-button>
+                  <n-tag
+                    v-else-if="group.key === 'target' && groupedUpstream"
+                    size="small"
+                    :bordered="false"
+                  >
+                    服务器组
+                  </n-tag>
+                </div>
+                <p v-if="group.key === 'target'" class="section-note">
+                  {{
+                    groupedUpstream
+                      ? "访问请求会转发至下面的目标服务器。"
+                      : resource.kind === "http"
+                        ? "填写要转发到的网站地址，支持 HTTP 和 HTTPS。"
+                        : "填写目标服务的地址与端口。"
                   }}
                 </p>
-                <n-button
-                  :disabled="
-                    busy ||
-                    differsFromDesired ||
-                    !tlsAvailable ||
-                    !resource.fields.listeners?.editable ||
-                    !fieldInputs.certificate
-                  "
-                  @click="addHTTPSListener"
-                  >添加 443 HTTPS 监听</n-button
-                >
-                <p class="muted">
-                  更换证书后需应用配置。移除证书前，请先关闭 HTTPS 监听。
-                  启用包含子域名的 HSTS 前，请确认所有子域名均支持
-                  HTTPS。<router-link to="/certificates">管理证书</router-link>
+                <p v-if="group.key === 'client'" class="section-note">
+                  网站前方使用 CDN 或其他代理时，在这里设置可信来源。
                 </p>
-              </template>
+                <template v-if="group.key === 'https'">
+                  <n-alert
+                    v-if="!tlsAvailable"
+                    type="warning"
+                    :bordered="false"
+                    style="margin-bottom: 16px"
+                  >
+                    {{ tlsReason }}
+                  </n-alert>
+                  <n-alert
+                    v-if="certificateError"
+                    type="warning"
+                    :bordered="false"
+                    style="margin-bottom: 16px"
+                  >
+                    {{ certificateError }}
+                  </n-alert>
+                  <n-form-item
+                    label="证书"
+                    :feedback="
+                      resource.fields.certificate?.reason ||
+                        resource.fields.certificate_key?.reason
+                    "
+                  >
+                    <n-select
+                      :value="certificateChoice"
+                      :options="certificateOptions"
+                      :disabled="
+                        !certificateEditable ||
+                          !tlsAvailable ||
+                          certificateLoading
+                      "
+                      @update:value="chooseCertificate"
+                    />
+                  </n-form-item>
+                  <n-form-item
+                    v-if="certificateChoice"
+                    :show-feedback="false"
+                    label="证书版本"
+                  >
+                    <n-select
+                      :value="fieldInputs.certificate || null"
+                      :options="certificateVersionOptions"
+                      :loading="certificateLoading"
+                      :disabled="
+                        !certificateEditable ||
+                          !tlsAvailable ||
+                          certificateLoading
+                      "
+                      @update:value="chooseCertificateVersion"
+                    />
+                  </n-form-item>
+                  <p v-if="boundCertificateVersion" class="muted">
+                    证书覆盖域名：{{
+                      [
+                        ...boundCertificateVersion.summary.dns_names,
+                        ...boundCertificateVersion.summary.ip_addresses,
+                      ].join("、")
+                    }}
+                  </p>
+                  <n-button
+                    :disabled="
+                      busy ||
+                        differsFromDesired ||
+                        !tlsAvailable ||
+                        !resource.fields.listeners?.editable ||
+                        !fieldInputs.certificate
+                    "
+                    @click="addHTTPSListener"
+                  >
+                    添加 443 HTTPS 监听
+                  </n-button>
+                  <p class="muted">
+                    更换证书后需应用配置。移除证书前，请先关闭 HTTPS 监听。
+                    启用包含子域名的 HSTS 前，请确认所有子域名均支持
+                    HTTPS。<router-link to="/certificates">
+                      管理证书
+                    </router-link>
+                  </p>
+                </template>
 
-              <div v-if="group.key === 'headers'" class="proxy-presets">
-                <span class="section-note">常用转发配置</span>
-                <div class="inline-gap">
-                  <n-button
-                    size="small"
-                    :disabled="busy || differsFromDesired || !canPreset('http')"
-                    @click="preset('http')"
-                    >普通网站</n-button
-                  >
-                  <n-button
-                    size="small"
-                    :disabled="
-                      busy || differsFromDesired || !canPreset('websocket')
-                    "
-                    @click="preset('websocket')"
-                    >WebSocket</n-button
-                  >
-                  <n-button
-                    size="small"
-                    :disabled="
-                      busy || differsFromDesired || !canPreset('streaming')
-                    "
-                    @click="preset('streaming')"
-                    >SSE / 流式响应</n-button
-                  >
+                <div v-if="group.key === 'headers'" class="proxy-presets">
+                  <span class="section-note">常用转发配置</span>
+                  <div class="inline-gap">
+                    <n-button
+                      size="small"
+                      :disabled="
+                        busy || differsFromDesired || !canPreset('http')
+                      "
+                      @click="preset('http')"
+                    >
+                      普通网站
+                    </n-button>
+                    <n-button
+                      size="small"
+                      :disabled="
+                        busy || differsFromDesired || !canPreset('websocket')
+                      "
+                      @click="preset('websocket')"
+                    >
+                      WebSocket
+                    </n-button>
+                    <n-button
+                      size="small"
+                      :disabled="
+                        busy || differsFromDesired || !canPreset('streaming')
+                      "
+                      @click="preset('streaming')"
+                    >
+                      SSE / 流式响应
+                    </n-button>
+                  </div>
                 </div>
-              </div>
-              <div class="proxy-field-grid">
-                <n-form-item
-                  v-for="(field, name) in group.fields"
-                  :key="`${resource.id}:${name}`"
-                  :class="{
-                    'wide-field':
-                      field.format === 'lines' ||
-                      field.format === 'tokens' ||
-                      name === 'upstream_servers' ||
-                      name === 'upstream' ||
-                      name === 'access_list' ||
-                      name === 'waf_policy',
-                    'access-list-field': name === 'access_list',
-                  }"
-                  :label="
-                    name === 'upstream' && groupedHTTP
-                      ? '后端协议'
-                      : name === 'upstream' && resource.kind === 'stream'
-                        ? '目标服务器'
-                        : (fieldLabels[name] ?? name)
-                  "
-                  :feedback="field.reason || fieldFeatureReason(name)"
-                  :show-feedback="!!(field.reason || fieldFeatureReason(name))"
-                  ><n-select
-                    v-if="name === 'upstream' && groupedHTTP"
-                    v-model:value="upstreamProtocol"
-                    :options="[
-                      { label: 'HTTP', value: 'http' },
-                      { label: 'HTTPS', value: 'https' },
-                    ]"
-                    :disabled="busy || differsFromDesired || !field.editable"
-                  /><n-tag
-                    v-else-if="
-                      name === 'upstream' &&
-                      groupedUpstream &&
-                      resource.kind === 'stream'
+                <div class="proxy-field-grid">
+                  <n-form-item
+                    v-for="(field, name) in group.fields"
+                    :key="`${resource.id}:${name}`"
+                    :class="{
+                      'wide-field':
+                        field.format === 'lines' ||
+                        field.format === 'tokens' ||
+                        name === 'upstream_servers' ||
+                        name === 'upstream' ||
+                        name === 'access_list' ||
+                        name === 'waf_policy',
+                      'access-list-field': name === 'access_list',
+                    }"
+                    :label="
+                      name === 'upstream' && groupedHTTP
+                        ? '后端协议'
+                        : name === 'upstream' && resource.kind === 'stream'
+                          ? '目标服务器'
+                          : (fieldLabels[name] ?? name)
                     "
-                    >服务器组</n-tag
+                    :feedback="
+                      (name === 'upstream_servers' && enablingGroup
+                        ? ''
+                        : field.reason) || fieldFeatureReason(name)
+                    "
+                    :show-feedback="
+                      !!(
+                        (name === 'upstream_servers' && enablingGroup
+                          ? ''
+                          : field.reason) || fieldFeatureReason(name)
+                      )
+                    "
                   >
-                  <upstream-members
-                    v-else-if="
-                      name === 'upstream_servers' &&
-                      (field.editable || enablingGroup)
-                    "
-                    v-model:value="fieldInputs[name]"
-                    :disabled="busy || differsFromDesired"
-                  /><n-select
-                    v-else-if="fieldOptions(name)"
-                    v-model:value="fieldInputs[name]"
-                    :options="fieldOptions(name) ?? []"
-                    :disabled="
-                      busy ||
-                      !field.editable ||
-                      differsFromDesired ||
-                      !!fieldFeatureReason(name)
-                    "
-                  />
-                  <NginxFieldInput
-                    v-else
-                    :value="fieldInputs[name] ?? ''"
-                    @update:value="fieldInputs[name] = $event"
-                    :name="name"
-                    :format="field.format"
-                    :kind="resource.kind"
-                    :resource-id="resource.id"
-                    :disabled="
-                      busy ||
-                      !field.editable ||
-                      differsFromDesired ||
-                      !!fieldFeatureReason(name)
-                    "
-                  />
-                  <router-link
-                    v-if="name === 'access_list'"
-                    class="access-list-link"
-                    to="/access-lists"
-                    >管理访问名单</router-link
-                  ></n-form-item
-                >
-              </div>
+                    <n-select
+                      v-if="name === 'upstream' && groupedHTTP"
+                      v-model:value="upstreamProtocol"
+                      :options="[
+                        { label: 'HTTP', value: 'http' },
+                        { label: 'HTTPS', value: 'https' },
+                      ]"
+                      :disabled="busy || differsFromDesired || !field.editable"
+                    /><n-tag
+                      v-else-if="
+                        name === 'upstream' &&
+                          groupedUpstream &&
+                          resource.kind === 'stream'
+                      "
+                    >
+                      服务器组
+                    </n-tag>
+                    <upstream-members
+                      v-else-if="
+                        name === 'upstream_servers' &&
+                          (field.editable || enablingGroup)
+                      "
+                      v-model:value="fieldInputs[name]"
+                      :disabled="busy || differsFromDesired"
+                    /><n-select
+                      v-else-if="fieldOptions(name)"
+                      v-model:value="fieldInputs[name]"
+                      :options="fieldOptions(name) ?? []"
+                      :disabled="
+                        busy ||
+                          !field.editable ||
+                          differsFromDesired ||
+                          !!fieldFeatureReason(name)
+                      "
+                    />
+                    <NginxFieldInput
+                      v-else
+                      :value="fieldInputs[name] ?? ''"
+                      :name="name"
+                      :format="field.format"
+                      :kind="resource.kind"
+                      :resource-id="resource.id"
+                      :disabled="
+                        busy ||
+                          !field.editable ||
+                          differsFromDesired ||
+                          !!fieldFeatureReason(name)
+                      "
+                      @update:value="fieldInputs[name] = $event"
+                    />
+                    <router-link
+                      v-if="name === 'access_list'"
+                      class="access-list-link"
+                      to="/access-lists"
+                    >
+                      管理访问名单
+                    </router-link>
+                  </n-form-item>
+                </div>
 
-              <template v-if="group.key === 'paths'">
-                <n-form-item :show-feedback="false" label="替换访问路径前缀"
-                  ><n-switch
-                    v-model:value="rewritePrefix"
-                    :disabled="
-                      busy ||
-                      differsFromDesired ||
-                      !resource.fields.upstream?.editable
-                    "
-                /></n-form-item>
+                <template v-if="group.key === 'paths'">
+                  <n-form-item :show-feedback="false" label="替换访问路径前缀">
+                    <n-switch
+                      v-model:value="rewritePrefix"
+                      :disabled="
+                        busy ||
+                          differsFromDesired ||
+                          !resource.fields.upstream?.editable
+                      "
+                    />
+                  </n-form-item>
+                  <n-form-item
+                    v-if="rewritePrefix"
+                    :show-feedback="false"
+                    label="目标路径"
+                  >
+                    <n-input
+                      v-model:value="upstreamURI"
+                      :disabled="
+                        busy ||
+                          differsFromDesired ||
+                          !resource.fields.upstream?.editable
+                      "
+                      placeholder="/"
+                    />
+                  </n-form-item>
+                  <p class="muted">
+                    路径示例：{{ pathExample }}
+                  </p>
+                </template>
                 <n-form-item
+                  v-if="group.key === 'access'"
                   :show-feedback="false"
-                  v-if="rewritePrefix"
-                  label="目标路径"
-                  ><n-input
-                    v-model:value="upstreamURI"
-                    :disabled="
-                      busy ||
-                      differsFromDesired ||
-                      !resource.fields.upstream?.editable
-                    "
-                    placeholder="/"
-                /></n-form-item>
-                <p class="muted">路径示例：{{ pathExample }}</p>
-              </template>
+                  label="自动封禁"
+                >
+                  <div class="proxy-toggle">
+                    <n-switch
+                      :value="metadata.client_deny === true"
+                      :disabled="busy || differsFromDesired"
+                      @update:value="metadata.client_deny = $event === true"
+                    />
+                    <span class="section-note">对本网站应用自动封禁名单</span>
+                  </div>
+                </n-form-item>
+              </section>
               <n-form-item
+                v-if="tab.key === 'basic'"
                 :show-feedback="false"
-                v-if="group.key === 'access'"
-                label="自动封禁"
+                label="备注（可选）"
               >
-                <div class="proxy-toggle">
-                  <n-switch
-                    :value="metadata.client_deny === true"
-                    @update:value="metadata.client_deny = $event === true"
-                    :disabled="busy || differsFromDesired"
-                  />
-                  <span class="section-note">对本网站应用自动封禁名单</span>
-                </div>
+                <n-input
+                  v-model:value="metadata.notes"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  :disabled="busy || differsFromDesired"
+                  :maxlength="2048"
+                  placeholder="记录网站用途或其他说明"
+                />
               </n-form-item>
-            </section>
-            <n-form-item
-              :show-feedback="false"
-              v-if="tab.key === 'basic'"
-              label="备注（可选）"
-            >
-              <n-input
-                v-model:value="metadata.notes"
-                type="textarea"
-                :autosize="{ minRows: 2, maxRows: 4 }"
-                :disabled="busy || differsFromDesired"
-                :maxlength="2048"
-                placeholder="记录网站用途或其他说明"
-              />
-            </n-form-item>
-          </div>
-        </NTabPane>
-      </NTabs>
-    </div>
-    <template #actions>
-      <div class="inline-gap">
-        <n-button :disabled="busy || dirty" @click="resourceAction('copy')"
-          >复制</n-button
-        >
-        <n-button
-          type="error"
-          :disabled="busy || dirty"
-          @click="resourceAction('delete')"
-          >删除</n-button
-        >
-      </div>
-    </template>
-  </FormDialog>
-  <NModal
-    v-model:show="sourceVisible"
-    preset="card"
-    title="Nginx 高级配置"
-    style="width: 1400px; max-width: 96vw"
-  >
-    <NAlert type="warning" :bordered="false" style="margin-bottom: 16px"
-      >源文件修改会影响代理服务，请在保存前校验配置。</NAlert
-    >
-    <div class="editor-layout surface">
-      <aside class="file-tree">
-        <div class="section-heading">
-          <h2>配置文件</h2>
-          <n-button
-            text
-            title="添加文件"
-            :disabled="busy || !!formDirty"
-            @click="fileVisible = true"
-            >＋</n-button
-          >
-        </div>
-        <button
-          v-for="file in files"
-          :key="file.id"
-          class="file-item"
-          :class="{ selected: selected === file.id }"
-          @click="selected = file.id"
-        >
-          <span>▤</span>{{ file.path }}
-        </button>
-        <div class="file-budget">{{ files.length }} / 128 个文件</div>
-      </aside>
-      <div class="editor-main">
-        <template v-if="currentFile"
-          ><div class="editor-title">
-            <span class="mono">{{ currentFile.path }}</span>
-            <div class="inline-gap">
-              <span class="muted"
-                >{{ currentFile.content.split("\n").length }} 行</span
-              ><n-button
-                v-if="currentFile.path !== 'nginx.conf'"
-                text
-                type="error"
-                :disabled="busy || !!formDirty"
-                @click="removeFile"
-                >移除</n-button
-              >
             </div>
-          </div>
-          <textarea
-            v-model="currentFile.content"
-            class="code-editor"
-            :disabled="busy || !!formDirty"
-            spellcheck="false"
-            :aria-label="currentFile.path"
-            :maxlength="262144"
-          /></template
-        ><n-empty v-else description="请选择配置文件" />
+          </NTabPane>
+        </NTabs>
       </div>
-    </div>
-    <div v-if="diagnostics.length" class="diagnostics surface">
-      <div class="section-heading">
-        <h2>配置诊断</h2>
-        <n-tag type="error" size="small">{{ diagnostics.length }} 项</n-tag>
-      </div>
-      <div
-        v-for="(item, index) in diagnostics"
-        :key="index"
-        class="diagnostic-row"
-      >
-        <span class="mono"
-          >{{ files.find((f) => f.id === item.file_id)?.path }}:{{
-            item.line
-          }}</span
-        ><span>{{ item.message }}</span>
-      </div>
-    </div>
-    <div class="save-bar">
-      <span class="muted">{{ files.length }} 个配置文件</span>
-      <div class="inline-gap">
-        <n-button :loading="busy" :disabled="!!formDirty" @click="preview"
-          >解析与预览</n-button
-        ><n-button :disabled="busy || !!formDirty" @click="save(true)"
-          >保存并校验</n-button
-        ><n-button
-          type="primary"
-          :disabled="
-            busy ||
-            !!formDirty ||
-            !runtime?.available ||
-            !runtime.integrity ||
-            !runtime.running
-          "
-          @click="save(false, true)"
-          >保存并应用</n-button
-        ><n-button
-          type="primary"
-          :loading="busy"
-          :disabled="!!formDirty"
-          @click="save()"
-          >保存配置</n-button
-        >
-      </div>
-    </div>
-  </NModal>
-
-  <configuration-changes
-    v-model:show="changesVisible"
-    :tree="tree"
-    :files="files"
-    :applied-revision="runtime?.revision_id ?? ''"
-  />
-  <nginx-external
-    v-model:show="externalVisible"
-    :tree="tree"
-    @captured="capturedExternal"
-    @restored="loadRuntime"
-  />
-  <nginx-modules
-    v-model:show="modulesVisible"
-    :tree="tree"
-    @saved="setTree($event.tree)"
-  />
-  <FormDialog
-    :show="createVisible"
-    title="添加网站 / 代理"
-    :busy="busy"
-    width="980px"
-    :dirty="createSnapshot !== createBaseline"
-    submit-text="创建"
-    @submit="createResource"
-    @cancel="createVisible = false"
-  >
-    <div class="proxy-editor proxy-form">
-      <n-alert
-        v-if="createError"
-        type="warning"
-        :bordered="false"
-        class="proxy-form-error"
-        >{{ createError }}</n-alert
-      >
-      <div class="proxy-field-grid">
-        <n-form-item :show-feedback="false" label="名称">
-          <n-input
-            v-model:value="createName"
-            :maxlength="128"
-            placeholder="例如：公司官网、内部应用"
-          />
-        </n-form-item>
-        <n-form-item :show-feedback="false" label="代理类型">
-          <n-select
-            :value="createKind"
-            :options="[
-              { label: '网站代理（HTTP / HTTPS）', value: 'http' },
-              { label: 'TCP / UDP 端口转发', value: 'stream' },
-            ]"
-            @update:value="chooseCreateKind"
-          />
-        </n-form-item>
-      </div>
-      <section class="proxy-settings">
-        <div class="proxy-section-heading"><h3>访问入口</h3></div>
-        <n-form-item
-          :show-feedback="false"
-          v-if="createKind === 'http'"
-          label="访问域名"
-          required
-        >
-          <ValueListInput
-            v-model:value="createDomains"
-            item-label="域名"
-            placeholder="example.com 或 *.example.com"
-            :maxlength="253"
-            :disabled="busy"
-          />
-        </n-form-item>
-        <n-form-item :show-feedback="false" label="访问端口与监听地址" required>
-          <NginxListeners
-            v-model:value="createListen"
-            :kind="createKind"
-            :allow-tls="false"
-            :disabled="busy"
-          />
-        </n-form-item>
-        <p v-if="createKind === 'http'" class="section-note">
-          默认通过 80 端口访问。创建后可在 HTTPS 设置中选择证书，开启加密访问。
-        </p>
-      </section>
-      <section class="proxy-settings">
-        <div class="proxy-section-heading"><h3>转发目标</h3></div>
-        <NRadioGroup
-          v-model:value="createTargetMode"
-          :disabled="busy"
-          class="proxy-target-mode"
-          aria-label="转发方式"
-        >
-          <NRadioButton value="direct">单个目标</NRadioButton>
-          <NRadioButton value="group">服务器组（Upstream）</NRadioButton>
-        </NRadioGroup>
-        <template v-if="createTargetMode === 'direct'">
-          <n-form-item
-            :show-feedback="false"
-            :label="createKind === 'http' ? '目标网站地址' : '目标服务器'"
-            required
+      <template #actions>
+        <div v-if="editorMode === 'edit' && resource" class="inline-gap">
+          <n-button
+            :disabled="busy || dirty"
+            @click="resource && selectResource(resource, 'copy')"
           >
-            <n-input
-              v-if="createKind === 'http'"
-              v-model:value="createUpstream"
-              placeholder="http://127.0.0.1:3000 或 https://example.com"
-              :maxlength="2048"
-            />
-            <EndpointInput
-              v-else
-              v-model:value="createUpstream"
-              :disabled="busy"
-            />
-          </n-form-item>
-          <p v-if="createKind === 'http'" class="section-note">
-            填写完整地址，可在地址后附加目标路径，例如
-            http://127.0.0.1:3000/app/。
-          </p>
-        </template>
-        <template v-else>
-          <p class="section-note">
-            添加一台或多台服务器，将访问请求分配给它们。
-          </p>
-          <n-form-item
-            :show-feedback="false"
-            v-if="createKind === 'http'"
-            label="后端协议"
+            复制配置
+          </n-button>
+          <n-button
+            type="error"
+            :disabled="busy || dirty"
+            @click="deleteResource"
           >
-            <n-select
-              v-model:value="createGroupProtocol"
-              :options="[
-                { label: 'HTTP', value: 'http' },
-                { label: 'HTTPS', value: 'https' },
-              ]"
-            />
-          </n-form-item>
-          <n-form-item :show-feedback="false" label="目标服务器" required>
-            <UpstreamMembers v-model:value="createMembers" :disabled="busy" />
-          </n-form-item>
-          <div v-if="createKind === 'http'" class="proxy-field-grid">
-            <n-form-item
-              label="后端网站域名（可选）"
-              feedback="留空时使用第一台服务器地址。"
+            删除
+          </n-button>
+        </div>
+      </template>
+    </FormDialog>
+    <NModal
+      v-model:show="sourceVisible"
+      preset="card"
+      title="Nginx 高级配置"
+      style="width: 1400px; max-width: 96vw"
+    >
+      <NAlert type="warning" :bordered="false" style="margin-bottom: 16px">
+        源文件修改会影响代理服务，请在保存前校验配置。
+      </NAlert>
+      <div class="editor-layout surface">
+        <aside class="file-tree">
+          <div class="section-heading">
+            <h2>配置文件</h2>
+            <n-button
+              text
+              title="添加文件"
+              :disabled="busy || !!formDirty"
+              @click="fileVisible = true"
             >
-              <n-input
-                v-model:value="createGroupHost"
-                placeholder="例如 api.example.com"
-                :maxlength="320"
-              />
-            </n-form-item>
-            <n-form-item :show-feedback="false" label="目标路径（可选）">
-              <n-input
-                v-model:value="createGroupPath"
-                placeholder="例如 /api/；留空保留访问路径"
-                :maxlength="2048"
-              />
-            </n-form-item>
+              ＋
+            </n-button>
           </div>
-        </template>
-        <n-form-item
-          :show-feedback="false"
-          v-if="createKind === 'http'"
-          label="转发域名（Host）"
+          <button
+            v-for="file in files"
+            :key="file.id"
+            class="file-item"
+            :class="{ selected: selected === file.id }"
+            @click="selected = file.id"
+          >
+            <span>▤</span>{{ file.path }}
+          </button>
+          <div class="file-budget">
+            {{ files.length }} / 128 个文件
+          </div>
+        </aside>
+        <div class="editor-main">
+          <template v-if="currentFile">
+            <div class="editor-title">
+              <span class="mono">{{ currentFile.path }}</span>
+              <div class="inline-gap">
+                <span class="muted">{{ currentFile.content.split("\n").length }} 行</span><n-button
+                  v-if="currentFile.path !== 'nginx.conf'"
+                  text
+                  type="error"
+                  :disabled="busy || !!formDirty"
+                  @click="removeFile"
+                >
+                  移除
+                </n-button>
+              </div>
+            </div>
+            <textarea
+              v-model="currentFile.content"
+              class="code-editor"
+              :disabled="busy || !!formDirty"
+              spellcheck="false"
+              :aria-label="currentFile.path"
+              :maxlength="262144"
+            />
+          </template><n-empty v-else description="请选择配置文件" />
+        </div>
+      </div>
+      <div v-if="diagnostics.length" class="diagnostics surface">
+        <div class="section-heading">
+          <h2>配置诊断</h2>
+          <n-tag type="error" size="small">
+            {{ diagnostics.length }} 项
+          </n-tag>
+        </div>
+        <div
+          v-for="(item, index) in diagnostics"
+          :key="index"
+          class="diagnostic-row"
         >
-          <n-select
-            v-model:value="createHostMode"
-            :options="[
-              { label: '使用目标网站域名', value: 'target' },
-              { label: '保留用户访问的域名', value: 'incoming' },
-            ]"
-          />
-        </n-form-item>
-      </section>
-      <n-form-item :show-feedback="false" label="备注（可选）">
-        <n-input
-          v-model:value="createNotes"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 4 }"
-          :maxlength="2048"
-          placeholder="记录网站用途或其他说明"
-        />
+          <span class="mono">{{ files.find((f) => f.id === item.file_id)?.path }}:{{
+            item.line
+          }}</span><span>{{ item.message }}</span>
+        </div>
+      </div>
+      <div class="save-bar">
+        <span class="muted">{{ files.length }} 个配置文件</span>
+        <div class="inline-gap">
+          <n-button :loading="busy" :disabled="!!formDirty" @click="preview">
+            解析与预览
+          </n-button><n-button :disabled="busy || !!formDirty" @click="save(true)">
+            保存并校验
+          </n-button><n-button
+            type="primary"
+            :disabled="
+              busy ||
+                !!formDirty ||
+                !runtime?.available ||
+                !runtime.integrity ||
+                !runtime.running
+            "
+            @click="save(false, true)"
+          >
+            保存并应用
+          </n-button><n-button
+            type="primary"
+            :loading="busy"
+            :disabled="!!formDirty"
+            @click="save()"
+          >
+            保存配置
+          </n-button>
+        </div>
+      </div>
+    </NModal>
+
+    <configuration-changes
+      v-model:show="changesVisible"
+      :tree="tree"
+      :files="files"
+      :applied-revision="runtime?.revision_id ?? ''"
+    />
+    <nginx-external
+      v-model:show="externalVisible"
+      :tree="tree"
+      @captured="capturedExternal"
+      @restored="loadRuntime"
+    />
+    <nginx-modules
+      v-model:show="modulesVisible"
+      :tree="tree"
+      @saved="setTree($event.tree)"
+    />
+    <FormDialog
+      :show="fileVisible"
+      title="添加配置文件"
+      :busy="busy"
+      :dirty="!!newPath.trim()"
+      :submit-disabled="!newPath.trim()"
+      submit-text="添加"
+      @submit="addFile"
+      @cancel="
+        fileVisible = false;
+        newPath = '';
+      "
+    >
+      <n-form-item :show-feedback="false" label="受管相对路径">
+        <n-input v-model:value="newPath" placeholder="http/site.conf" />
       </n-form-item>
-    </div>
-  </FormDialog>
-  <FormDialog
-    :show="fileVisible"
-    title="添加配置文件"
-    :busy="busy"
-    :dirty="!!newPath.trim()"
-    :submit-disabled="!newPath.trim()"
-    submit-text="添加"
-    @submit="addFile"
-    @cancel="
-      fileVisible = false;
-      newPath = '';
-    "
-    ><n-form-item :show-feedback="false" label="受管相对路径"
-      ><n-input
-        v-model:value="newPath"
-        placeholder="http/site.conf" /></n-form-item
-  ></FormDialog>
+    </FormDialog>
+  </div>
 </template>
 
 <style scoped>
+.nginx-page {
+  gap: 12px;
+}
+.site-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-height: 24px;
+}
+.site-summary > .inline-gap {
+  gap: 8px;
+}
+.site-alert {
+  margin: 0;
+}
+.site-list {
+  padding: 16px;
+}
+.site-list-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.site-search {
+  width: 340px;
+  max-width: 100%;
+}
+.site-filter {
+  width: 132px;
+}
+.site-count {
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+.site-list :deep(.site-actions) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.site-list :deep(.site-identity),
+.site-list :deep(.site-target) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.site-list :deep(.site-name) {
+  font-size: 13px;
+  font-weight: 600;
+}
+.site-list :deep(.site-notes) {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.site-list :deep(.site-name),
+.site-list :deep(.site-notes),
+.site-list :deep(.site-truncate) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-list :deep(.site-target-label) {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+@media (max-width: 720px) {
+  .site-search {
+    width: 100%;
+  }
+  .site-filter {
+    flex: 1;
+  }
+  .site-list {
+    padding: 12px;
+  }
+}
 .proxy-editor {
   container: proxy-editor / inline-size;
   min-width: 0;

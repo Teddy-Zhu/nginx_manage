@@ -258,6 +258,87 @@ func TestAPIStreamUpstreamGroupInput(t *testing.T) {
 	}
 }
 
+func TestAPIWebsiteEditorCreateAndCopy(t *testing.T) {
+	for _, kind := range []string{"http", "stream"} {
+		t.Run(kind, func(t *testing.T) {
+			n := startAPINode(t)
+			n.initialize(t)
+			before := readAPIData[nginxconfig.Tree](t, n.request(t, "GET", "/nginx/config-tree", nil, nil, 200, "OK"))
+			template := readAPIData[nginxconfig.Resource](t, n.request(t, "GET", "/nginx/resources/template?kind="+kind, nil, nil, 200, "OK"))
+			if template.Kind != kind || !template.Fields["connect_timeout"].Editable || !template.Fields["error_log"].Editable {
+				t.Fatalf("incomplete editor template: %+v", template)
+			}
+			if kind == "http" && (!template.Fields["certificate"].Editable || !template.Fields["request_headers"].Editable || !template.Fields["access_list"].Editable) {
+				t.Fatal("new websites must expose the same HTTPS, forwarding and access fields as editing")
+			}
+			unchanged := readAPIData[nginxconfig.Tree](t, n.request(t, "GET", "/nginx/config-tree", nil, nil, 200, "OK"))
+			if unchanged.Version != before.Version || len(unchanged.Resources) != len(before.Resources) {
+				t.Fatal("opening the creation form persisted a site")
+			}
+			input := nginxconfig.CreateRequest{
+				BaseVersion: before.Version, Kind: kind, Listen: []string{"18081"}, Upstream: "127.0.0.1:8080",
+				UpstreamServers: []string{"127.0.0.1:8080 weight=2", "127.0.0.1:8081 backup"},
+				Metadata:        &nginxconfig.ResourceMetadata{Name: "Original", Notes: "created with full settings", Enabled: true},
+				Changes:         map[string][]string{"connect_timeout": {"17s"}, "error_log": {strings.Replace(template.Fields["error_log"].Values[0], " warn", " error", 1)}},
+			}
+			if kind == "http" {
+				input.Upstream, input.Domains = "http://service.example.test", []string{"first.example.test", "alias.example.test"}
+				input.Changes["body_size"] = []string{"4m"}
+				input.Changes["request_headers"] = []string{"Host $host", "Upgrade $http_upgrade", "Connection upgrade"}
+			}
+			saved := readAPIData[nginxconfig.SaveResult](t, n.request(t, "POST", "/nginx/resources", input, map[string]string{"Idempotency-Key": "editor-create"}, 201, "OK"))
+			if len(saved.Tree.Resources) != 1 {
+				t.Fatal("creation did not save exactly one site")
+			}
+			original := saved.Tree.Resources[0]
+			if original.Fields["connect_timeout"].Values[0] != "17s" || !strings.Contains(original.Fields["error_log"].Values[0], original.ID+"/error.log error") {
+				t.Fatal("creation lost edited settings or the site's own log path")
+			}
+			if kind == "http" && (original.Fields["body_size"].Values[0] != "4m" || len(original.Fields["request_headers"].Values) != 3) {
+				t.Fatal("creation lost HTTP settings")
+			}
+			originalJSON, _ := json.Marshal(original.Fields)
+			copyInput := nginxconfig.ResourceActionRequest{BaseVersion: saved.Tree.Version,
+				Metadata: &nginxconfig.ResourceMetadata{Name: "Edited copy", Notes: "independent", Enabled: false},
+				Changes:  map[string][]string{"connect_timeout": {"31s"}, "upstream_servers": {"127.0.0.1:9090"}, "error_log": {strings.Replace(original.Fields["error_log"].Values[0], " error", " crit", 1)}},
+			}
+			if kind == "http" {
+				copyInput.Changes["domains"] = []string{"copy.example.test"}
+				copyInput.Changes["upstream"] = []string{original.Fields["upstream"].Values[0] + "/copied/"}
+			}
+			path := "/nginx/resources/" + original.ID + "/copy"
+			copied := readAPIData[nginxconfig.SaveResult](t, n.request(t, "POST", path, copyInput, map[string]string{"Idempotency-Key": "editor-copy"}, 201, "OK"))
+			var clone nginxconfig.Resource
+			for _, item := range copied.Tree.Resources {
+				if item.ID != original.ID {
+					clone = item
+				} else {
+					currentJSON, _ := json.Marshal(item.Fields)
+					if !bytes.Equal(originalJSON, currentJSON) || item.Metadata != original.Metadata {
+						t.Fatal("copying modified the source site")
+					}
+				}
+			}
+			if len(copied.Tree.Resources) != 2 || clone.Metadata.Name != "Edited copy" || clone.Metadata.Enabled || clone.Fields["connect_timeout"].Values[0] != "31s" || clone.Fields["upstream_servers"].Values[0] != "127.0.0.1:9090" {
+				t.Fatalf("copy did not persist edited settings atomically: %+v", clone)
+			}
+			if clone.Fields["upstream"].Values[0] == original.Fields["upstream"].Values[0] || !strings.Contains(clone.Fields["error_log"].Values[0], clone.ID+"/error.log crit") {
+				t.Fatal("copy shared the source's upstream or logs")
+			}
+			replayed := readAPIData[nginxconfig.SaveResult](t, n.request(t, "POST", path, copyInput, map[string]string{"Idempotency-Key": "editor-copy"}, 201, "OK"))
+			if replayed.Tree.Version != copied.Tree.Version {
+				t.Fatal("replaying copy created another site")
+			}
+			bad := nginxconfig.ResourceActionRequest{BaseVersion: copied.Tree.Version, Changes: map[string][]string{"listeners": {"not-a-port"}}}
+			n.request(t, "POST", path, bad, map[string]string{"Idempotency-Key": "editor-invalid-copy"}, 400, "VALIDATION_FAILED")
+			final := readAPIData[nginxconfig.Tree](t, n.request(t, "GET", "/nginx/config-tree", nil, nil, 200, "OK"))
+			if final.Version != copied.Tree.Version || len(final.Resources) != 2 {
+				t.Fatal("a failed copy left a partial site")
+			}
+		})
+	}
+}
+
 func TestAPILargeFirewallPolicyPersistence(t *testing.T) {
 	n := startAPINode(t)
 	n.initialize(t)

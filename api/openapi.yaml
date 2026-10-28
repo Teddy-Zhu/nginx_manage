@@ -892,6 +892,18 @@ paths:
       responses:
         '201': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /nginx/resources/template:
+    get:
+      operationId: getResourceTemplate
+      x-scopes: [config.write, config.secrets]
+      parameters:
+        - in: query
+          name: kind
+          required: true
+          schema: { type: string, enum: [http, stream] }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /nginx/resources/{id}:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     patch:
@@ -3576,6 +3588,11 @@ components:
       properties:
         base_version: { type: integer, format: int64, minimum: 0 }
         name: { type: string, maxLength: 128 }
+        metadata: { $ref: '#/components/schemas/ResourceMetadata' }
+        changes:
+          type: object
+          description: 在副本保存前应用的字段修改，不修改原站点。
+          additionalProperties: { type: array, items: { type: string } }
     AccessList:
       type: object
       required: [id, file_id, name, notes, mode, entries, countries, geoip_updated_at, editable, reason]
@@ -4064,6 +4081,10 @@ components:
         upstream_servers: { type: array, maxItems: 128, items: { type: string } }
         preserve_host: { type: boolean, default: false, description: 保留访问域名作为 Host；默认使用目标网站域名。 }
         metadata: { $ref: '#/components/schemas/ResourceMetadata' }
+        changes:
+          type: object
+          description: 与编辑站点相同的可视化字段，在创建时一次保存。
+          additionalProperties: { type: array, items: { type: string } }
     SaveRequest:
       type: object
       required: [base_version, files, draft, validate]
