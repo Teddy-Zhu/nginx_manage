@@ -134,7 +134,7 @@ async function start() {
     connectOpen.value = false;
     connect.code = "";
     connectKey = useIdempotency();
-    if (value.state === "succeeded") message.success("节点连接已登记");
+    if (value.state === "succeeded") message.success("远程服务器已添加");
   });
 }
 async function resume(job: PairingJob) {

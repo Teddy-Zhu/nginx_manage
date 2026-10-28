@@ -21,7 +21,7 @@ export const useNodes = defineStore("nodes", () => {
       const row = current && value.find((item) => item.id === current.connection);
       if (current && (!row || row.removed_at || row.state === "removing")) {
         selectedTarget.value = { ...current, scopes: [] };
-        error.value = "当前节点连接已删除或正在删除，请选择其他节点";
+        error.value = "当前远程服务器连接已删除或正在删除，请选择其他服务器";
       } else if (current && row) {
         selectedTarget.value = { ...current, name: row.name, scopes: row.state === "connected" ? [...row.scopes] : [] };
         if (row.state !== "connected") error.value = row.error || "当前连接需要重新检查";

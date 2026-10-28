@@ -1,12 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "监控",
+    "title": "系统监控",
     "subtitle": "查看 CPU、内存、磁盘与服务状态",
     "nav": true,
     "order": 1,
     "symbol": "▥",
-    "group": "概览"
+    "group": "运行概况"
   }
 }
 </route>

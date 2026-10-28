@@ -414,7 +414,7 @@ export function apiError(error: unknown): ApiError {
   } else normalized = new ApiError("CLIENT_ERROR", "请求处理失败", 0);
   if ((normalized.status === 401 || normalized.code === "UNAUTHENTICATED") && (!normalized.originNodeId || normalized.originNodeId === sourceNodeId.value)) window.dispatchEvent(new Event("session-expired"));
   const targetUnauthorized = !!selectedTarget.value && normalized.originNodeId === selectedTarget.value.nodeId && (normalized.status === 401 || normalized.code === "UNAUTHENTICATED");
-  if (selectedTarget.value && normalized.code !== "CANCELLED" && (normalized.code.startsWith("REMOTE_") || normalized.code === "NODE_IDENTITY_CHANGED" || targetUnauthorized)) nodeRequestError.value = targetUnauthorized ? "目标节点授权不可用，请检查节点连接" : normalized.message;
+  if (selectedTarget.value && normalized.code !== "CANCELLED" && (normalized.code.startsWith("REMOTE_") || normalized.code === "NODE_IDENTITY_CHANGED" || targetUnauthorized)) nodeRequestError.value = targetUnauthorized ? "目标服务器授权不可用，请在远程服务管理中检查连接" : normalized.message;
   return normalized;
 }
 

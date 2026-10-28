@@ -6,7 +6,7 @@
     "nav": true,
     "order": 21,
     "symbol": "⇄",
-    "group": "软件应用"
+    "group": "应用管理"
   }
 }
 </route>

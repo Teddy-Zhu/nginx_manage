@@ -55,7 +55,7 @@ export function acceptOperation(id: number, data: unknown) {
   if (typeof taskId === "string" && /^[0-9a-f-]{36}$/.test(taskId)) {
     value.taskId = taskId;
   } else {
-    value.error = "服务未返回任务编号，请在任务记录中确认执行结果。";
+    value.error = "服务未返回任务编号，请在操作记录中确认执行结果。";
     value.uncertain = true;
   }
 }

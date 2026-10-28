@@ -263,11 +263,11 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
   <n-alert type="info" :bordered="false" style="margin-bottom: 20px">
     策略需在
     <router-link to="/nginx">
-      Nginx 配置
+      网站管理
     </router-link> 中绑定站点并应用。IP
     黑白名单复用
     <router-link to="/access-lists">
-      访问列表
+      网站黑白名单
     </router-link>。同一策略的站点共享每来源限流额度；使用 CDN
     或前置代理时，先配置可信代理来源和真实 IP 头。
   </n-alert>

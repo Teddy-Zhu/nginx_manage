@@ -225,7 +225,7 @@ useLiveRefresh(api, ["tasks", "software"], load, () => reading.value);
       </div>
       <NAlert v-if="overview?.installation" type="success"
         >Nginx 已安装。<RouterLink to="/nginx"
-          >管理网站与代理</RouterLink
+          >打开网站管理</RouterLink
         ></NAlert
       >
       <NAlert

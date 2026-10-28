@@ -1,7 +1,7 @@
 <route lang="json">
 {
   "meta": {
-    "title": "网站访问控制",
+    "title": "网站黑白名单",
     "subtitle": "管理网站的 IP 与国家黑白名单",
     "nav": true,
     "order": 12,
@@ -221,7 +221,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
   <div class="page-stack">
     <div class="page-toolbar">
       <p class="muted">
-        创建访问名单后，在<router-link to="/nginx">网站与代理</router-link
+        创建访问名单后，在<router-link to="/nginx">网站管理</router-link
         >中选择使用并应用。
       </p>
       <div class="inline-gap">

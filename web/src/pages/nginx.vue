@@ -1,8 +1,8 @@
 <route lang="json">
 {
   "meta": {
-    "title": "网站与代理",
-    "subtitle": "创建网站和反向代理，管理域名与 HTTPS",
+    "title": "网站管理",
+    "subtitle": "管理网站、反向代理、端口转发与 HTTPS",
     "nav": true,
     "order": 10,
     "symbol": "⌘",
@@ -1088,7 +1088,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     ></n-alert
   >
   <section v-if="tree?.resources.length" class="surface page-stack">
-    <h2>网站与代理</h2>
+    <h2>站点列表</h2>
     <div class="record-list">
       <article
         v-for="item in tree.resources"

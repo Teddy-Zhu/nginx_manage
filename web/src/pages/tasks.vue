@@ -1,8 +1,8 @@
 <route lang="json">
 {
   "meta": {
-    "title": "任务与操作记录",
-    "subtitle": "查看任务进度与历史操作",
+    "title": "操作记录",
+    "subtitle": "查看任务进度、执行结果与操作历史",
     "nav": true,
     "order": 42,
     "symbol": "☷",
@@ -233,7 +233,7 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tas
           :loading="busy"
           :bordered="false"
           :scroll-x="900" /></n-tab-pane
-      ><n-tab-pane name="audit" tab="操作审计">
+      ><n-tab-pane name="audit" tab="操作历史">
         <div class="page-stack">
           <div class="grid-2">
             <NFormItem label="开始时间"

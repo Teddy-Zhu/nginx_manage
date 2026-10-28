@@ -236,7 +236,7 @@ onUnmounted(stop);
       >
         {{ currentOperation.error }}
         <p v-if="currentOperation.uncertain">
-          请先查看任务记录，确认结果后再操作。
+          请先查看操作记录，确认结果后再操作。
         </p>
       </NAlert>
       <NAlert

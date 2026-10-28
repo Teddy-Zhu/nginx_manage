@@ -1,8 +1,8 @@
 <route lang="json">
 {
   "meta": {
-    "title": "Docker 容器",
-    "subtitle": "查看容器信息、运行状态和日志",
+    "title": "容器管理",
+    "subtitle": "管理 Docker 容器，查看运行状态与日志",
     "nav": true,
     "order": 41,
     "symbol": "▦",

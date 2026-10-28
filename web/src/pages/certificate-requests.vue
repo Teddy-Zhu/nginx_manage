@@ -517,7 +517,7 @@ useLiveRefresh(
       <template v-else>
         <n-alert type="info" :bordered="false" class="form-notice"
           >域名需指向这台服务器，公网 80 端口需可访问，并在
-          <router-link to="/nginx">网站与代理</router-link>
+          <router-link to="/nginx">网站管理</router-link>
           中启用域名验证入口。通配域名请改用 DNS 验证。</n-alert
         >
         <n-form-item

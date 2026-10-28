@@ -1,7 +1,7 @@
 <route lang="json">
 {
   "meta": {
-    "title": "SSL 证书",
+    "title": "证书管理",
     "subtitle": "管理证书、申请和自动续期",
     "nav": true,
     "order": 11,

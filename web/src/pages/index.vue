@@ -1,12 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "概览",
+    "title": "系统概览",
     "subtitle": "查看服务器状态与常用功能",
     "nav": true,
     "order": 0,
     "symbol": "◫",
-    "group": "概览"
+    "group": "运行概况"
   }
 }
 </route>
@@ -162,7 +162,7 @@ useLiveRefresh(
       <div class="stat-card">
         <span class="stat-label">内存使用率</span
         ><strong>{{ metric("memory", "used_percent") }}</strong
-        ><RouterLink to="/server">查看监控</RouterLink>
+        ><RouterLink to="/server">查看系统监控</RouterLink>
       </div>
       <div class="stat-card">
         <span class="stat-label">Nginx</span><strong>{{ nginxLabel }}</strong
@@ -183,18 +183,18 @@ useLiveRefresh(
               ).length
             : "—"
         }}</strong
-        ><RouterLink to="/tasks">查看任务记录</RouterLink>
+        ><RouterLink to="/tasks">查看操作记录</RouterLink>
       </div>
     </div>
     <section class="panel page-stack">
       <h2>常用操作</h2>
       <div class="shortcut-grid">
         <RouterLink to="/nginx"
-          ><strong>网站与代理</strong
+          ><strong>网站管理</strong
           ><span class="muted">管理域名、网站和反向代理</span></RouterLink
         >
         <RouterLink to="/certificates"
-          ><strong>SSL 证书</strong
+          ><strong>证书管理</strong
           ><span class="muted">申请和更新网站证书</span></RouterLink
         >
         <RouterLink to="/firewall-rules"
@@ -211,7 +211,7 @@ useLiveRefresh(
       <section class="surface">
         <div class="section-heading">
           <h2>系统信息</h2>
-          <RouterLink to="/server">详细监控</RouterLink>
+          <RouterLink to="/server">系统监控</RouterLink>
         </div>
         <dl v-if="capabilities?.host" class="detail-list">
           <dt>操作系统</dt>

@@ -6,7 +6,7 @@
     "nav": true,
     "order": 51,
     "symbol": "⇄",
-    "group": "数据与设置"
+    "group": "面板管理"
   }
 }
 </route>

@@ -12,7 +12,7 @@ const labels: Record<string, string> = {
   "backup.secrets": "备份敏感配置",
   "backup.restore": "恢复备份",
   "update.execute": "执行更新",
-  "nodes.manage": "管理服务器连接",
+  "nodes.manage": "管理远程服务器",
   "notifications.write": "管理通知",
 };
 export function permissionLabel(scope: string) {

@@ -1,8 +1,8 @@
 <route lang="json">
 {
   "meta": {
-    "title": "服务器连接",
-    "subtitle": "连接和管理其他服务器",
+    "title": "远程服务管理",
+    "subtitle": "管理远程服务器、连接授权与管理目标切换",
     "nav": true,
     "localOnly": true,
     "order": 43,
@@ -91,7 +91,7 @@ async function create() {
     form.name = form.url = form.api_key = "";
     keyFor = useIdempotency();
     adding.value = false;
-  }, "服务器连接已添加");
+  }, "远程服务器已添加");
 }
 function select(id: string, value: boolean) {
   if (value && selected.value.length < 8)
@@ -144,12 +144,12 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-stack">
-    <NAlert v-if="!canManage" type="warning">需要服务器连接管理权限。</NAlert>
+    <NAlert v-if="!canManage" type="warning">需要远程服务管理权限。</NAlert>
     <template v-else>
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <section class="panel page-stack">
         <div class="toolbar">
-          <h2>已连接的服务器</h2>
+          <h2>远程服务器</h2>
           <div class="inline-gap">
             <NButton
               :loading="!!checking.length"
@@ -163,11 +163,11 @@ onUnmounted(() => {
               type="primary"
               :disabled="busy || !!checking.length"
               @click="adding = true"
-              >添加服务器</NButton
+              >添加远程服务器</NButton
             >
           </div>
         </div>
-        <p v-if="!active.length" class="empty-state">暂无服务器连接。</p>
+        <p v-if="!active.length" class="empty-state">尚未添加远程服务器。</p>
         <div v-else class="record-list">
           <article v-for="node in active" :key="node.id" class="record-card">
             <div class="toolbar">
@@ -229,7 +229,7 @@ onUnmounted(() => {
       </section>
       <FormDialog
         :show="adding"
-        title="添加服务器"
+        title="添加远程服务器"
         :busy="busy"
         :dirty="!!(form.name || form.url || form.api_key)"
         :submit-disabled="

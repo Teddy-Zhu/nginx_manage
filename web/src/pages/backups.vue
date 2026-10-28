@@ -1,13 +1,13 @@
 <route lang="json">
 {
   "meta": {
-    "title": "备份恢复",
+    "title": "备份与恢复",
     "subtitle": "备份系统数据，或从备份恢复",
     "nav": true,
     "localOnly": true,
     "order": 50,
     "symbol": "▣",
-    "group": "数据与设置"
+    "group": "面板管理"
   }
 }
 </route>

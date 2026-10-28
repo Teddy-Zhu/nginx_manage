@@ -1,12 +1,12 @@
 <route lang="json">
 {
   "meta": {
-    "title": "通知",
+    "title": "消息通知",
     "subtitle": "设置通知渠道和接收事件",
     "nav": true,
     "order": 52,
     "symbol": "♧",
-    "group": "数据与设置"
+    "group": "面板管理"
   }
 }
 </route>

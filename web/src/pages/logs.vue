@@ -1,7 +1,7 @@
 <route lang="json">
 {
   "meta": {
-    "title": "日志",
+    "title": "日志管理",
     "subtitle": "查询网站访问、系统与操作日志",
     "nav": true,
     "order": 41,

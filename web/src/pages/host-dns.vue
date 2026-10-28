@@ -1,8 +1,8 @@
 <route lang="json">
 {
   "meta": {
-    "title": "DNS 设置",
-    "subtitle": "设置服务器使用的 DNS 地址",
+    "title": "服务器 DNS",
+    "subtitle": "设置服务器解析域名时使用的 DNS 地址",
     "nav": true,
     "order": 40,
     "symbol": "◎",
