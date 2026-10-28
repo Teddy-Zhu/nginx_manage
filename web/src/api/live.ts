@@ -473,7 +473,7 @@ function schedule(force = false) {
   });
 }
 
-// All pages, operation drawers and servers share this module's single socket.
+// All pages, operation dialogs and servers share this module's single socket.
 export function subscribeLive(
   scope: RequestScope,
   topics: LiveTopic[],

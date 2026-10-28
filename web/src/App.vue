@@ -11,7 +11,7 @@ import { useRoute } from "vue-router";
 import ShellLayout from "./components/ShellLayout.vue";
 import SoftwareGate from "./components/SoftwareGate.vue";
 import FrontendVersionNotice from "./components/FrontendVersionNotice.vue";
-import OperationDrawer from "./components/OperationDrawer.vue";
+import OperationDialog from "./components/OperationDialog.vue";
 import { useNodes } from "./stores/node";
 
 const route = useRoute();
@@ -47,7 +47,7 @@ const themeOverrides: GlobalThemeOverrides = {
     <n-dialog-provider>
       <n-message-provider>
         <FrontendVersionNotice />
-        <OperationDrawer v-if="!route.meta.public" />
+        <OperationDialog v-if="!route.meta.public" />
         <router-view v-if="route.meta.public" />
         <shell-layout v-else>
           <SoftwareGate v-if="!nodes.switching" :key="`${nodes.generation}:${route.path}`" :software="route.meta.software">

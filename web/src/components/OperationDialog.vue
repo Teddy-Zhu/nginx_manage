@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import {
-  NAlert,
-  NButton,
-  NDrawer,
-  NDrawerContent,
-  NSpin,
-  NTag,
-} from "naive-ui";
+import { NAlert, NButton, NModal, NSpin, NTag } from "naive-ui";
 import { apiError, createAPI, type LogRow, type Task } from "../api/client";
 import { liveTopicScopes } from "../api/live";
 import { currentOperation, operationVisible } from "../stores/operation";
@@ -225,126 +218,134 @@ onUnmounted(stop);
 </script>
 
 <template>
-  <NDrawer
+  <NModal
     v-model:show="operationVisible"
-    :width="'min(560px, 100vw)'"
-    placement="right"
+    preset="card"
+    :title="currentOperation?.title ?? '操作详情'"
+    :style="{ width: '880px', maxWidth: 'calc(100vw - 32px)' }"
+    :mask-closable="false"
   >
-    <NDrawerContent :title="currentOperation?.title ?? '操作详情'" closable>
-      <div class="page-stack">
-        <NAlert v-if="currentOperation?.submitting" type="info"
-          ><NSpin size="small" /> 正在提交操作，请稍候…</NAlert
-        >
-        <NAlert
-          v-if="currentOperation?.error"
-          :type="currentOperation.uncertain ? 'warning' : 'error'"
-          :title="
-            currentOperation.uncertain ? '提交结果待确认' : '未能提交操作'
-          "
-        >
-          {{ currentOperation.error }}
-          <p v-if="currentOperation.uncertain">
-            请先查看任务记录，确认结果后再操作。
-          </p>
-        </NAlert>
-        <NAlert
-          v-if="
-            currentOperation?.requestOnly &&
-            !currentOperation.submitting &&
-            !currentOperation.error
-          "
-          type="success"
-          >操作已完成。</NAlert
-        >
-        <template v-if="currentOperation?.taskId">
-          <div class="toolbar">
-            <div class="operation-state">
-              <NSpin v-if="active || (!task && reading)" size="small" /><NTag
-                :type="tagType"
-                >{{
-                  task ? (taskStates[state] ?? "状态待确认") : "正在查询状态"
-                }}</NTag
-              >
-            </div>
-            <NButton size="small" :loading="reading" @click="refresh?.()"
-              >刷新</NButton
-            >
-          </div>
-          <div v-if="task" class="surface page-stack">
-            <strong>{{
-              taskStageLabel(task.stage, task.kind, task.state)
-            }}</strong>
-            <p class="muted">
-              提交时间：{{ date(task.created_at)
-              }}<span v-if="elapsed"> · 已用时 {{ elapsed }}</span>
-            </p>
-            <p v-if="active" class="muted">
-              任务正在后台执行，进度和日志将自动更新。
-            </p>
-            <p v-if="needsAttention">请返回原操作页面确认或恢复任务。</p>
-          </div>
-          <NAlert v-if="statusError" type="warning" title="暂时无法读取任务状态"
-            >{{ statusError }}。任务可能仍在执行，请刷新后确认。</NAlert
-          >
-          <NAlert
-            v-if="task?.last_error"
-            :type="task.state === 'failed' ? 'error' : 'warning'"
-            title="执行详情"
-            >{{ task.last_error }}</NAlert
-          >
-          <div class="toolbar">
-            <h3>执行日志</h3>
-            <span v-if="checkedAt" class="muted"
-              >更新于 {{ new Date(checkedAt).toLocaleTimeString() }}</span
-            >
-          </div>
-          <NAlert v-if="!canReadLogs" type="info"
-            >当前账户没有查看日志的权限。</NAlert
-          >
-          <NAlert v-else-if="logError" type="warning" title="日志暂不可用">{{
-            logError
-          }}</NAlert>
-          <p
-            v-else-if="!rows.length && !softwareLog && !softwareMessage"
-            class="muted"
-          >
-            {{
-              active
-                ? "等待执行日志，稍后自动更新…"
-                : "最近七天内暂无可读取的执行日志。"
-            }}
-          </p>
-          <ol v-if="rows.length" class="operation-log" aria-label="执行日志">
-            <li
-              v-for="(row, index) in rows"
-              :key="`${row.time}-${index}`"
-              :class="{ 'log-error': row.level === 'error' }"
-            >
-              <time>{{ date(row.time) }}</time
-              ><span>{{ eventLabel(row) }}</span>
-            </li>
-          </ol>
-          <NAlert
-            v-if="softwareError"
-            type="warning"
-            title="操作详情暂不可用"
-            >{{ softwareError }}</NAlert
-          >
-          <p v-if="canReadLogs && softwareMessage">{{ softwareMessage }}</p>
-          <pre v-if="canReadLogs && softwareLog" class="software-log">{{
-            softwareLog
-          }}</pre>
-          <NAlert v-if="logNotice" type="warning">{{ logNotice }}</NAlert>
-        </template>
-      </div>
-      <template #footer
-        ><NButton @click="operationVisible = false">关闭</NButton></template
+    <div class="operation-dialog-body page-stack">
+      <NAlert v-if="currentOperation?.submitting" type="info"
+        ><NSpin size="small" /> 正在提交操作，请稍候…</NAlert
       >
-    </NDrawerContent>
-  </NDrawer>
+      <NAlert
+        v-if="currentOperation?.error"
+        :type="currentOperation.uncertain ? 'warning' : 'error'"
+        :title="currentOperation.uncertain ? '提交结果待确认' : '未能提交操作'"
+      >
+        {{ currentOperation.error }}
+        <p v-if="currentOperation.uncertain">
+          请先查看任务记录，确认结果后再操作。
+        </p>
+      </NAlert>
+      <NAlert
+        v-if="
+          currentOperation?.requestOnly &&
+          !currentOperation.submitting &&
+          !currentOperation.error
+        "
+        type="success"
+        >操作已完成。</NAlert
+      >
+      <template v-if="currentOperation?.taskId">
+        <div class="toolbar">
+          <div class="operation-state">
+            <NSpin v-if="active || (!task && reading)" size="small" /><NTag
+              :type="tagType"
+              >{{
+                task ? (taskStates[state] ?? "状态待确认") : "正在查询状态"
+              }}</NTag
+            >
+          </div>
+          <NButton size="small" :loading="reading" @click="refresh?.()"
+            >刷新</NButton
+          >
+        </div>
+        <div v-if="task" class="surface page-stack">
+          <strong>{{
+            taskStageLabel(task.stage, task.kind, task.state)
+          }}</strong>
+          <p class="muted">
+            提交时间：{{ date(task.created_at)
+            }}<span v-if="elapsed"> · 已用时 {{ elapsed }}</span>
+          </p>
+          <p v-if="active" class="muted">
+            任务正在后台执行，进度和日志将自动更新。
+          </p>
+          <p v-if="needsAttention">请返回原操作页面确认或恢复任务。</p>
+        </div>
+        <NAlert v-if="statusError" type="warning" title="暂时无法读取任务状态"
+          >{{ statusError }}。任务可能仍在执行，请刷新后确认。</NAlert
+        >
+        <NAlert
+          v-if="task?.last_error"
+          :type="task.state === 'failed' ? 'error' : 'warning'"
+          title="执行详情"
+          >{{ task.last_error }}</NAlert
+        >
+        <div class="toolbar">
+          <h3>执行日志</h3>
+          <span v-if="checkedAt" class="muted"
+            >更新于 {{ new Date(checkedAt).toLocaleTimeString() }}</span
+          >
+        </div>
+        <NAlert v-if="!canReadLogs" type="info"
+          >当前账户没有查看日志的权限。</NAlert
+        >
+        <NAlert v-else-if="logError" type="warning" title="日志暂不可用">{{
+          logError
+        }}</NAlert>
+        <p
+          v-else-if="!rows.length && !softwareLog && !softwareMessage"
+          class="muted"
+        >
+          {{
+            active
+              ? "等待执行日志，稍后自动更新…"
+              : "最近七天内暂无可读取的执行日志。"
+          }}
+        </p>
+        <ol v-if="rows.length" class="operation-log" aria-label="执行日志">
+          <li
+            v-for="(row, index) in rows"
+            :key="`${row.time}-${index}`"
+            :class="{ 'log-error': row.level === 'error' }"
+          >
+            <time>{{ date(row.time) }}</time
+            ><span>{{ eventLabel(row) }}</span>
+          </li>
+        </ol>
+        <NAlert v-if="softwareError" type="warning" title="操作详情暂不可用">{{
+          softwareError
+        }}</NAlert>
+        <p v-if="canReadLogs && softwareMessage">{{ softwareMessage }}</p>
+        <pre v-if="canReadLogs && softwareLog" class="software-log">{{
+          softwareLog
+        }}</pre>
+        <NAlert v-if="logNotice" type="warning">{{ logNotice }}</NAlert>
+      </template>
+    </div>
+    <template #footer>
+      <div class="operation-dialog-footer">
+        <NButton @click="operationVisible = false">关闭</NButton>
+      </div>
+    </template>
+  </NModal>
 </template>
 
 <style scoped>
+.operation-dialog-body {
+  max-height: calc(100dvh - 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  padding-right: 4px;
+}
+.operation-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+}
 .software-log {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
