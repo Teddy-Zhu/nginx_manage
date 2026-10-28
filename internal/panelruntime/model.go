@@ -22,7 +22,7 @@ const FileCountLimit = 4096
 
 var digest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var relative = regexp.MustCompile(`^[a-zA-Z0-9_.][a-zA-Z0-9_./-]*$`)
-var imageValue = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$`)
+var imageValue = regexp.MustCompile(`^(sha256:[0-9a-f]{64}|[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64})$`)
 
 type File struct {
 	SHA256 string `json:"sha256"`

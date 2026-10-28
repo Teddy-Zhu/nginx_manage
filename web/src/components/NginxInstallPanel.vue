@@ -26,11 +26,7 @@ const api = useNodeAPI(),
   { run, busy } = useAction();
 let keyFor = useIdempotency();
 const prerelease = ref(false);
-const updatePath = computed(() =>
-  props.overview?.installation?.owner === "docker"
-    ? "/nginx-images"
-    : "/component-switches",
-);
+const updatePath = "/nginx-images";
 const permitted = computed(
   () => !!session.me?.scopes.includes("components.manage"),
 );
@@ -42,7 +38,7 @@ const checked = computed(() =>
       task.result?.input.prerelease === prerelease.value &&
       task.result.release?.assets.some(
         (asset) =>
-          asset.component === "nginx" &&
+          asset.component === "panel" &&
           task.result!.release!.selected.includes(asset.id),
       ),
   ),
@@ -56,7 +52,7 @@ const prepared = computed(() =>
       item.result?.runtime_ready &&
       item.result.release?.assets.some(
         (asset) =>
-          asset.component === "nginx" &&
+          asset.component === "panel" &&
           item.result!.release!.selected.includes(asset.id),
       ) &&
       item.result.release.expires_at * 1000 > Date.now(),
@@ -80,7 +76,7 @@ function check() {
       action: "check",
       tag: "",
       prerelease: prerelease.value,
-      components: ["nginx"],
+      components: ["panel"],
       plan_id: "",
       manifest_sha256: "",
       trust_sha256: "",
@@ -186,13 +182,11 @@ function pull(item: ComponentTask, imageID: string) {
       <div class="button-row">
         <RouterLink
           :to="{
-            path: overview?.installation
-              ? updatePath
-              : '/component-installations',
+            path: updatePath,
             query: { prepare: item.id },
           }"
           ><NButton type="primary" :disabled="busy || active || !permitted">{{
-            overview?.installation ? "应用更新" : "继续安装"
+            "应用更新"
           }}</NButton></RouterLink
         >
         <template

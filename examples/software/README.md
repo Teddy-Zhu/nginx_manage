@@ -21,4 +21,4 @@ docker run --rm -v "$PWD:/workspace" -w /workspace python:3.12-slim-bookworm \
 
 如需改端口或镜像，由软件维护者修改 `demo/compose.yaml`；已安装实例可修改该软件独立工作目录中的 `compose.yaml`，再使用原生 Compose 应用配置。面板 JSON 无需增加任何 Docker 设置。网页入口由状态脚本读取当前实际端口并返回。
 
-对接其他软件时，提供自己的安装、卸载和只读状态操作，再按需要声明启停、重启、更新及日志。可以使用 Compose、systemd 或其他运行方式，均无需修改面板代码。完整格式与状态约定见 [第三方软件接入规范](../../docs/software-sources.md)。
+对接其他软件时，提供自己的安装、卸载和只读状态操作，再按需要声明启停、重启、更新及日志。应用统一通过 Docker 运行，配置及数据挂载到外部；可使用原生 Compose 或 Docker 命令，无需修改面板代码。完整格式与状态约定见 [第三方软件接入规范](../../docs/software-sources.md)。

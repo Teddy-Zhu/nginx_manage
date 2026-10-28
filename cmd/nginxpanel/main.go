@@ -75,6 +75,12 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	command := os.Args[1]
+	if command == "container-package-info" {
+		return runContainerPackageInfo(os.Args[2:])
+	}
+	if command == "container-package" {
+		return runContainerPackage(os.Args[2:])
+	}
 	if strings.HasPrefix(command, "deployment-upgrade") {
 		return runDeploymentUpgrade(ctx, command, os.Args[2:])
 	}
@@ -195,6 +201,7 @@ func run() error {
 	moduleFile := flags.String("nginx-modules", "", "root-owned native module catalog shared by Web and agent")
 	devAgent := flags.Bool("dev", false, "non-root read-only development agent")
 	releaseTrust := flags.String("release-trust", "/etc/nginxpanel/release-trust.json", "root-owned publisher trust configuration")
+	containerManifest := flags.String("container-manifest", "", "root-approved local container installation inventory")
 	releaseManifest := flags.String("release-manifest", "", "root-owned signed release manifest")
 	releaseSignature := flags.String("release-signature", "", "root-owned detached release signature")
 	releaseManifestSHA := flags.String("release-manifest-sha256", "", "expected authenticated manifest digest for image admission")
@@ -359,8 +366,8 @@ func run() error {
 		"installation-defaults":              {"data-dir": true},
 		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
 		"panel-native-serve":                 {"data-dir": true},
-		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-verify":               {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-verify":               {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-status":               {"data-dir": true},
 		"panel-runtime-stage":                {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
 		"panel-runtime-staged":               {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
@@ -383,8 +390,8 @@ func run() error {
 		"launcher-status":                    {"data-dir": true},
 		"launcher-operation":                 {"data-dir": true, "launcher-operation": true},
 		"launcher-restart":                   {"data-dir": true, "launcher-operation": true, "launcher-boot": true, "launcher-release": true, "launcher-instance": true},
-		"nginx-container-bind":               {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"nginx-container-verify":             {"data-dir": true, "nginx-image": true, "launcher-binary": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-bind":               {"data-dir": true, "nginx-image": true, "launcher-binary": true, "nginx-user": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"nginx-container-verify":             {"data-dir": true, "nginx-image": true, "launcher-binary": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"nginx-container-status":             {"data-dir": true},
 		"nginx-container-launch":             {"data-dir": true},
 		"nginx-container-test":               {"data-dir": true, "nginx-test-revision": true},
@@ -626,7 +633,7 @@ func run() error {
 			if command != "launcher-restart" && command != "launcher-operation" {
 				invalidFlag = f.Name
 			}
-		case "release-manifest-sha256":
+		case "container-manifest", "release-manifest-sha256":
 			if command != "panel-runtime-bind" && command != "panel-runtime-verify" && command != "nginx-container-bind" && command != "nginx-container-verify" {
 				invalidFlag = f.Name
 			}
@@ -1064,7 +1071,7 @@ func run() error {
 		return json.NewEncoder(os.Stdout).Encode(map[string]string{"state": "requested"})
 	case "nginx-container-verify":
 		out, err := nginxcontainer.VerifySource(ctx, nginxcontainer.BindInput{DataDir: absDir, Image: *nginxImage, LauncherBinary: *launcherBinary,
-			Signature: releases.ImageInput{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}})
+			Signature: releases.ImageInput{LocalManifestPath: *containerManifest, TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}})
 		if err != nil {
 			return err
 		}
@@ -1083,7 +1090,7 @@ func run() error {
 			return err
 		}
 		out, err := nginxcontainer.Bind(ctx, nginxcontainer.BindInput{DataDir: absDir, Image: *nginxImage, LauncherBinary: *launcherBinary, UID: uid, GID: gid,
-			Signature: releases.ImageInput{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}})
+			Signature: releases.ImageInput{LocalManifestPath: *containerManifest, TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}})
 		if err != nil {
 			return err
 		}
@@ -1166,7 +1173,7 @@ func run() error {
 			return errors.New("管理协议须为 http 或 https")
 		}
 		input := panelruntime.BindInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, LauncherBinary: *launcherBinary, Listen: *listen, HTTP: *protocol == "http", UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID, Image: *panelImage,
-			Signature: releases.ImageInput{TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}}
+			Signature: releases.ImageInput{LocalManifestPath: *containerManifest, TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}}
 		if command == "panel-runtime-verify" {
 			out, err := panelruntime.VerifySource(ctx, input)
 			if err != nil {

@@ -25,7 +25,7 @@ func localImage(ctx context.Context, d *dockerClient, reference, expected string
 	if err := d.JSON(ctx, "GET", "/images/"+url.PathEscape(reference)+"/json", nil, &image); err != nil {
 		return image, err
 	}
-	matched := false
+	matched := reference == image.ID
 	for _, ref := range image.RepoDigests {
 		if repositoryDigest(ref) == repositoryDigest(reference) {
 			matched = true

@@ -6,7 +6,7 @@ usage() {
 用法：bash scripts/build.sh [--arch amd64|arm64] [--output-dir 目录] [--version 版本] [--release-tool]
 默认自动检测构建机架构，通过 Docker 构建 Linux 安装包，输出 dist/nginxpanel-linux-<架构>.tar。
 只有为其他架构机器构建时才需使用 --arch；Docker 须已具备该架构的执行能力。
-安装包包含固定模块的静态 Nginx，全部编译在容器内完成。
+安装包包含面板和预置常用模块的 Nginx 运行镜像，全部编译在容器内完成。
 --release-tool 仅构建发行工具，默认输出 bin/nginxpanel-release。
 不调用宿主机 Go、Node.js 或 pnpm，不安装宿主机软件。
 EOF
@@ -49,7 +49,9 @@ if [[ $target == release-tool ]]; then
   exporter=type=local,dest=$output
 else
   destination=$output/nginxpanel-linux-$arch.tar
-  exporter=type=tar,dest=$destination
+  work=$(mktemp -d)
+  trap 'chmod -R u+w -- "$work"; rm -rf -- "$work"' EXIT
+  exporter=type=tar,dest=$work/program.tar
 fi
 printf 'Docker 构建：linux/%s；Go %s；Node %s；pnpm %s\n' "$arch" "$go_version" "$node_version" "$pnpm_version"
 docker build --file "$root/deploy/build.Dockerfile" --target "$target" \
@@ -59,4 +61,10 @@ docker build --file "$root/deploy/build.Dockerfile" --target "$target" \
   --build-arg "PNPM_VERSION=$pnpm_version" \
   --build-arg "BUILD_VERSION=$version" \
   --output "$exporter" "$root"
+if [[ $target == bundle ]]; then
+  mkdir -p "$work/package"
+  tar -xf "$work/program.tar" --no-same-owner --no-same-permissions -C "$work/package"
+  bash "$root/scripts/package-containers.sh" "$work/package" "$arch"
+  tar -C "$work/package" -cf "$destination" .
+fi
 printf '构建完成：%s\n' "$destination"

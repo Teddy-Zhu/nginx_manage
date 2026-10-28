@@ -12,6 +12,7 @@ import (
 )
 
 type ImageInput struct {
+	LocalManifestPath                      string
 	TrustPath, ManifestPath, SignaturePath string
 	ExpectedManifestSHA256                 string
 	AllowPrerelease                        bool
@@ -22,6 +23,7 @@ type ImageInput struct {
 // timestamp and historical trust hash must never be supplied by a Web request.
 // Running an approved image does not require retaining the offline input files.
 type ImageApproval struct {
+	LocalBuild     bool        `json:"local_build,omitempty"`
 	Schema         int         `json:"schema"`
 	Repository     string      `json:"repository"`
 	Version        string      `json:"version"`
@@ -36,6 +38,9 @@ type ImageApproval struct {
 }
 
 func (a ImageApproval) Validate(component, reference, imageID, launcher string) error {
+	if a.LocalBuild {
+		return a.validateLocal(component, reference, imageID, launcher)
+	}
 	p, f := a.Image.Platform, a.Image.Evidence
 	prefix := imageRepository(a.Repository, component) + "@"
 	if a.Schema != Schema || !repository.MatchString(a.Repository) || !validVersion(a.Version) || !validCommit(a.Commit) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || len(a.TrustPath) > 512 || !filepath.IsAbs(a.TrustPath) || filepath.Clean(a.TrustPath) != a.TrustPath || a.ApprovedAt <= 0 || a.ApprovedAt > time.Now().Unix()+300 || (component != "panel-launcher" && component != "nginx") || a.Image.ID != component || a.Image.Reference != reference || !strings.HasPrefix(reference, prefix) || !imageDigest(strings.TrimPrefix(reference, prefix)) || p.OS != "linux" || p.Architecture != runtime.GOARCH || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || !dockerapi.MatchesImageID(reference, p.ConfigDigest, imageID) || !validHash(p.LauncherSHA256) || p.LauncherSHA256 != launcher || f.Path != component+".oci.json" || !validHash(f.SHA256) || f.Size <= 0 || f.Size > MaxImageEvidenceBytes || f.Mode != 0644 {
@@ -48,6 +53,9 @@ func (a ImageApproval) Validate(component, reference, imageID, launcher string) 
 // only the original approval read from a root-owned immutable binding: it still
 // checks current local keys, so removing a signing key blocks that retry.
 func AdmitImage(in ImageInput, component, reference string, prior *ImageApproval) (ImageApproval, Asset, error) {
+	if in.LocalManifestPath != "" {
+		return admitLocalImage(in, component, reference, prior)
+	}
 	var out ImageApproval
 	if in.TrustPath == "" || in.ManifestPath == "" || in.SignaturePath == "" {
 		return out, Asset{}, errors.New("镜像准入须提供本机信任、发行清单与签名信封")

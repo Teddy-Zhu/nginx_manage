@@ -3,7 +3,13 @@
 日常面板更新使用“设置 → 系统更新”，无需维护会话，系统自动拉取对应镜像、重启面板并迁移数据。下文保留部署布局和专门本机维护接口说明；其中要求维护会话的独立命令不是日常更新的操作步骤。当前软件安装与更新入口见[软件源说明](../../docs/software-sources.md)。
 
 
-完整安装步骤见[部署指南](../../docs/deployment.md#5b-docker-安装)，首次登录与业务操作见[使用手册](../../docs/user-guide.md)，日常服务和恢复见[运维文档](../../docs/operations.md)。本文保留镜像、来源和维护事务的详细约束；当前完成状态及暂缓事项以[进度清单](../../docs/progress.md)为准。
+完整安装步骤见[部署指南](../../docs/deployment.md#3-一键安装)，首次登录与业务操作见[使用手册](../../docs/user-guide.md)，日常服务和恢复见[运维文档](../../docs/operations.md)。本文保留镜像、来源和维护事务的详细约束；当前完成状态及暂缓事项以[进度清单](../../docs/progress.md)为准。
+
+## 完整安装包
+
+标准源码安装和 Release 安装均携带面板与 Nginx 镜像归档及内容清单，由安装入口自动导入并核对实际镜像内容。宿主机只运行 Agent，配置、数据库、证书和日志挂载到外部目录。面板容器不挂载 Docker 套接字。镜像来源不完整时安装失败，不选择原生运行。
+
+本地安装包按 root 批准的 `containers.json` 绑定内容寻址的镜像 ID、同版程序和完整前端；无需临时镜像仓库，不伪造发布者签名。使用仓库镜像或执行后续在线更新时，继续采用下文的签名镜像准入。
 
 ## 签名镜像下载
 
@@ -52,7 +58,7 @@ docker build -f deploy/docker/panel.Dockerfile --build-arg TARGETARCH=amd64 -t n
 sudo deploy/native/install.sh \
   --binary /root/nginxpanel-release/nginxpanel \
   --web-dir /root/nginxpanel-release/web \
-  --without-nginx \
+  --nginx-image 'ghcr.io/example/nginxpanel/nginx@sha256:<digest>' \
   --panel-mode docker \
   --panel-image 'ghcr.io/<owner>/<repo>/panel@sha256:<image-digest>' \
   --release-trust /etc/nginxpanel/release-trust.json \

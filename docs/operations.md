@@ -52,29 +52,6 @@ Docker 状态同时显示容器及面板实际进程，容器停止时后者不�
 
 `bootstrap` 只读取原一次性引导令牌，不能重置已有管理员。需停用可选远程入口时，执行 `disable-remote` 并核对返回状态与 Agent 处理结果。
 
-### 原生部署
-
-```sh
-sudo systemctl status nginxpanel.service nginxpanel-agent.service
-sudo journalctl -u nginxpanel.service -u nginxpanel-agent.service --since '1 hour ago' --no-pager
-```
-
-安装了原生 Nginx 时：
-
-```sh
-sudo systemctl status nginxpanel-nginx.service
-sudo journalctl -u nginxpanel-nginx.service --since '1 hour ago' --no-pager
-```
-
-没有在途维护或恢复任务时，常规重启面板和 Agent 可分别执行：
-
-```sh
-sudo systemctl restart nginxpanel.service
-sudo systemctl restart nginxpanel-agent.service
-```
-
-面板、Agent 和 Nginx 是独立服务。配置更新优先使用网页应用流程；重启 Nginx 可能中断业务，需单独安排。
-
 ### Docker 部署
 
 ```sh
@@ -95,7 +72,7 @@ sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
 sudo docker compose -f /etc/nginxpanel/docker/compose.yaml restart panel
 ```
 
-Compose 同时包含 Nginx 时，停止整个项目会影响代理流量。镜像和挂载变更使用对应维护流程，保留系统批准记录与实际容器身份的一致性。
+Compose 包含面板和 Nginx，停止整个项目会影响代理流量。镜像和挂载变更使用对应维护流程，保留系统批准记录与实际容器身份的一致性。
 
 ## 组件准备与更新
 

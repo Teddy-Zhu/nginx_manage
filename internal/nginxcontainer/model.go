@@ -22,7 +22,7 @@ const Bootstrap = "/usr/local/bin/nginxpanel-nginx-launcher"
 const binaryLimit = 192 << 20
 
 var hashValue = regexp.MustCompile(`^[0-9a-f]{64}$`)
-var imageValue = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$`)
+var imageValue = regexp.MustCompile(`^(sha256:[0-9a-f]{64}|[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64})$`)
 
 // Compare daemon RepoDigests by immutable repository/digest identity, retaining
 // registry ports when normalizing an optional tag in daemon metadata.

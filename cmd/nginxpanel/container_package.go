@@ -1,0 +1,125 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+
+	"nginxpanel/internal/releases"
+)
+
+func runContainerPackageInfo(args []string) error {
+	f := flag.NewFlagSet("container-package-info", flag.ContinueOnError)
+	path := f.String("manifest", "", "installer content inventory")
+	if err := f.Parse(args); err != nil {
+		return err
+	}
+	if f.NArg() != 0 || *path == "" {
+		return errors.New("须指定容器安装清单")
+	}
+	info, err := os.Lstat(*path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() || info.Size() > 2<<20 {
+		return errors.New("容器安装清单无效")
+	}
+	raw, err := os.ReadFile(*path)
+	if err != nil {
+		return err
+	}
+	var pkg releases.ContainerPackage
+	if err = json.Unmarshal(raw, &pkg); err != nil {
+		return err
+	}
+	digest := regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	if pkg.Schema != 1 || pkg.Architecture != runtime.GOARCH || len(pkg.Images) != 2 || !digest.MatchString(pkg.Images["panel-launcher"]) || !digest.MatchString(pkg.Images["nginx"]) || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(pkg.BinarySHA256) {
+		return errors.New("安装包镜像架构或内容标识无效")
+	}
+	// Resolve archive tags after loading: classic and containerd image stores
+	// use different IDs for the same saved image. Runtime binding uses the
+	// receiving daemon's immutable ID, never these mutable bootstrap tags.
+	_, err = fmt.Fprintf(os.Stdout, "nginxpanel-build-panel:%s-%s\nnginxpanel-build-nginx:%s-%s\n", pkg.Architecture, pkg.BinarySHA256, pkg.Architecture, pkg.BinarySHA256)
+	return err
+}
+
+// Runs in the build container; no host compiler or registry is required to
+// produce a complete installer with content-addressed Docker image archives.
+func runContainerPackage(args []string) error {
+	f := flag.NewFlagSet("container-package", flag.ContinueOnError)
+	root := f.String("package-dir", "", "assembled installer directory")
+	panel := f.String("panel-image", "", "local panel image ID")
+	nginx := f.String("nginx-image", "", "local Nginx image ID")
+	if err := f.Parse(args); err != nil {
+		return err
+	}
+	digest := regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	if *root == "" || f.NArg() != 0 || !digest.MatchString(*panel) || !digest.MatchString(*nginx) {
+		return errors.New("容器打包须指定安装目录和两项镜像内容 ID")
+	}
+	file := func(name string, limit int64) (releases.File, error) {
+		var out releases.File
+		info, err := os.Lstat(filepath.Join(*root, name))
+		if err != nil {
+			return out, err
+		}
+		if !info.Mode().IsRegular() || info.Size() > limit {
+			return out, errors.New("安装包只能包含长度受限的普通文件")
+		}
+		source, err := os.Open(filepath.Join(*root, name))
+		if err != nil {
+			return out, err
+		}
+		defer source.Close()
+		h := sha256.New()
+		n, err := io.Copy(h, io.LimitReader(source, limit+1))
+		if err != nil || n != info.Size() {
+			return out, errors.New("安装包文件读取失败或内容已变化")
+		}
+		return releases.File{Path: filepath.ToSlash(name), SHA256: hex.EncodeToString(h.Sum(nil)), Size: n, Mode: 0644}, nil
+	}
+	binary, err := file("nginxpanel", 192<<20)
+	if err != nil {
+		return err
+	}
+	pkg := releases.ContainerPackage{Schema: 1, Version: version, Architecture: runtime.GOARCH, BinarySHA256: binary.SHA256, Images: map[string]string{"panel-launcher": *panel, "nginx": *nginx}}
+	err = filepath.WalkDir(filepath.Join(*root, "web"), func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(*root, path)
+		if err != nil {
+			return err
+		}
+		item, err := file(relative, 32<<20)
+		if err != nil {
+			return err
+		}
+		pkg.Web = append(pkg.Web, item)
+		if len(pkg.Web) > 4096 {
+			return errors.New("前端文件数量超过安装包上限")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(filepath.Join(*root, "containers.json"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return err
+	}
+	err = json.NewEncoder(out).Encode(pkg)
+	return errors.Join(err, out.Close())
+}

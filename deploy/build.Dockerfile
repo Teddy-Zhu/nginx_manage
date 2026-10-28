@@ -35,24 +35,12 @@ ARG TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=linux GOARCH=$TARGETARCH go build -trimpath -o /out/nginxpanel-release ./cmd/nginxpanel-release
 
-FROM --platform=$TARGETPLATFORM debian:bookworm-slim AS nginx-build
-ARG TARGETARCH
-WORKDIR /src
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    python3 musl-tools build-essential perl linux-libc-dev ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-COPY scripts/build-nginx.py ./scripts/build-nginx.py
-COPY scripts/release/nginx.py scripts/release/stage.py ./scripts/release/
-COPY internal/releases/nginx-source-lock.json ./internal/releases/nginx-source-lock.json
-RUN python3 scripts/build-nginx.py "$TARGETARCH"
-
 FROM scratch AS release-tool
 COPY --from=release-tool-build --chmod=0555 /out/nginxpanel-release /nginxpanel-release
 
 FROM scratch AS bundle
 COPY --from=panel-build --chmod=0555 /out/nginxpanel /nginxpanel
 COPY --from=frontend /src/web/dist/ /web/
-COPY --from=nginx-build /out/nginx/ /nginx/
 COPY --chmod=0555 install.sh manage.sh /
 COPY --chmod=0555 deploy/native/install.sh /deploy/native/install.sh
 COPY --chmod=0555 deploy/native/lifecycle.sh /deploy/native/lifecycle.sh

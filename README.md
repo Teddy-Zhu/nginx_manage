@@ -8,7 +8,7 @@
 
 将下例的 `OWNER/REPO` 替换为实际 GitHub 仓库，在部署目标选择一种方式：
 
-**源码安装**（需要 Git、Docker，编译工具全部在容器内）：
+**源码安装**（需要 Git、Docker 和 Compose，编译工具全部在容器内）：
 
 ```sh
 git clone https://github.com/OWNER/REPO.git nginxpanel
@@ -16,7 +16,7 @@ cd nginxpanel
 sudo bash install.sh --yes
 ```
 
-**Release 安装**（自动下载本机架构的已编译包，无需 Docker、Go 或 Node.js）：
+**Release 安装**（自动下载本机架构的已编译包，需要 Docker 和 Compose，无需 Go 或 Node.js）：
 
 ```sh
 curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o nginxpanel-setup.sh && bash nginxpanel-setup.sh --yes
@@ -24,12 +24,12 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 两种方式都会自动检测环境、安装并启动服务，最后输出首次访问方法。去掉 `--yes` 可先核对摘要；加 `--advanced` 才进入自定义设置。也可对下载的脚本加 `--source`，一次完成拉取源码、容器编译和安装。Release 入口需仓库已发布包含安装脚本的新发行。默认监听全部网卡并随机选择空闲管理端口，保存后重启不变；安装后可直接用机器公网或内网 IP 访问。首次指定端口可加 `--port 23456`。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务，或用 `sudo bash /opt/nginxpanel/manage.sh set-port 23456` 修改端口。
 
-源码安装默认在 Docker 中编译并安装面板和固定模块的静态 Nginx；预置 HTTPS、HTTP/2、反向代理、缓存、gzip / 静态 gzip、真实 IP、访问控制、限流、状态统计、子请求认证、内容替换、分片及 TCP/UDP 转发、TLS 预读等常用模块。Fail2ban、[FRP 服务端](docs/frps.md)等其他软件按需安装，不依赖宿主机编译工具。
+仅必要权限的 Agent 运行在宿主机，面板、Nginx、Fail2ban、FRP 及第三方应用均使用 Docker，配置、数据库、证书和日志挂载在外部数据目录。源码安装在 Docker 中编译，源码包与 Release 均携带面板和 Nginx 运行镜像，自动导入，无原生部署回退。Nginx 镜像预置 HTTPS、HTTP/2、反向代理、缓存、gzip / 静态 gzip、真实 IP、访问控制、限流、状态统计、子请求认证、内容替换、分片及 TCP/UDP 转发、TLS 预读等常用模块。Fail2ban、[FRP 服务端](docs/frps.md)等其他软件按需安装，不依赖宿主机编译工具。
 
 | 文档 | 内容 |
 | --- | --- |
 | [完整文档导航](docs/README.md) | 从安装到日常使用的阅读顺序及专题索引 |
-| [部署指南](docs/deployment.md) | 材料准备、源码构建、原生/Docker 安装、首次登录、管理入口 |
+| [部署指南](docs/deployment.md) | 材料准备、源码构建、Docker 安装、首次登录、管理入口 |
 | [使用手册](docs/user-guide.md) | 代理、证书、主机功能、API、节点、迁移与备份 |
 | [运维与故障处理](docs/operations.md) | 服务管理、更新、恢复、常见问题与停用边界 |
 

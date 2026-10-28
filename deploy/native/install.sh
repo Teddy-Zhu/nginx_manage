@@ -6,20 +6,16 @@ umask 077
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web (--without-nginx | --nginx-binary /usr/sbin/nginx | --nginx-plan <计划ID> --nginx-asset <资产ID> | --nginx-image <本地镜像@sha256:摘要>) [--data-dir /srv/nginxpanel] [--listen IP:端口] [--protocol http|https] [--nginx-log-owner agent|external|unconfirmed] [--dns-owner auto|unconfirmed|regular-file|networkmanager|networkd|netplan] [--firewall-owner auto|unconfirmed|direct-nftables|firewalld|ufw|iptables-nft|iptables-legacy --firewall-ssh auto|openssh|none] [--start]
-面板容器：另加 --panel-mode docker --panel-image <镜像@sha256:摘要> --release-manifest <签名清单> --release-signature <签名信封>。使用本机 release-trust 验签，镜像与程序须为同一发行；--start 仅启动宿主机服务，容器使用生成的 Compose 启动。
-默认在全部网卡监听 HTTPS 并随机选择空闲端口；--protocol http 可改用 HTTP，--listen 可指定地址和端口。
-仅安装本机 root 已批准的构建产物。--without-nginx 只安装面板和 Agent；不下载、编译或接管系统 Nginx。
-默认自动识别主机 DNS 和防火墙，启用已支持环境的管理能力；可显式选择 unconfirmed 保持只读。不会安装、启停或切换系统网络管理器。
-防火墙自动完成空规则区域的管理登记，不改动已有业务规则；默认识别并保护 OpenSSH，不能确定的环境保留只读。
-Nginx 应用专用日志默认由本系统轮转；已有外部轮转时可选择 external，不修改外部规则。
-SELinux 启用时注册本应用的持久文件标签模块并应用标签，保留系统进程策略与当前防护状态。
+用法：install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web --panel-image <镜像摘要> --nginx-image <镜像摘要> (--container-manifest /可信目录/containers.json | --release-manifest <签名清单> --release-signature <签名信封>) [--data-dir /srv/nginxpanel] [--listen IP:端口] [--protocol http|https] [--start]
+仅 Agent 与必要的权限操作运行在宿主机；面板和 Nginx 使用 Docker，配置、数据库和日志挂载到数据目录。
+推荐运行顶层 install.sh 自动导入配套镜像。--start 启动 Agent；容器使用生成的 /etc/nginxpanel/docker/compose.yaml 启动。
+
 EOF
 }
-binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= prerelease=no without_nginx=no data=/srv/nginxpanel protocol=https listen= start=no panel_mode=native panel_image= nginx_image= native_nginx=no dns_owner=auto firewall_owner=auto firewall_ssh=auto nginx_log_owner=agent
+binary= web= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= container_manifest= prerelease=no without_nginx=no data=/srv/nginxpanel protocol=https listen= start=no panel_mode=docker panel_image= nginx_image= dns_owner=auto firewall_owner=auto firewall_ssh=auto nginx_log_owner=agent
 while (($#)); do
   case "$1" in
-    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--data-dir|--listen|--protocol|--panel-mode|--panel-image|--nginx-image|--dns-owner|--firewall-owner|--firewall-ssh|--nginx-log-owner)
+    --binary|--web-dir|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--container-manifest|--data-dir|--listen|--protocol|--panel-mode|--panel-image|--nginx-image|--dns-owner|--firewall-owner|--firewall-ssh|--nginx-log-owner)
       (($# >= 2)) || die "参数缺少值：$1"
       case "$1" in
         --binary) binary=$2 ;; --web-dir) web=$2 ;; --nginx-binary) nginx=$2 ;;
@@ -27,6 +23,7 @@ while (($#)); do
         --data-dir) data=$2 ;; --listen) listen=$2 ;; --protocol) protocol=$2 ;;
         --panel-mode) panel_mode=$2 ;; --panel-image) panel_image=$2 ;;
         --nginx-image) nginx_image=$2 ;;
+        --container-manifest) container_manifest=$2 ;;
         --dns-owner) dns_owner=$2 ;;
         --firewall-owner) firewall_owner=$2 ;; --firewall-ssh) firewall_ssh=$2 ;;
         --nginx-log-owner) nginx_log_owner=$2 ;;
@@ -44,25 +41,16 @@ done
 [[ $EUID == 0 ]] || die '安装需要本机 root'
 [[ ! -e /etc/nginxpanel/install/lifecycle && ! -L /etc/nginxpanel/install/lifecycle ]] || die '已有卸载或重装记录，请使用 manage.sh reinstall 或续办完全卸载'
 [[ -n $binary && -n $web ]] || { usage; exit 1; }
-case "$panel_mode" in
-  native) [[ -z $panel_image && -z $release_manifest && -z $release_signature ]] || die '原生面板模式不能指定容器镜像或镜像签名文件' ;;
-  docker)
-    [[ $panel_image =~ ^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$ ]] || die '面板镜像须显式固定 sha256 摘要'
-    [[ -n $release_manifest && -n $release_signature ]] || die 'Docker 安装须提供镜像发行清单及签名信封'
-    ;;
-  *) die 'panel-mode 仅允许 native 或 docker' ;;
-esac
-if [[ -n $nginx_image ]]; then
-  [[ $panel_mode == docker && $without_nginx == no && -z $nginx && -z $nginx_plan && -z $nginx_asset ]] || die 'Nginx 镜像须与 Docker 面板配套，不能混用原生程序、组件计划或未安装选择'
-  [[ $nginx_image =~ ^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$ ]] || die 'Nginx 镜像须固定 sha256 摘要，且已由 root 准备到本地 Docker'
-elif [[ $without_nginx == yes ]]; then
-  [[ -z $nginx && -z $nginx_plan && -z $nginx_asset && ( $prerelease == no || $panel_mode == docker ) ]] || die '仅面板安装不能同时选择 Nginx 程序或签名组件'
-elif [[ -n $nginx ]]; then
-  [[ -z $nginx_plan && -z $nginx_asset && ( $prerelease == no || $panel_mode == docker ) ]] || die '本机程序与签名组件不能混用'
+[[ $panel_mode == docker ]] || die '应用仅支持 Docker 部署，宿主机只运行 Agent'
+[[ -z $nginx && -z $nginx_plan && -z $nginx_asset && $without_nginx == no ]] || die '不支持宿主机 Nginx 安装，请使用配套 Nginx 镜像'
+for image in "$panel_image" "$nginx_image"; do
+  [[ $image =~ ^sha256:[0-9a-f]{64}$ || $image =~ ^[a-z0-9][a-z0-9._:/-]{0,240}@sha256:[0-9a-f]{64}$ ]] || die '须提供面板与 Nginx 的固定内容摘要镜像'
+done
+if [[ -n $container_manifest ]]; then
+  [[ -z $release_manifest && -z $release_signature && $prerelease == no ]] || die '本地安装包不能混用远程发行材料'
 else
-  [[ $nginx_plan =~ ^[0-9a-f]{64}$ && $nginx_asset =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$ ]] || die '须显式选择仅面板、本机 Nginx 或完整的签名计划与资产 ID'
+  [[ -n $release_manifest && -n $release_signature ]] || die '须提供完整安装包或签名发行材料'
 fi
-if [[ $without_nginx == no && -z $nginx_image ]]; then native_nginx=yes; fi
 for tool in stat readlink install sha256sum cmp sync flock getent groupadd useradd runuser systemctl systemd-tmpfiles mktemp find cut id uname dirname mv ln rm touch chmod od; do
   command -v "$tool" >/dev/null || die "缺少已有系统工具：$tool"
 done
@@ -256,34 +244,17 @@ else
     firewalld) firewall_after=firewalld.service ;;
   esac
 fi
-nginx_source=()
-if [[ -n $nginx_image ]]; then
-  nginx_source=()
-elif [[ $without_nginx == yes ]]; then
-  nginx_source=(--nginx-uninstalled)
-elif [[ -n $nginx ]]; then
-  nginx=$(readlink -e "$nginx")
-  nginx_source=(--nginx-binary "$nginx")
-else
-  canonical "$release_trust"
-  [[ $release_trust == /etc/nginxpanel/* ]] || die '原生服务发行信任须位于 /etc/nginxpanel'
-  nginx_source=(--release-plan "$nginx_plan" --release-select "$nginx_asset" --release-trust "$release_trust")
-  if [[ $prerelease == yes ]]; then nginx_source+=(--release-prerelease); fi
-fi
-if [[ $native_nginx == yes ]]; then
-  nginx=$("$binary" component-path --data-dir "$data" "${nginx_source[@]}")
-  canonical "$nginx"
-  trusted_file "$nginx" $((64 * 1024 * 1024))
-  [[ -x $nginx ]] || die '指定 Nginx 程序不可执行'
-  native_elf "$nginx"
-fi
 root_chain "$web"
 [[ -f $web/index.html ]] || die '前端目录缺少构建后的 index.html'
 root_chain "${data%/*}"
 
 image_source=()
-image_manifest_hash=
-if [[ $panel_mode == docker ]]; then
+if [[ -n $container_manifest ]]; then
+  canonical "$container_manifest"
+  trusted_file "$container_manifest" $((2 * 1024 * 1024))
+  image_manifest_hash=$(sha256sum "$container_manifest" | cut -d ' ' -f1)
+  image_source=(--container-manifest "$container_manifest")
+else
   canonical "$release_trust"; canonical "$release_manifest"; canonical "$release_signature"
   [[ $release_trust == /etc/nginxpanel/* ]] || die '镜像发行信任须位于 /etc/nginxpanel'
   trusted_file "$release_manifest" $((2 * 1024 * 1024))
@@ -291,11 +262,9 @@ if [[ $panel_mode == docker ]]; then
   image_manifest_hash=$(sha256sum "$release_manifest" | cut -d ' ' -f1)
   image_source=(--release-trust "$release_trust" --release-manifest "$release_manifest" --release-signature "$release_signature" --release-manifest-sha256 "$image_manifest_hash")
   if [[ $prerelease == yes ]]; then image_source+=(--release-prerelease); fi
-  "$binary" panel-runtime-verify --data-dir "$data" --panel-binary "$binary" --web-dir "$web" --launcher-binary "$binary" --panel-image "$panel_image" "${image_source[@]}" >/dev/null
-  if [[ -n $nginx_image ]]; then
-    "$binary" nginx-container-verify --data-dir "$data" --nginx-image "$nginx_image" --launcher-binary "$binary" "${image_source[@]}" >/dev/null
-  fi
 fi
+"$binary" panel-runtime-verify --data-dir "$data" --panel-binary "$binary" --web-dir "$web" --launcher-binary "$binary" --panel-image "$panel_image" "${image_source[@]}" >/dev/null
+"$binary" nginx-container-verify --data-dir "$data" --nginx-image "$nginx_image" --launcher-binary "$binary" "${image_source[@]}" >/dev/null
 
 ensure_dir /run/nginxpanel-install 700 root root
 exec 9>/run/nginxpanel-install/lock
@@ -391,7 +360,6 @@ fi
 binary_hash=$(sha256sum "$binary" | cut -d ' ' -f1)
 web_hash=$(sha256sum "$manifest" | cut -d ' ' -f1)
 nginx_hash=
-if [[ $native_nginx == yes ]]; then nginx_hash=$(sha256sum "$nginx" | cut -d ' ' -f1); fi
 release=$(printf '%s\n%s\n' "$binary_hash" "$web_hash" | sha256sum | cut -d ' ' -f1)
 release_dir=/opt/nginxpanel/releases/$release
 if [[ -z $listen ]]; then
@@ -504,11 +472,7 @@ else ln -s "releases/$release" /opt/nginxpanel/current; sync -f /opt/nginxpanel;
 printf '{"version":1,"modules":[]}\n' >"$work/nginx-modules.json"
 write_owned "$work/nginx-modules.json" /etc/nginxpanel/nginx-modules.json
 "$release_dir/nginxpanel" panel-writer-bind --data-dir "$data" --panel-gid "$(id -g nginxpanel)"
-if [[ $panel_mode == docker ]]; then
-  "$release_dir/nginxpanel" panel-runtime-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --launcher-binary "$release_dir/nginxpanel" --panel-image "$panel_image" --listen "$listen" --protocol "$protocol" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" "${image_source[@]}" >"$work/panel-runtime.json"
-else
-  "$release_dir/nginxpanel" panel-native-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --listen "$listen" --protocol "$protocol" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" >"$work/panel-runtime.json"
-fi
+"$release_dir/nginxpanel" panel-runtime-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --web-dir "$release_dir/web" --launcher-binary "$release_dir/nginxpanel" --panel-image "$panel_image" --listen "$listen" --protocol "$protocol" --allowed-uid "$panel_uid" --panel-gid "$(id -g nginxpanel)" --ipc-gid "$(getent group nginxpanel-ipc | cut -d: -f3)" "${image_source[@]}" >"$work/panel-runtime.json"
 # Only unfinished installations run init; a live panel owns the writer lock.
 printf 'native-install-v15\n' >"$work/ready"
 if [[ -e $state/ready || -L $state/ready ]]; then
@@ -517,16 +481,8 @@ if [[ -e $state/ready || -L $state/ready ]]; then
 else
   runuser -u nginxpanel -- "$data/runtime/current/nginxpanel" init --data-dir "$data"
 fi
-if [[ $native_nginx == yes ]]; then
-  [[ $(sha256sum "$nginx" | cut -d ' ' -f1) == "$nginx_hash" ]] || die 'Nginx 程序已变化'
-fi
-nginx_agent_flag=--nginx-binding
-if [[ -n $nginx_image ]]; then
-  "$release_dir/nginxpanel" nginx-container-bind --data-dir "$data" --nginx-image "$nginx_image" --launcher-binary "$release_dir/nginxpanel" --nginx-user nginxpanel-nginx "${image_source[@]}" >"$work/nginx-binding.json"
-  nginx_agent_flag=--nginx-container
-else
-  "$release_dir/nginxpanel" component-bind --data-dir "$data" "${nginx_source[@]}" >"$work/nginx-binding.json"
-fi
+nginx_agent_flag=--nginx-container
+"$release_dir/nginxpanel" nginx-container-bind --data-dir "$data" --nginx-image "$nginx_image" --launcher-binary "$release_dir/nginxpanel" --nginx-user nginxpanel-nginx "${image_source[@]}" >"$work/nginx-binding.json"
 if [[ $without_nginx == no && ! -f $state/ready ]]; then
   "$release_dir/nginxpanel" nginx-init --data-dir "$data" "$nginx_agent_flag" --nginx-user nginxpanel-nginx --nginx-modules /etc/nginxpanel/nginx-modules.json
 fi
@@ -538,45 +494,11 @@ fi
 
 # Root services must retain identity switching across systemd's SELinux/seccomp
 # setup; NoNewPrivileges still applies to them and their children.
-cat >"$work/nginxpanel-nginx.service" <<EOF
-[Unit]
-Description=NginxPanel dedicated Nginx instance
-After=network.target
-Before=nginxpanel-agent.service
-
-[Service]
-Type=exec
-User=root
-AmbientCapabilities=CAP_SETUID
-Group=root
-UMask=0027
-ExecCondition=/opt/nginxpanel/current/nginxpanel nginx-runtime-status --data-dir $data
-ExecStartPre=/opt/nginxpanel/current/nginxpanel nginx-runtime --data-dir $data --nginx-runtime-check
-ExecStart=/opt/nginxpanel/current/nginxpanel nginx-runtime --data-dir $data
-KillSignal=SIGQUIT
-KillMode=mixed
-TimeoutStartSec=180
-TimeoutStopSec=65
-Restart=on-failure
-RestartSec=3
-LimitNOFILE=65536
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadWritePaths=$data/nginx $data/logs $data/run
-InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups $data/agent $data/acme
-RestrictSUIDSGID=yes
-LockPersonality=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
 cat >"$work/nginxpanel-agent.service" <<EOF
 [Unit]
 Description=NginxPanel local privileged agent
-After=nginxpanel-nginx.service systemd-tmpfiles-setup.service $firewall_after
-Before=nginxpanel.service
+After=docker.service systemd-tmpfiles-setup.service $firewall_after
+Wants=docker.service
 
 [Service]
 Type=exec
@@ -602,117 +524,6 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 [Install]
 WantedBy=multi-user.target
 EOF
-cat >"$work/nginxpanel-fail2ban-python@.service" <<EOF
-[Unit]
-Description=NginxPanel approved system Python dependency operation %i
-After=network.target
-
-[Service]
-Type=exec
-User=root
-Group=root
-UMask=0077
-ExecStart=/opt/nginxpanel/current/nginxpanel fail2ban-python-worker --data-dir $data --fail2ban-operation %i
-Restart=no
-KillMode=mixed
-RuntimeMaxSec=45min
-TimeoutStopSec=15
-NoNewPrivileges=yes
-ProtectSystem=no
-ProtectHome=yes
-PrivateTmp=yes
-InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
-LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
-EOF
-cat >"$work/nginxpanel.service" <<EOF
-[Unit]
-Description=NginxPanel management API and Web
-Wants=nginxpanel-agent.service
-After=network.target nginxpanel-agent.service
-ConditionPathExists=!$data/run/panel-service-hold.json
-ConditionPathExists=!$data/run/panel-writer-fence.json
-
-[Service]
-Type=exec
-User=nginxpanel
-Group=nginxpanel
-SupplementaryGroups=nginxpanel-ipc
-UMask=0077
-WorkingDirectory=$data
-ExecStart=/opt/nginxpanel/current/nginxpanel panel-native-serve --data-dir $data
-Restart=on-failure
-RestartSec=3
-TimeoutStopSec=45
-NoNewPrivileges=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-ProtectProc=invisible
-ReadWritePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups $data/run/readiness $data/run/panel-writer.lock
-InaccessiblePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs
-RestrictSUIDSGID=yes
-LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-SystemCallArchitectures=native
-
-[Install]
-WantedBy=multi-user.target
-EOF
-cat >"$work/nginxpanel-install@.service" <<EOF
-[Unit]
-Description=NginxPanel first Nginx installation %i
-After=network.target
-
-[Service]
-Type=exec
-User=root
-AmbientCapabilities=CAP_SETUID
-Group=nginxpanel-ipc
-UMask=0027
-ExecStart=/opt/nginxpanel/current/nginxpanel nginx-install-worker --data-dir $data --install-operation %i
-RuntimeMaxSec=660
-TimeoutStopSec=15
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run $data/bin/components
-InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
-RestrictSUIDSGID=yes
-LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
-EOF
-cat >"$work/nginxpanel-switch@.service" <<EOF
-[Unit]
-Description=NginxPanel independent Nginx component switch %i
-After=network.target
-
-[Service]
-Type=exec
-User=root
-AmbientCapabilities=CAP_SETUID
-Group=nginxpanel-ipc
-UMask=0077
-ExecStart=/opt/nginxpanel/current/nginxpanel nginx-switch-worker --data-dir $data --nginx-switch-operation %i
-Restart=no
-KillMode=mixed
-RuntimeMaxSec=1200
-TimeoutStopSec=500
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadWritePaths=$data/agent $data/acme $data/certificates $data/modules $data/nginx $data/logs $data/run $data/bin/components
-InaccessiblePaths=$data/app $data/bootstrap $data/secrets $data/staging $data/backups
-RestrictSUIDSGID=yes
-LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
-EOF
-# Coordinated updates atomically select the host Agent under /opt/nginxpanel.
 cat >"$work/nginxpanel-update@.service" <<EOF
 [Unit]
 Description=NginxPanel independent panel update %i
@@ -838,11 +649,7 @@ if [[ -e /run/ufw.lock || -L /run/ufw.lock ]]; then trusted_file /run/ufw.lock 4
 printf 'd /run/nginxpanel-host 0700 root root -\nd /run/nginxpanel-install 0700 root root -\nf /run/ufw.lock 0600 root root -\n' >"$work/nginxpanel.conf"
 write_owned "$work/nginxpanel.conf" /etc/tmpfiles.d/nginxpanel.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/nginxpanel.conf
-install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service nginxpanel-fail2ban-python@.service)
-if [[ $panel_mode == docker ]]; then install_units+=(nginxpanel-image@.service); fi
-if [[ -z $nginx_image ]]; then install_units+=(nginxpanel-nginx.service nginxpanel-install@.service nginxpanel-switch@.service); fi
-if [[ -n $nginx_image ]]; then install_units+=(nginxpanel-nginx-image@.service); fi
-if [[ $panel_mode == native ]]; then install_units+=(nginxpanel.service); fi
+install_units=(nginxpanel-agent.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service nginxpanel-image@.service nginxpanel-nginx-image@.service)
 for unit in "${install_units[@]}"; do
   write_owned "$work/$unit" "/etc/systemd/system/$unit"
 done
@@ -862,14 +669,6 @@ esac
 write_owned "$work/ready" "$state/ready" 600
 start_units=(nginxpanel-agent.service)
 enabled_units=(nginxpanel-agent.service)
-if [[ $panel_mode == native ]]; then
-  start_units+=(nginxpanel.service)
-  enabled_units+=(nginxpanel.service)
-fi
-if [[ $native_nginx == yes ]]; then
-  enabled_units+=(nginxpanel-nginx.service)
-  start_units+=(nginxpanel-nginx.service)
-fi
 systemctl enable "${enabled_units[@]}"
 if [[ $start == yes ]]; then
   systemctl start "${start_units[@]}"
@@ -877,7 +676,7 @@ if [[ $start == yes ]]; then
     systemctl is-active --quiet "$unit" || die "服务未进入 active：$unit；保留安装记录，请检查 systemd 日志"
   done
 fi
-printf '面板及 Agent 已启用开机启动。\n'
+printf 'Agent 已启用开机启动；应用容器通过 Docker 自动重启。\n'
 printf '已准备宿主机部署：%s\n面板运行模式：%s\n管理地址：%s://%s\n' "$data" "$panel_mode" "$protocol" "$listen"
 printf '%s\n' '使用机器公网或内网 IP 及上述端口访问；通配监听地址不是浏览器访问地址。云安全组和外部防火墙需允许该 TCP 端口。'
 if [[ $panel_mode == docker ]]; then printf '%s\n' '面板 Compose：/etc/nginxpanel/docker/compose.yaml；使用 docker compose -f /etc/nginxpanel/docker/compose.yaml up -d 启动。'; fi

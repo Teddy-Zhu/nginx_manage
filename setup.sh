@@ -21,7 +21,7 @@ usage() {
 --fresh           完全卸载旧安装并安装所选源码/Release，永久删除原数据
 --uninstall       使用所选源码/Release 的新工具卸载旧安装，默认保留数据
 --keep-data       明确保留数据卸载；--purge 完全卸载，仅与 --uninstall 一起使用
-Release 安装不需要 Docker/Go/Node.js；源码安装需要 Git 和 Docker。
+两种安装方式均需要 Docker 和 Compose；源码方式另需 Git，无需本机 Go 或 Node.js。
 需要 root 权限时调用 sudo。私有 Release 可使用已认证的 GitHub CLI。
 EOF
 }
@@ -93,7 +93,7 @@ download() {
 }
 if [[ $mode == source ]]; then
   command -v git >/dev/null || die '源码安装需要 Git'
-  command -v docker >/dev/null || die '源码安装需要已有 Docker；可改用默认 Release 安装'
+  command -v docker >/dev/null || die '需要已有 Docker 和 Compose；不会使用宿主机应用部署'
   clone_args=(--depth 1 --single-branch)
   if [[ -n $ref ]]; then clone_args+=(--branch "$ref"); fi
   printf '拉取源码：%s（%s）\n' "$repository" "${ref:-默认分支}"
@@ -156,6 +156,7 @@ mkdir -m 0700 "$work/package"
 tar -xzf "$work/$asset" --no-same-owner --no-same-permissions -C "$work/package"
 [[ -f $work/package/nginxpanel && -f $work/package/web/index.html &&
    -f $work/package/install.sh && -f $work/package/manage.sh &&
-   -f $work/package/deploy/native/install.sh && -f $work/package/deploy/native/lifecycle.sh ]] || die 'Release 缺少完整安装入口；请使用包含一键安装脚本的新发行或使用源码安装'
+   -f $work/package/deploy/native/install.sh && -f $work/package/deploy/native/lifecycle.sh &&
+   -f $work/package/containers.json && -f $work/package/container-images.tar ]] || die 'Release 缺少完整安装入口；请使用包含一键安装脚本的新发行或使用源码安装'
 printf '%s\n' '安装包校验完成'
 run_installer "$work/package"

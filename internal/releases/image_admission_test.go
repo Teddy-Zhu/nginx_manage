@@ -38,3 +38,34 @@ func TestImageApprovalDaemonIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalImageApprovalOriginAndContent(t *testing.T) {
+	id := "sha256:" + strings.Repeat("a", 64)
+	launcher, manifest := strings.Repeat("b", 64), strings.Repeat("c", 64)
+	base := ImageApproval{LocalBuild: true, Schema: Schema, Version: "0.1.0-dev", ManifestSHA256: manifest, TrustSHA256: manifest,
+		TrustPath: "/opt/nginxpanel/installer/containers.json", ApprovedAt: time.Now().Unix(),
+		Image: ImageChoice{ID: "nginx", Reference: id, Platform: ImagePlatform{OS: "linux", Architecture: runtime.GOARCH, ConfigDigest: id, LauncherSHA256: launcher},
+			Evidence: File{Path: "containers.json", SHA256: manifest, Size: 100, Mode: 0644}}}
+	if err := base.Validate("nginx", id, id, launcher); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		edit func(*ImageApproval)
+	}{
+		{"cannot claim publisher signature", func(a *ImageApproval) { a.LocalBuild = false }},
+		{"cannot mix publisher identity", func(a *ImageApproval) { a.Repository = "example/panel" }},
+		{"cannot replace content", func(a *ImageApproval) { a.Image.Platform.ConfigDigest = "sha256:" + manifest }},
+		{"cannot replace program", func(a *ImageApproval) { a.Image.Platform.LauncherSHA256 = manifest }},
+		{"cannot replace inventory", func(a *ImageApproval) { a.Image.Evidence.SHA256 = launcher }},
+		{"cannot use registry reference", func(a *ImageApproval) { a.Image.Reference = "example/nginx@" + id }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			a := base
+			test.edit(&a)
+			if err := a.Validate("nginx", a.Image.Reference, id, launcher); err == nil {
+				t.Fatal("accepted a mismatched approval")
+			}
+		})
+	}
+}

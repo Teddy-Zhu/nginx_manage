@@ -8,28 +8,28 @@ NginxPanel 用于管理专用 Nginx 实例及相关主机功能。安装和宿�
 
 | 顺序 | 文档 | 内容 |
 | --- | --- | --- |
-| 1 | [部署指南](deployment.md) | 准备材料、源码构建、原生或 Docker 安装、首次登录、开放管理入口 |
+| 1 | [部署指南](deployment.md) | 准备材料、源码构建、Docker 安装、首次登录、开放管理入口 |
 | 2 | [使用手册](user-guide.md) | 第一个代理、HTTPS、访问控制、主机功能、节点、迁移、备份及 API |
 | 3 | [运维与故障处理](operations.md) | 服务管理、更新、配置恢复、完整恢复、常见问题及清理边界 |
 
-首次部署可沿“原生安装 → SSH 转发 → 初始化管理员 → 创建 HTTP 代理 → 保存并应用”的顺序操作。需要容器运行时，在部署指南中选择 Docker 分支，后续网页使用流程相同。
+首次部署按“一键安装 → 打开管理地址 → 初始化管理员 → 创建 HTTP 代理 → 保存并应用”操作。宿主机仅运行 Agent，其余应用使用 Docker。
 
 ## 按任务查阅
 
 | 任务 | 操作入口与详细说明 |
 | --- | --- |
-| 原生安装参数、账户、目录和 systemd | [原生安装参考](../deploy/native/README.md) |
+| Agent 安装参数、账户、目录和 systemd | [Agent 安装参考](../deploy/native/README.md) |
 | Docker 镜像、Compose 和容器维护 | [Docker 部署参考](../deploy/docker/README.md) |
-| 一键安装与 Docker 编译 | [源码安装](deployment.md#从源码安装) · [Release 安装](deployment.md#从-github-release-安装) · [离线构建](deployment.md#离线构建与手动安装材料) |
+| 一键安装与 Docker 编译 | [源码安装](deployment.md#从源码安装) · [Release 安装](deployment.md#使用-release-安装) · [离线构建](deployment.md#从源码安装) |
 | 菜单管理、服务启停与日志 | [管理脚本](operations.md#管理脚本) |
 | 保留数据卸载、完全卸载与重装 | [卸载与重新安装](operations.md#卸载与重新安装) |
-| 旧程序缺少卸载命令、未使用环境安装新版 | [旧版本处理](deployment.md#旧版本卸载与未使用环境更新) |
+| 旧程序缺少卸载命令、未使用环境安装新版 | [旧版本处理](deployment.md#5-服务管理与重新安装) |
 | 创建代理、上游组及 TCP/UDP 转发 | [创建第一个代理](user-guide.md#创建第一个-http-代理) |
 | 导入证书、ACME 签发与自动部署 | [配置 HTTPS](user-guide.md#配置-https) |
 | 主机 DNS 所有者与限时确认 | [主机 DNS 操作](user-guide.md#主机-dns) |
 | 日志查询、通知和任务结果 | [日志、通知与任务](user-guide.md#日志通知与任务) |
 | 远程访问面板、来源限制与本机救援 | [管理入口](management-listener.md) |
-| 原生 Nginx 动态模块批准 | [模块接入](native-modules.md) |
+| Nginx 镜像与预置模块 | [Docker 部署](../deploy/docker/README.md) |
 | 防火墙后端授权、入口保护、应用与回滚 | [防火墙](firewall.md) |
 | 登录防护、Docker 软件安装与软件源配置 | [软件源与部署](software-sources.md) |
 | 已有原生 Fail2ban 的内部接口参考 | [Fail2ban](fail2ban.md) |
