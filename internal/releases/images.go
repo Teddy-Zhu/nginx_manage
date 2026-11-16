@@ -6,18 +6,56 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
 const MaxImageEvidenceBytes = 32 << 20
 
+func ImageToken(id string) (string, bool) {
+	if id == "nginx" {
+		return "image-nginx", true
+	}
+	return "", false
+}
+
+func ImageIDFromToken(token string) (string, bool) {
+	if token == "image-nginx" {
+		return "nginx", true
+	}
+	return "", false
+}
+
+func imageAllowedComponent(id string) string {
+	return id
+}
+
+func PlanImage(plan Plan, token string) (ImageChoice, bool) {
+	id, ok := ImageIDFromToken(token)
+	if !ok || !slices.Contains(plan.Selected, token) {
+		return ImageChoice{}, false
+	}
+	for _, image := range plan.Manifest.Images {
+		if image.ID != id {
+			continue
+		}
+		for _, platform := range image.Platforms {
+			if platform.OS == plan.Host.OS && platform.Architecture == plan.Host.Architecture {
+				return ImageChoice{ID: id, Reference: image.Repository + "@" + image.Digest, Platform: platform, Evidence: image.Evidence}, true
+			}
+		}
+	}
+	return ImageChoice{}, false
+}
+
 type ImagePlatform struct {
-	OS             string `json:"os"`
-	Architecture   string `json:"architecture"`
-	Digest         string `json:"digest"`
-	ConfigDigest   string `json:"config_digest"`
-	LauncherSHA256 string `json:"launcher_sha256"`
+	OS               string `json:"os"`
+	Architecture     string `json:"architecture"`
+	Digest           string `json:"digest"`
+	ConfigDigest     string `json:"config_digest"`
+	LauncherSHA256   string `json:"launcher_sha256,omitempty"`
+	LauncherProtocol int    `json:"launcher_protocol"`
 }
 
 // The index digest authenticates the platform manifests and their attached
@@ -69,43 +107,26 @@ type ociManifest struct {
 }
 
 func imageRepository(repo, id string) string {
-	if id == "panel-launcher" {
-		return "ghcr.io/" + strings.ToLower(repo) + "/panel"
-	}
 	return "ghcr.io/" + strings.ToLower(repo) + "/nginx"
 }
 func imageDigest(value string) bool {
 	return strings.HasPrefix(value, "sha256:") && validHash(strings.TrimPrefix(value, "sha256:"))
 }
 func validateImages(m Manifest) error {
-	if len(m.Images) != 0 && len(m.Images) != 2 {
-		return errors.New("镜像发行须同时包含 panel-launcher 和 nginx")
+	if len(m.Images) > 1 {
+		return errors.New("发行仅允许包含 Nginx 容器镜像")
 	}
 	seen := map[string]bool{}
 	commit := ""
 	for _, image := range m.Images {
-		if !slices.Contains([]string{"panel-launcher", "nginx"}, image.ID) || seen[image.ID] || image.Repository != imageRepository(m.Repository, image.ID) || image.Version != m.Version || !validCommit(image.Commit) || commit != "" && commit != image.Commit || !imageDigest(image.Digest) || len(image.Platforms) != 2 {
+		if image.ID != "nginx" || seen[image.ID] || image.Repository != imageRepository(m.Repository, image.ID) || image.Version != m.Version || !validCommit(image.Commit) || commit != "" && commit != image.Commit || !imageDigest(image.Digest) || len(image.Platforms) != 2 {
 			return errors.New("镜像身份、版本、提交、摘要或平台无效")
 		}
 		seen[image.ID], commit = true, image.Commit
 		architectures := map[string]bool{}
 		for _, p := range image.Platforms {
-			if p.OS != "linux" || !slices.Contains([]string{"amd64", "arm64"}, p.Architecture) || architectures[p.Architecture] || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || !validHash(p.LauncherSHA256) {
+			if p.OS != "linux" || !slices.Contains([]string{"amd64", "arm64"}, p.Architecture) || architectures[p.Architecture] || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || p.LauncherProtocol != LauncherVersion || p.LauncherSHA256 != "" {
 				return errors.New("镜像须分别固定 Linux amd64/arm64 的 manifest 和 config 摘要")
-			}
-			bound := false
-			for _, asset := range m.Assets {
-				if asset.ID != "panel-linux-"+p.Architecture || asset.Component != "panel" || asset.Version != m.Version || asset.OS != p.OS || asset.Architecture != p.Architecture {
-					continue
-				}
-				for _, file := range asset.Files {
-					if file.Path == "nginxpanel" && file.SHA256 == p.LauncherSHA256 {
-						bound = true
-					}
-				}
-			}
-			if !bound {
-				return errors.New("镜像 launcher 未绑定同版同架构的面板发行程序")
 			}
 			architectures[p.Architecture] = true
 		}
@@ -127,7 +148,7 @@ func cloneImages(images []ContainerImage) []ContainerImage {
 
 func publicationImages(in PublishInput, spec PublicationSpec, manifest Manifest) ([]ContainerImage, map[string][]byte, error) {
 	if in.ImagesPath == "" {
-		return nil, nil, nil
+		return nil, nil, errors.New("正式发行必须包含 Nginx 容器镜像")
 	}
 	raw, err := readPublicationFile(in.ImagesPath, 64<<10)
 	if err != nil {
@@ -137,7 +158,7 @@ func publicationImages(in PublishInput, spec PublicationSpec, manifest Manifest)
 	if err := strictJSON(raw, &publication); err != nil {
 		return nil, nil, err
 	}
-	if publication.Schema != Schema || publication.Repository != in.Repository || publication.Version != in.Version || publication.Commit != in.Commit || len(publication.Images) != 2 {
+	if publication.Schema != Schema || publication.Repository != in.Repository || publication.Version != in.Version || publication.Commit != in.Commit || len(publication.Images) != 1 || publication.Images[0].ID != "nginx" {
 		return nil, nil, errors.New("镜像发布输入与批准的源码身份不一致")
 	}
 	m := manifest
@@ -239,8 +260,15 @@ func inspectImageEvidence(raw []byte, image ContainerImage, repository string) e
 			return err
 		}
 		labels := config.Config.Labels
-		if config.OS != p.OS || config.Architecture != p.Architecture || labels["org.opencontainers.image.source"] != "https://github.com/"+repository || labels["org.opencontainers.image.revision"] != image.Commit || labels["org.opencontainers.image.version"] != image.Version || labels["org.nginxpanel.launcher.sha256"] != p.LauncherSHA256 {
+		if config.OS != p.OS || config.Architecture != p.Architecture || labels["org.opencontainers.image.source"] != "https://github.com/"+repository || labels["org.opencontainers.image.revision"] != image.Commit || labels["org.opencontainers.image.version"] != image.Version {
 			return errors.New("OCI 配置的源码、版本或架构不一致")
+		}
+		launcherProtocol, err := strconv.Atoi(labels["org.nginxpanel.launcher.protocol"])
+		if err != nil || launcherProtocol != p.LauncherProtocol || launcherProtocol != LauncherVersion {
+			return errors.New("OCI launcher 协议与受支持版本不一致")
+		}
+		if labels["org.nginxpanel.launcher.sha256"] != "" {
+			return errors.New("OCI Nginx 镜像不得绑定独立发布的面板二进制")
 		}
 		var attestation ociManifest
 		a := attestations[p.Digest]
@@ -319,21 +347,18 @@ type ImageVerification struct {
 // VerifyImages authenticates the catalog with the existing local trust root.
 // It neither contacts a registry nor pulls, approves, binds or starts an image.
 func VerifyImages(in Input) (ImageVerification, error) {
-	in.Assets, in.Components, in.AllowedComponents = nil, []string{"panel"}, []string{"panel"}
+	in.Assets, in.Components, in.AllowedComponents = nil, nil, nil
+	in.ImageCatalog = true
 	verified, err := Verify(in)
 	if err != nil {
 		return ImageVerification{}, err
 	}
 	p := verified.Plan()
-	if len(p.Manifest.Images) != 2 {
-		return ImageVerification{}, errors.New("此发行不包含完整镜像清单")
-	}
 	out := ImageVerification{State: "images_verified", Repository: p.Manifest.Repository, Version: p.Manifest.Version, ManifestSHA256: p.ManifestSHA256, TrustSHA256: p.TrustSHA256, KeyID: p.KeyID}
-	for _, image := range p.Manifest.Images {
-		for _, platform := range image.Platforms {
-			if platform.OS == in.Host.OS && platform.Architecture == in.Host.Architecture {
-				out.Images = append(out.Images, ImageChoice{ID: image.ID, Reference: image.Repository + "@" + image.Digest, Platform: platform, Evidence: image.Evidence})
-			}
+	for _, token := range p.Selected {
+		choice, ok := PlanImage(p, token)
+		if ok {
+			out.Images = append(out.Images, choice)
 		}
 	}
 	return out, nil

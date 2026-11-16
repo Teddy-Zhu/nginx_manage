@@ -19,6 +19,7 @@ import (
 // a business restore. Future reachability operations persist their deadline and
 // recovery snapshot before applying any side effect.
 type Record struct {
+	CoreUpdate                *CoreUpdateIntent                `json:"core_update,omitempty"`
 	NginxImage                *NginxImageOperation             `json:"nginx_image,omitempty"`
 	PanelImage                *PanelImageOperation             `json:"panel_image,omitempty"`
 	AgentUpgrade              *AgentUpgradeOperation           `json:"agent_upgrade,omitempty"`

@@ -74,9 +74,6 @@ type Server struct {
 func (s *Server) Run(ctx context.Context) error {
 	ctx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
-	if !s.Dev && s.AllowedUID == 0 {
-		return errors.New("production Web peer must be a non-root account")
-	}
 	if !s.Dev && os.Geteuid() != 0 {
 		return errors.New("production agent must run as root")
 	}

@@ -39,7 +39,6 @@ type NginxImageIntent struct {
 	Panel             panelruntime.Deployment  `json:"panel"`
 	PanelID           string                   `json:"panel_id"`
 	ApprovalSHA256    string                   `json:"approval_sha256"`
-	FrontendSHA256    string                   `json:"frontend_sha256"`
 	Agent             AgentProgram             `json:"agent"`
 	AgentProcess      AgentProcess             `json:"agent_process"`
 	AgentUnit         string                   `json:"agent_unit"`
@@ -112,13 +111,13 @@ func validNginxImage(r Record) error {
 		return errors.New("Nginx 镜像意图超过保留预算")
 	}
 	in := i.Input
-	if !in.AllowDowntime || !validID(in.MaintenanceID) || in.MaintenanceID == r.OperationID || !validID(i.Epoch) || in.Stage.DataDir != i.Before.DataDir || in.Stage.TrustPath != "/etc/nginxpanel/release-trust.json" || in.Signature.TrustPath != in.Stage.TrustPath || in.Signature.AllowPrerelease != in.Stage.AllowPrerelease || !panelSelectionDigest.MatchString(in.Stage.PlanID) || !panelSelectionDigest.MatchString(in.Signature.ExpectedManifestSHA256) || !nginxcontainer.SameIdentity(i.Before, i.Target) || i.Before.ImageID == i.Target.ImageID || i.Target.Image != in.Image || i.Target.SignedImage.ManifestSHA256 != in.Signature.ExpectedManifestSHA256 || i.Panel.Mode != "docker" || i.Panel.DataDir != in.Stage.DataDir || !panelSelectionDigest.MatchString(i.PanelID) || !panelSelectionDigest.MatchString(i.FrontendSHA256) || !panelSelectionDigest.MatchString(i.ApprovalSHA256) || !panelSelectionDigest.MatchString(i.PublicationSHA256) || !panelSelectionDigest.MatchString(i.AgentUnit) || !panelSelectionDigest.MatchString(i.WorkerUnit) || r.Deadline != i.Deadline || r.UpdatedAt < i.CreatedAt || i.CreatedAt <= 0 || i.CreatedAt > time.Now().Unix()+300 || i.Deadline != i.CreatedAt+600 || r.RequestHash != nginxImageHash(r.OperationID, i) || len(p.Failure) > 4000 || len(r.Error) > 4000 {
+	if !in.AllowDowntime || !validID(in.MaintenanceID) || in.MaintenanceID == r.OperationID || !validID(i.Epoch) || in.Stage.DataDir != i.Before.DataDir || in.Stage.TrustPath != "/etc/nginxpanel/release-trust.json" || in.Signature.TrustPath != in.Stage.TrustPath || in.Signature.AllowPrerelease != in.Stage.AllowPrerelease || !panelSelectionDigest.MatchString(in.Stage.PlanID) || !panelSelectionDigest.MatchString(in.Signature.ExpectedManifestSHA256) || !nginxcontainer.SameIdentity(i.Before, i.Target) || i.Before.ImageID == i.Target.ImageID || i.Target.Image != in.Image || i.Target.SignedImage.ManifestSHA256 != in.Signature.ExpectedManifestSHA256 || i.Panel.Mode != "native" || i.Panel.DataDir != in.Stage.DataDir || !panelSelectionDigest.MatchString(i.PanelID) || !panelSelectionDigest.MatchString(i.ApprovalSHA256) || !panelSelectionDigest.MatchString(i.PublicationSHA256) || !panelSelectionDigest.MatchString(i.AgentUnit) || !panelSelectionDigest.MatchString(i.WorkerUnit) || r.Deadline != i.Deadline || r.UpdatedAt < i.CreatedAt || i.CreatedAt <= 0 || i.CreatedAt > time.Now().Unix()+300 || i.Deadline != i.CreatedAt+600 || r.RequestHash != nginxImageHash(r.OperationID, i) || len(p.Failure) > 4000 || len(r.Error) > 4000 {
 		return errors.New("Nginx 镜像意图或运行来源不一致")
 	}
 	if i.Directory != "bootstrap" && !validID(i.Directory) || i.RevisionID != "" && !validID(i.RevisionID) || i.DeploymentID != "" && !validID(i.DeploymentID) {
 		return errors.New("Nginx 镜像事务缺少固定发布身份")
 	}
-	if !agentProcessValid(i.AgentProcess) || i.AgentProcess.State != "running" || i.Agent.Link == "" || !panelSelectionDigest.MatchString(i.Agent.BinarySHA256) || i.Container.State != "running" || !panelSelectionDigest.MatchString(i.Container.Instance.ID) || i.Container.Instance.ImageID != i.Before.ImageID || i.Container.Instance.PID <= 1 {
+	if !agentProgramValid(i.Agent) || i.Agent.DataDir != i.Before.DataDir || !agentProcessValid(i.AgentProcess) || i.AgentProcess.State != "running" || i.Container.State != "running" || !panelSelectionDigest.MatchString(i.Container.Instance.ID) || i.Container.Instance.ImageID != i.Before.ImageID || i.Container.Instance.PID <= 1 {
 		return errors.New("Nginx 镜像事务缺少原进程代次")
 	}
 	if started, e := time.Parse(time.RFC3339Nano, i.Container.Instance.StartedAt); e != nil || started.IsZero() || i.Container.Instance.RestartCount < 0 {

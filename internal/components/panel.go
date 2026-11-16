@@ -10,11 +10,11 @@ import (
 
 func panelSelection(plan releases.Plan) (bool, error) {
 	for _, asset := range plan.Assets {
-		if asset.Component == "panel" || asset.Component == "web" {
+		if asset.Component == "panel" {
 			if len(plan.Assets) != 1 {
-				return false, errors.New("面板和独立前端须分别准备，不能与其他组件共用更新计划")
+				return false, errors.New("核心服务须独立准备，不能与其他组件共用更新计划")
 			}
-			return asset.Component == "panel", nil
+			return true, nil
 		}
 	}
 	return false, nil
@@ -26,19 +26,6 @@ func (m *Manager) prepareRuntime(ctx context.Context, out *Operation, plan relea
 		return err
 	}
 	out.Panel = nil
-	out.Frontend = nil
-	if len(plan.Assets) == 1 && plan.Assets[0].Component == "web" {
-		source, err := releases.Prepared(ctx, releases.Input{TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"web"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, plan.ID)
-		if err != nil {
-			return err
-		}
-		staged, err := panelruntime.StageFrontend(ctx, m.DataDir, source)
-		if err != nil {
-			return err
-		}
-		out.Frontend = &FrontendResult{ReleaseID: staged.ID, Version: staged.Version}
-		return nil
-	}
 	if !panel {
 		return nil
 	}

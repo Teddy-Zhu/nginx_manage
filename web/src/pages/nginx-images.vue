@@ -2,7 +2,7 @@
 {
   "meta": {
     "title": "更新 Nginx",
-    "subtitle": "更换版本或恢复上一版本",
+    "subtitle": "更新 Nginx 运行镜像",
     "nav": false,
     "order": 7.25,
     "symbol": "◇",
@@ -15,11 +15,12 @@
 import TaskLogButton from "../components/TaskLogButton.vue";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { useRoute } from "vue-router";
 import {
   NAlert,
   NButton,
   NCheckbox,
+  NEmpty,
   NFormItem,
   NPopconfirm,
   NSelect,
@@ -29,17 +30,22 @@ import {
   useNodeAPI,
   apiError,
   type ImageUpgradeTask,
+  type ComponentCreateInput,
   type ComponentTask,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
+import { inspectTask } from "../stores/operation";
+import { randomUUID } from "../utils/crypto";
 
 const api = useNodeAPI(),
   route = useRoute(),
   session = useSession(),
   { run, busy } = useAction();
 let keyFor = useIdempotency();
-const allowDowntime = ref(false);
+const allowDowntime = ref(false),
+  prerelease = ref(false),
+  lastID = ref("");
 const preparations = ref<ComponentTask[]>([]),
   tasks = ref<ImageUpgradeTask[]>([]),
   selected = ref(
@@ -57,26 +63,72 @@ watch(
     selected.value = typeof id === "string" ? id : "";
   },
 );
-const prepared = computed(() =>
+function containsNginxImage(task: ComponentTask) {
+  const release = task.result?.release;
+  if (!release) return false;
+  return (
+    release.selected.includes("image-nginx") &&
+    release.images.some((image) => image.id === "nginx")
+  );
+}
+const nginxOperations = computed(() =>
   preparations.value.filter(
-    (t) =>
-      t.action === "prepare" &&
-      t.state === "succeeded" &&
-      t.result?.runtime_ready &&
-      t.result.panel &&
-      !t.result.panel.requires_coordination &&
-      t.result.release?.images?.some((image) => image.id === "nginx"),
+    (task) =>
+      task.result?.input.components?.includes("nginx") ||
+      containsNginxImage(task),
   ),
+);
+const checked = computed(
+  () =>
+    nginxOperations.value
+      .filter(
+        (task) =>
+          task.action === "check" &&
+          task.state === "succeeded" &&
+          task.result?.input.prerelease === prerelease.value &&
+          containsNginxImage(task),
+      )
+      .sort((a, b) => b.created_at - a.created_at)[0],
+);
+const release = computed(() => checked.value?.result?.release);
+const prepared = computed(() =>
+  nginxOperations.value
+    .filter((task) => {
+      const release = task.result?.release;
+      return (
+        task.action === "prepare" &&
+        task.state === "succeeded" &&
+        task.result?.runtime_ready &&
+        containsNginxImage(task) &&
+        !!release &&
+        release.expires_at * 1000 > Date.now()
+      );
+    })
+    .sort((a, b) => b.created_at - a.created_at),
 );
 const chosen = computed(() =>
   prepared.value.find((t) => t.id === selected.value),
 );
-const active = computed(() =>
-  tasks.value.some(
-    (t) =>
-      t.stage !== "restore_isolated" &&
-      !["succeeded", "failed", "rolled_back", "cancelled"].includes(t.state),
+const preparedForRelease = computed(() =>
+  prepared.value.find(
+    (task) => task.result?.release?.plan_id === release.value?.plan_id,
   ),
+);
+const last = computed(() =>
+  preparations.value.find((task) => task.id === lastID.value),
+);
+const active = computed(
+  () =>
+    nginxOperations.value.some((task) =>
+      ["queued", "running", "recovery_required"].includes(task.state),
+    ) ||
+    tasks.value.some(
+      (task) =>
+        task.stage !== "restore_isolated" &&
+        !["succeeded", "failed", "rolled_back", "cancelled"].includes(
+          task.state,
+        ),
+    ),
 );
 const canCreate = computed(
   () =>
@@ -140,6 +192,50 @@ const stages: Record<string, string> = {
 };
 function date(value: number) {
   return new Date(value * 1000).toLocaleString();
+}
+async function submit(input: ComponentCreateInput) {
+  await run(async () => {
+    const task = await api.createComponentTask(input, randomUUID());
+    preparations.value = [
+      task,
+      ...preparations.value.filter((item) => item.id !== task.id),
+    ];
+    lastID.value = task.id;
+    if (input.input.action === "prepare") selected.value = task.id;
+    inspectTask(task.id, "Nginx 镜像准备日志");
+  });
+  await load();
+}
+async function check() {
+  await submit({
+    input: {
+      action: "check",
+      components: ["nginx"],
+      tag: "",
+      prerelease: prerelease.value,
+      plan_id: "",
+      manifest_sha256: "",
+      trust_sha256: "",
+    },
+  });
+}
+async function prepare() {
+  const task = checked.value,
+    source = task?.result;
+  if (!task || !source?.release || !source.runtime_ready) return;
+  await submit({
+    check_task_id: task.id,
+    input: {
+      action: "prepare",
+      tag: source.release.tag,
+      prerelease: source.input.prerelease,
+      assets: source.release.selected,
+      plan_id: source.release.plan_id,
+      manifest_sha256: source.release.manifest_sha256,
+      trust_sha256: source.release.trust_sha256,
+      offline_id: source.input.offline_id,
+    },
+  });
 }
 function canResume(t: ImageUpgradeTask) {
   const result = t.result;
@@ -224,53 +320,108 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <section class="panel page-stack">
       <div class="toolbar">
-        <h2>更新 Nginx</h2>
-        <NButton @click="load">刷新</NButton>
+        <h2>更新 Nginx 镜像</h2>
+        <NButton :loading="reading" @click="load">刷新</NButton>
       </div>
       <p class="muted">
-        请先在<RouterLink
-          :to="{ path: '/components', query: { software: 'nginx' } }"
-          >软件商店</RouterLink
-        >下载所需版本，再开始更新。
+        检查并准备签名镜像，确认后即可应用更新。网站配置与证书会保留。
       </p>
       <NAlert type="info"
         >更新期间网站服务会短暂中断，失败时将尝试恢复原版本。</NAlert
       >
-      <p class="muted">更新前请确保已下载所选版本。网站配置与证书会保留。</p>
-      <NFormItem label="已准备版本"
+      <div class="button-row">
+        <NButton
+          type="primary"
+          :loading="busy || active"
+          :disabled="!canWrite || active"
+          @click="check"
+          >{{ active ? "正在处理" : "检查更新" }}</NButton
+        ><NCheckbox v-model:checked="prerelease" :disabled="busy || active"
+          >包含预览版本</NCheckbox
+        >
+      </div>
+      <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
+      <div v-if="last" class="button-row">
+        <NTag
+          :type="
+            last.state === 'succeeded'
+              ? 'success'
+              : last.state === 'failed'
+                ? 'error'
+                : 'info'
+          "
+          >{{
+            last.state === "succeeded"
+              ? "已完成"
+              : last.state === "failed"
+                ? "未完成"
+                : "正在处理"
+          }}</NTag
+        ><TaskLogButton :task-id="last.id" />
+      </div>
+      <section v-if="release" class="page-stack">
+        <div class="toolbar">
+          <strong>可用版本 {{ release.version }}</strong>
+          <NTag v-if="preparedForRelease" type="success">已准备</NTag>
+        </div>
+        <NAlert v-if="!checked?.result?.runtime_ready" type="warning"
+          >当前环境暂不满足更新条件，请查看检查日志。</NAlert
+        >
+        <div class="button-row">
+          <NButton
+            v-if="!preparedForRelease"
+            type="primary"
+            :loading="busy || active"
+            :disabled="
+              !canWrite ||
+              active ||
+              !checked?.result?.runtime_ready ||
+              release.expires_at * 1000 <= Date.now()
+            "
+            @click="prepare"
+            >准备镜像</NButton
+          ><TaskLogButton
+            v-if="preparedForRelease"
+            :task-id="preparedForRelease.id"
+          />
+        </div>
+      </section>
+      <NEmpty v-if="!prepared.length" description="尚未准备可用镜像" />
+      <NFormItem v-else label="准备好的版本"
         ><NSelect
           v-model:value="selected"
           :options="
-            prepared.map((t) => ({
-              label: `${t.result?.release?.version} · ${date(t.created_at)}`,
-              value: t.id,
+            prepared.map((task) => ({
+              label: `${task.result?.release?.version} · ${date(task.created_at)}`,
+              value: task.id,
             }))
           "
-          placeholder="选择已下载版本"
-          :disabled="!canWrite || busy"
+          placeholder="选择镜像版本"
+          :disabled="!canWrite || busy || active"
       /></NFormItem>
       <NCheckbox
         v-if="canWrite"
         v-model:checked="allowDowntime"
-        :disabled="busy"
+        :disabled="busy || active"
         >允许 Nginx 服务短暂中断</NCheckbox
       >
       <div v-if="canWrite">
         <NPopconfirm
           :disabled="!canCreate"
-          positive-text="更换镜像"
+          positive-text="开始更新"
           @positive-click="upgrade"
           ><template #trigger
             ><NButton type="primary" :disabled="!canCreate" :loading="busy"
-              >更换镜像</NButton
+              >立即更新</NButton
             ></template
-          >确认更换为版本 {{ chosen?.result?.release?.version }}？</NPopconfirm
+          >确认将 Nginx 更新到
+          {{ chosen?.result?.release?.version }}？</NPopconfirm
         >
       </div>
     </section>
     <section class="panel page-stack">
-      <h2>替换任务</h2>
-      <p v-if="!tasks.length" class="muted">暂无替换任务</p>
+      <h2>更新记录</h2>
+      <NEmpty v-if="!tasks.length" description="暂无更新记录" />
       <article v-for="task in tasks" :key="task.id" class="panel page-stack">
         <TaskLogButton :task-id="task.id" />
         <div class="toolbar">
@@ -304,12 +455,10 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
           >{{ task.error }}</NAlert
         >
         <div v-if="canResume(task)">
-          <NPopconfirm
-            positive-text="继续更换版本"
-            @positive-click="resume(task)"
+          <NPopconfirm positive-text="继续更新" @positive-click="resume(task)"
             ><template #trigger
-              ><NButton :loading="busy">继续更换版本</NButton></template
-            >确认继续更换版本？系统会继续完成操作，失败时恢复原版本。</NPopconfirm
+              ><NButton :loading="busy">继续更新</NButton></template
+            >确认继续更新？失败时将恢复原版本。</NPopconfirm
           >
         </div>
       </article>

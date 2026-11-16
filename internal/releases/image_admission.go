@@ -43,7 +43,8 @@ func (a ImageApproval) Validate(component, reference, imageID, launcher string) 
 	}
 	p, f := a.Image.Platform, a.Image.Evidence
 	prefix := imageRepository(a.Repository, component) + "@"
-	if a.Schema != Schema || !repository.MatchString(a.Repository) || !validVersion(a.Version) || !validCommit(a.Commit) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || len(a.TrustPath) > 512 || !filepath.IsAbs(a.TrustPath) || filepath.Clean(a.TrustPath) != a.TrustPath || a.ApprovedAt <= 0 || a.ApprovedAt > time.Now().Unix()+300 || (component != "panel-launcher" && component != "nginx") || a.Image.ID != component || a.Image.Reference != reference || !strings.HasPrefix(reference, prefix) || !imageDigest(strings.TrimPrefix(reference, prefix)) || p.OS != "linux" || p.Architecture != runtime.GOARCH || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || !dockerapi.MatchesImageID(reference, p.ConfigDigest, imageID) || !validHash(p.LauncherSHA256) || p.LauncherSHA256 != launcher || f.Path != component+".oci.json" || !validHash(f.SHA256) || f.Size <= 0 || f.Size > MaxImageEvidenceBytes || f.Mode != 0644 {
+	launcherValid := p.LauncherProtocol == LauncherVersion && component == "nginx" && p.LauncherSHA256 == ""
+	if a.Schema != Schema || !repository.MatchString(a.Repository) || !validVersion(a.Version) || !validCommit(a.Commit) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || len(a.TrustPath) > 512 || !filepath.IsAbs(a.TrustPath) || filepath.Clean(a.TrustPath) != a.TrustPath || a.ApprovedAt <= 0 || a.ApprovedAt > time.Now().Unix()+300 || component != "nginx" || a.Image.ID != component || a.Image.Reference != reference || !strings.HasPrefix(reference, prefix) || !imageDigest(strings.TrimPrefix(reference, prefix)) || p.OS != "linux" || p.Architecture != runtime.GOARCH || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || !dockerapi.MatchesImageID(reference, p.ConfigDigest, imageID) || !launcherValid || f.Path != component+".oci.json" || !validHash(f.SHA256) || f.Size <= 0 || f.Size > MaxImageEvidenceBytes || f.Mode != 0644 {
 		return errors.New("镜像签名批准记录与本机运行绑定不一致")
 	}
 	return nil
@@ -60,6 +61,10 @@ func AdmitImage(in ImageInput, component, reference string, prior *ImageApproval
 	if in.TrustPath == "" || in.ManifestPath == "" || in.SignaturePath == "" {
 		return out, Asset{}, errors.New("镜像准入须提供本机信任、发行清单与签名信封")
 	}
+	token, ok := ImageToken(component)
+	if !ok {
+		return out, Asset{}, errors.New("镜像组件无效")
+	}
 	at := time.Now().Unix()
 	if prior != nil {
 		if err := prior.Validate(component, reference, prior.Image.Platform.ConfigDigest, prior.Image.Platform.LauncherSHA256); err != nil {
@@ -70,13 +75,12 @@ func AdmitImage(in ImageInput, component, reference string, prior *ImageApproval
 		}
 		at = prior.ApprovedAt
 	}
-	// These images carry static Linux programs; host distribution libraries are
-	// not an admission dependency. The catalog must contain that static package.
+	// Image admission is independent of a Go or native component archive.
 	input := Input{TrustPath: in.TrustPath, ManifestPath: in.ManifestPath, SignaturePath: in.SignaturePath, AllowPrerelease: in.AllowPrerelease,
-		PanelStaging: in.PanelStaging && component == "panel-launcher",
+		PanelStaging: false,
 		Host:         Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: "any", Version: "any"},
 		Receiver:     Receiver{APIMajor: 1, AgentProtocol: protocol.Agent, Launcher: LauncherVersion},
-		Assets:       []string{"panel-linux-" + runtime.GOARCH}, AllowedComponents: []string{"panel"}}
+		Assets:       []string{token}, AllowedComponents: []string{imageAllowedComponent(component)}}
 	v, err := verifyAt(input, at)
 	if err != nil {
 		return out, Asset{}, err
@@ -111,10 +115,5 @@ func AdmitImage(in ImageInput, component, reference string, prior *ImageApproval
 			return ImageApproval{}, Asset{}, errors.New("镜像发行身份与原批准记录不一致")
 		}
 	}
-	for _, asset := range p.Assets {
-		if asset.ID == "panel-linux-"+runtime.GOARCH && asset.ABI == "static" && asset.Distribution == "any" && asset.DistributionVersion == "any" && p.Manifest.FrontendVersion == asset.Version {
-			return out, asset, nil
-		}
-	}
-	return ImageApproval{}, Asset{}, errors.New("镜像缺少同版静态面板和前端发行资产")
+	return out, Asset{}, nil
 }

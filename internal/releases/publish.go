@@ -69,7 +69,7 @@ func validCommit(commit string) bool {
 	return err == nil && (len(raw) == 20 || len(raw) == 32) && commit == strings.ToLower(commit)
 }
 
-// NewPublication describes matching panel/web and prebuilt native Nginx assets.
+// NewPublication describes the two platform archives for the core binary.
 func NewPublication(repo, version, commit, notes string, automaticRollback bool) (PublicationSpec, error) {
 	if !repository.MatchString(repo) || !validVersion(version) || !validCommit(commit) {
 		return PublicationSpec{}, errors.New("发布身份或版本无效")
@@ -87,26 +87,10 @@ func NewPublication(repo, version, commit, notes string, automaticRollback bool)
 		channel = "prerelease"
 	}
 	spec := PublicationSpec{Commit: commit, Manifest: Manifest{Schema: Schema, Repository: repo, Version: version, Channel: channel, CreatedAt: now, ExpiresAt: now + 365*86400, APIMajor: 1, DatabaseSchema: databaseSchema, MinimumAgentProtocol: protocol.Agent, MinimumLauncher: LauncherVersion, FrontendVersion: version, AutomaticRollback: automaticRollback, Notes: notes}}
-	for _, arch := range []string{"amd64", "arm64", "any"} {
-		id, component, archive := "panel-linux-"+arch, "panel", "nginxpanel_"+version+"_linux_"+arch+".tar.gz"
-		executable := []string{"nginxpanel"}
-		if arch == "any" {
-			id, component, archive, executable = "web", "web", "nginxpanel_"+version+"_web.tar.gz", []string{}
-		}
-		spec.Packages = append(spec.Packages, PackageSource{Directory: id, ExecutableFiles: executable, Asset: Asset{ID: id, Component: component, Version: version, OS: "linux", Architecture: arch, Distribution: "any", DistributionVersion: "any", ABI: "static", Archive: archive, License: "MIT", LicenseFiles: []string{"LICENSE", "THIRD_PARTY_NOTICES.txt"}, SourceURL: "https://github.com/" + repo + "/tree/" + commit, Maintenance: "maintained"}})
-	}
 	for _, arch := range []string{"amd64", "arm64"} {
-		component, err := nginxPublicationPackage(arch, version)
-		if err != nil {
-			return PublicationSpec{}, err
-		}
-		spec.Packages = append(spec.Packages, component)
+		id, archive := "panel-linux-"+arch, "nginxpanel_"+version+"_linux_"+arch+".tar.gz"
+		spec.Packages = append(spec.Packages, PackageSource{Directory: id, ExecutableFiles: []string{"nginxpanel"}, Asset: Asset{ID: id, Component: "panel", Version: version, OS: "linux", Architecture: arch, Distribution: "any", DistributionVersion: "any", ABI: "static", Archive: archive, License: "MIT", LicenseFiles: []string{"LICENSE", "THIRD_PARTY_NOTICES.txt"}, SourceURL: "https://github.com/" + repo + "/tree/" + commit, Maintenance: "maintained"}})
 	}
-	fail2ban, err := fail2banPublicationPackage(version)
-	if err != nil {
-		return PublicationSpec{}, err
-	}
-	spec.Packages = append(spec.Packages, fail2ban)
 	return spec, nil
 }
 
@@ -149,8 +133,11 @@ func publicationEvidence(directory string, asset Asset, spec PublicationSpec) (m
 		}
 		return map[string][]byte{sbomName: sbom, provenanceName: raw}, nil
 	}
-	if p.NativeNginx != nil || p.Fail2ban != nil || p.Scope != "source-and-build-dependencies" || !text(p.GoVersion, 64) || !text(p.NodeVersion, 64) || !text(p.PNPMVersion, 64) || !validHash(p.GoSumSHA256) || !validHash(p.WebLockSHA256) {
+	if p.NativeNginx != nil || p.Fail2ban != nil || !text(p.GoVersion, 64) || !validHash(p.GoSumSHA256) {
 		return nil, errors.New("发布构建来源缺少对应工具链及依赖输入")
+	}
+	if p.Scope != "source-and-build-dependencies" || !text(p.NodeVersion, 64) || !text(p.PNPMVersion, 64) || !validHash(p.WebLockSHA256) {
+		return nil, errors.New("发布构建来源缺少对应前端工具链及锁文件")
 	}
 	if asset.Component == "panel" {
 		var binaryHash string
@@ -178,7 +165,7 @@ func publicationEvidence(directory string, asset Asset, spec PublicationSpec) (m
 			}
 		}
 		if info.Path != "nginxpanel/cmd/nginxpanel" || info.Main.Path != "nginxpanel" || info.Main.Replace != nil || info.GoVersion != p.GoVersion || settings["GOOS"] != "linux" || settings["GOARCH"] != asset.Architecture || settings["CGO_ENABLED"] != "0" || settings["vcs.revision"] != spec.Commit || settings["vcs.modified"] != "false" || !versioned {
-			return nil, errors.New("面板 Go 构建信息与发布架构、版本或干净提交不一致")
+			return nil, errors.New("控制平面 Go 构建信息与发行架构、版本或干净提交不一致")
 		}
 		for _, dep := range info.Deps {
 			if dep.Replace != nil {
@@ -253,7 +240,7 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	if err != nil {
 		return PublicationResult{}, err
 	}
-	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) == 0 || len(spec.Packages) > 16 {
+	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) != 2 {
 		return PublicationResult{}, errors.New("发布清单身份、有效期、协议或回滚条件不满足")
 	}
 	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
@@ -275,14 +262,16 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	names := map[string]bool{"release-manifest.json": true, "release-manifest.sig": true, "checksums.txt": true}
 	budget := int64(MaxManifestBytes + (64 << 10))
 	fileCount := 0
+	coreArchitectures := map[string]bool{}
 	for _, source := range spec.Packages {
 		if err := ctx.Err(); err != nil {
 			return PublicationResult{}, err
 		}
 		a := source.Asset
-		if !identifier.MatchString(a.ID) || !safePath(source.Directory) || !safePath(a.Archive) || strings.Contains(a.Archive, "/") || !strings.HasSuffix(a.Archive, ".tar.gz") || names[a.Archive] || len(a.Files) != 0 || a.Size != 0 || a.UnpackedBytes != 0 || a.SHA256 != "" || len(source.ExecutableFiles) > 64 {
+		if a.Component != "panel" || !slices.Contains([]string{"amd64", "arm64"}, a.Architecture) || a.ID != "panel-linux-"+a.Architecture || source.Directory != a.ID || coreArchitectures[a.Architecture] || !identifier.MatchString(a.ID) || !safePath(source.Directory) || !safePath(a.Archive) || strings.Contains(a.Archive, "/") || !strings.HasSuffix(a.Archive, ".tar.gz") || names[a.Archive] || len(a.Files) != 0 || a.Size != 0 || a.UnpackedBytes != 0 || a.SHA256 != "" || len(source.ExecutableFiles) > 64 {
 			return PublicationResult{}, errors.New("发布源目录、归档名称或计算字段无效")
 		}
+		coreArchitectures[a.Architecture] = true
 		names[a.Archive] = true
 		directory := filepath.Join(in.InputRoot, source.Directory)
 		a.Files, a.UnpackedBytes, err = publicationFiles(ctx, directory, source.ExecutableFiles)

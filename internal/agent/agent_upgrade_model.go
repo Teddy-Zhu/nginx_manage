@@ -25,6 +25,7 @@ type AgentUpgradeInput struct {
 }
 type AgentProgram struct {
 	Link         string `json:"link"`
+	DataDir      string `json:"data_dir,omitempty"`
 	BinarySHA256 string `json:"binary_sha256"`
 }
 type AgentProcess struct {
@@ -74,9 +75,28 @@ func agentProgramLinkValid(link string) bool {
 	return len(parts) == 2 && (parts[0] == "releases" || parts[0] == "agent-releases") && panelSelectionDigest.MatchString(parts[1])
 }
 func agentProgramValid(p AgentProgram) bool {
+	if p.DataDir != "" {
+		if !panelSelectionDigest.MatchString(p.BinarySHA256) || !strings.HasPrefix(p.Link, "core-releases/") || !panelSelectionDigest.MatchString(strings.TrimPrefix(p.Link, "core-releases/")) {
+			return false
+		}
+		snapshot, err := panelruntime.Read(p.DataDir)
+		if err != nil || snapshot.Deployment.Mode != "native" || snapshot.Release.AgentProtocol != Protocol {
+			return false
+		}
+		root, err := panelruntime.Root(p.DataDir)
+		if err != nil || p.Link != "core-releases/"+snapshot.Release.ID || p.BinarySHA256 != snapshot.Release.BinarySHA256 || filepath.Clean(snapshot.Directory) != filepath.Join(root, "releases", snapshot.Release.ID) {
+			return false
+		}
+		return true
+	}
 	return agentProgramLinkValid(p.Link) && panelSelectionDigest.MatchString(p.BinarySHA256) && (!strings.HasPrefix(p.Link, "agent-releases/") || strings.TrimPrefix(p.Link, "agent-releases/") == p.BinarySHA256)
 }
-func (p AgentProgram) binary() string { return filepath.Join(agentBootstrapRoot, p.Link, "nginxpanel") }
+func (p AgentProgram) binary() string {
+	if p.DataDir != "" {
+		return filepath.Join(p.DataDir, "runtime", "releases", strings.TrimPrefix(p.Link, "core-releases/"), "nginxpanel")
+	}
+	return filepath.Join(agentBootstrapRoot, p.Link, "nginxpanel")
+}
 func agentProcessValid(p AgentProcess) bool {
 	return p.State == "running" && validID(p.BootID) && len(p.Invocation) == 32 && strings.Trim(p.Invocation, "0123456789abcdef") == "" && strings.Trim(p.Invocation, "0") != "" && p.PID > 1 && p.StartTicks > 0
 }

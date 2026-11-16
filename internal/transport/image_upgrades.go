@@ -75,18 +75,6 @@ func (s *Server) resumeImageUpgrade(w http.ResponseWriter, r *http.Request, comp
 	}
 	s.respond(w, r, http.StatusAccepted, "OK", "原镜像替换续办请求已受理", out)
 }
-func (s *Server) ListPanelImageUpgrades(w http.ResponseWriter, r *http.Request) {
-	s.listImageUpgrades(w, r, imageupdates.Panel)
-}
-func (s *Server) GetPanelImageUpgrade(w http.ResponseWriter, r *http.Request, id apigen.ID) {
-	s.getImageUpgrade(w, r, imageupdates.Panel, id)
-}
-func (s *Server) CreatePanelImageUpgrade(w http.ResponseWriter, r *http.Request, p apigen.CreatePanelImageUpgradeParams) {
-	s.createImageUpgrade(w, r, imageupdates.Panel, p.IdempotencyKey)
-}
-func (s *Server) ResumePanelImageUpgrade(w http.ResponseWriter, r *http.Request, id apigen.ID, p apigen.ResumePanelImageUpgradeParams) {
-	s.resumeImageUpgrade(w, r, imageupdates.Panel, id, p.IdempotencyKey)
-}
 func (s *Server) ListNginxImageUpgrades(w http.ResponseWriter, r *http.Request) {
 	s.listImageUpgrades(w, r, imageupdates.Nginx)
 }

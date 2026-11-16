@@ -17,21 +17,28 @@ func TestImageApprovalDaemonIdentity(t *testing.T) {
 		Schema: Schema, Repository: "validation/nginxpanel", Version: "0.1.0", Commit: strings.Repeat("e", 40),
 		KeyID: "test", ManifestSHA256: launcher, TrustSHA256: launcher, TrustPath: "/etc/nginxpanel/release-trust.json", ApprovedAt: time.Now().Unix(),
 		Image: ImageChoice{ID: "nginx", Reference: reference,
-			Platform: ImagePlatform{OS: "linux", Architecture: runtime.GOARCH, Digest: platform, ConfigDigest: config, LauncherSHA256: launcher},
+			Platform: ImagePlatform{OS: "linux", Architecture: runtime.GOARCH, Digest: platform, ConfigDigest: config, LauncherProtocol: LauncherVersion},
 			Evidence: File{Path: "nginx.oci.json", SHA256: launcher, Size: 1, Mode: 0644}},
 	}
 	for _, test := range []struct {
 		name, id string
 		accepted bool
+		mutate   func(*ImageApproval)
 	}{
-		{"classic config", config, true},
-		{"containerd index", index, true},
-		{"platform is not the bound target", platform, false},
-		{"unapproved content", "sha256:" + strings.Repeat("f", 64), false},
-		{"missing identity", "", false},
+		{"classic config", config, true, nil},
+		{"containerd index", index, true, nil},
+		{"platform is not the bound target", platform, false, nil},
+		{"unapproved content", "sha256:" + strings.Repeat("f", 64), false, nil},
+		{"missing identity", "", false, nil},
+		{"unsupported launcher protocol", config, false, func(a *ImageApproval) { a.Image.Platform.LauncherProtocol = LauncherVersion + 1 }},
+		{"unbound launcher hash", config, false, func(a *ImageApproval) { a.Image.Platform.LauncherSHA256 = launcher }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := approval.Validate("nginx", reference, test.id, launcher)
+			candidate := approval
+			if test.mutate != nil {
+				test.mutate(&candidate)
+			}
+			err := candidate.Validate("nginx", reference, test.id, launcher)
 			if (err == nil) != test.accepted {
 				t.Fatalf("accepted=%v, want %v: %v", err == nil, test.accepted, err)
 			}
@@ -44,7 +51,7 @@ func TestLocalImageApprovalOriginAndContent(t *testing.T) {
 	launcher, manifest := strings.Repeat("b", 64), strings.Repeat("c", 64)
 	base := ImageApproval{LocalBuild: true, Schema: Schema, Version: "0.1.0-dev", ManifestSHA256: manifest, TrustSHA256: manifest,
 		TrustPath: "/opt/nginxpanel/installer/containers.json", ApprovedAt: time.Now().Unix(),
-		Image: ImageChoice{ID: "nginx", Reference: id, Platform: ImagePlatform{OS: "linux", Architecture: runtime.GOARCH, ConfigDigest: id, LauncherSHA256: launcher},
+		Image: ImageChoice{ID: "nginx", Reference: id, Platform: ImagePlatform{OS: "linux", Architecture: runtime.GOARCH, ConfigDigest: id, LauncherProtocol: LauncherVersion, LauncherSHA256: launcher},
 			Evidence: File{Path: "containers.json", SHA256: manifest, Size: 100, Mode: 0644}}}
 	if err := base.Validate("nginx", id, id, launcher); err != nil {
 		t.Fatal(err)

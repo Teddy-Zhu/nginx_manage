@@ -24,9 +24,9 @@ def stage_bootstrap(directory, repository, tag):
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.+-]+)?", tag):
         raise ValueError("invalid bootstrap release tag")
     source = Path("setup.sh").read_text(encoding="utf-8")
-    if source.count('default_repository=""') != 1 or source.count('default_version="latest"') != 1:
+    if source.count('default_repository="Teddy-Zhu/nginx_manage"') != 1 or source.count('default_version="latest"') != 1:
         raise ValueError("bootstrap identity placeholders are missing or duplicated")
-    source = source.replace('default_repository=""', f'default_repository="{repository}"')
+    source = source.replace('default_repository="Teddy-Zhu/nginx_manage"', f'default_repository="{repository}"')
     source = source.replace('default_version="latest"', f'default_version="{tag}"')
     with (directory / "setup.sh").open("x", encoding="utf-8") as output:
         output.write(source)

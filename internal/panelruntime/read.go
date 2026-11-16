@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -107,64 +106,6 @@ func executable(name, expected string) error {
 	}
 	return nil
 }
-func inventory(dir string, published bool) (map[string]File, error) {
-	files := map[string]File{}
-	var size int64
-	count := 0
-	err := filepath.WalkDir(dir, func(name string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(dir, name)
-		if err != nil {
-			return err
-		}
-		if rel != "." && !validRelative(rel) {
-			return errors.New("前端产物路径无效")
-		}
-		count++
-		if count > FileCountLimit*2 {
-			return errors.New("前端目录及文件数量超过限制")
-		}
-		info, err := os.Lstat(name)
-		if err != nil {
-			return err
-		}
-		st, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || st.Uid != 0 || info.Mode().Perm()&0022 != 0 {
-			return errors.New("前端产物须由 root 持有且不可被其他账户写入")
-		}
-		if entry.IsDir() && info.IsDir() {
-			if published && info.Mode().Perm() != 0755 {
-				return errors.New("已发布前端目录权限已变化")
-			}
-			return nil
-		}
-		if !info.Mode().IsRegular() || info.Mode().Perm()&0111 != 0 {
-			return errors.New("前端产物只能包含不可执行的普通文件")
-		}
-		// The native installer adds its own inventory beside the assets. The
-		// persistent release has one canonical inventory in release.json.
-		if !published && rel == ".web.sha256" {
-			_, err := secure.ReadRootFile(name, 1<<20)
-			return err
-		}
-		if published && info.Mode().Perm() != 0444 {
-			return errors.New("已发布前端文件须为只读产物")
-		}
-		hash, err := secure.HashRootFile(name, WebFileLimit)
-		if err != nil {
-			return err
-		}
-		size += info.Size()
-		if len(files) >= FileCountLimit || size > WebLimit {
-			return errors.New("前端产物超过容量限制")
-		}
-		files[rel] = File{SHA256: hash, Size: info.Size()}
-		return nil
-	})
-	return files, err
-}
 func readRelease(dir, id string) (Release, error) {
 	var r Release
 	for _, entry := range []struct {
@@ -198,18 +139,6 @@ func readRelease(dir, id string) (Release, error) {
 	}
 	if err = executable(filepath.Join(dir, "nginxpanel"), r.BinarySHA256); err != nil {
 		return r, err
-	}
-	actual, err := inventory(filepath.Join(dir, "web"), true)
-	if err != nil {
-		return r, err
-	}
-	if len(actual) != len(r.Web) {
-		return r, errors.New("面板前端文件清单已变化")
-	}
-	for name, f := range r.Web {
-		if actual[name] != f {
-			return r, errors.New("面板前端文件已变化")
-		}
 	}
 	return r, nil
 }

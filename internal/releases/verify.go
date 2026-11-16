@@ -127,7 +127,7 @@ func validVersion(s string) bool {
 	return true
 }
 func validateAsset(a Asset) error {
-	if !identifier.MatchString(a.ID) || slices.Contains([]string{"plan.json", "release-manifest.json", "release-manifest.sig"}, a.ID) || !slices.Contains([]string{"panel", "web", "nginx", "fail2ban"}, a.Component) || !validVersion(a.Version) || a.OS != "linux" || !slices.Contains([]string{"amd64", "arm64", "any"}, a.Architecture) || a.Architecture == "any" && a.Component != "web" && a.Component != "fail2ban" {
+	if !identifier.MatchString(a.ID) || slices.Contains([]string{"plan.json", "release-manifest.json", "release-manifest.sig"}, a.ID) || !slices.Contains([]string{"panel", "nginx", "fail2ban"}, a.Component) || !validVersion(a.Version) || a.OS != "linux" || !slices.Contains([]string{"amd64", "arm64", "any"}, a.Architecture) || a.Architecture == "any" && a.Component != "fail2ban" {
 		return errors.New("资产标识、类型、版本或架构无效")
 	}
 	if !identifier.MatchString(a.Distribution) || !text(a.DistributionVersion, 64) || a.ABI != "static" && a.ABI != "constrained" && a.ABI != "system-python" || a.ABI == "constrained" && (a.Distribution == "any" || len(a.RuntimeFiles) == 0) || a.ABI != "constrained" && len(a.RuntimeFiles) != 0 {
@@ -171,16 +171,10 @@ func validateAsset(a Asset) error {
 			return errors.New("资产缺少有效许可文件")
 		}
 	}
-	entry := map[string]string{"panel": "nginxpanel", "web": "index.html", "nginx": "bin/nginx", "fail2ban": "bin/fail2ban-server"}[a.Component]
+	entry := map[string]string{"panel": "nginxpanel", "nginx": "bin/nginx", "fail2ban": "bin/fail2ban-server"}[a.Component]
 	f, ok := files[entry]
-	if !ok || f.Size == 0 || a.Component == "web" && f.Mode != 0644 || a.Component != "web" && f.Mode != 0755 {
+	if !ok || f.Size == 0 || f.Mode != 0755 {
 		return errors.New("资产缺少固定入口文件")
-	}
-	if a.Component == "panel" {
-		f, ok := files["web/index.html"]
-		if !ok || f.Size == 0 || f.Mode != 0644 {
-			return errors.New("面板资产须包含配套前端")
-		}
 	}
 	seenRuntime := map[string]bool{}
 	for _, f := range a.RuntimeFiles {
@@ -242,19 +236,21 @@ func manifestCatalog(m Manifest) (map[string]Asset, error) {
 	if err := validateImages(m); err != nil {
 		return nil, err
 	}
-	if len(m.Assets) == 0 || len(m.Assets) > 16 {
-		return nil, errors.New("发行资产须为 1–16 项")
+	if len(m.Images) != 1 || len(m.Assets) != 2 {
+		return nil, errors.New("正式发行须包含一个 Nginx 镜像和两个架构的核心程序包")
 	}
 	assets := map[string]Asset{}
 	archiveNames := map[string]bool{}
+	architectures := map[string]bool{}
 	files := 0
 	for _, asset := range m.Assets {
 		if err := validateAsset(asset); err != nil {
 			return nil, fmt.Errorf("资产 %s：%w", asset.ID, err)
 		}
-		if asset.Component == "panel" && asset.Version != m.Version || asset.Component == "web" && asset.Version != m.FrontendVersion {
-			return nil, errors.New("面板或前端资产版本与发行清单不一致")
+		if asset.Component != "panel" || asset.Version != m.Version || asset.ID != "panel-linux-"+asset.Architecture || asset.ABI != "static" || len(asset.Dependencies) != 0 || architectures[asset.Architecture] {
+			return nil, errors.New("核心程序包身份、架构或依赖不符合发行契约")
 		}
+		architectures[asset.Architecture] = true
 		if _, ok := assets[asset.ID]; ok || archiveNames[asset.Archive] {
 			return nil, errors.New("发行资产或归档名重复")
 		}
@@ -264,6 +260,9 @@ func manifestCatalog(m Manifest) (map[string]Asset, error) {
 		if files > MaxFiles {
 			return nil, errors.New("发行文件清单合计超过 4096 项")
 		}
+	}
+	if !architectures["amd64"] || !architectures["arm64"] {
+		return nil, errors.New("发行须包含 Linux amd64 和 arm64 核心程序包")
 	}
 	colors := map[string]int{}
 	var visit func(string) error
@@ -340,8 +339,10 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 	if in.Host.OS != "linux" || !slices.Contains([]string{"amd64", "arm64"}, in.Host.Architecture) || !identifier.MatchString(in.Host.Distribution) || !text(in.Host.Version, 64) {
 		return nil, errors.New("宿主机平台尚未确认")
 	}
-	if err := selectors(in.Assets, in.Components); err != nil {
-		return nil, err
+	if !in.ImageCatalog {
+		if err := selectors(in.Assets, in.Components); err != nil {
+			return nil, err
+		}
 	}
 	assets, err := manifestCatalog(m)
 	if err != nil {
@@ -351,21 +352,52 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 		return nil, errors.New("接收端协议尚未确认")
 	}
 	issues := requirements.Incompatibilities(in.Receiver)
-	selected, err := selectAssets(m, in.Host, in.Assets, in.Components)
-	if err != nil {
-		return nil, err
+	var selected []string
+	if in.ImageCatalog {
+		for _, image := range m.Images {
+			if imageHasPlatform(m, image.ID, in.Host.OS, in.Host.Architecture) {
+				token, _ := ImageToken(image.ID)
+				selected = append(selected, token)
+			}
+		}
+		if len(selected) == 0 {
+			return nil, errors.New("发行没有适用于本机的签名镜像")
+		}
+	} else {
+		selected, err = selectAssets(m, in.Host, in.Assets, in.Components)
+		if err != nil {
+			return nil, err
+		}
 	}
 	sort.Strings(selected)
 	for i, id := range selected {
 		if i > 0 && id == selected[i-1] {
 			return nil, errors.New("所选资产重复")
 		}
+		if imageID, ok := ImageIDFromToken(id); ok {
+			if !imageExists(m, imageID) || !imageHasPlatform(m, imageID, in.Host.OS, in.Host.Architecture) {
+				return nil, errors.New("所选签名镜像不存在或不支持本机架构")
+			}
+			component := imageAllowedComponent(imageID)
+			if len(in.AllowedComponents) != 0 && !slices.Contains(in.AllowedComponents, component) {
+				return nil, errors.New("所选镜像组件未获授权")
+			}
+			continue
+		}
 		if _, ok := assets[id]; !ok {
 			return nil, errors.New("所选资产不存在")
 		}
 	}
 	stagingOnly := len(issues) != 0
-	if stagingOnly && !(in.PanelStaging && m.APIMajor == in.Receiver.APIMajor && len(selected) == 1 && assets[selected[0]].Component == "panel" && assets[selected[0]].ABI == "static" && len(assets[selected[0]].Dependencies) == 0) {
+	stagingAllowed := false
+	if in.PanelStaging && m.APIMajor == in.Receiver.APIMajor && len(selected) == 1 {
+		if _, ok := ImageIDFromToken(selected[0]); ok {
+			stagingAllowed = false
+		} else if asset, ok := assets[selected[0]]; ok {
+			stagingAllowed = asset.Component == "panel" && asset.ABI == "static" && len(asset.Dependencies) == 0
+		}
+	}
+	if stagingOnly && !stagingAllowed {
 		return nil, &receiverCompatibilityError{announcement: Announcement{Repository: m.Repository, Version: m.Version, Tag: "v" + m.Version, Channel: m.Channel, KeyID: sig.KeyID, ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), ExpiresAt: m.ExpiresAt, Notes: m.Notes, Requirements: requirements, Receiver: in.Receiver, ReceiverCompatible: false, Incompatibilities: issues}}
 	}
 	p := Plan{StagingOnly: stagingOnly, State: "manifest_verified", ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), KeyID: sig.KeyID, Manifest: m, Host: in.Host, Receiver: in.Receiver, Selected: selected, Assets: []Asset{}}
@@ -402,6 +434,9 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 		return nil
 	}
 	for _, id := range selected {
+		if _, ok := ImageIDFromToken(id); ok {
+			continue
+		}
 		if err := include(id); err != nil {
 			return nil, err
 		}

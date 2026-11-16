@@ -29,6 +29,7 @@ import (
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/storage"
+	"nginxpanel/internal/webui"
 	"nginxpanel/migrations"
 )
 
@@ -75,6 +76,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	command := os.Args[1]
+	if command == "core-update-worker" {
+		return runCoreUpdateCLI(ctx, os.Args[2:])
+	}
 	if command == "container-package-info" {
 		return runContainerPackageInfo(os.Args[2:])
 	}
@@ -364,10 +368,10 @@ func run() error {
 		"installation-removal-check":         {"data-dir": true},
 		"installation-removal-prepare":       {"data-dir": true},
 		"installation-defaults":              {"data-dir": true},
-		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "web-dir": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
+		"panel-native-bind":                  {"data-dir": true, "panel-binary": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true},
 		"panel-native-serve":                 {"data-dir": true},
-		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
-		"panel-runtime-verify":               {"data-dir": true, "panel-binary": true, "web-dir": true, "launcher-binary": true, "panel-image": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-bind":                 {"data-dir": true, "panel-binary": true, "launcher-binary": true, "panel-image": true, "listen": true, "protocol": true, "allowed-uid": true, "panel-gid": true, "ipc-gid": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
+		"panel-runtime-verify":               {"data-dir": true, "panel-binary": true, "launcher-binary": true, "panel-image": true, "container-manifest": true, "release-trust": true, "release-manifest": true, "release-manifest-sha256": true, "release-signature": true, "release-prerelease": true},
 		"panel-runtime-status":               {"data-dir": true},
 		"panel-runtime-stage":                {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
 		"panel-runtime-staged":               {"data-dir": true, "release-plan": true, "release-trust": true, "release-prerelease": true},
@@ -417,7 +421,7 @@ func run() error {
 		if allowed, ok := runtimeFlags[command]; ok && !allowed[f.Name] {
 			invalidFlag = f.Name
 		}
-		if f.Name == "panel-runtime" && command != "serve" {
+		if f.Name == "panel-runtime" && command != "serve" && command != "core" {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
@@ -538,7 +542,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "firewall-scope":
-			if command != "agent" && command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" && command != "firewalld-init" && command != "firewalld-registration" && command != "firewalld-recover" && command != "firewalld-remove" && command != "ufw-init" && command != "ufw-registration" && command != "ufw-recover" && command != "ufw-remove" && command != "iptables-init" && command != "iptables-registration" && command != "iptables-recover" && command != "iptables-remove" && command != "iptables-retire" && command != "iptables-retirement" && command != "docker-firewall-init" && command != "docker-firewall-registration" && command != "docker-firewall-recover" && command != "docker-firewall-remove" {
+			if command != "agent" && command != "core" && command != "firewall-init" && command != "firewall-registration" && command != "firewall-recover" && command != "firewall-remove" && command != "firewalld-init" && command != "firewalld-registration" && command != "firewalld-recover" && command != "firewalld-remove" && command != "ufw-init" && command != "ufw-registration" && command != "ufw-recover" && command != "ufw-remove" && command != "iptables-init" && command != "iptables-registration" && command != "iptables-recover" && command != "iptables-remove" && command != "iptables-retire" && command != "iptables-retirement" && command != "docker-firewall-init" && command != "docker-firewall-registration" && command != "docker-firewall-recover" && command != "docker-firewall-remove" {
 				invalidFlag = f.Name
 			}
 		case "firewall-operation":
@@ -558,7 +562,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "firewall-owner", "firewall-ssh":
-			if command != "agent" {
+			if command != "agent" && command != "core" {
 				invalidFlag = f.Name
 			}
 		case "backup-input-fd":
@@ -614,7 +618,7 @@ func run() error {
 				invalidFlag = f.Name
 			}
 		case "nginx-container":
-			if command != "agent" && command != "nginx-init" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-activate" && command != "fail2ban-upgrade-run" {
+			if command != "agent" && command != "core" && command != "nginx-init" && command != "fail2ban-upgrade-verify" && command != "fail2ban-upgrade-activate" && command != "fail2ban-upgrade-run" {
 				invalidFlag = f.Name
 			}
 		case "panel-gid":
@@ -667,6 +671,11 @@ func run() error {
 	if *nginxRuntimeCheck && command != "nginx-runtime" {
 		return errors.New("nginx-runtime-check is only valid for nginx-runtime")
 	}
+	if command == "core" {
+		if err := selectCoreExecutable(absDir, "core", os.Args[2:]); err != nil {
+			return err
+		}
+	}
 	var installation *nginxruntime.Installation
 	var containerRuntime *nginxcontainer.Runtime
 	if *nginxContainer {
@@ -681,7 +690,7 @@ func run() error {
 		installation = binding.Installation()
 	}
 	if *nginxBinding {
-		if (command != "agent" && command != "nginx-init") || *nginxBinary != "" || *devAgent || *releasePlan != "" || *releaseSelect != "" {
+		if (command != "agent" && command != "core" && command != "nginx-init") || *nginxBinary != "" || *devAgent || *releasePlan != "" || *releaseSelect != "" {
 			return errors.New("nginx-binding requires a native agent or initializer without another binary selection")
 		}
 		call, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -1163,7 +1172,7 @@ func run() error {
 		if *protocol != "" && *protocol != "http" && *protocol != "https" {
 			return errors.New("管理协议须为 http 或 https")
 		}
-		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, Listen: *listen, HTTP: *protocol == "http", UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
+		out, err := panelruntime.BindNative(ctx, panelruntime.NativeInput{DataDir: absDir, Binary: *panelBinary, Listen: *listen, HTTP: *protocol == "http", UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID})
 		if err != nil {
 			return err
 		}
@@ -1172,7 +1181,7 @@ func run() error {
 		if *protocol != "" && *protocol != "http" && *protocol != "https" {
 			return errors.New("管理协议须为 http 或 https")
 		}
-		input := panelruntime.BindInput{DataDir: absDir, Binary: *panelBinary, WebDir: *webDir, LauncherBinary: *launcherBinary, Listen: *listen, HTTP: *protocol == "http", UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID, Image: *panelImage,
+		input := panelruntime.BindInput{DataDir: absDir, Binary: *panelBinary, LauncherBinary: *launcherBinary, Listen: *listen, HTTP: *protocol == "http", UID: *allowedUID, GID: *panelGID, IPCGID: *ipcGID, Image: *panelImage,
 			Signature: releases.ImageInput{LocalManifestPath: *containerManifest, TrustPath: *releaseTrust, ManifestPath: *releaseManifest, SignaturePath: *releaseSignature, AllowPrerelease: *releasePrerelease, ExpectedManifestSHA256: *releaseManifestSHA}}
 		if command == "panel-runtime-verify" {
 			out, err := panelruntime.VerifySource(ctx, input)
@@ -1438,7 +1447,11 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"version": version, "database_schema": schema, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "launcher_version": releases.LauncherVersion})
+		frontendID, err := webui.Identity()
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"frontend_id": frontendID, "version": version, "database_schema": schema, "agent_protocol": agent.Protocol, "parser_version": nginxconfig.ParserVersion, "launcher_version": releases.LauncherVersion})
 	case "doctor":
 		return json.NewEncoder(os.Stdout).Encode(platform.Detect())
 	case "init", "dev":
@@ -1504,7 +1517,7 @@ func run() error {
 		}
 		defer engine.Close()
 		return engine.Initialize()
-	case "agent":
+	case "agent", "core":
 		if *maintenanceScope != "host" && *maintenanceScope != "unconfirmed" {
 			return errors.New("maintenance-scope must be host or unconfirmed")
 		}
@@ -1533,7 +1546,17 @@ func run() error {
 		if *nginxBinary != "" || containerRuntime != nil {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Container: containerRuntime, Journal: journal}
 		}
-		return (&agent.Server{Socket: path, SocketSELinuxContext: *socketSELinuxContext, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}).Run(ctx)
+		host := &agent.Server{Socket: path, SocketSELinuxContext: *socketSELinuxContext, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}
+		if command == "core" {
+			o := app.Defaults(absDir, false)
+			d, err := panelruntime.ReadDeployment(absDir)
+			if err != nil {
+				return err
+			}
+			o.Listen, o.Socket, o.Policy, o.Version, o.PanelRuntime = d.Listen, path, policy, version, "native"
+			return app.RunCore(ctx, o, host)
+		}
+		return host.Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

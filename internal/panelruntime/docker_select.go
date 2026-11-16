@@ -20,8 +20,7 @@ func SameDockerApplication(before, after Deployment) bool {
 	if before.Mode != "docker" || after.Mode != "docker" || before.validate(before.DataDir) != nil || after.validate(after.DataDir) != nil {
 		return false
 	}
-	after.Image, after.ImageID, after.LauncherSHA256, after.SignedImage = before.Image, before.ImageID, before.LauncherSHA256, before.SignedImage
-	after.LauncherRelease = before.LauncherRelease
+	after.Image, after.ImageID, after.LauncherSHA256, after.LauncherRelease, after.SignedImage = before.Image, before.ImageID, before.LauncherSHA256, before.LauncherRelease, before.SignedImage
 	return before == after
 }
 

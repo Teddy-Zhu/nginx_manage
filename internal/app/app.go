@@ -25,7 +25,6 @@ import (
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/acme"
 	"nginxpanel/internal/agent"
-	"nginxpanel/internal/agentupdates"
 	"nginxpanel/internal/auditlog"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/backup"
@@ -216,14 +215,14 @@ func Lock(dataDir string, development bool) (func(), error) {
 }
 
 func Run(ctx context.Context, o Options) error {
-	if o.PanelRuntime != "native" && o.PanelRuntime != "docker" && o.PanelRuntime != "development" {
+	if o.PanelRuntime != "native" && o.PanelRuntime != "development" {
 		return errors.New("面板运行模式未明确配置")
 	}
 	if o.Dev != (o.PanelRuntime == "development") {
 		return errors.New("面板运行模式与开发开关不一致")
 	}
-	if !o.Dev && os.Geteuid() == 0 {
-		return errors.New("serve must run as a dedicated non-root user")
+	if !o.Dev && os.Geteuid() != 0 {
+		return errors.New("core service must run as root")
 	}
 	host, _, err := net.SplitHostPort(o.Listen)
 	if err != nil {
@@ -244,7 +243,7 @@ func Run(ctx context.Context, o Options) error {
 	defer unlock()
 	var running panelruntime.Snapshot
 	if !o.Dev {
-		running, err = panelruntime.CheckProcess(o.DataDir, o.PanelRuntime, o.Listen, o.WebDir, o.Version)
+		running, err = panelruntime.CheckProcess(o.DataDir, o.PanelRuntime, o.Listen, o.Version)
 		if err != nil {
 			return err
 		}
@@ -298,7 +297,6 @@ func Run(ctx context.Context, o Options) error {
 	componentService := &components.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Agent: agentClient}
 	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	switchService := &nginxswitch.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
-	agentUpgradeService := &agentupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	imageUpgradeService := &imageupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	updateService := &panelupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	fail2banService := &fail2ban.PolicyService{DB: db, Vault: vault, Maintenance: maintenanceService}
@@ -316,14 +314,17 @@ func Run(ctx context.Context, o Options) error {
 	}
 	migrationService := &migration.Service{HostDNS: dnsService, Monitoring: monitoringService, Fail2ban: fail2banService, Firewall: firewallService, Components: componentService, Installations: installationService, Maintenance: maintenanceService, DB: db, Vault: vault, Config: config, ACME: acmeService, Notifications: notificationService, Agent: agentClient, NodeID: nodeID, Version: o.Version}
 	backupService := &backup.Service{DB: db, Vault: vault, Maintenance: maintenanceService, Agent: agentClient, DataDir: o.DataDir, NodeID: nodeID, Version: o.Version, Runtime: o.PanelRuntime, ReleaseID: running.Release.ID}
-	static := &frontendHandler{data: o.DataDir, baseID: running.Release.ID, development: spa(o.WebDir), dev: o.Dev}
+	static, err := newFrontendHandler(spa(o.WebDir), o.Dev)
+	if err != nil {
+		return err
+	}
 	authentication := auth.New(db, o.Dev)
 	authentication.Sessions.Cookie.Secure = !o.Dev && !o.HTTP
 	// Browsers prevent HTTP from replacing an existing Secure cookie of the same name.
 	if o.HTTP {
 		authentication.Sessions.Cookie.Name = "nginxpanel_http_session"
 	}
-	apiServer := &transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: authentication, Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, AgentUpgrades: agentUpgradeService, ImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}
+	apiServer := &transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: authentication, Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, ImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}
 	api := apiServer.Handler()
 	if eventLogs != nil {
 		eventLogs.OnDelivered = func() { apiServer.Realtime.Notify("tasks") }
@@ -347,7 +348,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	defer listener.Close()
 	var workers sync.WaitGroup
-	workers.Add(16)
+	workers.Add(15)
 	if eventLogs != nil {
 		eventCtx, stopEvents := context.WithCancel(context.WithoutCancel(runCtx))
 		eventDone := make(chan struct{})
@@ -402,7 +403,6 @@ func Run(ctx context.Context, o Options) error {
 	go func() { defer workers.Done(); result <- installationService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- switchService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- updateService.Run(runCtx) }()
-	go func() { defer workers.Done(); result <- agentUpgradeService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- imageUpgradeService.Run(runCtx) }()
 	go func() { defer workers.Done(); result <- maintenanceService.Run(runCtx) }()
 	select {

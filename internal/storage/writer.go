@@ -55,7 +55,7 @@ func writerDirectory(data string) error {
 }
 
 func writerFile(data string, gid int) (*os.File, error) {
-	if !filepath.IsAbs(data) || filepath.Clean(data) != data || gid <= 0 || uint64(gid) > uint64(^uint32(0)) {
+	if !filepath.IsAbs(data) || filepath.Clean(data) != data || gid < 0 || uint64(gid) > uint64(^uint32(0)) {
 		return nil, errors.New("正式面板写锁的目录或专用组无效")
 	}
 	if err := writerDirectory(data); err != nil {

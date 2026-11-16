@@ -74,7 +74,7 @@ func (s *Service) ClearOffline(ctx context.Context, p auth.Principal, requestID,
 		return OfflineUpload{}, fault.Invalid("离线上传 UUID 无效")
 	}
 	var pending int
-	if err = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.activate','component.pull') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&pending); err != nil {
+	if err = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.pull') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&pending); err != nil {
 		return OfflineUpload{}, err
 	}
 	if pending != 0 {

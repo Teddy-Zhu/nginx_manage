@@ -69,7 +69,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 			return out, fault.Invalid("软件操作不能引用组件任务")
 		}
 	}
-	if in.Input.Action == "activate" || in.Input.Action == "pull" {
+	if in.Input.Action == "pull" {
 		if err := p.Require("system.write"); err != nil {
 			return out, err
 		}
@@ -124,7 +124,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		return out, err
 	}
 	var active int
-	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.activate','component.pull','component.software') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&active); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.pull','component.software') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&active); err != nil {
 		return out, err
 	}
 	if active != 0 {
@@ -133,11 +133,6 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	now := time.Now().Unix()
 	if in.Input.Action == "pull" {
 		if err = s.validateImageParent(ctx, tx, p.ID, in, now); err != nil {
-			return out, err
-		}
-	}
-	if in.Input.Action == "activate" {
-		if err = s.validateFrontendParent(ctx, tx, p.ID, in, now); err != nil {
 			return out, err
 		}
 	}

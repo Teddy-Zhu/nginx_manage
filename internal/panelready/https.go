@@ -3,10 +3,8 @@ package panelready
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -17,16 +15,23 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
+	"golang.org/x/net/html"
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
 )
+
+const frontendFileLimit = 8 << 20
+const frontendEntryLimit = 64
+const frontendModuleLimit = 16
+const frontendCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 type HTTPSResult struct {
 	FrontendFiles     int    `json:"frontend_files"`
@@ -127,6 +132,175 @@ func apiData(raw []byte, header http.Header, node string, out any) error {
 	return decode(e.Data, out)
 }
 
+func frontendAssetPath(source string) (string, error) {
+	if len(source) > 512 || !strings.HasPrefix(source, "/assets/") || strings.HasPrefix(source, "//") || strings.ContainsAny(source, "?#%\\") || path.Clean(source) != source {
+		return "", errors.New("前端入口资源路径无效")
+	}
+	for _, c := range source {
+		if c > 127 || !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("/._-", c)) {
+			return "", errors.New("前端入口资源路径无效")
+		}
+	}
+	switch strings.ToLower(path.Ext(source)) {
+	case ".js", ".mjs", ".css", ".svg", ".png", ".ico", ".webp", ".jpg", ".jpeg", ".avif":
+		return source, nil
+	default:
+		return "", errors.New("前端入口资源类型无效")
+	}
+}
+
+func frontendEntries(entries []string) (map[string]struct{}, error) {
+	if len(entries) == 0 || len(entries) > frontendEntryLimit || !sort.StringsAreSorted(entries) {
+		return nil, errors.New("前端入口资源清单无效")
+	}
+	want := make(map[string]struct{}, len(entries))
+	hasScript := false
+	for _, entry := range entries {
+		asset, err := frontendAssetPath(entry)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := want[asset]; exists {
+			return nil, errors.New("前端入口资源清单包含重复项")
+		}
+		want[asset] = struct{}{}
+		ext := strings.ToLower(path.Ext(asset))
+		if extIsJavaScript(ext) {
+			hasScript = true
+		}
+	}
+	if !hasScript {
+		return nil, errors.New("前端入口缺少 JavaScript 模块")
+	}
+	return want, nil
+}
+
+func extIsJavaScript(ext string) bool { return ext == ".js" || ext == ".mjs" }
+
+func checkFrontendAsset(ctx context.Context, c *http.Client, scheme, address, name string) error {
+	raw, headers, err := readResponse(ctx, c, scheme, address, name, frontendFileLimit)
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return errors.New("前端入口资源内容为空")
+	}
+	media, _, err := mime.ParseMediaType(headers.Get("Content-Type"))
+	if err != nil {
+		return errors.New("前端入口资源响应类型无效")
+	}
+	switch strings.ToLower(path.Ext(name)) {
+	case ".js", ".mjs":
+		if media != "text/javascript" && media != "application/javascript" && media != "text/ecmascript" && media != "application/ecmascript" {
+			return errors.New("前端脚本响应类型无效")
+		}
+	case ".css":
+		if media != "text/css" {
+			return errors.New("前端样式响应类型无效")
+		}
+	case ".svg", ".png", ".ico", ".webp", ".jpg", ".jpeg", ".avif":
+		if !strings.HasPrefix(media, "image/") {
+			return errors.New("前端图标响应类型无效")
+		}
+	}
+	return nil
+}
+
+func checkFrontendPage(raw []byte, headers http.Header, want map[string]struct{}) error {
+	media, _, err := mime.ParseMediaType(headers.Get("Content-Type"))
+	if err != nil || media != "text/html" || headers.Get("Cache-Control") != "no-store" || !strings.EqualFold(headers.Get("X-Content-Type-Options"), "nosniff") || headers.Get("Referrer-Policy") != "no-referrer" || headers.Get("Content-Security-Policy") != frontendCSP {
+		return errors.New("前端首页响应类型或安全策略无效")
+	}
+	seen := make(map[string]struct{}, len(want))
+	hasHTML, hasBody, hasApp, modules := false, false, false, 0
+	add := func(source string, script bool) error {
+		asset, err := frontendAssetPath(source)
+		if err != nil {
+			return err
+		}
+		if script && !extIsJavaScript(strings.ToLower(path.Ext(asset))) {
+			return errors.New("前端脚本入口扩展名无效")
+		}
+		if _, exists := want[asset]; !exists {
+			return errors.New("前端首页引用不匹配入口清单")
+		}
+		seen[asset] = struct{}{}
+		return nil
+	}
+	tokenizer := html.NewTokenizer(bytes.NewReader(raw))
+	for {
+		typeOf := tokenizer.Next()
+		if typeOf == html.ErrorToken {
+			if tokenizer.Err() != io.EOF {
+				return errors.New("前端首页 HTML 格式无效")
+			}
+			break
+		}
+		if typeOf != html.StartTagToken && typeOf != html.SelfClosingTagToken {
+			continue
+		}
+		tag := tokenizer.Token()
+		attrs := make(map[string]string, len(tag.Attr))
+		for _, attr := range tag.Attr {
+			if _, exists := attrs[attr.Key]; exists {
+				return errors.New("前端首页包含重复属性")
+			}
+			attrs[attr.Key] = attr.Val
+		}
+		switch tag.Data {
+		case "html":
+			hasHTML = true
+		case "body":
+			hasBody = true
+		case "base":
+			return errors.New("前端首页不能重定义资源基址")
+		case "div":
+			if attrs["id"] == "app" {
+				hasApp = true
+			}
+		case "script":
+			if attrs["src"] == "" || attrs["type"] != "module" {
+				return errors.New("前端首页包含未授权脚本")
+			}
+			if err := add(attrs["src"], true); err != nil {
+				return err
+			}
+			modules++
+		case "link":
+			rels := strings.Fields(strings.ToLower(attrs["rel"]))
+			stylesheet := containsString(rels, "stylesheet")
+			modulepreload := containsString(rels, "modulepreload")
+			icon := containsString(rels, "icon")
+			resource := stylesheet || modulepreload || icon
+			if resource {
+				if attrs["href"] == "" {
+					return errors.New("前端首页入口链接缺少地址")
+				}
+				ext := strings.ToLower(path.Ext(attrs["href"]))
+				if stylesheet && ext != ".css" || modulepreload && !extIsJavaScript(ext) || icon && ext != ".svg" && ext != ".png" && ext != ".ico" && ext != ".webp" && ext != ".jpg" && ext != ".jpeg" && ext != ".avif" {
+					return errors.New("前端首页入口链接类型无效")
+				}
+				if err := add(attrs["href"], modulepreload); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if !hasHTML || !hasBody || !hasApp || modules == 0 || modules > frontendModuleLimit || len(seen) != len(want) {
+		return errors.New("前端首页内容或入口资源不完整")
+	}
+	return nil
+}
+
+func containsString(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
+}
+
 // CheckListener uses the configured management protocol and published routes.
 // HTTPS pins the saved certificate; HTTP remains confined to the local listener.
 func CheckListener(ctx context.Context, s panelruntime.Snapshot, nodeID string) (HTTPSResult, error) {
@@ -198,61 +372,26 @@ func CheckListener(ctx context.Context, s panelruntime.Snapshot, nodeID string) 
 	if version.Version != s.Release.Version || version.APIVersion != 1 || version.AgentProtocol != s.Release.AgentProtocol || version.LauncherVersion != s.Release.LauncherVersion || version.Runtime != s.Deployment.Mode || version.ParserVersion == "" || version.PolicyVersion == "" {
 		return out, errors.New("实际 API 版本或运行模式与当前发布不一致")
 	}
-	frontend, _, err := panelruntime.Frontends(s.Deployment.DataDir, s.Release.ID)
+	if version.FrontendID != s.Release.FrontendID {
+		return out, errors.New("实际页面身份与目标核心发布不一致")
+	}
+	want, err := frontendEntries(version.FrontendEntrypoints)
 	if err != nil {
 		return out, err
 	}
-	if version.FrontendID != frontend.Source.ID {
-		return out, errors.New("实际前端身份与已批准选择不一致")
-	}
-	web := frontend.Files
-	files := make([]string, 0, len(web))
-	for name := range web {
-		files = append(files, name)
-	}
-	sort.Strings(files)
-	for _, name := range files {
-		f := web[name]
-		raw, headers, err = readResponse(ctx, c, scheme, address, "/"+name, f.Size)
-		if err != nil {
+	for _, name := range version.FrontendEntrypoints {
+		if err = checkFrontendAsset(ctx, c, scheme, address, name); err != nil {
 			return out, err
-		}
-		h := sha256.Sum256(raw)
-		if int64(len(raw)) != f.Size || hex.EncodeToString(h[:]) != f.SHA256 {
-			return out, fmt.Errorf("实际前端文件 %s 与受信发布不一致", name)
-		}
-		media, _, err := mime.ParseMediaType(headers.Get("Content-Type"))
-		switch strings.ToLower(filepath.Ext(name)) {
-		case ".html":
-			if err != nil || media != "text/html" {
-				return out, errors.New("实际前端 HTML 响应类型无效")
-			}
-		case ".js", ".mjs":
-			if err != nil || media != "text/javascript" && media != "application/javascript" {
-				return out, errors.New("实际前端脚本响应类型无效")
-			}
-		case ".css":
-			if err != nil || media != "text/css" {
-				return out, errors.New("实际前端样式响应类型无效")
-			}
 		}
 		out.FrontendFiles++
 	}
-	// The browser entry route must resolve to this same signed index.
-	raw, headers, err = readResponse(ctx, c, scheme, address, "/", web["index.html"].Size)
+	// The root route must serve the active application's HTML entry point.
+	raw, headers, err = readResponse(ctx, c, scheme, address, "/", frontendFileLimit)
 	if err != nil {
 		return out, err
 	}
-	if secure.Hash(raw) != web["index.html"].SHA256 {
-		return out, errors.New("实际前端入口与受信发布不一致")
-	}
-	media, _, err := mime.ParseMediaType(headers.Get("Content-Type"))
-	if err != nil || media != "text/html" {
-		return out, errors.New("实际前端入口响应类型无效")
-	}
-	again, _, err := panelruntime.Frontends(s.Deployment.DataDir, s.Release.ID)
-	if err != nil || again.Source != frontend.Source {
-		return out, errors.New("就绪观察期间前端选择变化")
+	if err = checkFrontendPage(raw, headers, want); err != nil {
+		return out, err
 	}
 	return out, nil
 }

@@ -19,7 +19,7 @@ usage() {
 不会安装宿主机编译工具、自动安装 Docker 或接管已有系统 Nginx。
 
 带参数时转交标准安装器，例如：
-sudo bash install.sh --binary /可信目录/nginxpanel --web-dir /可信目录/web --without-nginx --start
+sudo bash install.sh --binary /可信目录/nginxpanel --nginx-image sha256:... --start
   --protocol http|https     访问协议，默认 https
 完整参数：bash deploy/native/install.sh --help
 EOF
@@ -165,11 +165,9 @@ if [[ $fresh == yes || $uninstall == yes ]]; then
       trusted_file "$installer_lifecycle_stage/$control"
     done
     candidate=$installer_lifecycle_stage/nginxpanel
-    candidate_web=$installer_lifecycle_stage/web
-    if [[ ! -f $candidate ]]; then candidate=$installer_lifecycle_stage/bin/nginxpanel; candidate_web=$installer_lifecycle_stage/web/dist; fi
+    if [[ ! -f $candidate ]]; then candidate=$installer_lifecycle_stage/bin/nginxpanel; fi
     trusted_file "$candidate"
     [[ -x $candidate ]] || die '安装包缺少可执行程序'
-    if [[ $fresh == yes ]]; then trusted_file "$candidate_web/index.html"; fi
     case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
     [[ $(elf_arch "$candidate") == "$arch" ]] || die '安装包程序与本机架构不匹配'
     removal_args=(uninstall --checker-binary "$candidate")
@@ -233,7 +231,7 @@ if [[ -r /etc/os-release ]]; then
     if [[ $key == PRETTY_NAME ]]; then os_name=${value//\"/}; break; fi
   done </etc/os-release
 fi
-if [[ -f $root/nginxpanel ]]; then binary=$root/nginxpanel; web=$root/web; else binary=$root/bin/nginxpanel; web=$root/web/dist; fi
+if [[ -f $root/nginxpanel ]]; then binary=$root/nginxpanel; else binary=$root/bin/nginxpanel; fi
 docker_ready=no docker_state=未安装
 if command -v docker >/dev/null; then
   docker_state='不可用（需要本机 rootful Docker 和 Compose）'
@@ -243,12 +241,11 @@ if command -v docker >/dev/null; then
     fi
   fi
 fi
-[[ $docker_ready == yes ]] || die '需要本机 rootful Docker 和 Compose；不会改为宿主机应用部署，请先准备 Docker 后重试'
+[[ $docker_ready == yes ]] || die '需要本机 rootful Docker 和 Compose；不会自动安装 Docker，请先准备 Docker 后重试'
 [[ -f $root/containers.json && -f $root/container-images.tar ]] || die '安装包缺少运行镜像，请使用完整 Release 或在源码目录运行 install.sh 重新构建'
 image_refs=$("$binary" container-package-info --manifest "$root/containers.json") || die '无法读取配套容器镜像'
 mapfile -t package_images <<<"$image_refs"
-[[ ${#package_images[@]} == 2 ]] || die '安装包缺少配套镜像'
-panel_mode=docker
+[[ ${#package_images[@]} == 1 ]] || die '安装包缺少 Nginx 镜像'
 data=/srv/nginxpanel data_ready=no
 for candidate in /srv/nginxpanel /var/lib/nginxpanel; do
   if (root_chain "${candidate%/*}") 2>/dev/null && \
@@ -263,11 +260,11 @@ listen=
 if [[ -f $binary && -x $binary && $(elf_arch "$binary") == "$arch" ]]; then
   listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择管理地址或端口，请检查端口占用和网络配置'
 fi
-printf '\nNginxPanel 环境检测\n  系统：%s\n  架构：%s\n  本机 Docker：%s\n  部署方式：Docker\n  数据目录：%s\n  管理监听：%s\n' "$os_name" "$arch" "$docker_state" "$data" "${listen:-安装时自动选择}"
+printf '\nNginxPanel 环境检测\n  系统：%s\n  架构：%s\n  Docker：%s\n  部署：宿主机服务\n  数据目录：%s\n  管理监听：%s\n' "$os_name" "$arch" "$docker_state" "$data" "${listen:-安装时自动选择}"
 printf '%s\n' '默认自动识别主机网络环境并启用基础管理，安装完成后启动服务。'
 custom=$advanced
-if [[ ! -f $binary || ! -f $web/index.html ]]; then
-  [[ $custom == yes ]] || die '安装包缺少程序或前端；请使用完整 Release 或在源码目录运行 install.sh'
+if [[ ! -f $binary ]]; then
+  [[ $custom == yes ]] || die '安装包缺少程序；请使用完整 Release 或在源码目录运行 install.sh'
 elif [[ $data_ready == no ]]; then
   [[ $custom == yes ]] || die '默认数据目录均不可用；使用 --advanced 选择新的空目录'
 fi
@@ -275,14 +272,12 @@ if [[ $custom == yes ]]; then
   ask data '数据目录' "$data"
 fi
 binary=$(readlink -e -- "$binary") || die '程序路径不存在；请先使用 Docker 构建并传输安装包'
-web=$(readlink -e -- "$web") || die '前端目录不存在；请使用构建后的 web 目录'
-[[ -f $binary && -x $binary && -d $web && -f $web/index.html ]] || die '程序不可执行或前端缺少 index.html'
+[[ -f $binary && -x $binary ]] || die '程序不可执行'
 [[ $(elf_arch "$binary") == "$arch" ]] || die "面板程序与目标 linux/$arch 架构不匹配，请传输正确的安装包"
 if [[ -z $listen ]]; then
   listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择空闲管理端口'
 fi
 if [[ $custom == yes ]]; then ask listen '管理监听 IP:端口（IPv6 使用 [地址]:端口）' "$listen"; fi
-[[ -z $(find "$web" -mindepth 1 ! -type d ! -type f -print -quit) ]] || die '前端目录只能包含普通文件和目录'
 [[ $data =~ ^/(srv|var/lib)/[a-zA-Z0-9_-][a-zA-Z0-9_./-]*$ && $data != */ && $data != *//* && $data != */./* && $data != */../* && $data != */. && $data != */.. ]] || die '数据目录须为 /srv 或 /var/lib 下的规范路径'
 [[ $listen =~ ^(\[[0-9a-f:]+\]|[0-9.]+):([0-9]{4,5})$ ]] || die '管理地址须为 IPv4:端口或 [IPv6]:端口'
 port=${BASH_REMATCH[2]}
@@ -292,7 +287,7 @@ root_chain "${data%/*}"
 [[ ! -e $data && ! -L $data ]] || empty_directory "$data" || die '数据目录不可用或非空，不能首次安装覆盖'
 
 protocol=${requested_protocol:-https}
-args=(--data-dir "$data" --listen "$listen" --protocol "$protocol" --panel-mode "$panel_mode")
+args=(--data-dir "$data" --listen "$listen" --protocol "$protocol")
 dns_owner=auto firewall_owner=auto firewall_ssh=auto log_owner=agent
 if [[ $custom == yes ]] && yes_no '手动调整主机网络管理或日志设置？'; then
   choose dns_owner '主机 DNS 的实际所有者' 1 auto:自动识别 unconfirmed:仅查看 regular-file:普通resolv.conf文件 networkmanager:NetworkManager networkd:systemd-networkd netplan:Netplan
@@ -306,9 +301,9 @@ fi
 if [[ $firewall_owner == auto ]]; then firewall_ssh=auto; fi
 args+=(--dns-owner "$dns_owner" --nginx-log-owner "$log_owner" --firewall-owner "$firewall_owner" --firewall-ssh "$firewall_ssh")
 start=yes
-if [[ $custom == yes ]] && ! yes_no '安装完成后启用并启动所选服务？Docker 模式同时启动容器' yes; then start=no; fi
+  if [[ $custom == yes ]] && ! yes_no '安装完成后启用并启动管理服务及 Nginx 容器？' yes; then start=no; fi
 if [[ $start == yes ]]; then args+=(--start); fi
-printf '\n安装确认\n  部署：%s\n  程序：%s\n  前端：%s\n  数据：%s\n  管理：%s://%s\n  Nginx：%s\n  DNS：%s\n  防火墙：%s / SSH：%s\n  日志轮转：%s\n  立即启动：%s\n' "$panel_mode" "$binary" "$web" "$data" "$protocol" "$listen" "Docker" "$dns_owner" "$firewall_owner" "$firewall_ssh" "$log_owner" "$start"
+printf '\n安装确认\n  部署：宿主机服务\n  程序：%s\n  数据：%s\n  管理：%s://%s\n  Nginx：Docker 容器\n  DNS：%s\n  防火墙：%s / SSH：%s\n  日志轮转：%s\n  立即启动：%s\n' "$binary" "$data" "$protocol" "$listen" "$dns_owner" "$firewall_owner" "$firewall_ssh" "$log_owner" "$start"
 printf '%s\n' '请确认材料来源。将复制为本机 root 批准材料，调用标准安装器；不修改云安全组或接管其他 Nginx 服务。'
 printf '安装参数：'; printf '%q ' "${args[@]}"; printf '\n'
 confirm_install
@@ -321,20 +316,17 @@ exec 8>/opt/nginxpanel/.wizard.lock
 flock -n 8 || die '另一个安装向导正在执行'
 [[ ! -e $plan && ! -L $plan && ! -e /etc/nginxpanel/install/intent && ! -L /etc/nginxpanel/install/intent ]] || die '安装状态已变化，请重新运行向导核对原安装命令'
 stage=$(mktemp -d /opt/nginxpanel/installer-inputs.XXXXXXXX)
-install -d -m 0755 "$stage/web" "$stage/deploy/native"
+install -d -m 0755 "$stage/deploy/native"
 install -m 0555 "$binary" "$stage/nginxpanel"
 install -m 0555 "$root/deploy/native/install.sh" "$stage/deploy/native/install.sh"
 install -m 0555 "$root/deploy/native/lifecycle.sh" "$stage/deploy/native/lifecycle.sh"
 install -m 0555 "$root/manage.sh" "$stage/manage.sh"
-cp -R -- "$web/." "$stage/web/"
-chmod -R u=rwX,go=rX "$stage/web"
-printf '%s\n' '正在导入面板和 Nginx 运行镜像…'
+printf '%s\n' '正在导入 Nginx 运行镜像…'
 docker image load --input "$root/container-images.tar"
-panel_image=$(docker image inspect --format '{{.Id}}' "${package_images[0]}")
-nginx_image=$(docker image inspect --format '{{.Id}}' "${package_images[1]}")
-"$stage/nginxpanel" container-package --package-dir "$stage" --panel-image "$panel_image" --nginx-image "$nginx_image"
+nginx_image=$(docker image inspect --format '{{.Id}}' "${package_images[0]}")
+"$stage/nginxpanel" container-package --package-dir "$stage" --nginx-image "$nginx_image"
 chmod 0444 "$stage/containers.json"
-args+=(--panel-image "$panel_image" --nginx-image "$nginx_image" --container-manifest "$stage/containers.json")
+args+=(--nginx-image "$nginx_image" --container-manifest "$stage/containers.json")
 if [[ -e /opt/nginxpanel/manage.sh || -L /opt/nginxpanel/manage.sh ]]; then
   trusted_file /opt/nginxpanel/manage.sh
   cmp -s "$stage/manage.sh" /opt/nginxpanel/manage.sh || die '已有不同管理脚本，停止覆盖'
@@ -350,11 +342,8 @@ fi
 pending=$(mktemp /opt/nginxpanel/.install-command.XXXXXXXX)
 {
   printf '#!/bin/bash\nset -euo pipefail\nexport PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C DOCKER_HOST=unix:///run/docker.sock\nunset DOCKER_CONTEXT DOCKER_TLS DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_API_VERSION\n'
-  printf '%q ' /bin/bash "$stage/deploy/native/install.sh" --binary "$stage/nginxpanel" --web-dir "$stage/web" "${args[@]}"
+  printf '%q ' /bin/bash "$stage/deploy/native/install.sh" --binary "$stage/nginxpanel" "${args[@]}"
   printf '\n'
-  if [[ $panel_mode == docker && $start == yes ]]; then
-    printf '%s\n' 'docker compose -f /etc/nginxpanel/docker/compose.yaml up -d --pull never'
-  fi
   printf '%s\n' 'install -m 0400 /dev/null /opt/nginxpanel/install-complete' 'sync -f /opt/nginxpanel/install-complete' 'sync -f /opt/nginxpanel'
 } >"$pending"
 chmod 0500 "$pending"

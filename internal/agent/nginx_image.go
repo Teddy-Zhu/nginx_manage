@@ -15,7 +15,6 @@ import (
 	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
-	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/storage"
 )
@@ -103,12 +102,12 @@ func (w *nginxImageWorker) guard(ctx context.Context) error {
 	if hash != i.WorkerUnit {
 		return errors.New("Nginx 镜像服务偏离原登记")
 	}
-	agentHash, _, args, err := agentUpgradeUnits(ctx, i.Before.DataDir, w.r.OperationID)
+	agentHash, _, _, err := agentUpgradeUnits(ctx, i.Before.DataDir, w.r.OperationID)
 	if err != nil {
 		return err
 	}
-	if agentHash != i.AgentUnit || len(args) < 7 || args[6] != "--nginx-container" {
-		return errors.New("Agent 服务偏离固定容器登记")
+	if agentHash != i.AgentUnit {
+		return errors.New("核心服务偏离固定登记")
 	}
 	if err = checkAgentProgram(i.Agent); err != nil {
 		return err
@@ -119,13 +118,6 @@ func (w *nginxImageWorker) guard(ctx context.Context) error {
 	}
 	if current.Release.ID != i.PanelID || selectionValueHash(current.Deployment) != selectionValueHash(i.Panel) {
 		return errors.New("Nginx 镜像操作期间应用选择发生变化")
-	}
-	frontend, err := panelImageFrontend(i.Before.DataDir)
-	if err != nil {
-		return err
-	}
-	if frontend != i.FrontendSHA256 {
-		return errors.New("Nginx 镜像操作期间前端选择发生变化")
 	}
 	raw, err := secure.ReadRootFile(panelruntime.DockerComposePath, panelruntime.DockerComposeLimit)
 	if err != nil {
@@ -156,18 +148,11 @@ func (w *nginxImageWorker) guard(ctx context.Context) error {
 		if time.Now().Unix() >= i.Deadline {
 			return errors.New("原 Nginx 镜像前进期限已过")
 		}
-		staged, e := panelruntime.Staged(ctx, i.Input.Stage)
+		approved, sourceHash, e := admitNginxImageSource(ctx, i.Input.Stage, i.Input.Signature, i.Target.Image, &i.Target.SignedImage)
 		if e != nil {
 			return e
 		}
-		if staged.Release.AgentProtocol != Protocol || selectionValueHash(staged.Approval) != i.ApprovalSHA256 {
-			return errors.New("Nginx 镜像关联的程序批准或 Agent 协议不一致")
-		}
-		approved, _, e := releases.AdmitImage(i.Input.Signature, "nginx", i.Target.Image, &i.Target.SignedImage)
-		if e != nil {
-			return e
-		}
-		if approved != i.Target.SignedImage {
+		if sourceHash != i.ApprovalSHA256 || approved != i.Target.SignedImage {
 			return errors.New("Nginx 镜像签名批准发生变化")
 		}
 	}
@@ -217,15 +202,15 @@ func queueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string, 
 		return zero, err
 	}
 	access()
-	if _, err = installationExecutable(); err != nil {
+	if _, err = installationExecutableFor(in.Stage.DataDir); err != nil {
 		return zero, err
 	}
 	panel, err := panelruntime.Read(in.Stage.DataDir)
 	if err != nil {
 		return zero, err
 	}
-	if panel.Deployment.Mode != "docker" || panel.Release.AgentProtocol != Protocol {
-		return zero, errors.New("Nginx 镜像替换要求同协议的容器部署")
+	if panel.Deployment.Mode != "native" || panel.Release.AgentProtocol != Protocol {
+		return zero, errors.New("Nginx 镜像替换要求当前受信任的原生核心")
 	}
 	before, err := nginxcontainer.Read(in.Stage.DataDir)
 	if err != nil {
@@ -238,16 +223,16 @@ func queueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string, 
 	if active {
 		return zero, errors.New("Nginx 镜像服务实例仍在运行")
 	}
-	staged, err := panelruntime.Stage(ctx, in.Stage)
+	approval, sourceHash, err := admitNginxImageSource(ctx, in.Stage, in.Signature, in.Image, nil)
 	if err != nil {
 		return zero, err
 	}
-	target, err := nginxcontainer.AdmitCandidate(ctx, nginxcontainer.BindInput{DataDir: before.DataDir, Image: in.Image, LauncherBinary: filepath.Join(staged.Directory, "nginxpanel"), UID: before.UID, GID: before.GID, Signature: in.Signature}, before)
+	target, err := nginxcontainer.AdmitCandidate(ctx, nginxcontainer.BindInput{DataDir: before.DataDir, Image: in.Image, UID: before.UID, GID: before.GID, Signature: in.Signature}, before)
 	if err != nil {
 		return zero, err
 	}
-	if target.SignedImage.ManifestSHA256 != staged.Approval.ManifestSHA256 || target.BootstrapSHA256 != staged.Release.BinarySHA256 {
-		return zero, errors.New("候选 Nginx 镜像与预备程序不属于同一签名发行")
+	if target.SignedImage != approval || target.BootstrapSHA256 == "" {
+		return zero, errors.New("候选 Nginx 镜像未通过签名来源和镜像内bootstrap核验")
 	}
 	if err = nginxcontainer.VerifyRetainedImage(ctx, before); err != nil {
 		return zero, err
@@ -256,27 +241,20 @@ func queueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string, 
 	if err != nil {
 		return zero, err
 	}
-	agent, err := readAgentProgram()
+	agent, err := readCoreProgram(before.DataDir)
 	if err != nil {
 		return zero, err
 	}
-	agentUnit, _, args, err := agentUpgradeUnits(ctx, before.DataDir, id)
+	agentUnit, _, _, err := agentUpgradeUnits(ctx, before.DataDir, id)
 	if err != nil {
 		return zero, err
-	}
-	if len(args) < 7 || args[6] != "--nginx-container" {
-		return zero, errors.New("Agent 未登记容器 Nginx")
 	}
 	process, err := agentUpgradeObserve(ctx, before.DataDir, id, agent)
 	if err != nil {
 		return zero, err
 	}
 	if process.State != "running" {
-		return zero, errors.New("原 Agent 尚未运行")
-	}
-	frontend, err := panelImageFrontend(before.DataDir)
-	if err != nil {
-		return zero, err
+		return zero, errors.New("管理服务尚未运行")
 	}
 	var oldCompose, newCompose bytes.Buffer
 	if err = panelruntime.ComposeWithNginx(&oldCompose, panel.Deployment, before); err != nil {
@@ -293,7 +271,7 @@ func queueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string, 
 		return zero, errors.New("原 Nginx 容器尚未运行")
 	}
 	now := time.Now().Unix()
-	i := NginxImageIntent{Input: in, Epoch: epoch, Before: before, Target: target, Panel: panel.Deployment, PanelID: panel.Release.ID, FrontendSHA256: frontend, ApprovalSHA256: selectionValueHash(staged.Approval), Agent: agent, AgentProcess: process, AgentUnit: agentUnit, WorkerUnit: unit, BeforeCompose: oldCompose.Bytes(), TargetCompose: newCompose.Bytes(), TargetLabels: labels, Container: container, CreatedAt: now, Deadline: now + 600}
+	i := NginxImageIntent{Input: in, Epoch: epoch, Before: before, Target: target, Panel: panel.Deployment, PanelID: panel.Release.ID, ApprovalSHA256: sourceHash, Agent: agent, AgentProcess: process, AgentUnit: agentUnit, WorkerUnit: unit, BeforeCompose: oldCompose.Bytes(), TargetCompose: newCompose.Bytes(), TargetLabels: labels, Container: container, CreatedAt: now, Deadline: now + 600}
 	w := &nginxImageWorker{j: j, r: Record{OperationID: id, Kind: nginxImageKind, State: "running", Stage: "authorized", MaintenanceEpoch: epoch, UpdatedAt: now, Deadline: i.Deadline, NginxImage: &NginxImageOperation{Intent: i}}}
 	n := w.nginx(before)
 	if err = n.setup(); err != nil {
@@ -327,7 +305,7 @@ func queueNginxImage(ctx context.Context, in NginxImageInput, id, epoch string, 
 		return zero, err
 	}
 	if observed != process {
-		return zero, errors.New("镜像授权期间原 Agent 代次变化")
+		return zero, errors.New("镜像授权期间管理服务实例发生变化")
 	}
 	compose, err := secure.ReadRootFile(panelruntime.DockerComposePath, panelruntime.DockerComposeLimit)
 	if err != nil {

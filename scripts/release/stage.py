@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import stat
 import subprocess
 
 
@@ -74,32 +73,6 @@ def node_records(value, records):
             node_records(child, records)
 
 
-def copy_web(source, destination):
-    count, size = 0, 0
-    if not source.is_dir() or source.is_symlink():
-        raise ValueError("frontend build directory is missing or linked")
-    destination.mkdir(exist_ok=True)
-    for root, directories, files in os.walk(source, followlinks=False):
-        for name in directories + files:
-            path = Path(root, name)
-            if path.is_symlink():
-                raise ValueError(f"frontend build contains link: {path}")
-        relative = Path(root).relative_to(source)
-        target = destination / relative
-        target.mkdir(exist_ok=True)
-        for name in files:
-            path = Path(root, name)
-            if not stat.S_ISREG(path.stat().st_mode):
-                raise ValueError(f"frontend build contains special file: {path}")
-            count += 1
-            size += path.stat().st_size
-            if count > 4096 or size > 64 << 20 or path.stat().st_size > 8 << 20:
-                raise ValueError("frontend build exceeds native installer limits")
-            shutil.copyfile(path, target / name)
-    if count == 0:
-        raise ValueError("frontend build is empty")
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-root", required=True, type=Path)
@@ -110,8 +83,12 @@ def main():
     args = parser.parse_args()
     spec = json.loads(read(args.input_root / "publication.json", 4 << 20))
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    if commit != spec["commit"] or subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=normal"]):
+    status = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=normal", "--", ".", ":(exclude)internal/webui/dist"])
+    if commit != spec["commit"] or status:
         raise ValueError("publication must use the approved clean source commit")
+    embedded_dist = Path("internal/webui/dist")
+    if embedded_dist.is_symlink() or not embedded_dist.is_dir() or not (embedded_dist / "index.html").is_file() or (embedded_dist / "index.html").is_symlink():
+        raise ValueError("frontend must be built into the core embed directory before release compilation")
     project_license = read("LICENSE", 256 << 10)
     if not project_license:
         raise ValueError("project LICENSE must be supplied before publishing")
@@ -146,9 +123,8 @@ def main():
     }
     for package in spec["packages"]:
         asset = package["asset"]
-        if asset["component"] in ("nginx", "fail2ban"):
-            # Component assemblers stage these assets from the approved spec.
-            continue
+        if asset["component"] != "panel":
+            raise ValueError("default staging only accepts the core package")
         destination = args.input_root / package["directory"]
         destination.mkdir()
         provenance = dict(shared, asset=asset["id"])
@@ -156,18 +132,14 @@ def main():
             binary = args.binaries / ("nginxpanel-" + asset["architecture"])
             shutil.copyfile(binary, destination / "nginxpanel")
             provenance["binary_sha256"] = hashlib.sha256(read(binary, 192 << 20)).hexdigest()
-            copy_web(Path("web/dist"), destination / "web")
             # 安装入口随面板进入同一签名文件清单，不另造一份二进制安装包。
             for name in ("install.sh", "manage.sh", "deploy/native/install.sh", "deploy/native/lifecycle.sh"):
                 target = destination / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(read(name, 256 << 10))
             license_notices = go_notice + node_notice
-        elif asset["component"] == "web":
-            copy_web(Path("web/dist"), destination)
-            license_notices = node_notice
         else:
-            raise ValueError("default staging only accepts panel and web packages")
+            raise ValueError("default staging only accepts the core package")
         if len(license_notices) > 16 << 20:
             raise ValueError("combined dependency notices exceed 16 MiB")
         (destination / "LICENSE").write_bytes(project_license)

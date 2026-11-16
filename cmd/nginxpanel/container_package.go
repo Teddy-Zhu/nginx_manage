@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -42,13 +41,13 @@ func runContainerPackageInfo(args []string) error {
 		return err
 	}
 	digest := regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	if pkg.Schema != 1 || pkg.Architecture != runtime.GOARCH || len(pkg.Images) != 2 || !digest.MatchString(pkg.Images["panel-launcher"]) || !digest.MatchString(pkg.Images["nginx"]) || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(pkg.BinarySHA256) {
+	if pkg.Schema != 1 || pkg.Architecture != runtime.GOARCH || len(pkg.Images) != 1 || !digest.MatchString(pkg.Images["nginx"]) || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(pkg.BinarySHA256) || pkg.LauncherProtocol != releases.LauncherVersion {
 		return errors.New("安装包镜像架构或内容标识无效")
 	}
 	// Resolve archive tags after loading: classic and containerd image stores
 	// use different IDs for the same saved image. Runtime binding uses the
 	// receiving daemon's immutable ID, never these mutable bootstrap tags.
-	_, err = fmt.Fprintf(os.Stdout, "nginxpanel-build-panel:%s-%s\nnginxpanel-build-nginx:%s-%s\n", pkg.Architecture, pkg.BinarySHA256, pkg.Architecture, pkg.BinarySHA256)
+	_, err = fmt.Fprintf(os.Stdout, "nginxpanel-build-nginx:%s-%s\n", pkg.Architecture, pkg.BinarySHA256)
 	return err
 }
 
@@ -57,14 +56,13 @@ func runContainerPackageInfo(args []string) error {
 func runContainerPackage(args []string) error {
 	f := flag.NewFlagSet("container-package", flag.ContinueOnError)
 	root := f.String("package-dir", "", "assembled installer directory")
-	panel := f.String("panel-image", "", "local panel image ID")
 	nginx := f.String("nginx-image", "", "local Nginx image ID")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
 	digest := regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	if *root == "" || f.NArg() != 0 || !digest.MatchString(*panel) || !digest.MatchString(*nginx) {
-		return errors.New("容器打包须指定安装目录和两项镜像内容 ID")
+	if *root == "" || f.NArg() != 0 || !digest.MatchString(*nginx) {
+		return errors.New("容器打包须指定安装目录和 Nginx 镜像内容 ID")
 	}
 	file := func(name string, limit int64) (releases.File, error) {
 		var out releases.File
@@ -91,31 +89,7 @@ func runContainerPackage(args []string) error {
 	if err != nil {
 		return err
 	}
-	pkg := releases.ContainerPackage{Schema: 1, Version: version, Architecture: runtime.GOARCH, BinarySHA256: binary.SHA256, Images: map[string]string{"panel-launcher": *panel, "nginx": *nginx}}
-	err = filepath.WalkDir(filepath.Join(*root, "web"), func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		relative, err := filepath.Rel(*root, path)
-		if err != nil {
-			return err
-		}
-		item, err := file(relative, 32<<20)
-		if err != nil {
-			return err
-		}
-		pkg.Web = append(pkg.Web, item)
-		if len(pkg.Web) > 4096 {
-			return errors.New("前端文件数量超过安装包上限")
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+	pkg := releases.ContainerPackage{Schema: 1, Version: version, Architecture: runtime.GOARCH, BinarySHA256: binary.SHA256, LauncherProtocol: releases.LauncherVersion, Images: map[string]string{"nginx": *nginx}}
 	out, err := os.OpenFile(filepath.Join(*root, "containers.json"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return err

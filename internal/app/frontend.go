@@ -1,69 +1,59 @@
 package app
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
 	"io/fs"
+	"mime"
 	"net/http"
-	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
+	"time"
 
-	"nginxpanel/internal/panelruntime"
-	"nginxpanel/internal/secure"
+	"nginxpanel/internal/webui"
 )
+
+const frontendFileLimit = 8 << 20
 
 var hashedFrontendAsset = regexp.MustCompile(`^assets/[a-zA-Z0-9_./-]+[-.][a-zA-Z0-9_-]{8,}\.[a-zA-Z0-9]+$`)
 
 type frontendHandler struct {
-	data, baseID string
+	files        fs.FS
 	development  http.Handler
 	dev          bool
-	mu           sync.Mutex
-	loaded       bool
-	selection    os.FileInfo
-	current      panelruntime.FrontendSnapshot
-	previous     *panelruntime.FrontendSnapshot
-	scripts      []string
+	identity     string
+	entryScripts []string
 }
 
-func (h *frontendHandler) sources() (panelruntime.FrontendSnapshot, *panelruntime.FrontendSnapshot, []string, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	root, err := panelruntime.Root(h.data)
+func newFrontendHandler(development http.Handler, dev bool) (*frontendHandler, error) {
+	if dev {
+		return &frontendHandler{development: development, dev: true}, nil
+	}
+	files, err := webui.FS()
 	if err != nil {
-		return h.current, nil, nil, err
+		return nil, err
 	}
-	info, err := os.Lstat(filepath.Join(root, "frontend.json"))
-	if err != nil && !os.IsNotExist(err) {
-		return h.current, nil, nil, err
-	}
-	if h.loaded && (info == nil && h.selection == nil || info != nil && h.selection != nil && os.SameFile(info, h.selection) && info.Size() == h.selection.Size() && info.ModTime().Equal(h.selection.ModTime())) {
-		return h.current, h.previous, h.scripts, nil
-	}
-	current, previous, err := panelruntime.Frontends(h.data, h.baseID)
+	identity, err := webui.Identity()
 	if err != nil {
-		return current, nil, nil, err
+		return nil, err
 	}
-	scripts, err := panelruntime.FrontendEntrypoints(current)
+	entryScripts, err := webui.EntryScripts()
 	if err != nil {
-		return current, nil, nil, err
+		return nil, err
 	}
-	// A rename racing this read is observed on the next request. No cache entry
-	// can suppress a later selection because it retains this pre-read inode.
-	h.current, h.previous, h.scripts, h.selection, h.loaded = current, previous, scripts, info, true
-	return current, previous, scripts, nil
+	return &frontendHandler{files: files, identity: identity, entryScripts: entryScripts}, nil
 }
+
 func (h *frontendHandler) version() (string, []string, error) {
 	if h.dev {
 		return "", []string{}, nil
 	}
-	current, _, scripts, err := h.sources()
-	return current.Source.ID, scripts, err
+	return h.identity, append([]string(nil), h.entryScripts...), nil
 }
+
 func (h *frontendHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.dev {
 		h.development.ServeHTTP(w, r)
@@ -71,7 +61,7 @@ func (h *frontendHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "method not allowed", 405)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -86,47 +76,30 @@ func (h *frontendHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	current, previous, _, err := h.sources()
+	data, err := fs.ReadFile(h.files, name)
 	if err != nil {
-		http.Error(w, "前端发布状态未确认", http.StatusServiceUnavailable)
-		return
-	}
-	source := current
-	file, exists := current.Files[name]
-	if !exists && hashedFrontendAsset.MatchString(name) && previous != nil {
-		if old, found := previous.Files[name]; found {
-			source, file, exists = *previous, old, true
-		}
-	}
-	if !exists {
-		if filepath.Ext(name) != "" || name == "assets" || strings.HasPrefix(name, "assets/") {
+		acceptsHTML := strings.Contains(r.Header.Get("Accept"), "text/html")
+		if filepath.Ext(name) != "" && !acceptsHTML || name == "assets" || strings.HasPrefix(name, "assets/") {
 			http.NotFound(w, r)
 			return
 		}
 		name = "index.html"
-		file = current.Files[name]
+		data, err = fs.ReadFile(h.files, name)
 	}
-	f, before, err := secure.OpenRootFile(filepath.Join(source.Directory, name), panelruntime.WebFileLimit)
-	if err != nil {
-		http.Error(w, "前端资源读取失败", http.StatusServiceUnavailable)
+	if err != nil || len(data) > frontendFileLimit {
+		http.Error(w, "前端资源不可用", http.StatusServiceUnavailable)
 		return
 	}
-	defer f.Close()
-	hash := sha256.New()
-	n, err := io.Copy(hash, io.LimitReader(f, panelruntime.WebFileLimit+1))
-	if err != nil || n != file.Size || hex.EncodeToString(hash.Sum(nil)) != file.SHA256 || !secure.RootFileUnchanged(f, before) {
-		http.Error(w, "前端资源与批准清单不一致", http.StatusServiceUnavailable)
-		return
-	}
-	if _, err = f.Seek(0, io.SeekStart); err != nil {
-		http.Error(w, "前端资源读取失败", http.StatusServiceUnavailable)
-		return
-	}
-	w.Header().Set("ETag", `"`+file.SHA256+`"`)
+	hash := sha256.Sum256(data)
+	digest := hex.EncodeToString(hash[:])
+	w.Header().Set("ETag", `"`+digest+`"`)
 	if hashedFrontendAsset.MatchString(name) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
-	http.ServeContent(w, r, name, before.ModTime(), f)
+	if contentType := mime.TypeByExtension(path.Ext(name)); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(data))
 }
 
 var _ http.Handler = (*frontendHandler)(nil)

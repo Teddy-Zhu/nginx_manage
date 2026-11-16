@@ -15,7 +15,6 @@ import (
 
 	"golang.org/x/sys/unix"
 	"nginxpanel/internal/fault"
-	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/protocol"
 	"nginxpanel/internal/releases"
@@ -27,7 +26,7 @@ type Manager struct {
 	ContainerAction                           func(context.Context, software.Request, software.Progress) (software.Result, error)
 	FrpsAction                                func(context.Context, software.Request, software.Progress) (software.Result, error)
 	Fail2banAction                            func(context.Context, software.Request, software.Progress) (software.Result, error)
-	UpdatePanel                               func(context.Context, software.Request, software.Progress) (software.Result, error)
+	UpdatePanel                               func(context.Context, string, software.Request, software.Progress) (software.Result, error)
 	Dir, DataDir, TrustPath, TokenPath, Scope string
 	Dev                                       bool
 	mu                                        sync.Mutex
@@ -40,15 +39,9 @@ type Manager struct {
 
 func (m *Manager) Overview() Overview {
 	out := Overview{Scope: m.Scope, KeyIDs: []string{}}
-	out.Frontend.Reason = "须由宿主机 root Agent 读取持久版本"
 	if m.Dev || m.Scope != "host" {
 		out.Reason = "须由本机 root 确认宿主机组件范围"
 		return out
-	}
-	if frontend, err := panelruntime.CurrentFrontend(m.DataDir); err == nil {
-		out.Frontend = frontend
-	} else {
-		out.Frontend.Reason = bounded(err.Error())
 	}
 	var catalogErr error
 	out.Software, catalogErr = software.Read(m.DataDir)
@@ -130,7 +123,7 @@ func (m *Manager) Open(ctx context.Context) error {
 	if resume != nil {
 		m.active = true
 		m.workers.Add(1)
-		go m.run(*resume, time.Now().Add(3*time.Minute))
+		go m.run(*resume, time.Now().Add(10*time.Minute))
 	}
 	return nil
 }
@@ -237,15 +230,10 @@ func (m *Manager) interrupted(ctx context.Context, out *Operation) {
 		}
 		return
 	}
-	if out.Input.Action == "activate" {
-		out.Error = "前端激活中断，最终选择尚未确认"
-		m.reconcileFrontend(out)
-		return
-	}
 	if out.Input.Action != "prepare" {
 		return
 	}
-	result, err := releases.Prepared(ctx, releases.Input{PanelStaging: true, TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
+	result, err := releases.Prepared(ctx, releases.Input{PanelStaging: true, TrustPath: m.TrustPath, Assets: out.Input.Assets, AllowedComponents: []string{"nginx", "fail2ban", "panel"}, AllowPrerelease: out.Input.Prerelease, Host: m.host(), Receiver: receiver()}, out.Input.PlanID)
 	if err == nil {
 		if result.Plan.ManifestSHA256 != out.Input.ManifestSHA256 || result.Plan.TrustSHA256 != out.Input.TrustSHA256 {
 			err = releases.ErrReleaseChanged
@@ -299,20 +287,20 @@ func (m *Manager) run(out Operation, until time.Time) {
 			if m.UpdatePanel == nil {
 				err = errors.New("此安装未提供面板更新能力")
 			} else {
-				result, err = m.UpdatePanel(ctx, *out.Input.Software, progress)
+				result, err = m.UpdatePanel(ctx, out.ID, *out.Input.Software, progress)
 			}
 		} else {
 			result, err = software.Run(ctx, m.DataDir, *out.Input.Software, progress)
 		}
-		out.Software = &result
+		if !errors.Is(err, ErrRestartPending) {
+			out.Software = &result
+		}
 		if err == nil {
 			out.State, out.Stage = "succeeded", "software_done"
 			out.RuntimeReason = bounded(result.Message)
 		}
 	} else if err == nil && out.Input.Action == "pull" {
 		err = m.pullImage(ctx, &out)
-	} else if err == nil && out.Input.Action == "activate" {
-		err = m.activateFrontend(ctx, &out)
 	} else if err == nil {
 		in := out.Input.online()
 		in.TrustPath, in.TokenPath, in.Host, in.Receiver = m.TrustPath, m.TokenPath, m.host(), receiver()
@@ -325,9 +313,6 @@ func (m *Manager) run(out Operation, until time.Time) {
 		out.Announcement = result.Announcement
 		if err == nil {
 			_, err = panelSelection(result.Plan)
-		}
-		if err == nil {
-			err = m.frontendCompatible(result.Plan)
 		}
 		if err == nil && out.Input.Action == "prepare" {
 			err = m.prepareRuntime(ctx, &out, result.Plan)
@@ -347,6 +332,16 @@ func (m *Manager) run(out Operation, until time.Time) {
 			}
 		}
 	}
+	if errors.Is(err, ErrRestartPending) {
+		out.State, out.Stage, out.ErrorCode, out.Error = "running", "core_updating", "", ""
+		if writeErr := m.write(&out); writeErr != nil {
+			slog.Error("核心更新中断状态持久化失败", "operation_id", out.ID, "error", writeErr)
+			m.mu.Lock()
+			m.poisoned = true
+			m.mu.Unlock()
+		}
+		return
+	}
 	if err != nil {
 		out.State, out.Stage, out.ErrorCode, out.Error = "failed", "failed", "COMPONENT_OPERATION_FAILED", bounded(err.Error())
 		if errors.Is(err, releases.ErrReceiverIncompatible) {
@@ -354,9 +349,6 @@ func (m *Manager) run(out Operation, until time.Time) {
 		}
 		if errors.Is(err, releases.ErrReleaseChanged) {
 			out.ErrorCode = "COMPONENT_SOURCE_CHANGED"
-		}
-		if out.Input.Action == "activate" {
-			m.reconcileFrontend(&out)
 		}
 		if out.Input.Action == "prepare" || out.Input.Action == "pull" {
 			// A failed response is not evidence that the atomic publication failed.

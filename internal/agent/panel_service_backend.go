@@ -39,6 +39,13 @@ func panelProcFile(name string, limit int64) ([]byte, error) {
 }
 
 func panelNativeUnit(data string) error {
+	deployment, err := panelruntime.ReadDeployment(data)
+	if err != nil {
+		return err
+	}
+	if deployment.Mode != "native" || deployment.UID != 0 || deployment.GID != 0 || deployment.IPCGID != 0 {
+		return errors.New("原生核心未登记为宿主机 root 单服务")
+	}
 	intent, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/intent", 4096)
 	if err != nil {
 		return err
@@ -58,13 +65,14 @@ func panelNativeUnit(data string) error {
 	for _, line := range strings.Split(string(raw), "\n") {
 		if strings.HasPrefix(line, "ExecStart=") {
 			count++
-			if line != "ExecStart=/opt/nginxpanel/current/nginxpanel panel-native-serve --data-dir "+data {
-				return errors.New("原生面板固定启动入口已变化")
+			actual := strings.TrimSpace(strings.TrimPrefix(line, "ExecStart="))
+			if _, err = nativeCoreArguments(actual, data, deployment.UID, "/opt/nginxpanel/current/nginxpanel"); err != nil {
+				return errors.New("原生核心固定启动入口已变化")
 			}
 		}
 	}
 	if count != 1 {
-		return errors.New("原生面板服务启动入口无效")
+		return errors.New("原生核心服务启动入口无效")
 	}
 	return nil
 }
@@ -74,7 +82,7 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	if err := panelNativeUnit(s.Deployment.DataDir); err != nil {
 		return o, err
 	}
-	raw, err := installationSystemctl(ctx, "show", "--property=LoadState,FragmentPath,DropInPaths,NeedDaemonReload,User,Group,WorkingDirectory,ActiveState,MainPID,InvocationID", "nginxpanel.service")
+	raw, err := installationSystemctl(ctx, "show", "--property=LoadState,FragmentPath,DropInPaths,NeedDaemonReload,User,Group,ActiveState,MainPID,InvocationID", "nginxpanel.service")
 	if err != nil {
 		return o, err
 	}
@@ -89,8 +97,8 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 		}
 		values[key] = value
 	}
-	if len(values) != 10 || values["LoadState"] != "loaded" || values["FragmentPath"] != "/etc/systemd/system/nginxpanel.service" || values["DropInPaths"] != "" || values["NeedDaemonReload"] != "no" || values["User"] != "nginxpanel" || values["Group"] != "nginxpanel" || values["WorkingDirectory"] != s.Deployment.DataDir {
-		return o, errors.New("systemd 实际加载的面板服务与固定安装不一致")
+	if len(values) != 9 || values["LoadState"] != "loaded" || values["FragmentPath"] != "/etc/systemd/system/nginxpanel.service" || values["DropInPaths"] != "" || values["NeedDaemonReload"] != "no" || values["User"] != "root" || values["Group"] != "root" {
+		return o, errors.New("systemd 实际加载的核心服务与固定安装不一致")
 	}
 	boot, err := panelProcFile("/proc/sys/kernel/random/boot_id", 64)
 	if err != nil {
@@ -102,12 +110,12 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	}
 	o.PID, err = strconv.Atoi(values["MainPID"])
 	if err != nil || o.PID < 0 || o.PID == 1 {
-		return o, errors.New("systemd 面板主进程标识无效")
+		return o, errors.New("systemd 核心主进程标识无效")
 	}
 	switch values["ActiveState"] {
 	case "inactive", "failed":
 		if o.PID != 0 {
-			return o, errors.New("已停止服务仍有面板主进程")
+			return o, errors.New("已停止服务仍有核心主进程")
 		}
 		o.State = "stopped"
 		return o, nil
@@ -116,18 +124,18 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	case "activating", "deactivating":
 		o.State = values["ActiveState"]
 	default:
-		return o, errors.New("原生面板服务处于未知状态")
+		return o, errors.New("原生核心服务处于未知状态")
 	}
 	if o.PID == 0 {
 		return o, nil
 	}
 	invocation := values["InvocationID"]
 	if len(invocation) != 32 {
-		return o, errors.New("systemd 面板实例身份缺失")
+		return o, errors.New("systemd 核心实例身份缺失")
 	}
 	o.InstanceID = invocation[:8] + "-" + invocation[8:12] + "-" + invocation[12:16] + "-" + invocation[16:20] + "-" + invocation[20:]
 	if !validID(o.InstanceID) {
-		return o, errors.New("systemd 面板实例身份无效")
+		return o, errors.New("systemd 核心实例身份无效")
 	}
 	base := "/proc/" + strconv.Itoa(o.PID)
 	process, err := panelProcFile(base+"/status", 16384)
@@ -141,22 +149,18 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 			continue
 		}
 		if len(fields) != 5 {
-			return o, errors.New("面板主进程账户格式无效")
-		}
-		want := s.Deployment.UID
-		if fields[0] == "Gid:" {
-			want = s.Deployment.GID
+			return o, errors.New("核心主进程账户格式无效")
 		}
 		for _, field := range fields[1:] {
 			value, e := strconv.Atoi(field)
-			if e != nil || value != want {
-				return o, errors.New("面板主进程账户与运行绑定不一致")
+			if e != nil || value != 0 {
+				return o, errors.New("核心主进程账户不是 root")
 			}
 		}
 		identities++
 	}
 	if identities != 2 {
-		return o, errors.New("面板主进程账户身份缺失")
+		return o, errors.New("核心主进程账户身份缺失")
 	}
 	live, err := os.Stat(base + "/exe")
 	if err != nil {
@@ -180,11 +184,11 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	if !owned {
 		return o, errors.New("面板主进程不属于固定 systemd 服务")
 	}
-	args := []string{filepath.Join(s.Directory, "nginxpanel"), "serve", "--data-dir", s.Deployment.DataDir, "--listen", s.Deployment.Listen, "--web-dir", filepath.Join(s.Directory, "web"), "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--panel-runtime", "native"}
 	cmdline, err := panelProcFile(base+"/cmdline", 8192)
 	if err != nil {
 		return o, err
 	}
+	executable := filepath.Join(s.Directory, "nginxpanel")
 	if !os.SameFile(live, expected) {
 		bootstrap, e := trustedFile("/opt/nginxpanel/current/nginxpanel", true)
 		if e != nil {
@@ -194,15 +198,14 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 		if e != nil {
 			return o, e
 		}
-		entry := []byte("/opt/nginxpanel/current/nginxpanel\x00panel-native-serve\x00--data-dir\x00" + s.Deployment.DataDir + "\x00")
-		if !os.SameFile(live, info) || !bytes.Equal(cmdline, entry) {
-			return o, errors.New("systemd 主进程不是当前批准的面板程序或固定启动入口")
+		if !os.SameFile(live, info) {
+			return o, errors.New("systemd 主进程不是当前批准的核心程序")
 		}
-		o.State = "activating"
-		return o, nil
+		executable = "/opt/nginxpanel/current/nginxpanel"
 	}
-	if !bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
-		return o, errors.New("面板主进程参数不是固定 serve 入口")
+	args, err := nativeCoreArguments(strings.TrimSuffix(strings.ReplaceAll(string(cmdline), "\x00", " "), " "), s.Deployment.DataDir, 0, executable)
+	if err != nil || !bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
+		return o, errors.New("核心主进程参数不是固定 core 入口")
 	}
 	stat, err := panelProcFile(base+"/stat", 8192)
 	if err != nil {
@@ -210,15 +213,15 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	}
 	end := strings.LastIndex(string(stat), ") ")
 	if end < 0 {
-		return o, errors.New("面板进程启动标识无效")
+		return o, errors.New("核心进程启动标识无效")
 	}
 	fields := strings.Fields(string(stat)[end+2:])
 	if len(fields) < 20 {
-		return o, errors.New("面板进程启动标识缺失")
+		return o, errors.New("核心进程启动标识缺失")
 	}
 	o.StartTicks, err = strconv.ParseUint(fields[19], 10, 64)
 	if err != nil || o.StartTicks == 0 {
-		return o, errors.New("面板进程启动标识无效")
+		return o, errors.New("核心进程启动标识无效")
 	}
 	after, err := installationSystemctl(ctx, "show", "--property=MainPID,InvocationID", "nginxpanel.service")
 	if err != nil {
@@ -228,12 +231,12 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	for _, line := range strings.Split(strings.TrimSpace(after), "\n") {
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
-			return o, errors.New("面板进程复核格式无效")
+			return o, errors.New("核心进程复核格式无效")
 		}
 		check[key] = value
 	}
 	if len(check) != 2 || check["MainPID"] != strconv.Itoa(o.PID) || check["InvocationID"] != invocation {
-		return o, errors.New("面板服务实例在观测期间变化")
+		return o, errors.New("核心服务实例在观测期间变化")
 	}
 	return o, nil
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"nginxpanel/internal/platform"
@@ -56,11 +55,11 @@ type StagedRelease struct {
 	Reused        bool          `json:"reused"`
 }
 
-// RequireCurrent is an activation guard. Signature staging deliberately accepts
-// a future Agent protocol; ordinary selection must still use the live contract.
+// Agent and API protocols move together inside the core. The installed image
+// launcher and update API remain the activation boundary.
 func (s StagedRelease) RequireCurrent() error {
-	if s.Release.AgentProtocol != protocol.Agent || s.Release.LauncherVersion != releases.LauncherVersion || s.Compatibility.MinimumAgentProtocol > protocol.Agent || s.Compatibility.MinimumLauncher > releases.LauncherVersion {
-		return errors.New("目标需要协调升级 Agent 或 launcher，不能单独切换面板程序")
+	if s.Compatibility.APIMajor != 1 || s.Release.AgentProtocol < s.Compatibility.MinimumAgentProtocol || s.Release.LauncherVersion != releases.LauncherVersion || s.Compatibility.MinimumLauncher > releases.LauncherVersion {
+		return errors.New("此版本无法直接更新，请使用完整安装包重新安装")
 	}
 	return nil
 }
@@ -121,8 +120,8 @@ func stageSource(ctx context.Context, in StageInput, prior *StageApproval) (rele
 		return source, err
 	}
 	p := source.Plan
-	if len(p.Assets) != 1 || p.Assets[0].Component != "panel" || p.Assets[0].ABI != "static" || p.Manifest.Version != p.Manifest.FrontendVersion {
-		return source, errors.New("暂存须使用包含同版前端的独立静态面板资产")
+	if len(p.Assets) != 1 || p.Assets[0].Component != "panel" || p.Assets[0].ABI != "static" {
+		return source, errors.New("暂存须使用内置前端的独立静态核心程序")
 	}
 	if prior != nil && (p.ManifestSHA256 != prior.ManifestSHA256 || p.TrustSHA256 != prior.TrustSHA256) {
 		return source, releases.ErrReleaseChanged
@@ -145,7 +144,7 @@ func stageMatches(r Release, source releases.Result) error {
 	if !found {
 		return errors.New("面板程序不属于签名准备计划")
 	}
-	return signedWeb(r.Web, a)
+	return nil
 }
 
 func stagedResult(root string, r Release, a StageApproval, p releases.Plan, reused bool) StagedRelease {
@@ -225,7 +224,7 @@ func Stage(ctx context.Context, in StageInput) (StagedRelease, error) {
 	}
 	at := time.Now().Unix()
 	a := source.Plan.Assets[0]
-	binary, web := filepath.Join(source.Directory, a.ID, "nginxpanel"), filepath.Join(source.Directory, a.ID, "web")
+	binary := filepath.Join(source.Directory, a.ID, "nginxpanel")
 	// Authenticate bytes before the fixed version command may execute them.
 	var expected string
 	for _, file := range a.Files {
@@ -240,21 +239,15 @@ func Stage(ctx context.Context, in StageInput) (StagedRelease, error) {
 	if actual != expected {
 		return out, releases.ErrReleaseChanged
 	}
-	r, err := describe(ctx, binary)
+	r, err := DescribeBinary(ctx, binary)
 	if err != nil {
 		return out, err
-	}
-	r.Web = map[string]File{}
-	for _, file := range a.Files {
-		if strings.HasPrefix(file.Path, "web/") {
-			r.Web[strings.TrimPrefix(file.Path, "web/")] = File{SHA256: file.SHA256, Size: file.Size}
-		}
 	}
 	r.ID = releaseID(r)
 	if err = stageMatches(r, source); err != nil {
 		return out, err
 	}
-	if err = publishRelease(ctx, root, binary, web, r); err != nil {
+	if err = publishRelease(ctx, root, binary, r); err != nil {
 		return out, err
 	}
 	current, err := releases.InspectTrust(in.TrustPath)

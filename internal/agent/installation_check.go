@@ -15,7 +15,7 @@ import (
 )
 
 // Must match the native installer's intent and ready records.
-const nativeInstallationStamp = "native-install-v15\n"
+const nativeInstallationStamp = "native-install-v16\n"
 
 // CheckInstallationRemoval only inspects state. Host protections must be
 // released through their owners before removing the executors and recovery data.

@@ -61,11 +61,10 @@ export function builtinSoftware(
         (task) =>
           task.action !== "software" &&
           (task.result?.input.components?.includes("nginx") ||
-            (task.result?.input.components?.includes("panel") &&
-              task.result?.release?.images.some((image) => image.id === "nginx")) ||
-            task.result?.release?.assets.some(
-              (asset) => asset.component === "nginx",
-            )),
+            (task.result?.release?.selected.includes("image-nginx") &&
+              task.result.release.images.some(
+                (image) => image.id === "nginx",
+              ))),
       ),
       entry: { to: "/nginx" },
       note: overview?.installation

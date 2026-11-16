@@ -27,7 +27,10 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 	b.raw = append(b.raw, p...)
 	return len(p), nil
 }
-func describe(ctx context.Context, binary string) (Release, error) {
+
+// DescribeBinary inspects a root-approved executable without requiring frontend
+// files or publishing an application release. Callers authenticate its source first.
+func DescribeBinary(ctx context.Context, binary string) (Release, error) {
 	var r Release
 	hash, err := secure.HashRootFile(binary, BinaryLimit)
 	if err != nil {
@@ -50,6 +53,7 @@ func describe(ctx context.Context, binary string) (Release, error) {
 		DatabaseSchema  int64  `json:"database_schema"`
 		AgentProtocol   int    `json:"agent_protocol"`
 		LauncherVersion int    `json:"launcher_version"`
+		FrontendID      string `json:"frontend_id"`
 		ParserVersion   string `json:"parser_version"`
 	}
 	if err = decode(out.raw, &info); err != nil {
@@ -58,7 +62,7 @@ func describe(ctx context.Context, binary string) (Release, error) {
 	if after, err := secure.HashRootFile(binary, BinaryLimit); err != nil || after != hash {
 		return r, errors.New("面板程序在版本核对期间变化")
 	}
-	r = Release{Schema: Schema, Version: info.Version, DatabaseSchema: info.DatabaseSchema, AgentProtocol: info.AgentProtocol, LauncherVersion: info.LauncherVersion, Architecture: runtime.GOARCH, BinarySHA256: hash}
+	r = Release{Schema: Schema, Version: info.Version, DatabaseSchema: info.DatabaseSchema, AgentProtocol: info.AgentProtocol, LauncherVersion: info.LauncherVersion, FrontendID: info.FrontendID, Architecture: runtime.GOARCH, BinarySHA256: hash}
 	return r, nil
 }
 func syncDir(name string) error {
@@ -162,10 +166,6 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	if err != nil {
 		return out, err
 	}
-	web, err := filepath.EvalSymlinks(in.WebDir)
-	if err != nil {
-		return out, err
-	}
 	source, err := VerifySource(ctx, in)
 	if err != nil {
 		return out, err
@@ -196,12 +196,12 @@ func Bind(ctx context.Context, in BindInput) (Snapshot, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err
 	}
-	return bindRelease(ctx, root, binary, web, r, d)
+	return bindRelease(ctx, root, binary, r, d)
 }
 
 // bindRelease requires publicationLock and never resets an existing current
 // pointer. Repeating bootstrap after an update cannot select the initial code.
-func bindRelease(ctx context.Context, root, binary, web string, r Release, d Deployment) (Snapshot, error) {
+func bindRelease(ctx context.Context, root, binary string, r Release, d Deployment) (Snapshot, error) {
 	var out Snapshot
 	ready := filepath.Join(root, "binding.ready")
 	bound := false
@@ -224,7 +224,7 @@ func bindRelease(ctx context.Context, root, binary, web string, r Release, d Dep
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return out, err
 	}
-	if err = publishRelease(ctx, root, binary, web, r); err != nil {
+	if err = publishRelease(ctx, root, binary, r); err != nil {
 		return out, err
 	}
 	if err = publishFile(filepath.Join(root, "launcher.json"), rawDeployment); err != nil {

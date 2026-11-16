@@ -71,12 +71,12 @@ func (m *Manager) CreateOffline(ctx context.Context, req OfflineRequest) (out Of
 	if err = offlineWrite(filepath.Join(dir, "signature.json"), req.Input.Signature); err != nil {
 		return out, err
 	}
-	v, err := releases.Verify(releases.Input{PanelStaging: true, TrustPath: m.TrustPath, ManifestPath: filepath.Join(dir, "manifest.json"), SignaturePath: filepath.Join(dir, "signature.json"), Assets: req.Input.Assets, Components: req.Input.Components, AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, AllowPrerelease: req.Input.Prerelease, Host: m.host(), Receiver: receiver()})
+	v, err := releases.Verify(releases.Input{PanelStaging: true, TrustPath: m.TrustPath, ManifestPath: filepath.Join(dir, "manifest.json"), SignaturePath: filepath.Join(dir, "signature.json"), Assets: req.Input.Assets, Components: req.Input.Components, AllowedComponents: []string{"nginx", "fail2ban", "panel"}, AllowPrerelease: req.Input.Prerelease, Host: m.host(), Receiver: receiver()})
 	if err != nil {
 		return out, fault.Invalid("离线清单未获本机信任或不适用于目标：" + bounded(err.Error()))
 	}
 	p := v.Plan()
-	if len(p.Assets) > 2 || len(p.Assets) != len(p.Selected) {
+	if len(p.Assets) > 2 || len(p.Assets) != 0 && len(p.Assets) != len(p.Selected) {
 		return out, fault.Invalid("每次离线上传最多两个独立签名资产，须完整选择依赖")
 	}
 	if _, err = panelSelection(p); err != nil {
@@ -84,7 +84,7 @@ func (m *Manager) CreateOffline(ctx context.Context, req OfflineRequest) (out Of
 	}
 	now := time.Now().Unix()
 	expires := min(now+86400, p.Manifest.ExpiresAt)
-	out = OfflineUpload{ID: req.ID, RequestHash: req.Hash(), CreatedAt: now, ExpiresAt: expires, Prerelease: req.Input.Prerelease, Release: release(p), Assets: []OfflineAsset{}}
+	out = OfflineUpload{Complete: len(p.Assets) == 0, ID: req.ID, RequestHash: req.Hash(), CreatedAt: now, ExpiresAt: expires, Prerelease: req.Input.Prerelease, Release: release(p), Assets: []OfflineAsset{}}
 	for _, a := range p.Assets {
 		out.Assets = append(out.Assets, OfflineAsset{ID: a.ID, Archive: a.Archive, SHA256: a.SHA256, Size: a.Size})
 	}

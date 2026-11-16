@@ -11,6 +11,7 @@ RUN /bin/sh /usr/local/libexec/check-nginx-image \
     && chmod 0444 /usr/share/nginxpanel/capabilities.json /usr/share/nginxpanel/nginx-build.txt /usr/share/nginxpanel/nginx.sha256 /usr/share/nginxpanel/launcher.sha256
 LABEL org.opencontainers.image.title="NginxPanel Nginx runtime" \
       org.opencontainers.image.description="HTTP/TLS, Stream/TLS/preread/realip, ACL, basic WAF, JSON logs and HTTP-01 modules supplied at build time" \
+      org.nginxpanel.launcher.protocol="2" \
       org.nginxpanel.modules.policy="image-only" \
       org.nginxpanel.modules.manifest="/usr/share/nginxpanel/capabilities.json"
 # The managed configuration and runtime state use an explicitly bound data path.

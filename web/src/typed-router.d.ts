@@ -59,13 +59,6 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
-    '/agent-upgrades': RouteRecordInfo<
-      '/agent-upgrades',
-      '/agent-upgrades',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
     '/backups': RouteRecordInfo<
       '/backups',
       '/backups',
@@ -90,20 +83,6 @@ declare module 'vue-router/auto-routes' {
     '/certificates': RouteRecordInfo<
       '/certificates',
       '/certificates',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
-    '/component-installations': RouteRecordInfo<
-      '/component-installations',
-      '/component-installations',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
-    '/component-switches': RouteRecordInfo<
-      '/component-switches',
-      '/component-switches',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -241,13 +220,6 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
-    '/panel-images': RouteRecordInfo<
-      '/panel-images',
-      '/panel-images',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
     '/panel-updates': RouteRecordInfo<
       '/panel-updates',
       '/panel-updates',
@@ -328,14 +300,6 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
-    'src/pages/agent-upgrades.vue': {
-      routes:
-        | '/agent-upgrades'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
     'src/pages/backups.vue': {
       routes:
         | '/backups'
@@ -363,22 +327,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/certificates.vue': {
       routes:
         | '/certificates'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/component-installations.vue': {
-      routes:
-        | '/component-installations'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/component-switches.vue': {
-      routes:
-        | '/component-switches'
       views:
         | never
       pathParamNames:
@@ -531,14 +479,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/notifications.vue': {
       routes:
         | '/notifications'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/panel-images.vue': {
-      routes:
-        | '/panel-images'
       views:
         | never
       pathParamNames:

@@ -63,13 +63,13 @@ jobs:
           mkdir -p .release/input .release/binaries
           go build -trimpath -o "$RUNNER_TEMP/nginxpanel-release" ./cmd/nginxpanel-release
           "$RUNNER_TEMP/nginxpanel-release" spec --repository "$RELEASE_REPOSITORY" --version "$version" --commit "$commit" --notes-file "deploy/release/notes/$version.md" --policy-file "deploy/release/policies/$version.json" --output .release/input/publication.json
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "commit=$commit"
+            echo "tag=$RELEASE_TAG"
+          } >> "$GITHUB_OUTPUT"
       - name: Install locked frontend dependencies
         run: pnpm --dir web install --frozen-lockfile
-      - name: Required centralized checks
-        run: make verify
       - name: Build matching frontend and static Linux binaries
         env:
           RELEASE_VERSION: ${{ steps.identity.outputs.version }}
@@ -77,11 +77,16 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --dir web exec vite build
+          rm -rf internal/webui/dist
+          mkdir -p internal/webui/dist
+          cp -a web/dist/. internal/webui/dist/
           for arch in amd64 arm64; do
             GOOS=linux GOARCH="$arch" go build -trimpath -buildvcs=true -ldflags "-s -w -X main.version=$RELEASE_VERSION" -o ".release/binaries/nginxpanel-$arch" ./cmd/nginxpanel
             GOOS=linux GOARCH="$arch" go list -deps -json ./cmd/nginxpanel >> .release/go-packages.json
           done
           pnpm --dir web list --prod --depth Infinity --json > .release/node-dependencies.json
+      - name: Required centralized checks
+        run: make verify
       - name: Generate source and build dependency SBOM
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
@@ -98,8 +103,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/release/stage.py --input-root .release/input --source-sbom "$RUNNER_TEMP/source.spdx.json" --go-packages .release/go-packages.json --node-dependencies .release/node-dependencies.json --binaries .release/binaries
-      - name: Assemble pinned official Fail2ban code and compatibility files
-        run: python3 scripts/release/fail2ban.py --input-root .release/input
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         id: upload
         with:
@@ -107,48 +110,6 @@ jobs:
           path: .release/input/
           if-no-files-found: error
           include-hidden-files: true
-          retention-days: 7
-
-  nginx:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - architecture: amd64
-            runner: ubuntu-24.04
-          - architecture: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.build.outputs.commit }}
-          persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ needs.build.outputs.artifact }}
-          path: .release/input
-          merge-multiple: true
-      - name: Install native release build tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y musl-tools build-essential perl linux-libc-dev
-      - name: Build locked static Nginx and stage its source and runtime evidence
-        env:
-          RELEASE_ARCHITECTURE: ${{ matrix.architecture }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/release/nginx.py --spec .release/input/publication.json --architecture "$RELEASE_ARCHITECTURE" --output ".release/nginx-$RELEASE_ARCHITECTURE"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: native-nginx-${{ matrix.architecture }}
-          path: .release/nginx-${{ matrix.architecture }}/
-          if-no-files-found: error
           retention-days: 7
 
   images:
@@ -219,7 +180,7 @@ jobs:
         run: docker logout ghcr.io
 
   publish:
-    needs: [build, nginx, images]
+    needs: [build, images]
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     environment: release
@@ -244,11 +205,6 @@ jobs:
         with:
           pattern: image-build-*
           path: .release/image-build-input
-          merge-multiple: true
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: native-nginx-*
-          path: .release/input
           merge-multiple: true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:

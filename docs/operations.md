@@ -9,8 +9,8 @@
 | 位置 | 用途 |
 | --- | --- |
 | `/etc/nginxpanel/` | 安装记录、本机发行信任、Docker Compose 等 root 管理配置 |
-| `/opt/nginxpanel/current/` | 已批准的宿主机 Agent、安装和本机维护程序 |
-| `DATA/runtime/` | 面板不可变版本及当前运行选择 |
+| `/opt/nginxpanel/current/` | 当前核心程序及本机维护命令 |
+| `DATA/runtime/` | 已批准核心程序版本及当前版本指针 |
 | `DATA/app/` | 业务 SQLite 数据及相关业务材料 |
 | `DATA/secrets/` | 主密钥和主入口 TLS 等秘密 |
 | `DATA/agent/` | root 私有执行、授权和恢复记录 |
@@ -30,64 +30,62 @@
 sudo bash /opt/nginxpanel/manage.sh
 ```
 
-菜单支持部署信息、服务状态、启停/重启、服务日志、初始化令牌、主入口证书指纹、监听端口修改、附加管理入口救援、卸载和重新安装。非引导安装也可从 root 批准的完整安装包运行 `sudo bash manage.sh`，卸载脚本须随包保留；脚本读取现有 root 安装记录，不执行其中的文本。
+菜单支持部署信息、核心服务状态、启停/重启、服务日志、初始化令牌、主入口证书指纹、监听端口修改、附加管理入口救援、卸载和重新安装。非引导安装也可从 root 批准的完整安装包运行 `sudo bash manage.sh`，卸载脚本须随包保留；脚本读取现有 root 安装记录，不执行其中的文本。
 
 ```sh
 sudo bash /opt/nginxpanel/manage.sh info
 sudo bash /opt/nginxpanel/manage.sh status
-sudo bash /opt/nginxpanel/manage.sh restart panel
-sudo bash /opt/nginxpanel/manage.sh logs agent --lines 200
-sudo bash /opt/nginxpanel/manage.sh logs panel --follow
+sudo systemctl status nginxpanel.service
+sudo journalctl -u nginxpanel.service -n 200 --no-pager
+sudo systemctl restart nginxpanel.service
 sudo bash /opt/nginxpanel/manage.sh fingerprint
 sudo bash /opt/nginxpanel/manage.sh set-port 23456
 ```
 
-`start/stop/restart` 默认仅操作 panel，可选择 `agent`、`nginx` 或 `all`；`all` 跳过明确未安装的 Nginx。非交互变更须加 `--yes`，交互变更先确认影响。原生使用 systemd，容器服务使用已生成的 Compose，宿主机 Agent 始终使用 systemd。Docker 操作固定使用本机 `/run/docker.sock`，不沿用远程 Docker context。
+核心统一由 `nginxpanel.service` 启动、停止和重启；它同时提供 Agent、管理 API 和前端。Nginx 作为独立 Docker 容器运行。检查或操作容器时使用本机 Docker，安装和更新从系统页面进行。
 
-Docker 状态同时显示容器及面板实际进程，容器停止时后者不可查询；容器已运行不等于业务已就绪。宿主机工具版本由 `info` 展示，当前面板程序版本仍按网页核对。
+核心服务状态通过 systemd 查看；`nginxpanel.service` 运行不代表 Nginx 或网站代理已经就绪。宿主机工具版本由 `info` 展示，当前核心程序版本仍按网页核对。
 
-脚本遇到持久停机或恢复屏障时拒绝常规启动/重启面板。维护、更新和完整恢复继续沿原任务处理；日常服务停止不替代持久停机准备。
+存在未完成的更新或恢复任务时，先在页面查询并处理原任务，再重启核心服务。手动停止服务不替代更新或恢复流程。
 
 `set-port` 允许 1024–65535，支持 `--yes`；运行中的面板自动停止、保存并启动，已停止的面板保持停止。新端口绑定失败保留原配置，维护与恢复屏障下拒绝修改。`info` 从当前运行绑定读取端口；初始安装意图用于记录首次安装参数，不表示当前端口。修改前放行新端口对应的云安全组和防火墙规则。
 
-`bootstrap` 只读取原一次性引导令牌，不能重置已有管理员。需停用可选远程入口时，执行 `disable-remote` 并核对返回状态与 Agent 处理结果。
+`bootstrap` 只读取原一次性引导令牌，不能重置已有管理员。需停用可选远程入口时，执行 `disable-remote` 并核对返回状态与核心服务处理结果。
 
-### Docker 部署
+### Nginx 容器
 
 ```sh
-sudo systemctl status nginxpanel-agent.service
+sudo systemctl status nginxpanel.service
 sudo docker compose -f /etc/nginxpanel/docker/compose.yaml ps
-sudo docker compose -f /etc/nginxpanel/docker/compose.yaml logs --tail 100 panel
+sudo docker compose -f /etc/nginxpanel/docker/compose.yaml logs --tail 100 nginx
 ```
 
-使用原安装生成的配置启动或重建：
+使用原安装生成的配置启动 Nginx：
 
 ```sh
-sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d
+sudo docker compose -f /etc/nginxpanel/docker/compose.yaml up -d --pull never nginx
 ```
 
-没有在途维护或恢复任务时，只重启 Web 容器：
+重启 Nginx 容器：
 
 ```sh
-sudo docker compose -f /etc/nginxpanel/docker/compose.yaml restart panel
+sudo docker compose -f /etc/nginxpanel/docker/compose.yaml restart nginx
 ```
 
-Compose 包含面板和 Nginx，停止整个项目会影响代理流量。镜像和挂载变更使用对应维护流程，保留系统批准记录与实际容器身份的一致性。
+Compose 仅管理 Nginx 容器。停止 Nginx 会中断网站代理；核心管理服务仍由 `nginxpanel.service` 独立运行。Fail2ban、FRPS 等可选应用在用户手动安装后由各自容器管理。
 
 ## 组件准备与更新
 
-常规面板更新在“设置 → 系统更新”完成：
+核心程序更新在“设置 → 系统更新”完成：
 
 1. 按需通过“备份恢复”保存完整备份，阅读目标发行说明。
 2. 点击“检查更新”，再点击“下载更新”，等待签名校验和准备完成。
-3. 点击“立即更新”。宿主 Agent 完成替换及重启，面板启动后自动迁移数据。
-4. 短暂断连后重新连接，查看原任务的结果。Docker 部署自动拉取对应镜像并重新创建面板容器，原生部署切换程序并重启服务。
+3. 点击“立即更新”。系统启动短期独立的 `nginxpanel-core-update@<UUID>.service`，由 root 批准并切换 `DATA/runtime/current`，然后重启 `nginxpanel.service`；新核心启动时自动迁移数据。
+4. 短暂断连后重新连接，查看原任务结果。
 
-更新失败时保留原任务与日志，根据错误处理；数据库已迁移后不自动强行降级。需要更新宿主 Agent 或安装工具的发行，使用安装脚本完成部署。常规更新不能绕过已有的停机或恢复屏障。
+更新失败时保留原任务与日志，根据错误处理；数据库已迁移后不自动强行降级。核心服务、管理 API 和前端随同一个二进制更新，不存在独立 Agent 或前端更新步骤。
 
-Fail2ban 和第三方软件在“软件商店”独立更新，先拉取镜像，再替换其容器；数据保留，启动失败时尝试恢复原容器。详见[软件源说明](software-sources.md)。
-
-Nginx 的安装与运行替换沿其独立流程处理，不随面板更新更换。缺少模块时使用预置所需能力的完整镜像。需要本机维护或救援时，固定命令及签名输入见[发行与更新参考](releases.md)、[Docker 维护参考](../deploy/docker/README.md)；这些专门接口的维护会话要求不属于日常面板更新步骤。
+Nginx 镜像从其独立页面检查、准备和更新，不随核心程序更新更换。常用模块已预置在镜像中。已安装的 Fail2ban、FRPS 和第三方应用也分别更新自己的镜像，数据保留并由对应流程检查运行结果。可选软件默认不安装。
 
 ## 配置应用失败或外部变更
 
@@ -150,10 +148,10 @@ sudo /opt/nginxpanel/current/nginxpanel management-listener-disable \
 | 浏览器提示证书不可信 | 地址、证书有效期、通过可信 SSH 取得的指纹 | 核对本节点证书后建立信任；管理入口换证书后更新相应节点信任 |
 | 显示初始化页面 | 是否连接预期节点、管理员是否尚未创建 | 从目标 `DATA/bootstrap/token` 取得一次性令牌 |
 | 忘记管理员密码 | 是否仍有有效登录会话、是否有完整备份 | 可用会话可在设置中修改密码；系统无默认密码和通用的一键重置入口，无法登录时保留数据与密钥并按可用恢复材料处理 |
-| Agent 不可用 | Agent 服务、Unix Socket、安装账户/组、组件版本和维护状态 | 使用匹配版本及原安装权限修复，不向普通用户开放 root 目录 |
+| 管理服务不可用 | `nginxpanel.service` 状态及日志、磁盘空间和最近更新任务 | 修复核心服务；需要时沿原更新任务恢复，不单独更新 Agent 或前端 |
 | 登录成功但代理不通 | 是否已应用、Nginx 是否运行、监听与上游、云安全组及系统规则 | 区分管理入口、客户端到代理、代理到上游三条链路 |
 | 应用时端口占用 | 目标监听端口及既有系统服务 | 用 `sudo ss -lntup` 定位，调整监听或安排原服务切换 |
-| 报缺模块/未知指令 | 目标 Nginx 实际能力、批准的原生模块、镜像能力 | 原生批准匹配模块，Docker 更换预置所需模块的受信镜像 |
+| 报缺模块/未知指令 | 当前 Nginx 镜像能力及配置 | 更换预置所需模块的受信 Nginx 镜像 |
 | DNS、防火墙、轮转按钮只读 | 所有者、安装范围、root 登记、模块开关及实时诊断 | 按对应授权流程处理；模块开关本身不授予系统权限 |
 | 返回版本冲突 | 其他操作或节点状态是否已变化 | 重新读取、比较变化并生成新计划 |
 | 更新、迁移超时 | 原任务是否已受理，是否仍在执行或待恢复 | 查询原任务，核对后按原入口续办 |
@@ -185,7 +183,7 @@ sudo bash /opt/nginxpanel/manage.sh uninstall --purge
 
 | 操作 | 清理与保留范围 |
 | --- | --- |
-| 保留数据卸载 | 停止并移除本应用原生服务或容器，移除部署程序、服务 unit、对应 drop-in 和 tmpfiles 配置；原数据根保持不动，保留账号数据、密钥、证书、配置、日志、备份及执行记录。`DATA/.installation/` 保存原版本和主机安装配置的重装材料；保留两个小型管理脚本、最小安装记录、专用账户及数据所需的 SELinux 标签规则 |
+| 保留数据卸载 | 停止并移除核心 systemd 服务及本应用管理的容器，移除部署程序、服务 unit、对应 drop-in 和 tmpfiles 配置；原数据根保持不动，保留账号数据、密钥、证书、配置、日志、备份及执行记录。`DATA/.installation/` 保存原版本和主机安装配置的重装材料；保留两个小型管理脚本、最小安装记录、专用账户及数据所需的 SELinux 标签规则 |
 | 重新安装 | 校验本机重装材料，恢复卸载前的版本、服务文件和主机安装配置；保留当前数据、节点身份及后来修改的监听端口，恢复原开机设置和运行/停止状态。已停止的可选组件保持停止，不下载软件或拉取镜像 |
 | 完全卸载 | 在卸载服务和程序后，删除整个数据根、重装材料、`/opt/nginxpanel`、`/etc/nginxpanel`，清理未被外部改动的专用账户/组及本应用 SELinux 模块；之后使用源码或 Release 安装入口全新安装 |
 

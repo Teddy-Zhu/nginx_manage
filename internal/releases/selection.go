@@ -38,7 +38,7 @@ func selectors(assets, components []string) error {
 		seen[id] = true
 	}
 	for _, component := range components {
-		if !slices.Contains([]string{"panel", "web", "nginx", "fail2ban"}, component) {
+		if !slices.Contains([]string{"panel", "nginx"}, component) {
 			return errors.New("未知组件")
 		}
 	}
@@ -53,6 +53,11 @@ func selectAssets(m Manifest, host Host, explicit, components []string) ([]strin
 	}
 	selected := []string{}
 	for _, component := range components {
+		if imageID, ok := imageForComponent(m, component); ok && imageHasPlatform(m, imageID, host.OS, host.Architecture) {
+			token, _ := ImageToken(imageID)
+			selected = append(selected, token)
+			continue
+		}
 		candidates := []string{}
 		for _, a := range m.Assets {
 			if a.Component == component && hostAsset(a, host) {
@@ -69,6 +74,38 @@ func selectAssets(m Manifest, host Host, explicit, components []string) ([]strin
 		selected = append(selected, candidates[0])
 	}
 	return selected, nil
+}
+
+func imageForComponent(m Manifest, component string) (string, bool) {
+	switch component {
+	case "nginx":
+		return "nginx", imageExists(m, "nginx")
+	default:
+		return "", false
+	}
+}
+
+func imageExists(m Manifest, id string) bool {
+	for _, image := range m.Images {
+		if image.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func imageHasPlatform(m Manifest, id, os, architecture string) bool {
+	for _, image := range m.Images {
+		if image.ID != id {
+			continue
+		}
+		for _, platform := range image.Platforms {
+			if platform.OS == os && platform.Architecture == architecture {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type TrustInfo struct {

@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"nginxpanel/internal/nginxruntime"
+	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 )
 
@@ -28,15 +29,7 @@ func AdmitCandidate(ctx context.Context, in BindInput, before Binding) (Binding,
 	if !reflect.DeepEqual(current, before) {
 		return zero, errors.New("当前 Nginx 绑定已变化")
 	}
-	launcher, err := filepath.EvalSymlinks(in.LauncherBinary)
-	if err != nil {
-		return zero, err
-	}
-	hash, err := secure.HashRootFile(launcher, binaryLimit)
-	if err != nil {
-		return zero, err
-	}
-	approval, err := admitSource(in, hash, nil)
+	approval, _, err := releases.AdmitImage(in.Signature, "nginx", in.Image, nil)
 	if err != nil {
 		return zero, err
 	}
@@ -49,13 +42,14 @@ func AdmitCandidate(ctx context.Context, in BindInput, before Binding) (Binding,
 	if err != nil {
 		return zero, err
 	}
+	bootstrapHash, err := inspectNginxBootstrap(ctx, d, image, approval)
+	if err != nil {
+		return zero, err
+	}
 	if image.ID == before.ImageID {
 		return zero, errors.New("候选与原 Nginx 镜像配置摘要相同")
 	}
-	if err = imageBinary(ctx, d, image.ID, Bootstrap, hash); err != nil {
-		return zero, err
-	}
-	candidate, err := bindingMetadata(ctx, d, in, approval, image, hash)
+	candidate, err := bindingMetadata(ctx, d, in, approval, image, bootstrapHash)
 	if err != nil {
 		return zero, err
 	}

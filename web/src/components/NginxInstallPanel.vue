@@ -30,33 +30,37 @@ const updatePath = "/nginx-images";
 const permitted = computed(
   () => !!session.me?.scopes.includes("components.manage"),
 );
-const checked = computed(() =>
-  props.tasks.find(
-    (task) =>
-      task.action === "check" &&
-      task.state === "succeeded" &&
-      task.result?.input.prerelease === prerelease.value &&
-      task.result.release?.assets.some(
-        (asset) =>
-          asset.component === "panel" &&
-          task.result!.release!.selected.includes(asset.id),
-      ),
-  ),
+function hasNginxImage(task: ComponentTask) {
+  const release = task.result?.release;
+  if (!release) return false;
+  return (
+    release.selected.includes("image-nginx") &&
+    release.images.some((image) => image.id === "nginx")
+  );
+}
+const checked = computed(
+  () =>
+    props.tasks.find(
+      (task) =>
+        task.action === "check" &&
+        task.state === "succeeded" &&
+        task.result?.input.prerelease === prerelease.value &&
+        hasNginxImage(task),
+    ) ?? null,
 );
 const release = computed(() => checked.value?.result?.release);
 const prepared = computed(() =>
-  props.tasks.filter(
-    (item) =>
+  props.tasks.filter((item) => {
+    const release = item.result?.release;
+    return (
       item.action === "prepare" &&
       item.state === "succeeded" &&
       item.result?.runtime_ready &&
-      item.result.release?.assets.some(
-        (asset) =>
-          asset.component === "panel" &&
-          item.result!.release!.selected.includes(asset.id),
-      ) &&
-      item.result.release.expires_at * 1000 > Date.now(),
-  ),
+      hasNginxImage(item) &&
+      !!release &&
+      release.expires_at * 1000 > Date.now()
+    );
+  }),
 );
 watch(busy, (value) => emit("busy", value));
 async function submit(input: ComponentCreateInput) {
@@ -65,7 +69,7 @@ async function submit(input: ComponentCreateInput) {
       ? api.pullComponentImage(input, keyFor(input))
       : api.createComponentTask(input, keyFor(input)));
     emit("task", item);
-    inspectTask(item.id, "Nginx 软件操作日志");
+    inspectTask(item.id, "Nginx 更新日志");
     keyFor = useIdempotency();
   });
 }
@@ -76,7 +80,7 @@ function check() {
       action: "check",
       tag: "",
       prerelease: prerelease.value,
-      components: ["panel"],
+      components: ["nginx"],
       plan_id: "",
       manifest_sha256: "",
       trust_sha256: "",
@@ -147,10 +151,7 @@ function pull(item: ComponentTask, imageID: string) {
       ><TaskLogButton v-if="checked" :task-id="checked.id" />
     </div>
     <template v-if="release">
-      <p>
-        可用版本 {{ release.tag }} ·
-        {{ (release.archive_bytes / 1048576).toFixed(1) }} MB
-      </p>
+      <p>可用版本 {{ release.version }}</p>
       <NAlert v-if="release.expires_at * 1000 <= Date.now()" type="info"
         >版本信息已过期，请重新查找可用版本。</NAlert
       >
@@ -167,7 +168,7 @@ function pull(item: ComponentTask, imageID: string) {
           release.expires_at * 1000 <= Date.now()
         "
         @click="prepare"
-        >下载软件</NButton
+        >准备镜像</NButton
       >
     </template>
     <section
@@ -176,7 +177,7 @@ function pull(item: ComponentTask, imageID: string) {
       class="record-card page-stack"
     >
       <div class="section-heading">
-        <strong>{{ item.result?.release?.tag }} 已下载</strong
+        <strong>{{ item.result?.release?.version }} 已准备</strong
         ><TaskLogButton :task-id="item.id" />
       </div>
       <div class="button-row">
@@ -193,12 +194,9 @@ function pull(item: ComponentTask, imageID: string) {
           v-for="image in item.result?.release?.images ?? []"
           :key="image.id"
           ><NButton
-            v-if="image.id === 'nginx'"
+            v-if="image.id === 'nginx' && !overview?.installation"
             :disabled="
-              busy ||
-              active ||
-              !session.me?.scopes.includes('system.write') ||
-              !!item.result?.panel?.requires_coordination
+              busy || active || !session.me?.scopes.includes('system.write')
             "
             @click="pull(item, image.id)"
             >下载运行环境</NButton

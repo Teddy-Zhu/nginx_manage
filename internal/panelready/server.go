@@ -35,7 +35,6 @@ func credentials(c *net.UnixConn) (*unix.Ucred, error) {
 type rootListener struct{ *net.UnixListener }
 
 // Publish only the public certificate next to the root-only readiness socket.
-// The Agent's mount namespace must keep business data and private keys hidden.
 func publishCertificate(data string) error {
 	d := panelruntime.Deployment{DataDir: data, UID: os.Geteuid(), GID: os.Getegid()}
 	cert, err := readCertificate(d, []string{"secrets", "secrets/node-tls"})
@@ -92,24 +91,31 @@ func (l *rootListener) Accept() (net.Conn, error) {
 	}
 }
 
-// Listen is called after taking the application writer lock. Only a stale
-// socket belonging to this dedicated account can be removed.
+// Listen is called after taking the application writer lock. The readiness
+// endpoint belongs to the registered root-native core service.
 func Listen(data string) (net.Listener, error) {
-	if os.Geteuid() == 0 {
-		return nil, errors.New("readiness 服务须以面板专用账户运行")
+	if os.Geteuid() != 0 || os.Getegid() != 0 {
+		return nil, errors.New("readiness 服务须由 root 核心服务运行")
+	}
+	deployment, err := panelruntime.ReadDeployment(data)
+	if err != nil {
+		return nil, err
+	}
+	if deployment.Mode != "native" || deployment.UID != 0 || deployment.GID != 0 || deployment.IPCGID != 0 {
+		return nil, errors.New("readiness 服务未绑定到 root 原生部署")
 	}
 	info, err := os.Lstat(filepath.Dir(Socket(data)))
 	if err != nil {
 		return nil, err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 || int(st.Uid) != os.Geteuid() || int(st.Gid) != os.Getegid() {
-		return nil, errors.New("readiness 目录不属于专用面板账户")
+	if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 || st.Uid != 0 || st.Gid != 0 {
+		return nil, errors.New("readiness 目录不属于 root 核心服务")
 	}
 	name := Socket(data)
 	if info, err := os.Lstat(name); err == nil {
 		st, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || info.Mode()&os.ModeSocket == 0 || int(st.Uid) != os.Geteuid() {
+		if !ok || info.Mode()&os.ModeSocket == 0 || info.Mode().Perm() != 0600 || st.Uid != 0 || st.Gid != 0 {
 			return nil, errors.New("已有 readiness Socket 的类型或归属无效")
 		}
 		c, err := net.DialTimeout("unix", name, 500*time.Millisecond)

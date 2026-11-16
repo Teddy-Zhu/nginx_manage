@@ -95,7 +95,7 @@ func (w *nginxImageWorker) agent(ctx context.Context, start bool) error {
 	if actual.State == state {
 		return nil
 	}
-	_, requestErr := installationSystemctl(ctx, action, "nginxpanel-agent.service")
+	_, requestErr := installationSystemctl(ctx, action, "nginxpanel.service")
 	wait, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	for {
@@ -373,7 +373,7 @@ func (w *nginxImageWorker) confirm(ctx context.Context, b nginxcontainer.Binding
 		return err
 	}
 	if process.State != "running" {
-		return errors.New("Agent 尚未恢复运行")
+		return errors.New("管理服务尚未恢复运行")
 	}
 	probe, err := waitNginxInstallationProbe(ctx, b.DataDir, true, i.RevisionID, i.DeploymentID, func(info *nginxruntime.Installation) bool {
 		return info != nil && info.Owner == "docker" && info.SHA256 == b.BinarySHA256 && info.Version == b.Capabilities.Version && info.SourceURL == b.Image
@@ -397,7 +397,7 @@ func (w *nginxImageWorker) confirm(ctx context.Context, b nginxcontainer.Binding
 		return err
 	}
 	if agent != process {
-		return errors.New("联合确认期间 Agent 代次变化")
+		return errors.New("联合确认期间管理服务实例发生变化")
 	}
 	if err = w.guard(ctx); err != nil {
 		return err

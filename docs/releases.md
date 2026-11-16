@@ -1,6 +1,14 @@
 # 签名发行资产与准备
 
-初次安装见[部署指南](deployment.md)，日常组件更新顺序见[运维文档](operations.md#组件准备与更新)。本文提供签名材料及各独立维护入口的合同；当前状态和已运行范围分别以[进度清单](progress.md)、[验证记录](validation.md)为准。
+初次安装见[部署指南](deployment.md)，日常组件更新顺序见[运维文档](operations.md#组件准备与更新)。本文说明当前签名发行和应用镜像更新流程；当前状态和已运行范围分别以[进度清单](progress.md)、[验证记录](validation.md)为准。正式 GitHub Release 尚未完成公开发行验收。
+
+## 当前核心更新
+
+生产环境只有一个核心程序，内含 Agent、管理 API 和前端页面，由宿主机 `nginxpanel.service` 以 root 运行。安装包包含核心二进制与 Nginx 镜像，不提供独立 `web/` 发布资产或面板运行镜像；前端随核心二进制发布。
+
+系统更新只有一个面板入口：检查 `panel` 组件、准备签名核心包、确认后提交 `update-panel`。短期 `nginxpanel-core-update@<UUID>.service` 由 root 核对签名批准并切换 `DATA/runtime/current`，随后重启 `nginxpanel.service`。新核心启动时自动迁移数据库。更新页面不单独选择 Agent、管理面板或前端版本；Nginx 及其他应用镜像按各自流程更新。
+
+旧版双进程、面板容器、独立前端和 launcher 更新章节已不适用于当前部署，保留的旧命令不可用于新安装。以下相关章节会明确标注为旧版记录；历史验收证据仍以[验证记录](validation.md)为准。
 
 已接入离线 `release-verify/release-prepare` 和在线 `release-check/release-fetch` 本机命令。验证入口只验签、检查清单及解析依赖闭包，返回 `state=manifest_verified`；准备入口继续核对归档、宿主机运行依赖并发布不可变副本，返回 `state=prepared`。准备不等于安装、启用或运行；不执行包内程序、脚本或包管理器，也不迁移数据库或切换当前版本。
 
@@ -13,7 +21,7 @@
 ```json
 {
   "schema": 1,
-  "repository": "owner/nginxpanel",
+  "repository": "Teddy-Zhu/nginx_manage",
   "keys": [{"id": "release-2026", "public_key": "<Base64 编码的 32 字节 Ed25519 公钥>"}]
 }
 ```
@@ -22,13 +30,13 @@
 
 `release-manifest.sig` 是 JSON，字段为 `schema=1`、`key_id`、`signature`。签名使用标准 Ed25519，消息为 UTF-8 字节 `nginxpanel-release-manifest-v1\n`（末尾为一个实际换行）拼接 **未经修改的完整 manifest 文件字节**；`signature` 为规范标准 Base64 的 64 字节签名。签名后不能再格式化 manifest。公钥也使用规范标准 Base64。此流程不生成或托管发布私钥。
 
-验签前只读有界文件和签名信封，认证后解析清单；JSON 拒绝未知字段、重复字段、非法 UTF-8、尾随值及过深结构。清单须匹配本机信任中的仓库并使用当前 schema；准备还须匹配接收端 API 主版本并满足 Agent/launcher 最低版本。有效期必须明确、未过期、最长两年；创建时间不得超过本机时间 5 分钟。预发布必须显式 `--release-prerelease`。
+验签前只读有界文件和签名信封，认证后解析清单；JSON 拒绝未知字段、重复字段、非法 UTF-8、尾随值及过深结构。清单须匹配本机信任中的仓库并使用当前 schema；准备还须匹配接收端 API 主版本与核心程序要求。有效期必须明确、未过期、最长两年；创建时间不得超过本机时间 5 分钟。预发布必须显式 `--release-prerelease`。
 
 ## 清单合同
 
-清单字段以 `internal/releases/model.go` 及 `images.go` 为唯一模型，包含 `schema/repository/version/channel/created_at/expires_at/api_major/database_schema/minimum_agent_protocol/minimum_launcher/frontend_version/automatic_rollback/notes/assets/images`。版本使用 SemVer，channel 为 stable/prerelease；数据库 schema 和自动回滚标志是后续激活准入的材料，准备流程不据此承诺已迁移或能够回滚。发布工具从本次版本独立批准的策略读取 `automatic_rollback`，签名时重新核对，见 [发布流程](publishing.md#本机入口)。镜像引用、平台摘要与 OCI 元数据也受同一清单签名保护；`release-images` 的只读认证入口见 [固定镜像发行](publishing.md#固定镜像发行)。
+清单字段以 `internal/releases/model.go` 及 `images.go` 为唯一模型，包含 `schema/repository/version/channel/created_at/expires_at/api_major/database_schema/minimum_agent_protocol/minimum_launcher/frontend_version/automatic_rollback/notes/assets/images`。版本使用 SemVer，channel 为 stable/prerelease；核心资产内含配套前端，用户不单独选择或激活前端资产。数据库 schema 和自动回滚标志是后续准入材料，准备流程不据此承诺已迁移或能够回滚。发布工具从本次版本独立批准的策略读取 `automatic_rollback`，签名时重新核对，见 [发布流程](publishing.md#本机入口)。镜像引用、平台摘要与 OCI 元数据也受同一清单签名保护；`release-images` 的只读认证入口见 [固定镜像发行](publishing.md#固定镜像发行)。
 
-每个资产登记唯一 ID、组件、版本、Linux 架构、发行版及版本、ABI、必要系统文件的长度/权限/散列、归档长度/散列、展开总长、逐文件清单、同清单内的精确依赖 ID、许可文件、HTTPS 上游来源、维护状态及 Nginx 模块声明。仅允许 panel/web/nginx/fail2ban 四种组件；固定入口依次为 `nginxpanel`、`index.html`、`bin/nginx`、`bin/fail2ban-server`。panel 须包含 `web/index.html`，其版本与发行版本一致；独立 web 的版本与 frontend_version 一致。
+每个资产登记唯一 ID、组件、版本、Linux 架构、发行版及版本、ABI、必要系统文件的长度/权限/散列、归档长度/散列、展开总长、逐文件清单、同清单内的精确依赖 ID、许可文件、HTTPS 上游来源、维护状态及 Nginx 模块声明。核心资产包含 `nginxpanel` 可执行文件及其嵌入的前端；不再发行或安装独立 `web` 资产。Nginx 和 Fail2ban 组件资产仍按签名清单验证。
 
 `abi=static` 不允许系统运行文件约束，ELF 主入口不得有解释器或动态库依赖；`abi=constrained` 必须固定实际发行版/版本和所需系统文件。静态资产可声明 distribution/distribution_version 为 any/any；web 和 Fail2ban 纯代码资产的 architecture 可为 any。宿主机动态依赖可位于 `/usr/lib/`、`/lib/`、`/lib64/` 或固定 `/usr/bin/python3[.版本]`，解析系统链接后再核对 root 文件身份、长度、权限与散列。依赖缺失、漂移或冲突直接失败，不回退安装其他管理器或组件。
 
@@ -48,29 +56,29 @@ Fail2ban 固定使用 `abi=system-python`、Linux、architecture/distribution/di
 /opt/approved/nginxpanel release-verify \
   --release-manifest /opt/approved/release-manifest.json \
   --release-signature /opt/approved/release-manifest.sig \
-  --release-select panel-linux-amd64
+  --release-select '<核心程序资产 ID>'
 
 sudo /opt/approved/nginxpanel release-prepare \
   --release-manifest /opt/approved/release-manifest.json \
   --release-signature /opt/approved/release-manifest.sig \
   --release-assets /opt/approved/assets \
-  --release-select panel-linux-amd64
+  --release-select '<核心程序资产 ID>'
 ```
 
 准备目录固定为 `/opt/nginxpanel/prepared/<plan-id>/`，包含依赖资产各自目录、原始 manifest/signature 和计划记录。root 文件锁串行处理；同文件系统暂存完成、gzip/逐文件复核、运行依赖及信任再次确认后，使用不覆盖 rename 一次发布整个闭包。相同计划复用前重新核对所有文件及记录，外部修改不会被覆盖。失败清理本次暂存，清理失败记录日志并由容量准入保留；崩溃残留和既有版本不会自动删除。
 
-准备好的 panel 路径可以作为 [原生安装器](../deploy/native/README.md) 的 `--binary` 和 `--web-dir` 输入，仍须由本机 root 明确安装/启动。预备资产不会改变已有系统 Nginx、管理监听、业务开关或当前程序指针。
+准备好的核心程序资产供安装器或面板系统更新流程使用；前端已嵌入核心二进制，不需要单独提供 `--web-dir`。准备不会切换生产环境中的 `DATA/runtime/current`，也不会启动或重启服务。
 
 ## 在线发现与下载
 
 在线命令需要本机 root，使用同一信任配置、显式资产 ID 和准备目录。未指定标签时只查询最新稳定版；预发布必须同时指定完整 `v` 前缀 SemVer 标签和 `--release-prerelease`。GitHub 的发行标签、渠道与签名清单必须一致。
 
 ```sh
-sudo /opt/approved/nginxpanel release-check --release-select panel-linux-amd64
-sudo /opt/approved/nginxpanel release-fetch --release-select panel-linux-amd64
+sudo /opt/approved/nginxpanel release-check --release-select '<核心程序资产 ID>'
+sudo /opt/approved/nginxpanel release-fetch --release-select '<核心程序资产 ID>'
 sudo /opt/approved/nginxpanel release-fetch \
   --release-tag v1.2.3-rc.1 --release-prerelease \
-  --release-select panel-linux-amd64 \
+  --release-select '<核心程序资产 ID>' \
   --release-token-file /etc/nginxpanel/github-token
 ```
 
@@ -88,9 +96,9 @@ manifest 最多 2 MiB/16 个资产/合计 4096 个文件，准备计划最多 4 
 
 仅接收单一 gzip 流包裹的 root USTAR，物理头逐块检查，拒绝 PAX/GNU 扩展、链接、设备、未知/重复文件、非零填充及额外压缩流。归档首先校验完整签名散列，再解包；复制期间再次散列并检查文件身份，gzip CRC 和完整文件清单通过后才发布。
 
-[发布工具与 CI 流程](publishing.md) 已接入面板/web 及 amd64/arm64 静态 Nginx 的打包、签名、源码/依赖 SBOM 和草稿发布，尚未运行或发布；项目采用 MIT 许可，正式仓库签名配置仍需提供。Nginx 默认资产按固定源码配方预置模块，可复用现有准备、首次安装及迁移依赖准备入口。Fail2ban 官方代码组装、许可/兼容文件、来源和默认签名发行也已接入，复用现有组件准备与受管安装；原生 Nginx 维护切换本机命令见后文；Web/API、其他组件切换和完整系统验收仍待补齐。
+[发布工具与 CI 流程](publishing.md)包含核心程序、Nginx 镜像的打包签名及源码/依赖 SBOM 流程；正式公开 GitHub Release 尚未完成验收，不在此声称发行已成功。核心程序包内嵌前端，Nginx 镜像预置常用模块。Fail2ban 和 FRP 等可选应用按需安装，各自更新，不随核心程序或 Nginx 更新。
 
-## 面板版本暂存
+## 旧版架构存档：面板版本暂存
 
 本机 root 可将已准备的 `panel-linux-<当前架构>` 计划复制到 `DATA/runtime/releases/<内容散列>`，供后续独立更新执行器使用。沿用准备时的目标主机和接收协议身份，检查当前公钥、签名有效期、静态 ELF、程序版本与 Agent/launcher 协议，并核对同版前端文件。只在程序已通过签名散列核对后执行固定 `version` 命令。
 
@@ -106,11 +114,11 @@ sudo /opt/nginxpanel/current/nginxpanel panel-runtime-staged \
 
 `state=staged` 仅表示持久副本及其批准记录就绪，返回数据库 schema、协议门槛和签名回滚声明供后续准入使用。不切换当前版本、不迁移数据库、不重启面板或 Nginx/Fail2ban；独立 worker、版本切换、健康检查与失败回滚编排已在后续更新入口接入。本入口尚未运行，统一留到 P5 集中验证。
 
-## 面板程序版本选择
+## 旧版架构存档：面板程序版本选择
 
 原生和 Docker 面板均使用 root 持有的 `runtime/launcher.json` 运行绑定与 `runtime/current` 内容版本指针。绑定明确 `native/docker` 模式、专用身份、监听和初始版本，禁止直接转换部署方式。原生安装通过 `panel-native-bind` 复制本机批准的程序及前端；systemd 的固定 `panel-native-serve` 入口再执行所选持久版本。`/opt/nginxpanel/current` 继续提供宿主机 Agent 和安装工具，普通面板选择不改动它。初始化完成记录 `runtime/binding.ready` 防止指针丢失后重装工具擅自退回初始版本。
 
-正式 `init/serve` 在取得 root 写锁后核对实际执行文件 inode，`serve` 还检查运行模式、监听、版本和所选前端；旧启动入口与新选择发生竞争时，旧程序在读取主密钥、数据库或运行迁移前退出。安装器从已选择的持久程序执行初始化，重复首次安装不会用初始程序打开新版数据。开发入口仍独立运行。
+正式初始化和核心服务在取得 root 写锁后核对实际执行文件 inode；核心服务同时核对运行模式、监听、版本和内置前端身份。固定安装入口指向当前核心，显式运行旧核心时也先切换至受信目标，再打开主密钥、数据库或执行迁移。安装器从已选择的持久程序执行初始化，重复首次安装不会用初始程序打开新版数据。开发入口仍独立运行。
 
 本机 root 的 `panel-runtime-select` 要求原维护会话未释放、当前 Agent epoch、已经完整认证且未过期的本机快照，以及已签名批准的暂存计划；执行前必须停止 `serve`。它复核当前专用账户、运行绑定、当前公钥、原批准与完整产物。程序的 `version` 输出从内嵌迁移取得 `database_schema`，并与签名清单核对；目标 schema 不得低于当前程序或快照，不能以旧快照绕过程序降级检查。
 
@@ -127,7 +135,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-selection-status \
 
 `version_selected` 仅表示程序指针已持久化；本入口不重启服务、打开数据库或释放维护会话，不报告应用健康。独立 worker 的自动编排、匹配程序与数据的自动回滚及清理见下文；本命令仅提供程序选择。尚未运行以上入口、服务、安装器、构建或测试，统一留到 P5。
 
-## 面板进程维护
+## 旧版架构存档：双进程面板维护
 
 本机 root 的 `panel-service-control` 仅控制已绑定的管理面板，要求同一未释放维护会话及当前 Agent epoch；本阶段合同使用 Agent 协议 18、launcher 协议 2。原生模式核对安装意图 v9、已加载且没有 drop-in 的固定 `nginxpanel.service`，检查 UID/GID、主进程、实例与启动标识、执行文件、固定参数及 systemd cgroup；Docker 模式认证 launcher 的 UID、独立容器 PID 1 和执行散列，使用 boot ID 与 serve 实例 UUID 区分进程。Docker 状态中的 PID 属于容器命名空间，原生 PID 属于宿主机。
 
@@ -151,7 +159,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-service-operation \
 
 持久停机标记或未完成的进程记录会阻止维护释放。`started` 表示已观测到目标进程实例；就绪检查见下文。完整程序/数据回滚、升级提交及清理由独立更新 worker 编排，见下文。尚未执行控制入口、systemd、launcher、服务、构建或测试，统一留到 P5。
 
-## 面板就绪观察
+## 旧版架构存档：面板就绪观察
 
 本机 root 的 `panel-readiness` 关联原维护会话、已完成的启动操作及原恢复快照，返回当次观察证据。生产 `serve` 在持有写锁后提供 `DATA/run/readiness/readiness.sock`，并在同目录发布管理 TLS 的公开证书；此 Socket 仅接受 root 对端，返回统一的 `code/message/data/request_id/node_id`。Agent 可访问这项 IPC，业务目录和私钥仍被其挂载命名空间隐藏。开发模式不提供此入口。
 
@@ -170,7 +178,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-readiness \
 
 返回包含原启动/快照/绑定散列、进程实例、应用状态、管理监听与前端核对数量和观察时间，仅表示该时间点的结果；独立更新执行器见下文。本命令不释放维护、不启动进程、不恢复数据、不删除快照。原生 HTTP 部署中的实际更新及补偿恢复已验证，具体范围见 [当前进度](progress.md)。
 
-## 独立面板更新事务
+## 旧版架构存档：独立面板更新事务
 
 `update-worker` 在待替换 `serve` 之外以 root 运行，要求已完成的签名暂存、同一 held 维护会话及当前 epoch。固定流程为：一致性快照、持久停机、版本选择、新进程启动、就绪观察、提交结果、协调原维护会话释放。发布须明确声明允许自动回滚；不支持直接降低 schema，不自动升级宿主机 Agent、launcher、Nginx 或 Fail2ban。使用前须部署理解本合同的 Agent 21。
 
@@ -216,7 +224,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-update-status \
 
 清理保留 root 审计记录、共享 `recovery.key`、当前/前一程序及前端版本。`recovery_required` 的材料不按 TTL 删除。未获原快照批准、助手目录残留、无法归属的 `.snapshot-*` 暂存及其他未知资源不自动删除，须本机核对；清理完成仅指原批准清单，不能视为全目录垃圾回收。清理无需打开当前数据库或长时间持有配置写入准入锁。数据库迁移为 19，Agent 合同为 21，安装登记现为 v12。
 
-## 本机面板恢复快照
+## 旧版架构存档：本机面板恢复快照
 
 本机 root 的 `panel-snapshot-capture` 须提供已经 held 的维护会话及当前 Agent epoch。捕获期间持有维护释放所用的 root 锁，拒绝尚有独立副作用任务执行中或待恢复的节点。SQLite 助手降为 `nginxpanel` 专用账户，使用 [VACUUM INTO](https://www.sqlite.org/lang_vacuum.html) 生成包含 WAL 中已提交内容的一致性副本，不直接复制活动数据库，也不以 root 解析业务数据库。助手有两分钟期限、512 MiB 单文件限制，整次捕获期限五分钟，输出仅在 root 分配的私有暂存目录中生成。
 
@@ -235,7 +243,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-snapshot-check \
 
 单份期限 24 小时、最多八份、密文总预算 2 GiB，新增前按最大单份预留容量；超限明确失败。期限只报告 `expired`，不自动删除救援依据。中断留下的不完整密文或助手暂存须本机处理；不能将一次捕获成功视为已授权后续恢复，恢复仍须核对未释放的同一维护会话。
 
-## 本机快照数据恢复
+## 旧版架构存档：本机快照数据恢复
 
 本机 root 可在停下 `serve` 后恢复同一未释放维护会话中的快照。恢复前须安排与快照匹配的程序版本；本入口只安装数据，不选择版本、启停服务或认定应用健康。Agent 重启导致会话处于 closing 时，使用其当前 epoch 核对原维护身份；已释放的旧维护标识不能重新用于覆盖后续写入。
 
@@ -259,7 +267,7 @@ sudo /opt/nginxpanel/current/nginxpanel panel-restore-status \
 
 ## 组件页面与任务
 
-原生 Agent 由本机 root 设置 `--component-scope host`，沿用 `--release-trust` 与可选 `--release-token-file`；默认未确认范围及开发 Agent 不准备组件。Web/API 不接收仓库 URL、公钥、Token 或文件路径，`components.manage` 权限及有效登录会话约束此入口。页面 `/components` 自动扫描接入，使用统一 JSON 外壳；`GET /api/v1/components` 读来源，`GET/POST /api/v1/components/tasks` 读本人任务或提交带幂等键的检查/准备。
+宿主机核心服务使用本机 root 批准的 `--component-scope host`、`--release-trust` 与可选 `--release-token-file`；未确认范围及开发模式不准备组件。Web/API 不接收仓库 URL、公钥、Token 或文件路径，`components.manage` 权限及有效登录会话约束此入口。页面 `/components` 自动扫描接入，使用统一 JSON 外壳；`GET /api/v1/components` 读来源，`GET/POST /api/v1/components/tasks` 读本人任务或提交带幂等键的检查/准备。
 
 检查可用 `components: ["nginx"]`（可另选 `fail2ban`）按架构/发行版唯一匹配，多个匹配项须使用明确 `assets` ID，不猜测最新 ABI。准备须引用本人成功检查任务 `check_task_id`，显式绑定 `tag/prerelease/assets/plan_id/manifest_sha256/trust_sha256` 及原检查的可选离线上传 `offline_id`；过期、来源变化或系统运行依赖缺失时停止准备。root Agent 再次验证全部材料；在线来源在下载前核对期望散列，离线来源仅使用原上传归档。`runtime_ready` 只说明已声明的本机运行文件满足校验，不代表实际执行或 ABI 验收。
 
@@ -282,14 +290,14 @@ Web 将任务输入及精简结果分别加密，保留最多 64 项，单条 64
 
 Agent/数据库/归档为 110/32/6，无首版前兼容路径。源码实现与集成完成，生成器、构建、类型检查、lint、测试、浏览器及真实上传/解包/安装未执行，待 P5 隔离 Docker/虚拟机集中验收；不增加 UI 自动化测试。验收须覆盖签名/平台/选择拒绝、重复请求错绑、完整及部分分块重试、断连/重启续传、偏移和前缀冲突、清除发布/删除中断、来源过期/撤销、检查来源替换、篡改归档和解包拒绝、维护准入及容量边界。
 
-## 原生运行绑定
+## 旧版架构存档：原生运行绑定
 
 已准备的单一 Nginx 资产可由原生安装器通过 `--nginx-plan/--nginx-asset` 直接接入，见 [原生安装](../deploy/native/README.md)。固定 `component-path/component-bind/nginx-runtime` 命令分别负责准入解析、不可变本机安装批准和执行；Web 不能创建或覆盖绑定。Agent 和 systemd 使用同一绑定，实际版本须匹配签名资产，启动不依赖 GitHub 或下载缓存。
 
 `Prepared` 现在为纯只读回执核验，恢复不会创建锁或补发归档。已安装运行使用 root 本机批准时间验证原清单的准入有效期，并以当前受信公钥及仓库重新验签、复核完整原计划/文件和系统依赖。原批准信任散列只用于重建不可变回执身份，不替代当前验签；添加无关公钥不触发无关版本失效，撤销签名公钥仍拒绝启动。此规则不用于新检查/准备，业务请求也不能提交批准时间或旧信任材料。
 
 
-## 原生 Nginx 运行组件维护切换
+## 旧版架构存档：原生 Nginx 运行组件维护切换
 
 本机 root 可使用 `component-switch` 将已运行的专用原生 Nginx 换成已准备的签名资产。入口要求原生安装 v14 已完成、Nginx 与 Agent 正常运行、独立维护会话已持有，以及明确允许重启停机。Docker 继续使用固定镜像及构建时预置模块，本入口不编译或增装模块。Web/API 已接入同一切换核心，其他组件的运行版本切换仍待接入。
 
@@ -319,7 +327,7 @@ sudo /opt/nginxpanel/current/nginxpanel component-switch \
 API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.service` 启动独立 worker，候选校验及服务控制不占用 Agent 请求。父记录固定唯一子操作；查询、服务重启和重复请求均不重用已领取授权。每次启动授权五分钟，原任务最多 32 次授权，记录总量最多 64 项；初次子操作仍使用十分钟前进及八分钟补偿期限，续办不延长前进期限。独立服务失败后，只有显式新授权才清除失败状态并启动；状态查询仅对账。补偿请求持久生效，后续续办继续补偿；尚未建立子操作时取消派发记为 failed/cancelled_before_switch，不虚构运行恢复证明。断连、记录缺失或执行状态不明时保留原任务与维护锁；完整备份恢复中的源切换任务隔离，不向新环境重放。页面/API、独立服务及故障恢复尚未实际执行，待 P5 集中验证。
 
 
-## 独立前端发布与激活
+## 旧版架构存档：独立前端发布与激活
 
 组件页可单独选择 `web`，在线和离线来源均沿用原签名检查及准备任务。前端不能与面板或其他组件合并准备；清单 API 主版本、数据库合同必须适合当前受管后端，Agent/launcher 下限仍按发布验证。服务器不构建前端，也不执行 web 资产中的程序。准备只发布不可变目录，`frontend.release_id` 是静态发布身份，`activated=false` 不代表已切换。
 
@@ -336,14 +344,14 @@ API 持久保存加密任务及 root 派发父记录，由 `nginxpanel-switch@.s
 
 ## 已验签发行说明与接收端要求
 
-组件检查结果和离线上传信息保留清单签名覆盖的 `notes/requirements/receiver`，展示 API 主版本、目标数据库结构、Agent/launcher 下限、配套前端版本和自动回滚标志。发行说明按纯文本显示，不执行 HTML 或 Markdown。说明最多 8 KiB UTF-8、默认 JSON 编码后最多 16 KiB，仅允许 LF 和 TAB 控制字符；空说明在接收端显示为未提供，发布工具要求非空说明。
+组件检查结果和离线上传信息保留清单签名覆盖的 `notes/requirements/receiver`，展示 API 主版本、目标数据库结构、核心程序要求和自动回滚标志。前端随核心程序发布，不单独准备或激活。发行说明按纯文本显示，不执行 HTML 或 Markdown。说明最多 8 KiB UTF-8、默认 JSON 编码后最多 16 KiB，仅允许 LF 和 TAB 控制字符；空说明在接收端显示为未提供，发布工具要求非空说明。
 
 在线检查在签名、清单结构、仓库、标签、渠道、有效期及当前信任核对通过后，即使接收端版本不满足要求，也将已认证的 `announcement` 保存在失败任务中，错误码为 `COMPONENT_RECEIVER_INCOMPATIBLE`。说明包含要求、当前接收端版本及差异，不含准备计划 ID、资产或可执行授权；失败任务不能用于准备或激活。未经认证、来源不一致、清单过期或信任变化的响应不会保留此说明。离线创建仍须通过完整接收准入，版本不满足时直接拒绝并返回要求差异。
 
-接收端不满足要求时，页面提示选择匹配 API 的发行，或由节点管理员处理 Agent/launcher 更新后重新检查；容器方式通过替换受信任镜像更新。独立 Agent 升级见下一节，跨协议变更仍须协调部署。Agent/数据库/归档为 112/33/6；本轮仅完成实现和源码审阅，生成器、构建、类型检查、lint、测试、浏览器、发布工具及真实系统操作均留待 P5 隔离集中验证。
+接收端不满足要求时，页面提示选择匹配当前系统 API 和数据库结构的核心发行后重新检查。核心服务与管理页面随同一签名程序更新，不单独更换 Agent、launcher 或面板镜像。实际支持范围以当前[进度清单](progress.md)与[验证记录](validation.md)为准。
 
 
-## 独立 Agent 与宿主机工具升级
+## 旧版架构存档：独立 Agent 与宿主机工具升级
 
 本机 root 可使用已经准备的单一签名静态面板资产升级 `/opt/nginxpanel/current` 中的 Agent 与固定宿主机工具。目标须与当前选中面板的 Agent 协议、数据库结构和 launcher 合同一致；不替换 `runtime/current`、容器 launcher 镜像、Nginx 或 Fail2ban，不迁移业务数据库。可使用本机命令，或通过网页/API 创建和续办持久任务。
 
@@ -373,7 +381,7 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 任务和授权加密保存，单次启动授权五分钟，root 最多保留 32 次连续授权，本地每任务最多保留 64 次请求、共 64 项任务。派发标记先提交，HTTP 断开、Agent 重启或服务启动结果不明后只查询原记录；曾提交但 root 记录缺失时须本机处理。源备份隔离任务不得在恢复目标提交或续办。面板更新与 Agent 升级不能并行；事务确认后自动完成收尾。首次安装器预建 root 程序发布目录，并登记 `/etc/tmpfiles.d/nginxpanel.conf` 以在开机时创建共享安装锁目录；Agent 服务只获得发布子目录写入权，程序指针仍由独立升级服务切换。
 
 
-### 面板运行镜像替换
+### 旧版架构存档：面板运行镜像替换
 
 容器面板在“运行镜像”页选择已完成的签名面板准备任务，由后台准备执行条件后更换 launcher 镜像。当前应用、前端选择与业务数据库保留；运行镜像须已在目标主机按摘要准备。统一 API 为 `GET/POST /api/v1/panel/images/upgrades`、`GET /api/v1/panel/images/upgrades/{id}` 和 `POST /api/v1/panel/images/upgrades/{id}/resume`，创建字段为 `prepare_task_id`。写请求需要组件管理、系统写权限、有效登录会话或显式授权 Token、幂等键；远程节点使用已登记的同资源转发路径。
 
@@ -381,10 +389,10 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 
 面板更新、Agent 升级和运行镜像替换共用活动任务限制，未结束时不能释放维护；完整备份中的隔离源任务保留审计和结果，不参与目标的新任务活动限制，不能从目标续办或重放。实际容器重建、恢复、权限和远程调用尚未执行，待 P5 隔离集中验证。
 
-## 签名镜像拉取
+## Nginx 签名镜像更新
 
-完成面板签名准备后，组件页展示同一发行的本机架构镜像。选择“拉取镜像”会创建独立 `component.pull` 持久任务；API 为 `POST /api/v1/components/images/pull`，请求使用 `ComponentCreateInput`，其中 `prepare_task_id` 为本人的成功准备任务、`check_task_id` 为空，`input.action=pull`、`input.image_id=panel-launcher|nginx`，其余标签、资产、计划与签名散列须和准备结果一致。写入口要求 `components.manage`、`system.write`、有效登录会话或显式授权 Token、幂等键，远程节点沿登记路径转发。镜像拉取应在应用更新之前完成。
+Nginx 使用独立签名镜像计划，不依赖核心程序资产。软件商店首次安装可从已准备的计划拉取 Nginx 镜像；已安装的 Nginx 在镜像更新页面检查并准备目标镜像，再提交更新任务。该更新任务引用 `prepare_task_id`，后台按签名准备计划拉取并核对镜像，不要求用户额外创建 `component.pull` 任务。Fail2ban、FRP 和第三方软件按各自应用流程更新，不随核心程序或 Nginx 镜像更新。
 
-root 重新核对准备目录及当前发布信任，从签名清单推导固定 GHCR 摘要和 Linux amd64/arm64 平台；不接受用户镜像地址、Docker 地址或 Registry 凭据。当前入口下载可公开访问的发行镜像；私有包访问策略须由发布方在发布前安排。通过固定 Docker Engine API 1.47 读取下载进度，十分钟期限、8 MiB 总进度、64 KiB 单条进度与 65,536 条记录上限；HTTP 成功但流中报错也判失败。下载后核对实际镜像摘要、配置、架构、卷声明及签名启动器字节，过程只创建并删除未启动的元数据容器。已有镜像核对通过则复用，仅权威镜像缺失允许下载。
+核心服务以 root 重新核对准备目录及当前发布信任，从签名清单推导 Nginx 固定镜像摘要和本机架构；不接受用户镜像地址、Docker 地址或 Registry 凭据。镜像按摘要核对后切换受管 Nginx 容器，核心程序本身不运行在 Docker 中。
 
-启动意图先持久化。Web 断连只查询原 UUID，Agent 重启后按原 root 意图重新验签并只检查本地内容；已存在且核对通过则确认就绪，其他情况记录失败，显式新建任务才可再次下载。不删除缓存层、既有镜像或运行容器，也不修改当前部署选择。首次安装可使用 [Docker 部署说明](../deploy/docker/README.md#签名镜像下载) 的 root 命令。下载就绪与运行切换分别授权；实现待 P5 隔离验证。
+应用镜像更新任务在执行前持久化意图。页面断连后继续查询原任务，未知结果不会伪装为成功。更新及恢复只针对 Nginx 容器和已签名镜像，不切换核心程序版本或修改业务数据。

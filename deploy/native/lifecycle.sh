@@ -49,7 +49,7 @@ lifecycle_units() {
   local unit path
   lifecycle_unit_names=()
   for unit in nginxpanel.service nginxpanel-agent.service nginxpanel-nginx.service nginxpanel-fail2ban.service \
-    nginxpanel-install@.service nginxpanel-switch@.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service \
+    nginxpanel-install@.service nginxpanel-switch@.service nginxpanel-core-update@.service nginxpanel-update@.service nginxpanel-agent-upgrade@.service \
     nginxpanel-image@.service nginxpanel-nginx-image@.service nginxpanel-fail2ban-python@.service; do
     path=/etc/systemd/system/$unit
     if [[ -e $path || -L $path ]]; then
@@ -78,14 +78,14 @@ lifecycle_check_workers() {
 lifecycle_writer_lock() {
   local path=$data/run/panel-writer.lock
   root_chain "$data/run"
-  [[ -f $path && ! -L $path && $(stat -c %u "$path") == 0 && $(stat -c %h "$path") == 1 && $(stat -c %a "$path") == 660 && $(stat -c %G "$path") == nginxpanel ]] || die '面板写锁类型或归属不可信'
+  [[ -f $path && ! -L $path && $(stat -c %u "$path") == 0 && $(stat -c %h "$path") == 1 && $(stat -c %a "$path") == 660 && $(stat -c %g "$path") == 0 ]] || die '面板写锁类型或归属不可信'
   exec 7<>"$path"
   flock -n 7 || die '仍有面板或恢复进程持有写锁，停止卸载'
   lifecycle_writer_held=yes
 }
 lifecycle_stop() {
   local unit state
-  if [[ $panel_mode == docker && -f $compose ]]; then
+  if [[ -f $compose ]]; then
     compose_command down --timeout 65 || die '无法停止并移除本应用容器，未清理安装文件'
   fi
   for unit in nginxpanel.service nginxpanel-fail2ban.service nginxpanel-nginx.service nginxpanel-agent.service; do
@@ -106,8 +106,9 @@ lifecycle_capture_running() {
       case "$state" in active) lifecycle_running_units+=("$unit") ;; inactive|failed) ;; *) die "$unit 正在切换状态（$state），请稍后重试" ;; esac
     fi
   done
-  if [[ $panel_mode == docker ]]; then
+  if [[ -f $compose ]]; then
     for service in panel nginx; do
+      if [[ $service == panel && $panel_mode != docker ]]; then continue; fi
       if [[ $service == nginx && -z $nginx_image ]]; then continue; fi
       running=$(compose_command ps --status running -q "$service") || die '无法核对本应用容器状态'
       if [[ -n $running ]]; then lifecycle_running_containers+=("$service"); fi
@@ -414,7 +415,7 @@ lifecycle_reinstall() {
     restored_running=$restored_running$unit:
   done <"$lifecycle_dir/running"
   while IFS= read -r service; do
-    [[ $panel_mode == docker && ( $service == panel || $service == nginx && -n $nginx_image ) ]] || die '重装材料包含未知容器'
+    [[ $service == panel && $panel_mode == docker || $service == nginx && -n $nginx_image ]] || die '重装材料包含未知容器'
     compose_command up -d --no-deps --pull never "$service" || die '容器启动失败，请检查后续办 reinstall'
     running=$(compose_command ps --status running -q "$service") || die '无法核对恢复后的容器状态'
     [[ -n $running ]] || die '恢复后的容器未运行，请检查后续办 reinstall'

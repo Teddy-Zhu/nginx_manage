@@ -6,30 +6,30 @@
 
 首次使用从[部署指南](docs/deployment.md)开始，安装后按[使用手册](docs/user-guide.md)创建第一个代理。
 
-将下例的 `OWNER/REPO` 替换为实际 GitHub 仓库，在部署目标选择一种方式：
+默认仓库为 `Teddy-Zhu/nginx_manage`。在部署目标选择一种方式：
 
 **源码安装**（需要 Git、Docker 和 Compose，编译工具全部在容器内）：
 
 ```sh
-git clone https://github.com/OWNER/REPO.git nginxpanel
-cd nginxpanel
-sudo bash install.sh --yes
+bash setup.sh --source --yes
 ```
 
-**Release 安装**（自动下载本机架构的已编译包，需要 Docker 和 Compose，无需 Go 或 Node.js）：
+仓库发布包含安装脚本和本机架构安装包的正式版本后，可使用 Release 安装：
 
 ```sh
-curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o nginxpanel-setup.sh && bash nginxpanel-setup.sh --yes
+curl -fL https://github.com/Teddy-Zhu/nginx_manage/releases/latest/download/setup.sh \
+  -o nginxpanel-setup.sh
+bash nginxpanel-setup.sh --yes
 ```
 
-两种方式都会自动检测环境、安装并启动服务，最后输出首次访问方法。去掉 `--yes` 可先核对摘要；加 `--advanced` 才进入自定义设置。也可对下载的脚本加 `--source`，一次完成拉取源码、容器编译和安装。Release 入口需仓库已发布包含安装脚本的新发行。默认监听全部网卡并随机选择空闲管理端口，保存后重启不变；安装后可直接用机器公网或内网 IP 访问。首次指定端口可加 `--port 23456`。安装后使用 `sudo bash /opt/nginxpanel/manage.sh` 管理服务，或用 `sudo bash /opt/nginxpanel/manage.sh set-port 23456` 修改端口。
+两种方式都会检测环境、安装并启动服务，最后输出首次访问地址。省略 `--yes` 可先核对安装摘要；加 `--advanced` 才进入自定义设置。也可对下载的引导脚本加 `--source`，拉取源码、容器编译并安装。仓库公开访问和正式 Release 是否可用仍待确认，本文不表示 GitHub 已有可用公开发行。默认监听全部网卡并随机选择空闲管理端口，保存后重启不变；安装后可通过机器公网或内网 IP 访问。首次指定端口可加 `--port 23456`。安装后使用 `sudo systemctl restart nginxpanel.service` 重启核心服务，或用 `sudo bash /opt/nginxpanel/manage.sh set-port 23456` 修改端口。
 
-仅必要权限的 Agent 运行在宿主机，面板、Nginx、Fail2ban、FRP 及第三方应用均使用 Docker，配置、数据库、证书和日志挂载在外部数据目录。源码安装在 Docker 中编译，源码包与 Release 均携带面板和 Nginx 运行镜像，自动导入，无原生部署回退。Nginx 镜像预置 HTTPS、HTTP/2、反向代理、缓存、gzip / 静态 gzip、真实 IP、访问控制、限流、状态统计、子请求认证、内容替换、分片及 TCP/UDP 转发、TLS 预读等常用模块。Fail2ban、[FRP 服务端](docs/frps.md)等其他软件按需安装，不依赖宿主机编译工具。
+核心程序将 Agent、管理 API 和前端页面合并为一个二进制，由宿主机 `nginxpanel.service` 以 root 运行。Nginx 使用 Docker 容器，配置、数据库、证书和日志保存在外部数据目录。源码安装由 Docker 容器编译；安装包包含核心程序和 Nginx 镜像，不再提供独立 `web/` 目录或面板运行镜像。Fail2ban、[FRP 服务端](docs/frps.md)和第三方应用默认不安装，需要时再手动安装。Nginx 常用模块已预置在镜像中。
 
 | 文档 | 内容 |
 | --- | --- |
 | [完整文档导航](docs/README.md) | 从安装到日常使用的阅读顺序及专题索引 |
-| [部署指南](docs/deployment.md) | 材料准备、源码构建、Docker 安装、首次登录、管理入口 |
+| [部署指南](docs/deployment.md) | 环境检测、源码或 Release 安装、首次登录、服务管理 |
 | [使用手册](docs/user-guide.md) | 代理、证书、主机功能、API、节点、迁移与备份 |
 | [运维与故障处理](docs/operations.md) | 服务管理、更新、恢复、常见问题与停用边界 |
 
@@ -41,9 +41,9 @@ curl -fL https://github.com/OWNER/REPO/releases/latest/download/setup.sh -o ngin
 
 ## 功能概览
 
-当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单与基础 WAF 策略、手动证书版本与 HTTPS 绑定/跳转/HSTS、不可变修订、原文差异、外部快照/草稿捕获/受管恢复、并发保护和独立草稿；Unix Socket Agent 身份校验、Nginx 编译/受信动态模块能力、不可变发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
+当前实现：单管理员引导、SCS 会话、CSRF、Argon2id、限定权限机器凭据；统一 JSON 响应与 Axios 请求层；HTTP/Stream 代理 CRUD、常用字段/原文双向映射、可复用黑白名单与基础 WAF 策略、手动证书版本与 HTTPS 绑定/跳转/HSTS、不可变修订、原文差异、外部快照/草稿捕获/受管恢复、并发保护和独立草稿；核心服务身份校验、预置 Nginx 模块、不可变发布/运行确认/回滚、持久任务及审计；自动扫描页面路由的管理界面。
 
-ACME、主机 DNS、防火墙、Fail2ban、多节点、加密备份与跨环境迁移、原生与 Docker 部署及签名更新均已接入，实际运行能力须按目标系统验收；保存与校验不会显示为已生效。
+ACME、主机 DNS、防火墙、Fail2ban、多节点、加密备份与跨环境迁移、宿主核心服务和 Docker 应用管理及签名更新均已接入，实际运行能力须按目标系统验收；保存与校验不会显示为已生效。
 
 ## 开发
 
@@ -64,19 +64,11 @@ pnpm --dir web dev
 
 访问 `http://127.0.0.1:5173`。API 默认 `127.0.0.1:8080`，Vite 同源代理 `/api`。首次启动生成 `.local/bootstrap/token`，从本机读取该文件，在初始化页面设置管理员；没有默认密码。数据目录不纳入 Git。
 
-需要 Agent 宿主机只读诊断时，在同一普通用户下另开终端：
+开发模式使用回环地址，不作为生产部署方案。开发时由 Go 提供 API、Vite 提供热更新页面；生产中前端随核心二进制提供。实际执行及部署验收须在隔离虚拟机完成，见[运行矩阵](docs/support-matrix.md)。
 
-```sh
-go run ./cmd/nginxpanel agent --dev --data-dir=.local
-```
+签名发行检查与准备见[发行资产合同](docs/releases.md)。系统更新只有一个入口，更新核心二进制并在启动时自动完成数据迁移；Nginx 及其他应用镜像按各自流程更新，不随核心程序更新。
 
-实际执行入口由本机 root 显式指定 `--nginx-binary` 和 `--nginx-user`，要求可信程序及独立 worker 账户。`nginx-init` 创建无站点基线；服务须以对应数据根为 prefix，并从 `nginx/active/nginx.conf` 启动。动态模块由本机 root 清单批准，通过 `--nginx-modules` 向 Web/Agent 提供同一选择范围，详见 [模块接入](docs/native-modules.md)。[原生安装入口](deploy/native/README.md) 已接入账户/目录分区、不可变产物及三个 systemd 服务，支持 `--without-nginx` 仅安装 Web/Agent，显式 `--start` 才按所选组件启用启动；不接管已有系统 Nginx。实际安装与服务的验收范围见[运行验收矩阵](docs/support-matrix.md)。开发 Agent 不开放实际执行。
-
-未连接 Agent 时保持预览模式，不提供虚假的系统操作成功结果。开发模式只允许回环 HTTP，不作为生产部署方案；生产默认开放 HTTPS 主入口，另可配置附加受控监听。部署方式见 [原生安装](deploy/native/README.md) 和 [Docker 部署](deploy/docker/README.md)。
-
-本机 `release-verify/release-prepare` 与 `release-check/release-fetch` 已接入固定发布公钥、离线签名清单、固定 GitHub 仓库的受限下载和有界资产准备，见 [发行资产合同](docs/releases.md)。准备好的 panel 可交给原生安装器；组件激活、在线更新及迁移依赖安装通过各自的维护流程执行。
-
-项目采用 [MIT 许可](LICENSE)。面板/web 的 [发布工具与 GitHub 工作流](docs/publishing.md) 已接入打包、实际许可文件、依赖 SBOM、构建来源及 Ed25519 签名，先上传完整草稿再公开。正式发布仍需配置仓库和发布密钥。
+项目采用 [MIT 许可](LICENSE)。[发布工具与 GitHub 工作流](docs/publishing.md)包含安装包、实际许可文件、依赖 SBOM、构建来源及 Ed25519 签名流程。正式仓库公开发行和签名配置尚未完成验证。
 
 生成代码：`make generate`。构建：`make build`，调用 Docker 构建并输出安装包；`make release-tool` 同样通过 Docker 构建发行工具。构建入口不调用本机 Go、Node.js 或 pnpm。验证：`make verify`，仅在业务实现和集成稳定后的集中验证阶段执行；不包含 UI 自动化。开发验证须在隔离环境执行，已执行范围及待验收项见 [验证记录](docs/validation.md)。
 

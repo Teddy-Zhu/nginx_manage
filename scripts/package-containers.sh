@@ -6,7 +6,7 @@ root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
 package=$(cd -- "$1" && pwd -P)
 arch=$2
 case "$arch" in amd64|arm64) ;; *) exit 1 ;; esac
-[[ -f $package/nginxpanel && -f $package/web/index.html && -f $package/LICENSE ]]
+[[ -f $package/nginxpanel && -f $package/LICENSE ]]
 [[ $package != *,* && $package != *$'\n'* ]]
 [[ ! -e $package/containers.json && ! -e $package/container-images.tar ]]
 work=$(mktemp -d)
@@ -19,17 +19,12 @@ if [[ -f $package/THIRD_PARTY_NOTICES.txt ]]; then
 fi
 cp -- "$root/deploy/docker/nginx-capabilities.json" "$root/deploy/docker/check-nginx-image.sh" "$work/deploy/docker/"
 launcher_hash=$(sha256sum -- "$package/nginxpanel"); launcher_hash=${launcher_hash%% *}
-images=() tags=()
-for component in panel nginx; do
-  if [[ $component == panel ]]; then context=$work/.release/binaries; else context=$work; fi
-  tag=nginxpanel-build-$component:$arch-$launcher_hash
-  docker build --platform "linux/$arch" --load --file "$root/deploy/docker/$component.Dockerfile" \
-    --label "org.nginxpanel.launcher.sha256=$launcher_hash" --tag "$tag" "$context"
-  tags+=("$tag")
-  images+=("$(docker image inspect --format '{{.Id}}' "$tag")")
-done
+tag=nginxpanel-build-nginx:$arch-$launcher_hash
+docker build --platform "linux/$arch" --load --file "$root/deploy/docker/nginx.Dockerfile" \
+  --label "org.nginxpanel.launcher.sha256=$launcher_hash" --tag "$tag" "$work"
+image=$(docker image inspect --format '{{.Id}}' "$tag")
 docker run --rm --platform "linux/$arch" --network none --user "$(id -u):$(id -g)" \
   --mount "type=bind,source=$package,target=/package" \
-  --entrypoint /usr/local/bin/nginxpanel-launcher "${images[0]}" \
-  container-package --package-dir /package --panel-image "${images[0]}" --nginx-image "${images[1]}"
-docker image save --output "$package/container-images.tar" "${tags[@]}"
+  --entrypoint /usr/local/bin/nginxpanel-nginx-launcher "$image" \
+  container-package --package-dir /package --nginx-image "$image"
+docker image save --output "$package/container-images.tar" "$tag"

@@ -25,7 +25,7 @@ import ComponentReleaseDetails from "./ComponentReleaseDetails.vue";
 const props = defineProps<{
   available: boolean;
   blocked: boolean;
-  initialComponent?: "nginx" | "fail2ban" | "panel" | "web";
+  initialComponent?: "nginx" | "fail2ban" | "panel";
 }>();
 const emit = defineEmits<{ changed: [] }>();
 const api = useNodeAPI(),
@@ -36,7 +36,7 @@ const manifest = ref<File | null>(null),
 const archives = ref<File[]>([]),
   uploads = ref<ComponentOfflineUpload[]>([]);
 const selected = ref(""),
-  component = ref<"nginx" | "fail2ban" | "panel" | "web">(
+  component = ref<"nginx" | "fail2ban" | "panel">(
     props.initialComponent ?? "nginx",
   );
 const selection = ref("components"),
@@ -357,8 +357,7 @@ onUnmounted(() => {
         :options="[
           { value: 'nginx', label: 'Nginx' },
           { value: 'fail2ban', label: 'Fail2ban' },
-          { value: 'panel', label: '面板' },
-          { value: 'web', label: '独立前端' },
+          { value: 'panel', label: '核心服务' },
         ]"
         :disabled="busy || !!pendingStart"
       />

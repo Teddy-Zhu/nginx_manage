@@ -30,6 +30,7 @@ export default tseslint.config(
         URL: "readonly",
         File: "readonly",
         HTMLInputElement: "readonly",
+        HTMLDetailsElement: "readonly",
         TextEncoder: "readonly",
         Blob: "readonly",
         FileReader: "readonly",

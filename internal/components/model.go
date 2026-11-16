@@ -11,25 +11,22 @@ import (
 
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/nginxruntime"
-	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/software"
 )
 
 type Input struct {
-	Software           *software.Request `json:"software,omitempty"`
-	ImageID            string            `json:"image_id,omitempty"`
-	FrontendBaseID     string            `json:"frontend_base_id,omitempty"`
-	ExpectedFrontendID string            `json:"expected_frontend_id,omitempty"`
-	OfflineID          string            `json:"offline_id,omitempty"`
-	Action             string            `json:"action"`
-	Tag                string            `json:"tag"`
-	Prerelease         bool              `json:"prerelease"`
-	Components         []string          `json:"components,omitempty"`
-	Assets             []string          `json:"assets,omitempty"`
-	PlanID             string            `json:"plan_id"`
-	ManifestSHA256     string            `json:"manifest_sha256"`
-	TrustSHA256        string            `json:"trust_sha256"`
+	Software       *software.Request `json:"software,omitempty"`
+	ImageID        string            `json:"image_id,omitempty"`
+	OfflineID      string            `json:"offline_id,omitempty"`
+	Action         string            `json:"action"`
+	Tag            string            `json:"tag"`
+	Prerelease     bool              `json:"prerelease"`
+	Components     []string          `json:"components,omitempty"`
+	Assets         []string          `json:"assets,omitempty"`
+	PlanID         string            `json:"plan_id"`
+	ManifestSHA256 string            `json:"manifest_sha256"`
+	TrustSHA256    string            `json:"trust_sha256"`
 }
 
 var operationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -41,7 +38,7 @@ func digest(value string) bool {
 }
 func (in Input) Validate() error {
 	if in.Action == "software" {
-		if in.Software == nil || in.OfflineID != "" || in.ImageID != "" || in.FrontendBaseID != "" || in.ExpectedFrontendID != "" || in.Tag != "" || in.Prerelease || len(in.Components) != 0 || len(in.Assets) != 0 || in.PlanID != "" || in.ManifestSHA256 != "" || in.TrustSHA256 != "" {
+		if in.Software == nil || in.OfflineID != "" || in.ImageID != "" || in.Tag != "" || in.Prerelease || len(in.Components) != 0 || len(in.Assets) != 0 || in.PlanID != "" || in.ManifestSHA256 != "" || in.TrustSHA256 != "" {
 			return fault.Invalid("软件操作输入无效")
 		}
 		if err := in.Software.Validate(); err != nil {
@@ -55,7 +52,7 @@ func (in Input) Validate() error {
 	if in.OfflineID != "" && (!ValidID(in.OfflineID) || in.Tag == "" || len(in.Components) != 0 || len(in.Assets) == 0) {
 		return fault.Invalid("离线组件须引用上传 UUID、固定标签及资产选择")
 	}
-	if in.Action != "check" && in.Action != "prepare" && in.Action != "activate" && in.Action != "pull" {
+	if in.Action != "check" && in.Action != "prepare" && in.Action != "pull" {
 		return fault.Invalid("未知组件操作")
 	}
 	if len(in.Components)+len(in.Assets) > 2 {
@@ -63,14 +60,14 @@ func (in Input) Validate() error {
 	}
 	if in.Action == "pull" {
 		if (in.ImageID != "panel-launcher" && in.ImageID != "nginx") || len(in.Assets) != 1 {
-			return fault.Invalid("镜像拉取须选择签名面板计划中的固定镜像")
+			return fault.Invalid("镜像拉取须选择独立签名镜像计划")
 		}
 	} else if in.ImageID != "" {
 		return fault.Invalid("此组件操作不能选择镜像")
 	}
 	for _, id := range in.Components {
-		if id != "nginx" && id != "fail2ban" && id != "panel" && id != "web" {
-			return fault.Invalid("组件入口只接受 Nginx、Fail2ban、面板与独立前端")
+		if id != "nginx" && id != "fail2ban" && id != "panel" {
+			return fault.Invalid("不支持所选更新组件")
 		}
 	}
 	if in.Action == "check" && (in.PlanID != "" || in.ManifestSHA256 != "" || in.TrustSHA256 != "") {
@@ -79,20 +76,13 @@ func (in Input) Validate() error {
 	if in.Action != "check" && (in.Tag == "" || len(in.Components) != 0 || len(in.Assets) == 0 || !digest(in.PlanID) || !digest(in.ManifestSHA256) || !digest(in.TrustSHA256)) {
 		return fault.Invalid("准备须绑定已检查的标签、资产、计划和信任散列")
 	}
-	if in.Action == "activate" {
-		if len(in.Assets) != 1 || !digest(in.FrontendBaseID) || !digest(in.ExpectedFrontendID) {
-			return fault.Invalid("前端激活须绑定当前后端和前端身份")
-		}
-	} else if in.FrontendBaseID != "" || in.ExpectedFrontendID != "" {
-		return fault.Invalid("检查和准备不能携带前端激活身份")
-	}
 	if err := releases.ValidateOnlineSelection(in.online()); err != nil {
 		return fault.Invalid(err.Error())
 	}
 	return nil
 }
 func (in Input) online() releases.OnlineInput {
-	return releases.OnlineInput{PanelStaging: true, Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
+	return releases.OnlineInput{PanelStaging: true, Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban", "panel"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
 }
 
 type PanelPreparation struct {
@@ -103,14 +93,6 @@ type PanelPreparation struct {
 	DatabaseSchema       int64  `json:"database_schema"`
 	AutomaticRollback    bool   `json:"automatic_rollback"`
 }
-type FrontendResult struct {
-	ReleaseID  string `json:"release_id"`
-	Version    string `json:"version"`
-	Activated  bool   `json:"activated"`
-	BaseID     string `json:"base_id"`
-	PreviousID string `json:"previous_id"`
-}
-
 type Request struct {
 	Protocol    int    `json:"protocol"`
 	OperationID string `json:"operation_id"`
@@ -167,7 +149,6 @@ type Operation struct {
 	Software      *software.Result       `json:"software,omitempty"`
 	Image         *ImagePreparation      `json:"image,omitempty"`
 	Announcement  *releases.Announcement `json:"announcement,omitempty"`
-	Frontend      *FrontendResult        `json:"frontend,omitempty"`
 	Protocol      int                    `json:"protocol"`
 	ID            string                 `json:"id"`
 	RequestHash   string                 `json:"request_hash"`
@@ -185,22 +166,21 @@ type Operation struct {
 	Panel         *PanelPreparation      `json:"panel,omitempty"`
 }
 type Overview struct {
-	Frps             *frps.Status                `json:"frps,omitempty"`
-	Software         software.Catalog            `json:"software"`
-	Frontend         panelruntime.FrontendStatus `json:"frontend"`
-	SwitchAvailable  bool                        `json:"switch_available"`
-	SwitchReason     string                      `json:"switch_reason"`
-	InstallAvailable bool                        `json:"install_available"`
-	InstallReason    string                      `json:"install_reason"`
-	Installation     *nginxruntime.Installation  `json:"installation,omitempty"`
-	Running          bool                        `json:"running"`
-	RuntimeReason    string                      `json:"runtime_reason"`
-	Available        bool                        `json:"available"`
-	Scope            string                      `json:"scope"`
-	Reason           string                      `json:"reason"`
-	Repository       string                      `json:"repository"`
-	TrustSHA256      string                      `json:"trust_sha256"`
-	KeyIDs           []string                    `json:"key_ids"`
+	Frps             *frps.Status               `json:"frps,omitempty"`
+	Software         software.Catalog           `json:"software"`
+	SwitchAvailable  bool                       `json:"switch_available"`
+	SwitchReason     string                     `json:"switch_reason"`
+	InstallAvailable bool                       `json:"install_available"`
+	InstallReason    string                     `json:"install_reason"`
+	Installation     *nginxruntime.Installation `json:"installation,omitempty"`
+	Running          bool                       `json:"running"`
+	RuntimeReason    string                     `json:"runtime_reason"`
+	Available        bool                       `json:"available"`
+	Scope            string                     `json:"scope"`
+	Reason           string                     `json:"reason"`
+	Repository       string                     `json:"repository"`
+	TrustSHA256      string                     `json:"trust_sha256"`
+	KeyIDs           []string                   `json:"key_ids"`
 }
 type Host interface {
 	ReadComponents(context.Context) (Overview, error)

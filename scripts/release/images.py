@@ -56,7 +56,9 @@ def write(path, value):
 
 
 def image_repository(repository, image):
-    return "ghcr.io/" + repository.lower() + "/" + ("panel" if image == "panel-launcher" else "nginx")
+    if image != "nginx":
+        raise ValueError("unsupported image component")
+    return "ghcr.io/" + repository.lower() + "/nginx"
 
 
 def identity(args):
@@ -77,39 +79,34 @@ def build(args):
         raise ValueError("image builds require the matching native Linux runner")
     if args.output.exists():
         raise ValueError("build receipt already exists")
-    source = args.input / ("panel-linux-" + architecture)
     binaries = Path(".release/binaries")
     binaries.mkdir(parents=True, exist_ok=True)
+    source = args.input / ("panel-linux-" + architecture)
     shutil.copyfile(source / "nginxpanel", binaries / ("nginxpanel-" + architecture))
-    launcher_sha256 = hashlib.sha256(read(binaries / ("nginxpanel-" + architecture), 192 << 20)).hexdigest()
     licenses = binaries / ("licenses-" + architecture)
-    licenses.mkdir()
+    licenses.mkdir(exist_ok=True)
     licenses.chmod(0o755)
     for name in ("LICENSE", "THIRD_PARTY_NOTICES.txt"):
         shutil.copyfile(source / name, licenses / name)
         (licenses / name).chmod(0o644)
     result.update(architecture=architecture, images=[])
-    for image, dockerfile, context in (
-        ("panel-launcher", "deploy/docker/panel.Dockerfile", str(binaries)),
-        ("nginx", "deploy/docker/nginx.Dockerfile", "."),
-    ):
-        repository = image_repository(args.repository, image)
-        metadata = binaries / (image + ".build.json")
-        command = ["docker", "buildx", "build", "--platform", "linux/" + architecture,
-                   "--file", dockerfile, "--tag", repository + ":build-" + run + "-" + architecture,
-                   "--output", "type=image,push=true,oci-mediatypes=true,oci-artifact=true",
-                   "--attest", "type=provenance,mode=max,version=v0.2",
-                   "--attest", "type=sbom,generator=" + SCANNER,
-                   "--label", "org.nginxpanel.launcher.sha256=" + launcher_sha256,
-                   "--metadata-file", str(metadata)]
-        for name, value in (("source", "https://github.com/" + args.repository),
-                            ("revision", args.commit), ("version", args.version)):
-            command += ["--label", "org.opencontainers.image." + name + "=" + value]
-        subprocess.run(command + [context], check=True, timeout=1200)
-        digest = decode(read(metadata, 4 << 20))["containerimage.digest"]
-        if not DIGEST.fullmatch(digest):
-            raise ValueError("builder did not return an immutable image digest")
-        result["images"].append({"id": image, "repository": repository, "digest": digest})
+    image = "nginx"
+    repository = image_repository(args.repository, image)
+    metadata = binaries / (image + ".build.json")
+    command = ["docker", "buildx", "build", "--platform", "linux/" + architecture,
+               "--file", "deploy/docker/nginx.Dockerfile", "--tag", repository + ":build-" + run + "-" + architecture,
+               "--output", "type=image,push=true,oci-mediatypes=true,oci-artifact=true",
+               "--attest", "type=provenance,mode=max,version=v0.2",
+               "--attest", "type=sbom,generator=" + SCANNER,
+               "--metadata-file", str(metadata)]
+    for name, value in (("source", "https://github.com/" + args.repository),
+                        ("revision", args.commit), ("version", args.version)):
+        command += ["--label", "org.opencontainers.image." + name + "=" + value]
+    subprocess.run(command + ["."], check=True, timeout=1200)
+    digest = decode(read(metadata, 4 << 20))["containerimage.digest"]
+    if not DIGEST.fullmatch(digest):
+        raise ValueError("builder did not return an immutable image digest")
+    result["images"].append({"id": image, "repository": repository, "digest": digest})
     write(args.output, result)
 
 
@@ -211,9 +208,16 @@ def graph(registry, raw_index):
             target = descriptor["platform"]
             if target.get("os") != "linux" or target.get("architecture") not in ("amd64", "arm64") or config.get("architecture") != target["architecture"]:
                 raise ValueError("unexpected runtime platform")
-            platforms.append({"os": "linux", "architecture": target["architecture"],
-                              "digest": descriptor["digest"], "config_digest": manifest["config"]["digest"],
-                              "launcher_sha256": config["config"]["Labels"]["org.nginxpanel.launcher.sha256"]})
+            labels = config.get("config", {}).get("Labels", {})
+            protocol = labels.get("org.nginxpanel.launcher.protocol", "")
+            if protocol != "2":
+                raise ValueError("image is missing the supported launcher protocol label")
+            record = {"os": "linux", "architecture": target["architecture"],
+                      "digest": descriptor["digest"], "config_digest": manifest["config"]["digest"],
+                      "launcher_protocol": int(protocol)}
+            if labels.get("org.nginxpanel.launcher.sha256", ""):
+                raise ValueError("nginx image must not bind to a separately released panel binary")
+            platforms.append(record)
     evidence = {"schema": 1, "index": base64.b64encode(raw_index).decode(),
                 "blobs": [{"digest": digest, "data": base64.b64encode(raw).decode()}
                           for digest, raw in sorted(blobs.items())]}
@@ -225,16 +229,16 @@ def merge(args):
     sources = {}
     for architecture in ("amd64", "arm64"):
         receipt = decode(read(args.input / ("images-" + architecture + ".json"), 64 << 10))
-        if any(receipt.get(key) != value for key, value in publication.items()) or receipt.get("architecture") != architecture or len(receipt.get("images", [])) != 2:
+        if any(receipt.get(key) != value for key, value in publication.items()) or receipt.get("architecture") != architecture or not isinstance(receipt.get("images"), list) or len(receipt["images"]) != 1:
             raise ValueError("image build receipt identity changed")
         for image in receipt["images"]:
             image_id = image["id"]
-            if image_id not in ("panel-launcher", "nginx") or image["repository"] != image_repository(args.repository, image_id) or not DIGEST.fullmatch(image["digest"]) or (image_id, architecture) in sources:
+            if image_id != "nginx" or image["repository"] != image_repository(args.repository, image_id) or not DIGEST.fullmatch(image["digest"]) or (image_id, architecture) in sources:
                 raise ValueError("image build receipt contains an invalid or duplicate image")
             sources[image_id, architecture] = image
     args.output.mkdir()
     publication["images"] = []
-    for image_id in ("panel-launcher", "nginx"):
+    for image_id in ("nginx",):
         repository = image_repository(args.repository, image_id)
         registry = Registry(repository)
         expected = []

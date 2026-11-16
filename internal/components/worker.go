@@ -49,7 +49,7 @@ func (s *Service) next(ctx context.Context) error {
 	}
 	defer done()
 	var id string
-	err := s.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('component.check','component.prepare','component.activate','component.pull','component.software') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated' AND NOT EXISTS(SELECT 1 FROM restore_quarantined_tasks q WHERE q.task_id=tasks.id) ORDER BY created_at,id LIMIT 1").Scan(&id)
+	err := s.DB.QueryRowContext(ctx, "SELECT id FROM tasks WHERE kind IN ('component.check','component.prepare','component.pull','component.software') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated' AND NOT EXISTS(SELECT 1 FROM restore_quarantined_tasks q WHERE q.task_id=tasks.id) ORDER BY created_at,id LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

@@ -252,7 +252,7 @@ func bindingMetadata(ctx context.Context, d *dockerClient, in BindInput, approva
 		return b, err
 	}
 	if bootstrapHash != launcherHash {
-		return b, errors.New("Nginx 镜像启动器与本机批准的面板程序不一致")
+		return b, errors.New("Nginx 镜像启动器与批准的固定内容不一致")
 	}
 	b = Binding{Schema: Schema, DataDir: in.DataDir, Image: in.Image, ImageID: image.ID, Architecture: image.Architecture, UID: in.UID, GID: in.GID, BinarySHA256: nginxHash, BootstrapSHA256: bootstrapHash, Build: string(files["nginx-build.txt"]), Capabilities: c, Environment: image.Config.Env, BoundAt: approval.ApprovedAt, SignedImage: approval}
 	if err = b.validate(in.DataDir); err != nil {

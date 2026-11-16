@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/imageupdates"
+	"nginxpanel/internal/nginxcontainer"
+	"nginxpanel/internal/panelruntime"
+	"nginxpanel/internal/releases"
 	"os"
 )
 
@@ -55,6 +58,29 @@ func (s *Server) readNginxImageUpgrade(ctx context.Context, id string) (imageupd
 	return hostedNginxImage(r, active)
 }
 
+func (s *Server) nginxImageInput(ctx context.Context, req imageupdates.Request) (NginxImageInput, error) {
+	stage := panelruntime.StageInput{DataDir: s.DataDir, PlanID: req.Input.PlanID, TrustPath: s.ReleaseTrust, AllowPrerelease: req.Input.Prerelease}
+	source, err := preparedNginxImageSource(ctx, stage)
+	if err != nil {
+		return NginxImageInput{}, err
+	}
+	approval, _, err := admitNginxImageSource(ctx, stage, source.Signature, source.Choice.Reference, nil)
+	if err != nil {
+		return NginxImageInput{}, err
+	}
+	if _, err = nginxcontainer.PullSignedImage(ctx, approval); err != nil {
+		return NginxImageInput{}, err
+	}
+	confirmed, _, err := admitNginxImageSource(ctx, stage, source.Signature, source.Choice.Reference, &approval)
+	if err != nil {
+		return NginxImageInput{}, err
+	}
+	if confirmed != approval {
+		return NginxImageInput{}, releases.ErrReleaseChanged
+	}
+	return NginxImageInput{Stage: stage, Signature: source.Signature, Image: source.Choice.Reference, MaintenanceID: req.Input.MaintenanceID, AllowDowntime: req.Input.AllowDowntime}, nil
+}
+
 func (s *Server) queueNginxImageUpgrade(ctx context.Context, req imageupdates.Request) (imageupdates.Operation, error) {
 	var zero imageupdates.Operation
 	if err := req.Validate(); err != nil {
@@ -86,7 +112,7 @@ func (s *Server) queueNginxImageUpgrade(ctx context.Context, req imageupdates.Re
 		if req.Sequence != 1 || req.Command != "upgrade" {
 			return zero, fault.NotFound("续办的原 Nginx 镜像替换不存在")
 		}
-		in, inputErr := s.imageInput(ctx, req)
+		in, inputErr := s.nginxImageInput(ctx, req)
 		if inputErr != nil {
 			// Only a root absence proved under the transaction locks is a definitive
 			// preflight rejection. Other failures retain uncertain-dispatch semantics.

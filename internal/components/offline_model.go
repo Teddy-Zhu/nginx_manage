@@ -77,7 +77,10 @@ type OfflineUpload struct {
 }
 
 func (u OfflineUpload) Valid() bool {
-	if !ValidID(u.ID) || !digest(u.RequestHash) || u.CreatedAt <= 0 || u.ExpiresAt <= u.CreatedAt || u.ExpiresAt > u.CreatedAt+86400 || u.ExpiresAt > u.Release.ExpiresAt || !digest(u.Release.PlanID) || !digest(u.Release.ManifestSHA256) || !digest(u.Release.TrustSHA256) || u.Release.Tag != "v"+u.Release.Version || len(u.Assets) == 0 || len(u.Assets) > 2 || len(u.Assets) != len(u.Release.Assets) || len(u.Assets) != len(u.Release.Selected) {
+	if !ValidID(u.ID) || !digest(u.RequestHash) || u.CreatedAt <= 0 || u.ExpiresAt <= u.CreatedAt || u.ExpiresAt > u.CreatedAt+86400 || u.ExpiresAt > u.Release.ExpiresAt || !digest(u.Release.PlanID) || !digest(u.Release.ManifestSHA256) || !digest(u.Release.TrustSHA256) || u.Release.Tag != "v"+u.Release.Version || len(u.Assets) > 2 || len(u.Assets) != len(u.Release.Assets) || len(u.Assets) != 0 && len(u.Assets) != len(u.Release.Selected) {
+		return false
+	}
+	if len(u.Assets) == 0 && (len(u.Release.Images) != 1 || len(u.Release.Selected) != 1 || u.Release.Selected[0] != "image-"+u.Release.Images[0].ID || !u.Release.Images[0].valid(u.Release.Repository)) {
 		return false
 	}
 	seen := map[string]bool{}
@@ -101,6 +104,9 @@ func (u OfflineUpload) Valid() bool {
 		complete = complete && a.Received == a.Size
 	}
 	for _, id := range u.Release.Selected {
+		if len(u.Assets) == 0 && id == "image-"+u.Release.Images[0].ID {
+			continue
+		}
 		if !seen[id] {
 			return false
 		}

@@ -32,7 +32,7 @@ usage() {
   --follow                     持续跟随服务日志
   --checker-binary 路径        使用 root 批准的程序执行卸载检查（仅 uninstall）
 
-更新、备份恢复与限时网络变更使用面板中的原维护流程。
+系统更新、备份恢复与网络变更可在管理页面操作。
 EOF
 }
 action=${1:-menu}
@@ -155,7 +155,7 @@ service_command() {
     esac
   else
     local unit=nginxpanel.service
-    case "$selected" in agent) unit=nginxpanel-agent.service ;; nginx) unit=nginxpanel-nginx.service ;; esac
+    case "$selected" in agent) unit=nginxpanel.service ;; nginx) unit=nginxpanel-nginx.service ;; esac
     if [[ $operation == status ]]; then systemctl --no-pager --full status "$unit"; else systemctl "$operation" "$unit"; fi
   fi
 }
@@ -163,7 +163,7 @@ service_action() {
   local selected result=0
   local -a selections=("$component")
   if [[ $component == all ]]; then
-    if [[ $action == stop ]]; then selections=(panel nginx agent); else selections=(agent nginx panel); fi
+    if [[ $action == stop ]]; then selections=(panel nginx); else selections=(nginx panel); fi
   fi
   if [[ $action != status ]]; then
     trusted_file /etc/nginxpanel/install/ready
@@ -252,7 +252,7 @@ logs_action() {
     if [[ $follow == yes ]]; then args+=(--follow); fi
     compose_command logs --tail "$lines" "${args[@]}" "$service"
   else
-    case "$component" in agent) unit=nginxpanel-agent.service ;; nginx) unit=nginxpanel-nginx.service ;; esac
+    case "$component" in agent) unit=nginxpanel.service ;; nginx) unit=nginxpanel-nginx.service ;; esac
     if [[ $follow == yes ]]; then args+=(--follow); fi
     journalctl --no-pager -u "$unit" -n "$lines" "${args[@]}"
   fi
@@ -288,8 +288,8 @@ if [[ $action == menu ]]; then
       1) command=info ;; 2) command=status ;;
       3|4|5|6)
         case "$selection" in 3) command=start ;; 4) command=stop ;; 5) command=restart ;; 6) command=logs ;; esac
-        prompt='组件 panel/agent/nginx/all [panel]: '
-        if [[ $command == logs ]]; then prompt='组件 panel/agent/nginx [panel]: '; fi
+        prompt='组件 panel/nginx/all [panel]: '
+        if [[ $command == logs ]]; then prompt='组件 panel/nginx [panel]: '; fi
         read -r -p "$prompt" selected || exit 0
         selected=${selected:-panel}
         case "$selected" in

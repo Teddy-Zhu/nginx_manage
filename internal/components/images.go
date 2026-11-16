@@ -7,6 +7,7 @@ import (
 	"errors"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"nginxpanel/internal/fault"
@@ -32,10 +33,10 @@ func imageChoice(c releases.ImageChoice) Image {
 }
 func images(p releases.Plan) []Image {
 	out := []Image{}
-	if len(p.Assets) != 1 || p.Assets[0].Component != "panel" {
-		return out
-	}
 	for _, image := range p.Manifest.Images {
+		if !slices.Contains(p.Selected, "image-"+image.ID) {
+			continue
+		}
 		for _, platform := range image.Platforms {
 			if platform.OS == runtime.GOOS && platform.Architecture == runtime.GOARCH {
 				out = append(out, imageChoice(releases.ImageChoice{ID: image.ID, Reference: image.Repository + "@" + image.Digest, Platform: platform, Evidence: image.Evidence}))
@@ -43,6 +44,13 @@ func images(p releases.Plan) []Image {
 		}
 	}
 	return out
+}
+func imageSelection(id string) (token, component string, panelStaging bool, ok bool) {
+	if id != "nginx" {
+		return "", "", false, false
+	}
+	token, ok = releases.ImageToken(id)
+	return token, "nginx", false, ok
 }
 func (i Image) valid(repository string) bool {
 	path := "nginx"
@@ -64,8 +72,12 @@ func (s *Service) validateImageParent(ctx context.Context, tx *sql.Tx, principal
 	if err != nil {
 		return err
 	}
+	token, _, _, ok := imageSelection(in.Input.ImageID)
+	if !ok {
+		return fault.Invalid("签名镜像组件无效")
+	}
 	if state != "succeeded" || len(sealed) == 0 {
-		return fault.Conflict("须先完成签名面板准备")
+		return fault.Conflict("须先完成签名镜像准备")
 	}
 	raw, err := s.Vault.Open(sealed, "components:result:"+in.PrepareTaskID)
 	if err != nil {
@@ -79,19 +91,18 @@ func (s *Service) validateImageParent(ctx context.Context, tx *sql.Tx, principal
 		return err
 	}
 	r := prepared.Release
-	if prepared.Input.Action != "prepare" || r == nil || prepared.Panel == nil || (prepared.Panel.RequiresCoordination || r.StagingOnly) && in.Input.ImageID != "panel-launcher" || !prepared.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != prepared.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != prepared.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
+	if prepared.Input.Action != "prepare" || r == nil || !prepared.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != prepared.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != prepared.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, []string{token}) || !sameAssets(in.Input.Assets, r.Selected) || len(r.Assets) != 0 || len(r.Images) != 1 || r.Images[0].ID != in.Input.ImageID {
 		return fault.Conflict("镜像拉取请求与本人签名面板准备结果不一致或已过期")
 	}
-	for _, image := range r.Images {
-		if image.ID == in.Input.ImageID {
-			return nil
-		}
-	}
-	return fault.Conflict("准备发行未包含所选架构的签名镜像")
+	return nil
 }
 func (m *Manager) imageSource(ctx context.Context, out *Operation, recover bool) (releases.Result, error) {
 	in := out.Input
-	sourceInput := releases.Input{TrustPath: m.TrustPath, Assets: in.Assets, AllowedComponents: []string{"panel"}, AllowPrerelease: in.Prerelease, Host: m.host(), Receiver: receiver(), PanelStaging: in.ImageID == "panel-launcher"}
+	token, allowed, panelStaging, ok := imageSelection(in.ImageID)
+	if !ok || !sameAssets(in.Assets, []string{token}) {
+		return releases.Result{}, errors.New("镜像准备选择与目标组件不一致")
+	}
+	sourceInput := releases.Input{TrustPath: m.TrustPath, Assets: []string{token}, AllowedComponents: []string{allowed}, AllowPrerelease: in.Prerelease, Host: m.host(), Receiver: receiver(), PanelStaging: panelStaging}
 	var source releases.Result
 	var err error
 	if recover {
@@ -106,7 +117,7 @@ func (m *Manager) imageSource(ctx context.Context, out *Operation, recover bool)
 		return source, err
 	}
 	p := source.Plan
-	if len(p.Assets) != 1 || p.Assets[0].Component != "panel" || p.ID != in.PlanID || p.ManifestSHA256 != in.ManifestSHA256 || p.TrustSHA256 != in.TrustSHA256 || "v"+p.Manifest.Version != in.Tag {
+	if len(p.Assets) != 0 || !sameAssets(p.Selected, []string{token}) || p.ID != in.PlanID || p.ManifestSHA256 != in.ManifestSHA256 || p.TrustSHA256 != in.TrustSHA256 || "v"+p.Manifest.Version != in.Tag {
 		return source, releases.ErrReleaseChanged
 	}
 	return source, nil

@@ -246,7 +246,7 @@ func (m *Manager) offlineVerify(b offlineBasis) (*releases.Verified, error) {
 	if err != nil || hash != b.SignatureSHA256 {
 		return nil, errors.Join(releases.ErrReleaseChanged, err)
 	}
-	v, err := releases.Verify(releases.Input{PanelStaging: true, TrustPath: m.TrustPath, ManifestPath: filepath.Join(dir, "manifest.json"), SignaturePath: filepath.Join(dir, "signature.json"), Assets: b.Upload.Release.Selected, AllowedComponents: []string{"nginx", "fail2ban", "panel", "web"}, AllowPrerelease: b.Upload.Prerelease, Host: m.host(), Receiver: receiver()})
+	v, err := releases.Verify(releases.Input{PanelStaging: true, TrustPath: m.TrustPath, ManifestPath: filepath.Join(dir, "manifest.json"), SignaturePath: filepath.Join(dir, "signature.json"), Assets: b.Upload.Release.Selected, AllowedComponents: []string{"nginx", "fail2ban", "panel"}, AllowPrerelease: b.Upload.Prerelease, Host: m.host(), Receiver: receiver()})
 	if err != nil {
 		return nil, err
 	}

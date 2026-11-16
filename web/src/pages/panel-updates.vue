@@ -36,11 +36,26 @@ const permitted = computed(
     session.me?.scopes.includes("components.manage") &&
     session.me.scopes.includes("system.write"),
 );
+function containsSelectedPanelAsset(task: ComponentTask) {
+  const release = task.result?.release;
+  return !!release?.assets.some(
+    (asset) =>
+      asset.component === "panel" && release.selected.includes(asset.id),
+  );
+}
+const panelOperations = computed(() =>
+  tasks.value.filter(
+    (task) =>
+      task.result?.input.components?.includes("panel") ||
+      containsSelectedPanelAsset(task) ||
+      task.result?.input.software?.action === "update-panel",
+  ),
+);
 const active = computed(() =>
-  tasks.value.some(
-    (t) =>
-      ["queued", "running", "recovery_required"].includes(t.state) &&
-      t.stage !== "restore_isolated",
+  panelOperations.value.some(
+    (task) =>
+      ["queued", "running", "recovery_required"].includes(task.state) &&
+      task.stage !== "restore_isolated",
   ),
 );
 const last = computed(() => tasks.value.find((t) => t.id === lastID.value));

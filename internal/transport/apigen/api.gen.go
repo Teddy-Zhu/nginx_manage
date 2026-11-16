@@ -432,7 +432,6 @@ func (e CertificateVersionEnvironment) Valid() bool {
 
 // Defines values for ComponentInputAction.
 const (
-	ComponentInputActionActivate ComponentInputAction = "activate"
 	ComponentInputActionCheck    ComponentInputAction = "check"
 	ComponentInputActionPrepare  ComponentInputAction = "prepare"
 	ComponentInputActionPull     ComponentInputAction = "pull"
@@ -442,8 +441,6 @@ const (
 // Valid indicates whether the value is a known member of the ComponentInputAction enum.
 func (e ComponentInputAction) Valid() bool {
 	switch e {
-	case ComponentInputActionActivate:
-		return true
 	case ComponentInputActionCheck:
 		return true
 	case ComponentInputActionPrepare:
@@ -462,7 +459,6 @@ const (
 	ComponentInputComponentsFail2ban ComponentInputComponents = "fail2ban"
 	ComponentInputComponentsNginx    ComponentInputComponents = "nginx"
 	ComponentInputComponentsPanel    ComponentInputComponents = "panel"
-	ComponentInputComponentsWeb      ComponentInputComponents = "web"
 )
 
 // Valid indicates whether the value is a known member of the ComponentInputComponents enum.
@@ -474,8 +470,6 @@ func (e ComponentInputComponents) Valid() bool {
 		return true
 	case ComponentInputComponentsPanel:
 		return true
-	case ComponentInputComponentsWeb:
-		return true
 	default:
 		return false
 	}
@@ -486,7 +480,6 @@ const (
 	ComponentOfflineInputComponentsFail2ban ComponentOfflineInputComponents = "fail2ban"
 	ComponentOfflineInputComponentsNginx    ComponentOfflineInputComponents = "nginx"
 	ComponentOfflineInputComponentsPanel    ComponentOfflineInputComponents = "panel"
-	ComponentOfflineInputComponentsWeb      ComponentOfflineInputComponents = "web"
 )
 
 // Valid indicates whether the value is a known member of the ComponentOfflineInputComponents enum.
@@ -497,8 +490,6 @@ func (e ComponentOfflineInputComponents) Valid() bool {
 	case ComponentOfflineInputComponentsNginx:
 		return true
 	case ComponentOfflineInputComponentsPanel:
-		return true
-	case ComponentOfflineInputComponentsWeb:
 		return true
 	default:
 		return false
@@ -4257,25 +4248,6 @@ type ComponentCreateInput struct {
 	PrepareTaskId *string        `json:"prepare_task_id,omitempty"`
 }
 
-// ComponentFrontendResult defines model for ComponentFrontendResult.
-type ComponentFrontendResult struct {
-	Activated  bool   `json:"activated"`
-	BaseId     string `json:"base_id"`
-	PreviousId string `json:"previous_id"`
-	ReleaseId  string `json:"release_id"`
-	Version    string `json:"version"`
-}
-
-// ComponentFrontendStatus defines model for ComponentFrontendStatus.
-type ComponentFrontendStatus struct {
-	Available  bool   `json:"available"`
-	BaseId     string `json:"base_id"`
-	CurrentId  string `json:"current_id"`
-	PreviousId string `json:"previous_id"`
-	Reason     string `json:"reason"`
-	Version    string `json:"version"`
-}
-
 // ComponentImage defines model for ComponentImage.
 type ComponentImage struct {
 	Architecture   string `json:"architecture"`
@@ -4294,13 +4266,11 @@ type ComponentImagePreparation struct {
 
 // ComponentInput defines model for ComponentInput.
 type ComponentInput struct {
-	Action             ComponentInputAction        `json:"action"`
-	Assets             *[]string                   `json:"assets,omitempty"`
-	Components         *[]ComponentInputComponents `json:"components,omitempty"`
-	ExpectedFrontendId *string                     `json:"expected_frontend_id,omitempty"`
-	FrontendBaseId     *string                     `json:"frontend_base_id,omitempty"`
-	ImageId            *string                     `json:"image_id,omitempty"`
-	ManifestSha256     string                      `json:"manifest_sha256"`
+	Action         ComponentInputAction        `json:"action"`
+	Assets         *[]string                   `json:"assets,omitempty"`
+	Components     *[]ComponentInputComponents `json:"components,omitempty"`
+	ImageId        *string                     `json:"image_id,omitempty"`
+	ManifestSha256 string                      `json:"manifest_sha256"`
 
 	// OfflineId 可选的本机离线上传 UUID；不存在时从已配置在线源检查/准备。准备必须保留原检查来源。
 	OfflineId   *string          `json:"offline_id,omitempty"`
@@ -4364,7 +4334,6 @@ type ComponentOperation struct {
 	Deadline      int64                         `json:"deadline"`
 	Error         string                        `json:"error"`
 	ErrorCode     string                        `json:"error_code"`
-	Frontend      *ComponentFrontendResult      `json:"frontend,omitempty"`
 	Id            string                        `json:"id"`
 	Image         *ComponentImagePreparation    `json:"image,omitempty"`
 	Input         ComponentInput                `json:"input"`
@@ -4382,22 +4351,21 @@ type ComponentOperation struct {
 
 // ComponentOverview defines model for ComponentOverview.
 type ComponentOverview struct {
-	Available        bool                    `json:"available"`
-	Frontend         ComponentFrontendStatus `json:"frontend"`
-	Frps             *FrpsStatus             `json:"frps,omitempty"`
-	InstallAvailable bool                    `json:"install_available"`
-	InstallReason    string                  `json:"install_reason"`
-	Installation     *NginxInstallation      `json:"installation,omitempty"`
-	KeyIds           []string                `json:"key_ids"`
-	Reason           string                  `json:"reason"`
-	Repository       string                  `json:"repository"`
-	Running          bool                    `json:"running"`
-	RuntimeReason    string                  `json:"runtime_reason"`
-	Scope            string                  `json:"scope"`
-	Software         SoftwareCatalog         `json:"software"`
-	SwitchAvailable  bool                    `json:"switch_available"`
-	SwitchReason     string                  `json:"switch_reason"`
-	TrustSha256      string                  `json:"trust_sha256"`
+	Available        bool               `json:"available"`
+	Frps             *FrpsStatus        `json:"frps,omitempty"`
+	InstallAvailable bool               `json:"install_available"`
+	InstallReason    string             `json:"install_reason"`
+	Installation     *NginxInstallation `json:"installation,omitempty"`
+	KeyIds           []string           `json:"key_ids"`
+	Reason           string             `json:"reason"`
+	Repository       string             `json:"repository"`
+	Running          bool               `json:"running"`
+	RuntimeReason    string             `json:"runtime_reason"`
+	Scope            string             `json:"scope"`
+	Software         SoftwareCatalog    `json:"software"`
+	SwitchAvailable  bool               `json:"switch_available"`
+	SwitchReason     string             `json:"switch_reason"`
+	TrustSha256      string             `json:"trust_sha256"`
 }
 
 // ComponentPanelPreparation defines model for ComponentPanelPreparation.
@@ -8735,20 +8703,6 @@ type UpdateACMEPolicyParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
-// CreateAgentUpgradeParams defines parameters for CreateAgentUpgrade.
-type CreateAgentUpgradeParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
-	IdempotencyKey Idempotency `json:"Idempotency-Key"`
-}
-
-// ResumeAgentUpgradeParams defines parameters for ResumeAgentUpgrade.
-type ResumeAgentUpgradeParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
-	IdempotencyKey Idempotency `json:"Idempotency-Key"`
-}
-
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
 	From       int64   `form:"from" json:"from"`
@@ -8841,13 +8795,6 @@ type ReplaceCertificateParams struct {
 
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
-}
-
-// CreateFrontendActivationParams defines parameters for CreateFrontendActivation.
-type CreateFrontendActivationParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
-	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
 // CreateComponentImagePullParams defines parameters for CreateComponentImagePull.
@@ -9562,20 +9509,6 @@ type SetNotificationPolicyParams struct {
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
 }
 
-// CreatePanelImageUpgradeParams defines parameters for CreatePanelImageUpgrade.
-type CreatePanelImageUpgradeParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
-	IdempotencyKey Idempotency `json:"Idempotency-Key"`
-}
-
-// ResumePanelImageUpgradeParams defines parameters for ResumePanelImageUpgrade.
-type ResumePanelImageUpgradeParams struct {
-	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
-	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
-	IdempotencyKey Idempotency `json:"Idempotency-Key"`
-}
-
 // CreatePanelUpdateParams defines parameters for CreatePanelUpdate.
 type CreatePanelUpdateParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -9697,9 +9630,6 @@ type IssueACMEProfileJSONRequestBody = ACMEIssueInput
 // UpdateACMEPolicyJSONRequestBody defines body for UpdateACMEPolicy for application/json ContentType.
 type UpdateACMEPolicyJSONRequestBody = ACMEPolicyInput
 
-// CreateAgentUpgradeJSONRequestBody defines body for CreateAgentUpgrade for application/json ContentType.
-type CreateAgentUpgradeJSONRequestBody = AgentUpgradeCreateInput
-
 // ExportAuditJSONRequestBody defines body for ExportAudit for application/json ContentType.
 type ExportAuditJSONRequestBody = AuditFilter
 
@@ -9723,9 +9653,6 @@ type DeployCertificateJSONRequestBody = CertificateDeployInput
 
 // ReplaceCertificateJSONRequestBody defines body for ReplaceCertificate for application/json ContentType.
 type ReplaceCertificateJSONRequestBody = CertificateInput
-
-// CreateFrontendActivationJSONRequestBody defines body for CreateFrontendActivation for application/json ContentType.
-type CreateFrontendActivationJSONRequestBody = ComponentCreateInput
 
 // CreateComponentImagePullJSONRequestBody defines body for CreateComponentImagePull for application/json ContentType.
 type CreateComponentImagePullJSONRequestBody = ComponentCreateInput
@@ -9942,9 +9869,6 @@ type TestNotificationChannelJSONRequestBody = NotificationVersionInput
 
 // SetNotificationPolicyJSONRequestBody defines body for SetNotificationPolicy for application/json ContentType.
 type SetNotificationPolicyJSONRequestBody = NotificationPolicyInput
-
-// CreatePanelImageUpgradeJSONRequestBody defines body for CreatePanelImageUpgrade for application/json ContentType.
-type CreatePanelImageUpgradeJSONRequestBody = PanelImageUpgradeCreateInput
 
 // CreatePanelUpdateJSONRequestBody defines body for CreatePanelUpdate for application/json ContentType.
 type CreatePanelUpdateJSONRequestBody = PanelUpdateCreateInput
@@ -10205,18 +10129,6 @@ type ServerInterface interface {
 	// (PUT /acme-profiles/{id}/policy)
 	UpdateACMEPolicy(w http.ResponseWriter, r *http.Request, id ID, params UpdateACMEPolicyParams)
 
-	// (GET /agent/upgrades)
-	ListAgentUpgrades(w http.ResponseWriter, r *http.Request)
-
-	// (POST /agent/upgrades)
-	CreateAgentUpgrade(w http.ResponseWriter, r *http.Request, params CreateAgentUpgradeParams)
-
-	// (GET /agent/upgrades/{id})
-	GetAgentUpgrade(w http.ResponseWriter, r *http.Request, id ID)
-
-	// (POST /agent/upgrades/{id}/resume)
-	ResumeAgentUpgrade(w http.ResponseWriter, r *http.Request, id ID, params ResumeAgentUpgradeParams)
-
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
 
@@ -10276,9 +10188,6 @@ type ServerInterface interface {
 
 	// (GET /components)
 	GetComponents(w http.ResponseWriter, r *http.Request)
-
-	// (POST /components/frontend/activate)
-	CreateFrontendActivation(w http.ResponseWriter, r *http.Request, params CreateFrontendActivationParams)
 
 	// (POST /components/images/pull)
 	CreateComponentImagePull(w http.ResponseWriter, r *http.Request, params CreateComponentImagePullParams)
@@ -10759,18 +10668,6 @@ type ServerInterface interface {
 
 	// (PUT /notifications/policy)
 	SetNotificationPolicy(w http.ResponseWriter, r *http.Request, params SetNotificationPolicyParams)
-
-	// (GET /panel/images/upgrades)
-	ListPanelImageUpgrades(w http.ResponseWriter, r *http.Request)
-
-	// (POST /panel/images/upgrades)
-	CreatePanelImageUpgrade(w http.ResponseWriter, r *http.Request, params CreatePanelImageUpgradeParams)
-
-	// (GET /panel/images/upgrades/{id})
-	GetPanelImageUpgrade(w http.ResponseWriter, r *http.Request, id ID)
-
-	// (POST /panel/images/upgrades/{id}/resume)
-	ResumePanelImageUpgrade(w http.ResponseWriter, r *http.Request, id ID, params ResumePanelImageUpgradeParams)
 
 	// (GET /panel/updates)
 	ListPanelUpdates(w http.ResponseWriter, r *http.Request)
@@ -11456,183 +11353,6 @@ func (siw *ServerInterfaceWrapper) UpdateACMEPolicy(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateACMEPolicy(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListAgentUpgrades operation middleware
-func (siw *ServerInterfaceWrapper) ListAgentUpgrades(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAgentUpgrades(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateAgentUpgrade operation middleware
-func (siw *ServerInterfaceWrapper) CreateAgentUpgrade(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateAgentUpgradeParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey Idempotency
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateAgentUpgrade(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetAgentUpgrade operation middleware
-func (siw *ServerInterfaceWrapper) GetAgentUpgrade(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAgentUpgrade(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ResumeAgentUpgrade operation middleware
-func (siw *ServerInterfaceWrapper) ResumeAgentUpgrade(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ResumeAgentUpgradeParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey Idempotency
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResumeAgentUpgrade(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -12542,70 +12262,6 @@ func (siw *ServerInterfaceWrapper) GetComponents(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetComponents(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateFrontendActivation operation middleware
-func (siw *ServerInterfaceWrapper) CreateFrontendActivation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateFrontendActivationParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey Idempotency
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateFrontendActivation(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19680,183 +19336,6 @@ func (siw *ServerInterfaceWrapper) SetNotificationPolicy(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
-// ListPanelImageUpgrades operation middleware
-func (siw *ServerInterfaceWrapper) ListPanelImageUpgrades(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPanelImageUpgrades(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreatePanelImageUpgrade operation middleware
-func (siw *ServerInterfaceWrapper) CreatePanelImageUpgrade(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreatePanelImageUpgradeParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey Idempotency
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreatePanelImageUpgrade(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetPanelImageUpgrade operation middleware
-func (siw *ServerInterfaceWrapper) GetPanelImageUpgrade(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPanelImageUpgrade(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ResumePanelImageUpgrade operation middleware
-func (siw *ServerInterfaceWrapper) ResumePanelImageUpgrade(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ResumePanelImageUpgradeParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CSRF
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = &XCSRFToken
-
-	}
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey Idempotency
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResumePanelImageUpgrade(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ListPanelUpdates operation middleware
 func (siw *ServerInterfaceWrapper) ListPanelUpdates(w http.ResponseWriter, r *http.Request) {
 
@@ -20870,18 +20349,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nodes/{id}/refresh", wrapper.RefreshNode)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote/identity", wrapper.GetRemoteIdentity)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/remote/authorization", wrapper.RevokeRemoteAuthorization)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/images/upgrades", wrapper.ListPanelImageUpgrades)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/images/upgrades", wrapper.CreatePanelImageUpgrade)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/images/upgrades/{id}", wrapper.GetPanelImageUpgrade)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/images/upgrades/{id}/resume", wrapper.ResumePanelImageUpgrade)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/images/upgrades", wrapper.ListNginxImageUpgrades)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/images/upgrades", wrapper.CreateNginxImageUpgrade)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nginx/images/upgrades/{id}", wrapper.GetNginxImageUpgrade)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nginx/images/upgrades/{id}/resume", wrapper.ResumeNginxImageUpgrade)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/agent/upgrades", wrapper.ListAgentUpgrades)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/agent/upgrades", wrapper.CreateAgentUpgrade)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/agent/upgrades/{id}", wrapper.GetAgentUpgrade)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/agent/upgrades/{id}/resume", wrapper.ResumeAgentUpgrade)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/updates", wrapper.ListPanelUpdates)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/panel/updates", wrapper.CreatePanelUpdate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/panel/updates/{id}", wrapper.GetPanelUpdate)
@@ -20910,7 +20381,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers/{id}", wrapper.GetDockerContainer)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers/{id}/logs", wrapper.GetDockerContainerLogs)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components", wrapper.GetComponents)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/frontend/activate", wrapper.CreateFrontendActivation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/images/pull", wrapper.CreateComponentImagePull)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/tasks", wrapper.ListComponentTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/tasks", wrapper.CreateComponentTask)

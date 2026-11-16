@@ -10,10 +10,12 @@ import (
 	"net/url"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"nginxpanel/internal/dockerapi"
+	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 )
 
@@ -73,11 +75,12 @@ func imageArchive(ctx context.Context, d *dockerClient, imageID, path string, ma
 	return nil
 }
 
-func imageBinary(ctx context.Context, d *dockerClient, imageID, path, expected string) error {
-	if !hashValue.MatchString(expected) || path != Bootstrap && path != "/usr/local/bin/nginxpanel-launcher" {
-		return errors.New("镜像程序不属于固定启动器入口")
+func imageBinaryHash(ctx context.Context, d *dockerClient, imageID, path string, output io.Writer) (string, error) {
+	if path != Bootstrap && path != "/usr/local/bin/nginxpanel-launcher" {
+		return "", errors.New("镜像程序不属于固定启动器入口")
 	}
-	return imageArchive(ctx, d, imageID, path, binaryLimit+(16<<10), func(t *tar.Reader) error {
+	var actual string
+	err := imageArchive(ctx, d, imageID, path, binaryLimit+(16<<10), func(t *tar.Reader) error {
 		entry, err := t.Next()
 		if err != nil {
 			return err
@@ -86,18 +89,45 @@ func imageBinary(ctx context.Context, d *dockerClient, imageID, path, expected s
 			return errors.New("镜像启动器须为 root 持有的固定只读普通程序")
 		}
 		h := sha256.New()
-		n, err := io.Copy(h, t)
+		destination := io.Writer(h)
+		if output != nil {
+			destination = io.MultiWriter(output, h)
+		}
+		n, err := io.Copy(destination, t)
 		if err != nil {
 			return err
 		}
-		if n != entry.Size || hex.EncodeToString(h.Sum(nil)) != expected {
-			return errors.New("镜像启动器实际内容与签名发行程序不一致")
+		if n != entry.Size {
+			return errors.New("镜像启动器未完整读取")
 		}
 		if _, err = t.Next(); err != io.EOF {
 			return errors.New("镜像启动器归档包含额外内容或未完整读取")
 		}
+		actual = hex.EncodeToString(h.Sum(nil))
 		return nil
 	})
+	return actual, err
+}
+
+func imageBinary(ctx context.Context, d *dockerClient, imageID, path, expected string) error {
+	if !hashValue.MatchString(expected) {
+		return errors.New("镜像启动器缺少有效的内容散列")
+	}
+	actual, err := imageBinaryHash(ctx, d, imageID, path, nil)
+	if err != nil {
+		return err
+	}
+	if actual != expected {
+		return errors.New("镜像启动器实际内容与批准散列不一致")
+	}
+	return nil
+}
+
+func verifyImageLauncherProtocol(image imageInfo, expected int) error {
+	if expected != releases.LauncherVersion || image.Config.Labels["org.nginxpanel.launcher.protocol"] != strconv.Itoa(expected) {
+		return errors.New("镜像启动器协议与当前核心不兼容")
+	}
+	return nil
 }
 
 // InspectPanelImage reuses the host-only Docker endpoint and metadata reader;

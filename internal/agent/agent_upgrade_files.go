@@ -59,6 +59,24 @@ func readAgentProgram() (AgentProgram, error) {
 	}
 	return p, nil
 }
+func readCoreProgram(data string) (AgentProgram, error) {
+	snapshot, err := panelruntime.Read(data)
+	if err != nil {
+		return AgentProgram{}, err
+	}
+	p := AgentProgram{
+		Link:         "core-releases/" + snapshot.Release.ID,
+		DataDir:      data,
+		BinarySHA256: snapshot.Release.BinarySHA256,
+	}
+	if !agentProgramValid(p) {
+		return AgentProgram{}, errors.New("核心程序与当前 root 发布快照不一致")
+	}
+	if err := checkAgentProgram(p); err != nil {
+		return AgentProgram{}, err
+	}
+	return p, nil
+}
 func checkAgentProgram(p AgentProgram) error {
 	if !agentProgramValid(p) {
 		return errors.New("Agent 程序恢复身份无效")

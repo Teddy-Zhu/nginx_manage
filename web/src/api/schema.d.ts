@@ -1045,54 +1045,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/panel/images/upgrades": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listPanelImageUpgrades"];
-        put?: never;
-        post: operations["createPanelImageUpgrade"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/panel/images/upgrades/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getPanelImageUpgrade"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/panel/images/upgrades/{id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resumePanelImageUpgrade"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/nginx/images/upgrades": {
         parameters: {
             query?: never;
@@ -1135,54 +1087,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["resumeNginxImageUpgrade"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent/upgrades": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAgentUpgrades"];
-        put?: never;
-        post: operations["createAgentUpgrade"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent/upgrades/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAgentUpgrade"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent/upgrades/{id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resumeAgentUpgrade"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1555,23 +1459,6 @@ export interface paths {
         get: operations["getComponents"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/components/frontend/activate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 独立前端确认激活；action 必须为 activate，引用本人的 prepare_task_id，并绑定当前 frontend_base_id/expected_frontend_id。要求 components.manage 与 system.write。 */
-        post: operations["createFrontendActivation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5201,7 +5088,7 @@ export interface components {
             /** Format: byte */
             signature: string;
             assets: string[];
-            components: ("nginx" | "fail2ban" | "panel" | "web")[];
+            components: ("nginx" | "fail2ban" | "panel")[];
             prerelease: boolean;
         };
         ComponentOfflineChunk: {
@@ -5231,21 +5118,6 @@ export interface components {
             complete: boolean;
             release: components["schemas"]["ComponentRelease"];
             assets: components["schemas"]["ComponentOfflineAsset"][];
-        };
-        ComponentFrontendResult: {
-            activated: boolean;
-            release_id: string;
-            version: string;
-            base_id: string;
-            previous_id: string;
-        };
-        ComponentFrontendStatus: {
-            available: boolean;
-            reason: string;
-            base_id: string;
-            current_id: string;
-            version: string;
-            previous_id: string;
         };
         ComponentImage: {
             id: string;
@@ -5467,18 +5339,16 @@ export interface components {
         };
         ComponentInput: {
             /** @enum {string} */
-            action: "check" | "prepare" | "activate" | "pull" | "software";
+            action: "check" | "prepare" | "pull" | "software";
             tag: string;
             prerelease: boolean;
-            components?: ("nginx" | "fail2ban" | "panel" | "web")[];
+            components?: ("nginx" | "fail2ban" | "panel")[];
             assets?: string[];
             plan_id: string;
             manifest_sha256: string;
             trust_sha256: string;
             /** @description 可选的本机离线上传 UUID；不存在时从已配置在线源检查/准备。准备必须保留原检查来源。 */
             offline_id?: string;
-            frontend_base_id?: string;
-            expected_frontend_id?: string;
             image_id?: string;
             software?: components["schemas"]["SoftwareRequest"];
         };
@@ -5501,7 +5371,6 @@ export interface components {
             install_reason: string;
             switch_available: boolean;
             switch_reason: string;
-            frontend: components["schemas"]["ComponentFrontendStatus"];
             software: components["schemas"]["SoftwareCatalog"];
             frps?: components["schemas"]["FrpsStatus"];
         };
@@ -5604,7 +5473,6 @@ export interface components {
             runtime_reason: string;
             release?: components["schemas"]["ComponentRelease"];
             panel?: components["schemas"]["ComponentPanelPreparation"];
-            frontend?: components["schemas"]["ComponentFrontendResult"];
             announcement?: components["schemas"]["ComponentReleaseAnnouncement"];
             image?: components["schemas"]["ComponentImagePreparation"];
             software?: components["schemas"]["SoftwareResult"];
@@ -8651,74 +8519,6 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
-    listPanelImageUpgrades: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    createPanelImageUpgrade: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-                "Idempotency-Key": components["parameters"]["Idempotency"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PanelImageUpgradeCreateInput"];
-            };
-        };
-        responses: {
-            202: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    getPanelImageUpgrade: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    resumePanelImageUpgrade: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-                "Idempotency-Key": components["parameters"]["Idempotency"];
-            };
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
     listNginxImageUpgrades: {
         parameters: {
             query?: never;
@@ -8769,74 +8569,6 @@ export interface operations {
         };
     };
     resumeNginxImageUpgrade: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-                "Idempotency-Key": components["parameters"]["Idempotency"];
-            };
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    listAgentUpgrades: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    createAgentUpgrade: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-                "Idempotency-Key": components["parameters"]["Idempotency"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentUpgradeCreateInput"];
-            };
-        };
-        responses: {
-            202: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    getAgentUpgrade: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    resumeAgentUpgrade: {
         parameters: {
             query?: never;
             header: {
@@ -9334,27 +9066,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
-            default: components["responses"]["JSON"];
-        };
-    };
-    createFrontendActivation: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
-                "X-CSRF-Token"?: components["parameters"]["CSRF"];
-                "Idempotency-Key": components["parameters"]["Idempotency"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ComponentCreateInput"];
-            };
-        };
-        responses: {
-            202: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

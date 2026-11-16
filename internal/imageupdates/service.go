@@ -198,19 +198,23 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, requestID, key, 
 		return zero, err
 	}
 	r := prepared.Result
-	if prepared.Action != "prepare" || prepared.State != "succeeded" || r == nil || r.Release == nil || !r.RuntimeReady || r.Panel == nil {
-		return zero, fault.Conflict("须选择已完成签名暂存的面板准备任务")
+	if prepared.Action != "prepare" || prepared.State != "succeeded" || r == nil || r.Release == nil || !r.RuntimeReady || component == Panel && r.Panel == nil {
+		return zero, fault.Conflict("须选择已完成签名准备的任务")
 	}
-	if r.Panel.RequiresCoordination && (component != Panel || !in.AllowDowntime) {
+	if component == Panel && r.Panel.RequiresCoordination && !in.AllowDowntime {
 		return zero, fault.Conflict("此准备版本仅允许明确授权停机后替换面板运行镜像")
 	}
 	if err = r.Validate(components.Request{Protocol: r.Protocol, OperationID: r.ID, Input: r.Input}); err != nil {
 		return zero, err
 	}
 	available := false
-	for _, image := range r.Release.Images {
-		if image.ID == component {
-			available = true
+	if component == Nginx {
+		available = len(r.Release.Assets) == 0 && len(r.Release.Selected) == 1 && r.Release.Selected[0] == "image-nginx" && len(r.Release.Images) == 1 && r.Release.Images[0].ID == Nginx
+	} else {
+		for _, image := range r.Release.Images {
+			if image.ID == component {
+				available = true
+			}
 		}
 	}
 	if !available {

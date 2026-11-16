@@ -12,13 +12,13 @@ import (
 )
 
 type NativeInput struct {
-	DataDir, Binary, WebDir, Listen string
-	HTTP                            bool
-	UID, GID, IPCGID                int
+	DataDir, Binary, Listen string
+	HTTP                    bool
+	UID, GID, IPCGID        int
 }
 
 // BindNative publishes the root administrator's initial installation. Online
-// updates instead require a signed staged approval and maintenance transaction.
+// updates use a signed staged approval and a detached core update worker.
 func BindNative(ctx context.Context, in NativeInput) (Snapshot, error) {
 	var out Snapshot
 	if os.Geteuid() != 0 {
@@ -32,20 +32,12 @@ func BindNative(ctx context.Context, in NativeInput) (Snapshot, error) {
 	if err != nil {
 		return out, err
 	}
-	web, err := filepath.EvalSymlinks(in.WebDir)
-	if err != nil {
-		return out, err
-	}
-	r, err := describe(ctx, binary)
+	r, err := DescribeBinary(ctx, binary)
 	if err != nil {
 		return out, err
 	}
 	if r.AgentProtocol != protocol.Agent || r.LauncherVersion != releases.LauncherVersion {
 		return out, errors.New("初始程序与本机 Agent 或 launcher 协议不一致")
-	}
-	r.Web, err = inventory(web, false)
-	if err != nil {
-		return out, err
 	}
 	r.ID = releaseID(r)
 	if err = r.validate(); err != nil {
@@ -60,7 +52,7 @@ func BindNative(ctx context.Context, in NativeInput) (Snapshot, error) {
 		return out, err
 	}
 	defer unlock()
-	return bindRelease(ctx, root, binary, web, r, d)
+	return bindRelease(ctx, root, binary, r, d)
 }
 
 // ExecNative is the fixed systemd entry point. The selected immutable program
@@ -74,14 +66,14 @@ func ExecNative(data string) error {
 		return errors.New("原生启动入口与面板部署身份不一致")
 	}
 	binary := filepath.Join(s.Directory, "nginxpanel")
-	args := []string{binary, "serve", "--data-dir", data, "--listen", s.Deployment.Listen, "--web-dir", filepath.Join(s.Directory, "web"), "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--panel-runtime", "native"}
+	args := []string{binary, "serve", "--data-dir", data, "--listen", s.Deployment.Listen, "--nginx-modules", "/etc/nginxpanel/nginx-modules.json", "--panel-runtime", "native"}
 	return unix.Exec(binary, args, []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "TZ=UTC", "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"})
 }
 
 // CheckProcess must run with the writer lock held. A bootstrap wrapper or
 // launcher may have read current just before a root version selection; a stale
 // child must fail before vault access or automatic schema migration.
-func CheckProcess(data, mode, listen, web, version string) (Snapshot, error) {
+func CheckProcess(data, mode, listen, version string) (Snapshot, error) {
 	s, err := Read(data)
 	if err != nil {
 		return s, err
@@ -89,13 +81,6 @@ func CheckProcess(data, mode, listen, web, version string) (Snapshot, error) {
 	d := s.Deployment
 	if d.Mode != mode || d.Listen != listen || d.UID != os.Geteuid() || d.GID != os.Getegid() || s.Release.Version != version {
 		return s, errors.New("当前程序与 root 面板运行绑定不一致")
-	}
-	resolved, err := filepath.EvalSymlinks(web)
-	if err != nil {
-		return s, err
-	}
-	if resolved != filepath.Join(s.Directory, "web") {
-		return s, errors.New("面板前端不属于当前批准版本")
 	}
 	return s, checkExecutable(s)
 }

@@ -27,6 +27,8 @@ COPY deploy/docker/templates.go deploy/docker/panel.compose.yaml ./deploy/docker
 FROM go-source AS panel-build
 ARG TARGETARCH
 ARG BUILD_VERSION=0.1.0-dev
+RUN rm -rf /src/internal/webui/dist
+COPY --from=frontend /src/web/dist/ /src/internal/webui/dist/
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=linux GOARCH=$TARGETARCH go build -trimpath -ldflags "-X main.version=$BUILD_VERSION" -o /out/nginxpanel ./cmd/nginxpanel
 
@@ -40,7 +42,6 @@ COPY --from=release-tool-build --chmod=0555 /out/nginxpanel-release /nginxpanel-
 
 FROM scratch AS bundle
 COPY --from=panel-build --chmod=0555 /out/nginxpanel /nginxpanel
-COPY --from=frontend /src/web/dist/ /web/
 COPY --chmod=0555 install.sh manage.sh /
 COPY --chmod=0555 deploy/native/install.sh /deploy/native/install.sh
 COPY --chmod=0555 deploy/native/lifecycle.sh /deploy/native/lifecycle.sh

@@ -5,7 +5,10 @@ import (
 	"errors"
 	"nginxpanel/internal/imageupdates"
 	"nginxpanel/internal/nginxmodules"
+	"nginxpanel/internal/panelruntime"
 	"nginxpanel/internal/secure"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -21,8 +24,8 @@ func nginxImageHost(ctx context.Context, data, id string) (string, bool, error) 
 		return "", false, err
 	}
 	ready, err := nginxmodules.ReadTrusted("/etc/nginxpanel/install/ready", 64)
-	if err != nil || string(ready) != nativeInstallationStamp || !strings.HasPrefix(string(intent), nativeInstallationStamp) || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\npanel_mode=docker\n") || strings.Contains(string(intent), "\nnginx_image=\n") {
-		return "", false, errors.New("Nginx 镜像替换缺少已完成的容器面板安装登记")
+	if err != nil || string(ready) != nativeInstallationStamp || !strings.HasPrefix(string(intent), nativeInstallationStamp) || !strings.Contains(string(intent), "\ndata="+data+"\n") || !strings.Contains(string(intent), "\npanel_mode=native\n") {
+		return "", false, errors.New("Nginx 镜像替换缺少已完成的原生核心安装登记")
 	}
 	name := "/etc/systemd/system/" + nginxImageTemplate
 	raw, err := nginxmodules.ReadTrusted(name, 64<<10)
@@ -62,6 +65,35 @@ func nginxImageHost(ctx context.Context, data, id string) (string, bool, error) 
 	}
 }
 
+func installationExecutableFor(data string) (string, error) {
+	name, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	actual, err := trustedFile(name, true)
+	if err != nil {
+		return "", err
+	}
+	bootstrap, bootstrapErr := trustedFile("/opt/nginxpanel/current/nginxpanel", true)
+	if bootstrapErr == nil && actual == bootstrap {
+		return actual, nil
+	}
+	snapshot, err := panelruntime.Read(data)
+	if err != nil || snapshot.Deployment.Mode != "native" || snapshot.Release.AgentProtocol != Protocol {
+		return "", errors.New("安装执行器不属于当前已登记的原生核心")
+	}
+	expected := filepath.Join(snapshot.Directory, "nginxpanel")
+	core, err := trustedFile(expected, true)
+	if err != nil {
+		return "", err
+	}
+	program := AgentProgram{Link: "core-releases/" + snapshot.Release.ID, DataDir: data, BinarySHA256: snapshot.Release.BinarySHA256}
+	if actual != core || checkAgentProgram(program) != nil {
+		return "", errors.New("安装执行器偏离 root 批准的当前核心程序")
+	}
+	return actual, nil
+}
+
 func dispatchNginxImage(ctx context.Context, id string) error {
 	v, err := agentUpgradeProperties(ctx, nginxImageUnit(id), "ActiveState,MainPID,ControlPID")
 	if err != nil {
@@ -91,7 +123,7 @@ func RunNginxImage(ctx context.Context, data, id string) (Record, error) {
 	if err != nil || nginxImageTerminal(r) {
 		return r, err
 	}
-	if _, err = installationExecutable(); err != nil {
+	if _, err = installationExecutableFor(data); err != nil {
 		return r, err
 	}
 	if err := verifySystemdWorker(ctx, nginxImageUnit(id)); err != nil {

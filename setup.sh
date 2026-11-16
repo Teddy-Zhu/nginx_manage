@@ -3,8 +3,8 @@ set -euo pipefail
 export LC_ALL=C
 umask 077
 
-# 发布时写入仓库与标签，使下载后的脚本无需再填写来源。
-default_repository=""
+# 发布时固定发行标签；源码入口默认使用官方仓库。
+default_repository="Teddy-Zhu/nginx_manage"
 default_version="latest"
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
@@ -12,7 +12,7 @@ usage() {
 用法：bash setup.sh [--source] [--repo owner/repo] [--yes] [--advanced] [--port 端口] [--fresh | --uninstall [--keep-data | --purge]]
 默认下载 GitHub Release，自动匹配本机架构，校验 SHA-256 后安装。
 --source          拉取源码，通过 Docker 编译并自动安装
---repo owner/repo 源码脚本未内置仓库时指定；本地仓库可自动读取 origin
+--repo owner/repo 指定其他发行仓库，默认 Teddy-Zhu/nginx_manage
 --version v1.2.3  安装指定 Release，默认使用脚本所属发行版本
 --ref 分支或标签  源码模式指定分支或标签，默认仓库默认分支
 --yes             无需交互，确认所选操作（包括完全卸载的数据删除）

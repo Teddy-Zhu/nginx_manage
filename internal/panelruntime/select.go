@@ -39,9 +39,6 @@ func SwitchCurrent(data, before, after, operation string) error {
 	if _, err = readRelease(filepath.Join(root, "releases", after), after); err != nil {
 		return err
 	}
-	if err = savePreviousProgram(root, before, after, operation); err != nil {
-		return err
-	}
 	name, target := filepath.Join(root, ".select-"+operation), "releases/"+after
 	info, err := os.Lstat(name)
 	if errors.Is(err, os.ErrNotExist) {

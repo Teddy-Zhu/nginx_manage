@@ -8,6 +8,32 @@ import (
 	"nginxpanel/internal/releases"
 )
 
+func inspectNginxBootstrap(ctx context.Context, d *dockerClient, image imageInfo, a releases.ImageApproval) (string, error) {
+	protocol := a.Image.Platform.LauncherProtocol
+	if a.LocalBuild {
+		protocol = releases.LauncherVersion
+	}
+	if err := verifyImageLauncherProtocol(image, protocol); err != nil {
+		return "", err
+	}
+	actual, err := imageBinaryHash(ctx, d, image.ID, Bootstrap, nil)
+	if err != nil {
+		return "", err
+	}
+	files, err := imageMetadata(ctx, d, image.ID)
+	if err != nil {
+		return "", err
+	}
+	declared, err := checksum(files["launcher.sha256"], Bootstrap)
+	if err != nil || declared != actual {
+		return "", errors.New("Nginx 镜像bootstrap与其完整性清单不一致")
+	}
+	if a.LocalBuild && actual != a.Image.Platform.LauncherSHA256 {
+		return "", errors.New("本地Nginx镜像bootstrap与安装包散列不一致")
+	}
+	return actual, nil
+}
+
 // InspectSignedImage only reads an image and a stopped metadata container. It
 // verifies the signed platform configuration and launcher bytes without running
 // any image program or changing an existing runtime binding.
@@ -24,11 +50,11 @@ func InspectSignedImage(ctx context.Context, a releases.ImageApproval) error {
 	if err != nil {
 		return err
 	}
-	path := Bootstrap
-	if a.Image.ID == "panel-launcher" {
-		path = "/usr/local/bin/nginxpanel-launcher"
+	if a.Image.ID == "nginx" {
+		_, err = inspectNginxBootstrap(ctx, d, image, a)
+		return err
 	}
-	return imageBinary(ctx, d, image.ID, path, a.Image.Platform.LauncherSHA256)
+	return imageBinary(ctx, d, image.ID, "/usr/local/bin/nginxpanel-launcher", a.Image.Platform.LauncherSHA256)
 }
 
 // Only an authoritative image absence permits a download. Unavailable Docker,

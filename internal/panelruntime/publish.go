@@ -43,7 +43,7 @@ func publicationLock(root string) (func(), error) {
 
 // publishRelease requires publicationLock. A complete directory is renamed
 // before its approval is recorded, so interruption leaves no approved half-copy.
-func publishRelease(ctx context.Context, root, binary, web string, r Release) error {
+func publishRelease(ctx context.Context, root, binary string, r Release) error {
 	if err := r.validate(); err != nil {
 		return err
 	}
@@ -65,19 +65,8 @@ func publishRelease(ctx context.Context, root, binary, web string, r Release) er
 		if err = os.Chmod(tmp, 0755); err != nil {
 			return err
 		}
-		if err = os.Mkdir(filepath.Join(tmp, "web"), 0755); err != nil {
-			return err
-		}
 		if err = copyArtifact(binary, filepath.Join(tmp, "nginxpanel"), r.BinarySHA256, BinaryLimit, 0555); err != nil {
 			return err
-		}
-		for name, f := range r.Web {
-			if err = os.MkdirAll(filepath.Dir(filepath.Join(tmp, "web", name)), 0755); err != nil {
-				return err
-			}
-			if err = copyArtifact(filepath.Join(web, name), filepath.Join(tmp, "web", name), f.SHA256, WebFileLimit, 0444); err != nil {
-				return err
-			}
 		}
 		raw, err := json.Marshal(r)
 		if err != nil {

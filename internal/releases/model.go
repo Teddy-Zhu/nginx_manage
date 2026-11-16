@@ -95,9 +95,10 @@ type Receiver struct {
 }
 type Input struct {
 	TrustPath, ManifestPath, SignaturePath string
-	// PanelStaging permits only a standalone signed panel asset to be prepared
-	// ahead of the receiver. It never authorizes activation or component install.
+	// PanelStaging permits one core binary to be prepared ahead of the receiver.
+	// It never authorizes activation.
 	PanelStaging      bool
+	ImageCatalog      bool
 	Assets            []string
 	Components        []string
 	AllowedComponents []string
