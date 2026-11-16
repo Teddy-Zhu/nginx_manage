@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import platform
 import re
-import shutil
 import subprocess
 import urllib.error
 import urllib.parse
@@ -81,14 +80,13 @@ def build(args):
         raise ValueError("build receipt already exists")
     binaries = Path(".release/binaries")
     binaries.mkdir(parents=True, exist_ok=True)
-    source = args.input / ("panel-linux-" + architecture)
-    shutil.copyfile(source / "nginxpanel", binaries / ("nginxpanel-" + architecture))
+    launcher = binaries / ("nginxpanel-" + architecture)
     licenses = binaries / ("licenses-" + architecture)
-    licenses.mkdir(exist_ok=True)
-    licenses.chmod(0o755)
+    # The image workflow builds its own launcher; no core release is downloaded.
+    if not launcher.is_file() or launcher.is_symlink() or launcher.stat().st_size == 0:
+        raise ValueError("image launcher binary is missing")
     for name in ("LICENSE", "THIRD_PARTY_NOTICES.txt"):
-        shutil.copyfile(source / name, licenses / name)
-        (licenses / name).chmod(0o644)
+        read(licenses / name, 16 << 20)
     result.update(architecture=architecture, images=[])
     image = "nginx"
     repository = image_repository(args.repository, image)
@@ -121,6 +119,10 @@ class Redirects(urllib.request.HTTPRedirectHandler):
         return redirected
 
 
+class RegistryNotFound(RuntimeError):
+    pass
+
+
 class Registry:
     def __init__(self, repository):
         if not repository.startswith("ghcr.io/"):
@@ -143,13 +145,15 @@ class Registry:
                     raise ValueError("registry did not confirm metadata retrieval")
                 raw = response.read(limit + 1)
         except urllib.error.HTTPError as error:
+            if error.code == 404:
+                raise RegistryNotFound("registry metadata was not found") from None
             raise RuntimeError("registry metadata request failed with HTTP " + str(error.code)) from None
         if not raw or len(raw) > limit:
             raise ValueError("registry metadata exceeds the length bound")
         return raw
 
     def get(self, kind, reference, size=None):
-        if kind not in ("manifests", "blobs") or not (DIGEST.fullmatch(reference) or kind == "manifests" and re.fullmatch(r"release-[0-9]+-[0-9]+", reference)):
+        if kind not in ("manifests", "blobs") or not (DIGEST.fullmatch(reference) or kind == "manifests" and re.fullmatch(r"(?:release-[0-9]+-[0-9]+|v[0-9][0-9A-Za-z_.-]{0,126})", reference)):
             raise ValueError("invalid registry metadata selector")
         headers = {"Authorization": "Bearer " + self.token,
                    "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/octet-stream"}
@@ -265,19 +269,48 @@ def merge(args):
     write(args.output / "publication.json", publication)
 
 
+def tag(args):
+    identity(args)
+    manifest = decode(read(args.input, 2 << 20))
+    if manifest.get("repository") != args.repository or manifest.get("version") != args.version or manifest.get("assets") or len(manifest.get("images", [])) != 1:
+        raise ValueError("version tags require the signed component-only manifest")
+    image = manifest["images"][0]
+    repository = image_repository(args.repository, image["id"])
+    if image["repository"] != repository or image["commit"] != args.commit or not DIGEST.fullmatch(image["digest"]):
+        raise ValueError("signed image source identity changed")
+    version_tag = "v" + args.version.replace("+", "_")
+    registry = Registry(repository)
+    try:
+        existing = registry.get("manifests", version_tag)
+    except RegistryNotFound:
+        existing = None
+    if existing is not None:
+        if "sha256:" + hashlib.sha256(existing).hexdigest() != image["digest"]:
+            raise ValueError("component version tag already refers to a different image")
+        return
+    subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", repository + ":" + version_tag,
+                    repository + "@" + image["digest"]], check=True, timeout=120)
+    if "sha256:" + hashlib.sha256(registry.get("manifests", version_tag)).hexdigest() != image["digest"]:
+        raise ValueError("published version tag does not match the signed digest")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices=("build", "merge"))
+    parser.add_argument("operation", choices=("build", "merge", "tag"))
     for name in ("repository", "version", "commit"):
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--input", required=True, type=Path)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--architecture", choices=("amd64", "arm64"))
     args = parser.parse_args()
+    if args.operation != "tag" and args.output is None:
+        parser.error("--output is required for build and merge")
     if args.operation == "build":
         build(args)
-    else:
+    elif args.operation == "merge":
         merge(args)
+    else:
+        tag(args)
 
 
 if __name__ == "__main__":

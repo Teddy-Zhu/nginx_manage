@@ -117,7 +117,7 @@ func (m *Manager) imageSource(ctx context.Context, out *Operation, recover bool)
 		return source, err
 	}
 	p := source.Plan
-	if len(p.Assets) != 0 || !sameAssets(p.Selected, []string{token}) || p.ID != in.PlanID || p.ManifestSHA256 != in.ManifestSHA256 || p.TrustSHA256 != in.TrustSHA256 || "v"+p.Manifest.Version != in.Tag {
+	if len(p.Assets) != 0 || !sameAssets(p.Selected, []string{token}) || p.ID != in.PlanID || p.ManifestSHA256 != in.ManifestSHA256 || p.TrustSHA256 != in.TrustSHA256 || releases.ManifestTag(p.Manifest) != in.Tag {
 		return source, releases.ErrReleaseChanged
 	}
 	return source, nil

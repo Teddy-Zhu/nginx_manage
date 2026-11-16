@@ -1,5 +1,17 @@
 # 当前进度与未完成清单
 
+## 核心与 Nginx 独立发行（2026-11-16）
+
+进度：实现、调用接入、代码审阅和 Docker 集中验证完成，尚未执行真实 GitHub Actions 发布。
+
+- 核心使用 `Core binary release`（`release.yml`），由 `v<版本>` 标签或手动触发，发布内嵌前端的 Linux amd64、arm64 核心安装包、签名与安装脚本。首次安装所需的本地 Nginx 离线包继续由 CI 组装，不向 GHCR 发布镜像；核心更新不会替换已安装组件。
+- Nginx 使用独立 `Nginx Docker release`（`nginx-release.yml`），由 `nginx-v<版本>` 标签或手动触发，独立构建镜像启动程序，发布 GHCR 多架构镜像、固定版本标签与签名组件清单。无需核心 Release 或前端编译，两个版本无需一致。Fail2ban、FRP 继续使用各自上游 Docker 镜像，不重复发布第三方镜像。
+- 核心和镜像清单分别验签，在线与离线检查、准备、拉取及回执使用对应标签；查询与缓存按核心/Nginx 分开，组件发行不会成为仓库核心 Latest。Nginx 默认检查最近 100 个发行中的最近稳定版，找不到时明确提示指定标签。
+- 修复 Release 引导脚本仍要求外置 `web/index.html` 的旧检查；生成的前端文件已加入忽略规则，核心 CI 构建保留源码占位文件，避免二进制被错误标记为脏源码构建。
+- Actions 静态校验、发布脚本 Python/Shell 语法检查、相关 Go 测试、核心与发布工具编译、两种发行规格 CLI 及独立启动程序真实依赖许可收集均通过。验证在 Docker 中执行，未修改本机服务或安装编译依赖；未增加或运行 UI 自动化测试。
+
+真实发布仍需在仓库配置 `release` environment 的签名种子、公钥和 Key ID，并具备 GitHub Release 与 GHCR 发布权限；每次发行需提交对应版本的说明与策略。尚未推送标签、触发远程 Actions 或发布资产，具体操作见[发布文档](publishing.md)。本地记录位于 `.validation/independent-releases/`。
+
 ## 单一核心服务与组件独立升级（2026-11-16）
 
 进度：实现与集成完成，Docker 集中验证通过；本轮未部署虚拟机，UI 由用户验收。

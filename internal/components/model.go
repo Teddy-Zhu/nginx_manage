@@ -137,7 +137,7 @@ type Release struct {
 }
 
 func release(plan releases.Plan) Release {
-	out := Release{StagingOnly: plan.StagingOnly, Notes: plan.Manifest.Notes, Requirements: releases.ManifestRequirements(plan.Manifest), Receiver: plan.Receiver, PlanID: plan.ID, ManifestSHA256: plan.ManifestSHA256, TrustSHA256: plan.TrustSHA256, Repository: plan.Manifest.Repository, Version: plan.Manifest.Version, Tag: "v" + plan.Manifest.Version, Channel: plan.Manifest.Channel, KeyID: plan.KeyID, ExpiresAt: plan.Manifest.ExpiresAt, Selected: slices.Clone(plan.Selected), Assets: []Asset{}, ArchiveBytes: plan.ArchiveBytes, UnpackedBytes: plan.UnpackedBytes}
+	out := Release{StagingOnly: plan.StagingOnly, Notes: plan.Manifest.Notes, Requirements: releases.ManifestRequirements(plan.Manifest), Receiver: plan.Receiver, PlanID: plan.ID, ManifestSHA256: plan.ManifestSHA256, TrustSHA256: plan.TrustSHA256, Repository: plan.Manifest.Repository, Version: plan.Manifest.Version, Tag: releases.ManifestTag(plan.Manifest), Channel: plan.Manifest.Channel, KeyID: plan.KeyID, ExpiresAt: plan.Manifest.ExpiresAt, Selected: slices.Clone(plan.Selected), Assets: []Asset{}, ArchiveBytes: plan.ArchiveBytes, UnpackedBytes: plan.UnpackedBytes}
 	out.Images = images(plan)
 	for _, a := range plan.Assets {
 		out.Assets = append(out.Assets, Asset{ID: a.ID, Component: a.Component, Version: a.Version, Architecture: a.Architecture, Distribution: a.Distribution, DistributionVersion: a.DistributionVersion, ABI: a.ABI, SourceURL: a.SourceURL, License: a.License, Maintenance: a.Maintenance, Features: append([]string{}, a.Features...), Dependencies: append([]string{}, a.Dependencies...), RuntimeFiles: len(a.RuntimeFiles), ArchiveBytes: a.Size, UnpackedBytes: a.UnpackedBytes})

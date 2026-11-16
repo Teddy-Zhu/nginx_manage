@@ -154,7 +154,7 @@ while read -r permissions rest; do
 done <"$work/types"
 mkdir -m 0700 "$work/package"
 tar -xzf "$work/$asset" --no-same-owner --no-same-permissions -C "$work/package"
-[[ -f $work/package/nginxpanel && -f $work/package/web/index.html &&
+[[ -f $work/package/nginxpanel &&
    -f $work/package/install.sh && -f $work/package/manage.sh &&
    -f $work/package/deploy/native/install.sh && -f $work/package/deploy/native/lifecycle.sh &&
    -f $work/package/containers.json && -f $work/package/container-images.tar ]] || die 'Release 缺少完整安装入口；请使用包含一键安装脚本的新发行或使用源码安装'

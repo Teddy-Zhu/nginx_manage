@@ -60,7 +60,7 @@ func parseGithubRelease(raw []byte, in OnlineInput) (githubRelease, error) {
 	if err := decodeJSON(raw, &release, false); err != nil {
 		return githubRelease{}, errors.New("GitHub 发行元数据 JSON 无效")
 	}
-	if release.ID <= 0 || release.Draft || !strings.HasPrefix(release.Tag, "v") || !validVersion(strings.TrimPrefix(release.Tag, "v")) || in.Tag != "" && in.Tag != release.Tag || release.Prerelease && (!in.AllowPrerelease || in.Tag == "") || release.PublishedAt.IsZero() || release.PublishedAt.After(time.Now().Add(5*time.Minute)) || len(release.Assets) < 2 || len(release.Assets) > MaxReleaseAssets {
+	if release.ID <= 0 || release.Draft || !strings.HasPrefix(release.Tag, in.tagPrefix()) || !validVersion(strings.TrimPrefix(release.Tag, in.tagPrefix())) || in.Tag != "" && in.Tag != release.Tag || release.Prerelease && (!in.AllowPrerelease || in.Tag == "") || release.PublishedAt.IsZero() || release.PublishedAt.After(time.Now().Add(5*time.Minute)) || len(release.Assets) < 2 || len(release.Assets) > MaxReleaseAssets {
 		return githubRelease{}, errors.New("GitHub 发行身份、渠道或资产数量不满足条件")
 	}
 	ids, names := map[int64]bool{}, map[string]bool{}
@@ -74,11 +74,11 @@ func parseGithubRelease(raw []byte, in OnlineInput) (githubRelease, error) {
 }
 
 func (s *onlineSession) discover(ctx context.Context) (githubRelease, bool, bool, error) {
-	endpoint := tagEndpoint(s.input.Tag)
+	endpoint := s.input.metadataEndpoint()
 	key := hash([]byte(s.publisher.trust.Repository + "\n" + endpoint + "\n" + hash(s.publisher.raw) + "\n" + s.tokenHash))
 	now := time.Now().Unix()
 	if s.cache.Key == key && len(s.cache.Body) != 0 && s.cache.FreshUntil > now {
-		release, err := parseGithubRelease(s.cache.Body, s.input)
+		release, err := discoverRelease(s.cache.Body, s.input)
 		return release, true, true, err
 	}
 	if s.cache.NextCheck > now {
@@ -118,7 +118,7 @@ func (s *onlineSession) discover(ctx context.Context) (githubRelease, bool, bool
 			return githubRelease{}, false, false, errors.New("GitHub 发行元数据超过 2 MiB")
 		}
 	}
-	release, err := parseGithubRelease(raw, s.input)
+	release, err := discoverRelease(raw, s.input)
 	if err != nil {
 		return githubRelease{}, false, false, err
 	}
@@ -137,7 +137,7 @@ func (s *onlineSession) discover(ctx context.Context) (githubRelease, bool, bool
 		}
 		s.cache.FreshUntil = time.Now().Unix() + age
 	} else {
-		s.cache = onlineCache{Schema: Schema, NextCheck: s.cache.NextCheck, BlockedUntil: s.cache.BlockedUntil}
+		s.cache = onlineCache{Schema: Schema, imageChannel: s.input.imageChannel(), NextCheck: s.cache.NextCheck, BlockedUntil: s.cache.BlockedUntil}
 	}
 	if err := writeOnlineCache(s.cache); err != nil {
 		return githubRelease{}, false, false, err
@@ -179,7 +179,7 @@ func Online(ctx context.Context, in OnlineInput) (OnlineResult, error) {
 	if groups >= 8 || entries+22 > 256 || used+2*maxCacheBytes+MaxManifestBytes+4096 > maxDownloadBytes {
 		return OnlineResult{}, errors.New("在线发行缓存没有足够预算，须本机清理已核对的残留暂存")
 	}
-	cache, err := readOnlineCache()
+	cache, err := readOnlineCache(in.imageChannel())
 	if err != nil {
 		return OnlineResult{}, err
 	}
@@ -246,7 +246,7 @@ func Online(ctx context.Context, in OnlineInput) (OnlineResult, error) {
 		}
 		return OnlineResult{}, err
 	}
-	if verified.plan.TrustSHA256 != hash(publisher.raw) || "v"+verified.plan.Manifest.Version != release.Tag || release.Prerelease != (verified.plan.Manifest.Channel == "prerelease") {
+	if verified.plan.TrustSHA256 != hash(publisher.raw) || ManifestTag(verified.plan.Manifest) != release.Tag || release.Prerelease != (verified.plan.Manifest.Channel == "prerelease") {
 		return OnlineResult{}, errors.New("签名清单与本机信任、GitHub 发行标签或渠道不一致")
 	}
 	if err := s.currentSource(); err != nil {

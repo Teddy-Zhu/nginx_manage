@@ -1,107 +1,94 @@
-# 发布产物生成与签名
+# GitHub Actions 发布
 
-发布工具 `cmd/nginxpanel-release` 供发布账户和 CI 使用，服务器只使用 [发行资产接收入口](releases.md)。工具不执行输入程序、构建源码、下载依赖或调用包管理器；已执行的本地构建、签名产物生成和隔离验证见[验证记录](validation.md)；正式 GitHub 仓库及发布凭据仍待配置，未执行真实发布。
+核心程序和项目自建的 Nginx 镜像分别发布，使用独立版本、标签和流水线。前端内嵌于核心程序，不单独发布。运行架构见[部署指南](deployment.md)，签名和升级流程见[发行与准备](releases.md)。
 
-## 产物和证据
+| 发布内容 | Actions 工作流 | Git 标签 | 产物 |
+| --- | --- | --- | --- |
+| 核心程序（Agent、API、前端） | `Core binary release` / `release.yml` | `v1.2.3` | Linux amd64、arm64 安装包，签名清单、校验和、依赖及来源证据、`setup.sh` |
+| Nginx | `Nginx Docker release` / `nginx-release.yml` | `nginx-v1.30.6` | GHCR 多架构镜像、独立 GitHub Release 的签名镜像清单及 OCI 证据 |
+| Fail2ban、FRP 服务端 | 使用软件商店配置的上游镜像 | 不使用项目发行标签 | 拉取各自镜像并重建对应容器 |
 
-默认发布规格包含 Linux amd64/arm64 面板包、独立 web 包、两种架构的静态 Nginx 包及架构无关的 Fail2ban 官方代码包。面板包包含静态 Go 二进制、同版前端、项目许可、第三方许可原文、SPDX 和构建来源；同时包含 `install.sh`、`manage.sh` 和 `deploy/native/install.sh`，三份安装管理脚本随程序进入原签名文件清单。web 包包含构建后的 HTML/CSS/JS 和对应记录，不包含 node_modules 或服务端构建工具。Nginx 包包含固定入口 `bin/nginx`、源码和静态运行库许可、锁定配方、构建记录及独立证据。
+两个工作流均支持推送相应标签自动触发，以及在 Actions 中手动输入已存在的确切标签。核心发行不会向 GHCR 发布组件镜像，Nginx 发行不下载核心 Release，也不编译前端。核心安装包仍在 CI 中组装随包 Nginx 镜像，供首次离线安装；核心更新只切换核心程序，不替换已安装的 Nginx。
 
-每个包的 `<asset-id>.spdx.json` 和 `<asset-id>.provenance.json` 同时放在归档与发行根目录。外部副本逐字节匹配签名清单中的文件长度/散列，因此也可以用已验签的文件清单核对。面板/web 的 SPDX 2.3 由固定 Syft 生成，范围明确为源码和构建依赖，包括声明的开发依赖，不宣称每项都存在于运行时 JavaScript。许可文件来自实际使用的 Go 模块、Go 标准库及前端生产依赖；缺少许可原文时停止，不能用任意许可证补齐。Nginx 的 SPDX 由原生构建器按锁定源码、实际静态运行库和二进制生成；全量已安装构建包另存有界版本清单，不冒充全部包均被链接进程序。
+## 仓库配置
 
-面板/web 构建来源绑定仓库、版本、完整提交、资产、Go/Node/pnpm 版本、go.sum 与 pnpm-lock 散列及 workflow run。面板另核对实际二进制散列、ELF 架构/静态链接、Go 模块和构建设置：干净 VCS 提交、目标平台、CGO=0、注入的 main.version；拒绝模块 replace。数据库目标版本从内嵌 SQL 派生，Agent 协议由 Agent 和发布工具共用单一常量，launcher 使用接收端同一常量。
+默认仓库为 `Teddy-Zhu/nginx_manage`，工作流使用实际运行仓库的 `github.repository`，镜像地址为 `ghcr.io/<小写 owner/repo>/nginx`。当前代码按公开仓库和公开镜像访问设计；仓库、GHCR 包可见性和访问权限由维护者设置，代码不会自动公开仓库或包。
 
-归档按路径排序，固定 root UID/GID、0644/0755 模式、零时间戳及 USTAR 格式，使用单 gzip 流；不接收链接、特殊文件或自行携带的计算字段。逐文件扫描后在打包时重算散列并核对文件身份，使用与接收端相同的资产/依赖图校验。单文件/归档/展开/清单预算沿用接收合同，整次发布输入与输出最多 2 GiB。SHA-256 清单按文件名排序，包含所有公开记录和归档，不包含其自身。
+在 GitHub 的 `release` environment 配置：
 
-工具只生成新的输出目录，同文件系统暂存、同步后不覆盖发布；失败只清理自己的暂存。`state=signed` 仅表示本地签名产物已生成，不代表已上传、安装或通过系统矩阵验收。自动回滚能力由本次版本独立批准的策略决定，并进入签名清单。
+- Secret `RELEASE_ED25519_SEED`：Base64 编码的 32 字节 Ed25519 私钥种子。
+- Variable `RELEASE_ED25519_PUBLIC_KEY`：与种子对应的 Base64 公钥。
+- Variable `RELEASE_KEY_ID`：签名密钥标识，例如 `release-2026`。
 
-## 本机入口
+私钥、公钥和 Key ID 必须匹配。环境保护和标签限制由仓库维护者配置。核心发布仅需 `contents:write`；Nginx 镜像构建需 `packages:write`，其签名发布任务同时需 `contents:write`。工作流使用 GitHub 提供的 Token，部署服务器不持有发布私钥。
 
-`make release-tool` 通过 Docker 构建本机架构的 Linux 工具到 `bin/nginxpanel-release`，不依赖本机 Go；构建脚本的 `--release-tool` 分支不构建前端。准备目录沿用工作流布局：`panel-linux-amd64/`、`panel-linux-arm64/`、`web/`、`nginx-linux-amd64/`、`nginx-linux-arm64/`、`fail2ban/`，各目录包含对应入口、实际许可原文及同 ID 的两份 JSON 证据。Nginx 和 Fail2ban 资产须符合发布工具内嵌的各自源码锁定配方。
+手动触发要求工作流已进入默认分支，参见 [GitHub 手动运行工作流说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)。首次正式使用前，应确认仓库可使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm` 运行器。
 
-```sh
-bin/nginxpanel-release spec \
-  --repository owner/nginxpanel --version 1.2.3 \
-  --commit <完整提交> --notes-file deploy/release/notes/1.2.3.md \
-  --policy-file deploy/release/policies/1.2.3.json \
-  --output .release/input/publication.json
+## 发布核心程序
 
-bin/nginxpanel-release bundle \
-  --repository owner/nginxpanel --version 1.2.3 --commit <完整提交> \
-  --spec .release/input/publication.json --input-root .release/input \
-  --policy-file deploy/release/policies/1.2.3.json \
-  --key-file /home/publisher/keys/release.seed --key-id release-2026 \
-  --public-key <独立确认的Base64公钥> --output .release/output
+先提交对应版本的发行说明和策略：
+
+```text
+deploy/release/notes/1.2.3.md
+deploy/release/policies/1.2.3.json
 ```
 
-`spec` 必须通过 `--notes-file` 指定本次发布批准的非空 UTF-8 说明（LF 换行），最多 8 KiB、默认 JSON 编码后最多 16 KiB。说明进入 `manifest.notes`，与协议、数据库和 Agent/launcher 要求共同签名；`bundle` 只使用规格中的说明，不能另行覆盖。GitHub 流水线读取标签提交内的 `deploy/release/notes/<不带 v 的 SemVer>.md`，发标签前须提交该文件；缺失或无效时发布失败。GitHub release 正文使用同一说明，接收端只信任签名清单，不以可编辑正文判断接收条件。
-
-`spec` 与 `bundle` 均须通过 `--policy-file` 指定本次版本批准的 JSON 策略，最多 4 KiB。文件必须包含确切版本和显式布尔值，不接受缺失字段、null、未知字段或重复字段：
+说明为非空 UTF-8 文本，最多 8 KiB。策略必须明确版本和自动回滚声明：
 
 ```json
 {"version":"1.2.3","automatic_rollback":false}
 ```
 
-维护者在确认本次版本能于维护窗口内恢复原程序和匹配快照后，才可将 `automatic_rollback` 批准为 `true`；它不承诺释放维护窗口后的旧快照恢复。`false` 仍可生成和准备签名发行，但当前面板升级入口会拒绝无自动补偿保证的版本。不可逆变更不能因打包成功而获得回滚授权。
-
-发标签前须同时提交 `deploy/release/policies/<不带 v 的 SemVer>.json`。构建任务用该策略生成规格；签名任务从同一批准提交的源码重新读取策略，并核对上传规格中的声明，不能用 artifact 内的策略代替。策略路径须在归档、镜像输入及输出树之外，目录和文件遵循发布账户归属、禁止其他账户写入及禁止链接的规则。缺失、版本不符或声明不一致时停止签名，不产生发行目录。
-
-包含镜像时，`bundle` 另外指定 `--images .release/images/publication.json`。输入清单与其同目录的 `panel-launcher.oci.json`、`nginx.oci.json` 来自下述镜像步骤；私钥须位于镜像输入树之外。原生归档发行可省略镜像输入，不能只登记一个镜像或一种架构。
-
-私钥文件为规范 Base64 的 32 字节 Ed25519 seed，可带一个尾随 LF，权限必须 0600。其目录及上层由发布账户或 root 持有且不可被其他账户写入，不允许链接；私钥位于输入和输出树之外。公钥须独立配置并与 seed 派生结果完全一致，不从包内选择信任根。签名采用接收端相同域前缀与完整 manifest 字节，生成后用配置公钥复核。私钥不进入规格、产物、输出和校验清单。
-
-## GitHub Actions
-
-上传前 `scripts/release/publish.py` 从同一批准提交的 `setup.sh` 生成独立下载入口，自动内置实际仓库和本次标签，并将其 SHA-256 增补至 `checksums.txt`，与已有归档一起上传草稿、完整核对后公开。它直接复用 `nginxpanel_<版本>_linux_<架构>.tar.gz`，无需另建一套安装包或重复编译。最新入口可使用 [GitHub 的 latest 资产下载链接](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases)。
-
-`setup.sh` 负责首次从所选 GitHub 仓库获取并校验传输完整性，脚本本身不宣称独立公钥验签。其所属标签固定后，程序与校验清单使用同一发行；面板归档继续受原签名清单约束。首次安装操作见[部署指南](deployment.md#3-一键安装)，后续签名更新和组件准备的信任规则保持原有实现。
-
-[release.yml](../.github/workflows/release.yml) 在 v 标签推送或指定已有标签的手工触发时运行。所有 action 使用固定 commit，Go 读取 go.mod/toolchain，Node 使用 24.x，pnpm 来自 packageManager；依赖冻结安装。构建任务只授予 contents:read，执行现有 make verify 一轮，然后构建前端和两种静态二进制，生成依赖记录、许可原文和 SBOM。前端直接调用 Vite，复用前序类型检查结果，不重复执行 build 脚本中的同一检查。
-
-发布任务使用 release environment，按构建任务确认的 commit 检出源码，自行构建发布工具；归档使用构建任务指定的 artifact ID，镜像回执使用当前工作流中固定名称的 artifact，不执行上传的程序。签名 seed 仅在打包签名步骤写入临时 0600 文件，步骤结束清理；上传步骤只持有 GitHub Token。
-
-## 原生 Nginx 组件
-
-[`nginx-source-lock.json`](../internal/releases/nginx-source-lock.json) 是构建器与签名工具共同使用的来源：Nginx 1.30.6、OpenSSL 3.5.9、PCRE2 10.49、zlib 1.3.2 均固定官方 HTTPS 源码、长度、SHA-256 与许可路径。上游分别为 [Nginx](https://nginx.org/en/download.html)、[OpenSSL](https://openssl-library.org/source/)、[PCRE2](https://github.com/PCRE2Project/pcre2/releases) 和 [zlib](https://zlib.net/)。升级须修改此配方并重新发布完整签名资产，不在目标机器编译源码或增装模块。
-
-工作流在 `ubuntu-24.04`、`ubuntu-24.04-arm` 各自的原生架构运行器构建，CI 安装 musl/GCC/Perl 和 `linux-libc-dev`，使用 musl-gcc 和固定参数静态链接上述依赖。构建器将目标架构的 Linux UAPI 头文件复制到临时目录，仅将该目录加入 OpenSSL 的头文件搜索路径，避免混入 glibc 头文件；系统包版本仍纳入构建记录。HTTP/TLS/Real IP、Stream/TLS/Real IP/SSL Preread、限流和当前代理所需的内置模块直接进入二进制；另开启 HTTP/2 与 PCRE JIT。构建参数参考 [Nginx 官方配置说明](https://nginx.org/en/docs/configure.html)。源码下载、解包、构建和记录均有长度/时间限制，源码链接与特殊文件拒绝展开；不安装生成的 Nginx 服务。
-
-`scripts/release/nginx.py` 绑定批准的干净源码提交、规格和 runner 架构，保留未剥离符号的二进制，记录 `nginx -V`、编译器版本、runner 镜像版本、系统包版本以及 libc.a/libgcc.a/libgcc_eh.a 的实际包版本和 SHA-256。包内保存这三份运行库对应的真实 copyright、GCC 运行库例外和 GPL-3 原文；缺失即停止。源码配方、构建记录和系统包清单都由 provenance 散列绑定，并进入签名文件清单。
-
-签名工具独立检查二进制架构、静态 ELF 闭包、所需模块的已定义对象符号、实际二进制和各证据散列；SPDX 必须完整匹配锁定的四份源码、三份静态运行库及程序。只有原生构建任务执行自己生成的 `nginx -V`，签名任务不执行上传的程序。发布后原有可信组件准备、原生首次安装和迁移依赖准备按架构选择 `nginx-linux-amd64/arm64`；static any/any 只声明发行资产的系统选择约束，不能代替目标发行版、内核、配置和实际运行验收。
-
-## Fail2ban 官方代码组件
-
-默认 `fail2ban` 资产使用 `abi=system-python`，架构和发行版为 any，固定官方 1.1.1 源码归档、长度、SHA-256、三个入口、版本文件、COPYING 和 async 兼容文件散列；配方见 [fail2ban-source-lock.json](../internal/releases/fail2ban-source-lock.json)，上游为 [Fail2ban 官方发行](https://github.com/fail2ban/fail2ban/releases/tag/1.1.1)。归档包含官方 Python 库、三个原始脚本、供参考的 `.conf` 配置、许可、SPDX 及来源记录；排除测试包、setup.py、字节码、解释器和构建依赖。运行配置仍由现有受管实例生成，不激活归档中的发行版默认 jail/action。
-
-`build` 任务在面板/web 暂存后执行 `scripts/release/fail2ban.py`，绑定同一干净提交与规格；只复制经过散列核对的官方源码，使用隔离 Python 记录三个官方入口的版本，不执行安装、服务控制或 pip。provenance 绑定完整逐源文件清单、组装 Python 版本、入口版本记录和锁定配方；签名工具核对每个文件、固定入口/兼容文件及 SPDX 的官方源码与兼容许可。通用打包仍检查禁止携带 ELF，签名任务不执行上传代码。
-
-签名资产明确声明 CPython 主版本 3、可接受 minor 范围 9–14，要求标准 GIL 模式。目标机组件准备、已有产物复核及 Fail2ban 诊断复用固定 `/usr/bin/python3` 探测，先核对 root 路径/权限/文件身份，再执行两秒有界的 `-I -S -B` 标准库及 SQLite 内存读写检查；导入不读取用户 site-packages、环境 Python 路径或当前目录。探测前后核对解释器身份和散列，缺失依赖时停止准备，沿现有明确授权的系统 Python 包流程处理。
-
-正式安装另将实际目标机解释器路径、版本和散列写入原 root 安装记录；后续漂移仍阻止运行，不能以兼容范围替代本机批准。`runtime_ready` 对 Fail2ban 只证明上述解释器/标准库前提满足，完整配置、服务启动和运行结果仍由原安装器核对。此范围是代码准入声明，3.9–3.14 的真实发行版/架构与服务行为验收仍待 P5；不能据源码组装或标准库探测宣称系统矩阵已通过。面板 Docker 镜像继续不包含 Python/Fail2ban。
-
-## 固定镜像发行
-
-镜像构建复用同次发行的面板静态程序及许可文本，分别使用 `ubuntu-24.04`、`ubuntu-24.04-arm` 原生运行器；不在服务器或运行容器中编译、增装模块。Buildx 固定版本，BuildKit 和 SBOM scanner 固定版本与摘要。Nginx 构建门禁继续核对预置模块、版本和程序散列，面板镜像只含 launcher、CA 和许可文件。
-
-镜像存放于 `ghcr.io/<小写 owner/repo>/panel` 与 `/nginx`。构建与发布任务单独取得 `packages:write`，仅使用同次工作流的镜像回执；合并引用两个原始索引的摘要，不读取可变构建标签。合并后重新核对平台 manifest/config，读取 OCI 索引、配置、SBOM 和来源声明，不拉取运行层或启动镜像。Registry 凭据只发送至 GHCR，跳转至固定 GitHub 内容域时移除授权头。
-
-`release-manifest.json` 的 `images` 同时登记两个镜像、发行版本/源码提交、索引摘要、amd64/arm64 的 manifest/config 摘要、同架构面板程序散列和 OCI 证据文件。Go 发布工具独立核对完整元数据引用、原始字节的 SHA-256、镜像源码标签、launcher 散列标签与归档程序一致性，以及各平台明确绑定的非空 SPDX 2.3 和 BuildKit SLSA v0.2 `mode=max` 证据，再与归档一起签名。证据文件只含元数据，不含镜像运行层。OCI 证据布局遵循 [Docker attestation storage](https://docs.docker.com/build/metadata/attestations/attestation-storage/)，来源格式显式指定为 [BuildKit SLSA v0.2](https://github.com/moby/buildkit/blob/v0.34.0/docs/attestations/slsa-provenance.md)。
-
-Registry 只产生本次 run/attempt 的构建与候选标签；部署身份使用签名清单中的 `repository@sha256:...`。失败可能留下候选镜像或草稿，流程不覆盖旧发行、不自动删除或将未签名候选认定为可部署。只有镜像证据、归档和签名全部完成后才公开 GitHub 发行。GHCR 可见性、工作流权限及包访问权限仍由仓库维护者配置，不假定已公开可拉取。
-
-本机可用已独立批准的工具和信任根读取签名镜像身份：
+然后创建并推送标签，或对已存在的标签手动触发：
 
 ```sh
-sudo /opt/nginxpanel/current/nginxpanel release-images \
-  --release-trust /etc/nginxpanel/release-trust.json \
-  --release-manifest /opt/nginxpanel/offline/release-manifest.json \
-  --release-signature /opt/nginxpanel/offline/release-manifest.sig
+git tag v1.2.3
+git push origin v1.2.3
+# 也可在 Actions 页面选择 Core binary release，再输入 v1.2.3。
+gh workflow run release.yml -f tag=v1.2.3
 ```
 
-此入口复用归档验签、有效期和接收协议规则，返回当前架构的固定引用、配置摘要及证据散列；`images_verified` 仅表示镜像清单已认证，不代表本机已有镜像、已绑定、已运行或通过部署验收。镜像可由本机管理员使用[签名镜像下载命令](../deploy/docker/README.md#签名镜像下载)准备，已有面板也可从组件页显式拉取；[Docker 安装器](../deploy/docker/README.md#安装来源与批准记录) 在写入意图前自动检查签名、本地镜像和程序/前端，并在绑定时重新检查、保存只读批准记录。模块变化通过新镜像发行处理。
+工作流先构建前端并嵌入核心，交叉编译 Linux amd64、arm64 静态程序，执行集中检查，收集依赖许可、SPDX 和构建来源。两个原生架构任务分别组装首次安装所需的本地 Nginx 镜像，不向 GHCR 推送镜像。签名任务核对干净源码提交、版本、二进制构建信息、文件清单和独立策略后，生成两个 `nginxpanel_<版本>_linux_<架构>.tar.gz`。
 
-项目采用 [MIT 许可](../LICENSE)，面板/web 资产的 SPDX 标识为 `MIT`，归档及镜像包含项目 LICENSE 和第三方许可声明；第三方组件保留各自许可证。正式发布需要配置 release environment 中的 `RELEASE_ED25519_SEED` secret、`RELEASE_ED25519_PUBLIC_KEY` 和 `RELEASE_KEY_ID` variables。environment 的审批、受信标签限制和私钥保管由仓库维护者配置；代码不假定这些仓库设置已经完成。接收主机仍须由本机 root 独立批准仓库和公钥，普通配置迁移不覆盖它们。
+发行先建立草稿，上传并核对全部资产，再公开。稳定核心版设为仓库 Latest；预发布不会替代 Latest。`setup.sh` 从核心 Latest 下载与本机架构匹配的安装包。
 
-上传前核对当前标签仍指向批准的完整提交。已存在的发行或恢复草稿不会被自动覆盖；新建 draft，上传全部文件并核对资产名称、数量、状态、长度及可用的 GitHub SHA-256 后才公开。失败保留 draft，不自动删除、覆盖或跳过失败。稳定版使用 GitHub legacy 版本选择，预发布不会成为 latest；可配合仓库 immutable releases，但不能替代签名，相关字段见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
+## 独立发布 Nginx
 
-项目许可证已补齐；正式仓库与发布凭据尚未配置。原生组件和镜像发行仍需在 P5 完成产物生成与系统验收，真实 CI、签名发布和外部部署尚未执行。
+Nginx 的发行说明和策略单独存放，版本不要求与核心一致：
+
+```text
+deploy/release/notes/nginx/1.30.6.md
+deploy/release/policies/nginx/1.30.6.json
+```
+
+策略格式相同，`version` 使用 Nginx 组件发行版本。镜像基础版本和预置模块由 `deploy/docker/nginx.Dockerfile`、`nginx-capabilities.json` 与 `check-nginx-image.sh` 管理；需要调整基础版本或模块时先修改并提交这些文件。
+
+```sh
+git tag nginx-v1.30.6
+git push origin nginx-v1.30.6
+# 或对已存在标签手动触发：
+gh workflow run nginx-release.yml -f tag=nginx-v1.30.6
+```
+
+工作流在 amd64、arm64 原生运行器分别构建镜像内的启动程序与 Nginx 镜像，执行组件检查和镜像模块门禁，推送原始摘要回执。合并任务只引用这些原始摘要，保留 BuildKit SBOM 和 SLSA 来源证据，再由 Go 发布工具独立核对并签名。
+
+镜像同时具有版本标签，例如 `ghcr.io/teddy-zhu/nginx_manage/nginx:v1.30.6`。SemVer 构建元数据中的 `+` 在 Docker 标签中替换为 `_`。已有版本标签若指向不同摘要，发布停止；不覆盖旧版本。面板部署使用签名清单中的 `repository@sha256:...`，不依赖可变标签。
+
+对应 GitHub Release 使用 `nginx-v1.30.6` 标签，包含 `release-manifest.json`、`release-manifest.sig`、`nginx.oci.json` 和 `checksums.txt`，不附带核心二进制或安装脚本，也不会成为仓库 Latest。`make_latest` 行为见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
+
+面板检查 Nginx 更新时单独查询最近 100 个发行，选取其中最近发布的 Nginx 稳定版；不会误用核心 Latest。没有匹配项时明确失败，可通过本机发行命令指定更早的 `nginx-v<版本>`。核心和 Nginx 使用独立的固定缓存槽位，分别处理检查间隔。预发布必须指定确切标签并明确允许预发布。
+
+## 本机签名工具
+
+发布工具只用于构建环境，不在接收主机编译或执行下载代码。通过 Docker 构建工具后，可使用：
+
+```sh
+nginxpanel-release spec --component panel \
+  --repository Teddy-Zhu/nginx_manage --version 1.2.3 --commit <完整提交> \
+  --notes-file deploy/release/notes/1.2.3.md \
+  --policy-file deploy/release/policies/1.2.3.json --output <新的规格文件>
+```
+
+Nginx 规格使用 `--component nginx` 和 `notes/nginx/`、`policies/nginx/` 路径，打包时必须提供 `--images <经过核对的镜像 publication.json>`；核心打包不提供镜像输入。两种签名清单不混装核心资产与组件镜像。已有本机信任根继续限制仓库、公钥和接收协议，普通配置迁移不会覆盖信任根。
+
+失败可能保留构建镜像或恢复草稿，流程不自动覆盖发行、删除草稿、忽略验签失败或发布不完整资产。实际 GitHub Actions、GHCR 推送及签名下载尚需在配置了上述凭据的真实仓库执行；本地检查不能代替实际发布结果。

@@ -12,8 +12,8 @@ import (
 var ErrReleaseChanged = errors.New("发行材料或本机信任已变化，请重新检查")
 
 func ValidateOnlineSelection(in OnlineInput) error {
-	if in.Tag != "" && (!strings.HasPrefix(in.Tag, "v") || !validVersion(strings.TrimPrefix(in.Tag, "v"))) || in.AllowPrerelease && in.Tag == "" {
-		return errors.New("标签须为 v 开头的 SemVer，预发布须显式指定标签")
+	if in.Tag != "" && (!strings.HasPrefix(in.Tag, in.tagPrefix()) || !validVersion(strings.TrimPrefix(in.Tag, in.tagPrefix()))) || in.AllowPrerelease && in.Tag == "" {
+		return errors.New("核心标签须为 v 开头、Nginx 标签须为 nginx-v 开头的 SemVer；预发布须显式指定标签")
 	}
 	if err := selectors(in.Assets, in.Components); err != nil {
 		return err
@@ -41,6 +41,9 @@ func selectors(assets, components []string) error {
 		if !slices.Contains([]string{"panel", "nginx"}, component) {
 			return errors.New("未知组件")
 		}
+	}
+	if len(components) > 1 || slices.Contains(assets, "image-nginx") && len(assets) > 1 {
+		return errors.New("核心程序和 Nginx 镜像分别发行，请分别检查和准备")
 	}
 	return nil
 }

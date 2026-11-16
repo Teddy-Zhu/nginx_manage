@@ -172,7 +172,11 @@ func (s *onlineSession) get(ctx context.Context, endpoint, accept, etag string) 
 		return nil, fmt.Errorf("GitHub 请求处于限流等待期，最早重试时间 %s", time.Unix(s.cache.BlockedUntil, 0).UTC().Format(time.RFC3339))
 	}
 	// Endpoints are constructed locally; no URL returned by GitHub is used here.
-	u := "https://api.github.com/repos/" + s.publisher.trust.Repository + "/releases/" + endpoint
+	suffix := "/" + endpoint
+	if endpoint == "?per_page=100" {
+		suffix = endpoint
+	}
+	u := "https://api.github.com/repos/" + s.publisher.trust.Repository + "/releases" + suffix
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, errors.New("GitHub 请求路径无效")

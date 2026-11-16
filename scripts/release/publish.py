@@ -47,7 +47,9 @@ def main():
     p.add_argument("--directory", required=True, type=Path)
     args = p.parse_args()
     manifest = json.loads((args.directory / "release-manifest.json").read_bytes())
-    if manifest["repository"] != args.repository or "v" + manifest["version"] != args.tag:
+    image_only = not manifest["assets"] and len(manifest["images"]) == 1 and manifest["images"][0]["id"] == "nginx"
+    prefix = "nginx-v" if image_only else "v"
+    if manifest["repository"] != args.repository or prefix + manifest["version"] != args.tag:
         raise ValueError("release identity does not match signed directory")
     base = "repos/" + args.repository
     target = api(base + "/git/ref/tags/" + args.tag)["object"]
@@ -65,7 +67,8 @@ def main():
         raise ValueError("release or recovery draft already exists; refusing overwrite")
     if "(HTTP 404)" not in prior.stderr:
         raise RuntimeError("cannot determine whether release already exists: " + prior.stderr)
-    stage_bootstrap(args.directory, args.repository, args.tag)
+    if not image_only:
+        stage_bootstrap(args.directory, args.repository, args.tag)
     files = sorted(args.directory.iterdir())
     if not files or len(files) > 64 or any(not f.is_file() or f.is_symlink() or f.stat().st_size > 128 << 20 for f in files):
         raise ValueError("invalid signed release directory")
@@ -100,7 +103,7 @@ def main():
     prerelease = manifest["channel"] == "prerelease"
     published = api(base + "/releases/" + str(release["id"]), {
         "draft": False, "prerelease": prerelease,
-        "make_latest": "false" if prerelease else "legacy",
+        "make_latest": "false" if prerelease or image_only else "true",
     })
     if published["id"] != release["id"] or published["draft"] or published["prerelease"] != prerelease:
         raise ValueError("release publication was not confirmed")

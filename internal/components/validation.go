@@ -58,7 +58,7 @@ func (out Operation) Validate(req Request) error {
 		return nil
 	}
 	r := out.Release
-	if r == nil || r.Requirements.Validate() != nil || !releases.ValidNotes(r.Notes) || r.Receiver.APIMajor != 1 || r.Receiver.AgentProtocol <= 0 || r.Receiver.Launcher <= 0 || r.StagingOnly != (len(r.Requirements.Incompatibilities(r.Receiver)) != 0) || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != "v"+r.Version || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
+	if r == nil || r.Requirements.Validate() != nil || !releases.ValidNotes(r.Notes) || r.Receiver.APIMajor != 1 || r.Receiver.AgentProtocol <= 0 || r.Receiver.Launcher <= 0 || r.StagingOnly != (len(r.Requirements.Incompatibilities(r.Receiver)) != 0) || !digest(r.PlanID) || !digest(r.ManifestSHA256) || !digest(r.TrustSHA256) || r.Repository == "" || r.KeyID == "" || r.Tag != releases.SelectionTag(r.Version, r.Selected) || r.ExpiresAt <= out.CreatedAt || len(r.Selected) == 0 || len(r.Selected) > 2 || len(r.Assets) > 2 || out.Error != "" || out.ErrorCode != "" {
 		return errors.New("组件成功结果不完整")
 	}
 	if req.Input.Tag != "" && r.Tag != req.Input.Tag {

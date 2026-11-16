@@ -34,7 +34,7 @@
 
 ## 清单合同
 
-清单字段以 `internal/releases/model.go` 及 `images.go` 为唯一模型，包含 `schema/repository/version/channel/created_at/expires_at/api_major/database_schema/minimum_agent_protocol/minimum_launcher/frontend_version/automatic_rollback/notes/assets/images`。版本使用 SemVer，channel 为 stable/prerelease；核心资产内含配套前端，用户不单独选择或激活前端资产。数据库 schema 和自动回滚标志是后续准入材料，准备流程不据此承诺已迁移或能够回滚。发布工具从本次版本独立批准的策略读取 `automatic_rollback`，签名时重新核对，见 [发布流程](publishing.md#本机入口)。镜像引用、平台摘要与 OCI 元数据也受同一清单签名保护；`release-images` 的只读认证入口见 [固定镜像发行](publishing.md#固定镜像发行)。
+清单字段以 `internal/releases/model.go` 及 `images.go` 为唯一模型，包含 `schema/repository/version/channel/created_at/expires_at/api_major/database_schema/minimum_agent_protocol/minimum_launcher/frontend_version/automatic_rollback/notes/assets/images`。版本使用 SemVer，channel 为 stable/prerelease；核心资产内含配套前端，用户不单独选择或激活前端资产。数据库 schema 和自动回滚标志是后续准入材料，准备流程不据此承诺已迁移或能够回滚。发布工具从本次版本独立批准的策略读取 `automatic_rollback`，签名时重新核对，见 [发布流程](publishing.md#本机入口)。核心发行只包含两个架构的核心程序包，标签为 `v<版本>`；Nginx 独立发行只包含镜像与 OCI 证据，标签为 `nginx-v<版本>`。两者分别签名、分别检查和更新，版本无需一致。镜像引用、平台摘要与 OCI 元数据受组件清单签名保护；`release-images` 的只读认证入口见 [固定镜像发行](publishing.md#固定镜像发行)。
 
 每个资产登记唯一 ID、组件、版本、Linux 架构、发行版及版本、ABI、必要系统文件的长度/权限/散列、归档长度/散列、展开总长、逐文件清单、同清单内的精确依赖 ID、许可文件、HTTPS 上游来源、维护状态及 Nginx 模块声明。核心资产包含 `nginxpanel` 可执行文件及其嵌入的前端；不再发行或安装独立 `web` 资产。Nginx 和 Fail2ban 组件资产仍按签名清单验证。
 

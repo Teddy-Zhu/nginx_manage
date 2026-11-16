@@ -236,8 +236,8 @@ func manifestCatalog(m Manifest) (map[string]Asset, error) {
 	if err := validateImages(m); err != nil {
 		return nil, err
 	}
-	if len(m.Images) != 1 || len(m.Assets) != 2 {
-		return nil, errors.New("正式发行须包含一个 Nginx 镜像和两个架构的核心程序包")
+	if !(len(m.Images) == 0 && len(m.Assets) == 2 || len(m.Images) == 1 && len(m.Assets) == 0) {
+		return nil, errors.New("发行须为两个架构的核心程序包，或独立的 Nginx 镜像")
 	}
 	assets := map[string]Asset{}
 	archiveNames := map[string]bool{}
@@ -261,7 +261,7 @@ func manifestCatalog(m Manifest) (map[string]Asset, error) {
 			return nil, errors.New("发行文件清单合计超过 4096 项")
 		}
 	}
-	if !architectures["amd64"] || !architectures["arm64"] {
+	if len(m.Assets) != 0 && (!architectures["amd64"] || !architectures["arm64"]) {
 		return nil, errors.New("发行须包含 Linux amd64 和 arm64 核心程序包")
 	}
 	colors := map[string]int{}
@@ -398,7 +398,7 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 		}
 	}
 	if stagingOnly && !stagingAllowed {
-		return nil, &receiverCompatibilityError{announcement: Announcement{Repository: m.Repository, Version: m.Version, Tag: "v" + m.Version, Channel: m.Channel, KeyID: sig.KeyID, ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), ExpiresAt: m.ExpiresAt, Notes: m.Notes, Requirements: requirements, Receiver: in.Receiver, ReceiverCompatible: false, Incompatibilities: issues}}
+		return nil, &receiverCompatibilityError{announcement: Announcement{Repository: m.Repository, Version: m.Version, Tag: ManifestTag(m), Channel: m.Channel, KeyID: sig.KeyID, ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), ExpiresAt: m.ExpiresAt, Notes: m.Notes, Requirements: requirements, Receiver: in.Receiver, ReceiverCompatible: false, Incompatibilities: issues}}
 	}
 	p := Plan{StagingOnly: stagingOnly, State: "manifest_verified", ManifestSHA256: hash(raw), TrustSHA256: hash(publisher.raw), KeyID: sig.KeyID, Manifest: m, Host: in.Host, Receiver: in.Receiver, Selected: selected, Assets: []Asset{}}
 	added := map[string]bool{}

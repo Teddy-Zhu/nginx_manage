@@ -30,6 +30,7 @@ func run() error {
 	repo := f.String("repository", "", "approved owner/repository")
 	version := f.String("version", "", "SemVer version without v prefix")
 	commit := f.String("commit", "", "approved full source commit")
+	component := f.String("component", "panel", "publication component: panel or nginx (spec)")
 	output := f.String("output", "", "new output file (spec) or directory (bundle)")
 	specFile := f.String("spec", "", "publication specification (bundle)")
 	inputRoot := f.String("input-root", "", "prepared package input tree (bundle)")
@@ -60,7 +61,15 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		spec, err := releases.NewPublication(*repo, *version, *commit, notes, automaticRollback)
+		var spec releases.PublicationSpec
+		switch *component {
+		case "panel":
+			spec, err = releases.NewPublication(*repo, *version, *commit, notes, automaticRollback)
+		case "nginx":
+			spec, err = releases.NewImagePublication(*repo, *version, *commit, notes, automaticRollback)
+		default:
+			return errors.New("发布组件须为 panel 或 nginx")
+		}
 		if err != nil {
 			return err
 		}

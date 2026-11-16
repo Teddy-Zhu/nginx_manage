@@ -94,6 +94,16 @@ func NewPublication(repo, version, commit, notes string, automaticRollback bool)
 	return spec, nil
 }
 
+// NewImagePublication signs the image catalog without coupling it to core archives.
+func NewImagePublication(repo, version, commit, notes string, automaticRollback bool) (PublicationSpec, error) {
+	spec, err := NewPublication(repo, version, commit, notes, automaticRollback)
+	if err != nil {
+		return PublicationSpec{}, err
+	}
+	spec.Packages = nil
+	return spec, nil
+}
+
 func publicationEvidence(directory string, asset Asset, spec PublicationSpec) (map[string][]byte, error) {
 	sbomName, provenanceName := asset.ID+".spdx.json", asset.ID+".provenance.json"
 	sbom, err := readPublicationFile(filepath.Join(directory, sbomName), 16<<20)
@@ -240,7 +250,7 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	if err != nil {
 		return PublicationResult{}, err
 	}
-	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || len(m.Assets) != 0 || len(m.Images) != 0 || len(spec.Packages) != 2 {
+	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || len(m.Assets) != 0 || len(m.Images) != 0 || (len(spec.Packages) != 2 && len(spec.Packages) != 0) {
 		return PublicationResult{}, errors.New("发布清单身份、有效期、协议或回滚条件不满足")
 	}
 	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {

@@ -80,7 +80,7 @@ func (r Requirements) Incompatibilities(current Receiver) []string {
 
 func (a Announcement) Validate() error {
 	issues := a.Requirements.Incompatibilities(a.Receiver)
-	if !repository.MatchString(a.Repository) || !validVersion(a.Version) || a.Tag != "v"+a.Version || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || a.ExpiresAt <= 0 || !ValidNotes(a.Notes) || a.Requirements.Validate() != nil || a.Receiver.APIMajor < 1 || a.Receiver.AgentProtocol < 1 || a.Receiver.Launcher < 1 || a.ReceiverCompatible != (len(issues) == 0) || !slices.Equal(a.Incompatibilities, issues) || a.Channel != "stable" && a.Channel != "prerelease" {
+	if !repository.MatchString(a.Repository) || !validVersion(a.Version) || (a.Tag != "v"+a.Version && a.Tag != "nginx-v"+a.Version) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || a.ExpiresAt <= 0 || !ValidNotes(a.Notes) || a.Requirements.Validate() != nil || a.Receiver.APIMajor < 1 || a.Receiver.AgentProtocol < 1 || a.Receiver.Launcher < 1 || a.ReceiverCompatible != (len(issues) == 0) || !slices.Equal(a.Incompatibilities, issues) || a.Channel != "stable" && a.Channel != "prerelease" {
 		return errors.New("已验签发行说明无效")
 	}
 	return nil

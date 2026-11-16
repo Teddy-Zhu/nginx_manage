@@ -21,9 +21,10 @@ const (
 	maxDownloadBytes = 512 << 20
 )
 
-// A single metadata slot bounds retained API data. Credentials are never stored;
+// Two fixed metadata slots isolate core and Nginx release checks. Credentials are never stored;
 // Key binds the slot to the local trust bytes, endpoint and credential identity.
 type onlineCache struct {
+	imageChannel bool
 	Schema       int             `json:"schema"`
 	Key          string          `json:"key"`
 	ETag         string          `json:"etag"`
@@ -89,10 +90,17 @@ func lockOnline() (*os.File, error) {
 	return f, nil // Closing the descriptor also releases the flock.
 }
 
-func readOnlineCache() (onlineCache, error) {
-	raw, err := readRoot(filepath.Join(DownloadStore, "cache.json"), maxCacheBytes)
+func cacheName(imageChannel bool) string {
+	if imageChannel {
+		return "cache-nginx.json"
+	}
+	return "cache.json"
+}
+
+func readOnlineCache(imageChannel bool) (onlineCache, error) {
+	raw, err := readRoot(filepath.Join(DownloadStore, cacheName(imageChannel)), maxCacheBytes)
 	if os.IsNotExist(err) {
-		return onlineCache{Schema: Schema}, nil
+		return onlineCache{Schema: Schema, imageChannel: imageChannel}, nil
 	}
 	if err != nil {
 		return onlineCache{}, err
@@ -111,6 +119,7 @@ func readOnlineCache() (onlineCache, error) {
 		(len(cache.Manifest) == 0) != (len(cache.Signature) == 0) {
 		return onlineCache{}, errors.New("在线发行缓存结构或期限无效，须由本机管理员检查")
 	}
+	cache.imageChannel = imageChannel
 	return cache, nil
 }
 
@@ -147,7 +156,7 @@ func writeOnlineCache(cache onlineCache) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	if err := os.Rename(f.Name(), filepath.Join(DownloadStore, "cache.json")); err != nil {
+	if err := os.Rename(f.Name(), filepath.Join(DownloadStore, cacheName(cache.imageChannel))); err != nil {
 		return err
 	}
 	return syncDir(DownloadStore)
@@ -183,7 +192,7 @@ func downloadUsage() (int64, int, int, error) {
 			groups++
 		} else {
 			if parent == DownloadStore {
-				if entry.Name() != "cache.json" && entry.Name() != ".online.lock" && !strings.HasPrefix(entry.Name(), ".cache-") {
+				if entry.Name() != "cache.json" && entry.Name() != "cache-nginx.json" && entry.Name() != ".online.lock" && !strings.HasPrefix(entry.Name(), ".cache-") {
 					return errors.New("在线发行缓存出现未知文件")
 				}
 			} else if filepath.Dir(parent) != DownloadStore {

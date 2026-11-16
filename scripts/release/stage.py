@@ -73,6 +73,21 @@ def node_records(value, records):
             node_records(child, records)
 
 
+def go_notices(report):
+    go_records = set()
+    for package in json_stream(report):
+        module = package.get("Module")
+        if not module or module.get("Main"):
+            continue
+        if module.get("Replace") or not module.get("Dir") or not module.get("Version"):
+            raise ValueError("Go publication dependency is replaced or unresolved")
+        go_records.add((module["Path"], module["Version"], module["Dir"]))
+    if not go_records:
+        raise ValueError("Go production dependency report is empty")
+    go_root = Path(subprocess.check_output(["go", "env", "GOROOT"], text=True).strip())
+    return b"===== Go standard library =====\n" + read(go_root / "LICENSE", 256 << 10) + notices(go_records)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-root", required=True, type=Path)
@@ -92,18 +107,7 @@ def main():
     project_license = read("LICENSE", 256 << 10)
     if not project_license:
         raise ValueError("project LICENSE must be supplied before publishing")
-    go_records = set()
-    for package in json_stream(args.go_packages):
-        module = package.get("Module")
-        if not module or module.get("Main"):
-            continue
-        if module.get("Replace") or not module.get("Dir") or not module.get("Version"):
-            raise ValueError("Go publication dependency is replaced or unresolved")
-        go_records.add((module["Path"], module["Version"], module["Dir"]))
-    if not go_records:
-        raise ValueError("Go production dependency report is empty")
-    go_root = Path(subprocess.check_output(["go", "env", "GOROOT"], text=True).strip())
-    go_notice = b"===== Go standard library =====\n" + read(go_root / "LICENSE", 256 << 10) + notices(go_records)
+    go_notice = go_notices(args.go_packages)
     npm_records = set()
     node_records(json.loads(read(args.node_dependencies, 32 << 20)), npm_records)
     if not npm_records:

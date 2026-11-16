@@ -148,7 +148,13 @@ func cloneImages(images []ContainerImage) []ContainerImage {
 
 func publicationImages(in PublishInput, spec PublicationSpec, manifest Manifest) ([]ContainerImage, map[string][]byte, error) {
 	if in.ImagesPath == "" {
-		return nil, nil, errors.New("正式发行必须包含 Nginx 容器镜像")
+		if len(spec.Packages) == 2 {
+			return nil, nil, nil
+		}
+		return nil, nil, errors.New("Nginx 发行必须包含签名容器镜像证据")
+	}
+	if len(spec.Packages) != 0 {
+		return nil, nil, errors.New("核心程序和 Nginx 镜像须独立发布")
 	}
 	raw, err := readPublicationFile(in.ImagesPath, 64<<10)
 	if err != nil {
