@@ -50,7 +50,7 @@ gh workflow run release.yml -f tag=v1.2.3
 
 工作流先构建前端并嵌入核心，交叉编译 Linux amd64、arm64 静态程序，执行集中检查，收集依赖许可、SPDX 和构建来源。两个原生架构任务分别组装首次安装所需的本地 Nginx 镜像，不向 GHCR 推送镜像。签名任务核对干净源码提交、版本、二进制构建信息、文件清单和独立策略后，生成两个 `nginxpanel_<版本>_linux_<架构>.tar.gz`。
 
-发行先建立草稿，上传并核对全部资产，再公开。稳定核心版设为仓库 Latest；预发布不会替代 Latest。`setup.sh` 从核心 Latest 下载与本机架构匹配的安装包。
+发行先建立草稿，上传并核对全部资产，再公开。稳定核心版设为仓库 Latest；Beta 不会替代 Latest。`setup.sh` 从核心 Latest 下载与本机架构匹配的安装包。
 
 ## 独立发布 Nginx
 
@@ -76,7 +76,25 @@ gh workflow run nginx-release.yml -f tag=nginx-v1.30.6
 
 对应 GitHub Release 使用 `nginx-v1.30.6` 标签，包含 `release-manifest.json`、`release-manifest.sig`、`nginx.oci.json` 和 `checksums.txt`，不附带核心二进制或安装脚本，也不会成为仓库 Latest。`make_latest` 行为见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
 
-面板检查 Nginx 更新时单独查询最近 100 个发行，选取其中最近发布的 Nginx 稳定版；不会误用核心 Latest。没有匹配项时明确失败，可通过本机发行命令指定更早的 `nginx-v<版本>`。核心和 Nginx 使用独立的固定缓存槽位，分别处理检查间隔。预发布必须指定确切标签并明确允许预发布。
+面板支持保存“稳定版 / Beta”更新通道，核心和 Nginx 共用此选择，刷新或重新登录后保留。稳定版核心使用仓库 Latest；Beta 核心与 Nginx 镜像按所选通道查询最近 100 个发行，选择最近发布的对应版本，没有匹配项时明确提示。核心/Nginx 与稳定/Beta 分别使用四个固定缓存槽位。指定确切标签仍可下载较早版本，Beta 须明确允许。
+
+## 从分支发布 Beta（无需预先创建标签）
+
+版本以 `-dev` 结尾时自动归入 Beta；其他 SemVer 预发布版本也归入 Beta。正式版本归入稳定版。签名清单使用 `stable` / `beta`，GitHub Release 的 Beta 标记为 prerelease，永不替代稳定版 Latest。
+
+在 Actions 手动选择工作流，将 `tag` 留空，填写源码分支 `source_ref` 与开发基础版本 `version`。不填写分支时使用 Actions 选中的工作流分支；默认基础版本为 `0.1.0-dev`。例如：
+
+```sh
+# 分支名按实际仓库填写；工作流文件需要已存在于仓库默认分支。
+gh workflow run release.yml -f source_ref=main -f version=1.2.4-dev
+gh workflow run nginx-release.yml -f source_ref=main -f version=1.30.6-dev
+```
+
+实际版本增加 GitHub run ID 和 attempt，例如 `1.2.4-123456789.1-dev`，防止不同源码复用同一版本。流程自动生成本次说明及明确关闭自动回滚的策略，发布阶段复用构建时已确定的版本；只重跑失败的发布任务不会改变版本。资产上传核对后自动创建指向构建提交的 GitHub 标签，无需事先手工打标签。核心与 Nginx 仍可分别发布。已有发行或部分草稿不会被覆盖，失败时查看保留的草稿后另行发起新构建。 自动生成的开发标签不再次触发构建，避免使用自定义令牌发布时重复运行；普通手工 `v1.2.4-dev` / `nginx-v1.30.6-dev` 标签仍可触发发布，需提交对应版本的说明和策略。
+
+通常使用工作流自带的 `GITHUB_TOKEN`。如果源码分支修改了 `.github/workflows`，GitHub 可能要求额外的 Workflows 写入权限才能创建源码标签；此时在 `release` environment 配置可选的 `RELEASE_GITHUB_TOKEN`，使用具备该仓库 Contents 和 Workflows 写入权限的令牌。签名凭据要求与稳定版相同，参见 [GitHub 创建发行的权限说明](https://docs.github.com/en/rest/releases/releases#create-a-release)。
+
+面板的“系统更新”和“更新 Nginx”均可切换更新通道。切换只改变后续检查来源，不会立即安装、自动降级或修改已运行组件。命令行使用 `--release-channel stable` 或 `--release-channel beta`；指定 Beta 标签或验证离线 Beta 材料时也可使用此参数。
 
 ## 本机签名工具
 

@@ -2,12 +2,22 @@ name: Core binary release
 
 on:
   push:
-    tags: ["v*"]
+    # Generated development tags must not start a second build when a custom token publishes them.
+    tags: ["v*", "!v*-[0-9]*.[0-9]*-dev"]
   workflow_dispatch:
     inputs:
       tag:
-        description: Exact existing v-prefixed SemVer tag
-        required: true
+        description: Existing v-prefixed tag; leave empty for a branch Beta build
+        required: false
+        type: string
+      source_ref:
+        description: Beta source branch or commit; defaults to the selected workflow ref
+        required: false
+        type: string
+      version:
+        description: Base version for tag-free Beta builds (must end in -dev)
+        required: false
+        default: 0.1.0-dev
         type: string
 
 permissions:
@@ -29,11 +39,12 @@ jobs:
       commit: ${{ steps.identity.outputs.commit }}
       version: ${{ steps.identity.outputs.version }}
       tag: ${{ steps.identity.outputs.tag }}
+      create_tag: ${{ steps.identity.outputs.create_tag }}
       artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || inputs.source_ref || github.ref }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -50,24 +61,26 @@ jobs:
       - name: Bind release identity
         id: identity
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+          RELEASE_BASE_VERSION: ${{ inputs.version || '0.1.0-dev' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release/identity.py --component panel --tag "$RELEASE_TAG" --version "$RELEASE_BASE_VERSION"
+      - name: Create publication spec
+        env:
           RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.identity.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.identity.outputs.commit }}
+          RELEASE_NOTES: ${{ steps.identity.outputs.notes }}
+          RELEASE_POLICY: ${{ steps.identity.outputs.policy }}
         shell: bash
         run: |
           set -euo pipefail
           test -s LICENSE
-          test "${RELEASE_TAG:0:1}" = v
-          version="${RELEASE_TAG#v}"
-          commit="$(git rev-parse HEAD)"
-          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$commit"
           mkdir -p .release/input .release/binaries
           go build -trimpath -o "$RUNNER_TEMP/nginxpanel-release" ./cmd/nginxpanel-release
-          "$RUNNER_TEMP/nginxpanel-release" spec --repository "$RELEASE_REPOSITORY" --version "$version" --commit "$commit" --notes-file "deploy/release/notes/$version.md" --policy-file "deploy/release/policies/$version.json" --output .release/input/publication.json
-          {
-            echo "version=$version"
-            echo "commit=$commit"
-            echo "tag=$RELEASE_TAG"
-          } >> "$GITHUB_OUTPUT"
+          "$RUNNER_TEMP/nginxpanel-release" spec --repository "$RELEASE_REPOSITORY" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --notes-file "$RELEASE_NOTES" --policy-file "$RELEASE_POLICY" --output .release/input/publication.json
       - name: Install locked frontend dependencies
         run: pnpm --dir web install --frozen-lockfile
       - name: Build matching frontend and static Linux binaries
@@ -156,7 +169,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.build.outputs.commit }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Bind publication metadata
+        id: approval
+        env:
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_CREATE_TAG: ${{ needs.build.outputs.create_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_CREATE_TAG" = true ]; then
+            python3 scripts/release/identity.py --component panel --version "$RELEASE_VERSION" --reuse-version
+          else
+            python3 scripts/release/identity.py --component panel --tag "$RELEASE_TAG"
+          fi
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -188,6 +216,8 @@ jobs:
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
           RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+          RELEASE_NOTES: ${{ steps.approval.outputs.notes }}
+          RELEASE_POLICY: ${{ steps.approval.outputs.policy }}
         shell: bash
         run: |
           set -euo pipefail
@@ -196,14 +226,17 @@ jobs:
           trap 'rm -rf -- "$keydir"' EXIT
           printf '%s\n' "$RELEASE_SEED" > "$keydir/seed"
           unset RELEASE_SEED
-          "$RUNNER_TEMP/nginxpanel-release" bundle --repository "$RELEASE_REPOSITORY" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --spec .release/input/publication.json --input-root .release/input --policy-file "deploy/release/policies/$RELEASE_VERSION.json" --key-file "$keydir/seed" --key-id "$RELEASE_KEY_ID" --public-key "$RELEASE_PUBLIC_KEY" --output .release/output
+          "$RUNNER_TEMP/nginxpanel-release" bundle --repository "$RELEASE_REPOSITORY" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --spec .release/input/publication.json --input-root .release/input --policy-file "$RELEASE_POLICY" --key-file "$keydir/seed" --key-id "$RELEASE_KEY_ID" --public-key "$RELEASE_PUBLIC_KEY" --output .release/output
       - name: Upload complete draft then publish
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.build.outputs.tag }}
           RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+          RELEASE_CREATE_TAG: ${{ needs.build.outputs.create_tag }}
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/release/publish.py --repository "$GH_REPO" --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --directory .release/output
+          options=()
+          if [ "$RELEASE_CREATE_TAG" = true ]; then options+=(--create-tag); fi
+          python3 scripts/release/publish.py --repository "$GH_REPO" --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --directory .release/output "${options[@]}"

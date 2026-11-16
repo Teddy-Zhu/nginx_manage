@@ -7055,6 +7055,83 @@
           "components.manage"
         ]
       }
+    },
+    "/nodes/connections/{connection}/components/update-channel": {
+      "get": {
+        "operationId": "remoteGetUpdateChannel",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getUpdateChannel",
+        "x-forward-path": "/components/update-channel",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-query-keys": [],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      },
+      "put": {
+        "operationId": "remoteSetUpdateChannel",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "setUpdateChannel",
+        "x-forward-path": "/components/update-channel",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/UpdateChannel"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "security": [

@@ -86,6 +86,7 @@ export type DockerControl = components["schemas"]["DockerControl"];
 export type SoftwareRequest = components["schemas"]["SoftwareRequest"];
 export type SoftwareSource = components["schemas"]["SoftwareSource"];
 export type SoftwareCatalog = components["schemas"]["SoftwareCatalog"];
+export type UpdateChannel = components["schemas"]["UpdateChannel"];
 export type ComponentInput = components["schemas"]["ComponentInput"];
 export type ComponentCreateInput =
   components["schemas"]["ComponentCreateInput"];
@@ -988,6 +989,14 @@ export function createAPI(scope: RequestScope) {
       }),
     components: (signal?: AbortSignal) =>
       request<ComponentOverview>({ url: "/components", signal }),
+    updateChannel: () =>
+      request<UpdateChannel>({ url: "/components/update-channel" }),
+    setUpdateChannel: (channel: UpdateChannel["channel"]) =>
+      request<UpdateChannel>({
+        url: "/components/update-channel",
+        method: "PUT",
+        data: { channel },
+      }),
     componentOfflineUploads: (signal?: AbortSignal) =>
       request<ComponentOfflineUpload[]>({ url: "/components/offline", signal }),
     createComponentOfflineUpload: (data: ComponentOfflineInput, key: string) =>

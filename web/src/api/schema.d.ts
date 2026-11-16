@@ -1482,6 +1482,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/update-channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUpdateChannel"];
+        put: operations["setUpdateChannel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components/tasks": {
         parameters: {
             query?: never;
@@ -5337,6 +5353,10 @@ export interface components {
             message: string;
             log: string;
         };
+        UpdateChannel: {
+            /** @enum {string} */
+            channel: "stable" | "beta";
+        };
         ComponentInput: {
             /** @enum {string} */
             action: "check" | "prepare" | "pull" | "software";
@@ -9087,6 +9107,39 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getUpdateChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    setUpdateChannel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChannel"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

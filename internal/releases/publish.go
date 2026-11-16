@@ -82,10 +82,7 @@ func NewPublication(repo, version, commit, notes string, automaticRollback bool)
 		return PublicationSpec{}, err
 	}
 	now := time.Now().Unix()
-	channel := "stable"
-	if strings.Contains(strings.Split(version, "+")[0], "-") {
-		channel = "prerelease"
-	}
+	channel := VersionChannel(version)
 	spec := PublicationSpec{Commit: commit, Manifest: Manifest{Schema: Schema, Repository: repo, Version: version, Channel: channel, CreatedAt: now, ExpiresAt: now + 365*86400, APIMajor: 1, DatabaseSchema: databaseSchema, MinimumAgentProtocol: protocol.Agent, MinimumLauncher: LauncherVersion, FrontendVersion: version, AutomaticRollback: automaticRollback, Notes: notes}}
 	for _, arch := range []string{"amd64", "arm64"} {
 		id, archive := "panel-linux-"+arch, "nginxpanel_"+version+"_linux_"+arch+".tar.gz"
@@ -253,7 +250,7 @@ func Publish(ctx context.Context, in PublishInput) (PublicationResult, error) {
 	if spec.Commit != in.Commit || m.Schema != Schema || m.Repository != in.Repository || m.Version != in.Version || !validVersion(m.FrontendVersion) || !ValidNotes(m.Notes) || strings.TrimSpace(m.Notes) == "" || m.APIMajor != 1 || m.DatabaseSchema != databaseSchema || m.MinimumAgentProtocol != protocol.Agent || m.MinimumLauncher != LauncherVersion || m.CreatedAt <= 0 || m.CreatedAt > now+300 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 || len(m.Assets) != 0 || len(m.Images) != 0 || (len(spec.Packages) != 2 && len(spec.Packages) != 0) {
 		return PublicationResult{}, errors.New("发布清单身份、有效期、协议或回滚条件不满足")
 	}
-	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
+	if !ValidChannel(m.Version, m.Channel) {
 		return PublicationResult{}, errors.New("发布渠道与版本不一致")
 	}
 	stage, err := os.MkdirTemp(filepath.Dir(in.Output), ".publish-*")

@@ -21,10 +21,11 @@ const (
 	maxDownloadBytes = 512 << 20
 )
 
-// Two fixed metadata slots isolate core and Nginx release checks. Credentials are never stored;
+// Four fixed metadata slots isolate the core/Nginx and stable/Beta checks. Credentials are never stored;
 // Key binds the slot to the local trust bytes, endpoint and credential identity.
 type onlineCache struct {
 	imageChannel bool
+	beta         bool
 	Schema       int             `json:"schema"`
 	Key          string          `json:"key"`
 	ETag         string          `json:"etag"`
@@ -90,17 +91,21 @@ func lockOnline() (*os.File, error) {
 	return f, nil // Closing the descriptor also releases the flock.
 }
 
-func cacheName(imageChannel bool) string {
+func cacheName(imageChannel, beta bool) string {
+	name := "cache"
 	if imageChannel {
-		return "cache-nginx.json"
+		name += "-nginx"
 	}
-	return "cache.json"
+	if beta {
+		name += "-beta"
+	}
+	return name + ".json"
 }
 
-func readOnlineCache(imageChannel bool) (onlineCache, error) {
-	raw, err := readRoot(filepath.Join(DownloadStore, cacheName(imageChannel)), maxCacheBytes)
+func readOnlineCache(imageChannel, beta bool) (onlineCache, error) {
+	raw, err := readRoot(filepath.Join(DownloadStore, cacheName(imageChannel, beta)), maxCacheBytes)
 	if os.IsNotExist(err) {
-		return onlineCache{Schema: Schema, imageChannel: imageChannel}, nil
+		return onlineCache{Schema: Schema, imageChannel: imageChannel, beta: beta}, nil
 	}
 	if err != nil {
 		return onlineCache{}, err
@@ -119,7 +124,7 @@ func readOnlineCache(imageChannel bool) (onlineCache, error) {
 		(len(cache.Manifest) == 0) != (len(cache.Signature) == 0) {
 		return onlineCache{}, errors.New("在线发行缓存结构或期限无效，须由本机管理员检查")
 	}
-	cache.imageChannel = imageChannel
+	cache.imageChannel, cache.beta = imageChannel, beta
 	return cache, nil
 }
 
@@ -156,7 +161,7 @@ func writeOnlineCache(cache onlineCache) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	if err := os.Rename(f.Name(), filepath.Join(DownloadStore, cacheName(cache.imageChannel))); err != nil {
+	if err := os.Rename(f.Name(), filepath.Join(DownloadStore, cacheName(cache.imageChannel, cache.beta))); err != nil {
 		return err
 	}
 	return syncDir(DownloadStore)
@@ -192,7 +197,7 @@ func downloadUsage() (int64, int, int, error) {
 			groups++
 		} else {
 			if parent == DownloadStore {
-				if entry.Name() != "cache.json" && entry.Name() != "cache-nginx.json" && entry.Name() != ".online.lock" && !strings.HasPrefix(entry.Name(), ".cache-") {
+				if entry.Name() != "cache.json" && entry.Name() != "cache-nginx.json" && entry.Name() != "cache-beta.json" && entry.Name() != "cache-nginx-beta.json" && entry.Name() != ".online.lock" && !strings.HasPrefix(entry.Name(), ".cache-") {
 					return errors.New("在线发行缓存出现未知文件")
 				}
 			} else if filepath.Dir(parent) != DownloadStore {

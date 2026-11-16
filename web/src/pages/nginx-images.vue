@@ -13,6 +13,10 @@
 </route>
 <script setup lang="ts">
 import TaskLogButton from "../components/TaskLogButton.vue";
+import {
+  updateChannels,
+  useUpdateChannel,
+} from "../composables/update-channel";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -42,9 +46,16 @@ const api = useNodeAPI(),
   route = useRoute(),
   session = useSession(),
   { run, busy } = useAction();
+const {
+  channel,
+  prerelease,
+  ready: channelReady,
+  saving: savingChannel,
+  loadChannel,
+  saveChannel,
+} = useUpdateChannel(api);
 let keyFor = useIdempotency();
 const allowDowntime = ref(false),
-  prerelease = ref(false),
   lastID = ref("");
 const preparations = ref<ComponentTask[]>([]),
   tasks = ref<ImageUpgradeTask[]>([]),
@@ -99,6 +110,7 @@ const prepared = computed(() =>
         task.action === "prepare" &&
         task.state === "succeeded" &&
         task.result?.runtime_ready &&
+        task.result.input.prerelease === prerelease.value &&
         containsNginxImage(task) &&
         !!release &&
         release.expires_at * 1000 > Date.now()
@@ -266,6 +278,7 @@ async function load() {
     const [sources, items] = await Promise.all([
       api.componentTasks(controller.signal),
       api.nginxImageUpgrades(controller.signal),
+      loadChannel(),
     ]);
     preparations.value = sources;
     tasks.value = items;
@@ -333,13 +346,25 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
         <NButton
           type="primary"
           :loading="busy || active"
-          :disabled="!canWrite || active"
+          :disabled="!canWrite || active || savingChannel || !channelReady"
           @click="check"
           >{{ active ? "正在处理" : "检查更新" }}</NButton
-        ><NCheckbox v-model:checked="prerelease" :disabled="busy || active"
-          >包含预览版本</NCheckbox
         >
+        <NSelect
+          :value="channel"
+          :options="updateChannels"
+          aria-label="更新通道"
+          style="width: 150px"
+          :loading="savingChannel"
+          :disabled="
+            busy || active || savingChannel || !channelReady || !canWrite
+          "
+          @update:value="(value) => run(() => saveChannel(value))"
+        />
       </div>
+      <p v-if="channel === 'beta'" class="muted">
+        Beta 版本用于提前体验新功能，可能存在尚未修复的问题。
+      </p>
       <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
       <div v-if="last" class="button-row">
         <NTag

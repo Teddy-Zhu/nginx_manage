@@ -3487,6 +3487,24 @@ func (e SystemVersionRuntime) Valid() bool {
 	}
 }
 
+// Defines values for UpdateChannelChannel.
+const (
+	Beta   UpdateChannelChannel = "beta"
+	Stable UpdateChannelChannel = "stable"
+)
+
+// Valid indicates whether the value is a known member of the UpdateChannelChannel enum.
+func (e UpdateChannelChannel) Valid() bool {
+	switch e {
+	case Beta:
+		return true
+	case Stable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WAFConfigRateUnit.
 const (
 	WAFConfigRateUnitRm WAFConfigRateUnit = "r/m"
@@ -8530,6 +8548,14 @@ type Tree struct {
 	WafPolicies []WAFPolicy `json:"waf_policies"`
 }
 
+// UpdateChannel defines model for UpdateChannel.
+type UpdateChannel struct {
+	Channel UpdateChannelChannel `json:"channel"`
+}
+
+// UpdateChannelChannel defines model for UpdateChannel.Channel.
+type UpdateChannelChannel string
+
 // WAFConfig defines model for WAFConfig.
 type WAFConfig struct {
 	// BodySize 空值继承；零表示不限制。
@@ -8870,6 +8896,12 @@ type CreateComponentTaskParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// SetUpdateChannelParams defines parameters for SetUpdateChannel.
+type SetUpdateChannelParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
 // CreateCredentialParams defines parameters for CreateCredential.
@@ -9672,6 +9704,9 @@ type CreateNginxSwitchJSONRequestBody = NginxSwitchCreateInput
 // CreateComponentTaskJSONRequestBody defines body for CreateComponentTask for application/json ContentType.
 type CreateComponentTaskJSONRequestBody = ComponentCreateInput
 
+// SetUpdateChannelJSONRequestBody defines body for SetUpdateChannel for application/json ContentType.
+type SetUpdateChannelJSONRequestBody = UpdateChannel
+
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
 type CreateCredentialJSONRequestBody = CredentialInput
 
@@ -10239,6 +10274,12 @@ type ServerInterface interface {
 
 	// (POST /components/tasks)
 	CreateComponentTask(w http.ResponseWriter, r *http.Request, params CreateComponentTaskParams)
+
+	// (GET /components/update-channel)
+	GetUpdateChannel(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /components/update-channel)
+	SetUpdateChannel(w http.ResponseWriter, r *http.Request, params SetUpdateChannelParams)
 
 	// (GET /credentials)
 	ListCredentials(w http.ResponseWriter, r *http.Request)
@@ -13091,6 +13132,61 @@ func (siw *ServerInterfaceWrapper) CreateComponentTask(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateComponentTask(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUpdateChannel operation middleware
+func (siw *ServerInterfaceWrapper) GetUpdateChannel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUpdateChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetUpdateChannel operation middleware
+func (siw *ServerInterfaceWrapper) SetUpdateChannel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetUpdateChannelParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetUpdateChannel(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20382,6 +20478,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers/{id}/logs", wrapper.GetDockerContainerLogs)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components", wrapper.GetComponents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/images/pull", wrapper.CreateComponentImagePull)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/update-channel", wrapper.GetUpdateChannel)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/update-channel", wrapper.SetUpdateChannel)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/tasks", wrapper.ListComponentTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/tasks", wrapper.CreateComponentTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations", wrapper.ListMigrations)

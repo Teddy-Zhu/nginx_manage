@@ -11,7 +11,7 @@
 </route>
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { NAlert, NButton, NCheckbox, NEmpty, NTag } from "naive-ui";
+import { NAlert, NButton, NSelect, NEmpty, NTag } from "naive-ui";
 import {
   useNodeAPI,
   type ComponentCreateInput,
@@ -24,12 +24,23 @@ import { inspectTask } from "../stores/operation";
 import { taskStates } from "../utils/tasks";
 import { randomUUID } from "../utils/crypto";
 import TaskLogButton from "../components/TaskLogButton.vue";
+import {
+  updateChannels,
+  useUpdateChannel,
+} from "../composables/update-channel";
 const api = useNodeAPI(),
   session = useSession(),
   { run, busy } = useAction();
+const {
+  channel,
+  prerelease,
+  ready: channelReady,
+  saving: savingChannel,
+  loadChannel,
+  saveChannel,
+} = useUpdateChannel(api);
 const tasks = ref<ComponentTask[]>([]),
   version = ref(""),
-  prerelease = ref(false),
   lastID = ref("");
 const permitted = computed(
   () =>
@@ -91,6 +102,7 @@ async function load() {
     const [items, current] = await Promise.all([
       api.componentTasks(),
       api.systemVersion(),
+      loadChannel(),
     ]);
     tasks.value = items;
     version.value = current.version;
@@ -129,7 +141,7 @@ async function download() {
     input: {
       action: "prepare",
       tag: r.tag,
-      prerelease: prerelease.value,
+      prerelease: t.result!.input.prerelease,
       assets: r.selected,
       plan_id: r.plan_id,
       manifest_sha256: r.manifest_sha256,
@@ -179,13 +191,25 @@ onMounted(load);
         <NButton
           type="primary"
           :loading="busy || active"
-          :disabled="!permitted || active"
+          :disabled="!permitted || active || savingChannel || !channelReady"
           @click="check"
           >{{ active ? "正在处理" : "检查更新" }}</NButton
-        ><NCheckbox v-model:checked="prerelease" :disabled="busy || active"
-          >包含预览版本</NCheckbox
         >
+        <NSelect
+          :value="channel"
+          :options="updateChannels"
+          aria-label="更新通道"
+          style="width: 150px"
+          :loading="savingChannel"
+          :disabled="
+            busy || active || savingChannel || !channelReady || !permitted
+          "
+          @update:value="(value) => run(() => saveChannel(value))"
+        />
       </div>
+      <p v-if="channel === 'beta'" class="muted">
+        Beta 版本用于提前体验新功能，可能存在尚未修复的问题。
+      </p>
       <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
       <div v-if="last" class="button-row">
         <NTag
@@ -202,7 +226,12 @@ onMounted(load);
     </section>
     <section v-if="release" class="panel page-stack">
       <div class="section-heading">
-        <h3>可用版本 {{ release.version }}</h3>
+        <h3>
+          可用版本 {{ release.version }}
+          <NTag v-if="release.channel === 'beta'" type="warning" size="small"
+            >Beta</NTag
+          >
+        </h3>
         <NTag v-if="prepared" type="success">已下载</NTag>
       </div>
       <p v-if="release.notes">{{ release.notes }}</p>

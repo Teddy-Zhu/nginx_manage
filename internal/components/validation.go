@@ -44,7 +44,7 @@ func (out Operation) Validate(req Request) error {
 		}
 	}
 	if a := out.Announcement; a != nil {
-		if a.Validate() != nil || a.Receiver.APIMajor != 1 || a.ReceiverCompatible || out.State != "failed" || out.ErrorCode != "COMPONENT_RECEIVER_INCOMPATIBLE" || req.Input.Action == "pull" || req.Input.OfflineID != "" || req.Input.Tag != "" && a.Tag != req.Input.Tag || a.Channel == "prerelease" && !req.Input.Prerelease || a.ExpiresAt <= out.CreatedAt || req.Input.ManifestSHA256 != "" && a.ManifestSHA256 != req.Input.ManifestSHA256 || req.Input.TrustSHA256 != "" && a.TrustSHA256 != req.Input.TrustSHA256 {
+		if a.Validate() != nil || a.Receiver.APIMajor != 1 || a.ReceiverCompatible || out.State != "failed" || out.ErrorCode != "COMPONENT_RECEIVER_INCOMPATIBLE" || req.Input.Action == "pull" || req.Input.OfflineID != "" || req.Input.Tag != "" && a.Tag != req.Input.Tag || a.Channel == "beta" && !req.Input.Prerelease || a.ExpiresAt <= out.CreatedAt || req.Input.ManifestSHA256 != "" && a.ManifestSHA256 != req.Input.ManifestSHA256 || req.Input.TrustSHA256 != "" && a.TrustSHA256 != req.Input.TrustSHA256 {
 			return errors.New("组件失败结果的已验签说明不匹配")
 		}
 	}
@@ -142,7 +142,7 @@ func (out Operation) Validate(req Request) error {
 	} else if out.Stage != "checked" {
 		return errors.New("组件检查状态无效")
 	}
-	if r.Channel != "stable" && (r.Channel != "prerelease" || !req.Input.Prerelease) {
+	if !releases.ValidChannel(r.Version, r.Channel) || r.Channel == "beta" && !req.Input.Prerelease {
 		return errors.New("组件发行渠道不匹配")
 	}
 	if strings.ContainsAny(r.Repository, "\r\n\x00") {

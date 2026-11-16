@@ -27,6 +27,35 @@ func (s *Server) GetComponents(w http.ResponseWriter, r *http.Request) {
 	}
 	s.ok(w, r, out)
 }
+func (s *Server) GetUpdateChannel(w http.ResponseWriter, r *http.Request) {
+	_, ok := s.authorize(w, r, "read", "components.manage")
+	if !ok || !s.componentsReady(w, r) {
+		return
+	}
+	out, err := s.Components.GetUpdateChannel(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}
+func (s *Server) SetUpdateChannel(w http.ResponseWriter, r *http.Request, params apigen.SetUpdateChannelParams) {
+	p, ok := s.authorize(w, r, "components.manage", "system.write")
+	if !ok || !s.componentsReady(w, r) {
+		return
+	}
+	var in components.UpdateChannel
+	if err := decodeLimit(w, r, &in, 1024); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out, err := s.Components.SetUpdateChannel(r.Context(), p, in)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
+}
 func (s *Server) ListComponentTasks(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.componentsReady(w, r) {

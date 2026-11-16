@@ -333,7 +333,7 @@ func verifyAt(in Input, now int64) (*Verified, error) {
 	if m.Schema != Schema || m.Repository != publisher.trust.Repository || !validVersion(m.Version) || requirements.Validate() != nil || !ValidNotes(m.Notes) || m.CreatedAt > now+300 || m.CreatedAt <= 0 || m.ExpiresAt <= now || m.ExpiresAt <= m.CreatedAt || m.ExpiresAt-m.CreatedAt > 2*366*86400 {
 		return nil, errors.New("发行清单身份、有效期或发行要求无效")
 	}
-	if m.Channel != "stable" && m.Channel != "prerelease" || m.Channel == "prerelease" && !in.AllowPrerelease || m.Channel == "stable" && strings.Contains(strings.Split(m.Version, "+")[0], "-") {
+	if !ValidChannel(m.Version, m.Channel) || m.Channel == "beta" && !in.AllowPrerelease {
 		return nil, errors.New("发行渠道或预发布授权无效")
 	}
 	if in.Host.OS != "linux" || !slices.Contains([]string{"amd64", "arm64"}, in.Host.Architecture) || !identifier.MatchString(in.Host.Distribution) || !text(in.Host.Version, 64) {

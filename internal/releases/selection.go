@@ -12,8 +12,8 @@ import (
 var ErrReleaseChanged = errors.New("发行材料或本机信任已变化，请重新检查")
 
 func ValidateOnlineSelection(in OnlineInput) error {
-	if in.Tag != "" && (!strings.HasPrefix(in.Tag, in.tagPrefix()) || !validVersion(strings.TrimPrefix(in.Tag, in.tagPrefix()))) || in.AllowPrerelease && in.Tag == "" {
-		return errors.New("核心标签须为 v 开头、Nginx 标签须为 nginx-v 开头的 SemVer；预发布须显式指定标签")
+	if in.Tag != "" && (!strings.HasPrefix(in.Tag, in.tagPrefix()) || !validVersion(strings.TrimPrefix(in.Tag, in.tagPrefix()))) {
+		return errors.New("核心标签须为 v 开头、Nginx 标签须为 nginx-v 开头的 SemVer")
 	}
 	if err := selectors(in.Assets, in.Components); err != nil {
 		return err

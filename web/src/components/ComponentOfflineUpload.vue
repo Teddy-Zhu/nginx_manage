@@ -389,7 +389,7 @@ onUnmounted(() => {
       />
     </NFormItem>
     <NCheckbox v-model:checked="prerelease" :disabled="busy || !!pendingStart"
-      >允许预发布版本</NCheckbox
+      >允许 Beta 版本</NCheckbox
     >
     <NButton
       :loading="busy && !!pendingStart"

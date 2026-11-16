@@ -6,6 +6,22 @@ import (
 	"strings"
 )
 
+// VersionChannel is shared by publication and verification. Development builds
+// always end in -dev; other SemVer prereleases also belong to the Beta channel.
+func VersionChannel(version string) string {
+	if !validVersion(version) {
+		return ""
+	}
+	if strings.HasSuffix(version, "-dev") || strings.Contains(strings.Split(version, "+")[0], "-") {
+		return "beta"
+	}
+	return "stable"
+}
+
+func ValidChannel(version, channel string) bool {
+	return (channel == "stable" || channel == "beta") && channel == VersionChannel(version)
+}
+
 // SelectionTag keeps component releases out of the core's latest release.
 func SelectionTag(version string, selected []string) string {
 	if len(selected) == 1 && selected[0] == "image-nginx" {
@@ -33,21 +49,21 @@ func (in OnlineInput) tagPrefix() string {
 }
 
 func (in OnlineInput) metadataEndpoint() string {
-	if in.Tag == "" && in.imageChannel() {
+	if in.Tag == "" && (in.imageChannel() || in.AllowPrerelease) {
 		return "?per_page=100"
 	}
 	return tagEndpoint(in.Tag)
 }
 
-// GitHub's latest endpoint is reserved for the core. Image discovery uses one
-// bounded page; older component releases remain available by explicit tag.
+// GitHub's latest endpoint is reserved for the stable core. Beta and image
+// discovery use one bounded page; older releases remain available by exact tag.
 func discoverRelease(raw []byte, in OnlineInput) (githubRelease, error) {
-	if in.Tag != "" || !in.imageChannel() {
+	if in.Tag != "" || !in.imageChannel() && !in.AllowPrerelease {
 		return parseGithubRelease(raw, in)
 	}
 	var candidates []json.RawMessage
 	if err := decodeJSON(raw, &candidates, false); err != nil || len(candidates) > 100 {
-		return githubRelease{}, errors.New("GitHub 组件发行列表无效或超过 100 项")
+		return githubRelease{}, errors.New("GitHub 发行列表无效或超过 100 项")
 	}
 	var selected githubRelease
 	for _, candidate := range candidates {
@@ -55,7 +71,7 @@ func discoverRelease(raw []byte, in OnlineInput) (githubRelease, error) {
 		if err := json.Unmarshal(candidate, &identity); err != nil {
 			return githubRelease{}, errors.New("GitHub 组件发行元数据无效")
 		}
-		if identity.Draft || identity.Prerelease || !strings.HasPrefix(identity.Tag, in.tagPrefix()) {
+		if identity.Draft || identity.Prerelease != in.AllowPrerelease || !strings.HasPrefix(identity.Tag, in.tagPrefix()) {
 			continue
 		}
 		release, err := parseGithubRelease(candidate, in)
@@ -67,7 +83,11 @@ func discoverRelease(raw []byte, in OnlineInput) (githubRelease, error) {
 		}
 	}
 	if selected.ID == 0 {
-		return githubRelease{}, errors.New("最近 100 个发行中没有 Nginx 稳定版，请指定 nginx-v 开头的发行标签")
+		channel := "稳定版"
+		if in.AllowPrerelease {
+			channel = "Beta"
+		}
+		return githubRelease{}, errors.New("最近 100 个发行中没有所选组件的" + channel + "，可稍后重试或指定发行标签")
 	}
 	return selected, nil
 }

@@ -22,7 +22,8 @@ func TestIndependentReleaseSelections(t *testing.T) {
 		{"wrong nginx channel", OnlineInput{Components: []string{"nginx"}, Tag: "v2.0.0"}, "", false},
 		{"mixed components", OnlineInput{Components: []string{"panel", "nginx"}}, "", false},
 		{"mixed assets", OnlineInput{Assets: []string{"panel-linux-amd64", "image-nginx"}}, "", false},
-		{"implicit prerelease", OnlineInput{Components: []string{"nginx"}, AllowPrerelease: true}, "", false},
+		{"latest nginx beta", OnlineInput{Components: []string{"nginx"}, AllowPrerelease: true}, "?per_page=100", true},
+		{"latest core beta", OnlineInput{Components: []string{"panel"}, AllowPrerelease: true}, "?per_page=100", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := ValidateOnlineSelection(test.in)
@@ -63,6 +64,47 @@ func TestImageDiscoveryDoesNotUseCoreLatest(t *testing.T) {
 	raw, _ = json.Marshal(preview)
 	if _, err := discoverRelease(raw, in); err != nil {
 		t.Fatalf("explicit component prerelease: %v", err)
+	}
+}
+
+func TestBetaDiscoveryKeepsComponentsAndChannelsSeparate(t *testing.T) {
+	base := githubRelease{ID: 1, Tag: "v2.0.1-123.1-dev", Prerelease: true, PublishedAt: time.Now().UTC().Add(-time.Hour), Assets: []githubAsset{
+		{ID: 1, Name: "release-manifest.json", State: "uploaded", Size: 1},
+		{ID: 2, Name: "release-manifest.sig", State: "uploaded", Size: 1},
+	}}
+	stable, nginx, draft, newer := base, base, base, base
+	stable.ID, stable.Tag, stable.Prerelease = 2, "v2.0.2", false
+	nginx.ID, nginx.Tag = 3, "nginx-v1.30.6-123.1-dev"
+	draft.ID, draft.Draft = 4, true
+	newer.ID, newer.Tag, newer.PublishedAt = 5, "v2.0.1-124.1-dev", base.PublishedAt.Add(time.Minute)
+	raw, _ := json.Marshal([]githubRelease{stable, nginx, base, draft, newer})
+	for _, component := range []string{"panel", "nginx"} {
+		in := OnlineInput{Components: []string{component}, AllowPrerelease: true}
+		got, err := discoverRelease(raw, in)
+		expected := newer.Tag
+		if component == "nginx" {
+			expected = nginx.Tag
+		}
+		if err != nil || got.Tag != expected {
+			t.Fatalf("%s Beta discovery: %q, %v", component, got.Tag, err)
+		}
+	}
+	raw, _ = json.Marshal([]githubRelease{stable, nginx, draft})
+	if _, err := discoverRelease(raw, OnlineInput{Components: []string{"panel"}, AllowPrerelease: true}); err == nil {
+		t.Fatal("Beta must not fall back to stable, another component or a draft")
+	}
+	raw, _ = json.Marshal(base)
+	if _, err := discoverRelease(raw, OnlineInput{Components: []string{"panel"}, Tag: base.Tag}); err == nil {
+		t.Fatal("explicit Beta tag requires Beta consent")
+	}
+	base.Prerelease = false
+	raw, _ = json.Marshal(base)
+	if _, err := discoverRelease(raw, OnlineInput{Components: []string{"panel"}, Tag: base.Tag, AllowPrerelease: true}); err == nil {
+		t.Fatal("GitHub stable flag must not override a -dev version")
+	}
+	publication, err := NewPublication("validation/nginxpanel", newer.Tag[1:], strings.Repeat("a", 40), "Beta", false)
+	if err != nil || publication.Manifest.Channel != "beta" || ValidChannel(publication.Manifest.Version, "stable") {
+		t.Fatalf("development publication channel is incorrect: %v", err)
 	}
 }
 

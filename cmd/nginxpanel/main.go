@@ -212,14 +212,21 @@ func run() error {
 	releaseAssets := flags.String("release-assets", "", "root-owned directory of offline release archives")
 	releaseSelect := flags.String("release-select", "", "explicit comma-separated asset IDs")
 	releasePlan := flags.String("release-plan", "", "exact immutable prepared release plan ID")
-	releasePrerelease := flags.Bool("release-prerelease", false, "permit authenticated prerelease assets")
-	releaseTag := flags.String("release-tag", "", "exact v-prefixed GitHub release tag; empty selects latest stable")
+	releasePrerelease := flags.Bool("release-prerelease", false, "permit authenticated Beta assets")
+	releaseChannel := flags.String("release-channel", "", "update channel: stable or beta")
+	releaseTag := flags.String("release-tag", "", "exact core v- or Nginx nginx-v-prefixed GitHub release tag; empty selects the chosen channel")
 	releaseToken := flags.String("release-token-file", "", "root-owned 0600 GitHub read-only token file; public releases need no token")
 	backupFile := flags.String("backup-file", "", "encrypted disaster backup for offline inspection or preparation")
 	restoreOperation := flags.String("restore-operation", "", "offline recovery preparation UUID")
 	backupInputFD := flags.Int("backup-input-fd", -1, "fixed inherited ciphertext descriptor for the non-root helper")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
+	}
+	if *releaseChannel != "" {
+		if *releaseChannel != "stable" && *releaseChannel != "beta" || *releaseChannel == "stable" && *releasePrerelease {
+			return errors.New("release-channel must be stable or beta and must not conflict with release-prerelease")
+		}
+		*releasePrerelease = *releaseChannel == "beta"
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
@@ -418,7 +425,7 @@ func run() error {
 	}
 	var invalidFlag string
 	flags.Visit(func(f *flag.Flag) {
-		if allowed, ok := runtimeFlags[command]; ok && !allowed[f.Name] {
+		if allowed, ok := runtimeFlags[command]; ok && !allowed[f.Name] && !(f.Name == "release-channel" && allowed["release-prerelease"]) {
 			invalidFlag = f.Name
 		}
 		if f.Name == "panel-runtime" && command != "serve" && command != "core" {
