@@ -27,6 +27,10 @@ func TestImageApprovalDaemonIdentity(t *testing.T) {
 	}{
 		{"classic config", config, true, nil},
 		{"containerd index", index, true, nil},
+		{"Docker Hub signed image", config, true, func(a *ImageApproval) { a.Image.Reference = "docker.io/team/nginxpanel-nginx@" + index }},
+		{"unapproved registry", config, false, func(a *ImageApproval) { a.Image.Reference = "registry.example/team/nginx@" + index }},
+		{"Docker Hub hostname spoof", config, false, func(a *ImageApproval) { a.Image.Reference = "docker.io.example/team/nginx@" + index }},
+		{"tag cannot replace digest", config, false, func(a *ImageApproval) { a.Image.Reference = "docker.io/team/nginxpanel-nginx:v1.0.0" }},
 		{"platform is not the bound target", platform, false, nil},
 		{"unapproved content", "sha256:" + strings.Repeat("f", 64), false, nil},
 		{"missing identity", "", false, nil},
@@ -38,7 +42,7 @@ func TestImageApprovalDaemonIdentity(t *testing.T) {
 			if test.mutate != nil {
 				test.mutate(&candidate)
 			}
-			err := candidate.Validate("nginx", reference, test.id, launcher)
+			err := candidate.Validate("nginx", candidate.Image.Reference, test.id, launcher)
 			if (err == nil) != test.accepted {
 				t.Fatalf("accepted=%v, want %v: %v", err == nil, test.accepted, err)
 			}

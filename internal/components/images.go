@@ -53,14 +53,7 @@ func imageSelection(id string) (token, component string, panelStaging bool, ok b
 	return token, "nginx", false, ok
 }
 func (i Image) valid(repository string) bool {
-	path := "nginx"
-	if i.ID == "panel-launcher" {
-		path = "panel"
-	} else if i.ID != "nginx" {
-		return false
-	}
-	prefix := "ghcr.io/" + strings.ToLower(repository) + "/" + path + "@sha256:"
-	return i.Architecture == runtime.GOARCH && strings.HasPrefix(i.Reference, prefix) && digest(strings.TrimPrefix(i.Reference, prefix)) && strings.HasPrefix(i.PlatformDigest, "sha256:") && digest(strings.TrimPrefix(i.PlatformDigest, "sha256:")) && strings.HasPrefix(i.ConfigDigest, "sha256:") && digest(strings.TrimPrefix(i.ConfigDigest, "sha256:"))
+	return i.Architecture == runtime.GOARCH && releases.ValidImageReference(repository, i.ID, i.Reference) && strings.HasPrefix(i.PlatformDigest, "sha256:") && digest(strings.TrimPrefix(i.PlatformDigest, "sha256:")) && strings.HasPrefix(i.ConfigDigest, "sha256:") && digest(strings.TrimPrefix(i.ConfigDigest, "sha256:"))
 }
 func (s *Service) validateImageParent(ctx context.Context, tx *sql.Tx, principal string, in CreateInput, now int64) error {
 	var state string

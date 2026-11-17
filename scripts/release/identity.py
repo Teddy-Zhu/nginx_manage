@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pin tagged releases or unique, tag-free development builds to their source."""
+"""Pin release versions to source, with independent tag-free Nginx versions."""
 import argparse
 import json
 import os
@@ -8,8 +8,10 @@ import re
 import subprocess
 
 
-def identity(component, tag, version, run, attempt, reuse_version=False):
+def identity(component, tag, version, run, attempt, reuse_version=False, channel=""):
     prefix = "nginx-v" if component == "nginx" else "v"
+    if channel and (component != "nginx" or tag or channel not in ("stable", "dev")):
+        raise ValueError("independent release channels require an untagged Nginx build")
     create_tag = not tag
     if tag and reuse_version:
         raise ValueError("a tagged release cannot reuse a generated version")
@@ -18,9 +20,14 @@ def identity(component, tag, version, run, attempt, reuse_version=False):
             raise ValueError("release tag has the wrong component prefix")
         version = tag[len(prefix):]
     else:
-        if not version.endswith("-dev") or "+" in version:
+        if channel == "stable":
+            if "-" in version.split("+", 1)[0]:
+                raise ValueError("stable component versions cannot contain a prerelease suffix")
+        elif channel == "dev" and not version.endswith("-dev"):
+            version += "-dev"
+        if channel != "stable" and (not version.endswith("-dev") or "+" in version):
             raise ValueError("tag-free builds require a base version ending in -dev, without build metadata")
-        if not reuse_version:
+        if channel != "stable" and not reuse_version:
             if not re.fullmatch(r"[1-9][0-9]*", run) or not re.fullmatch(r"[1-9][0-9]*", attempt):
                 raise ValueError("development builds require the GitHub run ID and attempt")
             version = version[:-4] + f"-{run}.{attempt}-dev"
@@ -41,10 +48,11 @@ def main():
     p.add_argument("--component", choices=["panel", "nginx"], required=True)
     p.add_argument("--tag", default="")
     p.add_argument("--version", default="")
+    p.add_argument("--channel", choices=("stable", "dev"), default="", help="independent Nginx release channel")
     p.add_argument("--reuse-version", action="store_true", help="reuse a pinned development build version during publication")
     args = p.parse_args()
     version, tag, create_tag = identity(args.component, args.tag, args.version,
-                                        os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", ""), args.reuse_version)
+                                        os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", ""), args.reuse_version, args.channel)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if not create_tag:
         target = subprocess.check_output(["git", "rev-parse", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
@@ -57,11 +65,12 @@ def main():
             raise ValueError("tagged releases require committed notes and policy")
     else:
         # Keep generated approval inputs outside the source and package tree.
-        # No automatic rollback is asserted for development builds.
+        # Independent component builds do not need committed version-tag files.
         root = Path(os.environ["RUNNER_TEMP"]) / f"release-{args.component}"
         root.mkdir(exist_ok=True)
         notes, policy = root / "notes.md", root / "policy.json"
-        notes.write_text(f"Beta {version}\n\n开发预览版本，可能包含尚未修复的问题。\n源码提交：{commit}\n", encoding="utf-8")
+        description = "Nginx 组件稳定版" if args.channel == "stable" else "Beta 开发预览版本"
+        notes.write_text(f"{description} {version}\n\n源码提交：{commit}\n", encoding="utf-8")
         policy.write_text(json.dumps({"version": version, "automatic_rollback": False}) + "\n", encoding="utf-8")
     values = {"version": version, "commit": commit, "tag": tag,
               "create_tag": str(create_tag).lower(), "notes": str(notes), "policy": str(policy)}

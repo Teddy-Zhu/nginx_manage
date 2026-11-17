@@ -35,6 +35,12 @@ func repositoryDigest(value string) string {
 	if tag := strings.LastIndex(name, ":"); tag > strings.LastIndex(name, "/") {
 		name = name[:tag]
 	}
+	// Docker may omit its default registry in RepoDigests even when the signed
+	// reference explicitly uses docker.io. Keep other registries distinct.
+	name = strings.TrimPrefix(strings.TrimPrefix(name, "docker.io/"), "index.docker.io/")
+	if !strings.Contains(name, "/") {
+		name = "library/" + name
+	}
 	return name + "@" + parts[1]
 }
 

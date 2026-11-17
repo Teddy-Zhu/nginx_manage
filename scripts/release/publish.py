@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish a complete signed directory through a new GitHub draft release."""
+"""Publish a signed directory as a stable release or a Beta prerelease."""
 import argparse
 import hashlib
 import json
@@ -9,13 +9,20 @@ import subprocess
 import tempfile
 
 
-def api(endpoint, body=None):
-    command = ["gh", "api", endpoint]
-    data = None
-    if body is not None:
-        command += ["--method", "PATCH", "--input", "-"]
-        data = json.dumps(body).encode()
-    return json.loads(subprocess.check_output(command, input=data))
+def api(endpoint):
+    return json.loads(subprocess.check_output(["gh", "api", endpoint]))
+
+
+def require_new_release(base, tag):
+    # The tag endpoint only returns published releases; the paginated list also
+    # includes drafts left by an earlier upload failure for this publisher.
+    pages = json.loads(subprocess.check_output([
+        "gh", "api", base + "/releases?per_page=100", "--paginate", "--slurp",
+    ]))
+    for page in pages:
+        for release in page:
+            if release["tag_name"] == tag:
+                raise ValueError(f"release or recovery draft already exists (id={release['id']}); refusing overwrite")
 
 
 def stage_bootstrap(directory, repository, tag):
@@ -62,7 +69,7 @@ def main():
     p.add_argument("--tag", required=True)
     p.add_argument("--commit", required=True)
     p.add_argument("--directory", required=True, type=Path)
-    p.add_argument("--create-tag", action="store_true", help="create a missing tag for a -dev Beta build")
+    p.add_argument("--create-tag", action="store_true", help="create a source tag for an independent component or -dev core release")
     args = p.parse_args()
     manifest = json.loads((args.directory / "release-manifest.json").read_bytes())
     image_only = not manifest["assets"] and len(manifest["images"]) == 1 and manifest["images"][0]["id"] == "nginx"
@@ -71,16 +78,12 @@ def main():
         raise ValueError("release identity does not match signed directory")
     if manifest["channel"] not in ("stable", "beta"):
         raise ValueError("unsupported release channel")
-    if args.create_tag and (manifest["channel"] != "beta" or not manifest["version"].endswith("-dev")):
-        raise ValueError("automatic source tags are only allowed for -dev Beta releases")
+    if args.create_tag and not image_only and (manifest["channel"] != "beta" or not manifest["version"].endswith("-dev")):
+        raise ValueError("automatic core source tags are only allowed for -dev Beta releases")
     base = "repos/" + args.repository
     verify_tag(base, args.tag, args.commit, allow_missing=args.create_tag)
     endpoint = base + "/releases/tags/" + args.tag
-    prior = subprocess.run(["gh", "api", endpoint], capture_output=True, text=True)
-    if prior.returncode == 0:
-        raise ValueError("release or recovery draft already exists; refusing overwrite")
-    if "(HTTP 404)" not in prior.stderr:
-        raise RuntimeError("cannot determine whether release already exists: " + prior.stderr)
+    require_new_release(base, args.tag)
     if not image_only:
         stage_bootstrap(args.directory, args.repository, args.tag)
     files = sorted(args.directory.iterdir())
@@ -93,38 +96,34 @@ def main():
             for block in iter(lambda: reader.read(1 << 20), b""):
                 digest.update(block)
         expected[path.name] = (path.stat().st_size, "sha256:" + digest.hexdigest())
-    # Upload failure retains the draft for inspection. No clobber, deletion or
-    # automatic reuse of a partial prior publication is performed.
+    # Let gh upload all supplied assets and finish publication in one command.
+    # No clobber, deletion or automatic reuse of a prior publication is performed.
     # Use the same approved notes as the signed manifest. GitHub's editable
     # release body is never an authority for receiver-side compatibility.
+    prerelease = manifest["channel"] == "beta"
     with tempfile.TemporaryDirectory(prefix="nginxpanel-notes-") as temporary:
         notes = Path(temporary) / "notes.txt"
         notes.write_text(manifest["notes"], encoding="utf-8")
         command = ["gh", "release", "create", args.tag, *map(str, files), "--repo", args.repository,
-                   "--draft", "--target", args.commit, "--title", args.tag, "--notes-file", str(notes)]
+                   "--target", args.commit, "--title", args.tag, "--notes-file", str(notes),
+                   "--latest=false" if prerelease or image_only else "--latest=true"]
+        if prerelease:
+            command.append("--prerelease")
         if not args.create_tag:
             command.append("--verify-tag")
         subprocess.run(command, check=True)
     release = api(endpoint)
-    if release["tag_name"] != args.tag or not release["draft"] or release["target_commitish"] != args.commit:
-        raise ValueError("created draft release identity changed")
+    if release["tag_name"] != args.tag or release["draft"] or release["prerelease"] != prerelease or release["target_commitish"] != args.commit:
+        raise ValueError("published release identity or channel does not match signed directory")
     remote = release["assets"]
     if len(remote) != len(expected):
-        raise ValueError("draft release asset count does not match signed directory")
+        raise ValueError("release asset count does not match signed directory")
     seen = set()
     for item in remote:
         name = item["name"]
         if name in seen or name not in expected or item["state"] != "uploaded" or item["size"] != expected[name][0] or item.get("digest") not in (None, "", expected[name][1]):
-            raise ValueError("draft release contains missing or mismatched asset")
+            raise ValueError("release contains missing or mismatched asset")
         seen.add(name)
-    verify_tag(base, args.tag, args.commit, allow_missing=args.create_tag)
-    prerelease = manifest["channel"] == "beta"
-    published = api(base + "/releases/" + str(release["id"]), {
-        "draft": False, "prerelease": prerelease,
-        "make_latest": "false" if prerelease or image_only else "true",
-    })
-    if published["id"] != release["id"] or published["draft"] or published["prerelease"] != prerelease:
-        raise ValueError("release publication was not confirmed")
     verify_tag(base, args.tag, args.commit)
     print(f"Published {args.repository} {args.tag} ({release['id']})")
 

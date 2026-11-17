@@ -57,6 +57,11 @@ def write(path, value):
 def image_repository(repository, image):
     if image != "nginx":
         raise ValueError("unsupported image component")
+    configured = os.environ.get("NGINX_IMAGE_REPOSITORY", "")
+    if configured:
+        if not re.fullmatch(r"docker\.io/[a-z0-9]+(?:[._-][a-z0-9]+)*/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*", configured) or len(configured) > 240:
+            raise ValueError("NGINX_IMAGE_REPOSITORY must be docker.io/namespace/repository without a tag")
+        return configured
     return "ghcr.io/" + repository.lower() + "/nginx"
 
 
@@ -109,9 +114,12 @@ def build(args):
 
 
 class Redirects(urllib.request.HTTPRedirectHandler):
+    def __init__(self, hosts):
+        self.hosts = hosts
+
     def redirect_request(self, request, response, code, message, headers, url):
         target = urllib.parse.urlsplit(url)
-        if target.scheme != "https" or target.hostname not in ("ghcr.io", "pkg-containers.githubusercontent.com") or target.port not in (None, 443) or target.username or target.password or target.fragment:
+        if target.scheme != "https" or target.hostname not in self.hosts or target.port not in (None, 443) or target.username or target.password or target.fragment:
             raise ValueError("registry redirect is outside the approved HTTPS hosts")
         redirected = super().redirect_request(request, response, code, message, headers, url)
         if target.hostname != urllib.parse.urlsplit(request.full_url).hostname:
@@ -125,15 +133,27 @@ class RegistryNotFound(RuntimeError):
 
 class Registry:
     def __init__(self, repository):
-        if not repository.startswith("ghcr.io/"):
-            raise ValueError("only the approved GHCR repository is supported")
-        self.path = repository.removeprefix("ghcr.io/")
-        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), Redirects())
-        query = urllib.parse.urlencode({"service": "ghcr.io", "scope": "repository:" + self.path + ":pull"})
-        credentials = os.environ["GITHUB_ACTOR"] + ":" + os.environ["GH_TOKEN"]
-        authorization = "Basic " + base64.b64encode(credentials.encode()).decode()
-        token = decode(self.request("https://ghcr.io/token?" + query, {"Authorization": authorization}, 64 << 10))
-        self.token = token["token"]
+        host, _, self.path = repository.partition("/")
+        if host == "docker.io" and re.fullmatch(r"[a-z0-9]+(?:[._-][a-z0-9]+)*/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*", self.path):
+            self.origin, realm, service = "https://registry-1.docker.io", "https://auth.docker.io/token", "registry.docker.io"
+            username, password = os.environ.get("DOCKERHUB_USERNAME", ""), os.environ.get("DOCKERHUB_TOKEN", "")
+            hosts = {"registry-1.docker.io", "auth.docker.io", "production.cloudfront.docker.com", "production.cloudflare.docker.com",
+                     "docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com"}
+        elif host == "ghcr.io" and re.fullmatch(r"[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*/nginx", self.path):
+            self.origin, realm, service = "https://ghcr.io", "https://ghcr.io/token", "ghcr.io"
+            username, password = os.environ["GITHUB_ACTOR"], os.environ["GH_TOKEN"]
+            hosts = {"ghcr.io", "pkg-containers.githubusercontent.com"}
+        else:
+            raise ValueError("only canonical Docker Hub and project GHCR repositories are supported")
+        if bool(username) != bool(password):
+            raise ValueError("registry username and token must be provided together")
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), Redirects(hosts))
+        query = urllib.parse.urlencode({"service": service, "scope": "repository:" + self.path + ":pull"})
+        headers = {}
+        if username:
+            headers["Authorization"] = "Basic " + base64.b64encode((username + ":" + password).encode()).decode()
+        token = decode(self.request(realm + "?" + query, headers, 64 << 10))
+        self.token = token.get("token", token.get("access_token"))
         if not isinstance(self.token, str) or not self.token or len(self.token) > 32768:
             raise ValueError("registry did not return a bounded pull token")
 
@@ -162,7 +182,7 @@ class Registry:
             if not isinstance(size, int) or not 0 < size <= limit:
                 raise ValueError("invalid OCI descriptor length")
             limit = size
-        raw = self.request("https://ghcr.io/v2/" + self.path + "/" + kind + "/" + reference, headers, limit)
+        raw = self.request(self.origin + "/v2/" + self.path + "/" + kind + "/" + reference, headers, limit)
         if size is not None and len(raw) != size or DIGEST.fullmatch(reference) and "sha256:" + hashlib.sha256(raw).hexdigest() != reference:
             raise ValueError("registry metadata does not match its digest or length")
         return raw

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"nginxpanel/internal/dockerapi"
@@ -42,9 +41,8 @@ func (a ImageApproval) Validate(component, reference, imageID, launcher string) 
 		return a.validateLocal(component, reference, imageID, launcher)
 	}
 	p, f := a.Image.Platform, a.Image.Evidence
-	prefix := imageRepository(a.Repository, component) + "@"
 	launcherValid := p.LauncherProtocol == LauncherVersion && component == "nginx" && p.LauncherSHA256 == ""
-	if a.Schema != Schema || !repository.MatchString(a.Repository) || !validVersion(a.Version) || !validCommit(a.Commit) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || len(a.TrustPath) > 512 || !filepath.IsAbs(a.TrustPath) || filepath.Clean(a.TrustPath) != a.TrustPath || a.ApprovedAt <= 0 || a.ApprovedAt > time.Now().Unix()+300 || component != "nginx" || a.Image.ID != component || a.Image.Reference != reference || !strings.HasPrefix(reference, prefix) || !imageDigest(strings.TrimPrefix(reference, prefix)) || p.OS != "linux" || p.Architecture != runtime.GOARCH || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || !dockerapi.MatchesImageID(reference, p.ConfigDigest, imageID) || !launcherValid || f.Path != component+".oci.json" || !validHash(f.SHA256) || f.Size <= 0 || f.Size > MaxImageEvidenceBytes || f.Mode != 0644 {
+	if a.Schema != Schema || !repository.MatchString(a.Repository) || !validVersion(a.Version) || !validCommit(a.Commit) || !identifier.MatchString(a.KeyID) || !validHash(a.ManifestSHA256) || !validHash(a.TrustSHA256) || len(a.TrustPath) > 512 || !filepath.IsAbs(a.TrustPath) || filepath.Clean(a.TrustPath) != a.TrustPath || a.ApprovedAt <= 0 || a.ApprovedAt > time.Now().Unix()+300 || component != "nginx" || a.Image.ID != component || a.Image.Reference != reference || !ValidImageReference(a.Repository, component, reference) || p.OS != "linux" || p.Architecture != runtime.GOARCH || !imageDigest(p.Digest) || !imageDigest(p.ConfigDigest) || !dockerapi.MatchesImageID(reference, p.ConfigDigest, imageID) || !launcherValid || f.Path != component+".oci.json" || !validHash(f.SHA256) || f.Size <= 0 || f.Size > MaxImageEvidenceBytes || f.Mode != 0644 {
 		return errors.New("镜像签名批准记录与本机运行绑定不一致")
 	}
 	return nil

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -109,6 +110,17 @@ type ociManifest struct {
 func imageRepository(repo, id string) string {
 	return "ghcr.io/" + strings.ToLower(repo) + "/nginx"
 }
+
+var dockerHubRepository = regexp.MustCompile(`^docker\.io/[a-z0-9]+(?:[._-][a-z0-9]+)*/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$`)
+
+// ValidImageReference validates the registry and immutable digest of a signed
+// component reference. Docker Hub namespaces are bound by the release signature
+// and the OCI evidence still binds the original GitHub source and commit.
+func ValidImageReference(source, component, reference string) bool {
+	name, digest, ok := strings.Cut(reference, "@")
+	return ok && repository.MatchString(source) && component == "nginx" && len(name) <= 240 &&
+		(name == imageRepository(source, component) || dockerHubRepository.MatchString(name)) && imageDigest(digest)
+}
 func imageDigest(value string) bool {
 	return strings.HasPrefix(value, "sha256:") && validHash(strings.TrimPrefix(value, "sha256:"))
 }
@@ -119,7 +131,7 @@ func validateImages(m Manifest) error {
 	seen := map[string]bool{}
 	commit := ""
 	for _, image := range m.Images {
-		if image.ID != "nginx" || seen[image.ID] || image.Repository != imageRepository(m.Repository, image.ID) || image.Version != m.Version || !validCommit(image.Commit) || commit != "" && commit != image.Commit || !imageDigest(image.Digest) || len(image.Platforms) != 2 {
+		if image.ID != "nginx" || seen[image.ID] || !ValidImageReference(m.Repository, image.ID, image.Repository+"@"+image.Digest) || image.Version != m.Version || !validCommit(image.Commit) || commit != "" && commit != image.Commit || len(image.Platforms) != 2 {
 			return errors.New("镜像身份、版本、提交、摘要或平台无效")
 		}
 		seen[image.ID], commit = true, image.Commit
