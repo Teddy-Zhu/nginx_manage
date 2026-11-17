@@ -5509,6 +5509,13 @@ export interface components {
             /** Format: int64 */
             updated_at: number;
             result?: components["schemas"]["ComponentOperation"];
+            core_update?: components["schemas"]["CoreUpdateStatus"];
+        };
+        CoreUpdateStatus: {
+            current_version: string;
+            /** @enum {string} */
+            state: "available" | "current" | "older" | "unknown";
+            message?: string;
         };
         NotificationKind: {
             id: string;

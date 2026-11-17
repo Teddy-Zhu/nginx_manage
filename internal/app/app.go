@@ -294,7 +294,7 @@ func Run(ctx context.Context, o Options) error {
 	if agentClient != nil {
 		dnsService.Agent = agentClient
 	}
-	componentService := &components.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Agent: agentClient}
+	componentService := &components.Service{Version: o.Version, Maintenance: maintenanceService, DB: db, Vault: vault, Agent: agentClient}
 	installationService := &nginxinstall.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	switchService := &nginxswitch.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}
 	imageUpgradeService := &imageupdates.Service{Maintenance: maintenanceService, DB: db, Vault: vault, Components: componentService, Agent: agentClient}

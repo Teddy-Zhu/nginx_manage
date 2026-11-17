@@ -10,6 +10,10 @@
 
 两个工作流均支持推送相应标签自动触发，以及在 Actions 中手动输入已存在的确切标签。核心发行不会向 GHCR 发布组件镜像，Nginx 发行不下载核心 Release，也不编译前端。核心安装包仍在 CI 中组装随包 Nginx 镜像，供首次离线安装；核心更新只切换核心程序，不替换已安装的 Nginx。
 
+核心构建保留 `-trimpath`。amd64、arm64 原生安装包任务分别运行对应程序生成 `containers.json`，记录程序实际版本、架构和二进制 SHA-256；签名打包复用这份清单，同时核对 Go 工具链、源码提交及干净状态，不依赖 Go 在 `-trimpath` 下省略的 `-ldflags` 字段。缺少清单或运行信息不一致时停止发布。
+
+发行版本通过 `-X main.version=<版本>` 写入二进制，`nginxpanel version` 和系统版本接口均读取该值。系统更新将它与所选通道的已验签发行版本进行语义版本比较，仅更高版本提供自动更新；同版本、较旧版本和无效版本分别明确提示。Beta 构建编号、重试编号按数字顺序比较，构建元数据不影响版本先后。
+
 ## Actions 页面怎么填写
 
 进入 Actions，按发布内容选择 `Core binary release（核心程序发布）` 或 `Nginx Docker release（Nginx 镜像发布）`，点击 **Run workflow**。

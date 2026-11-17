@@ -156,6 +156,17 @@ func publicationEvidence(directory string, asset Asset, spec PublicationSpec) (m
 		if !validHash(p.BinarySHA256) || p.BinarySHA256 != binaryHash {
 			return nil, errors.New("构建来源未绑定实际面板二进制")
 		}
+		runtimeRaw, err := readPublicationFile(filepath.Join(directory, "containers.json"), 2<<20)
+		if err != nil {
+			return nil, fmt.Errorf("读取原生安装清单中的运行版本失败：%w", err)
+		}
+		var installed ContainerPackage
+		if err := strictJSON(runtimeRaw, &installed); err != nil {
+			return nil, err
+		}
+		if installed.Schema != Schema || installed.Version != asset.Version || installed.Architecture != asset.Architecture || installed.BinarySHA256 != binaryHash || installed.LauncherProtocol != LauncherVersion || len(installed.Images) != 1 || !imageDigest(installed.Images["nginx"]) {
+			return nil, errors.New("面板安装清单中的运行版本、架构、二进制散列或启动协议不一致")
+		}
 		info, err := buildinfo.ReadFile(filepath.Join(directory, "nginxpanel"))
 		if err != nil {
 			return nil, err
@@ -164,15 +175,10 @@ func publicationEvidence(directory string, asset Asset, spec PublicationSpec) (m
 		for _, setting := range info.Settings {
 			settings[setting.Key] = setting.Value
 		}
-		flags := strings.Fields(settings["-ldflags"])
-		versioned := false
-		for i, flag := range flags {
-			if flag == "-X" && i+1 < len(flags) && flags[i+1] == "main.version="+asset.Version {
-				versioned = true
-			}
-		}
-		if info.Path != "nginxpanel/cmd/nginxpanel" || info.Main.Path != "nginxpanel" || info.Main.Replace != nil || info.GoVersion != p.GoVersion || settings["GOOS"] != "linux" || settings["GOARCH"] != asset.Architecture || settings["CGO_ENABLED"] != "0" || settings["vcs.revision"] != spec.Commit || settings["vcs.modified"] != "false" || !versioned {
-			return nil, errors.New("控制平面 Go 构建信息与发行架构、版本或干净提交不一致")
+		// Go omits -ldflags with -trimpath. Each native installer instead runs
+		// the core to generate containers.json with its version and binary hash.
+		if info.Path != "nginxpanel/cmd/nginxpanel" || info.Main.Path != "nginxpanel" || info.Main.Replace != nil || info.GoVersion != p.GoVersion || settings["GOOS"] != "linux" || settings["GOARCH"] != asset.Architecture || settings["CGO_ENABLED"] != "0" || settings["vcs.revision"] != spec.Commit || settings["vcs.modified"] != "false" {
+			return nil, errors.New("控制平面 Go 构建信息与发行架构、工具链或干净提交不一致")
 		}
 		for _, dep := range info.Deps {
 			if dep.Replace != nil {

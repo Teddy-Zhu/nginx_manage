@@ -15,6 +15,7 @@ import (
 )
 
 type Service struct {
+	Version     string
 	Maintenance *maintenance.Service
 	DB          *sql.DB
 	Vault       *secure.Vault
@@ -26,15 +27,16 @@ type CreateInput struct {
 	CheckTaskID   string `json:"check_task_id"`
 }
 type Task struct {
-	ID          string     `json:"id"`
-	OperationID string     `json:"operation_id"`
-	Action      string     `json:"action"`
-	State       string     `json:"state"`
-	Stage       string     `json:"stage"`
-	Error       string     `json:"error"`
-	CreatedAt   int64      `json:"created_at"`
-	UpdatedAt   int64      `json:"updated_at"`
-	Result      *Operation `json:"result,omitempty"`
+	CoreUpdate  *CoreUpdateStatus `json:"core_update,omitempty"`
+	ID          string            `json:"id"`
+	OperationID string            `json:"operation_id"`
+	Action      string            `json:"action"`
+	State       string            `json:"state"`
+	Stage       string            `json:"stage"`
+	Error       string            `json:"error"`
+	CreatedAt   int64             `json:"created_at"`
+	UpdatedAt   int64             `json:"updated_at"`
+	Result      *Operation        `json:"result,omitempty"`
 }
 
 func (s *Service) Overview(ctx context.Context) (Overview, error) {
@@ -163,6 +165,12 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		if checked.Input.Action != "check" || r == nil || checked.State != "succeeded" || !checked.RuntimeReady || r.ExpiresAt <= now || in.Input.OfflineID != checked.Input.OfflineID || in.Input.Tag != r.Tag || in.Input.Prerelease != checked.Input.Prerelease || in.Input.PlanID != r.PlanID || in.Input.ManifestSHA256 != r.ManifestSHA256 || in.Input.TrustSHA256 != r.TrustSHA256 || !sameAssets(in.Input.Assets, r.Selected) {
 			return out, fault.Conflict("准备请求与检查结果不一致，或系统依赖尚未就绪；请重新检查")
 		}
+		if checked.Input.Tag == "" && checked.Input.OfflineID == "" && isCoreRelease(r) {
+			status := coreUpdateStatus(s.Version, r.Version)
+			if status.State != "available" {
+				return out, fault.Conflict("目标版本不高于当前程序版本，或版本号无法比较，请重新检查更新")
+			}
+		}
 	}
 	out = Task{ID: secure.ID(), OperationID: secure.ID(), Action: in.Input.Action, State: "queued", Stage: "queued", CreatedAt: now, UpdatedAt: now}
 	raw, err := json.Marshal(in.Input)
@@ -222,7 +230,7 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]Task, error) {
 			redactOperation(&op)
 			t.Result = &op
 		}
-		out = append(out, t)
+		out = append(out, s.withCoreUpdate(t))
 	}
 	return out, rows.Err()
 }

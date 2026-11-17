@@ -83,6 +83,8 @@ const checked = computed(() =>
   ),
 );
 const release = computed(() => checked.value?.result?.release);
+const updateStatus = computed(() => checked.value?.core_update);
+const updateAvailable = computed(() => updateStatus.value?.state === "available");
 const prepared = computed(() =>
   tasks.value.find(
     (t) =>
@@ -135,7 +137,7 @@ async function check() {
 async function download() {
   const r = release.value,
     t = checked.value;
-  if (!r || !t) return;
+  if (!r || !t || !updateAvailable.value) return;
   await submit({
     check_task_id: t.id,
     input: {
@@ -152,7 +154,7 @@ async function download() {
 }
 async function update() {
   const t = prepared.value;
-  if (!t?.result?.release) return;
+  if (!t?.result?.release || !updateAvailable.value) return;
   if (!window.confirm("现在更新系统？面板连接将短暂中断，已有数据会保留。"))
     return;
   await submit({
@@ -227,21 +229,30 @@ onMounted(load);
     <section v-if="release" class="panel page-stack">
       <div class="section-heading">
         <h3>
-          可用版本 {{ release.version }}
+          {{ updateAvailable ? "发现新版本" : "所选通道版本" }} {{ release.version }}
           <NTag v-if="release.channel === 'beta'" type="warning" size="small"
             >Beta</NTag
           >
         </h3>
-        <NTag v-if="prepared" type="success">已下载</NTag>
+        <NTag v-if="prepared && updateAvailable" type="success">已下载</NTag>
       </div>
       <p v-if="release.notes">{{ release.notes }}</p>
-      <p class="muted">
+      <NAlert v-if="updateStatus?.state === 'current'" type="success"
+        >当前已是最新版本。</NAlert
+      >
+      <NAlert v-else-if="updateStatus?.state === 'older'" type="info"
+        >当前安装版本高于所选通道的发布版本，暂无可用更新。</NAlert
+      >
+      <NAlert v-else-if="!updateAvailable" type="warning"
+        >{{ updateStatus?.message || "正在确认当前程序版本，请刷新后重试。" }}</NAlert
+      >
+      <p v-if="updateAvailable" class="muted">
         下载大小：{{ (release.archive_bytes / 1048576).toFixed(1) }} MB
       </p>
-      <NAlert v-if="!checked?.result?.runtime_ready" type="warning"
+      <NAlert v-if="updateAvailable && !checked?.result?.runtime_ready" type="warning"
         >服务器暂不满足此版本的安装条件，请查看检查日志。</NAlert
       >
-      <div class="button-row">
+      <div v-if="updateAvailable" class="button-row">
         <NButton
           v-if="!prepared"
           type="primary"
@@ -268,7 +279,7 @@ onMounted(load);
         ><TaskLogButton v-if="prepared" :task-id="prepared.id" />
       </div>
       <NAlert
-        v-if="prepared?.result?.panel?.requires_coordination"
+        v-if="updateAvailable && prepared?.result?.panel?.requires_coordination"
         type="warning"
         >此版本需要更新安装程序，请使用安装脚本更新。</NAlert
       >

@@ -496,6 +496,30 @@ func (e ComponentOfflineInputComponents) Valid() bool {
 	}
 }
 
+// Defines values for CoreUpdateStatusState.
+const (
+	CoreUpdateStatusStateAvailable CoreUpdateStatusState = "available"
+	CoreUpdateStatusStateCurrent   CoreUpdateStatusState = "current"
+	CoreUpdateStatusStateOlder     CoreUpdateStatusState = "older"
+	CoreUpdateStatusStateUnknown   CoreUpdateStatusState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the CoreUpdateStatusState enum.
+func (e CoreUpdateStatusState) Valid() bool {
+	switch e {
+	case CoreUpdateStatusStateAvailable:
+		return true
+	case CoreUpdateStatusStateCurrent:
+		return true
+	case CoreUpdateStatusStateOlder:
+		return true
+	case CoreUpdateStatusStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateResourceKind.
 const (
 	CreateResourceKindHttp   CreateResourceKind = "http"
@@ -4455,6 +4479,7 @@ type ComponentReleaseRequirements struct {
 // ComponentTask defines model for ComponentTask.
 type ComponentTask struct {
 	Action      string              `json:"action"`
+	CoreUpdate  *CoreUpdateStatus   `json:"core_update,omitempty"`
 	CreatedAt   int64               `json:"created_at"`
 	Error       string              `json:"error"`
 	Id          string              `json:"id"`
@@ -4464,6 +4489,16 @@ type ComponentTask struct {
 	State       string              `json:"state"`
 	UpdatedAt   int64               `json:"updated_at"`
 }
+
+// CoreUpdateStatus defines model for CoreUpdateStatus.
+type CoreUpdateStatus struct {
+	CurrentVersion string                `json:"current_version"`
+	Message        *string               `json:"message,omitempty"`
+	State          CoreUpdateStatusState `json:"state"`
+}
+
+// CoreUpdateStatusState defines model for CoreUpdateStatus.State.
+type CoreUpdateStatusState string
 
 // CreateResource defines model for CreateResource.
 type CreateResource struct {

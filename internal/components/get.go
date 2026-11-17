@@ -49,7 +49,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id string) (Task, e
 		redactOperation(&op)
 		out.Result = &op
 	}
-	return out, nil
+	return s.withCoreUpdate(out), nil
 }
 
 // Public task results expose settings without returning stored client credentials.
