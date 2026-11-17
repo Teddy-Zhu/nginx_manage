@@ -33,12 +33,21 @@ def json_stream(path):
         yield value
 
 
-def notices(records):
+def notices(records, supplements=None):
     output = bytearray()
     pattern = re.compile(r"^(licen[cs]e|copying|notice|copyright|patents)([._-].*)?$", re.I)
     for name, version, directory in sorted(records):
         root = Path(directory).resolve(strict=True)
         found = [p for p in sorted(root.iterdir()) if pattern.fullmatch(p.name) and p.is_file()]
+        source = None
+        supplement = (supplements or {}).get(f"{name}@{version}")
+        if not found and supplement:
+            manifest = json.loads(read(root / "package.json", 1 << 20))
+            if (manifest.get("name"), manifest.get("version"), manifest.get("license")) != (name, version, supplement["license"]):
+                raise ValueError(f"license supplement does not match installed dependency: {name}@{version}")
+            root = Path("deploy/release/licenses").resolve(strict=True)
+            found = [root / supplement["file"]]
+            source = supplement["source"]
         if not found or len(found) > 32:
             raise ValueError(f"dependency license files missing or excessive: {name}@{version}")
         for path in found:
@@ -48,6 +57,8 @@ def notices(records):
             if not raw:
                 raise ValueError(f"empty dependency license: {name}@{version}")
             output.extend(f"\n===== {name}@{version} / {path.name} =====\n".encode())
+            if source:
+                output.extend(f"Source: {source}\n".encode())
             output.extend(raw)
             output.extend(b"\n")
             if len(output) > 16 << 20:
@@ -55,22 +66,37 @@ def notices(records):
     return bytes(output)
 
 
-def node_records(value, records):
+def node_records(value, records, package_root=None):
     if isinstance(value, list):
         for child in value:
-            node_records(child, records)
+            node_records(child, records, package_root)
         return
     if not isinstance(value, dict):
         raise ValueError("invalid pnpm dependency report")
+    package_root = Path("web") if package_root is None else package_root
+    installed_root = Path("web/node_modules").resolve(strict=True)
+    manifest = json.loads(read(package_root / "package.json", 1 << 20))
+    optional = manifest.get("optionalDependencies", {})
+    if not isinstance(optional, dict):
+        raise ValueError(f"invalid optional dependency declarations: {package_root}")
     for section in ("dependencies", "optionalDependencies"):
         for name, child in value.get(section, {}).items():
             if not isinstance(child, dict) or not child.get("version") or not child.get("path"):
                 raise ValueError(f"incomplete pnpm dependency: {name}")
-            path = Path(child["path"]).resolve(strict=True)
-            if not path.is_relative_to(Path("web/node_modules").resolve()):
+            path = Path(child["path"]).resolve()
+            if not path.is_relative_to(installed_root):
                 raise ValueError(f"production dependency outside installed tree: {name}")
+            try:
+                path = path.resolve(strict=True)
+            except FileNotFoundError as error:
+                # pnpm can report uninstalled platform bindings under
+                # "dependencies". The parent package, rather than that report
+                # section or a package-name pattern, determines optionality.
+                if name in optional:
+                    continue
+                raise ValueError(f"required production dependency missing: {name}") from error
             records.add((name, child["version"], str(path)))
-            node_records(child, records)
+            node_records(child, records, path)
 
 
 def go_notices(report):
@@ -112,7 +138,8 @@ def main():
     node_records(json.loads(read(args.node_dependencies, 32 << 20)), npm_records)
     if not npm_records:
         raise ValueError("frontend production dependency report is empty")
-    node_notice = notices(npm_records)
+    node_supplements = json.loads(read("deploy/release/licenses/npm.json", 256 << 10))
+    node_notice = notices(npm_records, node_supplements)
     sbom = read(args.source_sbom, 16 << 20)
     shared = {
         "schema": 1, "repository": spec["manifest"]["repository"],

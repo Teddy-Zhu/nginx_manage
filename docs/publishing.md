@@ -10,6 +10,23 @@
 
 两个工作流均支持推送相应标签自动触发，以及在 Actions 中手动输入已存在的确切标签。核心发行不会向 GHCR 发布组件镜像，Nginx 发行不下载核心 Release，也不编译前端。核心安装包仍在 CI 中组装随包 Nginx 镜像，供首次离线安装；核心更新只切换核心程序，不替换已安装的 Nginx。
 
+## Actions 页面怎么填写
+
+进入 Actions，按发布内容选择 `Core binary release（核心程序发布）` 或 `Nginx Docker release（Nginx 镜像发布）`，点击 **Run workflow**。
+
+**Use workflow from** 是 GitHub 自带的分支选择。发布分支上的 Beta 时，直接在这里选择源码分支，不需要再填写分支名。下面只保留两个输入：
+
+| 发布方式 | `tag`：已有发布标签 | `version`：Beta 基础版本 |
+| --- | --- | --- |
+| 核心 Beta（无需标签） | 留空 | 例如 `1.2.4-dev`，也可保留默认 `0.1.0-dev` |
+| 核心稳定版 | 填已有标签，例如 `v1.2.3` | 忽略，可保留默认值 |
+| Nginx Beta（无需标签） | 留空 | 例如 `1.30.6-dev` |
+| Nginx 稳定版 | 填已有标签，例如 `nginx-v1.30.6` | 忽略，可保留默认值 |
+
+`tag` 有值时，源码和版本都取自该标签，上方分支不决定发布源码；标签必须已推送到仓库，并包含该版本的发行说明和策略。`tag` 留空时，源码取自上方选中的分支，`version` 不带 `v` 前缀且必须以 `-dev` 结尾；实际版本会自动追加构建编号，例如 `1.2.4-123456789.1-dev`。
+
+分支构建固定使用本次触发时的提交。修改工作流或修复打包脚本后，应先将修复提交推送到所选分支，再发起一次新的运行；发布已有标签时则需创建包含修复的新版本标签。旧运行的 **Re-run failed jobs** 保留原始提交，详见 [GitHub 重跑说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)。
+
 ## 仓库配置
 
 默认仓库为 `Teddy-Zhu/nginx_manage`，工作流使用实际运行仓库的 `github.repository`，镜像地址为 `ghcr.io/<小写 owner/repo>/nginx`。当前代码按公开仓库和公开镜像访问设计；仓库、GHCR 包可见性和访问权限由维护者设置，代码不会自动公开仓库或包。
@@ -50,6 +67,8 @@ gh workflow run release.yml -f tag=v1.2.3
 
 工作流先构建前端并嵌入核心，交叉编译 Linux amd64、arm64 静态程序，执行集中检查，收集依赖许可、SPDX 和构建来源。两个原生架构任务分别组装首次安装所需的本地 Nginx 镜像，不向 GHCR 推送镜像。签名任务核对干净源码提交、版本、二进制构建信息、文件清单和独立策略后，生成两个 `nginxpanel_<版本>_linux_<架构>.tar.gz`。
 
+依赖许可优先读取已安装包中的许可文件。部分 npm 包没有独立许可文件，补充材料存放在 `deploy/release/licenses/`，由 `npm.json` 按精确包名和版本引用并记录来源，打包时无需联网下载。补充材料必须与已安装包的名称、版本及许可声明一致；升级依赖时需同步材料。代理库的许可取自随包 README，vdirs 保留其发布元数据中的作者和 MIT 声明，并明确标注未提供独立版权说明。
+
 发行先建立草稿，上传并核对全部资产，再公开。稳定核心版设为仓库 Latest；Beta 不会替代 Latest。`setup.sh` 从核心 Latest 下载与本机架构匹配的安装包。
 
 ## 独立发布 Nginx
@@ -82,12 +101,12 @@ gh workflow run nginx-release.yml -f tag=nginx-v1.30.6
 
 版本以 `-dev` 结尾时自动归入 Beta；其他 SemVer 预发布版本也归入 Beta。正式版本归入稳定版。签名清单使用 `stable` / `beta`，GitHub Release 的 Beta 标记为 prerelease，永不替代稳定版 Latest。
 
-在 Actions 手动选择工作流，将 `tag` 留空，填写源码分支 `source_ref` 与开发基础版本 `version`。不填写分支时使用 Actions 选中的工作流分支；默认基础版本为 `0.1.0-dev`。例如：
+在 Actions 手动选择工作流，用上方 **Use workflow from** 选择源码分支，将 `tag` 留空，填写开发基础版本 `version`；默认基础版本为 `0.1.0-dev`。例如：
 
 ```sh
 # 分支名按实际仓库填写；工作流文件需要已存在于仓库默认分支。
-gh workflow run release.yml -f source_ref=main -f version=1.2.4-dev
-gh workflow run nginx-release.yml -f source_ref=main -f version=1.30.6-dev
+gh workflow run release.yml --ref main -f version=1.2.4-dev
+gh workflow run nginx-release.yml --ref main -f version=1.30.6-dev
 ```
 
 实际版本增加 GitHub run ID 和 attempt，例如 `1.2.4-123456789.1-dev`，防止不同源码复用同一版本。流程自动生成本次说明及明确关闭自动回滚的策略，发布阶段复用构建时已确定的版本；只重跑失败的发布任务不会改变版本。资产上传核对后自动创建指向构建提交的 GitHub 标签，无需事先手工打标签。核心与 Nginx 仍可分别发布。已有发行或部分草稿不会被覆盖，失败时查看保留的草稿后另行发起新构建。 自动生成的开发标签不再次触发构建，避免使用自定义令牌发布时重复运行；普通手工 `v1.2.4-dev` / `nginx-v1.30.6-dev` 标签仍可触发发布，需提交对应版本的说明和策略。

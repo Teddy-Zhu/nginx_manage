@@ -1,0 +1,52 @@
+{
+  "@css-render/plugin-bem@0.15.14": {
+    "license": "MIT",
+    "file": "css-render-0.15.14.LICENSE",
+    "source": "https://github.com/07akioni/css-render/blob/9345145da71707d1d05a99c1d3a6e89315ac0574/LICENSE"
+  },
+  "@css-render/vue3-ssr@0.15.14": {
+    "license": "MIT",
+    "file": "css-render-0.15.14.LICENSE",
+    "source": "https://github.com/07akioni/css-render/blob/9345145da71707d1d05a99c1d3a6e89315ac0574/LICENSE"
+  },
+  "css-render@0.15.14": {
+    "license": "MIT",
+    "file": "css-render-0.15.14.LICENSE",
+    "source": "https://github.com/07akioni/css-render/blob/9345145da71707d1d05a99c1d3a6e89315ac0574/LICENSE"
+  },
+  "@rolldown/binding-linux-x64-gnu@1.2.14": {
+    "license": "MIT",
+    "file": "rolldown-1.2.14.LICENSE",
+    "source": "https://github.com/rolldown/rolldown/blob/c9a8cda42bc0fdd84c7b4b4e6d7f95ae83e8b5f7/LICENSE"
+  },
+  "@rolldown/binding-linux-x64-musl@1.2.14": {
+    "license": "MIT",
+    "file": "rolldown-1.2.14.LICENSE",
+    "source": "https://github.com/rolldown/rolldown/blob/c9a8cda42bc0fdd84c7b4b4e6d7f95ae83e8b5f7/LICENSE"
+  },
+  "@rolldown/binding-linux-arm64-gnu@1.2.14": {
+    "license": "MIT",
+    "file": "rolldown-1.2.14.LICENSE",
+    "source": "https://github.com/rolldown/rolldown/blob/c9a8cda42bc0fdd84c7b4b4e6d7f95ae83e8b5f7/LICENSE"
+  },
+  "@rolldown/binding-linux-arm64-musl@1.2.14": {
+    "license": "MIT",
+    "file": "rolldown-1.2.14.LICENSE",
+    "source": "https://github.com/rolldown/rolldown/blob/c9a8cda42bc0fdd84c7b4b4e6d7f95ae83e8b5f7/LICENSE"
+  },
+  "agent-base@6.0.2": {
+    "license": "MIT",
+    "file": "proxy-agents-MIT.NOTICE",
+    "source": "https://registry.npmjs.org/agent-base/-/agent-base-6.0.2.tgz#package/README.md"
+  },
+  "https-proxy-agent@5.0.1": {
+    "license": "MIT",
+    "file": "proxy-agents-MIT.NOTICE",
+    "source": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz#package/README.md"
+  },
+  "vdirs@0.1.8": {
+    "license": "MIT",
+    "file": "vdirs-0.1.8.NOTICE",
+    "source": "https://registry.npmjs.org/vdirs/0.1.8"
+  }
+}

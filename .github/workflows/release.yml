@@ -1,4 +1,4 @@
-name: Core binary release
+name: Core binary release（核心程序发布）
 
 on:
   push:
@@ -7,15 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing v-prefixed tag; leave empty for a branch Beta build
-        required: false
-        type: string
-      source_ref:
-        description: Beta source branch or commit; defaults to the selected workflow ref
+        description: "已有发布标签：正式版填 v0.1.0；从分支发布 Beta 时留空"
         required: false
         type: string
       version:
-        description: Base version for tag-free Beta builds (must end in -dev)
+        description: "Beta 基础版本：如 0.1.0-dev，自动追加构建编号；填写 tag 时忽略"
         required: false
         default: 0.1.0-dev
         type: string
@@ -44,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || inputs.source_ref || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -98,7 +94,9 @@ jobs:
           done
           pnpm --dir web list --prod --depth Infinity --json > .release/node-dependencies.json
       - name: Required centralized checks
-        run: make verify
+        run: |
+          make verify
+          python3 -B -m unittest discover -s scripts/release -p test_stage.py
       - name: Generate source and build dependency SBOM
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:

@@ -1,4 +1,4 @@
-name: Nginx Docker release
+name: Nginx Docker release（Nginx 镜像发布）
 
 on:
   push:
@@ -7,15 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing nginx-v-prefixed tag; leave empty for a branch Beta build
-        required: false
-        type: string
-      source_ref:
-        description: Beta source branch or commit; defaults to the selected workflow ref
+        description: "已有发布标签：正式版填 nginx-v1.30.6；从分支发布 Beta 时留空"
         required: false
         type: string
       version:
-        description: Base version for tag-free Beta builds (must end in -dev)
+        description: "Beta 基础版本：如 0.1.0-dev，自动追加构建编号；填写 tag 时忽略"
         required: false
         default: 0.1.0-dev
         type: string
@@ -43,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || inputs.source_ref || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Bind release identity
