@@ -85,7 +85,10 @@ export function builtinSoftware(
       installed: fail2ban?.installed ?? null,
       runtime: fail2banRuntime(fail2ban),
       task: tasks.find(
-        (task) => task.result?.input.software?.action === "fail2ban",
+        (task) =>
+          task.result?.input.software?.action === "fail2ban" ||
+          (task.result?.input.software?.source_id === "builtin" &&
+            task.result.input.software.app_id === "fail2ban"),
       ),
       entry: { to: "/fail2ban" },
       note: "系统内置",
@@ -117,7 +120,10 @@ export function builtinSoftware(
       installed: frps?.installed ?? null,
       runtime: frps?.state ?? ("unknown" as const),
       task: tasks.find(
-        (task) => task.result?.input.software?.action === "frps",
+        (task) =>
+          task.result?.input.software?.action === "frps" ||
+          (task.result?.input.software?.source_id === "builtin" &&
+            task.result.input.software.app_id === "frps"),
       ),
       entry: { to: "/frps" },
       note: frps?.stats?.version ? `版本 ${frps.stats.version}` : "系统内置",
@@ -142,6 +148,10 @@ export function builtinSoftware(
   ];
   return definitions.map((item) => ({
     ...item,
+    versioned: true,
+    note: overview?.versions?.[item.id]
+      ? `组件 ${overview.versions[item.id]!.version} · 软件 ${overview.versions[item.id]!.software_version ?? overview.versions[item.id]!.version}`
+      : item.note,
     installed: item.installed === true,
     status: softwareStatus(item.installed, item.runtime, item.task),
   }));

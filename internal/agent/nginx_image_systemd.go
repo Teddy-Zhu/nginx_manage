@@ -155,6 +155,9 @@ func RunNginxImage(ctx context.Context, data, id string) (Record, error) {
 		err = w.forward(forward)
 		cancel()
 		if err == nil {
+			err = w.recordVersion()
+		}
+		if err == nil {
 			w.r.State, w.r.Stage, w.r.Error = "succeeded", "committed", ""
 			return w.r, w.save()
 		}

@@ -38,6 +38,9 @@ func Run(ctx context.Context, data string, request frps.Request, progress func(s
 		return err
 	}
 	if request.Config != nil {
+		if request.Action == "configure" && request.Config.Image != original.Config.Image {
+			return out, errors.New("请通过版本管理切换软件版本")
+		}
 		next.Config = *request.Config
 		if next.Config.Token == "" {
 			next.Config.Token = original.Config.Token

@@ -13,10 +13,16 @@ const props = defineProps<{
   busy: boolean;
   actions: SoftwareOperation[];
   compact?: boolean;
+  versioned?: boolean;
 }>();
 defineEmits<{ operate: [action: SoftwareOperation] }>();
 const controls = computed(() =>
-  softwareControls(props.installed, props.runtime, props.actions),
+  softwareControls(props.installed, props.runtime, props.actions).map(
+    (action) =>
+      props.versioned && action.id === "update"
+        ? { ...action, label: "切换版本" }
+        : action,
+  ),
 );
 const visible = computed(() =>
   controls.value.filter(
@@ -50,15 +56,18 @@ const more = computed(() =>
       :secondary="action.danger"
       :disabled="!permitted || busy"
       @click="$emit('operate', action.id)"
-      >{{ action.label }}</NButton
     >
+      {{ action.label }}
+    </NButton>
     <NDropdown
       v-if="more.length"
       trigger="click"
       :options="more"
       @select="$emit('operate', $event as SoftwareOperation)"
     >
-      <NButton :disabled="!permitted || busy">更多操作</NButton>
+      <NButton :disabled="!permitted || busy">
+        更多操作
+      </NButton>
     </NDropdown>
   </div>
 </template>

@@ -1465,6 +1465,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getComponentVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components/images/pull": {
         parameters: {
             query?: never;
@@ -5242,6 +5258,34 @@ export interface components {
             action: "install" | "configure" | "start" | "stop" | "restart" | "update" | "uninstall" | "logs";
             config?: components["schemas"]["FrpsConfig"];
         };
+        ComponentVersion: {
+            id: string;
+            version: string;
+            software_version?: string;
+            /** @enum {string} */
+            channel: "stable" | "beta";
+            /** Format: int64 */
+            published_at?: number;
+            notes?: string;
+            architectures?: ("amd64" | "arm64")[];
+            minimum_core?: string;
+            unavailable?: string;
+        };
+        ComponentVersionCatalog: {
+            source_id: string;
+            app_id: string;
+            /** @enum {string} */
+            channel: "stable" | "beta";
+            page: number;
+            has_more: boolean;
+            versions: components["schemas"]["ComponentVersion"][];
+            current?: components["schemas"]["ComponentVersion"];
+            previous?: components["schemas"]["ComponentVersion"];
+            /** Format: int64 */
+            checked_at: number;
+            cached: boolean;
+            error?: string;
+        };
         SoftwareAction: {
             command: string[];
             description?: string;
@@ -5253,6 +5297,8 @@ export interface components {
             actions: {
                 [key: string]: components["schemas"]["SoftwareAction"];
             };
+            versions_url?: string;
+            versions?: components["schemas"]["ComponentVersion"][];
         };
         SoftwareSource: {
             /** @enum {integer} */
@@ -5272,6 +5318,8 @@ export interface components {
             error?: string;
             /** @description 软件状态操作返回的访问地址；{host} 表示当前服务器地址 */
             entry?: string;
+            version?: components["schemas"]["ComponentVersion"];
+            previous?: components["schemas"]["ComponentVersion"];
         };
         SoftwareCatalog: {
             sources: components["schemas"]["SoftwareSource"][];
@@ -5346,12 +5394,14 @@ export interface components {
             fail2ban?: components["schemas"]["Fail2banContainerRequest"];
             frps?: components["schemas"]["FrpsRequest"];
             container?: components["schemas"]["DockerControl"];
+            version?: string;
         };
         SoftwareResult: {
             source_id?: string;
             app_id?: string;
             message: string;
             log: string;
+            version?: components["schemas"]["ComponentVersion"];
         };
         UpdateChannel: {
             /** @enum {string} */
@@ -5393,6 +5443,9 @@ export interface components {
             switch_reason: string;
             software: components["schemas"]["SoftwareCatalog"];
             frps?: components["schemas"]["FrpsStatus"];
+            versions: {
+                [key: string]: components["schemas"]["ComponentVersion"];
+            };
         };
         ComponentAsset: {
             id: string;
@@ -9086,6 +9139,25 @@ export interface operations {
     getComponents: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getComponentVersions: {
+        parameters: {
+            query: {
+                source_id: string;
+                app_id: string;
+                channel: "stable" | "beta";
+                page?: number;
+                refresh?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

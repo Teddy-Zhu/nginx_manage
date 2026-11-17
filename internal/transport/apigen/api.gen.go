@@ -496,6 +496,60 @@ func (e ComponentOfflineInputComponents) Valid() bool {
 	}
 }
 
+// Defines values for ComponentVersionArchitectures.
+const (
+	ComponentVersionArchitecturesAmd64 ComponentVersionArchitectures = "amd64"
+	ComponentVersionArchitecturesArm64 ComponentVersionArchitectures = "arm64"
+)
+
+// Valid indicates whether the value is a known member of the ComponentVersionArchitectures enum.
+func (e ComponentVersionArchitectures) Valid() bool {
+	switch e {
+	case ComponentVersionArchitecturesAmd64:
+		return true
+	case ComponentVersionArchitecturesArm64:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentVersionChannel.
+const (
+	ComponentVersionChannelBeta   ComponentVersionChannel = "beta"
+	ComponentVersionChannelStable ComponentVersionChannel = "stable"
+)
+
+// Valid indicates whether the value is a known member of the ComponentVersionChannel enum.
+func (e ComponentVersionChannel) Valid() bool {
+	switch e {
+	case ComponentVersionChannelBeta:
+		return true
+	case ComponentVersionChannelStable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentVersionCatalogChannel.
+const (
+	ComponentVersionCatalogChannelBeta   ComponentVersionCatalogChannel = "beta"
+	ComponentVersionCatalogChannelStable ComponentVersionCatalogChannel = "stable"
+)
+
+// Valid indicates whether the value is a known member of the ComponentVersionCatalogChannel enum.
+func (e ComponentVersionCatalogChannel) Valid() bool {
+	switch e {
+	case ComponentVersionCatalogChannelBeta:
+		return true
+	case ComponentVersionCatalogChannelStable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CoreUpdateStatusState.
 const (
 	CoreUpdateStatusStateAvailable CoreUpdateStatusState = "available"
@@ -1605,16 +1659,16 @@ func (e Fail2banPanelLoginStatusSourceId) Valid() bool {
 
 // Defines values for Fail2banPythonPlanArchitecture.
 const (
-	Amd64 Fail2banPythonPlanArchitecture = "amd64"
-	Arm64 Fail2banPythonPlanArchitecture = "arm64"
+	Fail2banPythonPlanArchitectureAmd64 Fail2banPythonPlanArchitecture = "amd64"
+	Fail2banPythonPlanArchitectureArm64 Fail2banPythonPlanArchitecture = "arm64"
 )
 
 // Valid indicates whether the value is a known member of the Fail2banPythonPlanArchitecture enum.
 func (e Fail2banPythonPlanArchitecture) Valid() bool {
 	switch e {
-	case Amd64:
+	case Fail2banPythonPlanArchitectureAmd64:
 		return true
-	case Arm64:
+	case Fail2banPythonPlanArchitectureArm64:
 		return true
 	default:
 		return false
@@ -3513,16 +3567,16 @@ func (e SystemVersionRuntime) Valid() bool {
 
 // Defines values for UpdateChannelChannel.
 const (
-	Beta   UpdateChannelChannel = "beta"
-	Stable UpdateChannelChannel = "stable"
+	UpdateChannelChannelBeta   UpdateChannelChannel = "beta"
+	UpdateChannelChannelStable UpdateChannelChannel = "stable"
 )
 
 // Valid indicates whether the value is a known member of the UpdateChannelChannel enum.
 func (e UpdateChannelChannel) Valid() bool {
 	switch e {
-	case Beta:
+	case UpdateChannelChannelBeta:
 		return true
-	case Stable:
+	case UpdateChannelChannelStable:
 		return true
 	default:
 		return false
@@ -3613,6 +3667,24 @@ func (e WAFPathMatch) Valid() bool {
 	case Exact:
 		return true
 	case Prefix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetComponentVersionsParamsChannel.
+const (
+	GetComponentVersionsParamsChannelBeta   GetComponentVersionsParamsChannel = "beta"
+	GetComponentVersionsParamsChannelStable GetComponentVersionsParamsChannel = "stable"
+)
+
+// Valid indicates whether the value is a known member of the GetComponentVersionsParamsChannel enum.
+func (e GetComponentVersionsParamsChannel) Valid() bool {
+	switch e {
+	case GetComponentVersionsParamsChannelBeta:
+		return true
+	case GetComponentVersionsParamsChannelStable:
 		return true
 	default:
 		return false
@@ -4393,21 +4465,22 @@ type ComponentOperation struct {
 
 // ComponentOverview defines model for ComponentOverview.
 type ComponentOverview struct {
-	Available        bool               `json:"available"`
-	Frps             *FrpsStatus        `json:"frps,omitempty"`
-	InstallAvailable bool               `json:"install_available"`
-	InstallReason    string             `json:"install_reason"`
-	Installation     *NginxInstallation `json:"installation,omitempty"`
-	KeyIds           []string           `json:"key_ids"`
-	Reason           string             `json:"reason"`
-	Repository       string             `json:"repository"`
-	Running          bool               `json:"running"`
-	RuntimeReason    string             `json:"runtime_reason"`
-	Scope            string             `json:"scope"`
-	Software         SoftwareCatalog    `json:"software"`
-	SwitchAvailable  bool               `json:"switch_available"`
-	SwitchReason     string             `json:"switch_reason"`
-	TrustSha256      string             `json:"trust_sha256"`
+	Available        bool                        `json:"available"`
+	Frps             *FrpsStatus                 `json:"frps,omitempty"`
+	InstallAvailable bool                        `json:"install_available"`
+	InstallReason    string                      `json:"install_reason"`
+	Installation     *NginxInstallation          `json:"installation,omitempty"`
+	KeyIds           []string                    `json:"key_ids"`
+	Reason           string                      `json:"reason"`
+	Repository       string                      `json:"repository"`
+	Running          bool                        `json:"running"`
+	RuntimeReason    string                      `json:"runtime_reason"`
+	Scope            string                      `json:"scope"`
+	Software         SoftwareCatalog             `json:"software"`
+	SwitchAvailable  bool                        `json:"switch_available"`
+	SwitchReason     string                      `json:"switch_reason"`
+	TrustSha256      string                      `json:"trust_sha256"`
+	Versions         map[string]ComponentVersion `json:"versions"`
 }
 
 // ComponentPanelPreparation defines model for ComponentPanelPreparation.
@@ -4489,6 +4562,43 @@ type ComponentTask struct {
 	State       string              `json:"state"`
 	UpdatedAt   int64               `json:"updated_at"`
 }
+
+// ComponentVersion defines model for ComponentVersion.
+type ComponentVersion struct {
+	Architectures   *[]ComponentVersionArchitectures `json:"architectures,omitempty"`
+	Channel         ComponentVersionChannel          `json:"channel"`
+	Id              string                           `json:"id"`
+	MinimumCore     *string                          `json:"minimum_core,omitempty"`
+	Notes           *string                          `json:"notes,omitempty"`
+	PublishedAt     *int64                           `json:"published_at,omitempty"`
+	SoftwareVersion *string                          `json:"software_version,omitempty"`
+	Unavailable     *string                          `json:"unavailable,omitempty"`
+	Version         string                           `json:"version"`
+}
+
+// ComponentVersionArchitectures defines model for ComponentVersion.Architectures.
+type ComponentVersionArchitectures string
+
+// ComponentVersionChannel defines model for ComponentVersion.Channel.
+type ComponentVersionChannel string
+
+// ComponentVersionCatalog defines model for ComponentVersionCatalog.
+type ComponentVersionCatalog struct {
+	AppId     string                         `json:"app_id"`
+	Cached    bool                           `json:"cached"`
+	Channel   ComponentVersionCatalogChannel `json:"channel"`
+	CheckedAt int64                          `json:"checked_at"`
+	Current   *ComponentVersion              `json:"current,omitempty"`
+	Error     *string                        `json:"error,omitempty"`
+	HasMore   bool                           `json:"has_more"`
+	Page      int                            `json:"page"`
+	Previous  *ComponentVersion              `json:"previous,omitempty"`
+	SourceId  string                         `json:"source_id"`
+	Versions  []ComponentVersion             `json:"versions"`
+}
+
+// ComponentVersionCatalogChannel defines model for ComponentVersionCatalog.Channel.
+type ComponentVersionCatalogChannel string
 
 // CoreUpdateStatus defines model for CoreUpdateStatus.
 type CoreUpdateStatus struct {
@@ -8479,6 +8589,8 @@ type SoftwareApplication struct {
 	Description string                    `json:"description"`
 	Id          string                    `json:"id"`
 	Name        string                    `json:"name"`
+	Versions    *[]ComponentVersion       `json:"versions,omitempty"`
+	VersionsUrl *string                   `json:"versions_url,omitempty"`
 }
 
 // SoftwareCatalog defines model for SoftwareCatalog.
@@ -8495,9 +8607,11 @@ type SoftwareInstallation struct {
 	// Entry 软件状态操作返回的访问地址；{host} 表示当前服务器地址
 	Entry     *string                    `json:"entry,omitempty"`
 	Error     *string                    `json:"error,omitempty"`
+	Previous  *ComponentVersion          `json:"previous,omitempty"`
 	SourceId  string                     `json:"source_id"`
 	State     *SoftwareInstallationState `json:"state,omitempty"`
 	UpdatedAt int64                      `json:"updated_at"`
+	Version   *ComponentVersion          `json:"version,omitempty"`
 }
 
 // SoftwareInstallationState defines model for SoftwareInstallation.State.
@@ -8515,6 +8629,7 @@ type SoftwareRequest struct {
 	Source     *SoftwareSource           `json:"source,omitempty"`
 	SourceId   *string                   `json:"source_id,omitempty"`
 	Url        *string                   `json:"url,omitempty"`
+	Version    *string                   `json:"version,omitempty"`
 }
 
 // SoftwareRequestAction defines model for SoftwareRequest.Action.
@@ -8522,10 +8637,11 @@ type SoftwareRequestAction string
 
 // SoftwareResult defines model for SoftwareResult.
 type SoftwareResult struct {
-	AppId    *string `json:"app_id,omitempty"`
-	Log      string  `json:"log"`
-	Message  string  `json:"message"`
-	SourceId *string `json:"source_id,omitempty"`
+	AppId    *string           `json:"app_id,omitempty"`
+	Log      string            `json:"log"`
+	Message  string            `json:"message"`
+	SourceId *string           `json:"source_id,omitempty"`
+	Version  *ComponentVersion `json:"version,omitempty"`
 }
 
 // SoftwareSource defines model for SoftwareSource.
@@ -8938,6 +9054,18 @@ type SetUpdateChannelParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
+
+// GetComponentVersionsParams defines parameters for GetComponentVersions.
+type GetComponentVersionsParams struct {
+	SourceId string                            `form:"source_id" json:"source_id"`
+	AppId    string                            `form:"app_id" json:"app_id"`
+	Channel  GetComponentVersionsParamsChannel `form:"channel" json:"channel"`
+	Page     *int                              `form:"page,omitempty" json:"page,omitempty"`
+	Refresh  *bool                             `form:"refresh,omitempty" json:"refresh,omitempty"`
+}
+
+// GetComponentVersionsParamsChannel defines parameters for GetComponentVersions.
+type GetComponentVersionsParamsChannel string
 
 // CreateCredentialParams defines parameters for CreateCredential.
 type CreateCredentialParams struct {
@@ -10315,6 +10443,9 @@ type ServerInterface interface {
 
 	// (PUT /components/update-channel)
 	SetUpdateChannel(w http.ResponseWriter, r *http.Request, params SetUpdateChannelParams)
+
+	// (GET /components/versions)
+	GetComponentVersions(w http.ResponseWriter, r *http.Request, params GetComponentVersionsParams)
 
 	// (GET /credentials)
 	ListCredentials(w http.ResponseWriter, r *http.Request)
@@ -13222,6 +13353,91 @@ func (siw *ServerInterfaceWrapper) SetUpdateChannel(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetUpdateChannel(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetComponentVersions operation middleware
+func (siw *ServerInterfaceWrapper) GetComponentVersions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetComponentVersionsParams
+
+	// ------------- Required query parameter "source_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "source_id", r.URL.Query(), &params.SourceId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "source_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "app_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "app_id", r.URL.Query(), &params.AppId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "app_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "app_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "channel" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "channel", r.URL.Query(), &params.Channel, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "channel"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "channel", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "refresh" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "refresh", r.URL.Query(), &params.Refresh, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "refresh"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "refresh", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetComponentVersions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20512,6 +20728,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers/{id}", wrapper.GetDockerContainer)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/docker/containers/{id}/logs", wrapper.GetDockerContainerLogs)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components", wrapper.GetComponents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/versions", wrapper.GetComponentVersions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/images/pull", wrapper.CreateComponentImagePull)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/update-channel", wrapper.GetUpdateChannel)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/update-channel", wrapper.SetUpdateChannel)

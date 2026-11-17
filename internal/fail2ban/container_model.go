@@ -85,11 +85,14 @@ func (c ContainerConfig) Validate() error {
 }
 func (r ContainerRequest) Validate() error {
 	switch r.Action {
-	case "install", "configure":
+	case "install", "configure", "update":
+		if r.Action == "update" && r.Config == nil && r.JailID == "" && r.Address == "" {
+			return nil
+		}
 		if r.Config != nil && r.JailID == "" && r.Address == "" {
 			return r.Config.Validate()
 		}
-	case "start", "stop", "restart", "update", "uninstall", "logs":
+	case "start", "stop", "restart", "uninstall", "logs":
 		if r.Config == nil && r.JailID == "" && r.Address == "" {
 			return nil
 		}

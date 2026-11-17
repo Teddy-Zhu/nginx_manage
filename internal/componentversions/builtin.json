@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "applications": {
+    "fail2ban": [
+      {"id":"1.1.0","version":"1.1.0","software_version":"1.1.1","channel":"stable","architectures":["amd64","arm64"],"notes":"Fail2ban 1.1.1，Debian 运行环境。","image":"docker.io/crazymax/fail2ban@sha256:46de55500b19ec4d1b4b83bc63057c66e63748dae610248bd6b385eb9cb170cb"},
+      {"id":"1.0.0","version":"1.0.0","software_version":"1.1.0","channel":"stable","architectures":["amd64","arm64"],"notes":"Fail2ban 1.1.0，Debian 运行环境。","image":"docker.io/crazymax/fail2ban@sha256:757af650d919bca9642bb405c524df3947e6b0c4e8cc925e2a71dedcde3b8598"}
+    ],
+    "frps": [
+      {"id":"1.1.0","version":"1.1.0","software_version":"0.72.0","channel":"stable","architectures":["amd64","arm64"],"notes":"FRP 服务端 0.72.0。","image":"ghcr.io/fatedier/frps@sha256:17abb20dd392557a44070d9726954630c0eb1f7a9bd6ead5ae9150d165179ea4"},
+      {"id":"1.0.0","version":"1.0.0","software_version":"0.71.1","channel":"stable","architectures":["amd64","arm64"],"notes":"FRP 服务端 0.71.1。","image":"ghcr.io/fatedier/frps@sha256:48720c81f048e842f7f0b8053753c1a8514053d59d2dee8a953f67995de73a18"},
+      {"id":"0.9.0","version":"0.9.0","software_version":"0.71.0","channel":"stable","architectures":["amd64","arm64"],"notes":"FRP 服务端 0.71.0。","image":"ghcr.io/fatedier/frps@sha256:cd8b947ba61678b200baa4f71ccc33f3c52e4e2cc0059700ba3b8354e36af7c3"}
+    ]
+  }
+}

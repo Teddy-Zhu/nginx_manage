@@ -13,10 +13,8 @@
 </route>
 <script setup lang="ts">
 import TaskLogButton from "../components/TaskLogButton.vue";
-import {
-  updateChannels,
-  useUpdateChannel,
-} from "../composables/update-channel";
+import ComponentVersionDialog from "../components/ComponentVersionDialog.vue";
+import { compareComponentVersions } from "../utils/component-version";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -36,6 +34,7 @@ import {
   type ImageUpgradeTask,
   type ComponentCreateInput,
   type ComponentTask,
+  type ComponentVersion,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
@@ -46,17 +45,14 @@ const api = useNodeAPI(),
   route = useRoute(),
   session = useSession(),
   { run, busy } = useAction();
-const {
-  channel,
-  prerelease,
-  ready: channelReady,
-  saving: savingChannel,
-  loadChannel,
-  saveChannel,
-} = useUpdateChannel(api);
+const channel = ref<"stable" | "beta">("stable"),
+  prerelease = computed(() => channel.value === "beta");
 let keyFor = useIdempotency();
 const allowDowntime = ref(false),
   lastID = ref("");
+const choosingVersion = ref(false),
+  targetVersion = ref<ComponentVersion | null>(null),
+  currentVersion = ref<ComponentVersion | null>(null);
 const preparations = ref<ComponentTask[]>([]),
   tasks = ref<ImageUpgradeTask[]>([]),
   selected = ref(
@@ -97,6 +93,8 @@ const checked = computed(
           task.action === "check" &&
           task.state === "succeeded" &&
           task.result?.input.prerelease === prerelease.value &&
+          (!targetVersion.value ||
+            task.result?.input.tag === targetVersion.value.id) &&
           containsNginxImage(task),
       )
       .sort((a, b) => b.created_at - a.created_at)[0],
@@ -111,6 +109,8 @@ const prepared = computed(() =>
         task.state === "succeeded" &&
         task.result?.runtime_ready &&
         task.result.input.prerelease === prerelease.value &&
+        (!targetVersion.value ||
+          task.result.release?.tag === targetVersion.value.id) &&
         containsNginxImage(task) &&
         !!release &&
         release.expires_at * 1000 > Date.now()
@@ -121,6 +121,14 @@ const prepared = computed(() =>
 const chosen = computed(() =>
   prepared.value.find((t) => t.id === selected.value),
 );
+const downgrade = computed(() => {
+  const version = chosen.value?.result?.release?.version;
+  return !!(
+    version &&
+    currentVersion.value &&
+    (compareComponentVersions(version, currentVersion.value.version) ?? 0) < 0
+  );
+});
 const preparedForRelease = computed(() =>
   prepared.value.find(
     (task) => task.result?.release?.plan_id === release.value?.plan_id,
@@ -152,11 +160,11 @@ const canCreate = computed(
 );
 const states: Record<string, string> = {
   queued: "排队中",
-  running: "升级中",
+  running: "切换中",
   compensating: "恢复原版本",
   recovery_required: "待恢复",
-  succeeded: "升级完成",
-  failed: "升级未完成",
+  succeeded: "切换完成",
+  failed: "切换未完成",
   rolled_back: "已恢复原版本",
   cancelled: "已取消",
 };
@@ -223,13 +231,21 @@ async function check() {
     input: {
       action: "check",
       components: ["nginx"],
-      tag: "",
+      tag: targetVersion.value?.id ?? "",
       prerelease: prerelease.value,
       plan_id: "",
       manifest_sha256: "",
       trust_sha256: "",
     },
   });
+}
+async function chooseVersion(version: ComponentVersion) {
+  channel.value = version.channel;
+  selected.value = "";
+  allowDowntime.value = false;
+  targetVersion.value = version;
+  choosingVersion.value = false;
+  await check();
 }
 async function prepare() {
   const task = checked.value,
@@ -275,13 +291,17 @@ async function load() {
   reading.value = true;
   controller = new AbortController();
   try {
-    const [sources, items] = await Promise.all([
+    const [sources, items, overview] = await Promise.all([
       api.componentTasks(controller.signal),
       api.nginxImageUpgrades(controller.signal),
-      loadChannel(),
+      api.components(controller.signal),
     ]);
     preparations.value = sources;
+    const requested = sources.find((item) => item.id === selected.value);
+    if (requested)
+      channel.value = requested.result?.input.prerelease ? "beta" : "stable";
     tasks.value = items;
+    currentVersion.value = overview.versions?.nginx ?? null;
     error.value = "";
     if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
@@ -329,43 +349,52 @@ onUnmounted(() => {
 useLiveRefresh(api, ["tasks"], load, () => reading.value);
 </script>
 <template>
+  <ComponentVersionDialog
+    :show="choosingVersion"
+    name="Nginx"
+    source-id="builtin"
+    app-id="nginx"
+    :busy="busy || active"
+    submit-text="检查此版本"
+    @choose="chooseVersion"
+    @cancel="choosingVersion = false"
+  />
   <div class="page-stack">
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
     <section class="panel page-stack">
       <div class="toolbar">
-        <h2>更新 Nginx 镜像</h2>
-        <NButton :loading="reading" @click="load">刷新</NButton>
+        <h2>Nginx 版本管理</h2>
+        <NButton :loading="reading" @click="load">
+          刷新
+        </NButton>
       </div>
       <p class="muted">
         检查并准备签名镜像，确认后即可应用更新。网站配置与证书会保留。
       </p>
-      <NAlert type="info"
-        >更新期间网站服务会短暂中断，失败时将尝试恢复原版本。</NAlert
-      >
+      <NAlert type="info">
+        更新期间网站服务会短暂中断，失败时将尝试恢复原版本。
+      </NAlert>
       <div class="button-row">
         <NButton
           type="primary"
           :loading="busy || active"
-          :disabled="!canWrite || active || savingChannel || !channelReady"
-          @click="check"
-          >{{ active ? "正在处理" : "检查更新" }}</NButton
+          :disabled="!canWrite || active"
+          @click="choosingVersion = true"
         >
-        <NSelect
-          :value="channel"
-          :options="updateChannels"
-          aria-label="更新通道"
-          style="width: 150px"
-          :loading="savingChannel"
-          :disabled="
-            busy || active || savingChannel || !channelReady || !canWrite
-          "
-          @update:value="(value) => run(() => saveChannel(value))"
-        />
+          {{ active ? "正在处理" : "选择版本" }}
+        </NButton>
       </div>
       <p v-if="channel === 'beta'" class="muted">
         Beta 版本用于提前体验新功能，可能存在尚未修复的问题。
       </p>
-      <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
+      <NAlert v-if="last?.error" type="error">
+        {{ last.error }}
+      </NAlert>
+      <NAlert v-if="downgrade" type="warning">
+        目标版本较旧，现有配置或数据可能不兼容。确认后仍可切换，失败时将尝试恢复原版本。
+      </NAlert>
       <div v-if="last" class="button-row">
         <NTag
           :type="
@@ -375,23 +404,26 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
                 ? 'error'
                 : 'info'
           "
-          >{{
+        >
+          {{
             last.state === "succeeded"
               ? "已完成"
               : last.state === "failed"
                 ? "未完成"
                 : "正在处理"
-          }}</NTag
-        ><TaskLogButton :task-id="last.id" />
+          }}
+        </NTag><TaskLogButton :task-id="last.id" />
       </div>
       <section v-if="release" class="page-stack">
         <div class="toolbar">
           <strong>可用版本 {{ release.version }}</strong>
-          <NTag v-if="preparedForRelease" type="success">已准备</NTag>
+          <NTag v-if="preparedForRelease" type="success">
+            已准备
+          </NTag>
         </div>
-        <NAlert v-if="!checked?.result?.runtime_ready" type="warning"
-          >当前环境暂不满足更新条件，请查看检查日志。</NAlert
-        >
+        <NAlert v-if="!checked?.result?.runtime_ready" type="warning">
+          当前环境暂不满足更新条件，请查看检查日志。
+        </NAlert>
         <div class="button-row">
           <NButton
             v-if="!preparedForRelease"
@@ -399,21 +431,22 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
             :loading="busy || active"
             :disabled="
               !canWrite ||
-              active ||
-              !checked?.result?.runtime_ready ||
-              release.expires_at * 1000 <= Date.now()
+                active ||
+                !checked?.result?.runtime_ready ||
+                release.expires_at * 1000 <= Date.now()
             "
             @click="prepare"
-            >准备镜像</NButton
-          ><TaskLogButton
+          >
+            准备镜像
+          </NButton><TaskLogButton
             v-if="preparedForRelease"
             :task-id="preparedForRelease.id"
           />
         </div>
       </section>
       <NEmpty v-if="!prepared.length" description="尚未准备可用镜像" />
-      <NFormItem v-else label="准备好的版本"
-        ><NSelect
+      <NFormItem v-else label="准备好的版本">
+        <NSelect
           v-model:value="selected"
           :options="
             prepared.map((task) => ({
@@ -423,25 +456,28 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
           "
           placeholder="选择镜像版本"
           :disabled="!canWrite || busy || active"
-      /></NFormItem>
+        />
+      </NFormItem>
       <NCheckbox
         v-if="canWrite"
         v-model:checked="allowDowntime"
         :disabled="busy || active"
-        >允许 Nginx 服务短暂中断</NCheckbox
       >
+        允许 Nginx 服务短暂中断
+      </NCheckbox>
       <div v-if="canWrite">
         <NPopconfirm
           :disabled="!canCreate"
           positive-text="开始更新"
           @positive-click="upgrade"
-          ><template #trigger
-            ><NButton type="primary" :disabled="!canCreate" :loading="busy"
-              >立即更新</NButton
-            ></template
-          >确认将 Nginx 更新到
-          {{ chosen?.result?.release?.version }}？</NPopconfirm
         >
+          <template #trigger>
+            <NButton type="primary" :disabled="!canCreate" :loading="busy">
+              立即更新
+            </NButton>
+          </template>确认将 Nginx 更新到
+          {{ chosen?.result?.release?.version }}？
+        </NPopconfirm>
       </div>
     </section>
     <section class="panel page-stack">
@@ -450,8 +486,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
       <article v-for="task in tasks" :key="task.id" class="panel page-stack">
         <TaskLogButton :task-id="task.id" />
         <div class="toolbar">
-          <strong>{{ states[task.state] ?? "状态待确认" }}</strong
-          ><NTag
+          <strong>{{ states[task.state] ?? "状态待确认" }}</strong><NTag
             :type="
               task.state === 'succeeded'
                 ? 'success'
@@ -459,10 +494,13 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
                   ? 'warning'
                   : 'info'
             "
-            >{{ stages[task.stage] ?? "正在处理" }}</NTag
           >
+            {{ stages[task.stage] ?? "正在处理" }}
+          </NTag>
         </div>
-        <p class="muted">{{ date(task.created_at) }}</p>
+        <p class="muted">
+          {{ date(task.created_at) }}
+        </p>
         <p v-if="task.result">
           目标版本 {{ task.result.target_version }} ·
           {{
@@ -477,14 +515,17 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
         <NAlert
           v-if="task.error"
           :type="task.state === 'rolled_back' ? 'info' : 'warning'"
-          >{{ task.error }}</NAlert
         >
+          {{ task.error }}
+        </NAlert>
         <div v-if="canResume(task)">
-          <NPopconfirm positive-text="继续更新" @positive-click="resume(task)"
-            ><template #trigger
-              ><NButton :loading="busy">继续更新</NButton></template
-            >确认继续更新？失败时将恢复原版本。</NPopconfirm
-          >
+          <NPopconfirm positive-text="继续更新" @positive-click="resume(task)">
+            <template #trigger>
+              <NButton :loading="busy">
+                继续更新
+              </NButton>
+            </template>确认继续更新？失败时将恢复原版本。
+          </NPopconfirm>
         </div>
       </article>
     </section>

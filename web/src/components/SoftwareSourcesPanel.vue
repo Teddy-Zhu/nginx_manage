@@ -16,6 +16,7 @@ import {
   type SoftwareCatalog,
   type SoftwareRequest,
   type SoftwareSource,
+  type ComponentVersion,
 } from "../api/client";
 import { useSoftwareOperations } from "../composables/software";
 import { useNodes } from "../stores/node";
@@ -32,6 +33,7 @@ import {
 } from "../utils/software";
 import SoftwareActions from "./SoftwareActions.vue";
 import SoftwareManagementPanel from "./SoftwareManagementPanel.vue";
+import ComponentVersionDialog from "./ComponentVersionDialog.vue";
 const props = defineProps<{
   catalog?: SoftwareCatalog;
   tasks: ComponentTask[];
@@ -58,6 +60,10 @@ const origin = computed(() =>
     : window.location.origin,
 );
 const selected = ref("");
+const versionChoice = ref<{
+  entry: CatalogEntry;
+  action: "install" | "update";
+} | null>(null);
 const selectedEntry = computed(() =>
   entries.value.find(
     (entry) => `${entry.source.id}/${entry.application.id}` === selected.value,
@@ -135,12 +141,22 @@ async function submit(request: SoftwareRequest) {
   source.value = null;
   url.value = fileName.value = "";
   emit("changed");
+  return task;
 }
 async function removeSource(id: string) {
   if (!window.confirm("删除此软件源？已安装的软件需要先卸载。")) return;
   await submit({ action: "delete", source_id: id });
 }
 async function operate(action: SoftwareOperation, entry: CatalogEntry) {
+  if (
+    (action === "install" || action === "update") &&
+    (entry.application.versions_url ||
+      entry.application.versions?.length ||
+      entry.installation?.version)
+  ) {
+    versionChoice.value = { entry, action };
+    return;
+  }
   const definition =
     action === "install" || action === "update"
       ? entry.application
@@ -156,8 +172,30 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
     app_id: entry.application.id,
   });
 }
+async function chooseVersion(version: ComponentVersion) {
+  const choice = versionChoice.value;
+  if (!choice) return;
+  const task = await submit({
+    action: choice.action,
+    source_id: choice.entry.source.id,
+    app_id: choice.entry.application.id,
+    version: version.id,
+  });
+  if (task) versionChoice.value = null;
+}
 </script>
 <template>
+  <ComponentVersionDialog
+    v-if="versionChoice"
+    :show="true"
+    :name="versionChoice.entry.application.name"
+    :source-id="versionChoice.entry.source.id"
+    :app-id="versionChoice.entry.application.id"
+    :submit-text="versionChoice.action === 'install' ? '安装此版本' : '切换版本'"
+    :busy="busy || active"
+    @choose="chooseVersion"
+    @cancel="versionChoice = null"
+  />
   <Teleport defer to="#software-source-actions">
     <div v-if="visible" class="source-tools">
       <NSelect
@@ -166,27 +204,30 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
         aria-label="软件源"
         class="source-select"
       />
-      <NButton @click="manageSources = true"
-        >管理软件源<span class="source-count">{{
+      <NButton @click="manageSources = true">
+        管理软件源<span class="source-count">{{
           catalog?.sources.length ?? 0
-        }}</span></NButton
-      >
+        }}</span>
+      </NButton>
     </div>
   </Teleport>
   <div v-show="visible" class="page-stack">
-    <NAlert v-if="catalog?.error" type="error"
-      >暂时无法读取第三方软件，请刷新后重试。</NAlert
-    >
+    <NAlert v-if="catalog?.error" type="error">
+      暂时无法读取第三方软件，请刷新后重试。
+    </NAlert>
     <template v-else-if="!catalog?.sources.length">
       <section class="store-empty">
         <NEmpty description="尚未添加第三方软件源" />
-        <p class="muted">添加软件源，即可浏览和安装其中的应用。</p>
+        <p class="muted">
+          添加软件源，即可浏览和安装其中的应用。
+        </p>
         <NButton
           type="primary"
           :disabled="!permitted || busy || active"
           @click="openImport"
-          >添加软件源</NButton
         >
+          添加软件源
+        </NButton>
       </section>
     </template>
     <div v-else-if="visibleEntries.length" class="store-grid">
@@ -218,9 +259,9 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
         :description="
           entries.length ? '没有符合条件的软件' : '软件源中暂无软件'
         "
-      /><NButton v-if="selectedSource" @click="selectedSource = ''"
-        >查看全部软件源</NButton
-      >
+      /><NButton v-if="selectedSource" @click="selectedSource = ''">
+        查看全部软件源
+      </NButton>
       <p v-else class="muted">
         可调整搜索条件，或在“管理软件源”中更新软件列表。
       </p>
@@ -235,18 +276,18 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
               ? 'error'
               : 'info'
         "
-        >{{
+      >
+        {{
           job.state === "succeeded"
             ? "操作已完成"
             : job.state === "failed"
               ? "操作未完成"
               : "正在处理"
-        }}</NTag
-      ><TaskLogButton :task-id="job.id" /><span
+        }}
+      </NTag><TaskLogButton :task-id="job.id" /><span
         v-if="job.error"
         class="error"
-        >{{ job.error }}</span
-      >
+      >{{ job.error }}</span>
     </div>
   </div>
   <NModal
@@ -283,17 +324,19 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
       "
       :error="
         selectedEntry.installation?.error ||
-        (!selectedEntry.listed
-          ? '软件源已不再提供此软件，仍可启停、查看日志或卸载。'
-          : '')
+          (!selectedEntry.listed
+            ? '软件源已不再提供此软件，仍可启停、查看日志或卸载。'
+            : '')
       "
       @operate="operate($event, selectedEntry!)"
     />
-    <template #footer
-      ><div class="dialog-footer">
-        <NButton :disabled="busy" @click="selected = ''">关闭</NButton>
-      </div></template
-    >
+    <template #footer>
+      <div class="dialog-footer">
+        <NButton :disabled="busy" @click="selected = ''">
+          关闭
+        </NButton>
+      </div>
+    </template>
   </NModal>
   <NModal
     v-model:show="manageSources"
@@ -306,17 +349,17 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
   >
     <div class="sources-body page-stack">
       <div class="section-heading">
-        <span class="muted">{{ catalog?.sources.length ?? 0 }} 个软件源</span
-        ><NButton
+        <span class="muted">{{ catalog?.sources.length ?? 0 }} 个软件源</span><NButton
           type="primary"
           :disabled="!permitted || busy || active"
           @click="openImport"
-          >添加软件源</NButton
         >
+          添加软件源
+        </NButton>
       </div>
-      <NAlert v-if="catalog?.error" type="error"
-        >暂时无法读取软件源，请关闭后刷新重试。</NAlert
-      >
+      <NAlert v-if="catalog?.error" type="error">
+        暂时无法读取软件源，请关闭后刷新重试。
+      </NAlert>
       <NEmpty
         v-else-if="!catalog?.sources.length"
         description="尚未添加软件源"
@@ -328,7 +371,9 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
       >
         <div>
           <strong>{{ item.name }}</strong>
-          <p class="muted source-address">{{ item.url || "本地文件导入" }}</p>
+          <p class="muted source-address">
+            {{ item.url || "本地文件导入" }}
+          </p>
         </div>
         <div class="source-footer">
           <span class="muted">{{ item.applications.length }} 款软件</span>
@@ -338,22 +383,24 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
               size="small"
               :disabled="!permitted || busy || active"
               @click="submit({ action: 'refresh', source_id: item.id })"
-              >更新列表</NButton
-            ><NButton
+            >
+              更新列表
+            </NButton><NButton
               size="small"
               type="error"
               secondary
               :disabled="
                 !permitted ||
-                busy ||
-                active ||
-                catalog?.installed.some(
-                  (installed) => installed.source_id === item.id,
-                )
+                  busy ||
+                  active ||
+                  catalog?.installed.some(
+                    (installed) => installed.source_id === item.id,
+                  )
               "
               @click="removeSource(item.id)"
-              >删除</NButton
             >
+              删除
+            </NButton>
           </div>
         </div>
         <p
@@ -390,8 +437,8 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
     "
   >
     <div class="page-stack">
-      <NFormItem label="软件源地址"
-        ><NInput
+      <NFormItem label="软件源地址">
+        <NInput
           v-model:value="url"
           placeholder="输入配置文件地址或 GitHub 文件链接"
           :disabled="busy"
@@ -399,13 +446,12 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
             source = null;
             fileName = '';
           "
-      /></NFormItem>
+        />
+      </NFormItem>
       <div class="button-row">
-        <span class="muted">或从文件导入</span
-        ><NButton :disabled="busy" @click="fileInput?.click()"
-          >选择 JSON 文件</NButton
-        ><span>{{ fileName }}</span
-        ><input
+        <span class="muted">或从文件导入</span><NButton :disabled="busy" @click="fileInput?.click()">
+          选择 JSON 文件
+        </NButton><span>{{ fileName }}</span><input
           ref="fileInput"
           type="file"
           accept=".json,application/json"
@@ -413,7 +459,9 @@ async function operate(action: SoftwareOperation, entry: CatalogEntry) {
           @change="chooseFile"
         />
       </div>
-      <p class="muted">添加后可查看软件介绍，再选择安装。</p>
+      <p class="muted">
+        添加后可查看软件介绍，再选择安装。
+      </p>
     </div>
   </FormDialog>
 </template>

@@ -23,6 +23,7 @@ import {
   type FrpsConfig,
   type FrpsStatus,
   type FrpsRequest,
+  type ComponentVersion,
 } from "../api/client";
 import { useSoftwareOperations } from "../composables/software";
 import { useLiveRefresh } from "../composables/live";
@@ -33,6 +34,7 @@ import { softwareStatus } from "../utils/software";
 import FormDialog from "./FormDialog.vue";
 import PortRangesInput from "./PortRangesInput.vue";
 import TaskLogButton from "./TaskLogButton.vue";
+import ComponentVersionDialog from "./ComponentVersionDialog.vue";
 
 const emit = defineEmits<{ changed: []; busy: [value: boolean] }>();
 const message = useMessage(),
@@ -50,6 +52,7 @@ const editing = ref(false),
   addressMode = ref("all");
 const httpEnabled = ref(false),
   httpsEnabled = ref(false);
+const pendingInstall = ref<FrpsConfig | null>(null);
 const addressOptions = [
   { label: "所有 IPv4 地址（推荐）", value: "all" },
   { label: "所有 IPv6 地址", value: "ipv6" },
@@ -230,8 +233,6 @@ async function save() {
       invalid("connection", "请填写接收连接的 IP 地址");
     if (!config.token.trim() && !status.value?.token_set)
       invalid("connection", "请填写访问密钥");
-    if (!status.value?.installed && !config.image.trim())
-      invalid("connection", "请填写软件下载来源");
     const ports = unrestricted.value
       ? []
       : ranges.value.map((row) => {
@@ -260,40 +261,74 @@ async function save() {
   const action: FrpsRequest["action"] = status.value.installed
     ? "configure"
     : "install";
+  if (action === "install") {
+    pendingInstall.value = valid;
+    editing.value = false;
+    return;
+  }
   const task = await submit(
     { action: "frps", frps: { action, config: valid } },
-    action === "install" ? "FRP 服务端安装日志" : "FRP 设置操作日志",
+    "FRP 设置操作日志",
   );
   if (task) editing.value = false;
+}
+async function installVersion(version: ComponentVersion) {
+  if (!pendingInstall.value) return;
+  const task = await submit(
+    {
+      action: "frps",
+      version: version.id,
+      frps: { action: "install", config: pendingInstall.value },
+    },
+    "FRP 服务端安装日志",
+  );
+  if (task) pendingInstall.value = null;
 }
 useLiveRefresh(api, ["software"], load, () => reading.value);
 onMounted(load);
 </script>
 <template>
+  <ComponentVersionDialog
+    :show="!!pendingInstall"
+    name="FRP 服务端"
+    source-id="builtin"
+    app-id="frps"
+    :busy="processing"
+    @choose="installVersion"
+    @cancel="
+      pendingInstall = null;
+      editing = true;
+    "
+  />
   <section class="page-stack panel frps-panel">
     <div class="frps-toolbar">
       <div class="frps-service-status">
         <h3>服务状态</h3>
-        <NTag :type="display.tone" :bordered="false">{{ display.label }}</NTag>
-        <span v-if="status?.stats?.version" class="muted"
-          >v{{ status.stats.version }}</span
-        >
+        <NTag :type="display.tone" :bordered="false">
+          {{ display.label }}
+        </NTag>
+        <span v-if="status?.stats?.version" class="muted">v{{ status.stats.version }}</span>
       </div>
       <div v-if="status?.installed" class="button-row">
         <NButton
           type="primary"
           :disabled="!permitted || processing"
           @click="settings"
-          >服务设置</NButton
         >
-        <RouterLink :to="{ path: '/components', query: { software: 'frps' } }"
-          ><NButton>软件管理</NButton></RouterLink
-        >
+          服务设置
+        </NButton>
+        <RouterLink :to="{ path: '/components', query: { software: 'frps' } }">
+          <NButton>软件管理</NButton>
+        </RouterLink>
       </div>
     </div>
     <NSkeleton v-if="!status && reading" text :repeat="3" />
-    <NAlert v-if="readError" type="error">{{ readError }}</NAlert>
-    <NAlert v-if="status?.error" type="warning">{{ status.error }}</NAlert>
+    <NAlert v-if="readError" type="error">
+      {{ readError }}
+    </NAlert>
+    <NAlert v-if="status?.error" type="warning">
+      {{ status.error }}
+    </NAlert>
     <template v-if="status?.installed">
       <div class="frps-metrics">
         <div v-for="item in metrics" :key="item.label" class="frps-metric">
@@ -311,8 +346,9 @@ onMounted(load);
               type="primary"
               :disabled="!endpoint"
               @click="copy(endpoint)"
-              >复制地址</NButton
             >
+              复制地址
+            </NButton>
           </div>
         </div>
         <span class="frps-connection-security">{{
@@ -327,12 +363,10 @@ onMounted(load);
         <div>
           <dt>网站转发</dt>
           <dd class="frps-website-status">
-            <span v-for="website in websites" :key="website.name"
-              >{{ website.name
-              }}<span :class="{ muted: !website.port }">{{
-                website.port ? `端口 ${website.port}` : "未开启"
-              }}</span></span
-            >
+            <span v-for="website in websites" :key="website.name">{{ website.name
+            }}<span :class="{ muted: !website.port }">{{
+              website.port ? `端口 ${website.port}` : "未开启"
+            }}</span></span>
           </dd>
         </div>
         <div>
@@ -341,9 +375,9 @@ onMounted(load);
         </div>
       </dl>
       <div class="frps-note">
-        客户端需填写相同的访问密钥，连接与映射端口需在<RouterLink to="/firewall"
-          >防火墙</RouterLink
-        >中放行。
+        客户端需填写相同的访问密钥，连接与映射端口需在<RouterLink to="/firewall">
+          防火墙
+        </RouterLink>中放行。
       </div>
     </template>
     <NEmpty
@@ -352,16 +386,21 @@ onMounted(load);
       description="尚未安装 FRP 服务端"
     >
       <template #extra>
-        <p class="muted">安装后可连接其他设备，使用端口映射和网站转发。</p>
+        <p class="muted">
+          安装后可连接其他设备，使用端口映射和网站转发。
+        </p>
         <NButton
           type="primary"
           :disabled="!permitted || processing || status.state === 'unknown'"
           @click="settings"
-          >安装 FRP 服务端</NButton
         >
+          安装 FRP 服务端
+        </NButton>
       </template>
     </NEmpty>
-    <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
+    <NAlert v-if="last?.error" type="error">
+      {{ last.error }}
+    </NAlert>
     <div v-if="last" class="frps-task">
       <span class="muted">{{
         last.state === "succeeded"
@@ -443,13 +482,15 @@ onMounted(load);
                   <NButton
                     :disabled="processing || !permitted"
                     @click="draft.token = randomUUID().replaceAll('-', '')"
-                    >随机生成</NButton
                   >
+                    随机生成
+                  </NButton>
                   <NButton
                     :disabled="processing || !draft.token"
                     @click="copy(draft.token)"
-                    >复制密钥</NButton
                   >
+                    复制密钥
+                  </NButton>
                 </div>
                 <span class="frps-field-hint">{{
                   status?.token_set
@@ -479,13 +520,6 @@ onMounted(load);
                 />
               </div>
             </div>
-            <NFormItem v-if="!status?.installed" label="软件下载来源" required>
-              <NInput
-                v-model:value="draft.image"
-                placeholder="默认使用官方发布版本"
-                :disabled="processing || !permitted"
-              />
-            </NFormItem>
           </div>
         </NTabPane>
         <NTabPane name="ports" tab="端口映射" display-directive="show">
@@ -496,8 +530,12 @@ onMounted(load);
                 :disabled="processing || !permitted"
                 @update:value="unrestricted = $event === 'all'"
               >
-                <NRadioButton value="selected">指定端口</NRadioButton>
-                <NRadioButton value="all">不限制</NRadioButton>
+                <NRadioButton value="selected">
+                  指定端口
+                </NRadioButton>
+                <NRadioButton value="all">
+                  不限制
+                </NRadioButton>
               </NRadioGroup>
             </NFormItem>
             <template v-if="!unrestricted">
@@ -509,9 +547,9 @@ onMounted(load);
                 :disabled="processing || !permitted"
               />
             </template>
-            <NAlert v-else type="info" :show-icon="false"
-              >客户端可使用任意可用端口进行映射。对外访问仍受服务器防火墙限制。</NAlert
-            >
+            <NAlert v-else type="info" :show-icon="false">
+              客户端可使用任意可用端口进行映射。对外访问仍受服务器防火墙限制。
+            </NAlert>
           </div>
         </NTabPane>
         <NTabPane name="web" tab="网站转发" display-directive="show">
@@ -574,10 +612,8 @@ onMounted(load);
                   placeholder="例如 example.com"
                   :disabled="processing || !permitted"
                 />
-                <span class="frps-field-hint"
-                  >设置后，客户端可使用 app.example.com
-                  等子域名。域名需解析到此服务器。</span
-                >
+                <span class="frps-field-hint">设置后，客户端可使用 app.example.com
+                  等子域名。域名需解析到此服务器。</span>
               </div>
             </NFormItem>
             <p v-if="httpEnabled || httpsEnabled" class="frps-field-hint">

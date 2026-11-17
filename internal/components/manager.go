@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/platform"
 	"nginxpanel/internal/protocol"
@@ -23,6 +24,9 @@ import (
 )
 
 type Manager struct {
+	Version                                   string
+	BuiltinVersions                           func(context.Context, componentversions.Query) (componentversions.Catalog, error)
+	VersionAction                             func(context.Context, software.Request, software.Progress) (software.Result, error)
 	ContainerAction                           func(context.Context, software.Request, software.Progress) (software.Result, error)
 	FrpsAction                                func(context.Context, software.Request, software.Progress) (software.Result, error)
 	Fail2banAction                            func(context.Context, software.Request, software.Progress) (software.Result, error)
@@ -38,7 +42,7 @@ type Manager struct {
 }
 
 func (m *Manager) Overview() Overview {
-	out := Overview{Scope: m.Scope, KeyIDs: []string{}}
+	out := Overview{Scope: m.Scope, KeyIDs: []string{}, Versions: map[string]componentversions.Version{}}
 	if m.Dev || m.Scope != "host" {
 		out.Reason = "须由本机 root 确认宿主机组件范围"
 		return out
@@ -265,7 +269,13 @@ func (m *Manager) run(out Operation, until time.Time) {
 			}
 		}
 		var result software.Result
-		if out.Input.Software.Action == "container" {
+		if out.Input.Software.SourceID == "builtin" && (out.Input.Software.Action == "install" || out.Input.Software.Action == "update") || out.Input.Software.Version != "" && (out.Input.Software.Action == "frps" || out.Input.Software.Action == "fail2ban") {
+			if m.VersionAction == nil {
+				err = errors.New("组件版本切换不可用")
+			} else {
+				result, err = m.VersionAction(ctx, *out.Input.Software, progress)
+			}
+		} else if out.Input.Software.Action == "container" {
 			if m.ContainerAction == nil {
 				err = errors.New("Docker 容器管理不可用")
 			} else {
@@ -290,7 +300,7 @@ func (m *Manager) run(out Operation, until time.Time) {
 				result, err = m.UpdatePanel(ctx, out.ID, *out.Input.Software, progress)
 			}
 		} else {
-			result, err = software.Run(ctx, m.DataDir, *out.Input.Software, progress)
+			result, err = software.RunWithCore(ctx, m.DataDir, m.Version, *out.Input.Software, progress)
 		}
 		if !errors.Is(err, ErrRestartPending) {
 			out.Software = &result

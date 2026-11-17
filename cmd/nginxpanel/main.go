@@ -1553,7 +1553,7 @@ func run() error {
 		if *nginxBinary != "" || containerRuntime != nil {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Container: containerRuntime, Journal: journal}
 		}
-		host := &agent.Server{Socket: path, SocketSELinuxContext: *socketSELinuxContext, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}
+		host := &agent.Server{ProgramVersion: version, Socket: path, SocketSELinuxContext: *socketSELinuxContext, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}
 		if command == "core" {
 			o := app.Defaults(absDir, false)
 			d, err := panelruntime.ReadDeployment(absDir)

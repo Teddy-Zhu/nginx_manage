@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/secure"
 	"os"
 	"os/exec"
@@ -60,6 +61,9 @@ func applicationDirectory(data, source, app string) string {
 	return filepath.Join(data, "agent", "software", "work", source, app)
 }
 func operationCommand(ctx context.Context, data, source string, app Application, action string, progress Progress) (string, error) {
+	return versionCommand(ctx, data, source, app, action, nil, nil, progress)
+}
+func versionCommand(ctx context.Context, data, source string, app Application, action string, target, previous *componentversions.Version, progress Progress) (string, error) {
 	operation, ok := app.Actions[action]
 	if !ok {
 		return "", fmt.Errorf("软件未提供此操作：%s", action)
@@ -76,6 +80,14 @@ func operationCommand(ctx context.Context, data, source string, app Application,
 	command := exec.CommandContext(ctx, operation.Command[0], operation.Command[1:]...)
 	command.Dir = dir
 	command.Env = append(os.Environ(), "NGINXPANEL_SOFTWARE_DIR="+dir, "NGINXPANEL_SOFTWARE_ID="+secure.Hash([]byte(source + "/" + app.ID))[:16], "NGINXPANEL_SOURCE_ID="+source, "NGINXPANEL_APP_ID="+app.ID)
+	version, id, oldVersion, oldID := "", "", "", ""
+	if target != nil {
+		version, id = target.Version, target.ID
+	}
+	if previous != nil {
+		oldVersion, oldID = previous.Version, previous.ID
+	}
+	command.Env = append(command.Env, "NGINXPANEL_TARGET_VERSION="+version, "NGINXPANEL_TARGET_VERSION_ID="+id, "NGINXPANEL_PREVIOUS_VERSION="+oldVersion, "NGINXPANEL_PREVIOUS_VERSION_ID="+oldID)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	command.Cancel = func() error {
 		err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL)

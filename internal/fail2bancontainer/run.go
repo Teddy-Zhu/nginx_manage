@@ -50,7 +50,7 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 		out.Message = "服务日志已读取"
 		return out, err
 	case "install", "update":
-		if r.Action == "install" {
+		if r.Action == "install" || r.Config != nil {
 			if installed && c.Revision != r.Config.Revision {
 				return out, errors.New("配置已更新，请刷新后重试")
 			}
@@ -209,7 +209,7 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 			return out, errors.New("配置已更新，请刷新后重试")
 		}
 		if next.Image != c.Image {
-			return out, errors.New("更换下载来源后，请重新安装软件")
+			return out, errors.New("请通过版本管理切换软件版本")
 		}
 		alive := false
 		if present {

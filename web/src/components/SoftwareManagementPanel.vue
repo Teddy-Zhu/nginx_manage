@@ -25,17 +25,23 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
   <div class="page-stack software-management">
     <div class="software-summary">
       <div class="button-row">
-        <NTag :type="app.status.tone" :bordered="false">{{
-          app.status.label
-        }}</NTag>
+        <NTag :type="app.status.tone" :bordered="false">
+          {{
+            app.status.label
+          }}
+        </NTag>
         <span class="muted">{{ app.note }}</span>
       </div>
-      <p class="muted">{{ app.description }}</p>
+      <p class="muted">
+        {{ app.description }}
+      </p>
     </div>
-    <NAlert v-if="error" type="warning">{{ error }}</NAlert>
-    <NAlert v-if="task?.error" type="error"
-      >上次操作未完成：{{ task.error }}</NAlert
-    >
+    <NAlert v-if="error" type="warning">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="task?.error" type="error">
+      上次操作未完成：{{ task.error }}
+    </NAlert>
     <section class="software-section">
       <div class="management-heading">
         <h3>运行管理</h3>
@@ -43,10 +49,12 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
           v-if="settingsAvailable"
           :disabled="!permitted || busy"
           @click="$emit('settings')"
-          >运行设置</NButton
         >
+          运行设置
+        </NButton>
       </div>
       <SoftwareControls
+        :versioned="app.versioned"
         compact
         :installed="app.installed"
         :runtime="runtime"
@@ -62,11 +70,15 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
     <section v-if="app.installed && app.entry" class="software-entry">
       <div>
         <h3>功能入口</h3>
-        <p class="muted">{{ app.name }}</p>
+        <p class="muted">
+          {{ app.name }}
+        </p>
       </div>
-      <RouterLink v-if="app.entry.to" :to="app.entry.to"
-        ><NButton type="primary">打开功能页面</NButton></RouterLink
-      >
+      <RouterLink v-if="app.entry.to" :to="app.entry.to">
+        <NButton type="primary">
+          打开功能页面
+        </NButton>
+      </RouterLink>
       <NButton
         v-else-if="app.entry.href"
         tag="a"
@@ -74,8 +86,9 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
         target="_blank"
         rel="noopener noreferrer"
         type="primary"
-        >打开应用</NButton
       >
+        打开应用
+      </NButton>
     </section>
     <div v-if="task" class="management-task">
       <span class="muted">{{

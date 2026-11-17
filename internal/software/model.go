@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/containers"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/frps"
@@ -17,10 +18,12 @@ type Action struct {
 	Description string   `json:"description,omitempty"`
 }
 type Application struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Actions     map[string]Action `json:"actions"`
+	ID          string                      `json:"id"`
+	Name        string                      `json:"name"`
+	Description string                      `json:"description"`
+	Actions     map[string]Action           `json:"actions"`
+	VersionsURL string                      `json:"versions_url,omitempty"`
+	Versions    []componentversions.Version `json:"versions,omitempty"`
 }
 type Source struct {
 	Schema       int           `json:"schema"`
@@ -30,12 +33,14 @@ type Source struct {
 	Applications []Application `json:"applications"`
 }
 type Installation struct {
-	SourceID    string      `json:"source_id"`
-	Application Application `json:"application"`
-	UpdatedAt   int64       `json:"updated_at"`
-	State       string      `json:"state,omitempty"`
-	Error       string      `json:"error,omitempty"`
-	Entry       string      `json:"entry,omitempty"`
+	SourceID    string                     `json:"source_id"`
+	Application Application                `json:"application"`
+	UpdatedAt   int64                      `json:"updated_at"`
+	State       string                     `json:"state,omitempty"`
+	Error       string                     `json:"error,omitempty"`
+	Entry       string                     `json:"entry,omitempty"`
+	Version     *componentversions.Version `json:"version,omitempty"`
+	Previous    *componentversions.Version `json:"previous,omitempty"`
 }
 type Catalog struct {
 	Sources   []Source       `json:"sources"`
@@ -53,12 +58,14 @@ type Request struct {
 	AppID      string                     `json:"app_id,omitempty"`
 	PlanID     string                     `json:"plan_id,omitempty"`
 	Prerelease bool                       `json:"prerelease,omitempty"`
+	Version    string                     `json:"version,omitempty"`
 }
 type Result struct {
-	SourceID string `json:"source_id,omitempty"`
-	AppID    string `json:"app_id,omitempty"`
-	Message  string `json:"message"`
-	Log      string `json:"log"`
+	SourceID string                     `json:"source_id,omitempty"`
+	AppID    string                     `json:"app_id,omitempty"`
+	Message  string                     `json:"message"`
+	Log      string                     `json:"log"`
+	Version  *componentversions.Version `json:"version,omitempty"`
 }
 
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
@@ -79,10 +86,21 @@ func (s Source) Validate() error {
 	}
 	seen := map[string]bool{}
 	for _, app := range s.Applications {
-		if !identifier.MatchString(app.ID) || seen[app.ID] || strings.TrimSpace(app.Name) == "" || len(app.Name) > 128 || len(app.Description) > 1024 || len(app.Actions) < 3 || len(app.Actions) > 8 {
+		if !identifier.MatchString(app.ID) || seen[app.ID] || strings.TrimSpace(app.Name) == "" || len(app.Name) > 128 || len(app.Description) > 1024 || len(app.Actions) < 3 || len(app.Actions) > 11 {
 			return errors.New("软件名称或操作定义无效")
 		}
 		seen[app.ID] = true
+		if app.VersionsURL != "" && len(app.Versions) > 0 {
+			return errors.New("软件版本列表与版本目录地址只能选择一种")
+		}
+		if app.VersionsURL != "" {
+			if _, err := sourceURL(app.VersionsURL); err != nil {
+				return err
+			}
+		}
+		if err := validateVersions(app.Versions); err != nil {
+			return err
+		}
 		for _, required := range []string{"install", "uninstall", "status"} {
 			if _, ok := app.Actions[required]; !ok {
 				return errors.New("软件必须定义安装、卸载和状态检查操作")
@@ -90,7 +108,7 @@ func (s Source) Validate() error {
 		}
 		for name, action := range app.Actions {
 			switch name {
-			case "install", "uninstall", "status", "start", "stop", "restart", "update", "logs":
+			case "install", "uninstall", "status", "start", "stop", "restart", "update", "logs", "check-version", "backup", "restore":
 			default:
 				return errors.New("不支持的软件操作：" + name)
 			}
@@ -108,6 +126,15 @@ func (s Source) Validate() error {
 	return nil
 }
 func (r Request) Validate() error {
+	if r.Version == "" && (r.SourceID == "builtin" && (r.Action == "install" || r.Action == "update") || r.Frps != nil && (r.Frps.Action == "install" || r.Frps.Action == "update") || r.Fail2ban != nil && (r.Fail2ban.Action == "install" || r.Fail2ban.Action == "update")) {
+		return errors.New("请选择需要安装的软件版本")
+	}
+	if len(r.Version) > 128 || strings.ContainsAny(r.Version, " \t\r\n/\\\x00") || r.Version != "" && r.Action != "install" && r.Action != "update" && r.Action != "frps" && r.Action != "fail2ban" {
+		return errors.New("目标软件版本无效")
+	}
+	if r.Version != "" && (r.Action == "frps" && (r.Frps == nil || r.Frps.Action != "install" && r.Frps.Action != "update") || r.Action == "fail2ban" && (r.Fail2ban == nil || r.Fail2ban.Action != "install" && r.Fail2ban.Action != "update")) {
+		return errors.New("此操作不能选择版本")
+	}
 	if r.Action == "container" {
 		if r.Container == nil || r.Frps != nil || r.Fail2ban != nil || r.Source != nil || r.URL != "" || r.SourceID != "" || r.AppID != "" || r.PlanID != "" || r.Prerelease {
 			return errors.New("容器操作参数无效")

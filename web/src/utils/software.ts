@@ -68,6 +68,7 @@ export interface SoftwareEntry {
   href?: string;
 }
 export interface SoftwareView {
+  versioned?: boolean;
   id: string;
   name: string;
   description: string;
@@ -283,6 +284,11 @@ export function applicationView(
     name: application.name,
     description: application.description || "暂无软件介绍",
     category: "第三方应用",
+    versioned: !!(
+      application.versions_url ||
+      application.versions?.length ||
+      installation?.version
+    ),
     accent: "amber",
     installed: !!installation,
     status: softwareStatus(
@@ -291,6 +297,8 @@ export function applicationView(
       softwareApplicationTask(tasks, source.id, application.id),
     ),
     entry: applicationEntry(entry, origin),
-    note: `来自 ${source.name}`,
+    note: installation?.version
+      ? `版本 ${installation.version.version} · ${source.name}`
+      : `来自 ${source.name}`,
   };
 }

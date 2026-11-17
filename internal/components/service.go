@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"nginxpanel/internal/componentversions"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ type Task struct {
 
 func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	if s.Agent == nil {
-		return Overview{Reason: "未连接本机 Agent", KeyIDs: []string{}}, nil
+		return Overview{Reason: "未连接本机 Agent", KeyIDs: []string{}, Versions: map[string]componentversions.Version{}}, nil
 	}
 	return s.Agent.ReadComponents(ctx)
 }
@@ -62,7 +63,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		if err := p.Require("system.write"); err != nil {
 			return out, err
 		}
-		if in.Input.Software.Action == "fail2ban" {
+		if in.Input.Software.Action == "fail2ban" || in.Input.Software.SourceID == "builtin" && in.Input.Software.AppID == "fail2ban" {
 			if err := p.Require("security.write"); err != nil {
 				return out, err
 			}

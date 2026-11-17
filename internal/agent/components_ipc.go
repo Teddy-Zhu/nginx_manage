@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"nginxpanel/internal/components"
+	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/frpscontainer"
+	"nginxpanel/internal/nginxcontainer"
+	"nginxpanel/internal/releases"
 	"nginxpanel/internal/software"
 )
 
@@ -33,11 +36,25 @@ func componentReply(w http.ResponseWriter, data any, err error) {
 	}{Protocol, code, message, data})
 }
 func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
+	s.componentVersionHandlers(mux, m)
 	s.containerHandlers(mux)
 	s.componentOfflineHandlers(mux, m)
 	s.fail2banContainerHandler(mux)
 	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {
 		out := m.Overview()
+		out.Versions = map[string]componentversions.Version{}
+		if binding, err := nginxcontainer.Read(s.DataDir); err == nil && releases.VersionChannel(binding.SignedImage.Version) != "" {
+			v := binding.SignedImage.Version
+			out.Versions["nginx"] = componentversions.Version{ID: "nginx-v" + v, Version: v, SoftwareVersion: binding.Capabilities.Version, Channel: releases.VersionChannel(v)}
+		}
+		for _, app := range []string{"frps", "fail2ban"} {
+			catalog, err := s.builtinVersions(r.Context(), componentversions.Query{SourceID: "builtin", AppID: app, Channel: "stable", Page: 1})
+			if err != nil {
+				out.Software.Error = err.Error()
+			} else if catalog.Current != nil {
+				out.Versions[app] = *catalog.Current
+			}
+		}
 		if !s.Dev && s.ComponentScope == "host" {
 			call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			status := frpscontainer.Status(call, s.DataDir)

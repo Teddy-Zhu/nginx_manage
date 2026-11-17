@@ -4,6 +4,7 @@ package components
 import (
 	"context"
 	"encoding/hex"
+	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/frps"
 	"regexp"
 	"slices"
@@ -166,21 +167,22 @@ type Operation struct {
 	Panel         *PanelPreparation      `json:"panel,omitempty"`
 }
 type Overview struct {
-	Frps             *frps.Status               `json:"frps,omitempty"`
-	Software         software.Catalog           `json:"software"`
-	SwitchAvailable  bool                       `json:"switch_available"`
-	SwitchReason     string                     `json:"switch_reason"`
-	InstallAvailable bool                       `json:"install_available"`
-	InstallReason    string                     `json:"install_reason"`
-	Installation     *nginxruntime.Installation `json:"installation,omitempty"`
-	Running          bool                       `json:"running"`
-	RuntimeReason    string                     `json:"runtime_reason"`
-	Available        bool                       `json:"available"`
-	Scope            string                     `json:"scope"`
-	Reason           string                     `json:"reason"`
-	Repository       string                     `json:"repository"`
-	TrustSHA256      string                     `json:"trust_sha256"`
-	KeyIDs           []string                   `json:"key_ids"`
+	Versions         map[string]componentversions.Version `json:"versions"`
+	Frps             *frps.Status                         `json:"frps,omitempty"`
+	Software         software.Catalog                     `json:"software"`
+	SwitchAvailable  bool                                 `json:"switch_available"`
+	SwitchReason     string                               `json:"switch_reason"`
+	InstallAvailable bool                                 `json:"install_available"`
+	InstallReason    string                               `json:"install_reason"`
+	Installation     *nginxruntime.Installation           `json:"installation,omitempty"`
+	Running          bool                                 `json:"running"`
+	RuntimeReason    string                               `json:"runtime_reason"`
+	Available        bool                                 `json:"available"`
+	Scope            string                               `json:"scope"`
+	Reason           string                               `json:"reason"`
+	Repository       string                               `json:"repository"`
+	TrustSHA256      string                               `json:"trust_sha256"`
+	KeyIDs           []string                             `json:"key_ids"`
 }
 type Host interface {
 	ReadComponents(context.Context) (Overview, error)

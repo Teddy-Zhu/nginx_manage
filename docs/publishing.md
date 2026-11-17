@@ -137,3 +137,11 @@ nginxpanel-release spec --component panel \
 Nginx 规格使用 `--component nginx` 和独立版本的说明、策略文件（工作流在临时目录自动生成），打包时必须提供 `--images <经过核对的镜像 publication.json>`；核心打包不提供镜像输入。两种签名清单不混装核心资产与组件镜像。已有本机信任根继续限制源码仓库、公钥和接收协议，OCI 证据仍核对 GitHub 源码与提交；镜像仓库由签名清单固定，支持 Docker Hub 与原有 GHCR 引用，普通配置迁移不会覆盖信任根。
 
 上传失败可能保留构建镜像或由 GitHub CLI 留下的草稿，流程不自动覆盖发行、删除草稿或忽略上传、校验及验签错误。实际 GitHub Actions、Docker Hub 推送及签名下载尚需在配置了上述凭据的真实仓库执行；本地检查不能代替实际发布结果。
+
+## 内置软件版本目录
+
+Nginx 独立发行完成后，面板版本选择器直接按页读取包含签名材料的 `nginx-v*` 发行记录，不需要重新发布核心来更新版本列表。稳定版和 Beta 分开展示；实际安装仍验证签名清单及固定镜像摘要。
+
+Fail2ban 和 FRP 的目录为 `internal/componentversions/builtin.json`，既随核心嵌入，也可由面板“检查新版”从主分支刷新。新增条目时使用新的组件 SemVer 和不可变 `id`，另填实际 `software_version`；确认官方多架构镜像的摘要、目标架构与必要的 `minimum_core`。不能替换已有条目的发行内容，不使用 `latest` 等浮动标签作为版本身份。该目录只更新元数据，不触发安装，不需要核心 Release；发布前应保留仍需提供的历史版本。
+
+第三方软件使用同一公开版本元数据，通过自己的安装脚本和原生 Compose 处理所选版本；第三方 JSON 不增加 Docker 配置。接入方式见[软件源规范](software-sources.md#组件版本管理)。

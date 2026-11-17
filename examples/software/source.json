@@ -71,8 +71,54 @@
             "status"
           ],
           "description": "检查网站状态并返回访问入口"
+        },
+        "check-version": {
+          "command": [
+            "/bin/sh",
+            "-c",
+            "if [ -f ./manage.sh ]; then /bin/sh ./manage.sh check-version; else case \"$NGINXPANEL_TARGET_VERSION\" in 1.0.0|1.1.0) command -v docker >/dev/null;; *) exit 1;; esac; fi"
+          ],
+          "description": "检查所选版本及运行条件"
+        },
+        "backup": {
+          "command": [
+            "/bin/sh",
+            "./manage.sh",
+            "backup"
+          ],
+          "description": "备份版本管理的页面"
+        },
+        "restore": {
+          "command": [
+            "/bin/sh",
+            "./manage.sh",
+            "restore"
+          ],
+          "description": "恢复原版本"
         }
-      }
+      },
+      "versions": [
+        {
+          "id": "1.1.0",
+          "version": "1.1.0",
+          "channel": "stable",
+          "architectures": [
+            "amd64",
+            "arm64"
+          ],
+          "notes": "演示新版页面，支持恢复到 1.0.0。"
+        },
+        {
+          "id": "1.0.0",
+          "version": "1.0.0",
+          "channel": "stable",
+          "architectures": [
+            "amd64",
+            "arm64"
+          ],
+          "notes": "基础演示版本。"
+        }
+      ]
     }
   ]
 }

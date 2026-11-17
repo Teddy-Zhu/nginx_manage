@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"nginxpanel/internal/components"
+	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/transport/apigen"
 )
@@ -14,6 +15,25 @@ func (s *Server) componentsReady(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+func (s *Server) GetComponentVersions(w http.ResponseWriter, r *http.Request, params apigen.GetComponentVersionsParams) {
+	_, ok := s.authorize(w, r, "read", "components.manage")
+	if !ok || !s.componentsReady(w, r) {
+		return
+	}
+	q := componentversions.Query{SourceID: params.SourceId, AppID: params.AppId, Channel: string(params.Channel), Page: 1}
+	if params.Page != nil {
+		q.Page = *params.Page
+	}
+	if params.Refresh != nil {
+		q.Refresh = *params.Refresh
+	}
+	out, err := s.Components.Versions(r.Context(), q)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, out)
 }
 func (s *Server) GetComponents(w http.ResponseWriter, r *http.Request) {
 	_, ok := s.authorize(w, r, "read", "components.manage")

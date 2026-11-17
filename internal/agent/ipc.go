@@ -44,6 +44,7 @@ type CheckResult struct {
 	Diagnostics   []nginxconfig.Diagnostic `json:"diagnostics"`
 }
 type Server struct {
+	ProgramVersion       string
 	Socket               string
 	SocketSELinuxContext string
 	AllowedUID           uint32
@@ -176,7 +177,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}()
 	}
 	mux := http.NewServeMux()
-	componentManager := &components.Manager{ContainerAction: s.manageDockerContainer, FrpsAction: s.manageFrps, Fail2banAction: s.manageContainerFail2ban, UpdatePanel: s.updateSoftwarePanel, DataDir: s.DataDir, Dir: filepath.Join(s.DataDir, "agent", "components"), TrustPath: s.ReleaseTrust, TokenPath: s.ReleaseToken, Scope: s.ComponentScope, Dev: s.Dev}
+	componentManager := &components.Manager{Version: s.ProgramVersion, BuiltinVersions: s.builtinVersions, VersionAction: s.manageComponentVersion, ContainerAction: s.manageDockerContainer, FrpsAction: s.manageFrps, Fail2banAction: s.manageContainerFail2ban, UpdatePanel: s.updateSoftwarePanel, DataDir: s.DataDir, Dir: filepath.Join(s.DataDir, "agent", "components"), TrustPath: s.ReleaseTrust, TokenPath: s.ReleaseToken, Scope: s.ComponentScope, Dev: s.Dev}
 	defer componentManager.Close()
 	if err := componentManager.Open(ctx); err != nil {
 		return err

@@ -1,6 +1,8 @@
 services:
   web:
-    image: nginx:stable-alpine
+    image: nginx@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
+    labels:
+      io.nginxpanel.demo.version: "${DEMO_VERSION:-uninstalled}"
     restart: unless-stopped
     ports:
       - "${DEMO_PORT:-18080}:80"

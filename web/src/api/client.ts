@@ -84,6 +84,9 @@ export type DockerDetail = components["schemas"]["DockerDetail"];
 export type DockerLogs = components["schemas"]["DockerLogs"];
 export type DockerControl = components["schemas"]["DockerControl"];
 export type SoftwareRequest = components["schemas"]["SoftwareRequest"];
+export type ComponentVersion = components["schemas"]["ComponentVersion"];
+export type ComponentVersionCatalog =
+  components["schemas"]["ComponentVersionCatalog"];
 export type SoftwareSource = components["schemas"]["SoftwareSource"];
 export type SoftwareCatalog = components["schemas"]["SoftwareCatalog"];
 export type UpdateChannel = components["schemas"]["UpdateChannel"];
@@ -1031,6 +1034,21 @@ export function createAPI(scope: RequestScope) {
       }),
     componentTasks: (signal?: AbortSignal) =>
       request<ComponentTask[]>({ url: "/components/tasks", signal }),
+    componentVersions: (
+      params: {
+        source_id: string;
+        app_id: string;
+        channel: "stable" | "beta";
+        page: number;
+        refresh?: boolean;
+      },
+      signal?: AbortSignal,
+    ) =>
+      request<ComponentVersionCatalog>({
+        url: "/components/versions",
+        params,
+        signal,
+      }),
     nginxImageUpgrades: (signal?: AbortSignal) =>
       request<ImageUpgradeTask[]>({ url: "/nginx/images/upgrades", signal }),
     createNginxImageUpgrade: (

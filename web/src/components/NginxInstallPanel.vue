@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { NAlert, NButton, NCheckbox } from "naive-ui";
+import { NAlert, NButton } from "naive-ui";
 import {
   useNodeAPI,
   type ComponentOverview,
   type ComponentTask,
   type ComponentCreateInput,
+  type ComponentVersion,
 } from "../api/client";
 import { useSession } from "../stores/session";
 import { useAction, useIdempotency } from "../composables/action";
 import { inspectTask } from "../stores/operation";
 import TaskLogButton from "./TaskLogButton.vue";
+import ComponentVersionDialog from "./ComponentVersionDialog.vue";
 const props = defineProps<{
   overview: ComponentOverview | null;
   tasks: ComponentTask[];
@@ -26,6 +28,8 @@ const api = useNodeAPI(),
   { run, busy } = useAction();
 let keyFor = useIdempotency();
 const prerelease = ref(false);
+const choosingVersion = ref(false),
+  targetVersion = ref<ComponentVersion | null>(null);
 const updatePath = "/nginx-images";
 const permitted = computed(
   () => !!session.me?.scopes.includes("components.manage"),
@@ -45,6 +49,8 @@ const checked = computed(
         task.action === "check" &&
         task.state === "succeeded" &&
         task.result?.input.prerelease === prerelease.value &&
+        (!targetVersion.value ||
+          task.result?.input.tag === targetVersion.value.id) &&
         hasNginxImage(task),
     ) ?? null,
 );
@@ -78,7 +84,7 @@ function check() {
     check_task_id: "",
     input: {
       action: "check",
-      tag: "",
+      tag: targetVersion.value?.id ?? "",
       prerelease: prerelease.value,
       components: ["nginx"],
       plan_id: "",
@@ -124,52 +130,67 @@ function pull(item: ComponentTask, imageID: string) {
     },
   });
 }
+async function chooseVersion(version: ComponentVersion) {
+  targetVersion.value = version;
+  prerelease.value = version.channel === "beta";
+  choosingVersion.value = false;
+  await check();
+}
 </script>
 <template>
+  <ComponentVersionDialog
+    :show="choosingVersion"
+    name="Nginx"
+    source-id="builtin"
+    app-id="nginx"
+    :busy="busy || active"
+    submit-text="检查此版本"
+    @choose="chooseVersion"
+    @cancel="choosingVersion = false"
+  />
   <div class="page-stack">
-    <NAlert v-if="overview && !overview.available" type="warning"
-      >安装源暂不可用，请稍后重试或查看操作日志。</NAlert
-    >
+    <NAlert v-if="overview && !overview.available" type="warning">
+      安装源暂不可用，请稍后重试或查看操作日志。
+    </NAlert>
     <div v-if="overview?.installation" class="button-row">
-      <RouterLink :to="updatePath"
-        ><NButton>应用已下载的更新</NButton></RouterLink
-      >
+      <RouterLink :to="updatePath">
+        <NButton>应用已下载的更新</NButton>
+      </RouterLink>
     </div>
     <div class="section-heading">
       <h3>{{ overview?.installation ? "下载更新" : "选择安装版本" }}</h3>
-      <NCheckbox v-model:checked="prerelease" :disabled="busy || active"
-        >包含预览版本</NCheckbox
-      >
     </div>
     <div class="button-row">
       <NButton
         type="primary"
         :loading="busy"
         :disabled="!permitted || !overview?.available || active"
-        @click="check"
-        >查找可用版本</NButton
-      ><TaskLogButton v-if="checked" :task-id="checked.id" />
+        @click="choosingVersion = true"
+      >
+        选择版本
+      </NButton><TaskLogButton v-if="checked" :task-id="checked.id" />
     </div>
     <template v-if="release">
       <p>可用版本 {{ release.version }}</p>
-      <NAlert v-if="release.expires_at * 1000 <= Date.now()" type="info"
-        >版本信息已过期，请重新查找可用版本。</NAlert
-      >
-      <NAlert v-if="!checked?.result?.runtime_ready" type="warning"
-        >当前服务器暂不满足此版本的安装条件，请查看检查日志。</NAlert
-      >
+      <NAlert v-if="release.expires_at * 1000 <= Date.now()" type="info">
+        版本信息已过期，请重新查找可用版本。
+      </NAlert>
+      <NAlert v-if="!checked?.result?.runtime_ready" type="warning">
+        当前服务器暂不满足此版本的安装条件，请查看检查日志。
+      </NAlert>
       <NButton
         :loading="busy"
         :disabled="
           !permitted ||
-          busy ||
-          active ||
-          !checked?.result?.runtime_ready ||
-          release.expires_at * 1000 <= Date.now()
+            busy ||
+            active ||
+            !checked?.result?.runtime_ready ||
+            release.expires_at * 1000 <= Date.now()
         "
         @click="prepare"
-        >准备镜像</NButton
       >
+        准备镜像
+      </NButton>
     </template>
     <section
       v-for="item in prepared"
@@ -177,8 +198,7 @@ function pull(item: ComponentTask, imageID: string) {
       class="record-card page-stack"
     >
       <div class="section-heading">
-        <strong>{{ item.result?.release?.version }} 已准备</strong
-        ><TaskLogButton :task-id="item.id" />
+        <strong>{{ item.result?.release?.version }} 已准备</strong><TaskLogButton :task-id="item.id" />
       </div>
       <div class="button-row">
         <RouterLink
@@ -186,22 +206,27 @@ function pull(item: ComponentTask, imageID: string) {
             path: updatePath,
             query: { prepare: item.id },
           }"
-          ><NButton type="primary" :disabled="busy || active || !permitted">{{
-            "应用更新"
-          }}</NButton></RouterLink
         >
+          <NButton type="primary" :disabled="busy || active || !permitted">
+            {{
+              "应用更新"
+            }}
+          </NButton>
+        </RouterLink>
         <template
           v-for="image in item.result?.release?.images ?? []"
           :key="image.id"
-          ><NButton
+        >
+          <NButton
             v-if="image.id === 'nginx' && !overview?.installation"
             :disabled="
               busy || active || !session.me?.scopes.includes('system.write')
             "
             @click="pull(item, image.id)"
-            >下载运行环境</NButton
-          ></template
-        >
+          >
+            下载运行环境
+          </NButton>
+        </template>
       </div>
     </section>
   </div>
