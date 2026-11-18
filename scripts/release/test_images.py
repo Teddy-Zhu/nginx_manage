@@ -28,14 +28,15 @@ class ImageRegistryTests(unittest.TestCase):
             env = {"NGINX_IMAGE_REPOSITORY": repository, "GITHUB_RUN_ID": "44", "GITHUB_RUN_ATTEMPT": "2"}
             with self.subTest(version=version), patch.dict("os.environ", env, clear=True), \
                     patch("images.read", return_value=json.dumps(manifest).encode()), \
-                    patch("images.Registry") as registry, patch("images.subprocess.run") as run:
-                registry.return_value.get.side_effect = [RegistryNotFound(), raw]
+                    patch.object(Registry, "pull_token", return_value="pull-token"), \
+                    patch.object(Registry, "request", side_effect=[RegistryNotFound(), raw]) as request, \
+                    patch("images.subprocess.run") as run:
                 tag(args)
-                self.assertEqual([call.args for call in registry.return_value.get.call_args_list],
-                                 [("manifests", version)] * 2)
+                url = "https://registry-1.docker.io/v2/myteam/nginxpanel-nginx/manifests/" + version
+                self.assertEqual([call.args[0] for call in request.call_args_list], [url] * 2)
                 self.assertEqual(run.call_args.args[0][-2:], [repository + ":" + version, repository + "@" + digest])
-                registry.return_value.get.side_effect = None
-                registry.return_value.get.return_value = b"another manifest"
+                request.side_effect = None
+                request.return_value = b"another manifest"
                 run.reset_mock()
                 with self.assertRaisesRegex(ValueError, "请使用新的组件版本"):
                     tag(args)

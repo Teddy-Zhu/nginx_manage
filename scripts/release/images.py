@@ -20,6 +20,7 @@ import urllib.request
 
 
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+COMPONENT_TAG = re.compile(r"[0-9][0-9A-Za-z.-]{0,127}")
 SCANNER = "docker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9"
 LIMIT = 32 << 20
 
@@ -69,7 +70,7 @@ def image_repository(repository, image):
 def identity(args):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*", args.repository):
         raise ValueError("invalid repository identity")
-    if not re.fullmatch(r"[0-9][0-9A-Za-z.-]{0,127}", args.version) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", args.commit):
+    if not COMPONENT_TAG.fullmatch(args.version) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", args.commit):
         raise ValueError("invalid source version or commit")
     run = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
     if not re.fullmatch(r"[0-9]+-[0-9]+", run):
@@ -207,7 +208,10 @@ class Registry:
         return raw
 
     def get(self, kind, reference, size=None):
-        if kind not in ("manifests", "blobs") or not (DIGEST.fullmatch(reference) or kind == "manifests" and re.fullmatch(r"(?:release-[0-9]+-[0-9]+|v[0-9][0-9A-Za-z_.-]{0,126})", reference)):
+        manifest_tag = kind == "manifests" and (
+            COMPONENT_TAG.fullmatch(reference) or re.fullmatch(r"release-[0-9]+-[0-9]+", reference)
+        )
+        if kind not in ("manifests", "blobs") or not (DIGEST.fullmatch(reference) or manifest_tag):
             raise ValueError("invalid registry metadata selector")
         headers = {"Authorization": "Bearer " + self.token,
                    "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/octet-stream"}
