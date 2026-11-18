@@ -46,8 +46,8 @@ const savedCheck = "nginxpanel:update-check";
 const savedUpgrade = "nginxpanel:update-task";
 const tasks = ref<ComponentTask[]>([]),
   version = ref(""),
-  checkID = ref(sessionStorage.getItem(savedCheck) ?? ""),
-  upgradeID = ref(sessionStorage.getItem(savedUpgrade) ?? "");
+  checkID = ref(window.sessionStorage.getItem(savedCheck) ?? ""),
+  upgradeID = ref(window.sessionStorage.getItem(savedUpgrade) ?? "");
 const permitted = computed(
   () =>
     session.me?.scopes.includes("components.manage") &&
@@ -123,10 +123,10 @@ async function submit(input: ComponentCreateInput, installing: boolean) {
     tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)];
     if (installing) {
       upgradeID.value = task.id;
-      sessionStorage.setItem(savedUpgrade, task.id);
+      window.sessionStorage.setItem(savedUpgrade, task.id);
     } else {
       checkID.value = task.id;
-      sessionStorage.setItem(savedCheck, task.id);
+      window.sessionStorage.setItem(savedCheck, task.id);
     }
   });
 }
@@ -151,7 +151,7 @@ async function changeChannel(value: typeof channel.value) {
   await run(async () => {
     await saveChannel(value);
     checkID.value = "";
-    sessionStorage.removeItem(savedCheck);
+    window.sessionStorage.removeItem(savedCheck);
   });
 }
 function confirmUpdate() {
