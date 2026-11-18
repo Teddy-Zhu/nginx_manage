@@ -16,9 +16,14 @@ type operationHost struct {
 	status  RootStatus
 	pending bool
 	offline bool
+	reads   chan struct{}
 }
 
 func (h *operationHost) MaintenanceStatus(context.Context) (RootStatus, error) {
+	select {
+	case h.reads <- struct{}{}:
+	default:
+	}
 	if h.offline {
 		return RootStatus{}, errors.New("agent offline")
 	}
@@ -55,6 +60,33 @@ func operationService(t *testing.T) (*Service, *operationHost, auth.Principal) {
 	}
 	return s, host, auth.Principal{ID: "test:admin", Scopes: []string{"system.write", "components.manage", "auth.manage"}}
 }
+func TestNewMaintenanceWakesIdleReconciliation(t *testing.T) {
+	s, host, p := operationService(t)
+	host.reads = make(chan struct{}, 1)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	})
+	waitForRead := func() {
+		t.Helper()
+		select {
+		case <-host.reads:
+		case <-time.After(5 * time.Second):
+			t.Fatal("maintenance reconciliation did not wake")
+		}
+	}
+	waitForRead()
+	if _, err := s.Start(ctx, p, secure.ID(), secure.ID(), StartInput{DrainSeconds: 30}); err != nil {
+		t.Fatal(err)
+	}
+	waitForRead()
+}
+
 func TestOperationTaskAutomaticallyReleases(t *testing.T) {
 	for _, state := range []string{"succeeded", "failed", "cancelled"} {
 		t.Run(state, func(t *testing.T) {

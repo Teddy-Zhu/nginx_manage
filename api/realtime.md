@@ -1,6 +1,6 @@
 # 实时状态与日志
 
-浏览器通过同源 `GET /api/v1/events` 建立唯一 WebSocket。登录后，页面状态的首次读取和持续更新均通过此连接完成，不通过主题通知重新发送 HTTP 请求。登录、保存、安装等操作接口及手动日志查询、文件下载继续使用 HTTP。
+浏览器通过同源 `GET /api/v1/events` 建立唯一 WebSocket，接收实时数据和操作进度。登录、保存、安装、软件清单、登录防护容器状态、手动日志查询及文件下载使用 HTTP。软件清单在进入页面、手动刷新或软件操作结束时读取，版本列表在打开版本选择时读取。
 
 订阅按服务器连接分组，在连接中提交当前页面所需主题和资源；分页与筛选参数保留在资源地址中。页面关闭、服务器切换、退出登录时释放订阅，断线重连后重新发送当前订阅并同步完整数据。
 
@@ -26,16 +26,14 @@
 | --- | --- | --- |
 | monitoring | 最新监控、趋势、监控设置 | read |
 | tasks | 任务、软件操作、证书及其他相关状态 | read；各资源另行校验权限 |
-| software | 软件清单与真实运行状态（含外部启停） | read、components.manage |
 | notifications | 通知状态、事件、投递记录 | read |
-| maintenance | 维护状态 | read、system.write |
 | backups | 备份记录与策略 | read、backup.export |
 | firewall | 防火墙状态及已有准备任务的进度 | read、security.write |
 | listener | 管理入口及确认结果 | read、system.write |
 | version | 页面更新信息 | read |
 | dns | DNS 状态与管理开关 | read |
-| fail2ban | 登录防护状态 | read |
-| nginx | 网站配置与 Nginx 运行状态 | read；各资源另行校验权限 |
+| fail2ban | 登录防护配置 | read |
+| nginx | 网站配置与 Nginx 运行状态，按订阅及操作同步 | read，各资源另行校验权限 |
 | nodes | 服务器连接与连接申请状态 | read、nodes.manage |
 | logs | 日志来源、策略和实时日志 | read；敏感日志另行校验权限 |
 

@@ -14,10 +14,11 @@ import (
 )
 
 type Runner struct {
-	Maintenance *maintenance.Service
-	DB          *sql.DB
-	Config      *nginxconfig.Service
-	Agent       *agent.Client
+	Maintenance   *maintenance.Service
+	DB            *sql.DB
+	Config        *nginxconfig.Service
+	Agent         *agent.Client
+	OnNginxChange func()
 }
 
 func (r *Runner) Run(ctx context.Context) error {
@@ -200,7 +201,8 @@ func (r *Runner) finish(ctx context.Context, t dbgen.Task, state, stage, message
 		return err
 	}
 	defer tx.Rollback()
-	if (t.Kind == "nginx.apply" || t.Kind == "nginx.restore") && (state == "succeeded" || state == "rolled_back") {
+	applied := (t.Kind == "nginx.apply" || t.Kind == "nginx.restore") && (state == "succeeded" || state == "rolled_back")
+	if applied {
 		var revision any
 		if observed != "" {
 			revision = observed
@@ -215,5 +217,11 @@ func (r *Runner) finish(ctx context.Context, t dbgen.Task, state, stage, message
 	if _, err := tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,?,?,?,?,?,?)", secure.ID(), t.OperationID, "system:tasks", t.Kind, t.RevisionID.String, state, time.Now().Unix()); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if applied && r.OnNginxChange != nil {
+		r.OnNginxChange()
+	}
+	return nil
 }

@@ -326,10 +326,12 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 	mux.HandleFunc("GET /v1/nginx/state", func(w http.ResponseWriter, r *http.Request) {
 		if s.Nginx == nil {
-			writeJSON(w, NginxState{Reason: "专用 Nginx 执行尚未配置"})
+			writeJSON(w, NginxState{Installed: s.Installation != nil, Reason: "专用 Nginx 执行尚未配置"})
 			return
 		}
-		writeJSON(w, s.Nginx.State(r.Context()))
+		state := s.Nginx.State(r.Context())
+		state.Installed = s.Installation != nil
+		writeJSON(w, state)
 	})
 	server := &http.Server{Handler: rootMaintenance.handler(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second}
 	go func() {

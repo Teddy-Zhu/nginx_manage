@@ -21,7 +21,6 @@ import {
   type Fail2banContainerConfig,
 } from "../api/client";
 import { useSoftwareOperations } from "../composables/software";
-import { useLiveRefresh } from "../composables/live";
 import { randomUUID } from "../utils/crypto";
 import ValueListInput from "./ValueListInput.vue";
 import TaskLogButton from "./TaskLogButton.vue";
@@ -215,7 +214,6 @@ async function ban() {
     addresses.value = [];
   }
 }
-useLiveRefresh(api, ["fail2ban"], load, () => reading.value);
 onMounted(load);
 </script>
 <template>

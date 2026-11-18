@@ -8,7 +8,6 @@ export type LiveTopic =
   | "nodes"
   | "logs"
   | "tasks"
-  | "software"
   | "monitoring"
   | "notifications"
   | "backups"
@@ -45,7 +44,6 @@ const bindings = new WeakMap<RequestScope, Map<string, Binding>>();
 export const liveTopicScopes: Record<LiveTopic, string[]> = {
   docker: ["read", "components.manage"],
   tasks: ["read"],
-  software: ["read", "components.manage"],
   monitoring: ["read"],
   logs: ["read"],
   nginx: ["read"],

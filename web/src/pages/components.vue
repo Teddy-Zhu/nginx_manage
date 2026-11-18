@@ -44,9 +44,15 @@ const api = useNodeAPI(),
   session = useSession();
 const overview = ref<ComponentOverview | null>(null),
   tasks = ref<ComponentTask[]>([]);
-const reading = ref(false),
+const readingOverview = ref(false),
+  readingTasks = ref(false),
   loaded = ref(false),
-  error = ref("");
+  overviewError = ref(""),
+  taskError = ref("");
+const reading = computed(() => readingOverview.value || readingTasks.value);
+const error = computed(() =>
+  [overviewError.value, taskError.value].filter(Boolean).join("、"),
+);
 const search = ref(""),
   statusFilter = ref("all");
 const selected = ref<string | null>(null),
@@ -95,38 +101,65 @@ const stateLabels: Record<string, string> = {
 function recordTask(task: ComponentTask) {
   tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)];
 }
-async function load() {
-  if (reading.value || controller.signal.aborted) return;
-  reading.value = true;
+let overviewRequest: Promise<void> | undefined;
+function loadOverview() {
+  if (controller.signal.aborted) return;
+  if (overviewRequest) return overviewRequest;
+  readingOverview.value = true;
+  overviewRequest = api
+    .components(controller.signal)
+    .then((value) => {
+      overview.value = value;
+      overviewError.value = "";
+    })
+    .catch((failure: unknown) => {
+      if (!controller.signal.aborted)
+        overviewError.value = `软件列表：${apiError(failure).message}`;
+    })
+    .finally(() => {
+      overviewRequest = undefined;
+      readingOverview.value = false;
+      loaded.value = true;
+    });
+  return overviewRequest;
+}
+async function loadTasks() {
+  if (readingTasks.value || controller.signal.aborted) return;
+  readingTasks.value = true;
   try {
-    const [source, items] = await Promise.allSettled([
-      api.components(controller.signal),
-      api.componentTasks(controller.signal),
-    ]);
+    const items = await api.componentTasks(controller.signal);
     if (controller.signal.aborted) return;
-    overview.value = source.status === "fulfilled" ? source.value : null;
-    if (items.status === "fulfilled")
-      tasks.value = [
-        ...tasks.value.filter(
-          (task) => !items.value.some((item) => item.id === task.id),
-        ),
-        ...items.value,
-      ].sort((a, b) => b.created_at - a.created_at);
-    loaded.value = true;
-    error.value = [source, items]
-      .flatMap((result, index) =>
-        result.status === "rejected"
-          ? [
-              `${["软件列表", "操作记录"][index]}：${apiError(result.reason).message}`,
-            ]
-          : [],
-      )
-      .join("；");
+    const previous = new Map(tasks.value.map((task) => [task.id, task]));
+    const settled = items.some((task) => {
+      const prior = previous.get(task.id);
+      const action = task.result?.input.software?.action;
+      return (
+        task.action === "software" &&
+        action !== "logs" &&
+        action !== "update-panel" &&
+        softwareTaskActive(prior) &&
+        task.state !== prior?.state &&
+        ["succeeded", "failed", "recovery_required"].includes(task.state)
+      );
+    });
+    for (const task of items) previous.set(task.id, task);
+    tasks.value = [...previous.values()].sort(
+      (a, b) => b.created_at - a.created_at,
+    );
+    taskError.value = "";
+    if (settled) {
+      await overviewRequest;
+      await loadOverview();
+    }
   } catch (failure) {
-    if (!controller.signal.aborted) error.value = apiError(failure).message;
+    if (!controller.signal.aborted)
+      taskError.value = `操作记录：${apiError(failure).message}`;
   } finally {
-    if (!controller.signal.aborted) reading.value = false;
+    readingTasks.value = false;
   }
+}
+async function load() {
+  await Promise.all([loadOverview(), loadTasks()]);
 }
 function closeDetails() {
   if (detailBusy.value) return;
@@ -143,12 +176,7 @@ function openDetails(app: string, install = false) {
 }
 onMounted(load);
 onUnmounted(() => controller.abort());
-useLiveRefresh(
-  api,
-  ["tasks", "software", "fail2ban"],
-  load,
-  () => reading.value,
-);
+useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
 </script>
 <template>
   <Teleport defer to="#page-heading-actions">

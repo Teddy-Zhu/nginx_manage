@@ -17,11 +17,12 @@ import (
 )
 
 type Service struct {
-	Version     string
-	Maintenance *maintenance.Service
-	DB          *sql.DB
-	Vault       *secure.Vault
-	Agent       Host
+	Version          string
+	Maintenance      *maintenance.Service
+	DB               *sql.DB
+	Vault            *secure.Vault
+	Agent            Host
+	OnSoftwareChange func(software.Request)
 }
 type CreateInput struct {
 	PrepareTaskID      string `json:"prepare_task_id,omitempty"`

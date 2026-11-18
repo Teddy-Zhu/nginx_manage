@@ -19,12 +19,13 @@ type Hub struct {
 	interval func(string) time.Duration
 	clients  map[*Subscription]bool
 	stop     context.CancelFunc
-	running  bool
+	pollers  int
 }
 type Subscription struct {
 	hub     *Hub
 	topics  map[string]bool
 	pending map[string]bool
+	polls   bool
 	Wake    chan struct{}
 }
 
@@ -38,14 +39,17 @@ func (h *Hub) Subscribe(topics []string) *Subscription {
 	for _, topic := range topics {
 		s.topics[topic] = true
 		s.pending[topic] = true
+		s.polls = s.polls || h.interval(topic) > 0
 	}
 	h.clients[s] = true
 	s.Wake <- struct{}{}
-	if !h.running {
-		ctx, stop := context.WithCancel(context.Background())
-		h.running = true
-		h.stop = stop
-		go h.run(ctx)
+	if s.polls {
+		if h.pollers == 0 {
+			ctx, stop := context.WithCancel(context.Background())
+			h.stop = stop
+			go h.run(ctx)
+		}
+		h.pollers++
 	}
 	return s
 }
@@ -53,10 +57,16 @@ func (s *Subscription) Close() {
 	h := s.hub
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if !h.clients[s] {
+		return
+	}
 	delete(h.clients, s)
-	if len(h.clients) == 0 && h.running {
-		h.stop()
-		h.running = false
+	if s.polls {
+		h.pollers--
+		if h.pollers == 0 {
+			h.stop()
+			h.stop = nil
+		}
 	}
 }
 func (s *Subscription) Take() []string {

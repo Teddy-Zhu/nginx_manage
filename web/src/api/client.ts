@@ -747,6 +747,7 @@ function componentTaskTitle(data: ComponentCreateInput) {
 export function createAPI(scope: RequestScope) {
   const request = <T>(config: RequestConfig) => scopedRequest<T>(config, scope);
   return {
+    reloadLive: () => refreshLive(scope),
     subscribe: (topics: LiveTopic[], changed: () => void) =>
       subscribeLive(scope, topics, changed),
     request,

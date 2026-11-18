@@ -321,23 +321,30 @@ function canResume(t: ImageUpgradeTask) {
 const reading = ref(false);
 let controller: AbortController | null = null,
   closed = false;
-async function load() {
+async function loadCurrentVersion(signal: AbortSignal) {
+  const overview = await api.components(signal);
+  currentVersion.value = overview.versions?.nginx ?? null;
+  currentEngine.value = overview.installation?.version ?? "";
+}
+async function load(readVersion = false) {
   if (reading.value || closed) return;
   reading.value = true;
   controller = new AbortController();
   try {
-    const [sources, items, overview] = await Promise.all([
+    const [sources, items] = await Promise.all([
       api.componentTasks(controller.signal),
       api.nginxImageUpgrades(controller.signal),
-      api.components(controller.signal),
     ]);
     preparations.value = sources;
     const requested = sources.find((item) => item.id === selected.value);
     if (requested)
       channel.value = requested.result?.input.prerelease ? "beta" : "stable";
+    const settled = tasks.value.some(
+      (task) => task.state !== "succeeded" &&
+        items.some((item) => item.id === task.id && item.state === "succeeded"),
+    );
     tasks.value = items;
-    currentVersion.value = overview.versions?.nginx ?? null;
-    currentEngine.value = overview.installation?.version ?? "";
+    if (readVersion || settled) await loadCurrentVersion(controller.signal);
     error.value = "";
     if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
@@ -376,7 +383,7 @@ async function resume(t: ImageUpgradeTask) {
   await load();
 }
 onMounted(() => {
-  void load();
+  void load(true);
 });
 onUnmounted(() => {
   closed = true;
@@ -401,7 +408,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
     <section class="panel page-stack">
       <div class="toolbar">
         <h2>Nginx 版本管理</h2>
-        <NButton :loading="reading" @click="load"> 刷新 </NButton>
+        <NButton :loading="reading" @click="load(true)"> 刷新 </NButton>
       </div>
       <div v-if="currentEngine" class="button-row">
         <span class="muted">已安装</span>

@@ -807,8 +807,9 @@ function setTree(value: Tree) {
   certificateLoading.value = false;
   certificateError.value = "";
 }
-async function load() {
+async function load(refresh = false) {
   if (dirty.value && !window.confirm("有未保存修改，确认重新加载？")) return;
+  if (refresh) api.reloadLive();
   await run(async () => {
     setTree(await api.tree());
     await Promise.all([loadRuntime(), loadTLSChoices()]);
@@ -1115,7 +1116,7 @@ onBeforeRouteLeave(
 );
 useLiveRefresh(
   api,
-  ["nginx", "tasks"],
+  ["nginx"],
   async () => {
     await loadRuntime();
     await loadTLSChoices();
@@ -1170,7 +1171,7 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               更多操作
             </NButton>
           </NDropdown>
-          <n-button :disabled="busy" @click="load">
+          <n-button :disabled="busy" @click="load(true)">
             刷新
           </n-button><n-button
             :disabled="

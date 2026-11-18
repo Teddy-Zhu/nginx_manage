@@ -6566,6 +6566,7 @@ export interface components {
             scopes: string[];
         };
         NginxRuntime: {
+            installed: boolean;
             external_change: boolean;
             available: boolean;
             revision_id: string;

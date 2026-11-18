@@ -20,11 +20,10 @@ import {
   apiError,
   useNodeAPI,
   type Task,
-  type ComponentOverview,
+  type NginxRuntime,
   type MonitoringLatest,
   type NotificationOverview,
 } from "../api/client";
-import { nginxState } from "../utils/software";
 import { taskKinds, taskStates } from "../utils/tasks";
 
 const api = useNodeAPI();
@@ -39,13 +38,15 @@ interface Capabilities {
   } | null;
 }
 const capabilities = ref<Capabilities | null>(null),
-  nginx = ref<ComponentOverview | null>(null);
+  nginx = ref<NginxRuntime | null>(null);
 const monitoring = ref<MonitoringLatest | null>(null),
   notifications = ref<NotificationOverview | null>(null);
 const tasks = ref<Task[] | null>(null),
   errors = ref<string[]>([]),
   loading = ref(false);
-const softwareState = computed(() => nginxState(nginx.value));
+const softwareState = computed(() =>
+  !nginx.value ? "unavailable" : nginx.value.installed ? "installed" : "missing",
+);
 const nginxLabel = computed(() =>
   softwareState.value === "missing"
     ? "未安装"
@@ -67,7 +68,7 @@ async function load() {
   loading.value = true;
   const results = await Promise.allSettled([
     api.request<Capabilities>({ url: "/system/capabilities" }),
-    api.components(),
+    api.nginxRuntime(),
     api.monitoringLatest(),
     api.tasks(),
     api.notifications(),
@@ -94,6 +95,10 @@ async function load() {
     results[4].status === "fulfilled" ? results[4].value : null;
   loading.value = false;
 }
+function reload() {
+  api.reloadLive();
+  return load();
+}
 const columns: DataTableColumns<Task> = [
   {
     title: "任务",
@@ -114,7 +119,7 @@ const columns: DataTableColumns<Task> = [
 onMounted(load);
 useLiveRefresh(
   api,
-  ["tasks", "software", "monitoring", "notifications"],
+  ["tasks", "nginx", "monitoring", "notifications"],
   load,
   () => loading.value,
 );
@@ -124,7 +129,7 @@ useLiveRefresh(
   <div class="page-stack">
     <div class="toolbar">
       <h2>服务器概况</h2>
-      <NButton :loading="loading" @click="load">刷新</NButton>
+      <NButton :loading="loading" @click="reload">刷新</NButton>
     </div>
     <NAlert v-if="errors.length" type="warning" title="部分状态暂时无法读取"
       >其他功能仍可使用，请稍后刷新。</NAlert

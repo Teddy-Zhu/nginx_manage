@@ -21,7 +21,17 @@ func TestSubscriptionCoalescingAndCleanup(t *testing.T) {
 		default:
 		}
 		return "", errors.New("unavailable")
-	}, func(string) time.Duration { return 2 * time.Second })
+	}, func(topic string) time.Duration {
+		if topic == "nginx" {
+			return 0
+		}
+		return 2 * time.Second
+	})
+	eventOnly := h.Subscribe([]string{"nginx"})
+	defer eventOnly.Close()
+	if h.pollers != 0 {
+		t.Fatal("event-only subscription started periodic work")
+	}
 	first := h.Subscribe([]string{"tasks", "monitoring"})
 	second := h.Subscribe([]string{"notifications"})
 	defer first.Close()
@@ -47,7 +57,7 @@ func TestSubscriptionCoalescingAndCleanup(t *testing.T) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if len(h.clients) != 0 || h.running {
-		t.Fatal("observer or subscriptions remained active")
+	if len(h.clients) != 1 || h.pollers != 0 {
+		t.Fatal("periodic observer or its subscriptions remained active")
 	}
 }

@@ -17,6 +17,11 @@ import (
 
 const columns = "task_id,phase,deadline,root_requested,root_epoch,last_error,created_at,updated_at,COALESCE(owner_task_id,'')"
 
+const (
+	idleReconcileInterval   = 30 * time.Second
+	activeReconcileInterval = 2 * time.Second
+)
+
 func readSession(row interface{ Scan(...any) error }) (*Session, error) {
 	var s Session
 	err := row.Scan(&s.TaskID, &s.Phase, &s.Deadline, &s.RootRequested, &s.RootEpoch, &s.Error, &s.CreatedAt, &s.UpdatedAt, &s.OwnerTaskID)
@@ -123,6 +128,7 @@ func (s *Service) start(ctx context.Context, p auth.Principal, requestID, key st
 		if !committed {
 			if commitAttempted {
 				s.publish(nil, "unavailable", "维护提交结果待核对")
+				s.notify()
 			} else {
 				s.publish(nil, "open", "")
 			}
@@ -154,6 +160,7 @@ func (s *Service) start(ctx context.Context, p auth.Principal, requestID, key st
 	}
 	committed = true
 	s.publish(&out, "draining", "")
+	s.notify()
 	return out, nil
 }
 func (s *Service) insert(ctx context.Context, tx *sql.Tx, p auth.Principal, in Session) error {
@@ -275,6 +282,7 @@ func (s *Service) Release(ctx context.Context, p auth.Principal, requestID, id s
 		return out, err
 	}
 	s.publish(session, "releasing", session.Error)
+	s.notify()
 	return *session, nil
 }
 func validID(id string) bool {
@@ -582,11 +590,26 @@ func validRoot(root RootStatus) bool {
 		return false
 	}
 }
+func (s *Service) reconcileWake() chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.wake == nil {
+		s.wake = make(chan struct{}, 1)
+	}
+	return s.wake
+}
+
+func (s *Service) notify() {
+	select {
+	case s.reconcileWake() <- struct{}{}:
+	default:
+	}
+}
+
 func (s *Service) Run(ctx context.Context) error {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
+	wake := s.reconcileWake()
 	reported := false
-	for {
+	for ctx.Err() == nil {
 		if err := s.step(ctx); err != nil && ctx.Err() == nil {
 			if !reported {
 				slog.Warn("maintenance reconciliation failed", "error", err)
@@ -595,10 +618,19 @@ func (s *Service) Run(ctx context.Context) error {
 		} else {
 			reported = false
 		}
+		interval := activeReconcileInterval
+		s.mu.Lock()
+		if s.session == nil && s.phase == "open" {
+			interval = idleReconcileInterval
+		}
+		s.mu.Unlock()
+		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
+		case <-wake:
+		case <-timer.C:
 		}
+		timer.Stop()
 	}
+	return nil
 }

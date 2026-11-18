@@ -26,7 +26,6 @@ import {
   type SoftwareRequest,
 } from "../api/client";
 import { useSoftwareOperations } from "../composables/software";
-import { useLiveRefresh } from "../composables/live";
 import { useNodes } from "../stores/node";
 import { randomUUID } from "../utils/crypto";
 import type { PortRange } from "../utils/form";
@@ -290,7 +289,6 @@ async function installVersion(
   );
   if (task) pendingInstall.value = null;
 }
-useLiveRefresh(api, ["software"], load, () => reading.value);
 onMounted(load);
 </script>
 <template>

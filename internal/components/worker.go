@@ -152,10 +152,17 @@ func (s *Service) update(ctx context.Context, t dbgen.Task, state, stage, messag
 			return err
 		}
 	}
-	if state != t.State && (state == "succeeded" || state == "failed" || state == "recovery_required") {
+	settled := state != t.State && (state == "succeeded" || state == "failed" || state == "recovery_required")
+	if settled {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_logs(id,request_id,principal,action,resource_id,outcome,created_at) VALUES(?,'component-worker','system',?,?,?,?)", secure.ID(), t.Kind, t.ID, state, now); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if settled && op != nil && op.Input.Software != nil && s.OnSoftwareChange != nil {
+		s.OnSoftwareChange(*op.Input.Software)
+	}
+	return nil
 }

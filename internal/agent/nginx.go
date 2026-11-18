@@ -70,6 +70,7 @@ type ApplyRequest struct {
 }
 
 type NginxState struct {
+	Installed      bool   `json:"installed"`
 	Available      bool   `json:"available"`
 	RevisionID     string `json:"revision_id"`
 	Integrity      bool   `json:"integrity"`

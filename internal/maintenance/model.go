@@ -68,6 +68,7 @@ type Service struct {
 	session *Session
 	root    RootStatus
 	reason  string
+	wake    chan struct{}
 }
 
 // Held serializes maintenance-owned admission with release and reconciliation.

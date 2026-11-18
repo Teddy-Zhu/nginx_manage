@@ -4,7 +4,6 @@ import { NAlert, NButton, NSpin } from "naive-ui";
 import { apiError, useNodeAPI } from "../api/client";
 import SoftwareRequired from "./SoftwareRequired.vue";
 import {
-  nginxState,
   fail2banState,
   type SoftwareState,
 } from "../utils/software";
@@ -14,8 +13,7 @@ import { useLiveRefresh } from "../composables/live";
 const props = defineProps<{ software?: "nginx" | "fail2ban" }>();
 const api = useNodeAPI();
 const session = useSession();
-// The software inventory requires a separate scope. Read-only website users
-// retain the feature's existing access checks without requiring that scope.
+// Only users who can open the software store see the Nginx installation prompt.
 const canInspect = computed(
   () =>
     props.software !== "nginx" ||
@@ -31,10 +29,8 @@ async function load() {
   error.value = "";
   try {
     if (props.software === "nginx") {
-      const status = await api.components();
-      state.value = nginxState(status);
-      if (state.value === "unavailable")
-        throw new Error(status.reason || "服务器管理服务不可用。");
+      const status = await api.nginxRuntime();
+      state.value = status.installed ? "installed" : "missing";
     } else {
       const status = await api.fail2banContainer();
       state.value = fail2banState(status);
@@ -47,13 +43,13 @@ async function load() {
   }
 }
 watch([() => props.software, canInspect], load, { immediate: true });
+function reload() {
+  if (props.software === "nginx") api.reloadLive();
+  return load();
+}
 useLiveRefresh(
   api,
-  props.software === "nginx"
-    ? ["software"]
-    : props.software === "fail2ban"
-      ? ["fail2ban"]
-      : [],
+  props.software === "nginx" ? ["nginx"] : [],
   load,
   () => reading.value,
 );
@@ -69,7 +65,7 @@ useLiveRefresh(
     <NAlert type="error" title="暂时无法读取软件状态"
       >请稍后重试，或检查服务器上的面板服务是否正常运行。</NAlert
     >
-    <NButton style="margin-top: 16px" @click="load">重新读取</NButton>
+    <NButton style="margin-top: 16px" @click="reload">重新读取</NButton>
   </section>
   <SoftwareRequired
     v-else-if="

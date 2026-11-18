@@ -50,6 +50,7 @@ import (
 	"nginxpanel/internal/panelupdates"
 	"nginxpanel/internal/remotelisten"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/software"
 	"nginxpanel/internal/storage"
 	"nginxpanel/internal/tasks"
 	"nginxpanel/internal/transport"
@@ -342,6 +343,17 @@ func Run(ctx context.Context, o Options) error {
 	}
 	apiServer := &transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: authentication, Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, ImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime, DataDir: o.DataDir}
 	api := apiServer.Handler()
+	nginxChanged := func() { apiServer.Realtime.Notify("nginx", "tasks") }
+	componentService.OnSoftwareChange = func(request software.Request) {
+		switch {
+		case request.Action == "logs":
+			return
+		case request.Action == "install-nginx", request.AppID == "nginx", request.Action == "container":
+			nginxChanged()
+		case request.Action == "fail2ban", request.AppID == "fail2ban":
+			apiServer.Realtime.Notify("fail2ban", "tasks")
+		}
+	}
 	if eventLogs != nil {
 		eventLogs.OnDelivered = func() { apiServer.Realtime.Notify("tasks") }
 	}
@@ -403,7 +415,7 @@ func Run(ctx context.Context, o Options) error {
 	}()
 	go func() {
 		defer workers.Done()
-		result <- (&tasks.Runner{Maintenance: maintenanceService, DB: db, Config: config, Agent: agentClient}).Run(runCtx)
+		result <- (&tasks.Runner{Maintenance: maintenanceService, DB: db, Config: config, Agent: agentClient, OnNginxChange: nginxChanged}).Run(runCtx)
 	}()
 	go func() {
 		defer workers.Done()

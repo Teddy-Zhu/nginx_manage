@@ -4131,8 +4131,9 @@ components:
         scopes: { type: array, items: { type: string } }
     NginxRuntime:
       type: object
-      required: [available, revision_id, deployment_id, integrity, running, reason, external_change]
+      required: [installed, available, revision_id, deployment_id, integrity, running, reason, external_change]
       properties:
+        installed: { type: boolean }
         external_change: { type: boolean }
         available: { type: boolean }
         revision_id: { type: string }

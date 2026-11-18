@@ -26,8 +26,7 @@ var realtimeScopes = map[string][]string{
 	"backups":  {"read", "backup.export"},
 	"firewall": {"read", "security.write"}, "listener": {"read", "system.write"}, "version": {"read"},
 	"dns": {"read"}, "fail2ban": {"read"}, "logs": {"read"}, "nginx": {"read"}, "nodes": {"read", "nodes.manage"},
-	"software": {"read", "components.manage"},
-	"docker":   {"read", "components.manage"},
+	"docker": {"read", "components.manage"},
 }
 
 func realtimeInterval(topic string) time.Duration {
@@ -35,8 +34,8 @@ func realtimeInterval(topic string) time.Duration {
 	case "version":
 		// The frontend and binary are replaced together on process restart.
 		return 0
-	case "nginx", "software", "fail2ban":
-		return 6 * time.Second
+	case "nginx", "fail2ban":
+		return 0
 	default:
 		return 2 * time.Second
 	}
@@ -49,16 +48,6 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 	switch topic {
 	case "docker":
 		return strconv.FormatInt(time.Now().Unix()/3, 10), nil
-	case "software":
-		if s.Agent == nil {
-			return "", errors.New("agent unavailable")
-		}
-		value, err = s.Agent.ReadComponents(ctx)
-	case "nginx":
-		if s.Agent == nil {
-			return "", errors.New("agent unavailable")
-		}
-		value, err = s.Agent.NginxState(ctx)
 	case "nodes":
 		rows, e := s.DB.QueryContext(ctx, `SELECT 'node:'||id,state,json_array(version,updated_at,removed_at,last_error,expires_at>0 AND expires_at<=unixepoch()) FROM nodes UNION ALL SELECT 'pair:'||id,state,json_array(expires_at<=unixepoch()) FROM node_pairings UNION ALL SELECT 'job:'||id,state,json_array(stage,last_error,updated_at) FROM node_pairing_jobs ORDER BY 1`)
 		if e != nil {
@@ -167,11 +156,6 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 			return "", errors.New("agent unavailable")
 		}
 		value, err = s.Agent.ManagementListener(ctx)
-	case "fail2ban":
-		if s.Agent == nil {
-			return "", errors.New("agent unavailable")
-		}
-		value, err = s.Agent.ReadFail2banContainer(ctx)
 	case "dns":
 		if s.HostDNS == nil {
 			return "", errors.New("DNS unavailable")
@@ -368,22 +352,26 @@ func (s *Server) realtimeMutation(r *http.Request) {
 		}
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1")
+	if strings.HasPrefix(path, "/nginx/") && !strings.HasPrefix(path, "/nginx/images/") {
+		s.Realtime.Notify("nginx", "tasks")
+		return
+	}
+	if path == "/fail2ban" || path == "/modules/fail2ban" || strings.HasPrefix(path, "/fail2ban/") {
+		s.Realtime.Notify("fail2ban", "tasks")
+		return
+	}
 	if topic, ok := contract.RealtimeTopic(path); ok {
 		switch topic {
-		case "notifications", "nodes", "backups", "monitoring":
+		case "notifications", "nodes", "backups", "monitoring", "docker":
 			s.Realtime.Notify(topic, "tasks")
-			return
-		case "nginx":
-			s.Realtime.Notify(topic, "tasks", "software")
-			return
-		case "docker", "software":
-			s.Realtime.Notify(topic, "tasks", "docker", "software")
 			return
 		}
 	}
 	topics := make([]string, 0, len(realtimeScopes))
 	for topic := range realtimeScopes {
-		topics = append(topics, topic)
+		if topic != "nginx" && topic != "fail2ban" {
+			topics = append(topics, topic)
+		}
 	}
 	s.Realtime.Notify(topics...)
 }

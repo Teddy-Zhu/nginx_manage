@@ -8121,6 +8121,7 @@ type NginxRuntime struct {
 	Available      bool   `json:"available"`
 	DeploymentId   string `json:"deployment_id"`
 	ExternalChange bool   `json:"external_change"`
+	Installed      bool   `json:"installed"`
 	Integrity      bool   `json:"integrity"`
 	Reason         string `json:"reason"`
 	RevisionId     string `json:"revision_id"`
