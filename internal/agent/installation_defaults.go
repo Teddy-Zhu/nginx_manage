@@ -25,11 +25,11 @@ func DetectInstallationDefaults(ctx context.Context, dataDir string) (Installati
 	if reason := (&HostDNS{Scope: "host"}).hostScopeReason(); reason != "" {
 		return out, errors.New(reason)
 	}
-	view := (&HostDNS{Scope: "host"}).Read()
+	dnsOwner := (&HostDNS{Scope: "host"}).Read().Owner
 	candidates := []string{}
-	switch view.Owner {
+	switch dnsOwner {
 	case "regular-file", "netplan", "networkd":
-		candidates = append(candidates, view.Owner)
+		candidates = append(candidates, dnsOwner)
 	case "NetworkManager":
 		candidates = append(candidates, "networkmanager")
 	case "resolved":
@@ -41,10 +41,6 @@ func DetectInstallationDefaults(ctx context.Context, dataDir string) (Installati
 			out.DNSOwner = owner
 			break
 		}
-		view = candidate
-	}
-	if out.DNSOwner == "unconfirmed" {
-		out.Warnings = append(out.Warnings, "DNS 设置暂时仅支持查看："+view.Reason)
 	}
 	call, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
