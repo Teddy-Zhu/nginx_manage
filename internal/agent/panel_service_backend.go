@@ -166,10 +166,6 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	if err != nil {
 		return o, err
 	}
-	expected, err := os.Stat(filepath.Join(s.Directory, "nginxpanel"))
-	if err != nil {
-		return o, err
-	}
 	cgroup, err := panelProcFile(base+"/cgroup", 8192)
 	if err != nil {
 		return o, err
@@ -188,24 +184,8 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 	if err != nil {
 		return o, err
 	}
-	executable := filepath.Join(s.Directory, "nginxpanel")
-	if !os.SameFile(live, expected) {
-		bootstrap, e := trustedFile("/opt/nginxpanel/current/nginxpanel", true)
-		if e != nil {
-			return o, e
-		}
-		info, e := os.Stat(bootstrap)
-		if e != nil {
-			return o, e
-		}
-		if !os.SameFile(live, info) {
-			return o, errors.New("systemd 主进程不是当前批准的核心程序")
-		}
-		executable = "/opt/nginxpanel/current/nginxpanel"
-	}
-	args, err := nativeCoreArguments(strings.TrimSuffix(strings.ReplaceAll(string(cmdline), "\x00", " "), " "), s.Deployment.DataDir, 0, executable)
-	if err != nil || !bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
-		return o, errors.New("核心主进程参数不是固定 core 入口")
+	if err := validateNativeCoreProcess(s, live, cmdline); err != nil {
+		return o, err
 	}
 	stat, err := panelProcFile(base+"/stat", 8192)
 	if err != nil {
@@ -239,6 +219,43 @@ func panelNativeObservation(ctx context.Context, s panelruntime.Snapshot) (Panel
 		return o, errors.New("核心服务实例在观测期间变化")
 	}
 	return o, nil
+}
+
+func validateNativeCoreProcess(s panelruntime.Snapshot, live os.FileInfo, cmdline []byte) error {
+	releasePath := filepath.Join(s.Directory, "nginxpanel")
+	expected, err := os.Stat(releasePath)
+	if err != nil {
+		return err
+	}
+	// systemd can retain the installed entry as argv[0] while /proc/<pid>/exe
+	// resolves to the selected release. Check the arguments and inode independently.
+	const bootstrapPath = "/opt/nginxpanel/current/nginxpanel"
+	executable := releasePath
+	argv0, _, _ := strings.Cut(string(cmdline), "\x00")
+	if argv0 == bootstrapPath {
+		executable = bootstrapPath
+	}
+	if !os.SameFile(live, expected) {
+		if executable != bootstrapPath {
+			return errors.New("systemd 主进程不是当前批准的核心程序")
+		}
+		bootstrap, err := trustedFile(bootstrapPath, true)
+		if err != nil {
+			return err
+		}
+		info, err := os.Stat(bootstrap)
+		if err != nil {
+			return err
+		}
+		if !os.SameFile(live, info) {
+			return errors.New("systemd 主进程不是当前批准的核心程序")
+		}
+	}
+	args, err := nativeCoreArguments(strings.TrimSuffix(strings.ReplaceAll(string(cmdline), "\x00", " "), " "), s.Deployment.DataDir, 0, executable)
+	if err != nil || !bytes.Equal(cmdline, []byte(strings.Join(args, "\x00")+"\x00")) {
+		return errors.New("核心主进程参数不是固定 core 入口")
+	}
+	return nil
 }
 
 func observePanelService(ctx context.Context, s panelruntime.Snapshot) (PanelServiceObservation, error) {

@@ -67,7 +67,7 @@ func (s *Server) updateSoftwarePanel(ctx context.Context, id string, in software
 	}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	stages := map[string]string{"queued": "等待更新执行", "stopping": "正在停止核心服务", "selecting": "正在替换核心程序", "starting": "正在启动核心服务并完成数据迁移"}
+	stages := map[string]string{"queued": "等待更新执行", "stopping": "正在停止核心服务", "selecting": "正在替换核心程序", "starting": "正在启动核心服务并完成数据迁移", "checking": "正在验证管理入口"}
 	previous := ""
 	for {
 		r, err := coreUpdateRecord(s.Journal, id, s.DataDir)

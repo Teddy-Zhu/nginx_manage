@@ -245,19 +245,32 @@ func activateCore(ctx context.Context, data, id, before string, target panelrunt
 	if _, err = installationSystemctl(ctx, "start", "nginxpanel.service"); err != nil {
 		return err
 	}
+	if err = stage("checking"); err != nil {
+		return err
+	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
+	var lastCheckErr error
 	for {
 		s, readErr := panelruntime.Read(data)
-		if readErr == nil && s.Release.ID == target.ID {
-			ready, _, readyErr := panelreadyForSoftware(ctx, s)
-			if readyErr == nil && ready {
+		checkErr := readErr
+		if checkErr == nil {
+			if s.Release.ID != target.ID {
+				checkErr = errors.New("当前核心版本与升级目标不一致")
+			} else if ready, _, readyErr := panelreadyForSoftware(ctx, s); readyErr != nil {
+				checkErr = readyErr
+			} else if ready {
 				return nil
+			} else {
+				checkErr = errors.New("当前数据版本与升级目标不一致")
 			}
+		}
+		if ctx.Err() == nil || lastCheckErr == nil {
+			lastCheckErr = checkErr
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("核心服务未能启动完成，程序及数据已保留，请查看更新日志: %w", ctx.Err())
+			return fmt.Errorf("面板就绪检查未完成（%v）：%w", ctx.Err(), lastCheckErr)
 		case <-tick.C:
 		}
 	}

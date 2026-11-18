@@ -68,7 +68,7 @@ func InstallCorePackage(parent context.Context, data, binary, trust string, appr
 			return err
 		}
 	}
-	steps := map[string]string{"stopping": "正在停止面板", "selecting": "正在替换核心程序", "starting": "正在启动面板"}
+	steps := map[string]string{"stopping": "正在停止面板", "selecting": "正在替换核心程序", "starting": "正在启动面板", "checking": "正在验证管理入口"}
 	if err := activateCore(ctx, data, secure.ID(), current.Release.ID, target, func(step string) error {
 		progress(steps[step])
 		return nil

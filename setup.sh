@@ -106,6 +106,33 @@ if ((EUID != 0)); then
 fi
 installed=no
 if as_root test -f /etc/nginxpanel/install/ready; then installed=yes; fi
+confirm_existing() {
+  local answer
+  printf '%s\n' "$1"
+  if [[ $auto_confirm == yes ]]; then return; fi
+  if ! read -r -p '确认继续？[y/N] ' answer || [[ ${answer,,} != y && ${answer,,} != yes ]]; then
+    printf '%s\n' '安装已取消'
+    exit 0
+  fi
+}
+if [[ $fresh == yes ]] && as_root test -f /etc/nginxpanel/install/intent; then
+  confirm_existing '检测到已有安装。重新安装将永久删除原数据。'
+  install_args+=(--confirmed-fresh)
+elif [[ $fresh == no && $uninstall == no && $installed == yes ]]; then
+  [[ $advanced == no && $setup_options == no ]] || die '已有安装，升级沿用现有设置。请移除初次安装选项后重试'
+  if [[ $mode == source ]]; then
+    target="源码 ${ref:-默认分支}"
+  elif [[ $version != latest ]]; then
+    target=$version
+  elif [[ $dev == yes ]]; then
+    target='最新开发版'
+  else
+    target='最新稳定版'
+  fi
+  printf '已检测到 NginxPanel 安装。更新来源 %s（%s）。\n' "$repository" "$target"
+  confirm_existing '升级或覆盖安装将重启面板，并保留配置和数据。'
+  install_args+=(--confirmed-upgrade)
+fi
 if [[ $mode == source || $fresh == yes || ( $uninstall == no && $installed == no ) ]]; then
   command -v timeout >/dev/null || die '缺少系统工具：timeout'
   as_root /bin/bash -c '

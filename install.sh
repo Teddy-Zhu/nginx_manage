@@ -32,7 +32,7 @@ EOF
 valid_port() {
   [[ $1 =~ ^[1-9][0-9]{3,4}$ ]] && ((10#$1 >= 1024 && 10#$1 <= 65535))
 }
-auto_confirm=no advanced=no requested_port= requested_protocol= fresh=no uninstall=no purge=no keep_data=no
+auto_confirm=no advanced=no requested_port= requested_protocol= fresh=no uninstall=no purge=no keep_data=no confirmed_operation=
 requested_admin= password_file=
 while (($#)); do
   case "$1" in
@@ -42,6 +42,8 @@ while (($#)); do
     --uninstall) uninstall=yes; shift ;;
     --purge) purge=yes; shift ;;
     --keep-data) keep_data=yes; shift ;;
+    --confirmed-upgrade|--confirmed-fresh)
+      confirmed_operation=${1#--confirmed-}; shift ;;
     --protocol) (($# >= 2)) || die "--protocol 缺少协议"; requested_protocol=$2; [[ $2 == http || $2 == https ]] || die "管理协议须为 http 或 https"; shift 2 ;;
     --port) (($# >= 2)) && [[ -n $2 ]] || die '--port 缺少端口'; requested_port=$2; shift 2 ;;
     --admin-user|--admin-password-file)
@@ -50,7 +52,7 @@ while (($#)); do
       shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
-      [[ $auto_confirm == no && $advanced == no && -z $requested_port && -z $requested_protocol && -z $requested_admin && -z $password_file && $fresh == no && $uninstall == no && $purge == no && $keep_data == no ]] || die '引导入口选项不能与标准安装器参数混用'
+      [[ $auto_confirm == no && $advanced == no && -z $requested_port && -z $requested_protocol && -z $requested_admin && -z $password_file && $fresh == no && $uninstall == no && $purge == no && $keep_data == no && -z $confirmed_operation ]] || die '引导入口选项不能与标准安装器参数混用'
       exec /bin/bash "$root/deploy/native/install.sh" "$@" ;;
   esac
 done
@@ -209,6 +211,7 @@ install_from_source() {
   if [[ $uninstall == yes ]]; then next_args+=(--uninstall); fi
   if [[ $purge == yes ]]; then next_args+=(--purge); fi
   if [[ $keep_data == yes ]]; then next_args+=(--keep-data); fi
+  if [[ -n $confirmed_operation ]]; then next_args+=("--confirmed-$confirmed_operation"); fi
   /bin/bash "$build_work/package/install.sh" "${next_args[@]}"
   exit 0
 }
@@ -219,8 +222,15 @@ upgrade_existing() {
   if [[ -n $requested_protocol || -n $requested_port || -n $requested_admin || -n $password_file || $advanced == yes ]]; then
     die '已有安装，升级沿用现有设置。请移除初次安装选项后重试'
   fi
-  printf '%s\n' '已检测到 NginxPanel 安装。'
   if [[ $source_tree == yes ]]; then
+    if [[ $auto_confirm == no && $confirmed_operation != upgrade ]]; then
+      printf '%s\n' '已检测到 NginxPanel 安装。将通过 Docker 构建当前源码，保留配置和数据并重启面板。'
+      if ! yes_no '确认继续？'; then
+        printf '%s\n' '安装已取消'
+        exit 0
+      fi
+    fi
+    confirmed_operation=upgrade
     check_docker
     install_from_source
   fi
@@ -235,7 +245,7 @@ upgrade_existing() {
   trap 'rm -rf -- "$upgrade_stage"' EXIT
   install -m 0555 "$binary" "$upgrade_stage/nginxpanel"
   local -a args=(--data-dir "$data")
-  if [[ $auto_confirm == yes ]]; then args+=(--yes); fi
+  if [[ $auto_confirm == yes || $confirmed_operation == upgrade ]]; then args+=(--yes); fi
   if [[ -f $root/release-trust.json && ! -L $root/release-trust.json ]]; then
     [[ $(stat -c %s "$root/release-trust.json") -le 16384 ]] || die '发行签名配置超出大小限制'
     install -m 0400 "$root/release-trust.json" "$upgrade_stage/release-trust.json"
@@ -247,13 +257,31 @@ upgrade_existing() {
 }
 source_tree=no
 if [[ -f $root/scripts/build.sh && -f $root/go.mod && -f $root/web/package.json ]]; then source_tree=yes; fi
+case "$confirmed_operation" in
+  upgrade)
+    [[ $fresh == no && $uninstall == no && -f /etc/nginxpanel/install/ready &&
+       ! -e /etc/nginxpanel/install/lifecycle && ! -L /etc/nginxpanel/install/lifecycle ]] ||
+      die '已有安装状态已变化，请重新运行安装脚本确认操作'
+    ;;
+  fresh)
+    [[ $fresh == yes && -f /etc/nginxpanel/install/intent ]] ||
+      die '已有安装状态已变化，请重新运行安装脚本确认操作'
+    ;;
+esac
 if [[ $fresh == yes || $uninstall == yes ]]; then
   [[ $(uname -s) == Linux && -d /run/systemd/system ]] || die '安装目标需要运行 systemd 的 Linux 主机'
   if [[ $uninstall == yes ]]; then
     [[ -e /etc/nginxpanel/install/intent || -L /etc/nginxpanel/install/intent ]] || die '未发现本系统安装记录，无需卸载'
   fi
-  # Build/download the new tools before touching the old installation. Normal
-  # installation still returns early for an already completed installation.
+  if [[ $fresh == yes && ( -e /etc/nginxpanel/install/intent || -L /etc/nginxpanel/install/intent ) ]]; then
+    trusted_file /etc/nginxpanel/install/intent
+    if [[ $auto_confirm == no && $confirmed_operation != fresh ]] && ! yes_no '重新安装将永久删除原数据。确认继续？'; then
+      printf '%s\n' '安装已取消'
+      exit 0
+    fi
+    confirmed_operation=fresh
+  fi
+  # Prepare the new tools before removing the existing installation.
   if [[ $source_tree == yes ]]; then
     check_docker
     install_from_source
@@ -285,7 +313,7 @@ if [[ $fresh == yes || $uninstall == yes ]]; then
     elif [[ $keep_data == yes ]]; then
       removal_args+=(--keep-data)
     fi
-    if [[ $auto_confirm == yes ]]; then removal_args+=(--yes); fi
+    if [[ $auto_confirm == yes || $confirmed_operation == fresh ]]; then removal_args+=(--yes); fi
     /bin/bash "$installer_lifecycle_stage/manage.sh" "${removal_args[@]}"
     if [[ $uninstall == yes ]]; then exit 0; fi
     next_args=()
