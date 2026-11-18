@@ -7927,9 +7927,11 @@ type MonitoringCondition struct {
 
 // MonitoringHistory defines model for MonitoringHistory.
 type MonitoringHistory struct {
-	Earliest    int64             `json:"earliest"`
-	From        int64             `json:"from"`
-	Notice      string            `json:"notice"`
+	Earliest int64  `json:"earliest"`
+	From     int64  `json:"from"`
+	Notice   string `json:"notice"`
+
+	// Points 所选指标的分钟记录，缺失分钟不返回
 	Points      []MonitoringPoint `json:"points"`
 	StepSeconds int64             `json:"step_seconds"`
 	StoredBytes int64             `json:"stored_bytes"`
@@ -9497,12 +9499,11 @@ type PreflightMigrationParams struct {
 
 // GetMonitoringHistoryParams defines parameters for GetMonitoringHistory.
 type GetMonitoringHistoryParams struct {
-	Kind   string `form:"kind" json:"kind"`
-	Id     string `form:"id" json:"id"`
-	Value  string `form:"value" json:"value"`
-	From   int64  `form:"from" json:"from"`
-	Until  int64  `form:"until" json:"until"`
-	Points *int   `form:"points,omitempty" json:"points,omitempty"`
+	Kind  string `form:"kind" json:"kind"`
+	Id    string `form:"id" json:"id"`
+	Value string `form:"value" json:"value"`
+	From  int64  `form:"from" json:"from"`
+	Until int64  `form:"until" json:"until"`
 }
 
 // SetMonitoringSettingsParams defines parameters for SetMonitoringSettings.
@@ -17273,19 +17274,6 @@ func (siw *ServerInterfaceWrapper) GetMonitoringHistory(w http.ResponseWriter, r
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "points" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "points", r.URL.Query(), &params.Points, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "points"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "points", Err: err})
 		}
 		return
 	}

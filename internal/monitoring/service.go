@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -32,6 +33,11 @@ type Service struct {
 	conditions map[string]Condition
 	pending    []transition
 	reason     string
+	history    *historyStats
+}
+
+type historyStats struct {
+	earliest, bytes int64
 }
 
 func Ensure(ctx context.Context, db *sql.DB) error {
@@ -521,21 +527,34 @@ func (s *Service) persist(ctx context.Context, settings Settings, finish bool) e
 			return err
 		}
 	}
-	for _, query := range []struct {
-		sql  string
-		args []any
-	}{
-		{"DELETE FROM metric_samples WHERE minute<?", []any{now - settings.RetentionHours*3600}},
-		{"DELETE FROM metric_samples WHERE minute NOT IN (SELECT minute FROM metric_samples ORDER BY minute DESC LIMIT ?)", []any{limits.MetricHistoryMinutes}},
-		{"DELETE FROM metric_samples WHERE minute IN (SELECT minute FROM (SELECT minute,SUM(bytes) OVER (ORDER BY minute DESC) AS total FROM metric_samples) WHERE total>?)", []any{limits.MetricHistoryBytes}},
-		{"DELETE FROM monitoring_events WHERE expires_at<=? OR id NOT IN (SELECT id FROM monitoring_events ORDER BY created_at DESC,id DESC LIMIT 1024)", []any{now}},
-	} {
-		if _, err = tx.ExecContext(ctx, query.sql, query.args...); err != nil {
+	if _, err = tx.ExecContext(ctx, "DELETE FROM metric_samples WHERE minute<?", now-settings.RetentionHours*3600); err != nil {
+		return err
+	}
+	var stats historyStats
+	var count int
+	if err = tx.QueryRowContext(ctx, "SELECT COALESCE(MIN(minute),0),COALESCE(SUM(bytes),0),COUNT(*) FROM metric_samples").Scan(&stats.earliest, &stats.bytes, &count); err != nil {
+		return err
+	}
+	if count > limits.MetricHistoryMinutes {
+		if _, err = tx.ExecContext(ctx, "DELETE FROM metric_samples WHERE minute NOT IN (SELECT minute FROM metric_samples ORDER BY minute DESC LIMIT ?)", limits.MetricHistoryMinutes); err != nil {
 			return err
 		}
 	}
+	if stats.bytes > limits.MetricHistoryBytes {
+		if _, err = tx.ExecContext(ctx, "DELETE FROM metric_samples WHERE minute IN (SELECT minute FROM (SELECT minute,SUM(bytes) OVER (ORDER BY minute DESC) AS total FROM metric_samples) WHERE total>?)", limits.MetricHistoryBytes); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM monitoring_events WHERE expires_at<=? OR id NOT IN (SELECT id FROM monitoring_events ORDER BY created_at DESC,id DESC LIMIT 1024)", now); err != nil {
+		return err
+	}
 	if err = tx.Commit(); err != nil {
 		return err
+	}
+	if count > limits.MetricHistoryMinutes || stats.bytes > limits.MetricHistoryBytes {
+		s.history = nil
+	} else {
+		s.history = &stats
 	}
 	s.pending = nil
 	if finish {
@@ -544,9 +563,17 @@ func (s *Service) persist(ctx context.Context, settings Settings, finish bool) e
 	return nil
 }
 func (s *Service) stats(ctx context.Context) (int64, int64, error) {
-	var earliest, bytes int64
-	err := s.DB.QueryRowContext(ctx, "SELECT COALESCE(MIN(minute),0),COALESCE(SUM(bytes),0) FROM metric_samples").Scan(&earliest, &bytes)
-	return earliest, bytes, err
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.history == nil {
+		var stats historyStats
+		err := s.DB.QueryRowContext(ctx, "SELECT COALESCE(MIN(minute),0),COALESCE(SUM(bytes),0) FROM metric_samples").Scan(&stats.earliest, &stats.bytes)
+		if err != nil {
+			return 0, 0, err
+		}
+		s.history = &stats
+	}
+	return s.history.earliest, s.history.bytes, nil
 }
 func (s *Service) Latest(ctx context.Context) (Latest, error) {
 	view, err := s.Settings(ctx)
@@ -587,68 +614,46 @@ func (s *Service) History(ctx context.Context, q HistoryQuery) (History, error) 
 	}
 	from := q.From / 60 * 60
 	until := q.Until / 60 * 60
-	minutes := (until-from)/60 + 1
-	step := (minutes + int64(q.Points) - 1) / int64(q.Points) * 60
-	count := (until-from)/step + 1
-	out := History{From: from, Until: until, StepSeconds: step, Points: make([]Point, count), Notice: "历史按分钟聚合；空档及缺失值不补零，超出保留时间或存储配额的样本不可恢复"}
-	stats := make([]Stat, count)
-	seen := make([]int64, count)
-	missing := make([]bool, count)
-	for i := range out.Points {
-		out.Points[i] = Point{At: from + int64(i)*step, Gap: true}
-	}
-	consume := func(b bucket) {
-		if b.Minute < from || b.Minute > until {
-			return
-		}
-		index := (b.Minute - from) / step
-		entry := b.Metrics[metricKey(q.Kind, q.ID)]
-		if entry == nil {
-			return
-		}
-		stat := entry.Values[q.Value]
-		stats[index].Merge(stat)
-		if stat.Count > 0 {
-			seen[index]++
-		}
-		if b.Gap || stat.Count < b.Attempts {
-			missing[index] = true
-		}
-	}
-	// Copy the in-flight minute before querying; ignore the same persisted
-	// minute, which may exist after a threshold transition.
+	out := History{From: from, Until: until, StepSeconds: 60, Points: []Point{}, Notice: "缺失值留空，采样空档不连接。"}
+	key := metricKey(q.Kind, q.ID)
+	// A threshold event may already have persisted this minute.
 	s.mu.Lock()
-	var live *bucket
-	if s.current != nil {
-		raw, e := json.Marshal(s.current)
-		if e != nil {
-			s.mu.Unlock()
-			return out, e
-		}
-		live = &bucket{}
-		if e = json.Unmarshal(raw, live); e != nil {
-			s.mu.Unlock()
-			return out, e
+	var live Point
+	var liveMinute int64
+	if b := s.current; b != nil && b.Minute >= from && b.Minute <= until {
+		liveMinute = b.Minute
+		if entry := b.Metrics[key]; entry != nil {
+			live = historyPoint(b.Minute, b.Attempts, b.Gap, entry.Values[q.Value])
 		}
 	}
 	s.mu.Unlock()
-	rows, err := s.DB.QueryContext(ctx, "SELECT payload FROM metric_samples WHERE minute>=? AND minute<=? ORDER BY minute LIMIT ?", from, until, limits.MetricHistoryMinutes)
+	quotedKey, _ := json.Marshal(key)
+	statPath := "$.Metrics." + string(quotedKey) + ".Values." + q.Value
+	rows, err := s.DB.QueryContext(ctx, `SELECT minute, json_extract(payload,'$.Attempts','$.Gap',?) FROM metric_samples
+ WHERE minute BETWEEN ? AND ? AND minute<>? ORDER BY minute LIMIT ?`,
+		statPath, from, until, liveMinute, limits.MetricHistoryMinutes)
 	if err != nil {
 		return out, err
 	}
 	for rows.Next() {
+		var minute int64
 		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
+		if err := rows.Scan(&minute, &raw); err != nil {
 			rows.Close()
 			return out, err
 		}
-		b, err := decodeBucket(raw)
-		if err != nil {
+		var fields [3]json.RawMessage
+		var attempts int
+		var gap bool
+		var stat Stat
+		if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(fields[0], &attempts) != nil ||
+			json.Unmarshal(fields[1], &gap) != nil || json.Unmarshal(fields[2], &stat) != nil || attempts < 1 || attempts > 32 ||
+			stat.Count < 0 || stat.Count > attempts || Number(stat.Sum) == nil || Number(stat.Min) == nil || Number(stat.Max) == nil || stat.Min > stat.Max {
 			rows.Close()
-			return out, fmt.Errorf("decode monitoring minute: %w", err)
+			return out, errors.New("invalid monitoring aggregate")
 		}
-		if live == nil || live.Minute != b.Minute {
-			consume(*b)
+		if stat.Count > 0 {
+			out.Points = append(out.Points, historyPoint(minute, attempts, gap, stat))
 		}
 	}
 	err = rows.Err()
@@ -656,19 +661,17 @@ func (s *Service) History(ctx context.Context, q HistoryQuery) (History, error) 
 	if err != nil {
 		return out, err
 	}
-	if live != nil {
-		consume(*live)
-	}
-	for i, stat := range stats {
-		if stat.Count > 0 {
-			out.Points[i].Average = Number(stat.Sum / float64(stat.Count))
-			out.Points[i].Minimum = Number(stat.Min)
-			out.Points[i].Maximum = Number(stat.Max)
-			out.Points[i].Count = stat.Count
-			expected := min(step/60, (until-out.Points[i].At)/60+1)
-			out.Points[i].Gap = missing[i] || seen[i] < expected
-		}
+	if live.Count > 0 {
+		index := sort.Search(len(out.Points), func(i int) bool { return out.Points[i].At >= live.At })
+		out.Points = slices.Insert(out.Points, index, live)
 	}
 	out.Earliest, out.StoredBytes, err = s.stats(ctx)
 	return out, err
+}
+
+func historyPoint(minute int64, attempts int, gap bool, stat Stat) Point {
+	if stat.Count == 0 {
+		return Point{At: minute, Gap: true}
+	}
+	return Point{At: minute, Average: Number(stat.Sum / float64(stat.Count)), Minimum: Number(stat.Min), Maximum: Number(stat.Max), Count: stat.Count, Gap: gap || stat.Count < attempts}
 }

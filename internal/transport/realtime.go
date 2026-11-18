@@ -68,24 +68,9 @@ func (s *Server) realtimeFingerprint(ctx context.Context, topic string) (string,
 		// Log cursors must advance independently of task state transitions.
 		return time.Now().UTC().Format("20060102150405"), nil
 	case "tasks":
-		rows, e := s.DB.QueryContext(ctx, `SELECT id,kind,state,stage,last_error,observed_revision,updated_at FROM tasks ORDER BY id`)
-		if e != nil {
-			return "", e
-		}
-		defer rows.Close()
-		hash := sha256.New()
-		encoder := json.NewEncoder(hash)
-		for rows.Next() {
-			var id, kind, state, stage, lastError, revision string
-			var updated int64
-			if e = rows.Scan(&id, &kind, &state, &stage, &lastError, &revision, &updated); e != nil {
-				return "", e
-			}
-			if e = encoder.Encode([]any{id, kind, state, stage, lastError, revision, updated}); e != nil {
-				return "", e
-			}
-		}
-		return hex.EncodeToString(hash.Sum(nil)), rows.Err()
+		var revision int64
+		err := s.DB.QueryRowContext(ctx, "SELECT revision FROM realtime_task_revision WHERE id=1").Scan(&revision)
+		return strconv.FormatInt(revision, 10), err
 	case "monitoring":
 		if s.Monitoring == nil {
 			return "", errors.New("monitoring unavailable")

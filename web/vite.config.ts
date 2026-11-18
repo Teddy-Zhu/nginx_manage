@@ -6,6 +6,7 @@ import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 import { VueRouterAutoImports } from "vue-router/unplugin";
 import VueRouter from "vue-router/vite";
 import { routeOptions } from "./routing.config.ts";
+import { precompress } from "./scripts/precompress.ts";
 
 export default defineConfig({
   plugins: [
@@ -16,6 +17,7 @@ export default defineConfig({
       dts: "src/auto-imports.d.ts",
     }),
     Components({ resolvers: [NaiveUiResolver()], dts: "src/components.d.ts" }),
+    precompress(),
   ],
   server: {
     port: 5173,

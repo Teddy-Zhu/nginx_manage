@@ -13,12 +13,20 @@ import (
 func TestFrontendGzipRepresentations(t *testing.T) {
 	const asset = "assets/index-AbCdEf12.js"
 	plain := bytes.Repeat([]byte("console.log('panel');\n"), 100)
-	files := fstest.MapFS{asset: {Data: plain}}
-	compressed, err := compressFrontend(files)
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(plain); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	files := fstest.MapFS{asset: {Data: plain}, "gzip/" + asset: {Data: compressed.Bytes()}}
+	assets, err := indexFrontend(files)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &frontendHandler{files: files, compressed: compressed}
+	h := &frontendHandler{files: files, assets: assets}
 	request := func(method, encoding, etag, byteRange string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/"+asset, nil)
 		r.Header.Set("Accept-Encoding", encoding)
@@ -56,5 +64,10 @@ func TestFrontendGzipRepresentations(t *testing.T) {
 	}
 	if partial := request(http.MethodGet, "gzip", "", "bytes=0-7"); partial.Code != 206 || !bytes.Equal(partial.Body.Bytes(), plain[:8]) {
 		t.Fatalf("unexpected range response: %d %v", partial.Code, partial.Header())
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/gzip/"+asset, nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("private gzip path returned %d", w.Code)
 	}
 }

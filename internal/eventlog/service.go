@@ -105,10 +105,7 @@ func (s *Service) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 		work, cancel := context.WithTimeout(ctx, 4*time.Second)
-		err := s.flush(work)
-		if err == nil {
-			err = s.deliver(work)
-		}
+		err := s.cycle(work)
 		cancel()
 		if ctx.Err() != nil {
 			return nil
@@ -121,6 +118,27 @@ func (s *Service) Run(ctx context.Context) error {
 			warned = false
 		}
 	}
+}
+
+func (s *Service) cycle(ctx context.Context) error {
+	hasLocalEvents := len(s.input) != 0 || len(s.held) != 0 || s.dropped.Load() != 0
+	if !hasLocalEvents {
+		var queued, dropped bool
+		err := s.DB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM event_log_queue), dropped>0 FROM event_log_status WHERE id=1").Scan(&queued, &dropped)
+		if err != nil {
+			return err
+		}
+		if !dropped {
+			if !queued {
+				return nil
+			}
+			return s.deliver(ctx)
+		}
+	}
+	if err := s.flush(ctx); err != nil {
+		return err
+	}
+	return s.deliver(ctx)
 }
 
 func (s *Service) flush(ctx context.Context) error {

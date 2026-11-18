@@ -41,6 +41,9 @@ func Identity() (string, error) {
 		if walkErr != nil {
 			return walkErr
 		}
+		if name == "gzip" && entry.IsDir() {
+			return fs.SkipDir
+		}
 		if !entry.IsDir() {
 			entries = append(entries, name)
 		}
@@ -51,14 +54,19 @@ func Identity() (string, error) {
 	}
 	sort.Strings(entries)
 	hash := sha256.New()
+	buffer := make([]byte, 32<<10)
 	for _, name := range entries {
-		data, err := fs.ReadFile(root, name)
+		file, err := root.Open(name)
 		if err != nil {
 			return "", err
 		}
 		hash.Write([]byte(name))
 		hash.Write([]byte{0})
-		hash.Write(data)
+		_, err = io.CopyBuffer(hash, file, buffer)
+		file.Close()
+		if err != nil {
+			return "", err
+		}
 		hash.Write([]byte{0})
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil

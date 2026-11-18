@@ -45,7 +45,7 @@ func TestMonitoringHistoryGapsAndRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	query := HistoryQuery{Kind: "cpu", ID: "total", Value: "usage_percent", From: base, Until: base + 59, Points: 1}
+	query := HistoryQuery{Kind: "cpu", ID: "total", Value: "usage_percent", From: base, Until: base + 59}
 	check := func(service *Service, count int, average float64, gap bool) {
 		t.Helper()
 		history, err := service.History(t.Context(), query)
@@ -73,25 +73,17 @@ func TestMonitoringHistoryGapsAndRestart(t *testing.T) {
 	observe(cpuSample(base+120, nil))
 	observe(cpuSample(base+135, Number(0)))
 	observe(cpuSample(base+150, Number(60)))
-	query.Until, query.Points = base+179, 3
+	query.Until = base + 179
 	history, err := s.History(t.Context(), query)
 	if err != nil {
 		t.Fatal(err)
 	}
-	missing, partial := history.Points[1], history.Points[2]
-	if !missing.Gap || missing.Count != 0 || missing.Average != nil || missing.Minimum != nil || missing.Maximum != nil {
-		t.Fatalf("missing minute was converted to a value: %+v", missing)
+	if history.StepSeconds != 60 || len(history.Points) != 2 || history.Points[0].At != base || history.Points[1].At != base+120 {
+		t.Fatalf("expected only the original minute records: %+v", history)
 	}
+	partial := history.Points[1]
 	if !partial.Gap || partial.Count != 2 || partial.Average == nil || *partial.Average != 30 || partial.Minimum == nil || *partial.Minimum != 0 || partial.Maximum == nil || *partial.Maximum != 60 {
 		t.Fatalf("null and genuine zero were conflated: %+v", partial)
-	}
-	query.Points = 1
-	history, err = s.History(t.Context(), query)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p := history.Points[0]; p.Count != 4 || !p.Gap || p.Average == nil || *p.Average != 45 {
-		t.Fatalf("downsampling lost gaps or weighted values: %+v", p)
 	}
 }
 

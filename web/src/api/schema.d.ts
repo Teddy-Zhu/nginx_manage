@@ -5844,6 +5844,7 @@ export interface components {
             gap: boolean;
         };
         MonitoringHistory: {
+            /** @description 所选指标的分钟记录，缺失分钟不返回 */
             points: components["schemas"]["MonitoringPoint"][];
             /** Format: int64 */
             step_seconds: number;
@@ -11052,7 +11053,6 @@ export interface operations {
                 value: string;
                 from: number;
                 until: number;
-                points?: number;
             };
             header?: never;
             path?: never;

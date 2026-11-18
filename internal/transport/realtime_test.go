@@ -148,7 +148,7 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 	}
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	remote := secure.ID()
-	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks", "monitoring"}, Resources: []string{"/tasks", "/monitoring/latest", "/monitoring/history?kind=cpu&id=total&value=usage_percent&points=3&window=3600"}}, {Connection: remote, Topics: []string{"tasks"}, Resources: []string{"/tasks"}}}}); err != nil {
+	if err = conn.WriteJSON(realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"tasks", "monitoring"}, Resources: []string{"/tasks", "/monitoring/latest", "/monitoring/history?kind=cpu&id=total&value=usage_percent&window=3600"}}, {Connection: remote, Topics: []string{"tasks"}, Resources: []string{"/tasks"}}}}); err != nil {
 		t.Fatal(err)
 	}
 	var frame realtimeMessage
@@ -177,7 +177,7 @@ func TestRealtimeOriginAuthorizationAndLogout(t *testing.T) {
 			if json.Unmarshal(frame.Data, &latest) != nil || latest.Sample == nil || *latest.Sample.Metrics[0].Values["usage_percent"] != 13.5 {
 				t.Fatalf("missing metric values: %s", frame.Data)
 			}
-		case "/monitoring/history?kind=cpu&id=total&value=usage_percent&points=3&window=3600":
+		case "/monitoring/history?kind=cpu&id=total&value=usage_percent&window=3600":
 		default:
 			t.Fatalf("unrequested resource: %s", frame.Resource)
 		}
@@ -348,6 +348,19 @@ func TestRealtimeFingerprintsCoverTaskAndBackupChanges(t *testing.T) {
 	after, err := server.realtimeFingerprint(t.Context(), "tasks")
 	if err != nil || before == after {
 		t.Fatalf("task change not observed: %v", err)
+	}
+	if _, err = db.ExecContext(t.Context(), "UPDATE tasks SET observed_revision='changed' WHERE id=?", id); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := server.realtimeFingerprint(t.Context(), "tasks")
+	if err != nil || updated == after {
+		t.Fatalf("task progress at the same timestamp not observed: %v", err)
+	}
+	if _, err = db.ExecContext(t.Context(), "DELETE FROM tasks WHERE id=?", id); err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := server.realtimeFingerprint(t.Context(), "tasks"); err != nil || deleted == updated {
+		t.Fatalf("task removal not observed: %v", err)
 	}
 	before, err = server.realtimeFingerprint(t.Context(), "backups")
 	if err != nil {

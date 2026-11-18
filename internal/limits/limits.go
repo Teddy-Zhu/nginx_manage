@@ -53,6 +53,5 @@ const (
 	MetricSampleBytes        = 64 << 10
 	MetricBucketBytes        = 128 << 10
 	MetricHistoryBytes       = 32 << 20
-	MetricHistoryPoints      = 300
 	MetricHistoryMinutes     = 24 * 60
 )

@@ -687,6 +687,11 @@ type PanelUpdateRequest struct {
 	CreatedAt  int64  `json:"created_at"`
 }
 
+type RealtimeTaskRevision struct {
+	ID       int64 `json:"id"`
+	Revision int64 `json:"revision"`
+}
+
 type RestoreBarrier struct {
 	ID            string `json:"id"`
 	Mode          string `json:"mode"`

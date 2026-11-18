@@ -5,7 +5,7 @@
 订阅按服务器连接分组，在连接中提交当前页面所需主题和资源；分页与筛选参数保留在资源地址中。页面关闭、服务器切换、退出登录时释放订阅，断线重连后重新发送当前订阅并同步完整数据。
 
 ```json
-{"type":"subscribe","revision":1,"subscriptions":[{"connection":"","topics":["monitoring"],"resources":["/monitoring/latest","/monitoring/history?kind=cpu&id=total&value=usage_percent&window=3600&points=180"]}]}
+{"type":"subscribe","revision":1,"subscriptions":[{"connection":"","topics":["monitoring"],"resources":["/monitoring/latest","/monitoring/history?kind=cpu&id=total&value=usage_percent&window=3600"]}]}
 ```
 
 服务端首次逐项发送订阅资源的数据，随后只推送内容变化的资源。每条消息统一采用单层 `code`、`message`、`data`；`data` 直接承载业务数据，不再嵌套 HTTP 响应。成功时 `message` 为空，失败时包含明确原因并额外携带 `status`，保留各页面现有错误处理。

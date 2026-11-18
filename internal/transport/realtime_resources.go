@@ -3,6 +3,7 @@ package transport
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"io"
@@ -110,11 +111,18 @@ type realtimeResources struct {
 	request  *http.Request
 	subject  string
 	cursors  map[string]string
-	previous map[string]realtimeValue
+	previous map[string]realtimeSnapshot
+}
+
+type realtimeSnapshot struct {
+	code, message string
+	status        int
+	reset         bool
+	digest        [sha256.Size]byte
 }
 
 func (s *Server) realtimeResources(r *http.Request) *realtimeResources {
-	return &realtimeResources{server: s, request: r, cursors: map[string]string{}, previous: map[string]realtimeValue{}}
+	return &realtimeResources{server: s, request: r, cursors: map[string]string{}, previous: map[string]realtimeSnapshot{}}
 }
 func (state *realtimeResources) Close() {
 	if state.server.Agent == nil || len(state.cursors) == 0 {
@@ -144,7 +152,6 @@ func (state *realtimeResources) Read(ctx context.Context, topics, resources []st
 		r.RequestURI = u.RequestURI()
 		r.Method = http.MethodGet
 		r.Body = http.NoBody
-		r.Header = r.Header.Clone()
 		r.Header.Set("Content-Type", "application/json")
 		capture := &realtimeCapture{header: http.Header{}}
 		if r.Header.Get(remoteapi.HopHeader) != "" && !contract.RealtimeRemoteAllowed(resource) {
@@ -185,7 +192,7 @@ func (state *realtimeResources) Read(ctx context.Context, topics, resources []st
 			continue
 		}
 		var value realtimeValue
-		if capture.status == 0 || json.Unmarshal(capture.body.Bytes(), &value) != nil || value.Code == "" || !json.Valid(value.Data) || (value.Code == "OK") != (capture.status >= 200 && capture.status < 300) {
+		if capture.status == 0 || json.Unmarshal(capture.body.Bytes(), &value) != nil || value.Code == "" || len(value.Data) == 0 || (value.Code == "OK") != (capture.status >= 200 && capture.status < 300) {
 			value = realtimeUnavailable("实时状态读取失败")
 		}
 		if total+capture.body.Len() > 7<<20 {
@@ -198,12 +205,14 @@ func (state *realtimeResources) Read(ctx context.Context, topics, resources []st
 			value.Status = capture.status
 		}
 		value.Reset = capture.Header().Get("X-Realtime-Reset") == "true"
-		previous, exists := state.previous[resource]
 		// Live log pages are deltas: identical rows may be separate events.
-		if u.Path != "/api/v1/logs/live" && exists && previous.Code == value.Code && previous.Message == value.Message && previous.Status == value.Status && bytes.Equal(previous.Data, value.Data) {
-			continue
+		if u.Path != "/api/v1/logs/live" {
+			snapshot := realtimeSnapshot{value.Code, value.Message, value.Status, value.Reset, sha256.Sum256(value.Data)}
+			if previous, exists := state.previous[resource]; exists && previous == snapshot {
+				continue
+			}
+			state.previous[resource] = snapshot
 		}
-		state.previous[resource] = value
 		out[resource] = value
 	}
 	return out

@@ -126,12 +126,11 @@ type Latest struct {
 type HistoryQuery struct {
 	Kind, ID, Value string
 	From, Until     int64
-	Points          int
 }
 
 func (q HistoryQuery) Validate() error {
-	if !ValidField(q.Kind, q.Value) || q.ID == "" || len(q.ID) > 128 || q.Points < 1 || q.Points > limits.MetricHistoryPoints || q.From <= 0 || q.Until < q.From || q.Until-q.From > 24*3600 || q.Until > time.Now().Add(time.Minute).Unix() {
-		return fault.Invalid("指标、维度或时间范围无效，最多查询 24 小时、300 个趋势点")
+	if !ValidField(q.Kind, q.Value) || q.ID == "" || len(q.ID) > 128 || q.From <= 0 || q.Until < q.From || q.Until-q.From > 24*3600 || q.Until > time.Now().Add(time.Minute).Unix() {
+		return fault.Invalid("指标、维度或时间范围无效，最多查询 24 小时")
 	}
 	return nil
 }
@@ -171,20 +170,6 @@ func (s *Stat) Add(value float64) {
 	}
 	s.Sum += value
 	s.Count++
-}
-func (s *Stat) Merge(other Stat) {
-	if other.Count == 0 {
-		return
-	}
-	if s.Count == 0 {
-		s.Min = other.Min
-		s.Max = other.Max
-	} else {
-		s.Min = min(s.Min, other.Min)
-		s.Max = max(s.Max, other.Max)
-	}
-	s.Sum += other.Sum
-	s.Count += other.Count
 }
 
 type aggregateMetric struct {

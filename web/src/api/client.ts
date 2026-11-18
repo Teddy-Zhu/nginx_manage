@@ -1513,7 +1513,6 @@ export function createAPI(scope: RequestScope) {
         value: string;
         from: number;
         until: number;
-        points?: number;
       },
       signal?: AbortSignal,
     ) =>

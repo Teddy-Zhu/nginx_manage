@@ -321,8 +321,11 @@ func (c *MetricsCollector) collectNetwork(s *monitoring.Sample, continuous bool,
 	}
 	c.network = current
 }
+
+var mountEscapes = strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+
 func mountPath(raw string) (string, bool) {
-	v := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`).Replace(raw)
+	v := mountEscapes.Replace(raw)
 	if !filepath.IsAbs(v) || filepath.Clean(v) != v || len(v) > 256 || strings.ContainsAny(v, "\x00\n\r\t") {
 		return "", false
 	}
@@ -339,18 +342,22 @@ func (c *MetricsCollector) collectMounts(s *monitoring.Sample) {
 		priority                 int
 	}
 	mounts := []mount{}
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		left, right, ok := strings.Cut(line, " - ")
 		if !ok {
 			continue
 		}
-		a, b := strings.Fields(left), strings.Fields(right)
-		if len(a) < 6 || len(b) < 2 {
+		kind, source, ok := strings.Cut(right, " ")
+		if !ok || source == "" {
 			continue
 		}
-		switch b[0] {
+		switch kind {
 		case "ext2", "ext3", "ext4", "xfs", "btrfs", "f2fs", "zfs", "bcachefs", "ntfs3":
 		default:
+			continue
+		}
+		a := strings.Fields(left)
+		if len(a) < 6 {
 			continue
 		}
 		path, ok := mountPath(a[4])
@@ -363,7 +370,7 @@ func (c *MetricsCollector) collectMounts(s *monitoring.Sample) {
 		} else if c.DataDir == path || strings.HasPrefix(c.DataDir, path+"/") {
 			priority = 1
 		}
-		mounts = append(mounts, mount{path, a[2], b[0], a[3], priority})
+		mounts = append(mounts, mount{path, a[2], kind, a[3], priority})
 	}
 	sort.Slice(mounts, func(i, j int) bool {
 		if mounts[i].priority != mounts[j].priority {

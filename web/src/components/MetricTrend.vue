@@ -6,7 +6,50 @@ const props = defineProps<{
   unit: string;
 }>();
 const selected = ref<number | null>(null);
-const points = computed(() => props.history?.points ?? []);
+const points = computed<MonitoringPoint[]>(() => {
+  const history = props.history;
+  if (!history?.points.length) return [];
+  const minute = history.step_seconds;
+  const minutes = (history.until - history.from) / minute + 1;
+  const span = Math.ceil(minutes / 180);
+  const intervals = Array.from(
+    { length: Math.ceil(minutes / span) },
+    (_, i) => ({
+      at: history.from + i * span * minute,
+      samples: 0,
+      sum: 0,
+      min: Infinity,
+      max: -Infinity,
+      seen: 0,
+      gap: false,
+    }),
+  );
+  for (const point of history.points) {
+    const index = Math.floor((point.at - history.from) / (span * minute));
+    const interval = intervals[index];
+    if (
+      !interval ||
+      point.average === null ||
+      point.minimum === null ||
+      point.maximum === null
+    )
+      continue;
+    interval.sum += point.average * point.count;
+    interval.samples += point.count;
+    interval.min = Math.min(interval.min, point.minimum);
+    interval.max = Math.max(interval.max, point.maximum);
+    interval.seen++;
+    interval.gap ||= point.gap;
+  }
+  return intervals.map((interval, i) => ({
+    at: interval.at,
+    average: interval.samples ? interval.sum / interval.samples : null,
+    minimum: interval.samples ? interval.min : null,
+    maximum: interval.samples ? interval.max : null,
+    count: interval.samples,
+    gap: interval.gap || interval.seen < Math.min(span, minutes - i * span),
+  }));
+});
 const ceiling = computed(() =>
   props.unit === "%"
     ? 100

@@ -1,10 +1,9 @@
 package app
 
 import (
-	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"io/fs"
 	"mime"
@@ -25,16 +24,17 @@ var hashedFrontendAsset = regexp.MustCompile(`^assets/[a-zA-Z0-9_./-]+[-.][a-zA-
 
 type frontendHandler struct {
 	files        fs.FS
-	compressed   map[string]frontendEncoding
+	assets       map[string]frontendAsset
 	development  http.Handler
 	dev          bool
 	identity     string
 	entryScripts []string
 }
 
-type frontendEncoding struct {
-	data []byte
-	etag string
+type frontendAsset struct {
+	etag     string
+	gzipETag string
+	gzipSize int64
 }
 
 func newFrontendHandler(development http.Handler, dev bool) (*frontendHandler, error) {
@@ -53,52 +53,60 @@ func newFrontendHandler(development http.Handler, dev bool) (*frontendHandler, e
 	if err != nil {
 		return nil, err
 	}
-	compressed, err := compressFrontend(files)
+	assets, err := indexFrontend(files)
 	if err != nil {
 		return nil, err
 	}
-	return &frontendHandler{files: files, compressed: compressed, identity: identity, entryScripts: entryScripts}, nil
+	return &frontendHandler{files: files, assets: assets, identity: identity, entryScripts: entryScripts}, nil
 }
 
-func frontendETag(data []byte) string {
-	hash := sha256.Sum256(data)
-	return `"` + hex.EncodeToString(hash[:]) + `"`
-}
-
-func compressFrontend(files fs.FS) (map[string]frontendEncoding, error) {
-	out := make(map[string]frontendEncoding)
-	writer := gzip.NewWriter(io.Discard)
+func indexFrontend(files fs.FS) (map[string]frontendAsset, error) {
+	out := make(map[string]frontendAsset)
+	hash := sha256.New()
+	buffer := make([]byte, 32<<10)
+	etag := func(name string) (string, error) {
+		file, err := files.Open(name)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+		hash.Reset()
+		if _, err := io.CopyBuffer(hash, file, buffer); err != nil {
+			return "", err
+		}
+		return `"` + hex.EncodeToString(hash.Sum(nil)) + `"`, nil
+	}
 	err := fs.WalkDir(files, ".", func(name string, entry fs.DirEntry, err error) error {
+		if err == nil && name == "gzip" && entry.IsDir() {
+			return fs.SkipDir
+		}
 		if err != nil || entry.IsDir() {
 			return err
-		}
-		switch path.Ext(name) {
-		case ".html", ".js", ".mjs", ".css", ".svg", ".json", ".txt":
-		default:
-			return nil
 		}
 		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
-		if info.Size() < 512 || info.Size() > frontendFileLimit {
+		if !info.Mode().IsRegular() || info.Size() > frontendFileLimit {
 			return nil
 		}
-		data, err := fs.ReadFile(files, name)
+		tag, err := etag(name)
 		if err != nil {
 			return err
 		}
-		var buffer bytes.Buffer
-		writer.Reset(&buffer)
-		if _, err = writer.Write(data); err != nil {
+		asset := frontendAsset{etag: tag}
+		zipped := path.Join("gzip", name)
+		compressed, err := fs.Stat(files, zipped)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-		if err = writer.Close(); err != nil {
-			return err
+		if err == nil && compressed.Mode().IsRegular() && compressed.Size() < info.Size() {
+			if asset.gzipETag, err = etag(zipped); err != nil {
+				return err
+			}
+			asset.gzipSize = compressed.Size()
 		}
-		if buffer.Len() < len(data) {
-			out[name] = frontendEncoding{data: buffer.Bytes(), etag: frontendETag(buffer.Bytes())}
-		}
+		out[name] = asset
 		return nil
 	})
 	return out, err
@@ -168,17 +176,38 @@ func (h *frontendHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data, err := fs.ReadFile(h.files, name)
-	if err != nil {
+	asset, ok := h.assets[name]
+	if !ok {
 		acceptsHTML := strings.Contains(r.Header.Get("Accept"), "text/html")
-		if filepath.Ext(name) != "" && !acceptsHTML || name == "assets" || strings.HasPrefix(name, "assets/") {
+		if filepath.Ext(name) != "" && !acceptsHTML || name == "assets" || strings.HasPrefix(name, "assets/") || name == "gzip" || strings.HasPrefix(name, "gzip/") {
 			http.NotFound(w, r)
 			return
 		}
 		name = "index.html"
-		data, err = fs.ReadFile(h.files, name)
+		asset = h.assets[name]
 	}
-	if err != nil || len(data) > frontendFileLimit {
+	filename := name
+	tag := asset.etag
+	gzipped := false
+	if asset.gzipETag != "" {
+		w.Header().Add("Vary", "Accept-Encoding")
+		gzipped = r.Header.Get("Range") == "" && acceptsGzip(r.Header.Values("Accept-Encoding"))
+		if gzipped {
+			filename, tag = path.Join("gzip", name), asset.gzipETag
+		}
+	}
+	if tag == "" {
+		http.Error(w, "前端资源不可用", http.StatusServiceUnavailable)
+		return
+	}
+	file, err := h.files.Open(filename)
+	if err != nil {
+		http.Error(w, "前端资源不可用", http.StatusServiceUnavailable)
+		return
+	}
+	defer file.Close()
+	content, ok := file.(io.ReadSeeker)
+	if !ok {
 		http.Error(w, "前端资源不可用", http.StatusServiceUnavailable)
 		return
 	}
@@ -188,18 +217,12 @@ func (h *frontendHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if contentType := mime.TypeByExtension(path.Ext(name)); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
-	if compressed, ok := h.compressed[name]; ok {
-		w.Header().Add("Vary", "Accept-Encoding")
-		if r.Header.Get("Range") == "" && acceptsGzip(r.Header.Values("Accept-Encoding")) {
-			w.Header().Set("Content-Encoding", "gzip")
-			w.Header().Set("Content-Length", strconv.Itoa(len(compressed.data)))
-			w.Header().Set("ETag", compressed.etag)
-			http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(compressed.data))
-			return
-		}
+	if gzipped {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Length", strconv.FormatInt(asset.gzipSize, 10))
 	}
-	w.Header().Set("ETag", frontendETag(data))
-	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(data))
+	w.Header().Set("ETag", tag)
+	http.ServeContent(w, r, name, time.Time{}, content)
 }
 
 var _ http.Handler = (*frontendHandler)(nil)

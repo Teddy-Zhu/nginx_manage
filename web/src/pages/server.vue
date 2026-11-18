@@ -15,7 +15,15 @@
 import SettingsSection from "../components/SettingsSection.vue";
 import FormDialog from "../components/FormDialog.vue";
 import { useLiveRefresh } from "../composables/live";
-import { computed, onMounted, onUnmounted, ref, watch, toRaw } from "vue";
+import {
+  computed,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watch,
+  toRaw,
+} from "vue";
 import {
   NAlert,
   NButton,
@@ -51,7 +59,7 @@ const { run, busy } = useAction(),
 const latest = ref<MonitoringLatest | null>(null),
   settings = ref<MonitoringSettingsView | null>(null),
   capability = ref<MonitoringCapability | null>(null),
-  history = ref<MonitoringHistory | null>(null);
+  history = shallowRef<MonitoringHistory | null>(null);
 const edit = ref<MonitoringSettings | null>(null),
   modal = ref(false),
   selected = ref("cpu:total"),
@@ -277,7 +285,6 @@ async function readHistory() {
         value: field.value,
         from: until - hours.value * 3600,
         until,
-        points: 180,
       },
       active.signal,
     );

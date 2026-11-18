@@ -68,10 +68,7 @@ func (s *Server) GetMonitoringHistory(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 	defer s.metricReads.Add(-1)
-	q := monitoring.HistoryQuery{Kind: params.Kind, ID: params.Id, Value: params.Value, From: params.From, Until: params.Until, Points: 180}
-	if params.Points != nil {
-		q.Points = *params.Points
-	}
+	q := monitoring.HistoryQuery{Kind: params.Kind, ID: params.Id, Value: params.Value, From: params.From, Until: params.Until}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	out, err := s.Monitoring.History(ctx, q)
