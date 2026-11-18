@@ -1,12 +1,14 @@
 """Docker Hub identity, metadata authentication and redirect behavior."""
 import base64
 import hashlib
+import io
 import unittest
+from contextlib import redirect_stderr
 from unittest.mock import patch
 import urllib.parse
 import urllib.request
 
-from images import Registry, Redirects, image_repository
+from images import Registry, RegistryRedirectRejected, Redirects, image_repository
 
 
 class ImageRegistryTests(unittest.TestCase):
@@ -49,6 +51,29 @@ class ImageRegistryTests(unittest.TestCase):
         for target in ("http://production.cloudfront.docker.com/blob", "https://example.com/blob", "https://user@production.cloudfront.docker.com/blob"):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 redirects.redirect_request(request, None, 307, "Redirect", {}, target)
+
+    def test_authenticated_blob_redirect_retries_anonymously_and_checks_digest(self):
+        raw = b'{"architecture":"amd64"}'
+        digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+        location = "https://unlisted.example/storage?signature=private"
+        with patch.dict("os.environ", {"DOCKERHUB_USERNAME": "publisher", "DOCKERHUB_TOKEN": "test-token"}, clear=True), \
+                patch.object(Registry, "request") as request, redirect_stderr(io.StringIO()) as logs:
+            request.return_value = b'{"token":"authenticated"}'
+            registry = Registry("docker.io/myteam/nginxpanel-nginx")
+            with self.assertRaises(RegistryRedirectRejected) as rejected:
+                Redirects({"registry-1.docker.io"}).redirect_request(
+                    urllib.request.Request(registry.origin), None, 302, "Redirect", {}, location,
+                )
+            request.reset_mock()
+            request.side_effect = [rejected.exception, b'{"token":"anonymous"}', raw, rejected.exception, b"x" * len(raw)]
+            self.assertEqual(registry.get("blobs", digest, len(raw)), raw)
+            with self.assertRaisesRegex(ValueError, "digest or length"):
+                registry.get("blobs", digest, len(raw))
+            self.assertEqual([call.args[1].get("Authorization") for call in request.call_args_list],
+                             ["Bearer authenticated", None, "Bearer anonymous", "Bearer authenticated", "Bearer anonymous"])
+            self.assertEqual(request.call_args_list[1].args[0], registry.token_url)
+            self.assertIn("HTTP 302 to unlisted.example", logs.getvalue())
+            self.assertNotIn("signature=private", logs.getvalue())
 
 
 if __name__ == "__main__":

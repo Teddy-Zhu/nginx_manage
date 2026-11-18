@@ -13,6 +13,7 @@ from pathlib import Path
 import platform
 import re
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -113,16 +114,34 @@ def build(args):
     write(args.output, result)
 
 
+class RegistryRedirectRejected(ValueError):
+    pass
+
+
 class Redirects(urllib.request.HTTPRedirectHandler):
     def __init__(self, hosts):
         self.hosts = hosts
 
     def redirect_request(self, request, response, code, message, headers, url):
-        target = urllib.parse.urlsplit(url)
-        if target.scheme != "https" or target.hostname not in self.hosts or target.port not in (None, 443) or target.username or target.password or target.fragment:
-            raise ValueError("registry redirect is outside the approved HTTPS hosts")
+        try:
+            target = urllib.parse.urlsplit(url)
+            host, port = target.hostname, target.port
+        except ValueError:
+            raise RegistryRedirectRejected(f"registry redirect HTTP {code} has a malformed target") from None
+        if target.scheme != "https" or port not in (None, 443):
+            reason = "expected HTTPS on port 443"
+        elif target.username is not None or target.password is not None or target.fragment:
+            reason = "target contains user info or a fragment"
+        elif host not in self.hosts:
+            reason = "target host is not approved"
+        else:
+            reason = ""
+        if reason:
+            # The path and query can contain signed storage credentials.
+            safe_host = host if host and re.fullmatch(r"[a-z0-9.-]{1,253}", host) else "<invalid host>"
+            raise RegistryRedirectRejected(f"registry redirect HTTP {code} to {safe_host} rejected: {reason}")
         redirected = super().redirect_request(request, response, code, message, headers, url)
-        if target.hostname != urllib.parse.urlsplit(request.full_url).hostname:
+        if redirected is not None and host != urllib.parse.urlsplit(request.full_url).hostname:
             redirected.remove_header("Authorization")
         return redirected
 
@@ -149,13 +168,20 @@ class Registry:
             raise ValueError("registry username and token must be provided together")
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), Redirects(hosts))
         query = urllib.parse.urlencode({"service": service, "scope": "repository:" + self.path + ":pull"})
+        self.token_url = realm + "?" + query
+        self.allow_anonymous_blob_retry = host == "docker.io" and bool(username)
+        self.anonymous_blob_token = None
         headers = {}
         if username:
             headers["Authorization"] = "Basic " + base64.b64encode((username + ":" + password).encode()).decode()
-        token = decode(self.request(realm + "?" + query, headers, 64 << 10))
-        self.token = token.get("token", token.get("access_token"))
-        if not isinstance(self.token, str) or not self.token or len(self.token) > 32768:
+        self.token = self.pull_token(headers)
+
+    def pull_token(self, headers):
+        response = decode(self.request(self.token_url, headers, 64 << 10))
+        token = response.get("token", response.get("access_token"))
+        if not isinstance(token, str) or not token or len(token) > 32768:
             raise ValueError("registry did not return a bounded pull token")
+        return token
 
     def request(self, url, headers, limit):
         request = urllib.request.Request(url, headers=headers)
@@ -182,7 +208,18 @@ class Registry:
             if not isinstance(size, int) or not 0 < size <= limit:
                 raise ValueError("invalid OCI descriptor length")
             limit = size
-        raw = self.request(self.origin + "/v2/" + self.path + "/" + kind + "/" + reference, headers, limit)
+        url = self.origin + "/v2/" + self.path + "/" + kind + "/" + reference
+        try:
+            raw = self.request(url, headers, limit)
+        except RegistryRedirectRejected as error:
+            if kind != "blobs" or not self.allow_anonymous_blob_retry:
+                raise
+            # The published Docker Hub image is public. A pull token issued
+            # without account credentials can use a different storage route.
+            print(f"{error}; retrying blob with an anonymous Docker Hub pull token", file=sys.stderr)
+            if self.anonymous_blob_token is None:
+                self.anonymous_blob_token = self.pull_token({})
+            raw = self.request(url, {**headers, "Authorization": "Bearer " + self.anonymous_blob_token}, limit)
         if size is not None and len(raw) != size or DIGEST.fullmatch(reference) and "sha256:" + hashlib.sha256(raw).hexdigest() != reference:
             raise ValueError("registry metadata does not match its digest or length")
         return raw

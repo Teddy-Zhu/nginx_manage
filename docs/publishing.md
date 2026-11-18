@@ -55,7 +55,7 @@ Nginx 工作流没有 `tag` 输入，使用独立的 `version` 与 `channel`：
 
 核心和 Nginx 共用签名配置。已有核心签名配置时，Nginx 只需新增 Docker Hub 用户名和令牌。工作流在开始构建前一次列出缺失项。GitHub Release 通常使用内置 `GITHUB_TOKEN` 和 `contents: write`。
 
-镜像完整地址为 `docker.io/<命名空间>/<仓库名>`。组织仓库需确保登录用户有推送权限。Docker Hub 登录和元数据读取均使用上述令牌；GitHub 内置 Token 只用于源码和 Release，不再要求 `packages:write`。参见 [Docker Hub 推送说明](https://docs.docker.com/docker-hub/repos/manage/hub-images/push/)。
+镜像完整地址为 `docker.io/<命名空间>/<仓库名>`。组织仓库需确保登录用户有推送权限。Docker Hub 推送和 OCI 元数据读取默认使用上述凭据。若 blob 下载重定向被拒绝，脚本记录目标域名及原因，并使用匿名拉取令牌重试一次，仍校验摘要和长度。GitHub 内置 Token 用于源码和 Release。参见 [Docker Hub 推送说明](https://docs.docker.com/docker-hub/repos/manage/hub-images/push/)。
 
 手动触发要求工作流已进入默认分支，参见 [GitHub 手动运行工作流说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)。首次正式使用前，应确认仓库可使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm` 运行器。
 
