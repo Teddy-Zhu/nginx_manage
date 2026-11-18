@@ -403,6 +403,13 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
         <h2>Nginx 版本管理</h2>
         <NButton :loading="reading" @click="load"> 刷新 </NButton>
       </div>
+      <div v-if="currentEngine" class="button-row">
+        <span class="muted">已安装</span>
+        <strong>Nginx {{ currentEngine }}</strong>
+        <span v-if="currentVersion" class="muted">
+          组件 {{ currentVersion.version }}
+        </span>
+      </div>
       <p class="muted">
         检查并准备签名镜像，确认后即可应用更新。网站配置与证书会保留。
       </p>
