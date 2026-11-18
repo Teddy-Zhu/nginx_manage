@@ -403,6 +403,19 @@ install -m 0555 "$root/deploy/native/lifecycle.sh" "$stage/deploy/native/lifecyc
 install -m 0555 "$root/manage.sh" "$stage/manage.sh"
 install -m 0444 "$root/containers.json" "$stage/containers.json"
 install -m 0400 "$root/container-images.tar" "$stage/container-images.tar"
+if [[ -f $root/release-trust.json && ! -L $root/release-trust.json ]]; then
+  [[ $(stat -c %s "$root/release-trust.json") -le 16384 ]] || die '发行签名配置超出大小限制'
+  if [[ ! -e /etc/nginxpanel && ! -L /etc/nginxpanel ]]; then
+    install -d -m 0755 -o root -g root /etc/nginxpanel
+  fi
+  root_chain /etc/nginxpanel
+  if [[ ! -e /etc/nginxpanel/release-trust.json && ! -L /etc/nginxpanel/release-trust.json ]]; then
+    trust_file=$(mktemp /etc/nginxpanel/.release-trust.XXXXXXXX)
+    install -m 0444 "$root/release-trust.json" "$trust_file"
+    mv -nT -- "$trust_file" /etc/nginxpanel/release-trust.json
+    rm -f -- "$trust_file"
+  fi
+fi
 args+=(--nginx-package "$stage")
 printf '%s\n' "$admin_record" >"$stage/admin.json"
 chmod 0400 "$stage/admin.json"

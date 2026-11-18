@@ -76,6 +76,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	command := os.Args[1]
+	if command == "upgrade" {
+		return runUpgradeCLI(ctx, os.Args[2:])
+	}
 	if command == "core-update-worker" {
 		return runCoreUpdateCLI(ctx, os.Args[2:])
 	}

@@ -68,7 +68,11 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 				return out, err
 			}
 		}
-		if in.CheckTaskID != "" || in.PrepareTaskID != "" {
+		if in.Input.Software.Action == "update-panel" {
+			if !ValidID(in.CheckTaskID) || in.Input.Tag != "" {
+				return out, fault.Invalid("请先检查更新并确认目标版本")
+			}
+		} else if in.CheckTaskID != "" {
 			return out, fault.Invalid("软件操作不能引用组件任务")
 		}
 	}
@@ -134,6 +138,39 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		return out, fault.Conflict("已有组件任务执行中或待恢复")
 	}
 	now := time.Now().Unix()
+	if in.Input.Action == "software" && in.Input.Software.Action == "update-panel" {
+		var state string
+		err = tx.QueryRowContext(ctx, "SELECT t.state,o.result FROM component_operations o JOIN tasks t ON t.id=o.task_id WHERE o.task_id=? AND o.principal=? AND t.kind='component.check'", in.CheckTaskID, p.ID).Scan(&state, &sealed)
+		if errors.Is(err, sql.ErrNoRows) {
+			return out, fault.NotFound("更新检查任务不存在")
+		}
+		if err != nil {
+			return out, err
+		}
+		if state != "succeeded" || len(sealed) == 0 {
+			return out, fault.Conflict("请先完成更新检查")
+		}
+		raw, err := s.Vault.Open(sealed, "components:result:"+in.CheckTaskID)
+		if err != nil {
+			return out, err
+		}
+		var checked Operation
+		if err = json.Unmarshal(raw, &checked); err != nil {
+			return out, err
+		}
+		if err = checked.Validate(Request{Protocol: checked.Protocol, OperationID: checked.ID, Input: checked.Input}); err != nil {
+			return out, err
+		}
+		r := checked.Release
+		update := in.Input.Software
+		if checked.State != "succeeded" || checked.Input.Action != "check" || checked.Input.OfflineID != "" || !checked.RuntimeReady || !isCoreRelease(r) || r.ExpiresAt <= now || r.PlanID != update.PlanID || checked.Input.Prerelease != update.Prerelease || coreUpdateStatus(s.Version, r.Version).State != "available" {
+			return out, fault.Conflict("所选更新已失效或无法安装，请重新检查")
+		}
+		in.Input.Tag, in.Input.Assets, in.Input.ManifestSHA256, in.Input.TrustSHA256 = r.Tag, r.Selected, r.ManifestSHA256, r.TrustSHA256
+		if err = in.Input.Validate(); err != nil {
+			return out, err
+		}
+	}
 	if in.Input.Action == "pull" {
 		if err = s.validateImageParent(ctx, tx, p.ID, in, now); err != nil {
 			return out, err

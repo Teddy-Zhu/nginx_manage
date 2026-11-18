@@ -1125,9 +1125,9 @@ export function createAPI(scope: RequestScope) {
         method: "POST",
         headers: { "Idempotency-Key": key },
       }),
-    createComponentTask: (data: ComponentCreateInput, key: string) =>
+    createComponentTask: (data: ComponentCreateInput, key: string, showActivity = true) =>
       request<ComponentTask>({
-        activity: componentTaskTitle(data),
+        activity: showActivity ? componentTaskTitle(data) : undefined,
         url: "/components/tasks",
         method: "POST",
         headers: { "Idempotency-Key": key },

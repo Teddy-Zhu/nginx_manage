@@ -224,6 +224,20 @@ jobs:
           trap 'rm -rf -- "$keydir"' EXIT
           printf '%s\n' "$RELEASE_SEED" > "$keydir/seed"
           unset RELEASE_SEED
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          trust = dict(schema=1, repository=os.environ["RELEASE_REPOSITORY"],
+                       keys=[dict(id=os.environ["RELEASE_KEY_ID"], public_key=os.environ["RELEASE_PUBLIC_KEY"])])
+          for arch in ("amd64", "arm64"):
+              path = Path(f".release/input/panel-linux-{arch}/release-trust.json")
+              with path.open("x", encoding="utf-8") as output:
+                  json.dump(trust, output)
+                  output.write("\n")
+              path.chmod(0o644)
+          PY
           "$RUNNER_TEMP/nginxpanel-release" bundle --repository "$RELEASE_REPOSITORY" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --spec .release/input/publication.json --input-root .release/input --policy-file "$RELEASE_POLICY" --key-file "$keydir/seed" --key-id "$RELEASE_KEY_ID" --public-key "$RELEASE_PUBLIC_KEY" --output .release/output
       - name: Publish the signed release
         env:

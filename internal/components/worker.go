@@ -79,6 +79,9 @@ func (s *Service) next(ctx context.Context) error {
 		// Persisting submission intent precedes IPC. Missing receipts after this point
 		// are ambiguous even if Web never received the acceptance response.
 		if task.SubmitStarted != 0 || task.AgentAccepted != 0 {
+			if input.Action == "check" || input.Action == "prepare" {
+				return s.update(ctx, task, "failed", "operation_missing", "检查或下载记录未创建，请重新检查更新", nil, false)
+			}
 			return s.update(ctx, task, "recovery_required", "operation_missing", "已提交的组件操作记录缺失，须本机确认结果", nil, false)
 		}
 		result, e := s.DB.ExecContext(ctx, "UPDATE tasks SET state='running',stage='agent_submit_pending',submit_started=1,attempts=attempts+1,updated_at=? WHERE id=? AND submit_started=0 AND agent_accepted=0 AND state='queued'", time.Now().Unix(), id)
@@ -94,7 +97,7 @@ func (s *Service) next(ctx context.Context) error {
 		}
 		task.State = "running"
 		op, err = s.Agent.SubmitComponent(ctx, req)
-		if errors.As(err, &remote) && (remote.Status == 400 || remote.Status == 409) {
+		if errors.As(err, &remote) && (remote.Status == 400 || remote.Status == 409 || remote.Code == "COMPONENT_NOT_SUBMITTED") {
 			return s.update(ctx, task, "failed", "preflight_rejected", remote.Message, nil, false)
 		}
 	}

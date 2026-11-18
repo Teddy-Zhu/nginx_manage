@@ -81,7 +81,12 @@ func (s *onlineSession) discover(ctx context.Context) (githubRelease, bool, bool
 		release, err := discoverRelease(s.cache.Body, s.input)
 		return release, true, true, err
 	}
-	if s.cache.NextCheck > now {
+	// A confirmed preparation uses the exact signed release already checked.
+	// The discovery cooldown still applies to finding versions, and s.get
+	// enforces GitHub's actual rate-limit window for every request.
+	confirmed := s.input.Prepare && s.input.Tag != "" && s.input.ExpectedPlanID != "" &&
+		s.input.ExpectedManifestSHA256 != "" && s.input.ExpectedTrustSHA256 != ""
+	if !confirmed && s.cache.NextCheck > now {
 		return githubRelease{}, false, false, fmt.Errorf("发行检查间隔至少 60 秒，最早重试时间 %s", time.Unix(s.cache.NextCheck, 0).UTC().Format(time.RFC3339))
 	}
 	etag := ""
@@ -90,7 +95,9 @@ func (s *onlineSession) discover(ctx context.Context) (githubRelease, bool, bool
 	}
 	// Persist the attempt before networking, so process restarts and failures do
 	// not bypass the metadata request interval. No stale response is a success.
-	s.cache.NextCheck = now + 60
+	if !confirmed {
+		s.cache.NextCheck = now + 60
+	}
 	if err := writeOnlineCache(s.cache); err != nil {
 		return githubRelease{}, false, false, err
 	}

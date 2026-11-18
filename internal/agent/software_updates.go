@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"nginxpanel/internal/components"
@@ -13,12 +14,33 @@ import (
 	"nginxpanel/internal/software"
 )
 
+// ApplyCoreUpgrade is also used from the host when the management UI is down.
+func ApplyCoreUpgrade(ctx context.Context, data, trust, id string, in software.Request, progress software.Progress) (software.Result, error) {
+	s := Server{DataDir: data, ReleaseTrust: trust, Journal: &Journal{Dir: filepath.Join(data, "agent", "operations")}}
+	return s.updateSoftwarePanel(ctx, id, in, progress)
+}
+
 // The signed update is owned by a detached host worker. Cancellation during
 // the core restart leaves this component task pending for the new core to
 // reconcile, rather than reporting a failed or completed upgrade prematurely.
 func (s *Server) updateSoftwarePanel(ctx context.Context, id string, in software.Request, progress software.Progress) (software.Result, error) {
 	out := software.Result{}
 	source := panelruntime.StageInput{DataDir: s.DataDir, PlanID: in.PlanID, TrustPath: s.ReleaseTrust, AllowPrerelease: in.Prerelease}
+	prior, err := coreUpdateRecord(s.Journal, id, s.DataDir)
+	if err == nil {
+		if prior.CoreUpdate.Source != source {
+			return out, errors.New("核心更新与原下载任务不一致")
+		}
+		if prior.State == "succeeded" {
+			out.Message = "系统已更新并启动"
+			return out, nil
+		}
+		if prior.State == "failed" {
+			return out, errors.New(prior.Error)
+		}
+	} else if !os.IsNotExist(err) {
+		return out, err
+	}
 	staged, err := panelruntime.Staged(ctx, source)
 	if err != nil {
 		return out, err
@@ -50,6 +72,13 @@ func (s *Server) updateSoftwarePanel(ctx context.Context, id string, in software
 	for {
 		r, err := coreUpdateRecord(s.Journal, id, s.DataDir)
 		if err != nil {
+			if os.IsNotExist(err) {
+				current, readErr := panelruntime.Read(s.DataDir)
+				if readErr == nil && current.Release.ID == staged.Release.ID {
+					out.Message = "当前已是此版本"
+					return out, nil
+				}
+			}
 			return out, err
 		}
 		if r.CoreUpdate.Source != source {

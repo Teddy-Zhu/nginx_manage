@@ -39,11 +39,20 @@ func digest(value string) bool {
 }
 func (in Input) Validate() error {
 	if in.Action == "software" {
-		if in.Software == nil || in.OfflineID != "" || in.ImageID != "" || in.Tag != "" || in.Prerelease || len(in.Components) != 0 || len(in.Assets) != 0 || in.PlanID != "" || in.ManifestSHA256 != "" || in.TrustSHA256 != "" {
+		if in.Software == nil || in.OfflineID != "" || in.ImageID != "" || in.Prerelease || len(in.Components) != 0 || in.PlanID != "" {
 			return fault.Invalid("软件操作输入无效")
 		}
 		if err := in.Software.Validate(); err != nil {
 			return fault.Invalid(err.Error())
+		}
+		if in.Tag != "" && in.Software.Action == "update-panel" {
+			if len(in.Assets) == 1 && strings.HasPrefix(in.Assets[0], "panel-linux-") && digest(in.ManifestSHA256) && digest(in.TrustSHA256) && releases.ValidateOnlineSelection(in.coreOnline()) == nil {
+				return nil
+			}
+			return fault.Invalid("系统升级须绑定已检查的发行版本")
+		}
+		if in.Tag != "" || len(in.Assets) != 0 || in.ManifestSHA256 != "" || in.TrustSHA256 != "" {
+			return fault.Invalid("软件操作输入无效")
 		}
 		return nil
 	}
@@ -94,6 +103,12 @@ func (in Input) validateSubmission() error {
 
 func (in Input) online() releases.OnlineInput {
 	return releases.OnlineInput{PanelStaging: true, Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban", "panel"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
+}
+
+func (in Input) coreOnline() releases.OnlineInput {
+	return releases.OnlineInput{PanelStaging: true, Tag: in.Tag, Assets: slices.Clone(in.Assets),
+		AllowPrerelease: in.Software.Prerelease, Prepare: true, AllowedComponents: []string{"panel"},
+		ExpectedPlanID: in.Software.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
 }
 
 type PanelPreparation struct {

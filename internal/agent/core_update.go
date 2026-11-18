@@ -11,6 +11,7 @@ import (
 
 	"nginxpanel/internal/nginxmodules"
 	"nginxpanel/internal/panelruntime"
+	"nginxpanel/internal/releases"
 	"nginxpanel/internal/storage"
 )
 
@@ -114,6 +115,9 @@ func (s *Server) queueCoreUpdate(ctx context.Context, id string, source panelrun
 	if before.Release.ID == staged.Release.ID {
 		return nil
 	}
+	if comparison, err := releases.CompareVersions(before.Release.Version, staged.Release.Version); err != nil || comparison >= 0 {
+		return errors.New("目标版本须高于当前运行版本，请重新检查")
+	}
 	i := &CoreUpdateIntent{Source: source, Before: before.Release.ID, Target: staged.Release.ID}
 	r := Record{OperationID: id, Kind: coreUpdateKind, State: "running", Stage: "queued", RequestHash: selectionValueHash(i), CoreUpdate: i}
 	if err = s.Journal.Put(r); err != nil {
@@ -201,6 +205,12 @@ func RunCoreUpdate(parent context.Context, data, id string) (resultErr error) {
 	}
 	if current.Release.ID != i.Before && current.Release.ID != i.Target {
 		return errors.New("核心版本偏离原更新任务")
+	}
+	if current.Release.ID == i.Target {
+		if ready, _, _ := panelreadyForSoftware(ctx, current); ready {
+			r.State, r.Stage, r.Error = "succeeded", "committed", ""
+			return j.Put(r)
+		}
 	}
 	if err = stage("stopping"); err != nil {
 		return err

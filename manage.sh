@@ -20,6 +20,7 @@ usage() {
   fingerprint                  显示主入口证书 SHA-256
   set-port 端口                修改主入口端口，运行中的面板自动重启
   set-protocol http|https      切换访问协议，运行中的面板自动重启
+  upgrade [--check|--dev]      检查或安装选定通道的核心更新
   disable-remote               请求停用附加管理入口（不关闭主入口）
   uninstall                    卸载程序和服务，默认保留数据，可交互选择清理
   uninstall --keep-data        明确保留数据卸载（默认方式）
@@ -39,9 +40,14 @@ action=${1:-menu}
 if (($#)); then shift; fi
 case "$action" in -h|--help|help) usage; exit 0 ;; esac
 component= yes=no lines=100 follow=no requested_port= requested_protocol= purge=no keep_data=no checker_binary=
+upgrade_args=()
 while (($#)); do
   case "$1" in
     --yes) yes=yes; shift ;;
+    --check|--dev) [[ $action == upgrade ]] || die "$1 只能用于 upgrade"; upgrade_args+=("$1"); shift ;;
+    --version|--release-trust|--release-token)
+      [[ $action == upgrade && $# -ge 2 && $2 != --* ]] || die "$1 需要升级参数值"
+      upgrade_args+=("$1" "$2"); shift 2 ;;
     --purge) purge=yes; shift ;;
     --keep-data) keep_data=yes; shift ;;
     --checker-binary) (($# >= 2)) && [[ $2 == /* ]] || die '--checker-binary 需要绝对路径'; checker_binary=$2; shift 2 ;;
@@ -55,7 +61,7 @@ while (($#)); do
     *) usage; die "未知参数：$1" ;;
   esac
 done
-case "$action" in menu|info|status|start|stop|restart|logs|bootstrap|fingerprint|disable-remote|set-port|set-protocol|uninstall|reinstall) ;; *) usage; die "未知命令：$action" ;; esac
+case "$action" in menu|info|status|start|stop|restart|logs|bootstrap|fingerprint|disable-remote|set-port|set-protocol|upgrade|uninstall|reinstall) ;; *) usage; die "未知命令：$action" ;; esac
 [[ $purge == no || $action == uninstall ]] || die '--purge 只能用于 uninstall'
 [[ $keep_data == no || $action == uninstall && $purge == no ]] || die '--keep-data 只能用于保留数据卸载，不能与 --purge 混用'
 [[ -z $checker_binary || $action == uninstall ]] || die '--checker-binary 只能用于 uninstall'
@@ -318,6 +324,10 @@ fi
 case "$action" in
   info) show_info ;;
   set-port|set-protocol) set_access ;;
+  upgrade)
+    load_binary
+    if [[ $yes == yes ]]; then upgrade_args+=(--yes); fi
+    exec "$binary" upgrade --data-dir "$data" "${upgrade_args[@]}" ;;
   uninstall|reinstall) lifecycle_action ;;
   status|start|stop|restart) service_action ;;
   logs) logs_action ;;

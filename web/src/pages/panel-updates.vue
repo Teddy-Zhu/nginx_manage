@@ -11,16 +11,17 @@
 </route>
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { NAlert, NButton, NSelect, NEmpty, NTag } from "naive-ui";
+import { NAlert, NButton, NSelect, NEmpty, NTag, useDialog } from "naive-ui";
+import { liveDisconnected } from "../api/live";
 import {
   useNodeAPI,
   type ComponentCreateInput,
   type ComponentTask,
 } from "../api/client";
-import { useAction } from "../composables/action";
+import { useAction, useIdempotency } from "../composables/action";
 import { useLiveRefresh } from "../composables/live";
 import { useSession } from "../stores/session";
-import { inspectTask } from "../stores/operation";
+import { loadedFrontendEntries } from "../frontend-version";
 import { taskStates } from "../utils/tasks";
 import { randomUUID } from "../utils/crypto";
 import TaskLogButton from "../components/TaskLogButton.vue";
@@ -30,7 +31,9 @@ import {
 } from "../composables/update-channel";
 const api = useNodeAPI(),
   session = useSession(),
-  { run, busy } = useAction();
+  { run, busy } = useAction(),
+  dialog = useDialog();
+const upgradeKey = useIdempotency();
 const {
   channel,
   prerelease,
@@ -39,67 +42,58 @@ const {
   loadChannel,
   saveChannel,
 } = useUpdateChannel(api);
+const savedCheck = "nginxpanel:update-check";
+const savedUpgrade = "nginxpanel:update-task";
 const tasks = ref<ComponentTask[]>([]),
   version = ref(""),
-  lastID = ref("");
+  checkID = ref(sessionStorage.getItem(savedCheck) ?? ""),
+  upgradeID = ref(sessionStorage.getItem(savedUpgrade) ?? "");
 const permitted = computed(
   () =>
     session.me?.scopes.includes("components.manage") &&
     session.me.scopes.includes("system.write"),
 );
-function containsSelectedPanelAsset(task: ComponentTask) {
-  const release = task.result?.release;
-  return !!release?.assets.some(
-    (asset) =>
-      asset.component === "panel" && release.selected.includes(asset.id),
-  );
+function pending(task: ComponentTask | undefined) {
+  return task?.state === "queued" || task?.state === "running";
 }
-const panelOperations = computed(() =>
-  tasks.value.filter(
-    (task) =>
-      task.result?.input.components?.includes("panel") ||
-      containsSelectedPanelAsset(task) ||
-      task.result?.input.software?.action === "update-panel",
-  ),
+const lastCheck = computed(() =>
+  tasks.value.find((task) => task.id === checkID.value),
 );
-const active = computed(() =>
-  panelOperations.value.some(
-    (task) =>
-      ["queued", "running", "recovery_required"].includes(task.state) &&
-      task.stage !== "restore_isolated",
-  ),
-);
-const last = computed(() => tasks.value.find((t) => t.id === lastID.value));
 const checked = computed(() =>
   tasks.value.find(
-    (t) =>
-      t.action === "check" &&
-      t.state === "succeeded" &&
-      t.result?.input.prerelease === prerelease.value &&
-      t.result?.release?.assets.some(
-        (a) =>
-          a.component === "panel" && t.result!.release!.selected.includes(a.id),
-      ),
+    (task) =>
+      (!checkID.value || task.id === checkID.value) &&
+      task.action === "check" &&
+      task.state === "succeeded" &&
+      task.result?.input.prerelease === prerelease.value &&
+      !!task.core_update,
   ),
 );
 const release = computed(() => checked.value?.result?.release);
 const updateStatus = computed(() => checked.value?.core_update);
-const updateAvailable = computed(() => updateStatus.value?.state === "available");
-const prepared = computed(() =>
-  tasks.value.find(
-    (t) =>
-      t.action === "prepare" &&
-      t.state === "succeeded" &&
-      t.result?.panel &&
-      t.result.input.plan_id === release.value?.plan_id,
-  ),
+const updateAvailable = computed(
+  () => updateStatus.value?.state === "available",
 );
 const history = computed(() =>
   tasks.value
-    .filter((t) => t.result?.input.software?.action === "update-panel")
+    .filter(
+      (task) =>
+        task.id === upgradeID.value ||
+        task.result?.input.software?.action === "update-panel",
+    )
     .slice(0, 10),
 );
+const updating = computed(() => history.value.some(pending));
+const active = computed(() => pending(lastCheck.value) || updating.value);
+const canUpgrade = computed(
+  () =>
+    updateAvailable.value &&
+    !!checked.value?.result?.runtime_ready &&
+    !!release.value &&
+    release.value.expires_at * 1000 > Date.now(),
+);
 async function load() {
+  if (updating.value && liveDisconnected.value) return;
   await run(async () => {
     const [items, current] = await Promise.all([
       api.componentTasks(),
@@ -108,69 +102,88 @@ async function load() {
     ]);
     tasks.value = items;
     version.value = current.version;
+    if (
+      upgradeID.value &&
+      items.some(
+        (item) => item.id === upgradeID.value && item.state === "succeeded",
+      ) &&
+      current.frontend_id &&
+      loadedFrontendEntries.length &&
+      JSON.stringify([...current.frontend_entries].sort()) !==
+        JSON.stringify(loadedFrontendEntries)
+    ) {
+      window.location.reload();
+    }
   });
 }
-async function submit(input: ComponentCreateInput) {
+async function submit(input: ComponentCreateInput, installing: boolean) {
   await run(async () => {
-    const task = await api.createComponentTask(input, randomUUID());
-    lastID.value = task.id;
-    tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
-    inspectTask(
-      task.id,
-      input.input.action === "software" ? "系统更新日志" : "更新准备日志",
-    );
+    const key = installing ? upgradeKey(input) : randomUUID();
+    const task = await api.createComponentTask(input, key, installing);
+    tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)];
+    if (installing) {
+      upgradeID.value = task.id;
+      sessionStorage.setItem(savedUpgrade, task.id);
+    } else {
+      checkID.value = task.id;
+      sessionStorage.setItem(savedCheck, task.id);
+    }
   });
 }
 async function check() {
-  await submit({
-    input: {
-      action: "check",
-      components: ["panel"],
-      tag: "",
-      prerelease: prerelease.value,
-      plan_id: "",
-      manifest_sha256: "",
-      trust_sha256: "",
-    },
-  });
-}
-async function download() {
-  const r = release.value,
-    t = checked.value;
-  if (!r || !t || !updateAvailable.value) return;
-  await submit({
-    check_task_id: t.id,
-    input: {
-      action: "prepare",
-      tag: r.tag,
-      prerelease: t.result!.input.prerelease,
-      assets: r.selected,
-      plan_id: r.plan_id,
-      manifest_sha256: r.manifest_sha256,
-      trust_sha256: r.trust_sha256,
-      offline_id: t.result?.input.offline_id,
-    },
-  });
-}
-async function update() {
-  const t = prepared.value;
-  if (!t?.result?.release || !updateAvailable.value) return;
-  if (!window.confirm("现在更新系统？面板连接将短暂中断，已有数据会保留。"))
-    return;
-  await submit({
-    input: {
-      action: "software",
-      tag: "",
-      prerelease: false,
-      plan_id: "",
-      manifest_sha256: "",
-      trust_sha256: "",
-      software: {
-        action: "update-panel",
-        plan_id: t.result.release.plan_id,
-        prerelease: t.result.input.prerelease,
+  if (active.value || liveDisconnected.value) return;
+  await submit(
+    {
+      input: {
+        action: "check",
+        components: ["panel"],
+        tag: "",
+        prerelease: prerelease.value,
+        plan_id: "",
+        manifest_sha256: "",
+        trust_sha256: "",
       },
     },
+    false,
+  );
+}
+async function changeChannel(value: typeof channel.value) {
+  await run(async () => {
+    await saveChannel(value);
+    checkID.value = "";
+    sessionStorage.removeItem(savedCheck);
+  });
+}
+function confirmUpdate() {
+  const task = checked.value;
+  const target = release.value;
+  if (!task || !target || !canUpgrade.value || active.value) return;
+  dialog.warning({
+    title: `更新至 ${target.version}`,
+    content:
+      "系统将下载安装更新并自动重启。重启期间面板会短暂断开，恢复连接后可查看更新结果。",
+    positiveText: "下载安装",
+    negativeText: "取消",
+    onPositiveClick: () =>
+      submit(
+        {
+          check_task_id: task.id,
+          input: {
+            action: "software",
+            tag: "",
+            prerelease: false,
+            plan_id: "",
+            manifest_sha256: "",
+            trust_sha256: "",
+            software: {
+              action: "update-panel",
+              plan_id: target.plan_id,
+              prerelease: task.result!.input.prerelease,
+            },
+          },
+        },
+        true,
+      ),
   });
 }
 useLiveRefresh(api, ["tasks"], load, () => busy.value);
@@ -186,16 +199,21 @@ onMounted(load);
         </div>
         <NButton :loading="busy" @click="load">刷新</NButton>
       </div>
-      <p class="muted">
-        检查并下载新版本后，即可更新。更新期间面板会短暂断开，完成后自动恢复连接。
-      </p>
+      <p class="muted">检查当前更新通道，确认后下载安装。</p>
       <div class="button-row">
         <NButton
           type="primary"
-          :loading="busy || active"
-          :disabled="!permitted || active || savingChannel || !channelReady"
+          :loading="pending(lastCheck)"
+          :disabled="
+            !permitted ||
+            busy ||
+            active ||
+            savingChannel ||
+            !channelReady ||
+            liveDisconnected
+          "
           @click="check"
-          >{{ active ? "正在处理" : "检查更新" }}</NButton
+          >{{ pending(lastCheck) ? "正在检查" : "检查更新" }}</NButton
         >
         <NSelect
           :value="channel"
@@ -206,35 +224,29 @@ onMounted(load);
           :disabled="
             busy || active || savingChannel || !channelReady || !permitted
           "
-          @update:value="(value) => run(() => saveChannel(value))"
+          @update:value="changeChannel"
         />
       </div>
       <p v-if="channel === 'beta'" class="muted">
         Beta 版本用于提前体验新功能，可能存在尚未修复的问题。
       </p>
-      <NAlert v-if="last?.error" type="error">{{ last.error }}</NAlert>
-      <div v-if="last" class="button-row">
-        <NTag
-          :type="
-            last.state === 'succeeded'
-              ? 'success'
-              : last.state === 'failed'
-                ? 'error'
-                : 'info'
-          "
-          >{{ taskStates[last.state] || "正在处理" }}</NTag
-        ><TaskLogButton :task-id="last.id" />
-      </div>
+      <NAlert v-if="updating && liveDisconnected" type="info">
+        面板正在重启或连接暂时中断，恢复后将继续显示更新结果。
+      </NAlert>
+      <NAlert v-if="lastCheck?.error && !pending(lastCheck)" type="error">
+        {{ lastCheck.error }}
+      </NAlert>
+      <TaskLogButton v-if="lastCheck" :task-id="lastCheck.id" />
     </section>
     <section v-if="release" class="panel page-stack">
       <div class="section-heading">
         <h3>
-          {{ updateAvailable ? "发现新版本" : "所选通道版本" }} {{ release.version }}
+          {{ updateAvailable ? "发现新版本" : "所选通道版本" }}
+          {{ release.version }}
           <NTag v-if="release.channel === 'beta'" type="warning" size="small"
             >Beta</NTag
           >
         </h3>
-        <NTag v-if="prepared && updateAvailable" type="success">已下载</NTag>
       </div>
       <p v-if="release.notes">{{ release.notes }}</p>
       <NAlert v-if="updateStatus?.state === 'current'" type="success"
@@ -243,46 +255,29 @@ onMounted(load);
       <NAlert v-else-if="updateStatus?.state === 'older'" type="info"
         >当前安装版本高于所选通道的发布版本，暂无可用更新。</NAlert
       >
-      <NAlert v-else-if="!updateAvailable" type="warning"
-        >{{ updateStatus?.message || "正在确认当前程序版本，请刷新后重试。" }}</NAlert
-      >
+      <NAlert v-else-if="!updateAvailable" type="warning">{{
+        updateStatus?.message || "正在确认当前程序版本，请刷新后重试。"
+      }}</NAlert>
       <p v-if="updateAvailable" class="muted">
         下载大小：{{ (release.archive_bytes / 1048576).toFixed(1) }} MB
       </p>
-      <NAlert v-if="updateAvailable && !checked?.result?.runtime_ready" type="warning"
+      <NAlert
+        v-if="updateAvailable && !checked?.result?.runtime_ready"
+        type="warning"
         >服务器暂不满足此版本的安装条件，请查看检查日志。</NAlert
       >
       <div v-if="updateAvailable" class="button-row">
         <NButton
-          v-if="!prepared"
           type="primary"
-          :loading="busy || active"
+          :loading="updating"
           :disabled="
-            !permitted ||
-            active ||
-            !checked?.result?.runtime_ready ||
-            release.expires_at * 1000 <= Date.now()
+            !permitted || busy || active || liveDisconnected || !canUpgrade
           "
-          @click="download"
-          >下载更新</NButton
-        ><NButton
-          v-else
-          type="primary"
-          :loading="busy || active"
-          :disabled="
-            !permitted ||
-            active ||
-            prepared.result?.panel?.requires_coordination
-          "
-          @click="update"
-          >立即更新</NButton
-        ><TaskLogButton v-if="prepared" :task-id="prepared.id" />
+          @click="confirmUpdate"
+        >
+          下载安装
+        </NButton>
       </div>
-      <NAlert
-        v-if="updateAvailable && prepared?.result?.panel?.requires_coordination"
-        type="warning"
-        >此版本需要更新安装程序，请使用安装脚本更新。</NAlert
-      >
     </section>
     <section class="panel page-stack">
       <h3>更新记录</h3>

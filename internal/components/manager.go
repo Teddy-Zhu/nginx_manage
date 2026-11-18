@@ -165,12 +165,6 @@ func (m *Manager) Submit(in Request) (Operation, error) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.closed || m.poisoned || m.ctx == nil || m.ctx.Err() != nil {
-		return Operation{}, fault.Unavailable("组件执行器已停止或记录待本机恢复")
-	}
-	if overview := m.Overview(); !overview.Available && in.Input.Action != "software" {
-		return Operation{}, fault.Unavailable(overview.Reason)
-	}
 	raw, err := json.Marshal(in)
 	if err != nil {
 		return Operation{}, err
@@ -184,6 +178,14 @@ func (m *Manager) Submit(in Request) (Operation, error) {
 	}
 	if !os.IsNotExist(err) {
 		return Operation{}, err
+	}
+	if m.closed || m.poisoned || m.ctx == nil || m.ctx.Err() != nil {
+		return Operation{}, fault.New(503, "COMPONENT_NOT_SUBMITTED", "组件执行器暂不可用")
+	}
+	if in.Input.Action != "software" || in.Input.Software.Action == "update-panel" {
+		if overview := m.Overview(); !overview.Available {
+			return Operation{}, fault.New(503, "COMPONENT_NOT_SUBMITTED", overview.Reason)
+		}
 	}
 	if m.active {
 		return Operation{}, fault.Conflict("已有组件检查或准备操作正在执行")
@@ -300,7 +302,15 @@ func (m *Manager) run(out Operation, until time.Time) {
 			if m.UpdatePanel == nil {
 				err = errors.New("此安装未提供面板更新能力")
 			} else {
-				result, err = m.UpdatePanel(ctx, out.ID, *out.Input.Software, progress)
+				if out.Input.Tag != "" {
+					err = PrepareCoreUpgrade(ctx, m.DataDir, m.TrustPath, m.TokenPath, out.Input, progress)
+				}
+				if err == nil {
+					result, err = m.UpdatePanel(ctx, out.ID, *out.Input.Software, progress)
+				}
+				if errors.Is(err, context.Canceled) && m.ctx.Err() != nil {
+					err = ErrRestartPending
+				}
 			}
 		} else {
 			err = errors.New("软件操作无效")
