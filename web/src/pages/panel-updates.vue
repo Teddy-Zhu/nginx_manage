@@ -10,20 +10,21 @@
 }
 </route>
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { NAlert, NButton, NSelect, NEmpty, NTag, useDialog } from "naive-ui";
 import { liveDisconnected } from "../api/live";
 import {
+  ApiError,
   useNodeAPI,
   type ComponentCreateInput,
   type ComponentTask,
+  type CoreUpdateCheck,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useLiveRefresh } from "../composables/live";
 import { useSession } from "../stores/session";
 import { loadedFrontendEntries } from "../frontend-version";
 import { taskStates } from "../utils/tasks";
-import { randomUUID } from "../utils/crypto";
 import TaskLogButton from "../components/TaskLogButton.vue";
 import {
   updateChannels,
@@ -36,44 +37,32 @@ const api = useNodeAPI(),
 const upgradeKey = useIdempotency();
 const {
   channel,
-  prerelease,
   ready: channelReady,
   saving: savingChannel,
   loadChannel,
   saveChannel,
 } = useUpdateChannel(api);
-const savedCheck = "nginxpanel:update-check";
 const savedUpgrade = "nginxpanel:update-task";
 const tasks = ref<ComponentTask[]>([]),
   version = ref(""),
-  checkID = ref(window.sessionStorage.getItem(savedCheck) ?? ""),
   upgradeID = ref(window.sessionStorage.getItem(savedUpgrade) ?? "");
+const checked = ref<CoreUpdateCheck>();
+const checking = ref(false);
+const checkError = ref("");
+let checkRequest: AbortController | undefined;
 const permitted = computed(
   () =>
     session.me?.scopes.includes("components.manage") &&
     session.me.scopes.includes("system.write"),
 );
+const canCheck = computed(
+  () =>
+    session.me?.scopes.includes("read") &&
+    session.me.scopes.includes("components.manage"),
+);
 function pending(task: ComponentTask | undefined) {
   return task?.state === "queued" || task?.state === "running";
 }
-const lastCheck = computed(() =>
-  tasks.value.find((task) => task.id === checkID.value),
-);
-const checked = computed(() =>
-  tasks.value.find(
-    (task) =>
-      (!checkID.value || task.id === checkID.value) &&
-      task.action === "check" &&
-      task.state === "succeeded" &&
-      task.result?.input.prerelease === prerelease.value &&
-      !!task.core_update,
-  ),
-);
-const release = computed(() => checked.value?.result?.release);
-const updateStatus = computed(() => checked.value?.core_update);
-const updateAvailable = computed(
-  () => updateStatus.value?.state === "available",
-);
 const history = computed(() =>
   tasks.value
     .filter(
@@ -84,14 +73,7 @@ const history = computed(() =>
     .slice(0, 10),
 );
 const updating = computed(() => history.value.some(pending));
-const active = computed(() => pending(lastCheck.value) || updating.value);
-const canUpgrade = computed(
-  () =>
-    updateAvailable.value &&
-    !!checked.value?.result?.runtime_ready &&
-    !!release.value &&
-    release.value.expires_at * 1000 > Date.now(),
-);
+const active = computed(() => checking.value || updating.value);
 async function load() {
   if (updating.value && liveDisconnected.value) return;
   await run(async () => {
@@ -116,74 +98,80 @@ async function load() {
     }
   });
 }
-async function submit(input: ComponentCreateInput, installing: boolean) {
+async function submitUpdate(input: ComponentCreateInput) {
   await run(async () => {
-    const key = installing ? upgradeKey(input) : randomUUID();
-    const task = await api.createComponentTask(input, key, installing);
+    const task = await api.createComponentTask(input, upgradeKey(input));
     tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)];
-    if (installing) {
-      upgradeID.value = task.id;
-      window.sessionStorage.setItem(savedUpgrade, task.id);
-    } else {
-      checkID.value = task.id;
-      window.sessionStorage.setItem(savedCheck, task.id);
-    }
+    upgradeID.value = task.id;
+    window.sessionStorage.setItem(savedUpgrade, task.id);
+    checked.value = undefined;
   });
 }
 async function check() {
-  if (active.value || liveDisconnected.value) return;
-  await submit(
-    {
-      input: {
-        action: "check",
-        components: ["panel"],
-        tag: "",
-        prerelease: prerelease.value,
-        plan_id: "",
-        manifest_sha256: "",
-        trust_sha256: "",
-      },
-    },
-    false,
-  );
+  if (active.value || !channelReady.value) return;
+  const request = new AbortController();
+  checkRequest = request;
+  checking.value = true;
+  checked.value = undefined;
+  checkError.value = "";
+  try {
+    const result = await api.checkCoreUpdate(channel.value, request.signal);
+    if (!request.signal.aborted) {
+      version.value = result.current_version;
+      checked.value = result;
+    }
+  } catch (error) {
+    if (!request.signal.aborted) {
+      checkError.value =
+        error instanceof Error &&
+        !(error instanceof ApiError && error.status === 0)
+          ? error.message
+          : "未能完成更新检查，请稍后重试。";
+    }
+  } finally {
+    if (checkRequest === request) {
+      checkRequest = undefined;
+      checking.value = false;
+    }
+  }
 }
 async function changeChannel(value: typeof channel.value) {
-  await run(async () => {
-    await saveChannel(value);
-    checkID.value = "";
-    window.sessionStorage.removeItem(savedCheck);
-  });
+  await run(() => saveChannel(value));
 }
+watch(channel, () => {
+  checkRequest?.abort();
+  checked.value = undefined;
+  checkError.value = "";
+});
+onUnmounted(() => checkRequest?.abort());
 function confirmUpdate() {
-  const task = checked.value;
-  const target = release.value;
-  if (!task || !target || !canUpgrade.value || active.value) return;
+  const target = checked.value;
+  if (!target?.confirmation || active.value || liveDisconnected.value) return;
+  const confirmation = target.confirmation;
   dialog.warning({
     title: `更新至 ${target.version}`,
     content:
       "系统将下载安装更新并自动重启。重启期间面板会短暂断开，恢复连接后可查看更新结果。",
     positiveText: "下载安装",
     negativeText: "取消",
-    onPositiveClick: () =>
-      submit(
-        {
-          check_task_id: task.id,
-          input: {
-            action: "software",
-            tag: "",
-            prerelease: false,
-            plan_id: "",
-            manifest_sha256: "",
-            trust_sha256: "",
-            software: {
-              action: "update-panel",
-              plan_id: target.plan_id,
-              prerelease: task.result!.input.prerelease,
-            },
+    onPositiveClick: () => {
+      if (checked.value !== target || active.value || liveDisconnected.value)
+        return;
+      return submitUpdate({
+        update_confirmation: confirmation,
+        input: {
+          action: "software",
+          tag: "",
+          prerelease: false,
+          plan_id: "",
+          manifest_sha256: "",
+          trust_sha256: "",
+          software: {
+            action: "update-panel",
           },
         },
-        true,
-      ),
+      });
+    },
   });
 }
 useLiveRefresh(api, ["tasks"], load, () => busy.value);
@@ -197,23 +185,16 @@ onMounted(load);
           <h3>当前版本</h3>
           <p class="current-version">{{ version || "正在读取" }}</p>
         </div>
-        <NButton :loading="busy" @click="load">刷新</NButton>
       </div>
-      <p class="muted">检查当前更新通道，确认后下载安装。</p>
       <div class="button-row">
         <NButton
           type="primary"
-          :loading="pending(lastCheck)"
+          :loading="checking"
           :disabled="
-            !permitted ||
-            busy ||
-            active ||
-            savingChannel ||
-            !channelReady ||
-            liveDisconnected
+            !canCheck || busy || active || savingChannel || !channelReady
           "
           @click="check"
-          >{{ pending(lastCheck) ? "正在检查" : "检查更新" }}</NButton
+          >{{ checking ? "正在检查" : "检查更新" }}</NButton
         >
         <NSelect
           :value="channel"
@@ -233,46 +214,36 @@ onMounted(load);
       <NAlert v-if="updating && liveDisconnected" type="info">
         面板正在重启或连接暂时中断，恢复后将继续显示更新结果。
       </NAlert>
-      <NAlert v-if="lastCheck?.error && !pending(lastCheck)" type="error">
-        {{ lastCheck.error }}
+      <NAlert v-if="checkError" type="error">
+        {{ checkError }}
       </NAlert>
-      <TaskLogButton v-if="lastCheck" :task-id="lastCheck.id" />
-    </section>
-    <section v-if="release" class="panel page-stack">
-      <div class="section-heading">
+      <NAlert v-else-if="checked?.state === 'current'" type="success">
+        当前已是最新版本。
+      </NAlert>
+      <NAlert v-else-if="checked?.state === 'older'" type="info">
+        当前版本高于所选通道的 {{ checked.version }}，暂无可用更新。
+      </NAlert>
+      <NAlert v-else-if="checked?.state === 'unknown'" type="warning">
+        {{ checked.message }}
+      </NAlert>
+      <div v-else-if="checked?.state === 'available'" class="update-result">
         <h3>
-          {{ updateAvailable ? "发现新版本" : "所选通道版本" }}
-          {{ release.version }}
-          <NTag v-if="release.channel === 'beta'" type="warning" size="small"
+          发现新版本 {{ checked.version }}
+          <NTag v-if="checked.channel === 'beta'" type="warning" size="small"
             >Beta</NTag
           >
         </h3>
-      </div>
-      <p v-if="release.notes">{{ release.notes }}</p>
-      <NAlert v-if="updateStatus?.state === 'current'" type="success"
-        >当前已是最新版本。</NAlert
-      >
-      <NAlert v-else-if="updateStatus?.state === 'older'" type="info"
-        >当前安装版本高于所选通道的发布版本，暂无可用更新。</NAlert
-      >
-      <NAlert v-else-if="!updateAvailable" type="warning">{{
-        updateStatus?.message || "正在确认当前程序版本，请刷新后重试。"
-      }}</NAlert>
-      <p v-if="updateAvailable" class="muted">
-        下载大小：{{ (release.archive_bytes / 1048576).toFixed(1) }} MB
-      </p>
-      <NAlert
-        v-if="updateAvailable && !checked?.result?.runtime_ready"
-        type="warning"
-        >服务器暂不满足此版本的安装条件，请查看检查日志。</NAlert
-      >
-      <div v-if="updateAvailable" class="button-row">
+        <p v-if="checked.notes" class="release-notes">{{ checked.notes }}</p>
+        <p class="muted">
+          {{ (checked.archive_bytes / 1048576).toFixed(1) }} MB
+        </p>
+        <NAlert v-if="checked.message" type="warning">{{
+          checked.message
+        }}</NAlert>
         <NButton
+          v-if="checked.confirmation"
           type="primary"
-          :loading="updating"
-          :disabled="
-            !permitted || busy || active || liveDisconnected || !canUpgrade
-          "
+          :disabled="!permitted || busy || active || liveDisconnected"
           @click="confirmUpdate"
         >
           下载安装
@@ -300,6 +271,21 @@ onMounted(load);
   font-size: 26px;
   font-weight: 600;
   margin: 8px 0 0;
+}
+.update-result {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+.update-result h3,
+.update-result p {
+  margin: 0;
+}
+.release-notes {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 .update-record {
   display: flex;

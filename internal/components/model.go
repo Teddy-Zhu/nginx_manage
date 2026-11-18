@@ -218,6 +218,7 @@ type ServiceStatus struct {
 }
 type Host interface {
 	ReadComponents(context.Context) (Overview, error)
+	CheckCoreUpdate(context.Context, bool) (CoreUpdateCandidate, error)
 	SubmitComponent(context.Context, Request) (Operation, error)
 	ComponentOperation(context.Context, string) (Operation, error)
 }

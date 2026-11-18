@@ -76,6 +76,19 @@ func (s *Server) SetUpdateChannel(w http.ResponseWriter, r *http.Request, params
 	}
 	s.ok(w, r, out)
 }
+func (s *Server) CheckCoreUpdate(w http.ResponseWriter, r *http.Request, params apigen.CheckCoreUpdateParams) {
+	p, ok := s.authorize(w, r, "read", "components.manage")
+	if !ok || !s.componentsReady(w, r) {
+		return
+	}
+	out, err := s.Components.CheckCoreUpdate(r.Context(), p, string(params.Channel))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	s.ok(w, r, out)
+}
 func (s *Server) ListComponentTasks(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.authorize(w, r, "read", "components.manage")
 	if !ok || !s.componentsReady(w, r) {

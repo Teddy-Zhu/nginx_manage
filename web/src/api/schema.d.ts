@@ -1514,6 +1514,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/core-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["checkCoreUpdate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components/tasks": {
         parameters: {
             query?: never;
@@ -5422,6 +5438,8 @@ export interface components {
             input: components["schemas"]["ComponentInput"];
             check_task_id?: string;
             prepare_task_id?: string;
+            /** Format: byte */
+            update_confirmation?: string;
         };
         ComponentOverview: {
             bundled_nginx?: boolean;
@@ -5572,6 +5590,20 @@ export interface components {
             /** @enum {string} */
             state: "available" | "current" | "older" | "unknown";
             message?: string;
+        };
+        CoreUpdateCheck: {
+            current_version: string;
+            /** @enum {string} */
+            state: "available" | "current" | "older" | "unknown";
+            message?: string;
+            version: string;
+            /** @enum {string} */
+            channel: "stable" | "beta";
+            notes: string;
+            /** Format: int64 */
+            archive_bytes: number;
+            /** Format: byte */
+            confirmation?: string;
         };
         NotificationKind: {
             id: string;
@@ -9219,6 +9251,21 @@ export interface operations {
                 "application/json": components["schemas"]["UpdateChannel"];
             };
         };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    checkCoreUpdate: {
+        parameters: {
+            query: {
+                channel: "stable" | "beta";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];

@@ -5,14 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"nginxpanel/internal/componentversions"
 	"strings"
 	"time"
 
 	"nginxpanel/internal/auth"
+	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/maintenance"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/software"
 )
 
 type Service struct {
@@ -23,9 +24,10 @@ type Service struct {
 	Agent       Host
 }
 type CreateInput struct {
-	PrepareTaskID string `json:"prepare_task_id,omitempty"`
-	Input         Input  `json:"input"`
-	CheckTaskID   string `json:"check_task_id"`
+	PrepareTaskID      string `json:"prepare_task_id,omitempty"`
+	Input              Input  `json:"input"`
+	CheckTaskID        string `json:"check_task_id"`
+	UpdateConfirmation []byte `json:"update_confirmation,omitempty"`
 }
 type Task struct {
 	CoreUpdate  *CoreUpdateStatus `json:"core_update,omitempty"`
@@ -56,8 +58,20 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	if err := p.Require("components.manage"); err != nil {
 		return out, err
 	}
-	if err := in.Input.validateSubmission(); err != nil {
-		return out, err
+	coreUpdate := in.Input.Action == "software" && in.Input.Software != nil && in.Input.Software.Action == "update-panel"
+	if coreUpdate {
+		if in.CheckTaskID != "" || len(in.UpdateConfirmation) == 0 || len(in.UpdateConfirmation) > 2048 ||
+			in.Input.Tag != "" || len(in.Input.Assets) != 0 || in.Input.ManifestSHA256 != "" || in.Input.TrustSHA256 != "" ||
+			*in.Input.Software != (software.Request{Action: "update-panel"}) {
+			return out, fault.Invalid("请先检查更新并确认目标版本")
+		}
+	} else {
+		if len(in.UpdateConfirmation) != 0 {
+			return out, fault.Invalid("此操作不能携带系统更新确认")
+		}
+		if err := in.Input.validateSubmission(); err != nil {
+			return out, err
+		}
 	}
 	if in.Input.Action == "software" {
 		if err := p.Require("system.write"); err != nil {
@@ -68,11 +82,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 				return out, err
 			}
 		}
-		if in.Input.Software.Action == "update-panel" {
-			if !ValidID(in.CheckTaskID) || in.Input.Tag != "" {
-				return out, fault.Invalid("请先检查更新并确认目标版本")
-			}
-		} else if in.CheckTaskID != "" {
+		if in.CheckTaskID != "" {
 			return out, fault.Invalid("软件操作不能引用组件任务")
 		}
 	}
@@ -138,35 +148,14 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		return out, fault.Conflict("已有组件任务执行中或待恢复")
 	}
 	now := time.Now().Unix()
-	if in.Input.Action == "software" && in.Input.Software.Action == "update-panel" {
-		var state string
-		err = tx.QueryRowContext(ctx, "SELECT t.state,o.result FROM component_operations o JOIN tasks t ON t.id=o.task_id WHERE o.task_id=? AND o.principal=? AND t.kind='component.check'", in.CheckTaskID, p.ID).Scan(&state, &sealed)
-		if errors.Is(err, sql.ErrNoRows) {
-			return out, fault.NotFound("更新检查任务不存在")
-		}
+	if coreUpdate {
+		checked, err := s.confirmedCoreUpdate(p, in.UpdateConfirmation, now)
 		if err != nil {
 			return out, err
 		}
-		if state != "succeeded" || len(sealed) == 0 {
-			return out, fault.Conflict("请先完成更新检查")
-		}
-		raw, err := s.Vault.Open(sealed, "components:result:"+in.CheckTaskID)
-		if err != nil {
-			return out, err
-		}
-		var checked Operation
-		if err = json.Unmarshal(raw, &checked); err != nil {
-			return out, err
-		}
-		if err = checked.Validate(Request{Protocol: checked.Protocol, OperationID: checked.ID, Input: checked.Input}); err != nil {
-			return out, err
-		}
-		r := checked.Release
-		update := in.Input.Software
-		if checked.State != "succeeded" || checked.Input.Action != "check" || checked.Input.OfflineID != "" || !checked.RuntimeReady || !isCoreRelease(r) || r.ExpiresAt <= now || r.PlanID != update.PlanID || checked.Input.Prerelease != update.Prerelease || coreUpdateStatus(s.Version, r.Version).State != "available" {
-			return out, fault.Conflict("所选更新已失效或无法安装，请重新检查")
-		}
-		in.Input.Tag, in.Input.Assets, in.Input.ManifestSHA256, in.Input.TrustSHA256 = r.Tag, r.Selected, r.ManifestSHA256, r.TrustSHA256
+		in.Input.Tag, in.Input.Assets = checked.Tag, checked.Assets
+		in.Input.ManifestSHA256, in.Input.TrustSHA256 = checked.ManifestSHA256, checked.TrustSHA256
+		in.Input.Software = checked.Software
 		if err = in.Input.Validate(); err != nil {
 			return out, err
 		}

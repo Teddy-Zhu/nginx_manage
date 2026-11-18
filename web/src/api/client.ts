@@ -96,6 +96,7 @@ export type ComponentAsset = components["schemas"]["ComponentAsset"];
 export type ComponentRelease = components["schemas"]["ComponentRelease"];
 export type ComponentOperation = components["schemas"]["ComponentOperation"];
 export type ComponentTask = components["schemas"]["ComponentTask"];
+export type CoreUpdateCheck = components["schemas"]["CoreUpdateCheck"];
 export type ImageUpgradeTask = components["schemas"]["ImageUpgradeTask"];
 export type NginxImageUpgradeCreateInput =
   components["schemas"]["NginxImageUpgradeCreateInput"];
@@ -993,6 +994,12 @@ export function createAPI(scope: RequestScope) {
       request<ComponentOverview>({ url: "/components", signal }),
     updateChannel: () =>
       request<UpdateChannel>({ url: "/components/update-channel" }),
+    checkCoreUpdate: (channel: UpdateChannel["channel"], signal?: AbortSignal) =>
+      request<CoreUpdateCheck>({
+        url: "/components/core-update",
+        params: { channel },
+        signal,
+      }),
     setUpdateChannel: (channel: UpdateChannel["channel"]) =>
       request<UpdateChannel>({
         url: "/components/update-channel",

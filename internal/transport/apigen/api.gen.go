@@ -580,6 +580,48 @@ func (e ComponentVersionCatalogChannel) Valid() bool {
 	}
 }
 
+// Defines values for CoreUpdateCheckChannel.
+const (
+	CoreUpdateCheckChannelBeta   CoreUpdateCheckChannel = "beta"
+	CoreUpdateCheckChannelStable CoreUpdateCheckChannel = "stable"
+)
+
+// Valid indicates whether the value is a known member of the CoreUpdateCheckChannel enum.
+func (e CoreUpdateCheckChannel) Valid() bool {
+	switch e {
+	case CoreUpdateCheckChannelBeta:
+		return true
+	case CoreUpdateCheckChannelStable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CoreUpdateCheckState.
+const (
+	CoreUpdateCheckStateAvailable CoreUpdateCheckState = "available"
+	CoreUpdateCheckStateCurrent   CoreUpdateCheckState = "current"
+	CoreUpdateCheckStateOlder     CoreUpdateCheckState = "older"
+	CoreUpdateCheckStateUnknown   CoreUpdateCheckState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the CoreUpdateCheckState enum.
+func (e CoreUpdateCheckState) Valid() bool {
+	switch e {
+	case CoreUpdateCheckStateAvailable:
+		return true
+	case CoreUpdateCheckStateCurrent:
+		return true
+	case CoreUpdateCheckStateOlder:
+		return true
+	case CoreUpdateCheckStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CoreUpdateStatusState.
 const (
 	CoreUpdateStatusStateAvailable CoreUpdateStatusState = "available"
@@ -3688,6 +3730,24 @@ func (e WAFPathMatch) Valid() bool {
 	}
 }
 
+// Defines values for CheckCoreUpdateParamsChannel.
+const (
+	CheckCoreUpdateParamsChannelBeta   CheckCoreUpdateParamsChannel = "beta"
+	CheckCoreUpdateParamsChannelStable CheckCoreUpdateParamsChannel = "stable"
+)
+
+// Valid indicates whether the value is a known member of the CheckCoreUpdateParamsChannel enum.
+func (e CheckCoreUpdateParamsChannel) Valid() bool {
+	switch e {
+	case CheckCoreUpdateParamsChannelBeta:
+		return true
+	case CheckCoreUpdateParamsChannelStable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetComponentVersionsParamsChannel.
 const (
 	GetComponentVersionsParamsChannelBeta   GetComponentVersionsParamsChannel = "beta"
@@ -4372,9 +4432,10 @@ type ComponentAsset struct {
 
 // ComponentCreateInput defines model for ComponentCreateInput.
 type ComponentCreateInput struct {
-	CheckTaskId   *string        `json:"check_task_id,omitempty"`
-	Input         ComponentInput `json:"input"`
-	PrepareTaskId *string        `json:"prepare_task_id,omitempty"`
+	CheckTaskId        *string        `json:"check_task_id,omitempty"`
+	Input              ComponentInput `json:"input"`
+	PrepareTaskId      *string        `json:"prepare_task_id,omitempty"`
+	UpdateConfirmation *[]byte        `json:"update_confirmation,omitempty"`
 }
 
 // ComponentImage defines model for ComponentImage.
@@ -4623,6 +4684,24 @@ type ComponentVersionCatalog struct {
 
 // ComponentVersionCatalogChannel defines model for ComponentVersionCatalog.Channel.
 type ComponentVersionCatalogChannel string
+
+// CoreUpdateCheck defines model for CoreUpdateCheck.
+type CoreUpdateCheck struct {
+	ArchiveBytes   int64                  `json:"archive_bytes"`
+	Channel        CoreUpdateCheckChannel `json:"channel"`
+	Confirmation   *[]byte                `json:"confirmation,omitempty"`
+	CurrentVersion string                 `json:"current_version"`
+	Message        *string                `json:"message,omitempty"`
+	Notes          string                 `json:"notes"`
+	State          CoreUpdateCheckState   `json:"state"`
+	Version        string                 `json:"version"`
+}
+
+// CoreUpdateCheckChannel defines model for CoreUpdateCheck.Channel.
+type CoreUpdateCheckChannel string
+
+// CoreUpdateCheckState defines model for CoreUpdateCheck.State.
+type CoreUpdateCheckState string
 
 // CoreUpdateStatus defines model for CoreUpdateStatus.
 type CoreUpdateStatus struct {
@@ -8968,6 +9047,14 @@ type ReplaceCertificateParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// CheckCoreUpdateParams defines parameters for CheckCoreUpdate.
+type CheckCoreUpdateParams struct {
+	Channel CheckCoreUpdateParamsChannel `form:"channel" json:"channel"`
+}
+
+// CheckCoreUpdateParamsChannel defines parameters for CheckCoreUpdate.
+type CheckCoreUpdateParamsChannel string
+
 // CreateComponentImagePullParams defines parameters for CreateComponentImagePull.
 type CreateComponentImagePullParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
@@ -10394,6 +10481,9 @@ type ServerInterface interface {
 
 	// (GET /components)
 	GetComponents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /components/core-update)
+	CheckCoreUpdate(w http.ResponseWriter, r *http.Request, params CheckCoreUpdateParams)
 
 	// (POST /components/images/pull)
 	CreateComponentImagePull(w http.ResponseWriter, r *http.Request, params CreateComponentImagePullParams)
@@ -12524,6 +12614,39 @@ func (siw *ServerInterfaceWrapper) GetComponents(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetComponents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CheckCoreUpdate operation middleware
+func (siw *ServerInterfaceWrapper) CheckCoreUpdate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CheckCoreUpdateParams
+
+	// ------------- Required query parameter "channel" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "channel", r.URL.Query(), &params.Channel, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "channel"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "channel", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CheckCoreUpdate(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20829,6 +20952,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/images/pull", wrapper.CreateComponentImagePull)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/update-channel", wrapper.GetUpdateChannel)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/update-channel", wrapper.SetUpdateChannel)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/core-update", wrapper.CheckCoreUpdate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/tasks", wrapper.ListComponentTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/tasks", wrapper.CreateComponentTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations", wrapper.ListMigrations)

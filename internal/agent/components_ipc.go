@@ -106,6 +106,10 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 		out, err := m.Status(r.PathValue("id"))
 		componentReply(w, out, err)
 	})
+	mux.HandleFunc("GET /v1/components/core-update", func(w http.ResponseWriter, r *http.Request) {
+		out, err := m.CheckCoreUpdate(r.Context(), r.URL.Query().Get("channel") == "beta")
+		componentReply(w, out, err)
+	})
 	mux.HandleFunc("POST /v1/components/operations", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 		defer r.Body.Close()
@@ -123,6 +127,15 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 func (c *Client) ReadComponents(ctx context.Context) (components.Overview, error) {
 	var out components.Overview
 	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/components", nil, &out)
+	return out, err
+}
+func (c *Client) CheckCoreUpdate(ctx context.Context, prerelease bool) (components.CoreUpdateCandidate, error) {
+	path := "/v1/components/core-update"
+	if prerelease {
+		path += "?channel=beta"
+	}
+	var out components.CoreUpdateCandidate
+	err := c.envelopeRequest(ctx, http.MethodGet, path, nil, &out)
 	return out, err
 }
 func (c *Client) SubmitComponent(ctx context.Context, in components.Request) (components.Operation, error) {
