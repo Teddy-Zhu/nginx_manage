@@ -1,35 +1,9 @@
 import type {
   ComponentOverview,
   Fail2banContainerStatus,
-  SoftwareCatalog,
   ComponentTask,
   SoftwareRequest,
 } from "../api/client";
-
-export function softwareCatalogEntries(catalog?: SoftwareCatalog) {
-  return (catalog?.sources ?? []).flatMap((source) => {
-    const installations = (catalog?.installed ?? []).filter(
-      (item) => item.source_id === source.id,
-    );
-    const applications = [
-      ...source.applications,
-      ...installations
-        .filter(
-          (item) =>
-            !source.applications.some((app) => app.id === item.application.id),
-        )
-        .map((item) => item.application),
-    ];
-    return applications.map((application) => ({
-      source,
-      application,
-      listed: source.applications.some((app) => app.id === application.id),
-      installation: installations.find(
-        (item) => item.application.id === application.id,
-      ),
-    }));
-  });
-}
 
 export type SoftwareState =
   "installed" | "missing" | "unbound" | "recovery" | "unavailable";
@@ -64,8 +38,7 @@ export interface SoftwareStatus {
   tone: StatusTone;
 }
 export interface SoftwareEntry {
-  to?: string;
-  href?: string;
+  to: string;
 }
 export interface SoftwareView {
   versioned?: boolean;
@@ -90,6 +63,7 @@ export const softwareOperationLabels: Record<SoftwareOperation, string> = {
 };
 const pendingLabels: Record<string, string> = {
   install: "安装中",
+  "install-nginx": "安装中",
   start: "启动中",
   stop: "停止中",
   restart: "重启中",
@@ -123,13 +97,11 @@ export function softwareTaskLabel(task: ComponentTask) {
         ? request.fail2ban?.action
         : request?.action;
   if (action && action in softwareOperationLabels)
-    return `${softwareOperationLabels[action as SoftwareOperation]}${request?.action === "frps" ? " · FRP 服务端" : request?.action === "fail2ban" ? " · 登录防护" : ""}`;
+    return `${softwareOperationLabels[action as SoftwareOperation]}${request?.app_id === "frps" || request?.action === "frps" ? " · FRP 服务端" : request?.app_id === "fail2ban" || request?.action === "fail2ban" ? " · 登录防护" : ""}`;
   const labels: Record<string, string> = {
-    import: "添加软件源",
-    refresh: "更新软件列表",
-    delete: "删除软件源",
     configure: "保存软件设置",
     "update-panel": "系统更新",
+    "install-nginx": "安装 Nginx",
   };
   return labels[action ?? ""] ?? "软件操作";
 }
@@ -201,18 +173,6 @@ export function softwareControls(
       danger: id === "uninstall",
     }));
 }
-export function applicationActions(entry: CatalogEntry): SoftwareOperation[] {
-  if (!entry.installation)
-    return entry.listed && entry.application.actions.install ? ["install"] : [];
-  const actions = standardServiceActions.filter(
-    (id) =>
-      id !== "install" &&
-      id !== "update" &&
-      !!entry.installation!.application.actions[id],
-  );
-  if (entry.listed && entry.application.actions.update) actions.push("update");
-  return actions;
-}
 export function softwareConfirmation(action: SoftwareOperation, name: string) {
   return {
     install: `安装 ${name}？`,
@@ -235,70 +195,5 @@ export function softwareTaskInput(request: SoftwareRequest) {
       trust_sha256: "",
       software: request,
     },
-  };
-}
-export type CatalogEntry = ReturnType<typeof softwareCatalogEntries>[number];
-export function softwareApplicationTask(
-  tasks: ComponentTask[],
-  source: string,
-  app: string,
-) {
-  return tasks.find((task) => {
-    const request = task.result?.input.software;
-    return request?.source_id === source && request.app_id === app;
-  });
-}
-export function applicationEntry(
-  entry: CatalogEntry,
-  origin: string,
-): SoftwareEntry | undefined {
-  if (
-    !origin ||
-    !entry.installation?.entry ||
-    entry.installation.state !== "running"
-  )
-    return;
-  try {
-    const host = new URL(origin).hostname;
-    const url = new URL(entry.installation.entry.replaceAll("{host}", host));
-    if (
-      !["http:", "https:"].includes(url.protocol) ||
-      url.username ||
-      url.password
-    )
-      return;
-    return { href: url.href };
-  } catch {
-    return;
-  }
-}
-
-export function applicationView(
-  entry: CatalogEntry,
-  tasks: ComponentTask[],
-  origin: string,
-): SoftwareView {
-  const { application, installation, source } = entry;
-  return {
-    id: `${source.id}/${application.id}`,
-    name: application.name,
-    description: application.description || "暂无软件介绍",
-    category: "第三方应用",
-    versioned: !!(
-      application.versions_url ||
-      application.versions?.length ||
-      installation?.version
-    ),
-    accent: "amber",
-    installed: !!installation,
-    status: softwareStatus(
-      !!installation,
-      installation?.state ?? "unknown",
-      softwareApplicationTask(tasks, source.id, application.id),
-    ),
-    entry: applicationEntry(entry, origin),
-    note: installation?.version
-      ? `版本 ${installation.version.version} · ${source.name}`
-      : `来自 ${source.name}`,
   };
 }

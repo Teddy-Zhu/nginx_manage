@@ -21,7 +21,7 @@ func (s *Server) GetComponentVersions(w http.ResponseWriter, r *http.Request, pa
 	if !ok || !s.componentsReady(w, r) {
 		return
 	}
-	q := componentversions.Query{SourceID: params.SourceId, AppID: params.AppId, Channel: string(params.Channel), Page: 1}
+	q := componentversions.Query{AppID: params.AppId, Channel: string(params.Channel), Page: 1}
 	if params.Page != nil {
 		q.Page = *params.Page
 	}

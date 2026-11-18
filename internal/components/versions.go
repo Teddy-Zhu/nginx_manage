@@ -10,7 +10,6 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/releases"
-	"nginxpanel/internal/software"
 )
 
 func (s *Service) Versions(ctx context.Context, q componentversions.Query) (componentversions.Catalog, error) {
@@ -46,16 +45,16 @@ func (m *Manager) Versions(ctx context.Context, q componentversions.Query) (comp
 	if err := q.Validate(); err != nil {
 		return componentversions.Catalog{}, err
 	}
-	if q.SourceID != "builtin" {
-		return software.Versions(ctx, m.DataDir, m.Version, q)
-	}
-	if q.AppID != "nginx" {
+	if q.AppID == "fail2ban" || q.AppID == "frps" {
 		if m.BuiltinVersions == nil {
 			return componentversions.Catalog{}, errors.New("内置组件版本服务不可用")
 		}
 		return m.BuiltinVersions(ctx, q)
 	}
-	out := componentversions.Catalog{SourceID: q.SourceID, AppID: q.AppID, Channel: q.Channel, Page: q.Page, Versions: []componentversions.Version{}}
+	if q.AppID != "nginx" {
+		return componentversions.Catalog{}, fault.NotFound("系统组件不存在")
+	}
+	out := componentversions.Catalog{AppID: q.AppID, Channel: q.Channel, Page: q.Page, Versions: []componentversions.Version{}}
 	if binding, err := nginxcontainer.Read(m.DataDir); err == nil {
 		out.Current = NginxVersion(binding)
 	} else if !os.IsNotExist(err) {

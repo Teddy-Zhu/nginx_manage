@@ -24,9 +24,10 @@ import (
 )
 
 type Manager struct {
-	Version                                   string
+	InstallNginx                              func(context.Context, software.Progress) (software.Result, error)
+	NginxInstalled                            func()
 	BuiltinVersions                           func(context.Context, componentversions.Query) (componentversions.Catalog, error)
-	VersionAction                             func(context.Context, software.Request, software.Progress) (software.Result, error)
+	BuiltinAction                             func(context.Context, software.Request, software.Progress) (software.Result, error)
 	ContainerAction                           func(context.Context, software.Request, software.Progress) (software.Result, error)
 	FrpsAction                                func(context.Context, software.Request, software.Progress) (software.Result, error)
 	Fail2banAction                            func(context.Context, software.Request, software.Progress) (software.Result, error)
@@ -46,11 +47,6 @@ func (m *Manager) Overview() Overview {
 	if m.Dev || m.Scope != "host" {
 		out.Reason = "须由本机 root 确认宿主机组件范围"
 		return out
-	}
-	var catalogErr error
-	out.Software, catalogErr = software.Read(m.DataDir)
-	if catalogErr != nil {
-		out.Software.Error = bounded(catalogErr.Error())
 	}
 	trust, err := releases.InspectTrust(m.TrustPath)
 	if err != nil {
@@ -269,11 +265,17 @@ func (m *Manager) run(out Operation, until time.Time) {
 			}
 		}
 		var result software.Result
-		if out.Input.Software.SourceID == "builtin" && (out.Input.Software.Action == "install" || out.Input.Software.Action == "update") || out.Input.Software.Version != "" && (out.Input.Software.Action == "frps" || out.Input.Software.Action == "fail2ban") {
-			if m.VersionAction == nil {
-				err = errors.New("组件版本切换不可用")
+		if out.Input.Software.Action == "install-nginx" {
+			if m.InstallNginx == nil {
+				err = errors.New("Nginx 安装不可用")
 			} else {
-				result, err = m.VersionAction(ctx, *out.Input.Software, progress)
+				result, err = m.InstallNginx(ctx, progress)
+			}
+		} else if out.Input.Software.AppID != "" {
+			if m.BuiltinAction == nil {
+				err = errors.New("内置组件管理不可用")
+			} else {
+				result, err = m.BuiltinAction(ctx, *out.Input.Software, progress)
 			}
 		} else if out.Input.Software.Action == "container" {
 			if m.ContainerAction == nil {
@@ -300,7 +302,7 @@ func (m *Manager) run(out Operation, until time.Time) {
 				result, err = m.UpdatePanel(ctx, out.ID, *out.Input.Software, progress)
 			}
 		} else {
-			result, err = software.RunWithCore(ctx, m.DataDir, m.Version, *out.Input.Software, progress)
+			err = errors.New("软件操作无效")
 		}
 		if !errors.Is(err, ErrRestartPending) {
 			out.Software = &result
@@ -376,6 +378,8 @@ func (m *Manager) run(out Operation, until time.Time) {
 		m.mu.Lock()
 		m.poisoned = true
 		m.mu.Unlock()
+	} else if out.State == "succeeded" && out.Input.Software != nil && out.Input.Software.Action == "install-nginx" && m.NginxInstalled != nil {
+		m.NginxInstalled()
 	}
 }
 

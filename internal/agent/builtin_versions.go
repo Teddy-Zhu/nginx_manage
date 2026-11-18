@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"nginxpanel/internal/components"
 	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/fail2bancontainer"
@@ -29,20 +30,21 @@ func builtinImage(data, app string) (string, bool, error) {
 	}
 }
 
-func (s *Server) builtinVersions(ctx context.Context, q componentversions.Query) (componentversions.Catalog, error) {
-	out := componentversions.Catalog{SourceID: "builtin", AppID: q.AppID, Channel: q.Channel, Page: q.Page, Versions: []componentversions.Version{}}
+func (s *Server) builtinVersions(_ context.Context, q componentversions.Query) (componentversions.Catalog, error) {
+	out := componentversions.Catalog{AppID: q.AppID, Channel: q.Channel, Page: q.Page, Versions: []componentversions.Version{}}
 	image, installed, err := builtinImage(s.DataDir, q.AppID)
 	if err != nil {
 		return out, err
 	}
-	document, cached, loadErr := componentversions.Builtin(ctx, s.DataDir, q.Refresh)
-	out.Cached = cached
-	if loadErr != nil {
-		out.Error = loadErr.Error()
+	document, err := componentversions.Builtin()
+	if err != nil {
+		return out, err
 	}
-	if !cached {
-		out.CheckedAt = time.Now().Unix()
-	}
+	return s.componentVersions(q, image, installed, document)
+}
+
+func (s *Server) componentVersions(q componentversions.Query, image string, installed bool, document componentversions.BuiltinDocument) (componentversions.Catalog, error) {
+	out := componentversions.Catalog{AppID: q.AppID, Channel: q.Channel, Page: q.Page, Versions: []componentversions.Version{}, CheckedAt: time.Now().Unix()}
 	state, err := componentversions.ReadState(s.DataDir, "builtin", q.AppID)
 	if err != nil {
 		return out, err
@@ -64,7 +66,7 @@ func (s *Server) builtinVersions(ctx context.Context, q componentversions.Query)
 		v = componentversions.ApplyAvailability(v, s.ProgramVersion)
 		versions = append(versions, v)
 	}
-	// Retain a formerly installed version even after it leaves the remote list.
+	// Retain installed versions after a catalog update.
 	for _, previous := range []*componentversions.Version{out.Current, out.Previous} {
 		if previous == nil || previous.Channel != q.Channel {
 			continue
@@ -93,23 +95,55 @@ func (s *Server) builtinVersions(ctx context.Context, q componentversions.Query)
 	return out, nil
 }
 
-func (s *Server) manageComponentVersion(ctx context.Context, r software.Request, progress software.Progress) (software.Result, error) {
-	var out software.Result
+func (s *Server) appendBuiltinVersions(out *components.Overview, protectionImage string) {
+	document, err := componentversions.Builtin()
+	if err != nil {
+		out.ComponentError = err.Error()
+		return
+	}
+	record := func(app, image string) {
+		q := componentversions.Query{AppID: app, Channel: "stable", Page: 1}
+		catalog, err := s.componentVersions(q, image, true, document)
+		if err != nil {
+			if out.ComponentError == "" {
+				out.ComponentError = err.Error()
+			}
+		} else if catalog.Current != nil {
+			out.Versions[app] = *catalog.Current
+		}
+	}
+	if out.Frps != nil && out.Frps.Installed {
+		record("frps", out.Frps.Config.Image)
+	}
+	if out.Fail2ban != nil && out.Fail2ban.Installed {
+		record("fail2ban", protectionImage)
+	}
+}
+
+func (s *Server) manageBuiltinComponent(ctx context.Context, r software.Request, progress software.Progress) (out software.Result, err error) {
 	if s.Dev || s.ComponentScope != "host" || s.MaintenanceScope != "host" {
 		return out, fault.Unavailable("当前环境不允许管理组件")
 	}
+	if r.AppID == "fail2ban" && s.MetricsScope != "host" {
+		return out, fault.Unavailable("当前环境不允许管理宿主机登录防护")
+	}
+	defer func() { out.AppID = r.AppID }()
+	if r.Action == "install" || r.Action == "update" {
+		return s.manageComponentVersion(ctx, r, progress)
+	}
+	switch r.AppID {
+	case "frps":
+		return frpscontainer.Run(ctx, s.DataDir, frps.Request{Action: r.Action}, progress)
+	case "fail2ban":
+		return fail2bancontainer.Run(ctx, s.DataDir, fail2ban.ContainerRequest{Action: r.Action}, progress)
+	default:
+		return out, fault.NotFound("内置组件不存在")
+	}
+}
+
+func (s *Server) manageComponentVersion(ctx context.Context, r software.Request, progress software.Progress) (software.Result, error) {
+	var out software.Result
 	app, action := r.AppID, r.Action
-	if r.Frps != nil {
-		app = "frps"
-		action = r.Frps.Action
-	}
-	if r.Fail2ban != nil {
-		app = "fail2ban"
-		action = r.Fail2ban.Action
-	}
-	if action != "install" && action != "update" {
-		return out, fault.Invalid("该操作不支持选择版本")
-	}
 	image, installed, err := builtinImage(s.DataDir, app)
 	if err != nil {
 		return out, err
@@ -117,7 +151,10 @@ func (s *Server) manageComponentVersion(ctx context.Context, r software.Request,
 	if action == "update" && !installed {
 		return out, fault.Invalid("请先安装软件")
 	}
-	document, _, err := componentversions.Builtin(ctx, s.DataDir, false)
+	if action == "install" && installed {
+		return out, fault.Conflict("软件已安装，请使用切换版本")
+	}
+	document, err := componentversions.Builtin()
 	if err != nil {
 		return out, err
 	}
@@ -157,7 +194,7 @@ func (s *Server) manageComponentVersion(ctx context.Context, r software.Request,
 		return out, fault.Invalid(selected.Unavailable)
 	}
 	if state.Current != nil && state.Current.ID == selected.ID && state.Image != selected.Image {
-		return out, errors.New("同一版本的镜像身份已改变，请检查软件源")
+		return out, errors.New("同一版本的镜像摘要已改变")
 	}
 	if state.Current != nil {
 		if direction, compareErr := releases.CompareVersions(selected.Version.Version, state.Current.Version); compareErr == nil && direction < 0 {
@@ -177,9 +214,6 @@ func (s *Server) manageComponentVersion(ctx context.Context, r software.Request,
 			config = *r.Frps.Config
 		}
 		config.Image = selected.Image
-		if !installed {
-			action = "install"
-		}
 		out, err = frpscontainer.Run(ctx, s.DataDir, frps.Request{Action: action, Config: &config}, progress)
 		restore = func(recovery context.Context) error {
 			_, e := frpscontainer.Run(recovery, s.DataDir, frps.Request{Action: "update", Config: &old}, progress)
@@ -191,13 +225,10 @@ func (s *Server) manageComponentVersion(ctx context.Context, r software.Request,
 			return out, readErr
 		}
 		config := old
-		if r.Fail2ban != nil && r.Fail2ban.Config != nil {
-			config = *r.Fail2ban.Config
+		if r.AutoStart != nil {
+			config.AutoStart = *r.AutoStart
 		}
 		config.Image = selected.Image
-		if !installed {
-			action = "install"
-		}
 		out, err = fail2bancontainer.Run(ctx, s.DataDir, fail2ban.ContainerRequest{Action: action, Config: &config}, progress)
 		restore = func(recovery context.Context) error {
 			current, _, e := fail2bancontainer.Configuration(s.DataDir)

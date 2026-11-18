@@ -167,9 +167,11 @@ type Operation struct {
 	Panel         *PanelPreparation      `json:"panel,omitempty"`
 }
 type Overview struct {
+	BundledNginx     bool                                 `json:"bundled_nginx,omitempty"`
 	Versions         map[string]componentversions.Version `json:"versions"`
 	Frps             *frps.Status                         `json:"frps,omitempty"`
-	Software         software.Catalog                     `json:"software"`
+	Fail2ban         *ServiceStatus                       `json:"fail2ban,omitempty"`
+	ComponentError   string                               `json:"component_error,omitempty"`
 	SwitchAvailable  bool                                 `json:"switch_available"`
 	SwitchReason     string                               `json:"switch_reason"`
 	InstallAvailable bool                                 `json:"install_available"`
@@ -183,6 +185,11 @@ type Overview struct {
 	Repository       string                               `json:"repository"`
 	TrustSHA256      string                               `json:"trust_sha256"`
 	KeyIDs           []string                             `json:"key_ids"`
+}
+type ServiceStatus struct {
+	Installed bool   `json:"installed"`
+	State     string `json:"state"`
+	Error     string `json:"error"`
 }
 type Host interface {
 	ReadComponents(context.Context) (Overview, error)

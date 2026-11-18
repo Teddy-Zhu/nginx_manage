@@ -139,10 +139,8 @@ Nginx 规格使用 `--component nginx` 和独立版本的说明、策略文件�
 
 上传失败可能保留构建镜像或由 GitHub CLI 留下的草稿，流程不自动覆盖发行、删除草稿或忽略上传、校验及验签错误。实际 GitHub Actions、Docker Hub 推送及签名下载尚需在配置了上述凭据的真实仓库执行；本地检查不能代替实际发布结果。
 
-## 内置软件版本目录
+## 内置组件版本目录
 
 Nginx 独立发行完成后，面板版本选择器直接按页读取包含签名材料的 `nginx-v*` 发行记录。工作流把实际引擎版本写入发行说明，面板按该版本筛选组件，准备镜像前再与已验签的发行说明核对。稳定版和 Beta 分开展示，安装继续使用固定镜像摘要。
 
-Fail2ban 和 FRP 的目录为 `internal/componentversions/builtin.json`，既随核心嵌入，也可由面板“检查新版”从主分支刷新。新增条目时使用新的组件 SemVer 和不可变 `id`，另填实际 `software_version`；确认官方多架构镜像的摘要、目标架构与必要的 `minimum_core`。不能替换已有条目的发行内容，不使用 `latest` 等浮动标签作为版本身份。该目录只更新元数据，不触发安装，不需要核心 Release；发布前应保留仍需提供的历史版本。
-
-第三方软件使用同一公开版本元数据，通过自己的安装脚本和原生 Compose 处理所选版本；第三方 JSON 不增加 Docker 配置。接入方式见[软件源规范](software-sources.md#组件版本管理)。
+Fail2ban 和 FRP 服务端从 `internal/componentversions/builtin.json` 读取随核心二进制发布的版本目录。在 `applications` 下增加版本时使用新的组件 SemVer 和不可变 `id`，同时记录实际 `software_version`、目标架构、上游镜像摘要和可选的 `minimum_core`。发布核心程序后，新版本会出现在软件商店。已安装组件由用户按需切换版本。

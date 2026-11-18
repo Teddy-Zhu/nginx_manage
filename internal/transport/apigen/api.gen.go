@@ -496,6 +496,36 @@ func (e ComponentOfflineInputComponents) Valid() bool {
 	}
 }
 
+// Defines values for ComponentOverviewFail2banState.
+const (
+	ComponentOverviewFail2banStateMissing   ComponentOverviewFail2banState = "missing"
+	ComponentOverviewFail2banStateRunning   ComponentOverviewFail2banState = "running"
+	ComponentOverviewFail2banStateStarting  ComponentOverviewFail2banState = "starting"
+	ComponentOverviewFail2banStateStopped   ComponentOverviewFail2banState = "stopped"
+	ComponentOverviewFail2banStateUnhealthy ComponentOverviewFail2banState = "unhealthy"
+	ComponentOverviewFail2banStateUnknown   ComponentOverviewFail2banState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the ComponentOverviewFail2banState enum.
+func (e ComponentOverviewFail2banState) Valid() bool {
+	switch e {
+	case ComponentOverviewFail2banStateMissing:
+		return true
+	case ComponentOverviewFail2banStateRunning:
+		return true
+	case ComponentOverviewFail2banStateStarting:
+		return true
+	case ComponentOverviewFail2banStateStopped:
+		return true
+	case ComponentOverviewFail2banStateUnhealthy:
+		return true
+	case ComponentOverviewFail2banStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ComponentVersionArchitectures.
 const (
 	ComponentVersionArchitecturesAmd64 ComponentVersionArchitectures = "amd64"
@@ -3445,52 +3475,20 @@ func (e ResourceKind) Valid() bool {
 	}
 }
 
-// Defines values for SoftwareInstallationState.
-const (
-	SoftwareInstallationStateMissing   SoftwareInstallationState = "missing"
-	SoftwareInstallationStateRunning   SoftwareInstallationState = "running"
-	SoftwareInstallationStateStarting  SoftwareInstallationState = "starting"
-	SoftwareInstallationStateStopped   SoftwareInstallationState = "stopped"
-	SoftwareInstallationStateUnhealthy SoftwareInstallationState = "unhealthy"
-	SoftwareInstallationStateUnknown   SoftwareInstallationState = "unknown"
-)
-
-// Valid indicates whether the value is a known member of the SoftwareInstallationState enum.
-func (e SoftwareInstallationState) Valid() bool {
-	switch e {
-	case SoftwareInstallationStateMissing:
-		return true
-	case SoftwareInstallationStateRunning:
-		return true
-	case SoftwareInstallationStateStarting:
-		return true
-	case SoftwareInstallationStateStopped:
-		return true
-	case SoftwareInstallationStateUnhealthy:
-		return true
-	case SoftwareInstallationStateUnknown:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for SoftwareRequestAction.
 const (
-	SoftwareRequestActionContainer   SoftwareRequestAction = "container"
-	SoftwareRequestActionDelete      SoftwareRequestAction = "delete"
-	SoftwareRequestActionFail2ban    SoftwareRequestAction = "fail2ban"
-	SoftwareRequestActionFrps        SoftwareRequestAction = "frps"
-	SoftwareRequestActionImport      SoftwareRequestAction = "import"
-	SoftwareRequestActionInstall     SoftwareRequestAction = "install"
-	SoftwareRequestActionLogs        SoftwareRequestAction = "logs"
-	SoftwareRequestActionRefresh     SoftwareRequestAction = "refresh"
-	SoftwareRequestActionRestart     SoftwareRequestAction = "restart"
-	SoftwareRequestActionStart       SoftwareRequestAction = "start"
-	SoftwareRequestActionStop        SoftwareRequestAction = "stop"
-	SoftwareRequestActionUninstall   SoftwareRequestAction = "uninstall"
-	SoftwareRequestActionUpdate      SoftwareRequestAction = "update"
-	SoftwareRequestActionUpdatePanel SoftwareRequestAction = "update-panel"
+	SoftwareRequestActionContainer    SoftwareRequestAction = "container"
+	SoftwareRequestActionFail2ban     SoftwareRequestAction = "fail2ban"
+	SoftwareRequestActionFrps         SoftwareRequestAction = "frps"
+	SoftwareRequestActionInstall      SoftwareRequestAction = "install"
+	SoftwareRequestActionInstallNginx SoftwareRequestAction = "install-nginx"
+	SoftwareRequestActionLogs         SoftwareRequestAction = "logs"
+	SoftwareRequestActionRestart      SoftwareRequestAction = "restart"
+	SoftwareRequestActionStart        SoftwareRequestAction = "start"
+	SoftwareRequestActionStop         SoftwareRequestAction = "stop"
+	SoftwareRequestActionUninstall    SoftwareRequestAction = "uninstall"
+	SoftwareRequestActionUpdate       SoftwareRequestAction = "update"
+	SoftwareRequestActionUpdatePanel  SoftwareRequestAction = "update-panel"
 )
 
 // Valid indicates whether the value is a known member of the SoftwareRequestAction enum.
@@ -3498,19 +3496,15 @@ func (e SoftwareRequestAction) Valid() bool {
 	switch e {
 	case SoftwareRequestActionContainer:
 		return true
-	case SoftwareRequestActionDelete:
-		return true
 	case SoftwareRequestActionFail2ban:
 		return true
 	case SoftwareRequestActionFrps:
 		return true
-	case SoftwareRequestActionImport:
-		return true
 	case SoftwareRequestActionInstall:
 		return true
-	case SoftwareRequestActionLogs:
+	case SoftwareRequestActionInstallNginx:
 		return true
-	case SoftwareRequestActionRefresh:
+	case SoftwareRequestActionLogs:
 		return true
 	case SoftwareRequestActionRestart:
 		return true
@@ -3529,15 +3523,18 @@ func (e SoftwareRequestAction) Valid() bool {
 	}
 }
 
-// Defines values for SoftwareSourceSchema.
+// Defines values for SoftwareRequestAppId.
 const (
-	SoftwareSourceSchemaN1 SoftwareSourceSchema = 1
+	SoftwareRequestAppIdFail2ban SoftwareRequestAppId = "fail2ban"
+	SoftwareRequestAppIdFrps     SoftwareRequestAppId = "frps"
 )
 
-// Valid indicates whether the value is a known member of the SoftwareSourceSchema enum.
-func (e SoftwareSourceSchema) Valid() bool {
+// Valid indicates whether the value is a known member of the SoftwareRequestAppId enum.
+func (e SoftwareRequestAppId) Valid() bool {
 	switch e {
-	case SoftwareSourceSchemaN1:
+	case SoftwareRequestAppIdFail2ban:
+		return true
+	case SoftwareRequestAppIdFrps:
 		return true
 	default:
 		return false
@@ -4465,7 +4462,14 @@ type ComponentOperation struct {
 
 // ComponentOverview defines model for ComponentOverview.
 type ComponentOverview struct {
-	Available        bool                        `json:"available"`
+	Available      bool    `json:"available"`
+	BundledNginx   *bool   `json:"bundled_nginx,omitempty"`
+	ComponentError *string `json:"component_error,omitempty"`
+	Fail2ban       *struct {
+		Error     string                         `json:"error"`
+		Installed bool                           `json:"installed"`
+		State     ComponentOverviewFail2banState `json:"state"`
+	} `json:"fail2ban,omitempty"`
 	Frps             *FrpsStatus                 `json:"frps,omitempty"`
 	InstallAvailable bool                        `json:"install_available"`
 	InstallReason    string                      `json:"install_reason"`
@@ -4476,12 +4480,14 @@ type ComponentOverview struct {
 	Running          bool                        `json:"running"`
 	RuntimeReason    string                      `json:"runtime_reason"`
 	Scope            string                      `json:"scope"`
-	Software         SoftwareCatalog             `json:"software"`
 	SwitchAvailable  bool                        `json:"switch_available"`
 	SwitchReason     string                      `json:"switch_reason"`
 	TrustSha256      string                      `json:"trust_sha256"`
 	Versions         map[string]ComponentVersion `json:"versions"`
 }
+
+// ComponentOverviewFail2banState defines model for ComponentOverview.Fail2ban.State.
+type ComponentOverviewFail2banState string
 
 // ComponentPanelPreparation defines model for ComponentPanelPreparation.
 type ComponentPanelPreparation struct {
@@ -4593,7 +4599,6 @@ type ComponentVersionCatalog struct {
 	HasMore   bool                           `json:"has_more"`
 	Page      int                            `json:"page"`
 	Previous  *ComponentVersion              `json:"previous,omitempty"`
-	SourceId  string                         `json:"source_id"`
 	Versions  []ComponentVersion             `json:"versions"`
 }
 
@@ -8577,84 +8582,32 @@ type SaveResult struct {
 	Tree   Tree    `json:"tree"`
 }
 
-// SoftwareAction defines model for SoftwareAction.
-type SoftwareAction struct {
-	Command     []string `json:"command"`
-	Description *string  `json:"description,omitempty"`
-}
-
-// SoftwareApplication defines model for SoftwareApplication.
-type SoftwareApplication struct {
-	Actions     map[string]SoftwareAction `json:"actions"`
-	Description string                    `json:"description"`
-	Id          string                    `json:"id"`
-	Name        string                    `json:"name"`
-	Versions    *[]ComponentVersion       `json:"versions,omitempty"`
-	VersionsUrl *string                   `json:"versions_url,omitempty"`
-}
-
-// SoftwareCatalog defines model for SoftwareCatalog.
-type SoftwareCatalog struct {
-	Error     *string                `json:"error,omitempty"`
-	Installed []SoftwareInstallation `json:"installed"`
-	Sources   []SoftwareSource       `json:"sources"`
-}
-
-// SoftwareInstallation defines model for SoftwareInstallation.
-type SoftwareInstallation struct {
-	Application SoftwareApplication `json:"application"`
-
-	// Entry 软件状态操作返回的访问地址；{host} 表示当前服务器地址
-	Entry     *string                    `json:"entry,omitempty"`
-	Error     *string                    `json:"error,omitempty"`
-	Previous  *ComponentVersion          `json:"previous,omitempty"`
-	SourceId  string                     `json:"source_id"`
-	State     *SoftwareInstallationState `json:"state,omitempty"`
-	UpdatedAt int64                      `json:"updated_at"`
-	Version   *ComponentVersion          `json:"version,omitempty"`
-}
-
-// SoftwareInstallationState defines model for SoftwareInstallation.State.
-type SoftwareInstallationState string
-
 // SoftwareRequest defines model for SoftwareRequest.
 type SoftwareRequest struct {
 	Action     SoftwareRequestAction     `json:"action"`
-	AppId      *string                   `json:"app_id,omitempty"`
+	AppId      *SoftwareRequestAppId     `json:"app_id,omitempty"`
+	AutoStart  *bool                     `json:"auto_start,omitempty"`
 	Container  *DockerControl            `json:"container,omitempty"`
 	Fail2ban   *Fail2banContainerRequest `json:"fail2ban,omitempty"`
 	Frps       *FrpsRequest              `json:"frps,omitempty"`
 	PlanId     *string                   `json:"plan_id,omitempty"`
 	Prerelease *bool                     `json:"prerelease,omitempty"`
-	Source     *SoftwareSource           `json:"source,omitempty"`
-	SourceId   *string                   `json:"source_id,omitempty"`
-	Url        *string                   `json:"url,omitempty"`
 	Version    *string                   `json:"version,omitempty"`
 }
 
 // SoftwareRequestAction defines model for SoftwareRequest.Action.
 type SoftwareRequestAction string
 
+// SoftwareRequestAppId defines model for SoftwareRequest.AppId.
+type SoftwareRequestAppId string
+
 // SoftwareResult defines model for SoftwareResult.
 type SoftwareResult struct {
-	AppId    *string           `json:"app_id,omitempty"`
-	Log      string            `json:"log"`
-	Message  string            `json:"message"`
-	SourceId *string           `json:"source_id,omitempty"`
-	Version  *ComponentVersion `json:"version,omitempty"`
+	AppId   *string           `json:"app_id,omitempty"`
+	Log     string            `json:"log"`
+	Message string            `json:"message"`
+	Version *ComponentVersion `json:"version,omitempty"`
 }
-
-// SoftwareSource defines model for SoftwareSource.
-type SoftwareSource struct {
-	Applications []SoftwareApplication `json:"applications"`
-	Id           string                `json:"id"`
-	Name         string                `json:"name"`
-	Schema       SoftwareSourceSchema  `json:"schema"`
-	Url          *string               `json:"url,omitempty"`
-}
-
-// SoftwareSourceSchema defines model for SoftwareSource.Schema.
-type SoftwareSourceSchema int
 
 // SystemVersion defines model for SystemVersion.
 type SystemVersion struct {
@@ -9057,11 +9010,10 @@ type SetUpdateChannelParams struct {
 
 // GetComponentVersionsParams defines parameters for GetComponentVersions.
 type GetComponentVersionsParams struct {
-	SourceId string                            `form:"source_id" json:"source_id"`
-	AppId    string                            `form:"app_id" json:"app_id"`
-	Channel  GetComponentVersionsParamsChannel `form:"channel" json:"channel"`
-	Page     *int                              `form:"page,omitempty" json:"page,omitempty"`
-	Refresh  *bool                             `form:"refresh,omitempty" json:"refresh,omitempty"`
+	AppId   string                            `form:"app_id" json:"app_id"`
+	Channel GetComponentVersionsParamsChannel `form:"channel" json:"channel"`
+	Page    *int                              `form:"page,omitempty" json:"page,omitempty"`
+	Refresh *bool                             `form:"refresh,omitempty" json:"refresh,omitempty"`
 }
 
 // GetComponentVersionsParamsChannel defines parameters for GetComponentVersions.
@@ -13370,19 +13322,6 @@ func (siw *ServerInterfaceWrapper) GetComponentVersions(w http.ResponseWriter, r
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetComponentVersionsParams
-
-	// ------------- Required query parameter "source_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "source_id", r.URL.Query(), &params.SourceId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "source_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source_id", Err: err})
-		}
-		return
-	}
 
 	// ------------- Required query parameter "app_id" -------------
 

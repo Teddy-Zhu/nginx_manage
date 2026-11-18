@@ -5272,7 +5272,6 @@ export interface components {
             unavailable?: string;
         };
         ComponentVersionCatalog: {
-            source_id: string;
             app_id: string;
             /** @enum {string} */
             channel: "stable" | "beta";
@@ -5284,46 +5283,6 @@ export interface components {
             /** Format: int64 */
             checked_at: number;
             cached: boolean;
-            error?: string;
-        };
-        SoftwareAction: {
-            command: string[];
-            description?: string;
-        };
-        SoftwareApplication: {
-            id: string;
-            name: string;
-            description: string;
-            actions: {
-                [key: string]: components["schemas"]["SoftwareAction"];
-            };
-            versions_url?: string;
-            versions?: components["schemas"]["ComponentVersion"][];
-        };
-        SoftwareSource: {
-            /** @enum {integer} */
-            schema: 1;
-            id: string;
-            name: string;
-            url?: string;
-            applications: components["schemas"]["SoftwareApplication"][];
-        };
-        SoftwareInstallation: {
-            source_id: string;
-            application: components["schemas"]["SoftwareApplication"];
-            /** Format: int64 */
-            updated_at: number;
-            /** @enum {string} */
-            state?: "running" | "starting" | "stopped" | "unhealthy" | "missing" | "unknown";
-            error?: string;
-            /** @description 软件状态操作返回的访问地址；{host} 表示当前服务器地址 */
-            entry?: string;
-            version?: components["schemas"]["ComponentVersion"];
-            previous?: components["schemas"]["ComponentVersion"];
-        };
-        SoftwareCatalog: {
-            sources: components["schemas"]["SoftwareSource"][];
-            installed: components["schemas"]["SoftwareInstallation"][];
             error?: string;
         };
         DockerControl: {
@@ -5384,20 +5343,18 @@ export interface components {
         };
         SoftwareRequest: {
             /** @enum {string} */
-            action: "import" | "refresh" | "delete" | "install" | "update" | "uninstall" | "update-panel" | "fail2ban" | "start" | "stop" | "restart" | "logs" | "frps" | "container";
-            source?: components["schemas"]["SoftwareSource"];
-            url?: string;
-            source_id?: string;
-            app_id?: string;
+            action: "install" | "update" | "uninstall" | "update-panel" | "fail2ban" | "start" | "stop" | "restart" | "logs" | "install-nginx" | "frps" | "container";
+            /** @enum {string} */
+            app_id?: "fail2ban" | "frps";
             plan_id?: string;
             prerelease?: boolean;
             fail2ban?: components["schemas"]["Fail2banContainerRequest"];
             frps?: components["schemas"]["FrpsRequest"];
             container?: components["schemas"]["DockerControl"];
             version?: string;
+            auto_start?: boolean;
         };
         SoftwareResult: {
-            source_id?: string;
             app_id?: string;
             message: string;
             log: string;
@@ -5428,6 +5385,7 @@ export interface components {
             prepare_task_id?: string;
         };
         ComponentOverview: {
+            bundled_nginx?: boolean;
             available: boolean;
             scope: string;
             reason: string;
@@ -5441,11 +5399,17 @@ export interface components {
             install_reason: string;
             switch_available: boolean;
             switch_reason: string;
-            software: components["schemas"]["SoftwareCatalog"];
             frps?: components["schemas"]["FrpsStatus"];
             versions: {
                 [key: string]: components["schemas"]["ComponentVersion"];
             };
+            fail2ban?: {
+                installed: boolean;
+                /** @enum {string} */
+                state: "running" | "starting" | "stopped" | "unhealthy" | "missing" | "unknown";
+                error: string;
+            };
+            component_error?: string;
         };
         ComponentAsset: {
             id: string;
@@ -9152,7 +9116,6 @@ export interface operations {
     getComponentVersions: {
         parameters: {
             query: {
-                source_id: string;
                 app_id: string;
                 channel: "stable" | "beta";
                 page?: number;

@@ -10,15 +10,6 @@ defineEmits<{ manage: [] }>();
     ><NButton type="primary">打开</NButton></RouterLink
   >
   <NButton
-    v-else-if="app.installed && app.entry?.href"
-    tag="a"
-    :href="app.entry.href"
-    target="_blank"
-    rel="noopener noreferrer"
-    type="primary"
-    >打开</NButton
-  >
-  <NButton
     v-else
     type="primary"
     :disabled="

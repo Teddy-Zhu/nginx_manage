@@ -689,12 +689,22 @@ func run() error {
 		if *nginxBinding || *nginxBinary != "" || *devAgent || *releasePlan != "" || *releaseSelect != "" || len(catalog) != 0 {
 			return errors.New("Nginx 容器不能混用原生运行或模块选择")
 		}
-		binding, err := nginxcontainer.Read(absDir)
-		if err != nil {
-			return err
+		pending := false
+		if command == "core" {
+			var err error
+			pending, err = agent.BundledNginxPending(absDir)
+			if err != nil {
+				return err
+			}
 		}
-		containerRuntime = &nginxcontainer.Runtime{Binding: binding}
-		installation = binding.Installation()
+		if !pending {
+			binding, err := nginxcontainer.Read(absDir)
+			if err != nil {
+				return err
+			}
+			containerRuntime = &nginxcontainer.Runtime{Binding: binding}
+			installation = binding.Installation()
+		}
 	}
 	if *nginxBinding {
 		if (command != "agent" && command != "core" && command != "nginx-init") || *nginxBinary != "" || *devAgent || *releasePlan != "" || *releaseSelect != "" {
@@ -1553,7 +1563,9 @@ func run() error {
 		if *nginxBinary != "" || containerRuntime != nil {
 			engine = &agent.Nginx{DataDir: absDir, Binary: *nginxBinary, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy, Modules: catalog, Container: containerRuntime, Journal: journal}
 		}
-		host := &agent.Server{ProgramVersion: version, Socket: path, SocketSELinuxContext: *socketSELinuxContext, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}
+		newHost := func() *agent.Server {
+			return &agent.Server{ProgramVersion: version, Socket: path, SocketSELinuxContext: *socketSELinuxContext, AllowedUID: uint32(uid), Policy: policy, Journal: journal, Nginx: engine, NginxLogOwner: *logOwner, Dev: *devAgent, MetricsScope: *metricsScope, DataDir: absDir, DNSOwner: *dnsOwner, DNSScope: *dnsScope, FirewallScope: *firewallScope, FirewallOwner: *firewallOwner, FirewallSSH: *firewallSSH, ComponentScope: *componentScope, MaintenanceScope: *maintenanceScope, ReleaseTrust: *releaseTrust, ReleaseToken: *releaseToken, Installation: installation}
+		}
 		if command == "core" {
 			o := app.Defaults(absDir, false)
 			d, err := panelruntime.ReadDeployment(absDir)
@@ -1561,9 +1573,21 @@ func run() error {
 				return err
 			}
 			o.Listen, o.Socket, o.Policy, o.Version, o.PanelRuntime = d.Listen, path, policy, version, "native"
-			return app.RunCore(ctx, o, host)
+			host := newHost()
+			host.CoreReload = make(chan struct{}, 1)
+			if err := app.RunCore(ctx, o, host); !errors.Is(err, app.ErrReloadCore) {
+				return err
+			}
+			binding, err := nginxcontainer.Read(absDir)
+			if err != nil {
+				return err
+			}
+			engine = &agent.Nginx{DataDir: absDir, WorkerUser: *nginxUser, LogOwner: *logOwner, Policy: policy,
+				Container: &nginxcontainer.Runtime{Binding: binding}, Journal: journal}
+			installation = binding.Installation()
+			return app.RunCore(ctx, o, newHost())
 		}
-		return host.Run(ctx)
+		return newHost().Run(ctx)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}

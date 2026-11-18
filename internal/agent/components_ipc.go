@@ -10,10 +10,10 @@ import (
 
 	"nginxpanel/internal/components"
 	"nginxpanel/internal/componentversions"
+	"nginxpanel/internal/fail2bancontainer"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/frpscontainer"
 	"nginxpanel/internal/nginxcontainer"
-	"nginxpanel/internal/software"
 )
 
 func componentReply(w http.ResponseWriter, data any, err error) {
@@ -47,26 +47,33 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 				out.Versions["nginx"] = *version
 			}
 		}
-		for _, app := range []string{"frps", "fail2ban"} {
-			catalog, err := s.builtinVersions(r.Context(), componentversions.Query{SourceID: "builtin", AppID: app, Channel: "stable", Page: 1})
-			if err != nil {
-				out.Software.Error = err.Error()
-			} else if catalog.Current != nil {
-				out.Versions[app] = *catalog.Current
-			}
-		}
 		if !s.Dev && s.ComponentScope == "host" {
 			call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			status := frpscontainer.Status(call, s.DataDir)
+			cancel()
 			out.Frps = &status
-			cancel()
-		}
-		if !s.Dev && out.Software.Error == "" {
-			call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-			software.Observe(call, s.DataDir, &out.Software)
-			cancel()
+			var protectionImage string
+			if s.MetricsScope == "host" {
+				call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+				protection, err := fail2bancontainer.Status(call, s.DataDir)
+				cancel()
+				if err != nil {
+					protection.State, protection.Error = "unknown", err.Error()
+				}
+				out.Fail2ban = &components.ServiceStatus{Installed: protection.Installed, State: protection.State, Error: protection.Error}
+				protectionImage = protection.Config.Image
+			}
+			s.appendBuiltinVersions(&out, protectionImage)
 		}
 		out.Installation = s.Installation
+		if s.CoreReload != nil && s.Installation == nil {
+			pending, err := BundledNginxPending(s.DataDir)
+			if err != nil {
+				componentReply(w, nil, err)
+				return
+			}
+			out.BundledNginx = pending
+		}
 		out.SwitchReason = "仅已运行的原生 Nginx 支持组件维护切换"
 		if !s.Dev && s.ComponentScope == "host" && s.MaintenanceScope == "host" && s.Installation != nil && s.Nginx != nil && s.Nginx.Container == nil {
 			if err := nginxSwitchServiceTemplate(s.DataDir); err == nil {
@@ -88,6 +95,8 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 			defer cancel()
 			state := s.Nginx.State(call)
 			out.Running, out.RuntimeReason = state.Running, state.Reason
+		} else if out.BundledNginx {
+			out.RuntimeReason = "尚未安装 Nginx"
 		} else {
 			out.RuntimeReason = "未接入受管 Nginx 实例"
 		}

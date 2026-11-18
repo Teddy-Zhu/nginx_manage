@@ -8,9 +8,9 @@ NginxPanel 的宿主机部分是一个核心二进制，内含 Agent、管理 AP
 sudo bash install.sh --yes
 ```
 
-源码编译由 Docker 完成。安装包包含核心二进制和 Nginx 镜像归档；不包含独立 `web/` 目录或面板运行镜像。根目录安装入口会校验并导入镜像、写入服务配置并完成首次启动。`deploy/native/install.sh` 是内部安装步骤，不应单独用来拼装发行包。
+源码编译由 Docker 完成。安装包包含核心二进制和 Nginx 镜像归档。根目录安装入口部署核心服务，并保留后续安装 Nginx 所需的镜像归档。`deploy/native/install.sh` 是内部安装步骤。
 
-默认只安装核心服务和 Nginx。Nginx 在 Docker 容器中运行，配置和业务数据保存在宿主机数据目录。Fail2ban、FRPS 和第三方软件默认不安装，用户可在管理界面中按需安装。
+默认只安装核心服务。登录后，在软件商店安装所需的内置组件。Nginx 在 Docker 容器中运行，配置和业务数据保存在宿主机数据目录。
 
 查看核心服务状态和日志：
 

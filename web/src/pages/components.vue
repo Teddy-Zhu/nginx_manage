@@ -21,8 +21,6 @@ import {
   NModal,
   NSelect,
   NSkeleton,
-  NTabPane,
-  NTabs,
   NTag,
 } from "naive-ui";
 import {
@@ -30,16 +28,10 @@ import {
   useNodeAPI,
   type ComponentOverview,
   type ComponentTask,
-  type Fail2banContainerStatus,
 } from "../api/client";
 import { useLiveRefresh } from "../composables/live";
 import { useSession } from "../stores/session";
-import {
-  softwareTaskActive,
-  softwareTaskLabel,
-  softwareCatalogEntries,
-} from "../utils/software";
-import SoftwareSourcesPanel from "../components/SoftwareSourcesPanel.vue";
+import { softwareTaskActive, softwareTaskLabel } from "../utils/software";
 import SoftwareCard from "../components/SoftwareCard.vue";
 import SoftwareActions from "../components/SoftwareActions.vue";
 import { builtinSoftware } from "../software/builtin";
@@ -51,13 +43,11 @@ const api = useNodeAPI(),
   router = useRouter(),
   session = useSession();
 const overview = ref<ComponentOverview | null>(null),
-  tasks = ref<ComponentTask[]>([]),
-  fail2ban = ref<Fail2banContainerStatus | null>(null);
+  tasks = ref<ComponentTask[]>([]);
 const reading = ref(false),
   loaded = ref(false),
   error = ref("");
-const store = ref("system"),
-  search = ref(""),
+const search = ref(""),
   statusFilter = ref("all");
 const selected = ref<string | null>(null),
   detailBusy = ref(false),
@@ -65,7 +55,7 @@ const selected = ref<string | null>(null),
 const controller = new AbortController();
 const active = computed(() => tasks.value.some(softwareTaskActive));
 const systemSoftware = computed(() =>
-  builtinSoftware(overview.value, fail2ban.value, tasks.value, active.value),
+  builtinSoftware(overview.value, tasks.value),
 );
 const querySoftware = computed(() =>
   systemSoftware.value.some((app) => app.id === route.query.software)
@@ -76,7 +66,6 @@ watch(
   querySoftware,
   (value) => {
     selected.value = value;
-    if (value) store.value = "system";
   },
   { immediate: true },
 );
@@ -92,9 +81,6 @@ const filteredSystemSoftware = computed(() => {
         (statusFilter.value === "installed" ? app.installed : !app.installed)),
   );
 });
-const thirdPartyCount = computed(
-  () => softwareCatalogEntries(overview.value?.software).length,
-);
 const selectedApp = computed(() =>
   systemSoftware.value.find((app) => app.id === selected.value),
 );
@@ -112,10 +98,9 @@ async function load() {
   if (reading.value || controller.signal.aborted) return;
   reading.value = true;
   try {
-    const [source, items, observation] = await Promise.allSettled([
+    const [source, items] = await Promise.allSettled([
       api.components(controller.signal),
       api.componentTasks(controller.signal),
-      api.fail2banContainer(controller.signal),
     ]);
     if (controller.signal.aborted) return;
     overview.value = source.status === "fulfilled" ? source.value : null;
@@ -126,14 +111,12 @@ async function load() {
         ),
         ...items.value,
       ].sort((a, b) => b.created_at - a.created_at);
-    fail2ban.value =
-      observation.status === "fulfilled" ? observation.value : null;
     loaded.value = true;
-    error.value = [source, items, observation]
+    error.value = [source, items]
       .flatMap((result, index) =>
         result.status === "rejected"
           ? [
-              `${["软件列表", "操作记录", "登录防护"][index]}：${apiError(result.reason).message}`,
+              `${["软件列表", "操作记录"][index]}：${apiError(result.reason).message}`,
             ]
           : [],
       )
@@ -169,46 +152,13 @@ useLiveRefresh(
     >
   </Teleport>
   <div class="page-stack">
-    <NAlert v-if="error" type="error">软件状态读取失败：{{ error }}</NAlert>
+    <NAlert v-if="error || overview?.component_error" type="error">
+      {{ error || overview?.component_error }}
+    </NAlert>
     <NAlert v-if="active" type="info" :bordered="false"
       >软件操作正在处理，可在“操作记录”中查看进度和日志。</NAlert
     >
     <section class="store-workspace">
-      <NTabs
-        v-model:value="store"
-        type="line"
-        size="large"
-        :pane-style="{ paddingTop: '24px' }"
-      >
-        <NTabPane
-          name="system"
-          display-directive="show"
-          :tab="`系统商店 · ${systemSoftware.length}`"
-        >
-          <div class="store-intro">
-            <div>
-              <h2>系统内置软件</h2>
-              <p class="muted">
-                常用的网站服务与安全工具，安装后可直接在面板中管理。
-              </p>
-            </div>
-          </div>
-        </NTabPane>
-        <NTabPane
-          name="third-party"
-          display-directive="show"
-          :tab="`第三方商店 · ${thirdPartyCount}`"
-        >
-          <div class="store-intro">
-            <div>
-              <h2>第三方软件</h2>
-              <p class="muted">
-                浏览已添加软件源提供的应用，选择需要的软件安装。
-              </p>
-            </div>
-          </div>
-        </NTabPane>
-      </NTabs>
       <div class="store-filters">
         <NInput
           v-model:value="search"
@@ -227,11 +177,6 @@ useLiveRefresh(
           aria-label="安装状态"
           class="store-status-filter"
         />
-        <div
-          id="software-source-actions"
-          v-show="store === 'third-party'"
-          class="source-actions"
-        />
       </div>
       <template v-if="!loaded && reading">
         <div class="store-grid">
@@ -243,7 +188,7 @@ useLiveRefresh(
           />
         </div>
       </template>
-      <template v-else-if="store === 'system'">
+      <template v-else>
         <div v-if="filteredSystemSoftware.length" class="store-grid">
           <SoftwareCard
             v-for="app in filteredSystemSoftware"
@@ -282,16 +227,6 @@ useLiveRefresh(
           ></NEmpty
         >
       </template>
-      <SoftwareSourcesPanel
-        :visible="store === 'third-party' && (loaded || !reading)"
-        :catalog="overview?.software"
-        :tasks="tasks"
-        :active="active"
-        :search="search"
-        :status-filter="statusFilter"
-        @changed="load"
-        @task="recordTask"
-      />
     </section>
   </div>
   <NModal
@@ -313,9 +248,10 @@ useLiveRefresh(
         v-if="selectedApp"
         :key="selectedApp.id"
         :app="selectedApp"
+        :overview="overview"
+        :tasks="tasks"
         :active="active"
         @busy="detailBusy = $event"
-        @changed="load"
         @task="recordTask"
       />
     </div>
@@ -368,16 +304,6 @@ useLiveRefresh(
   gap: 24px;
   min-width: 0;
 }
-.store-intro {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.store-intro h2 {
-  font-size: 17px;
-  margin-bottom: 6px;
-}
 .store-filters {
   display: flex;
   gap: 12px;
@@ -388,12 +314,6 @@ useLiveRefresh(
 }
 .store-status-filter {
   width: 150px;
-}
-.source-actions {
-  flex: 1;
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
 }
 .store-grid {
   display: grid;

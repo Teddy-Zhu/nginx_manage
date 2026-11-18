@@ -2,9 +2,9 @@
 
 Docker 用于运行 Nginx 和用户按需安装的应用。核心程序不在容器中运行，由宿主机 `nginxpanel.service` 提供 Agent、管理 API 和内嵌前端。
 
-完整安装包只附带 Nginx 镜像归档和核心二进制，不包含面板镜像或 `web/` 静态目录。安装器导入并校验 Nginx 镜像后，生成 `/etc/nginxpanel/docker/compose.yaml`；该 Compose 只管理 Nginx。镜像预置常用 HTTP、Stream 等模块，安装或更新时不在宿主机编译或追加模块。
+完整安装包附带 Nginx 镜像归档和核心二进制。用户在软件商店点击「安装 Nginx」时，面板导入并校验镜像，确认容器运行后保存 `/etc/nginxpanel/docker/compose.yaml`。镜像已预置常用 HTTP、Stream 等模块。
 
-默认不会安装 Fail2ban、FRPS 或第三方应用。用户从软件商店手动安装后，这些应用作为独立 Docker 容器运行并按各自流程更新。组件镜像不随核心程序更新；Nginx 镜像也有独立的检查、准备和更新页面。
+Fail2ban 和 FRP 服务端从软件商店按需安装，分别使用上游的 Docker 镜像。Nginx 镜像由项目独立发布，可在面板检查并更新。各组件独立运行和更新。
 
 查看 Nginx 容器状态和日志：
 

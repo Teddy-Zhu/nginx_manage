@@ -14,6 +14,8 @@ type coreServiceResult struct {
 	err  error
 }
 
+var ErrReloadCore = errors.New("重新接入 Nginx")
+
 // RunCore starts the privileged host Agent and management API from the same
 // process and binary. The API is exposed only after the Agent socket responds.
 func RunCore(ctx context.Context, o Options, host *agent.Server) error {
@@ -72,6 +74,13 @@ func RunCore(ctx context.Context, o Options, host *agent.Server) error {
 		first = coreServiceResult{name: "agent", err: err}
 	case err := <-managementDone:
 		first = coreServiceResult{name: "management", err: err}
+	case <-host.CoreReload:
+		cancel()
+		agentErr, managementErr := <-agentDone, <-managementDone
+		if err := joinedCoreErrors(runCtx, coreServiceResult{name: "agent", err: agentErr}, coreServiceResult{name: "management", err: managementErr}); err != nil {
+			return err
+		}
+		return ErrReloadCore
 	case <-ctx.Done():
 		cancel()
 		agentErr, managementErr := <-agentDone, <-managementDone

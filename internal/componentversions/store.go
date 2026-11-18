@@ -91,7 +91,7 @@ func SaveState(data, source, app string, state State) error {
 
 func ReadCatalog(data string, q Query) (Catalog, error) {
 	var catalog Catalog
-	dir, err := Directory(data, q.SourceID, q.AppID)
+	dir, err := Directory(data, "builtin", q.AppID)
 	if err != nil {
 		return catalog, err
 	}
@@ -102,7 +102,7 @@ func ReadCatalog(data string, q Query) (Catalog, error) {
 	if err = json.Unmarshal(raw, &catalog); err != nil {
 		return catalog, errors.New("版本目录缓存损坏")
 	}
-	if catalog.SourceID != q.SourceID || catalog.AppID != q.AppID || catalog.Channel != q.Channel || catalog.Page != q.Page || len(catalog.Versions) > 100 {
+	if catalog.AppID != q.AppID || catalog.Channel != q.Channel || catalog.Page != q.Page || len(catalog.Versions) > 100 {
 		return catalog, errors.New("版本目录缓存与查询不一致")
 	}
 	for _, version := range catalog.Versions {
@@ -114,7 +114,7 @@ func ReadCatalog(data string, q Query) (Catalog, error) {
 }
 
 func SaveCatalog(data string, q Query, catalog Catalog) error {
-	dir, err := Directory(data, q.SourceID, q.AppID)
+	dir, err := Directory(data, "builtin", q.AppID)
 	if err != nil {
 		return err
 	}

@@ -7159,14 +7159,6 @@
             }
           },
           {
-            "name": "source_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "app_id",
             "in": "query",
             "required": true,
@@ -7204,7 +7196,6 @@
           }
         ],
         "x-query-keys": [
-          "source_id",
           "app_id",
           "channel",
           "page",

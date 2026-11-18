@@ -109,7 +109,7 @@ lifecycle_capture_running() {
   if [[ -f $compose ]]; then
     for service in panel nginx; do
       if [[ $service == panel && $panel_mode != docker ]]; then continue; fi
-      if [[ $service == nginx && -z $nginx_image ]]; then continue; fi
+      if [[ $service == nginx ]] && ! nginx_uses_compose; then continue; fi
       running=$(compose_command ps --status running -q "$service") || die '无法核对本应用容器状态'
       if [[ -n $running ]]; then lifecycle_running_containers+=("$service"); fi
     done
@@ -415,7 +415,11 @@ lifecycle_reinstall() {
     restored_running=$restored_running$unit:
   done <"$lifecycle_dir/running"
   while IFS= read -r service; do
-    [[ $service == panel && $panel_mode == docker || $service == nginx && -n $nginx_image ]] || die '重装材料包含未知容器'
+    if [[ $service == nginx ]]; then
+      nginx_uses_compose || die '重装材料缺少 Nginx 容器配置'
+    else
+      [[ $service == panel && $panel_mode == docker ]] || die '重装材料包含未知容器'
+    fi
     compose_command up -d --no-deps --pull never "$service" || die '容器启动失败，请检查后续办 reinstall'
     running=$(compose_command ps --status running -q "$service") || die '无法核对恢复后的容器状态'
     [[ -n $running ]] || die '恢复后的容器未运行，请检查后续办 reinstall'

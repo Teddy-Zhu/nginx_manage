@@ -121,9 +121,12 @@ compose_command() {
   command -v docker >/dev/null || die '缺少 Docker 命令'
   docker compose -f "$compose" "$@"
 }
+nginx_uses_compose() {
+  [[ -n $nginx_image || $panel_mode == native && -f $compose ]]
+}
 nginx_available() {
   local result
-  if [[ -n $nginx_image ]]; then return 0; fi
+  if nginx_uses_compose; then return 0; fi
   load_binary
   if "$binary" nginx-runtime-status --data-dir "$data"; then return 0; else result=$?; fi
   if ((result == 1)); then return 1; fi
@@ -139,7 +142,7 @@ confirm_change() {
 }
 service_command() {
   local operation=$1 selected=$2
-  if [[ $selected == panel && $panel_mode == docker || $selected == nginx && -n $nginx_image ]]; then
+  if [[ $selected == panel && $panel_mode == docker ]] || { [[ $selected == nginx ]] && nginx_uses_compose; }; then
     local service=panel
     if [[ $selected == nginx ]]; then service=nginx; fi
     case "$operation" in
@@ -247,7 +250,7 @@ logs_action() {
   local unit=nginxpanel.service service=panel
   local -a args=()
   if [[ $component == nginx ]]; then nginx_available || die 'Nginx 尚未安装'; fi
-  if [[ $component == panel && $panel_mode == docker || $component == nginx && -n $nginx_image ]]; then
+  if [[ $component == panel && $panel_mode == docker ]] || { [[ $component == nginx ]] && nginx_uses_compose; }; then
     if [[ $component == nginx ]]; then service=nginx; fi
     if [[ $follow == yes ]]; then args+=(--follow); fi
     compose_command logs --tail "$lines" "${args[@]}" "$service"

@@ -1,16 +1,15 @@
 package componentversions
 
 import (
-	"context"
 	"os"
 	"runtime"
 	"testing"
 )
 
 func TestBundledCatalogAndRequirements(t *testing.T) {
-	document, cached, err := Builtin(context.Background(), t.TempDir(), false)
-	if err != nil || !cached {
-		t.Fatalf("offline catalog: %v %v", cached, err)
+	document, err := Builtin()
+	if err != nil {
+		t.Fatalf("内置组件目录：%v", err)
 	}
 	for _, app := range []string{"frps", "fail2ban"} {
 		versions := document.Applications[app]
@@ -55,8 +54,8 @@ func TestInstalledHistoryAndCacheIdentity(t *testing.T) {
 	if err != nil || read.Current.ID != current.ID || read.Previous.ID != previous.ID || read.PreviousImage != "previous" {
 		t.Fatalf("history lost: %+v %v", read, err)
 	}
-	q := Query{SourceID: "builtin", AppID: "frps", Channel: "stable", Page: 1}
-	if err = SaveCatalog(data, q, Catalog{SourceID: "builtin", AppID: "fail2ban", Channel: "stable", Page: 1}); err != nil {
+	q := Query{AppID: "frps", Channel: "stable", Page: 1}
+	if err = SaveCatalog(data, q, Catalog{AppID: "fail2ban", Channel: "stable", Page: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = ReadCatalog(data, q); err == nil {

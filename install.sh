@@ -10,7 +10,7 @@ root=$(cd -- "$(dirname -- "$0")" && pwd -P)
 usage() {
   cat <<'EOF'
 用法：sudo bash install.sh [--yes] [--advanced] [--port 端口] [--fresh | --uninstall [--keep-data | --purge]]
-自动检测本机系统、架构、安装材料、Docker、Nginx 和管理端口，确认推荐方案后安装。
+自动检测本机系统、架构、安装材料、Docker 和管理端口，确认推荐方案后安装面板。
 源码目录自动使用 Docker 编译并接续安装，无需手动构建或解包。
 --port 指定管理端口；不指定时自动选择随机空闲端口，默认允许外部访问。
 --yes 直接确认所选操作（包括完全卸载的数据删除）；--advanced 才逐项调整安装配置。
@@ -19,7 +19,7 @@ usage() {
 不会安装宿主机编译工具、自动安装 Docker 或接管已有系统 Nginx。
 
 带参数时转交标准安装器，例如：
-sudo bash install.sh --binary /可信目录/nginxpanel --nginx-image sha256:... --start
+sudo bash install.sh --binary /可信目录/nginxpanel --nginx-package /可信安装包 --start
   --protocol http|https     访问协议，默认 https
 完整参数：bash deploy/native/install.sh --help
 EOF
@@ -243,9 +243,7 @@ if command -v docker >/dev/null; then
 fi
 [[ $docker_ready == yes ]] || die '需要本机 rootful Docker 和 Compose；不会自动安装 Docker，请先准备 Docker 后重试'
 [[ -f $root/containers.json && -f $root/container-images.tar ]] || die '安装包缺少运行镜像，请使用完整 Release 或在源码目录运行 install.sh 重新构建'
-image_refs=$("$binary" container-package-info --manifest "$root/containers.json") || die '无法读取配套容器镜像'
-mapfile -t package_images <<<"$image_refs"
-[[ ${#package_images[@]} == 1 ]] || die '安装包缺少 Nginx 镜像'
+"$binary" container-package-info --manifest "$root/containers.json" >/dev/null || die '无法读取配套容器镜像'
 data=/srv/nginxpanel data_ready=no
 for candidate in /srv/nginxpanel /var/lib/nginxpanel; do
   if (root_chain "${candidate%/*}") 2>/dev/null && \
@@ -301,9 +299,9 @@ fi
 if [[ $firewall_owner == auto ]]; then firewall_ssh=auto; fi
 args+=(--dns-owner "$dns_owner" --nginx-log-owner "$log_owner" --firewall-owner "$firewall_owner" --firewall-ssh "$firewall_ssh")
 start=yes
-  if [[ $custom == yes ]] && ! yes_no '安装完成后启用并启动管理服务及 Nginx 容器？' yes; then start=no; fi
+if [[ $custom == yes ]] && ! yes_no '安装完成后启动管理服务？' yes; then start=no; fi
 if [[ $start == yes ]]; then args+=(--start); fi
-printf '\n安装确认\n  部署：宿主机服务\n  程序：%s\n  数据：%s\n  管理：%s://%s\n  Nginx：Docker 容器\n  DNS：%s\n  防火墙：%s / SSH：%s\n  日志轮转：%s\n  立即启动：%s\n' "$binary" "$data" "$protocol" "$listen" "$dns_owner" "$firewall_owner" "$firewall_ssh" "$log_owner" "$start"
+printf '\n安装确认\n  部署：宿主机服务\n  程序：%s\n  数据：%s\n  管理：%s://%s\n  Nginx：在软件商店手动安装\n  DNS：%s\n  防火墙：%s / SSH：%s\n  日志轮转：%s\n  立即启动：%s\n' "$binary" "$data" "$protocol" "$listen" "$dns_owner" "$firewall_owner" "$firewall_ssh" "$log_owner" "$start"
 printf '%s\n' '请确认材料来源。将复制为本机 root 批准材料，调用标准安装器；不修改云安全组或接管其他 Nginx 服务。'
 printf '安装参数：'; printf '%q ' "${args[@]}"; printf '\n'
 confirm_install
@@ -321,12 +319,9 @@ install -m 0555 "$binary" "$stage/nginxpanel"
 install -m 0555 "$root/deploy/native/install.sh" "$stage/deploy/native/install.sh"
 install -m 0555 "$root/deploy/native/lifecycle.sh" "$stage/deploy/native/lifecycle.sh"
 install -m 0555 "$root/manage.sh" "$stage/manage.sh"
-printf '%s\n' '正在导入 Nginx 运行镜像…'
-docker image load --input "$root/container-images.tar"
-nginx_image=$(docker image inspect --format '{{.Id}}' "${package_images[0]}")
-"$stage/nginxpanel" container-package --package-dir "$stage" --nginx-image "$nginx_image"
-chmod 0444 "$stage/containers.json"
-args+=(--nginx-image "$nginx_image" --container-manifest "$stage/containers.json")
+install -m 0444 "$root/containers.json" "$stage/containers.json"
+install -m 0400 "$root/container-images.tar" "$stage/container-images.tar"
+args+=(--nginx-package "$stage")
 if [[ -e /opt/nginxpanel/manage.sh || -L /opt/nginxpanel/manage.sh ]]; then
   trusted_file /opt/nginxpanel/manage.sh
   cmp -s "$stage/manage.sh" /opt/nginxpanel/manage.sh || die '已有不同管理脚本，停止覆盖'

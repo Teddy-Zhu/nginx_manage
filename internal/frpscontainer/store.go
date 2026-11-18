@@ -77,7 +77,7 @@ func save(data string, r record) error {
 	return atomicFile(filepath.Join(directory(data), "state.json"), raw)
 }
 
-// Native JSON belongs to this built-in adapter; third-party catalogs never describe Docker.
+// Native JSON stores the FRP adapter configuration.
 func render(r record) ([]byte, error) {
 	ports := make([]map[string]int, 0, len(r.Config.AllowPorts))
 	for _, p := range r.Config.AllowPorts {

@@ -14,5 +14,5 @@
 import FrpsInstallPanel from "../components/FrpsInstallPanel.vue";
 </script>
 <template>
-  <div class="page-stack"><FrpsInstallPanel /></div>
+  <FrpsInstallPanel />
 </template>

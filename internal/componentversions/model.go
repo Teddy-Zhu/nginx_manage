@@ -1,5 +1,4 @@
-// Package componentversions defines version metadata shared by built-in and
-// source-provided applications. Runtime configuration belongs to each adapter.
+// Package componentversions defines version metadata for built-in components.
 package componentversions
 
 import (
@@ -24,11 +23,10 @@ type Version struct {
 }
 
 type Query struct {
-	SourceID string `json:"source_id"`
-	AppID    string `json:"app_id"`
-	Channel  string `json:"channel"`
-	Page     int    `json:"page"`
-	Refresh  bool   `json:"refresh"`
+	AppID   string `json:"app_id"`
+	Channel string `json:"channel"`
+	Page    int    `json:"page"`
+	Refresh bool   `json:"refresh"`
 }
 
 type State struct {
@@ -40,7 +38,6 @@ type State struct {
 }
 
 type Catalog struct {
-	SourceID  string    `json:"source_id"`
 	AppID     string    `json:"app_id"`
 	Channel   string    `json:"channel"`
 	Page      int       `json:"page"`
@@ -54,7 +51,7 @@ type Catalog struct {
 }
 
 func (q Query) Validate() error {
-	if !Identifier(q.SourceID) || !Identifier(q.AppID) || q.Channel != "stable" && q.Channel != "beta" || q.Page < 1 || q.Page > 1000 {
+	if !Identifier(q.AppID) || q.Channel != "stable" && q.Channel != "beta" || q.Page < 1 || q.Page > 1000 {
 		return errors.New("版本查询参数无效")
 	}
 	return nil

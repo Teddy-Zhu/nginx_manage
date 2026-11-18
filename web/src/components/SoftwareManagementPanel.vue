@@ -26,9 +26,7 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
     <div class="software-summary">
       <div class="button-row">
         <NTag :type="app.status.tone" :bordered="false">
-          {{
-            app.status.label
-          }}
+          {{ app.status.label }}
         </NTag>
         <span class="muted">{{ app.note }}</span>
       </div>
@@ -74,21 +72,9 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
           {{ app.name }}
         </p>
       </div>
-      <RouterLink v-if="app.entry.to" :to="app.entry.to">
-        <NButton type="primary">
-          打开功能页面
-        </NButton>
+      <RouterLink :to="app.entry.to">
+        <NButton type="primary"> 打开功能页面 </NButton>
       </RouterLink>
-      <NButton
-        v-else-if="app.entry.href"
-        tag="a"
-        :href="app.entry.href"
-        target="_blank"
-        rel="noopener noreferrer"
-        type="primary"
-      >
-        打开应用
-      </NButton>
     </section>
     <div v-if="task" class="management-task">
       <span class="muted">{{

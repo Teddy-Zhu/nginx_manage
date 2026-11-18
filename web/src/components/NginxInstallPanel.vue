@@ -35,6 +35,9 @@ const updatePath = "/nginx-images";
 const permitted = computed(
   () => !!session.me?.scopes.includes("components.manage"),
 );
+const installAllowed = computed(
+  () => permitted.value && !!session.me?.scopes.includes("system.write"),
+);
 function hasNginxImage(task: ComponentTask) {
   const release = task.result?.release;
   if (!release) return false;
@@ -83,7 +86,12 @@ async function submit(input: ComponentCreateInput) {
       ? api.pullComponentImage(input, keyFor(input))
       : api.createComponentTask(input, keyFor(input)));
     emit("task", item);
-    inspectTask(item.id, "Nginx 更新日志");
+    inspectTask(
+      item.id,
+      input.input.software?.action === "install-nginx"
+        ? "Nginx 安装日志"
+        : "Nginx 更新日志",
+    );
     keyFor = useIdempotency();
   });
 }
@@ -144,19 +152,43 @@ async function chooseVersion(version: ComponentVersion) {
   choosingVersion.value = false;
   await check();
 }
+function installBundled() {
+  return submit({
+    input: {
+      action: "software",
+      tag: "",
+      prerelease: false,
+      plan_id: "",
+      manifest_sha256: "",
+      trust_sha256: "",
+      software: { action: "install-nginx" },
+    },
+  });
+}
 </script>
 <template>
   <ComponentVersionDialog
     :show="choosingVersion"
     name="Nginx"
-    source-id="builtin"
     app-id="nginx"
     :busy="busy || active"
     submit-text="检查此版本"
     @choose="chooseVersion"
     @cancel="choosingVersion = false"
   />
-  <div class="page-stack">
+  <div
+    v-if="overview?.bundled_nginx && !overview.installation"
+    class="button-row"
+  >
+    <NButton
+      type="primary"
+      :loading="busy || active"
+      :disabled="!installAllowed || active"
+      @click="installBundled"
+      >安装 Nginx</NButton
+    >
+  </div>
+  <div v-else class="page-stack">
     <NAlert v-if="overview && !overview.available" type="warning">
       安装源暂不可用，请稍后重试或查看操作日志。
     </NAlert>
@@ -175,8 +207,8 @@ async function chooseVersion(version: ComponentVersion) {
         :disabled="!permitted || !overview?.available || active"
         @click="choosingVersion = true"
       >
-        选择版本
-      </NButton><TaskLogButton v-if="checked" :task-id="checked.id" />
+        选择版本 </NButton
+      ><TaskLogButton v-if="checked" :task-id="checked.id" />
     </div>
     <template v-if="release">
       <p>
@@ -198,11 +230,11 @@ async function chooseVersion(version: ComponentVersion) {
         :loading="busy"
         :disabled="
           !permitted ||
-            busy ||
-            active ||
-            engineMismatch ||
-            !checked?.result?.runtime_ready ||
-            release.expires_at * 1000 <= Date.now()
+          busy ||
+          active ||
+          engineMismatch ||
+          !checked?.result?.runtime_ready ||
+          release.expires_at * 1000 <= Date.now()
         "
         @click="prepare"
       >
@@ -215,7 +247,8 @@ async function chooseVersion(version: ComponentVersion) {
       class="record-card page-stack"
     >
       <div class="section-heading">
-        <strong>{{ item.result?.release?.version }} 已准备</strong><TaskLogButton :task-id="item.id" />
+        <strong>{{ item.result?.release?.version }} 已准备</strong
+        ><TaskLogButton :task-id="item.id" />
       </div>
       <div class="button-row">
         <RouterLink

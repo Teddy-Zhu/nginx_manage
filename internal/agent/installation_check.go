@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 
 	"nginxpanel/internal/fail2bancontainer"
+	"nginxpanel/internal/frpscontainer"
+	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
-	"nginxpanel/internal/software"
 )
 
 // Must match the native installer's intent and ready records.
@@ -35,6 +36,19 @@ func checkInstallationRemoval(ctx context.Context, data string, releaseEmpty boo
 	}
 	if _, err := panelruntime.ReadDeployment(data); err != nil {
 		return err
+	}
+	if pending, err := BundledNginxPending(data); err != nil {
+		return err
+	} else if pending {
+		binding, err := nginxcontainer.Read(data)
+		if err == nil {
+			if _, err = nginxcontainer.ReadContainer(ctx, binding); err == nil {
+				return errors.New("Nginx 首次安装尚未确认，请先回到软件商店完成安装")
+			}
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
 	}
 	j := &Journal{Dir: filepath.Join(data, "agent", "operations")}
 	var records []Record
@@ -144,12 +158,10 @@ func checkInstallationRemoval(ctx context.Context, data string, releaseEmpty boo
 	} else if installed {
 		return errors.New("请先在软件商店卸载登录防护，再卸载本系统；防护配置会保留")
 	}
-	catalog, err := software.Read(data)
-	if err != nil {
+	if _, installed, err := frpscontainer.Configuration(data); err != nil {
 		return err
-	}
-	if len(catalog.Installed) > 0 {
-		return errors.New("请先在软件商店卸载第三方软件，再卸载本系统；数据卷会保留")
+	} else if installed {
+		return errors.New("请先在软件商店卸载 FRP 服务端，再卸载本系统；配置会保留")
 	}
 	return nil
 }

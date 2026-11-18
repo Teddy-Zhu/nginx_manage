@@ -63,7 +63,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 		if err := p.Require("system.write"); err != nil {
 			return out, err
 		}
-		if in.Input.Software.Action == "fail2ban" || in.Input.Software.SourceID == "builtin" && in.Input.Software.AppID == "fail2ban" {
+		if in.Input.Software.RequiresSecurity() {
 			if err := p.Require("security.write"); err != nil {
 				return out, err
 			}

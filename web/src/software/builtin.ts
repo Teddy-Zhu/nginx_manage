@@ -1,13 +1,5 @@
-import { markRaw, type Component } from "vue";
-import NginxInstallPanel from "../components/NginxInstallPanel.vue";
-import type {
-  ComponentOverview,
-  ComponentTask,
-  Fail2banContainerStatus,
-  SoftwareRequest,
-} from "../api/client";
+import type { ComponentOverview, ComponentTask } from "../api/client";
 import {
-  fail2banRuntime,
   softwareStatus,
   standardServiceActions,
   type RuntimeState,
@@ -15,146 +7,106 @@ import {
   type SoftwareView,
 } from "../utils/software";
 
-export interface SoftwareRuntimeSettings {
-  image: string;
-  auto_start: boolean;
-}
 export interface BuiltinSoftwareView extends SoftwareView {
+  id: "nginx" | "fail2ban" | "frps";
   runtime: RuntimeState;
   scopes: string[];
   actions: SoftwareOperation[];
   task?: ComponentTask;
   error?: string;
-  module?: string;
-  settings?: SoftwareRuntimeSettings;
-  request?: (
-    action: SoftwareOperation | "configure",
-    settings?: SoftwareRuntimeSettings,
-  ) => SoftwareRequest;
-  installTo?: string;
-  installer?: Component;
-  installerProps?: Record<string, unknown>;
 }
 
-// Integrations declare lifecycle operations here. Feature editors stay on their own routes.
 export function builtinSoftware(
   overview: ComponentOverview | null,
-  fail2ban: Fail2banContainerStatus | null,
   tasks: ComponentTask[],
-  active: boolean,
 ): BuiltinSoftwareView[] {
-  const frps = overview?.frps;
-  const definitions = [
-    {
-      id: "nginx",
-      name: "Nginx",
-      category: "网站服务",
-      description: "创建网站与反向代理，管理 HTTPS、上游服务和网站访问控制。",
-      accent: "green" as const,
-      installed: overview?.scope === "host" ? !!overview.installation : null,
-      runtime: overview?.running
-        ? ("running" as const)
-        : overview?.runtime_reason
-          ? ("unknown" as const)
-          : ("stopped" as const),
-      task: tasks.find(
-        (task) =>
-          task.action !== "software" &&
-          (task.result?.input.components?.includes("nginx") ||
-            (task.result?.release?.selected.includes("image-nginx") &&
-              task.result.release.images.some(
-                (image) => image.id === "nginx",
-              ))),
-      ),
-      entry: { to: "/nginx" },
-      note: overview?.versions?.nginx
-        ? `组件 ${overview.versions.nginx.version} · Nginx ${overview.versions.nginx.software_version}`
-        : overview?.installation
-          ? `Nginx ${overview.installation.version}`
-          : "系统内置",
-      scopes: ["components.manage"],
-      actions: ["install", "update"] as SoftwareOperation[],
-      error: overview?.runtime_reason,
-      installer: markRaw(NginxInstallPanel),
-      installerProps: { overview, tasks, active },
-    },
+  const installed = overview?.scope === "host" ? !!overview.installation : null;
+  const runtime: RuntimeState = overview?.running
+    ? "running"
+    : overview?.runtime_reason
+      ? "unknown"
+      : "stopped";
+  const task = tasks.find(
+    (task) =>
+      task.result?.input.software?.action === "install-nginx" ||
+      (task.action !== "software" &&
+        (task.result?.input.components?.includes("nginx") ||
+          (task.result?.release?.selected.includes("image-nginx") &&
+            task.result.release.images.some((image) => image.id === "nginx")))),
+  );
+  const version = overview?.versions?.nginx;
+  const nginx: BuiltinSoftwareView = {
+    id: "nginx",
+    name: "Nginx",
+    category: "网站服务",
+    description: "创建网站与反向代理，管理 HTTPS、上游服务和网站访问控制。",
+    accent: "green",
+    installed: installed === true,
+    runtime,
+    task,
+    status: softwareStatus(installed, runtime, task),
+    entry: { to: "/nginx" },
+    note: version
+      ? `组件 ${version.version} · Nginx ${version.software_version ?? version.version}`
+      : overview?.installation
+        ? `Nginx ${overview.installation.version}`
+        : "系统内置",
+    scopes: ["components.manage"],
+    actions: ["install", "update"],
+    error: installed ? overview?.runtime_reason : undefined,
+    versioned: true,
+  };
+  const services = [
     {
       id: "fail2ban",
       name: "Fail2ban",
-      category: "安全防护",
-      description: "自动封禁反复登录失败的 IP，保护 SSH、管理面板和网站。",
-      accent: "blue" as const,
-      installed: fail2ban?.installed ?? null,
-      runtime: fail2banRuntime(fail2ban),
-      task: tasks.find(
-        (task) =>
-          task.result?.input.software?.action === "fail2ban" ||
-          (task.result?.input.software?.source_id === "builtin" &&
-            task.result.input.software.app_id === "fail2ban"),
-      ),
-      entry: { to: "/fail2ban" },
-      note: "系统内置",
-      scopes: ["components.manage", "system.write", "security.write"],
-      actions: standardServiceActions,
-      module: "fail2ban",
-      error: fail2ban?.error,
-      settings: fail2ban?.config,
-      request: (
-        action: SoftwareOperation | "configure",
-        settings?: SoftwareRuntimeSettings,
-      ): SoftwareRequest => ({
-        action: "fail2ban",
-        fail2ban: {
-          action,
-          ...(["install", "configure"].includes(action) && fail2ban
-            ? { config: { ...fail2ban.config, ...settings } }
-            : {}),
-        },
-      }),
+      category: "登录防护",
+      description: "保护 SSH、面板和网站登录。",
+      accent: "amber",
+      status: overview?.fail2ban,
     },
     {
       id: "frps",
       name: "FRP 服务端",
-      category: "网络连接",
-      description:
-        "接入内网客户端，提供 TCP、UDP 端口映射和 HTTP、HTTPS 网站转发。",
-      accent: "green" as const,
-      installed: frps?.installed ?? null,
-      runtime: frps?.state ?? ("unknown" as const),
-      task: tasks.find(
-        (task) =>
-          task.result?.input.software?.action === "frps" ||
-          (task.result?.input.software?.source_id === "builtin" &&
-            task.result.input.software.app_id === "frps"),
-      ),
-      entry: { to: "/frps" },
-      note: frps?.stats?.version ? `版本 ${frps.stats.version}` : "系统内置",
-      scopes: ["components.manage", "system.write"],
-      actions: standardServiceActions,
-      error: frps?.error,
-      settings: frps?.config,
-      installTo: "/frps?install=1",
-      request: (
-        action: SoftwareOperation | "configure",
-        settings?: SoftwareRuntimeSettings,
-      ): SoftwareRequest => ({
-        action: "frps",
-        frps: {
-          action,
-          ...(action === "configure" && frps
-            ? { config: { ...frps.config, ...settings } }
-            : {}),
-        },
-      }),
+      category: "网络转发",
+      description: "为内网客户端提供端口映射和网站转发。",
+      accent: "blue",
+      status: overview?.frps,
     },
+  ] as const;
+  return [
+    nginx,
+    ...services.map((service): BuiltinSoftwareView => {
+      const installed =
+        service.status?.installed ??
+        (overview?.scope === "host" ? false : null);
+      const runtime = service.status?.state ?? "unknown";
+      const task = tasks.find(
+        (task) => task.result?.input.software?.app_id === service.id,
+      );
+      const version = overview?.versions?.[service.id];
+      return {
+        id: service.id,
+        name: service.name,
+        category: service.category,
+        description: service.description,
+        accent: service.accent,
+        installed: installed === true,
+        runtime,
+        task,
+        status: softwareStatus(installed, runtime, task),
+        entry: { to: "/" + service.id },
+        note: version
+          ? `组件 ${version.version} · 软件 ${version.software_version ?? version.version}`
+          : "系统内置",
+        scopes:
+          service.id === "fail2ban"
+            ? ["components.manage", "system.write", "security.write"]
+            : ["components.manage", "system.write"],
+        actions: standardServiceActions,
+        error: service.status?.error,
+        versioned: true,
+      };
+    }),
   ];
-  return definitions.map((item) => ({
-    ...item,
-    versioned: true,
-    note: overview?.versions?.[item.id]
-      ? `组件 ${overview.versions[item.id]!.version} · 软件 ${overview.versions[item.id]!.software_version ?? overview.versions[item.id]!.version}`
-      : item.note,
-    installed: item.installed === true,
-    status: softwareStatus(item.installed, item.runtime, item.task),
-  }));
 }

@@ -391,7 +391,7 @@ sudo /opt/nginxpanel/current/nginxpanel agent-upgrade-resume \
 
 ## Nginx 签名镜像更新
 
-Nginx 使用独立签名镜像计划，不依赖核心程序资产。软件商店首次安装可从已准备的计划拉取 Nginx 镜像；已安装的 Nginx 在镜像更新页面检查并准备目标镜像，再提交更新任务。该更新任务引用 `prepare_task_id`，后台按签名准备计划拉取并核对镜像，不要求用户额外创建 `component.pull` 任务。Fail2ban、FRP 和第三方软件按各自应用流程更新，不随核心程序或 Nginx 镜像更新。
+首次安装 Nginx 时使用安装包预置镜像。后续可在 Nginx 镜像更新页面选择项目独立发布的签名镜像。更新任务引用 `prepare_task_id`，后台拉取并核对镜像。Fail2ban 和 FRP 服务端按内置版本目录直接拉取上游镜像，各组件独立更新。
 
 核心服务以 root 重新核对准备目录及当前发布信任，从签名清单推导 Nginx 固定镜像摘要和本机架构；不接受用户镜像地址、Docker 地址或 Registry 凭据。镜像按摘要核对后切换受管 Nginx 容器，核心程序本身不运行在 Docker 中。
 

@@ -87,8 +87,6 @@ export type SoftwareRequest = components["schemas"]["SoftwareRequest"];
 export type ComponentVersion = components["schemas"]["ComponentVersion"];
 export type ComponentVersionCatalog =
   components["schemas"]["ComponentVersionCatalog"];
-export type SoftwareSource = components["schemas"]["SoftwareSource"];
-export type SoftwareCatalog = components["schemas"]["SoftwareCatalog"];
 export type UpdateChannel = components["schemas"]["UpdateChannel"];
 export type ComponentInput = components["schemas"]["ComponentInput"];
 export type ComponentCreateInput =
@@ -1036,7 +1034,6 @@ export function createAPI(scope: RequestScope) {
       request<ComponentTask[]>({ url: "/components/tasks", signal }),
     componentVersions: (
       params: {
-        source_id: string;
         app_id: string;
         channel: "stable" | "beta";
         page: number;

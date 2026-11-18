@@ -18,7 +18,7 @@ func (s *Server) componentVersionHandlers(mux *http.ServeMux, manager *component
 			return
 		}
 		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-		q := componentversions.Query{SourceID: r.URL.Query().Get("source_id"), AppID: r.URL.Query().Get("app_id"), Channel: r.URL.Query().Get("channel"), Page: page, Refresh: r.URL.Query().Get("refresh") == "true"}
+		q := componentversions.Query{AppID: r.URL.Query().Get("app_id"), Channel: r.URL.Query().Get("channel"), Page: page, Refresh: r.URL.Query().Get("refresh") == "true"}
 		out, err := manager.Versions(r.Context(), q)
 		componentReply(w, out, err)
 	})
@@ -29,7 +29,7 @@ func (c *Client) ComponentVersions(ctx context.Context, q componentversions.Quer
 	if err := q.Validate(); err != nil {
 		return out, fault.Invalid(err.Error())
 	}
-	values := url.Values{"source_id": {q.SourceID}, "app_id": {q.AppID}, "channel": {q.Channel}, "page": {strconv.Itoa(q.Page)}, "refresh": {strconv.FormatBool(q.Refresh)}}
+	values := url.Values{"app_id": {q.AppID}, "channel": {q.Channel}, "page": {strconv.Itoa(q.Page)}, "refresh": {strconv.FormatBool(q.Refresh)}}
 	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/components/versions?"+values.Encode(), nil, &out)
 	return out, err
 }

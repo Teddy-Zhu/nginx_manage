@@ -21,7 +21,6 @@ import FormDialog from "./FormDialog.vue";
 const props = defineProps<{
   show: boolean;
   name: string;
-  sourceId: string;
   appId: string;
   busy?: boolean;
   submitText?: string;
@@ -95,7 +94,6 @@ async function load(refresh = false) {
   try {
     const result = await api.componentVersions(
       {
-        source_id: props.sourceId,
         app_id: props.appId,
         channel: channel.value,
         page: page.value,
@@ -119,7 +117,7 @@ async function load(refresh = false) {
   }
 }
 watch(
-  () => [props.show, props.sourceId, props.appId],
+  () => [props.show, props.appId],
   () => {
     if (props.show) {
       channel.value = "stable";
@@ -169,9 +167,9 @@ onBeforeUnmount(() => controller?.abort());
     :busy="busy"
     :submit-disabled="
       reading ||
-        !version ||
-        !!version.unavailable ||
-        version.id === catalog?.current?.id
+      !version ||
+      !!version.unavailable ||
+      version.id === catalog?.current?.id
     "
     :submit-text="
       downgrade
@@ -184,9 +182,12 @@ onBeforeUnmount(() => controller?.abort());
   >
     <div class="page-stack">
       <div class="version-toolbar">
-        <span v-if="catalog?.current" class="muted">当前版本 {{ catalog.current.version
-        }}<template v-if="catalog.current.software_version">
-          · {{ name }} {{ catalog.current.software_version }}</template></span><NSelect
+        <span v-if="catalog?.current" class="muted"
+          >当前版本 {{ catalog.current.version
+          }}<template v-if="catalog.current.software_version">
+            · {{ name }} {{ catalog.current.software_version }}</template
+          ></span
+        ><NSelect
           :value="channel"
           :options="channels"
           :disabled="reading || busy"
@@ -242,16 +243,18 @@ onBeforeUnmount(() => controller?.abort());
                   size="small"
                   type="success"
                 >
-                  当前
-                </NTag><NTag
+                  当前 </NTag
+                ><NTag
                   v-else-if="page === 1 && item.id === recommended"
                   size="small"
                   type="info"
                 >
-                  推荐
-                </NTag><NTag v-if="item.id === catalog?.previous?.id" size="small">
-                  上次安装
-                </NTag><span v-if="item.software_version" class="muted">组件 {{ item.version }}</span><span v-if="item.published_at" class="muted">{{
+                  推荐 </NTag
+                ><NTag v-if="item.id === catalog?.previous?.id" size="small">
+                  上次安装 </NTag
+                ><span v-if="item.software_version" class="muted"
+                  >组件 {{ item.version }}</span
+                ><span v-if="item.published_at" class="muted">{{
                   new Date(item.published_at * 1000).toLocaleDateString()
                 }}</span>
               </div>
@@ -262,8 +265,8 @@ onBeforeUnmount(() => controller?.abort());
                 {{ item.unavailable || item.notes }}
               </p>
             </div>
-          </div>
-        </NRadioGroup><NEmpty v-else-if="!reading" description="此通道暂无可用版本" />
+          </div> </NRadioGroup
+        ><NEmpty v-else-if="!reading" description="此通道暂无可用版本" />
         <div v-else class="version-placeholder" />
       </NSpin>
       <div v-if="page > 1 || catalog?.has_more" class="version-pagination">
@@ -271,8 +274,9 @@ onBeforeUnmount(() => controller?.abort());
           :disabled="reading || busy || page <= 1"
           @click="changePage(page - 1)"
         >
-          上一页
-        </NButton><span class="muted">第 {{ page }} 页</span><NButton
+          上一页 </NButton
+        ><span class="muted">第 {{ page }} 页</span
+        ><NButton
           :disabled="reading || busy || !catalog?.has_more"
           @click="changePage(page + 1)"
         >
