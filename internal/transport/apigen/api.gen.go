@@ -4592,6 +4592,7 @@ type ComponentVersion struct {
 	Architectures   *[]ComponentVersionArchitectures `json:"architectures,omitempty"`
 	Channel         ComponentVersionChannel          `json:"channel"`
 	Id              string                           `json:"id"`
+	ImageTag        *string                          `json:"image_tag,omitempty"`
 	MinimumCore     *string                          `json:"minimum_core,omitempty"`
 	Notes           *string                          `json:"notes,omitempty"`
 	PublishedAt     *int64                           `json:"published_at,omitempty"`
@@ -8617,6 +8618,7 @@ type SoftwareRequest struct {
 	Container  *DockerControl            `json:"container,omitempty"`
 	Fail2ban   *Fail2banContainerRequest `json:"fail2ban,omitempty"`
 	Frps       *FrpsRequest              `json:"frps,omitempty"`
+	ImageTag   *string                   `json:"image_tag,omitempty"`
 	PlanId     *string                   `json:"plan_id,omitempty"`
 	Prerelease *bool                     `json:"prerelease,omitempty"`
 	Version    *string                   `json:"version,omitempty"`

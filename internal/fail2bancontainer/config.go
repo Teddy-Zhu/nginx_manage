@@ -23,13 +23,7 @@ func render(data string, c fail2ban.ContainerConfig) error {
 		fmt.Fprintf(&text, "\n[%s]\nenabled = %t\nport = %s\nmaxretry = %d\nfindtime = %d\nbantime = %d\n", jailName(rule.ID), rule.Enabled, strings.Join(ports, ","), rule.MaxRetry, rule.FindTime, rule.BanTime)
 		switch rule.Kind {
 		case "ssh":
-			journal := false
-			for _, dir := range []string{"/run/log/journal", "/var/log/journal"} {
-				if info, err := os.Stat(dir); err == nil && info.IsDir() {
-					journal = true
-				}
-			}
-			if journal {
+			if hasSSHJournal() {
 				text.WriteString("filter = sshd\nbackend = systemd\njournalmatch = _SYSTEMD_UNIT=ssh.service + _SYSTEMD_UNIT=sshd.service\n")
 			} else {
 				path := ""
@@ -67,4 +61,13 @@ func render(data string, c fail2ban.ContainerConfig) error {
 		}
 	}
 	return atomicFile(filepath.Join(directory(data), "data", "jail.d", "nginxpanel.local"), []byte(text.String()), 0644)
+}
+
+func hasSSHJournal() bool {
+	for _, dir := range []string{"/run/log/journal", "/var/log/journal"} {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
 }

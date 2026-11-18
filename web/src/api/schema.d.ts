@@ -5299,6 +5299,7 @@ export interface components {
             id: string;
             version: string;
             software_version?: string;
+            image_tag?: string;
             /** @enum {string} */
             channel: "stable" | "beta";
             /** Format: int64 */
@@ -5389,6 +5390,7 @@ export interface components {
             frps?: components["schemas"]["FrpsRequest"];
             container?: components["schemas"]["DockerControl"];
             version?: string;
+            image_tag?: string;
             auto_start?: boolean;
         };
         SoftwareResult: {

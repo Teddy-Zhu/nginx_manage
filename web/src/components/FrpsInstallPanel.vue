@@ -23,7 +23,7 @@ import {
   type FrpsConfig,
   type FrpsStatus,
   type FrpsRequest,
-  type ComponentVersion,
+  type SoftwareRequest,
 } from "../api/client";
 import { useSoftwareOperations } from "../composables/software";
 import { useLiveRefresh } from "../composables/live";
@@ -275,13 +275,15 @@ async function save() {
   );
   if (task) editing.value = false;
 }
-async function installVersion(version: ComponentVersion) {
+async function installVersion(
+  choice: Pick<SoftwareRequest, "version" | "image_tag">,
+) {
   if (!pendingInstall.value) return;
   const task = await submit(
     {
       action: "install",
       app_id: "frps",
-      version: version.id,
+      ...choice,
       frps: { action: "install", config: pendingInstall.value },
     },
     "FRP 服务端安装日志",
@@ -297,7 +299,11 @@ onMounted(load);
     name="FRP 服务端"
     app-id="frps"
     :busy="processing"
-    @choose="installVersion"
+    allow-image-tag
+    start-with-image-tag
+    submit-text="安装"
+    @choose="installVersion({ version: $event.id })"
+    @choose-tag="installVersion({ image_tag: $event })"
     @cancel="
       pendingInstall = null;
       editing = true;

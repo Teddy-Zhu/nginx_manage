@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"nginxpanel/internal/components"
@@ -176,15 +177,31 @@ func (s *Server) manageComponentVersion(ctx context.Context, r software.Request,
 		}
 	}
 	var selected *componentversions.BuiltinRelease
-	for _, candidate := range document.Applications[app] {
-		if candidate.ID == r.Version {
-			release := candidate
-			selected = &release
-			break
+	if r.Version == "" {
+		tag := r.ImageTag
+		if tag == "" {
+			tag = componentversions.LatestImageTag
 		}
-	}
-	if selected == nil && state.Previous != nil && state.Previous.ID == r.Version && state.PreviousImage != "" {
-		selected = &componentversions.BuiltinRelease{Version: *state.Previous, Image: state.PreviousImage}
+		ref, pullErr := software.PullBuiltinTag(ctx, app, tag, progress)
+		if pullErr != nil {
+			return out, pullErr
+		}
+		_, digest, _ := strings.Cut(ref, "@sha256:")
+		selected = &componentversions.BuiltinRelease{
+			Version: componentversions.Version{ID: "image-" + digest, Version: tag, ImageTag: tag, Channel: "stable"},
+			Image:   ref,
+		}
+	} else {
+		for _, candidate := range document.Applications[app] {
+			if candidate.ID == r.Version {
+				release := candidate
+				selected = &release
+				break
+			}
+		}
+		if selected == nil && state.Previous != nil && state.Previous.ID == r.Version && state.PreviousImage != "" {
+			selected = &componentversions.BuiltinRelease{Version: *state.Previous, Image: state.PreviousImage}
+		}
 	}
 	if selected == nil {
 		return out, fault.Invalid("请选择可用的软件版本")
@@ -196,12 +213,16 @@ func (s *Server) manageComponentVersion(ctx context.Context, r software.Request,
 	if state.Current != nil && state.Current.ID == selected.ID && state.Image != selected.Image {
 		return out, errors.New("同一版本的镜像摘要已改变")
 	}
-	if state.Current != nil {
+	if state.Current != nil && state.Current.ImageTag == "" && selected.ImageTag == "" {
 		if direction, compareErr := releases.CompareVersions(selected.Version.Version, state.Current.Version); compareErr == nil && direction < 0 {
 			progress("正在降级，现有配置或数据可能与目标版本不兼容")
 		}
 	}
-	progress("正在切换到组件版本 " + selected.Version.Version)
+	label := "版本 " + selected.Version.Version
+	if selected.ImageTag != "" {
+		label = "镜像标签 " + selected.ImageTag
+	}
+	progress("正在切换到" + label)
 	var restore func(context.Context) error
 	switch app {
 	case "frps":
@@ -265,6 +286,6 @@ func (s *Server) manageComponentVersion(ctx context.Context, r software.Request,
 		return out, fmt.Errorf("软件已安装，但记录版本失败：%w", err)
 	}
 	out.Version = &selected.Version
-	out.Message = "已切换到版本 " + selected.Version.Version
+	out.Message = "已切换到" + label
 	return out, nil
 }

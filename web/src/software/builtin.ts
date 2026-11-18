@@ -35,6 +35,8 @@ export function builtinSoftware(
             task.result.release.images.some((image) => image.id === "nginx")))),
   );
   const version = overview?.versions?.nginx;
+  const engineVersion =
+    version?.software_version || overview?.installation?.version;
   const nginx: BuiltinSoftwareView = {
     id: "nginx",
     name: "Nginx",
@@ -46,10 +48,10 @@ export function builtinSoftware(
     task,
     status: softwareStatus(installed, runtime, task),
     entry: { to: "/nginx" },
-    note: version
-      ? `组件 ${version.version} · Nginx ${version.software_version ?? version.version}`
-      : overview?.installation
-        ? `Nginx ${overview.installation.version}`
+    note: engineVersion
+      ? `Nginx ${engineVersion}`
+      : version
+        ? `组件 ${version.version}`
         : "系统内置",
     scopes: ["components.manage"],
     actions: ["install", "update"],
@@ -96,9 +98,11 @@ export function builtinSoftware(
         task,
         status: softwareStatus(installed, runtime, task),
         entry: { to: "/" + service.id },
-        note: version
-          ? `组件 ${version.version} · 软件 ${version.software_version ?? version.version}`
-          : "系统内置",
+        note: version?.image_tag
+          ? `镜像标签 ${version.image_tag}`
+          : version
+            ? `组件 ${version.version} · 软件 ${version.software_version ?? version.version}`
+            : "系统内置",
         scopes:
           service.id === "fail2ban"
             ? ["components.manage", "system.write", "security.write"]

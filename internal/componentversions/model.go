@@ -3,6 +3,7 @@ package componentversions
 
 import (
 	"errors"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -11,11 +12,17 @@ import (
 )
 
 const BundledNginxID = "bundled-nginx"
+const LatestImageTag = "latest"
+
+var imageTag = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+
+func ValidImageTag(tag string) bool { return imageTag.MatchString(tag) }
 
 type Version struct {
 	ID              string   `json:"id"`
 	Version         string   `json:"version"`
 	SoftwareVersion string   `json:"software_version,omitempty"`
+	ImageTag        string   `json:"image_tag,omitempty"`
 	Channel         string   `json:"channel"`
 	PublishedAt     int64    `json:"published_at,omitempty"`
 	Notes           string   `json:"notes,omitempty"`
@@ -72,7 +79,11 @@ func Identifier(value string) bool {
 }
 
 func (v Version) Validate() error {
-	if len(v.ID) < 1 || len(v.ID) > 128 || strings.ContainsAny(v.ID, " \t\r\n/\\\x00") || !releases.ValidChannel(v.Version, v.Channel) || len(v.SoftwareVersion) > 128 || len(v.Notes) > 8192 || len(v.Architectures) > 8 || len(v.Unavailable) > 1024 || v.PublishedAt < 0 {
+	validVersion := releases.ValidChannel(v.Version, v.Channel)
+	if v.ImageTag != "" {
+		validVersion = ValidImageTag(v.ImageTag) && v.Version == v.ImageTag && (v.Channel == "stable" || v.Channel == "beta")
+	}
+	if len(v.ID) < 1 || len(v.ID) > 128 || strings.ContainsAny(v.ID, " \t\r\n/\\\x00") || !validVersion || len(v.SoftwareVersion) > 128 || len(v.Notes) > 8192 || len(v.Architectures) > 8 || len(v.Unavailable) > 1024 || v.PublishedAt < 0 {
 		return errors.New("组件版本信息无效")
 	}
 	if v.MinimumCore != "" {
@@ -107,6 +118,12 @@ func ApplyAvailability(v Version, core string) Version {
 
 func Sort(versions []Version) {
 	slices.SortStableFunc(versions, func(a, b Version) int {
+		if (a.ImageTag != "") != (b.ImageTag != "") {
+			if a.ImageTag != "" {
+				return 1
+			}
+			return -1
+		}
 		if comparison, err := releases.CompareVersions(a.Version, b.Version); err == nil && comparison != 0 {
 			return -comparison
 		}

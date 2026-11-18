@@ -9,6 +9,7 @@ import (
 	"nginxpanel/internal/software"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -70,6 +71,13 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 		progress("正在检查安装条件")
 		if _, err = command(ctx, "run", "--rm", "--entrypoint", "/bin/sh", c.Image, "-ec", `for utility in fail2ban-client python3 ipset iptables-legacy ip6tables-legacy flock; do command -v "$utility" >/dev/null || exit 1; done`); err != nil {
 			return out, fmt.Errorf("下载来源缺少所需防护工具，请使用兼容的 Fail2ban 镜像：%w", err)
+		}
+		if hasSSHJournal() && slices.ContainsFunc(c.Rules, func(rule fail2ban.ContainerRule) bool {
+			return rule.Enabled && rule.Kind == "ssh"
+		}) {
+			if _, err = command(ctx, "run", "--rm", "--entrypoint", "python3", c.Image, "-c", "from systemd import journal"); err != nil {
+				return out, fmt.Errorf("此镜像无法读取 SSH 登录日志，请选择 Debian 镜像：%w", err)
+			}
 		}
 		progress("正在准备防护环境")
 		if err = prepareKernel(ctx); err != nil {

@@ -6,7 +6,6 @@ import {
   useNodeAPI,
   type ComponentOverview,
   type ComponentTask,
-  type ComponentVersion,
   type SoftwareRequest,
 } from "../api/client";
 import { useSession } from "../stores/session";
@@ -74,14 +73,16 @@ async function submit(request: SoftwareRequest, title: string) {
     setBusy(false);
   }
 }
-async function chooseVersion(version: ComponentVersion) {
+async function chooseVersion(
+  choice: Pick<SoftwareRequest, "version" | "image_tag">,
+) {
   const action = versionOperation.value;
   const appID = props.app.id;
   if (!action || !permitted.value || appID === "nginx") return;
   const request: SoftwareRequest = {
     action,
     app_id: appID,
-    version: version.id,
+    ...choice,
   };
   if (action === "install" && appID === "fail2ban")
     request.auto_start = autoStart.value;
@@ -124,8 +125,11 @@ function operate(action: SoftwareOperation) {
     :name="app.name"
     :app-id="app.id"
     :busy="installerBusy || active"
+    :allow-image-tag="app.id !== 'nginx'"
+    :start-with-image-tag="versionOperation === 'install'"
     :submit-text="versionOperation === 'install' ? '安装' : '切换版本'"
-    @choose="chooseVersion"
+    @choose="chooseVersion({ version: $event.id })"
+    @choose-tag="chooseVersion({ image_tag: $event })"
     @cancel="versionOperation = null"
   >
     <label

@@ -24,6 +24,7 @@ type Request struct {
 	PlanID     string                     `json:"plan_id,omitempty"`
 	Prerelease bool                       `json:"prerelease,omitempty"`
 	Version    string                     `json:"version,omitempty"`
+	ImageTag   string                     `json:"image_tag,omitempty"`
 	AutoStart  *bool                      `json:"auto_start,omitempty"`
 }
 
@@ -46,6 +47,7 @@ func (r Request) Validate() error {
 	if r.Action != "update-panel" && (r.PlanID != "" || r.Prerelease) ||
 		r.Action != "install" && r.AutoStart != nil ||
 		r.Action != "install" && r.Action != "update" && r.Action != "install-nginx" && r.Version != "" ||
+		r.Action != "install" && r.Action != "update" && r.ImageTag != "" ||
 		r.Action != "container" && r.Container != nil ||
 		r.Action != "fail2ban" && r.Fail2ban != nil ||
 		r.Action != "frps" && r.Action != "install" && r.Frps != nil {
@@ -95,9 +97,14 @@ func (r Request) validateComponent() error {
 	if r.AppID != "frps" && r.AppID != "fail2ban" {
 		return errors.New("内置组件不存在")
 	}
-	if (r.Action == "install" || r.Action == "update") &&
-		(r.Version == "" || len(r.Version) > 128 || strings.ContainsAny(r.Version, " \t\r\n/\\\x00")) {
-		return errors.New("请选择可用的组件版本")
+	if r.Action == "install" || r.Action == "update" {
+		if r.ImageTag != "" {
+			if r.Version != "" || !componentversions.ValidImageTag(r.ImageTag) {
+				return errors.New("请选择组件版本或输入有效的 Docker 镜像标签")
+			}
+		} else if (r.Action == "update" && r.Version == "") || len(r.Version) > 128 || strings.ContainsAny(r.Version, " \t\r\n/\\\x00") {
+			return errors.New("请选择可用的组件版本")
+		}
 	}
 	if r.Action != "install" {
 		return nil
