@@ -2,16 +2,45 @@
 import base64
 import hashlib
 import io
+import json
+from types import SimpleNamespace
 import unittest
 from contextlib import redirect_stderr
 from unittest.mock import patch
 import urllib.parse
 import urllib.request
 
-from images import Registry, RegistryRedirectRejected, Redirects, image_repository
+from images import Registry, RegistryNotFound, RegistryRedirectRejected, Redirects, image_repository, tag
 
 
 class ImageRegistryTests(unittest.TestCase):
+    def test_published_tag_is_the_signed_component_version(self):
+        repository = "docker.io/myteam/nginxpanel-nginx"
+        raw = b'{"schemaVersion":2}'
+        digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+        for version in ("2.0.1", "2.0.1-dev"):
+            args = SimpleNamespace(repository="source/project", version=version, commit="a" * 40, input=None)
+            manifest = {
+                "repository": args.repository, "version": version, "assets": [],
+                "images": [{"id": "nginx", "repository": repository, "version": version,
+                            "commit": args.commit, "digest": digest}],
+            }
+            env = {"NGINX_IMAGE_REPOSITORY": repository, "GITHUB_RUN_ID": "44", "GITHUB_RUN_ATTEMPT": "2"}
+            with self.subTest(version=version), patch.dict("os.environ", env, clear=True), \
+                    patch("images.read", return_value=json.dumps(manifest).encode()), \
+                    patch("images.Registry") as registry, patch("images.subprocess.run") as run:
+                registry.return_value.get.side_effect = [RegistryNotFound(), raw]
+                tag(args)
+                self.assertEqual([call.args for call in registry.return_value.get.call_args_list],
+                                 [("manifests", version)] * 2)
+                self.assertEqual(run.call_args.args[0][-2:], [repository + ":" + version, repository + "@" + digest])
+                registry.return_value.get.side_effect = None
+                registry.return_value.get.return_value = b"another manifest"
+                run.reset_mock()
+                with self.assertRaisesRegex(ValueError, "请使用新的组件版本"):
+                    tag(args)
+                run.assert_not_called()
+
     def test_explicit_docker_hub_repository_is_used_without_tags(self):
         with patch.dict("os.environ", {"NGINX_IMAGE_REPOSITORY": "docker.io/myteam/nginxpanel-nginx"}, clear=True):
             self.assertEqual(image_repository("source/project", "nginx"), "docker.io/myteam/nginxpanel-nginx")

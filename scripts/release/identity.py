@@ -19,19 +19,23 @@ def identity(component, tag, version, run, attempt, reuse_version=False, channel
         if not tag.startswith(prefix):
             raise ValueError("release tag has the wrong component prefix")
         version = tag[len(prefix):]
-    else:
-        if channel == "stable":
-            if "-" in version.split("+", 1)[0]:
-                raise ValueError("stable component versions cannot contain a prerelease suffix")
-        elif channel == "dev" and not version.endswith("-dev"):
+    elif channel:
+        if "+" in version:
+            raise ValueError("Nginx 组件版本直接用作 Docker 标签，请移除 + 构建元数据")
+        if channel == "stable" and "-" in version:
+            raise ValueError("Nginx 稳定版请填写 X.Y.Z")
+        if channel == "dev" and not version.endswith("-dev"):
+            if "-" in version:
+                raise ValueError("Nginx 开发版请填写 X.Y.Z 或以 -dev 结尾的版本")
             version += "-dev"
-        if channel != "stable" and (not version.endswith("-dev") or "+" in version):
+    else:
+        if not version.endswith("-dev") or "+" in version:
             raise ValueError("tag-free builds require a base version ending in -dev, without build metadata")
-        if channel != "stable" and not reuse_version:
+        if not reuse_version:
             if not re.fullmatch(r"[1-9][0-9]*", run) or not re.fullmatch(r"[1-9][0-9]*", attempt):
                 raise ValueError("development builds require the GitHub run ID and attempt")
             version = version[:-4] + f"-{run}.{attempt}-dev"
-        tag = prefix + version
+    tag = prefix + version
     # The Go publication tool performs the complete SemVer validation before
     # signing. This bound also keeps paths, workflow outputs and OCI tags safe.
     if len(version) > 96 or not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", version):
@@ -49,11 +53,12 @@ def main():
     p.add_argument("--tag", default="")
     p.add_argument("--version", default="")
     p.add_argument("--channel", choices=("stable", "dev"), default="", help="independent Nginx release channel")
-    p.add_argument("--reuse-version", action="store_true", help="reuse a pinned development build version during publication")
+    p.add_argument("--reuse-version", action="store_true", help="reuse a pinned core development version during publication")
     args = p.parse_args()
     version, tag, create_tag = identity(args.component, args.tag, args.version,
                                         os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", ""), args.reuse_version, args.channel)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    engine = ""
     if not create_tag:
         target = subprocess.check_output(["git", "rev-parse", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
         if target != commit:
@@ -81,6 +86,8 @@ def main():
         policy.write_text(json.dumps({"version": version, "automatic_rollback": False}) + "\n", encoding="utf-8")
     values = {"version": version, "commit": commit, "tag": tag,
               "create_tag": str(create_tag).lower(), "notes": str(notes), "policy": str(policy)}
+    if engine:
+        values["nginx_version"] = engine
     with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
         for key, value in values.items():
             output.write(f"{key}={value}\n")

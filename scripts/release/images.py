@@ -69,7 +69,7 @@ def image_repository(repository, image):
 def identity(args):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*", args.repository):
         raise ValueError("invalid repository identity")
-    if not re.fullmatch(r"[0-9A-Za-z.+-]{1,128}", args.version) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", args.commit):
+    if not re.fullmatch(r"[0-9][0-9A-Za-z.-]{0,127}", args.version) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", args.commit):
         raise ValueError("invalid source version or commit")
     run = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
     if not re.fullmatch(r"[0-9]+-[0-9]+", run):
@@ -341,21 +341,20 @@ def tag(args):
         raise ValueError("version tags require the signed component-only manifest")
     image = manifest["images"][0]
     repository = image_repository(args.repository, image["id"])
-    if image["repository"] != repository or image["commit"] != args.commit or not DIGEST.fullmatch(image["digest"]):
+    if image["repository"] != repository or image["version"] != args.version or image["commit"] != args.commit or not DIGEST.fullmatch(image["digest"]):
         raise ValueError("signed image source identity changed")
-    version_tag = "v" + args.version.replace("+", "_")
     registry = Registry(repository)
     try:
-        existing = registry.get("manifests", version_tag)
+        existing = registry.get("manifests", args.version)
     except RegistryNotFound:
         existing = None
     if existing is not None:
         if "sha256:" + hashlib.sha256(existing).hexdigest() != image["digest"]:
-            raise ValueError("component version tag already refers to a different image")
+            raise ValueError(f"{repository}:{args.version} 已发布且指向其他镜像摘要，请使用新的组件版本")
         return
-    subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", repository + ":" + version_tag,
+    subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", repository + ":" + args.version,
                     repository + "@" + image["digest"]], check=True, timeout=120)
-    if "sha256:" + hashlib.sha256(registry.get("manifests", version_tag)).hexdigest() != image["digest"]:
+    if "sha256:" + hashlib.sha256(registry.get("manifests", args.version)).hexdigest() != image["digest"]:
         raise ValueError("published version tag does not match the signed digest")
 
 

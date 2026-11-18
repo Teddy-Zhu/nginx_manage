@@ -9,19 +9,20 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(identity("nginx", "", "2.0.0", "44", "1", channel="stable"),
                          ("2.0.0", "nginx-v2.0.0", True))
 
-    def test_dev_versions_are_unique_and_keep_the_dev_suffix(self):
+    def test_component_dev_versions_are_independent_of_run_number(self):
         for base in ("2.0.1", "2.0.1-dev"):
-            self.assertEqual(identity("nginx", "", base, "44", "2", channel="dev"),
-                             ("2.0.1-44.2-dev", "nginx-v2.0.1-44.2-dev", True))
+            self.assertEqual(identity("nginx", "", base, "", "", channel="dev"),
+                             ("2.0.1-dev", "nginx-v2.0.1-dev", True))
 
     def test_publication_reuses_exact_build_version(self):
-        for channel, version in (("stable", "2.0.0"), ("dev", "2.0.1-44.2-dev")):
-            self.assertEqual(identity("nginx", "", version, "99", "10", True, channel),
+        for channel, version in (("stable", "2.0.0"), ("dev", "2.0.1-dev"), ("dev", "2.0.1-rc.1-dev")):
+            self.assertEqual(identity("nginx", "", version, "99", "10", channel=channel),
                              (version, "nginx-v" + version, True))
 
     def test_invalid_or_ambiguous_component_versions_are_rejected(self):
         for version, channel in (("2.0.0-dev", "stable"), ("v2.0.0", "stable"),
-                                 ("02.0.0", "stable"), ("2.0.0+meta", "dev")):
+                                 ("02.0.0", "stable"), ("2.0.0+meta", "dev"),
+                                 ("2.0.0+meta", "stable"), ("2.0.0-rc.1", "dev")):
             with self.subTest(version=version, channel=channel), self.assertRaises(ValueError):
                 identity("nginx", "", version, "44", "1", channel=channel)
         with self.assertRaises(ValueError):

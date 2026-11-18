@@ -1,15 +1,15 @@
 name: Nginx Docker release（Nginx 镜像发布）
+run-name: Nginx 组件 ${{ inputs.version }} (${{ inputs.channel }})
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Nginx 组件独立版本，如 1.0.0；与核心及 Nginx 引擎版本分别管理"
+        description: "组件版本与 Docker 标签，如 1.2.3 或 1.2.3-dev"
         required: true
-        default: 1.0.0
         type: string
       channel:
-        description: "发布通道：stable 为稳定版，dev 自动追加构建编号并发布为预发布版本"
+        description: "stable 发布正式版，dev 发布预发布版并补全 -dev 后缀"
         required: true
         default: stable
         type: choice
@@ -17,10 +17,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: nginx-release-${{ inputs.version }}-${{ inputs.channel }}
-  cancel-in-progress: false
 
 env:
   GOTOOLCHAIN: local
@@ -75,6 +71,16 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/release/identity.py --component nginx --channel "$RELEASE_CHANNEL" --version "$RELEASE_BASE_VERSION"
+      - name: Show planned release versions
+        env:
+          RELEASE_VERSION: ${{ steps.identity.outputs.version }}
+          RELEASE_TAG: ${{ steps.identity.outputs.tag }}
+          NGINX_VERSION: ${{ steps.identity.outputs.nginx_version }}
+          NGINX_IMAGE_REPOSITORY: docker.io/${{ vars.NGINX_DOCKERHUB_REPOSITORY || format('{0}/nginxpanel-nginx', vars.DOCKERHUB_USERNAME) }}
+        shell: bash
+        run: |
+          printf "### 计划发布版本\n\n- 组件版本 \`%s\`\n- Docker 镜像 \`%s:%s\`\n- GitHub Release \`%s\`\n- Nginx 引擎 \`%s\`\n" \
+            "$RELEASE_VERSION" "$NGINX_IMAGE_REPOSITORY" "$RELEASE_VERSION" "$RELEASE_TAG" "$NGINX_VERSION" >> "$GITHUB_STEP_SUMMARY"
       - name: Check release scripts
         run: python3 -B -m unittest discover -s scripts/release -p 'test_*.py'
 
@@ -146,6 +152,9 @@ jobs:
 
   publish:
     needs: [identity, images]
+    concurrency:
+      group: nginx-publish-${{ needs.identity.outputs.version }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     environment: release
@@ -168,7 +177,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/release/identity.py --component nginx --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --reuse-version
+          python3 scripts/release/identity.py --component nginx --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -241,3 +250,5 @@ jobs:
           options=()
           if [ "$RELEASE_CREATE_TAG" = true ]; then options+=(--create-tag); fi
           python3 scripts/release/publish.py --repository "$GH_REPO" --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --directory .release/output "${options[@]}"
+          printf "### 发布完成\n\n- Docker 镜像 \`%s:%s\`\n- [GitHub Release](%s/%s/releases/tag/%s)\n" \
+            "$NGINX_IMAGE_REPOSITORY" "${RELEASE_TAG#nginx-v}" "$GITHUB_SERVER_URL" "$GH_REPO" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"

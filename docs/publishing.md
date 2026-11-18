@@ -31,10 +31,10 @@ Nginx 工作流没有 `tag` 输入，使用独立的 `version` 与 `channel`：
 
 | `version` | `channel` | 实际组件版本与发布结果 |
 | --- | --- | --- |
-| `1.0.0` | `stable` | `1.0.0`，正式 Release，镜像标签 `v1.0.0` |
-| `1.0.1` 或 `1.0.1-dev` | `dev` | 如 `1.0.1-123456789.1-dev`，Prerelease，同名版本镜像标签带 `v` 前缀 |
+| `1.0.0` | `stable` | Docker 标签 `1.0.0`，正式 Release `nginx-v1.0.0` |
+| `1.0.1` 或 `1.0.1-dev` | `dev` | Docker 标签 `1.0.1-dev`，预发布 `nginx-v1.0.1-dev` |
 
-组件版本表示本项目 Nginx 镜像的发行版本，由该工作流的 `version` 输入决定。上游 Nginx 引擎版本由组件的基础镜像及能力清单决定，例如组件 `1.0.0` 和 `1.0.1` 可以都使用同一个 Nginx 引擎。面板核心另有自己的版本。稳定版组件版本号必须唯一，发布自动生成 GitHub Release 的 `nginx-v<组件版本>` 标签、说明和策略。首次离线安装使用随包镜像时，软件商店显示实际 Nginx 引擎版本，切换到独立发行镜像后同时显示组件版本。
+组件版本由工作流的 `version` 输入决定。上游 Nginx 引擎版本由组件的基础镜像及能力清单决定，面板核心另有自己的版本。Action 摘要列出计划发布的 Docker 镜像、GitHub Release 标签和实际打包的 Nginx 引擎版本。首次离线安装使用随包镜像时，软件商店显示实际 Nginx 引擎版本，切换到独立发行镜像后可查看组件版本和 Nginx 引擎版本。
 
 分支构建固定使用本次触发时的提交。修改工作流或修复打包脚本后，应先将修复提交推送到所选分支，再发起一次新的运行；发布已有标签时则需创建包含修复的新版本标签。旧运行的 **Re-run failed jobs** 保留原始提交，详见 [GitHub 重跑说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)。
 
@@ -100,7 +100,7 @@ gh workflow run nginx-release.yml --ref main -f version=1.0.1 -f channel=dev
 
 工作流在 amd64、arm64 原生运行器分别构建 Nginx 专用启动器，将其与固定摘要的上游 Nginx 基础镜像和预置模块打包为组件镜像。合并任务只引用推送后的原始摘要，保留 BuildKit SBOM 和 SLSA 来源证据，再由 Go 发布工具独立核对并签名。
 
-镜像同时具有版本标签，例如 `docker.io/myteam/nginxpanel-nginx:v1.0.0`。SemVer 构建元数据中的 `+` 在 Docker 标签中替换为 `_`。已有版本标签若指向不同摘要，发布停止；不覆盖旧版本。面板部署使用签名清单中的 `repository@sha256:...`，不依赖可变标签。
+正式镜像使用组件版本作为 Docker 标签，例如 `docker.io/myteam/nginxpanel-nginx:1.0.0`。Docker 标签不支持 `+`，组件版本请省略此类构建元数据。每次重新发布不同镜像时都要更换版本号，已有版本标签若指向不同摘要，发布会停止。面板部署使用签名清单中的 `repository@sha256:...`。两个架构的 `build-*` 标签用于构建和校验，发布完成后可在 Action 摘要查看正式镜像。
 
 对应 GitHub Release 自动使用 `nginx-v1.0.0` 等组件标签，包含 `release-manifest.json`、`release-manifest.sig`、`nginx.oci.json` 和 `checksums.txt`，不附带核心二进制或安装脚本，也不会成为仓库 Latest。`make_latest` 行为见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
 
@@ -118,7 +118,7 @@ gh workflow run release.yml --ref main -f version=1.2.4-dev
 gh workflow run nginx-release.yml --ref main -f version=1.0.1 -f channel=dev
 ```
 
-开发版本增加 GitHub run ID 和 attempt，例如 `1.2.4-123456789.1-dev`，防止不同源码复用同一版本。流程自动生成说明及关闭自动回滚的策略，发布阶段复用构建版本；只重跑失败的发布任务不会改变版本。GitHub 标签由流程自动生成，已有发行或失败上传留下的草稿不会被覆盖，失败后查看记录并另行发起新构建。核心普通手工 `v1.2.4-dev` 标签仍可触发发布，需提交对应说明和策略；Nginx 仅从 Actions 的版本与通道输入发布。
+核心开发版本增加 GitHub run ID 和 attempt，例如 `1.2.4-123456789.1-dev`。Nginx 开发版使用填写的组件版本，并在需要时补全 `-dev`，例如 `1.0.1-dev`。两个流程都自动生成 GitHub 标签、发行说明及关闭自动回滚的策略。已有发行或失败上传留下的草稿会使同版本发布停止。核心普通手工 `v1.2.4-dev` 标签仍可触发发布，需提交对应说明和策略。
 
 通常使用工作流自带的 `GITHUB_TOKEN`。如果源码分支修改了 `.github/workflows`，GitHub 可能要求额外的 Workflows 写入权限才能创建源码标签；此时在 `release` environment 配置可选的 `RELEASE_GITHUB_TOKEN`，使用具备该仓库 Contents 和 Workflows 写入权限的令牌。签名凭据要求与稳定版相同，参见 [GitHub 创建发行的权限说明](https://docs.github.com/en/rest/releases/releases#create-a-release)。
 
