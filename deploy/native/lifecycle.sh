@@ -444,14 +444,28 @@ lifecycle_finish_reinstall() {
 lifecycle_action() {
   case "$action" in
     uninstall)
+      local mode=keep answer
       if [[ $purge == yes ]]; then
+        mode=purge
+      elif [[ $keep_data == no && $yes == no && -t 0 && -t 1 ]]; then
+        while :; do
+          read -r -p "是否清理数据目录 $data？[y/N]: " answer || die '输入已结束，卸载取消'
+          case "$answer" in
+            y|Y|yes|YES) mode=purge; break ;;
+            ''|n|N|no|NO) break ;;
+            *) printf '%s\n' '请输入 y 或 n' ;;
+          esac
+        done
+      fi
+      if [[ $mode == purge ]]; then
         confirm_change "完全卸载将永久删除本系统程序、配置、密钥、证书、备份及数据目录 $data，并停止代理服务。"
       else
+        case "$lifecycle_state" in
+          purging|purge-uninstalling) die '完全卸载尚未完成，请续办 uninstall --purge' ;;
+        esac
         confirm_change "卸载将停止并移除本系统服务与运行程序，保留 $data 中的数据和重装材料。"
       fi
       lifecycle_lock
-      local mode=keep
-      if [[ $purge == yes ]]; then mode=purge; fi
       lifecycle_uninstall "$mode" ;;
     reinstall)
       confirm_change "重新安装将恢复卸载前的版本、配置及服务启停状态；运行中的代理会中断，数据目录为 $data。"

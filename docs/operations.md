@@ -169,7 +169,9 @@ sudo /opt/nginxpanel/current/nginxpanel management-listener-disable \
 ### 卸载与重新安装
 
 ```sh
-# 保留数据卸载，也是 uninstall 的默认方式
+# 交互卸载，在清理数据提示直接回车会保留数据
+sudo bash /opt/nginxpanel/manage.sh uninstall
+# 明确保留数据
 sudo bash /opt/nginxpanel/manage.sh uninstall --keep-data
 # 恢复卸载前版本；已安装时也可直接执行，自动完成卸载与重装
 sudo bash /opt/nginxpanel/manage.sh reinstall
@@ -177,7 +179,7 @@ sudo bash /opt/nginxpanel/manage.sh reinstall
 sudo bash /opt/nginxpanel/manage.sh uninstall --purge
 ```
 
-三种操作均先确认影响；非交互执行需加 `--yes`。卸载会停止代理流量。
+选择清理数据后，脚本会再次列出将删除的内容，确认后才执行。非交互卸载使用 `uninstall --yes` 保留数据，使用 `uninstall --purge --yes` 清理数据。卸载会停止代理流量。
 
 若提示 `unknown subcommand "installation-removal-check"`，说明管理脚本与已安装宿主程序版本不同，该检查发生在删除之前。从最新源码或完整安装包执行 `sudo bash install.sh --uninstall --keep-data` 或 `sudo bash install.sh --uninstall --purge`，入口会使用新工具检查旧安装；源码仅在 Docker 中编译。尚未使用、希望清空原数据并安装当前版本时使用 `sudo bash install.sh --fresh`。具体步骤见[旧版本处理](deployment.md#旧版本卸载与未使用环境更新)。
 

@@ -21,7 +21,7 @@ usage() {
   set-port 端口                修改主入口端口，运行中的面板自动重启
   set-protocol http|https      切换访问协议，运行中的面板自动重启
   disable-remote               请求停用附加管理入口（不关闭主入口）
-  uninstall                    卸载程序和服务，保留数据及原版本重装材料
+  uninstall                    卸载程序和服务，默认保留数据，可交互选择清理
   uninstall --keep-data        明确保留数据卸载（默认方式）
   uninstall --purge            完全卸载，删除本系统数据、配置、密钥和证书
   reinstall                    重新安装原版本，保留配置和服务启停状态
@@ -284,7 +284,7 @@ if [[ $action == menu ]]; then
   self=$(readlink -e -- "$0")
   while :; do
     printf '\nNginxPanel 管理（%s，%s）\n' "$panel_mode" "$data"
-    printf '%s\n' '  1) 部署信息' '  2) 全部服务状态' '  3) 启动服务' '  4) 停止服务' '  5) 重启服务' '  6) 服务日志' '  7) 初始化令牌' '  8) 证书指纹' '  9) 停用附加管理入口' '  10) 修改主入口端口' '  11) 卸载（保留数据）' '  12) 完全卸载' '  13) 重新安装' '  14) 切换 HTTP / HTTPS' '  0) 退出'
+    printf '%s\n' '  1) 部署信息' '  2) 全部服务状态' '  3) 启动服务' '  4) 停止服务' '  5) 重启服务' '  6) 服务日志' '  7) 初始化令牌' '  8) 证书指纹' '  9) 停用附加管理入口' '  10) 修改主入口端口' '  11) 卸载' '  12) 完全卸载' '  13) 重新安装' '  14) 切换 HTTP / HTTPS' '  0) 退出'
     read -r -p '请选择 [0]: ' selection || exit 0
     selected=
     case "$selection" in

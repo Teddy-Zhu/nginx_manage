@@ -15,7 +15,8 @@ usage() {
 --port 指定管理端口；不指定时自动选择随机空闲端口，默认允许外部访问。
 --yes 直接确认所选操作（包括完全卸载的数据删除）；--advanced 才逐项调整安装配置。
 --fresh 完全卸载旧安装后安装当前源码/安装包，永久删除原数据；适用于尚未使用的环境。
---uninstall 使用当前源码/安装包中的程序检查并卸载旧安装，默认保留数据，--purge 完全卸载。
+--uninstall 使用当前源码或安装包卸载旧安装，默认保留数据，可交互选择清理。
+--keep-data 明确保留数据，--purge 明确清理数据，均需与 --uninstall 一起使用。
 不会安装宿主机编译工具、自动安装 Docker 或接管已有系统 Nginx。
 
 带参数时转交标准安装器，例如：
@@ -182,7 +183,11 @@ if [[ $fresh == yes || $uninstall == yes ]]; then
     case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
     [[ $(elf_arch "$candidate") == "$arch" ]] || die '安装包程序与本机架构不匹配'
     removal_args=(uninstall --checker-binary "$candidate")
-    if [[ $fresh == yes || $purge == yes ]]; then removal_args+=(--purge); fi
+    if [[ $fresh == yes || $purge == yes ]]; then
+      removal_args+=(--purge)
+    elif [[ $keep_data == yes ]]; then
+      removal_args+=(--keep-data)
+    fi
     if [[ $auto_confirm == yes ]]; then removal_args+=(--yes); fi
     /bin/bash "$installer_lifecycle_stage/manage.sh" "${removal_args[@]}"
     if [[ $uninstall == yes ]]; then exit 0; fi

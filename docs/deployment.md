@@ -85,7 +85,7 @@ sudo docker ps
 
 系统更新从面板唯一的“系统更新”入口执行：检查版本、准备签名核心包并确认更新。短期独立的 `nginxpanel-core-update@<UUID>.service` 在 root 权限下批准并切换 `DATA/runtime/current`，随后重启核心服务；新程序启动时自动完成数据库迁移。Nginx 和其他应用镜像各自更新，不随核心程序更新。
 
-管理脚本支持 `uninstall --keep-data` 保留数据卸载、`uninstall --purge` 完全卸载和 `reinstall`。源码更新不会自动替换已安装核心程序；已部署环境从系统更新入口更新。
+运行 `bash setup.sh --dev` 安装开发版，加 `--uninstall` 进入卸载流程。源码入口 `install.sh` 和本机管理脚本 `manage.sh uninstall` 支持相同的数据选择，默认保留数据。可使用 `--keep-data` 或 `--purge` 明确选择。保留数据卸载后可通过 `manage.sh reinstall` 恢复原安装。已部署环境通过面板的系统更新入口升级。
 
 旧双服务或面板容器部署不能通过核心程序更新入口转换为当前结构。切换前先创建备份；需要重新安装时按管理脚本的保留数据卸载及安装流程处理。保留数据不代表旧程序、运行容器或配置格式可直接复用。
 
