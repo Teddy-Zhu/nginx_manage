@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NAlert, NButton, NTag, NSelect, useDialog } from "naive-ui";
 import { useSession } from "../stores/session";
