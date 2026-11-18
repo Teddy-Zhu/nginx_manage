@@ -37,6 +37,12 @@ type Response struct {
 }
 
 func (s *Server) respond(w http.ResponseWriter, r *http.Request, status int, code, message string, data any) {
+	if capture, ok := w.(*realtimeCapture); ok {
+		if err := capture.respond(status, code, message, data); err != nil {
+			slog.Error("realtime response encoding failed", "request_id", r.Context().Value(requestIDKey), "error", err)
+		}
+		return
+	}
 	b, err := json.Marshal(Response{code, message, data, r.Context().Value(requestIDKey).(string), s.NodeID})
 	if err != nil {
 		slog.Error("response encoding failed", "request_id", r.Context().Value(requestIDKey))

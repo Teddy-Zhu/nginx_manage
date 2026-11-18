@@ -210,7 +210,7 @@ func (g *maintenanceGate) enter(progress bool) (func(), bool) {
 	return func() { once.Do(func() { g.mu.Lock(); g.active--; g.mu.Unlock() }) }, true
 }
 func (g *maintenanceGate) closing() bool { g.mu.Lock(); defer g.mu.Unlock(); return g.id != "" }
-func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootStatus, error) {
+func (g *maintenanceGate) statusSummaryLocked() maintenance.RootStatus {
 	out := maintenance.RootStatus{Available: !g.dev && g.scope == "host", ID: g.id, Phase: g.phase, Epoch: g.epoch}
 	if out.Phase == "" {
 		out.Phase = "open"
@@ -220,13 +220,16 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 	}
 	if g.poisoned {
 		out.Phase, out.Reason = "recovery_required", "维护记录无法持久保存，须本机恢复"
-		return out, nil
 	}
-	if g.dev {
-		return out, nil
+	if !g.poisoned && !g.dev {
+		out.Busy = g.active
 	}
-	out.Busy = g.active
-	if g.active != 0 {
+	return out
+}
+
+func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootStatus, error) {
+	out := g.statusSummaryLocked()
+	if g.poisoned || g.dev || g.active != 0 {
 		return out, nil
 	}
 	records, err := g.records()
@@ -449,6 +452,11 @@ func (g *maintenanceGate) statusLocked(ctx context.Context) (maintenance.RootSta
 func (g *maintenanceGate) status(ctx context.Context) (maintenance.RootStatus, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	// The open gate has no drain to reconcile. Acquire and release still scan
+	// durable state while holding the maintenance lock.
+	if g.id == "" && (g.phase == "" || g.phase == "open") {
+		return g.statusSummaryLocked(), nil
+	}
 	return g.statusLocked(ctx)
 }
 func (g *maintenanceGate) acquire(ctx context.Context, in maintenance.RootRequest) (maintenance.RootStatus, error) {

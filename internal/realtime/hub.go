@@ -10,11 +10,16 @@ import (
 )
 
 type Observer func(context.Context, string) (string, error)
+
+const pollInterval = 2 * time.Second
+
 type Hub struct {
-	mu      sync.Mutex
-	observe Observer
-	clients map[*Subscription]bool
-	running bool
+	mu       sync.Mutex
+	observe  Observer
+	interval func(string) time.Duration
+	clients  map[*Subscription]bool
+	stop     context.CancelFunc
+	running  bool
 }
 type Subscription struct {
 	hub     *Hub
@@ -23,7 +28,9 @@ type Subscription struct {
 	Wake    chan struct{}
 }
 
-func New(observe Observer) *Hub { return &Hub{observe: observe, clients: make(map[*Subscription]bool)} }
+func New(observe Observer, interval func(string) time.Duration) *Hub {
+	return &Hub{observe: observe, interval: interval, clients: make(map[*Subscription]bool)}
+}
 func (h *Hub) Subscribe(topics []string) *Subscription {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -35,12 +42,23 @@ func (h *Hub) Subscribe(topics []string) *Subscription {
 	h.clients[s] = true
 	s.Wake <- struct{}{}
 	if !h.running {
+		ctx, stop := context.WithCancel(context.Background())
 		h.running = true
-		go h.run()
+		h.stop = stop
+		go h.run(ctx)
 	}
 	return s
 }
-func (s *Subscription) Close() { s.hub.mu.Lock(); delete(s.hub.clients, s); s.hub.mu.Unlock() }
+func (s *Subscription) Close() {
+	h := s.hub
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.clients, s)
+	if len(h.clients) == 0 && h.running {
+		h.stop()
+		h.running = false
+	}
+}
 func (s *Subscription) Take() []string {
 	s.hub.mu.Lock()
 	defer s.hub.mu.Unlock()
@@ -69,17 +87,14 @@ func (h *Hub) Notify(topics ...string) {
 		}
 	}
 }
-func (h *Hub) run() {
-	ticker := time.NewTicker(2 * time.Second)
+func (h *Hub) run(ctx context.Context) {
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	fingerprints := map[string]string{}
-	for {
+	next := map[string]time.Time{}
+	tick := time.Now()
+	for ctx.Err() == nil {
 		h.mu.Lock()
-		if len(h.clients) == 0 {
-			h.running = false
-			h.mu.Unlock()
-			return
-		}
 		topics := map[string]bool{}
 		for s := range h.clients {
 			for topic := range s.topics {
@@ -90,13 +105,19 @@ func (h *Hub) run() {
 		for topic := range fingerprints {
 			if !topics[topic] {
 				delete(fingerprints, topic)
+				delete(next, topic)
 			}
 		}
 		changed := []string{}
 		for topic := range topics {
-			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-			value, err := h.observe(ctx, topic)
+			interval := h.interval(topic)
+			if interval <= 0 || (interval > pollInterval && tick.Before(next[topic])) || ctx.Err() != nil {
+				continue
+			}
+			call, cancel := context.WithTimeout(ctx, 4*time.Second)
+			value, err := h.observe(call, topic)
 			cancel()
+			next[topic] = tick.Add(interval)
 			if err != nil {
 				value = "unavailable"
 			} else {
@@ -107,9 +128,13 @@ func (h *Hub) run() {
 				changed = append(changed, topic)
 			}
 		}
-		if len(changed) > 0 {
+		if len(changed) > 0 && ctx.Err() == nil {
 			h.Notify(changed...)
 		}
-		<-ticker.C
+		select {
+		case <-ctx.Done():
+			return
+		case tick = <-ticker.C:
+		}
 	}
 }

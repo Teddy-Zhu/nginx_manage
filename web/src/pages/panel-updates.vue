@@ -74,13 +74,13 @@ const history = computed(() =>
 );
 const updating = computed(() => history.value.some(pending));
 const active = computed(() => checking.value || updating.value);
-async function load() {
+async function load(initial = false) {
   if (updating.value && liveDisconnected.value) return;
   await run(async () => {
     const [items, current] = await Promise.all([
       api.componentTasks(),
       api.systemVersion(),
-      loadChannel(),
+      initial ? loadChannel() : undefined,
     ]);
     tasks.value = items;
     version.value = current.version;
@@ -175,7 +175,7 @@ function confirmUpdate() {
   });
 }
 useLiveRefresh(api, ["tasks"], load, () => busy.value);
-onMounted(load);
+onMounted(() => load(true));
 </script>
 <template>
   <div class="page-stack">

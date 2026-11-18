@@ -7,10 +7,7 @@ import (
 )
 
 func (s *Server) containersReady(w http.ResponseWriter, r *http.Request) bool {
-	if _, ok := s.authorize(w, r, "read"); !ok {
-		return false
-	}
-	if _, ok := s.authorize(w, r, "components.manage"); !ok {
+	if _, ok := s.authorize(w, r, "read", "components.manage"); !ok {
 		return false
 	}
 	if s.Agent == nil {

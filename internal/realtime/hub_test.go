@@ -9,17 +9,23 @@ import (
 )
 
 func TestSubscriptionCoalescingAndCleanup(t *testing.T) {
-	releaseCtx, release := context.WithCancel(context.Background())
-	defer release()
+	started, stopped := make(chan struct{}, 1), make(chan struct{}, 1)
 	h := New(func(ctx context.Context, _ string) (string, error) {
 		select {
-		case <-releaseCtx.Done():
-		case <-ctx.Done():
+		case started <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		select {
+		case stopped <- struct{}{}:
+		default:
 		}
 		return "", errors.New("unavailable")
-	})
+	}, func(string) time.Duration { return 2 * time.Second })
 	first := h.Subscribe([]string{"tasks", "monitoring"})
 	second := h.Subscribe([]string{"notifications"})
+	defer first.Close()
+	defer second.Close()
 	if !slices.Equal(first.Take(), []string{"monitoring", "tasks"}) {
 		t.Fatal("missing initial synchronization")
 	}
@@ -27,26 +33,21 @@ func TestSubscriptionCoalescingAndCleanup(t *testing.T) {
 	if !slices.Equal(first.Take(), []string{"tasks"}) {
 		t.Fatal("notifications were duplicated or leaked between subscriptions")
 	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("observer did not start")
+	}
 	first.Close()
 	second.Close()
-	release()
-	h.mu.Lock()
-	count := len(h.clients)
-	h.mu.Unlock()
-	if count != 0 {
-		t.Fatal("subscriptions retained after disconnect")
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("closing the last subscription did not cancel the active probe")
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		h.mu.Lock()
-		running := h.running
-		h.mu.Unlock()
-		if !running {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("observer did not stop without subscribers")
-		}
-		time.Sleep(10 * time.Millisecond)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.clients) != 0 || h.running {
+		t.Fatal("observer or subscriptions remained active")
 	}
 }

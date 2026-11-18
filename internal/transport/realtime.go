@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	contract "nginxpanel/api"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/firewall"
@@ -27,6 +28,18 @@ var realtimeScopes = map[string][]string{
 	"dns": {"read"}, "fail2ban": {"read"}, "logs": {"read"}, "nginx": {"read"}, "nodes": {"read", "nodes.manage"},
 	"software": {"read", "components.manage"},
 	"docker":   {"read", "components.manage"},
+}
+
+func realtimeInterval(topic string) time.Duration {
+	switch topic {
+	case "version":
+		// The frontend and binary are replaced together on process restart.
+		return 0
+	case "nginx", "software", "fail2ban":
+		return 6 * time.Second
+	default:
+		return 2 * time.Second
+	}
 }
 
 // Fingerprints select changed resources; only authorized snapshots leave the server.
@@ -351,6 +364,20 @@ func (s *Server) realtimeMutation(r *http.Request) {
 	}
 	for _, suffix := range []string{"/preview", "/plan", "/resolve", "/query", "/check", "/download"} {
 		if strings.HasSuffix(r.URL.Path, suffix) {
+			return
+		}
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1")
+	if topic, ok := contract.RealtimeTopic(path); ok {
+		switch topic {
+		case "notifications", "nodes", "backups", "monitoring":
+			s.Realtime.Notify(topic, "tasks")
+			return
+		case "nginx":
+			s.Realtime.Notify(topic, "tasks", "software")
+			return
+		case "docker", "software":
+			s.Realtime.Notify(topic, "tasks", "docker", "software")
 			return
 		}
 	}

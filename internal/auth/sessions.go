@@ -21,7 +21,8 @@ func (s *Service) SessionAlive(ctx context.Context) (bool, error) {
 		sum := sha256.Sum256([]byte(token))
 		token = base64.RawURLEncoding.EncodeToString(sum[:])
 	}
-	_, found, err := s.Sessions.Store.Find(token)
+	var found bool
+	err := s.DB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sessions WHERE token=? AND expiry>?)", token, time.Now().Unix()).Scan(&found)
 	return found, err
 }
 

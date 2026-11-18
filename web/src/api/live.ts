@@ -30,6 +30,7 @@ export interface LiveResult {
 }
 interface Entry {
   resource: string;
+  topic: LiveTopic;
   owners: Set<symbol>;
   watchers: Set<(value: LiveResult) => void>;
   waiters: Set<(value: LiveResult) => void>;
@@ -105,6 +106,9 @@ function defaults(channel: Channel) {
   const topics = new Set(
     [...channel.listeners].flatMap((listener) => listener.topics),
   );
+  for (const entry of channel.entries.values()) {
+    if (entry.owners.size) topics.delete(entry.topic);
+  }
   return resources
     .filter((route) => topics.has(route.topic as LiveTopic))
     .map((route) => route.paths[0]);
@@ -114,6 +118,7 @@ function entryFor(channel: Channel, resource: string) {
   if (!entry) {
     entry = {
       resource,
+      topic: resourceTopic(resource)!,
       owners: new Set(),
       watchers: new Set(),
       waiters: new Set(),
@@ -130,6 +135,7 @@ function prune(key: string, channel: Channel) {
   if (!channel.listeners.size && !channel.entries.size) {
     if (channel.retry) clearTimeout(channel.retry);
     channels.delete(key);
+    refreshChannels.delete(key);
   }
   status();
   schedule();
@@ -164,7 +170,7 @@ function attach(scope: RequestScope, resource: string): Binding {
     },
   };
   signal.addEventListener("abort", binding.release, { once: true });
-  schedule();
+  prune(scope.target?.connection ?? "", channel);
   return binding;
 }
 function cancelled() {
@@ -241,10 +247,11 @@ export function watchLiveResource(
   };
 }
 export function refreshLive(scope: RequestScope) {
-  const channel = channels.get(scope.target?.connection ?? "");
+  const key = scope.target?.connection ?? "";
+  const channel = channels.get(key);
   if (!channel) return;
   for (const entry of channel.entries.values()) entry.value = undefined;
-  schedule(true);
+  schedule(key);
 }
 interface Channel {
   scope: RequestScope;
@@ -264,8 +271,8 @@ let retry: ReturnType<typeof setTimeout> | undefined;
 let failures = 0,
   revision = 0,
   signature = "",
-  scheduled = false,
-  forceUpdate = false;
+  scheduled = false;
+const refreshChannels = new Set<string>();
 let intentionalClose = false;
 export const liveDisconnected = ref(false);
 function status() {
@@ -296,27 +303,29 @@ function subscriptions() {
     })
     .sort((a, b) => a.connection.localeCompare(b.connection));
 }
-function publish(force = false) {
+function publish() {
   if (socket?.readyState !== WebSocket.OPEN) return;
   const desired = subscriptions(),
     next = JSON.stringify(desired);
-  // Navigation can dispose and recreate a resource before this batch is sent.
-  // An unchanged subscription still needs a snapshot if its cache was released.
-  force ||= [...channels.values()].some((channel) =>
-    [...channel.entries.values()].some((entry) => !entry.value),
-  );
-  if (!force && next === signature) return;
-  for (const channel of channels.values()) {
+  const filters = desired.map((filter) => {
+    const channel = channels.get(filter.connection)!;
+    const refresh =
+      refreshChannels.has(filter.connection) ||
+      [...channel.entries.values()].some((entry) => !entry.value);
+    if (!refresh) return filter;
     if (channel.retry) clearTimeout(channel.retry);
     channel.retry = undefined;
-  }
+    return { ...filter, refresh: true };
+  });
+  refreshChannels.clear();
+  if (next === signature && filters.every((filter) => !("refresh" in filter)))
+    return;
   signature = next;
   socket.send(
     JSON.stringify({
       type: "subscribe",
       revision: ++revision,
-      refresh: force,
-      subscriptions: desired,
+      subscriptions: filters,
     }),
   );
 }
@@ -366,15 +375,16 @@ function receive(current: WebSocket, event: MessageEvent) {
     if (channel.retry) clearTimeout(channel.retry);
     channel.retry = setTimeout(() => {
       channel.retry = undefined;
-      schedule(true);
+      schedule(frame.connection);
     }, delay(channel.failures));
     return;
   }
   const entry = frame.resource
     ? channel.entries.get(frame.resource)
     : undefined;
+  // A page can release a resource before the next subscription is sent.
+  if (!entry) return;
   if (
-    !entry ||
     (frame.reset !== undefined && typeof frame.reset !== "boolean") ||
     (frame.code === "OK"
       ? frame.status !== undefined
@@ -401,7 +411,7 @@ function receive(current: WebSocket, event: MessageEvent) {
     }
   }
   for (const listener of [...channel.listeners]) {
-    if (listener.topics.includes(resourceTopic(frame.resource!)!)) {
+    if (listener.topics.includes(entry.topic)) {
       try {
         listener.changed();
       } catch (error) {
@@ -422,7 +432,7 @@ function connect() {
     if (socket !== current) return;
     failures = 0;
     status();
-    publish(true);
+    publish();
   };
   current.onmessage = (event) => receive(current, event);
   current.onerror = () => current.close();
@@ -451,15 +461,14 @@ function connect() {
     }, delay(failures));
   };
 }
-function schedule(force = false) {
-  forceUpdate ||= force;
+function schedule(refresh?: string) {
+  if (refresh !== undefined) refreshChannels.add(refresh);
   if (scheduled) return;
   scheduled = true;
   queueMicrotask(() => {
     scheduled = false;
-    const forced = forceUpdate;
-    forceUpdate = false;
     if (!channels.size) {
+      refreshChannels.clear();
       if (retry) clearTimeout(retry);
       retry = undefined;
       failures = 0;
@@ -469,7 +478,7 @@ function schedule(force = false) {
       socket?.close();
       status();
     } else if (!socket) connect();
-    else publish(forced);
+    else publish();
   });
 }
 

@@ -17,6 +17,7 @@ type realtimeFilter struct {
 	Connection string   `json:"connection"`
 	Topics     []string `json:"topics"`
 	Resources  []string `json:"resources"`
+	Refresh    bool     `json:"refresh,omitempty"`
 }
 type realtimeRequest struct {
 	Type          string           `json:"type"`
@@ -27,7 +28,6 @@ type realtimeRequest struct {
 type realtimeChannel struct {
 	filter realtimeFilter
 	cancel context.CancelFunc
-	failed bool
 }
 type realtimeUpdate struct {
 	channel *realtimeChannel
@@ -94,7 +94,7 @@ func (s *Server) realtimeBrowser(r *http.Request, p auth.Principal, conn *websoc
 			}
 			for key, channel := range channels {
 				filter, exists := desired[key]
-				if !exists || command.Refresh || channel.failed || !slices.Equal(filter.Topics, channel.filter.Topics) || !slices.Equal(filter.Resources, channel.filter.Resources) {
+				if !exists || command.Refresh || filter.Refresh || !slices.Equal(filter.Topics, channel.filter.Topics) || !slices.Equal(filter.Resources, channel.filter.Resources) {
 					channel.cancel()
 					delete(channels, key)
 				}
@@ -119,7 +119,6 @@ func (s *Server) realtimeBrowser(r *http.Request, p auth.Principal, conn *websoc
 				return
 			}
 			if update.error {
-				channel.failed = true
 				if err := write(realtimeMessage{realtimeValue: realtimeValue{Code: "REMOTE_STREAM_INTERRUPTED", Message: "服务器状态更新暂时中断，正在重新连接"}, Connection: channel.filter.Connection, Revision: revision}); err != nil {
 					return
 				}

@@ -16,6 +16,7 @@ export function useLiveRefresh(
   let running = false,
     pending = false,
     disposed = false;
+  let frame: number | undefined;
   const ready = () =>
     !disposed && release !== undefined && !document.hidden && !blocked();
   const drain = async () => {
@@ -39,7 +40,11 @@ export function useLiveRefresh(
     // Keep one refresh queued while a page is loading or editing. A final
     // state change may be the last notification until another user action.
     pending = true;
-    void drain();
+    if (frame !== undefined || !ready()) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      void drain();
+    });
   };
   const stopBlocked = watch(blocked, (value) => {
     if (!value && pending) void drain();
@@ -71,6 +76,7 @@ export function useLiveRefresh(
   document.addEventListener("visibilitychange", visible);
   onScopeDispose(() => {
     disposed = true;
+    if (frame !== undefined) cancelAnimationFrame(frame);
     release?.();
     stop();
     stopBlocked();

@@ -80,7 +80,30 @@ type realtimeCapture struct {
 	header   http.Header
 	status   int
 	body     bytes.Buffer
+	value    realtimeValue
 	deadline time.Time
+}
+
+func (c *realtimeCapture) respond(status int, code, message string, data any) error {
+	if c.status != 0 {
+		return nil
+	}
+	if !c.deadline.IsZero() && !time.Now().Before(c.deadline) {
+		return os.ErrDeadlineExceeded
+	}
+	raw, err := json.Marshal(data)
+	switch {
+	case err != nil:
+		c.status = http.StatusInternalServerError
+		c.value = realtimeUnavailable("实时状态读取失败")
+	case len(raw) > realtimeFrameLimit:
+		c.status = http.StatusServiceUnavailable
+		c.value = realtimeUnavailable("实时数据超出限制，请缩小查询范围")
+	default:
+		c.status = status
+		c.value = realtimeValue{Code: code, Message: message, Data: raw}
+	}
+	return err
 }
 
 func (c *realtimeCapture) Header() http.Header { return c.header }
@@ -191,14 +214,18 @@ func (state *realtimeResources) Read(ctx context.Context, topics, resources []st
 		if u.Path == "/api/v1/logs/live" && capture.status == http.StatusNoContent {
 			continue
 		}
-		var value realtimeValue
-		if capture.status == 0 || json.Unmarshal(capture.body.Bytes(), &value) != nil || value.Code == "" || len(value.Data) == 0 || (value.Code == "OK") != (capture.status >= 200 && capture.status < 300) {
+		value := capture.value
+		if capture.body.Len() > 0 && json.Unmarshal(capture.body.Bytes(), &value) != nil {
+			value = realtimeValue{}
+		}
+		if capture.status == 0 || value.Code == "" || len(value.Data) == 0 || (value.Code == "OK") != (capture.status >= 200 && capture.status < 300) {
 			value = realtimeUnavailable("实时状态读取失败")
 		}
-		if total+capture.body.Len() > 7<<20 {
+		size := max(len(value.Data)+len(value.Code)+len(value.Message), capture.body.Len())
+		if total+size > 7<<20 {
 			value = realtimeUnavailable("实时数据超出限制，请缩小查询范围")
 		}
-		total += capture.body.Len()
+		total += size
 		if value.Code == "OK" {
 			value.Message = ""
 		} else if value.Status == 0 {

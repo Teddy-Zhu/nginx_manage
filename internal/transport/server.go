@@ -81,7 +81,7 @@ var _ apigen.ServerInterface = (*Server)(nil)
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	if s.Realtime == nil {
-		s.Realtime = realtime.New(s.realtimeFingerprint)
+		s.Realtime = realtime.New(s.realtimeFingerprint, realtimeInterval)
 	}
 	apigen.HandlerWithOptions(s, apigen.StdHTTPServerOptions{BaseURL: "/api/v1", BaseRouter: mux, ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 		s.fail(w, r, fault.Invalid("请求参数缺失或无效"))
