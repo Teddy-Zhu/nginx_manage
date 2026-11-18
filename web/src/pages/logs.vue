@@ -226,7 +226,7 @@ async function download() {
     const url = URL.createObjectURL(value.blob),
       link = document.createElement("a");
     link.href = url;
-    link.download = "managed-logs.jsonl";
+    link.download = "managed-logs.log";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     if (value.gap || value.truncated)

@@ -149,7 +149,7 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 			s.fail(w, r, fault.New(http.StatusBadGateway, "REMOTE_INVALID_RESPONSE", "目标响应格式或身份无效，请核对原任务"))
 			return
 		}
-	} else if route.Kind != "ndjson" || media != "application/x-ndjson" || response.StatusCode != http.StatusOK {
+	} else if response.StatusCode != http.StatusOK || !(route.Kind == "ndjson" && media == "application/x-ndjson" || route.Kind == "text" && media == "text/plain") {
 		s.fail(w, r, fault.New(http.StatusBadGateway, "REMOTE_INVALID_RESPONSE", "目标响应不符合资源合同"))
 		return
 	}

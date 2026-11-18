@@ -236,17 +236,12 @@ func (s *Server) DownloadLogs(w http.ResponseWriter, r *http.Request, _ apigen.D
 		skipped += page.Skipped
 		gap = gap || page.Gap
 		for _, row := range page.Rows {
-			line, encodeErr := json.Marshal(row)
-			if encodeErr != nil {
-				s.fail(w, r, encodeErr)
-				return
-			}
-			if buffer.Len()+len(line)+1 > 8<<20 || count >= 10000 {
+			line := logs.ExportLine(row)
+			if buffer.Len()+len(line) > 8<<20 || count >= 10000 {
 				truncated = true
 				break
 			}
-			buffer.Write(line)
-			buffer.WriteByte('\n')
+			buffer.WriteString(line)
 			count++
 		}
 		if truncated || !page.More {
@@ -261,14 +256,12 @@ func (s *Server) DownloadLogs(w http.ResponseWriter, r *http.Request, _ apigen.D
 			break
 		}
 	}
-	summary, _ := json.Marshal(map[string]any{"type": "summary", "rows": count, "scanned_bytes": scanned, "skipped": skipped, "gap": gap, "truncated": truncated, "sanitized": true})
-	w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename=nginx-logs.jsonl")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=managed-logs.log")
 	w.Header().Set("X-Log-Truncated", fmt.Sprint(truncated))
 	w.Header().Set("X-Log-Gap", fmt.Sprint(gap))
 	w.Header().Set("X-Node-ID", s.NodeID)
-	w.Write(summary)
-	w.Write([]byte("\n"))
+	fmt.Fprintf(w, "# 脱敏日志 · 记录 %d 条 · 跳过 %d 条 · 扫描 %d 字节 · 缺口 %t · 截断 %t\n", count, skipped, scanned, gap, truncated)
 	w.Write(buffer.Bytes())
 }
 

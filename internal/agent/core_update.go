@@ -165,18 +165,9 @@ func RunCoreUpdate(parent context.Context, data, id string) (resultErr error) {
 	}
 	i := r.CoreUpdate
 	stage := func(value string) error { r.Stage = value; return j.Put(r) }
-	stopped := false
 	defer func() {
 		if resultErr == nil {
 			return
-		}
-		if stopped {
-			// A start failure must not silently select an older binary against a
-			// potentially migrated DB. Keep the selected program and all data.
-			recovery, stop := context.WithTimeout(context.Background(), 30*time.Second)
-			_, startErr := installationSystemctl(recovery, "start", "nginxpanel.service")
-			stop()
-			resultErr = errors.Join(resultErr, startErr)
 		}
 		r.State, r.Stage, r.Error = "failed", "failed", resultErr.Error()
 		resultErr = errors.Join(resultErr, j.Put(r))
@@ -196,29 +187,44 @@ func RunCoreUpdate(parent context.Context, data, id string) (resultErr error) {
 	if err = staged.RequireCurrent(); err != nil {
 		return err
 	}
+	if err = activateCore(ctx, data, id, i.Before, staged.Release, stage); err != nil {
+		return err
+	}
+	r.State, r.Stage, r.Error = "succeeded", "committed", ""
+	return j.Put(r)
+}
+
+func activateCore(ctx context.Context, data, id, before string, target panelruntime.Release, stage func(string) error) (err error) {
 	current, err := panelruntime.Read(data)
 	if err != nil {
 		return err
 	}
-	if staged.Release.DatabaseSchema < current.Release.DatabaseSchema {
+	if target.DatabaseSchema < current.Release.DatabaseSchema {
 		return errors.New("目标版本早于当前数据格式，无法直接降级")
 	}
-	if current.Release.ID != i.Before && current.Release.ID != i.Target {
+	if current.Release.ID != before && current.Release.ID != target.ID {
 		return errors.New("核心版本偏离原更新任务")
 	}
-	if current.Release.ID == i.Target {
+	if current.Release.ID == target.ID {
 		if ready, _, _ := panelreadyForSoftware(ctx, current); ready {
-			r.State, r.Stage, r.Error = "succeeded", "committed", ""
-			return j.Put(r)
+			return nil
 		}
 	}
 	if err = stage("stopping"); err != nil {
 		return err
 	}
+	// Even a cancelled stop request may have reached systemd.
+	defer func() {
+		if err != nil {
+			recovery, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, startErr := installationSystemctl(recovery, "start", "nginxpanel.service")
+			err = errors.Join(err, startErr)
+		}
+	}()
 	if _, err = installationSystemctl(ctx, "stop", "nginxpanel.service"); err != nil {
 		return err
 	}
-	stopped = true
 	if err = stage("selecting"); err != nil {
 		return err
 	}
@@ -226,7 +232,9 @@ func RunCoreUpdate(parent context.Context, data, id string) (resultErr error) {
 	if err != nil {
 		return err
 	}
-	err = panelruntime.SwitchCurrent(data, i.Before, i.Target, id)
+	if before != target.ID {
+		err = panelruntime.SwitchCurrent(data, before, target.ID, id)
+	}
 	writer()
 	if err != nil {
 		return err
@@ -241,11 +249,10 @@ func RunCoreUpdate(parent context.Context, data, id string) (resultErr error) {
 	defer tick.Stop()
 	for {
 		s, readErr := panelruntime.Read(data)
-		if readErr == nil && s.Release.ID == i.Target {
+		if readErr == nil && s.Release.ID == target.ID {
 			ready, _, readyErr := panelreadyForSoftware(ctx, s)
 			if readyErr == nil && ready {
-				r.State, r.Stage, r.Error = "succeeded", "committed", ""
-				return j.Put(r)
+				return nil
 			}
 		}
 		select {

@@ -106,6 +106,10 @@ sudo bash /opt/nginxpanel/manage.sh upgrade --dev
 
 新版发行包包含项目的发行公钥。使用旧安装包或从源码安装时，如果没有预先配置发行信任，需要使用维护者的发布公钥配置 `/etc/nginxpanel/release-trust.json`。已有配置由管理员管理。 [发行签名配置](releases.md)
 
+在已安装的主机上运行 `setup.sh` 或新版安装包里的 `install.sh`，脚本会列出当前版本和安装包版本。确认后原地升级或覆盖核心程序，保留现有账号、端口和数据。发行包会为缺少发行公钥的安装补齐配置。
+
+使用 `sudo bash /opt/nginxpanel/manage.sh logs` 查看服务的纯文本日志。网页的日志下载为 `.log` 文件，首行提供脱敏和导出范围摘要。
+
 运行 `bash setup.sh --dev` 安装开发版，加 `--uninstall` 进入卸载流程。源码入口 `install.sh` 和本机管理脚本 `manage.sh uninstall` 支持相同的数据选择，默认保留数据。可使用 `--keep-data` 或 `--purge` 明确选择。保留数据卸载后可通过 `manage.sh reinstall` 恢复原安装。
 
 旧双服务或面板容器部署不能通过核心程序更新入口转换为当前结构。切换前先创建备份；需要重新安装时按管理脚本的保留数据卸载及安装流程处理。保留数据不代表旧程序、运行容器或配置格式可直接复用。

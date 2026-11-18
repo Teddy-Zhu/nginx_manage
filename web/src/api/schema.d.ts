@@ -2774,7 +2774,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 从新查询导出脱敏 JSONL，最多 10000 行、8 MiB、16 MiB 扫描和二十秒。首行是范围及缺口摘要；与查询使用相同权限。 */
+        /** @description 从新查询导出脱敏纯文本日志，最多 10000 行、8 MiB、16 MiB 扫描和二十秒。首行是范围及缺口摘要；与查询使用相同权限。 */
         post: operations["downloadLogs"];
         delete?: never;
         options?: never;
@@ -10938,13 +10938,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 脱敏 JSONL 下载。 */
+            /** @description 脱敏纯文本日志 下载。 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/x-ndjson": string;
+                    "text/plain": string;
                 };
             };
             default: components["responses"]["JSON"];

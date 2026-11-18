@@ -12,6 +12,7 @@ usage() {
 用法：sudo bash install.sh [安装选项] [--fresh | --uninstall [--keep-data | --purge]]
 安装向导可设置管理端口、访问协议和管理员账号。
 源码目录自动使用 Docker 编译并接续安装，无需手动构建或解包。
+检测到已安装的面板时，显示当前版本和安装包版本，确认后原地升级或覆盖安装。
 --port 端口                  指定管理端口，默认推荐随机空闲端口
 --protocol http|https        指定访问协议，默认 https
 --admin-user 账号            指定管理员账号，默认 admin
@@ -211,6 +212,39 @@ install_from_source() {
   /bin/bash "$build_work/package/install.sh" "${next_args[@]}"
   exit 0
 }
+
+upgrade_existing() {
+  trusted_file /etc/nginxpanel/install/intent
+  trusted_file /etc/nginxpanel/install/ready
+  if [[ -n $requested_protocol || -n $requested_port || -n $requested_admin || -n $password_file || $advanced == yes ]]; then
+    die '已有安装，升级沿用现有设置。请移除初次安装选项后重试'
+  fi
+  printf '%s\n' '已检测到 NginxPanel 安装。'
+  if [[ $source_tree == yes ]]; then
+    check_docker
+    install_from_source
+  fi
+  local data binary arch
+  data=$(awk -F= '$1=="data" { print $2 }' /etc/nginxpanel/install/intent)
+  [[ $data =~ ^/(srv|var/lib)/[A-Za-z0-9_./-]+$ ]] || die '无法读取已安装的数据目录'
+  case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
+  if [[ -f $root/nginxpanel ]]; then binary=$root/nginxpanel; else binary=$root/bin/nginxpanel; fi
+  [[ -f $binary && ! -L $binary && $(elf_arch "$binary") == "$arch" ]] || die '安装包程序与本机架构不匹配'
+  root_chain /opt/nginxpanel
+  upgrade_stage=$(mktemp -d /opt/nginxpanel/.upgrade.XXXXXXXX)
+  trap 'rm -rf -- "$upgrade_stage"' EXIT
+  install -m 0555 "$binary" "$upgrade_stage/nginxpanel"
+  local -a args=(--data-dir "$data")
+  if [[ $auto_confirm == yes ]]; then args+=(--yes); fi
+  if [[ -f $root/release-trust.json && ! -L $root/release-trust.json ]]; then
+    [[ $(stat -c %s "$root/release-trust.json") -le 16384 ]] || die '发行签名配置超出大小限制'
+    install -m 0400 "$root/release-trust.json" "$upgrade_stage/release-trust.json"
+    args+=(--package-trust "$upgrade_stage/release-trust.json")
+  fi
+  "$upgrade_stage/nginxpanel" install-upgrade "${args[@]}"
+  rm -rf -- "$upgrade_stage"
+  trap - EXIT
+}
 source_tree=no
 if [[ -f $root/scripts/build.sh && -f $root/go.mod && -f $root/web/package.json ]]; then source_tree=yes; fi
 if [[ $fresh == yes || $uninstall == yes ]]; then
@@ -279,18 +313,15 @@ if [[ -e /etc/nginxpanel/install/lifecycle || -L /etc/nginxpanel/install/lifecyc
   if [[ $auto_confirm == yes ]]; then reinstall_args+=(--yes); fi
   exec /bin/bash /opt/nginxpanel/manage.sh "${reinstall_args[@]}"
 fi
+if [[ $fresh == no && $uninstall == no ]] &&
+   [[ -e /etc/nginxpanel/install/ready || -L /etc/nginxpanel/install/ready ]]; then
+  upgrade_existing
+  exit 0
+fi
 if [[ -e $plan || -L $plan ]]; then
   trusted_file "$plan"
   [[ $(stat -c %s "$plan") -le 16384 ]] || die '原安装命令超出读取限制'
-  if [[ -e /opt/nginxpanel/install-complete || -L /opt/nginxpanel/install-complete ]]; then
-    trusted_file /opt/nginxpanel/install-complete
-    trusted_file /etc/nginxpanel/install/ready
-    [[ -z $requested_protocol ]] || die '已有安装记录，请使用 manage.sh set-protocol 修改协议'
-    [[ -z $requested_port ]] || die '已有安装记录，请使用 manage.sh set-port 修改端口'
-    [[ -z $requested_admin && -z $password_file ]] || die '已有安装记录，请在面板中管理账号'
-    printf '%s\n' 'NginxPanel 已安装。' '查看面板地址：sudo bash /opt/nginxpanel/manage.sh info'
-    exit 0
-  fi
+  [[ ! -e /opt/nginxpanel/install-complete && ! -L /opt/nginxpanel/install-complete ]] || die '已有安装完成标记，但缺少服务就绪记录'
   printf '%s\n' '发现未完成的安装，将使用原设置继续。'
   confirm_install
   /bin/bash "$plan"

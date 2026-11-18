@@ -11,6 +11,24 @@ import (
 	"nginxpanel/internal/releases"
 )
 
+// PublishNativeUpgrade stores a root-approved package without selecting it.
+func PublishNativeUpgrade(ctx context.Context, data, binary string, candidate Release) (Release, error) {
+	root, err := Root(data)
+	if err != nil {
+		return Release{}, err
+	}
+	candidate.ID = releaseID(candidate)
+	unlock, err := publicationLock(root)
+	if err != nil {
+		return Release{}, err
+	}
+	defer unlock()
+	if err := publishRelease(ctx, root, binary, candidate); err != nil {
+		return Release{}, err
+	}
+	return candidate, nil
+}
+
 type NativeInput struct {
 	DataDir, Binary, Listen string
 	HTTP                    bool

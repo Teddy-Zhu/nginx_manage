@@ -1508,7 +1508,7 @@ paths:
       operationId: downloadLogs
       x-scopes: [read]
       parameters: [{ $ref: '#/components/parameters/CSRF' }]
-      description: 从新查询导出脱敏 JSONL，最多 10000 行、8 MiB、16 MiB 扫描和二十秒。首行是范围及缺口摘要；与查询使用相同权限。
+      description: 从新查询导出脱敏纯文本日志，最多 10000 行、8 MiB、16 MiB 扫描和二十秒。首行是范围及缺口摘要；与查询使用相同权限。
       requestBody:
         required: true
         content:
@@ -1516,9 +1516,9 @@ paths:
             schema: { $ref: '#/components/schemas/LogQuery' }
       responses:
         '200':
-          description: 脱敏 JSONL 下载。
+          description: 脱敏纯文本日志 下载。
           content:
-            application/x-ndjson:
+            text/plain:
               schema: { type: string, format: binary }
         default: { $ref: '#/components/responses/JSON' }
   /monitoring/latest:

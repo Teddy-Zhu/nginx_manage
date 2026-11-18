@@ -83,3 +83,37 @@ func runUpgradeCLI(parent context.Context, args []string) error {
 	fmt.Println(result.Message)
 	return nil
 }
+
+func runInstallUpgradeCLI(ctx context.Context, args []string) error {
+	flags := flag.NewFlagSet("install-upgrade", flag.ContinueOnError)
+	data := flags.String("data-dir", "", "已安装的数据目录")
+	trust := flags.String("package-trust", "", "安装包随附的发行公钥")
+	yes := flags.Bool("yes", false, "确认安装并重启")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 || *data == "" {
+		return errors.New("须指定已安装的数据目录")
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return agent.InstallCorePackage(ctx, *data, binary, *trust, func(current, target string, upgrade bool) bool {
+		action := "覆盖安装"
+		if upgrade {
+			action = "升级"
+		}
+		fmt.Printf("当前版本 %s\n安装包版本 %s\n操作 %s，面板将重启，配置和数据将保留。\n", current, target, action)
+		if *yes {
+			return true
+		}
+		fmt.Printf("确认%s？[y/N] ", action)
+		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if !strings.EqualFold(strings.TrimSpace(answer), "y") {
+			fmt.Println("已取消安装")
+			return false
+		}
+		return true
+	}, func(message string) { fmt.Println(message) })
+}

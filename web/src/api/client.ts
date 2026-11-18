@@ -631,10 +631,11 @@ export function apiError(error: unknown): ApiError {
   return normalized;
 }
 
-async function downloadJSONLinesFor(
+async function downloadBlobFor(
   path: string,
   data: unknown,
   scope: RequestScope,
+  mediaType: string,
 ) {
   scope = { ...scope, signal: scopeSignal(scope) };
   assertScope(scope);
@@ -647,7 +648,7 @@ async function downloadJSONLinesFor(
     });
     checkNode(String(result.headers["x-node-id"] ?? ""), scope);
     if (
-      !String(result.headers["content-type"]).startsWith("application/x-ndjson")
+      String(result.headers["content-type"]).split(";")[0] !== mediaType
     )
       throw new ApiError("INVALID_RESPONSE", "下载返回格式无效", result.status);
     return result;
@@ -680,7 +681,7 @@ async function downloadJSONLinesFor(
 }
 
 async function downloadLogFileFor(data: LogQuery, scope: RequestScope) {
-  const result = await downloadJSONLinesFor("/logs/download", data, scope);
+  const result = await downloadBlobFor("/logs/download", data, scope, "text/plain");
   return {
     blob: result.data,
     gap: result.headers["x-log-gap"] === "true",
@@ -689,7 +690,7 @@ async function downloadLogFileFor(data: LogQuery, scope: RequestScope) {
 }
 
 async function exportAuditFor(data: AuditFilter, scope: RequestScope) {
-  const result = await downloadJSONLinesFor("/audit/export", data, scope);
+  const result = await downloadBlobFor("/audit/export", data, scope, "application/x-ndjson");
   const expected = String(result.headers["x-archive-sha256"] ?? "");
   if (result.data.size > 8 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(expected))
     throw new ApiError(

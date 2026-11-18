@@ -11,6 +11,7 @@ usage() {
   cat <<'EOF'
 用法：bash setup.sh [--source | --dev] [安装选项] [--fresh | --uninstall [--keep-data | --purge]]
 默认下载 GitHub Release，自动匹配本机架构，校验 SHA-256 后安装。
+检测到已有安装时，确认后使用所选源码或发行包原地升级或覆盖安装。
 --source          拉取源码，通过 Docker 编译并自动安装
 --dev             选择最近 100 条发行中适合本机架构的最新 -dev 预发布版
 --repo owner/repo 指定其他发行仓库，默认 Teddy-Zhu/nginx_manage
@@ -103,7 +104,9 @@ if ((EUID != 0)); then
   command -v sudo >/dev/null || die '需要 root 权限，请使用 sudo 或 root 账户执行'
   sudo -v || die '无法取得安装所需的 sudo 权限'
 fi
-if [[ $mode == source || $uninstall == no ]]; then
+installed=no
+if as_root test -f /etc/nginxpanel/install/ready; then installed=yes; fi
+if [[ $mode == source || $fresh == yes || ( $uninstall == no && $installed == no ) ]]; then
   command -v timeout >/dev/null || die '缺少系统工具：timeout'
   as_root /bin/bash -c '
     export PATH=/usr/sbin:/usr/bin:/sbin:/bin DOCKER_HOST=unix:///run/docker.sock

@@ -54,7 +54,7 @@ func main() {
 		}
 		return
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	if err := run(); err != nil {
 		if len(os.Args) > 1 && os.Args[1] == "nginx-runtime-status" {
 			// systemd skips ExecCondition for 1..254, but treats 255 as a
@@ -78,6 +78,9 @@ func run() error {
 	command := os.Args[1]
 	if command == "upgrade" {
 		return runUpgradeCLI(ctx, os.Args[2:])
+	}
+	if command == "install-upgrade" {
+		return runInstallUpgradeCLI(ctx, os.Args[2:])
 	}
 	if command == "core-update-worker" {
 		return runCoreUpdateCLI(ctx, os.Args[2:])
