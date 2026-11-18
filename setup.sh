@@ -16,7 +16,7 @@ usage() {
 --repo owner/repo 指定其他发行仓库，默认 Teddy-Zhu/nginx_manage
 --version 标签    安装指定 Release，支持 v1.2.3 和 v1.2.4-dev
 --ref 分支或标签  源码模式指定分支或标签，默认仓库默认分支
---yes             无需交互，确认所选操作（包括完全卸载的数据删除）
+--yes             跳过所选操作的确认，安装时默认生成初始密码
 --advanced        安装时打开高级设置
 --port 端口       指定管理端口，默认随机选择空闲端口并允许外部访问
 --protocol 协议   指定 http 或 https，默认 https
@@ -32,7 +32,7 @@ usage() {
 EOF
 }
 mode=release repository=$default_repository version=$default_version ref= version_override=no dev=no
-fresh=no uninstall=no purge=no keep_data=no advanced=no setup_options=no
+fresh=no uninstall=no purge=no keep_data=no advanced=no setup_options=no auto_confirm=no
 install_args=()
 while (($#)); do
   case "$1" in
@@ -57,7 +57,7 @@ while (($#)); do
     --purge) purge=yes; install_args+=(--purge); shift ;;
     --keep-data) keep_data=yes; install_args+=(--keep-data); shift ;;
     --advanced) advanced=yes; install_args+=(--advanced); shift ;;
-    --yes) install_args+=(--yes); shift ;;
+    --yes) auto_confirm=yes; install_args+=(--yes); shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "未知参数：$1" ;;
   esac
@@ -68,8 +68,10 @@ done
 [[ $uninstall == no || $advanced == no && $setup_options == no ]] || die '卸载不接受安装设置'
 [[ $(uname -s) == Linux && -d /run/systemd/system ]] || die '请在运行 systemd 的实际 Linux 部署目标执行'
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
-for tool in tar sha256sum mktemp stat; do command -v "$tool" >/dev/null || die "缺少系统工具：$tool"; done
-if [[ $EUID != 0 ]]; then command -v sudo >/dev/null || die '需要 root 权限，请使用 sudo 或 root 账户执行'; fi
+for tool in tar sha256sum mktemp stat systemctl; do command -v "$tool" >/dev/null || die "缺少系统工具：$tool"; done
+if [[ $auto_confirm == no || $advanced == yes ]]; then
+  [[ -t 0 && -t 1 ]] || die '交互安装需要终端；使用 --yes 按推荐配置直接安装'
+fi
 if [[ -z $repository ]] && command -v git >/dev/null && [[ -f ${BASH_SOURCE[0]} ]]; then
   script_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
   if origin=$(git -C "$script_root" config --get remote.origin.url); then
@@ -94,16 +96,31 @@ if [[ -n $ref ]]; then
   [[ $mode == source && $ref =~ ^[A-Za-z0-9][A-Za-z0-9_./+-]*$ && $ref != *..* ]] || die '--ref 仅用于源码分支或标签'
 fi
 
+as_root() {
+  if ((EUID == 0)); then "$@"; else sudo -- "$@"; fi
+}
+if ((EUID != 0)); then
+  command -v sudo >/dev/null || die '需要 root 权限，请使用 sudo 或 root 账户执行'
+  sudo -v || die '无法取得安装所需的 sudo 权限'
+fi
+if [[ $mode == source || $uninstall == no ]]; then
+  command -v timeout >/dev/null || die '缺少系统工具：timeout'
+  as_root /bin/bash -c '
+    export PATH=/usr/sbin:/usr/bin:/sbin:/bin DOCKER_HOST=unix:///run/docker.sock
+    unset DOCKER_CONTEXT DOCKER_TLS DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_API_VERSION
+    command -v docker >/dev/null && [[ -S /run/docker.sock && ! -L /run/docker.sock ]] &&
+      timeout 5 docker compose version >/dev/null 2>&1 || exit 1
+    docker_info=$(timeout 5 docker info --format "{{.OSType}}|{{.Swarm.LocalNodeState}}|{{json .SecurityOptions}}" 2>/dev/null) || exit 1
+    [[ $docker_info == "linux|inactive|"* && $docker_info != *rootless* ]]
+  ' || die '需要正在运行的本机 Docker Engine（rootful）和 Docker Compose'
+fi
+
 work=$(mktemp -d /tmp/nginxpanel-setup.XXXXXXXX)
 trap 'rm -rf -- "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 run_installer() {
-  if [[ $EUID == 0 ]]; then
-    /bin/bash "$1/install.sh" "${install_args[@]}"
-  else
-    sudo /bin/bash "$1/install.sh" "${install_args[@]}"
-  fi
+  as_root /bin/bash "$1/install.sh" "${install_args[@]}"
 }
 download() {
   curl --fail --silent --show-error --location --max-redirs 5 \
@@ -112,7 +129,7 @@ download() {
 }
 if [[ $mode == source ]]; then
   command -v git >/dev/null || die '源码安装需要 Git'
-  command -v docker >/dev/null || die '需要已有 Docker 和 Compose；不会使用宿主机应用部署'
+  printf '安装环境检查通过（linux/%s）\n' "$arch"
   clone_args=(--depth 1 --single-branch)
   if [[ -n $ref ]]; then clone_args+=(--branch "$ref"); fi
   printf '正在下载源码 %s（%s）…\n' "$repository" "${ref:-默认分支}"
@@ -128,6 +145,7 @@ else
   command -v curl >/dev/null || die 'Release 安装需要 curl 或 GitHub CLI'
   transport=curl
 fi
+printf '安装环境检查通过（linux/%s）\n' "$arch"
 
 # 固定标签后再下载，确保安装包和校验清单来自同一个发行。
 if [[ $version == latest ]]; then

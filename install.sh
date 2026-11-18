@@ -16,7 +16,7 @@ usage() {
 --protocol http|https        指定访问协议，默认 https
 --admin-user 账号            指定管理员账号，默认 admin
 --admin-password-file 文件   从单行文件读取管理员密码
---yes                        跳过确认和基本配置提问，未提供密码文件时在网页创建管理员
+--yes                        跳过确认和基本配置提问，未提供密码文件时生成随机密码
 --advanced                   调整数据目录、监听地址、主机网络和日志设置
 --fresh 完全卸载旧安装后安装当前源码/安装包，永久删除原数据；适用于尚未使用的环境。
 --uninstall 使用当前源码或安装包卸载旧安装，默认保留数据，可交互选择清理。
@@ -57,7 +57,6 @@ done
 [[ $purge == no || $uninstall == yes ]] || die '--purge 只能与 --uninstall 一起使用'
 [[ $keep_data == no || $uninstall == yes && $purge == no ]] || die '--keep-data 只能与 --uninstall 一起使用，不能与 --purge 混用'
 [[ $uninstall == no || $advanced == no && -z $requested_port && -z $requested_protocol && -z $requested_admin && -z $password_file ]] || die '卸载不接受安装设置'
-[[ $auto_confirm == no || -z $requested_admin || -n $password_file ]] || die '--yes 与 --admin-user 一起使用时须提供 --admin-password-file'
 if [[ -n $requested_port ]]; then
   valid_port "$requested_port" || die '端口须为 1024–65535'
 fi
@@ -107,28 +106,38 @@ confirm_install() {
   fi
 }
 prepare_admin() {
-  local password confirmation
+  local password confirmation random_bytes
   set +x
   if [[ -n $password_file ]]; then
     [[ -f $password_file && -r $password_file ]] || die '无法读取管理员密码文件'
     admin_record=$("$binary" installation-admin-prepare --username "$admin_user" <"$password_file") || die '管理员设置无效'
     return
   fi
-  if [[ $auto_confirm == yes ]]; then return; fi
-  local hint='（直接回车则在网页设置）'
-  if [[ -n $requested_admin ]]; then hint=; fi
   while :; do
-    if [[ -z $requested_admin ]]; then ask admin_user '管理员账号' "$admin_user"; fi
-    IFS= read -r -s -p "管理员密码（至少 6 位）$hint: " password || die '输入已结束，安装取消'
-    printf '\n' >&2
-    if [[ -z $password && -z $requested_admin ]]; then return; fi
-    IFS= read -r -s -p '确认管理员密码: ' confirmation || die '输入已结束，安装取消'
-    printf '\n' >&2
-    if [[ $password != "$confirmation" ]]; then
-      printf '%s\n' '两次输入的密码不一致，请重试。'
-    elif admin_record=$(printf '%s\n' "$password" | "$binary" installation-admin-prepare --username "$admin_user"); then
+    password=
+    generated_password=
+    if [[ $auto_confirm == no ]]; then
+      if [[ -z $requested_admin ]]; then ask admin_user '管理员账号' "$admin_user"; fi
+      IFS= read -r -s -p '管理员密码（至少 6 位，回车生成随机密码）: ' password || die '输入已结束，安装取消'
+      printf '\n' >&2
+    fi
+    if [[ -z $password ]]; then
+      random_bytes=$(od -An -N16 -tx1 /dev/urandom) || die '无法生成随机密码'
+      password=${random_bytes//[[:space:]]/}
+      [[ $password =~ ^[0-9a-f]{32}$ ]] || die '无法生成随机密码'
+      generated_password=$password
+    else
+      IFS= read -r -s -p '确认管理员密码: ' confirmation || die '输入已结束，安装取消'
+      printf '\n' >&2
+      if [[ $password != "$confirmation" ]]; then
+        printf '%s\n' '两次输入的密码不一致，请重试。'
+        continue
+      fi
+    fi
+    if admin_record=$(printf '%s\n' "$password" | "$binary" installation-admin-prepare --username "$admin_user"); then
       return
     fi
+    if [[ $auto_confirm == yes ]]; then die '管理员设置无效'; fi
   done
 }
 root_chain() {
@@ -163,8 +172,18 @@ empty_directory() {
   [[ -z $entry ]]
 }
 
+check_docker() {
+  local docker_info
+  if command -v docker >/dev/null && [[ -S /run/docker.sock && ! -L /run/docker.sock ]] &&
+     timeout 5 docker compose version >/dev/null 2>&1 &&
+     docker_info=$(timeout 5 docker info --format '{{.OSType}}|{{.Swarm.LocalNodeState}}|{{json .SecurityOptions}}' 2>/dev/null) &&
+     [[ $docker_info == 'linux|inactive|'* && $docker_info != *rootless* ]]; then
+    return
+  fi
+  die '需要正在运行的本机 Docker Engine（rootful）和 Docker Compose'
+}
+
 install_from_source() {
-  command -v docker >/dev/null || die '源码入口需要已有 Docker；无需编译时请使用 setup.sh 下载 Release'
   case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
   build_work=$(mktemp -d /tmp/nginxpanel-build.XXXXXXXX)
   trap 'rm -rf -- "$build_work"' EXIT
@@ -201,8 +220,12 @@ if [[ $fresh == yes || $uninstall == yes ]]; then
   fi
   # Build/download the new tools before touching the old installation. Normal
   # installation still returns early for an already completed installation.
-  if [[ $source_tree == yes ]]; then install_from_source; fi
+  if [[ $source_tree == yes ]]; then
+    check_docker
+    install_from_source
+  fi
   if [[ -e /etc/nginxpanel/install/intent || -L /etc/nginxpanel/install/intent ]]; then
+    if [[ $fresh == yes ]]; then check_docker; fi
     trusted_file /etc/nginxpanel/install/intent
     root_chain /opt
     installer_lifecycle_stage=$(mktemp -d /opt/.nginxpanel-lifecycle.XXXXXXXX)
@@ -280,24 +303,10 @@ for tool in stat readlink od find sha256sum timeout systemctl tar mktemp; do
   command -v "$tool" >/dev/null || die "环境检测缺少系统工具：$tool"
 done
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die '仅支持 amd64 或 arm64 安装目标' ;; esac
+check_docker
 # 源码入口与发行包入口最终使用同一个安装器，构建产物不写回源码树。
 if [[ $source_tree == yes ]]; then install_from_source; fi
-os_name=Linux
-if [[ -r /etc/os-release ]]; then
-  while IFS='=' read -r key value; do
-    if [[ $key == PRETTY_NAME ]]; then os_name=${value//\"/}; break; fi
-  done </etc/os-release
-fi
 if [[ -f $root/nginxpanel ]]; then binary=$root/nginxpanel; else binary=$root/bin/nginxpanel; fi
-docker_ready=no
-if command -v docker >/dev/null; then
-  if [[ -S /run/docker.sock && ! -L /run/docker.sock ]] && timeout 5 docker compose version >/dev/null 2>&1; then
-    if docker_info=$(timeout 5 docker info --format '{{.OSType}}|{{.Swarm.LocalNodeState}}|{{json .SecurityOptions}}' 2>/dev/null); then
-      if [[ $docker_info == 'linux|inactive|'* && $docker_info != *rootless* ]]; then docker_ready=yes; fi
-    fi
-  fi
-fi
-[[ $docker_ready == yes ]] || die '需要本机 rootful Docker 和 Compose；不会自动安装 Docker，请先准备 Docker 后重试'
 [[ -f $root/containers.json && -f $root/container-images.tar ]] || die '安装包缺少运行镜像，请使用完整 Release 或在源码目录运行 install.sh 重新构建'
 "$binary" container-package-info --manifest "$root/containers.json" >/dev/null || die '无法读取配套容器镜像'
 data=/srv/nginxpanel data_ready=no
@@ -308,7 +317,6 @@ for candidate in /srv/nginxpanel /var/lib/nginxpanel; do
     data=$candidate; data_ready=yes; break
   fi
 done
-printf '环境检查通过（%s，%s，Docker 与 Compose 可用）\n' "$os_name" "$arch"
 custom=$advanced
 if [[ $data_ready == no ]]; then
   [[ $custom == yes ]] || die '默认数据目录均不可用；使用 --advanced 选择新的空目录'
@@ -370,14 +378,10 @@ start=yes
 if [[ $custom == yes ]] && ! yes_no '安装完成后启动管理服务？' yes; then start=no; fi
 if [[ $start == yes ]]; then args+=(--start); fi
 admin_user=${requested_admin:-admin}
-admin_record=
+admin_record= generated_password=
 prepare_admin
 printf '\n安装 NginxPanel\n  数据目录：%s\n  管理端口：%s（%s）\n' "$data" "$port" "${protocol^^}"
-if [[ -n $admin_record ]]; then
-  printf '  管理员账号：%s\n' "$admin_user"
-else
-  printf '%s\n' '  管理员账号将在首次访问时设置'
-fi
+printf '  管理员账号：%s\n' "$admin_user"
 if [[ $custom == yes ]]; then
   printf '  监听地址：%s\n' "${listen%:*}"
   if [[ $start == no ]]; then printf '%s\n' '  安装后手动启动'; fi
@@ -400,13 +404,11 @@ install -m 0555 "$root/manage.sh" "$stage/manage.sh"
 install -m 0444 "$root/containers.json" "$stage/containers.json"
 install -m 0400 "$root/container-images.tar" "$stage/container-images.tar"
 args+=(--nginx-package "$stage")
-if [[ -n $admin_record ]]; then
-  printf '%s\n' "$admin_record" >"$stage/admin.json"
-  chmod 0400 "$stage/admin.json"
-  sync -f "$stage"
-  unset admin_record
-  args+=(--admin-setup)
-fi
+printf '%s\n' "$admin_record" >"$stage/admin.json"
+chmod 0400 "$stage/admin.json"
+sync -f "$stage"
+unset admin_record
+args+=(--admin-setup)
 if [[ -e /opt/nginxpanel/manage.sh || -L /opt/nginxpanel/manage.sh ]]; then
   trusted_file /opt/nginxpanel/manage.sh
   cmp -s "$stage/manage.sh" /opt/nginxpanel/manage.sh || die '已有不同管理脚本，停止覆盖'
@@ -428,6 +430,11 @@ pending=$(mktemp /opt/nginxpanel/.install-command.XXXXXXXX)
 } >"$pending"
 chmod 0500 "$pending"
 sync -f "$pending"
+# Show the generated password before saving the resumable plan, which stores only its hash.
+if [[ -n $generated_password ]]; then
+  printf '\n初始密码：%s（请保存）\n' "$generated_password"
+fi
+unset generated_password
 mv -T -- "$pending" "$plan"
 sync -f /opt/nginxpanel
 /bin/bash "$plan"
