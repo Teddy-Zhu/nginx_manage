@@ -9,11 +9,12 @@ default_version="latest"
 die() { printf '%s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-用法：bash setup.sh [--source] [--repo owner/repo] [--yes] [--advanced] [--port 端口] [--fresh | --uninstall [--keep-data | --purge]]
+用法：bash setup.sh [--source | --dev] [--repo owner/repo] [--yes] [--advanced] [--port 端口] [--fresh | --uninstall [--keep-data | --purge]]
 默认下载 GitHub Release，自动匹配本机架构，校验 SHA-256 后安装。
 --source          拉取源码，通过 Docker 编译并自动安装
+--dev             选择最近 100 条发行中适合本机架构的最新 -dev 预发布版
 --repo owner/repo 指定其他发行仓库，默认 Teddy-Zhu/nginx_manage
---version v1.2.3  安装指定 Release，默认使用脚本所属发行版本
+--version 标签    安装指定 Release，支持 v1.2.3 和 v1.2.4-dev
 --ref 分支或标签  源码模式指定分支或标签，默认仓库默认分支
 --yes             无需交互，确认所选操作（包括完全卸载的数据删除）
 --advanced        安装时打开高级设置
@@ -23,15 +24,17 @@ usage() {
 --keep-data       明确保留数据卸载；--purge 完全卸载，仅与 --uninstall 一起使用
 两种安装方式均需要 Docker 和 Compose；源码方式另需 Git，无需本机 Go 或 Node.js。
 需要 root 权限时调用 sudo。私有 Release 可使用已认证的 GitHub CLI。
+自动查找 dev 版需要已认证的 GitHub CLI，或 curl 与 jq。
 EOF
 }
-mode=release repository=$default_repository version=$default_version ref= version_override=no
+mode=release repository=$default_repository version=$default_version ref= version_override=no dev=no
 fresh=no uninstall=no purge=no keep_data=no advanced=no requested_port=
 install_args=()
 while (($#)); do
   case "$1" in
     --source) mode=source; shift ;;
     --release) mode=release; shift ;;
+    --dev) dev=yes; shift ;;
     --repo|--version|--ref)
       (($# >= 2)) && [[ -n $2 ]] || die "参数缺少值：$1"
       case "$1" in --repo) repository=$2 ;; --version) version=$2; version_override=yes ;; --ref) ref=$2 ;; esac
@@ -71,6 +74,12 @@ fi
 [[ $repository =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || die '未确定 GitHub 仓库；请使用 --repo owner/repo，或下载 Release 内置仓库的 setup.sh'
 [[ $version == latest || $version =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.+-]+)?$ ]] || die 'Release 版本须为 v 开头的版本号'
 [[ $mode != source || $version_override == no ]] || die '源码版本使用 --ref 指定，不使用 --version'
+dev_tag='^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?-dev$'
+if [[ $dev == yes ]]; then
+  [[ $mode == release ]] || die '--dev 仅用于 Release 安装；源码安装使用 --ref'
+  if [[ $version_override == no ]]; then version=latest; fi
+  [[ $version == latest || $version =~ $dev_tag ]] || die '--dev 与 --version 一起使用时须指定 -dev 标签'
+fi
 if [[ -n $ref ]]; then
   [[ $mode == source && $ref =~ ^[A-Za-z0-9][A-Za-z0-9_./+-]*$ && $ref != *..* ]] || die '--ref 仅用于源码分支或标签'
 fi
@@ -103,21 +112,42 @@ if [[ $mode == source ]]; then
   exit 0
 fi
 
-# 先固定标签，程序与校验清单始终取自同一发行，避免 latest 切换时混用。
 if command -v gh >/dev/null && { [[ -n ${GH_TOKEN:-} || -n ${GITHUB_TOKEN:-} ]] || gh auth status --hostname github.com >/dev/null 2>&1; }; then
-  if [[ $version == latest ]]; then version=$(gh release view --repo "$repository" --json tagName --jq .tagName); fi
   transport=gh
 else
   command -v curl >/dev/null || die 'Release 安装需要 curl 或 GitHub CLI'
-  if [[ $version == latest ]]; then
+  transport=curl
+fi
+
+# 固定标签后再下载，确保安装包和校验清单来自同一个发行。
+if [[ $version == latest ]]; then
+  if [[ $dev == yes ]]; then
+    endpoint="repos/$repository/releases?per_page=100"
+    filter='map(select(.draft == false and .prerelease == true and (.published_at | type == "string"))
+      | select(.tag_name | test("'"$dev_tag"'"))
+      | . as $release
+      | [.assets[] | select(.state == "uploaded") | .name] as $names
+      | select(($names | index("checksums.txt")) != null
+          and ($names | index("nginxpanel_" + ($release.tag_name | ltrimstr("v")) + "_linux_'"$arch"'.tar.gz")) != null))
+      | max_by(.published_at) | .tag_name // empty'
+    if [[ $transport == gh ]]; then
+      version=$(gh api "$endpoint" --jq "$filter") || die '无法查询 GitHub dev 发行列表'
+    else
+      command -v jq >/dev/null || die '自动查找 dev 版需要 jq，也可用 --version 指定标签'
+      download "https://api.github.com/$endpoint" "$work/releases.json" $((4 * 1024 * 1024)) || die '无法查询 GitHub dev 发行列表'
+      version=$(jq -r "$filter" "$work/releases.json") || die '无法解析 GitHub dev 发行列表'
+    fi
+    [[ $version =~ $dev_tag ]] || die "近期未找到适用于 Linux/$arch 的 dev 核心发行；可使用 --version 指定标签"
+  elif [[ $transport == gh ]]; then
+    version=$(gh release view --repo "$repository" --json tagName --jq .tagName) || die '找不到稳定版发行；可使用 --dev 安装开发版或 --source 从源码安装'
+  else
     effective=$(curl --fail --silent --show-error --head --location --max-redirs 5 \
       --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 60 \
-      --output /dev/null --write-out '%{url_effective}' "https://github.com/$repository/releases/latest")
+      --output /dev/null --write-out '%{url_effective}' "https://github.com/$repository/releases/latest") || die '找不到稳定版发行；可使用 --dev 安装开发版或 --source 从源码安装'
     [[ ${effective,,} == "https://github.com/${repository,,}/releases/tag/"* ]] || die '无法解析最新 Release 标签'
     version=${effective##*/}
     version=${version//%2B/+}; version=${version//%2b/+}
   fi
-  transport=curl
 fi
 [[ $version =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.+-]+)?$ ]] || die '发行标签不是受支持的 v 前缀版本号'
 asset=nginxpanel_${version#v}_linux_$arch.tar.gz

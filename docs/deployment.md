@@ -13,13 +13,13 @@ Nginx 在 Docker 容器中运行，网站配置、证书和日志保存在宿主
 - 使用 systemd 的 Linux，支持 amd64、arm64，需要部署目标的 root 权限。
 - 本机 rootful Docker Engine 和 Compose 插件；不使用远程 Docker context、rootless Docker 或 Swarm。
 - 源码安装另需 Git。Go、Node.js、pnpm 和 Nginx 均不需要安装在宿主机，源码编译由 Docker 容器完成。
-- Release 安装另需 curl，或已认证的 GitHub CLI。正式 Release 尚未完成公开发行验收，不据此表示 GitHub 上已有可用的公开版本。
+- Release 安装另需 curl，或已认证的 GitHub CLI。通过 curl 自动查找 dev 版还需要 jq。
 
 开发期间不要在开发主机执行安装或修改宿主机服务。部署和功能验收使用独立虚拟机。
 
 ## 安装
 
-默认仓库为 `Teddy-Zhu/nginx_manage`。仓库访问与正式公开发行状态仍在开发确认中。
+默认从 `Teddy-Zhu/nginx_manage` 获取源码和发行包。
 
 ### 从源码安装
 
@@ -39,15 +39,17 @@ bash setup.sh --source --yes
 
 ### 使用 Release 安装
 
-仓库发布包含 `setup.sh` 和本机架构安装包的正式版本后，可执行：
+从 [GitHub Releases](https://github.com/Teddy-Zhu/nginx_manage/releases) 下载所选核心版本附带的 `setup.sh`，运行 `bash setup.sh` 即可按该发行标签安装。也可使用主分支脚本选择版本：
 
 ```sh
-curl -fL https://github.com/Teddy-Zhu/nginx_manage/releases/latest/download/setup.sh \
+curl -fL https://raw.githubusercontent.com/Teddy-Zhu/nginx_manage/main/setup.sh \
   -o nginxpanel-setup.sh
-bash nginxpanel-setup.sh --yes
+bash nginxpanel-setup.sh --dev
 ```
 
-安装脚本校验安装包摘要，再安装核心程序和 Nginx 镜像。尚未发布或无法访问 Release 时，使用源码安装方式；本文不代表上述 GitHub 地址已有公开 Release。
+`--dev` 在最近 100 条发行中按发布时间选择最新版。候选须为已发布的 `v…-dev` 核心预发布版，并包含本机架构的安装包和校验清单。若已知标签，可直接用 `--version <标签>` 安装。主分支脚本默认查找稳定版，首个稳定版发布前请选择 dev、指定标签或源码安装。
+
+安装脚本校验安装包摘要，再安装核心程序和 Nginx 镜像。
 
 ### 安装选项
 
