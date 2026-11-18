@@ -105,8 +105,8 @@ if [[ $mode == source ]]; then
   command -v docker >/dev/null || die '需要已有 Docker 和 Compose；不会使用宿主机应用部署'
   clone_args=(--depth 1 --single-branch)
   if [[ -n $ref ]]; then clone_args+=(--branch "$ref"); fi
-  printf '拉取源码：%s（%s）\n' "$repository" "${ref:-默认分支}"
-  git clone "${clone_args[@]}" -- "https://github.com/$repository.git" "$work/source"
+  printf '正在下载源码 %s（%s）…\n' "$repository" "${ref:-默认分支}"
+  git clone --quiet "${clone_args[@]}" -- "https://github.com/$repository.git" "$work/source"
   [[ -f $work/source/install.sh && -f $work/source/scripts/build.sh ]] || die '源码缺少安装或 Docker 构建入口'
   run_installer "$work/source"
   exit 0
@@ -151,7 +151,7 @@ if [[ $version == latest ]]; then
 fi
 [[ $version =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.+-]+)?$ ]] || die '发行标签不是受支持的 v 前缀版本号'
 asset=nginxpanel_${version#v}_linux_$arch.tar.gz
-printf '下载发行：%s %s（linux/%s）\n' "$repository" "$version" "$arch"
+printf '正在下载安装包 %s %s（linux/%s）…\n' "$repository" "$version" "$arch"
 if [[ $transport == gh ]]; then
   gh release download "$version" --repo "$repository" --pattern "$asset" --pattern checksums.txt --dir "$work"
 else
@@ -188,5 +188,5 @@ tar -xzf "$work/$asset" --no-same-owner --no-same-permissions -C "$work/package"
    -f $work/package/install.sh && -f $work/package/manage.sh &&
    -f $work/package/deploy/native/install.sh && -f $work/package/deploy/native/lifecycle.sh &&
    -f $work/package/containers.json && -f $work/package/container-images.tar ]] || die 'Release 缺少完整安装入口；请使用包含一键安装脚本的新发行或使用源码安装'
-printf '%s\n' '安装包校验完成'
+printf '%s\n' '安装包校验通过'
 run_installer "$work/package"

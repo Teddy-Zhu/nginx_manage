@@ -94,10 +94,6 @@ confirm_install() {
     exit 0
   fi
 }
-finish() {
-  printf '\n管理入口：sudo bash /opt/nginxpanel/manage.sh\n'
-  /bin/bash /opt/nginxpanel/manage.sh info
-}
 root_chain() {
   local path=$1 mode
   while [[ $path != / ]]; do
@@ -137,9 +133,14 @@ install_from_source() {
   trap 'rm -rf -- "$build_work"' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  /bin/bash "$root/scripts/build.sh" --output-dir "$build_work"
+  printf '正在通过 Docker 构建安装包（linux/%s）…\n' "$arch"
+  if ! /bin/bash "$root/scripts/build.sh" --output-dir "$build_work" >"$build_work/build.log" 2>&1; then
+    cat -- "$build_work/build.log" >&2
+    die '安装包构建失败'
+  fi
   install -d -m 0700 "$build_work/package"
   tar -xf "$build_work/nginxpanel-linux-$arch.tar" -C "$build_work/package"
+  printf '%s\n' '安装包构建完成'
   next_args=()
   if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
   if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
@@ -208,7 +209,7 @@ if [[ -e /etc/nginxpanel/install/lifecycle || -L /etc/nginxpanel/install/lifecyc
   trusted_file /opt/nginxpanel/manage.sh
   [[ -z $requested_protocol ]] || die "已有安装记录；请使用 manage.sh set-protocol 修改协议"
   [[ -z $requested_port ]] || die '重装保留当前端口；重装后使用 manage.sh set-port 修改'
-  printf '%s\n' '发现卸载记录，将恢复卸载前版本和配置；版本更新使用面板维护入口。'
+  printf '%s\n' '发现卸载记录，将恢复原安装。'
   reinstall_args=(reinstall)
   if [[ $auto_confirm == yes ]]; then reinstall_args+=(--yes); fi
   exec /bin/bash /opt/nginxpanel/manage.sh "${reinstall_args[@]}"
@@ -221,15 +222,12 @@ if [[ -e $plan || -L $plan ]]; then
   if [[ -e /opt/nginxpanel/install-complete || -L /opt/nginxpanel/install-complete ]]; then
     trusted_file /opt/nginxpanel/install-complete
     trusted_file /etc/nginxpanel/install/ready
-    printf '%s\n' '已安装，未更新程序。保留数据升级使用面板维护入口；尚未使用且允许清空数据时，执行最新源码或安装包中的 install.sh --fresh。'
-    finish
+    printf '%s\n' 'NginxPanel 已安装。' '查看面板地址：sudo bash /opt/nginxpanel/manage.sh info'
     exit 0
   fi
-  printf '%s\n' '发现已保存的原安装命令。重复执行保留原参数和节点数据；版本更新请使用面板维护入口。'
-  cat -- "$plan"
+  printf '%s\n' '发现未完成的安装，将使用原设置继续。'
   confirm_install
   /bin/bash "$plan"
-  finish
   exit 0
 fi
 [[ ! -e /etc/nginxpanel/install/intent && ! -L /etc/nginxpanel/install/intent ]] || die '已有标准安装记录但没有引导安装命令；请用原参数续装，日常管理可运行本目录的 manage.sh'
@@ -248,12 +246,11 @@ if [[ -r /etc/os-release ]]; then
   done </etc/os-release
 fi
 if [[ -f $root/nginxpanel ]]; then binary=$root/nginxpanel; else binary=$root/bin/nginxpanel; fi
-docker_ready=no docker_state=未安装
+docker_ready=no
 if command -v docker >/dev/null; then
-  docker_state='不可用（需要本机 rootful Docker 和 Compose）'
   if [[ -S /run/docker.sock && ! -L /run/docker.sock ]] && timeout 5 docker compose version >/dev/null 2>&1; then
     if docker_info=$(timeout 5 docker info --format '{{.OSType}}|{{.Swarm.LocalNodeState}}|{{json .SecurityOptions}}' 2>/dev/null); then
-      if [[ $docker_info == 'linux|inactive|'* && $docker_info != *rootless* ]]; then docker_ready=yes; docker_state=可用; fi
+      if [[ $docker_info == 'linux|inactive|'* && $docker_info != *rootless* ]]; then docker_ready=yes; fi
     fi
   fi
 fi
@@ -274,8 +271,7 @@ listen=
 if [[ -f $binary && -x $binary && $(elf_arch "$binary") == "$arch" ]]; then
   listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择管理地址或端口，请检查端口占用和网络配置'
 fi
-printf '\nNginxPanel 环境检测\n  系统：%s\n  架构：%s\n  Docker：%s\n  部署：宿主机服务\n  数据目录：%s\n  管理监听：%s\n' "$os_name" "$arch" "$docker_state" "$data" "${listen:-安装时自动选择}"
-printf '%s\n' '默认自动识别主机网络环境并启用基础管理，安装完成后启动服务。'
+printf '环境检查通过（%s，%s，Docker 与 Compose 可用）\n' "$os_name" "$arch"
 custom=$advanced
 if [[ ! -f $binary ]]; then
   [[ $custom == yes ]] || die '安装包缺少程序；请使用完整 Release 或在源码目录运行 install.sh'
@@ -317,9 +313,11 @@ args+=(--dns-owner "$dns_owner" --nginx-log-owner "$log_owner" --firewall-owner 
 start=yes
 if [[ $custom == yes ]] && ! yes_no '安装完成后启动管理服务？' yes; then start=no; fi
 if [[ $start == yes ]]; then args+=(--start); fi
-printf '\n安装确认\n  部署：宿主机服务\n  程序：%s\n  数据：%s\n  管理：%s://%s\n  Nginx：在软件商店手动安装\n  DNS：%s\n  防火墙：%s / SSH：%s\n  日志轮转：%s\n  立即启动：%s\n' "$binary" "$data" "$protocol" "$listen" "$dns_owner" "$firewall_owner" "$firewall_ssh" "$log_owner" "$start"
-printf '%s\n' '请确认材料来源。将复制为本机 root 批准材料，调用标准安装器；不修改云安全组或接管其他 Nginx 服务。'
-printf '安装参数：'; printf '%q ' "${args[@]}"; printf '\n'
+printf '\n安装 NginxPanel\n  数据目录：%s\n  管理端口：%s（%s）\n' "$data" "$port" "${protocol^^}"
+if [[ $custom == yes ]]; then
+  printf '  监听地址：%s\n' "${listen%:*}"
+  if [[ $start == no ]]; then printf '%s\n' '  安装后手动启动'; fi
+fi
 confirm_install
 
 root_chain /opt
@@ -362,4 +360,3 @@ sync -f "$pending"
 mv -T -- "$pending" "$plan"
 sync -f /opt/nginxpanel
 /bin/bash "$plan"
-finish

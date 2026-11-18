@@ -294,10 +294,11 @@ cleanup() {
   if [[ -n $release_work ]]; then rm -rf -- "$release_work"; fi
   if [[ -n $pending_file ]]; then rm -f -- "$pending_file"; fi
   if ((result != 0)); then
-    printf '%s\n' '安装未完成；已写入的节点数据、账户和安装记录均保留。修复原因后以相同参数继续。' >&2
+    printf '%s\n' '安装未完成。处理上方错误后，可重新运行安装命令继续。' >&2
   fi
 }
 trap cleanup EXIT
+printf '%s\n' '正在安装面板服务…'
 reserved_units=(nginxpanel.service nginxpanel-core-update@.service nginxpanel-nginx-image@.service)
 selinux_policy_hash=
 if [[ $selinux_profile != disabled ]]; then
@@ -433,7 +434,10 @@ if [[ -e $state/ready || -L $state/ready ]]; then
   trusted_file "$state/ready" 64
   cmp -s "$work/ready" "$state/ready" || die '安装就绪记录不匹配'
 else
-  "$data/runtime/current/nginxpanel" init --data-dir "$data"
+  if ! "$data/runtime/current/nginxpanel" init --data-dir "$data" >"$work/init.log" 2>&1; then
+    cat -- "$work/init.log" >&2
+    die '面板初始化失败'
+  fi
 fi
 nginx_agent_flag=--nginx-container
 ensure_dir /etc/nginxpanel/docker 755 root root
@@ -564,18 +568,27 @@ case "$firewall_owner" in
   iptables-nft|iptables-legacy) "$release_dir/nginxpanel" iptables-init --data-dir "$data" --firewall-scope host --firewall-backend "$firewall_owner" >"$work/firewall-registration.json" ;;
 esac
 write_owned "$work/ready" "$state/ready" 600
-start_units=(nginxpanel.service)
-enabled_units=(nginxpanel.service)
-systemctl enable "${enabled_units[@]}"
+systemctl --quiet enable nginxpanel.service || die '无法设置面板开机启动'
 if [[ $start == yes ]]; then
+  printf '%s\n' '正在启动面板服务…'
   if [[ -n $nginx_image ]]; then docker compose -f /etc/nginxpanel/docker/compose.yaml up -d --pull never; fi
-  systemctl start "${start_units[@]}"
-  for unit in "${enabled_units[@]}"; do
-    systemctl is-active --quiet "$unit" || die "服务未进入 active：$unit；保留安装记录，请检查 systemd 日志"
-  done
+  if ! systemctl start nginxpanel.service || ! systemctl is-active --quiet nginxpanel.service; then
+    die '面板启动失败。运行 journalctl -u nginxpanel.service -n 50 查看日志。'
+  fi
 fi
-printf 'NginxPanel 管理服务已启用开机启动。\n'
-if [[ -n $nginx_package ]]; then printf '%s\n' '登录面板后，可在软件商店安装 Nginx。'; fi
-printf '已准备宿主机部署：%s\n管理地址：%s://%s\n' "$data" "$protocol" "$listen"
-printf '%s\n' '使用机器公网或内网 IP 及上述端口访问；通配监听地址不是浏览器访问地址。云安全组和外部防火墙需允许该 TCP 端口。'
-if [[ -f $data/bootstrap/token ]]; then printf '一次性引导文件：%s/bootstrap/token\n' "$data"; fi
+printf '\nNginxPanel 安装完成\n'
+if [[ $start == no ]]; then
+  printf '%s\n' '  启动面板：sudo systemctl start nginxpanel.service'
+fi
+if addresses=$("$data/runtime/current/nginxpanel" panel-access-urls --data-dir "$data") && [[ -n $addresses ]]; then
+  printf '%s\n' '  面板地址：'
+  while IFS= read -r address; do printf '    %s\n' "$address"; done <<<"$addresses"
+else
+  printf '  面板地址：使用服务器 IP 和端口 %s（%s）\n' "$port" "${protocol^^}"
+fi
+if [[ -f $data/bootstrap/token ]]; then
+  printf '  初始令牌文件：%s/bootstrap/token\n' "$data"
+fi
+if [[ -x /opt/nginxpanel/manage.sh ]]; then
+  printf '%s\n' '  管理命令：sudo bash /opt/nginxpanel/manage.sh'
+fi
