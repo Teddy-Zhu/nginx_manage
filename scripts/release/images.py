@@ -156,8 +156,16 @@ class Registry:
         if host == "docker.io" and re.fullmatch(r"[a-z0-9]+(?:[._-][a-z0-9]+)*/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*", self.path):
             self.origin, realm, service = "https://registry-1.docker.io", "https://auth.docker.io/token", "registry.docker.io"
             username, password = os.environ.get("DOCKERHUB_USERNAME", ""), os.environ.get("DOCKERHUB_TOKEN", "")
-            hosts = {"registry-1.docker.io", "auth.docker.io", "production.cloudfront.docker.com", "production.cloudflare.docker.com",
-                     "docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com"}
+            hosts = {
+                "registry-1.docker.io",
+                "auth.docker.io",
+                "production.cloudfront.docker.com",
+                "production.cloudflare.docker.com",
+                "docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com",
+                "docker-images-prod.s3.amazonaws.com",
+                "docker-images-prod.s3.us-east-1.amazonaws.com",
+                "docker-images-prod.s3.dualstack.us-east-1.amazonaws.com",
+            }
         elif host == "ghcr.io" and re.fullmatch(r"[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*/nginx", self.path):
             self.origin, realm, service = "https://ghcr.io", "https://ghcr.io/token", "ghcr.io"
             username, password = os.environ["GITHUB_ACTOR"], os.environ["GH_TOKEN"]

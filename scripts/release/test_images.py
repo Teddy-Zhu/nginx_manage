@@ -44,11 +44,28 @@ class ImageRegistryTests(unittest.TestCase):
             Registry("docker.io/myteam/nginxpanel-nginx")
 
     def test_cross_host_redirect_removes_authorization_and_rejects_other_hosts(self):
-        redirects = Redirects({"production.cloudfront.docker.com"})
+        with patch.dict("os.environ", {}, clear=True), patch.object(Registry, "pull_token", return_value="pull-token"):
+            registry = Registry("docker.io/myteam/nginxpanel-nginx")
+        redirects = next(handler for handler in registry.opener.handlers if isinstance(handler, Redirects))
         request = urllib.request.Request("https://registry-1.docker.io/v2/team/nginx/blobs/sha256:123", headers={"Authorization": "Bearer private"})
-        redirected = redirects.redirect_request(request, None, 307, "Redirect", {}, "https://production.cloudfront.docker.com/blob")
-        self.assertIsNone(redirected.get_header("Authorization"))
-        for target in ("http://production.cloudfront.docker.com/blob", "https://example.com/blob", "https://user@production.cloudfront.docker.com/blob"):
+        for host in (
+            "production.cloudfront.docker.com",
+            "docker-images-prod.s3.amazonaws.com",
+            "docker-images-prod.s3.us-east-1.amazonaws.com",
+            "docker-images-prod.s3.dualstack.us-east-1.amazonaws.com",
+        ):
+            with self.subTest(host=host):
+                target = f"https://{host}/blob?X-Amz-Signature=storage-signature"
+                redirected = redirects.redirect_request(request, None, 307, "Redirect", {}, target)
+                self.assertEqual(redirected.full_url, target)
+                self.assertIsNone(redirected.get_header("Authorization"))
+        for target in (
+            "http://production.cloudfront.docker.com/blob",
+            "https://example.com/blob",
+            "https://user@production.cloudfront.docker.com/blob",
+            "https://another-bucket.s3.dualstack.us-east-1.amazonaws.com/blob",
+            "https://docker-images-prod.s3.dualstack.us-east-1.amazonaws.com.example.com/blob",
+        ):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 redirects.redirect_request(request, None, 307, "Redirect", {}, target)
 
