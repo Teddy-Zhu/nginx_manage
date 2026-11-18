@@ -24,7 +24,8 @@ import (
 )
 
 type Manager struct {
-	InstallNginx                              func(context.Context, software.Progress) (software.Result, error)
+	InstallNginx                              func(context.Context, string, software.Progress) (software.Result, error)
+	BundledNginxVersion                       func() (*componentversions.Version, error)
 	NginxInstalled                            func()
 	BuiltinVersions                           func(context.Context, componentversions.Query) (componentversions.Catalog, error)
 	BuiltinAction                             func(context.Context, software.Request, software.Progress) (software.Result, error)
@@ -159,7 +160,7 @@ func (m *Manager) Submit(in Request) (Operation, error) {
 	if in.Protocol != protocol.Agent || !ValidID(in.OperationID) {
 		return Operation{}, fault.Invalid("组件请求协议或标识无效")
 	}
-	if err := in.Input.Validate(); err != nil {
+	if err := in.Input.validateSubmission(); err != nil {
 		return Operation{}, err
 	}
 	m.mu.Lock()
@@ -269,7 +270,7 @@ func (m *Manager) run(out Operation, until time.Time) {
 			if m.InstallNginx == nil {
 				err = errors.New("Nginx 安装不可用")
 			} else {
-				result, err = m.InstallNginx(ctx, progress)
+				result, err = m.InstallNginx(ctx, out.Input.Software.Version, progress)
 			}
 		} else if out.Input.Software.AppID != "" {
 			if m.BuiltinAction == nil {

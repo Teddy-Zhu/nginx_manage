@@ -19,7 +19,7 @@ func admitSource(in BindInput, launcherHash string, existing *Binding) (releases
 	if err != nil {
 		return approval, err
 	}
-	if launcherHash != approval.Image.Platform.LauncherSHA256 {
+	if launcherHash != "" && launcherHash != approval.Image.Platform.LauncherSHA256 {
 		return approval, errors.New("Nginx 启动器不属于签名镜像对应的发行程序")
 	}
 	return approval, nil

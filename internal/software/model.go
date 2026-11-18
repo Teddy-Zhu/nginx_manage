@@ -10,6 +10,7 @@ import (
 	"nginxpanel/internal/containers"
 	"nginxpanel/internal/fail2ban"
 	"nginxpanel/internal/frps"
+	"nginxpanel/internal/releases"
 )
 
 type Progress func(string)
@@ -44,7 +45,7 @@ func (r Request) RequiresSecurity() bool {
 func (r Request) Validate() error {
 	if r.Action != "update-panel" && (r.PlanID != "" || r.Prerelease) ||
 		r.Action != "install" && r.AutoStart != nil ||
-		r.Action != "install" && r.Action != "update" && r.Version != "" ||
+		r.Action != "install" && r.Action != "update" && r.Action != "install-nginx" && r.Version != "" ||
 		r.Action != "container" && r.Container != nil ||
 		r.Action != "fail2ban" && r.Fail2ban != nil ||
 		r.Action != "frps" && r.Action != "install" && r.Frps != nil {
@@ -59,7 +60,14 @@ func (r Request) Validate() error {
 	}
 	switch r.Action {
 	case "install-nginx":
-		return nil
+		// Completed install receipts from before version selection omit the ID.
+		if r.Version == "" || r.Version == componentversions.BundledNginxID {
+			return nil
+		}
+		if version, ok := strings.CutPrefix(r.Version, "nginx-v"); ok && releases.VersionChannel(version) != "" {
+			return nil
+		}
+		return errors.New("请选择 Nginx 安装版本")
 	case "update-panel":
 		if len(r.PlanID) == 64 && strings.Trim(r.PlanID, "0123456789abcdef") == "" {
 			return nil

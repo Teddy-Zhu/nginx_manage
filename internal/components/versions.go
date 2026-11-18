@@ -41,7 +41,7 @@ func NginxVersion(binding nginxcontainer.Binding) *componentversions.Version {
 	}
 }
 
-func (m *Manager) Versions(ctx context.Context, q componentversions.Query) (componentversions.Catalog, error) {
+func (m *Manager) Versions(ctx context.Context, q componentversions.Query) (catalog componentversions.Catalog, resultErr error) {
 	if err := q.Validate(); err != nil {
 		return componentversions.Catalog{}, err
 	}
@@ -55,10 +55,29 @@ func (m *Manager) Versions(ctx context.Context, q componentversions.Query) (comp
 		return componentversions.Catalog{}, fault.NotFound("系统组件不存在")
 	}
 	out := componentversions.Catalog{AppID: q.AppID, Channel: q.Channel, Page: q.Page, Versions: []componentversions.Version{}}
-	if binding, err := nginxcontainer.Read(m.DataDir); err == nil {
-		out.Current = NginxVersion(binding)
-	} else if !os.IsNotExist(err) {
-		return out, err
+	var bundled *componentversions.Version
+	if m.BundledNginxVersion != nil {
+		var err error
+		bundled, err = m.BundledNginxVersion()
+		if err != nil {
+			return out, err
+		}
+		if bundled != nil && q.Channel == "stable" && q.Page == 1 {
+			// Bundled metadata belongs to this installation, not the registry cache.
+			defer func() {
+				if resultErr == nil {
+					catalog.Versions = append([]componentversions.Version{*bundled}, catalog.Versions...)
+				}
+			}()
+		}
+	}
+	// A first-install binding can exist before the container actually starts.
+	if bundled == nil {
+		if binding, err := nginxcontainer.Read(m.DataDir); err == nil {
+			out.Current = NginxVersion(binding)
+		} else if !os.IsNotExist(err) {
+			return out, err
+		}
 	}
 	state, stateErr := componentversions.ReadState(m.DataDir, "builtin", "nginx")
 	if stateErr != nil {

@@ -10,6 +10,8 @@ import (
 	"nginxpanel/internal/releases"
 )
 
+const BundledNginxID = "bundled-nginx"
+
 type Version struct {
 	ID              string   `json:"id"`
 	Version         string   `json:"version"`

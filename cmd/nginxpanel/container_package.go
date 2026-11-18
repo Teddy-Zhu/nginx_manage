@@ -89,7 +89,17 @@ func runContainerPackage(args []string) error {
 	if err != nil {
 		return err
 	}
-	pkg := releases.ContainerPackage{Schema: 1, Version: version, Architecture: runtime.GOARCH, BinarySHA256: binary.SHA256, LauncherProtocol: releases.LauncherVersion, Images: map[string]string{"nginx": *nginx}}
+	var capabilities struct {
+		Version string `json:"nginx_version"`
+	}
+	raw, err := os.ReadFile("/usr/share/nginxpanel/capabilities.json")
+	if err != nil {
+		return err
+	}
+	if json.Unmarshal(raw, &capabilities) != nil || !releases.ValidChannel(capabilities.Version, "stable") {
+		return errors.New("镜像能力清单缺少 Nginx 引擎版本")
+	}
+	pkg := releases.ContainerPackage{Schema: 1, Version: version, NginxVersion: capabilities.Version, Architecture: runtime.GOARCH, BinarySHA256: binary.SHA256, LauncherProtocol: releases.LauncherVersion, Images: map[string]string{"nginx": *nginx}}
 	out, err := os.OpenFile(filepath.Join(*root, "containers.json"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return err

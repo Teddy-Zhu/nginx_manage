@@ -50,6 +50,7 @@ const reading = ref(false),
 const search = ref(""),
   statusFilter = ref("all");
 const selected = ref<string | null>(null),
+  openVersionPicker = ref(false),
   detailBusy = ref(false),
   showHistory = ref(false);
 const controller = new AbortController();
@@ -130,10 +131,15 @@ async function load() {
 function closeDetails() {
   if (detailBusy.value) return;
   selected.value = null;
+  openVersionPicker.value = false;
   if (querySoftware.value)
     void router.replace({
       query: { ...route.query, software: undefined, existing: undefined },
     });
+}
+function openDetails(app: string, install = false) {
+  openVersionPicker.value = install && app === "nginx";
+  selected.value = app;
 }
 onMounted(load);
 onUnmounted(() => controller.abort());
@@ -210,7 +216,8 @@ useLiveRefresh(
                   )
                 "
                 :active="active"
-                @manage="selected = app.id"
+                @manage="openDetails(app.id)"
+                @install="openDetails(app.id, true)"
               />
             </template>
           </SoftwareCard>
@@ -251,6 +258,7 @@ useLiveRefresh(
         :overview="overview"
         :tasks="tasks"
         :active="active"
+        :open-version-picker="openVersionPicker"
         @busy="detailBusy = $event"
         @task="recordTask"
       />

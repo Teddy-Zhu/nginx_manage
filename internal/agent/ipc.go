@@ -181,7 +181,8 @@ func (s *Server) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	componentManager := &components.Manager{BuiltinVersions: s.builtinVersions, BuiltinAction: s.manageBuiltinComponent, ContainerAction: s.manageDockerContainer, FrpsAction: s.manageFrps, Fail2banAction: s.manageContainerFail2ban, UpdatePanel: s.updateSoftwarePanel, DataDir: s.DataDir, Dir: filepath.Join(s.DataDir, "agent", "components"), TrustPath: s.ReleaseTrust, TokenPath: s.ReleaseToken, Scope: s.ComponentScope, Dev: s.Dev}
 	if s.CoreReload != nil {
-		componentManager.InstallNginx = s.installBundledNginx
+		componentManager.InstallNginx = s.installNginx
+		componentManager.BundledNginxVersion = s.bundledNginxVersion
 		componentManager.NginxInstalled = func() { s.CoreReload <- struct{}{} }
 	}
 	defer componentManager.Close()

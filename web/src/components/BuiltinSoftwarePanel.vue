@@ -28,6 +28,7 @@ const props = defineProps<{
   overview: ComponentOverview | null;
   tasks: ComponentTask[];
   active: boolean;
+  openVersionPicker?: boolean;
 }>();
 const emit = defineEmits<{
   task: [task: ComponentTask];
@@ -150,6 +151,7 @@ function operate(action: SoftwareOperation) {
       :overview="overview"
       :tasks="tasks"
       :active="active"
+      :open-version-picker="openVersionPicker"
       @busy="setBusy"
       @task="emit('task', $event)"
     />

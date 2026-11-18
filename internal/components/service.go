@@ -56,7 +56,7 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	if err := p.Require("components.manage"); err != nil {
 		return out, err
 	}
-	if err := in.Input.Validate(); err != nil {
+	if err := in.Input.validateSubmission(); err != nil {
 		return out, err
 	}
 	if in.Input.Action == "software" {

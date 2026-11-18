@@ -211,7 +211,11 @@ onBeforeUnmount(() => controller?.abort());
         </label>
       </div>
       <NAlert v-if="error || catalog?.error" type="warning">
-        {{ error || catalog?.error }}
+        {{
+          catalog?.versions.some((item) => item.id === "bundled-nginx")
+            ? "在线版本暂不可用，可安装配套版本。"
+            : error || catalog?.error
+        }}
       </NAlert>
       <NAlert v-if="channel === 'beta'" type="info">
         Beta 版本用于体验新功能，建议先备份重要配置。
@@ -234,7 +238,11 @@ onBeforeUnmount(() => controller?.abort());
               :value="item.id"
               :disabled="!!item.unavailable || item.id === catalog?.current?.id"
             >
-              <strong>{{ item.software_version ?? item.version }}</strong>
+              <strong>{{
+                item.id === "bundled-nginx"
+                  ? item.software_version || "配套版本"
+                  : (item.software_version ?? item.version)
+              }}</strong>
             </NRadio>
             <div class="version-info">
               <div class="version-tags">
@@ -252,7 +260,9 @@ onBeforeUnmount(() => controller?.abort());
                   推荐 </NTag
                 ><NTag v-if="item.id === catalog?.previous?.id" size="small">
                   上次安装 </NTag
-                ><span v-if="item.software_version" class="muted"
+                ><NTag v-if="item.id === 'bundled-nginx'" size="small">
+                  随安装包提供
+                </NTag><span v-else-if="item.software_version" class="muted"
                   >组件 {{ item.version }}</span
                 ><span v-if="item.published_at" class="muted">{{
                   new Date(item.published_at * 1000).toLocaleDateString()
@@ -286,7 +296,7 @@ onBeforeUnmount(() => controller?.abort());
       <NAlert v-if="downgrade" type="warning">
         目标版本较旧，现有配置或数据可能不兼容。切换失败时将尝试恢复原版本。
       </NAlert>
-      <p v-else class="muted version-tip">
+      <p v-else-if="catalog?.current" class="muted version-tip">
         切换版本可能短暂中断服务，建议提前备份重要数据。
       </p>
       <slot />

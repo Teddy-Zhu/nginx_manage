@@ -9,16 +9,19 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
 
+	"nginxpanel/internal/components"
 	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/nginxcontainer"
 	"nginxpanel/internal/panelruntime"
+	"nginxpanel/internal/platform"
 	"nginxpanel/internal/releases"
 	"nginxpanel/internal/secure"
 	"nginxpanel/internal/software"
@@ -67,7 +70,25 @@ func BundledNginxPending(data string) (bool, error) {
 	return false, err
 }
 
-func (s *Server) installBundledNginx(ctx context.Context, progress software.Progress) (out software.Result, resultErr error) {
+func (s *Server) bundledNginxVersion() (*componentversions.Version, error) {
+	pending, err := BundledNginxPending(s.DataDir)
+	if err != nil || !pending {
+		return nil, err
+	}
+	_, pkg, err := readNginxBundle(s.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	version := pkg.NginxVersion
+	if version == "" {
+		version = pkg.Version
+	}
+	out := componentversions.Version{ID: componentversions.BundledNginxID, Version: version,
+		SoftwareVersion: pkg.NginxVersion, Channel: releases.VersionChannel(version)}
+	return &out, out.Validate()
+}
+
+func (s *Server) installNginx(ctx context.Context, version string, progress software.Progress) (out software.Result, resultErr error) {
 	out.AppID = "nginx"
 	if s.Dev || s.ComponentScope != "host" || s.MaintenanceScope != "host" || s.CoreReload == nil || s.Nginx != nil {
 		return out, fault.Unavailable("当前环境不支持首次安装 Nginx")
@@ -94,7 +115,12 @@ func (s *Server) installBundledNginx(ctx context.Context, progress software.Prog
 	if err != nil {
 		return out, err
 	}
-	binding, err := s.bindBundledNginx(ctx, progress)
+	var binding nginxcontainer.Binding
+	if version == componentversions.BundledNginxID {
+		binding, err = s.bindBundledNginx(ctx, progress)
+	} else {
+		binding, err = s.bindReleasedNginx(ctx, version, progress)
+	}
 	if err != nil {
 		return out, err
 	}
@@ -180,6 +206,7 @@ func (s *Server) installBundledNginx(ctx context.Context, progress software.Prog
 	}
 	committed = true
 	out.Message = "Nginx 已安装并启动"
+	out.Version = components.NginxVersion(binding)
 	return out, nil
 }
 
@@ -198,20 +225,27 @@ func removeProvisionalNginx(ctx context.Context, binding nginxcontainer.Binding)
 	return nginxcontainer.ContainerAction(ctx, binding, id, "remove")
 }
 
+func readNginxBundle(data string) (string, releases.ContainerPackage, error) {
+	var pkg releases.ContainerPackage
+	dir, hash, err := nginxBundle(data)
+	if err != nil {
+		return "", pkg, err
+	}
+	raw, err := secure.ReadRootFile(filepath.Join(dir, "containers.json"), 2<<20)
+	if err != nil {
+		return "", pkg, err
+	}
+	if secure.Hash(raw) != hash || json.Unmarshal(raw, &pkg) != nil || !panelSelectionDigest.MatchString(pkg.BinarySHA256) {
+		return "", pkg, errors.New("配套 Nginx 镜像清单与安装记录不一致")
+	}
+	return dir, pkg, nil
+}
+
 func (s *Server) bindBundledNginx(ctx context.Context, progress software.Progress) (nginxcontainer.Binding, error) {
 	var empty nginxcontainer.Binding
-	dir, hash, err := nginxBundle(s.DataDir)
+	dir, pkg, err := readNginxBundle(s.DataDir)
 	if err != nil {
 		return empty, err
-	}
-	name := filepath.Join(dir, "containers.json")
-	raw, err := secure.ReadRootFile(name, 2<<20)
-	if err != nil {
-		return empty, err
-	}
-	var pkg releases.ContainerPackage
-	if secure.Hash(raw) != hash || json.Unmarshal(raw, &pkg) != nil || !panelSelectionDigest.MatchString(pkg.BinarySHA256) {
-		return empty, errors.New("配套 Nginx 镜像清单与安装记录不一致")
 	}
 	captured := filepath.Join(s.DataDir, "bin", "components", "bundled-nginx.json")
 	if previous, err := nginxcontainer.Read(s.DataDir); err == nil {
@@ -245,6 +279,48 @@ func (s *Server) bindBundledNginx(ctx context.Context, progress software.Progres
 	if err := componentversions.WriteFile(captured, pkg); err != nil {
 		return empty, err
 	}
+	return s.bindNginxInstallImage(ctx, image, filepath.Join(dir, "nginxpanel"), releases.ImageInput{LocalManifestPath: captured})
+}
+
+func (s *Server) bindReleasedNginx(ctx context.Context, tag string, progress software.Progress) (nginxcontainer.Binding, error) {
+	var empty nginxcontainer.Binding
+	version, ok := strings.CutPrefix(tag, "nginx-v")
+	channel := releases.VersionChannel(version)
+	if !ok || channel == "" {
+		return empty, fault.Invalid("请选择 Nginx 安装版本")
+	}
+	prerelease := channel == "beta"
+	info := platform.Detect()
+	progress("正在验证所选 Nginx 发行")
+	prepared, err := releases.Online(ctx, releases.OnlineInput{
+		TrustPath: s.ReleaseTrust, TokenPath: s.ReleaseToken, Tag: tag, Prepare: true, AllowPrerelease: prerelease,
+		Assets: []string{"image-nginx"}, AllowedComponents: []string{"nginx"},
+		Host:     releases.Host{OS: runtime.GOOS, Architecture: runtime.GOARCH, Distribution: info.OS, Version: info.Version},
+		Receiver: releases.Receiver{APIMajor: 1, AgentProtocol: Protocol, Launcher: releases.LauncherVersion},
+	})
+	if err != nil {
+		return empty, err
+	}
+	source, err := preparedNginxImageSource(ctx, panelruntime.StageInput{DataDir: s.DataDir, TrustPath: s.ReleaseTrust, PlanID: prepared.Plan.ID, AllowPrerelease: prerelease})
+	if err != nil {
+		return empty, err
+	}
+	approval, _, err := releases.AdmitImage(source.Signature, "nginx", source.Choice.Reference, nil)
+	if err != nil {
+		return empty, err
+	}
+	if approval.TrustSHA256 != source.Plan.TrustSHA256 || approval.Image != source.Choice {
+		return empty, releases.ErrReleaseChanged
+	}
+	progress("正在准备所选版本的 Nginx 镜像")
+	if _, err = nginxcontainer.PullSignedImage(ctx, approval); err != nil {
+		return empty, err
+	}
+	return s.bindNginxInstallImage(ctx, source.Choice.Reference, "", source.Signature)
+}
+
+func (s *Server) bindNginxInstallImage(ctx context.Context, image, launcher string, signature releases.ImageInput) (nginxcontainer.Binding, error) {
+	var empty nginxcontainer.Binding
 	worker, err := user.Lookup("nginxpanel-nginx")
 	if err != nil {
 		return empty, err
@@ -258,6 +334,5 @@ func (s *Server) bindBundledNginx(ctx context.Context, progress software.Progres
 		return empty, err
 	}
 	return nginxcontainer.Bind(ctx, nginxcontainer.BindInput{DataDir: s.DataDir, Image: image,
-		LauncherBinary: filepath.Join(dir, "nginxpanel"), UID: uid, GID: gid,
-		Signature: releases.ImageInput{LocalManifestPath: captured}})
+		LauncherBinary: launcher, UID: uid, GID: gid, Signature: signature})
 }

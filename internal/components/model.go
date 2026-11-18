@@ -82,6 +82,16 @@ func (in Input) Validate() error {
 	}
 	return nil
 }
+func (in Input) validateSubmission() error {
+	if err := in.Validate(); err != nil {
+		return err
+	}
+	if in.Software != nil && in.Software.Action == "install-nginx" && in.Software.Version == "" {
+		return fault.Invalid("请选择 Nginx 安装版本")
+	}
+	return nil
+}
+
 func (in Input) online() releases.OnlineInput {
 	return releases.OnlineInput{PanelStaging: true, Tag: in.Tag, Assets: slices.Clone(in.Assets), Components: slices.Clone(in.Components), AllowPrerelease: in.Prerelease, Prepare: in.Action == "prepare", AllowedComponents: []string{"nginx", "fail2ban", "panel"}, ExpectedPlanID: in.PlanID, ExpectedManifestSHA256: in.ManifestSHA256, ExpectedTrustSHA256: in.TrustSHA256}
 }

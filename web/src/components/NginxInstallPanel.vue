@@ -19,6 +19,7 @@ const props = defineProps<{
   overview: ComponentOverview | null;
   tasks: ComponentTask[];
   active: boolean;
+  openVersionPicker?: boolean;
 }>();
 const emit = defineEmits<{
   task: [task: ComponentTask];
@@ -37,6 +38,17 @@ const permitted = computed(
 );
 const installAllowed = computed(
   () => permitted.value && !!session.me?.scopes.includes("system.write"),
+);
+const firstInstall = computed(
+  () => !!props.overview?.bundled_nginx && !props.overview.installation,
+);
+watch(
+  () => props.openVersionPicker,
+  (show) => {
+    if (show && firstInstall.value && installAllowed.value)
+      choosingVersion.value = true;
+  },
+  { immediate: true },
 );
 function hasNginxImage(task: ComponentTask) {
   const release = task.result?.release;
@@ -147,23 +159,26 @@ function pull(item: ComponentTask, imageID: string) {
   });
 }
 async function chooseVersion(version: ComponentVersion) {
+  if (firstInstall.value) {
+    if (!installAllowed.value) return;
+    choosingVersion.value = false;
+    await submit({
+      input: {
+        action: "software",
+        tag: "",
+        prerelease: false,
+        plan_id: "",
+        manifest_sha256: "",
+        trust_sha256: "",
+        software: { action: "install-nginx", version: version.id },
+      },
+    });
+    return;
+  }
   targetVersion.value = version;
   prerelease.value = version.channel === "beta";
   choosingVersion.value = false;
   await check();
-}
-function installBundled() {
-  return submit({
-    input: {
-      action: "software",
-      tag: "",
-      prerelease: false,
-      plan_id: "",
-      manifest_sha256: "",
-      trust_sha256: "",
-      software: { action: "install-nginx" },
-    },
-  });
 }
 </script>
 <template>
@@ -172,19 +187,19 @@ function installBundled() {
     name="Nginx"
     app-id="nginx"
     :busy="busy || active"
-    submit-text="检查此版本"
+    :submit-text="firstInstall ? '安装此版本' : '检查此版本'"
     @choose="chooseVersion"
     @cancel="choosingVersion = false"
   />
   <div
-    v-if="overview?.bundled_nginx && !overview.installation"
+    v-if="firstInstall"
     class="button-row"
   >
     <NButton
       type="primary"
       :loading="busy || active"
       :disabled="!installAllowed || active"
-      @click="installBundled"
+      @click="choosingVersion = true"
       >安装 Nginx</NButton
     >
   </div>

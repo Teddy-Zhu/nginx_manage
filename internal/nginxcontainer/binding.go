@@ -146,14 +146,6 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 	if !imageValue.MatchString(in.Image) || in.UID <= 0 || in.GID <= 0 {
 		return b, errors.New("须明确固定镜像摘要及独立非 root Nginx 身份")
 	}
-	launcher, err := filepath.EvalSymlinks(in.LauncherBinary)
-	if err != nil {
-		return b, err
-	}
-	launcherHash, err := secure.HashRootFile(launcher, binaryLimit)
-	if err != nil {
-		return b, err
-	}
 	unlock, err := nginxruntime.LockSelection(in.DataDir)
 	if err != nil {
 		return b, err
@@ -161,12 +153,25 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 	defer unlock()
 	var existing *Binding
 	if prior, err := Read(in.DataDir); err == nil {
-		if prior.Image != in.Image || prior.UID != in.UID || prior.GID != in.GID || prior.BootstrapSHA256 != launcherHash {
+		if prior.Image != in.Image || prior.UID != in.UID || prior.GID != in.GID {
 			return b, errors.New("已有不同 Nginx 容器绑定，切换须进入维护流程")
 		}
 		existing = &prior
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return b, err
+	}
+	var launcherHash string
+	if in.LauncherBinary != "" {
+		launcher, err := filepath.EvalSymlinks(in.LauncherBinary)
+		if err != nil {
+			return b, err
+		}
+		launcherHash, err = secure.HashRootFile(launcher, binaryLimit)
+		if err != nil {
+			return b, err
+		}
+	} else if in.Signature.LocalManifestPath != "" {
+		return b, errors.New("本地 Nginx 镜像需要与安装包中的启动器核对")
 	}
 	approval, err := admitSource(in, launcherHash, existing)
 	if err != nil {
@@ -186,10 +191,18 @@ func Bind(ctx context.Context, in BindInput) (Binding, error) {
 	if err != nil {
 		return b, err
 	}
-	if err = imageBinary(ctx, d, image.ID, Bootstrap, launcherHash); err != nil {
+	if launcherHash == "" {
+		launcherHash, err = inspectNginxBootstrap(ctx, d, image, approval)
+	} else {
+		err = imageBinary(ctx, d, image.ID, Bootstrap, launcherHash)
+	}
+	if err != nil {
 		return b, err
 	}
 	if existing != nil {
+		if existing.BootstrapSHA256 != launcherHash {
+			return b, errors.New("Nginx 容器启动器与原登记不一致")
+		}
 		return *existing, nil
 	}
 	b, err = bindingMetadata(ctx, d, in, approval, image, launcherHash)

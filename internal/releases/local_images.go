@@ -12,6 +12,7 @@ import (
 type ContainerPackage struct {
 	Schema           int               `json:"schema"`
 	Version          string            `json:"version"`
+	NginxVersion     string            `json:"nginx_version,omitempty"`
 	Architecture     string            `json:"architecture"`
 	BinarySHA256     string            `json:"binary_sha256"`
 	LauncherProtocol int               `json:"launcher_protocol"`
