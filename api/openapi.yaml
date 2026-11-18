@@ -644,6 +644,23 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
+  /account:
+    put:
+      operationId: updateAdministrator
+      x-scopes: [auth.manage]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string, minLength: 1, maxLength: 64 }
+                password: { type: string, minLength: 6 }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
   /account/password:
     put:
       operationId: changePassword
@@ -696,6 +713,26 @@ paths:
       parameters: [{ $ref: '#/components/parameters/CSRF' }]
       responses:
         '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+  /system/panel-access:
+    get:
+      operationId: getPanelAccess
+      x-scopes: [system.write]
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        default: { $ref: '#/components/responses/JSON' }
+    put:
+      operationId: updatePanelAccess
+      x-scopes: [system.write]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PanelAccessInput' }
+      responses:
+        '200': { $ref: '#/components/responses/JSON' }
+        '202': { $ref: '#/components/responses/JSON' }
         default: { $ref: '#/components/responses/JSON' }
   /system/capabilities:
     get:
@@ -1996,6 +2033,12 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Response' }
   schemas:
+    PanelAccessInput:
+      type: object
+      required: [port, protocol]
+      properties:
+        port: { type: integer, minimum: 1024, maximum: 65535 }
+        protocol: { type: string, enum: [http, https] }
     RuntimeHistoryFilter:
       {"type": "object", "additionalProperties": false, "required": ["kind", "before", "keep"], "properties": {"kind": {"type": "string"}, "before": {"type": "integer", "format": "int64"}, "keep": {"type": "integer", "minimum": 2, "maximum": 32}}}
     RuntimeHistoryExecuteInput:

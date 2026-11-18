@@ -9,11 +9,15 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 root=$(cd -- "$(dirname -- "$0")" && pwd -P)
 usage() {
   cat <<'EOF'
-用法：sudo bash install.sh [--yes] [--advanced] [--port 端口] [--fresh | --uninstall [--keep-data | --purge]]
-自动检测本机系统、架构、安装材料、Docker 和管理端口，确认推荐方案后安装面板。
+用法：sudo bash install.sh [安装选项] [--fresh | --uninstall [--keep-data | --purge]]
+安装向导可设置管理端口、访问协议和管理员账号。
 源码目录自动使用 Docker 编译并接续安装，无需手动构建或解包。
---port 指定管理端口；不指定时自动选择随机空闲端口，默认允许外部访问。
---yes 直接确认所选操作（包括完全卸载的数据删除）；--advanced 才逐项调整安装配置。
+--port 端口                  指定管理端口，默认推荐随机空闲端口
+--protocol http|https        指定访问协议，默认 https
+--admin-user 账号            指定管理员账号，默认 admin
+--admin-password-file 文件   从单行文件读取管理员密码
+--yes                        跳过确认和基本配置提问，未提供密码文件时在网页创建管理员
+--advanced                   调整数据目录、监听地址、主机网络和日志设置
 --fresh 完全卸载旧安装后安装当前源码/安装包，永久删除原数据；适用于尚未使用的环境。
 --uninstall 使用当前源码或安装包卸载旧安装，默认保留数据，可交互选择清理。
 --keep-data 明确保留数据，--purge 明确清理数据，均需与 --uninstall 一起使用。
@@ -21,11 +25,14 @@ usage() {
 
 带参数时转交标准安装器，例如：
 sudo bash install.sh --binary /可信目录/nginxpanel --nginx-package /可信安装包 --start
-  --protocol http|https     访问协议，默认 https
 完整参数：bash deploy/native/install.sh --help
 EOF
 }
+valid_port() {
+  [[ $1 =~ ^[1-9][0-9]{3,4}$ ]] && ((10#$1 >= 1024 && 10#$1 <= 65535))
+}
 auto_confirm=no advanced=no requested_port= requested_protocol= fresh=no uninstall=no purge=no keep_data=no
+requested_admin= password_file=
 while (($#)); do
   case "$1" in
     --yes) auto_confirm=yes; shift ;;
@@ -36,18 +43,23 @@ while (($#)); do
     --keep-data) keep_data=yes; shift ;;
     --protocol) (($# >= 2)) || die "--protocol 缺少协议"; requested_protocol=$2; [[ $2 == http || $2 == https ]] || die "管理协议须为 http 或 https"; shift 2 ;;
     --port) (($# >= 2)) && [[ -n $2 ]] || die '--port 缺少端口'; requested_port=$2; shift 2 ;;
+    --admin-user|--admin-password-file)
+      (($# >= 2)) && [[ -n $2 && $2 != --* ]] || die "参数缺少值：$1"
+      if [[ $1 == --admin-user ]]; then requested_admin=$2; else password_file=$2; fi
+      shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
-      [[ $auto_confirm == no && $advanced == no && -z $requested_port && -z $requested_protocol && $fresh == no && $uninstall == no && $purge == no && $keep_data == no ]] || die '引导入口选项不能与标准安装器参数混用'
+      [[ $auto_confirm == no && $advanced == no && -z $requested_port && -z $requested_protocol && -z $requested_admin && -z $password_file && $fresh == no && $uninstall == no && $purge == no && $keep_data == no ]] || die '引导入口选项不能与标准安装器参数混用'
       exec /bin/bash "$root/deploy/native/install.sh" "$@" ;;
   esac
 done
 [[ $fresh == no || $uninstall == no ]] || die '--fresh 和 --uninstall 不能混用'
 [[ $purge == no || $uninstall == yes ]] || die '--purge 只能与 --uninstall 一起使用'
 [[ $keep_data == no || $uninstall == yes && $purge == no ]] || die '--keep-data 只能与 --uninstall 一起使用，不能与 --purge 混用'
-[[ $uninstall == no || $advanced == no && -z $requested_port && -z $requested_protocol ]] || die '卸载不接受 --advanced 或 --port'
+[[ $uninstall == no || $advanced == no && -z $requested_port && -z $requested_protocol && -z $requested_admin && -z $password_file ]] || die '卸载不接受安装设置'
+[[ $auto_confirm == no || -z $requested_admin || -n $password_file ]] || die '--yes 与 --admin-user 一起使用时须提供 --admin-password-file'
 if [[ -n $requested_port ]]; then
-  [[ $requested_port =~ ^[1-9][0-9]{3,4}$ ]] && ((requested_port >= 1024 && requested_port <= 65535)) || die '端口须为 1024–65535'
+  valid_port "$requested_port" || die '端口须为 1024–65535'
 fi
 [[ $EUID == 0 ]] || die '请在实际部署目标使用 sudo bash install.sh'
 if [[ $auto_confirm == no || $advanced == yes ]]; then
@@ -93,6 +105,31 @@ confirm_install() {
     printf '%s\n' '安装已取消'
     exit 0
   fi
+}
+prepare_admin() {
+  local password confirmation
+  set +x
+  if [[ -n $password_file ]]; then
+    [[ -f $password_file && -r $password_file ]] || die '无法读取管理员密码文件'
+    admin_record=$("$binary" installation-admin-prepare --username "$admin_user" <"$password_file") || die '管理员设置无效'
+    return
+  fi
+  if [[ $auto_confirm == yes ]]; then return; fi
+  local hint='（直接回车则在网页设置）'
+  if [[ -n $requested_admin ]]; then hint=; fi
+  while :; do
+    if [[ -z $requested_admin ]]; then ask admin_user '管理员账号' "$admin_user"; fi
+    IFS= read -r -s -p "管理员密码（至少 6 位）$hint: " password || die '输入已结束，安装取消'
+    printf '\n' >&2
+    if [[ -z $password && -z $requested_admin ]]; then return; fi
+    IFS= read -r -s -p '确认管理员密码: ' confirmation || die '输入已结束，安装取消'
+    printf '\n' >&2
+    if [[ $password != "$confirmation" ]]; then
+      printf '%s\n' '两次输入的密码不一致，请重试。'
+    elif admin_record=$(printf '%s\n' "$password" | "$binary" installation-admin-prepare --username "$admin_user"); then
+      return
+    fi
+  done
 }
 root_chain() {
   local path=$1 mode
@@ -146,6 +183,8 @@ install_from_source() {
   if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
   if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
   if [[ -n $requested_protocol ]]; then next_args+=(--protocol "$requested_protocol"); fi
+  if [[ -n $requested_admin ]]; then next_args+=(--admin-user "$requested_admin"); fi
+  if [[ -n $password_file ]]; then next_args+=(--admin-password-file "$password_file"); fi
   if [[ $fresh == yes ]]; then next_args+=(--fresh); fi
   if [[ $uninstall == yes ]]; then next_args+=(--uninstall); fi
   if [[ $purge == yes ]]; then next_args+=(--purge); fi
@@ -196,7 +235,9 @@ if [[ $fresh == yes || $uninstall == yes ]]; then
     if [[ $auto_confirm == yes ]]; then next_args+=(--yes); fi
     if [[ $advanced == yes ]]; then next_args+=(--advanced); fi
     if [[ -n $requested_port ]]; then next_args+=(--port "$requested_port"); fi
-  if [[ -n $requested_protocol ]]; then next_args+=(--protocol "$requested_protocol"); fi
+    if [[ -n $requested_protocol ]]; then next_args+=(--protocol "$requested_protocol"); fi
+    if [[ -n $requested_admin ]]; then next_args+=(--admin-user "$requested_admin"); fi
+    if [[ -n $password_file ]]; then next_args+=(--admin-password-file "$password_file"); fi
     /bin/bash "$installer_lifecycle_stage/install.sh" "${next_args[@]}"
     exit 0
   elif [[ -e /opt/nginxpanel/install-command.sh || -L /opt/nginxpanel/install-command.sh ]]; then
@@ -209,6 +250,7 @@ if [[ -e /etc/nginxpanel/install/lifecycle || -L /etc/nginxpanel/install/lifecyc
   trusted_file /opt/nginxpanel/manage.sh
   [[ -z $requested_protocol ]] || die "已有安装记录；请使用 manage.sh set-protocol 修改协议"
   [[ -z $requested_port ]] || die '重装保留当前端口；重装后使用 manage.sh set-port 修改'
+  [[ -z $requested_admin && -z $password_file ]] || die '重装保留原管理员账号'
   printf '%s\n' '发现卸载记录，将恢复原安装。'
   reinstall_args=(reinstall)
   if [[ $auto_confirm == yes ]]; then reinstall_args+=(--yes); fi
@@ -217,11 +259,12 @@ fi
 if [[ -e $plan || -L $plan ]]; then
   trusted_file "$plan"
   [[ $(stat -c %s "$plan") -le 16384 ]] || die '原安装命令超出读取限制'
-  [[ -z $requested_protocol ]] || die "已有安装记录；请使用 manage.sh set-protocol 修改协议"
-  [[ -z $requested_port ]] || die '已有安装计划；安装完成后使用 manage.sh set-port 修改端口'
   if [[ -e /opt/nginxpanel/install-complete || -L /opt/nginxpanel/install-complete ]]; then
     trusted_file /opt/nginxpanel/install-complete
     trusted_file /etc/nginxpanel/install/ready
+    [[ -z $requested_protocol ]] || die '已有安装记录，请使用 manage.sh set-protocol 修改协议'
+    [[ -z $requested_port ]] || die '已有安装记录，请使用 manage.sh set-port 修改端口'
+    [[ -z $requested_admin && -z $password_file ]] || die '已有安装记录，请在面板中管理账号'
     printf '%s\n' 'NginxPanel 已安装。' '查看面板地址：sudo bash /opt/nginxpanel/manage.sh info'
     exit 0
   fi
@@ -265,17 +308,9 @@ for candidate in /srv/nginxpanel /var/lib/nginxpanel; do
     data=$candidate; data_ready=yes; break
   fi
 done
-listen_args=()
-if [[ -n $requested_port ]]; then listen_args+=(--port "$requested_port"); fi
-listen=
-if [[ -f $binary && -x $binary && $(elf_arch "$binary") == "$arch" ]]; then
-  listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择管理地址或端口，请检查端口占用和网络配置'
-fi
 printf '环境检查通过（%s，%s，Docker 与 Compose 可用）\n' "$os_name" "$arch"
 custom=$advanced
-if [[ ! -f $binary ]]; then
-  [[ $custom == yes ]] || die '安装包缺少程序；请使用完整 Release 或在源码目录运行 install.sh'
-elif [[ $data_ready == no ]]; then
+if [[ $data_ready == no ]]; then
   [[ $custom == yes ]] || die '默认数据目录均不可用；使用 --advanced 选择新的空目录'
 fi
 if [[ $custom == yes ]]; then
@@ -284,10 +319,24 @@ fi
 binary=$(readlink -e -- "$binary") || die '程序路径不存在；请先使用 Docker 构建并传输安装包'
 [[ -f $binary && -x $binary ]] || die '程序不可执行'
 [[ $(elf_arch "$binary") == "$arch" ]] || die "面板程序与目标 linux/$arch 架构不匹配，请传输正确的安装包"
-if [[ -z $listen ]]; then
-  listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择空闲管理端口'
+listen_args=()
+if [[ -n $requested_port ]]; then listen_args+=(--port "$requested_port"); fi
+listen=$("$binary" panel-listen-default "${listen_args[@]}") || die '无法选择管理端口，请检查端口占用和网络配置'
+if [[ $custom == yes ]]; then
+  ask listen '管理监听 IP:端口（IPv6 使用 [地址]:端口）' "$listen"
+elif [[ $auto_confirm == no && -z $requested_port ]]; then
+  suggested_port=${listen##*:}
+  while :; do
+    ask port '管理端口' "$suggested_port"
+    if ! valid_port "$port"; then
+      printf '%s\n' '请输入 1024–65535 之间的端口。'
+    elif listen=$("$binary" panel-listen-default --port "$port" 2>/dev/null); then
+      break
+    else
+      printf '%s\n' '此端口无法监听，请选择其他端口。'
+    fi
+  done
 fi
-if [[ $custom == yes ]]; then ask listen '管理监听 IP:端口（IPv6 使用 [地址]:端口）' "$listen"; fi
 [[ $data =~ ^/(srv|var/lib)/[a-zA-Z0-9_-][a-zA-Z0-9_./-]*$ && $data != */ && $data != *//* && $data != */./* && $data != */../* && $data != */. && $data != */.. ]] || die '数据目录须为 /srv 或 /var/lib 下的规范路径'
 [[ $listen =~ ^(\[[0-9a-f:]+\]|[0-9.]+):([0-9]{4,5})$ ]] || die '管理地址须为 IPv4:端口或 [IPv6]:端口'
 port=${BASH_REMATCH[2]}
@@ -297,6 +346,13 @@ root_chain "${data%/*}"
 [[ ! -e $data && ! -L $data ]] || empty_directory "$data" || die '数据目录不可用或非空，不能首次安装覆盖'
 
 protocol=${requested_protocol:-https}
+if [[ -z $requested_protocol && ( $auto_confirm == no || $custom == yes ) ]]; then
+  while :; do
+    ask protocol '访问协议（https/http）' https
+    if [[ $protocol == https || $protocol == http ]]; then break; fi
+    printf '%s\n' '请输入 https 或 http。'
+  done
+fi
 args=(--data-dir "$data" --listen "$listen" --protocol "$protocol")
 dns_owner=auto firewall_owner=auto firewall_ssh=auto log_owner=agent
 if [[ $custom == yes ]] && yes_no '手动调整主机网络管理或日志设置？'; then
@@ -313,7 +369,15 @@ args+=(--dns-owner "$dns_owner" --nginx-log-owner "$log_owner" --firewall-owner 
 start=yes
 if [[ $custom == yes ]] && ! yes_no '安装完成后启动管理服务？' yes; then start=no; fi
 if [[ $start == yes ]]; then args+=(--start); fi
+admin_user=${requested_admin:-admin}
+admin_record=
+prepare_admin
 printf '\n安装 NginxPanel\n  数据目录：%s\n  管理端口：%s（%s）\n' "$data" "$port" "${protocol^^}"
+if [[ -n $admin_record ]]; then
+  printf '  管理员账号：%s\n' "$admin_user"
+else
+  printf '%s\n' '  管理员账号将在首次访问时设置'
+fi
 if [[ $custom == yes ]]; then
   printf '  监听地址：%s\n' "${listen%:*}"
   if [[ $start == no ]]; then printf '%s\n' '  安装后手动启动'; fi
@@ -336,6 +400,13 @@ install -m 0555 "$root/manage.sh" "$stage/manage.sh"
 install -m 0444 "$root/containers.json" "$stage/containers.json"
 install -m 0400 "$root/container-images.tar" "$stage/container-images.tar"
 args+=(--nginx-package "$stage")
+if [[ -n $admin_record ]]; then
+  printf '%s\n' "$admin_record" >"$stage/admin.json"
+  chmod 0400 "$stage/admin.json"
+  sync -f "$stage"
+  unset admin_record
+  args+=(--admin-setup)
+fi
 if [[ -e /opt/nginxpanel/manage.sh || -L /opt/nginxpanel/manage.sh ]]; then
   trusted_file /opt/nginxpanel/manage.sh
   cmp -s "$stage/manage.sh" /opt/nginxpanel/manage.sh || die '已有不同管理脚本，停止覆盖'

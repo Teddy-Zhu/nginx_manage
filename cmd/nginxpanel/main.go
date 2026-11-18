@@ -85,6 +85,9 @@ func run() error {
 	if command == "container-package" {
 		return runContainerPackage(os.Args[2:])
 	}
+	if command == "installation-admin-prepare" {
+		return runInitialAdminPrepare(os.Args[2:])
+	}
 	if strings.HasPrefix(command, "deployment-upgrade") {
 		return runDeploymentUpgrade(ctx, command, os.Args[2:])
 	}
@@ -112,6 +115,7 @@ func run() error {
 		defaultDir = ".local"
 	}
 	dataDir := flags.String("data-dir", defaultDir, "node data directory")
+	adminStdin := flags.Bool("admin-stdin", false, "read a prepared administrator record for init")
 	listen := flags.String("listen", "", "management listener IP:port")
 	protocol := flags.String("protocol", "", "management protocol: http or https (default https)")
 	listenPort := flags.Int("port", 0, "management port (zero selects an unused port during installation)")
@@ -370,6 +374,7 @@ func run() error {
 		"launcher":                           {"data-dir": true},
 		"panel-listen":                       {"data-dir": true},
 		"panel-access-urls":                  {"data-dir": true},
+		"panel-access-worker":                {"data-dir": true, "port": true, "protocol": true},
 		"panel-listen-default":               {"port": true, "listen": true},
 		"panel-listen-set":                   {"data-dir": true, "listen": true, "protocol": true},
 		"installation-removal-check":         {"data-dir": true},
@@ -432,8 +437,12 @@ func run() error {
 			invalidFlag = f.Name
 		}
 		switch f.Name {
+		case "admin-stdin":
+			if command != "init" {
+				invalidFlag = f.Name
+			}
 		case "port":
-			if command != "panel-listen-default" {
+			if command != "panel-listen-default" && command != "panel-access-worker" {
 				invalidFlag = f.Name
 			}
 		case "fail2ban-upgrade-activation":
@@ -1135,6 +1144,8 @@ func run() error {
 		return launcher.Run(ctx, absDir)
 	case "panel-native-serve":
 		return panelruntime.ExecNative(absDir)
+	case "panel-access-worker":
+		return agent.ApplyPanelAccess(ctx, absDir, *listenPort, *protocol)
 	case "panel-listen-default":
 		if *listen != "" {
 			if *listenPort != 0 {
@@ -1475,7 +1486,7 @@ func run() error {
 		if command == "dev" && os.Geteuid() == 0 {
 			return errors.New("development mode must not run as root")
 		}
-		path, err := app.Init(ctx, absDir, command == "dev")
+		path, err := initPanel(ctx, absDir, command == "dev", *adminStdin)
 		if err != nil {
 			return err
 		}

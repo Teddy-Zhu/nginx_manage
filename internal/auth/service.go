@@ -253,8 +253,8 @@ func (s *Service) BootstrapRequired(ctx context.Context) (bool, error) {
 }
 
 func (s *Service) Bootstrap(ctx context.Context, token, username, password string) error {
-	if len(username) < 1 || len(username) > 64 || strings.TrimSpace(username) != username || strings.ContainsAny(username, "\r\n\t\x00") {
-		return fault.Invalid("用户名须为 1–64 个字符且不含控制字符")
+	if err := validateUsername(username); err != nil {
+		return err
 	}
 	var want string
 	err := s.DB.QueryRowContext(ctx, "SELECT value FROM settings WHERE key='bootstrap_hash'").Scan(&want)
@@ -288,7 +288,7 @@ func (s *Service) Bootstrap(ctx context.Context, token, username, password strin
 	if n != 1 {
 		return ErrUnauthorized
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO users(id,username,password_hash,created_at) VALUES(1,?,?,?)", username, hash, time.Now().Unix()); err != nil {
+	if _, err := tx.ExecContext(ctx, insertAdmin, username, hash, time.Now().Unix()); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -378,13 +378,36 @@ func CreateCredentialTx(ctx context.Context, tx *sql.Tx, p Principal, in Credent
 }
 
 func (s *Service) ChangePassword(ctx context.Context, password string) error {
-	hash, err := HashPassword(password)
+	return s.UpdateAdministrator(ctx, nil, &password)
+}
+
+func (s *Service) UpdateAdministrator(ctx context.Context, username, password *string) error {
+	if username == nil && password == nil {
+		return fault.Invalid("请填写要修改的账号或密码")
+	}
+	if username != nil {
+		if err := validateUsername(*username); err != nil {
+			return err
+		}
+	}
+	var hash *string
+	if password != nil {
+		encoded, err := HashPassword(*password)
+		if err != nil {
+			return err
+		}
+		hash = &encoded
+	}
+	result, err := s.DB.ExecContext(ctx, "UPDATE users SET username=coalesce(?,username),password_hash=coalesce(?,password_hash),session_epoch=session_epoch+1 WHERE id=1", username, hash)
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.ExecContext(ctx, "UPDATE users SET password_hash=?,session_epoch=session_epoch+1 WHERE id=1", hash)
+	changed, err := result.RowsAffected()
 	if err != nil {
 		return err
+	}
+	if changed != 1 {
+		return fault.NotFound("管理员尚未创建")
 	}
 	return s.Sessions.Destroy(ctx)
 }

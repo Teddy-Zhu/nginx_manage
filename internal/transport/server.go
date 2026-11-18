@@ -68,6 +68,7 @@ type Server struct {
 	Dev             bool
 	Version         string
 	PanelRuntime    string
+	DataDir         string
 	logStreams      atomic.Int32
 	loginLogWarn    atomic.Int64
 	metricReads     atomic.Int32
@@ -217,6 +218,30 @@ func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request, _ apigen
 		return
 	}
 	if err := s.audit(r, p.ID, "auth.password", "administrator", "succeeded"); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.ok(w, r, nil)
+}
+func (s *Server) UpdateAdministrator(w http.ResponseWriter, r *http.Request, _ apigen.UpdateAdministratorParams) {
+	p, ok := s.localAdministrator(w, r, "auth.manage")
+	if !ok {
+		return
+	}
+	var in apigen.UpdateAdministratorJSONBody
+	if err := decode(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if err := s.Auth.UpdateAdministrator(r.Context(), in.Username, in.Password); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	action := "auth.username"
+	if in.Password != nil {
+		action = "auth.password"
+	}
+	if err := s.audit(r, p.ID, action, "administrator", "succeeded"); err != nil {
 		s.fail(w, r, err)
 		return
 	}

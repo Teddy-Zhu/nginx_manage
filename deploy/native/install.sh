@@ -14,6 +14,7 @@ usage() {
 EOF
 }
 binary= nginx= nginx_plan= nginx_asset= release_trust=/etc/nginxpanel/release-trust.json release_manifest= release_signature= container_manifest= prerelease=no data=/srv/nginxpanel protocol=https listen= start=no nginx_image= nginx_package= dns_owner=auto firewall_owner=auto firewall_ssh=auto nginx_log_owner=agent
+admin_setup=no
 while (($#)); do
   case "$1" in
     --binary|--nginx-binary|--nginx-plan|--nginx-asset|--release-trust|--release-manifest|--release-signature|--container-manifest|--data-dir|--listen|--protocol|--nginx-image|--nginx-package|--dns-owner|--firewall-owner|--firewall-ssh|--nginx-log-owner)
@@ -33,6 +34,7 @@ while (($#)); do
       shift 2 ;;
     --release-prerelease) prerelease=yes; shift ;;
     --start) start=yes; shift ;;
+    --admin-setup) admin_setup=yes; shift ;;
     --help) usage; exit 0 ;;
     *) usage; die "未知参数：$1" ;;
   esac
@@ -41,6 +43,7 @@ done
 [[ $EUID == 0 ]] || die '安装需要本机 root'
 [[ ! -e /etc/nginxpanel/install/lifecycle && ! -L /etc/nginxpanel/install/lifecycle ]] || die '已有卸载或重装记录，请使用 manage.sh reinstall 或续办完全卸载'
 [[ -n $binary ]] || { usage; exit 1; }
+[[ $admin_setup == no || -n $nginx_package ]] || die '管理员安装记录需要引导安装包'
 [[ -z $nginx && -z $nginx_plan && -z $nginx_asset ]] || die '不支持宿主机 Nginx 安装，请使用配套 Nginx 镜像'
 if [[ -n $nginx_package ]]; then
   [[ -z $nginx_image && -z $container_manifest && -z $release_manifest && -z $release_signature && $prerelease == no ]] || die '延后安装不能混用镜像预装参数'
@@ -434,7 +437,15 @@ if [[ -e $state/ready || -L $state/ready ]]; then
   trusted_file "$state/ready" 64
   cmp -s "$work/ready" "$state/ready" || die '安装就绪记录不匹配'
 else
-  if ! "$data/runtime/current/nginxpanel" init --data-dir "$data" >"$work/init.log" 2>&1; then
+  init_args=(--data-dir "$data")
+  init_input=/dev/null
+  if [[ $admin_setup == yes ]]; then
+    init_input=$nginx_package/admin.json
+    trusted_file "$init_input" 4096
+    [[ $(stat -c %a "$init_input") == 400 ]] || die '管理员安装记录权限无效'
+    init_args+=(--admin-stdin)
+  fi
+  if ! "$data/runtime/current/nginxpanel" init "${init_args[@]}" <"$init_input" >"$work/init.log" 2>&1; then
     cat -- "$work/init.log" >&2
     die '面板初始化失败'
   fi
@@ -568,6 +579,7 @@ case "$firewall_owner" in
   iptables-nft|iptables-legacy) "$release_dir/nginxpanel" iptables-init --data-dir "$data" --firewall-scope host --firewall-backend "$firewall_owner" >"$work/firewall-registration.json" ;;
 esac
 write_owned "$work/ready" "$state/ready" 600
+if [[ $admin_setup == yes ]]; then rm -f -- "$nginx_package/admin.json"; fi
 systemctl --quiet enable nginxpanel.service || die '无法设置面板开机启动'
 if [[ $start == yes ]]; then
   printf '%s\n' '正在启动面板服务…'
@@ -586,7 +598,9 @@ if addresses=$("$data/runtime/current/nginxpanel" panel-access-urls --data-dir "
 else
   printf '  面板地址：使用服务器 IP 和端口 %s（%s）\n' "$port" "${protocol^^}"
 fi
-if [[ -f $data/bootstrap/token ]]; then
+if [[ $admin_setup == yes ]]; then
+  printf '%s\n' '  管理员账号已就绪，可直接登录。'
+elif [[ -f $data/bootstrap/token ]]; then
   printf '  初始令牌文件：%s/bootstrap/token\n' "$data"
 fi
 if [[ -x /opt/nginxpanel/manage.sh ]]; then

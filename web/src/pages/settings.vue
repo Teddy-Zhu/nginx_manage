@@ -20,11 +20,12 @@ import { permissionLabel } from "../utils/permissions";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
 import { RouterLink, useRouter } from "vue-router";
-import { h, ref, onMounted } from "vue";
+import { computed, h, ref, onMounted } from "vue";
 import {
   NButton,
   NPopconfirm,
   NInput,
+  NInputNumber,
   NFormItem,
   NModal,
   NSelect,
@@ -34,6 +35,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import { useNodeAPI, type SystemVersion } from "../api/client";
+import type { components } from "../api/schema";
 import { useSession } from "../stores/session";
 import { useAction } from "../composables/action";
 const api = useNodeAPI();
@@ -53,14 +55,40 @@ const { run, busy, message } = useAction(),
 const credentials = ref<Credential[]>([]);
 const systemVersion = ref<SystemVersion | null>(null);
 
-const passwordOpen = ref(false);
+type PanelAccess = components["schemas"]["PanelAccessInput"];
+const access = ref<PanelAccess | null>(null);
+const accessOpen = ref(false);
+const pendingAccessURL = ref("");
+const port = ref<number | null>(null);
+const protocol = ref<PanelAccess["protocol"]>("https");
+const accessChanged = computed(
+  () =>
+    port.value !== access.value?.port ||
+    protocol.value !== access.value?.protocol,
+);
+const accountOpen = ref(false);
+const username = ref("");
+const password = ref("");
+const passwordConfirmation = ref("");
+const accountChanged = computed(
+  () =>
+    username.value.trim() !== session.localMe?.username ||
+    !!password.value ||
+    !!passwordConfirmation.value,
+);
+const accountValid = computed(
+  () =>
+    !!username.value.trim() &&
+    new TextEncoder().encode(username.value.trim()).length <= 64 &&
+    (!password.value || [...password.value].length >= 6) &&
+    passwordConfirmation.value === password.value,
+);
 const credentialVisible = ref(false),
   tokenVisible = ref(false),
   name = ref(""),
   scopes = ref<string[]>(["read"]),
   sources = ref<string[]>([]),
-  token = ref(""),
-  password = ref("");
+  token = ref("");
 const credentialColumns: DataTableColumns<Credential> = [
   { title: "名称", key: "name" },
   {
@@ -140,6 +168,11 @@ async function load() {
     ]);
     credentials.value = result[0];
     systemVersion.value = result[1];
+    if (systemVersion.value.runtime === "native") {
+      access.value = await request<PanelAccess>({
+        url: "/system/panel-access",
+      });
+    }
   });
 }
 async function createCredential() {
@@ -169,19 +202,48 @@ async function revokeCredential(id: string) {
     credentials.value = await request<Credential[]>({ url: "/credentials" });
   }, "API 密钥已撤销");
 }
-async function changePassword() {
-  if (!window.confirm("修改密码会撤销全部浏览器会话，确认继续？")) return;
+function openAccess() {
+  if (!access.value) return;
+  port.value = access.value.port;
+  protocol.value = access.value.protocol;
+  accessOpen.value = true;
+}
+async function updateAccess() {
+  if (port.value == null) return;
+  const next: PanelAccess = { port: port.value, protocol: protocol.value };
+  await run(async () => {
+    await request({ method: "PUT", url: "/system/panel-access", data: next });
+    const url = new URL(window.location.origin);
+    url.protocol = next.protocol + ":";
+    url.port = String(next.port);
+    pendingAccessURL.value = url.origin;
+    accessOpen.value = false;
+  });
+}
+function openAccount() {
+  username.value = session.localMe?.username ?? "";
+  accountOpen.value = true;
+}
+function closeAccount() {
+  accountOpen.value = false;
+  password.value = passwordConfirmation.value = "";
+}
+async function updateAccount() {
+  const nextUsername = username.value.trim();
   await run(async () => {
     await request({
       method: "PUT",
-      url: "/account/password",
-      data: { password: password.value },
+      url: "/account",
+      data: {
+        username:
+          nextUsername === session.localMe?.username ? undefined : nextUsername,
+        password: password.value || undefined,
+      },
     });
-    password.value = "";
-    passwordOpen.value = false;
+    closeAccount();
     session.clear();
     await router.push("/login");
-  }, "密码已修改，请重新登录");
+  }, "管理员账户已更新，请重新登录");
 }
 async function revokeSessions() {
   await run(async () => {
@@ -215,11 +277,63 @@ onMounted(load);
         <dd>{{ systemVersion.version }}</dd>
       </dl>
     </section>
+    <section v-if="access" class="surface">
+      <div class="section-heading">
+        <h2>面板访问</h2>
+        <NButton :disabled="busy" @click="openAccess">
+          修改访问设置
+        </NButton>
+      </div>
+      <dl class="detail-list">
+        <dt>访问协议</dt>
+        <dd>{{ access.protocol.toUpperCase() }}</dd>
+        <dt>面板端口</dt>
+        <dd>{{ access.port }}</dd>
+      </dl>
+      <NAlert v-if="pendingAccessURL" type="info">
+        面板正在切换访问地址。请稍候打开<a :href="pendingAccessURL">新地址</a>。
+        如果启动失败，面板会尝试恢复原地址。
+      </NAlert>
+      <FormDialog
+        :show="accessOpen"
+        title="修改访问设置"
+        width="440px"
+        :busy="busy"
+        :dirty="accessChanged"
+        :submit-disabled="
+          !accessChanged || port == null || port < 1024 || port > 65535
+        "
+        @submit="updateAccess"
+        @cancel="accessOpen = false"
+      >
+        <NFormItem label="访问协议">
+          <NSelect
+            v-model:value="protocol"
+            :options="[
+              { label: 'HTTPS', value: 'https' },
+              { label: 'HTTP', value: 'http' },
+            ]"
+          />
+        </NFormItem>
+        <NFormItem label="面板端口">
+          <NInputNumber
+            v-model:value="port"
+            :min="1024"
+            :max="65535"
+            :precision="0"
+          />
+        </NFormItem>
+        <p class="muted">
+          保存后面板会重启。请确保防火墙和安全组允许访问新端口。
+        </p>
+      </FormDialog>
+    </section>
     <section class="surface">
       <h2>管理设置</h2>
       <div class="shortcut-grid">
         <RouterLink to="/management-listener">
-          <strong>安全管理入口</strong><span class="muted">设置面板端口和允许访问的地址</span>
+          <strong>安全管理入口</strong>
+          <span class="muted">管理附加入口和允许访问的地址</span>
         </RouterLink>
         <RouterLink to="/modules">
           <strong>功能开关</strong><span class="muted">管理可选功能</span>
@@ -241,19 +355,14 @@ onMounted(load);
       </section>
     </section>
     <section class="surface">
-      <div class="section-heading">
-        <h2>管理员账户</h2>
-        <n-tag size="small" :bordered="false">
-          单管理员
-        </n-tag>
-      </div>
+      <h2>管理员账户</h2>
       <dl class="detail-list">
         <dt>用户名</dt>
         <dd>{{ session.localMe?.username }}</dd>
       </dl>
       <div class="form-actions">
-        <n-button :disabled="busy" @click="passwordOpen = true">
-          修改密码
+        <n-button :disabled="busy" @click="openAccount">
+          修改账号与密码
         </n-button>
         <n-popconfirm
           positive-text="退出全部设备"
@@ -268,25 +377,37 @@ onMounted(load);
         </n-popconfirm>
       </div>
       <FormDialog
-        :show="passwordOpen"
-        title="修改密码"
+        :show="accountOpen"
+        title="修改管理员账户"
+        width="440px"
         :busy="busy"
-        :dirty="!!password"
-        :submit-disabled="[...password].length < 6"
-        @submit="changePassword"
-        @cancel="
-          passwordOpen = false;
-          password = '';
-        "
+        :dirty="accountChanged"
+        :submit-disabled="!accountChanged || !accountValid"
+        @submit="updateAccount"
+        @cancel="closeAccount"
       >
+        <n-form-item label="用户名">
+          <n-input v-model:value="username" autocomplete="username" />
+        </n-form-item>
         <n-form-item label="新密码（至少 6 个字符）">
           <n-input
             v-model:value="password"
             type="password"
+            placeholder="留空则保留现有密码"
             autocomplete="new-password"
             show-password-on="click"
           />
         </n-form-item>
+        <n-form-item v-if="password || passwordConfirmation" label="确认新密码">
+          <n-input
+            v-model:value="passwordConfirmation"
+            type="password"
+            autocomplete="new-password"
+          />
+        </n-form-item>
+        <p class="muted">
+          保存后需要重新登录。
+        </p>
       </FormDialog>
     </section>
     <section class="surface">

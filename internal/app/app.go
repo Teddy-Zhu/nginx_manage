@@ -64,6 +64,14 @@ type Options struct {
 }
 
 func Init(ctx context.Context, dataDir string, development bool) (string, error) {
+	return initNode(ctx, dataDir, development, nil)
+}
+
+func InitWithAdmin(ctx context.Context, dataDir string, admin auth.InitialAdmin) (string, error) {
+	return initNode(ctx, dataDir, false, &admin)
+}
+
+func initNode(ctx context.Context, dataDir string, development bool, admin *auth.InitialAdmin) (string, error) {
 	if !filepath.IsAbs(dataDir) {
 		return "", errors.New("data directory must be absolute")
 	}
@@ -121,7 +129,7 @@ func Init(ctx context.Context, dataDir string, development bool) (string, error)
 		return "", err
 	}
 	bootstrapPath := ""
-	if users == 0 {
+	if users == 0 && admin == nil {
 		bootstrapPath = filepath.Join(dataDir, "bootstrap", "token")
 		var stored string
 		err := db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key='bootstrap_hash'").Scan(&stored)
@@ -144,6 +152,14 @@ func Init(ctx context.Context, dataDir string, development bool) (string, error)
 		}
 	} else if err != nil {
 		return "", err
+	}
+	if admin != nil {
+		if err := admin.Install(ctx, db); err != nil {
+			return "", err
+		}
+		if err := os.Remove(filepath.Join(dataDir, "bootstrap", "token")); err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
 	}
 	return bootstrapPath, nil
 }
@@ -324,7 +340,7 @@ func Run(ctx context.Context, o Options) error {
 	if o.HTTP {
 		authentication.Sessions.Cookie.Name = "nginxpanel_http_session"
 	}
-	apiServer := &transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: authentication, Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, ImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime}
+	apiServer := &transport.Server{FrontendVersion: static.version, History: historyService, Audit: auditlog.New(db, nodeID), Fail2ban: fail2banService, Firewall: firewallService, Maintenance: maintenanceService, DB: db, Auth: authentication, Config: config, ACME: acmeService, Agent: agentClient, Monitoring: monitoringService, Notifications: notificationService, HostDNS: dnsService, Migration: migrationService, Backups: backupService, Components: componentService, Installations: installationService, Switches: switchService, Updates: updateService, ImageUpgrades: imageUpgradeService, Nodes: &nodes.Service{DB: db, Vault: vault, NodeID: nodeID}, NodeID: nodeID, Dev: o.Dev, Version: o.Version, PanelRuntime: o.PanelRuntime, DataDir: o.DataDir}
 	api := apiServer.Handler()
 	if eventLogs != nil {
 		eventLogs.OnDelivered = func() { apiServer.Realtime.Notify("tasks") }

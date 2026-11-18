@@ -3457,6 +3457,24 @@ func (e PairingJobState) Valid() bool {
 	}
 }
 
+// Defines values for PanelAccessInputProtocol.
+const (
+	PanelAccessInputProtocolHttp  PanelAccessInputProtocol = "http"
+	PanelAccessInputProtocolHttps PanelAccessInputProtocol = "https"
+)
+
+// Valid indicates whether the value is a known member of the PanelAccessInputProtocol enum.
+func (e PanelAccessInputProtocol) Valid() bool {
+	switch e {
+	case PanelAccessInputProtocolHttp:
+		return true
+	case PanelAccessInputProtocolHttps:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceKind.
 const (
 	ResourceKindHttp   ResourceKind = "http"
@@ -8394,6 +8412,15 @@ type PairingOffer struct {
 	Secret *string `json:"secret,omitempty"`
 }
 
+// PanelAccessInput defines model for PanelAccessInput.
+type PanelAccessInput struct {
+	Port     int                      `json:"port"`
+	Protocol PanelAccessInputProtocol `json:"protocol"`
+}
+
+// PanelAccessInputProtocol defines model for PanelAccessInput.Protocol.
+type PanelAccessInputProtocol string
+
 // PanelImageUpgradeCreateInput defines model for PanelImageUpgradeCreateInput.
 type PanelImageUpgradeCreateInput struct {
 	AllowDowntime *bool  `json:"allow_downtime,omitempty"`
@@ -8759,6 +8786,18 @@ type Offset = int
 
 // JSON defines model for JSON.
 type JSON = Response
+
+// UpdateAdministratorJSONBody defines parameters for UpdateAdministrator.
+type UpdateAdministratorJSONBody struct {
+	Password *string `json:"password,omitempty"`
+	Username *string `json:"username,omitempty"`
+}
+
+// UpdateAdministratorParams defines parameters for UpdateAdministrator.
+type UpdateAdministratorParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
 
 // ChangePasswordJSONBody defines parameters for ChangePassword.
 type ChangePasswordJSONBody struct {
@@ -9747,11 +9786,20 @@ type SetModuleParams struct {
 // SetModuleJSONBodyFirewallRules defines parameters for SetModule.
 type SetModuleJSONBodyFirewallRules string
 
+// UpdatePanelAccessParams defines parameters for UpdatePanelAccess.
+type UpdatePanelAccessParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // ListTasksParams defines parameters for ListTasks.
 type ListTasksParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
 }
+
+// UpdateAdministratorJSONRequestBody defines body for UpdateAdministrator for application/json ContentType.
+type UpdateAdministratorJSONRequestBody UpdateAdministratorJSONBody
 
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody ChangePasswordJSONBody
@@ -10038,6 +10086,9 @@ type LoginJSONRequestBody LoginJSONBody
 // SetModuleJSONRequestBody defines body for SetModule for application/json ContentType.
 type SetModuleJSONRequestBody SetModuleJSONBody
 
+// UpdatePanelAccessJSONRequestBody defines body for UpdatePanelAccess for application/json ContentType.
+type UpdatePanelAccessJSONRequestBody = PanelAccessInput
+
 // AsFail2banDesiredJail0 returns the union data inside the Fail2banDesiredJail as a Fail2banDesiredJail0
 func (t Fail2banDesiredJail) AsFail2banDesiredJail0() (Fail2banDesiredJail0, error) {
 	var body Fail2banDesiredJail0
@@ -10245,6 +10296,9 @@ func (t *Fail2banDesiredJail) UnmarshalJSON(b []byte) error {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (PUT /account)
+	UpdateAdministrator(w http.ResponseWriter, r *http.Request, params UpdateAdministratorParams)
 
 	// (PUT /account/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams)
@@ -10882,6 +10936,12 @@ type ServerInterface interface {
 	// (PUT /system/modules/{id})
 	SetModule(w http.ResponseWriter, r *http.Request, id ID, params SetModuleParams)
 
+	// (GET /system/panel-access)
+	GetPanelAccess(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /system/panel-access)
+	UpdatePanelAccess(w http.ResponseWriter, r *http.Request, params UpdatePanelAccessParams)
+
 	// (GET /system/version)
 	GetVersion(w http.ResponseWriter, r *http.Request)
 
@@ -10900,6 +10960,47 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// UpdateAdministrator operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAdministrator(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateAdministratorParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAdministrator(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ChangePassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http.Request) {
@@ -20355,6 +20456,61 @@ func (siw *ServerInterfaceWrapper) SetModule(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// GetPanelAccess operation middleware
+func (siw *ServerInterfaceWrapper) GetPanelAccess(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPanelAccess(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePanelAccess operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePanelAccess(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdatePanelAccessParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePanelAccess(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetVersion operation middleware
 func (siw *ServerInterfaceWrapper) GetVersion(w http.ResponseWriter, r *http.Request) {
 
@@ -20687,11 +20843,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/bootstrap", wrapper.Bootstrap)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/session", wrapper.Logout)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/session", wrapper.Login)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/account", wrapper.UpdateAdministrator)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/account/password", wrapper.ChangePassword)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/sessions/revoke-all", wrapper.RevokeSessions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/credentials", wrapper.ListCredentials)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/credentials", wrapper.CreateCredential)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/credentials/{id}", wrapper.RevokeCredential)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/system/panel-access", wrapper.GetPanelAccess)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/system/panel-access", wrapper.UpdatePanelAccess)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/system/capabilities", wrapper.GetCapabilities)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/system/modules", wrapper.GetModules)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/system/modules/{id}", wrapper.SetModule)

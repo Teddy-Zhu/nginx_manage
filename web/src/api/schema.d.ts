@@ -1741,6 +1741,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateAdministrator"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/account/password": {
         parameters: {
             query?: never;
@@ -1802,6 +1818,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["revokeCredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/panel-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPanelAccess"];
+        put: operations["updatePanelAccess"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3010,6 +3042,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PanelAccessInput: {
+            port: number;
+            /** @enum {string} */
+            protocol: "http" | "https";
+        };
         RuntimeHistoryFilter: {
             kind: string;
             /** Format: int64 */
@@ -9471,6 +9508,29 @@ export interface operations {
             default: components["responses"]["JSON"];
         };
     };
+    updateAdministrator: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username?: string;
+                    password?: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
     changePassword: {
         parameters: {
             query?: never;
@@ -9557,6 +9617,40 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getPanelAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    updatePanelAccess: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PanelAccessInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["JSON"];
+            202: components["responses"]["JSON"];
             default: components["responses"]["JSON"];
         };
     };

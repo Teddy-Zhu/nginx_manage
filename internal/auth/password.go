@@ -26,17 +26,25 @@ func HashPassword(password string) (string, error) {
 	return fmt.Sprintf("$argon2id$v=19$m=65536,t=3,p=2$%s$%s", base64.RawStdEncoding.EncodeToString(salt[:]), base64.RawStdEncoding.EncodeToString(hash)), nil
 }
 
-func CheckPassword(encoded, password string) bool {
+func decodePasswordHash(encoded string) (salt, hash []byte) {
 	parts := strings.Split(encoded, "$")
-	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" || parts[3] != "m=65536,t=3,p=2" {
-		return false
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" || parts[2] != "v=19" || parts[3] != "m=65536,t=3,p=2" {
+		return nil, nil
 	}
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil || len(salt) != 16 {
-		return false
+		return nil, nil
 	}
-	want, err := base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil || len(want) != 32 {
+	hash, err = base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil || len(hash) != 32 {
+		return nil, nil
+	}
+	return salt, hash
+}
+
+func CheckPassword(encoded, password string) bool {
+	salt, want := decodePasswordHash(encoded)
+	if salt == nil {
 		return false
 	}
 	got := argon2.IDKey([]byte(password), salt, 3, argonMemory, 2, 32)

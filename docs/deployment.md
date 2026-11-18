@@ -53,10 +53,20 @@ bash nginxpanel-setup.sh --dev
 
 ### 安装选项
 
-- `--yes`：按检测结果安装；省略后先核对安装摘要。
-- `--port 23456`：指定管理端口；省略时随机选择空闲端口，重启后保持。
-- `--protocol http`：使用 HTTP；默认 HTTPS。
-- `--advanced`：调整数据目录、监听地址和主机网络管理设置。
+默认安装向导会询问管理端口、访问协议和管理员账号。按回车接受随机空闲端口和 HTTPS。默认管理员账号为 `admin`，安装时可修改。密码至少 6 个字符，输入时隐藏，直接回车可留到首次打开网页时设置。
+
+- `--yes` 跳过基本配置提问和确认。省略密码文件时，在网页创建管理员。
+- `--port 23456` 指定管理端口，`--protocol http` 指定访问协议。
+- `--admin-user operator` 指定管理员账号。
+- `--admin-password-file /root/nginxpanel-password` 从单行文件读取密码。请使用仅安装账户可读的文件。
+- `--advanced` 可调整数据目录、监听地址和主机网络管理设置。
+
+无人值守安装可同时指定端口、协议和账号。
+
+```sh
+sudo bash install.sh --yes --port 23456 --protocol https \
+  --admin-user operator --admin-password-file /root/nginxpanel-password
+```
 
 默认监听全部网卡，可通过机器公网或内网地址访问。数据目录优先使用 `/srv/nginxpanel`，不可用时尝试 `/var/lib/nginxpanel`；已有数据不会被首次安装覆盖。安装过程不会自动清空防火墙规则，也不会接管已有系统 Nginx。
 
@@ -93,4 +103,6 @@ sudo docker ps
 
 安装结束后按输出地址访问，例如 `http://服务器地址:端口`。`0.0.0.0` 和 `[::]` 是监听地址，不是浏览器访问地址。云安全组及现有防火墙需允许管理端口；使用 HTTPS 自签证书时，浏览器会提示确认。
 
-使用安装输出中的初始化信息创建管理员，密码至少 6 位。初始化信息丢失时运行 `manage.sh info` 查看提示。需要网站服务时，打开「软件商店 → Nginx」并点击「安装 Nginx」。安装完成后，在「网站代理」创建网站或反向代理。具体操作见[使用手册](user-guide.md)。
+在向导中创建过管理员时，可直接用该账号和密码登录。选择网页初始化时，运行 `sudo bash /opt/nginxpanel/manage.sh bootstrap` 获取初始令牌。登录后，可在「面板设置」修改管理员账号、密码、端口和访问协议。
+
+需要网站服务时，打开「软件商店 → Nginx」并点击「安装 Nginx」。安装完成后，在「网站代理」创建网站或反向代理。具体操作见[使用手册](user-guide.md)。
