@@ -394,7 +394,7 @@ ensure_dir "$data" 755 root root
 for dir in app bootstrap secrets staging backups; do ensure_dir "$data/$dir" 700 root root; done
 ensure_dir "$data/run" 755 root root
 ensure_dir "$data/run/readiness" 700 root root
-ensure_dir "$data/run/agent" 0700 root root
+ensure_dir "$data/run/agent" 700 root root
 ensure_dir "$data/agent" 700 root root
 ensure_dir "$data/acme" 700 root root
 ensure_dir "$data/certificates" 700 root root
@@ -427,6 +427,7 @@ else ln -s "$data/runtime/current" /opt/nginxpanel/current; sync -f /opt/nginxpa
 printf '{"version":1,"modules":[]}\n' >"$work/nginx-modules.json"
 write_owned "$work/nginx-modules.json" /etc/nginxpanel/nginx-modules.json
 "$release_dir/nginxpanel" panel-native-bind --data-dir "$data" --panel-binary "$release_dir/nginxpanel" --listen "$listen" --protocol "$protocol" --allowed-uid 0 --panel-gid 0 --ipc-gid 0 >"$work/panel-runtime.json"
+"$release_dir/nginxpanel" panel-writer-bind --data-dir "$data" --panel-gid 0
 printf 'native-install-v16\n' >"$work/ready"
 if [[ -e $state/ready || -L $state/ready ]]; then
   trusted_file "$state/ready" 64

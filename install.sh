@@ -86,6 +86,17 @@ yes_no() {
     case "$answer" in y|Y|yes|YES) return 0 ;; n|N|no|NO) return 1 ;; *) printf '%s\n' '请输入 y 或 n' ;; esac
   done
 }
+confirm_install() {
+  if [[ $auto_confirm == yes ]]; then return; fi
+  if ! yes_no '确认执行安装？'; then
+    printf '%s\n' '安装已取消'
+    exit 0
+  fi
+}
+finish() {
+  printf '\n管理入口：sudo bash /opt/nginxpanel/manage.sh\n'
+  /bin/bash /opt/nginxpanel/manage.sh info
+}
 root_chain() {
   local path=$1 mode
   while [[ $path != / ]]; do
