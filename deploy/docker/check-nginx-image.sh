@@ -2,10 +2,12 @@
 set -eu
 nginx -V > /usr/share/nginxpanel/nginx-build.txt 2>&1
 build=$(cat /usr/share/nginxpanel/nginx-build.txt)
-case "$build" in
-  *"nginx/1.30.6"*) ;;
-  *) echo 'Unexpected Nginx version' >&2; exit 1 ;;
-esac
+declared=$(sed -n 's/^[[:space:]]*"nginx_version"[[:space:]]*:[[:space:]]*"\([0-9][0-9.]*\)"[[:space:]]*,\{0,1\}[[:space:]]*$/\1/p' /usr/share/nginxpanel/capabilities.json)
+actual=$(printf '%s\n' "$build" | sed -n '1s/^nginx version: nginx\///p')
+if [ -z "$declared" ] || [ "$actual" != "$declared" ]; then
+  echo 'Nginx engine version does not match image capabilities' >&2
+  exit 1
+fi
 for flag in --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-http_gzip_static_module --with-http_stub_status_module --with-http_auth_request_module --with-http_sub_module --with-http_slice_module --with-http_addition_module --with-http_dav_module --with-stream --with-stream_ssl_module --with-stream_realip_module --with-stream_ssl_preread_module; do
   case " $build " in
     *" $flag "*) ;;

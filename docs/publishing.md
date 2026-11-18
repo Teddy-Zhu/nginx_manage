@@ -34,7 +34,7 @@ Nginx 工作流没有 `tag` 输入，使用独立的 `version` 与 `channel`：
 | `1.0.0` | `stable` | `1.0.0`，正式 Release，镜像标签 `v1.0.0` |
 | `1.0.1` 或 `1.0.1-dev` | `dev` | 如 `1.0.1-123456789.1-dev`，Prerelease，同名版本镜像标签带 `v` 前缀 |
 
-组件版本表示本项目 Nginx 镜像的发行版本，与核心版本、镜像内 Nginx 引擎版本分别管理。稳定版版本号必须唯一；相同版本不可覆盖。发布自动生成 GitHub Release 所需的 `nginx-v<组件版本>` 标签、说明和策略，用户无需准备标签或对应版本文件。
+组件版本表示本项目 Nginx 镜像的发行版本，由该工作流的 `version` 输入决定。上游 Nginx 引擎版本由组件的基础镜像及能力清单决定，例如组件 `1.0.0` 和 `1.0.1` 可以都使用同一个 Nginx 引擎。面板核心另有自己的版本。稳定版组件版本号必须唯一，发布自动生成 GitHub Release 的 `nginx-v<组件版本>` 标签、说明和策略。首次离线安装使用随包镜像时，软件商店显示实际 Nginx 引擎版本，切换到独立发行镜像后同时显示组件版本。
 
 分支构建固定使用本次触发时的提交。修改工作流或修复打包脚本后，应先将修复提交推送到所选分支，再发起一次新的运行；发布已有标签时则需创建包含修复的新版本标签。旧运行的 **Re-run failed jobs** 保留原始提交，详见 [GitHub 重跑说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)。
 
@@ -42,17 +42,18 @@ Nginx 工作流没有 `tag` 输入，使用独立的 `version` 与 `channel`：
 
 默认源码仓库为 `Teddy-Zhu/nginx_manage`，工作流使用实际运行仓库的 `github.repository`。Nginx 镜像发布到 Docker Hub，签名清单和 OCI 证据发布到 GitHub Release。部署机器按公开镜像拉取，不持有发布令牌；维护者需要将 Docker Hub 仓库设置为 Public。
 
-在 GitHub 的 `release` environment 配置：
+在 GitHub 仓库的 **Settings → Environments → release** 添加下表配置。其中 Variable 放入 Environment variables，Secret 放入 Environment secrets。如果私有仓库当前套餐不支持环境级配置，可在 **Settings → Secrets and variables → Actions** 添加同名的仓库级 Variables 和 Secrets。参见 [GitHub 环境配置](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)。
 
-- Secret `RELEASE_ED25519_SEED`：Base64 编码的 32 字节 Ed25519 私钥种子。
-- Variable `RELEASE_ED25519_PUBLIC_KEY`：与种子对应的 Base64 公钥。
-- Variable `RELEASE_KEY_ID`：签名密钥标识，例如 `release-2026`。
+| 名称 | 类型 | 用途 |
+| --- | --- | --- |
+| `DOCKERHUB_USERNAME` | Variable | Docker Hub 登录用户名 |
+| `DOCKERHUB_TOKEN` | Secret | 有目标镜像仓库读写权限的 Docker Hub access token |
+| `RELEASE_ED25519_SEED` | Secret | Base64 编码的 32 字节 Ed25519 私钥种子 |
+| `RELEASE_ED25519_PUBLIC_KEY` | Variable | 与种子对应的 Base64 公钥 |
+| `RELEASE_KEY_ID` | Variable | 签名密钥标识，例如 `release-2026` |
+| `NGINX_DOCKERHUB_REPOSITORY` | 可选 Variable | 例如 `myteam/nginxpanel-nginx`，默认 `<DOCKERHUB_USERNAME>/nginxpanel-nginx`。填写 `命名空间/仓库名` |
 
-私钥、公钥和 Key ID 必须匹配。核心与 Nginx 共用这三项配置，GitHub 发行使用 `contents:write`。Nginx 还需要在同一 `release` environment 配置：
-
-- Variable `DOCKERHUB_USERNAME`：Docker Hub 登录用户名。
-- Secret `DOCKERHUB_TOKEN`：拥有目标镜像仓库读写权限的 Docker Hub access token。
-- 可选 Variable `NGINX_DOCKERHUB_REPOSITORY`：`命名空间/仓库名`，例如 `myteam/nginxpanel-nginx`；默认是 `<DOCKERHUB_USERNAME>/nginxpanel-nginx`，不含域名、标签和摘要。
+核心和 Nginx 共用签名配置。已有核心签名配置时，Nginx 只需新增 Docker Hub 用户名和令牌。工作流在开始构建前一次列出缺失项。GitHub Release 通常使用内置 `GITHUB_TOKEN` 和 `contents: write`。
 
 镜像完整地址为 `docker.io/<命名空间>/<仓库名>`。组织仓库需确保登录用户有推送权限。Docker Hub 登录和元数据读取均使用上述令牌；GitHub 内置 Token 只用于源码和 Release，不再要求 `packages:write`。参见 [Docker Hub 推送说明](https://docs.docker.com/docker-hub/repos/manage/hub-images/push/)。
 
@@ -97,13 +98,13 @@ gh workflow run nginx-release.yml --ref main -f version=1.0.0 -f channel=stable
 gh workflow run nginx-release.yml --ref main -f version=1.0.1 -f channel=dev
 ```
 
-工作流在 amd64、arm64 原生运行器分别构建镜像内的启动程序与 Nginx 镜像，执行组件检查和镜像模块门禁，推送原始摘要回执。合并任务只引用这些原始摘要，保留 BuildKit SBOM 和 SLSA 来源证据，再由 Go 发布工具独立核对并签名。
+工作流在 amd64、arm64 原生运行器分别构建 Nginx 专用启动器，将其与固定摘要的上游 Nginx 基础镜像和预置模块打包为组件镜像。合并任务只引用推送后的原始摘要，保留 BuildKit SBOM 和 SLSA 来源证据，再由 Go 发布工具独立核对并签名。
 
 镜像同时具有版本标签，例如 `docker.io/myteam/nginxpanel-nginx:v1.0.0`。SemVer 构建元数据中的 `+` 在 Docker 标签中替换为 `_`。已有版本标签若指向不同摘要，发布停止；不覆盖旧版本。面板部署使用签名清单中的 `repository@sha256:...`，不依赖可变标签。
 
 对应 GitHub Release 自动使用 `nginx-v1.0.0` 等组件标签，包含 `release-manifest.json`、`release-manifest.sig`、`nginx.oci.json` 和 `checksums.txt`，不附带核心二进制或安装脚本，也不会成为仓库 Latest。`make_latest` 行为见 [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#update-a-release)。
 
-面板支持保存“稳定版 / Beta”更新通道，核心和 Nginx 共用此选择，刷新或重新登录后保留。稳定版核心使用仓库 Latest；Beta 核心与 Nginx 镜像按所选通道查询最近 100 个发行，选择最近发布的对应版本，没有匹配项时明确提示。核心/Nginx 与稳定/Beta 分别使用四个固定缓存槽位。指定确切标签仍可下载较早版本，Beta 须明确允许。
+核心更新通道由“系统更新”保存。Nginx 在自己的版本选择弹窗切换稳定版或 Beta，可分页查看并选择历史发行。选中确切标签后，面板再下载并验签。稳定版核心使用仓库 Latest，Beta 核心按其保存的通道发现发行。
 
 ## 从分支发布 Beta（无需预先创建标签）
 
@@ -140,7 +141,7 @@ Nginx 规格使用 `--component nginx` 和独立版本的说明、策略文件�
 
 ## 内置软件版本目录
 
-Nginx 独立发行完成后，面板版本选择器直接按页读取包含签名材料的 `nginx-v*` 发行记录，不需要重新发布核心来更新版本列表。稳定版和 Beta 分开展示；实际安装仍验证签名清单及固定镜像摘要。
+Nginx 独立发行完成后，面板版本选择器直接按页读取包含签名材料的 `nginx-v*` 发行记录。工作流把实际引擎版本写入发行说明，面板按该版本筛选组件，准备镜像前再与已验签的发行说明核对。稳定版和 Beta 分开展示，安装继续使用固定镜像摘要。
 
 Fail2ban 和 FRP 的目录为 `internal/componentversions/builtin.json`，既随核心嵌入，也可由面板“检查新版”从主分支刷新。新增条目时使用新的组件 SemVer 和不可变 `id`，另填实际 `software_version`；确认官方多架构镜像的摘要、目标架构与必要的 `minimum_core`。不能替换已有条目的发行内容，不使用 `latest` 等浮动标签作为版本身份。该目录只更新元数据，不触发安装，不需要核心 Release；发布前应保留仍需提供的历史版本。
 

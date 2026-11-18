@@ -13,7 +13,6 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/frpscontainer"
 	"nginxpanel/internal/nginxcontainer"
-	"nginxpanel/internal/releases"
 	"nginxpanel/internal/software"
 )
 
@@ -43,9 +42,10 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 	mux.HandleFunc("GET /v1/components", func(w http.ResponseWriter, r *http.Request) {
 		out := m.Overview()
 		out.Versions = map[string]componentversions.Version{}
-		if binding, err := nginxcontainer.Read(s.DataDir); err == nil && releases.VersionChannel(binding.SignedImage.Version) != "" {
-			v := binding.SignedImage.Version
-			out.Versions["nginx"] = componentversions.Version{ID: "nginx-v" + v, Version: v, SoftwareVersion: binding.Capabilities.Version, Channel: releases.VersionChannel(v)}
+		if binding, err := nginxcontainer.Read(s.DataDir); err == nil {
+			if version := components.NginxVersion(binding); version != nil {
+				out.Versions["nginx"] = *version
+			}
 		}
 		for _, app := range []string{"frps", "fail2ban"} {
 			catalog, err := s.builtinVersions(r.Context(), componentversions.Query{SourceID: "builtin", AppID: app, Channel: "stable", Page: 1})

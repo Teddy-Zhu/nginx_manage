@@ -37,6 +37,30 @@ jobs:
       tag: ${{ steps.identity.outputs.tag }}
       create_tag: ${{ steps.identity.outputs.create_tag }}
     steps:
+      - name: Check publication configuration
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          RELEASE_KEY_ID: ${{ vars.RELEASE_KEY_ID }}
+          RELEASE_ED25519_PUBLIC_KEY: ${{ vars.RELEASE_ED25519_PUBLIC_KEY }}
+          RELEASE_ED25519_SEED: ${{ secrets.RELEASE_ED25519_SEED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in DOCKERHUB_USERNAME RELEASE_KEY_ID RELEASE_ED25519_PUBLIC_KEY; do
+            if [[ -z ${!name} ]]; then
+              echo "::error::缺少 Variable $name，请在 release 环境或仓库 Actions Variables 中添加"
+              missing=1
+            fi
+          done
+          for name in DOCKERHUB_TOKEN RELEASE_ED25519_SEED; do
+            if [[ -z ${!name} ]]; then
+              echo "::error::缺少 Secret $name，请在 release 环境或仓库 Actions Secrets 中添加"
+              missing=1
+            fi
+          done
+          exit "$missing"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -47,13 +71,9 @@ jobs:
         env:
           RELEASE_BASE_VERSION: ${{ inputs.version }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$DOCKERHUB_USERNAME" || { echo 'Configure release variable DOCKERHUB_USERNAME' >&2; exit 1; }
-          test -n "$DOCKERHUB_TOKEN" || { echo 'Configure release secret DOCKERHUB_TOKEN' >&2; exit 1; }
           python3 scripts/release/identity.py --component nginx --channel "$RELEASE_CHANNEL" --version "$RELEASE_BASE_VERSION"
       - name: Check release scripts
         run: python3 -B -m unittest discover -s scripts/release -p 'test_*.py'
@@ -87,14 +107,14 @@ jobs:
           cache-dependency-path: go.sum
       - name: Build the image launcher and collect its dependency licenses
         env:
-          RELEASE_VERSION: ${{ needs.identity.outputs.version }}
           RELEASE_ARCHITECTURE: ${{ matrix.architecture }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .release/binaries
-          GOOS=linux GOARCH="$RELEASE_ARCHITECTURE" go build -trimpath -buildvcs=true -ldflags "-s -w -X main.version=$RELEASE_VERSION" -o ".release/binaries/nginxpanel-$RELEASE_ARCHITECTURE" ./cmd/nginxpanel
-          go list -deps -json ./cmd/nginxpanel > .release/go-packages.json
+          export GOOS=linux GOARCH="$RELEASE_ARCHITECTURE"
+          go build -trimpath -buildvcs=true -ldflags "-s -w" -o ".release/binaries/nginxpanel-$RELEASE_ARCHITECTURE" ./cmd/nginxpanel-nginx-launcher
+          go list -deps -json ./cmd/nginxpanel-nginx-launcher > .release/go-packages.json
           python3 scripts/release/launcher.py --architecture "$RELEASE_ARCHITECTURE" --go-packages .release/go-packages.json
       - name: Required component checks
         run: go test ./internal/releases ./internal/nginxcontainer

@@ -33,3 +33,7 @@ export function compareComponentVersions(a: string, b: string): number | null {
   }
   return 0;
 }
+
+export function nginxEngineVersion(notes: string | undefined) {
+  return notes?.match(/^Nginx 版本：([0-9]+\.[0-9]+\.[0-9]+)\r?$/m)?.[1];
+}

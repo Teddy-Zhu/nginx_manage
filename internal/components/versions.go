@@ -26,6 +26,22 @@ func (s *Service) Versions(ctx context.Context, q componentversions.Query) (comp
 	return host.ComponentVersions(ctx, q)
 }
 
+func NginxVersion(binding nginxcontainer.Binding) *componentversions.Version {
+	// For a bundled image the approval's version identifies the core installer.
+	if binding.SignedImage.LocalBuild {
+		return nil
+	}
+	version := binding.SignedImage.Version
+	channel := releases.VersionChannel(version)
+	if channel == "" {
+		return nil
+	}
+	return &componentversions.Version{
+		ID: "nginx-v" + version, Version: version, Channel: channel,
+		SoftwareVersion: binding.Capabilities.Version,
+	}
+}
+
 func (m *Manager) Versions(ctx context.Context, q componentversions.Query) (componentversions.Catalog, error) {
 	if err := q.Validate(); err != nil {
 		return componentversions.Catalog{}, err
@@ -41,10 +57,7 @@ func (m *Manager) Versions(ctx context.Context, q componentversions.Query) (comp
 	}
 	out := componentversions.Catalog{SourceID: q.SourceID, AppID: q.AppID, Channel: q.Channel, Page: q.Page, Versions: []componentversions.Version{}}
 	if binding, err := nginxcontainer.Read(m.DataDir); err == nil {
-		version := binding.SignedImage.Version
-		if releases.VersionChannel(version) != "" {
-			out.Current = &componentversions.Version{ID: "nginx-v" + version, Version: version, Channel: releases.VersionChannel(version), SoftwareVersion: binding.Capabilities.Version}
-		}
+		out.Current = NginxVersion(binding)
 	} else if !os.IsNotExist(err) {
 		return out, err
 	}
@@ -72,7 +85,7 @@ func (m *Manager) Versions(ctx context.Context, q componentversions.Query) (comp
 	out.CheckedAt, out.HasMore = time.Now().Unix(), more
 	for _, entry := range entries {
 		if entry.Channel == q.Channel {
-			out.Versions = append(out.Versions, componentversions.Version{ID: entry.Tag, Version: entry.Version, Channel: entry.Channel, PublishedAt: entry.PublishedAt, Notes: entry.Notes})
+			out.Versions = append(out.Versions, componentversions.Version{ID: entry.Tag, Version: entry.Version, SoftwareVersion: entry.SoftwareVersion, Channel: entry.Channel, PublishedAt: entry.PublishedAt, Notes: entry.Notes})
 		}
 	}
 	componentversions.Sort(out.Versions)

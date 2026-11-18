@@ -12,6 +12,7 @@ import {
 import { useSession } from "../stores/session";
 import { useAction, useIdempotency } from "../composables/action";
 import { inspectTask } from "../stores/operation";
+import { nginxEngineVersion } from "../utils/component-version";
 import TaskLogButton from "./TaskLogButton.vue";
 import ComponentVersionDialog from "./ComponentVersionDialog.vue";
 const props = defineProps<{
@@ -55,6 +56,13 @@ const checked = computed(
     ) ?? null,
 );
 const release = computed(() => checked.value?.result?.release);
+const engineVersion = computed(() => nginxEngineVersion(release.value?.notes));
+const engineMismatch = computed(
+  () =>
+    !!release.value &&
+    !!targetVersion.value?.software_version &&
+    targetVersion.value.software_version !== engineVersion.value,
+);
 const prepared = computed(() =>
   props.tasks.filter((item) => {
     const release = item.result?.release;
@@ -96,7 +104,7 @@ function check() {
 function prepare() {
   const item = checked.value,
     source = item?.result?.release;
-  if (!source || !item?.result?.runtime_ready) return;
+  if (!source || !item?.result?.runtime_ready || engineMismatch.value) return;
   return submit({
     check_task_id: item.id,
     input: {
@@ -171,7 +179,15 @@ async function chooseVersion(version: ComponentVersion) {
       </NButton><TaskLogButton v-if="checked" :task-id="checked.id" />
     </div>
     <template v-if="release">
-      <p>可用版本 {{ release.version }}</p>
+      <p>
+        组件 {{ release.version
+        }}<template v-if="engineVersion">
+          · Nginx {{ engineVersion }}
+        </template>
+      </p>
+      <NAlert v-if="engineMismatch" type="error">
+        发行中的 Nginx 版本与所选版本不一致，请刷新版本列表后重新选择。
+      </NAlert>
       <NAlert v-if="release.expires_at * 1000 <= Date.now()" type="info">
         版本信息已过期，请重新查找可用版本。
       </NAlert>
@@ -184,6 +200,7 @@ async function chooseVersion(version: ComponentVersion) {
           !permitted ||
             busy ||
             active ||
+            engineMismatch ||
             !checked?.result?.runtime_ready ||
             release.expires_at * 1000 <= Date.now()
         "
@@ -208,9 +225,7 @@ async function chooseVersion(version: ComponentVersion) {
           }"
         >
           <NButton type="primary" :disabled="busy || active || !permitted">
-            {{
-              "应用更新"
-            }}
+            {{ "应用更新" }}
           </NButton>
         </RouterLink>
         <template

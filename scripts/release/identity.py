@@ -70,7 +70,14 @@ def main():
         root.mkdir(exist_ok=True)
         notes, policy = root / "notes.md", root / "policy.json"
         description = "Nginx 组件稳定版" if args.channel == "stable" else "Beta 开发预览版本"
-        notes.write_text(f"{description} {version}\n\n源码提交：{commit}\n", encoding="utf-8")
+        lines = [f"{description} {version}"]
+        if args.component == "nginx":
+            capabilities = json.loads(Path("deploy/docker/nginx-capabilities.json").read_text(encoding="utf-8"))
+            engine = capabilities["nginx_version"]
+            if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", engine):
+                raise ValueError("invalid Nginx engine version in image capabilities")
+            lines += ["", f"Nginx 版本：{engine}"]
+        notes.write_text("\n".join([*lines, "", f"源码提交：{commit}", ""]), encoding="utf-8")
         policy.write_text(json.dumps({"version": version, "automatic_rollback": False}) + "\n", encoding="utf-8")
     values = {"version": version, "commit": commit, "tag": tag,
               "create_tag": str(create_tag).lower(), "notes": str(notes), "policy": str(policy)}

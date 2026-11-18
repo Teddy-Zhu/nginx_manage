@@ -7,17 +7,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
 
 type VersionSummary struct {
-	Tag         string
-	Version     string
-	Channel     string
-	PublishedAt int64
-	Notes       string
+	Tag             string
+	Version         string
+	SoftwareVersion string
+	Channel         string
+	PublishedAt     int64
+	Notes           string
 }
+
+var nginxVersionLine = regexp.MustCompile(`(?m)^Nginx 版本：([0-9]+\.[0-9]+\.[0-9]+)\r?$`)
 
 // ImageVersions lists published component releases without treating editable
 // GitHub metadata as authority to install. Selection still requires Online's
@@ -84,11 +88,17 @@ func ImageVersions(ctx context.Context, trustPath, tokenPath string, page int) (
 		if !manifest || !signature {
 			continue
 		}
-		notes := []rune(entry.Body)
+		engineVersion := ""
+		body := entry.Body
+		if match := nginxVersionLine.FindStringSubmatch(body); match != nil && validVersion(match[1]) {
+			engineVersion = match[1]
+			body = strings.TrimSpace(strings.Replace(body, match[0], "", 1))
+		}
+		notes := []rune(body)
 		if len(notes) > 2000 {
 			notes = notes[:2000]
 		}
-		out = append(out, VersionSummary{Tag: entry.Tag, Version: version, Channel: VersionChannel(version), PublishedAt: entry.PublishedAt.Unix(), Notes: string(notes)})
+		out = append(out, VersionSummary{Tag: entry.Tag, Version: version, SoftwareVersion: engineVersion, Channel: VersionChannel(version), PublishedAt: entry.PublishedAt.Unix(), Notes: string(notes)})
 	}
 	return out, len(entries) == 100, nil
 }

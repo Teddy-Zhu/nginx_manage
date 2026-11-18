@@ -14,7 +14,10 @@
 <script setup lang="ts">
 import TaskLogButton from "../components/TaskLogButton.vue";
 import ComponentVersionDialog from "../components/ComponentVersionDialog.vue";
-import { compareComponentVersions } from "../utils/component-version";
+import {
+  compareComponentVersions,
+  nginxEngineVersion,
+} from "../utils/component-version";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -52,7 +55,8 @@ const allowDowntime = ref(false),
   lastID = ref("");
 const choosingVersion = ref(false),
   targetVersion = ref<ComponentVersion | null>(null),
-  currentVersion = ref<ComponentVersion | null>(null);
+  currentVersion = ref<ComponentVersion | null>(null),
+  currentEngine = ref("");
 const preparations = ref<ComponentTask[]>([]),
   tasks = ref<ImageUpgradeTask[]>([]),
   selected = ref(
@@ -100,6 +104,14 @@ const checked = computed(
       .sort((a, b) => b.created_at - a.created_at)[0],
 );
 const release = computed(() => checked.value?.result?.release);
+const engineVersion = computed(() => nginxEngineVersion(release.value?.notes));
+const engineMismatch = computed(
+  () => !!release.value && !matchesEngine(release.value.notes),
+);
+function matchesEngine(notes?: string) {
+  const expected = targetVersion.value?.software_version;
+  return !expected || expected === nginxEngineVersion(notes);
+}
 const prepared = computed(() =>
   nginxOperations.value
     .filter((task) => {
@@ -109,10 +121,10 @@ const prepared = computed(() =>
         task.state === "succeeded" &&
         task.result?.runtime_ready &&
         task.result.input.prerelease === prerelease.value &&
-        (!targetVersion.value ||
-          task.result.release?.tag === targetVersion.value.id) &&
-        containsNginxImage(task) &&
+        (!targetVersion.value || release?.tag === targetVersion.value.id) &&
         !!release &&
+        matchesEngine(release.notes) &&
+        containsNginxImage(task) &&
         release.expires_at * 1000 > Date.now()
       );
     })
@@ -122,11 +134,17 @@ const chosen = computed(() =>
   prepared.value.find((t) => t.id === selected.value),
 );
 const downgrade = computed(() => {
-  const version = chosen.value?.result?.release?.version;
-  return !!(
-    version &&
-    currentVersion.value &&
-    (compareComponentVersions(version, currentVersion.value.version) ?? 0) < 0
+  const target = chosen.value?.result?.release;
+  if (!target) return false;
+  return (
+    (compareComponentVersions(
+      target.version,
+      currentVersion.value?.version ?? "",
+    ) ?? 0) < 0 ||
+    (compareComponentVersions(
+      nginxEngineVersion(target.notes) ?? "",
+      currentEngine.value,
+    ) ?? 0) < 0
   );
 });
 const preparedForRelease = computed(() =>
@@ -213,6 +231,17 @@ const stages: Record<string, string> = {
 function date(value: number) {
   return new Date(value * 1000).toLocaleString();
 }
+function preparedLabel(task: ComponentTask) {
+  const release = task.result?.release;
+  const engine = nginxEngineVersion(release?.notes);
+  return [
+    engine ? `Nginx ${engine}` : "",
+    `组件 ${release?.version ?? ""}`,
+    date(task.created_at),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 async function submit(input: ComponentCreateInput) {
   await run(async () => {
     const task = await api.createComponentTask(input, randomUUID());
@@ -250,7 +279,13 @@ async function chooseVersion(version: ComponentVersion) {
 async function prepare() {
   const task = checked.value,
     source = task?.result;
-  if (!task || !source?.release || !source.runtime_ready) return;
+  if (
+    !task ||
+    !source?.release ||
+    !source.runtime_ready ||
+    engineMismatch.value
+  )
+    return;
   await submit({
     check_task_id: task.id,
     input: {
@@ -302,6 +337,7 @@ async function load() {
       channel.value = requested.result?.input.prerelease ? "beta" : "stable";
     tasks.value = items;
     currentVersion.value = overview.versions?.nginx ?? null;
+    currentEngine.value = overview.installation?.version ?? "";
     error.value = "";
     if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
@@ -416,11 +452,16 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
       </div>
       <section v-if="release" class="page-stack">
         <div class="toolbar">
-          <strong>可用版本 {{ release.version }}</strong>
+          <strong>组件 {{ release.version
+          }}<template v-if="engineVersion">
+            · Nginx {{ engineVersion }}</template></strong>
           <NTag v-if="preparedForRelease" type="success">
             已准备
           </NTag>
         </div>
+        <NAlert v-if="engineMismatch" type="error">
+          发行中的 Nginx 版本与所选版本不一致，请刷新版本列表后重新选择。
+        </NAlert>
         <NAlert v-if="!checked?.result?.runtime_ready" type="warning">
           当前环境暂不满足更新条件，请查看检查日志。
         </NAlert>
@@ -432,6 +473,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
             :disabled="
               !canWrite ||
                 active ||
+                engineMismatch ||
                 !checked?.result?.runtime_ready ||
                 release.expires_at * 1000 <= Date.now()
             "
@@ -450,7 +492,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
           v-model:value="selected"
           :options="
             prepared.map((task) => ({
-              label: `${task.result?.release?.version} · ${date(task.created_at)}`,
+              label: preparedLabel(task),
               value: task.id,
             }))
           "
@@ -475,8 +517,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
             <NButton type="primary" :disabled="!canCreate" :loading="busy">
               立即更新
             </NButton>
-          </template>确认将 Nginx 更新到
-          {{ chosen?.result?.release?.version }}？
+          </template>确认将 Nginx 更新到 {{ chosen?.result?.release?.version }}？
         </NPopconfirm>
       </div>
     </section>
@@ -502,7 +543,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
           {{ date(task.created_at) }}
         </p>
         <p v-if="task.result">
-          目标版本 {{ task.result.target_version }} ·
+          Nginx 引擎 {{ task.result.target_version }} ·
           {{
             task.result.active
               ? "服务执行中"

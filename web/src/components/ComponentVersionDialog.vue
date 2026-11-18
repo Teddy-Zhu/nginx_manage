@@ -32,6 +32,7 @@ const api = useNodeAPI(),
   channel = ref<"stable" | "beta">("stable"),
   page = ref(1),
   selected = ref(""),
+  softwareVersion = ref(""),
   reading = ref(false),
   error = ref("");
 const channels = [
@@ -39,23 +40,49 @@ const channels = [
   { label: "Beta 版", value: "beta" },
 ];
 let controller: AbortController | undefined;
-const version = computed(() =>
-  catalog.value?.versions.find((v) => v.id === selected.value),
-);
-const recommended = computed(() =>
-  catalog.value?.versions.find(
+const softwareOptions = computed(() => {
+  const versions = new Set(
+    catalog.value?.versions.flatMap((item) =>
+      item.software_version ? [item.software_version] : [],
+    ),
+  );
+  return [
+    { label: "全部软件版本", value: "" },
+    ...Array.from(versions, (value) => ({ label: value, value })),
+  ];
+});
+const visibleVersions = computed(() =>
+  (catalog.value?.versions ?? []).filter(
     (item) =>
-      !item.unavailable &&
-      (!catalog.value?.current ||
-        (compareComponentVersions(item.version, catalog.value.current.version) ?? 0) > 0),
-  )?.id,
+      !softwareVersion.value || item.software_version === softwareVersion.value,
+  ),
+);
+const version = computed(() =>
+  visibleVersions.value.find((v) => v.id === selected.value),
+);
+const recommended = computed(
+  () =>
+    visibleVersions.value.find(
+      (item) =>
+        !item.unavailable &&
+        (!catalog.value?.current ||
+          (compareComponentVersions(
+            item.version,
+            catalog.value.current.version,
+          ) ?? 0) > 0),
+    )?.id,
 );
 const downgrade = computed(() => {
   const current = catalog.value?.current;
   return !!(
     version.value &&
     current &&
-    (compareComponentVersions(version.value.version, current.version) ?? 0) < 0
+    ((compareComponentVersions(version.value.version, current.version) ?? 0) <
+      0 ||
+      (compareComponentVersions(
+        version.value.software_version ?? "",
+        current.software_version ?? "",
+      ) ?? 0) < 0)
   );
 });
 async function load(refresh = false) {
@@ -78,17 +105,13 @@ async function load(refresh = false) {
     );
     if (request.signal.aborted) return;
     catalog.value = result;
-    selected.value =
-      result.versions.find(
-        (v) =>
-          !v.unavailable &&
-          v.id !== result.current?.id &&
-          (!result.current ||
-            (compareComponentVersions(v.version, result.current.version) ?? 0) >
-              0),
-      )?.id ?? "";
-    if (!result.current)
-      selected.value = result.versions.find((v) => !v.unavailable)?.id ?? "";
+    if (
+      !softwareOptions.value.some(
+        (option) => option.value === softwareVersion.value,
+      )
+    )
+      softwareVersion.value = "";
+    selected.value = recommended.value ?? "";
   } catch (e) {
     if (!request.signal.aborted) error.value = apiError(e).message;
   } finally {
@@ -101,6 +124,7 @@ watch(
     if (props.show) {
       channel.value = "stable";
       page.value = 1;
+      softwareVersion.value = "";
       catalog.value = null;
       selected.value = "";
       void load();
@@ -111,12 +135,21 @@ watch(
 function changeChannel(value: "stable" | "beta") {
   channel.value = value;
   page.value = 1;
+  softwareVersion.value = "";
   catalog.value = null;
   void load();
 }
 function changePage(value: number) {
   page.value = value;
+  softwareVersion.value = "";
   void load();
+}
+function changeSoftwareVersion(value: string) {
+  softwareVersion.value = value;
+  const items = visibleVersions.value.filter(
+    (item) => !item.unavailable && item.id !== catalog.value?.current?.id,
+  );
+  selected.value = recommended.value ?? (items.length === 1 ? items[0].id : "");
 }
 function selectVersion(item: ComponentVersion) {
   if (
@@ -164,23 +197,33 @@ onBeforeUnmount(() => controller?.abort());
           检查新版
         </NButton>
       </div>
+      <div v-if="softwareOptions.length > 1" class="version-toolbar">
+        <label class="version-filter">
+          {{ name }}版本
+          <NSelect
+            :value="softwareVersion"
+            :options="softwareOptions"
+            :disabled="reading || busy"
+            :aria-label="`${name}版本`"
+            @update:value="changeSoftwareVersion"
+          />
+        </label>
+      </div>
       <NAlert v-if="error || catalog?.error" type="warning">
-        {{
-          error || catalog?.error
-        }}
+        {{ error || catalog?.error }}
       </NAlert>
       <NAlert v-if="channel === 'beta'" type="info">
         Beta 版本用于体验新功能，建议先备份重要配置。
       </NAlert>
       <NSpin :show="reading">
         <NRadioGroup
-          v-if="catalog?.versions.length"
+          v-if="visibleVersions.length"
           v-model:value="selected"
           class="version-list"
           :disabled="reading || busy"
         >
           <div
-            v-for="item in catalog.versions"
+            v-for="item in visibleVersions"
             :key="item.id"
             class="version-row"
             :class="{ chosen: selected === item.id }"
@@ -188,14 +231,14 @@ onBeforeUnmount(() => controller?.abort());
           >
             <NRadio
               :value="item.id"
-              :disabled="!!item.unavailable || item.id === catalog.current?.id"
+              :disabled="!!item.unavailable || item.id === catalog?.current?.id"
             >
-              <strong>{{ item.version }}</strong>
+              <strong>{{ item.software_version ?? item.version }}</strong>
             </NRadio>
             <div class="version-info">
               <div class="version-tags">
                 <NTag
-                  v-if="item.id === catalog.current?.id"
+                  v-if="item.id === catalog?.current?.id"
                   size="small"
                   type="success"
                 >
@@ -206,9 +249,9 @@ onBeforeUnmount(() => controller?.abort());
                   type="info"
                 >
                   推荐
-                </NTag><NTag v-if="item.id === catalog.previous?.id" size="small">
+                </NTag><NTag v-if="item.id === catalog?.previous?.id" size="small">
                   上次安装
-                </NTag><span v-if="item.software_version" class="muted">{{ name }} {{ item.software_version }}</span><span v-if="item.published_at" class="muted">{{
+                </NTag><span v-if="item.software_version" class="muted">组件 {{ item.version }}</span><span v-if="item.published_at" class="muted">{{
                   new Date(item.published_at * 1000).toLocaleDateString()
                 }}</span>
               </div>
@@ -242,6 +285,7 @@ onBeforeUnmount(() => controller?.abort());
       <p v-else class="muted version-tip">
         切换版本可能短暂中断服务，建议提前备份重要数据。
       </p>
+      <slot />
     </div>
   </FormDialog>
 </template>
@@ -259,6 +303,15 @@ onBeforeUnmount(() => controller?.abort());
 }
 .version-channel {
   width: 130px;
+}
+.version-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 320px);
+}
+.version-filter :deep(.n-select) {
+  flex: 1;
 }
 .version-list {
   display: grid;

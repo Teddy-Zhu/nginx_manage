@@ -67,9 +67,11 @@ export function builtinSoftware(
               ))),
       ),
       entry: { to: "/nginx" },
-      note: overview?.installation
-        ? `版本 ${overview.installation.version}`
-        : "系统内置",
+      note: overview?.versions?.nginx
+        ? `组件 ${overview.versions.nginx.version} · Nginx ${overview.versions.nginx.software_version}`
+        : overview?.installation
+          ? `Nginx ${overview.installation.version}`
+          : "系统内置",
       scopes: ["components.manage"],
       actions: ["install", "update"] as SoftwareOperation[],
       error: overview?.runtime_reason,

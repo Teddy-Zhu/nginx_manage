@@ -30,6 +30,7 @@ const installerBusy = ref(false),
   editing = ref(false);
 const draft = ref<SoftwareRuntimeSettings | null>(null);
 const versionAction = ref<"install" | "update" | null>(null);
+const installAutoStart = ref(true);
 const permitted = computed(() =>
   props.app.scopes.every((scope) => session.me?.scopes.includes(scope)),
 );
@@ -80,6 +81,8 @@ async function operate(action: SoftwareOperation) {
     return;
   }
   if (action === "install" || action === "update") {
+    if (action === "install")
+      installAutoStart.value = props.app.settings?.auto_start ?? true;
     versionAction.value = action;
     return;
   }
@@ -92,11 +95,11 @@ async function operate(action: SoftwareOperation) {
 }
 async function chooseVersion(version: ComponentVersion) {
   if (!versionAction.value) return;
-  const task = await send(
-    versionAction.value,
-    versionAction.value === "install" ? props.app.settings : undefined,
-    version.id,
-  );
+  const settings =
+    versionAction.value === "install" && props.app.settings
+      ? { ...props.app.settings, auto_start: installAutoStart.value }
+      : undefined;
+  const task = await send(versionAction.value, settings, version.id);
   if (task) versionAction.value = null;
 }
 async function save() {
@@ -139,7 +142,19 @@ async function save() {
     :busy="processing"
     @choose="chooseVersion"
     @cancel="versionAction = null"
-  />
+  >
+    <div
+      v-if="versionAction === 'install' && app.settings"
+      class="runtime-setting"
+    >
+      <span>开机自动启动</span>
+      <NSwitch
+        v-model:value="installAutoStart"
+        aria-label="开机自动启动"
+        :disabled="processing"
+      />
+    </div>
+  </ComponentVersionDialog>
   <FormDialog
     :show="editing"
     :title="`${app.name} 运行设置`"
