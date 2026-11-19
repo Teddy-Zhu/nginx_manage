@@ -12,7 +12,7 @@
 
 <script setup lang="ts">
 import { useLiveRefresh } from "../composables/live";
-import { ref, reactive, onMounted, h } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import {
   NButton,
   NDataTable,
@@ -22,6 +22,9 @@ import {
   NSelect,
   NTabPane,
   NAlert,
+  NEmpty,
+  NSpin,
+  NTag,
   type DataTableColumns,
 } from "naive-ui";
 import {
@@ -34,16 +37,18 @@ import {
 } from "../api/client";
 import { useAction } from "../composables/action";
 import TaskLogButton from "../components/TaskLogButton.vue";
-import { taskKinds, taskStates, taskStageLabel } from "../utils/tasks";
+import { taskKinds, taskStates, taskStageSummary, taskStateLabel, taskStateTone } from "../utils/tasks";
 const api = useNodeAPI();
 const { request } = api;
 
+const pageSize = 30;
 const { run, busy } = useAction(),
   tasks = ref<Task[]>([]);
 const audits = ref<AuditPage | null>(null),
   offset = ref(0),
   tab = ref("tasks");
 const tasksError = ref("");
+const moreTasks = ref(false);
 function localTime(value: number) {
   const date = new Date(value);
   return new Date(value - date.getTimezoneOffset() * 60_000)
@@ -84,39 +89,6 @@ function queryFilter(): AuditFilter {
     request_id: filter.request_id,
   };
 }
-const taskColumns: DataTableColumns<Task> = [
-  {
-    title: "日志",
-    key: "logs",
-    render: (task) =>
-      h(TaskLogButton, {
-        taskId: task.id,
-        title: taskKinds[task.kind] ?? "操作详情",
-      }),
-  },
-
-  {
-    title: "类型",
-    key: "kind",
-    render: (r) => taskKinds[r.kind] ?? "后台任务",
-  },
-  {
-    title: "状态",
-    key: "state",
-    render: (r) => taskStates[r.state] ?? "状态待确认",
-  },
-  {
-    title: "阶段",
-    key: "stage",
-    render: (r) => taskStageLabel(r.stage, r.kind, r.state),
-  },
-  { title: "错误", key: "last_error", render: (r) => r.last_error || "—" },
-  {
-    title: "创建时间",
-    key: "created_at",
-    render: (r) => new Date(r.created_at * 1000).toLocaleString(),
-  },
-];
 const auditActions: Record<string, string> = {
   ...taskKinds,
   "auth.login": "登录面板",
@@ -151,13 +123,16 @@ const auditColumns: DataTableColumns<AuditRow> = [
     render: (r) => new Date(r.created_at * 1000).toLocaleString(),
   },
 ];
-async function loadTasks() {
+async function loadTasks(nextOffset = offset.value) {
   await run(async () => {
     try {
-      tasks.value = await request<Task[]>({
+      const result = await request<Task[]>({
         url: "/tasks",
-        params: { offset: offset.value },
+        params: { offset: nextOffset, limit: pageSize + 1 },
       });
+      tasks.value = result.slice(0, pageSize);
+      moreTasks.value = result.length > pageSize;
+      offset.value = nextOffset;
       tasksError.value = "";
     } catch (cause) {
       tasksError.value = apiError(cause).message;
@@ -185,8 +160,7 @@ async function changeTab(value: string) {
 }
 async function page(delta: number) {
   if (tab.value === "tasks") {
-    offset.value = Math.max(0, offset.value + delta * 30);
-    await loadTasks();
+    await loadTasks(Math.max(0, offset.value + delta * pageSize));
     return;
   }
   if (!applied.value || !audits.value) return;
@@ -212,31 +186,47 @@ async function exportAudit() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 }
-onMounted(loadTasks);
+onMounted(() => loadTasks());
 useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tasks");
 </script>
 <template>
-  <div class="toolbar">
-    <span class="muted">每页最多 30 条记录</span><n-button :loading="busy" @click="load">
-      刷新
-    </n-button>
-  </div>
-  <NAlert v-if="tab === 'tasks' && tasksError" type="error">
-    {{
-      tasksError
-    }}
-  </NAlert>
-  <section class="surface">
+  <section class="surface operation-records">
     <n-tabs type="line" :value="tab" @update:value="changeTab">
-      <n-tab-pane name="tasks" tab="执行任务">
-        <n-data-table
-          :columns="taskColumns"
-          :data="tasks"
-          :loading="busy"
-          :bordered="false"
-          :scroll-x="900"
-        />
-      </n-tab-pane><n-tab-pane name="audit" tab="操作历史">
+      <template #suffix>
+        <NButton size="small" :loading="busy" @click="load">
+          刷新
+        </NButton>
+      </template>
+      <n-tab-pane name="tasks" tab="任务">
+        <NAlert v-if="tasksError" type="error">
+          {{ tasksError }}
+        </NAlert>
+        <NSpin :show="busy && !tasks.length">
+          <ul v-if="tasks.length" class="task-list">
+            <li v-for="task in tasks" :key="task.id" class="task-row">
+              <div class="task-description">
+                <strong>{{ taskKinds[task.kind] ?? "后台任务" }}</strong>
+                <span v-if="task.last_error || taskStageSummary(task.stage, task.kind, task.state)" class="task-detail">
+                  {{ task.last_error || taskStageSummary(task.stage, task.kind, task.state) }}
+                </span>
+              </div>
+              <NTag size="small" :type="taskStateTone(task.state)" :bordered="false">
+                {{ taskStateLabel(task.state) }}
+              </NTag>
+              <time class="task-time" :datetime="new Date(task.created_at * 1000).toISOString()">
+                {{ new Date(task.created_at * 1000).toLocaleString() }}
+              </time>
+              <TaskLogButton
+                :task-id="task.id"
+                :title="taskKinds[task.kind] ?? '任务详情'"
+                label="详情"
+              />
+            </li>
+          </ul>
+          <NEmpty v-else-if="!tasksError" class="empty-records" description="暂无任务" />
+        </NSpin>
+      </n-tab-pane>
+      <n-tab-pane name="audit" tab="审计记录">
         <div class="page-stack">
           <div class="grid-2">
             <NFormItem label="开始时间">
@@ -293,9 +283,6 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tas
               导出审计记录
             </NButton>
           </div>
-          <p class="muted">
-            导出当前查询范围内的操作记录；记录较多时，请缩小时间范围。
-          </p>
           <NAlert v-if="audits?.notice" type="info">
             {{ audits.notice }}
           </NAlert>
@@ -315,10 +302,10 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tas
       >
         上一页
       </NButton>
-      <span class="muted">第 {{ tab === "tasks" ? offset / 30 + 1 : auditPage + 1 }} 页</span>
+      <span class="muted">第 {{ tab === "tasks" ? offset / pageSize + 1 : auditPage + 1 }} 页</span>
       <NButton
         :disabled="
-          busy || (tab === 'tasks' ? tasks.length < 30 : !audits?.more)
+          busy || (tab === 'tasks' ? !moreTasks : !audits?.more)
         "
         @click="page(1)"
       >
@@ -327,3 +314,53 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tas
     </div>
   </section>
 </template>
+
+<style scoped>
+.task-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px minmax(145px, auto) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--border-color);
+}
+.task-row > * {
+  justify-self: start;
+  min-width: 0;
+}
+.task-description {
+  display: grid;
+  gap: 4px;
+}
+.task-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-detail,
+.task-time {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.task-time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.empty-records {
+  padding: 36px 0;
+}
+@media (max-width: 680px) {
+  .task-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+  }
+  .task-row > :nth-child(even) {
+    justify-self: end;
+  }
+}
+</style>

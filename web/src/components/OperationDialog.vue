@@ -5,7 +5,7 @@ import { apiError, createAPI, type LogRow, type Task } from "../api/client";
 import { liveTopicScopes } from "../api/live";
 import { currentOperation, operationVisible } from "../stores/operation";
 import { useSession } from "../stores/session";
-import { isTaskActive, taskStageLabel, taskStates } from "../utils/tasks";
+import { isTaskActive, taskStageSummary, taskStateLabel, taskStateTone } from "../utils/tasks";
 
 const session = useSession();
 const task = ref<Task | null>(null);
@@ -17,7 +17,6 @@ const statusError = ref(""),
   softwareError = ref(""),
   logNotice = ref("");
 const reading = ref(false),
-  checkedAt = ref(0),
   clock = ref(Date.now());
 const active = computed(() => !!task.value && isTaskActive(task.value.state));
 const needsAttention = computed(() =>
@@ -33,17 +32,8 @@ const canReadLogs = computed(() =>
         currentOperation.value.scope.target.scopes.includes(permission)),
   ),
 );
-const state = computed(
-  () => task.value?.state ?? currentOperation.value?.state ?? "queued",
-);
-const tagType = computed(() =>
-  state.value === "succeeded"
-    ? "success"
-    : state.value === "failed"
-      ? "error"
-      : needsAttention.value
-        ? "warning"
-        : "info",
+const stage = computed(() =>
+  task.value ? taskStageSummary(task.value.stage, task.value.kind, task.value.state) : "",
 );
 const elapsed = computed(() => {
   if (!task.value || !active.value) return "";
@@ -56,13 +46,20 @@ const elapsed = computed(() => {
     : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
 });
 const date = (value: number) => new Date(value * 1000).toLocaleString();
-function eventLabel(row: LogRow) {
-  const [event, , kind = "", eventState = "", stage = ""] =
-    row.message.split(" ");
-  return event === "task.created"
-    ? "任务已创建"
-    : `${taskStageLabel(stage, kind, eventState)} · ${taskStates[eventState] ?? "状态待确认"}`;
-}
+const time = (value: number) => new Date(value * 1000).toLocaleTimeString();
+const progress = computed(() => {
+  const events: { at: number; label: string; error: boolean }[] = [];
+  for (const row of rows.value) {
+    if (row.event === "task.created") continue;
+    const [, , kind = "", state = "", stage = ""] = row.message.split(" ");
+    const label = taskStageSummary(stage, kind, state) || taskStateLabel(state);
+    const error = row.level === "error";
+    const previous = events[events.length - 1];
+    if (previous?.label !== label || previous.error !== error)
+      events.push({ at: row.time, label, error });
+  }
+  return events;
+});
 
 let controller: AbortController | undefined;
 let unsubscribe: (() => void) | undefined;
@@ -82,7 +79,7 @@ function stop() {
 
 watch(
   () =>
-    [currentOperation.value?.sequence, currentOperation.value?.taskId] as const,
+    [operationVisible.value, currentOperation.value?.sequence, currentOperation.value?.taskId] as const,
   () => {
     stop();
     task.value = null;
@@ -93,10 +90,9 @@ watch(
       softwareError.value =
       logNotice.value =
         "";
-    checkedAt.value = 0;
     reading.value = false;
     const operation = currentOperation.value;
-    if (!operation?.taskId) return;
+    if (!operationVisible.value || !operation?.taskId) return;
     const current = new AbortController();
     controller = current;
     const api = createAPI({ ...operation.scope, signal: current.signal });
@@ -119,7 +115,7 @@ watch(
           ticker = undefined;
         }
         operation.state = value.state;
-        checkedAt.value = clock.value = Date.now();
+        clock.value = Date.now();
         statusError.value = "";
         if (canReadLogs.value) {
           if (
@@ -140,6 +136,7 @@ watch(
                 "";
               softwareError.value = "";
             } catch (error) {
+              if (current.signal.aborted) return;
               softwareError.value = apiError(error).message;
             }
           }
@@ -151,6 +148,7 @@ watch(
                     source.category === "task" &&
                     source.resource_id === operation.taskId,
                 )?.id ?? "";
+            if (current.signal.aborted) return;
             if (sourceId && !stopLogs) {
               stopLogs = api.followLogs(
                 {
@@ -176,11 +174,7 @@ watch(
                   rows.value = [...(reset ? [] : rows.value), ...page.rows]
                     .sort((a, b) => a.time - b.time)
                     .slice(-100);
-                  logNotice.value =
-                    page.notice ||
-                    (page.gap
-                      ? "部分历史日志缺失，当前任务状态不受影响。"
-                      : "");
+                  logNotice.value = page.notice || (page.gap ? "部分进度记录缺失" : "");
                   logError.value = "";
                 },
                 (cause) => {
@@ -222,7 +216,7 @@ onUnmounted(stop);
     v-model:show="operationVisible"
     preset="card"
     :title="currentOperation?.title ?? '操作详情'"
-    :style="{ width: '880px', maxWidth: 'calc(100vw - 32px)' }"
+    :style="{ width: '720px', maxWidth: 'calc(100vw - 32px)' }"
     :mask-closable="false"
   >
     <div class="operation-dialog-body page-stack">
@@ -250,88 +244,83 @@ onUnmounted(stop);
         操作已完成。
       </NAlert>
       <template v-if="currentOperation?.taskId">
-        <div class="toolbar">
-          <div class="operation-state">
-            <NSpin v-if="active || (!task && reading)" size="small" /><NTag
-              :type="tagType"
-            >
-              {{
-                task ? (taskStates[state] ?? "状态待确认") : "正在查询状态"
-              }}
+        <section v-if="task" class="task-summary" aria-label="任务状态">
+          <div class="summary-state" role="status">
+            <NSpin v-if="active" size="small" />
+            <NTag :type="taskStateTone(task.state)" :bordered="false">
+              {{ taskStateLabel(task.state) }}
             </NTag>
+            <strong v-if="stage">{{ stage }}</strong>
           </div>
-          <NButton size="small" :loading="reading" @click="refresh?.()">
-            刷新
-          </NButton>
+          <dl class="summary-meta">
+            <div>
+              <dt>提交时间</dt>
+              <dd>{{ date(task.created_at) }}</dd>
+            </div>
+            <div v-if="elapsed">
+              <dt>已用时</dt>
+              <dd>{{ elapsed }}</dd>
+            </div>
+          </dl>
+        </section>
+        <div v-else-if="reading" class="summary-state" role="status">
+          <NSpin size="small" />
+          <span>读取任务状态</span>
         </div>
-        <div v-if="task" class="surface page-stack">
-          <strong>{{
-            taskStageLabel(task.stage, task.kind, task.state)
-          }}</strong>
-          <p class="muted">
-            提交时间：{{ date(task.created_at)
-            }}<span v-if="elapsed"> · 已用时 {{ elapsed }}</span>
-          </p>
-          <p v-if="needsAttention">
-            请返回原操作页面确认或恢复任务。
-          </p>
-        </div>
-        <NAlert v-if="statusError" type="warning" title="暂时无法读取任务状态">
+        <NAlert v-if="statusError" type="warning" title="任务状态暂不可用">
           {{ statusError }}
         </NAlert>
         <NAlert
           v-if="task?.last_error"
           :type="task.state === 'failed' ? 'error' : 'warning'"
-          title="执行详情"
         >
           {{ task.last_error }}
         </NAlert>
-        <div class="toolbar">
-          <h3>执行日志</h3>
-          <span v-if="checkedAt" class="muted">更新于 {{ new Date(checkedAt).toLocaleTimeString() }}</span>
-        </div>
-        <NAlert v-if="!canReadLogs" type="info">
-          当前账户没有查看日志的权限。
-        </NAlert>
-        <NAlert v-else-if="logError" type="warning" title="日志暂不可用">
-          {{
-            logError
-          }}
-        </NAlert>
-        <p
-          v-else-if="!rows.length && !softwareLog && !softwareMessage"
-          class="muted"
-        >
-          {{ active ? "暂无执行日志" : "最近七天暂无执行日志" }}
+        <p v-if="needsAttention" class="muted action-hint">
+          请返回任务来源页面{{ task?.state === "waiting_confirmation" ? "确认" : "恢复" }}。
         </p>
-        <ol v-if="rows.length" class="operation-log" aria-label="执行日志">
-          <li
-            v-for="(row, index) in rows"
-            :key="`${row.time}-${index}`"
-            :class="{ 'log-error': row.level === 'error' }"
-          >
-            <time>{{ date(row.time) }}</time><span>{{ eventLabel(row) }}</span>
-          </li>
-        </ol>
-        <NAlert v-if="softwareError" type="warning" title="操作详情暂不可用">
-          {{
-            softwareError
-          }}
-        </NAlert>
-        <p v-if="canReadLogs && softwareMessage">
+        <p
+          v-if="canReadLogs && softwareMessage && softwareMessage !== task?.last_error"
+          class="action-hint"
+        >
           {{ softwareMessage }}
         </p>
-        <pre v-if="canReadLogs && softwareLog" class="software-log">{{
-          softwareLog
-        }}</pre>
-        <NAlert v-if="logNotice" type="warning">
-          {{ logNotice }}
-        </NAlert>
+        <section v-if="task && canReadLogs" class="progress-section">
+          <h3>进度记录</h3>
+          <ol v-if="progress.length" class="operation-log" aria-label="进度记录">
+            <li
+              v-for="(item, index) in progress"
+              :key="index"
+              :class="{ 'log-error': item.error }"
+            >
+              <time :datetime="new Date(item.at * 1000).toISOString()" :title="date(item.at)">
+                {{ time(item.at) }}
+              </time>
+              <span>{{ item.label }}</span>
+            </li>
+          </ol>
+          <p v-else-if="!logError" class="muted">
+            暂无进度记录
+          </p>
+          <NAlert v-if="logError || logNotice" type="warning">
+            {{ logError || logNotice }}
+          </NAlert>
+        </section>
+        <details v-if="canReadLogs && softwareLog" class="program-output">
+          <summary>程序输出</summary>
+          <pre>{{ softwareLog }}</pre>
+        </details>
+        <p v-if="canReadLogs && softwareError" class="muted">
+          程序输出暂不可用 · {{ softwareError }}
+        </p>
       </template>
     </div>
     <template #footer>
       <div class="operation-dialog-footer">
-        <NButton @click="operationVisible = false">
+        <NButton v-if="currentOperation?.taskId" :loading="reading" @click="refresh?.()">
+          刷新
+        </NButton>
+        <NButton type="primary" @click="operationVisible = false">
           关闭
         </NButton>
       </div>
@@ -347,49 +336,105 @@ onUnmounted(stop);
   overflow-wrap: anywhere;
   padding-right: 4px;
 }
+.task-summary {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--surface-soft);
+}
+.summary-state,
+.summary-meta,
+.summary-meta > div,
 .operation-dialog-footer {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.summary-meta {
+  margin: 0;
+  gap: 6px 20px;
+  font-size: 13px;
+}
+.summary-meta > div {
+  gap: 6px;
+}
+.summary-meta dt {
+  color: var(--text-muted);
+}
+.summary-meta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.operation-dialog-footer {
   justify-content: flex-end;
 }
-.software-log {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 320px;
-  overflow: auto;
-  padding: 16px;
-  border-radius: 10px;
-  background: var(--bg);
-  font-size: 12px;
+.progress-section {
+  display: grid;
+  gap: 8px;
 }
-.operation-state {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.progress-section > h3,
+.progress-section > p,
+.action-hint {
+  margin: 0;
 }
 .operation-log {
   margin: 0;
-  padding: 12px 16px;
+  padding: 0 0 0 2px;
   list-style: none;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--surface-soft);
-  max-height: 480px;
+  max-height: 280px;
   overflow: auto;
 }
 .operation-log li {
+  position: relative;
   display: grid;
-  gap: 4px;
-  padding: 10px 0;
-  overflow-wrap: anywhere;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+  margin-left: 5px;
+  padding: 7px 0 7px 14px;
+  border-left: 1px solid var(--border-color);
 }
-.operation-log li + li {
-  border-top: 1px solid var(--border-color);
+.operation-log li::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
 }
 .operation-log time {
   color: var(--text-muted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .log-error {
   color: #b42318;
+}
+.operation-log li.log-error::before {
+  background: currentColor;
+}
+.program-output {
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+.program-output summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.program-output pre {
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  font-size: 12px;
 }
 </style>

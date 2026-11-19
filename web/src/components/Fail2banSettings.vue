@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import SettingsSection from "./SettingsSection.vue";
 import FormDialog from "./FormDialog.vue";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onScopeDispose, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import {
   NAlert,
   NButton,
   NCheckbox,
+  NDropdown,
   NEmpty,
   NFormItem,
   NInput,
@@ -20,22 +21,65 @@ import {
   type Fail2banContainerRule,
   type Fail2banContainerConfig,
 } from "../api/client";
+import { selectedTarget } from "../api/context";
 import { useSoftwareOperations } from "../composables/software";
 import { randomUUID } from "../utils/crypto";
 import ValueListInput from "./ValueListInput.vue";
 import TaskLogButton from "./TaskLogButton.vue";
+import { operationVisible } from "../stores/operation";
 import ServiceLogsDialog from "./ServiceLogsDialog.vue";
 import { useSession } from "../stores/session";
 import { fail2banRuntime, softwareStatus } from "../utils/software";
+type RuleKind = Fail2banContainerRule["kind"];
+type RuleDraft = Omit<Fail2banContainerRule, "ports" | "max_retry" | "find_time" | "ban_time"> & {
+  ports: (number | null)[];
+  max_retry: number | null;
+  find_time: number | null;
+  ban_time: number | null;
+};
+const templates = {
+  ssh: {
+    label: "SSH 登录",
+    ports: [22],
+    max_retry: 5,
+    find_time: 600,
+    ban_time: 3600,
+    hint: "建议确认 SSH 实际监听端口。",
+  },
+  panel: {
+    label: "面板登录",
+    ports: [],
+    max_retry: 5,
+    find_time: 300,
+    ban_time: 900,
+    hint: "填写目标服务器的面板监听端口。",
+  },
+  nginx: {
+    label: "网站 HTTP 401",
+    ports: [80, 443],
+    max_retry: 12,
+    find_time: 600,
+    ban_time: 600,
+    hint: "统计访问日志中的 HTTP 401，包括首次认证请求。启用前须应用网站配置并生成访问日志。",
+  },
+} satisfies Record<RuleKind, Omit<RuleDraft, "id" | "kind" | "name" | "enabled"> & {
+  label: string;
+  hint: string;
+}>;
+const options = (Object.keys(templates) as RuleKind[]).map((kind) => ({
+  label: templates[kind].label,
+  value: kind,
+}));
+const templateOptions = options.map(({ label, value }) => ({ label, key: value }));
 const reading = ref(false),
   readError = ref("");
 const status = ref<Fail2banContainerStatus | null>(null),
-  editing = ref<Fail2banContainerRule | null>(null),
+  editing = ref<RuleDraft | null>(null),
   whitelist = ref<string[] | null>(null),
   addresses = ref<string[]>([]),
   banRule = ref<string | null>(null),
   showBan = ref(false);
-const { api, run, busy, permitted, active, last, submit, control } =
+const { api, busy, permitted, active, last, submit, control } =
   useSoftwareOperations(load);
 const session = useSession();
 const showLogs = ref(false);
@@ -50,6 +94,52 @@ const displayStatus = computed(() =>
   ),
 );
 const blocked = computed(() => busy.value || active.value);
+const canEditRules = computed(() => status.value?.installed === true && permitted.value && !blocked.value);
+const canAddRule = computed(() => canEditRules.value && (status.value?.config.rules.length ?? 0) < 32);
+const editBase = ref<Fail2banContainerConfig | null>(null);
+const editingExisting = ref(false);
+const draftTaskId = ref("");
+const portStatus = ref("");
+const findingPorts = ref(false);
+let detection: AbortController | undefined;
+const changedConfig = computed(() =>
+  editBase.value !== null && status.value?.config.revision !== editBase.value.revision,
+);
+const portError = computed(() => {
+  const ports = editing.value?.ports ?? [];
+  if (!ports.length || !ports.every((port) => inRange(port, 1, 65535)))
+    return "请填写 1–65535 的端口。";
+  if (new Set(ports).size !== ports.length) return "保护端口不能重复。";
+  return "";
+});
+const validRule = computed<Fail2banContainerRule | null>(() => {
+  const rule = editing.value;
+  if (!rule || !rule.name.trim() || portError.value) return null;
+  const { ports, max_retry, find_time, ban_time } = rule;
+  if (
+    !ports.every((port) => inRange(port, 1, 65535)) ||
+    !inRange(max_retry, 1, 1000) ||
+    !inRange(find_time, 10, 604800) ||
+    !inRange(ban_time, 10, 31536000)
+  ) return null;
+  return { ...rule, name: rule.name.trim(), ports, max_retry, find_time, ban_time };
+});
+
+function formatDuration(seconds: number) {
+  if (seconds % 3600 === 0) return (seconds / 3600) + " 小时";
+  if (seconds % 60 === 0) return (seconds / 60) + " 分钟";
+  return seconds + " 秒";
+}
+function inRange(value: number | null, min: number, max: number): value is number {
+  return value !== null && Number.isInteger(value) && value >= min && value <= max;
+}
+function stopDetection() {
+  detection?.abort();
+  detection = undefined;
+  findingPorts.value = false;
+}
+onScopeDispose(stopDetection);
+
 async function setAutoStart(autoStart: boolean) {
   if (!status.value?.installed || blocked.value || !permitted.value) return;
   await control({
@@ -61,11 +151,6 @@ async function setAutoStart(autoStart: boolean) {
     },
   });
 }
-const options = [
-  { label: "SSH 登录", value: "ssh" },
-  { label: "面板登录", value: "panel" },
-  { label: "网站认证", value: "nginx" },
-];
 const ruleOptions = computed(() =>
   (status.value?.config.rules ?? [])
     .filter((r) => r.enabled)
@@ -85,8 +170,7 @@ const banned = computed(() =>
     })),
   ),
 );
-const editBase = ref<Fail2banContainerConfig | null>(null),
-  banMode = ref<"ban" | "unban">("ban");
+const banMode = ref<"ban" | "unban">("ban");
 async function load() {
   if (reading.value) return;
   reading.value = true;
@@ -110,73 +194,108 @@ function copyConfig(): Fail2banContainerConfig | null {
       }
     : null;
 }
+function closeRule() {
+  stopDetection();
+  editing.value = null;
+  draftTaskId.value = "";
+  portStatus.value = "";
+}
 function editWhitelist() {
+  if (!canEditRules.value) return;
+  closeRule();
   editBase.value = copyConfig();
   whitelist.value = [...(editBase.value?.whitelist ?? [])];
 }
-function start(
-  kind: Fail2banContainerRule["kind"] = "ssh",
-  source?: Fail2banContainerRule,
-) {
+function start(kind?: RuleKind, source?: Fail2banContainerRule) {
+  if (source ? !canEditRules.value : !canAddRule.value) return;
+  stopDetection();
+  portStatus.value = "";
+  draftTaskId.value = "";
   editBase.value = copyConfig();
-  editing.value = source
-    ? { ...source, ports: [...source.ports] }
-    : {
-        id: randomUUID(),
-        name:
-          kind === "ssh"
-            ? "SSH 登录"
-            : kind === "panel"
-              ? "面板登录"
-              : "网站认证",
-        kind,
-        enabled: true,
-        ports: kind === "ssh" ? [22] : kind === "panel" ? [] : [80, 443],
-        max_retry: 5,
-        find_time: 600,
-        ban_time: 3600,
-      };
-  if (!source && (kind === "panel" || kind === "ssh"))
-    void run(async () => {
-      const runtime = await api.firewallRuntime();
-      if (editing.value?.kind === kind)
-        editing.value.ports =
-          kind === "panel"
-            ? runtime.shortcuts.management
-            : runtime.shortcuts.ssh;
-    });
+  editingExisting.value = !!source;
+  if (source) {
+    editing.value = { ...source, ports: [...source.ports] };
+    return;
+  }
+  const template = templates[kind ?? "ssh"];
+  editing.value = {
+    id: randomUUID(),
+    name: kind ? template.label : "",
+    kind: kind ?? "ssh",
+    ports: kind ? [...template.ports] : [],
+    enabled: true,
+    max_retry: template.max_retry,
+    find_time: template.find_time,
+    ban_time: template.ban_time,
+  };
+  if (kind && kind !== "nginx" && !selectedTarget.value) void detectPorts();
 }
-async function save(config: Fail2banContainerConfig) {
-  if (
-    await submit(
-      { action: "fail2ban", fail2ban: { action: "configure", config } },
-      "防护规则操作日志",
-    )
-  ) {
-    editing.value = null;
-    whitelist.value = null;
+function changeKind(kind: RuleKind) {
+  const rule = editing.value;
+  if (!rule || rule.kind === kind) return;
+  stopDetection();
+  portStatus.value = "";
+  rule.kind = kind;
+}
+async function detectPorts() {
+  const rule = editing.value;
+  if (!rule || rule.kind === "nginx" || selectedTarget.value || findingPorts.value) return;
+  const kind = rule.kind, id = rule.id, previous = [...rule.ports];
+  const controller = new AbortController();
+  detection = controller;
+  findingPorts.value = true;
+  portStatus.value = "";
+  try {
+    const { shortcuts } = await api.firewallRuntime(controller.signal);
+    const current = editing.value;
+    if (controller.signal.aborted || current?.id !== id || current.kind !== kind) return;
+    const detected = kind === "ssh" ? shortcuts.ssh : shortcuts.management;
+    if (!detected.length) {
+      portStatus.value = "未检测到监听端口，请手动填写。";
+    } else if (
+      current.ports.length === previous.length &&
+      current.ports.every((port, index) => port === previous[index])
+    ) {
+      current.ports = detected.slice(0, 15);
+    }
+  } catch {
+    if (!controller.signal.aborted) portStatus.value = "端口检测暂不可用，请手动填写。";
+  } finally {
+    if (detection === controller) stopDetection();
   }
 }
-async function saveRule() {
-  const rule = editing.value,
-    c = editBase.value;
-  if (!rule || !c) return;
-  await save({
-    ...c,
-    rules: [
-      ...c.rules.filter((r) => r.id !== rule.id),
-      { ...rule, name: rule.name.trim() },
-    ],
-  });
+async function save(config: Fail2banContainerConfig, title = "更新登录防护配置") {
+  return await submit(
+    { action: "fail2ban", fail2ban: { action: "configure", config } },
+    title,
+  );
 }
+async function saveWhitelist() {
+  if (!editBase.value || !whitelist.value || changedConfig.value) return;
+  const config = { ...editBase.value, whitelist: whitelist.value.map((address) => address.trim()).filter(Boolean) };
+  if (await save(config, "更新信任名单")) whitelist.value = null;
+}
+async function saveRule() {
+  const rule = validRule.value, config = editBase.value;
+  if (!rule || !config || changedConfig.value || !canEditRules.value) return;
+  const rules = config.rules.some(({ id }) => rule.id === id)
+    ? config.rules.map((current) => current.id === rule.id ? rule : current)
+    : [...config.rules, rule];
+  stopDetection();
+  const task = await save({ ...config, rules }, editingExisting.value ? "更新防护规则" : "添加防护规则");
+  if (task) draftTaskId.value = task.id;
+}
+watch([last, draftTaskId], ([task, id]) => {
+  if (id && task?.id === id && task.state === "succeeded") closeRule();
+});
 async function removeRule(rule: Fail2banContainerRule) {
   const c = status.value?.config;
-  if (!c || !window.confirm(`删除“${rule.name}”？该规则的封禁将解除。`)) return;
+  if (!canEditRules.value || !c || !window.confirm(`删除“${rule.name}”？该规则的封禁将解除。`)) return;
   await save({ ...c, rules: c.rules.filter((r) => r.id !== rule.id) });
 }
 async function toggle(rule: Fail2banContainerRule) {
   const c = status.value?.config;
-  if (!c) return;
+  if (!canEditRules.value || !c) return;
   await save({
     ...c,
     rules: c.rules.map((r) =>
@@ -220,12 +339,7 @@ onMounted(load);
   <div class="page-stack">
     <section class="panel page-stack">
       <div class="section-heading">
-        <div>
-          <h3>防护概况</h3>
-          <p class="muted">
-            为登录入口添加规则，超过失败次数后自动封禁来源 IP。
-          </p>
-        </div>
+        <h3>防护概况</h3>
         <div class="button-row">
           <NTag :type="displayStatus.tone">
             {{ displayStatus.label }}
@@ -262,11 +376,6 @@ onMounted(load);
         <div>
           <span>当前封禁</span><strong>{{ totalBanned }}</strong>
         </div>
-        <div>
-          <span>自动启动</span><strong>{{
-            status?.config.auto_start ? "已开启" : "已关闭"
-          }}</strong>
-        </div>
       </div>
     </section>
     <NAlert v-if="readError" type="error">
@@ -274,42 +383,28 @@ onMounted(load);
     </NAlert><NAlert v-if="last?.error" type="error">
       {{ last.error }}
     </NAlert>
-    <div v-if="last" class="button-row">
-      <span>{{
-        last.state === "succeeded"
-          ? "操作已完成"
-          : last.state === "failed"
-            ? "操作未完成"
-            : "正在处理"
-      }}</span><TaskLogButton :task-id="last.id" />
+    <div v-if="last && last.state !== 'succeeded'" class="button-row">
+      <TaskLogButton :task-id="last.id" />
     </div>
     <section class="panel page-stack">
       <div class="section-heading">
         <h3>防护规则</h3>
-        <NButton
-          type="primary"
-          :disabled="!permitted || blocked"
-          @click="start()"
-        >
-          添加规则
-        </NButton>
-      </div>
-      <NEmpty
-        v-if="!status?.config.rules.length"
-        description="添加需要保护的登录入口"
-      >
-        <template #extra>
-          <div class="button-row">
-            <NButton :disabled="!permitted || blocked" @click="start('ssh')">
-              保护 SSH
-            </NButton><NButton :disabled="!permitted || blocked" @click="start('panel')">
-              保护面板
-            </NButton><NButton :disabled="!permitted || blocked" @click="start('nginx')">
-              保护网站
+        <div class="button-row">
+          <NDropdown :options="templateOptions" :disabled="!canAddRule" @select="start($event as RuleKind)">
+            <NButton :disabled="!canAddRule">
+              快速添加
             </NButton>
-          </div>
-        </template>
-      </NEmpty>
+          </NDropdown>
+          <NButton type="primary" :disabled="!canAddRule" @click="start()">
+            添加规则
+          </NButton>
+        </div>
+      </div>
+      <NEmpty v-if="status && !status.installed" description="安装 Fail2ban 后可添加防护规则" />
+      <NEmpty v-else-if="status && !status.config.rules.length" description="暂无防护规则" />
+      <p v-if="status?.config.rules.length === 32" class="muted">
+        已达到 32 条规则上限
+      </p>
       <article
         v-for="rule in status?.config.rules"
         :key="rule.id"
@@ -324,9 +419,9 @@ onMounted(load);
           <p class="muted">
             {{ options.find((o) => o.value === rule.kind)?.label }} · 端口
             {{ rule.ports.join("、") }} ·
-            {{ Math.round(rule.find_time / 60) }} 分钟内失败
+            {{ formatDuration(rule.find_time) }}内失败
             {{ rule.max_retry }} 次，封禁
-            {{ Math.round(rule.ban_time / 60) }} 分钟
+            {{ formatDuration(rule.ban_time) }}
           </p>
           <p
             v-if="status?.jails.find((j) => j.id === rule.id)?.error"
@@ -338,19 +433,19 @@ onMounted(load);
         <div class="button-row">
           <NButton
             size="small"
-            :disabled="!permitted || blocked"
+            :disabled="!canEditRules"
             @click="start(rule.kind, rule)"
           >
             编辑
           </NButton><NButton
             size="small"
-            :disabled="!permitted || blocked"
+            :disabled="!canEditRules"
             @click="toggle(rule)"
           >
             {{ rule.enabled ? "停用" : "启用" }}
           </NButton><NButton
             size="small"
-            :disabled="!permitted || blocked"
+            :disabled="!canEditRules"
             @click="removeRule(rule)"
           >
             删除
@@ -366,7 +461,7 @@ onMounted(load);
             名单中的地址不会因登录失败被自动封禁。
           </p>
         </div>
-        <NButton :disabled="!permitted || blocked" @click="editWhitelist()">
+        <NButton :disabled="!canEditRules" @click="editWhitelist()">
           编辑名单
         </NButton>
       </div>
@@ -426,21 +521,22 @@ onMounted(load);
   </div>
   <ServiceLogsDialog v-model:show="showLogs" app="fail2ban" name="Fail2ban" />
   <FormDialog
-    :show="!!editing"
-    title="防护规则"
+    :show="!!editing && (!draftTaskId || (!blocked && !operationVisible))"
+    :title="editingExisting ? '编辑防护规则' : '添加防护规则'"
     :busy="busy"
     :draft="editing"
-    :submit-disabled="
-      !permitted ||
-        blocked ||
-        !editing ||
-        !editing.name.trim() ||
-        !editing.ports.length
-    "
+    :dirty="!!draftTaskId && !!editing ? true : undefined"
+    :submit-disabled="!canEditRules || changedConfig || !validRule"
     @submit="saveRule"
-    @cancel="editing = null"
+    @cancel="closeRule"
   >
     <div v-if="editing" class="settings-stack">
+      <NAlert v-if="changedConfig" type="warning">
+        配置已更新，请重新打开规则编辑。
+      </NAlert>
+      <NAlert v-else-if="draftTaskId && last?.id === draftTaskId && last.error" type="error">
+        {{ last.error }}
+      </NAlert>
       <SettingsSection title="保护对象">
         <div class="settings-fields">
           <NFormItem label="规则名称" :show-feedback="false">
@@ -451,9 +547,9 @@ onMounted(load);
             />
           </NFormItem>
           <NFormItem label="保护入口" :show-feedback="false">
-            <NSelect v-model:value="editing.kind" :options="options" />
+            <NSelect :value="editing.kind" :options="options" @update:value="changeKind" />
           </NFormItem>
-          <NFormItem class="full-width" label="保护端口" :show-feedback="false">
+          <NFormItem class="full-width" label="保护端口" :feedback="portStatus || portError">
             <div class="port-list">
               <div
                 v-for="(port, index) in editing.ports"
@@ -467,23 +563,28 @@ onMounted(load);
                   :precision="0"
                   :show-button="false"
                   placeholder="端口"
-                  @update:value="editing.ports[index] = $event ?? 0"
+                  @update:value="editing.ports[index] = $event"
                 /><NButton @click="editing.ports.splice(index, 1)">
                   移除
                 </NButton>
               </div>
-              <NButton
-                dashed
-                :disabled="editing.ports.length >= 15"
-                @click="editing.ports.push(22)"
-              >
-                添加端口
-              </NButton>
+              <div class="button-row">
+                <NButton dashed :disabled="editing.ports.length >= 15" @click="editing.ports.push(null)">
+                  添加端口
+                </NButton>
+                <NButton
+                  v-if="editing.kind !== 'nginx' && !selectedTarget"
+                  :loading="findingPorts"
+                  @click="detectPorts"
+                >
+                  检测端口
+                </NButton>
+              </div>
             </div>
           </NFormItem>
         </div>
-        <p v-if="editing.kind === 'nginx'" class="section-note">
-          对网站登录认证中反复失败的来源进行封禁。
+        <p class="section-note">
+          {{ templates[editing.kind].hint }}
         </p>
       </SettingsSection>
       <SettingsSection
@@ -526,18 +627,14 @@ onMounted(load);
     title="编辑信任名单"
     :busy="busy"
     :draft="whitelist"
-    :submit-disabled="!permitted || blocked || !status || !editBase"
-    @submit="
-      editBase &&
-        whitelist &&
-        save({
-          ...editBase,
-          whitelist: whitelist.map((a) => a.trim()).filter(Boolean),
-        })
-    "
+    :submit-disabled="!canEditRules || !editBase || changedConfig"
+    @submit="saveWhitelist"
     @cancel="whitelist = null"
   >
     <div v-if="whitelist" class="page-stack">
+      <NAlert v-if="changedConfig" type="warning">
+        配置已更新，请重新打开名单编辑。
+      </NAlert>
       <ValueListInput
         v-model:value="whitelist"
         item-label="地址"
@@ -576,7 +673,7 @@ onMounted(load);
 <style scoped>
 .defense-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 .defense-stats > div {
@@ -610,14 +707,6 @@ onMounted(load);
   flex-direction: column;
   gap: 6px;
 }
-.defense-modal {
-  width: min(700px, calc(100vw - 32px));
-}
-.defense-fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
 .port-list {
   display: grid;
   gap: 12px;
@@ -637,9 +726,6 @@ onMounted(load);
   .rule-card {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .defense-fields {
-    grid-template-columns: 1fr;
   }
   .defense-stats {
     gap: 8px;

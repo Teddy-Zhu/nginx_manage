@@ -3,7 +3,7 @@ import { NButton } from "naive-ui";
 import { useRoute } from "vue-router";
 import { inspectTask } from "../stores/operation";
 
-defineProps<{ taskId: string; title?: string }>();
+defineProps<{ taskId: string; title?: string; label?: string }>();
 const route = useRoute();
 </script>
 
@@ -12,6 +12,6 @@ const route = useRoute();
     size="small"
     @click="inspectTask(taskId, title, !!route.meta.localOnly)"
   >
-    查看日志
+    {{ label ?? "查看日志" }}
   </NButton>
 </template>

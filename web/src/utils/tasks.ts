@@ -1,4 +1,13 @@
 export const taskKinds: Record<string, string> = {
+  "backup.create": "创建备份",
+  "panel.update": "更新管理面板",
+  "panel.image": "更新面板镜像",
+  "nginx.image": "更新 Nginx 镜像",
+  "agent.upgrade": "更新管理服务",
+  "host.dns.apply": "应用 DNS 配置",
+  "migration.push": "迁移到目标服务器",
+  "migration.dependencies": "准备迁移依赖",
+  "migration.acme.account": "导入证书账户",
   "component.install": "安装 Nginx",
   "component.switch": "更新 Nginx",
   "component.check": "检查软件版本",
@@ -156,4 +165,31 @@ export function taskStageLabel(stage: string, kind: string, state: string) {
         ? "执行失败"
         : "正在处理")
   );
+}
+
+export function taskStateLabel(state: string) {
+  return taskStates[state] ?? "状态待确认";
+}
+
+export function taskStateTone(state: string) {
+  switch (state) {
+    case "succeeded": return "success";
+    case "failed": return "error";
+    case "waiting_confirmation":
+    case "recovery_required":
+    case "compensating": return "warning";
+    case "running":
+    case "queued": return "info";
+    default: return "default";
+  }
+}
+
+export function taskStageSummary(stage: string, kind: string, state: string) {
+  if (
+    state === "queued" ||
+    !taskStages[stage] ||
+    ["software_done", "failed", "released"].includes(stage)
+  ) return "";
+  const label = taskStageLabel(stage, kind, state);
+  return label === taskStateLabel(state) ? "" : label;
 }
