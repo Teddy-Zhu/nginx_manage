@@ -321,11 +321,6 @@ function canResume(t: ImageUpgradeTask) {
 const reading = ref(false);
 let controller: AbortController | null = null,
   closed = false;
-async function loadCurrentVersion(signal: AbortSignal) {
-  const overview = await api.components(signal);
-  currentVersion.value = overview.versions?.nginx ?? null;
-  currentEngine.value = overview.installation?.version ?? "";
-}
 async function load(readVersion = false) {
   if (reading.value || closed) return;
   reading.value = true;
@@ -344,7 +339,11 @@ async function load(readVersion = false) {
         items.some((item) => item.id === task.id && item.state === "succeeded"),
     );
     tasks.value = items;
-    if (readVersion || settled) await loadCurrentVersion(controller.signal);
+    if (readVersion || settled) {
+      const overview = await api.components(controller.signal);
+      currentVersion.value = overview.versions?.nginx ?? null;
+      currentEngine.value = overview.installation?.version ?? "";
+    }
     error.value = "";
     if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
