@@ -141,6 +141,9 @@ func (s *Service) CreateLinked(ctx context.Context, p auth.Principal, requestID,
 	if !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
+	if request := in.Input.Software; request != nil && (request.Immediate() || request.Action == "logs") {
+		return out, fault.Invalid("请使用软件控制或服务日志接口")
+	}
 	var active int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks WHERE kind IN ('component.check','component.prepare','component.pull','component.software') AND state IN ('queued','running','recovery_required') AND stage<>'restore_isolated'").Scan(&active); err != nil {
 		return out, err

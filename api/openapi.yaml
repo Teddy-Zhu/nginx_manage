@@ -229,6 +229,8 @@ paths:
     get:
       operationId: getFail2banContainer
       x-scopes: [read]
+      parameters:
+        - {name: include_logs, in: query, schema: {type: boolean, default: true}}
       responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /firewall/runtime:
     get:
@@ -566,6 +568,20 @@ paths:
     {"get": {"operationId": "getUpdateChannel", "x-scopes": ["read", "components.manage"], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}, "put": {"operationId": "setUpdateChannel", "x-scopes": ["components.manage", "system.write"], "parameters": [{"$ref": "#/components/parameters/CSRF"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateChannel"}}}}, "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /components/core-update:
     {"get": {"operationId": "checkCoreUpdate", "x-scopes": ["read", "components.manage"], "parameters": [{"name": "channel", "in": "query", "required": true, "schema": {"type": "string", "enum": ["stable", "beta"]}}], "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
+  /components/service-logs:
+    get:
+      operationId: getServiceLogs
+      x-scopes: [read, components.manage]
+      parameters:
+        - {name: app_id, in: query, required: true, schema: {type: string, enum: [fail2ban, frps]}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
+  /components/control:
+    post:
+      operationId: controlSoftware
+      x-scopes: [components.manage, system.write]
+      parameters: [{"$ref": "#/components/parameters/CSRF"}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SoftwareRequest"}}}}
+      responses: {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}
   /components/tasks:
     {"get": {"operationId": "listComponentTasks", "responses": {"200": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}, "post": {"operationId": "createComponentTask", "parameters": [{"$ref": "#/components/parameters/CSRF"}, {"$ref": "#/components/parameters/Idempotency"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComponentCreateInput"}}}}, "responses": {"202": {"$ref": "#/components/responses/JSON"}, "default": {"$ref": "#/components/responses/JSON"}}}}
   /migrations:
@@ -2819,7 +2835,7 @@ components:
     Fail2banContainerStatus:
       {"type": "object", "additionalProperties": false, "required": ["installed", "running", "ready", "config", "jails", "logs", "error", "state"], "properties": {"installed": {"type": "boolean"}, "running": {"type": "boolean"}, "ready": {"type": "boolean"}, "config": {"$ref": "#/components/schemas/Fail2banContainerConfig"}, "jails": {"type": "array", "items": {"$ref": "#/components/schemas/Fail2banContainerJail"}}, "logs": {"type": "string"}, "error": {"type": "string"}, "state": {"type": "string", "enum": ["running", "starting", "stopped", "unhealthy", "missing", "unknown"]}}}
     Fail2banContainerRequest:
-      {"type": "object", "additionalProperties": false, "required": ["action"], "properties": {"action": {"type": "string", "enum": ["install", "configure", "start", "stop", "restart", "update", "uninstall", "ban", "unban", "logs"]}, "config": {"$ref": "#/components/schemas/Fail2banContainerConfig"}, "jail_id": {"type": "string"}, "address": {"type": "string"}}}
+      {"type": "object", "additionalProperties": false, "required": ["action"], "properties": {"action": {"type": "string", "enum": ["install", "configure", "start", "stop", "restart", "update", "uninstall", "ban", "unban", "logs", "auto-start"]}, "auto_start": {"type": "boolean"}, "revision": {"type": "integer", "minimum": 0}, "config": {"$ref": "#/components/schemas/Fail2banContainerConfig"}, "jail_id": {"type": "string"}, "address": {"type": "string"}}}
     FrpsPortRange:
       {"type": "object", "additionalProperties": false, "required": ["from", "to"], "properties": {"from": {"type": "integer", "minimum": 1, "maximum": 65535}, "to": {"type": "integer", "minimum": 1, "maximum": 65535}}}
     FrpsConfig:

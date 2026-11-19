@@ -10,6 +10,7 @@ const props = defineProps<{
   installed: boolean;
   runtime: RuntimeState;
   permitted: boolean;
+  logsPermitted: boolean;
   busy: boolean;
   actions: SoftwareOperation[];
   compact?: boolean;
@@ -54,7 +55,7 @@ const more = computed(() =>
             : 'default'
       "
       :secondary="action.danger"
-      :disabled="!permitted || busy"
+      :disabled="action.id === 'logs' ? !logsPermitted : !permitted || busy"
       @click="$emit('operate', action.id)"
     >
       {{ action.label }}

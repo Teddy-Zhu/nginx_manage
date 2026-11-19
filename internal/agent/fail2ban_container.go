@@ -7,6 +7,7 @@ import (
 	"nginxpanel/internal/fail2bancontainer"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/software"
+	"strconv"
 )
 
 func (s *Server) manageContainerFail2ban(ctx context.Context, r software.Request, progress software.Progress) (software.Result, error) {
@@ -21,12 +22,12 @@ func (s *Server) fail2banContainerHandler(mux *http.ServeMux) {
 			componentReply(w, nil, fault.Unavailable("当前环境不允许管理宿主机登录防护"))
 			return
 		}
-		status, err := fail2bancontainer.Status(r.Context(), s.DataDir)
+		status, err := fail2bancontainer.Status(r.Context(), s.DataDir, r.URL.Query().Get("include_logs") != "false")
 		componentReply(w, status, err)
 	})
 }
-func (c *Client) ReadFail2banContainer(ctx context.Context) (fail2ban.ContainerStatus, error) {
+func (c *Client) ReadFail2banContainer(ctx context.Context, includeLogs bool) (fail2ban.ContainerStatus, error) {
 	var out fail2ban.ContainerStatus
-	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/container", nil, &out)
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/fail2ban/container?include_logs="+strconv.FormatBool(includeLogs), nil, &out)
 	return out, err
 }

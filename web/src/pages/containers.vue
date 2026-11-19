@@ -35,7 +35,7 @@ import {
   type DockerOverview,
 } from "../api/client";
 import { useSession } from "../stores/session";
-import { useAction, useIdempotency } from "../composables/action";
+import { useAction } from "../composables/action";
 import { useLiveRefresh } from "../composables/live";
 import { inspectTask } from "../stores/operation";
 import { isTaskActive, taskStates } from "../utils/tasks";
@@ -67,8 +67,7 @@ const canRead = computed(
 const canWrite = computed(
   () => canRead.value && session.me?.scopes.includes("system.write"),
 );
-let closed = false,
-  keyFor = useIdempotency();
+let closed = false;
 const labels: Record<string, string> = {
   running: "运行中",
   created: "未启动",
@@ -181,21 +180,14 @@ async function control(c: DockerContainer, action: DockerControl["action"]) {
     c.protected
   )
     return;
-  const input = {
-    action: "software" as const,
-    tag: "",
-    prerelease: false,
-    plan_id: "",
-    manifest_sha256: "",
-    trust_sha256: "",
-    software: { action: "container" as const, container: { id: c.id, action } },
-  };
   await run(async () => {
-    const task = await api.createComponentTask({ input }, keyFor(input));
-    if (closed) return;
-    tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
-    keyFor = useIdempotency();
+    const result = await api.controlSoftware({
+      action: "container",
+      container: { id: c.id, action },
+    });
+    if (!closed) message.success(result.message);
   });
+  if (!closed) await load();
 }
 async function copyLogs() {
   try {

@@ -70,7 +70,7 @@ for name, groups in jails.items():
 print(json.dumps(result))
 `
 
-func Status(ctx context.Context, data string) (fail2ban.ContainerStatus, error) {
+func Status(ctx context.Context, data string, includeLogs bool) (fail2ban.ContainerStatus, error) {
 	c, installed, err := Configuration(data)
 	out := fail2ban.ContainerStatus{State: "unknown", Installed: installed, Config: c, Jails: []fail2ban.ContainerJail{}}
 	if err != nil {
@@ -96,11 +96,13 @@ func Status(ctx context.Context, data string) (fail2ban.ContainerStatus, error) 
 	if err != nil {
 		return out, err
 	}
-	logs, err := command(ctx, "logs", "--tail", "100", Name)
-	if err != nil {
-		out.Error = "暂时无法读取服务日志"
-	} else {
-		out.Logs = logs
+	if includeLogs {
+		logs, err := command(ctx, "logs", "--tail", "100", Name)
+		if err != nil {
+			out.Error = "暂时无法读取服务日志"
+		} else {
+			out.Logs = logs
+		}
 	}
 	if !out.Running {
 		out.State = "stopped"

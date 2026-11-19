@@ -1530,6 +1530,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/service-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getServiceLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["controlSoftware"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components/tasks": {
         parameters: {
             query?: never;
@@ -5263,7 +5295,9 @@ export interface components {
         };
         Fail2banContainerRequest: {
             /** @enum {string} */
-            action: "install" | "configure" | "start" | "stop" | "restart" | "update" | "uninstall" | "ban" | "unban" | "logs";
+            action: "install" | "configure" | "start" | "stop" | "restart" | "update" | "uninstall" | "ban" | "unban" | "logs" | "auto-start";
+            auto_start?: boolean;
+            revision?: number;
             config?: components["schemas"]["Fail2banContainerConfig"];
             jail_id?: string;
             address?: string;
@@ -7852,7 +7886,9 @@ export interface operations {
     };
     getFail2banContainer: {
         parameters: {
-            query?: never;
+            query?: {
+                include_logs?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9268,6 +9304,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    getServiceLogs: {
+        parameters: {
+            query: {
+                app_id: "fail2ban" | "frps";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["JSON"];
+        };
+    };
+    controlSoftware: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 所有浏览器写操作必须携带，已验证机器 Token 无需此项。 */
+                "X-CSRF-Token"?: components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoftwareRequest"];
+            };
+        };
         responses: {
             200: components["responses"]["JSON"];
             default: components["responses"]["JSON"];

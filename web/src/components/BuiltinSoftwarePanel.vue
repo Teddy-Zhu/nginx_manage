@@ -21,6 +21,7 @@ import {
 import ComponentVersionDialog from "./ComponentVersionDialog.vue";
 import NginxInstallPanel from "./NginxInstallPanel.vue";
 import SoftwareManagementPanel from "./SoftwareManagementPanel.vue";
+import ServiceLogsDialog from "./ServiceLogsDialog.vue";
 
 const props = defineProps<{
   app: BuiltinSoftwareView;
@@ -32,12 +33,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   task: [task: ComponentTask];
   busy: [value: boolean];
+  changed: [];
 }>();
 const session = useSession();
 const api = useNodeAPI();
 const dialog = useDialog();
 const router = useRouter();
-const { run } = useAction();
+const { run, message } = useAction();
+const showLogs = ref(false);
 const showInstaller = ref(false);
 const bundledInstall = computed(
   () => props.overview?.bundled_nginx && !props.app.installed,
@@ -47,6 +50,10 @@ const versionOperation = ref<"install" | "update" | null>(null);
 const autoStart = ref(true);
 const permitted = computed(() =>
   props.app.scopes.every((scope) => session.me?.scopes.includes(scope)),
+);
+const logsPermitted = computed(
+  () => session.me?.scopes.includes("read") === true &&
+    session.me.scopes.includes("components.manage"),
 );
 function setBusy(value: boolean) {
   installerBusy.value = value;
@@ -64,12 +71,26 @@ async function submit(request: SoftwareRequest, title: string) {
       const task = await api.createComponentTask(
         softwareTaskInput(request),
         randomUUID(),
+        false,
       );
       emit("task", task);
       inspectTask(task.id, title);
       return task;
     });
   } finally {
+    setBusy(false);
+  }
+}
+async function control(request: SoftwareRequest) {
+  if (props.active || installerBusy.value) return;
+  setBusy(true);
+  try {
+    await run(async () => {
+      const result = await api.controlSoftware(request);
+      message.success(result.message);
+    });
+  } finally {
+    emit("changed");
     setBusy(false);
   }
 }
@@ -90,8 +111,12 @@ async function chooseVersion(
     versionOperation.value = null;
 }
 function operate(action: SoftwareOperation) {
-  if (!permitted.value || props.active || installerBusy.value) return;
   const appID = props.app.id;
+  if (action === "logs") {
+    if (logsPermitted.value && appID !== "nginx") showLogs.value = true;
+    return;
+  }
+  if (!permitted.value || props.active || installerBusy.value) return;
   if (appID === "nginx") {
     showInstaller.value = true;
   } else if (action === "install" && appID === "frps") {
@@ -99,8 +124,11 @@ function operate(action: SoftwareOperation) {
   } else if (action === "install" || action === "update") {
     versionOperation.value = action;
   } else {
+    const request = { action, app_id: appID };
     const execute = () =>
-      submit({ action, app_id: appID }, props.app.name + "操作日志");
+      action === "uninstall"
+        ? submit(request, props.app.name + "卸载日志")
+        : control(request);
     const confirmation = softwareConfirmation(action, props.app.name);
     if (!confirmation) {
       void execute();
@@ -140,11 +168,18 @@ function operate(action: SoftwareOperation) {
       开机启动
     </label>
   </ComponentVersionDialog>
+  <ServiceLogsDialog
+    v-if="app.id !== 'nginx'"
+    v-model:show="showLogs"
+    :app="app.id"
+    :name="app.name"
+  />
   <SoftwareManagementPanel
     :app="app"
     :runtime="app.runtime"
     :actions="bundledInstall ? [] : app.actions"
     :permitted="permitted"
+    :logs-permitted="logsPermitted"
     :busy="installerBusy || active"
     :task="app.task"
     :error="app.error"

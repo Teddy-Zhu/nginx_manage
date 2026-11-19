@@ -83,6 +83,7 @@ export type DockerOverview = components["schemas"]["DockerOverview"];
 export type DockerDetail = components["schemas"]["DockerDetail"];
 export type DockerLogs = components["schemas"]["DockerLogs"];
 export type DockerControl = components["schemas"]["DockerControl"];
+type SoftwareResult = components["schemas"]["SoftwareResult"];
 export type SoftwareRequest = components["schemas"]["SoftwareRequest"];
 export type ComponentVersion = components["schemas"]["ComponentVersion"];
 export type ComponentVersionCatalog =
@@ -991,6 +992,34 @@ export function createAPI(scope: RequestScope) {
         headers: { "Idempotency-Key": key },
         timeout: 45_000,
       }),
+    watchServiceLogs: (
+      app: "frps" | "fail2ban",
+      updated: (value: string) => void,
+      failed: (error: ApiError) => void,
+    ) =>
+      watchLiveResource(
+        scope,
+        "/components/service-logs?app_id=" + app,
+        (value) => {
+          try {
+            updated(liveData<SoftwareResult>(value, scope).log);
+          } catch (error) {
+            failed(apiError(error));
+          }
+        },
+      ),
+    controlSoftware: (data: SoftwareRequest) =>
+      request<SoftwareResult>({
+        url: "/components/control",
+        method: "POST",
+        data,
+        timeout: 90_000,
+      }).catch((error: unknown) => {
+        const failure = apiError(error);
+        if (failure.code === "NETWORK_ERROR" && failure.status === 0)
+          throw new ApiError(failure.code, "未收到操作结果，请刷新服务状态确认", 0);
+        throw failure;
+      }),
     components: (signal?: AbortSignal) =>
       request<ComponentOverview>({ url: "/components", signal }),
     updateChannel: () =>
@@ -1374,6 +1403,7 @@ export function createAPI(scope: RequestScope) {
     fail2banContainer: (signal?: AbortSignal) =>
       request<Fail2banContainerStatus>({
         url: "/fail2ban/container",
+        params: { include_logs: false },
         signal,
         timeout: 30_000,
       }),

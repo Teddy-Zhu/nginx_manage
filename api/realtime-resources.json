@@ -149,7 +149,8 @@
     "paths": [
       "/docker/containers",
       "/docker/containers/{id}",
-      "/docker/containers/{id}/logs"
+      "/docker/containers/{id}/logs",
+      "/components/service-logs"
     ]
   }
 ]

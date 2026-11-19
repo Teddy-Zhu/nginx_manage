@@ -291,6 +291,7 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
         :open-version-picker="openVersionPicker"
         @busy="detailBusy = $event"
         @task="recordTask"
+        @changed="loadOverview"
       />
     </div>
     <template #footer>

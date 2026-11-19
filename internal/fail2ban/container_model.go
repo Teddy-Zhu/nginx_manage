@@ -48,10 +48,12 @@ type ContainerStatus struct {
 	Error     string          `json:"error"`
 }
 type ContainerRequest struct {
-	Action  string           `json:"action"`
-	Config  *ContainerConfig `json:"config,omitempty"`
-	JailID  string           `json:"jail_id,omitempty"`
-	Address string           `json:"address,omitempty"`
+	AutoStart *bool            `json:"auto_start,omitempty"`
+	Revision  *int64           `json:"revision,omitempty"`
+	Action    string           `json:"action"`
+	Config    *ContainerConfig `json:"config,omitempty"`
+	JailID    string           `json:"jail_id,omitempty"`
+	Address   string           `json:"address,omitempty"`
 }
 
 func (c ContainerConfig) Validate() error {
@@ -84,6 +86,15 @@ func (c ContainerConfig) Validate() error {
 	return nil
 }
 func (r ContainerRequest) Validate() error {
+	if r.Action == "auto-start" {
+		if r.AutoStart != nil && r.Revision != nil && *r.Revision >= 0 && r.Config == nil && r.JailID == "" && r.Address == "" {
+			return nil
+		}
+		return errors.New("开机启动设置无效")
+	}
+	if r.AutoStart != nil || r.Revision != nil {
+		return errors.New("登录防护操作无效")
+	}
 	switch r.Action {
 	case "install", "configure", "update":
 		if r.Action == "update" && r.Config == nil && r.JailID == "" && r.Address == "" {

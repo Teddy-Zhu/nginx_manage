@@ -999,6 +999,7 @@ func (e Fail2banBindingViewState) Valid() bool {
 
 // Defines values for Fail2banContainerRequestAction.
 const (
+	Fail2banContainerRequestActionAutoStart Fail2banContainerRequestAction = "auto-start"
 	Fail2banContainerRequestActionBan       Fail2banContainerRequestAction = "ban"
 	Fail2banContainerRequestActionConfigure Fail2banContainerRequestAction = "configure"
 	Fail2banContainerRequestActionInstall   Fail2banContainerRequestAction = "install"
@@ -1014,6 +1015,8 @@ const (
 // Valid indicates whether the value is a known member of the Fail2banContainerRequestAction enum.
 func (e Fail2banContainerRequestAction) Valid() bool {
 	switch e {
+	case Fail2banContainerRequestActionAutoStart:
+		return true
 	case Fail2banContainerRequestActionBan:
 		return true
 	case Fail2banContainerRequestActionConfigure:
@@ -3748,6 +3751,24 @@ func (e CheckCoreUpdateParamsChannel) Valid() bool {
 	}
 }
 
+// Defines values for GetServiceLogsParamsAppId.
+const (
+	GetServiceLogsParamsAppIdFail2ban GetServiceLogsParamsAppId = "fail2ban"
+	GetServiceLogsParamsAppIdFrps     GetServiceLogsParamsAppId = "frps"
+)
+
+// Valid indicates whether the value is a known member of the GetServiceLogsParamsAppId enum.
+func (e GetServiceLogsParamsAppId) Valid() bool {
+	switch e {
+	case GetServiceLogsParamsAppIdFail2ban:
+		return true
+	case GetServiceLogsParamsAppIdFrps:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetComponentVersionsParamsChannel.
 const (
 	GetComponentVersionsParamsChannelBeta   GetComponentVersionsParamsChannel = "beta"
@@ -5092,10 +5113,12 @@ type Fail2banContainerJail struct {
 
 // Fail2banContainerRequest defines model for Fail2banContainerRequest.
 type Fail2banContainerRequest struct {
-	Action  Fail2banContainerRequestAction `json:"action"`
-	Address *string                        `json:"address,omitempty"`
-	Config  *Fail2banContainerConfig       `json:"config,omitempty"`
-	JailId  *string                        `json:"jail_id,omitempty"`
+	Action    Fail2banContainerRequestAction `json:"action"`
+	Address   *string                        `json:"address,omitempty"`
+	AutoStart *bool                          `json:"auto_start,omitempty"`
+	Config    *Fail2banContainerConfig       `json:"config,omitempty"`
+	JailId    *string                        `json:"jail_id,omitempty"`
+	Revision  *int                           `json:"revision,omitempty"`
 }
 
 // Fail2banContainerRequestAction defines model for Fail2banContainerRequest.Action.
@@ -9050,6 +9073,12 @@ type ReplaceCertificateParams struct {
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
 
+// ControlSoftwareParams defines parameters for ControlSoftware.
+type ControlSoftwareParams struct {
+	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
+	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
+}
+
 // CheckCoreUpdateParams defines parameters for CheckCoreUpdate.
 type CheckCoreUpdateParams struct {
 	Channel CheckCoreUpdateParamsChannel `form:"channel" json:"channel"`
@@ -9104,6 +9133,14 @@ type WriteComponentOfflineChunkParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken *CSRF `json:"X-CSRF-Token,omitempty"`
 }
+
+// GetServiceLogsParams defines parameters for GetServiceLogs.
+type GetServiceLogsParams struct {
+	AppId GetServiceLogsParamsAppId `form:"app_id" json:"app_id"`
+}
+
+// GetServiceLogsParamsAppId defines parameters for GetServiceLogs.
+type GetServiceLogsParamsAppId string
 
 // CreateNginxSwitchParams defines parameters for CreateNginxSwitch.
 type CreateNginxSwitchParams struct {
@@ -9211,6 +9248,11 @@ type ApplyFail2banParams struct {
 	// XCSRFToken 所有浏览器写操作必须携带，已验证机器 Token 无需此项。
 	XCSRFToken     *CSRF       `json:"X-CSRF-Token,omitempty"`
 	IdempotencyKey Idempotency `json:"Idempotency-Key"`
+}
+
+// GetFail2banContainerParams defines parameters for GetFail2banContainer.
+type GetFail2banContainerParams struct {
+	IncludeLogs *bool `form:"include_logs,omitempty" json:"include_logs,omitempty"`
 }
 
 // ChangeFail2banExistingPolicyParams defines parameters for ChangeFail2banExistingPolicy.
@@ -9940,6 +9982,9 @@ type DeployCertificateJSONRequestBody = CertificateDeployInput
 // ReplaceCertificateJSONRequestBody defines body for ReplaceCertificate for application/json ContentType.
 type ReplaceCertificateJSONRequestBody = CertificateInput
 
+// ControlSoftwareJSONRequestBody defines body for ControlSoftware for application/json ContentType.
+type ControlSoftwareJSONRequestBody = SoftwareRequest
+
 // CreateComponentImagePullJSONRequestBody defines body for CreateComponentImagePull for application/json ContentType.
 type CreateComponentImagePullJSONRequestBody = ComponentCreateInput
 
@@ -10484,6 +10529,9 @@ type ServerInterface interface {
 	// (GET /components)
 	GetComponents(w http.ResponseWriter, r *http.Request)
 
+	// (POST /components/control)
+	ControlSoftware(w http.ResponseWriter, r *http.Request, params ControlSoftwareParams)
+
 	// (GET /components/core-update)
 	CheckCoreUpdate(w http.ResponseWriter, r *http.Request, params CheckCoreUpdateParams)
 
@@ -10516,6 +10564,9 @@ type ServerInterface interface {
 
 	// (PUT /components/offline/{id}/assets/{asset})
 	WriteComponentOfflineChunk(w http.ResponseWriter, r *http.Request, id string, asset string, params WriteComponentOfflineChunkParams)
+
+	// (GET /components/service-logs)
+	GetServiceLogs(w http.ResponseWriter, r *http.Request, params GetServiceLogsParams)
 
 	// (GET /components/switches)
 	ListNginxSwitches(w http.ResponseWriter, r *http.Request)
@@ -10596,7 +10647,7 @@ type ServerInterface interface {
 	ApplyFail2ban(w http.ResponseWriter, r *http.Request, params ApplyFail2banParams)
 
 	// (GET /fail2ban/container)
-	GetFail2banContainer(w http.ResponseWriter, r *http.Request)
+	GetFail2banContainer(w http.ResponseWriter, r *http.Request, params GetFail2banContainerParams)
 
 	// (POST /fail2ban/existing/operations)
 	ChangeFail2banExistingPolicy(w http.ResponseWriter, r *http.Request, params ChangeFail2banExistingPolicyParams)
@@ -12625,6 +12676,47 @@ func (siw *ServerInterfaceWrapper) GetComponents(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ControlSoftware operation middleware
+func (siw *ServerInterfaceWrapper) ControlSoftware(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ControlSoftwareParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CSRF
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ControlSoftware(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CheckCoreUpdate operation middleware
 func (siw *ServerInterfaceWrapper) CheckCoreUpdate(w http.ResponseWriter, r *http.Request) {
 
@@ -13150,6 +13242,39 @@ func (siw *ServerInterfaceWrapper) WriteComponentOfflineChunk(w http.ResponseWri
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.WriteComponentOfflineChunk(w, r, id, asset, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetServiceLogs operation middleware
+func (siw *ServerInterfaceWrapper) GetServiceLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetServiceLogsParams
+
+	// ------------- Required query parameter "app_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "app_id", r.URL.Query(), &params.AppId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "app_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "app_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetServiceLogs(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14270,8 +14395,27 @@ func (siw *ServerInterfaceWrapper) ApplyFail2ban(w http.ResponseWriter, r *http.
 // GetFail2banContainer operation middleware
 func (siw *ServerInterfaceWrapper) GetFail2banContainer(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFail2banContainerParams
+
+	// ------------- Optional query parameter "include_logs" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_logs", r.URL.Query(), &params.IncludeLogs, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_logs"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_logs", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFail2banContainer(w, r)
+		siw.Handler.GetFail2banContainer(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20942,6 +21086,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/update-channel", wrapper.GetUpdateChannel)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/components/update-channel", wrapper.SetUpdateChannel)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/core-update", wrapper.CheckCoreUpdate)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/service-logs", wrapper.GetServiceLogs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/control", wrapper.ControlSoftware)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/components/tasks", wrapper.ListComponentTasks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/components/tasks", wrapper.CreateComponentTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/migrations", wrapper.ListMigrations)

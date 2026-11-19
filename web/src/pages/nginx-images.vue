@@ -40,7 +40,6 @@ import {
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
-import { inspectTask } from "../stores/operation";
 import { randomUUID } from "../utils/crypto";
 
 const api = useNodeAPI(),
@@ -250,7 +249,6 @@ async function submit(input: ComponentCreateInput) {
     ];
     lastID.value = task.id;
     if (input.input.action === "prepare") selected.value = task.id;
-    inspectTask(task.id, "Nginx 镜像准备日志");
   });
   await load();
 }

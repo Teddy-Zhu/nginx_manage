@@ -24,6 +24,8 @@ import { useSoftwareOperations } from "../composables/software";
 import { randomUUID } from "../utils/crypto";
 import ValueListInput from "./ValueListInput.vue";
 import TaskLogButton from "./TaskLogButton.vue";
+import ServiceLogsDialog from "./ServiceLogsDialog.vue";
+import { useSession } from "../stores/session";
 import { fail2banRuntime, softwareStatus } from "../utils/software";
 const reading = ref(false),
   readError = ref("");
@@ -33,8 +35,14 @@ const status = ref<Fail2banContainerStatus | null>(null),
   addresses = ref<string[]>([]),
   banRule = ref<string | null>(null),
   showBan = ref(false);
-const { api, run, busy, permitted, active, last, submit } =
+const { api, run, busy, permitted, active, last, submit, control } =
   useSoftwareOperations(load);
+const session = useSession();
+const showLogs = ref(false);
+const logsPermitted = computed(
+  () => session.me?.scopes.includes("read") === true &&
+    session.me.scopes.includes("components.manage"),
+);
 const displayStatus = computed(() =>
   softwareStatus(
     status.value ? status.value.installed : null,
@@ -44,16 +52,14 @@ const displayStatus = computed(() =>
 const blocked = computed(() => busy.value || active.value);
 async function setAutoStart(autoStart: boolean) {
   if (!status.value?.installed || blocked.value || !permitted.value) return;
-  await submit(
-    {
-      action: "fail2ban",
-      fail2ban: {
-        action: "configure",
-        config: { ...status.value.config, auto_start: autoStart },
-      },
+  await control({
+    action: "fail2ban",
+    fail2ban: {
+      action: "auto-start",
+      auto_start: autoStart,
+      revision: status.value.config.revision,
     },
-    "登录防护设置日志",
-  );
+  });
 }
 const options = [
   { label: "SSH 登录", value: "ssh" },
@@ -180,13 +186,10 @@ async function toggle(rule: Fail2banContainerRule) {
 }
 async function unban(jail: string, address: string) {
   if (!window.confirm(`解除 ${address} 的封禁？`)) return;
-  await submit(
-    {
-      action: "fail2ban",
-      fail2ban: { action: "unban", jail_id: jail, address },
-    },
-    "解除封禁日志",
-  );
+  await control({
+    action: "fail2ban",
+    fail2ban: { action: "unban", jail_id: jail, address },
+  });
 }
 async function ban() {
   if (!banRule.value) return;
@@ -198,17 +201,14 @@ async function ban() {
   )
     return;
   if (
-    await submit(
-      {
-        action: "fail2ban",
-        fail2ban: {
-          action: banMode.value,
-          jail_id: banRule.value,
-          address: values[0],
-        },
+    await control({
+      action: "fail2ban",
+      fail2ban: {
+        action: banMode.value,
+        jail_id: banRule.value,
+        address: values[0],
       },
-      banMode.value === "ban" ? "封禁操作日志" : "解除封禁日志",
-    )
+    })
   ) {
     showBan.value = false;
     addresses.value = [];
@@ -236,6 +236,9 @@ onMounted(load);
           >
             <NButton>软件管理</NButton>
           </RouterLink>
+          <NButton v-if="status?.installed && logsPermitted" @click="showLogs = true">
+            服务日志
+          </NButton>
         </div>
       </div>
       <NAlert v-if="status?.error" type="warning">
@@ -420,12 +423,8 @@ onMounted(load);
         </NButton>
       </article>
     </section>
-    <section class="panel page-stack">
-      <h3>服务日志</h3>
-      <pre v-if="status?.logs" class="service-log">{{ status.logs }}</pre>
-      <NEmpty v-else description="暂无服务日志" />
-    </section>
   </div>
+  <ServiceLogsDialog v-model:show="showLogs" app="fail2ban" name="Fail2ban" />
   <FormDialog
     :show="!!editing"
     title="防护规则"
@@ -610,15 +609,6 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-.service-log {
-  max-height: 360px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: var(--surface-soft);
-  padding: 16px;
-  border-radius: 10px;
 }
 .defense-modal {
   width: min(700px, calc(100vw - 32px));

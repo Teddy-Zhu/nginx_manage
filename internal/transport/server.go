@@ -350,7 +350,7 @@ func (s *Server) SetModule(w http.ResponseWriter, r *http.Request, id apigen.ID,
 		return
 	}
 	if id == "fail2ban" && !*in.Enabled && s.Agent != nil {
-		state, err := s.Agent.ReadFail2banContainer(r.Context())
+		state, err := s.Agent.ReadFail2banContainer(r.Context(), false)
 		if err != nil {
 			s.fail(w, r, err)
 			return

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	contract "nginxpanel/api"
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/hostdns"
@@ -327,6 +328,16 @@ func TestRealtimeSubscriptionValidation(t *testing.T) {
 	}
 	if err := server.validateRealtimeRequest(auth.Principal{Scopes: []string{"read"}}, realtimeRequest{Type: "subscribe", Revision: 1, Subscriptions: []realtimeFilter{{Topics: []string{"docker"}, Resources: []string{"/docker/containers"}}}}, 0); err == nil {
 		t.Fatal("permission check bypassed")
+	}
+}
+
+func TestRealtimeServiceLogsResource(t *testing.T) {
+	resource := "/components/service-logs?app_id=fail2ban"
+	if err := validateRealtimeResources([]string{"docker"}, []string{resource}); err != nil {
+		t.Fatal(err)
+	}
+	if !contract.RealtimeRemoteAllowed(resource) {
+		t.Fatal("service logs are unavailable on remote nodes")
 	}
 }
 

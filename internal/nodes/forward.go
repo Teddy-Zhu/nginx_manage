@@ -17,6 +17,7 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/remoteapi"
 	"nginxpanel/internal/secure"
+	"nginxpanel/internal/software"
 )
 
 type Forward struct {
@@ -116,6 +117,10 @@ func (s *Service) OpenForward(ctx context.Context, p auth.Principal, trace, id s
 		client.Timeout = 125 * time.Second
 		client.Transport.(*http.Transport).ResponseHeaderTimeout = 124 * time.Second
 	}
+	if route.Path == "/components/control" {
+		client.Timeout = software.ControlTimeout + 12*time.Second
+		client.Transport.(*http.Transport).ResponseHeaderTimeout = software.ControlTimeout + 10*time.Second
+	}
 	if route.Kind == "sse" {
 		client.Timeout = 0
 	}
@@ -155,6 +160,9 @@ func (s *Service) OpenForward(ctx context.Context, p auth.Principal, trace, id s
 		defer stop()
 		if auditErr := audit(finish, s.DB, trace, p.ID, action, id, "unknown"); auditErr != nil {
 			slog.Warn("远程请求未知结果审计未完成", "request_id", trace, "error", auditErr)
+		}
+		if route.Path == "/components/control" {
+			return nil, fault.New(http.StatusBadGateway, "REMOTE_RESULT_UNKNOWN", "未收到目标响应，请刷新目标服务状态确认操作结果")
 		}
 		return nil, fault.New(http.StatusBadGateway, "REMOTE_RESULT_UNKNOWN", "无法确认目标执行结果，请查询原节点任务；重试写操作须使用原幂等键")
 	}

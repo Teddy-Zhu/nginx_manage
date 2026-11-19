@@ -11,7 +11,6 @@ import {
 } from "../api/client";
 import { useSession } from "../stores/session";
 import { useAction, useIdempotency } from "../composables/action";
-import { inspectTask } from "../stores/operation";
 import { nginxEngineVersion } from "../utils/component-version";
 import TaskLogButton from "./TaskLogButton.vue";
 import ComponentVersionDialog from "./ComponentVersionDialog.vue";
@@ -98,12 +97,6 @@ async function submit(input: ComponentCreateInput) {
       ? api.pullComponentImage(input, keyFor(input))
       : api.createComponentTask(input, keyFor(input)));
     emit("task", item);
-    inspectTask(
-      item.id,
-      input.input.software?.action === "install-nginx"
-        ? "Nginx 安装日志"
-        : "Nginx 更新日志",
-    );
     keyFor = useIdempotency();
   });
 }

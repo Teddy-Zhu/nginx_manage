@@ -17,6 +17,7 @@ import (
 	"nginxpanel/internal/auth"
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/remoteapi"
+	"nginxpanel/internal/software"
 )
 
 const remoteResponseLimit = 32 << 20
@@ -104,6 +105,13 @@ func (s *Server) forwardNode(w http.ResponseWriter, r *http.Request, route api.R
 	if route.Path == "/firewall/geoip/update" {
 		duration = 125 * time.Second
 		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(130 * time.Second)); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	if route.Path == "/components/control" {
+		duration = software.ControlTimeout + 15*time.Second
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(duration + 5*time.Second)); err != nil {
 			s.fail(w, r, err)
 			return
 		}

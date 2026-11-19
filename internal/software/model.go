@@ -5,6 +5,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 
 	"nginxpanel/internal/componentversions"
 	"nginxpanel/internal/containers"
@@ -14,6 +15,8 @@ import (
 )
 
 type Progress func(string)
+
+const ControlTimeout = 65 * time.Second
 
 type Request struct {
 	Container  *containers.Control        `json:"container,omitempty"`
@@ -41,6 +44,18 @@ func ValidImage(value string) bool { return image.MatchString(value) }
 
 func (r Request) RequiresSecurity() bool {
 	return r.Action == "fail2ban" || r.AppID == "fail2ban"
+}
+
+// Immediate reports actions whose result is returned by the control request.
+func (r Request) Immediate() bool {
+	switch r.Action {
+	case "start", "stop", "restart", "container":
+		return true
+	case "fail2ban":
+		return r.Fail2ban != nil && (r.Fail2ban.Action == "ban" || r.Fail2ban.Action == "unban" || r.Fail2ban.Action == "auto-start")
+	default:
+		return false
+	}
 }
 
 func (r Request) Validate() error {
@@ -85,7 +100,7 @@ func (r Request) Validate() error {
 	case "fail2ban":
 		if r.Fail2ban != nil {
 			switch r.Fail2ban.Action {
-			case "configure", "ban", "unban":
+			case "configure", "ban", "unban", "auto-start":
 				return r.Fail2ban.Validate()
 			}
 		}

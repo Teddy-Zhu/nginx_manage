@@ -908,6 +908,142 @@
         "x-query-keys": []
       }
     },
+    "/nodes/connections/{connection}/fail2ban/container": {
+      "get": {
+        "operationId": "remoteGetFail2banContainer",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getFail2banContainer",
+        "x-forward-path": "/fail2ban/container",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "include_logs",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "x-query-keys": [
+          "include_logs"
+        ],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
+    },
+    "/nodes/connections/{connection}/components/service-logs": {
+      "get": {
+        "operationId": "remoteGetServiceLogs",
+        "responses": {
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "getServiceLogs",
+        "x-forward-path": "/components/service-logs",
+        "x-response-kind": "json",
+        "x-body-limit": 1024,
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "app_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fail2ban",
+                "frps"
+              ]
+            }
+          }
+        ],
+        "x-query-keys": [
+          "app_id"
+        ],
+        "x-scopes": [
+          "read",
+          "components.manage"
+        ]
+      }
+    },
+    "/nodes/connections/{connection}/components/control": {
+      "post": {
+        "operationId": "remoteControlSoftware",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "./openapi.yaml#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./openapi.yaml#/components/schemas/SoftwareRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          },
+          "200": {
+            "$ref": "./openapi.yaml#/components/responses/JSON"
+          }
+        },
+        "x-local-operation": "controlSoftware",
+        "x-forward-path": "/components/control",
+        "x-response-kind": "json",
+        "x-body-limit": 4096,
+        "x-query-keys": [],
+        "x-scopes": [
+          "components.manage",
+          "system.write"
+        ]
+      }
+    },
     "/nodes/connections/{connection}/components/tasks": {
       "get": {
         "operationId": "remoteListComponentTasks",

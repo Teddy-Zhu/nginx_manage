@@ -14,6 +14,7 @@ defineProps<{
   runtime: RuntimeState;
   actions: SoftwareOperation[];
   permitted: boolean;
+  logsPermitted: boolean;
   busy: boolean;
   task?: ComponentTask;
   error?: string;
@@ -59,6 +60,7 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
         :permitted="
           permitted && (app.installed || app.status.state !== 'unknown')
         "
+        :logs-permitted="logsPermitted"
         :busy="busy"
         :actions="actions"
         @operate="$emit('operate', $event)"

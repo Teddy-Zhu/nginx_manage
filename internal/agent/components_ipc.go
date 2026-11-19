@@ -14,6 +14,7 @@ import (
 	"nginxpanel/internal/fault"
 	"nginxpanel/internal/frpscontainer"
 	"nginxpanel/internal/nginxcontainer"
+	"nginxpanel/internal/software"
 )
 
 func componentReply(w http.ResponseWriter, data any, err error) {
@@ -55,7 +56,7 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 			var protectionImage string
 			if s.MetricsScope == "host" {
 				call, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-				protection, err := fail2bancontainer.Status(call, s.DataDir)
+				protection, err := fail2bancontainer.Status(call, s.DataDir, false)
 				cancel()
 				if err != nil {
 					protection.State, protection.Error = "unknown", err.Error()
@@ -110,6 +111,48 @@ func (s *Server) componentHandlers(mux *http.ServeMux, m *components.Manager) {
 		out, err := m.CheckCoreUpdate(r.Context(), r.URL.Query().Get("channel") == "beta")
 		componentReply(w, out, err)
 	})
+	mux.HandleFunc("GET /v1/components/service-logs", func(w http.ResponseWriter, r *http.Request) {
+		in := software.Request{Action: "logs", AppID: r.URL.Query().Get("app_id")}
+		if err := in.Validate(); err != nil {
+			componentReply(w, nil, fault.Invalid(err.Error()))
+			return
+		}
+		out, err := s.manageBuiltinComponent(r.Context(), in, nil)
+		if err != nil {
+			var known *fault.Error
+			if !errors.As(err, &known) {
+				err = fault.Unavailable("暂时无法读取服务日志，请检查容器状态")
+			}
+		}
+		componentReply(w, out, err)
+	})
+	mux.HandleFunc("POST /v1/components/control", func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		defer r.Body.Close()
+		var in software.Request
+		d := json.NewDecoder(r.Body)
+		d.DisallowUnknownFields()
+		if d.Decode(&in) != nil || d.Decode(new(any)) != io.EOF {
+			componentReply(w, nil, fault.Invalid("软件控制请求格式无效"))
+			return
+		}
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(software.ControlTimeout + 2*time.Second)); err != nil {
+			componentReply(w, nil, err)
+			return
+		}
+		out, err := m.Control(r.Context(), in)
+		if err != nil {
+			var known *fault.Error
+			if !errors.As(err, &known) {
+				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+					err = fault.Unavailable("未能确认操作结果，请刷新服务状态")
+				} else {
+					err = fault.Conflict(err.Error())
+				}
+			}
+		}
+		componentReply(w, out, err)
+	})
 	mux.HandleFunc("POST /v1/components/operations", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 		defer r.Body.Close()
@@ -149,5 +192,23 @@ func (c *Client) ComponentOperation(ctx context.Context, id string) (components.
 	}
 	var out components.Operation
 	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/components/operations/"+id, nil, &out)
+	return out, err
+}
+
+func (c *Client) ServiceLogs(ctx context.Context, app string) (software.Result, error) {
+	var out software.Result
+	in := software.Request{Action: "logs", AppID: app}
+	if err := in.Validate(); err != nil {
+		return out, fault.Invalid(err.Error())
+	}
+	err := c.envelopeRequest(ctx, http.MethodGet, "/v1/components/service-logs?app_id="+app, nil, &out)
+	return out, err
+}
+
+func (c *Client) ControlSoftware(ctx context.Context, in software.Request) (software.Result, error) {
+	var out software.Result
+	client := *c.http
+	client.Timeout = software.ControlTimeout + 4*time.Second
+	err := (&Client{http: &client}).envelopeRequest(ctx, http.MethodPost, "/v1/components/control", in, &out)
 	return out, err
 }

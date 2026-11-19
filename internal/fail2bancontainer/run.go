@@ -211,6 +211,33 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 			}
 		}
 		out.Message = "登录防护已安装并启动"
+	case "auto-start":
+		if *r.Revision != c.Revision {
+			return out, errors.New("配置已更新，请刷新后重试")
+		}
+		if present {
+			if err = updateRestartPolicy(ctx, *r.AutoStart); err != nil {
+				return out, err
+			}
+		}
+		if c.AutoStart != *r.AutoStart {
+			next := c
+			next.AutoStart = *r.AutoStart
+			next.Revision++
+			if err = save(data, next); err != nil {
+				recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+				restoreErr := save(data, c)
+				if present {
+					restoreErr = errors.Join(restoreErr, updateRestartPolicy(recovery, c.AutoStart))
+				}
+				if restoreErr != nil {
+					err = fmt.Errorf("%w；恢复开机启动设置失败：%v", err, restoreErr)
+				}
+				return out, err
+			}
+		}
+		out.Message = "开机启动设置已保存"
 	case "configure":
 		next := *r.Config
 		if next.Revision != c.Revision {
@@ -241,11 +268,7 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 				_, restoreErr = client(recovery, "reload", "--restart")
 			}
 			if restoreErr == nil && present {
-				restart := "no"
-				if c.AutoStart {
-					restart = "always"
-				}
-				_, restoreErr = command(recovery, "update", "--restart", restart, Name)
+				restoreErr = updateRestartPolicy(recovery, c.AutoStart)
 			}
 			if restoreErr != nil {
 				err = fmt.Errorf("%w；恢复原配置失败：%v", err, restoreErr)
@@ -262,12 +285,8 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 				return out, err
 			}
 		}
-		restart := "no"
-		if next.AutoStart {
-			restart = "always"
-		}
 		if present {
-			if _, err = command(ctx, "update", "--restart", restart, Name); err != nil {
+			if err = updateRestartPolicy(ctx, next.AutoStart); err != nil {
 				return out, err
 			}
 		}
@@ -376,6 +395,15 @@ func Run(ctx context.Context, data string, r fail2ban.ContainerRequest, progress
 	}
 	return out, nil
 }
+func updateRestartPolicy(ctx context.Context, enabled bool) error {
+	policy := "no"
+	if enabled {
+		policy = "always"
+	}
+	_, err := command(ctx, "update", "--restart", policy, Name)
+	return err
+}
+
 func wait(ctx context.Context) error {
 	timer := time.NewTimer(45 * time.Second)
 	defer timer.Stop()

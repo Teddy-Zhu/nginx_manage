@@ -46,12 +46,23 @@ export function useSoftwareOperations(
       const task = await api.createComponentTask(
         softwareTaskInput(request),
         randomUUID(),
+        false,
       );
       lastID.value = task.id;
       tasks.value = [task, ...tasks.value.filter((t) => t.id !== task.id)];
       inspectTask(task.id, title);
       return task;
     });
+  }
+  async function control(request: SoftwareRequest) {
+    if (!permitted.value || active.value || busy.value) return;
+    const result = await run(async () => {
+      const response = await api.controlSoftware(request);
+      message.success(response.message);
+      return response;
+    });
+    await changed();
+    return result;
   }
   watch(
     () => last.value?.state,
@@ -62,5 +73,5 @@ export function useSoftwareOperations(
   );
   useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
   onMounted(refresh);
-  return { api, run, busy, permitted, active, last, tasks, submit, refresh };
+  return { api, run, busy, permitted, active, last, tasks, submit, control, refresh };
 }

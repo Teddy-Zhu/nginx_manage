@@ -3,9 +3,10 @@ package transport
 import (
 	"net/http"
 	"nginxpanel/internal/fault"
+	"nginxpanel/internal/transport/apigen"
 )
 
-func (s *Server) GetFail2banContainer(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GetFail2banContainer(w http.ResponseWriter, r *http.Request, params apigen.GetFail2banContainerParams) {
 	_, ok := s.authorize(w, r, "read")
 	if !ok {
 		return
@@ -14,7 +15,7 @@ func (s *Server) GetFail2banContainer(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, fault.Unavailable("登录防护服务未连接"))
 		return
 	}
-	out, err := s.Agent.ReadFail2banContainer(r.Context())
+	out, err := s.Agent.ReadFail2banContainer(r.Context(), params.IncludeLogs == nil || *params.IncludeLogs)
 	if err != nil {
 		s.fail(w, r, err)
 		return
