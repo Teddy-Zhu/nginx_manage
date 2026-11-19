@@ -3,7 +3,7 @@ import { NButton } from "naive-ui";
 import { RouterLink } from "vue-router";
 import type { SoftwareView } from "../utils/software";
 defineProps<{ app: SoftwareView; permitted: boolean; active: boolean }>();
-defineEmits<{ manage: []; install: [] }>();
+defineEmits<{ manage: []; install: []; update: [] }>();
 </script>
 <template>
   <RouterLink v-if="app.installed && app.entry?.to" :to="app.entry.to">
@@ -22,7 +22,14 @@ defineEmits<{ manage: []; install: [] }>();
     {{ app.installed ? "软件管理" : "安装" }}
   </NButton>
   <NButton
-    v-if="app.entry || !app.installed"
+    v-if="app.installed && app.versioned && permitted"
+    :disabled="active"
+    @click="$emit('update')"
+  >
+    切换版本
+  </NButton>
+  <NButton
+    v-if="(app.installed && app.entry) || !app.installed"
     quaternary
     @click="$emit('manage')"
   >

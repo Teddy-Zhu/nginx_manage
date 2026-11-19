@@ -1,16 +1,16 @@
 <route lang="json">
 {
   "meta": {
-    "title": "更新 Nginx",
+    "title": "Nginx 版本管理",
     "nav": false,
     "order": 7.25,
     "symbol": "◇",
-    "parent": "/components",
-    "software": "nginx"
+    "parent": "/components"
   }
 }
 </route>
 <script setup lang="ts">
+import DetailDialog from "../components/DetailDialog.vue";
 import TaskLogButton from "../components/TaskLogButton.vue";
 import ComponentVersionDialog from "../components/ComponentVersionDialog.vue";
 import {
@@ -19,11 +19,10 @@ import {
 } from "../utils/component-version";
 import { useLiveRefresh } from "../composables/live";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   NAlert,
   NButton,
-  NCheckbox,
   NEmpty,
   NFormItem,
   NPopconfirm,
@@ -37,11 +36,13 @@ import {
   type ComponentCreateInput,
   type ComponentTask,
   type ComponentVersion,
+  type ComponentOverview,
 } from "../api/client";
 import { useAction, useIdempotency } from "../composables/action";
 import { useSession } from "../stores/session";
-import { randomUUID } from "../utils/crypto";
+import { taskStateLabel, taskStageSummary, taskStateTone } from "../utils/tasks";
 
+const router = useRouter();
 const api = useNodeAPI(),
   route = useRoute(),
   session = useSession(),
@@ -49,9 +50,12 @@ const api = useNodeAPI(),
 const channel = ref<"stable" | "beta">("stable"),
   prerelease = computed(() => channel.value === "beta");
 let keyFor = useIdempotency();
-const allowDowntime = ref(false),
-  lastID = ref("");
+const lastID = ref("");
 const choosingVersion = ref(false),
+  showRelease = ref(false),
+  showPrepared = ref(false),
+  workflowError = ref(""),
+  overview = ref<ComponentOverview | null>(null),
   targetVersion = ref<ComponentVersion | null>(null),
   currentVersion = ref<ComponentVersion | null>(null),
   currentEngine = ref("");
@@ -72,6 +76,9 @@ watch(
     selected.value = typeof id === "string" ? id : "";
   },
 );
+const canChooseVersion = computed(() =>
+  canWrite.value && !!overview.value?.available && !busy.value && !active.value,
+);
 function containsNginxImage(task: ComponentTask) {
   const release = task.result?.release;
   if (!release) return false;
@@ -83,6 +90,7 @@ function containsNginxImage(task: ComponentTask) {
 const nginxOperations = computed(() =>
   preparations.value.filter(
     (task) =>
+      task.id === lastID.value ||
       task.result?.input.components?.includes("nginx") ||
       containsNginxImage(task),
   ),
@@ -118,10 +126,7 @@ const prepared = computed(() =>
         task.action === "prepare" &&
         task.state === "succeeded" &&
         task.result?.runtime_ready &&
-        task.result.input.prerelease === prerelease.value &&
-        (!targetVersion.value || release?.tag === targetVersion.value.id) &&
         !!release &&
-        matchesEngine(release.notes) &&
         containsNginxImage(task) &&
         release.expires_at * 1000 > Date.now()
       );
@@ -146,9 +151,11 @@ const downgrade = computed(() => {
   );
 });
 const preparedForRelease = computed(() =>
-  prepared.value.find(
-    (task) => task.result?.release?.plan_id === release.value?.plan_id,
-  ),
+  engineMismatch.value
+    ? undefined
+    : prepared.value.find(
+        (task) => task.result?.release?.plan_id === release.value?.plan_id,
+      ),
 );
 const last = computed(() =>
   preparations.value.find((task) => task.id === lastID.value),
@@ -171,7 +178,7 @@ const canCreate = computed(
     canWrite.value &&
     !!chosen.value &&
     !active.value &&
-    allowDowntime.value &&
+    !!overview.value?.installation &&
     !busy.value,
 );
 const states: Record<string, string> = {
@@ -240,24 +247,32 @@ function preparedLabel(task: ComponentTask) {
     .filter(Boolean)
     .join(" · ");
 }
+let workflowKey = useIdempotency();
 async function submit(input: ComponentCreateInput) {
+  workflowError.value = "";
   await run(async () => {
-    const task = await api.createComponentTask(input, randomUUID());
-    preparations.value = [
-      task,
-      ...preparations.value.filter((item) => item.id !== task.id),
-    ];
-    lastID.value = task.id;
-    if (input.input.action === "prepare") selected.value = task.id;
+    try {
+      const task = await api.createComponentTask(input, workflowKey(input), false);
+      preparations.value = [
+        task,
+        ...preparations.value.filter((item) => item.id !== task.id),
+      ];
+      lastID.value = task.id;
+      if (input.input.action === "prepare") selected.value = task.id;
+      workflowKey = useIdempotency();
+    } catch (cause) {
+      workflowError.value = apiError(cause).message;
+    }
   });
   await load();
 }
 async function check() {
+  if (!targetVersion.value || busy.value || active.value) return;
   await submit({
     input: {
       action: "check",
       components: ["nginx"],
-      tag: targetVersion.value?.id ?? "",
+      tag: targetVersion.value.id,
       prerelease: prerelease.value,
       plan_id: "",
       manifest_sha256: "",
@@ -268,21 +283,16 @@ async function check() {
 async function chooseVersion(version: ComponentVersion) {
   channel.value = version.channel;
   selected.value = "";
-  allowDowntime.value = false;
+  lastID.value = "";
   targetVersion.value = version;
   choosingVersion.value = false;
+  showRelease.value = true;
   await check();
 }
 async function prepare() {
   const task = checked.value,
     source = task?.result;
-  if (
-    !task ||
-    !source?.release ||
-    !source.runtime_ready ||
-    engineMismatch.value
-  )
-    return;
+  if (!task || !source?.release || !source.runtime_ready || engineMismatch.value) return;
   await submit({
     check_task_id: task.id,
     input: {
@@ -296,6 +306,33 @@ async function prepare() {
       offline_id: source.input.offline_id,
     },
   });
+}
+async function pullRuntime(item?: ComponentTask) {
+  const source = item?.result;
+  if (!item || !source?.release || !canWrite.value || active.value || busy.value ||
+    !overview.value || overview.value.installation) return;
+  const input: ComponentCreateInput = {
+    prepare_task_id: item.id,
+    input: {
+      action: "pull",
+      image_id: "nginx",
+      tag: source.release.tag,
+      prerelease: source.input.prerelease,
+      assets: source.release.selected,
+      plan_id: source.release.plan_id,
+      manifest_sha256: source.release.manifest_sha256,
+      trust_sha256: source.release.trust_sha256,
+      offline_id: source.input.offline_id,
+    },
+  };
+  showPrepared.value = showRelease.value = false;
+  await run(async () => {
+    const task = await api.pullComponentImage(input, workflowKey(input));
+    preparations.value = [task, ...preparations.value.filter(({ id }) => id !== task.id)];
+    lastID.value = task.id;
+    workflowKey = useIdempotency();
+  });
+  await load();
 }
 function canResume(t: ImageUpgradeTask) {
   const result = t.result;
@@ -328,21 +365,20 @@ async function load(readVersion = false) {
       api.nginxImageUpgrades(controller.signal),
     ]);
     preparations.value = sources;
-    const requested = sources.find((item) => item.id === selected.value);
-    if (requested)
-      channel.value = requested.result?.input.prerelease ? "beta" : "stable";
     const settled = tasks.value.some(
       (task) => task.state !== "succeeded" &&
         items.some((item) => item.id === task.id && item.state === "succeeded"),
     );
     tasks.value = items;
     if (readVersion || settled) {
-      const overview = await api.components(controller.signal);
-      currentVersion.value = overview.versions?.nginx ?? null;
-      currentEngine.value = overview.installation?.version ?? "";
+      overview.value = await api.components(controller.signal);
+      currentVersion.value = overview.value.versions?.nginx ?? null;
+      currentEngine.value = overview.value.installation?.version ?? "";
     }
     error.value = "";
-    if (!prepared.value.some((t) => t.id === selected.value))
+    if (showRelease.value && preparedForRelease.value)
+      selected.value = preparedForRelease.value.id;
+    else if (!prepared.value.some((t) => t.id === selected.value))
       selected.value = prepared.value[0]?.id ?? "";
   } catch (e) {
     if (!closed) error.value = apiError(e).message;
@@ -350,10 +386,12 @@ async function load(readVersion = false) {
     reading.value = false;
   }
 }
-async function upgrade() {
-  if (!canCreate.value) return;
+async function upgrade(item = chosen.value) {
+  if (!item || !canWrite.value || active.value || busy.value ||
+    !overview.value?.installation) return;
+  showPrepared.value = showRelease.value = false;
   const input = {
-    prepare_task_id: selected.value,
+    prepare_task_id: item.id,
     allow_downtime: true as const,
   };
   await run(async () => {
@@ -378,8 +416,21 @@ async function resume(t: ImageUpgradeTask) {
   }, "原镜像替换续办请求已受理");
   await load();
 }
-onMounted(() => {
-  void load(true);
+function openRelease() {
+  showRelease.value = true;
+  if (preparedForRelease.value) selected.value = preparedForRelease.value.id;
+}
+async function openFromStore() {
+  if (route.query.choose !== "1") return;
+  if (canChooseVersion.value) choosingVersion.value = true;
+  await router.replace({ query: { ...route.query, choose: undefined } });
+}
+onMounted(async () => {
+  await load(true);
+  if (!closed) await openFromStore();
+});
+watch(() => route.query.choose, () => {
+  if (!reading.value) void openFromStore();
 });
 onUnmounted(() => {
   closed = true;
@@ -393,10 +444,108 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
     name="Nginx"
     app-id="nginx"
     :busy="busy || active"
-    submit-text="检查此版本"
+    submit-text="继续"
     @choose="chooseVersion"
     @cancel="choosingVersion = false"
   />
+  <DetailDialog
+    v-model:show="showRelease"
+    body-height="300px"
+    :title="targetVersion ? 'Nginx ' + (targetVersion.software_version || targetVersion.version) : '版本详情'"
+  >
+    <div class="page-stack">
+      <div class="button-row">
+        <strong v-if="release">组件 {{ release.version }}</strong>
+        <strong v-if="!targetVersion && engineVersion">Nginx {{ engineVersion }}</strong>
+        <NTag v-if="preparedForRelease" type="success">
+          镜像已准备
+        </NTag>
+        <NTag v-else-if="last" :type="taskStateTone(last.state)">
+          {{ taskStateLabel(last.state) }}
+        </NTag>
+        <span v-else-if="busy">正在提交版本检查</span>
+      </div>
+      <p v-if="last && !preparedForRelease && taskStageSummary(last.stage, 'component.' + last.action, last.state)" class="muted">
+        {{ taskStageSummary(last.stage, 'component.' + last.action, last.state) }}
+      </p>
+      <NAlert v-if="workflowError || last?.error" type="error">
+        {{ workflowError || last?.error }}
+      </NAlert>
+      <NAlert v-if="engineMismatch" type="error">
+        发行包中的 Nginx 版本与所选版本不一致。
+      </NAlert>
+      <NAlert v-else-if="release && !checked?.result?.runtime_ready" type="warning">
+        当前服务器不满足此版本的运行条件。
+      </NAlert>
+      <NAlert v-if="preparedForRelease && downgrade" type="warning">
+        目标版本较旧，确认兼容性后再切换。
+      </NAlert>
+    </div>
+    <template #actions>
+      <TaskLogButton v-if="last || checked" :task-id="(last ?? checked)!.id" />
+      <NButton
+        v-if="!release && targetVersion && (workflowError || last?.state === 'failed')"
+        :disabled="busy || active"
+        @click="check"
+      >
+        重试检查
+      </NButton>
+      <NButton
+        v-if="release && !preparedForRelease"
+        type="primary"
+        :loading="busy || last?.action === 'prepare' && active"
+        :disabled="!canWrite || busy || active || engineMismatch || !checked?.result?.runtime_ready || release.expires_at * 1000 <= Date.now()"
+        @click="prepare"
+      >
+        准备镜像
+      </NButton>
+      <NPopconfirm
+        v-if="preparedForRelease && overview?.installation"
+        positive-text="切换版本"
+        @positive-click="upgrade(preparedForRelease)"
+      >
+        <template #trigger>
+          <NButton type="primary" :disabled="!canCreate || chosen?.id !== preparedForRelease.id">
+            切换到此版本
+          </NButton>
+        </template>
+        切换会短暂中断 Nginx 服务。确认切换到 {{ release?.version }}？
+      </NPopconfirm>
+      <NButton
+        v-else-if="preparedForRelease && overview"
+        type="primary"
+        :disabled="!canWrite || busy || active"
+        @click="pullRuntime(preparedForRelease)"
+      >
+        下载运行环境
+      </NButton>
+    </template>
+  </DetailDialog>
+  <DetailDialog v-model:show="showPrepared" title="已准备镜像">
+    <NFormItem label="版本">
+      <NSelect
+        v-model:value="selected"
+        :options="prepared.map((task) => ({ label: preparedLabel(task), value: task.id }))"
+        placeholder="选择镜像版本"
+      />
+    </NFormItem>
+    <NAlert v-if="downgrade" type="warning">
+      目标版本较旧，确认兼容性后再切换。
+    </NAlert>
+    <template #actions>
+      <NPopconfirm v-if="overview?.installation" positive-text="切换版本" @positive-click="upgrade()">
+        <template #trigger>
+          <NButton type="primary" :disabled="!canCreate">
+            切换到此版本
+          </NButton>
+        </template>
+        切换会短暂中断 Nginx 服务。确认切换到 {{ chosen?.result?.release?.version }}？
+      </NPopconfirm>
+      <NButton v-else-if="overview" type="primary" :disabled="!chosen || !canWrite || busy || active" @click="pullRuntime(chosen)">
+        下载运行环境
+      </NButton>
+    </template>
+  </DetailDialog>
   <div class="page-stack">
     <NAlert v-if="error" type="error">
       {{ error }}
@@ -415,116 +564,19 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
           组件 {{ currentVersion.version }}
         </span>
       </div>
-      <NAlert type="info">
-        更新期间网站会短暂中断，网站配置和证书会保留。
+      <NAlert v-if="overview && !overview.available" type="warning">
+        {{ overview.reason || "安装源暂不可用" }}
       </NAlert>
       <div class="button-row">
-        <NButton
-          type="primary"
-          :loading="busy || active"
-          :disabled="!canWrite || active"
-          @click="choosingVersion = true"
-        >
-          {{ active ? "正在处理" : "选择版本" }}
+        <NButton type="primary" :disabled="!canChooseVersion" @click="choosingVersion = true">
+          选择版本
         </NButton>
-      </div>
-      <p v-if="channel === 'beta'" class="muted">
-        Beta 版本可能不稳定。
-      </p>
-      <NAlert v-if="last?.error" type="error">
-        {{ last.error }}
-      </NAlert>
-      <NAlert v-if="downgrade" type="warning">
-        目标版本较旧，现有配置或数据可能不兼容。确认后仍可切换，失败时将尝试恢复原版本。
-      </NAlert>
-      <div v-if="last" class="button-row">
-        <NTag
-          :type="
-            last.state === 'succeeded'
-              ? 'success'
-              : last.state === 'failed'
-                ? 'error'
-                : 'info'
-          "
-        >
-          {{
-            last.state === "succeeded"
-              ? "已完成"
-              : last.state === "failed"
-                ? "未完成"
-                : "正在处理"
-          }}
-        </NTag><TaskLogButton :task-id="last.id" />
-      </div>
-      <section v-if="release" class="page-stack">
-        <div class="toolbar">
-          <strong>组件 {{ release.version
-          }}<template v-if="engineVersion">
-            · Nginx {{ engineVersion }}</template></strong>
-          <NTag v-if="preparedForRelease" type="success">
-            已准备
-          </NTag>
-        </div>
-        <NAlert v-if="engineMismatch" type="error">
-          发行中的 Nginx 版本与所选版本不一致，请刷新版本列表后重新选择。
-        </NAlert>
-        <NAlert v-if="!checked?.result?.runtime_ready" type="warning">
-          当前环境暂不满足更新条件，请查看检查日志。
-        </NAlert>
-        <div class="button-row">
-          <NButton
-            v-if="!preparedForRelease"
-            type="primary"
-            :loading="busy || active"
-            :disabled="
-              !canWrite ||
-                active ||
-                engineMismatch ||
-                !checked?.result?.runtime_ready ||
-                release.expires_at * 1000 <= Date.now()
-            "
-            @click="prepare"
-          >
-            准备镜像
-          </NButton><TaskLogButton
-            v-if="preparedForRelease"
-            :task-id="preparedForRelease.id"
-          />
-        </div>
-      </section>
-      <NEmpty v-if="!prepared.length" description="尚未准备可用镜像" />
-      <NFormItem v-else label="准备好的版本">
-        <NSelect
-          v-model:value="selected"
-          :options="
-            prepared.map((task) => ({
-              label: preparedLabel(task),
-              value: task.id,
-            }))
-          "
-          placeholder="选择镜像版本"
-          :disabled="!canWrite || busy || active"
-        />
-      </NFormItem>
-      <NCheckbox
-        v-if="canWrite"
-        v-model:checked="allowDowntime"
-        :disabled="busy || active"
-      >
-        允许 Nginx 服务短暂中断
-      </NCheckbox>
-      <div v-if="canWrite">
-        <NPopconfirm
-          :disabled="!canCreate"
-          positive-text="开始更新"
-          @positive-click="upgrade"
-        >
-          <template #trigger>
-            <NButton type="primary" :disabled="!canCreate" :loading="busy">
-              立即更新
-            </NButton>
-          </template>确认将 Nginx 更新到 {{ chosen?.result?.release?.version }}？
-        </NPopconfirm>
+        <NButton :disabled="!release && !targetVersion" @click="openRelease">
+          版本详情
+        </NButton>
+        <NButton :disabled="!prepared.length" @click="showPrepared = true">
+          已准备镜像
+        </NButton>
       </div>
     </section>
     <section class="panel page-stack">

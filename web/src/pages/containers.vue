@@ -15,7 +15,6 @@ import {
   NAlert,
   NButton,
   NDataTable,
-  NDropdown,
   NInput,
   NModal,
   NSelect,
@@ -301,17 +300,16 @@ const columns: DataTableColumns<DockerContainer> = [
   {
     title: "操作",
     key: "actions",
-    width: 190,
+    width: 218,
     fixed: "right",
     render: (c) => {
-      const options = ["created", "exited"].includes(c.state)
-        ? [{ label: "启动容器", key: "start" }]
-        : ["running", "restarting"].includes(c.state)
-          ? [
-              { label: "重启容器", key: "restart" },
-              { label: "停止容器", key: "stop" },
-            ]
-          : [];
+      const controls = c.protected
+        ? []
+        : ["created", "exited"].includes(c.state)
+          ? [{ label: "启动", action: "start" }]
+          : ["running", "restarting"].includes(c.state)
+            ? [{ label: "重启", action: "restart" }, { label: "停止", action: "stop" }]
+            : [];
       return h("div", { class: "container-actions" }, [
         h(
           NButton,
@@ -333,43 +331,20 @@ const columns: DataTableColumns<DockerContainer> = [
           },
           () => "日志",
         ),
-        !c.protected && options.length
-          ? h(
-              NDropdown,
-              {
-                trigger: "click",
-                options,
-                onSelect: (action: string) => selectControl(c, action),
-              },
-              {
-                default: () =>
-                  h(
-                    NButton,
-                    {
-                      size: "small",
-                      quaternary: true,
-                      disabled:
-                        !canWrite.value ||
-                        busy.value ||
-                        !!active.value ||
-                        !!error.value,
-                      "aria-label": `管理 ${c.name}`,
-                    },
-                    () => [
-                      "更多",
-                      h(
-                        "span",
-                        {
-                          class: "container-action-arrow",
-                          "aria-hidden": "true",
-                        },
-                        "⌄",
-                      ),
-                    ],
-                  ),
-              },
-            )
-          : null,
+        ...controls.map(({ label, action }) =>
+          h(
+            NButton,
+            {
+              size: "small",
+              text: true,
+              type: action === "stop" ? "error" : "default",
+              disabled: !canWrite.value || busy.value || !!active.value || !!error.value,
+              "aria-label": label + " " + c.name,
+              onClick: () => selectControl(c, action),
+            },
+            () => label,
+          ),
+        ),
       ]);
     },
   },
@@ -741,12 +716,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 16px;
+  gap: 12px;
   white-space: nowrap;
-}
-.container-table :deep(.container-action-arrow) {
-  margin-left: 4px;
-  font-size: 12px;
 }
 .container-dialog {
   width: 960px;

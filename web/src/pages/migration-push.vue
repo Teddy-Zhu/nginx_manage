@@ -10,6 +10,7 @@
 }
 </route>
 <script setup lang="ts">
+import DetailDialog from "../components/DetailDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import MappingInput from "../components/MappingInput.vue";
 import { mappingRecord, type MappingRow } from "../utils/form";
@@ -85,6 +86,8 @@ const mode = ref<MigrationPushInput["mode"]>("preview"),
   selected = ref<MigrationPushTask | null>(null),
   history = ref<MigrationPushTask[]>([]),
   error = ref("");
+const showProgress = ref(false);
+const showOptions = ref(false);
 const permitted = computed(() =>
   ["backup.export", "backup.secrets", "config.secrets", "nodes.manage"].every(
     (scope) => session.me?.scopes.includes(scope),
@@ -165,11 +168,11 @@ async function load() {
   controller = new AbortController();
   try {
     history.value = await api.migrationPushes(controller.signal);
-    if (selected.value)
-      selected.value = await api.migrationPush(
-        selected.value.id,
-        controller.signal,
-      );
+    const id = selected.value?.id;
+    if (id) {
+      const current = await api.migrationPush(id, controller.signal);
+      if (selected.value?.id === id) selected.value = current;
+    }
     error.value = "";
   } catch (e) {
     if (!closed) error.value = apiError(e).message;
@@ -181,6 +184,7 @@ async function inspect(id: string) {
   await run(async () => {
     selected.value = await api.migrationPush(id);
     resumeKey.value = "";
+    showProgress.value = true;
   });
 }
 const mappingError = computed(() => {
@@ -318,83 +322,16 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
             </NCheckbox>
           </div>
         </NFormItem>
-        <section>
-          <h3>迁移设置</h3>
-          <div class="page-stack">
-            <NFormItem
-              label="目标参数映射"
-              :validation-status="mappingError ? 'error' : undefined"
-              :feedback="mappingError"
-            >
-              <MappingInput
-                v-model:value="mappings"
-                :max="128"
-                :disabled="busy"
-              />
-            </NFormItem>
-            <p class="muted">
-              保留目标服务器的网络设置。DNS
-              可在迁移完成后，到目标服务器的网络设置中调整。
-            </p>
-            <MigrationMonitoringOptions
-              v-model="monitoringSettings"
-              :disabled="busy"
-            />
-            <MigrationFail2banOptions
-              v-model="fail2banSettings"
-              :disabled="busy"
-            />
-            <MigrationFirewallOptions
-              v-model="firewallSettings"
-              :disabled="busy"
-              @update:valid="firewallValid = $event"
-            />
-          </div>
-        </section>
         <NFormItem label="执行方式">
           <NSelect v-model:value="mode" :options="modes" />
         </NFormItem>
-        <NCheckbox v-model:checked="enableNginx">
-          授权启用目标 Nginx 配置模块
-        </NCheckbox>
-        <div v-if="mode !== 'preview'" class="page-stack">
-          <NCheckbox v-model:checked="prepareDependencies">
-            授权目标准备 Nginx 可信组件
-          </NCheckbox>
-          <div v-if="prepareDependencies" class="page-stack">
-            <NFormItem label="目标 Nginx 组件发行标签（可选）">
-              <NInput
-                v-model:value="dependencyTag"
-                placeholder="留空使用稳定版"
-              />
-            </NFormItem>
-            <NCheckbox v-model:checked="dependencyPrerelease">
-              允许指定的预发布版本
-            </NCheckbox>
-            <div>
-              <NCheckbox v-model:checked="dependencyInstall">
-                授权目标缺失时安装 Nginx
-              </NCheckbox>
-              <template v-if="dependencyInstall">
-                <NCheckbox v-model:checked="dependencyStart">
-                  安装后启动
-                </NCheckbox>
-                <NCheckbox v-model:checked="dependencyEnable">
-                  开机自动启动
-                </NCheckbox>
-                <p>
-                  目标 Key
-                  须具备系统写入权限。安装期间暂停目标配置写入，完成后恢复并重新预检。
-                </p>
-              </template>
-            </div>
-            <p>目标服务器的访问密钥需要具备安装软件的权限。</p>
-          </div>
-        </div>
         <p class="section-note">
           迁移期间原服务器继续运行。目标保留管理员账户和网络设置；迁入的自动任务和通知默认停用。
         </p>
         <div class="form-actions">
+          <NButton :disabled="busy" @click="showOptions = true">
+            迁移设置
+          </NButton>
           <NPopconfirm @positive-click="submit">
             <template #trigger>
               <NButton
@@ -417,106 +354,191 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
           </NPopconfirm>
         </div>
       </section>
-      <section v-if="selected" class="panel stack">
-        <div class="toolbar">
-          <h2>迁出进度</h2>
-          <NTag
-            :type="
-              selected.state === 'succeeded'
-                ? 'success'
-                : selected.state === 'failed'
-                  ? 'error'
-                  : 'warning'
-            "
+      <DetailDialog v-model:show="showOptions" title="迁移设置" body-height="420px">
+        <div class="page-stack">
+          <NFormItem
+            label="目标参数映射"
+            :validation-status="mappingError ? 'error' : undefined"
+            :feedback="mappingError"
           >
-            {{ stateLabels[selected.state] || selected.state }}
-          </NTag><NButton :disabled="busy || reading" @click="load">
-            刷新
+            <MappingInput
+              v-model:value="mappings"
+              :max="128"
+              :disabled="busy"
+            />
+          </NFormItem>
+          <p class="muted">
+            保留目标服务器的网络设置。DNS
+            可在迁移完成后，到目标服务器的网络设置中调整。
+          </p>
+          <MigrationMonitoringOptions
+            v-model="monitoringSettings"
+            :disabled="busy"
+          />
+          <MigrationFail2banOptions
+            v-model="fail2banSettings"
+            :disabled="busy"
+          />
+          <MigrationFirewallOptions
+            v-model="firewallSettings"
+            :disabled="busy"
+            @update:valid="firewallValid = $event"
+          />
+          <NCheckbox v-model:checked="enableNginx">
+            授权启用目标 Nginx 配置模块
+          </NCheckbox>
+          <div v-if="mode !== 'preview'" class="page-stack">
+            <NCheckbox v-model:checked="prepareDependencies">
+              授权目标准备 Nginx 可信组件
+            </NCheckbox>
+            <div v-if="prepareDependencies" class="page-stack">
+              <NFormItem label="目标 Nginx 组件发行标签（可选）">
+                <NInput
+                  v-model:value="dependencyTag"
+                  placeholder="留空使用稳定版"
+                />
+              </NFormItem>
+              <NCheckbox v-model:checked="dependencyPrerelease">
+                允许指定的预发布版本
+              </NCheckbox>
+              <div>
+                <NCheckbox v-model:checked="dependencyInstall">
+                  授权目标缺失时安装 Nginx
+                </NCheckbox>
+                <template v-if="dependencyInstall">
+                  <NCheckbox v-model:checked="dependencyStart">
+                    安装后启动
+                  </NCheckbox>
+                  <NCheckbox v-model:checked="dependencyEnable">
+                    开机自动启动
+                  </NCheckbox>
+                  <p>
+                    目标 Key
+                    须具备系统写入权限。安装期间暂停目标配置写入，完成后恢复并重新预检。
+                  </p>
+                </template>
+              </div>
+              <p>目标服务器的访问密钥需要具备安装软件的权限。</p>
+            </div>
+          </div>
+        </div>
+      </DetailDialog>
+      <section v-if="selected" class="panel section-heading">
+        <h2>当前迁出任务</h2>
+        <div class="button-row">
+          <NTag>{{ stateLabels[selected.state] || selected.state }}</NTag>
+          <NButton @click="showProgress = true">
+            查看迁出进度
           </NButton>
         </div>
-        <dl class="detail-list">
-          <dt>阶段</dt>
-          <dd>{{ labels[selected.stage] || selected.stage }}</dd>
-          <dt>目标</dt>
-          <dd>{{ selected.target_url }}</dd>
-
-          <dt>授权截止</dt>
-          <dd>{{ date(selected.expires_at) }}</dd>
-        </dl>
-        <NAlert v-if="selected.error" type="warning">
-          {{
-            selected.error
-          }}
-        </NAlert>
-        <template v-if="selected.plan">
-          <MigrationHostDNSPreview
-            v-if="selected.plan.host_dns"
-            :info="selected.plan.host_dns"
-          />
-          <MigrationMonitoringPreview
-            v-if="selected.plan.monitoring"
-            :info="selected.plan.monitoring"
-          />
-          <MigrationFail2banPreview
-            v-if="selected.plan.fail2ban"
-            :info="selected.plan.fail2ban"
-          />
-          <MigrationFirewallPreview
-            v-if="selected.plan.firewall"
-            :info="selected.plan.firewall"
-          />
-          <MigrationDependencies
-            v-if="selected.plan.dependencies"
-            :status="selected.plan.dependencies"
-          />
-          <TaskLogButton
-            v-if="selected.plan.task_id"
-            :task-id="selected.plan.task_id"
-          />
-          <NAlert v-if="selected.plan.pruned_at" type="info">
-            迁移文件已清理，当前保留迁移记录和执行结果。
-          </NAlert>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>状态</th>
-                  <th>结果</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(step, index) in selected.plan.steps" :key="index">
-                  <td>{{ stepStates[step.state] || step.state }}</td>
-                  <td>{{ step.message }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p
-            v-for="(item, index) in selected.plan.omissions"
-            :key="index"
-            class="muted"
-          >
-            {{ item }}
-          </p>
-        </template>
-        <template v-if="canResume">
-          <NFormItem label="重新授权目标 Key">
-            <NInput
-              v-model:value="resumeKey"
-              type="password"
-              show-password-on="click"
-              autocomplete="off"
-            />
-          </NFormItem><NPopconfirm @positive-click="resume">
-            <template #trigger>
-              <NButton :disabled="busy || !resumeKey">
-                核对并继续原任务
-              </NButton>
-            </template>确认使用原配置包、原目标和原执行方式继续？目标缺失原计划时将保留待恢复状态。
-          </NPopconfirm>
-        </template>
       </section>
+      <DetailDialog
+        v-model:show="showProgress"
+        :busy="busy"
+        title="迁出进度"
+        width="920px"
+        @update:show="(visible) => { if (!visible) resumeKey = ''; }"
+      >
+        <div v-if="selected" class="stack">
+          <div class="toolbar">
+            <NTag
+              :type="
+                selected.state === 'succeeded'
+                  ? 'success'
+                  : selected.state === 'failed'
+                    ? 'error'
+                    : 'warning'
+              "
+            >
+              {{ stateLabels[selected.state] || selected.state }}
+            </NTag><NButton :disabled="busy || reading" @click="load">
+              刷新
+            </NButton>
+          </div>
+          <dl class="detail-list">
+            <dt>阶段</dt>
+            <dd>{{ labels[selected.stage] || selected.stage }}</dd>
+            <dt>目标</dt>
+            <dd>{{ selected.target_url }}</dd>
+
+            <dt>授权截止</dt>
+            <dd>{{ date(selected.expires_at) }}</dd>
+          </dl>
+          <NAlert v-if="selected.error" type="warning">
+            {{
+              selected.error
+            }}
+          </NAlert>
+          <template v-if="selected.plan">
+            <MigrationHostDNSPreview
+              v-if="selected.plan.host_dns"
+              :info="selected.plan.host_dns"
+            />
+            <MigrationMonitoringPreview
+              v-if="selected.plan.monitoring"
+              :info="selected.plan.monitoring"
+            />
+            <MigrationFail2banPreview
+              v-if="selected.plan.fail2ban"
+              :info="selected.plan.fail2ban"
+            />
+            <MigrationFirewallPreview
+              v-if="selected.plan.firewall"
+              :info="selected.plan.firewall"
+            />
+            <MigrationDependencies
+              v-if="selected.plan.dependencies"
+              :status="selected.plan.dependencies"
+            />
+            <TaskLogButton
+              v-if="selected.plan.task_id"
+              :task-id="selected.plan.task_id"
+            />
+            <NAlert v-if="selected.plan.pruned_at" type="info">
+              迁移文件已清理，当前保留迁移记录和执行结果。
+            </NAlert>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>状态</th>
+                    <th>结果</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(step, index) in selected.plan.steps" :key="index">
+                    <td>{{ stepStates[step.state] || step.state }}</td>
+                    <td>{{ step.message }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p
+              v-for="(item, index) in selected.plan.omissions"
+              :key="index"
+              class="muted"
+            >
+              {{ item }}
+            </p>
+          </template>
+          <template v-if="canResume">
+            <NFormItem label="重新授权目标 Key">
+              <NInput
+                v-model:value="resumeKey"
+                type="password"
+                show-password-on="click"
+                autocomplete="off"
+              />
+            </NFormItem><NPopconfirm @positive-click="resume">
+              <template #trigger>
+                <NButton :disabled="busy || !resumeKey">
+                  核对并继续原任务
+                </NButton>
+              </template>确认使用原配置包、原目标和原执行方式继续？目标缺失原计划时将保留待恢复状态。
+            </NPopconfirm>
+          </template>
+        </div>
+      </DetailDialog>
       <section class="panel stack">
         <h2>迁出记录</h2>
         <p v-if="history.length === 0" class="muted">

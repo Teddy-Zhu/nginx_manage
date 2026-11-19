@@ -10,6 +10,7 @@
 </route>
 
 <script setup lang="ts">
+import DetailDialog from "../components/DetailDialog.vue";
 import CertificateWorkspace from "../components/CertificateWorkspace.vue";
 import { inspectTask } from "../stores/operation";
 import { useLiveRefresh } from "../composables/live";
@@ -57,6 +58,7 @@ const bindingGroups = computed(() => {
   }
   return [...groups.values()];
 });
+const showUsage = ref(false);
 const changedSites = computed(() => [
   ...new Set(
     preview.value?.changes.map((change) => siteName(change.resource_id)) ?? [],
@@ -93,7 +95,6 @@ let pendingSelection = false;
 
 async function loadSelected() {
   const id = selected.value;
-  preview.value = null;
   if (!id) {
     certificate.value = null;
     status.value = null;
@@ -145,13 +146,15 @@ async function deploy() {
       input,
       keyFor({ action: "deploy-certificate", id: plan.certificate_id, input }),
     );
+    preview.value = null;
     await loadSelected();
-  }, "网站证书更新已提交，可在下方查看结果");
+  }, "网站证书更新已提交");
 }
 watch(selected, () => {
   certificate.value = null;
   status.value = null;
   preview.value = null;
+  showUsage.value = false;
   pendingSelection = true;
   if (!busy.value) {
     pendingSelection = false;
@@ -253,59 +256,71 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
               @click="prepare"
             >
               检查可更新的网站
-            </n-button><router-link to="/nginx">
+            </n-button>
+            <NButton v-if="bindingGroups.length" @click="showUsage = true">
+              查看使用网站
+            </NButton><router-link to="/nginx">
               <n-button>管理网站</n-button>
             </router-link>
           </div>
         </template>
       </section>
-      <section v-if="preview" class="surface cert-section">
-        <h2>确认网站证书更新</h2>
-        <p v-if="!preview.changes.length" class="muted">
-          已保存的网站配置均使用当前证书，无需替换。尚未生效的配置请前往网站设置应用。
-        </p>
-        <template v-else>
-          <p>将为以下网站更新证书并应用配置：</p>
-          <div class="cert-actions">
-            <n-tag v-for="site in changedSites" :key="site">
-              {{ site }}
-            </n-tag>
-          </div>
-          <div class="cert-form-footer">
-            <n-button type="primary" :loading="busy" @click="deploy">
-              确认更新
-            </n-button><n-button :disabled="busy" @click="preview = null">
-              取消
-            </n-button>
-          </div>
-        </template>
-      </section>
-      <section v-if="bindingGroups.length" class="surface cert-section">
-        <h2>网站使用情况</h2>
-        <div
-          v-for="(binding, index) in bindingGroups"
-          :key="index"
-          class="cert-record"
-        >
-          <div class="cert-heading">
-            <span>{{ binding.name }}</span><n-tag
-              :bordered="false"
-              :type="binding.applied && binding.current ? 'success' : 'warning'"
-            >
-              {{
-                !binding.current
-                  ? "待更新证书"
-                  : binding.applied
-                    ? "已应用"
-                    : "待应用配置"
-              }}
-            </n-tag>
-          </div>
+      <DetailDialog
+        :show="!!preview"
+        title="网站证书更新"
+        @update:show="(visible) => { if (!visible) preview = null; }"
+      >
+        <div v-if="preview" class="certificate-workspace">
+          <p v-if="!preview.changes.length" class="muted">
+            已保存的网站配置均使用当前证书。
+          </p>
+          <template v-else>
+            <p>以下网站将应用新证书。</p>
+            <div class="cert-actions">
+              <NTag v-for="site in changedSites" :key="site">
+                {{ site }}
+              </NTag>
+            </div>
+          </template>
         </div>
-        <p v-if="certificate.bindings_truncated" class="muted">
-          仅显示部分网站，完整信息请前往网站设置查看。
-        </p>
-      </section>
+        <template #actions>
+          <NButton
+            v-if="preview?.changes.length"
+            type="primary"
+            :loading="busy"
+            @click="deploy"
+          >
+            确认更新
+          </NButton>
+        </template>
+      </DetailDialog>
+      <DetailDialog v-model:show="showUsage" title="使用此证书的网站">
+        <div class="certificate-workspace">
+          <div
+            v-for="(binding, index) in bindingGroups"
+            :key="index"
+            class="cert-record"
+          >
+            <div class="cert-heading">
+              <span>{{ binding.name }}</span><n-tag
+                :bordered="false"
+                :type="binding.applied && binding.current ? 'success' : 'warning'"
+              >
+                {{
+                  !binding.current
+                    ? "待更新证书"
+                    : binding.applied
+                      ? "已应用"
+                      : "待应用配置"
+                }}
+              </n-tag>
+            </div>
+          </div>
+          <p v-if="certificate.bindings_truncated" class="muted">
+            仅显示部分网站，完整信息请前往网站设置查看。
+          </p>
+        </div>
+      </DetailDialog>
       <section class="surface cert-section">
         <h2>更新记录</h2>
         <n-empty

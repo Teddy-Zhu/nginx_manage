@@ -426,7 +426,7 @@ onMounted(load);
       :busy="busy"
       :form-disabled="processing || !permitted"
       :submit-disabled="!permitted || processing"
-      :submit-text="status?.installed ? '保存设置' : '安装并启动'"
+      :submit-text="status?.installed ? '保存设置' : '选择版本'"
       :draft="editorDraft"
       width="720px"
       @submit="save"

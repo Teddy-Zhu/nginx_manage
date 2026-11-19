@@ -35,6 +35,7 @@ import {
   type HistoryScope,
 } from "../api/client";
 import { useAction } from "../composables/action";
+import DetailDialog from "../components/DetailDialog.vue";
 import RuntimeHistory from "../components/RuntimeHistory.vue";
 
 const api = useNodeAPI();
@@ -51,6 +52,7 @@ const filter = reactive({
 });
 const preview = ref<HistoryPreview | null>(null);
 const result = ref<HistoryResult | null>(null);
+const previewOpen = ref(false);
 const pending = ref<{ token: string; key: string } | null>(null);
 const total = computed(() => preview.value?.items.length ?? 0);
 const names: Record<string, string> = {
@@ -88,6 +90,11 @@ watch(filter, () => {
   if (!pending.value) preview.value = null;
 });
 
+function closePreview(visible: boolean) {
+  if (visible) return;
+  previewOpen.value = false;
+  result.value = null;
+}
 async function inspect() {
   await run(async () => {
     if (pending.value) throw new Error("请先核对上次清理结果");
@@ -98,6 +105,7 @@ async function inspect() {
     const input: HistoryFilter = { ...filter, before: Math.floor(before) };
     preview.value = await api.previewHistory(input);
     result.value = null;
+    previewOpen.value = true;
   });
 }
 async function execute() {
@@ -189,10 +197,39 @@ async function execute() {
             核对原操作结果
           </NButton>
         </NAlert>
-        <section v-if="preview" class="surface page-stack">
-          <div class="toolbar">
-            <span>本批 {{ total }} 项，每类最多 100 项</span>
-            <NPopconfirm v-if="!pending" @positive-click="execute">
+        <DetailDialog
+          :show="(previewOpen && !!preview) || !!result"
+          :title="result ? '清理结果' : '清理预览'"
+          :busy="busy"
+          width="960px"
+          @update:show="closePreview"
+        >
+          <div v-if="result" class="page-stack">
+            <NAlert type="success" :bordered="false">
+              已完成清理
+            </NAlert>
+            <NDataTable :columns="scopeColumns" :data="result.scopes" :scroll-x="540" :bordered="false" />
+          </div>
+          <div v-else-if="preview" class="page-stack">
+            <p>本批 {{ total }} 项</p>
+            <NDataTable :columns="scopeColumns" :data="preview.scopes" :scroll-x="540" :bordered="false" />
+            <p class="muted">
+              有效至 {{ new Date(preview.expires_at * 1000).toLocaleString() }}
+            </p>
+            <NDataTable
+              :columns="itemColumns"
+              :data="preview.items"
+              :row-key="(row: HistoryItem) => row.kind + ':' + row.id"
+              :pagination="{ pageSize: 20 }"
+              :scroll-x="540"
+              :bordered="false"
+            />
+          </div>
+          <template #actions>
+            <NButton v-if="pending" :loading="busy" @click="execute">
+              核对原操作结果
+            </NButton>
+            <NPopconfirm v-else-if="preview" @positive-click="execute">
               <template #trigger>
                 <NButton type="error" :loading="busy" :disabled="!total">
                   清理本批材料
@@ -200,37 +237,8 @@ async function execute() {
               </template>
               确认清理本批 {{ total }} 项历史材料？清理后无法再加载。
             </NPopconfirm>
-          </div>
-          <NDataTable
-            :columns="scopeColumns"
-            :data="preview.scopes"
-            :bordered="false"
-          />
-          <p class="muted">
-            预览有效至
-            {{
-              new Date(preview.expires_at * 1000).toLocaleString()
-            }}；引用或候选材料变化后须重新预览。
-          </p>
-          <NDataTable
-            :columns="itemColumns"
-            :data="preview.items"
-            :row-key="(row: HistoryItem) => `${row.kind}:${row.id}`"
-            :pagination="{ pageSize: 20 }"
-            :scroll-x="1000"
-            :bordered="false"
-          />
-        </section>
-        <section v-if="result" class="surface page-stack">
-          <NAlert type="success" :bordered="false">
-            已完成清理
-          </NAlert>
-          <NDataTable
-            :columns="scopeColumns"
-            :data="result.scopes"
-            :bordered="false"
-          />
-        </section>
+          </template>
+        </DetailDialog>
       </div>
     </NTabPane>
     <NTabPane name="runtime" tab="旧文件" display-directive="if">

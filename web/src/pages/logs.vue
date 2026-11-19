@@ -506,6 +506,7 @@ onUnmounted(reset);
     <n-data-table
       :columns="columns"
       :data="rows"
+      max-height="clamp(220px, 55dvh, 680px)"
       :scroll-x="http ? 2200 : stream ? 1250 : 950"
       :bordered="false"
     />

@@ -590,24 +590,12 @@ const dirty = computed(
     tree.value !== null &&
     (sourceJSON.value !== persisted.value || !!formDirty.value),
 );
-const moreActions = computed(() => [
-  {
-    label: "高级配置",
-    key: "source",
-    disabled: busy.value || !!formDirty.value,
-  },
-  {
-    label: "配置差异",
-    key: "changes",
-    disabled: busy.value || !!formDirty.value,
-  },
+const runtimeActions = computed(() => [
   { label: "外部修改", key: "external", disabled: busy.value || dirty.value },
   { label: "模块管理", key: "modules", disabled: busy.value || dirty.value },
 ]);
-function selectMoreAction(key: string) {
-  if (key === "source") sourceVisible.value = true;
-  else if (key === "changes") changesVisible.value = true;
-  else if (key === "external") externalVisible.value = true;
+function selectRuntimeAction(key: string) {
+  if (key === "external") externalVisible.value = true;
   else if (key === "modules") modulesVisible.value = true;
 }
 const differsFromDesired = computed(
@@ -1161,13 +1149,19 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       </div>
       <Teleport to="#page-heading-actions" defer>
         <div class="inline-gap">
+          <NButton :disabled="busy || !!formDirty" @click="sourceVisible = true">
+            源文件
+          </NButton>
+          <NButton :disabled="busy || !!formDirty" @click="changesVisible = true">
+            配置差异
+          </NButton>
           <NDropdown
             trigger="click"
-            :options="moreActions"
-            @select="selectMoreAction"
+            :options="runtimeActions"
+            @select="selectRuntimeAction"
           >
             <NButton :disabled="busy">
-              更多操作
+              运行环境
             </NButton>
           </NDropdown>
           <n-button :disabled="busy" @click="load(true)">

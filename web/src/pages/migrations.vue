@@ -11,6 +11,7 @@
 </route>
 
 <script setup lang="ts">
+import DetailDialog from "../components/DetailDialog.vue";
 import { useLiveRefresh } from "../composables/live";
 import MappingInput from "../components/MappingInput.vue";
 import { mappingRecord, type MappingRow } from "../utils/form";
@@ -141,6 +142,8 @@ const mode = ref<MigrationExecuteInput["mode"]>("draft"),
   plan = ref<MigrationPlan | null>(null),
   history = ref<MigrationPlan[]>([]),
   error = ref("");
+const showPlan = ref(false);
+const showOptions = ref(false);
 const dependencyTag = ref(""),
   remoteDependencies = ref(false),
   dependencyPrerelease = ref(false),
@@ -263,8 +266,9 @@ async function load() {
         selected.dependencies ||
         selected.state !== "planned" ||
         updated.state !== "planned"
-      )
-        plan.value = updated;
+      ) {
+        if (plan.value === selected) plan.value = updated;
+      }
     }
     error.value = "";
   } catch (e) {
@@ -281,6 +285,7 @@ async function currentVersion() {
 async function selectPlan(id: string) {
   await run(async () => {
     plan.value = await api.migration(id, controller.signal);
+    showPlan.value = true;
   });
 }
 async function selectFile(event: Event) {
@@ -358,6 +363,7 @@ async function previewFile() {
       host_dns: hostDNSOptions(),
     });
     importPassphrase.value = "";
+    showPlan.value = true;
   });
   await load();
 }
@@ -410,6 +416,7 @@ function showBlockedPlan(error: unknown): boolean {
   )
     return false;
   plan.value = data as MigrationPlan;
+  showPlan.value = true;
   return true;
 }
 async function pull(execute: boolean) {
@@ -425,6 +432,7 @@ async function pull(execute: boolean) {
     }
     try {
       plan.value = await api.pullMigration(pendingPull.input, pendingPull.key);
+      showPlan.value = true;
     } catch (error) {
       if (showBlockedPlan(error)) {
         pendingPull = null;
@@ -629,42 +637,6 @@ useLiveRefresh(api, ["tasks"], () => {
                   autocomplete="off"
                 />
               </NFormItem>
-
-              <div
-                v-if="has('components.manage')"
-                class="full-width page-stack"
-              >
-                <NCheckbox v-model:checked="remoteDependencies">
-                  迁入前自动准备 Nginx 依赖
-                </NCheckbox>
-                <template v-if="remoteDependencies">
-                  <NFormItem label="Nginx 组件发行标签（可选）">
-                    <NInput
-                      v-model:value="dependencyTag"
-                      placeholder="留空使用稳定版"
-                    />
-                  </NFormItem>
-                  <NCheckbox v-model:checked="dependencyPrerelease">
-                    允许指定的预发布版本
-                  </NCheckbox>
-                  <div v-if="has('system.write')">
-                    <NCheckbox v-model:checked="dependencyInstall">
-                      授权缺失时安装 Nginx
-                    </NCheckbox>
-                    <template v-if="dependencyInstall">
-                      <NCheckbox v-model:checked="dependencyStart">
-                        安装后启动
-                      </NCheckbox>
-                      <NCheckbox v-model:checked="dependencyEnable">
-                        开机自动启动
-                      </NCheckbox>
-                    </template>
-                  </div>
-                  <p class="muted">
-                    仅在目标服务器尚未安装 Nginx 时执行安装。
-                  </p>
-                </template>
-              </div>
             </div>
             <div class="choice-grid">
               <NCheckbox v-model:checked="remoteCertificates">
@@ -735,191 +707,247 @@ useLiveRefresh(api, ["tasks"], () => {
       <NCheckbox v-if="has('system.write')" v-model:checked="enableNginx">
         允许启用目标 Nginx 配置模块
       </NCheckbox>
-      <section>
-        <h3>迁移设置</h3>
-        <div class="page-stack">
-          <NFormItem
-            label="参数映射（原参数 → 目标参数）"
-            :validation-status="mappingError ? 'error' : undefined"
-            :feedback="mappingError"
-          >
-            <MappingInput v-model:value="mappings" :max="128" :disabled="busy" />
-          </NFormItem>
-          <MigrationHostDNSOptions
-            v-model="hostDNSSettings"
-            :sources="plan?.host_dns?.entries.map((item) => item.source) ?? []"
-            :disabled="busy"
-            :allow-map="has('host.dns.write')"
-            @update:valid="hostDNSValid = $event"
-          />
-          <MigrationMonitoringOptions
-            v-model="monitoringSettings"
-            :allow-replace="has('monitoring.write')"
-            :disabled="busy"
-          />
-          <MigrationFail2banOptions
-            v-model="fail2banSettings"
-            :disabled="busy"
-          />
-          <MigrationFirewallOptions
-            v-model="firewallSettings"
-            :disabled="busy"
-            @update:valid="firewallValid = $event"
-          />
-          <p class="muted">
-            修改目标映射后，请重新检查。
-          </p>
-        </div>
-      </section>
-    </section>
-    <section v-if="plan" class="panel page-stack">
-      <NAlert v-if="plan.mode === 'portable'" type="warning">
-        此计划来自可移植配置。迁入站点均已停用，须检查省略项并补齐保护后再启用。
-      </NAlert>
-      <div class="actions">
-        <h2>迁移计划</h2>
-        <NTag>{{ states[plan.state] ?? plan.state }}</NTag>
-        <NTag v-if="plan.pruned_at" type="warning">
-          材料已清理
-        </NTag>
-      </div>
-      <NAlert v-if="plan.pruned_at" type="info">
-        迁移材料已于
-        {{ time(plan.pruned_at) }}
-        清理，无法重新预检或执行，迁移记录和执行结果仍可查询。
-      </NAlert>
-      <p v-if="plan.state === 'planned'" class="muted">
-        有效期至 {{ time(plan.expires_at) }}
-      </p>
-      <NAlert
-        v-if="plan.last_error"
-        :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
-      >
-        {{ plan.last_error }}
-      </NAlert>
-      <NAlert
-        v-if="plan.pull"
-        :type="
-          ['failed', 'recovery_required'].includes(plan.pull.state)
-            ? 'error'
-            : plan.pull.state === 'succeeded'
-              ? 'success'
-              : 'info'
-        "
-        title="自动迁入"
-      >
-        {{ states[plan.pull.state] ?? plan.pull.state }} ·
-        {{ pullStages[plan.pull.stage] ?? plan.pull.stage }} ·
-        {{ options.find((item) => item.value === plan?.pull?.mode)?.label }}
-        <p>迁入授权有效期至 {{ time(plan.pull.deadline) }}</p>
-        <p v-if="plan.pull.error">
-          {{ plan.pull.error }}
-        </p>
-      </NAlert>
-      <MigrationHostDNSPreview
-        v-if="plan.host_dns"
-        :info="plan.host_dns"
-        :plan-id="
-          !plan.pruned_at &&
-            ['draft', 'saved', 'succeeded', 'rolled_back'].includes(plan.state)
-            ? plan.id
-            : undefined
-        "
-      />
-      <MigrationMonitoringPreview
-        v-if="plan.monitoring"
-        :info="plan.monitoring"
-      />
-      <MigrationFail2banPreview v-if="plan.fail2ban" :info="plan.fail2ban" />
-      <MigrationFirewallPreview v-if="plan.firewall" :info="plan.firewall" />
-      <MigrationDependencies
-        v-if="plan.dependencies"
-        :status="plan.dependencies"
-      />
-      <div v-if="plan.state === 'planned'" class="actions">
-        <NButton :disabled="busy" @click="preflight">
-          重新预检
+      <div class="button-row">
+        <NButton :disabled="busy" @click="showOptions = true">
+          迁移设置
         </NButton>
       </div>
-      <div
-        v-if="
-          plan.state === 'planned' &&
-            has('components.manage') &&
-            !continuingPull &&
-            !plan.dependencies
-        "
-      >
-        <NFormItem label="Nginx 组件发行标签（可选）">
-          <NInput v-model:value="dependencyTag" placeholder="留空使用稳定版" />
+    </section>
+    <DetailDialog v-model:show="showOptions" title="迁移设置" body-height="420px">
+      <div class="page-stack">
+        <NFormItem
+          label="参数映射（原参数 → 目标参数）"
+          :validation-status="mappingError ? 'error' : undefined"
+          :feedback="mappingError"
+        >
+          <MappingInput v-model:value="mappings" :max="128" :disabled="busy" />
         </NFormItem>
-        <NCheckbox v-model:checked="dependencyPrerelease">
-          允许指定的预发布版本
-        </NCheckbox>
-        <div v-if="has('system.write')">
-          <NCheckbox v-model:checked="dependencyInstall">
-            授权缺失时安装 Nginx
+        <MigrationHostDNSOptions
+          v-model="hostDNSSettings"
+          :sources="plan?.host_dns?.entries.map((item) => item.source) ?? []"
+          :disabled="busy"
+          :allow-map="has('host.dns.write')"
+          @update:valid="hostDNSValid = $event"
+        />
+        <MigrationMonitoringOptions
+          v-model="monitoringSettings"
+          :allow-replace="has('monitoring.write')"
+          :disabled="busy"
+        />
+        <MigrationFail2banOptions
+          v-model="fail2banSettings"
+          :disabled="busy"
+        />
+        <MigrationFirewallOptions
+          v-model="firewallSettings"
+          :disabled="busy"
+          @update:valid="firewallValid = $event"
+        />
+        <p class="muted">
+          修改目标映射后，请重新检查。
+        </p>
+        <div
+          v-if="transferTab === 'remote' && has('components.manage')"
+          class="full-width page-stack"
+        >
+          <NCheckbox v-model:checked="remoteDependencies">
+            迁入前自动准备 Nginx 依赖
           </NCheckbox>
-          <template v-if="dependencyInstall">
-            <NCheckbox v-model:checked="dependencyStart">
-              安装后启动
+          <template v-if="remoteDependencies">
+            <NFormItem label="Nginx 组件发行标签（可选）">
+              <NInput
+                v-model:value="dependencyTag"
+                placeholder="留空使用稳定版"
+              />
+            </NFormItem>
+            <NCheckbox v-model:checked="dependencyPrerelease">
+              允许指定的预发布版本
             </NCheckbox>
-            <NCheckbox v-model:checked="dependencyEnable">
-              开机自动启动
-            </NCheckbox>
-            <p>安装期间暂停配置写入，完成后恢复并重新预检。</p>
+            <div v-if="has('system.write')">
+              <NCheckbox v-model:checked="dependencyInstall">
+                授权缺失时安装 Nginx
+              </NCheckbox>
+              <template v-if="dependencyInstall">
+                <NCheckbox v-model:checked="dependencyStart">
+                  安装后启动
+                </NCheckbox>
+                <NCheckbox v-model:checked="dependencyEnable">
+                  开机自动启动
+                </NCheckbox>
+              </template>
+            </div>
+            <p class="muted">
+              仅在目标服务器尚未安装 Nginx 时执行安装。
+            </p>
           </template>
         </div>
-        <NPopconfirm @positive-click="prepareDependencies">
-          <template #trigger>
-            <NButton :disabled="busy">
-              准备 Nginx 依赖
-            </NButton>
-          </template>确认准备 Nginx？仅在目标服务器尚未安装 Nginx 时执行安装。
-        </NPopconfirm>
       </div>
-      <div class="migration-steps">
-        <div v-for="(step, i) in plan.steps" :key="i">
-          <NTag
-            :type="
-              step.state === 'blocked' || step.state === 'unavailable'
-                ? 'error'
-                : step.state === 'review'
-                  ? 'warning'
-                  : 'default'
-            "
-          >
-            {{ stepStates[step.state] ?? step.state }}
-          </NTag><span>{{ step.message }}</span>
-        </div>
+    </DetailDialog>
+    <section v-if="plan" class="panel section-heading">
+      <h2>当前迁移计划</h2>
+      <div class="button-row">
+        <NTag>{{ states[plan.state] ?? plan.state }}</NTag>
+        <NButton @click="showPlan = true">
+          查看计划
+        </NButton>
       </div>
-      <ul>
-        <li v-for="item in plan.omissions" :key="item">
-          {{ item }}
-        </li>
-      </ul>
-      <TaskLogButton v-if="plan.task_id" :task-id="plan.task_id" />
-      <NPopconfirm v-if="plan.state === 'planned'" @positive-click="execute">
-        <template #trigger>
-          <NButton
-            type="primary"
-            :loading="busy"
-            :disabled="
-              busy ||
-                preparingDependencies ||
-                continuingPull ||
-                (mode === 'save' && !plan.can_save) ||
-                (mode === 'apply' && !plan.can_apply)
-            "
-          >
-            执行计划
-          </NButton>
-        </template>{{
-          mode === "draft"
-            ? "保存为独立草稿。"
-            : "替换目标 Nginx 配置；应用失败时恢复原配置。"
-        }}
-      </NPopconfirm>
     </section>
+    <DetailDialog
+      v-model:show="showPlan"
+      :busy="busy"
+      title="迁移计划"
+      width="920px"
+    >
+      <div v-if="plan" class="page-stack">
+        <NAlert v-if="plan.mode === 'portable'" type="warning">
+          此计划来自可移植配置。迁入站点均已停用，须检查省略项并补齐保护后再启用。
+        </NAlert>
+        <div class="actions">
+          <NTag>{{ states[plan.state] ?? plan.state }}</NTag>
+          <NTag v-if="plan.pruned_at" type="warning">
+            材料已清理
+          </NTag>
+        </div>
+        <NAlert v-if="plan.pruned_at" type="info">
+          迁移材料已于
+          {{ time(plan.pruned_at) }}
+          清理，无法重新预检或执行，迁移记录和执行结果仍可查询。
+        </NAlert>
+        <p v-if="plan.state === 'planned'" class="muted">
+          有效期至 {{ time(plan.expires_at) }}
+        </p>
+        <NAlert
+          v-if="plan.last_error"
+          :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
+        >
+          {{ plan.last_error }}
+        </NAlert>
+        <NAlert
+          v-if="plan.pull"
+          :type="
+            ['failed', 'recovery_required'].includes(plan.pull.state)
+              ? 'error'
+              : plan.pull.state === 'succeeded'
+                ? 'success'
+                : 'info'
+          "
+          title="自动迁入"
+        >
+          {{ states[plan.pull.state] ?? plan.pull.state }} ·
+          {{ pullStages[plan.pull.stage] ?? plan.pull.stage }} ·
+          {{ options.find((item) => item.value === plan?.pull?.mode)?.label }}
+          <p>迁入授权有效期至 {{ time(plan.pull.deadline) }}</p>
+          <p v-if="plan.pull.error">
+            {{ plan.pull.error }}
+          </p>
+        </NAlert>
+        <MigrationHostDNSPreview
+          v-if="plan.host_dns"
+          :info="plan.host_dns"
+          :plan-id="
+            !plan.pruned_at &&
+              ['draft', 'saved', 'succeeded', 'rolled_back'].includes(plan.state)
+              ? plan.id
+              : undefined
+          "
+        />
+        <MigrationMonitoringPreview
+          v-if="plan.monitoring"
+          :info="plan.monitoring"
+        />
+        <MigrationFail2banPreview v-if="plan.fail2ban" :info="plan.fail2ban" />
+        <MigrationFirewallPreview v-if="plan.firewall" :info="plan.firewall" />
+        <MigrationDependencies
+          v-if="plan.dependencies"
+          :status="plan.dependencies"
+        />
+        <div v-if="plan.state === 'planned'" class="actions">
+          <NButton :disabled="busy" @click="preflight">
+            重新预检
+          </NButton>
+        </div>
+        <div
+          v-if="
+            plan.state === 'planned' &&
+              has('components.manage') &&
+              !continuingPull &&
+              !plan.dependencies
+          "
+        >
+          <NFormItem label="Nginx 组件发行标签（可选）">
+            <NInput v-model:value="dependencyTag" placeholder="留空使用稳定版" />
+          </NFormItem>
+          <NCheckbox v-model:checked="dependencyPrerelease">
+            允许指定的预发布版本
+          </NCheckbox>
+          <div v-if="has('system.write')">
+            <NCheckbox v-model:checked="dependencyInstall">
+              授权缺失时安装 Nginx
+            </NCheckbox>
+            <template v-if="dependencyInstall">
+              <NCheckbox v-model:checked="dependencyStart">
+                安装后启动
+              </NCheckbox>
+              <NCheckbox v-model:checked="dependencyEnable">
+                开机自动启动
+              </NCheckbox>
+              <p>安装期间暂停配置写入，完成后恢复并重新预检。</p>
+            </template>
+          </div>
+          <NPopconfirm @positive-click="prepareDependencies">
+            <template #trigger>
+              <NButton :disabled="busy">
+                准备 Nginx 依赖
+              </NButton>
+            </template>确认准备 Nginx？仅在目标服务器尚未安装 Nginx 时执行安装。
+          </NPopconfirm>
+        </div>
+        <div class="migration-steps">
+          <div v-for="(step, i) in plan.steps" :key="i">
+            <NTag
+              :type="
+                step.state === 'blocked' || step.state === 'unavailable'
+                  ? 'error'
+                  : step.state === 'review'
+                    ? 'warning'
+                    : 'default'
+              "
+            >
+              {{ stepStates[step.state] ?? step.state }}
+            </NTag><span>{{ step.message }}</span>
+          </div>
+        </div>
+        <ul>
+          <li v-for="item in plan.omissions" :key="item">
+            {{ item }}
+          </li>
+        </ul>
+        <TaskLogButton v-if="plan.task_id" :task-id="plan.task_id" />
+      </div>
+      <template #actions>
+        <NPopconfirm v-if="plan?.state === 'planned'" @positive-click="execute">
+          <template #trigger>
+            <NButton
+              type="primary"
+              :loading="busy"
+              :disabled="
+                busy ||
+                  preparingDependencies ||
+                  continuingPull ||
+                  (mode === 'save' && !plan.can_save) ||
+                  (mode === 'apply' && !plan.can_apply)
+              "
+            >
+              执行计划
+            </NButton>
+          </template>{{
+            mode === "draft"
+              ? "保存为独立草稿。"
+              : "替换目标 Nginx 配置；应用失败时恢复原配置。"
+          }}
+        </NPopconfirm>
+      </template>
+    </DetailDialog>
     <section v-if="history.length" class="panel page-stack">
       <h2>迁移记录</h2>
       <div v-for="item in history" :key="item.id" class="actions">

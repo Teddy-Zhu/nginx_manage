@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import FormDialog from "../components/FormDialog.vue";
+import DetailDialog from "../components/DetailDialog.vue";
 import CertificateWorkspace from "../components/CertificateWorkspace.vue";
 import { useLiveRefresh } from "../composables/live";
 import { useRoute, useRouter } from "vue-router";
@@ -25,6 +26,7 @@ import {
   NEmpty,
   NFormItem,
   NInput,
+  NSpin,
   NTag,
   type DataTableColumns,
 } from "naive-ui";
@@ -119,6 +121,10 @@ async function load() {
     items.value = await api.certificates();
     await loadSelected();
   });
+}
+function closeDetails(value: boolean) {
+  if (value) return;
+  void router.replace({ query: { ...route.query, certificate: undefined } });
 }
 function open(item: Certificate) {
   if (busy.value) return;
@@ -329,110 +335,115 @@ onUnmounted(() => {
         description="还没有证书，可自动申请或导入已有证书"
       />
     </section>
-    <section v-if="selected" class="surface cert-section">
-      <div class="cert-heading">
-        <div>
-          <h2>{{ selected.name }}</h2>
-          <p v-if="selected.notes" class="muted">
-            {{ selected.notes }}
-          </p>
-        </div>
-        <div class="cert-actions">
-          <router-link
-            :to="{
-              path: '/certificate-deployments',
-              query: { certificate: selected.id },
-            }"
-          >
-            <n-button type="primary">
-              用于网站
-            </n-button>
-          </router-link>
-          <router-link
-            v-if="selected.source === 'acme'"
-            :to="{
-              path: '/certificate-requests',
-              query: { certificate: selected.id },
-            }"
-          >
-            <n-button>续期设置</n-button>
-          </router-link>
-          <n-button :disabled="busy" @click="startImport(selected)">
-            导入更新
-          </n-button>
-          <n-button
-            type="error"
-            :disabled="
-              busy ||
-                !!selected.bindings.length ||
-                !!selected.historical_references
-            "
-            @click="remove"
-          >
-            删除
-          </n-button>
-        </div>
-      </div>
-      <template v-if="version">
-        <div class="cert-actions">
-          <n-tag :bordered="false">
-            {{ expiry(version) }}
-          </n-tag><n-tag :bordered="false">
-            {{
-              version.environment === "staging"
-                ? "测试证书"
-                : version.summary.trust === "system"
-                  ? "受信任证书"
-                  : version.summary.trust === "private"
-                    ? "私有证书"
-                    : "自签证书"
-            }}
-          </n-tag>
-        </div>
-        <n-alert
-          v-if="version.environment === 'staging'"
-          type="warning"
-          :bordered="false"
-        >
-          测试证书不受浏览器信任，请申请正式证书用于网站。
-        </n-alert>
-        <dl class="cert-stats">
-          <div>
-            <dt>生效时间</dt>
-            <dd>{{ date(version.summary.chain_not_before) }}</dd>
-          </div>
-          <div>
-            <dt>到期时间</dt>
-            <dd>{{ date(version.summary.chain_not_after) }}</dd>
-          </div>
-          <div>
-            <dt>签发机构</dt>
-            <dd>{{ version.summary.issuer }}</dd>
-          </div>
-        </dl>
-        <div class="cert-section">
-          <h3>适用域名与 IP</h3>
+    <DetailDialog
+      :show="!!selectedID"
+      :title="selected?.name ?? '证书详情'"
+      @update:show="closeDetails"
+    >
+      <NSpin v-if="!selected && busy" />
+      <NEmpty v-else-if="!selected" description="无法读取证书详情" />
+      <div v-else class="certificate-workspace">
+        <p v-if="selected.notes" class="muted">
+          {{ selected.notes }}
+        </p>
+        <div class="cert-heading">
           <div class="cert-actions">
-            <n-tag
-              v-for="domain in [
-                ...version.summary.dns_names,
-                ...version.summary.ip_addresses,
-              ]"
-              :key="domain"
-              size="small"
+            <router-link
+              :to="{
+                path: '/certificate-deployments',
+                query: { certificate: selected.id },
+              }"
             >
-              {{ domain }}
+              <n-button type="primary">
+                用于网站
+              </n-button>
+            </router-link>
+            <router-link
+              v-if="selected.source === 'acme'"
+              :to="{
+                path: '/certificate-requests',
+                query: { certificate: selected.id },
+              }"
+            >
+              <n-button>续期设置</n-button>
+            </router-link>
+            <n-button :disabled="busy" @click="startImport(selected)">
+              导入更新
+            </n-button>
+            <n-button
+              type="error"
+              :disabled="
+                busy ||
+                  !!selected.bindings.length ||
+                  !!selected.historical_references
+              "
+              @click="remove"
+            >
+              删除
+            </n-button>
+          </div>
+        </div>
+        <template v-if="version">
+          <div class="cert-actions">
+            <n-tag :bordered="false">
+              {{ expiry(version) }}
+            </n-tag><n-tag :bordered="false">
+              {{
+                version.environment === "staging"
+                  ? "测试证书"
+                  : version.summary.trust === "system"
+                    ? "受信任证书"
+                    : version.summary.trust === "private"
+                      ? "私有证书"
+                      : "自签证书"
+              }}
             </n-tag>
           </div>
-        </div>
-      </template>
-      <p
-        v-if="selected.bindings.length || selected.historical_references"
-        class="muted"
-      >
-        网站或历史配置仍在使用此证书，暂不能删除。
-      </p>
-    </section>
+          <n-alert
+            v-if="version.environment === 'staging'"
+            type="warning"
+            :bordered="false"
+          >
+            测试证书不受浏览器信任，请申请正式证书用于网站。
+          </n-alert>
+          <dl class="cert-stats">
+            <div>
+              <dt>生效时间</dt>
+              <dd>{{ date(version.summary.chain_not_before) }}</dd>
+            </div>
+            <div>
+              <dt>到期时间</dt>
+              <dd>{{ date(version.summary.chain_not_after) }}</dd>
+            </div>
+            <div>
+              <dt>签发机构</dt>
+              <dd>{{ version.summary.issuer }}</dd>
+            </div>
+          </dl>
+          <div class="cert-section">
+            <h3>适用域名与 IP</h3>
+            <div class="cert-actions">
+              <n-tag
+                v-for="domain in [
+                  ...version.summary.dns_names,
+                  ...version.summary.ip_addresses,
+                ]"
+                :key="domain"
+                size="small"
+              >
+                {{ domain }}
+              </n-tag>
+            </div>
+          </div>
+        </template>
+        <p
+          v-if="selected.bindings.length || selected.historical_references"
+          class="muted"
+        >
+          网站或历史配置仍在使用此证书，暂不能删除。
+        </p>
+      </div>
+    </DetailDialog>
     <FormDialog
       :show="importing"
       :title="replaceID ? '更新证书文件' : '导入证书'"

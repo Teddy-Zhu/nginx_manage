@@ -18,6 +18,7 @@ import {
   type RuntimeHistoryPreview,
   type RuntimeHistoryStatus,
 } from "../api/client";
+import DetailDialog from "./DetailDialog.vue";
 import { useAction } from "../composables/action";
 
 const api = useNodeAPI();
@@ -202,22 +203,30 @@ onMounted(load);
         核对并继续清理
       </NButton>
     </NAlert>
-    <section v-if="preview" class="surface page-stack">
-      <div class="toolbar">
-        <span>{{ preview.targets.length }} 个目录，{{ preview.entries }} 个条目，{{
-          (preview.bytes / 1024).toFixed(1)
-        }}
-          KiB{{ preview.more ? "；还有后续批次" : "" }}</span>
-        <NPopconfirm v-if="!pending" @positive-click="() => execute()">
+    <DetailDialog
+      :show="!!preview"
+      title="文件清理预览"
+      :busy="busy"
+      @update:show="(visible) => { if (!visible) preview = null; }"
+    >
+      <p v-if="preview">
+        {{ preview.targets.length }} 个目录，{{ preview.entries }} 个条目，
+        {{ (preview.bytes / 1024).toFixed(1) }} KiB{{ preview.more ? "，还有后续批次" : "" }}
+      </p>
+      <template #actions>
+        <NButton v-if="pending" :loading="busy" @click="execute()">
+          核对并继续清理
+        </NButton>
+        <NPopconfirm v-else @positive-click="execute()">
           <template #trigger>
-            <NButton type="error" :disabled="busy || !preview.targets.length">
+            <NButton type="error" :disabled="busy || !preview?.targets.length">
               清理本批文件
             </NButton>
           </template>
           确认清理所选旧文件？清理后无法恢复。
         </NPopconfirm>
-      </div>
-    </section>
+      </template>
+    </DetailDialog>
     <section class="surface page-stack">
       <h3>最近清理记录</h3>
       <NDataTable

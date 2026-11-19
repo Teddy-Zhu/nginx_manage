@@ -24,6 +24,7 @@ import { useLiveRefresh } from "../composables/live";
 import { useSession } from "../stores/session";
 import { loadedFrontendEntries } from "../frontend-version";
 import { taskStates } from "../utils/tasks";
+import DetailDialog from "../components/DetailDialog.vue";
 import TaskLogButton from "../components/TaskLogButton.vue";
 import {
   updateChannels,
@@ -48,6 +49,7 @@ const tasks = ref<ComponentTask[]>([]),
 const checked = ref<CoreUpdateCheck>();
 const checking = ref(false);
 const checkError = ref("");
+const showCheck = ref(false);
 let checkRequest: AbortController | undefined;
 const permitted = computed(
   () =>
@@ -104,6 +106,7 @@ async function submitUpdate(input: ComponentCreateInput) {
     upgradeID.value = task.id;
     window.sessionStorage.setItem(savedUpgrade, task.id);
     checked.value = undefined;
+    showCheck.value = false;
   });
 }
 async function check() {
@@ -118,6 +121,7 @@ async function check() {
     if (!request.signal.aborted) {
       version.value = result.current_version;
       checked.value = result;
+      showCheck.value = true;
     }
   } catch (error) {
     if (!request.signal.aborted) {
@@ -126,6 +130,7 @@ async function check() {
         !(error instanceof ApiError && error.status === 0)
           ? error.message
           : "未能完成更新检查，请稍后重试。";
+      showCheck.value = true;
     }
   } finally {
     if (checkRequest === request) {
@@ -141,6 +146,7 @@ watch(channel, () => {
   checkRequest?.abort();
   checked.value = undefined;
   checkError.value = "";
+  showCheck.value = false;
 });
 onUnmounted(() => checkRequest?.abort());
 function confirmUpdate() {
@@ -156,6 +162,7 @@ function confirmUpdate() {
     onPositiveClick: () => {
       if (checked.value !== target || active.value || liveDisconnected.value)
         return;
+      showCheck.value = false;
       return submitUpdate({
         update_confirmation: confirmation,
         input: {
@@ -216,6 +223,11 @@ onMounted(() => load(true));
       <NAlert v-if="updating && liveDisconnected" type="info">
         更新期间连接已断开，正在重连。
       </NAlert>
+    </section>
+    <DetailDialog
+      v-model:show="showCheck"
+      :title="checked?.state === 'available' ? '发现新版本 ' + checked.version : '检查更新'"
+    >
       <NAlert v-if="checkError" type="error">
         {{ checkError }}
       </NAlert>
@@ -229,33 +241,32 @@ onMounted(() => load(true));
         {{ checked.message }}
       </NAlert>
       <div v-else-if="checked?.state === 'available'" class="update-result">
-        <h3>
-          发现新版本 {{ checked.version }}
+        <div class="button-row">
+          <span>{{ (checked.archive_bytes / 1048576).toFixed(1) }} MB</span>
           <NTag v-if="checked.channel === 'beta'" type="warning" size="small">
             Beta
           </NTag>
-        </h3>
+        </div>
         <p v-if="checked.notes" class="release-notes">
           {{ checked.notes }}
-        </p>
-        <p class="muted">
-          {{ (checked.archive_bytes / 1048576).toFixed(1) }} MB
         </p>
         <NAlert v-if="checked.message" type="warning">
           {{
             checked.message
           }}
         </NAlert>
+      </div>
+      <template #actions>
         <NButton
-          v-if="checked.confirmation"
+          v-if="checked?.state === 'available' && checked.confirmation"
           type="primary"
           :disabled="!permitted || busy || active || liveDisconnected"
           @click="confirmUpdate"
         >
           下载安装
         </NButton>
-      </div>
-    </section>
+      </template>
+    </DetailDialog>
     <section class="panel page-stack">
       <h3>更新记录</h3>
       <NEmpty v-if="!history.length" description="暂无更新记录" />
@@ -284,10 +295,7 @@ onMounted(() => load(true));
   display: grid;
   justify-items: start;
   gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
 }
-.update-result h3,
 .update-result p {
   margin: 0;
 }

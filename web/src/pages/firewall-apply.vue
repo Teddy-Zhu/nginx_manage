@@ -35,6 +35,7 @@ import { useAction, useIdempotency } from "../composables/action";
 import { useRoute } from "vue-router";
 import { useSession } from "../stores/session";
 
+import DetailDialog from "../components/DetailDialog.vue";
 import DockerPlanDetails from "../components/DockerPlanDetails.vue";
 
 const route = useRoute();
@@ -57,10 +58,12 @@ const view = ref<FirewallRuntime | null>(null),
   error = ref(""),
   uncertain = ref(false),
   remaining = ref(0);
+const showPlan = ref(false);
 const controller = new AbortController();
 watch(() => route.query.action, (value) => {
   action.value = value === "remove" ? "remove" : "apply";
   plan.value = null;
+  showPlan.value = false;
 });
 const dockerTargets = ref<NonNullable<
   FirewallPlanInput["docker_targets"]
@@ -82,6 +85,11 @@ const preparing = computed(
     !!preparation.value &&
     ["running", "cancelling"].includes(preparation.value.state),
 );
+const planReady = computed(() => {
+  const current = plan.value;
+  return !!current && !preparing.value &&
+    (!current.preparation || current.preparation.state === "ready");
+});
 const preparationStates = {
   running: "正在准备",
   cancelling: "正在取消",
@@ -169,8 +177,10 @@ async function readRuntime() {
     view.value = result;
     error.value = "";
     updateDeadline();
-    if (result.operation && result.operation.plan_id === plan.value?.id)
+    if (result.operation && result.operation.plan_id === plan.value?.id && uncertain.value) {
       uncertain.value = false;
+      showPlan.value = false;
+    }
     const pending = result.preparation;
     if (pending && ["running", "cancelling"].includes(pending.state))
       action.value = pending.action;
@@ -231,6 +241,7 @@ function setAction(value: FirewallPlanInput["action"]) {
   action.value = value;
   plan.value = null;
   dockerTargets.value = null;
+  showPlan.value = false;
 }
 function bindDocker(
   targets: NonNullable<FirewallPlanInput["docker_targets"]> | null,
@@ -285,6 +296,7 @@ async function generate() {
       controller.signal,
     );
     uncertain.value = false;
+    showPlan.value = true;
   });
 }
 async function cancelPreparation() {
@@ -328,6 +340,7 @@ async function submit() {
     if (view.value)
       view.value = { ...view.value, available: false, operation: result };
     uncertain.value = false;
+    showPlan.value = false;
     updateDeadline();
     await readRuntime();
   });
@@ -512,74 +525,81 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
       取消准备
     </n-button>
   </section>
-  <section
-    v-if="
-      plan &&
-        !preparing &&
-        (!plan.preparation || plan.preparation.state === 'ready')
-    "
-    class="surface"
-  >
+  <section v-if="plan && planReady" class="surface">
     <div class="page-toolbar">
       <h3>{{ plan.action === "remove" ? "移除" : "应用" }}计划</h3>
-      <n-tag type="info">
-        {{
-          plan.action === "remove"
-            ? "移除本系统规则"
-            : `${plan.generated_rules} 条规则`
-        }}
-      </n-tag>
+      <div class="button-row">
+        <NTag type="info">
+          {{ plan.action === "remove" ? "移除本系统规则" : plan.generated_rules + " 条规则" }}
+        </NTag>
+        <NButton @click="showPlan = true">
+          查看计划
+        </NButton>
+      </div>
     </div>
-    <dl>
-      <dt>管理监听</dt>
-      <dd>{{ plan.listener }}</dd>
-      <dt>当前来源</dt>
-      <dd>{{ plan.control_source }}</dd>
-      <dt>SSH 配置</dt>
-      <dd>
-        {{
-          plan.ssh_profile === "openssh" ? "OpenSSH" : "本机已确认无 SSH 保护"
-        }}
-      </dd>
-      <dt>SSH 监听</dt>
-      <dd>{{ plan.ssh_listeners.join(", ") || "未观察到" }}</dd>
-      <dt>计划有效期</dt>
-      <dd>{{ new Date(plan.expires_at * 1000).toLocaleString() }}</dd>
-    </dl>
-    <DockerPlanDetails
-      v-if="plan.docker && stored"
-      :plan="plan.docker"
-      :targets="dockerTargets"
-      :policy="stored.policy"
-      :disabled="busy || !canManage || active"
-      @change="bindDocker"
-      @reload="reloadDocker"
-    />
-
-    <n-data-table
-      :columns="protections"
-      :data="plan.protections"
-      :pagination="{ pageSize: 10 }"
-      :scroll-x="650"
-    />
-    <p class="muted">
-      请核对以上连接保护。执行后需通过新连接确认；云安全组和其他系统规则仍可能影响访问。
-    </p>
-    <n-button
-      type="warning"
-      :disabled="
-        busy ||
-          !plan.can_apply ||
-          !canManage ||
-          active ||
-          operation?.plan_id === plan.id ||
-          (!uncertain && Date.now() / 1000 >= plan.expires_at)
-      "
-      @click="apply"
-    >
-      {{ uncertain ? "确认操作进度" : "确认应用" }}
-    </n-button>
   </section>
+  <DetailDialog
+    :show="showPlan && planReady"
+    :title="plan?.action === 'remove' ? '移除规则计划' : '应用规则计划'"
+    :busy="busy"
+    width="1000px"
+    @update:show="showPlan = $event"
+  >
+    <div v-if="plan" class="page-stack">
+      <dl>
+        <dt>管理监听</dt>
+        <dd>{{ plan.listener }}</dd>
+        <dt>当前来源</dt>
+        <dd>{{ plan.control_source }}</dd>
+        <dt>SSH 配置</dt>
+        <dd>
+          {{
+            plan.ssh_profile === "openssh" ? "OpenSSH" : "本机已确认无 SSH 保护"
+          }}
+        </dd>
+        <dt>SSH 监听</dt>
+        <dd>{{ plan.ssh_listeners.join(", ") || "未观察到" }}</dd>
+        <dt>计划有效期</dt>
+        <dd>{{ new Date(plan.expires_at * 1000).toLocaleString() }}</dd>
+      </dl>
+      <DockerPlanDetails
+        v-if="plan.docker && stored"
+        :plan="plan.docker"
+        :targets="dockerTargets"
+        :policy="stored.policy"
+        :disabled="busy || !canManage || active"
+        @change="bindDocker"
+        @reload="reloadDocker"
+      />
+
+      <n-data-table
+        :columns="protections"
+        :data="plan.protections"
+        :pagination="{ pageSize: 10 }"
+        :scroll-x="650"
+      />
+      <p class="muted">
+        请核对以上连接保护。执行后需通过新连接确认；云安全组和其他系统规则仍可能影响访问。
+      </p>
+    </div>
+    <template #actions>
+      <n-button
+        v-if="plan"
+        type="warning"
+        :disabled="
+          busy ||
+            !plan.can_apply ||
+            !canManage ||
+            active ||
+            operation?.plan_id === plan.id ||
+            (!uncertain && Date.now() / 1000 >= plan.expires_at)
+        "
+        @click="apply"
+      >
+        {{ uncertain ? "确认操作进度" : "确认应用" }}
+      </n-button>
+    </template>
+  </DetailDialog>
   <n-alert v-if="uncertain" type="warning" :bordered="false" class="notice">
     执行结果尚未取得。请保留本页，通过原请求查询或重送；未确认的变更会自动恢复。
   </n-alert>

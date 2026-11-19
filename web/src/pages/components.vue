@@ -55,8 +55,7 @@ const error = computed(() =>
 const search = ref(""),
   statusFilter = ref("all");
 const selected = ref<string | null>(null),
-  openVersionPicker = ref(false),
-  detailBusy = ref(false),
+  initialAction = ref<"manage" | "install" | "update">("manage"),
   showHistory = ref(false);
 const controller = new AbortController();
 const active = computed(() => tasks.value.some(softwareTaskActive));
@@ -72,6 +71,7 @@ watch(
   querySoftware,
   (value) => {
     selected.value = value;
+    initialAction.value = "manage";
   },
   { immediate: true },
 );
@@ -161,16 +161,24 @@ async function load() {
   await Promise.all([loadOverview(), loadTasks()]);
 }
 function closeDetails() {
-  if (detailBusy.value) return;
   selected.value = null;
-  openVersionPicker.value = false;
   if (querySoftware.value)
     void router.replace({
       query: { ...route.query, software: undefined, existing: undefined },
     });
 }
-function openDetails(app: string, install = false) {
-  openVersionPicker.value = install && app === "nginx";
+function openAction(app: string, action: typeof initialAction.value = "manage") {
+  if (action !== "manage") {
+    if (app === "nginx" && (action === "update" || !overview.value?.bundled_nginx)) {
+      void router.push({ path: "/nginx-images", query: { choose: "1" } });
+      return;
+    }
+    if (app === "frps" && action === "install") {
+      void router.push({ path: "/frps", query: { install: "1" } });
+      return;
+    }
+  }
+  initialAction.value = action;
   selected.value = app;
 }
 onMounted(load);
@@ -245,8 +253,9 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
                   )
                 "
                 :active="active"
-                @manage="openDetails(app.id)"
-                @install="openDetails(app.id, true)"
+                @manage="openAction(app.id)"
+                @install="openAction(app.id, 'install')"
+                @update="openAction(app.id, 'update')"
               />
             </template>
           </SoftwareCard>
@@ -266,42 +275,18 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
       </template>
     </section>
   </div>
-  <NModal
-    :show="!!selected"
-    preset="card"
-    :title="selectedApp ? `软件管理 · ${selectedApp.name}` : '软件管理'"
-    style="width: 760px; max-width: calc(100vw - 32px)"
-    :mask-closable="false"
-    :closable="!detailBusy"
-    :close-on-esc="!detailBusy"
-    @update:show="
-      (value: boolean) => {
-        if (!value) closeDetails();
-      }
-    "
-  >
-    <div class="software-details page-stack">
-      <BuiltinSoftwarePanel
-        v-if="selectedApp"
-        :key="selectedApp.id"
-        :app="selectedApp"
-        :overview="overview"
-        :tasks="tasks"
-        :active="active"
-        :open-version-picker="openVersionPicker"
-        @busy="detailBusy = $event"
-        @task="recordTask"
-        @changed="loadOverview"
-      />
-    </div>
-    <template #footer>
-      <div class="dialog-footer">
-        <NButton :disabled="detailBusy" @click="closeDetails">
-          关闭
-        </NButton>
-      </div>
-    </template>
-  </NModal>
+  <BuiltinSoftwarePanel
+    v-if="selectedApp"
+    :key="selectedApp.id + ':' + initialAction"
+    :app="selectedApp"
+    :overview="overview"
+    :active="active"
+    :initial-action="initialAction"
+    @task="recordTask"
+    @changed="loadOverview"
+    @navigate="openAction(selectedApp.id, $event)"
+    @close="closeDetails"
+  />
   <NModal
     v-model:show="showHistory"
     preset="card"
@@ -368,15 +353,10 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
   border-radius: 12px;
   background: var(--bg-surface);
 }
-.software-details,
 .software-history {
   max-height: calc(100dvh - 220px);
   overflow-y: auto;
   padding-right: 4px;
-}
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
 }
 .history-footer {
   display: flex;

@@ -10,6 +10,7 @@
 
 <script setup lang="ts">
 import FormDialog from "../components/FormDialog.vue";
+import DetailDialog from "../components/DetailDialog.vue";
 import CertificateWorkspace from "../components/CertificateWorkspace.vue";
 import { inspectTask } from "../stores/operation";
 import { useRoute, useRouter } from "vue-router";
@@ -158,7 +159,11 @@ async function load() {
     accounts.value = a;
     credentials.value = c;
     loaded.value = true;
-    if (selected.value) orders.value = await api.acmeOrders(selected.value);
+    const id = selected.value;
+    if (id) {
+      const result = await api.acmeOrders(id);
+      if (selected.value === id) orders.value = result;
+    }
   });
 }
 function openPolicy(item: ACMEProfile) {
@@ -351,13 +356,13 @@ async function archive(item: ACMEProfile) {
       orders.value = await api.acmeOrders(item.id);
   }, "签发配置已停用");
 }
+function closeOrders(show: boolean) {
+  if (show) return;
+  selected.value = "";
+  orders.value = [];
+}
 async function showOrders(item: ACMEProfile) {
   if (busy.value) return;
-  if (selected.value === item.id) {
-    selected.value = "";
-    orders.value = [];
-    return;
-  }
   await run(async () => {
     const result = await api.acmeOrders(item.id);
     orders.value = result;
@@ -692,9 +697,7 @@ useLiveRefresh(
           重新申请
         </n-button>
         <n-button :disabled="busy" @click="showOrders(item)">
-          {{
-            selected === item.id ? "收起记录" : "申请详情"
-          }}
+          申请详情
         </n-button>
         <n-button
           v-if="item.state !== 'archived'"
@@ -706,7 +709,23 @@ useLiveRefresh(
           停用申请
         </n-button>
       </div>
-      <div v-if="selected === item.id">
+    </section>
+    <div v-if="offset || profiles.length >= 100" class="cert-heading">
+      <n-button :disabled="busy || offset === 0" @click="changePage(-1)">
+        上一页
+      </n-button><span class="muted">第 {{ offset / 100 + 1 }} 页</span><n-button
+        :disabled="busy || profiles.length < 100"
+        @click="changePage(1)"
+      >
+        下一页
+      </n-button>
+    </div>
+    <DetailDialog
+      :show="!!selected"
+      :title="profiles.find((item) => item.id === selected)?.name ?? '申请详情'"
+      @update:show="closeOrders"
+    >
+      <div class="certificate-workspace">
         <n-empty v-if="!orders.length" description="尚无执行记录" />
         <article v-for="order in orders" :key="order.id" class="cert-record">
           <div class="cert-heading">
@@ -734,17 +753,7 @@ useLiveRefresh(
           </n-button>
         </article>
       </div>
-    </section>
-    <div v-if="offset || profiles.length >= 100" class="cert-heading">
-      <n-button :disabled="busy || offset === 0" @click="changePage(-1)">
-        上一页
-      </n-button><span class="muted">第 {{ offset / 100 + 1 }} 页</span><n-button
-        :disabled="busy || profiles.length < 100"
-        @click="changePage(1)"
-      >
-        下一页
-      </n-button>
-    </div>
+    </DetailDialog>
     <FormDialog
       :show="!!policyID"
       :title="'续期设置 · ' + policyName"

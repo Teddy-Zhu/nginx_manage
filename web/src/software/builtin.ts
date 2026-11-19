@@ -53,7 +53,7 @@ export function builtinSoftware(
       : version
         ? `组件 ${version.version}`
         : "系统内置",
-    scopes: ["components.manage"],
+    scopes: ["components.manage", "system.write"],
     actions: ["install", "update"],
     error: installed ? overview?.runtime_reason : undefined,
     versioned: true,

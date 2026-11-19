@@ -11,6 +11,7 @@
 </route>
 <script setup lang="ts">
 import SettingsSection from "../components/SettingsSection.vue";
+import DetailDialog from "../components/DetailDialog.vue";
 import FormDialog from "../components/FormDialog.vue";
 import ValueListInput from "../components/ValueListInput.vue";
 import { cleanList } from "../utils/form";
@@ -75,6 +76,7 @@ const activeTab = ref("rules"),
   ]),
   sources = ref<string[]>([]),
   formError = ref("");
+const checkOpen = ref(false);
 const formBusy = ref(false),
   checkError = ref("");
 const quickBusy = ref<"management" | "ssh" | "web" | null>(null);
@@ -669,6 +671,7 @@ async function check() {
         stored.value!.version,
         controller.signal,
       );
+      checkOpen.value = true;
     });
 }
 onMounted(load);
@@ -723,6 +726,9 @@ onMounted(load);
             </p>
           </div>
           <n-space align="center" :size="12">
+            <NButton :disabled="busy || dirty || !stored?.version" @click="check">
+              检查已保存规则
+            </NButton>
             <n-dropdown
               trigger="click"
               placement="bottom-end"
@@ -767,37 +773,9 @@ onMounted(load);
             </div>
           </template>
         </n-data-table>
-        <section>
-          <h3>规则检查</h3>
-
-          <p class="muted">
-            本工具管理的规则与系统已有规则共同生效。其他防火墙或云安全组中的限制需要在对应位置调整。
-          </p>
-          <n-space align="center" class="advanced-actions">
-            <RouterLink to="/firewall">
-              查看防火墙状态
-            </RouterLink>
-            <n-button
-              :disabled="busy || dirty || !stored?.version"
-              @click="check"
-            >
-              检查已保存规则
-            </n-button>
-          </n-space>
-          <n-alert
-            v-for="error in preview?.errors || []"
-            :key="error"
-            type="error"
-          >
-            {{ error }}
-          </n-alert>
-          <p v-if="preview">
-            {{ preview.compiled ? "规则检查通过" : "规则检查未通过" }}
-          </p>
-          <p v-if="observation && !observation.writable">
-            {{ observation.reason }}
-          </p>
-        </section>
+        <p v-if="observation && !observation.writable" class="muted">
+          {{ observation.reason }}
+        </p>
       </n-tab-pane>
       <n-tab-pane v-if="canWrite" name="geoip" tab="GeoIP 数据源">
         <GeoIPSourcePanel
@@ -810,6 +788,21 @@ onMounted(load);
       </n-tab-pane>
     </n-tabs>
   </div>
+  <DetailDialog v-model:show="checkOpen" title="防火墙规则检查">
+    <div v-if="preview" class="page-stack">
+      <NAlert :type="preview.compiled ? 'success' : 'warning'">
+        {{ preview.compiled ? "规则检查通过" : "规则检查未通过" }}
+      </NAlert>
+      <NAlert v-for="error in preview.errors" :key="error" type="error">
+        {{ error }}
+      </NAlert>
+    </div>
+    <template #actions>
+      <RouterLink to="/firewall">
+        <NButton>查看防火墙状态</NButton>
+      </RouterLink>
+    </template>
+  </DetailDialog>
   <FormDialog
     :show="!!editing"
     title="防火墙规则"
@@ -965,9 +958,6 @@ onMounted(load);
   background: #f0f6f2;
   color: #88a697;
   font-size: 28px;
-}
-.advanced-actions {
-  margin-top: 16px;
 }
 :deep(.n-alert) {
   margin-bottom: 16px;

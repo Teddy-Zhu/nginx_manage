@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
-import { NSwitch, useDialog } from "naive-ui";
+import { RouterLink } from "vue-router";
+import { NButton, NSwitch, useDialog } from "naive-ui";
 import {
   useNodeAPI,
   type ComponentOverview,
@@ -19,34 +19,38 @@ import {
   type SoftwareOperation,
 } from "../utils/software";
 import ComponentVersionDialog from "./ComponentVersionDialog.vue";
-import NginxInstallPanel from "./NginxInstallPanel.vue";
+import DetailDialog from "./DetailDialog.vue";
 import SoftwareManagementPanel from "./SoftwareManagementPanel.vue";
 import ServiceLogsDialog from "./ServiceLogsDialog.vue";
 
 const props = defineProps<{
   app: BuiltinSoftwareView;
   overview: ComponentOverview | null;
-  tasks: ComponentTask[];
   active: boolean;
-  openVersionPicker?: boolean;
+  initialAction: "manage" | "install" | "update";
 }>();
 const emit = defineEmits<{
   task: [task: ComponentTask];
-  busy: [value: boolean];
   changed: [];
+  close: [];
+  navigate: [action: "install" | "update"];
 }>();
 const session = useSession();
 const api = useNodeAPI();
 const dialog = useDialog();
-const router = useRouter();
 const { run, message } = useAction();
-const showLogs = ref(false);
-const showInstaller = ref(false);
-const bundledInstall = computed(
-  () => props.overview?.bundled_nginx && !props.app.installed,
-);
+type View = "manage" | "install" | "update" | "logs";
+const view = ref<View>(props.initialAction);
+const showLogs = computed({
+  get: () => view.value === "logs",
+  set: (show: boolean) => {
+    if (!show) view.value = "manage";
+  },
+});
 const installerBusy = ref(false);
-const versionOperation = ref<"install" | "update" | null>(null);
+const versionOperation = computed(() =>
+  view.value === "install" || view.value === "update" ? view.value : null,
+);
 const autoStart = ref(true);
 const permitted = computed(() =>
   props.app.scopes.every((scope) => session.me?.scopes.includes(scope)),
@@ -55,14 +59,14 @@ const logsPermitted = computed(
   () => session.me?.scopes.includes("read") === true &&
     session.me.scopes.includes("components.manage"),
 );
-function setBusy(value: boolean) {
-  installerBusy.value = value;
-  emit("busy", value);
+function closeVersion() {
+  if (props.initialAction === "manage") view.value = "manage";
+  else emit("close");
 }
 async function submit(request: SoftwareRequest, title: string) {
-  setBusy(true);
+  installerBusy.value = true;
   try {
-    return await run(async () => {
+    await run(async () => {
       if (request.app_id === "fail2ban" && request.action === "install") {
         const modules = await api.modules();
         if (!modules.some((item) => item.id === "fail2ban" && item.enabled))
@@ -74,16 +78,16 @@ async function submit(request: SoftwareRequest, title: string) {
         false,
       );
       emit("task", task);
+      emit("close");
       inspectTask(task.id, title);
-      return task;
     });
   } finally {
-    setBusy(false);
+    installerBusy.value = false;
   }
 }
 async function control(request: SoftwareRequest) {
   if (props.active || installerBusy.value) return;
-  setBusy(true);
+  installerBusy.value = true;
   try {
     await run(async () => {
       const result = await api.controlSoftware(request);
@@ -91,7 +95,7 @@ async function control(request: SoftwareRequest) {
     });
   } finally {
     emit("changed");
-    setBusy(false);
+    installerBusy.value = false;
   }
 }
 async function chooseVersion(
@@ -99,7 +103,12 @@ async function chooseVersion(
 ) {
   const action = versionOperation.value;
   const appID = props.app.id;
-  if (!action || !permitted.value || appID === "nginx") return;
+  if (!action || !permitted.value) return;
+  if (appID === "nginx") {
+    if (action === "install" && props.overview?.bundled_nginx && choice.version)
+      await submit({ action: "install-nginx", version: choice.version }, "安装 Nginx");
+    return;
+  }
   const request: SoftwareRequest = {
     action,
     app_id: appID,
@@ -107,23 +116,25 @@ async function chooseVersion(
   };
   if (action === "install" && appID === "fail2ban")
     request.auto_start = autoStart.value;
-  if (await submit(request, props.app.name + "版本操作日志"))
-    versionOperation.value = null;
+  await submit(request, props.app.name + " · " + (action === "install" ? "安装" : "切换版本"));
 }
 function operate(action: SoftwareOperation) {
   const appID = props.app.id;
   if (action === "logs") {
-    if (logsPermitted.value && appID !== "nginx") showLogs.value = true;
+    if (logsPermitted.value && appID !== "nginx") view.value = "logs";
     return;
   }
   if (!permitted.value || props.active || installerBusy.value) return;
-  if (appID === "nginx") {
-    showInstaller.value = true;
-  } else if (action === "install" && appID === "frps") {
-    void router.push({ path: "/frps", query: { install: "1" } });
-  } else if (action === "install" || action === "update") {
-    versionOperation.value = action;
-  } else {
+  if (action === "install" || action === "update") {
+    if (
+      (appID === "nginx" && (action === "update" || !props.overview?.bundled_nginx)) ||
+      (appID === "frps" && action === "install")
+    ) {
+      emit("navigate", action);
+      return;
+    }
+    view.value = action;
+  } else if (appID !== "nginx") {
     const request = { action, app_id: appID };
     const execute = () =>
       action === "uninstall"
@@ -154,11 +165,11 @@ function operate(action: SoftwareOperation) {
     :app-id="app.id"
     :busy="installerBusy || active"
     :allow-image-tag="app.id !== 'nginx'"
-    :start-with-image-tag="versionOperation === 'install'"
+    :start-with-image-tag="versionOperation === 'install' && app.id !== 'nginx'"
     :submit-text="versionOperation === 'install' ? '安装' : '切换版本'"
     @choose="chooseVersion({ version: $event.id })"
     @choose-tag="chooseVersion({ image_tag: $event })"
-    @cancel="versionOperation = null"
+    @cancel="closeVersion"
   >
     <label
       v-if="versionOperation === 'install' && app.id === 'fail2ban'"
@@ -174,25 +185,29 @@ function operate(action: SoftwareOperation) {
     :app="app.id"
     :name="app.name"
   />
-  <SoftwareManagementPanel
-    :app="app"
-    :runtime="app.runtime"
-    :actions="bundledInstall ? [] : app.actions"
-    :permitted="permitted"
-    :logs-permitted="logsPermitted"
-    :busy="installerBusy || active"
-    :task="app.task"
-    :error="app.error"
-    @operate="operate"
+  <DetailDialog
+    :show="view === 'manage'"
+    :title="'软件管理 · ' + app.name"
+    :busy="installerBusy"
+    @update:show="$emit('close')"
   >
-    <NginxInstallPanel
-      v-if="app.id === 'nginx' && (showInstaller || bundledInstall)"
-      :overview="overview"
-      :tasks="tasks"
-      :active="active"
-      :open-version-picker="openVersionPicker"
-      @busy="setBusy"
-      @task="emit('task', $event)"
+    <SoftwareManagementPanel
+      :app="app"
+      :runtime="app.runtime"
+      :actions="app.actions"
+      :permitted="permitted"
+      :logs-permitted="logsPermitted"
+      :busy="installerBusy || active"
+      :task="app.task"
+      :error="app.error"
+      @operate="operate"
     />
-  </SoftwareManagementPanel>
+    <template #actions>
+      <RouterLink v-if="app.installed && app.entry" :to="app.entry.to">
+        <NButton :disabled="installerBusy">
+          打开功能页面
+        </NButton>
+      </RouterLink>
+    </template>
+  </DetailDialog>
 </template>
